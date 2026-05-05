@@ -1,0 +1,17 @@
+[package]
+name = "renderpilot-platform-windows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Windows platform adapter boundary for RenderPilot."
+
+[lints]
+workspace = true
+
+[dependencies]
+renderpilot-application = { path = "../renderpilot-application" }
+renderpilot-domain = { path = "../renderpilot-domain" }
+
+[lib]
+path = "src/lib.rs"

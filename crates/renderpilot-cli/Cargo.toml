@@ -1,0 +1,27 @@
+[package]
+name = "renderpilot-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line entry point for RenderPilot."
+
+[lints]
+workspace = true
+
+[dependencies]
+renderpilot-application = { path = "../renderpilot-application" }
+renderpilot-detection = { path = "../renderpilot-detection" }
+renderpilot-domain = { path = "../renderpilot-domain" }
+renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
+renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "renderpilot"
+path = "src/main.rs"

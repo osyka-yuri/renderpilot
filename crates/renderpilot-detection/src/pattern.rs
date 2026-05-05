@@ -1,0 +1,481 @@
+use std::{collections::HashSet, fs, path::Path};
+
+use renderpilot_domain::GraphicsTechnology;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    error::LibraryPatternError,
+    glob::glob_matches,
+    normalize::{normalize_file_name, normalize_pattern},
+};
+
+/// Set of library filename patterns loaded from JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryPatternSet {
+    patterns: Vec<LibraryPattern>,
+}
+
+impl LibraryPatternSet {
+    /// Creates a pattern set and validates pattern ordering metadata.
+    pub fn new(patterns: Vec<LibraryPattern>) -> Result<Self, LibraryPatternError> {
+        let set = Self { patterns };
+        set.validate()?;
+        Ok(set)
+    }
+
+    /// Parses a pattern set from JSON text.
+    pub fn from_json_str(json: &str) -> Result<Self, LibraryPatternError> {
+        serde_json::from_str(json).map_err(LibraryPatternError::Json)
+    }
+
+    /// Loads a pattern set from a JSON file.
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, LibraryPatternError> {
+        let json = fs::read_to_string(path).map_err(LibraryPatternError::Io)?;
+        Self::from_json_str(&json)
+    }
+
+    /// Returns all configured patterns in matching order.
+    pub fn patterns(&self) -> &[LibraryPattern] {
+        &self.patterns
+    }
+
+    /// Returns the first graphics technology matching the given file name.
+    pub fn match_file_name(&self, file_name: &str) -> Option<GraphicsTechnology> {
+        self.match_file_name_on_platform(file_name, PatternPlatform::Any)
+    }
+
+    /// Returns the first matching pattern classification for the given file name.
+    pub fn find_match(&self, file_name: &str) -> Option<LibraryPatternMatch> {
+        self.find_match_on_platform(file_name, PatternPlatform::Any)
+    }
+
+    /// Returns the first graphics technology matching the given file name and platform.
+    pub fn match_file_name_on_platform(
+        &self,
+        file_name: &str,
+        platform: PatternPlatform,
+    ) -> Option<GraphicsTechnology> {
+        self.find_match_on_platform(file_name, platform)
+            .map(|matched| matched.technology)
+    }
+
+    /// Returns the first matching pattern classification for the given file name and platform.
+    pub fn find_match_on_platform(
+        &self,
+        file_name: &str,
+        platform: PatternPlatform,
+    ) -> Option<LibraryPatternMatch> {
+        let file_name = normalize_file_name(file_name)?;
+
+        self.patterns
+            .iter()
+            .find(|pattern| pattern.matches(file_name.as_str(), platform))
+            .map(LibraryPatternMatch::from)
+    }
+
+    fn validate(&self) -> Result<(), LibraryPatternError> {
+        let mut seen = HashSet::new();
+
+        for pattern in &self.patterns {
+            let key = (
+                pattern.platform,
+                pattern.kind,
+                pattern.normalized_pattern.clone(),
+            );
+
+            if !seen.insert(key) {
+                return Err(LibraryPatternError::DuplicatePattern {
+                    pattern: pattern.normalized_pattern.clone(),
+                    platform: pattern.platform,
+                    kind: pattern.kind,
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Metadata for a successful library pattern match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LibraryPatternMatch {
+    technology: GraphicsTechnology,
+    kind: PatternKind,
+    platform: PatternPlatform,
+}
+
+impl LibraryPatternMatch {
+    /// Returns the classified graphics technology.
+    pub fn technology(self) -> GraphicsTechnology {
+        self.technology
+    }
+
+    /// Returns whether the match came from an exact or glob pattern.
+    pub fn kind(self) -> PatternKind {
+        self.kind
+    }
+
+    /// Returns the pattern platform that matched.
+    pub fn platform(self) -> PatternPlatform {
+        self.platform
+    }
+}
+
+impl From<&LibraryPattern> for LibraryPatternMatch {
+    fn from(pattern: &LibraryPattern) -> Self {
+        Self {
+            technology: pattern.technology,
+            kind: pattern.kind,
+            platform: pattern.platform,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LibraryPatternSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawLibraryPatternSet {
+            patterns: Vec<LibraryPattern>,
+        }
+
+        let raw = RawLibraryPatternSet::deserialize(deserializer)?;
+        Self::new(raw.patterns).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for LibraryPatternSet {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct RawLibraryPatternSet<'a> {
+            patterns: &'a [LibraryPattern],
+        }
+
+        RawLibraryPatternSet {
+            patterns: &self.patterns,
+        }
+        .serialize(serializer)
+    }
+}
+
+/// One filename pattern and its graphics technology classification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryPattern {
+    pattern: String,
+    kind: PatternKind,
+    platform: PatternPlatform,
+    technology: GraphicsTechnology,
+    normalized_pattern: String,
+}
+
+impl LibraryPattern {
+    /// Creates a library pattern.
+    pub fn new(
+        pattern: impl Into<String>,
+        kind: PatternKind,
+        platform: PatternPlatform,
+        technology: GraphicsTechnology,
+    ) -> Result<Self, LibraryPatternError> {
+        let pattern = pattern.into();
+        let normalized_pattern =
+            normalize_pattern(&pattern).ok_or(LibraryPatternError::EmptyPattern)?;
+
+        Ok(Self {
+            pattern,
+            kind,
+            platform,
+            technology,
+            normalized_pattern,
+        })
+    }
+
+    /// Returns the source pattern text.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    /// Returns whether the pattern is exact or glob.
+    pub fn kind(&self) -> PatternKind {
+        self.kind
+    }
+
+    /// Returns the platform this pattern applies to.
+    pub fn platform(&self) -> PatternPlatform {
+        self.platform
+    }
+
+    /// Returns the classified graphics technology.
+    pub fn technology(&self) -> GraphicsTechnology {
+        self.technology
+    }
+
+    fn matches(&self, file_name: &str, platform: PatternPlatform) -> bool {
+        self.platform.matches(platform)
+            && self
+                .kind
+                .matches(self.normalized_pattern.as_str(), file_name)
+    }
+}
+
+impl<'de> Deserialize<'de> for LibraryPattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawLibraryPattern {
+            pattern: String,
+            #[serde(default = "default_pattern_kind")]
+            kind: PatternKind,
+            #[serde(default = "default_pattern_platform")]
+            platform: PatternPlatform,
+            technology: GraphicsTechnology,
+        }
+
+        let raw = RawLibraryPattern::deserialize(deserializer)?;
+        Self::new(raw.pattern, raw.kind, raw.platform, raw.technology)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for LibraryPattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct RawLibraryPattern<'a> {
+            pattern: &'a str,
+            kind: PatternKind,
+            platform: PatternPlatform,
+            technology: GraphicsTechnology,
+        }
+
+        RawLibraryPattern {
+            pattern: &self.pattern,
+            kind: self.kind,
+            platform: self.platform,
+            technology: self.technology,
+        }
+        .serialize(serializer)
+    }
+}
+
+/// Platform scope for a library pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatternPlatform {
+    /// Pattern applies to any platform.
+    Any,
+    /// Pattern applies to Windows libraries.
+    Windows,
+    /// Pattern applies to Linux libraries.
+    Linux,
+    /// Pattern applies to macOS libraries.
+    MacOs,
+}
+
+impl PatternPlatform {
+    fn matches(self, requested: Self) -> bool {
+        self == Self::Any || requested == Self::Any || self == requested
+    }
+}
+
+/// Matching strategy for a library pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatternKind {
+    /// Match the normalized file name exactly.
+    Exact,
+    /// Match the normalized file name using `*` and `?` wildcards.
+    Glob,
+}
+
+impl PatternKind {
+    fn matches(self, pattern: &str, file_name: &str) -> bool {
+        match self {
+            Self::Exact => pattern == file_name,
+            Self::Glob => glob_matches(pattern, file_name),
+        }
+    }
+}
+
+fn default_pattern_kind() -> PatternKind {
+    PatternKind::Exact
+}
+
+fn default_pattern_platform() -> PatternPlatform {
+    PatternPlatform::Any
+}
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_domain::GraphicsTechnology;
+
+    use super::{LibraryPattern, LibraryPatternSet, PatternKind, PatternPlatform};
+    use crate::LibraryPatternError;
+
+    const PATTERNS_JSON: &str = include_str!("../../../data/library_patterns.json");
+
+    #[test]
+    fn loads_library_patterns_json() {
+        let patterns = LibraryPatternSet::from_json_str(PATTERNS_JSON).expect("valid patterns");
+
+        assert!(!patterns.patterns().is_empty());
+    }
+
+    #[test]
+    fn detects_dlss_super_resolution() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("nvngx_dlss.dll"),
+            Some(GraphicsTechnology::DlssSuperResolution)
+        );
+    }
+
+    #[test]
+    fn detects_dlss_frame_generation() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("nvngx_dlssg.dll"),
+            Some(GraphicsTechnology::DlssFrameGeneration)
+        );
+    }
+
+    #[test]
+    fn detects_dlss_ray_reconstruction() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("nvngx_dlssd.dll"),
+            Some(GraphicsTechnology::DlssRayReconstruction)
+        );
+    }
+
+    #[test]
+    fn detects_streamline_glob() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("sl.interposer.dll"),
+            Some(GraphicsTechnology::NvidiaStreamline)
+        );
+    }
+
+    #[test]
+    fn detects_intel_xess() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("libxess.dll"),
+            Some(GraphicsTechnology::IntelXeSs)
+        );
+    }
+
+    #[test]
+    fn detects_amd_frame_generation_before_general_fsr() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_framegeneration.dll"),
+            Some(GraphicsTechnology::AmdFsrFrameGeneration)
+        );
+    }
+
+    #[test]
+    fn broad_fsr_patterns_are_unknown() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("some_fsr_unknown.dll"),
+            Some(GraphicsTechnology::Unknown)
+        );
+    }
+
+    #[test]
+    fn broad_xess_patterns_are_unknown() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("custom_xess_bridge.dll"),
+            Some(GraphicsTechnology::Unknown)
+        );
+    }
+
+    #[test]
+    fn matching_is_case_insensitive_and_accepts_paths() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name(r"C:\Games\Game\NVNGX_DLSS.DLL"),
+            Some(GraphicsTechnology::DlssSuperResolution)
+        );
+    }
+
+    #[test]
+    fn platform_filter_can_exclude_patterns() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name_on_platform("nvngx_dlss.dll", PatternPlatform::Linux),
+            None
+        );
+    }
+
+    #[test]
+    fn duplicate_patterns_are_rejected() {
+        let pattern = LibraryPattern::new(
+            "nvngx_dlss.dll",
+            PatternKind::Exact,
+            PatternPlatform::Windows,
+            GraphicsTechnology::DlssSuperResolution,
+        )
+        .expect("valid pattern");
+
+        let error = LibraryPatternSet::new(vec![pattern.clone(), pattern])
+            .expect_err("duplicate pattern should fail");
+
+        assert!(matches!(
+            error,
+            LibraryPatternError::DuplicatePattern { .. }
+        ));
+    }
+
+    #[test]
+    fn direct_deserialization_rejects_duplicate_patterns() {
+        let json = r#"
+        {
+          "patterns": [
+            {
+              "pattern": "nvngx_dlss.dll",
+              "kind": "exact",
+              "platform": "windows",
+              "technology": "DlssSuperResolution"
+            },
+            {
+              "pattern": "NVNGX_DLSS.DLL",
+              "kind": "exact",
+              "platform": "windows",
+              "technology": "DlssSuperResolution"
+            }
+          ]
+        }
+        "#;
+
+        let error =
+            serde_json::from_str::<LibraryPatternSet>(json).expect_err("duplicate should fail");
+
+        assert!(error.to_string().contains("duplicate library pattern"));
+    }
+
+    fn pattern_set() -> LibraryPatternSet {
+        LibraryPatternSet::from_json_str(PATTERNS_JSON).expect("valid patterns")
+    }
+}

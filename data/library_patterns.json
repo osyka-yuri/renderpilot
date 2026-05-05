@@ -1,0 +1,76 @@
+{
+  "patterns": [
+    {
+      "pattern": "nvngx_dlss.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "DlssSuperResolution"
+    },
+    {
+      "pattern": "nvngx_dlssg.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "DlssFrameGeneration"
+    },
+    {
+      "pattern": "nvngx_dlssd.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "DlssRayReconstruction"
+    },
+    {
+      "pattern": "sl.*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "NvidiaStreamline"
+    },
+    {
+      "pattern": "libxess.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "IntelXeSs"
+    },
+    {
+      "pattern": "libxess_fg.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "IntelXeFg"
+    },
+    {
+      "pattern": "amd_fidelityfx_framegeneration.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "AmdFsrFrameGeneration"
+    },
+    {
+      "pattern": "amd_fidelityfx*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "Unknown"
+    },
+    {
+      "pattern": "fidelityfx*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "Unknown"
+    },
+    {
+      "pattern": "*fsr*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "Unknown"
+    },
+    {
+      "pattern": "*xess*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "Unknown"
+    },
+    {
+      "pattern": "optiscaler*.dll",
+      "kind": "glob",
+      "platform": "windows",
+      "technology": "OptiScaler"
+    }
+  ]
+}

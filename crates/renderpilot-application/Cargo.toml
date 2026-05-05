@@ -1,0 +1,17 @@
+[package]
+name = "renderpilot-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Application boundary and use-case scaffolding for RenderPilot."
+
+[lints]
+workspace = true
+
+[dependencies]
+renderpilot-domain = { path = "../renderpilot-domain" }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"

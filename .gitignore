@@ -1,0 +1,9 @@
+/target/
+
+# Rust tooling
+**/*.rs.bk
+
+# Local workspace state
+/.idea/
+/.vscode/
+/.local/
