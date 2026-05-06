@@ -1,4 +1,6 @@
-use renderpilot_application::{AppError, AppResult, MetadataJson, OperationItemRecord, OperationPlan};
+use renderpilot_application::{
+    AppError, AppResult, MetadataJson, OperationItemRecord, OperationPlan,
+};
 use renderpilot_domain::{Sha256Hash, Version};
 use serde::{Deserialize, Serialize};
 
@@ -41,12 +43,13 @@ pub(super) fn planned_item_metadata(
             item.operation_id.as_str()
         ))
     })?;
-    let dto = serde_json::from_str::<PlannedOperationItemMetadataDto>(metadata_json.as_str()).map_err(|error| {
-        AppError::invalid_input(format!(
-            "operation item planned hash metadata is invalid for operation {}: {error}",
-            item.operation_id.as_str()
-        ))
-    })?;
+    let dto = serde_json::from_str::<PlannedOperationItemMetadataDto>(metadata_json.as_str())
+        .map_err(|error| {
+            AppError::invalid_input(format!(
+                "operation item planned hash metadata is invalid for operation {}: {error}",
+                item.operation_id.as_str()
+            ))
+        })?;
 
     Ok(PlannedOperationItemMetadata {
         original_sha256: dto

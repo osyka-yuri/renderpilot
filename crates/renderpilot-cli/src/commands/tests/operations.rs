@@ -12,12 +12,11 @@ use sha2::{Digest, Sha256};
 use crate::run;
 
 use super::{
-    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_component,
-    sample_game,
+    args, path_string, sample_artifact, sample_component, sample_game, CatalogFixture,
+    TempGameFolder,
 };
 
-const REPLACEMENT_SHA256: &str =
-    "70bf69c13743b7193ffd7a3718caab18522b61d4643fe13ac80caa5301e2345a";
+const REPLACEMENT_SHA256: &str = "70bf69c13743b7193ffd7a3718caab18522b61d4643fe13ac80caa5301e2345a";
 
 #[test]
 fn list_operations_reports_backup_readiness() {
@@ -85,7 +84,13 @@ fn list_operations_reports_backup_readiness() {
     let list_json: serde_json::Value = serde_json::from_str(&list_output).expect("valid json");
 
     assert_eq!(list_json["game_id"], game.id().as_str());
-    assert_eq!(list_json["operations"].as_array().expect("operations array").len(), 1);
+    assert_eq!(
+        list_json["operations"]
+            .as_array()
+            .expect("operations array")
+            .len(),
+        1
+    );
     assert_eq!(list_json["operations"][0]["operation_id"], operation_id);
     assert_eq!(list_json["operations"][0]["status"], "planned");
     assert_eq!(list_json["operations"][0]["backup_status"], "ready");
@@ -155,8 +160,8 @@ fn apply_operation_uses_saved_backup_and_updates_catalog() {
     )
     .expect("operation id should parse");
 
-    let backup_output =
-        run(args(&["backup", "--operation", operation_id.as_str()])).expect("backup should succeed");
+    let backup_output = run(args(&["backup", "--operation", operation_id.as_str()]))
+        .expect("backup should succeed");
     let backup_json: serde_json::Value =
         serde_json::from_str(&backup_output).expect("valid backup json");
     let backup_path = backup_json["items"][0]["backup_path"]
@@ -164,9 +169,10 @@ fn apply_operation_uses_saved_backup_and_updates_catalog() {
         .expect("backup path string")
         .to_owned();
 
-    let apply_output = run(args(&["apply", "--operation", operation_id.as_str()]))
-        .expect("apply should succeed");
-    let apply_json: serde_json::Value = serde_json::from_str(&apply_output).expect("valid apply json");
+    let apply_output =
+        run(args(&["apply", "--operation", operation_id.as_str()])).expect("apply should succeed");
+    let apply_json: serde_json::Value =
+        serde_json::from_str(&apply_output).expect("valid apply json");
     let operation = fixture
         .storage
         .find_operation(&operation_id)
@@ -195,11 +201,15 @@ fn apply_operation_uses_saved_backup_and_updates_catalog() {
     assert_eq!(components.len(), 1);
     assert_eq!(components[0].files().len(), 1);
     assert_eq!(
-        components[0].files()[0].version().map(|version| version.as_str()),
+        components[0].files()[0]
+            .version()
+            .map(|version| version.as_str()),
         Some("3.7.0")
     );
     assert_eq!(
-        components[0].files()[0].sha256().map(|sha256| sha256.as_str()),
+        components[0].files()[0]
+            .sha256()
+            .map(|sha256| sha256.as_str()),
         Some(REPLACEMENT_SHA256)
     );
 }
@@ -352,8 +362,7 @@ fn apply_is_blocked_when_target_changed_after_plan_swap() {
     )
     .expect("operation id should parse");
 
-    run(args(&["backup", "--operation", operation_id.as_str()]))
-        .expect("backup should succeed");
+    run(args(&["backup", "--operation", operation_id.as_str()])).expect("backup should succeed");
     fs::write(&source_path, b"mutated-target-bytes").expect("source file should be mutated");
 
     let error = run(args(&["apply", "--operation", operation_id.as_str()]))
@@ -384,8 +393,12 @@ fn apply_is_blocked_when_target_changed_after_plan_swap() {
 fn rollback_restores_original_file_and_updates_catalog() {
     let scenario = setup_applied_operation_scenario("rollback-success");
 
-    let rollback_output = run(args(&["rollback", "--operation", scenario.operation_id.as_str()]))
-        .expect("rollback should succeed");
+    let rollback_output = run(args(&[
+        "rollback",
+        "--operation",
+        scenario.operation_id.as_str(),
+    ]))
+    .expect("rollback should succeed");
     let rollback_json: serde_json::Value =
         serde_json::from_str(&rollback_output).expect("valid rollback json");
     let operation = scenario
@@ -405,9 +418,15 @@ fn rollback_restores_original_file_and_updates_catalog() {
         .list_components_for_game(&scenario.game_id)
         .expect("components should load");
 
-    assert_eq!(rollback_json["operation_id"], scenario.operation_id.as_str());
+    assert_eq!(
+        rollback_json["operation_id"],
+        scenario.operation_id.as_str()
+    );
     assert_eq!(rollback_json["status"], "rolled_back");
-    assert_eq!(rollback_json["items"][0]["restored_path"], path_string(&scenario.source_path));
+    assert_eq!(
+        rollback_json["items"][0]["restored_path"],
+        path_string(&scenario.source_path)
+    );
     assert_eq!(
         fs::read(&scenario.source_path).expect("restored bytes should be readable"),
         ORIGINAL_BYTES
@@ -420,11 +439,15 @@ fn rollback_restores_original_file_and_updates_catalog() {
     assert_eq!(components.len(), 1);
     assert_eq!(components[0].files().len(), 1);
     assert_eq!(
-        components[0].files()[0].version().map(|version| version.as_str()),
+        components[0].files()[0]
+            .version()
+            .map(|version| version.as_str()),
         Some("3.5.0")
     );
     assert_eq!(
-        components[0].files()[0].sha256().map(|sha256| sha256.as_str()),
+        components[0].files()[0]
+            .sha256()
+            .map(|sha256| sha256.as_str()),
         Some(scenario.original_sha256.as_str())
     );
 }
@@ -433,10 +456,18 @@ fn rollback_restores_original_file_and_updates_catalog() {
 fn rollback_is_idempotent_after_first_restore() {
     let scenario = setup_applied_operation_scenario("rollback-repeat");
 
-    run(args(&["rollback", "--operation", scenario.operation_id.as_str()]))
-        .expect("first rollback should succeed");
-    let second_output = run(args(&["rollback", "--operation", scenario.operation_id.as_str()]))
-        .expect("second rollback should succeed");
+    run(args(&[
+        "rollback",
+        "--operation",
+        scenario.operation_id.as_str(),
+    ]))
+    .expect("first rollback should succeed");
+    let second_output = run(args(&[
+        "rollback",
+        "--operation",
+        scenario.operation_id.as_str(),
+    ]))
+    .expect("second rollback should succeed");
     let second_json: serde_json::Value =
         serde_json::from_str(&second_output).expect("valid rollback json");
     let operation = scenario
@@ -458,7 +489,9 @@ fn rollback_is_idempotent_after_first_restore() {
     );
     assert_eq!(operation.status, OperationStatus::RolledBack);
     assert_eq!(
-        components[0].files()[0].sha256().map(|sha256| sha256.as_str()),
+        components[0].files()[0]
+            .sha256()
+            .map(|sha256| sha256.as_str()),
         Some(scenario.original_sha256.as_str())
     );
 }
@@ -469,8 +502,12 @@ fn rollback_is_blocked_when_target_file_is_locked() {
     let scenario = setup_applied_operation_scenario("rollback-locked");
     let lock = open_exclusive_file_lock(&scenario.source_path);
 
-    let error = run(args(&["rollback", "--operation", scenario.operation_id.as_str()]))
-        .expect_err("rollback should be blocked while target is locked");
+    let error = run(args(&[
+        "rollback",
+        "--operation",
+        scenario.operation_id.as_str(),
+    ]))
+    .expect_err("rollback should be blocked while target is locked");
     drop(lock);
     let operation = scenario
         .fixture
@@ -570,10 +607,8 @@ fn setup_applied_operation_scenario(name: &str) -> AppliedOperationScenario {
     )
     .expect("operation id should parse");
 
-    run(args(&["backup", "--operation", operation_id.as_str()]))
-        .expect("backup should succeed");
-    run(args(&["apply", "--operation", operation_id.as_str()]))
-        .expect("apply should succeed");
+    run(args(&["backup", "--operation", operation_id.as_str()])).expect("backup should succeed");
+    run(args(&["apply", "--operation", operation_id.as_str()])).expect("apply should succeed");
     assert_eq!(
         fixture
             .storage

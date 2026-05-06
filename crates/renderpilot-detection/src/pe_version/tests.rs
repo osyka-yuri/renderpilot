@@ -28,8 +28,8 @@ fn parses_numeric_prefix_from_decorated_version_text() {
 
 #[test]
 fn parses_numeric_version_after_leading_label() {
-    let version = parse_version_text("File version: 3.7.20 beta")
-        .expect("decorated version should parse");
+    let version =
+        parse_version_text("File version: 3.7.20 beta").expect("decorated version should parse");
 
     assert_eq!(version.as_str(), "3.7.20");
 }

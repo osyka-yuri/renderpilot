@@ -16,9 +16,7 @@ use super::{
     },
     journal::RetryableReplaceOperation,
     plan_metadata::planned_item_metadata,
-    shared::{
-        backup_lookup_map, rebuild_component_catalog, BackupLookupKey, CatalogUpdateItem,
-    },
+    shared::{backup_lookup_map, rebuild_component_catalog, BackupLookupKey, CatalogUpdateItem},
 };
 
 #[derive(Debug)]
@@ -45,10 +43,11 @@ pub(crate) fn rollback_operation(
         "rollback",
         "roll back",
     )?;
-    let prepared_items = match prepare_rollback_items(storage, &operation.operation, &operation.items) {
-        Ok(prepared_items) => prepared_items,
-        Err(error) => return Err(operation.capture_blocked(storage, error)),
-    };
+    let prepared_items =
+        match prepare_rollback_items(storage, &operation.operation, &operation.items) {
+            Ok(prepared_items) => prepared_items,
+            Err(error) => return Err(operation.capture_blocked(storage, error)),
+        };
 
     match rollback_operation_records(storage, &mut operation, &prepared_items) {
         Ok(result) => Ok(result),
@@ -64,7 +63,10 @@ fn prepare_rollback_items(
     let backups = storage.list_backups_for_game(&operation.game_id)?;
     let preparation = RollbackPreparation::new(operation, &backups);
 
-    items.iter().map(|item| preparation.prepare_item(item)).collect()
+    items
+        .iter()
+        .map(|item| preparation.prepare_item(item))
+        .collect()
 }
 
 fn rollback_operation_records(

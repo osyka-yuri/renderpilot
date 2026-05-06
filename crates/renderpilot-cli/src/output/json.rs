@@ -6,6 +6,7 @@ use renderpilot_application::{
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{GameInstallation, LibraryArtifact};
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::backup_manager::{
     ApplyOperationCatalogItemResult, ApplyOperationCatalogResult, BackupCatalogItemResult,
@@ -39,9 +40,7 @@ pub(crate) fn render_list_operations_output(
     render_pretty_json(&OperationListOutput::from(result))
 }
 
-pub(crate) fn render_plan_swap_output(
-    plan: &OperationPlan,
-) -> Result<String, serde_json::Error> {
+pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> Result<String, serde_json::Error> {
     render_pretty_json(&SwapPlanOutput::from(plan))
 }
 
@@ -61,6 +60,45 @@ pub(crate) fn render_rollback_operation_output(
     result: &RollbackOperationCatalogResult,
 ) -> Result<String, serde_json::Error> {
     render_pretty_json(&RollbackOperationOutput::from(result))
+}
+
+pub(crate) fn candidate_groups_value(
+    groups: Vec<ComponentFileReplacementCandidates>,
+) -> Result<Value, serde_json::Error> {
+    render_json_value(
+        groups
+            .into_iter()
+            .map(ComponentCandidateOutput::from)
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub(crate) fn operation_summaries_value(
+    result: &OperationListCatalogResult,
+) -> Result<Value, serde_json::Error> {
+    render_json_value(
+        result
+            .operations
+            .iter()
+            .map(OperationSummaryOutput::from)
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub(crate) fn apply_operation_value(
+    result: &ApplyOperationCatalogResult,
+) -> Result<Value, serde_json::Error> {
+    render_json_value(ApplyOperationOutput::from(result))
+}
+
+pub(crate) fn rollback_operation_value(
+    result: &RollbackOperationCatalogResult,
+) -> Result<Value, serde_json::Error> {
+    render_json_value(RollbackOperationOutput::from(result))
+}
+
+fn render_json_value(value: impl Serialize) -> Result<Value, serde_json::Error> {
+    serde_json::to_value(value)
 }
 
 fn render_pretty_json(value: &impl Serialize) -> Result<String, serde_json::Error> {
@@ -140,10 +178,14 @@ impl From<LibraryArtifact> for ArtifactOutput {
         Self {
             file_name: artifact.file_name().to_owned(),
             file_path: artifact.path().as_str().to_owned(),
-            version: artifact.version().map(|version| version.as_str().to_owned()),
+            version: artifact
+                .version()
+                .map(|version| version.as_str().to_owned()),
             sha256: artifact.sha256().as_str().to_owned(),
             source: artifact.source().map(str::to_owned),
-            source_game_id: artifact.source_game_id().map(|game_id| game_id.as_str().to_owned()),
+            source_game_id: artifact
+                .source_game_id()
+                .map(|game_id| game_id.as_str().to_owned()),
             trust_level: artifact.trust_level().as_str().to_owned(),
         }
     }
@@ -162,7 +204,10 @@ impl CandidateListOutput {
     ) -> Self {
         Self {
             game_id: game_id.as_str().to_owned(),
-            groups: groups.into_iter().map(ComponentCandidateOutput::from).collect(),
+            groups: groups
+                .into_iter()
+                .map(ComponentCandidateOutput::from)
+                .collect(),
         }
     }
 }
@@ -182,8 +227,14 @@ impl From<ComponentFileReplacementCandidates> for ComponentCandidateOutput {
             component_id: group.component_id().as_str().to_owned(),
             technology: group.technology().as_slug().to_owned(),
             file_path: group.file_path().as_str().to_owned(),
-            current_version: group.current_version().map(|version| version.as_str().to_owned()),
-            candidates: group.candidates().iter().map(CandidateOutput::from).collect(),
+            current_version: group
+                .current_version()
+                .map(|version| version.as_str().to_owned()),
+            candidates: group
+                .candidates()
+                .iter()
+                .map(CandidateOutput::from)
+                .collect(),
         }
     }
 }
@@ -205,10 +256,16 @@ impl From<&ReplacementCandidate> for CandidateOutput {
             artifact_id: candidate.artifact_id().as_str().to_owned(),
             file_name: candidate.file_name().to_owned(),
             file_path: candidate.file_path().as_str().to_owned(),
-            version: candidate.version().map(|version| version.as_str().to_owned()),
-            source_game_id: candidate.source_game_id().map(|game_id| game_id.as_str().to_owned()),
+            version: candidate
+                .version()
+                .map(|version| version.as_str().to_owned()),
+            source_game_id: candidate
+                .source_game_id()
+                .map(|game_id| game_id.as_str().to_owned()),
             comparison: candidate.comparison().as_str().to_owned(),
-            warning: candidate.warning().map(|warning| warning.as_str().to_owned()),
+            warning: candidate
+                .warning()
+                .map(|warning| warning.as_str().to_owned()),
         }
     }
 }
@@ -251,7 +308,10 @@ impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
             kind: entry.operation.kind.as_str().to_owned(),
             status: entry.operation.status.as_str().to_owned(),
             created_at: entry.operation.created_at.as_i64(),
-            completed_at: entry.operation.completed_at.map(|timestamp| timestamp.as_i64()),
+            completed_at: entry
+                .operation
+                .completed_at
+                .map(|timestamp| timestamp.as_i64()),
             item_count: entry.item_count,
             backup_count: entry.backup_count,
             backup_status: backup_status(entry.item_count, entry.backup_count).to_owned(),
@@ -286,7 +346,9 @@ impl From<&OperationPlan> for SwapPlanOutput {
             operation_type: plan.operation_type().as_str().to_owned(),
             target_path: plan.target_path().as_str().to_owned(),
             replacement_path: plan.replacement_path().as_str().to_owned(),
-            original_version: plan.original_version().map(|version| version.as_str().to_owned()),
+            original_version: plan
+                .original_version()
+                .map(|version| version.as_str().to_owned()),
             replacement_version: plan
                 .replacement_version()
                 .map(|version| version.as_str().to_owned()),
@@ -369,7 +431,10 @@ impl From<&ApplyOperationCatalogResult> for ApplyOperationOutput {
             operation_id: result.operation.id.as_str().to_owned(),
             game_id: result.operation.game_id.as_str().to_owned(),
             status: result.operation.status.as_str().to_owned(),
-            completed_at: result.operation.completed_at.map(|timestamp| timestamp.as_i64()),
+            completed_at: result
+                .operation
+                .completed_at
+                .map(|timestamp| timestamp.as_i64()),
             items: result
                 .items
                 .iter()
@@ -415,7 +480,10 @@ impl From<&RollbackOperationCatalogResult> for RollbackOperationOutput {
             operation_id: result.operation.id.as_str().to_owned(),
             game_id: result.operation.game_id.as_str().to_owned(),
             status: result.operation.status.as_str().to_owned(),
-            completed_at: result.operation.completed_at.map(|timestamp| timestamp.as_i64()),
+            completed_at: result
+                .operation
+                .completed_at
+                .map(|timestamp| timestamp.as_i64()),
             items: result
                 .items
                 .iter()

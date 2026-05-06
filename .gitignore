@@ -7,3 +7,6 @@
 /.idea/
 /.vscode/
 /.local/
+/apps/desktop/dist/
+/apps/desktop/node_modules/
+/apps/desktop/src-tauri/gen/

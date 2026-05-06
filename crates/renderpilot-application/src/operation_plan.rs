@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    OperationId, PathRef, Sha256Hash, Swappability, Version,
+    ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, OperationId,
+    PathRef, Sha256Hash, Swappability, Version,
 };
 
 use crate::{AppError, AppResult, OperationKind};
@@ -267,9 +267,7 @@ impl OperationPlanWarning {
     /// Returns the stable text form used by CLI output.
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ConfirmationRequiredForSwappability => {
-                "confirmation_required_for_swappability"
-            }
+            Self::ConfirmationRequiredForSwappability => "confirmation_required_for_swappability",
             Self::StreamlinePartialSwap => "streamline_partial_swap",
             Self::ManualVersionComparisonRequired => "manual_version_comparison_required",
         }
@@ -292,7 +290,10 @@ fn component_target_file(component: &GraphicsComponent) -> AppResult<&ComponentF
     })
 }
 
-fn generated_operation_id(component: &GraphicsComponent, artifact: &LibraryArtifact) -> OperationId {
+fn generated_operation_id(
+    component: &GraphicsComponent,
+    artifact: &LibraryArtifact,
+) -> OperationId {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
@@ -317,7 +318,11 @@ fn derive_risk_level(
         return OperationPlanRiskLevel::Blocked;
     }
 
-    if warnings.iter().copied().any(OperationPlanWarning::raises_risk_to_high) {
+    if warnings
+        .iter()
+        .copied()
+        .any(OperationPlanWarning::raises_risk_to_high)
+    {
         return OperationPlanRiskLevel::High;
     }
 
@@ -372,8 +377,8 @@ fn is_streamline_partial_swap(component: &GraphicsComponent) -> bool {
 mod tests {
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-        GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash,
-        Swappability, Version,
+        GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash, Swappability,
+        Version,
     };
 
     use super::{
@@ -405,9 +410,15 @@ mod tests {
         assert_eq!(plan.game_id(), component.game_id());
         assert_eq!(plan.operation_type().as_str(), "replace_component");
         assert_eq!(plan.target_path().as_str(), "C:/Games/GameA/nvngx_dlss.dll");
-        assert_eq!(plan.replacement_path().as_str(), "D:/Library/nvngx_dlss.dll");
+        assert_eq!(
+            plan.replacement_path().as_str(),
+            "D:/Library/nvngx_dlss.dll"
+        );
         assert_eq!(plan.original_version().map(Version::as_str), Some("3.5.0"));
-        assert_eq!(plan.replacement_version().map(Version::as_str), Some("3.7.0"));
+        assert_eq!(
+            plan.replacement_version().map(Version::as_str),
+            Some("3.7.0")
+        );
         assert_eq!(
             plan.original_sha256().map(Sha256Hash::as_str),
             Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
@@ -615,7 +626,8 @@ mod tests {
         version: Option<&str>,
         sha256: Option<&str>,
     ) -> GraphicsComponent {
-        let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"));
+        let mut file =
+            ComponentFile::new(PathRef::new(path).expect("component path should be valid"));
 
         if let Some(version) = version {
             file = file.with_version(Version::parse(version).expect("version should be valid"));
@@ -646,8 +658,9 @@ mod tests {
             .file_name()
             .and_then(|name| name.to_str())
             .expect("artifact path should contain a file name");
-        let mut file = ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
-            .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
+        let mut file =
+            ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
+                .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
         if let Some(version) = version {
             file = file.with_version(Version::parse(version).expect("version should be valid"));

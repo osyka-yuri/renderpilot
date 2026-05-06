@@ -120,7 +120,9 @@ mod tests {
         let folder = temp_game_folder("missing-manual-game-source");
         let source = ManualFolderGameSource::new(&folder);
 
-        let error = source.discover_game().expect_err("missing folder should fail");
+        let error = source
+            .discover_game()
+            .expect_err("missing folder should fail");
 
         assert!(error.message().contains("game folder does not exist"));
     }

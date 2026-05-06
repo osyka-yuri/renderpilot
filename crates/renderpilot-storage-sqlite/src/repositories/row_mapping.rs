@@ -238,8 +238,8 @@ fn build_artifact(
         file = file.with_version(mapping::version(version)?);
     }
 
-    let mut artifact = LibraryArtifact::new(id, technology, file_name, file, trust_level)
-        .map_err(invalid_row)?;
+    let mut artifact =
+        LibraryArtifact::new(id, technology, file_name, file, trust_level).map_err(invalid_row)?;
 
     if let Some(source) = source {
         artifact = artifact.with_source(source).map_err(invalid_row)?;

@@ -1,4 +1,6 @@
-use renderpilot_application::{AppError, AppResult, BackupRepository, GameRepository, OperationRepository};
+use renderpilot_application::{
+    AppError, AppResult, BackupRepository, GameRepository, OperationRepository,
+};
 use renderpilot_domain::GameId;
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -6,7 +8,9 @@ use crate::error::CliError;
 
 use super::{storage::open_catalog_storage, OperationListCatalogEntry, OperationListCatalogResult};
 
-pub(super) fn list_operations_impl(game_id: GameId) -> Result<OperationListCatalogResult, CliError> {
+pub(super) fn list_operations_impl(
+    game_id: GameId,
+) -> Result<OperationListCatalogResult, CliError> {
     let storage = open_catalog_storage()?;
     ensure_game_exists(&storage, &game_id)?;
     let operations = storage.list_operations_for_game(&game_id)?;

@@ -1,8 +1,7 @@
 use renderpilot_application::{AppResult, MetadataJson};
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameRuntime, GraphicsTechnology, Launcher, PathRef, Platform, Sha256Hash, Swappability,
-    Version,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId, GameRuntime,
+    GraphicsTechnology, Launcher, PathRef, Platform, Sha256Hash, Swappability, Version,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -13,8 +12,7 @@ pub(crate) fn serialize_json<T>(value: &T) -> AppResult<String>
 where
     T: Serialize + ?Sized,
 {
-    serde_json::to_string(value)
-        .map_err(|error| storage_context("could not serialize json", error))
+    serde_json::to_string(value).map_err(|error| storage_context("could not serialize json", error))
 }
 
 pub(crate) fn deserialize_json<T>(value: &str) -> AppResult<T>
@@ -43,7 +41,7 @@ where
     T: DeserializeOwned,
 {
     serde_json::from_value(Value::String(value.to_owned()))
-    .map_err(|error| storage_context("could not deserialize enum", error))
+        .map_err(|error| storage_context("could not deserialize enum", error))
 }
 
 pub(crate) fn game_id(value: String) -> AppResult<GameId> {

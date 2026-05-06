@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
     ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
@@ -22,7 +22,9 @@ pub fn find_replacement_candidates(
         for file in component.files() {
             let mut candidates = component_artifacts
                 .iter()
-                .filter_map(|artifact| ReplacementCandidate::for_component_file(component, file, artifact))
+                .filter_map(|artifact| {
+                    ReplacementCandidate::for_component_file(component, file, artifact)
+                })
                 .collect::<Vec<_>>();
 
             if candidates.is_empty() {
@@ -30,7 +32,10 @@ pub fn find_replacement_candidates(
             }
 
             candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
-            groups.push(ComponentFileReplacementCandidates::new(component, file, candidates));
+            let candidates = deduplicate_candidates(candidates);
+            groups.push(ComponentFileReplacementCandidates::new(
+                component, file, candidates,
+            ));
         }
     }
 
@@ -44,7 +49,10 @@ fn group_artifacts_by_technology(
     let mut grouped = HashMap::<GraphicsTechnology, Vec<&LibraryArtifact>>::new();
 
     for artifact in artifacts {
-        grouped.entry(artifact.technology()).or_default().push(artifact);
+        grouped
+            .entry(artifact.technology())
+            .or_default()
+            .push(artifact);
     }
 
     grouped
@@ -123,6 +131,7 @@ pub struct ReplacementCandidate {
     file_name: String,
     file_path: PathRef,
     version: Option<Version>,
+    sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
     warning: Option<CandidateWarning>,
@@ -141,6 +150,7 @@ impl ReplacementCandidate {
             file_name: artifact.file_name().to_owned(),
             file_path: artifact.path().clone(),
             version: artifact.version().cloned(),
+            sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
             warning: candidate_warning(component),
@@ -239,7 +249,9 @@ fn compare_versions(
     candidate: Option<&Version>,
 ) -> Option<CandidateComparison> {
     match (current, candidate) {
-        (Some(current), Some(candidate)) if candidate > current => Some(CandidateComparison::NewerVersion),
+        (Some(current), Some(candidate)) if candidate > current => {
+            Some(CandidateComparison::NewerVersion)
+        }
         (Some(current), Some(candidate)) if candidate <= current => None,
         _ => Some(CandidateComparison::UnknownVersion),
     }
@@ -252,12 +264,44 @@ fn candidate_warning(component: &GraphicsComponent) -> Option<CandidateWarning> 
     }
 }
 
+fn deduplicate_candidates(candidates: Vec<ReplacementCandidate>) -> Vec<ReplacementCandidate> {
+    let mut seen = HashSet::<CandidateDedupeKey>::new();
+    let mut deduplicated = Vec::with_capacity(candidates.len());
+
+    for candidate in candidates {
+        if seen.insert(CandidateDedupeKey::from(&candidate)) {
+            deduplicated.push(candidate);
+        }
+    }
+
+    deduplicated
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CandidateDedupeKey {
+    file_name: String,
+    comparison: CandidateComparison,
+    version: Option<Version>,
+    sha256: String,
+}
+
+impl From<&ReplacementCandidate> for CandidateDedupeKey {
+    fn from(candidate: &ReplacementCandidate) -> Self {
+        Self {
+            file_name: candidate.file_name.clone(),
+            comparison: candidate.comparison,
+            version: candidate.version.clone(),
+            sha256: candidate.sha256.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-        GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash,
-        Swappability, Version,
+        GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash, Swappability,
+        Version,
     };
 
     use super::{find_replacement_candidates, CandidateComparison, CandidateWarning};
@@ -299,13 +343,22 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[sr_candidate.clone(), fg_candidate, rr_candidate]);
+        let groups = find_replacement_candidates(
+            &[component],
+            &[sr_candidate.clone(), fg_candidate, rr_candidate],
+        );
 
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].technology(), GraphicsTechnology::DlssSuperResolution);
+        assert_eq!(
+            groups[0].technology(),
+            GraphicsTechnology::DlssSuperResolution
+        );
         assert_eq!(groups[0].candidates().len(), 1);
         assert_eq!(groups[0].candidates()[0].artifact_id(), sr_candidate.id());
-        assert_eq!(groups[0].candidates()[0].comparison(), CandidateComparison::NewerVersion);
+        assert_eq!(
+            groups[0].candidates()[0].comparison(),
+            CandidateComparison::NewerVersion
+        );
     }
 
     #[test]
@@ -365,7 +418,10 @@ mod tests {
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].candidates().len(), 1);
-        assert_eq!(groups[0].candidates()[0].comparison(), CandidateComparison::UnknownVersion);
+        assert_eq!(
+            groups[0].candidates()[0].comparison(),
+            CandidateComparison::UnknownVersion
+        );
     }
 
     #[test]
@@ -395,6 +451,66 @@ mod tests {
             groups[0].candidates()[0].warning(),
             Some(CandidateWarning::StreamlineSingleFileSwap)
         );
+    }
+
+    #[test]
+    fn skips_same_technology_artifacts_with_different_file_names() {
+        let component = sample_component(
+            "component:game-a:streamline",
+            "game:a",
+            GraphicsTechnology::NvidiaStreamline,
+            Swappability::BundleOnly,
+            Some("2.4.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/sl.common.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:streamline-interposer",
+            GraphicsTechnology::NvidiaStreamline,
+            Some("2.5.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/sl.interposer.dll",
+            Some("game:b"),
+        );
+
+        let groups = find_replacement_candidates(&[component], &[artifact]);
+
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn deduplicates_identical_candidates_observed_in_multiple_games() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let duplicate_a = sample_artifact(
+            "artifact:dlss-3.7-a",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+        let duplicate_b = sample_artifact(
+            "artifact:dlss-3.7-b",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "D:/Games/GameC/nvngx_dlss.dll",
+            Some("game:c"),
+        );
+
+        let groups = find_replacement_candidates(&[component], &[duplicate_a.clone(), duplicate_b]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 1);
+        assert_eq!(groups[0].candidates()[0].artifact_id(), duplicate_a.id());
     }
 
     #[test]
@@ -431,8 +547,9 @@ mod tests {
         sha256: &str,
         path: &str,
     ) -> GraphicsComponent {
-        let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
-            .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
+        let mut file =
+            ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
+                .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
         if let Some(version) = version {
             file = file.with_version(Version::parse(version).expect("version should be valid"));
@@ -460,8 +577,9 @@ mod tests {
             .file_name()
             .and_then(|name| name.to_str())
             .expect("artifact path should contain a file name");
-        let mut file = ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
-            .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
+        let mut file =
+            ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
+                .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
         if let Some(version) = version {
             file = file.with_version(Version::parse(version).expect("version should be valid"));
@@ -492,6 +610,10 @@ fn candidate_comparison(
     file: &renderpilot_domain::ComponentFile,
     artifact: &LibraryArtifact,
 ) -> Option<CandidateComparison> {
+    if !artifact_matches_component_file(file, artifact) {
+        return None;
+    }
+
     if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
         return None;
     }
@@ -501,4 +623,18 @@ fn candidate_comparison(
     }
 
     compare_versions(file.version(), artifact.version())
+}
+
+fn artifact_matches_component_file(
+    file: &renderpilot_domain::ComponentFile,
+    artifact: &LibraryArtifact,
+) -> bool {
+    let Some(file_name) = std::path::Path::new(file.path().as_str())
+        .file_name()
+        .and_then(|name| name.to_str())
+    else {
+        return false;
+    };
+
+    artifact.file_name() == file_name
 }

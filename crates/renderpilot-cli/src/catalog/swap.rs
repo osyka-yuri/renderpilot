@@ -10,9 +10,7 @@ use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::{backup_manager::metadata_json_for_planned_item, error::CliError};
 
-use super::{
-    storage::open_catalog_storage, CandidateCatalogResult, SwapPlanCatalogResult,
-};
+use super::{storage::open_catalog_storage, CandidateCatalogResult, SwapPlanCatalogResult};
 
 pub(super) fn find_candidates_impl(game_id: GameId) -> Result<CandidateCatalogResult, CliError> {
     let storage = open_catalog_storage()?;
@@ -72,7 +70,9 @@ fn find_artifact(storage: &SqliteStorage, artifact_id: &ArtifactId) -> AppResult
         .list_artifacts()?
         .into_iter()
         .find(|artifact| artifact.id() == artifact_id)
-        .ok_or_else(|| AppError::invalid_input(format!("artifact not found: {}", artifact_id.as_str())))
+        .ok_or_else(|| {
+            AppError::invalid_input(format!("artifact not found: {}", artifact_id.as_str()))
+        })
 }
 
 fn persist_swap_operation_plan(

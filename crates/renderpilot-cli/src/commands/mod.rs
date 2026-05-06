@@ -9,9 +9,9 @@ use crate::{
     error::CliError,
     output::{
         render_apply_operation_output, render_backup_output, render_candidates_output, render_help,
-        render_list_operations_output, render_rollback_operation_output,
-        render_list_artifacts_output, render_plan_swap_output, render_scan_folder_output,
-        render_summary, render_version,
+        render_list_artifacts_output, render_list_operations_output, render_plan_swap_output,
+        render_rollback_operation_output, render_scan_folder_output, render_summary,
+        render_version,
     },
 };
 

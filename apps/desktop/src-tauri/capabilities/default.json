@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "Default desktop capability set for the RenderPilot UI.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
+}

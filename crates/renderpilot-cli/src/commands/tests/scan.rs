@@ -2,7 +2,7 @@ use std::{ffi::OsString, fs};
 
 use crate::run;
 
-use super::{CatalogEnvironmentGuard, TempGameFolder, temp_db_path};
+use super::{temp_db_path, CatalogEnvironmentGuard, TempGameFolder};
 
 #[test]
 fn scan_folder_outputs_game_and_components_json() {

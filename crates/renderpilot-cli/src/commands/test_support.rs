@@ -2,20 +2,21 @@ use std::{
     ffi::{OsString, OsString as PlatformString},
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::MutexGuard,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use renderpilot_application::{ArtifactRepository, ComponentRepository, GameRepository};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, LibraryArtifact, Launcher,
+    GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact,
     PathRef, Platform, Sha256Hash, Swappability, Version,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::backup_manager::BACKUP_ROOT_DIR_ENV;
 use crate::catalog::CATALOG_DB_PATH_ENV;
+use crate::test_env::lock_process_env;
 
 pub(super) fn args(values: &[&str]) -> Vec<OsString> {
     values.iter().map(OsString::from).collect()
@@ -57,7 +58,7 @@ impl TempGameFolder {
 
 impl CatalogEnvironmentGuard {
     pub(super) fn new(path: PathBuf) -> Self {
-        let lock = lock_catalog_env();
+        let lock = lock_process_env();
         let previous = std::env::var_os(CATALOG_DB_PATH_ENV);
         let previous_backup_root = std::env::var_os(BACKUP_ROOT_DIR_ENV);
         let backup_root = temp_backup_root(&path);
@@ -87,7 +88,9 @@ impl CatalogFixture {
     }
 
     pub(super) fn store_game(&self, game: &GameInstallation) {
-        self.storage.upsert_game(game).expect("game should be stored");
+        self.storage
+            .upsert_game(game)
+            .expect("game should be stored");
     }
 
     pub(super) fn store_components(
@@ -221,22 +224,11 @@ pub(super) fn sample_artifact(
     .expect("source should be valid");
 
     match source_game_id {
-        Some(source_game_id) => artifact
-            .with_source_game_id(GameId::new(source_game_id).expect("source game id should be valid")),
+        Some(source_game_id) => artifact.with_source_game_id(
+            GameId::new(source_game_id).expect("source game id should be valid"),
+        ),
         None => artifact,
     }
-}
-
-fn catalog_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn lock_catalog_env() -> MutexGuard<'static, ()> {
-    catalog_env_lock()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn temp_backup_root(db_path: &Path) -> PathBuf {

@@ -37,6 +37,9 @@ mod tests {
     fn invalid_row_uses_stable_prefix() {
         let error = invalid_row("metadata json must be valid JSON");
 
-        assert_eq!(error.message(), "invalid sqlite row: metadata json must be valid JSON");
+        assert_eq!(
+            error.message(),
+            "invalid sqlite row: metadata json must be valid JSON"
+        );
     }
 }

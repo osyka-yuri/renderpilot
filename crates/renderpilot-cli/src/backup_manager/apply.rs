@@ -20,9 +20,7 @@ use super::{
     },
     journal::{require_replacement_plan_item, ReplacementPlanItem, RetryableReplaceOperation},
     plan_metadata::planned_item_metadata,
-    shared::{
-        backup_lookup_map, rebuild_component_catalog, BackupLookupKey, CatalogUpdateItem,
-    },
+    shared::{backup_lookup_map, rebuild_component_catalog, BackupLookupKey, CatalogUpdateItem},
 };
 
 #[derive(Debug)]
@@ -45,7 +43,8 @@ pub(crate) fn apply_operation(
     operation_id: OperationId,
 ) -> AppResult<ApplyOperationCatalogResult> {
     let mut operation = RetryableReplaceOperation::load(storage, &operation_id, "apply", "apply")?;
-    let prepared_items = match prepare_apply_items(storage, &operation.operation, &operation.items) {
+    let prepared_items = match prepare_apply_items(storage, &operation.operation, &operation.items)
+    {
         Ok(prepared_items) => prepared_items,
         Err(error) => return Err(operation.capture_blocked(storage, error)),
     };
@@ -65,7 +64,10 @@ fn prepare_apply_items(
     let artifacts = storage.list_artifacts()?;
     let preparation = ApplyPreparation::new(operation, &backups, &artifacts);
 
-    items.iter().map(|item| preparation.prepare_item(item)).collect()
+    items
+        .iter()
+        .map(|item| preparation.prepare_item(item))
+        .collect()
 }
 
 fn apply_operation_records(
@@ -85,7 +87,9 @@ fn apply_operation_records(
         applied_items.push(prepared_item);
     }
 
-    if let Err(error) = update_components_after_apply(storage, &operation.operation.game_id, prepared_items) {
+    if let Err(error) =
+        update_components_after_apply(storage, &operation.operation.game_id, prepared_items)
+    {
         return Err(rollback_after_apply_failure(error, &applied_items));
     }
 
@@ -104,15 +108,12 @@ fn apply_prepared_item(prepared_item: &PreparedApplyItem) -> AppResult<()> {
     prepared_item.apply()
 }
 
-fn rollback_after_apply_failure(
-    error: AppError,
-    applied_items: &[&PreparedApplyItem],
-) -> AppError {
+fn rollback_after_apply_failure(error: AppError, applied_items: &[&PreparedApplyItem]) -> AppError {
     match rollback_applied_items(applied_items) {
         Ok(()) => error,
-        Err(rollback_error) => AppError::provider_failed(format!(
-            "{error}; rollback failed: {rollback_error}"
-        )),
+        Err(rollback_error) => {
+            AppError::provider_failed(format!("{error}; rollback failed: {rollback_error}"))
+        }
     }
 }
 
@@ -323,12 +324,12 @@ impl PreparedApplyItem {
                 expected_sha256,
                 "backup sha256 mismatch",
             )
-                .map_err(|_| {
-                    blocked_error(format!(
-                        "backup integrity check failed for component {}",
-                        self.component_id().as_str()
-                    ))
-                })?;
+            .map_err(|_| {
+                blocked_error(format!(
+                    "backup integrity check failed for component {}",
+                    self.component_id().as_str()
+                ))
+            })?;
         }
 
         Ok(())
@@ -427,8 +428,8 @@ impl PreparedApplyItem {
     }
 
     fn updated_component_file(&self, file: &ComponentFile) -> ComponentFile {
-        let mut updated_file = ComponentFile::new(file.path().clone())
-            .with_sha256(self.artifact.sha256().clone());
+        let mut updated_file =
+            ComponentFile::new(file.path().clone()).with_sha256(self.artifact.sha256().clone());
 
         if let Some(version) = self.artifact.version().cloned() {
             updated_file = updated_file.with_version(version);
@@ -511,17 +512,17 @@ impl Drop for StagedReplacementFile {
 }
 
 fn temporary_target_path(target_path: &Path) -> AppResult<PathBuf> {
-    let file_name = target_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
-        AppError::invalid_input(format!(
-            "target path has no file name: {}",
-            target_path.display()
-        ))
-    })?;
+    let file_name = target_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            AppError::invalid_input(format!(
+                "target path has no file name: {}",
+                target_path.display()
+            ))
+        })?;
     let timestamp = current_timestamp_millis()?.as_i64();
-    let temp_name = format!(
-        ".{file_name}.renderpilot-{}-{timestamp}.tmp",
-        process::id()
-    );
+    let temp_name = format!(".{file_name}.renderpilot-{}-{timestamp}.tmp", process::id());
 
     Ok(target_path.with_file_name(temp_name))
 }

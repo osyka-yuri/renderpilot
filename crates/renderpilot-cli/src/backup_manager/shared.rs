@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use renderpilot_application::{AppError, AppResult, BackupRecord, OperationItemRecord, OperationRecord};
+use renderpilot_application::{
+    AppError, AppResult, BackupRecord, OperationItemRecord, OperationRecord,
+};
 use renderpilot_domain::{ComponentFile, ComponentId, GraphicsComponent, PathRef};
-
-pub(super) type CatalogFileKey = (String, String);
 
 pub(super) trait CatalogUpdateItem {
     fn catalog_component_id(&self) -> &ComponentId;
@@ -26,7 +26,7 @@ where
         .iter()
         .map(|prepared_item| {
             (
-                catalog_file_key(
+                CatalogFileKey::new(
                     prepared_item.catalog_component_id().as_str(),
                     prepared_item.catalog_file_path().as_str(),
                 ),
@@ -45,11 +45,28 @@ where
     Ok(updated_components)
 }
 
-pub(super) fn backup_lookup_map(backups: &[BackupRecord]) -> HashMap<BackupLookupKey, BackupRecord> {
+pub(super) fn backup_lookup_map(
+    backups: &[BackupRecord],
+) -> HashMap<BackupLookupKey, BackupRecord> {
     backups
         .iter()
         .map(|backup| (BackupLookupKey::from_backup(backup), backup.clone()))
         .collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CatalogFileKey {
+    component_id: String,
+    file_path: String,
+}
+
+impl CatalogFileKey {
+    fn new(component_id: &str, file_path: &str) -> Self {
+        Self {
+            component_id: component_id.to_owned(),
+            file_path: file_path.to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -77,10 +94,6 @@ impl BackupLookupKey {
     }
 }
 
-pub(super) fn catalog_file_key(component_id: &str, file_path: &str) -> CatalogFileKey {
-    (component_id.to_owned(), file_path.to_owned())
-}
-
 fn rebuild_component<T>(
     component: GraphicsComponent,
     items_by_key: &HashMap<CatalogFileKey, &T>,
@@ -98,11 +111,12 @@ where
     );
 
     for file in component.files() {
-        let key = catalog_file_key(component.id().as_str(), file.path().as_str());
+        let key = CatalogFileKey::new(component.id().as_str(), file.path().as_str());
 
         if let Some(prepared_item) = items_by_key.get(&key) {
             matched_files.insert(key);
-            updated_component = updated_component.with_file(prepared_item.updated_component_file(file));
+            updated_component =
+                updated_component.with_file(prepared_item.updated_component_file(file));
         } else {
             updated_component = updated_component.with_file(file.clone());
         }

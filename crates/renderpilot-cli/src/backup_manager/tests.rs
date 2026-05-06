@@ -3,7 +3,7 @@ use std::{
     fs::{self, OpenOptions},
     io::Write as _,
     path::PathBuf,
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::MutexGuard,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -12,17 +12,18 @@ use renderpilot_application::{
     OperationRecord, OperationRepository, OperationStatus, UnixTimestampMillis,
 };
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity,
-    GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher,
-    LibraryArtifact, OperationId, PathRef, Platform, Swappability, Version,
+    ArtifactId, ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation,
+    GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher, LibraryArtifact, OperationId,
+    PathRef, Platform, Swappability, Version,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
+
+use crate::test_env::lock_process_env;
 
 use super::{
     apply_operation, create_backup, create_backup_with_post_copy,
     filesystem::{backup_operation_root, path_ref_from_path, sanitize_path_segment, sha256_file},
-    planned_operation_item_metadata_json,
-    BACKUP_ROOT_DIR_ENV,
+    planned_operation_item_metadata_json, BACKUP_ROOT_DIR_ENV,
 };
 
 #[test]
@@ -42,10 +43,8 @@ fn backup_marks_operation_failed_when_sha256_verification_mismatches() {
     );
     let artifact = sample_artifact("artifact:dlss-3.7", "D:/Library/nvngx_dlss.dll");
     let operation = OperationRecord::new(
-        OperationId::new(
-            "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7",
-        )
-        .expect("operation id should be valid"),
+        OperationId::new("operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7")
+            .expect("operation id should be valid"),
         game.id().clone(),
         OperationKind::ReplaceComponent,
         OperationStatus::Planned,
@@ -67,8 +66,12 @@ fn backup_marks_operation_failed_when_sha256_verification_mismatches() {
     storage
         .replace_components_for_game(game.id(), &[component])
         .expect("component should be stored");
-    storage.upsert_artifact(&artifact).expect("artifact should be stored");
-    storage.upsert_operation(&operation).expect("operation should be stored");
+    storage
+        .upsert_artifact(&artifact)
+        .expect("artifact should be stored");
+    storage
+        .upsert_operation(&operation)
+        .expect("operation should be stored");
     storage
         .replace_operation_items(&operation.id, &[item])
         .expect("operation item should be stored");
@@ -163,16 +166,20 @@ fn apply_operation_rolls_back_when_catalog_refresh_fails() {
     storage
         .replace_components_for_game(game.id(), &[component.clone()])
         .expect("component should be stored");
-    storage.upsert_artifact(&artifact).expect("artifact should be stored");
-    storage.upsert_operation(&operation).expect("operation should be stored");
+    storage
+        .upsert_artifact(&artifact)
+        .expect("artifact should be stored");
+    storage
+        .upsert_operation(&operation)
+        .expect("operation should be stored");
     storage
         .replace_operation_items(&operation.id, &[item])
         .expect("operation item should be stored");
 
     create_backup(&storage, operation.id.clone(), "0.1.0").expect("backup should succeed");
 
-    let error =
-        apply_operation(&storage, operation.id.clone()).expect_err("apply should fail and roll back");
+    let error = apply_operation(&storage, operation.id.clone())
+        .expect_err("apply should fail and roll back");
     let operation_after = storage
         .find_operation(&operation.id)
         .expect("operation lookup should succeed")
@@ -243,7 +250,7 @@ struct BackupRootGuard {
 
 impl BackupRootGuard {
     fn new(root: PathBuf) -> Self {
-        let lock = lock_backup_root();
+        let lock = lock_process_env();
         let previous = env::var_os(BACKUP_ROOT_DIR_ENV);
 
         env::set_var(BACKUP_ROOT_DIR_ENV, &root);
@@ -270,18 +277,6 @@ impl Drop for BackupRootGuard {
     }
 }
 
-fn backup_root_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn lock_backup_root() -> MutexGuard<'static, ()> {
-    backup_root_lock()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 fn temp_backup_root(name: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -292,8 +287,8 @@ fn temp_backup_root(name: &str) -> PathBuf {
 }
 
 fn sample_game(game_id: GameId, install_path: PathRef) -> GameInstallation {
-    let identity =
-        GameIdentity::new(game_id, "Test Game", Launcher::Manual).expect("game identity should be valid");
+    let identity = GameIdentity::new(game_id, "Test Game", Launcher::Manual)
+        .expect("game identity should be valid");
 
     GameInstallation::new(
         identity,
@@ -303,7 +298,11 @@ fn sample_game(game_id: GameId, install_path: PathRef) -> GameInstallation {
     )
 }
 
-fn sample_component(component_id: &str, game_id: GameId, source_path: PathRef) -> GraphicsComponent {
+fn sample_component(
+    component_id: &str,
+    game_id: GameId,
+    source_path: PathRef,
+) -> GraphicsComponent {
     GraphicsComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         game_id,

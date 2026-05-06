@@ -8,9 +8,8 @@ use super::ComponentError;
 
 #[test]
 fn sha256_hash_normalizes_to_lowercase() {
-    let hash =
-        Sha256Hash::new("ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789")
-            .expect("valid hash");
+    let hash = Sha256Hash::new("ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789")
+        .expect("valid hash");
 
     assert_eq!(
         hash.as_str(),
@@ -48,10 +47,8 @@ fn component_file_keeps_version_and_hash() {
         ComponentFile::new(PathRef::new(r"C:\Games\Game\nvngx_dlss.dll").expect("valid path"))
             .with_version(Version::parse("3.7.20").expect("valid version"))
             .with_sha256(
-                Sha256Hash::new(
-                    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                )
-                .expect("valid hash"),
+                Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
+                    .expect("valid hash"),
             );
 
     assert_eq!(file.path().as_str(), "C:/Games/Game/nvngx_dlss.dll");
@@ -82,10 +79,8 @@ fn library_artifact_normalizes_source() {
         " nvngx_dlss.dll ",
         ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
             .with_sha256(
-                Sha256Hash::new(
-                    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                )
-                .expect("valid hash"),
+                Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
+                    .expect("valid hash"),
             ),
         ArtifactTrustLevel::LocalObserved,
     )
@@ -106,10 +101,8 @@ fn library_artifact_rejects_empty_source() {
         "nvngx_dlss.dll",
         ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
             .with_sha256(
-                Sha256Hash::new(
-                    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                )
-                .expect("valid hash"),
+                Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
+                    .expect("valid hash"),
             ),
         ArtifactTrustLevel::LocalObserved,
     )
@@ -129,10 +122,8 @@ fn library_artifact_tracks_source_game() {
         "nvngx_dlss.dll",
         ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
             .with_sha256(
-                Sha256Hash::new(
-                    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                )
-                .expect("valid hash"),
+                Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
+                    .expect("valid hash"),
             ),
         ArtifactTrustLevel::LocalObserved,
     )

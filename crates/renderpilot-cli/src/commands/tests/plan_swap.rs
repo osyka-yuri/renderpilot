@@ -4,7 +4,7 @@ use renderpilot_domain::Swappability;
 
 use crate::run;
 
-use super::{CatalogFixture, args, sample_artifact, sample_component, sample_game};
+use super::{args, sample_artifact, sample_component, sample_game, CatalogFixture};
 
 #[test]
 fn plan_swap_renders_operation_plan_json() {
@@ -55,14 +55,18 @@ fn plan_swap_renders_operation_plan_json() {
     assert_eq!(json["requires_backup"], true);
     assert_eq!(json["requires_elevation"], false);
     assert_eq!(json["artifact_id"], "artifact:dlss-3.7");
-    assert!(
-        json["operation_id"]
-            .as_str()
-            .expect("operation id string")
-            .starts_with("operation:replace_component:")
-    );
-    assert!(json["blockers"].as_array().expect("blockers array").is_empty());
-    assert!(json["warnings"].as_array().expect("warnings array").is_empty());
+    assert!(json["operation_id"]
+        .as_str()
+        .expect("operation id string")
+        .starts_with("operation:replace_component:"));
+    assert!(json["blockers"]
+        .as_array()
+        .expect("blockers array")
+        .is_empty());
+    assert!(json["warnings"]
+        .as_array()
+        .expect("warnings array")
+        .is_empty());
 }
 
 #[test]
@@ -149,7 +153,9 @@ fn plan_swap_surfaces_streamline_partial_swap_warning() {
     let warnings = json["warnings"].as_array().expect("warnings array");
 
     assert_eq!(json["risk_level"], "high");
-    assert!(warnings.iter().any(|warning| warning == "streamline_partial_swap"));
+    assert!(warnings
+        .iter()
+        .any(|warning| warning == "streamline_partial_swap"));
     assert!(warnings
         .iter()
         .any(|warning| warning == "confirmation_required_for_swappability"));
@@ -215,7 +221,10 @@ fn plan_swap_persists_planned_operation_and_item() {
     assert_eq!(operation.status.as_str(), "planned");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].component_id.as_str(), "component:game-a:dlss");
-    assert_eq!(items[0].source_path.as_str(), "C:/Games/GameA/nvngx_dlss.dll");
+    assert_eq!(
+        items[0].source_path.as_str(),
+        "C:/Games/GameA/nvngx_dlss.dll"
+    );
     assert_eq!(
         items[0].target_path.as_ref().map(|path| path.as_str()),
         Some("D:/Library/nvngx_dlss.dll")

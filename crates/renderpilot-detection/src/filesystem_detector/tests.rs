@@ -46,7 +46,11 @@ fn fixture_detects_known_graphics_libraries() {
         "amd_fidelityfx_framegeneration.dll",
         GraphicsTechnology::AmdFsrFrameGeneration,
     );
-    assert_detects(&libraries, "some_fsr_unknown.dll", GraphicsTechnology::Unknown);
+    assert_detects(
+        &libraries,
+        "some_fsr_unknown.dll",
+        GraphicsTechnology::Unknown,
+    );
 }
 
 #[test]
@@ -150,7 +154,10 @@ fn detected_files_include_hash_unknown_version_status_and_cache_key() {
     assert_eq!(dlss.status(), VersionDetectionStatus::UnknownVersion);
     assert_eq!(dlss.cache_key().path(), dlss.file_path());
     assert_eq!(dlss.cache_key().size(), 1);
-    assert_eq!(dlss.cache_key().sha256().as_str(), FIXTURE_NEWLINE_FILE_SHA256);
+    assert_eq!(
+        dlss.cache_key().sha256().as_str(),
+        FIXTURE_NEWLINE_FILE_SHA256
+    );
 }
 
 #[test]
@@ -177,8 +184,7 @@ fn assert_detects(
     assert!(
         libraries
             .iter()
-            .any(|library| library.file_name() == file_name
-                && library.technology() == technology),
+            .any(|library| library.file_name() == file_name && library.technology() == technology),
         "expected to detect {file_name} as {technology:?}; got {libraries:#?}"
     );
 }

@@ -1,6 +1,6 @@
 use renderpilot_application::{
-    AppError, AppResult, OperationItemRecord, OperationKind, OperationRecord,
-    OperationRepository, OperationStatus, UnixTimestampMillis,
+    AppError, AppResult, OperationItemRecord, OperationKind, OperationRecord, OperationRepository,
+    OperationStatus, UnixTimestampMillis,
 };
 use renderpilot_domain::{ArtifactId, OperationId, PathRef};
 use renderpilot_storage_sqlite::SqliteStorage;
@@ -57,19 +57,11 @@ impl RetryableReplaceOperation {
         self.mark_terminal_state(storage, OperationStatus::RolledBack)
     }
 
-    pub(super) fn capture_failure(
-        &mut self,
-        storage: &SqliteStorage,
-        error: AppError,
-    ) -> AppError {
+    pub(super) fn capture_failure(&mut self, storage: &SqliteStorage, error: AppError) -> AppError {
         self.capture_state_error(storage, error, Self::mark_failed, "failed")
     }
 
-    pub(super) fn capture_blocked(
-        &mut self,
-        storage: &SqliteStorage,
-        error: AppError,
-    ) -> AppError {
+    pub(super) fn capture_blocked(&mut self, storage: &SqliteStorage, error: AppError) -> AppError {
         self.capture_state_error(storage, error, Self::mark_blocked, "blocked")
     }
 
@@ -79,13 +71,8 @@ impl RetryableReplaceOperation {
         status: OperationStatus,
         completed_at: Option<UnixTimestampMillis>,
     ) -> AppResult<()> {
-        let updated = mark_operation_state(
-            storage,
-            &self.operation,
-            &self.items,
-            status,
-            completed_at,
-        )?;
+        let updated =
+            mark_operation_state(storage, &self.operation, &self.items, status, completed_at)?;
 
         self.operation = updated.0;
         self.items = updated.1;

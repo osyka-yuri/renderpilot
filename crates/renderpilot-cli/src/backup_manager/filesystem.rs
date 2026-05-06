@@ -28,7 +28,12 @@ pub(super) fn copy_backup_file_with_verification<F>(
 where
     F: Fn(&Path) -> std::io::Result<()>,
 {
-    copy_file_with_verification(source_path, backup_path, post_copy, "backup sha256 mismatch")
+    copy_file_with_verification(
+        source_path,
+        backup_path,
+        post_copy,
+        "backup sha256 mismatch",
+    )
 }
 
 pub(super) fn copy_file_with_verification<F>(
@@ -55,7 +60,10 @@ where
 
     post_copy(destination_path).map_err(|error| {
         file_system_error(
-            format!("failed to finalize copied file {}", destination_path.display()),
+            format!(
+                "failed to finalize copied file {}",
+                destination_path.display()
+            ),
             error,
         )
     })?;
@@ -127,7 +135,10 @@ pub(super) fn ensure_file_is_writable(path: &Path, description: &str) -> AppResu
         .open(path)
         .map_err(|error| {
             file_system_error(
-                format!("{description} is locked or not writable: {}", path.display()),
+                format!(
+                    "{description} is locked or not writable: {}",
+                    path.display()
+                ),
                 error,
             )
         })?;
@@ -149,7 +160,10 @@ fn backup_root_dir() -> PathBuf {
 
 pub(super) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
     let mut file = File::open(path).map_err(|error| {
-        file_system_error(format!("could not open {} for hashing", path.display()), error)
+        file_system_error(
+            format!("could not open {} for hashing", path.display()),
+            error,
+        )
     })?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; HASH_BUFFER_SIZE];

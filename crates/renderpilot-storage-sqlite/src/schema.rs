@@ -18,7 +18,8 @@ const DEDUPLICATE_ARTIFACTS_SQL: &str = "DELETE FROM library_artifacts
            WHERE sha256 IS NOT NULL
            GROUP BY sha256
        )";
-const CREATE_ARTIFACT_INDEXES_SQL: &str = "CREATE UNIQUE INDEX IF NOT EXISTS idx_library_artifacts_sha256
+const CREATE_ARTIFACT_INDEXES_SQL: &str =
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_library_artifacts_sha256
          ON library_artifacts(sha256);
      CREATE INDEX IF NOT EXISTS idx_library_artifacts_technology
          ON library_artifacts(technology);";
@@ -71,14 +72,19 @@ fn ensure_library_artifact_schema(connection: &Connection) -> AppResult<()> {
         return Ok(());
     }
 
-    add_missing_library_artifact_columns(connection, &columns)?;
-
-    if has_column(&columns, LEGACY_ARTIFACT_FILE_JSON_COLUMN) {
-        backfill_legacy_artifact_columns(connection)?;
-    }
-
+    migrate_library_artifact_columns(connection, &columns)?;
     normalize_library_artifact_rows(connection)?;
     create_library_artifact_indexes(connection)?;
+
+    Ok(())
+}
+
+fn migrate_library_artifact_columns(connection: &Connection, columns: &[String]) -> AppResult<()> {
+    add_missing_library_artifact_columns(connection, columns)?;
+
+    if has_column(columns, LEGACY_ARTIFACT_FILE_JSON_COLUMN) {
+        backfill_legacy_artifact_columns(connection)?;
+    }
 
     Ok(())
 }
@@ -149,21 +155,15 @@ fn backfill_legacy_artifact_columns(connection: &Connection) -> AppResult<()> {
         )
         .map_err(|error| storage_context("could not prepare legacy artifact migration", error))?;
     let rows = statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(|error| storage_context("could not read legacy artifact rows", error))?;
 
     for row in rows {
         let (id, file_json) =
             row.map_err(|error| storage_context("could not decode legacy artifact row", error))?;
-        let file = mapping::component_file(file_json)?;
-        let file_name = std::path::Path::new(file.path().as_str())
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| crate::error::storage_error("legacy artifact path is missing a file name"))?;
-        let version = file.version().map(|version| version.as_str());
-        let sha256 = file
-            .sha256()
-            .ok_or_else(|| crate::error::storage_error("legacy artifact sha256 is missing"))?;
+        let legacy_artifact = LegacyArtifactColumns::from_file_json(file_json)?;
 
         connection
             .execute(
@@ -174,12 +174,50 @@ fn backfill_legacy_artifact_columns(connection: &Connection) -> AppResult<()> {
                      sha256 = COALESCE(sha256, ?4),
                      trust_level = COALESCE(trust_level, 'LocalObserved')
                  WHERE id = ?5",
-                params![file_name, file.path().as_str(), version, sha256.as_str(), id],
+                params![
+                    legacy_artifact.file_name,
+                    legacy_artifact.file_path,
+                    legacy_artifact.version,
+                    legacy_artifact.sha256,
+                    id
+                ],
             )
             .map_err(|error| storage_context("could not migrate legacy artifact row", error))?;
     }
 
     Ok(())
+}
+
+struct LegacyArtifactColumns {
+    file_name: String,
+    file_path: String,
+    version: Option<String>,
+    sha256: String,
+}
+
+impl LegacyArtifactColumns {
+    fn from_file_json(file_json: String) -> AppResult<Self> {
+        let file = mapping::component_file(file_json)?;
+        let file_name = std::path::Path::new(file.path().as_str())
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| {
+                crate::error::storage_error("legacy artifact path is missing a file name")
+            })?
+            .to_owned();
+        let sha256 = file
+            .sha256()
+            .ok_or_else(|| crate::error::storage_error("legacy artifact sha256 is missing"))?
+            .as_str()
+            .to_owned();
+
+        Ok(Self {
+            file_name,
+            file_path: file.path().as_str().to_owned(),
+            version: file.version().map(|version| version.as_str().to_owned()),
+            sha256,
+        })
+    }
 }
 
 struct ColumnMigration {
@@ -189,11 +227,7 @@ struct ColumnMigration {
 }
 
 impl ColumnMigration {
-    const fn new(
-        name: &'static str,
-        sql: &'static str,
-        error_context: &'static str,
-    ) -> Self {
+    const fn new(name: &'static str, sql: &'static str, error_context: &'static str) -> Self {
         Self {
             name,
             sql,
@@ -204,9 +238,7 @@ impl ColumnMigration {
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::{
-        ComponentFile, GraphicsTechnology, PathRef, Sha256Hash, Version,
-    };
+    use renderpilot_domain::{ComponentFile, GraphicsTechnology, PathRef, Sha256Hash, Version};
     use rusqlite::{params, Connection};
 
     use super::{apply, table_columns, LIBRARY_ARTIFACTS_TABLE};
@@ -288,21 +320,33 @@ mod tests {
             .execute(
                 "INSERT INTO library_artifacts (id, technology, file_json, source, updated_at)
                  VALUES (?1, ?2, ?3, ?4, 1)",
-                params!["artifact:first", technology.clone(), first_file_json, "scan-folder"],
+                params![
+                    "artifact:first",
+                    technology.clone(),
+                    first_file_json,
+                    "scan-folder"
+                ],
             )
             .expect("first legacy artifact row should insert");
         connection
             .execute(
                 "INSERT INTO library_artifacts (id, technology, file_json, source, updated_at)
                  VALUES (?1, ?2, ?3, ?4, 2)",
-                params!["artifact:second", technology, second_file_json, "scan-folder"],
+                params![
+                    "artifact:second",
+                    technology,
+                    second_file_json,
+                    "scan-folder"
+                ],
             )
             .expect("second legacy artifact row should insert");
 
         apply(&connection).expect("schema migration should succeed");
 
         let count: i64 = connection
-            .query_row("SELECT COUNT(*) FROM library_artifacts", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM library_artifacts", [], |row| {
+                row.get(0)
+            })
             .expect("artifact count should load");
 
         assert_eq!(count, 1);

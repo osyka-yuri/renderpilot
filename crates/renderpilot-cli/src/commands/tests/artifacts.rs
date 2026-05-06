@@ -2,7 +2,7 @@ use std::{ffi::OsString, fs};
 
 use crate::run;
 
-use super::{CatalogEnvironmentGuard, TempGameFolder, args, temp_db_path};
+use super::{args, temp_db_path, CatalogEnvironmentGuard, TempGameFolder};
 
 #[test]
 fn list_artifacts_groups_artifacts_from_multiple_scans() {
@@ -49,7 +49,8 @@ fn list_artifacts_filters_by_technology() {
     fs::create_dir_all(fg_folder.path()).expect("temp folder should be created");
     fs::write(dlss_folder.path().join("nvngx_dlss.dll"), b"dlss-a")
         .expect("dlss file should be written");
-    fs::write(fg_folder.path().join("nvngx_dlssg.dll"), b"fg-a").expect("fg file should be written");
+    fs::write(fg_folder.path().join("nvngx_dlssg.dll"), b"fg-a")
+        .expect("fg file should be written");
 
     run(vec![
         OsString::from("scan-folder"),
@@ -73,7 +74,13 @@ fn list_artifacts_filters_by_technology() {
 
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0]["technology"], "dlss_super_resolution");
-    assert_eq!(groups[0]["artifacts"].as_array().expect("artifact array").len(), 1);
+    assert_eq!(
+        groups[0]["artifacts"]
+            .as_array()
+            .expect("artifact array")
+            .len(),
+        1
+    );
     assert_eq!(groups[0]["artifacts"][0]["file_name"], "nvngx_dlss.dll");
 }
 

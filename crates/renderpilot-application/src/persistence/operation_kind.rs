@@ -98,7 +98,10 @@ mod tests {
 
     #[test]
     fn trims_operation_kind_before_matching_or_storing() {
-        assert_eq!(OperationKind::from_storage(" scan ").unwrap(), OperationKind::Scan);
+        assert_eq!(
+            OperationKind::from_storage(" scan ").unwrap(),
+            OperationKind::Scan
+        );
 
         assert_eq!(
             OperationKind::from_storage(" future_operation ").unwrap(),

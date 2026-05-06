@@ -8,8 +8,12 @@ mod args;
 mod backup_manager;
 mod catalog;
 mod commands;
+pub mod desktop;
 mod error;
 mod output;
+
+#[cfg(test)]
+mod test_env;
 
 pub use error::CliError;
 

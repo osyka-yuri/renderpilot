@@ -1,4 +1,5 @@
 use std::{
+    fmt::Write as _,
     fs::{self, File},
     io::Read,
     path::Path,
@@ -68,11 +69,10 @@ pub enum VersionDetectionStatus {
 
 impl VersionDetectionStatus {
     fn from_version(version: Option<&Version>) -> Self {
-        if version.is_some() {
-            return Self::KnownVersion;
+        match version {
+            Some(_) => Self::KnownVersion,
+            None => Self::UnknownVersion,
         }
-
-        Self::UnknownVersion
     }
 }
 
@@ -123,7 +123,10 @@ impl FileStat {
 
 fn read_file_stat(path: &Path) -> AppResult<FileStat> {
     let metadata = fs::metadata(path).map_err(|error| {
-        detection_context_error(format_args!("could not read metadata for {}", path.display()), error)
+        detection_context_error(
+            format_args!("could not read metadata for {}", path.display()),
+            error,
+        )
     })?;
     let modified_at = metadata.modified().map_err(|error| {
         detection_context_error(
@@ -185,8 +188,6 @@ fn hex_lower(bytes: &[u8]) -> String {
     let mut hex = String::with_capacity(bytes.len() * 2);
 
     for byte in bytes {
-        use std::fmt::Write as _;
-
         let _ = write!(hex, "{byte:02x}");
     }
 

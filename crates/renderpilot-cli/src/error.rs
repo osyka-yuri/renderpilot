@@ -93,10 +93,9 @@ impl fmt::Display for CliError {
                 formatter,
                 format_args!("invalid operation id: {operation_id}"),
             ),
-            Self::InvalidTechnology(technology) => write_usage_error(
-                formatter,
-                format_args!("unknown technology: {technology}"),
-            ),
+            Self::InvalidTechnology(technology) => {
+                write_usage_error(formatter, format_args!("unknown technology: {technology}"))
+            }
             Self::CommandFailed(message) => formatter.write_str(message),
             Self::OutputSerializationFailed(message) => {
                 write!(formatter, "could not serialize CLI output: {message}")
@@ -150,18 +149,30 @@ mod tests {
     fn usage_errors_use_usage_exit_code() {
         assert_eq!(CliError::NonUnicodeArgument.exit_code(), 2);
         assert_eq!(CliError::UnknownArgument("--bad".to_owned()).exit_code(), 2);
-        assert_eq!(CliError::UnexpectedArgument("--bad".to_owned()).exit_code(), 2);
+        assert_eq!(
+            CliError::UnexpectedArgument("--bad".to_owned()).exit_code(),
+            2
+        );
         assert_eq!(CliError::MissingArgument("<path>").exit_code(), 2);
         assert_eq!(CliError::InvalidGameId("bad".to_owned()).exit_code(), 2);
-        assert_eq!(CliError::InvalidComponentId("bad".to_owned()).exit_code(), 2);
+        assert_eq!(
+            CliError::InvalidComponentId("bad".to_owned()).exit_code(),
+            2
+        );
         assert_eq!(CliError::InvalidArtifactId("bad".to_owned()).exit_code(), 2);
-        assert_eq!(CliError::InvalidOperationId("bad".to_owned()).exit_code(), 2);
+        assert_eq!(
+            CliError::InvalidOperationId("bad".to_owned()).exit_code(),
+            2
+        );
         assert_eq!(CliError::InvalidTechnology("bad".to_owned()).exit_code(), 2);
     }
 
     #[test]
     fn runtime_errors_use_general_failure_exit_code() {
-        assert_eq!(CliError::CommandFailed("scan failed".to_owned()).exit_code(), 1);
+        assert_eq!(
+            CliError::CommandFailed("scan failed".to_owned()).exit_code(),
+            1
+        );
         assert_eq!(
             CliError::OutputSerializationFailed("json failed".to_owned()).exit_code(),
             1

@@ -9,18 +9,32 @@ pub(crate) enum Command {
     Summary,
     Help,
     Version,
-    ScanFolder { path: PathBuf },
-    ListArtifacts { technology: Option<GraphicsTechnology> },
-    ListOperations { game_id: GameId },
-    Candidates { game_id: GameId },
+    ScanFolder {
+        path: PathBuf,
+    },
+    ListArtifacts {
+        technology: Option<GraphicsTechnology>,
+    },
+    ListOperations {
+        game_id: GameId,
+    },
+    Candidates {
+        game_id: GameId,
+    },
     PlanSwap {
         game_id: GameId,
         component_id: ComponentId,
         artifact_id: ArtifactId,
     },
-    Backup { operation_id: OperationId },
-    ApplyOperation { operation_id: OperationId },
-    RollbackOperation { operation_id: OperationId },
+    Backup {
+        operation_id: OperationId,
+    },
+    ApplyOperation {
+        operation_id: OperationId,
+    },
+    RollbackOperation {
+        operation_id: OperationId,
+    },
 }
 
 pub(crate) fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Command, CliError> {
@@ -76,41 +90,13 @@ fn parse_list_artifacts_command(args: &mut ArgCursor) -> Result<Command, CliErro
 }
 
 fn parse_candidates_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let mut game_id = None;
-
-    while let Some(argument) = args.next_keyword()? {
-        match argument.as_str() {
-            "--game" => {
-                let value = args.next_required_keyword("<game_id>")?;
-                let parsed = GameId::new(value.clone()).map_err(|_| CliError::InvalidGameId(value))?;
-                game_id = Some(parsed);
-            }
-            _ => return Err(CliError::UnexpectedArgument(argument)),
-        }
-    }
-
-    Ok(Command::Candidates {
-        game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
-    })
+    let game_id = parse_named_identifier(args, "--game", "<game_id>", CliError::InvalidGameId)?;
+    Ok(Command::Candidates { game_id })
 }
 
 fn parse_list_operations_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let mut game_id = None;
-
-    while let Some(argument) = args.next_keyword()? {
-        match argument.as_str() {
-            "--game" => {
-                let value = args.next_required_keyword("<game_id>")?;
-                let parsed = GameId::new(value.clone()).map_err(|_| CliError::InvalidGameId(value))?;
-                game_id = Some(parsed);
-            }
-            _ => return Err(CliError::UnexpectedArgument(argument)),
-        }
-    }
-
-    Ok(Command::ListOperations {
-        game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
-    })
+    let game_id = parse_named_identifier(args, "--game", "<game_id>", CliError::InvalidGameId)?;
+    Ok(Command::ListOperations { game_id })
 }
 
 fn parse_plan_swap_command(args: &mut ArgCursor) -> Result<Command, CliError> {
@@ -121,21 +107,25 @@ fn parse_plan_swap_command(args: &mut ArgCursor) -> Result<Command, CliError> {
     while let Some(argument) = args.next_keyword()? {
         match argument.as_str() {
             "--game" => {
-                let value = args.next_required_keyword("<game_id>")?;
-                let parsed = GameId::new(value.clone()).map_err(|_| CliError::InvalidGameId(value))?;
-                game_id = Some(parsed);
+                game_id = Some(parse_identifier_argument(
+                    args,
+                    "<game_id>",
+                    CliError::InvalidGameId,
+                )?);
             }
             "--component" => {
-                let value = args.next_required_keyword("<component_id>")?;
-                let parsed =
-                    ComponentId::new(value.clone()).map_err(|_| CliError::InvalidComponentId(value))?;
-                component_id = Some(parsed);
+                component_id = Some(parse_identifier_argument(
+                    args,
+                    "<component_id>",
+                    CliError::InvalidComponentId,
+                )?);
             }
             "--artifact" => {
-                let value = args.next_required_keyword("<artifact_id>")?;
-                let parsed =
-                    ArtifactId::new(value.clone()).map_err(|_| CliError::InvalidArtifactId(value))?;
-                artifact_id = Some(parsed);
+                artifact_id = Some(parse_identifier_argument(
+                    args,
+                    "<artifact_id>",
+                    CliError::InvalidArtifactId,
+                )?);
             }
             _ => return Err(CliError::UnexpectedArgument(argument)),
         }
@@ -149,63 +139,33 @@ fn parse_plan_swap_command(args: &mut ArgCursor) -> Result<Command, CliError> {
 }
 
 fn parse_backup_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let mut operation_id = None;
-
-    while let Some(argument) = args.next_keyword()? {
-        match argument.as_str() {
-            "--operation" => {
-                let value = args.next_required_keyword("<operation_id>")?;
-                let parsed =
-                    OperationId::new(value.clone()).map_err(|_| CliError::InvalidOperationId(value))?;
-                operation_id = Some(parsed);
-            }
-            _ => return Err(CliError::UnexpectedArgument(argument)),
-        }
-    }
-
-    Ok(Command::Backup {
-        operation_id: operation_id.ok_or(CliError::MissingArgument("<operation_id>"))?,
-    })
+    let operation_id = parse_named_identifier(
+        args,
+        "--operation",
+        "<operation_id>",
+        CliError::InvalidOperationId,
+    )?;
+    Ok(Command::Backup { operation_id })
 }
 
 fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let mut operation_id = None;
-
-    while let Some(argument) = args.next_keyword()? {
-        match argument.as_str() {
-            "--operation" => {
-                let value = args.next_required_keyword("<operation_id>")?;
-                let parsed =
-                    OperationId::new(value.clone()).map_err(|_| CliError::InvalidOperationId(value))?;
-                operation_id = Some(parsed);
-            }
-            _ => return Err(CliError::UnexpectedArgument(argument)),
-        }
-    }
-
-    Ok(Command::ApplyOperation {
-        operation_id: operation_id.ok_or(CliError::MissingArgument("<operation_id>"))?,
-    })
+    let operation_id = parse_named_identifier(
+        args,
+        "--operation",
+        "<operation_id>",
+        CliError::InvalidOperationId,
+    )?;
+    Ok(Command::ApplyOperation { operation_id })
 }
 
 fn parse_rollback_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let mut operation_id = None;
-
-    while let Some(argument) = args.next_keyword()? {
-        match argument.as_str() {
-            "--operation" => {
-                let value = args.next_required_keyword("<operation_id>")?;
-                let parsed =
-                    OperationId::new(value.clone()).map_err(|_| CliError::InvalidOperationId(value))?;
-                operation_id = Some(parsed);
-            }
-            _ => return Err(CliError::UnexpectedArgument(argument)),
-        }
-    }
-
-    Ok(Command::RollbackOperation {
-        operation_id: operation_id.ok_or(CliError::MissingArgument("<operation_id>"))?,
-    })
+    let operation_id = parse_named_identifier(
+        args,
+        "--operation",
+        "<operation_id>",
+        CliError::InvalidOperationId,
+    )?;
+    Ok(Command::RollbackOperation { operation_id })
 }
 
 #[derive(Debug)]
@@ -252,6 +212,41 @@ fn parse_os_argument(argument: OsString) -> Result<String, CliError> {
     argument
         .into_string()
         .map_err(|_| CliError::NonUnicodeArgument)
+}
+
+fn parse_named_identifier<T>(
+    args: &mut ArgCursor,
+    flag: &'static str,
+    argument_name: &'static str,
+    invalid: fn(String) -> CliError,
+) -> Result<T, CliError>
+where
+    T: TryFrom<String>,
+{
+    let mut parsed = None;
+
+    while let Some(argument) = args.next_keyword()? {
+        if argument != flag {
+            return Err(CliError::UnexpectedArgument(argument));
+        }
+
+        parsed = Some(parse_identifier_argument(args, argument_name, invalid)?);
+    }
+
+    parsed.ok_or(CliError::MissingArgument(argument_name))
+}
+
+fn parse_identifier_argument<T>(
+    args: &mut ArgCursor,
+    argument_name: &'static str,
+    invalid: fn(String) -> CliError,
+) -> Result<T, CliError>
+where
+    T: TryFrom<String>,
+{
+    let value = args.next_required_keyword(argument_name)?;
+
+    T::try_from(value.clone()).map_err(|_| invalid(value))
 }
 
 #[cfg(test)]
@@ -364,8 +359,12 @@ mod tests {
     #[test]
     fn list_operations_parses_game_argument() {
         assert_eq!(
-            parse_args(args(&["list-operations", "--game", "manual:C:/Games/GameA"]))
-                .expect("valid args"),
+            parse_args(args(&[
+                "list-operations",
+                "--game",
+                "manual:C:/Games/GameA"
+            ]))
+            .expect("valid args"),
             Command::ListOperations {
                 game_id: GameId::new("manual:C:/Games/GameA").expect("game id should parse")
             }
@@ -441,8 +440,7 @@ mod tests {
 
     #[test]
     fn apply_requires_operation_id() {
-        let error = parse_args(args(&["apply"]))
-            .expect_err("operation id should be required");
+        let error = parse_args(args(&["apply"])).expect_err("operation id should be required");
 
         assert_eq!(error, CliError::MissingArgument("<operation_id>"));
     }
@@ -485,8 +483,7 @@ mod tests {
 
     #[test]
     fn rollback_requires_operation_id() {
-        let error = parse_args(args(&["rollback"]))
-            .expect_err("operation id should be required");
+        let error = parse_args(args(&["rollback"])).expect_err("operation id should be required");
 
         assert_eq!(error, CliError::MissingArgument("<operation_id>"));
     }

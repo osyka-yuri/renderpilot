@@ -37,7 +37,8 @@ pub(super) fn create_backup_with_post_copy<F>(
 where
     F: Fn(&Path) -> std::io::Result<()>,
 {
-    let mut operation = RetryableReplaceOperation::load(storage, operation_id, "backup", "back up")?;
+    let mut operation =
+        RetryableReplaceOperation::load(storage, operation_id, "backup", "back up")?;
 
     match create_backup_records(storage, &operation, app_version, &post_copy) {
         Ok(result) => Ok(result),

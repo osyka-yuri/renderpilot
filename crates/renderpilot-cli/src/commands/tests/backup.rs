@@ -6,8 +6,8 @@ use renderpilot_domain::{GraphicsTechnology, Swappability};
 use crate::run;
 
 use super::{
-    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_component,
-    sample_game,
+    args, path_string, sample_artifact, sample_component, sample_game, CatalogFixture,
+    TempGameFolder,
 };
 
 #[test]
@@ -92,7 +92,10 @@ fn backup_creates_manifest_file_and_backup_record() {
         .expect("backups should load");
 
     assert_eq!(backup_json["game_id"], game.id().as_str());
-    assert_eq!(backup_json["items"].as_array().expect("backup items").len(), 1);
+    assert_eq!(
+        backup_json["items"].as_array().expect("backup items").len(),
+        1
+    );
     assert!(backup_path.exists());
     assert!(manifest_path.exists());
     assert_eq!(

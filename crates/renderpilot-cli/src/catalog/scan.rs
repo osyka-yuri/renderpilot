@@ -2,9 +2,7 @@ use std::path::PathBuf;
 
 use renderpilot_application::{AppError, AppResult};
 use renderpilot_detection::{DetectedLibraryFile, LibraryPatternComponentDetector};
-use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, LibraryArtifact,
-};
+use renderpilot_domain::{ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, LibraryArtifact};
 use renderpilot_platform_windows::ManualFolderGameSource;
 
 use crate::error::CliError;
@@ -52,7 +50,8 @@ fn build_scanned_artifact(
 }
 
 fn component_file_from_detected_library(library: &DetectedLibraryFile) -> ComponentFile {
-    let mut file = ComponentFile::new(library.file_path().clone()).with_sha256(library.sha256().clone());
+    let mut file =
+        ComponentFile::new(library.file_path().clone()).with_sha256(library.sha256().clone());
 
     if let Some(version) = library.version().cloned() {
         file = file.with_version(version);

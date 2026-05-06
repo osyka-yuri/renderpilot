@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/desktop/src-tauri",
     "crates/renderpilot-domain",
     "crates/renderpilot-application",
     "crates/renderpilot-detection",

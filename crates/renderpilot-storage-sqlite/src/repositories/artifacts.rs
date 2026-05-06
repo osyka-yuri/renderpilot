@@ -70,8 +70,7 @@ mod tests {
     use renderpilot_application::{ArtifactRepository, GameRepository};
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact, PathRef, Platform,
-        Sha256Hash,
+        GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact, PathRef, Platform, Sha256Hash,
     };
 
     use super::SqliteStorage;
@@ -144,12 +143,7 @@ mod tests {
         )
     }
 
-    fn sample_artifact(
-        id: &str,
-        path: &str,
-        file_name: &str,
-        sha256: &str,
-    ) -> LibraryArtifact {
+    fn sample_artifact(id: &str, path: &str, file_name: &str, sha256: &str) -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new(id).expect("artifact id should be valid"),
             GraphicsTechnology::DlssSuperResolution,

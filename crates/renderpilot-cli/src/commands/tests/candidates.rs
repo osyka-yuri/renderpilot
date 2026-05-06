@@ -2,7 +2,7 @@ use renderpilot_domain::{GraphicsTechnology, Swappability};
 
 use crate::run;
 
-use super::{CatalogFixture, args, sample_artifact, sample_component, sample_game};
+use super::{args, sample_artifact, sample_component, sample_game, CatalogFixture};
 
 #[test]
 fn candidates_show_newer_update_for_same_technology_only() {
@@ -41,8 +41,8 @@ fn candidates_show_newer_update_for_same_technology_only() {
         Some(game_b.id().as_str()),
     ));
 
-    let output =
-        run(args(&["candidates", "--game", game_a.id().as_str()])).expect("candidates should render");
+    let output = run(args(&["candidates", "--game", game_a.id().as_str()]))
+        .expect("candidates should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let groups = json["groups"].as_array().expect("groups array");
 
@@ -50,9 +50,18 @@ fn candidates_show_newer_update_for_same_technology_only() {
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0]["technology"], "dlss_super_resolution");
     assert_eq!(groups[0]["current_version"], "3.5.0");
-    assert_eq!(groups[0]["candidates"].as_array().expect("candidates array").len(), 1);
+    assert_eq!(
+        groups[0]["candidates"]
+            .as_array()
+            .expect("candidates array")
+            .len(),
+        1
+    );
     assert_eq!(groups[0]["candidates"][0]["comparison"], "newer_version");
-    assert_eq!(groups[0]["candidates"][0]["source_game_id"], game_b.id().as_str());
+    assert_eq!(
+        groups[0]["candidates"][0]["source_game_id"],
+        game_b.id().as_str()
+    );
     assert_eq!(groups[0]["candidates"][0]["file_name"], "nvngx_dlss.dll");
 }
 
@@ -85,8 +94,8 @@ fn candidates_surface_streamline_warning() {
         Some(game_b.id().as_str()),
     ));
 
-    let output =
-        run(args(&["candidates", "--game", game_a.id().as_str()])).expect("candidates should render");
+    let output = run(args(&["candidates", "--game", game_a.id().as_str()]))
+        .expect("candidates should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(

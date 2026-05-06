@@ -113,7 +113,10 @@ mod tests {
         let error = storage
             .replace_operation_items(
                 &operation.id,
-                &[sample_operation_item("operation:existing", "component:missing")],
+                &[sample_operation_item(
+                    "operation:existing",
+                    "component:missing",
+                )],
             )
             .expect_err("foreign-key violation should fail");
 

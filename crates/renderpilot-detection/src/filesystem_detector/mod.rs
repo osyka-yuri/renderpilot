@@ -13,14 +13,8 @@ use renderpilot_domain::{
 use serde::Serialize;
 
 use crate::{
-    error::detection_error,
-    file_metadata::read_detected_file_metadata,
-    FileCacheKey,
-    LibraryPatternError,
-    LibraryPatternSet,
-    PatternKind,
-    PatternPlatform,
-    VersionDetectionStatus,
+    error::detection_error, file_metadata::read_detected_file_metadata, FileCacheKey,
+    LibraryPatternError, LibraryPatternSet, PatternKind, PatternPlatform, VersionDetectionStatus,
 };
 
 use self::scan::collect_files;

@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 
 use renderpilot_application::{
-    ArtifactRepository, ComponentFileReplacementCandidates, OperationPlan, OperationRecord,
+    AppError, ArtifactRepository, ComponentFileReplacementCandidates, ComponentRepository,
+    GameRepository, OperationPlan, OperationRecord,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsTechnology, LibraryArtifact, OperationId,
+    ArtifactId, ComponentId, GameId, GameInstallation, GraphicsComponent, GraphicsTechnology,
+    LibraryArtifact, OperationId,
 };
 
 use crate::{
@@ -40,6 +42,13 @@ pub(crate) struct CandidateCatalogResult {
     pub(crate) groups: Vec<ComponentFileReplacementCandidates>,
 }
 
+pub(crate) struct GameDetailsCatalogResult {
+    pub(crate) game: GameInstallation,
+    pub(crate) components: Vec<GraphicsComponent>,
+    pub(crate) candidate_groups: Vec<ComponentFileReplacementCandidates>,
+    pub(crate) operations: OperationListCatalogResult,
+}
+
 pub(crate) struct SwapPlanCatalogResult {
     pub(crate) plan: OperationPlan,
 }
@@ -57,6 +66,27 @@ pub(crate) struct OperationListCatalogEntry {
 
 pub(crate) fn scan_folder(path: PathBuf) -> Result<ScanFolderCatalogResult, CliError> {
     scan_folder_impl(path)
+}
+
+pub(crate) fn list_games() -> Result<Vec<GameInstallation>, CliError> {
+    open_catalog_storage()?.list_games().map_err(Into::into)
+}
+
+pub(crate) fn get_game_details(game_id: GameId) -> Result<GameDetailsCatalogResult, CliError> {
+    let storage = open_catalog_storage()?;
+    let game = storage
+        .find_game(&game_id)?
+        .ok_or_else(|| AppError::invalid_input(format!("game not found: {}", game_id.as_str())))?;
+    let components = storage.list_components_for_game(&game_id)?;
+    let candidate_groups = find_candidates(game_id.clone())?.groups;
+    let operations = list_operations(game_id)?;
+
+    Ok(GameDetailsCatalogResult {
+        game,
+        components,
+        candidate_groups,
+        operations,
+    })
 }
 
 pub(crate) fn list_artifacts(

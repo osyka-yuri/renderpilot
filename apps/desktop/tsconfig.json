@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "paths": {
+      "@app/*": ["./ui/src/app/*"],
+      "@features/*": ["./ui/src/features/*"],
+      "@shared/*": ["./ui/src/shared/*"]
+    },
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["ui/src/**/*.ts", "ui/src/**/*.d.ts", "ui/src/**/*.svelte", "vite.config.ts"]
+}
