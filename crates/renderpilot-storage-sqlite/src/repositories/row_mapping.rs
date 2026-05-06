@@ -58,27 +58,17 @@ pub(super) fn component_from_row(
 pub(super) fn artifact_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<AppResult<LibraryArtifact>> {
-    let id: String = row.get(0)?;
-    let technology: String = row.get(1)?;
-    let file_name: String = row.get(2)?;
-    let file_path: String = row.get(3)?;
-    let version: Option<String> = row.get(4)?;
-    let sha256: String = row.get(5)?;
-    let source: Option<String> = row.get(6)?;
-    let source_game_id: Option<String> = row.get(7)?;
-    let trust_level: String = row.get(8)?;
-
-    Ok(build_artifact(
-        id,
-        technology,
-        file_name,
-        file_path,
-        version,
-        sha256,
-        source,
-        source_game_id,
-        trust_level,
-    ))
+    Ok(build_artifact(ArtifactRow {
+        id: row.get(0)?,
+        technology: row.get(1)?,
+        file_name: row.get(2)?,
+        file_path: row.get(3)?,
+        version: row.get(4)?,
+        sha256: row.get(5)?,
+        source: row.get(6)?,
+        source_game_id: row.get(7)?,
+        trust_level: row.get(8)?,
+    }))
 }
 
 pub(super) fn operation_from_row(
@@ -216,7 +206,7 @@ fn build_component(
     Ok(component)
 }
 
-fn build_artifact(
+struct ArtifactRow {
     id: String,
     technology: String,
     file_name: String,
@@ -226,26 +216,28 @@ fn build_artifact(
     source: Option<String>,
     source_game_id: Option<String>,
     trust_level: String,
-) -> AppResult<LibraryArtifact> {
-    let id = mapping::artifact_id(id)?;
-    let technology = mapping::graphics_technology(technology)?;
-    let file_path = mapping::path_ref(file_path)?;
-    let sha256 = mapping::sha256(sha256)?;
-    let trust_level = mapping::artifact_trust_level(trust_level)?;
+}
+
+fn build_artifact(row: ArtifactRow) -> AppResult<LibraryArtifact> {
+    let id = mapping::artifact_id(row.id)?;
+    let technology = mapping::graphics_technology(row.technology)?;
+    let file_path = mapping::path_ref(row.file_path)?;
+    let sha256 = mapping::sha256(row.sha256)?;
+    let trust_level = mapping::artifact_trust_level(row.trust_level)?;
     let mut file = ComponentFile::new(file_path).with_sha256(sha256);
 
-    if let Some(version) = version {
+    if let Some(version) = row.version {
         file = file.with_version(mapping::version(version)?);
     }
 
-    let mut artifact =
-        LibraryArtifact::new(id, technology, file_name, file, trust_level).map_err(invalid_row)?;
+    let mut artifact = LibraryArtifact::new(id, technology, row.file_name, file, trust_level)
+        .map_err(invalid_row)?;
 
-    if let Some(source) = source {
+    if let Some(source) = row.source {
         artifact = artifact.with_source(source).map_err(invalid_row)?;
     }
 
-    if let Some(source_game_id) = source_game_id {
+    if let Some(source_game_id) = row.source_game_id {
         artifact = artifact.with_source_game_id(mapping::game_id(source_game_id)?);
     }
 

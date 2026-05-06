@@ -1,18 +1,14 @@
 use std::{
     env,
     fs::{self, File, OpenOptions},
-    io::Read,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use renderpilot_application::{AppError, AppResult, OperationRecord, UnixTimestampMillis};
 use renderpilot_domain::{PathRef, Sha256Hash};
-use sha2::{Digest, Sha256};
 
 pub(crate) const BACKUP_ROOT_DIR_ENV: &str = "RENDERPILOT_BACKUP_ROOT";
-
-const HASH_BUFFER_SIZE: usize = 64 * 1024;
 
 pub(super) fn backup_operation_root(operation: &OperationRecord) -> PathBuf {
     backup_root_dir()
@@ -159,41 +155,16 @@ fn backup_root_dir() -> PathBuf {
 }
 
 pub(super) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
-    let mut file = File::open(path).map_err(|error| {
+    let file = File::open(path).map_err(|error| {
         file_system_error(
             format!("could not open {} for hashing", path.display()),
             error,
         )
     })?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; HASH_BUFFER_SIZE];
+    let hash = crate::hash::sha256_reader_hex(file)
+        .map_err(|error| file_system_error(format!("could not hash {}", path.display()), error))?;
 
-    loop {
-        let bytes_read = file.read(&mut buffer).map_err(|error| {
-            file_system_error(format!("could not hash {}", path.display()), error)
-        })?;
-
-        if bytes_read == 0 {
-            break;
-        }
-
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    Sha256Hash::new(hex_lower(&hasher.finalize()))
-        .map_err(|error| AppError::provider_failed(error.to_string()))
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(bytes.len() * 2);
-
-    for byte in bytes {
-        use std::fmt::Write as _;
-
-        let _ = write!(hex, "{byte:02x}");
-    }
-
-    hex
+    Sha256Hash::new(hash).map_err(|error| AppError::provider_failed(error.to_string()))
 }
 
 pub(super) fn ensure_file_matches_sha256(

@@ -10,6 +10,7 @@ mod catalog;
 mod commands;
 pub mod desktop;
 mod error;
+mod hash;
 mod output;
 
 #[cfg(test)]

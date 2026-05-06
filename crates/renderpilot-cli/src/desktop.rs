@@ -11,9 +11,8 @@ use renderpilot_domain::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
-use crate::{catalog, output, CliError, VERSION};
+use crate::{catalog, hash, output, CliError, VERSION};
 
 const APPLY_CONFIRMATION_TOKEN_DOMAIN: &[u8] = b"renderpilot:apply-operation-plan";
 
@@ -300,11 +299,11 @@ fn dashboard_risk_level(components: &[GraphicsComponent]) -> &'static str {
 }
 
 fn confirmation_token_for_operation(operation_id: &OperationId) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(APPLY_CONFIRMATION_TOKEN_DOMAIN);
-    hasher.update(b":");
-    hasher.update(operation_id.as_str().as_bytes());
-    format!("{:x}", hasher.finalize())
+    hash::sha256_hex_parts(&[
+        APPLY_CONFIRMATION_TOKEN_DOMAIN,
+        b":",
+        operation_id.as_str().as_bytes(),
+    ])
 }
 
 fn ensure_confirmation_token(
@@ -374,6 +373,7 @@ mod tests {
         apply_operation_plan, build_swap_plan, get_game_cards, rollback_operation,
         scan_manual_folder,
     };
+    use crate::hash::sha256_hex;
     use crate::test_env::lock_process_env;
     use crate::{backup_manager::BACKUP_ROOT_DIR_ENV, catalog::CATALOG_DB_PATH_ENV};
 
@@ -780,13 +780,5 @@ mod tests {
             ),
             None => artifact,
         }
-    }
-
-    fn sha256_hex(bytes: &[u8]) -> String {
-        use sha2::{Digest, Sha256};
-
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-        format!("{:x}", hasher.finalize())
     }
 }

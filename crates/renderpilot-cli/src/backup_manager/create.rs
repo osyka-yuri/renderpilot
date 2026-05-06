@@ -16,7 +16,7 @@ use super::{
         file_system_error, path_ref_from_path, sanitize_path_segment,
     },
     journal::{require_replacement_plan_item, RetryableReplaceOperation},
-    manifest::{write_backup_manifest, BackupManifest},
+    manifest::{write_backup_manifest, BackupManifest, BackupManifestInput},
     BackupCatalogItemResult, BackupCatalogResult,
 };
 
@@ -61,23 +61,21 @@ where
 
     ensure_directory(&backup_root, "backup directory")?;
 
+    let backup_context = BackupCreationContext {
+        operation: &operation.operation,
+        backup_root: &backup_root,
+        created_at,
+        app_version,
+        post_copy,
+    };
     let mut backup_items = Vec::with_capacity(operation.items.len());
 
     for (index, item) in operation.items.iter().enumerate() {
         let _replacement_plan = require_replacement_plan_item(&operation.operation, item)?;
 
         let (component, component_file) = resolve_backup_component_file(&components, item)?;
-        let backup_item = create_backup_item(
-            &operation.operation,
-            item,
-            component,
-            component_file,
-            &backup_root,
-            index,
-            created_at,
-            app_version,
-            post_copy,
-        )?;
+        let backup_item =
+            create_backup_item(&backup_context, item, component, component_file, index)?;
 
         storage.upsert_backup(&backup_item.record)?;
         backup_items.push(backup_item.result);
@@ -91,46 +89,51 @@ where
     })
 }
 
+struct BackupCreationContext<'a, F> {
+    operation: &'a OperationRecord,
+    backup_root: &'a Path,
+    created_at: UnixTimestampMillis,
+    app_version: &'a str,
+    post_copy: &'a F,
+}
+
 fn create_backup_item<F>(
-    operation: &OperationRecord,
+    context: &BackupCreationContext<'_, F>,
     item: &OperationItemRecord,
     component: &GraphicsComponent,
     component_file: &ComponentFile,
-    backup_root: &Path,
     index: usize,
-    created_at: UnixTimestampMillis,
-    app_version: &str,
-    post_copy: &F,
 ) -> AppResult<BackupCreatedItem>
 where
     F: Fn(&Path) -> std::io::Result<()>,
 {
     let source_path = Path::new(item.source_path.as_str());
-    let workspace = BackupItemWorkspace::create(backup_root, item, index)?;
+    let workspace = BackupItemWorkspace::create(context.backup_root, item, index)?;
     let backup_file_path = workspace.backup_file_path(source_file_name(item)?);
-    let sha256 = copy_backup_file_with_verification(source_path, &backup_file_path, post_copy)?;
+    let sha256 =
+        copy_backup_file_with_verification(source_path, &backup_file_path, context.post_copy)?;
     let manifest_path = workspace.manifest_path();
-    let manifest = BackupManifest::new(
-        operation.id.clone(),
-        operation.game_id.clone(),
-        item.source_path.clone(),
-        component.technology(),
-        component_file.version().cloned(),
-        sha256.clone(),
-        created_at,
-        app_version,
-    );
+    let manifest = BackupManifest::new(BackupManifestInput {
+        operation_id: &context.operation.id,
+        game_id: &context.operation.game_id,
+        original_path: &item.source_path,
+        technology: component.technology(),
+        version: component_file.version(),
+        sha256: &sha256,
+        created_at: context.created_at,
+        app_version: context.app_version,
+    });
 
     write_backup_manifest(&manifest_path, &manifest)?;
 
     let record = build_backup_record(
-        operation,
+        context.operation,
         item,
         &backup_file_path,
         &manifest_path,
         sha256.clone(),
-        created_at,
-        app_version,
+        context.created_at,
+        context.app_version,
     )?;
 
     workspace.commit();
@@ -177,7 +180,7 @@ fn resolve_backup_component_file<'a>(
     Ok((component, component_file))
 }
 
-fn source_file_name<'a>(item: &'a OperationItemRecord) -> AppResult<&'a std::ffi::OsStr> {
+fn source_file_name(item: &OperationItemRecord) -> AppResult<&std::ffi::OsStr> {
     Path::new(item.source_path.as_str())
         .file_name()
         .ok_or_else(|| {

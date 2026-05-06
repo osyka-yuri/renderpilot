@@ -11,21 +11,22 @@ build = "build.rs"
 workspace = true
 
 [build-dependencies]
-tauri-build = { version = "2.6.0", features = [] }
+tauri-build = { version = "2.6.1", features = [] }
 
 [dependencies]
 renderpilot-cli = { path = "../../../crates/renderpilot-cli" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2.11.0", features = [] }
+tauri = { version = "2.11.1", features = [] }
 tauri-plugin-dialog = "2.7.1"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+winreg = "0.56"
 
 [lib]
 name = "renderpilot_desktop"
 path = "src/lib.rs"
+test = false
 
 [[bin]]
 name = "renderpilot-desktop"

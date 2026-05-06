@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use renderpilot_application::{AppError, AppResult, UnixTimestampMillis};
-use renderpilot_domain::{GameId, GraphicsTechnology, OperationId, PathRef, Sha256Hash};
+use renderpilot_domain::{GameId, GraphicsTechnology, OperationId, PathRef, Sha256Hash, Version};
 use serde::Serialize;
 
 use super::filesystem::file_system_error;
@@ -18,26 +18,28 @@ pub(super) struct BackupManifest {
     app_version: String,
 }
 
+pub(super) struct BackupManifestInput<'a> {
+    pub(super) operation_id: &'a OperationId,
+    pub(super) game_id: &'a GameId,
+    pub(super) original_path: &'a PathRef,
+    pub(super) technology: GraphicsTechnology,
+    pub(super) version: Option<&'a Version>,
+    pub(super) sha256: &'a Sha256Hash,
+    pub(super) created_at: UnixTimestampMillis,
+    pub(super) app_version: &'a str,
+}
+
 impl BackupManifest {
-    pub(super) fn new(
-        operation_id: OperationId,
-        game_id: GameId,
-        original_path: PathRef,
-        technology: GraphicsTechnology,
-        version: Option<renderpilot_domain::Version>,
-        sha256: Sha256Hash,
-        created_at: UnixTimestampMillis,
-        app_version: &str,
-    ) -> Self {
+    pub(super) fn new(input: BackupManifestInput<'_>) -> Self {
         Self {
-            operation_id: operation_id.as_str().to_owned(),
-            game_id: game_id.as_str().to_owned(),
-            original_path: original_path.as_str().to_owned(),
-            technology: technology.as_slug().to_owned(),
-            version: version.map(|version| version.as_str().to_owned()),
-            sha256: sha256.as_str().to_owned(),
-            created_at: created_at.as_i64(),
-            app_version: app_version.to_owned(),
+            operation_id: input.operation_id.as_str().to_owned(),
+            game_id: input.game_id.as_str().to_owned(),
+            original_path: input.original_path.as_str().to_owned(),
+            technology: input.technology.as_slug().to_owned(),
+            version: input.version.map(|version| version.as_str().to_owned()),
+            sha256: input.sha256.as_str().to_owned(),
+            created_at: input.created_at.as_i64(),
+            app_version: input.app_version.to_owned(),
         }
     }
 }

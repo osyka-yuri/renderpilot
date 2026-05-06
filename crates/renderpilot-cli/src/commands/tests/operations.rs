@@ -7,8 +7,8 @@ use renderpilot_application::{
     BackupRepository, ComponentRepository, OperationRepository, OperationStatus,
 };
 use renderpilot_domain::{GraphicsTechnology, Swappability};
-use sha2::{Digest, Sha256};
 
+use crate::hash::sha256_hex;
 use crate::run;
 
 use super::{
@@ -647,19 +647,4 @@ fn open_exclusive_file_lock(path: &Path) -> std::fs::File {
     options.read(true).write(true).share_mode(0);
 
     options.open(path).expect("exclusive file lock should open")
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-
-    let mut hex = String::with_capacity(64);
-
-    for byte in hasher.finalize() {
-        use std::fmt::Write as _;
-
-        let _ = write!(hex, "{byte:02x}");
-    }
-
-    hex
 }

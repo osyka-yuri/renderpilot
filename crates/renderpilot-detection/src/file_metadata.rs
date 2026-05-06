@@ -1,5 +1,4 @@
 use std::{
-    fmt::Write as _,
     fs::{self, File},
     io::Read,
     path::Path,
@@ -142,19 +141,26 @@ fn read_file_stat(path: &Path) -> AppResult<FileStat> {
 }
 
 pub(crate) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
-    let mut file = File::open(path).map_err(|error| {
+    let file = File::open(path).map_err(|error| {
         detection_context_error(
             format_args!("could not open {} for hashing", path.display()),
             error,
         )
     })?;
+
+    let hash = sha256_reader_hex(file).map_err(|error| {
+        detection_context_error(format_args!("could not hash {}", path.display()), error)
+    })?;
+
+    Sha256Hash::new(hash).map_err(detection_error)
+}
+
+fn sha256_reader_hex(mut reader: impl Read) -> std::io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; HASH_BUFFER_SIZE];
 
     loop {
-        let bytes_read = file.read(&mut buffer).map_err(|error| {
-            detection_context_error(format_args!("could not hash {}", path.display()), error)
-        })?;
+        let bytes_read = reader.read(&mut buffer)?;
 
         if bytes_read == 0 {
             break;
@@ -163,8 +169,7 @@ pub(crate) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    let hash = hasher.finalize();
-    Sha256Hash::new(hex_lower(&hash)).map_err(detection_error)
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn system_time_to_unix_millis(path: &Path, modified_at: SystemTime) -> AppResult<u64> {
@@ -182,16 +187,6 @@ fn system_time_to_unix_millis(path: &Path, modified_at: SystemTime) -> AppResult
             path.display()
         ))
     })
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(bytes.len() * 2);
-
-    for byte in bytes {
-        let _ = write!(hex, "{byte:02x}");
-    }
-
-    hex
 }
 
 #[cfg(test)]
