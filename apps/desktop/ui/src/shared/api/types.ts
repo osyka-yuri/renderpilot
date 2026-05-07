@@ -1,143 +1,189 @@
-export interface GameIdentity {
-  id: string;
-  title: string;
-  launcher: string;
-  external_id?: string | null;
-}
+export type UnixTimestampMs = number;
 
-export interface GameInstallation {
-  identity: GameIdentity;
-  platform: string;
-  runtime: string;
-  install_path: string;
-  executable_candidates: string[];
-}
+export type Nullable<T> = T | null;
 
-export interface GameCard {
-  game_id: string;
-  title: string;
-  launcher: string;
-  platform: string;
-  runtime: string;
-  install_path: string;
-  external_id?: string | null;
-  technology_tags: string[];
-  component_count: number;
-  updates_available: boolean;
-  update_count: number;
-  risk_level: string;
-  backup_available: boolean;
-  operation_count: number;
-  last_operation_status?: string | null;
-}
+export type GameId = string;
+export type ComponentId = string;
+export type ArtifactId = string;
+export type OperationId = string;
+export type BackupId = string;
+export type ConfirmationToken = string;
+
+export type FilePath = string;
+export type Sha256Hash = string;
+export type Version = string;
+
+export type RiskLevel = string;
 
 export type CommandErrorSeverity = 'warning' | 'error';
 
-export interface CommandErrorDto {
+export type OperationStatus = string;
+export type OperationKind = string;
+export type BackupStatus = string;
+
+export type Launcher = string;
+export type Platform = string;
+export type Runtime = string;
+export type Technology = string;
+export type ComponentKind = string;
+export type Swappability = string;
+
+export type GameIdentity = {
+  id: GameId;
+  title: string;
+  launcher: Launcher;
+  external_id?: Nullable<string>;
+};
+
+export type GameInstallation = {
+  identity: GameIdentity;
+  platform: Platform;
+  runtime: Runtime;
+  install_path: FilePath;
+  executable_candidates: FilePath[];
+};
+
+export type GameCard = {
+  game_id: GameId;
+  title: string;
+  launcher: Launcher;
+  platform: Platform;
+  runtime: Runtime;
+  install_path: FilePath;
+  external_id?: Nullable<string>;
+
+  technology_tags: Technology[];
+  component_count: number;
+
+  updates_available: boolean;
+  update_count: number;
+
+  risk_level: RiskLevel;
+  backup_available: boolean;
+
+  operation_count: number;
+  last_operation_status?: Nullable<OperationStatus>;
+};
+
+export type CommandErrorDto = {
   code: string;
   severity: CommandErrorSeverity;
   message_key: string;
   details: string;
   suggested_actions: string[];
-}
+};
 
-export interface ComponentFile {
-  path: string;
-  version?: string | null;
-  sha256?: string | null;
-}
+export type ComponentFile = {
+  path: FilePath;
+  version?: Nullable<Version>;
+  sha256?: Nullable<Sha256Hash>;
+};
 
-export interface GraphicsComponent {
-  id: string;
-  game_id: string;
-  kind: string;
-  technology: string;
-  swappability: string;
+export type GraphicsComponent = {
+  id: ComponentId;
+  game_id: GameId;
+  kind: ComponentKind;
+  technology: Technology;
+  swappability: Swappability;
   files: ComponentFile[];
-}
+};
 
-export interface Candidate {
-  artifact_id: string;
+export type CandidateComparison = string;
+
+export type Candidate = {
+  artifact_id: ArtifactId;
   file_name: string;
-  file_path: string;
-  version?: string | null;
-  source_game_id?: string | null;
-  comparison: string;
-  warning?: string | null;
-}
+  file_path: FilePath;
+  version?: Nullable<Version>;
+  source_game_id?: Nullable<GameId>;
+  comparison: CandidateComparison;
+  warning?: Nullable<string>;
+};
 
-export interface CandidateGroup {
-  component_id: string;
-  technology: string;
-  file_path: string;
-  current_version?: string | null;
+export type CandidateGroup = {
+  component_id: ComponentId;
+  technology: Technology;
+  file_path: FilePath;
+  current_version?: Nullable<Version>;
   candidates: Candidate[];
-}
+};
 
-export interface OperationSummary {
-  operation_id: string;
-  kind: string;
-  status: string;
-  created_at: number;
-  completed_at?: number | null;
+export type OperationSummary = {
+  operation_id: OperationId;
+  kind: OperationKind;
+  status: OperationStatus;
+  created_at: UnixTimestampMs;
+  completed_at?: Nullable<UnixTimestampMs>;
   item_count: number;
   backup_count: number;
-  backup_status: string;
-}
+  backup_status: BackupStatus;
+};
 
-export interface GameListResponse {
+export type GameListResponse = {
   games: GameInstallation[];
-}
+};
 
-export interface GameDetails {
+export type GameDetails = {
   game: GameInstallation;
   components: GraphicsComponent[];
   candidate_groups: CandidateGroup[];
   operations: OperationSummary[];
-}
+};
 
-export interface SwapPlan {
-  operation_id: string;
-  confirmation_token: string;
-  game_id: string;
-  operation_type: string;
-  target_path: string;
-  replacement_path: string;
-  original_version?: string | null;
-  replacement_version?: string | null;
-  original_sha256?: string | null;
-  replacement_sha256?: string | null;
-  risk_level: string;
+export type SwapPlan = {
+  operation_id: OperationId;
+  confirmation_token: ConfirmationToken;
+
+  game_id: GameId;
+  operation_type: OperationKind;
+
+  target_path: FilePath;
+  replacement_path: FilePath;
+
+  original_version?: Nullable<Version>;
+  replacement_version?: Nullable<Version>;
+
+  original_sha256?: Nullable<Sha256Hash>;
+  replacement_sha256?: Nullable<Sha256Hash>;
+
+  risk_level: RiskLevel;
+
   requires_backup: boolean;
   requires_elevation: boolean;
-  artifact_id: string;
+
+  artifact_id: ArtifactId;
+
   blockers: string[];
   warnings: string[];
-}
+};
 
-export interface ApplyOperationResult {
-  operation_id: string;
-  game_id: string;
-  status: string;
-  completed_at?: number | null;
-  items: Array<{
-    backup_id: string;
-    component_id: string;
-    applied_path: string;
-    replacement_path: string;
-    backup_path: string;
-  }>;
-}
+export type AppliedOperationItem = {
+  backup_id: BackupId;
+  component_id: ComponentId;
+  applied_path: FilePath;
+  replacement_path: FilePath;
+  backup_path: FilePath;
+};
 
-export interface RollbackOperationResult {
-  operation_id: string;
-  game_id: string;
-  status: string;
-  completed_at?: number | null;
-  items: Array<{
-    backup_id: string;
-    component_id: string;
-    restored_path: string;
-    backup_path: string;
-  }>;
-}
+export type RollbackOperationItem = {
+  backup_id: BackupId;
+  component_id: ComponentId;
+  restored_path: FilePath;
+  backup_path: FilePath;
+};
+
+export type ApplyOperationResult = {
+  operation_id: OperationId;
+  game_id: GameId;
+  status: OperationStatus;
+  completed_at?: Nullable<UnixTimestampMs>;
+  items: AppliedOperationItem[];
+};
+
+export type RollbackOperationResult = {
+  operation_id: OperationId;
+  game_id: GameId;
+  status: OperationStatus;
+  completed_at?: Nullable<UnixTimestampMs>;
+  items: RollbackOperationItem[];
+};

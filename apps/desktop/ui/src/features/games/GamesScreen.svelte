@@ -6,8 +6,23 @@
   import Surface from '@shared/ui/Surface.svelte';
   import { formatLabel, titleMonogram } from '@shared/utils/presenters';
 
-  const noop: VoidHandler = (): void => {};
-  const noopOpenGame: GameSelectionHandler = (_gameId: string): void => {};
+  type DashboardStats = {
+    games: number;
+    updates: number;
+    backupsReady: number;
+  };
+
+  type UpdateBadgeTone = 'success' | 'muted';
+
+  const SCAN_LABEL = 'Scan Folder';
+  const SCANNING_LABEL = 'Scanning...';
+
+  const noop: VoidHandler = (): void => {
+    return;
+  };
+  const noopOpenGame: GameSelectionHandler = (_gameId: string): void => {
+    return;
+  };
 
   export let games: GameCard[] = [];
   export let busy = false;
@@ -15,31 +30,89 @@
   export let onOpenDetails: GameSelectionHandler = noopOpenGame;
   export let onOpenOperations: GameSelectionHandler = noopOpenGame;
 
-  $: dashboardStats = {
-    games: games.length,
-    updates: games.reduce((sum, game) => sum + game.update_count, 0),
-    backupsReady: games.filter((game) => game.backup_available).length,
-  };
+  $: hasGames = games.length > 0;
+  $: scanButtonLabel = busy ? SCANNING_LABEL : SCAN_LABEL;
+  $: dashboardStats = getDashboardStats(games);
+
+  function getDashboardStats(gameCards: GameCard[]): DashboardStats {
+    return gameCards.reduce<DashboardStats>(
+      (stats, game) => ({
+        games: stats.games + 1,
+        updates: stats.updates + getUpdateCount(game),
+        backupsReady: stats.backupsReady + Number(game.backup_available),
+      }),
+      {
+        games: 0,
+        updates: 0,
+        backupsReady: 0,
+      },
+    );
+  }
+
+  function getUpdateCount(game: GameCard): number {
+    return Math.max(0, game.update_count);
+  }
+
+  function getUpdateBadgeTone(game: GameCard): UpdateBadgeTone {
+    return game.updates_available ? 'success' : 'muted';
+  }
+
+  function getUpdateBadgeLabel(game: GameCard): string {
+    if (!game.updates_available) {
+      return 'Up to date';
+    }
+
+    const updateCount = getUpdateCount(game);
+
+    if (updateCount === 0) {
+      return 'Updates available';
+    }
+
+    return `${updateCount} update${updateCount === 1 ? '' : 's'} available`;
+  }
+
+  function getGameIdFromEvent(event: MouseEvent): string | null {
+    const { currentTarget } = event;
+
+    if (!(currentTarget instanceof HTMLElement)) {
+      return null;
+    }
+
+    return currentTarget.dataset.gameId ?? null;
+  }
 
   function handleScan(): void {
     onScan();
   }
 
-  function handleOpenDetails(gameId: string): void {
+  function handleDetailsClick(event: MouseEvent): void {
+    const gameId = getGameIdFromEvent(event);
+
+    if (gameId === null) {
+      return;
+    }
+
     onOpenDetails(gameId);
   }
 
-  function handleOpenOperations(gameId: string): void {
+  function handleOperationsClick(event: MouseEvent): void {
+    const gameId = getGameIdFromEvent(event);
+
+    if (gameId === null) {
+      return;
+    }
+
     onOpenOperations(gameId);
   }
 </script>
 
-<section class="screen-shell">
+<section class="screen-shell" aria-busy={busy}>
   <div class="overview-bar">
-    {#if games.length > 0}
-      <div class="overview-stats">
+    {#if hasGames}
+      <div class="overview-stats" aria-label="Dashboard summary">
         <Badge pill surface="outline">{dashboardStats.games} games</Badge>
         <Badge pill surface="outline">{dashboardStats.updates} updates</Badge>
+
         {#if dashboardStats.backupsReady > 0}
           <Badge pill surface="outline" tone="success">
             {dashboardStats.backupsReady} backup-ready
@@ -50,14 +123,15 @@
 
     <div class="overview-action">
       <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
-        {busy ? 'Scanning...' : 'Scan Folder'}
+        {scanButtonLabel}
       </Button>
     </div>
   </div>
 
-  {#if games.length === 0}
+  {#if !hasGames}
     <Surface class="empty-state">
       <div class="empty-icon" aria-hidden="true">RP</div>
+
       <div class="empty-copy">
         <h3>No scanned games yet</h3>
         <p>
@@ -65,13 +139,14 @@
           quick actions.
         </p>
       </div>
+
       <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
-        {busy ? 'Scanning...' : 'Scan Folder'}
+        {scanButtonLabel}
       </Button>
     </Surface>
   {:else}
     <div class="game-list">
-      {#each games as game}
+      {#each games as game (game.game_id)}
         <Surface as="article" interactive shadow class="game-card">
           <div class="card-body">
             <div class="card-header">
@@ -81,31 +156,21 @@
 
               <div class="header-copy">
                 <div class="platform-row">
-                  <Badge
-                    pill
-                    surface="soft"
-                    tone={game.updates_available ? 'success' : 'muted'}
-                    class="updates-badge"
-                  >
-                    {#if game.updates_available}
-                      {game.update_count} update{game.update_count === 1 ? '' : 's'} available
-                    {:else}
-                      Up to date
-                    {/if}
+                  <Badge pill surface="soft" tone={getUpdateBadgeTone(game)} class="updates-badge">
+                    {getUpdateBadgeLabel(game)}
                   </Badge>
                 </div>
 
-                <div class="title-row">
-                  <div class="title-copy">
-                    <h3>{game.title}</h3>
-                    <p class="card-path">{game.install_path}</p>
-                  </div>
+                <div class="title-copy">
+                  <h3>{game.title}</h3>
+                  <p class="card-path">{game.install_path}</p>
                 </div>
               </div>
             </div>
 
             <div class="technology-group">
               <p class="field-label">Detected libraries</p>
+
               <div class="technology-row">
                 {#if game.technology_tags.length === 0}
                   <Badge pill surface="outline" tone="muted">No detected technologies yet</Badge>
@@ -122,15 +187,20 @@
                 variant="primary"
                 size="sm"
                 fullWidth
-                onclick={() => handleOpenDetails(game.game_id)}
+                data-game-id={game.game_id}
+                aria-label={`Open details for ${game.title}`}
+                onclick={handleDetailsClick}
               >
                 Details
               </Button>
+
               <Button
                 variant="secondary"
                 size="sm"
                 fullWidth
-                onclick={() => handleOpenOperations(game.game_id)}
+                data-game-id={game.game_id}
+                aria-label={`Open journal for ${game.title}`}
+                onclick={handleOperationsClick}
               >
                 Journal
               </Button>
@@ -150,10 +220,10 @@
 
   .overview-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3) var(--space-4);
-    flex-wrap: wrap;
     padding: 0 var(--space-1);
   }
 
@@ -161,14 +231,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-  }
-
-  .field-label {
-    margin: 0 0 var(--space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.6875rem;
-    color: var(--text-subtle);
   }
 
   .overview-action {
@@ -182,18 +244,26 @@
     line-height: 1.2;
   }
 
+  .field-label {
+    margin: 0 0 var(--space-1);
+    color: var(--text-subtle);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .game-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(20.5rem, 1fr));
-    gap: var(--space-3);
     align-items: stretch;
+    gap: var(--space-3);
   }
 
   :global(.game-card) {
     position: relative;
     display: grid;
-    height: 100%;
     min-width: 0;
+    height: 100%;
     padding: var(--space-4);
     overflow: hidden;
   }
@@ -202,30 +272,30 @@
     display: grid;
     grid-template-rows: auto 1fr auto;
     gap: var(--space-4);
-    height: 100%;
     min-width: 0;
+    height: 100%;
   }
 
   .card-header {
     display: grid;
     grid-template-columns: 4.75rem minmax(0, 1fr);
-    gap: var(--space-3);
     align-items: start;
+    gap: var(--space-3);
   }
 
   .cover-placeholder {
-    min-height: 4.75rem;
-    border-radius: var(--radius-lg);
     display: grid;
+    min-height: 4.75rem;
     align-content: center;
     justify-items: center;
+    border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
+    border-radius: var(--radius-lg);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--accent) 16%, var(--bg-control)) 0%,
       var(--bg-control) 100%
     );
     color: var(--text-strong);
-    border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
   }
 
@@ -235,54 +305,48 @@
     letter-spacing: 0.04em;
   }
 
-  .header-copy {
+  .header-copy,
+  .title-copy,
+  .technology-group {
     display: grid;
-    gap: var(--space-3);
     min-width: 0;
   }
 
-  .title-row {
-    display: flex;
-    justify-content: space-between;
+  .header-copy {
     gap: var(--space-3);
-    align-items: start;
   }
 
   .title-copy {
-    display: grid;
     gap: var(--space-2);
-    min-width: 0;
+  }
+
+  .technology-group {
+    gap: var(--space-2);
+  }
+
+  .platform-row,
+  .technology-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.4rem;
   }
 
   :global(.updates-badge) {
     flex-shrink: 0;
     align-self: start;
     max-width: min(100%, 15rem);
-    white-space: normal;
     line-height: 1.2;
     text-align: center;
-  }
-
-  .platform-row,
-  .technology-row {
-    display: flex;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    align-items: flex-start;
+    white-space: normal;
   }
 
   .card-path {
     margin: 0;
     color: var(--text-muted);
-    word-break: break-word;
     font-size: 0.8125rem;
     line-height: 1.4;
-  }
-
-  .technology-group {
-    display: grid;
-    gap: var(--space-2);
-    min-width: 0;
+    word-break: break-word;
   }
 
   .card-actions {
@@ -301,9 +365,9 @@
   }
 
   .empty-icon {
+    display: grid;
     width: 2.5rem;
     height: 2.5rem;
-    display: grid;
     place-items: center;
     border-radius: var(--radius-lg);
     background: var(--accent-soft);
@@ -328,12 +392,7 @@
     }
 
     .overview-action {
-      margin-left: 0;
-      margin-right: 0;
-    }
-
-    .title-row {
-      flex-direction: column;
+      margin-inline: 0;
     }
   }
 

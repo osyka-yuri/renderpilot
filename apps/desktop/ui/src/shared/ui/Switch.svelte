@@ -1,65 +1,94 @@
 <script lang="ts">
-  type MouseHandler = (event: MouseEvent) => void;
-  type FocusHandler = (event: FocusEvent) => void;
+  import type { Snippet } from 'svelte';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
-  export let checked = false;
-  export let disabled = false;
+  type NativeSwitchProps = Omit<
+    HTMLButtonAttributes,
+    | 'class'
+    | 'disabled'
+    | 'type'
+    | 'role'
+    | 'title'
+    | 'aria-checked'
+    | 'aria-label'
+    | 'aria-labelledby'
+    | 'aria-describedby'
+  >;
 
-  /**
-   * Если не передать ariaLabel, accessible name будет браться из slot-контента.
-   * Для сложного slot-контента лучше передавать ariaLabel явно.
-   */
-  export let ariaLabel: string | undefined = undefined;
-  export let ariaLabelledBy: string | undefined = undefined;
-  export let ariaDescribedBy: string | undefined = undefined;
+  type SwitchProps = NativeSwitchProps & {
+    children?: Snippet;
 
-  export let title: string | undefined = undefined;
-  export let className = '';
+    checked?: boolean;
+    disabled?: boolean;
+    stackOnMobile?: boolean;
 
-  /**
-   * Сохраняет старое поведение: на мобильных label и switch становятся колонкой.
-   */
-  export let stackOnMobile = true;
+    class?: string;
+    title?: string | null;
 
-  export let onclick: MouseHandler | undefined = undefined;
-  export let onfocus: FocusHandler | undefined = undefined;
-  export let onblur: FocusHandler | undefined = undefined;
+    'aria-label'?: string | null;
+    'aria-labelledby'?: string | null;
+    'aria-describedby'?: string | null;
+  };
 
-  $: state = checked ? 'checked' : 'unchecked';
-  $: rootClass = ['switch-root', className].filter(Boolean).join(' ');
+  type ClassValue = string | false | null | undefined;
 
-  $: normalizedAriaLabel = ariaLabel?.trim() || undefined;
-  $: normalizedTitle = title?.trim() || undefined;
+  let {
+    children,
 
-  function handleClick(event: MouseEvent) {
-    if (disabled) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
+    checked = false,
+    disabled = false,
+    stackOnMobile = true,
 
-    onclick?.(event);
+    class: className = '',
+    title = null,
+
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
+    'aria-describedby': ariaDescribedBy,
+
+    ...restProps
+  }: SwitchProps = $props();
+
+  const ariaChecked = $derived(checked ? 'true' : 'false');
+
+  const normalizedTitle = $derived(trimmedOrUndefined(title));
+  const normalizedAriaLabel = $derived(trimmedOrUndefined(ariaLabel));
+  const normalizedAriaLabelledBy = $derived(trimmedOrUndefined(ariaLabelledBy));
+  const normalizedAriaDescribedBy = $derived(trimmedOrUndefined(ariaDescribedBy));
+
+  const stackOnMobileAttribute = $derived(stackOnMobile ? 'true' : undefined);
+
+  const switchClass = $derived(cx('switch-root', className));
+
+  function trimmedOrUndefined(value: string | null | undefined): string | undefined {
+    const trimmed = value?.trim();
+    return trimmed ?? undefined;
+  }
+
+  function cx(...values: ClassValue[]): string {
+    return values.filter(isNonEmptyString).join(' ');
+  }
+
+  function isNonEmptyString(value: ClassValue): value is string {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 </script>
 
 <button
+  {...restProps}
   type="button"
   role="switch"
-  aria-checked={checked ? 'true' : 'false'}
+  aria-checked={ariaChecked}
   aria-label={normalizedAriaLabel}
-  aria-labelledby={ariaLabelledBy}
-  aria-describedby={ariaDescribedBy}
+  aria-labelledby={normalizedAriaLabelledBy}
+  aria-describedby={normalizedAriaDescribedBy}
   title={normalizedTitle}
   {disabled}
-  class={rootClass}
-  data-state={state}
-  data-stack-on-mobile={stackOnMobile ? 'true' : undefined}
-  onclick={handleClick}
-  {onfocus}
-  {onblur}
+  class={switchClass}
+  data-stack-on-mobile={stackOnMobileAttribute}
 >
   <span class="switch-copy">
-    <slot />
+    {@render children?.()}
   </span>
 
   <span class="switch-track" aria-hidden="true">
@@ -79,16 +108,24 @@
     --switch-padding: 0.125rem;
     --switch-thumb-size: 0.875rem;
 
-    width: 100%;
+    --switch-track-background: var(--bg-control);
+    --switch-track-border-color: var(--border-control);
+    --switch-thumb-background: var(--text-soft);
+    --switch-thumb-position: var(--switch-padding);
+
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
 
+    inline-size: 100%;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
     border: 0;
+
     appearance: none;
     background: transparent;
-    padding: 0;
 
     font: inherit;
     color: inherit;
@@ -100,7 +137,7 @@
   }
 
   .switch-copy {
-    min-width: 0;
+    min-inline-size: 0;
     flex: 1 1 auto;
   }
 
@@ -110,10 +147,10 @@
 
     inline-size: var(--switch-width);
     block-size: var(--switch-height);
-    border: 1px solid var(--border-control);
+    border: 1px solid var(--switch-track-border-color);
     border-radius: 999px;
 
-    background: var(--bg-control);
+    background-color: var(--switch-track-background);
 
     transition:
       background-color 140ms ease,
@@ -124,13 +161,13 @@
   .switch-thumb {
     position: absolute;
     inset-block-start: 50%;
-    inset-inline-start: var(--switch-padding);
+    inset-inline-start: var(--switch-thumb-position);
 
     inline-size: var(--switch-thumb-size);
     block-size: var(--switch-thumb-size);
     border-radius: 999px;
 
-    background: var(--text-soft);
+    background-color: var(--switch-thumb-background);
     transform: translateY(-50%);
 
     pointer-events: none;
@@ -140,14 +177,11 @@
       background-color 140ms ease;
   }
 
-  .switch-root[data-state='checked'] .switch-track {
-    background: var(--accent);
-    border-color: transparent;
-  }
-
-  .switch-root[data-state='checked'] .switch-thumb {
-    inset-inline-start: calc(100% - var(--switch-padding) - var(--switch-thumb-size));
-    background: var(--accent-contrast);
+  .switch-root[aria-checked='true'] {
+    --switch-track-background: var(--accent);
+    --switch-track-border-color: transparent;
+    --switch-thumb-background: var(--accent-contrast);
+    --switch-thumb-position: calc(100% - var(--switch-padding) - var(--switch-thumb-size));
   }
 
   .switch-root:focus-visible {
@@ -159,12 +193,12 @@
   }
 
   @media (hover: hover) {
-    .switch-root:not(:disabled):not([data-state='checked']):hover .switch-track {
-      background: var(--bg-control-hover);
+    .switch-root:not(:disabled):not([aria-checked='true']):hover {
+      --switch-track-background: var(--bg-control-hover);
     }
 
-    .switch-root:not(:disabled)[data-state='checked']:hover .switch-track {
-      background: var(--accent-strong);
+    .switch-root:not(:disabled)[aria-checked='true']:hover {
+      --switch-track-background: var(--accent-strong);
     }
   }
 

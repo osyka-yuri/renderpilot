@@ -1,56 +1,84 @@
 <script lang="ts">
   import type { LanguageModeHandler, ThemeModeHandler, VoidHandler } from '@shared/utils/callbacks';
   import type { ThemeMode } from '@shared/theme/theme-mode';
+
   import Badge from '@shared/ui/Badge.svelte';
   import Select from '@shared/ui/Select.svelte';
   import Surface from '@shared/ui/Surface.svelte';
   import Switch from '@shared/ui/Switch.svelte';
 
-  type LanguageMode = 'system' | 'en' | 'ru';
+  type SelectOption<Value extends string> = {
+    value: Value;
+    label: string;
+  };
 
-  const themeOptions: Array<{ value: ThemeMode; label: string }> = [
+  const themeOptions = [
     { value: 'system', label: 'System' },
     { value: 'dark', label: 'Dark' },
     { value: 'light', label: 'Light' },
-  ];
-  const languageOptions: Array<{ value: LanguageMode; label: string }> = [
+  ] satisfies SelectOption<ThemeMode>[];
+
+  const languageOptions = [
     { value: 'system', label: 'Follow system' },
     { value: 'en', label: 'English' },
     { value: 'ru', label: 'Russian' },
-  ];
-  const noopTheme: ThemeModeHandler = (_mode: ThemeMode): void => {};
-  const noopLanguage: LanguageModeHandler = (_mode: LanguageMode): void => {};
-  const noopToggle: VoidHandler = (): void => {};
+  ] satisfies SelectOption<'system' | 'en' | 'ru'>[];
+
+  type LanguageMode = (typeof languageOptions)[number]['value'];
+
+  const noopThemeChange: ThemeModeHandler = () => undefined;
+  const noopLanguageChange: LanguageModeHandler = () => undefined;
+  const noopToggle: VoidHandler = () => undefined;
 
   export let themeMode: ThemeMode = 'system';
   export let languageMode: LanguageMode = 'system';
   export let advancedMode = false;
-  export let onThemeModeChange: ThemeModeHandler = noopTheme;
-  export let onLanguageModeChange: LanguageModeHandler = noopLanguage;
+
+  export let onThemeModeChange: ThemeModeHandler = noopThemeChange;
+  export let onLanguageModeChange: LanguageModeHandler = noopLanguageChange;
   export let onToggleAdvancedMode: VoidHandler = noopToggle;
 
+  function isOptionValue<Value extends string>(
+    value: string,
+    options: SelectOption<Value>[],
+  ): value is Value {
+    return options.some((option) => option.value === value);
+  }
+
   function handleThemeChange(nextValue: string): void {
-    onThemeModeChange(nextValue as ThemeMode);
+    if (!isOptionValue(nextValue, themeOptions)) {
+      return;
+    }
+
+    onThemeModeChange(nextValue);
   }
 
   function handleLanguageChange(nextValue: string): void {
-    onLanguageModeChange(nextValue as LanguageMode);
+    if (!isOptionValue(nextValue, languageOptions)) {
+      return;
+    }
+
+    onLanguageModeChange(nextValue);
+  }
+
+  function handleAdvancedModeToggle(): void {
+    onToggleAdvancedMode();
   }
 </script>
 
-<section class="screen-shell">
-  <article class="settings-section">
-    <div class="section-header">
+<section class="screen-shell" aria-label="Settings">
+  <article class="settings-section" aria-labelledby="appearance-title">
+    <header class="section-header">
       <p class="eyebrow">Interface</p>
-      <h3>Appearance and language</h3>
+      <h3 id="appearance-title">Appearance and language</h3>
       <p class="section-copy">
         Keep the shell visually consistent across themes and languages without turning preferences
         into oversized cards.
       </p>
-    </div>
+    </header>
 
     <Surface className="settings-panel" tone="elevated" shadow>
-      <div class="setting-row select-row">
+      <div class="setting-row">
         <div class="setting-copy">
           <p class="setting-label">Display</p>
           <h4>Theme</h4>
@@ -60,7 +88,7 @@
           </p>
         </div>
 
-        <span class="setting-control select-wrap">
+        <span class="setting-control">
           <Select
             ariaLabel="Theme mode"
             options={themeOptions}
@@ -70,7 +98,7 @@
         </span>
       </div>
 
-      <div class="setting-row select-row">
+      <div class="setting-row">
         <div class="setting-copy">
           <p class="setting-label">Localization</p>
           <h4>Language</h4>
@@ -80,7 +108,7 @@
           </p>
         </div>
 
-        <span class="setting-control select-wrap">
+        <span class="setting-control">
           <Select
             ariaLabel="Interface language"
             options={languageOptions}
@@ -92,26 +120,30 @@
     </Surface>
   </article>
 
-  <article class="settings-section">
-    <div class="section-header">
+  <article class="settings-section" aria-labelledby="workflow-title">
+    <header class="section-header">
       <p class="eyebrow">Behavior</p>
-      <h3>Workflow and provider posture</h3>
+      <h3 id="workflow-title">Workflow and provider posture</h3>
       <p class="section-copy">
         Keep operational behavior predictable and expose lower-level controls only when they improve
         the workflow.
       </p>
-    </div>
+    </header>
 
     <Surface className="settings-panel" tone="elevated" shadow>
       <div class="setting-row switch-row">
-        <Switch checked={advancedMode} ariaLabel="Advanced mode" onclick={onToggleAdvancedMode}>
+        <Switch
+          checked={advancedMode}
+          aria-label="Advanced mode"
+          onclick={handleAdvancedModeToggle}
+        >
           <span class="setting-copy">
             <span class="setting-label">Detail level</span>
             <span class="row-title">Advanced mode</span>
-            <span class="row-copy"
-              >Show lower-level actions and technical controls in detail screens only when you need
-              them.</span
-            >
+            <span class="row-copy">
+              Show lower-level actions and technical controls in detail screens only when you need
+              them.
+            </span>
           </span>
         </Switch>
       </div>
@@ -136,47 +168,57 @@
 </section>
 
 <style>
-  .screen-shell {
+  .screen-shell,
+  .settings-section,
+  .section-header,
+  .setting-copy,
+  .setting-status {
     display: grid;
+  }
+
+  .screen-shell {
     gap: var(--space-5);
     width: 100%;
   }
 
   .settings-section {
-    display: grid;
     gap: var(--space-3);
   }
 
-  .eyebrow {
+  .section-header {
+    gap: var(--space-1);
+    padding-inline: var(--space-1);
+  }
+
+  .eyebrow,
+  .setting-label {
     margin: 0;
     color: var(--text-subtle);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
     font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h3,
+  h4 {
+    margin: 0;
+    font-weight: 600;
   }
 
   h3 {
-    margin: 0;
     font-size: 1.05rem;
-    font-weight: 600;
   }
 
-  h4 {
-    margin: 0;
+  h4,
+  .row-title {
+    color: var(--text-strong);
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .section-header {
-    display: grid;
-    gap: var(--space-1);
-    padding: 0 var(--space-1);
   }
 
   .section-copy {
-    margin: 0;
     max-width: 56rem;
+    margin: 0;
     font-size: 0.875rem;
     line-height: 1.45;
   }
@@ -188,6 +230,10 @@
     border-radius: var(--radius-xl);
   }
 
+  :global(.settings-panel) > :last-child {
+    border-bottom: 0;
+  }
+
   .setting-row {
     display: flex;
     align-items: center;
@@ -197,23 +243,10 @@
     border-bottom: 1px solid var(--border-subtle);
   }
 
-  :global(.settings-panel) > :last-child {
-    border-bottom: 0;
-  }
-
   .setting-copy {
-    display: grid;
-    gap: var(--space-1);
-    min-width: 0;
     flex: 1;
-  }
-
-  .setting-label {
-    margin: 0;
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    min-width: 0;
+    gap: var(--space-1);
   }
 
   .setting-copy p,
@@ -223,24 +256,11 @@
     line-height: 1.45;
   }
 
-  .select-row {
-    cursor: default;
-  }
-
   .setting-control {
+    display: block;
     width: min(100%, 15rem);
     min-width: 13rem;
     flex-shrink: 0;
-  }
-
-  .select-wrap {
-    display: block;
-  }
-
-  .row-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-strong);
   }
 
   .switch-row {
@@ -252,10 +272,9 @@
   }
 
   .setting-status {
-    display: grid;
+    flex-shrink: 0;
     justify-items: end;
     gap: var(--space-2);
-    flex-shrink: 0;
   }
 
   .status-note {
@@ -264,20 +283,19 @@
   }
 
   @media (max-width: 720px) {
+    .section-header {
+      padding-inline: 0;
+    }
+
     .setting-row {
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
     }
 
-    .section-header {
-      padding: 0;
-    }
-
-    .setting-control,
-    .select-wrap {
-      min-width: 0;
+    .setting-control {
       width: 100%;
+      min-width: 0;
     }
 
     .setting-status {

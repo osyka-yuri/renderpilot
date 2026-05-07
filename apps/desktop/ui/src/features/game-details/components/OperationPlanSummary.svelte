@@ -5,19 +5,56 @@
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
 
+  type RiskBadgeTone = 'success' | 'warning' | 'danger';
+
+  type PlanMetric = {
+    label: string;
+    value: string;
+  };
+
+  type PlanFlag = {
+    label: string;
+    tone: 'warning' | 'muted';
+  };
+
+  type PlanNoteGroup = {
+    id: 'warnings' | 'blockers';
+    title: string;
+    tone: 'warning' | 'danger';
+    className: 'warning' | 'blocked';
+    items: string[];
+  };
+
   const BLOCKED_RISK_LEVEL = 'blocked';
   const UNKNOWN_VALUE = 'Unknown';
-  const noopApply: OperationHandler = (_operationId: string): void => {};
 
   export let plan: SwapPlan | null = null;
   export let busy = false;
-  export let onApply: OperationHandler = noopApply;
+  export let onApply: OperationHandler = () => {
+    return;
+  };
 
-  $: canApply =
-    !!plan && plan.blockers.length === 0 && plan.risk_level !== BLOCKED_RISK_LEVEL && !busy;
+  $: canApply = plan ? canApplyPlan(plan, busy) : false;
+
+  $: planTitle = plan ? formatLabel(plan.operation_type) : '';
+  $: planRiskLabel = plan ? formatRisk(plan.risk_level) : UNKNOWN_VALUE;
+  $: planRiskTone = plan ? getPlanRiskBadgeTone(plan.risk_level) : 'danger';
+
+  $: planFlags = plan ? getPlanFlags(plan) : [];
+  $: planMetrics = plan ? getPlanMetrics(plan) : [];
+  $: planNoteGroups = plan ? getPlanNoteGroups(plan) : [];
+
+  $: hasPlanNotes = planNoteGroups.length > 0;
+  $: readinessText = plan ? getReadinessCopy(plan) : '';
+
+  function canApplyPlan(currentPlan: SwapPlan, isBusy: boolean): boolean {
+    return (
+      !isBusy && currentPlan.blockers.length === 0 && currentPlan.risk_level !== BLOCKED_RISK_LEVEL
+    );
+  }
 
   function applyCurrentPlan(): void {
-    if (!plan) {
+    if (!plan || !canApply) {
       return;
     }
 
@@ -25,26 +62,105 @@
   }
 
   function displayValue(value?: string | null): string {
-    return value ?? UNKNOWN_VALUE;
+    const normalizedValue = value?.trim();
+
+    return normalizedValue ?? UNKNOWN_VALUE;
   }
 
-  function planRiskBadgeTone(level: string): 'success' | 'warning' | 'danger' {
-    const tone = riskTone(level);
+  function getPlanRiskBadgeTone(level: string): RiskBadgeTone {
+    switch (riskTone(level)) {
+      case 'low':
+        return 'success';
 
-    if (tone === 'low') {
-      return 'success';
+      case 'medium':
+        return 'warning';
+
+      default:
+        return 'danger';
     }
-
-    if (tone === 'medium') {
-      return 'warning';
-    }
-
-    return 'danger';
   }
 
-  function readinessCopy(currentPlan: SwapPlan): string {
+  function getPlanFlags(currentPlan: SwapPlan): PlanFlag[] {
+    return [
+      {
+        label: currentPlan.requires_backup ? 'Backup required' : 'Backup optional',
+        tone: currentPlan.requires_backup ? 'warning' : 'muted',
+      },
+      {
+        label: currentPlan.requires_elevation
+          ? 'Elevation may be required'
+          : 'No elevation expected',
+        tone: currentPlan.requires_elevation ? 'warning' : 'muted',
+      },
+      {
+        label: 'Confirmation attached',
+        tone: 'muted',
+      },
+    ];
+  }
+
+  function getPlanMetrics(currentPlan: SwapPlan): PlanMetric[] {
+    return [
+      {
+        label: 'Target',
+        value: displayValue(currentPlan.target_path),
+      },
+      {
+        label: 'Replacement',
+        value: displayValue(currentPlan.replacement_path),
+      },
+      {
+        label: 'Current version',
+        value: displayValue(currentPlan.original_version),
+      },
+      {
+        label: 'New version',
+        value: displayValue(currentPlan.replacement_version),
+      },
+      {
+        label: 'Backup',
+        value: currentPlan.requires_backup ? 'Required before replacement' : 'Optional',
+      },
+      {
+        label: 'Elevation',
+        value: currentPlan.requires_elevation ? 'May require elevation' : 'No elevation expected',
+      },
+    ];
+  }
+
+  function getPlanNoteGroups(currentPlan: SwapPlan): PlanNoteGroup[] {
+    const noteGroups: PlanNoteGroup[] = [];
+
+    if (currentPlan.warnings.length > 0) {
+      noteGroups.push({
+        id: 'warnings',
+        title: 'Warnings',
+        tone: 'warning',
+        className: 'warning',
+        items: currentPlan.warnings.map(formatLabel),
+      });
+    }
+
+    if (currentPlan.blockers.length > 0) {
+      noteGroups.push({
+        id: 'blockers',
+        title: 'Blockers',
+        tone: 'danger',
+        className: 'blocked',
+        items: currentPlan.blockers.map(formatLabel),
+      });
+    }
+
+    return noteGroups;
+  }
+
+  function getReadinessCopy(currentPlan: SwapPlan): string {
     if (currentPlan.blockers.length > 0) {
       return 'Resolve blockers before applying this staged operation.';
+    }
+
+    if (currentPlan.risk_level === BLOCKED_RISK_LEVEL) {
+      return 'This staged operation is blocked by its risk level.';
     }
 
     if (currentPlan.warnings.length > 0) {
@@ -56,96 +172,64 @@
 </script>
 
 {#if plan}
-  <section class="plan-card">
-    <div class="plan-head">
+  <section class="plan-card" aria-labelledby="operation-plan-title">
+    <header class="plan-head">
       <div class="plan-copy">
         <p class="eyebrow">Operation Plan</p>
+
         <div class="plan-title-row">
           <div>
-            <h3>{formatLabel(plan.operation_type)}</h3>
+            <h3 id="operation-plan-title">{planTitle}</h3>
             <p class="plan-id">{plan.operation_id}</p>
           </div>
-          <Badge pill size="md" tone={planRiskBadgeTone(plan.risk_level)}>
-            Risk {formatRisk(plan.risk_level)}
+
+          <Badge pill size="md" tone={planRiskTone}>
+            Risk {planRiskLabel}
           </Badge>
         </div>
 
-        <div class="plan-flags">
-          <Badge surface="outline" tone={plan.requires_backup ? 'warning' : 'muted'}>
-            {plan.requires_backup ? 'Backup required' : 'Backup optional'}
-          </Badge>
-          <Badge surface="outline" tone={plan.requires_elevation ? 'warning' : 'muted'}>
-            {plan.requires_elevation ? 'Elevation may be required' : 'No elevation expected'}
-          </Badge>
-          <Badge surface="outline" tone="muted">Confirmation attached</Badge>
+        <div class="plan-flags" aria-label="Operation requirements">
+          {#each planFlags as flag (flag.label)}
+            <Badge surface="outline" tone={flag.tone}>{flag.label}</Badge>
+          {/each}
         </div>
       </div>
-    </div>
+    </header>
 
     <dl class="plan-grid">
-      <div class="plan-metric">
-        <dt>Target</dt>
-        <dd>{plan.target_path}</dd>
-      </div>
-      <div class="plan-metric">
-        <dt>Replacement</dt>
-        <dd>{plan.replacement_path}</dd>
-      </div>
-      <div class="plan-metric">
-        <dt>Current Version</dt>
-        <dd>{displayValue(plan.original_version)}</dd>
-      </div>
-      <div class="plan-metric">
-        <dt>New Version</dt>
-        <dd>{displayValue(plan.replacement_version)}</dd>
-      </div>
-      <div class="plan-metric">
-        <dt>Backup</dt>
-        <dd>{plan.requires_backup ? 'Required before replacement' : 'Optional'}</dd>
-      </div>
-      <div class="plan-metric">
-        <dt>Elevation</dt>
-        <dd>{plan.requires_elevation ? 'May require elevation' : 'No elevation expected'}</dd>
-      </div>
+      {#each planMetrics as metric (metric.label)}
+        <div class="plan-metric">
+          <dt>{metric.label}</dt>
+          <dd>{metric.value}</dd>
+        </div>
+      {/each}
     </dl>
 
-    {#if plan.warnings.length > 0 || plan.blockers.length > 0}
+    {#if hasPlanNotes}
       <div class="plan-notes">
-        {#if plan.warnings.length > 0}
-          <section class="note-block warning">
+        {#each planNoteGroups as noteGroup (noteGroup.id)}
+          <section class={`note-block ${noteGroup.className}`}>
             <div class="note-head">
-              <strong>Warnings</strong>
-              <Badge pill tone="warning">{plan.warnings.length}</Badge>
+              <strong>{noteGroup.title}</strong>
+              <Badge pill tone={noteGroup.tone}>{noteGroup.items.length}</Badge>
             </div>
-            <ul class="note-list">
-              {#each plan.warnings as warning}
-                <li>{formatLabel(warning)}</li>
-              {/each}
-            </ul>
-          </section>
-        {/if}
 
-        {#if plan.blockers.length > 0}
-          <section class="note-block blocked">
-            <div class="note-head">
-              <strong>Blockers</strong>
-              <Badge pill tone="danger">{plan.blockers.length}</Badge>
-            </div>
             <ul class="note-list">
-              {#each plan.blockers as blocker}
-                <li>{formatLabel(blocker)}</li>
+              {#each noteGroup.items as item, index (`${noteGroup.id}-${index}`)}
+                <li>{item}</li>
               {/each}
             </ul>
           </section>
-        {/if}
+        {/each}
       </div>
     {/if}
 
-    <div class="plan-actions">
+    <footer class="plan-actions">
       <div class="action-copy">
-        <strong>Ready to apply</strong>
-        <p>{readinessCopy(plan)}</p>
+        <strong>{canApply ? 'Ready to apply' : 'Not ready to apply'}</strong>
+        <p>{readinessText}</p>
       </div>
+
       <Button
         variant="primary"
         size="sm"
@@ -155,7 +239,7 @@
       >
         {busy ? 'Applying...' : 'Apply Operation'}
       </Button>
-    </div>
+    </footer>
   </section>
 {/if}
 
@@ -164,113 +248,130 @@
     display: grid;
     gap: var(--space-3);
     padding: var(--space-4);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-xl);
     background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-card);
   }
 
-  .plan-head {
+  .plan-head,
+  .plan-copy,
+  .plan-notes,
+  .note-list,
+  .action-copy {
     display: grid;
+  }
+
+  .plan-head,
+  .plan-copy,
+  .plan-notes {
     gap: var(--space-3);
   }
 
-  .plan-copy {
-    display: grid;
+  .plan-copy,
+  .note-list {
     gap: var(--space-2);
+  }
+
+  .action-copy {
+    gap: 0.18rem;
+  }
+
+  .plan-title-row,
+  .plan-flags,
+  .note-head,
+  .plan-actions {
+    display: flex;
   }
 
   .plan-title-row {
-    display: flex;
     justify-content: space-between;
-    gap: var(--space-3);
     align-items: flex-start;
     flex-wrap: wrap;
-  }
-
-  .eyebrow {
-    margin: 0 0 var(--space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.6875rem;
-    color: var(--text-subtle);
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-  }
-
-  .plan-id {
-    margin: var(--space-1) 0 0;
-    color: var(--text-muted);
-    word-break: break-word;
+    gap: var(--space-3);
   }
 
   .plan-flags {
-    display: flex;
-    gap: var(--space-2);
     flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .eyebrow,
+  h3,
+  .plan-id,
+  .plan-actions p {
+    margin: 0;
+  }
+
+  .eyebrow {
+    color: var(--text-subtle);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  h3 {
+    color: var(--text-strong);
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .plan-id {
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    word-break: break-word;
   }
 
   .plan-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: var(--space-2);
+    margin: 0;
   }
 
-  .plan-metric {
+  .plan-metric,
+  .note-block {
     padding: var(--space-3);
-    border-radius: var(--radius-lg);
     border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
     background: var(--bg-soft);
   }
 
   dt {
+    margin-bottom: var(--space-1);
+    color: var(--text-subtle);
     font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-subtle);
-    margin-bottom: var(--space-1);
   }
 
   dd {
     margin: 0;
-    word-break: break-word;
     color: var(--text-strong);
-  }
-
-  .plan-notes {
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .note-block {
-    padding: var(--space-3);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-soft);
+    word-break: break-word;
   }
 
   .note-head {
-    display: flex;
     justify-content: space-between;
-    gap: var(--space-3);
     align-items: center;
+    gap: var(--space-3);
+  }
+
+  .note-head strong,
+  .action-copy strong {
+    color: var(--text-strong);
   }
 
   .note-list {
-    display: grid;
-    gap: var(--space-2);
     margin: var(--space-2) 0 0;
     padding: 0;
     list-style: none;
   }
 
   .note-list li {
-    padding-left: var(--space-4);
     position: relative;
+    padding-left: var(--space-4);
     color: var(--text-soft);
     line-height: 1.45;
   }
@@ -278,8 +379,8 @@
   .note-list li::before {
     content: '';
     position: absolute;
-    left: 0;
     top: 0.6rem;
+    left: 0;
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 999px;
@@ -288,32 +389,25 @@
   }
 
   .warning {
-    background: color-mix(in srgb, var(--warning) 6%, var(--bg-control));
     border-color: color-mix(in srgb, var(--warning) 18%, var(--border-subtle));
+    background: color-mix(in srgb, var(--warning) 6%, var(--bg-control));
   }
 
   .blocked {
-    background: color-mix(in srgb, var(--danger) 7%, var(--bg-control));
     border-color: color-mix(in srgb, var(--danger) 18%, var(--border-subtle));
+    background: color-mix(in srgb, var(--danger) 7%, var(--bg-control));
   }
 
   .plan-actions {
-    display: flex;
     justify-content: space-between;
-    gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
+    gap: var(--space-3);
     padding-top: var(--space-3);
     border-top: 1px solid var(--border-subtle);
   }
 
-  .action-copy {
-    display: grid;
-    gap: 0.18rem;
-  }
-
   .plan-actions p {
-    margin: 0;
     color: var(--text-muted);
   }
 

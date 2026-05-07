@@ -21,8 +21,18 @@
   import { formatTechnology } from '@shared/utils/presenters';
   import type { AccordionItem } from '@shared/ui/Accordion.svelte';
 
-  const noopBuildPlan: BuildPlanHandler = (_componentId: string, _artifactId: string): void => {};
-  const noopOperation: OperationHandler = (_operationId: string): void => {};
+  type SelectionMap = Record<string, string>;
+
+  type VendorAccordionState = {
+    gameId: string | null;
+    activeVendorKey: VendorKey | null;
+    hasSelectedVendorManually: boolean;
+  };
+
+  const DEFAULT_VENDOR_KEY: VendorKey = 'nvidia';
+
+  const noopBuildPlan: BuildPlanHandler = () => undefined;
+  const noopOperation: OperationHandler = () => undefined;
 
   export let details: GameDetails | null = null;
   export let gameCard: GameCard | null = null;
@@ -32,54 +42,103 @@
   export let onApply: OperationHandler = noopOperation;
   export let onRollback: OperationHandler = noopOperation;
 
-  let selectedArtifacts: Record<string, string> = {};
-  let selectedNvapiSelections: Record<string, string> = {};
-  let activeVendorKey: VendorKey | null = null;
-  let hasInteractedWithVendorAccordion = false;
-  let lastVendorAccordionGameId: string | null = null;
+  let selectedArtifacts: SelectionMap = {};
+  let selectedNvapiSelections: SelectionMap = {};
 
-  $: technologies = details
-    ? [...new Set(details.components.map((component) => formatTechnology(component.technology)))]
-    : [];
-  $: backupOperations = details?.operations.filter((operation) => operation.backup_count > 0) ?? [];
-  $: componentRows = details ? buildComponentRows(details) : [];
-  $: configuredRows = componentRows.map((row) => buildConfiguredRow(row, selectedArtifacts, busy));
-  $: technologySections = buildTechnologySections(configuredRows);
-  $: vendorBlocks = buildVendorBlocks(technologySections);
-  $: visibleVendorBlocks = vendorBlocks.filter(
-    (block) => block.key !== 'other' || block.sections.length > 0,
-  );
-  $: vendorAccordionItems = visibleVendorBlocks.map(buildVendorAccordionItem);
-  $: preferredVendorKey =
-    visibleVendorBlocks.find((block) => block.sections.length > 0)?.key ??
-    visibleVendorBlocks[0]?.key ??
-    'nvidia';
-  $: currentVendorAccordionGameId = gameCard?.game_id ?? null;
-  $: if (currentVendorAccordionGameId !== lastVendorAccordionGameId) {
-    lastVendorAccordionGameId = currentVendorAccordionGameId;
-    activeVendorKey = null;
-    hasInteractedWithVendorAccordion = false;
+  let vendorAccordionState = createVendorAccordionState(null);
+
+  $: currentGameId = gameCard?.game_id ?? null;
+
+  $: if (currentGameId !== vendorAccordionState.gameId) {
+    vendorAccordionState = createVendorAccordionState(currentGameId);
   }
-  $: effectiveVendorKey = hasInteractedWithVendorAccordion ? activeVendorKey : preferredVendorKey;
+
+  $: technologies = details ? getTechnologies(details) : [];
+  $: backupOperations = details?.operations.filter(hasBackups) ?? [];
+
+  $: componentRows = details ? buildComponentRows(details) : [];
 
   $: {
-    const nextArtifactSelections = details
+    const reconciledArtifacts = details
       ? reconcileArtifactSelections(componentRows, selectedArtifacts, plan)
       : {};
 
-    if (!sameSelectionMap(selectedArtifacts, nextArtifactSelections)) {
-      selectedArtifacts = nextArtifactSelections;
+    if (!sameSelectionMap(selectedArtifacts, reconciledArtifacts)) {
+      selectedArtifacts = reconciledArtifacts;
     }
   }
 
   $: {
-    const nextNvapiSelections = details
+    const reconciledNvapiSelections = details
       ? reconcileNvapiSelections(componentRows, selectedNvapiSelections)
       : {};
 
-    if (!sameSelectionMap(selectedNvapiSelections, nextNvapiSelections)) {
-      selectedNvapiSelections = nextNvapiSelections;
+    if (!sameSelectionMap(selectedNvapiSelections, reconciledNvapiSelections)) {
+      selectedNvapiSelections = reconciledNvapiSelections;
     }
+  }
+
+  $: configuredRows = componentRows.map((row) => buildConfiguredRow(row, selectedArtifacts, busy));
+
+  $: technologySections = buildTechnologySections(configuredRows);
+  $: vendorBlocks = buildVendorBlocks(technologySections);
+  $: visibleVendorBlocks = vendorBlocks.filter(hasVisibleVendorContent);
+  $: vendorAccordionItems = visibleVendorBlocks.map(buildVendorAccordionItem);
+
+  $: preferredVendorKey = resolvePreferredVendorKey(visibleVendorBlocks);
+
+  $: activeVendorKeyIsUsable = isActiveVendorKeyUsable(
+    visibleVendorBlocks,
+    vendorAccordionState.activeVendorKey,
+  );
+
+  $: effectiveVendorKey =
+    vendorAccordionState.hasSelectedVendorManually && activeVendorKeyIsUsable
+      ? vendorAccordionState.activeVendorKey
+      : preferredVendorKey;
+
+  function createVendorAccordionState(gameId: string | null): VendorAccordionState {
+    return {
+      gameId,
+      activeVendorKey: null,
+      hasSelectedVendorManually: false,
+    };
+  }
+
+  function getTechnologies(gameDetails: GameDetails): string[] {
+    return [
+      ...new Set(gameDetails.components.map((component) => formatTechnology(component.technology))),
+    ];
+  }
+
+  function hasBackups(operation: GameDetails['operations'][number]): boolean {
+    return operation.backup_count > 0;
+  }
+
+  function hasVisibleVendorContent(block: VendorBlock): boolean {
+    return block.key !== 'other' || block.sections.length > 0;
+  }
+
+  function hasVendorKey(blocks: VendorBlock[], vendorKey: VendorKey): boolean {
+    return blocks.some((block) => block.key === vendorKey);
+  }
+
+  function isActiveVendorKeyUsable(blocks: VendorBlock[], vendorKey: VendorKey | null): boolean {
+    return vendorKey === null || hasVendorKey(blocks, vendorKey);
+  }
+
+  function resolvePreferredVendorKey(blocks: VendorBlock[]): VendorKey {
+    const populatedBlock = blocks.find((block) => block.sections.length > 0);
+
+    if (populatedBlock !== undefined) {
+      return populatedBlock.key;
+    }
+
+    if (blocks.length > 0) {
+      return blocks[0].key;
+    }
+
+    return DEFAULT_VENDOR_KEY;
   }
 
   function vendorTechnologySummary(vendorBlock: VendorBlock): string {
@@ -97,58 +156,68 @@
   }
 
   function buildVendorAccordionItem(vendorBlock: VendorBlock): AccordionItem {
+    const hasSections = vendorBlock.sections.length > 0;
+
     return {
       value: vendorBlock.key,
       title: vendorBlock.label,
-      meta:
-        vendorBlock.sections.length > 0
-          ? `${vendorBlock.totalFiles} ${vendorBlock.totalFiles === 1 ? 'file' : 'files'}`
-          : undefined,
+      meta: hasSections ? formatFileCount(vendorBlock.totalFiles) : undefined,
       summary: vendorTechnologySummary(vendorBlock),
-      badges:
-        vendorBlock.sections.length > 0
-          ? [
-              {
-                label: `${vendorBlock.sections.length} ${vendorBlock.sections.length === 1 ? 'technology' : 'technologies'}`,
-              },
-              {
-                label: `${vendorBlock.totalCandidates} replacement ${vendorBlock.totalCandidates === 1 ? 'version' : 'versions'}`,
-                tone: vendorBlock.totalCandidates > 0 ? 'success' : 'muted',
-              },
-            ]
-          : [{ label: 'Empty', tone: 'muted' }],
+      badges: hasSections
+        ? [
+            {
+              label: formatTechnologyCount(vendorBlock.sections.length),
+            },
+            {
+              label: formatReplacementCount(vendorBlock.totalCandidates),
+              tone: vendorBlock.totalCandidates > 0 ? 'success' : 'muted',
+            },
+          ]
+        : [{ label: 'Empty', tone: 'muted' }],
     };
   }
 
-  function handleArtifactSelection(componentId: string, nextValue: string): void {
-    selectedArtifacts = {
-      ...selectedArtifacts,
-      [componentId]: nextValue,
+  function formatFileCount(count: number): string {
+    return `${count} ${count === 1 ? 'file' : 'files'}`;
+  }
+
+  function formatTechnologyCount(count: number): string {
+    return `${count} ${count === 1 ? 'technology' : 'technologies'}`;
+  }
+
+  function formatReplacementCount(count: number): string {
+    return `${count} replacement ${count === 1 ? 'version' : 'versions'}`;
+  }
+
+  function updateSelection(map: SelectionMap, key: string, value: string): SelectionMap {
+    return {
+      ...map,
+      [key]: value,
     };
   }
 
-  function handleNvapiSelection(componentId: string, controlId: string, nextValue: string): void {
-    selectedNvapiSelections = {
-      ...selectedNvapiSelections,
-      [selectionKey(componentId, controlId)]: nextValue,
+  function handleArtifactSelection(componentId: string, artifactId: string): void {
+    selectedArtifacts = updateSelection(selectedArtifacts, componentId, artifactId);
+  }
+
+  function handleNvapiSelection(componentId: string, controlId: string, artifactId: string): void {
+    selectedNvapiSelections = updateSelection(
+      selectedNvapiSelections,
+      selectionKey(componentId, controlId),
+      artifactId,
+    );
+  }
+
+  function handleVendorChange(vendorKey: VendorKey | null): void {
+    vendorAccordionState = {
+      ...vendorAccordionState,
+      activeVendorKey: vendorKey,
+      hasSelectedVendorManually: true,
     };
   }
 
   function canRollback(status: string): boolean {
     return status === 'completed' || status === 'rollback_required';
-  }
-
-  function handleBuildPlan(componentId: string, artifactId: string): void {
-    onBuildPlan(componentId, artifactId);
-  }
-
-  function handleRollback(operationId: string): void {
-    onRollback(operationId);
-  }
-
-  function selectVendorTab(vendorKey: VendorKey | null): void {
-    hasInteractedWithVendorAccordion = true;
-    activeVendorKey = vendorKey;
   }
 </script>
 
@@ -176,22 +245,18 @@
       riskLevel={gameCard?.risk_level}
       {busy}
       {selectionKey}
-      onVendorChange={selectVendorTab}
+      onVendorChange={handleVendorChange}
       onArtifactSelection={handleArtifactSelection}
       onNvapiSelection={handleNvapiSelection}
-      onBuildPlan={handleBuildPlan}
+      {onBuildPlan}
     />
 
     <OperationPlanSummary {plan} {busy} {onApply} />
 
     <section class="lower-grid">
       <BackupOperationsPanel operations={backupOperations} />
-      <OperationsHistoryPanel
-        operations={details.operations}
-        {busy}
-        {canRollback}
-        onRollback={handleRollback}
-      />
+
+      <OperationsHistoryPanel operations={details.operations} {busy} {canRollback} {onRollback} />
     </section>
   {/if}
 </section>

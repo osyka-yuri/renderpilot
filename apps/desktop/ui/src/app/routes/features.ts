@@ -1,27 +1,27 @@
 import type { Screen } from './screen';
 
-export interface FeatureAvailabilityContext {
+export type FeatureAvailabilityContext = {
   selectedGameId: string | null;
   advancedMode: boolean;
-}
+};
 
-export interface FeatureItem {
+export type FeatureItem = {
   id: string;
   title: string;
   description: string;
   screen: Screen;
   enabled: boolean;
   hidden: boolean;
-}
+};
 
-interface FeatureDefinition {
+type FeatureDefinition = {
   id: string;
   title: string;
   description: string;
   screen: Screen;
   requiresGameSelection?: boolean;
   requiresAdvancedMode?: boolean;
-}
+};
 
 const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {

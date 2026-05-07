@@ -9,13 +9,36 @@ import type {
 } from './types';
 import type { ScanManualFolderResult, SystemAppearance } from './desktop';
 
+type GameOperation = GameDetails['operations'][number];
+
+type GameCardBuildOverrides = Pick<
+  GameCard,
+  'risk_level' | 'backup_available' | 'last_operation_status'
+> & {
+  update_count: GameCard['update_count'];
+};
+
+type GameCardPatch = Partial<
+  Pick<GameCard, 'backup_available' | 'last_operation_status' | 'operation_count'>
+>;
+
+type OperationTarget = {
+  details: GameDetails;
+  operation: GameOperation;
+};
+
 type MockState = {
   games: GameCard[];
-  detailsByGameId: Record<string, GameDetails>;
-  plansByOperationId: Record<string, SwapPlan>;
-  componentIdByOperationId: Record<string, string>;
+  detailsByGameId: Record<string, GameDetails | undefined>;
+  plansByOperationId: Record<string, SwapPlan | undefined>;
+  componentIdByOperationId: Record<string, string | undefined>;
+  manualGameIdByInstallPath: Record<string, string | undefined>;
   manualCounter: number;
+  operationCounter: number;
 };
+
+const RENDERPILOT_LIBRARY_PATH = 'C:/RenderPilot/Library';
+const BACKUP_SUFFIX = '.renderpilot-backup';
 
 const mockState: MockState = createMockState();
 
@@ -23,11 +46,12 @@ export function isDesktopPreviewMode(): boolean {
   return !hasTauriBridge();
 }
 
-export async function mockScanManualFolder(path: string): Promise<ScanManualFolderResult> {
-  mockState.manualCounter += 1;
-  const gameId = `manual:preview:${mockState.manualCounter}`;
-  const title = lastPathSegment(path) || `Manual Game ${mockState.manualCounter}`;
-  const details = createManualPreviewDetails(gameId, title, path);
+export function mockScanManualFolder(path: string): Promise<ScanManualFolderResult> {
+  const installPath = normalizeWindowsSlashes(path);
+  const gameId = getOrCreateManualGameId(installPath);
+  const title = lastPathSegment(installPath) || 'Manual Game';
+
+  const details = createManualPreviewDetails(gameId, title, installPath);
   const card = createGameCardFromDetails(details, {
     update_count: details.candidate_groups.length,
     risk_level: 'medium',
@@ -35,44 +59,47 @@ export async function mockScanManualFolder(path: string): Promise<ScanManualFold
     last_operation_status: null,
   });
 
-  mockState.games = [card, ...mockState.games.filter((game) => game.game_id !== gameId)];
+  upsertGameCard(card);
   mockState.detailsByGameId[gameId] = details;
 
-  return { games: [clone(details)] };
+  return Promise.resolve({ games: [clone(details)] });
 }
 
-export async function mockGetGameCards(): Promise<GameCard[]> {
-  return clone(mockState.games);
+export function mockGetGameCards(): Promise<GameCard[]> {
+  return Promise.resolve(clone(mockState.games));
 }
 
-export async function mockGetSystemAppearance(): Promise<SystemAppearance> {
-  return {
+export function mockGetSystemAppearance(): Promise<SystemAppearance> {
+  return Promise.resolve({
     accentColor: null,
-  };
+  });
 }
 
-export async function mockGetGameDetails(gameId: string): Promise<GameDetails> {
-  return clone(requireGameDetails(gameId));
+export function mockGetGameDetails(gameId: string): Promise<GameDetails> {
+  return Promise.resolve(clone(requireGameDetails(gameId)));
 }
 
-export async function mockBuildSwapPlan(
+export function mockBuildSwapPlan(
   gameId: string,
   componentId: string,
   artifactId: string,
 ): Promise<SwapPlan> {
   const details = requireGameDetails(gameId);
-  const candidateGroup = details.candidate_groups.find(
-    (group) => group.component_id === componentId,
-  );
-  const candidate = candidateGroup?.candidates.find((item) => item.artifact_id === artifactId);
+  const sourceComponent = requireComponent(details, componentId);
+  const candidateGroup = requireCandidateGroup(details, componentId);
+  const candidate = candidateGroup.candidates.find((item) => item.artifact_id === artifactId);
 
-  if (!candidateGroup || !candidate) {
-    throw new Error('Mock preview could not resolve the requested candidate.');
+  if (!candidate) {
+    throw new Error(
+      `Mock preview could not find artifact ${artifactId} for component ${componentId}.`,
+    );
   }
 
-  const sourceComponent = details.components.find((component) => component.id === componentId);
-  const sourceFile = sourceComponent?.files[0];
-  const operationId = `operation:preview:${gameId}:${componentId}:${artifactId}`;
+  ensureComponentHasFiles(sourceComponent);
+
+  const sourceFile = sourceComponent.files[0];
+  const operationId = createPreviewOperationId();
+
   const plan: SwapPlan = {
     operation_id: operationId,
     confirmation_token: `preview-token:${operationId}`,
@@ -80,9 +107,9 @@ export async function mockBuildSwapPlan(
     operation_type: 'replace_component',
     target_path: candidateGroup.file_path,
     replacement_path: candidate.file_path,
-    original_version: candidateGroup.current_version ?? sourceFile?.version ?? null,
+    original_version: candidateGroup.current_version ?? sourceFile.version ?? null,
     replacement_version: candidate.version ?? null,
-    original_sha256: sourceFile?.sha256 ?? null,
+    original_sha256: sourceFile.sha256,
     replacement_sha256: null,
     risk_level: candidate.warning ? 'medium' : 'low',
     requires_backup: true,
@@ -94,103 +121,113 @@ export async function mockBuildSwapPlan(
 
   mockState.plansByOperationId[operationId] = plan;
   mockState.componentIdByOperationId[operationId] = componentId;
-  return clone(plan);
+
+  return Promise.resolve(clone(plan));
 }
 
-export async function mockApplyOperationPlan(
+export function mockApplyOperationPlan(
   operationId: string,
   confirmationToken: string,
 ): Promise<ApplyOperationResult> {
-  const plan = mockState.plansByOperationId[operationId];
-
-  if (!plan || plan.confirmation_token !== confirmationToken) {
-    throw new Error('confirmation token mismatch for operation preview');
-  }
-
+  const plan = requireSwapPlan(operationId, confirmationToken);
+  const componentId = requireOperationComponentId(operationId);
   const details = requireGameDetails(plan.game_id);
-  const componentId = mockState.componentIdByOperationId[operationId];
-  const component =
-    details.components.find((item) => item.id === componentId) ?? details.components[0];
+  const component = requireComponent(details, componentId);
 
-  details.operations = [
-    {
-      operation_id: operationId,
+  prependOperation(
+    details,
+    createOperationRecord({
+      operationId,
       kind: 'replace_component',
       status: 'completed',
-      created_at: Date.now() - 60_000,
-      completed_at: Date.now(),
-      item_count: 1,
-      backup_count: 1,
-      backup_status: 'available',
-    },
-    ...details.operations,
-  ];
+      createdAt: Date.now() - 60_000,
+      completedAt: Date.now(),
+      itemCount: 1,
+      backupCount: 1,
+      backupStatus: 'available',
+    }),
+  );
+
   updateGameCard(plan.game_id, {
     backup_available: true,
     last_operation_status: 'completed',
     operation_count: details.operations.length,
   });
 
-  return {
-    operation_id: operationId,
-    game_id: plan.game_id,
-    status: 'completed',
-    completed_at: Date.now(),
-    items: [
-      {
-        backup_id: `backup:${operationId}`,
-        component_id: component.id,
-        applied_path: plan.target_path,
-        replacement_path: plan.replacement_path,
-        backup_path: `${plan.target_path}.renderpilot-backup`,
-      },
-    ],
-  };
+  return Promise.resolve(
+    clone({
+      operation_id: operationId,
+      game_id: plan.game_id,
+      status: 'completed',
+      completed_at: Date.now(),
+      items: [
+        {
+          backup_id: `backup:${operationId}`,
+          component_id: component.id,
+          applied_path: plan.target_path,
+          replacement_path: plan.replacement_path,
+          backup_path: `${plan.target_path}${BACKUP_SUFFIX}`,
+        },
+      ],
+    }),
+  );
 }
 
-export async function mockRollbackOperation(operationId: string): Promise<RollbackOperationResult> {
-  const game =
-    mockState.games.find((item) => item.last_operation_status === 'completed') ??
-    mockState.games[0];
-  const details = requireGameDetails(game.game_id);
-  const fallbackRestorePath = 'C:/Games/Preview/nvngx_dlss.dll';
-  const fallbackComponentId = 'component:preview';
-  const primaryComponent = details.components[0];
-  const restoredPath = primaryComponent?.files[0]?.path ?? fallbackRestorePath;
+export function mockRollbackOperation(operationId: string): Promise<RollbackOperationResult> {
+  const target = findOperationTarget(operationId);
 
-  details.operations = [
-    {
-      operation_id: operationId,
+  if (!target) {
+    throw new Error(`Mock preview could not find operation ${operationId} to rollback.`);
+  }
+
+  const { details } = target;
+  const component = findPrimaryRollbackComponent(details);
+
+  if (!component) {
+    throw new Error(
+      `Mock preview rollback requires at least one component with files for ${details.game.identity.id}.`,
+    );
+  }
+
+  const sourceFile = component.files[0];
+  const rollbackOperationId = createRollbackOperationId(operationId);
+
+  prependOperation(
+    details,
+    createOperationRecord({
+      operationId: rollbackOperationId,
       kind: 'rollback_operation',
       status: 'rolled_back',
-      created_at: Date.now() - 20_000,
-      completed_at: Date.now(),
-      item_count: 1,
-      backup_count: 1,
-      backup_status: 'available',
-    },
-    ...details.operations,
-  ];
-  updateGameCard(game.game_id, {
+      createdAt: Date.now() - 20_000,
+      completedAt: Date.now(),
+      itemCount: 1,
+      backupCount: 1,
+      backupStatus: 'available',
+    }),
+  );
+
+  updateGameCard(details.game.identity.id, {
     backup_available: true,
     last_operation_status: 'rolled_back',
     operation_count: details.operations.length,
   });
 
-  return {
-    operation_id: operationId,
-    game_id: game.game_id,
-    status: 'rolled_back',
-    completed_at: Date.now(),
-    items: [
-      {
-        backup_id: `backup:${operationId}`,
-        component_id: primaryComponent?.id ?? fallbackComponentId,
-        restored_path: restoredPath,
-        backup_path: `${restoredPath}.renderpilot-backup`,
-      },
-    ],
-  };
+  return Promise.resolve(
+    clone({
+      operation_id: rollbackOperationId,
+      game_id: details.game.identity.id,
+      status: 'rolled_back',
+      completed_at: Date.now(),
+      items: [
+        {
+          backup_id: `backup:${operationId}`,
+          component_id: component.id,
+          restored_path: sourceFile.path,
+          backup_path: `${sourceFile.path}${BACKUP_SUFFIX}`,
+        },
+      ],
+    }),
+  );
 }
 
 function createMockState(): MockState {
@@ -203,13 +240,13 @@ function createMockState(): MockState {
         update_count: cyberpunk.candidate_groups.length,
         risk_level: 'low',
         backup_available: true,
-        last_operation_status: cyberpunk.operations[0]?.status ?? null,
+        last_operation_status: getLatestOperationStatus(cyberpunk),
       }),
       createGameCardFromDetails(alanWake, {
         update_count: alanWake.candidate_groups.length,
         risk_level: 'medium',
         backup_available: false,
-        last_operation_status: alanWake.operations[0]?.status ?? null,
+        last_operation_status: getLatestOperationStatus(alanWake),
       }),
     ],
     detailsByGameId: {
@@ -218,11 +255,15 @@ function createMockState(): MockState {
     },
     plansByOperationId: {},
     componentIdByOperationId: {},
+    manualGameIdByInstallPath: {},
     manualCounter: 0,
+    operationCounter: 0,
   };
 }
 
 function createCyberpunkDetails(): GameDetails {
+  const now = Date.now();
+
   const components: GraphicsComponent[] = [
     {
       id: 'component:cp2077:dlss',
@@ -278,7 +319,7 @@ function createCyberpunkDetails(): GameDetails {
         {
           artifact_id: 'artifact:dlss:3.7.20',
           file_name: 'nvngx_dlss.dll',
-          file_path: 'C:/RenderPilot/Library/nvngx_dlss_3.7.20.dll',
+          file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlss_3.7.20.dll`,
           version: '3.7.20',
           source_game_id: 'steam:1245620',
           comparison: 'newer_version',
@@ -295,7 +336,7 @@ function createCyberpunkDetails(): GameDetails {
         {
           artifact_id: 'artifact:dlssg:3.7.10',
           file_name: 'nvngx_dlssg.dll',
-          file_path: 'C:/RenderPilot/Library/nvngx_dlssg_3.7.10.dll',
+          file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlssg_3.7.10.dll`,
           version: '3.7.10',
           source_game_id: 'steam:1716740',
           comparison: 'newer_version',
@@ -325,8 +366,8 @@ function createCyberpunkDetails(): GameDetails {
         operation_id: 'operation:cp2077:last-swap',
         kind: 'replace_component',
         status: 'completed',
-        created_at: Date.now() - 86_400_000,
-        completed_at: Date.now() - 86_340_000,
+        created_at: now - 86_400_000,
+        completed_at: now - 86_340_000,
         item_count: 1,
         backup_count: 1,
         backup_status: 'available',
@@ -336,6 +377,8 @@ function createCyberpunkDetails(): GameDetails {
 }
 
 function createAlanWakeDetails(): GameDetails {
+  const now = Date.now();
+
   const components: GraphicsComponent[] = [
     {
       id: 'component:aw2:streamline',
@@ -396,7 +439,7 @@ function createAlanWakeDetails(): GameDetails {
           {
             artifact_id: 'artifact:streamline:2.5.1',
             file_name: 'sl.common.dll',
-            file_path: 'C:/RenderPilot/Library/sl.common_2.5.1.dll',
+            file_path: `${RENDERPILOT_LIBRARY_PATH}/sl.common_2.5.1.dll`,
             version: '2.5.1',
             source_game_id: 'steam:1888930',
             comparison: 'newer_version',
@@ -410,7 +453,7 @@ function createAlanWakeDetails(): GameDetails {
         operation_id: 'operation:aw2:failed-bundle',
         kind: 'replace_component',
         status: 'rollback_required',
-        created_at: Date.now() - 3_600_000,
+        created_at: now - 3_600_000,
         completed_at: null,
         item_count: 2,
         backup_count: 1,
@@ -420,9 +463,12 @@ function createAlanWakeDetails(): GameDetails {
   };
 }
 
-function createManualPreviewDetails(gameId: string, title: string, path: string): GameDetails {
-  const installPath = normalizeWindowsSlashes(path);
-  const dlssRelativePath = `${installPath}/nvngx_dlss.dll`;
+function createManualPreviewDetails(
+  gameId: string,
+  title: string,
+  installPath: string,
+): GameDetails {
+  const dlssPath = `${installPath}/nvngx_dlss.dll`;
 
   return {
     game: {
@@ -446,7 +492,7 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
         swappability: 'Swappable',
         files: [
           {
-            path: dlssRelativePath,
+            path: dlssPath,
             version: '3.5.10',
             sha256: 'preview-manual-dlss',
           },
@@ -457,13 +503,13 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
       {
         component_id: `${gameId}:dlss`,
         technology: 'DlssSuperResolution',
-        file_path: dlssRelativePath,
+        file_path: dlssPath,
         current_version: '3.5.10',
         candidates: [
           {
             artifact_id: `artifact:${gameId}:dlss-preview`,
             file_name: 'nvngx_dlss.dll',
-            file_path: 'C:/RenderPilot/Library/nvngx_dlss_preview.dll',
+            file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlss_preview.dll`,
             version: '3.7.20',
             source_game_id: null,
             comparison: 'newer_version',
@@ -478,12 +524,7 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
 
 function createGameCardFromDetails(
   details: GameDetails,
-  overrides: {
-    update_count: number;
-    risk_level: string;
-    backup_available: boolean;
-    last_operation_status: string | null;
-  },
+  overrides: GameCardBuildOverrides,
 ): GameCard {
   return {
     game_id: details.game.identity.id,
@@ -493,7 +534,7 @@ function createGameCardFromDetails(
     runtime: details.game.runtime,
     install_path: details.game.install_path,
     external_id: details.game.identity.external_id,
-    technology_tags: [...new Set(details.components.map((component) => component.technology))],
+    technology_tags: unique(details.components.map((component) => component.technology)),
     component_count: details.components.length,
     updates_available: overrides.update_count > 0,
     update_count: overrides.update_count,
@@ -504,13 +545,40 @@ function createGameCardFromDetails(
   };
 }
 
-function updateGameCard(
-  gameId: string,
-  patch: Partial<Pick<GameCard, 'backup_available' | 'last_operation_status' | 'operation_count'>>,
-): void {
+function createOperationRecord(input: {
+  operationId: string;
+  kind: GameOperation['kind'];
+  status: GameOperation['status'];
+  createdAt: number;
+  completedAt: number | null;
+  itemCount: number;
+  backupCount: number;
+  backupStatus: GameOperation['backup_status'];
+}): GameOperation {
+  return {
+    operation_id: input.operationId,
+    kind: input.kind,
+    status: input.status,
+    created_at: input.createdAt,
+    completed_at: input.completedAt,
+    item_count: input.itemCount,
+    backup_count: input.backupCount,
+    backup_status: input.backupStatus,
+  };
+}
+
+function prependOperation(details: GameDetails, operation: GameOperation): void {
+  details.operations = [operation, ...details.operations];
+}
+
+function updateGameCard(gameId: string, patch: GameCardPatch): void {
   mockState.games = mockState.games.map((game) =>
     game.game_id === gameId ? { ...game, ...patch } : game,
   );
+}
+
+function upsertGameCard(card: GameCard): void {
+  mockState.games = [card, ...mockState.games.filter((game) => game.game_id !== card.game_id)];
 }
 
 function requireGameDetails(gameId: string): GameDetails {
@@ -523,9 +591,117 @@ function requireGameDetails(gameId: string): GameDetails {
   return details;
 }
 
+function requireSwapPlan(operationId: string, confirmationToken: string): SwapPlan {
+  const plan = mockState.plansByOperationId[operationId];
+
+  if (!plan) {
+    throw new Error(`Mock preview could not find operation plan ${operationId}.`);
+  }
+
+  if (plan.confirmation_token !== confirmationToken) {
+    throw new Error('Confirmation token mismatch for operation preview.');
+  }
+
+  return plan;
+}
+
+function requireOperationComponentId(operationId: string): string {
+  const componentId = mockState.componentIdByOperationId[operationId];
+
+  if (!componentId) {
+    throw new Error(`Mock preview could not resolve component for operation ${operationId}.`);
+  }
+
+  return componentId;
+}
+
+function requireComponent(details: GameDetails, componentId: string): GraphicsComponent {
+  const component = details.components.find((item) => item.id === componentId);
+
+  if (!component) {
+    throw new Error(
+      `Mock preview could not find component ${componentId} for ${details.game.identity.id}.`,
+    );
+  }
+
+  return component;
+}
+
+function requireCandidateGroup(details: GameDetails, componentId: string): CandidateGroup {
+  const candidateGroup = details.candidate_groups.find(
+    (group) => group.component_id === componentId,
+  );
+
+  if (!candidateGroup) {
+    throw new Error(`Mock preview could not find candidate group for component ${componentId}.`);
+  }
+
+  return candidateGroup;
+}
+
+function ensureComponentHasFiles(component: GraphicsComponent): void {
+  if (component.files.length === 0) {
+    throw new Error(`Mock preview component ${component.id} does not contain any files.`);
+  }
+}
+
+function findOperationTarget(operationId: string): OperationTarget | null {
+  for (const details of Object.values(mockState.detailsByGameId)) {
+    if (!details) {
+      continue;
+    }
+
+    const operation = details.operations.find((item) => item.operation_id === operationId);
+
+    if (operation) {
+      return { details, operation };
+    }
+  }
+
+  return null;
+}
+
+function findPrimaryRollbackComponent(details: GameDetails): GraphicsComponent | null {
+  const component = details.components.find((item) => item.files.length > 0);
+
+  return component ?? null;
+}
+
+function getLatestOperationStatus(details: GameDetails): GameCard['last_operation_status'] {
+  return details.operations[0]?.status ?? null;
+}
+
+function getOrCreateManualGameId(installPath: string): string {
+  const existingGameId = mockState.manualGameIdByInstallPath[installPath];
+
+  if (existingGameId) {
+    return existingGameId;
+  }
+
+  mockState.manualCounter += 1;
+
+  const gameId = `manual:preview:${mockState.manualCounter}`;
+  mockState.manualGameIdByInstallPath[installPath] = gameId;
+
+  return gameId;
+}
+
+function createPreviewOperationId(): string {
+  mockState.operationCounter += 1;
+
+  return `operation:preview:${mockState.operationCounter}`;
+}
+
+function createRollbackOperationId(targetOperationId: string): string {
+  mockState.operationCounter += 1;
+
+  return `operation:rollback:${mockState.operationCounter}:${targetOperationId}`;
+}
+
 function lastPathSegment(path: string): string {
   const normalized = normalizeWindowsSlashes(path);
   const segments = normalized.split('/').filter(Boolean);
+
   return segments.length > 0 ? segments[segments.length - 1] : '';
 }
 
@@ -533,14 +709,12 @@ function normalizeWindowsSlashes(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
-type WindowWithTauri = Window & { __TAURI_INTERNALS__?: unknown };
+function unique<T>(items: T[]): T[] {
+  return [...new Set(items)];
+}
 
 function hasTauriBridge(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  return typeof (window as WindowWithTauri).__TAURI_INTERNALS__ !== 'undefined';
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
 function clone<T>(value: T): T {

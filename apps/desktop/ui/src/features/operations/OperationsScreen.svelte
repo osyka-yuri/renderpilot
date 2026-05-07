@@ -11,8 +11,27 @@
     statusTone,
   } from '@shared/utils/presenters';
 
-  const noop: VoidHandler = (): void => {};
-  const noopOperation: OperationHandler = (_operationId: string): void => {};
+  type Operation = GameDetails['operations'][number];
+
+  type OperationViewModel = {
+    operation: Operation;
+    canRollback: boolean;
+    kindLabel: string;
+    statusLabel: string;
+    createdAtLabel: string;
+    completedAtLabel: string;
+    backupStatusLabel: string;
+    rollbackCopy: string;
+  };
+
+  const BACKUP_AVAILABLE_STATUS = 'available';
+
+  const noop: VoidHandler = (): void => {
+    /* empty */
+  };
+  const noopOperation: OperationHandler = (_operationId: string): void => {
+    /* empty */
+  };
 
   export let details: GameDetails | null = null;
   export let gameCard: GameCard | null = null;
@@ -20,24 +39,78 @@
   export let onRollback: OperationHandler = noopOperation;
   export let onOpenDetails: VoidHandler = noop;
 
-  $: rollbackReadyCount =
-    details?.operations.filter((operation) => canRollback(operation)).length ?? 0;
+  $: operations = details?.operations ?? [];
+  $: operationRows = operations.map(toOperationViewModel);
+
+  $: totalOperations = operations.length;
+  $: rollbackReadyCount = operationRows.filter((row) => row.canRollback).length;
+  $: latestResultLabel = formatLabel(operations[0]?.status ?? 'none');
+
+  $: riskLevel = gameCard?.risk_level ?? 'unknown';
+  $: riskLabel = formatLabel(riskLevel);
+  $: riskToneValue = riskBadgeTone(gameCard?.risk_level);
 
   function handleOpenDetails(): void {
     onOpenDetails();
   }
 
-  function handleRollback(operationId: string): void {
+  function handleRollbackClick(event: MouseEvent): void {
+    if (busy) {
+      return;
+    }
+
+    const target = event.currentTarget;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const operationId = target.dataset.operationId;
+
+    if (!operationId) {
+      return;
+    }
+
+    const operation = operations.find((item) => item.operation_id === operationId);
+
+    if (!operation || !isRollbackAvailable(operation)) {
+      return;
+    }
+
     onRollback(operationId);
   }
 
-  function canRollback(operation: GameDetails['operations'][number]): boolean {
-    return operation.backup_count > 0 && operation.backup_status.toLowerCase() === 'available';
+  function toOperationViewModel(operation: Operation): OperationViewModel {
+    const canRollback = isRollbackAvailable(operation);
+
+    return {
+      operation,
+      canRollback,
+      kindLabel: formatLabel(operation.kind),
+      statusLabel: formatLabel(operation.status),
+      createdAtLabel: formatTimestamp(operation.created_at),
+      completedAtLabel: formatTimestamp(operation.completed_at),
+      backupStatusLabel: formatLabel(operation.backup_status),
+      rollbackCopy: canRollback
+        ? 'Rollback is available for this entry.'
+        : 'Rollback is unavailable because this entry does not have a restorable backup set.',
+    };
+  }
+
+  function isRollbackAvailable(operation: Operation): boolean {
+    return (
+      operation.backup_count > 0 &&
+      normalizeStatus(operation.backup_status) === BACKUP_AVAILABLE_STATUS
+    );
+  }
+
+  function normalizeStatus(status: string | null | undefined): string {
+    return status?.trim().toLowerCase() ?? '';
   }
 </script>
 
 <section class="screen-shell">
-  {#if !details}
+  {#if details === null}
     <Surface className="empty-state">
       <h3>No operation context</h3>
       <p>
@@ -55,34 +128,37 @@
           </p>
         </div>
 
-        <Button variant="secondary" size="sm" onclick={handleOpenDetails}>Back To Details</Button>
+        <Button variant="secondary" size="sm" onclick={handleOpenDetails}>Back to details</Button>
       </div>
 
       <Surface className="summary-panel" tone="elevated" shadow>
         <div class="summary-grid">
           <div class="summary-item">
             <span>Total operations</span>
-            <strong>{details.operations.length}</strong>
+            <strong>{totalOperations}</strong>
           </div>
+
           <div class="summary-item">
             <span>Rollback ready</span>
             <strong>{rollbackReadyCount}</strong>
           </div>
+
           <div class="summary-item">
             <span>Risk context</span>
-            <Badge surface="outline" tone={riskBadgeTone(gameCard?.risk_level)}>
-              {formatLabel(gameCard?.risk_level ?? 'unknown')}
+            <Badge surface="outline" tone={riskToneValue}>
+              {riskLabel}
             </Badge>
           </div>
+
           <div class="summary-item">
             <span>Latest result</span>
-            <strong>{formatLabel(details.operations[0]?.status ?? 'none')}</strong>
+            <strong>{latestResultLabel}</strong>
           </div>
         </div>
       </Surface>
     </section>
 
-    {#if details.operations.length === 0}
+    {#if operationRows.length === 0}
       <Surface className="empty-state">
         <h3>No operations yet</h3>
         <p>
@@ -103,55 +179,52 @@
         </div>
 
         <div class="operation-list">
-          {#each details.operations as operation}
+          {#each operationRows as row (row.operation.operation_id)}
             <Surface as="article" className="operation-row" interactive>
               <div class="row-head">
                 <div class="row-copy">
-                  <p class="eyebrow">{formatLabel(operation.kind)}</p>
-                  <h4>{operation.operation_id}</h4>
-                  <p class="row-note">Created {formatTimestamp(operation.created_at)}</p>
+                  <p class="eyebrow">{row.kindLabel}</p>
+                  <h4>{row.operation.operation_id}</h4>
+                  <p class="row-note">Created {row.createdAtLabel}</p>
                 </div>
 
-                <Badge pill tone={statusTone(operation.status)}>
-                  {formatLabel(operation.status)}
+                <Badge pill tone={statusTone(row.operation.status)}>
+                  {row.statusLabel}
                 </Badge>
               </div>
 
               <div class="detail-grid">
                 <div>
                   <span>Completed</span>
-                  <strong>{formatTimestamp(operation.completed_at)}</strong>
+                  <strong>{row.completedAtLabel}</strong>
                 </div>
+
                 <div>
                   <span>Backup status</span>
-                  <strong>{formatLabel(operation.backup_status)}</strong>
+                  <strong>{row.backupStatusLabel}</strong>
                 </div>
+
                 <div>
                   <span>Items</span>
-                  <strong>{operation.item_count}</strong>
+                  <strong>{row.operation.item_count}</strong>
                 </div>
+
                 <div>
                   <span>Backups</span>
-                  <strong>{operation.backup_count}</strong>
+                  <strong>{row.operation.backup_count}</strong>
                 </div>
               </div>
 
               <div class="row-actions">
-                <p class="rollback-copy">
-                  {#if canRollback(operation)}
-                    Rollback is available for this entry.
-                  {:else}
-                    Rollback is unavailable because this entry does not have a restorable backup
-                    set.
-                  {/if}
-                </p>
+                <p class="rollback-copy">{row.rollbackCopy}</p>
 
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={busy || !canRollback(operation)}
+                  disabled={busy || !row.canRollback}
                   loading={busy}
-                  onclick={() => handleRollback(operation.operation_id)}
+                  data-operation-id={row.operation.operation_id}
+                  onclick={handleRollbackClick}
                 >
                   {busy ? 'Working...' : 'Rollback'}
                 </Button>
@@ -176,13 +249,13 @@
   .row-head,
   .row-actions {
     display: flex;
-    justify-content: space-between;
     gap: var(--space-4);
-    align-items: start;
+    align-items: flex-start;
+    justify-content: space-between;
   }
 
   .section-head.compact {
-    padding: 0 var(--space-1);
+    padding-inline: var(--space-1);
   }
 
   :global(.summary-panel),
@@ -191,18 +264,21 @@
     padding: var(--space-4);
   }
 
-  .summary-grid,
-  .detail-grid {
+  :global(.operation-row) {
     display: grid;
     gap: var(--space-3);
   }
 
-  .summary-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  :global(.empty-state) {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
   }
 
+  .summary-grid,
   .detail-grid {
+    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
   }
 
   .summary-item,
@@ -212,27 +288,26 @@
 
   .eyebrow {
     margin: 0 0 var(--space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.6875rem;
     color: var(--text-subtle);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   h3,
   h4 {
     margin: 0;
     color: var(--text-strong);
+    font-weight: 600;
   }
 
   h3 {
     font-size: 1.05rem;
-    font-weight: 600;
   }
 
   h4 {
+    overflow-wrap: anywhere;
     font-size: 0.95rem;
-    font-weight: 600;
-    word-break: break-word;
   }
 
   .section-copy,
@@ -259,10 +334,10 @@
   .detail-grid span {
     display: block;
     margin-bottom: var(--space-1);
-    font-size: 0.6875rem;
     color: var(--text-subtle);
-    text-transform: uppercase;
+    font-size: 0.6875rem;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .summary-item strong,
@@ -270,24 +345,14 @@
     color: var(--text-strong);
   }
 
-  :global(.operation-row) {
-    display: grid;
-    gap: var(--space-3);
-  }
-
   .row-actions {
+    align-items: center;
     padding-top: var(--space-3);
     border-top: 1px solid var(--border-subtle);
-    align-items: center;
   }
 
   .rollback-copy {
     margin: 0;
-  }
-
-  :global(.empty-state) {
-    border-style: dashed;
-    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
   }
 
   @media (max-width: 1040px) {

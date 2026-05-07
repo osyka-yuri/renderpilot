@@ -14,77 +14,114 @@
   export let selectedArtifact = '';
   export let riskLevel: string | null | undefined = null;
   export let busy = false;
-  export let onArtifactSelection: (componentId: string, value: string) => void;
-  export let onBuildPlan: (componentId: string, artifactId: string) => void;
+
+  export let onArtifactSelection: (componentId: string, value: string) => void = () => {
+    return;
+  };
+  export let onBuildPlan: (componentId: string, artifactId: string) => void = () => {
+    return;
+  };
+
+  $: componentId = row.component.id;
+  $: currentPath = row.currentInstalled.path;
+  $: displayPath = row.group?.file_path ?? currentPath;
+  $: fileName = fileNameFromPath(currentPath);
+
+  $: installedOptions = installedOptionsForRow(row);
+  $: candidateOptions = candidateOptionsForRow(row);
+
+  $: candidatesCount = row.group?.candidates.length ?? 0;
+  $: hasCandidates = candidatesCount > 0;
+
+  $: replacementSelectDisabled = !hasCandidates || busy;
+  $: selectedCandidate = row.selectedCandidate;
+  $: selectedArtifactId = selectedCandidate?.artifact_id;
+
+  $: buildPlanDisabled = busy || !row.canBuildPlan || !selectedArtifactId;
+
+  $: compatibilityLabel =
+    candidatesCount === 1 ? '1 compatible version' : `${candidatesCount} compatible versions`;
+
+  function handleArtifactSelection(value: string) {
+    onArtifactSelection(componentId, value);
+  }
+
+  function handleBuildPlan() {
+    if (!selectedArtifactId || buildPlanDisabled) {
+      return;
+    }
+
+    onBuildPlan(componentId, selectedArtifactId);
+  }
 </script>
 
 <div class="technology-row">
-  <div class="file-meta">
-    <div>
-      <strong>{fileNameFromPath(row.currentInstalled.path)}</strong>
-      <p>{row.group?.file_path ?? row.currentInstalled.path}</p>
+  <header class="file-meta">
+    <div class="file-info">
+      <strong>{fileName}</strong>
+      <p>{displayPath}</p>
     </div>
 
-    <div class="library-badges">
+    <div class="library-badges" aria-label="Compatibility information">
       <Badge tone={riskBadgeTone(riskLevel)}>
         {formatLabel(row.component.swappability)}
       </Badge>
-      {#if row.group?.candidates.length}
-        <Badge
-          >{row.group.candidates.length} compatible {row.group.candidates.length === 1
-            ? 'version'
-            : 'versions'}</Badge
-        >
+
+      {#if hasCandidates}
+        <Badge>{compatibilityLabel}</Badge>
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
     </div>
-  </div>
+  </header>
 
   <div class="config-grid">
     <label class="config-field">
       <span class="field-label">Installed version</span>
+
       <Select
         size="sm"
         disabled
-        ariaLabel="Installed version"
-        options={installedOptionsForRow(row)}
+        ariaLabel={`Installed version for ${fileName}`}
+        options={installedOptions}
         value={row.installedValue}
       />
-      <small>{row.currentInstalled.path}</small>
+
+      <small>{currentPath}</small>
     </label>
 
     <label class="config-field">
       <span class="field-label">Replacement version</span>
+
       <Select
         size="sm"
-        disabled={!row.group || row.group.candidates.length === 0 || busy}
-        ariaLabel="Replacement version"
-        options={candidateOptionsForRow(row)}
+        disabled={replacementSelectDisabled}
+        ariaLabel={`Replacement version for ${fileName}`}
+        options={candidateOptions}
         value={selectedArtifact}
-        onValueChange={(value) => onArtifactSelection(row.component.id, value)}
+        onValueChange={handleArtifactSelection}
       />
+
       <small>{row.candidatePath}</small>
     </label>
   </div>
 
-  <div class="action-row">
+  <footer class="action-row">
     <div class="selection-summary">
-      <strong>{row.selectedCandidate ? 'Selected replacement' : 'Replacement selection'}</strong>
+      <strong>{selectedCandidate ? 'Selected replacement' : 'Replacement selection'}</strong>
       <p>{row.candidateSummary}</p>
     </div>
 
     <Button
       variant="primary"
       size="sm"
-      disabled={!row.canBuildPlan}
+      disabled={buildPlanDisabled}
       loading={busy}
-      onclick={() =>
-        row.selectedCandidate && onBuildPlan(row.component.id, row.selectedCandidate.artifact_id)}
+      onclick={handleBuildPlan}
     >
       {busy ? 'Working...' : 'Build File Plan'}
     </Button>
-  </div>
+  </footer>
 </div>
 
 <style>
@@ -101,7 +138,7 @@
   .action-row {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    gap: var(--space-4);
     align-items: flex-start;
   }
 
@@ -110,19 +147,26 @@
     border-bottom: 1px solid var(--border-subtle);
   }
 
-  .file-meta strong,
+  .file-info,
+  .selection-summary {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .file-info strong,
   .selection-summary strong {
     color: var(--text-strong);
   }
 
-  .file-meta strong {
+  .file-info strong {
     font-size: 0.98rem;
     line-height: 1.25;
   }
 
-  .file-meta p,
+  .file-info p,
   .selection-summary p {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     color: var(--text-muted);
     font-size: 0.84rem;
     line-height: 1.45;
@@ -131,9 +175,9 @@
 
   .library-badges {
     display: flex;
-    gap: var(--space-2);
     flex-wrap: wrap;
-    margin-top: var(--space-2);
+    gap: var(--space-2);
+    justify-content: flex-end;
   }
 
   .config-grid {
@@ -170,19 +214,12 @@
 
   .action-row {
     align-items: center;
-    gap: var(--space-4);
     padding-top: var(--space-3);
     border-top: 1px solid var(--border-subtle);
   }
 
   .selection-summary {
-    display: grid;
-    gap: var(--space-1);
     max-width: 44rem;
-  }
-
-  .selection-summary p {
-    margin: 0;
   }
 
   @media (max-width: 820px) {

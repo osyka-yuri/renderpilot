@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "format": "prettier --cache --write .",
-    "format:check": "prettier --cache --check ."
+    "format:check": "prettier --cache --check .",
+    "lint": "eslint . --cache --max-warnings 0",
+    "lint:fix": "eslint . --cache --fix --max-warnings 0"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.0",
@@ -17,12 +19,18 @@
     "svelte": "5.55.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@sveltejs/vite-plugin-svelte": "7.1.0",
     "@tauri-apps/cli": "2.11.0",
     "@types/node": "25.6.0",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.17.1",
+    "globals": "^16.5.0",
     "prettier": "^3.8.3",
     "prettier-plugin-svelte": "^3.5.1",
     "typescript": "6.0.3",
+    "typescript-eslint": "^8.59.2",
     "vite": "8.0.10"
   }
 }

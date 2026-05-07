@@ -9,6 +9,16 @@ import type {
 import { formatLabel, formatTechnology } from '@shared/utils/presenters';
 
 const UNKNOWN_VALUE = 'Unknown';
+const DEFAULT_COMPACT_LIST_LIMIT = 3;
+
+const NO_DETECTED_FILE_LABEL = 'No detected file';
+const NO_DETECTED_FILE_PATH = 'No file recorded';
+
+const NO_LOCAL_REPLACEMENTS_OPTION = {
+  value: '',
+  label: 'No local replacements',
+  disabled: true,
+};
 
 export type InstalledOption = {
   value: string;
@@ -23,10 +33,10 @@ export type NvApiControl = {
   label: string;
   description: string;
   defaultValue: string;
-  options: Array<{
+  options: {
     value: string;
     label: string;
-  }>;
+  }[];
 };
 
 export type ComponentConfiguratorRow = {
@@ -90,6 +100,7 @@ const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
       ],
     },
   ],
+
   DlssFrameGeneration: [
     {
       id: 'fg_profile',
@@ -105,6 +116,7 @@ const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
       ],
     },
   ],
+
   DlssRayReconstruction: [
     {
       id: 'rr_profile',
@@ -121,10 +133,10 @@ const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
   ],
 };
 
-const vendorBlueprints: Array<{
+const vendorBlueprints: {
   key: VendorKey;
   label: string;
-}> = [
+}[] = [
   { key: 'nvidia', label: 'NVIDIA' },
   { key: 'amd', label: 'AMD' },
   { key: 'intel', label: 'Intel' },
@@ -132,15 +144,20 @@ const vendorBlueprints: Array<{
 ];
 
 export function displayValue(value?: string | null): string {
-  return value ?? UNKNOWN_VALUE;
+  return normalizedText(value) ?? UNKNOWN_VALUE;
 }
 
-export function compactList(values: string[], emptyCopy: string, maxVisible = 3): string {
+export function compactList(
+  values: string[],
+  emptyCopy: string,
+  maxVisible = DEFAULT_COMPACT_LIST_LIMIT,
+): string {
   if (values.length === 0) {
     return emptyCopy;
   }
 
-  const visibleValues = values.slice(0, maxVisible);
+  const visibleLimit = normalizeVisibleLimit(maxVisible);
+  const visibleValues = values.slice(0, visibleLimit);
   const remainingCount = values.length - visibleValues.length;
   const suffix = remainingCount > 0 ? ` +${remainingCount} more` : '';
 
@@ -148,34 +165,21 @@ export function compactList(values: string[], emptyCopy: string, maxVisible = 3)
 }
 
 export function fileNameFromPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
+  const normalizedPath = path.replace(/\\/g, '/');
+  const fileName = normalizedPath.split('/').filter(Boolean).pop();
 
-  return normalized.split('/').pop() ?? path;
+  return fileName ?? path;
 }
 
 export function buildComponentRows(gameDetails: GameDetails): ComponentConfiguratorRow[] {
-  const candidateGroupsByComponentId = new Map(
-    gameDetails.candidate_groups.map((group) => [group.component_id, group]),
+  const candidateGroupsByComponentId = indexCandidateGroupsByComponentId(
+    gameDetails.candidate_groups,
   );
 
   return gameDetails.components.map((component) => {
     const group = candidateGroupsByComponentId.get(component.id) ?? null;
-    const installedOptions =
-      component.files.length > 0
-        ? component.files.map(buildInstalledOption)
-        : [
-            {
-              value: `missing:${component.id}`,
-              label: 'No detected file',
-              path: 'No file recorded',
-              version: null,
-              sha256: null,
-            },
-          ];
-    const installedValue =
-      group?.file_path && installedOptions.some((option) => option.path === group.file_path)
-        ? group.file_path
-        : installedOptions[0].value;
+    const installedOptions = buildInstalledOptions(component);
+    const installedValue = resolveInstalledValue(group, installedOptions);
 
     return {
       component,
@@ -192,16 +196,15 @@ export function buildConfiguredRow(
   selections: Record<string, string>,
   isBusy: boolean,
 ): ConfiguredComponentRow {
-  const currentInstalled = installedSelection(row);
-  const candidate = selectedCandidate(row, selections);
+  const selectedCandidate = findSelectedCandidate(row, selections);
 
   return {
     ...row,
-    currentInstalled,
-    selectedCandidate: candidate,
-    candidatePath: selectedCandidatePath(row, candidate),
-    candidateSummary: selectedCandidateSummary(row, candidate),
-    canBuildPlan: !!candidate && !isBusy,
+    currentInstalled: findInstalledSelection(row),
+    selectedCandidate,
+    candidatePath: selectedCandidatePath(row, selectedCandidate),
+    candidateSummary: selectedCandidateSummary(row, selectedCandidate),
+    canBuildPlan: Boolean(selectedCandidate) && !isBusy,
   };
 }
 
@@ -209,40 +212,17 @@ export function buildTechnologySections(rows: ConfiguredComponentRow[]): Technol
   const sectionsByTechnology = new Map<string, TechnologySection>();
 
   for (const row of rows) {
-    const existing = sectionsByTechnology.get(row.component.technology);
+    const section = getOrCreateTechnologySection(sectionsByTechnology, row);
 
-    if (existing) {
-      existing.rows.push(row);
-      existing.totalCandidates += row.group?.candidates.length ?? 0;
-      continue;
-    }
-
-    sectionsByTechnology.set(row.component.technology, {
-      technologyKey: row.component.technology,
-      label: formatTechnology(row.component.technology),
-      rows: [row],
-      nvapiControls: row.nvapiControls,
-      nvapiOwnerId: row.component.id,
-      totalCandidates: row.group?.candidates.length ?? 0,
-    });
+    section.rows.push(row);
+    section.totalCandidates += candidateCount(row.group);
   }
 
   return Array.from(sectionsByTechnology.values());
 }
 
 export function buildVendorBlocks(sections: TechnologySection[]): VendorBlock[] {
-  const blocksByVendor = new Map<VendorKey, VendorBlock>(
-    vendorBlueprints.map((blueprint) => [
-      blueprint.key,
-      {
-        key: blueprint.key,
-        label: blueprint.label,
-        sections: [],
-        totalFiles: 0,
-        totalCandidates: 0,
-      },
-    ]),
-  );
+  const blocksByVendor = buildVendorBlockMap();
 
   for (const section of sections) {
     const vendorKey = vendorKeyForTechnology(section.technologyKey);
@@ -259,22 +239,22 @@ export function buildVendorBlocks(sections: TechnologySection[]): VendorBlock[] 
 
   return vendorBlueprints
     .map((blueprint) => blocksByVendor.get(blueprint.key))
-    .filter((block): block is VendorBlock => !!block)
-    .filter((block) => block.key !== 'other' || block.sections.length > 0);
+    .filter(isDefined)
+    .filter(shouldShowVendorBlock);
 }
 
 export function sameSelectionMap(
   current: Record<string, string>,
   next: Record<string, string>,
 ): boolean {
-  const currentKeys = Object.keys(current);
+  const currentEntries = Object.entries(current);
   const nextKeys = Object.keys(next);
 
-  if (currentKeys.length !== nextKeys.length) {
+  if (currentEntries.length !== nextKeys.length) {
     return false;
   }
 
-  return nextKeys.every((key) => current[key] === next[key]);
+  return currentEntries.every(([key, value]) => next[key] === value);
 }
 
 export function reconcileArtifactSelections(
@@ -285,24 +265,11 @@ export function reconcileArtifactSelections(
   const nextSelections: Record<string, string> = {};
 
   for (const row of rows) {
-    if (!row.group || row.group.candidates.length === 0) {
-      continue;
+    const nextSelection = resolveArtifactSelection(row, currentSelections, activePlan);
+
+    if (nextSelection) {
+      nextSelections[row.component.id] = nextSelection;
     }
-
-    const candidateIds = new Set(row.group.candidates.map((candidate) => candidate.artifact_id));
-    const currentValue = currentSelections[row.component.id];
-    const plannedValue =
-      activePlan &&
-      activePlan.target_path === row.group.file_path &&
-      candidateIds.has(activePlan.artifact_id)
-        ? activePlan.artifact_id
-        : null;
-
-    nextSelections[row.component.id] =
-      plannedValue ??
-      (currentValue && candidateIds.has(currentValue)
-        ? currentValue
-        : row.group.candidates[0].artifact_id);
   }
 
   return nextSelections;
@@ -317,10 +284,8 @@ export function reconcileNvapiSelections(
   for (const row of rows) {
     for (const control of row.nvapiControls) {
       const key = selectionKey(row.component.id, control.id);
-      const currentValue = currentSelections[key];
-      const hasCurrentOption = control.options.some((option) => option.value === currentValue);
 
-      nextSelections[key] = hasCurrentOption ? currentValue : control.defaultValue;
+      nextSelections[key] = resolveNvapiSelection(control, currentSelections[key]);
     }
   }
 
@@ -331,29 +296,45 @@ export function selectionKey(componentId: string, controlId: string): string {
   return `${componentId}::${controlId}`;
 }
 
-export function installedOptionsForRow(row: ConfiguredComponentRow): Array<{
+export function installedOptionsForRow(row: ConfiguredComponentRow): {
   value: string;
   label: string;
-}> {
-  return row.installedOptions.map((option) => ({
-    value: option.value,
-    label: option.label,
+}[] {
+  return row.installedOptions.map(({ value, label }) => ({
+    value,
+    label,
   }));
 }
 
-export function candidateOptionsForRow(row: ConfiguredComponentRow): Array<{
+export function candidateOptionsForRow(row: ConfiguredComponentRow): {
   value: string;
   label: string;
   disabled?: boolean;
-}> {
-  if (!row.group || row.group.candidates.length === 0) {
-    return [{ value: '', label: 'No local replacements', disabled: true }];
+}[] {
+  const candidates = row.group?.candidates ?? [];
+
+  if (candidates.length === 0) {
+    return [NO_LOCAL_REPLACEMENTS_OPTION];
   }
 
-  return row.group.candidates.map((candidate) => ({
+  return candidates.map((candidate) => ({
     value: candidate.artifact_id,
     label: candidateOptionLabel(candidate),
   }));
+}
+
+function indexCandidateGroupsByComponentId(
+  candidateGroups: CandidateGroup[],
+): Map<string, CandidateGroup> {
+  return new Map(candidateGroups.map((group) => [group.component_id, group]));
+}
+
+function buildInstalledOptions(component: GraphicsComponent): InstalledOption[] {
+  if (component.files.length === 0) {
+    return [buildMissingInstalledOption(component.id)];
+  }
+
+  return component.files.map(buildInstalledOption);
 }
 
 function buildInstalledOption(file: ComponentFile): InstalledOption {
@@ -364,6 +345,71 @@ function buildInstalledOption(file: ComponentFile): InstalledOption {
     version: file.version ?? null,
     sha256: file.sha256 ?? null,
   };
+}
+
+function buildMissingInstalledOption(componentId: string): InstalledOption {
+  return {
+    value: `missing:${componentId}`,
+    label: NO_DETECTED_FILE_LABEL,
+    path: NO_DETECTED_FILE_PATH,
+    version: null,
+    sha256: null,
+  };
+}
+
+function resolveInstalledValue(
+  group: CandidateGroup | null,
+  installedOptions: InstalledOption[],
+): string {
+  if (group?.file_path && installedOptions.some((option) => option.path === group.file_path)) {
+    return group.file_path;
+  }
+
+  return installedOptions[0]?.value ?? UNKNOWN_VALUE;
+}
+
+function getOrCreateTechnologySection(
+  sectionsByTechnology: Map<string, TechnologySection>,
+  row: ConfiguredComponentRow,
+): TechnologySection {
+  const technologyKey = row.component.technology;
+  const existingSection = sectionsByTechnology.get(technologyKey);
+
+  if (existingSection) {
+    return existingSection;
+  }
+
+  const section: TechnologySection = {
+    technologyKey,
+    label: formatTechnology(technologyKey),
+    rows: [],
+    nvapiControls: row.nvapiControls,
+    nvapiOwnerId: row.component.id,
+    totalCandidates: 0,
+  };
+
+  sectionsByTechnology.set(technologyKey, section);
+
+  return section;
+}
+
+function buildVendorBlockMap(): Map<VendorKey, VendorBlock> {
+  return new Map(
+    vendorBlueprints.map((blueprint) => [
+      blueprint.key,
+      {
+        key: blueprint.key,
+        label: blueprint.label,
+        sections: [],
+        totalFiles: 0,
+        totalCandidates: 0,
+      },
+    ]),
+  );
+}
+
+function shouldShowVendorBlock(block: VendorBlock): boolean {
+  return block.key !== 'other' || block.sections.length > 0;
 }
 
 function vendorKeyForTechnology(technologyKey: string): VendorKey {
@@ -384,11 +430,70 @@ function vendorKeyForTechnology(technologyKey: string): VendorKey {
   return 'other';
 }
 
-function candidateOptionLabel(candidate: Candidate): string {
-  return candidate.version ? `v${candidate.version}` : 'Version unknown';
+function resolveArtifactSelection(
+  row: ComponentConfiguratorRow,
+  currentSelections: Record<string, string>,
+  activePlan: SwapPlan | null,
+): string | null {
+  const group = row.group;
+
+  if (!group || group.candidates.length === 0) {
+    return null;
+  }
+
+  const candidateIds = new Set(group.candidates.map((candidate) => candidate.artifact_id));
+  const plannedArtifactId = resolvePlannedArtifactId(group, candidateIds, activePlan);
+
+  if (plannedArtifactId) {
+    return plannedArtifactId;
+  }
+
+  const currentArtifactId = currentSelections[row.component.id];
+
+  if (currentArtifactId && candidateIds.has(currentArtifactId)) {
+    return currentArtifactId;
+  }
+
+  return group.candidates[0].artifact_id;
 }
 
-function selectedCandidate(
+function resolvePlannedArtifactId(
+  group: CandidateGroup,
+  candidateIds: Set<string>,
+  activePlan: SwapPlan | null,
+): string | null {
+  if (!activePlan) {
+    return null;
+  }
+
+  const matchesCurrentGroup = activePlan.target_path === group.file_path;
+  const matchesKnownCandidate = candidateIds.has(activePlan.artifact_id);
+
+  return matchesCurrentGroup && matchesKnownCandidate ? activePlan.artifact_id : null;
+}
+
+function resolveNvapiSelection(control: NvApiControl, currentValue?: string): string {
+  if (
+    currentValue !== undefined &&
+    control.options.some((option) => option.value === currentValue)
+  ) {
+    return currentValue;
+  }
+
+  return control.defaultValue;
+}
+
+function candidateCount(group: CandidateGroup | null): number {
+  return group?.candidates.length ?? 0;
+}
+
+function candidateOptionLabel(candidate: Candidate): string {
+  const version = normalizedText(candidate.version);
+
+  return version ? `v${version}` : 'Version unknown';
+}
+
+function findSelectedCandidate(
   row: ComponentConfiguratorRow,
   selections: Record<string, string>,
 ): Candidate | null {
@@ -397,21 +502,28 @@ function selectedCandidate(
   return row.group?.candidates.find((candidate) => candidate.artifact_id === artifactId) ?? null;
 }
 
-function installedSelection(row: ComponentConfiguratorRow): InstalledOption {
-  return (
-    row.installedOptions.find((option) => option.value === row.installedValue) ??
-    row.installedOptions[0]
-  );
+function findInstalledSelection(row: ComponentConfiguratorRow): InstalledOption {
+  const selectedOption = row.installedOptions.find((option) => option.value === row.installedValue);
+
+  if (selectedOption) {
+    return selectedOption;
+  }
+
+  if (row.installedOptions.length > 0) {
+    return row.installedOptions[0];
+  }
+
+  return buildMissingInstalledOption(row.component.id);
 }
 
 function selectedCandidatePath(row: ComponentConfiguratorRow, candidate: Candidate | null): string {
-  if (!candidate) {
-    return row.group
-      ? 'Choose a local replacement to stage a file swap plan.'
-      : 'No compatible local replacements were found for this component.';
+  if (candidate) {
+    return candidate.file_path;
   }
 
-  return candidate.file_path;
+  return row.group
+    ? 'Choose a local replacement to stage a file swap plan.'
+    : 'No compatible local replacements were found for this component.';
 }
 
 function selectedCandidateSummary(
@@ -424,15 +536,49 @@ function selectedCandidateSummary(
       : 'This detected component has no local DLL replacement candidates yet.';
   }
 
-  const summaryParts = [formatLabel(candidate.comparison)];
+  return joinSummaryParts([
+    formatLabel(candidate.comparison),
+    versionSummary(candidate.version),
+    warningSummary(candidate.warning),
+  ]);
+}
 
-  if (candidate.version) {
-    summaryParts.push(`v${candidate.version}`);
+function versionSummary(version?: string | null): string | null {
+  const normalizedVersion = normalizedText(version);
+
+  return normalizedVersion ? `v${normalizedVersion}` : null;
+}
+
+function warningSummary(warning?: string | null): string | null {
+  const normalizedWarning = normalizedText(warning);
+
+  return normalizedWarning ? formatLabel(normalizedWarning) : null;
+}
+
+function joinSummaryParts(parts: (string | null | undefined)[]): string {
+  return parts.filter(isNonEmptyString).join(' · ');
+}
+
+function normalizeVisibleLimit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_COMPACT_LIST_LIMIT;
   }
 
-  if (candidate.warning) {
-    summaryParts.push(formatLabel(candidate.warning));
+  return Math.max(1, Math.floor(value));
+}
+
+function normalizedText(value?: string | null): string | null {
+  if (!isNonEmptyString(value)) {
+    return null;
   }
 
-  return summaryParts.join(' · ');
+  return value.trim();
+}
+
+function isNonEmptyString(value?: string | null): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
 }

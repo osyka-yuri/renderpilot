@@ -65,5 +65,8 @@ jobs:
       - name: Check Prettier
         run: pnpm run format:check
 
+      - name: Lint (ESLint)
+        run: pnpm run lint
+
       - name: Build (tsc + Vite)
         run: pnpm run build
