@@ -7,7 +7,7 @@ import type {
   RollbackOperationResult,
   SwapPlan,
 } from './types';
-import type { SystemAppearance } from './desktop';
+import type { ScanManualFolderResult, SystemAppearance } from './desktop';
 
 type MockState = {
   games: GameCard[];
@@ -23,7 +23,7 @@ export function isDesktopPreviewMode(): boolean {
   return !hasTauriBridge();
 }
 
-export async function mockScanManualFolder(path: string): Promise<GameDetails> {
+export async function mockScanManualFolder(path: string): Promise<ScanManualFolderResult> {
   mockState.manualCounter += 1;
   const gameId = `manual:preview:${mockState.manualCounter}`;
   const title = lastPathSegment(path) || `Manual Game ${mockState.manualCounter}`;
@@ -38,7 +38,7 @@ export async function mockScanManualFolder(path: string): Promise<GameDetails> {
   mockState.games = [card, ...mockState.games.filter((game) => game.game_id !== gameId)];
   mockState.detailsByGameId[gameId] = details;
 
-  return clone(details);
+  return { games: [clone(details)] };
 }
 
 export async function mockGetGameCards(): Promise<GameCard[]> {

@@ -12,7 +12,7 @@ mod pattern;
 mod pe_version;
 
 pub use error::LibraryPatternError;
-pub use file_metadata::{FileCacheKey, VersionDetectionStatus};
+pub use file_metadata::{FileCacheKey, FileHashCache, VersionDetectionStatus};
 pub use filesystem_detector::{
     DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector,
 };

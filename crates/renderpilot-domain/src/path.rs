@@ -4,26 +4,37 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::text::{normalize_required_text, RequiredTextError};
 
+const PATH_SEPARATOR: char = '/';
+const WINDOWS_SEPARATOR: char = '\\';
+const NUL: char = '\0';
+const WINDOWS_DRIVE_ROOT_LEN: usize = 3;
+
 /// Platform-neutral path reference stored as normalized UTF-8 text.
 ///
 /// `PathRef` does not touch the filesystem and does not canonicalize paths.
-/// Normalization is lexical only: whitespace is trimmed, backslashes are
-/// converted to `/`, and trailing separators are removed except for `/`.
+/// Normalization is lexical only:
+///
+/// - surrounding whitespace is trimmed;
+/// - backslashes are converted to `/`;
+/// - redundant trailing separators are removed;
+/// - root separators are preserved:
+///   - `/` remains `/`;
+///   - `D:\` becomes `D:/`, not `D:`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
-pub struct PathRef(String);
+pub struct PathRef(
+    /// Stored normalized path text.
+    String,
+);
 
 impl PathRef {
     /// Creates a normalized path reference.
     pub fn new(value: impl Into<String>) -> Result<Self, PathRefError> {
-        let trimmed = normalize_required_text("path", value)?;
+        let value = normalize_required_text("path", value).map_err(PathRefError::from)?;
 
-        if trimmed.contains('\0') {
-            return Err(PathRefError::ContainsNul);
-        }
+        validate_path_text(&value)?;
 
-        let normalized = normalize_separators(&trimmed);
-        Ok(Self(normalized))
+        Ok(Self(normalize_path_text(&value)))
     }
 
     /// Returns normalized path text.
@@ -35,6 +46,12 @@ impl PathRef {
 impl fmt::Display for PathRef {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for PathRef {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -60,6 +77,7 @@ impl<'de> Deserialize<'de> for PathRef {
         D: Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
+
         Self::new(value).map_err(serde::de::Error::custom)
     }
 }
@@ -90,14 +108,47 @@ impl From<RequiredTextError> for PathRefError {
     }
 }
 
-fn normalize_separators(value: &str) -> String {
-    let mut normalized = value.replace('\\', "/");
-
-    while normalized.len() > 1 && normalized.ends_with('/') {
-        normalized.pop();
+fn validate_path_text(value: &str) -> Result<(), PathRefError> {
+    if contains_nul(value) {
+        return Err(PathRefError::ContainsNul);
     }
 
+    Ok(())
+}
+
+fn contains_nul(value: &str) -> bool {
+    value.contains(NUL)
+}
+
+fn normalize_path_text(value: &str) -> String {
+    let mut normalized = normalize_path_separators(value);
+
+    trim_redundant_trailing_separators(&mut normalized);
+
     normalized
+}
+
+fn normalize_path_separators(value: &str) -> String {
+    value.replace(WINDOWS_SEPARATOR, PATH_SEPARATOR.encode_utf8(&mut [0; 4]))
+}
+
+fn trim_redundant_trailing_separators(path: &mut String) {
+    while has_redundant_trailing_separator(path) {
+        path.pop();
+    }
+}
+
+fn has_redundant_trailing_separator(path: &str) -> bool {
+    path.len() > 1 && path.ends_with(PATH_SEPARATOR) && !is_windows_drive_root(path)
+}
+
+fn is_windows_drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+
+    bytes.len() == WINDOWS_DRIVE_ROOT_LEN
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes[2] == b'/'
 }
 
 #[cfg(test)]
@@ -112,10 +163,59 @@ mod tests {
     }
 
     #[test]
+    fn path_ref_preserves_windows_drive_root_slash() {
+        let path = PathRef::new("D:\\").expect("valid Windows root");
+
+        assert_eq!(path.as_str(), "D:/");
+    }
+
+    #[test]
+    fn path_ref_preserves_windows_drive_root_with_forward_slash() {
+        let path = PathRef::new("D:/").expect("valid Windows root");
+
+        assert_eq!(path.as_str(), "D:/");
+    }
+
+    #[test]
+    fn path_ref_trims_duplicate_trailing_separators_after_windows_drive_root() {
+        let path = PathRef::new("D://").expect("valid Windows root");
+
+        assert_eq!(path.as_str(), "D:/");
+    }
+
+    #[test]
     fn path_ref_preserves_unix_root() {
         let path = PathRef::new("/").expect("valid root");
 
         assert_eq!(path.as_str(), "/");
+    }
+
+    #[test]
+    fn path_ref_trims_duplicate_unix_root_separators_to_single_root() {
+        let path = PathRef::new("///").expect("valid root-like path");
+
+        assert_eq!(path.as_str(), "/");
+    }
+
+    #[test]
+    fn path_ref_removes_multiple_trailing_separators() {
+        let path = PathRef::new("C:/Games/Game///").expect("valid path");
+
+        assert_eq!(path.as_str(), "C:/Games/Game");
+    }
+
+    #[test]
+    fn path_ref_preserves_internal_duplicate_separators() {
+        let path = PathRef::new("C:/Games//Game").expect("valid path");
+
+        assert_eq!(path.as_str(), "C:/Games//Game");
+    }
+
+    #[test]
+    fn path_ref_does_not_canonicalize_relative_segments() {
+        let path = PathRef::new("C:/Games/../Game").expect("valid lexical path");
+
+        assert_eq!(path.as_str(), "C:/Games/../Game");
     }
 
     #[test]
@@ -138,5 +238,21 @@ mod tests {
             serde_json::from_str(r#""C:\\Games\\Cyberpunk 2077\\""#).expect("valid path json");
 
         assert_eq!(path.as_str(), "C:/Games/Cyberpunk 2077");
+    }
+
+    #[test]
+    fn path_ref_serializes_as_plain_string() {
+        let path = PathRef::new("C:/Games/Game").expect("valid path");
+
+        let json = serde_json::to_string(&path).expect("path should serialize");
+
+        assert_eq!(json, r#""C:/Games/Game""#);
+    }
+
+    #[test]
+    fn path_ref_as_ref_returns_normalized_text() {
+        let path = PathRef::new(r"C:\Games\Game\").expect("valid path");
+
+        assert_eq!(path.as_ref(), "C:/Games/Game");
     }
 }

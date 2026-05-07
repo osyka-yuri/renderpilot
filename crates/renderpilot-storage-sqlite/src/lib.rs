@@ -19,6 +19,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction};
 
 use crate::error::{storage_context, storage_error};
 
+pub use repositories::file_hash_cache::FileHashCacheRow;
 pub use repositories::SqliteStorage;
 
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);

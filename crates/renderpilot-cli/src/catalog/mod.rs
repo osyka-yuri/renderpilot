@@ -64,7 +64,7 @@ pub(crate) struct OperationListCatalogEntry {
     pub(crate) backup_count: usize,
 }
 
-pub(crate) fn scan_folder(path: PathBuf) -> Result<ScanFolderCatalogResult, CliError> {
+pub(crate) fn scan_folder(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
     scan_folder_impl(path)
 }
 

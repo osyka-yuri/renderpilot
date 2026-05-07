@@ -81,7 +81,7 @@
     const selected = await open({
       directory: true,
       multiple: false,
-      title: 'Select a game folder',
+      title: 'Select a folder to scan for games',
     });
 
     if (typeof selected !== 'string') {
@@ -89,8 +89,7 @@
     }
 
     await withBusy(async () => {
-      const details = await scanManualFolder(selected);
-      presentGameDetails(details, 'details');
+      await scanManualFolder(selected);
       await refreshGames();
     });
   }

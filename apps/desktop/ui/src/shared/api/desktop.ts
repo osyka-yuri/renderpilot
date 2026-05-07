@@ -42,9 +42,13 @@ type DesktopCommandPayloads = {
   rollback_operation: { operationId: string };
 };
 
+export type ScanManualFolderResult = {
+  games: GameDetails[];
+};
+
 type DesktopCommandResults = {
   get_system_appearance: SystemAppearance;
-  scan_manual_folder: GameDetails;
+  scan_manual_folder: ScanManualFolderResult;
   get_game_cards: GameCard[];
   get_game_details: GameDetails;
   build_swap_plan: SwapPlan;
@@ -106,7 +110,7 @@ async function invokeDesktopPreview<Command extends DesktopCommand>(
   }
 }
 
-export async function scanManualFolder(path: string): Promise<GameDetails> {
+export async function scanManualFolder(path: string): Promise<ScanManualFolderResult> {
   return invokeDesktop('scan_manual_folder', { path });
 }
 

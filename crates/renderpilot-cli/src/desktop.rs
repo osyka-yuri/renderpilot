@@ -16,11 +16,18 @@ use crate::{catalog, hash, output, CliError, VERSION};
 
 const APPLY_CONFIRMATION_TOKEN_DOMAIN: &[u8] = b"renderpilot:apply-operation-plan";
 
-/// Scans one manually selected folder and returns refreshed details for the detected game.
+/// Scans a manually chosen folder; JSON payload is `{ "games": [ ... ] }` (one element when a single install).
 pub fn scan_manual_folder(path: PathBuf) -> Result<Value, CliError> {
-    let result = catalog::scan_folder(path)?;
+    let results = catalog::scan_folder(path)?;
+    let game_details = results
+        .iter()
+        .map(|result| game_details_value(result.game.id().clone()))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    game_details_value(result.game.id().clone())
+    serde_json::to_value(ScanManualFolderOutput {
+        games: game_details,
+    })
+    .map_err(Into::into)
 }
 
 /// Lists all games currently stored in the local catalog.
@@ -93,6 +100,11 @@ pub fn rollback_operation(operation_id: impl Into<String>) -> Result<Value, CliE
     let result = catalog::rollback_operation(parse_operation_id(operation_id.into())?)?;
 
     output::rollback_operation_value(&result).map_err(Into::into)
+}
+
+#[derive(Debug, Serialize)]
+struct ScanManualFolderOutput {
+    games: Vec<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -389,10 +401,13 @@ mod tests {
         )
         .expect("test dll should be written");
 
-        let details =
+        let result =
             scan_manual_folder(game_dir.path().to_path_buf()).expect("scan should succeed");
         let game_cards = get_game_cards().expect("game cards should succeed");
 
+        let games = result["games"].as_array().expect("games array");
+        assert_eq!(games.len(), 1);
+        let details = &games[0];
         assert_eq!(
             details["components"]
                 .as_array()
@@ -419,6 +434,134 @@ mod tests {
         assert_eq!(game_cards[0]["updates_available"], false);
         assert_eq!(game_cards[0]["risk_level"], "low");
         assert_eq!(game_cards[0]["backup_available"], false);
+    }
+
+    #[test]
+    fn scan_manual_folder_parent_dir_produces_separate_games_per_subdirectory() {
+        let _guard = DesktopCatalogEnvGuard::new(temp_db_path("desktop-multi-scan"));
+        let parent_dir = TempGameFolder::new("desktop-multi-parent");
+
+        let game_a = parent_dir.path().join("GameA");
+        let game_b = parent_dir.path().join("GameB");
+        fs::create_dir_all(&game_a).expect("GameA dir should be created");
+        fs::create_dir_all(&game_b).expect("GameB dir should be created");
+        fs::write(game_a.join("nvngx_dlss.dll"), b"game-a-bytes")
+            .expect("GameA dll should be written");
+        fs::write(game_b.join("nvngx_dlss.dll"), b"game-b-bytes")
+            .expect("GameB dll should be written");
+
+        let result =
+            scan_manual_folder(parent_dir.path().to_path_buf()).expect("scan should succeed");
+        let game_cards = get_game_cards().expect("game cards should succeed");
+
+        let games = result["games"].as_array().expect("games array");
+        assert_eq!(
+            games.len(),
+            2,
+            "should detect two separate game installations"
+        );
+
+        let cards = game_cards.as_array().expect("game cards array");
+        assert_eq!(cards.len(), 2, "catalog should contain two game cards");
+
+        let install_paths: Vec<&str> = cards
+            .iter()
+            .map(|card| card["install_path"].as_str().expect("install_path string"))
+            .collect();
+
+        assert!(
+            install_paths.contains(&path_string(&game_a).as_str()),
+            "GameA install path should be in catalog"
+        );
+        assert!(
+            install_paths.contains(&path_string(&game_b).as_str()),
+            "GameB install path should be in catalog"
+        );
+
+        let titles: Vec<&str> = cards
+            .iter()
+            .map(|card| card["title"].as_str().expect("title string"))
+            .collect();
+        assert!(
+            titles.contains(&"GameA"),
+            "GameA title should be in catalog"
+        );
+        assert!(
+            titles.contains(&"GameB"),
+            "GameB title should be in catalog"
+        );
+    }
+
+    #[test]
+    fn scan_manual_folder_removes_stale_parent_entry_on_multi_scan() {
+        let _guard = DesktopCatalogEnvGuard::new(temp_db_path("desktop-stale-cleanup"));
+        let parent_dir = TempGameFolder::new("desktop-stale-parent");
+
+        let game_a = parent_dir.path().join("GameStaleA");
+        let game_b = parent_dir.path().join("GameStaleB");
+        fs::create_dir_all(&game_a).expect("GameStaleA dir should be created");
+        fs::create_dir_all(&game_b).expect("GameStaleB dir should be created");
+        fs::write(game_a.join("nvngx_dlss.dll"), b"a-bytes").expect("dll a should be written");
+        fs::write(game_b.join("nvngx_dlss.dll"), b"b-bytes").expect("dll b should be written");
+
+        // Legacy single-game parent rows are removed; two child games remain.
+        scan_manual_folder(parent_dir.path().to_path_buf()).expect("first scan should succeed");
+        scan_manual_folder(parent_dir.path().to_path_buf()).expect("second scan should succeed");
+
+        let game_cards = get_game_cards().expect("game cards should succeed");
+        let cards = game_cards.as_array().expect("game cards array");
+
+        // Expect two cards, no extra parent-row.
+        assert_eq!(
+            cards.len(),
+            2,
+            "parent ghost entry should not exist after multi-scan"
+        );
+
+        let titles: Vec<&str> = cards
+            .iter()
+            .map(|card| card["title"].as_str().expect("title"))
+            .collect();
+        assert!(titles.contains(&"GameStaleA"));
+        assert!(titles.contains(&"GameStaleB"));
+    }
+
+    #[test]
+    fn scan_manual_folder_no_duplicates_when_scanning_subdirectory_after_parent() {
+        // Regression: parent scan then `Store/` must not duplicate games (drive-root path normalisation).
+        let _guard = DesktopCatalogEnvGuard::new(temp_db_path("desktop-no-dup-nested"));
+        let parent = TempGameFolder::new("desktop-no-dup-parent");
+
+        // `Store/common/{GameAlpha,GameBeta}`
+        let game_a = parent.path().join("Store").join("common").join("GameAlpha");
+        let game_b = parent.path().join("Store").join("common").join("GameBeta");
+        fs::create_dir_all(&game_a).expect("GameAlpha dir should be created");
+        fs::create_dir_all(&game_b).expect("GameBeta dir should be created");
+        fs::write(game_a.join("nvngx_dlss.dll"), b"alpha-bytes")
+            .expect("GameAlpha dll should be written");
+        fs::write(game_b.join("nvngx_dlss.dll"), b"beta-bytes")
+            .expect("GameBeta dll should be written");
+
+        scan_manual_folder(parent.path().to_path_buf()).expect("parent scan should succeed");
+        let store_dir = parent.path().join("Store");
+        scan_manual_folder(store_dir).expect("store scan should succeed");
+
+        let game_cards = get_game_cards().expect("game cards should succeed");
+        let cards = game_cards.as_array().expect("game cards array");
+
+        let titles: Vec<&str> = cards
+            .iter()
+            .map(|c| c["title"].as_str().unwrap_or("?"))
+            .collect();
+
+        assert_eq!(
+            cards.len(),
+            2,
+            "scanning parent then sub-directory must produce exactly 2 entries, got: {}",
+            titles.join(", ")
+        );
+        assert!(titles.contains(&"GameAlpha"), "GameAlpha should be present");
+        assert!(titles.contains(&"GameBeta"), "GameBeta should be present");
     }
 
     #[test]

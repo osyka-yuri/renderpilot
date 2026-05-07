@@ -13,14 +13,17 @@ use renderpilot_domain::{
 use serde::Serialize;
 
 use crate::{
-    error::detection_error, file_metadata::read_detected_file_metadata, FileCacheKey,
-    LibraryPatternError, LibraryPatternSet, PatternKind, PatternPlatform, VersionDetectionStatus,
+    error::detection_error,
+    file_metadata::{read_detected_file_metadata, DetectedFileMetadata, FileHashCache},
+    FileCacheKey, LibraryPatternError, LibraryPatternSet, PatternKind, PatternPlatform,
+    VersionDetectionStatus,
 };
 
 use self::scan::collect_files;
 
 const DEFAULT_LIBRARY_PATTERNS_JSON: &str = include_str!("../../../../data/library_patterns.json");
 const DEFAULT_MAX_RECURSION_DEPTH: usize = 8;
+const DETECTOR_NAME: &str = "library-pattern-detector";
 
 /// One graphics library file detected inside a game folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -38,6 +41,26 @@ pub struct DetectedLibraryFile {
 }
 
 impl DetectedLibraryFile {
+    fn new(
+        file_name: String,
+        file_path: PathRef,
+        classification: LibraryFileClassification,
+        metadata: DetectedFileMetadata,
+    ) -> Self {
+        Self {
+            file_name,
+            file_path,
+            technology: classification.technology,
+            kind: classification.kind,
+            detection_confidence: classification.confidence,
+            swappability: classification.swappability,
+            version: metadata.version,
+            status: metadata.status,
+            sha256: metadata.sha256,
+            cache_key: metadata.cache_key,
+        }
+    }
+
     /// Returns the file name that matched a known library pattern.
     pub fn file_name(&self) -> &str {
         &self.file_name
@@ -90,13 +113,8 @@ impl DetectedLibraryFile {
 
     /// Converts the detected file into a component record for the given game.
     pub fn into_component(self, game: &GameInstallation) -> AppResult<GraphicsComponent> {
-        let component_id = ComponentId::new(format!("component:{}:{}", game.id(), self.file_path))
-            .map_err(detection_error)?;
-        let mut file = ComponentFile::new(self.file_path).with_sha256(self.sha256);
-
-        if let Some(version) = self.version {
-            file = file.with_version(version);
-        }
+        let component_id = component_id_for(game, &self.file_path)?;
+        let file = component_file_from_detection(self.file_path, self.sha256, self.version);
 
         Ok(GraphicsComponent::new(
             component_id,
@@ -140,10 +158,9 @@ impl LibraryPatternComponentDetector {
 
     /// Creates a Windows detector from the workspace `data/library_patterns.json`.
     pub fn windows_default() -> Result<Self, LibraryPatternError> {
-        Ok(Self::new(
-            LibraryPatternSet::from_json_str(DEFAULT_LIBRARY_PATTERNS_JSON)?,
-            PatternPlatform::Windows,
-        ))
+        let patterns = LibraryPatternSet::from_json_str(DEFAULT_LIBRARY_PATTERNS_JSON)?;
+
+        Ok(Self::new(patterns, PatternPlatform::Windows))
     }
 
     /// Sets the maximum recursion depth used when scanning a game folder.
@@ -157,6 +174,11 @@ impl LibraryPatternComponentDetector {
         &self.patterns
     }
 
+    /// Returns the platform filter used by this detector.
+    pub fn platform(&self) -> PatternPlatform {
+        self.platform
+    }
+
     /// Returns the maximum recursion depth used when scanning a game folder.
     pub fn max_depth(&self) -> usize {
         self.max_depth
@@ -167,11 +189,38 @@ impl LibraryPatternComponentDetector {
         &self,
         game: &GameInstallation,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
-        let root = PathBuf::from(game.install_path().as_str());
+        self.detect_library_files_with_optional_cache(game, None)
+    }
+
+    /// Like [`Self::detect_library_files`], but skips hashing when size/mtime match `cache`.
+    pub fn detect_library_files_with_cache(
+        &self,
+        game: &GameInstallation,
+        cache: &FileHashCache,
+    ) -> AppResult<Vec<DetectedLibraryFile>> {
+        self.detect_library_files_with_optional_cache(game, Some(cache))
+    }
+
+    fn detect_library_files_with_optional_cache(
+        &self,
+        game: &GameInstallation,
+        cache: Option<&FileHashCache>,
+    ) -> AppResult<Vec<DetectedLibraryFile>> {
+        let root = install_root_path(game);
+        let files = collect_files(&root, self.max_depth)?;
+
+        self.detect_library_files_from_paths(files, cache)
+    }
+
+    fn detect_library_files_from_paths(
+        &self,
+        files: Vec<PathBuf>,
+        cache: Option<&FileHashCache>,
+    ) -> AppResult<Vec<DetectedLibraryFile>> {
         let mut detected = Vec::new();
 
-        for file in collect_files(&root, self.max_depth)? {
-            if let Some(library) = self.detect_library_file(&file)? {
+        for file in files {
+            if let Some(library) = self.detect_library_file(&file, cache)? {
                 detected.push(library);
             }
         }
@@ -179,39 +228,45 @@ impl LibraryPatternComponentDetector {
         Ok(detected)
     }
 
-    fn detect_library_file(&self, file: &Path) -> AppResult<Option<DetectedLibraryFile>> {
-        let Some(file_name) = file.file_name().and_then(|name| name.to_str()) else {
+    fn detect_library_file(
+        &self,
+        file: &Path,
+        cache: Option<&FileHashCache>,
+    ) -> AppResult<Option<DetectedLibraryFile>> {
+        let Some(file_name) = file_name_for_matching(file) else {
             return Ok(None);
         };
 
-        let Some(matched) = self
-            .patterns
-            .find_match_on_platform(file_name, self.platform)
-        else {
+        let Some(classification) = self.classify_file_name(&file_name) else {
             return Ok(None);
         };
 
         let file_path = path_ref_from_path(file)?;
-        let file_metadata = read_detected_file_metadata(file, file_path.clone())?;
+        let metadata = read_detected_file_metadata(file, file_path.clone(), cache)?;
 
-        Ok(Some(DetectedLibraryFile {
-            file_name: file_name.to_owned(),
+        Ok(Some(DetectedLibraryFile::new(
+            file_name,
             file_path,
-            technology: matched.technology(),
-            kind: component_kind_for(matched.technology()),
-            detection_confidence: confidence_for(matched.kind(), matched.technology()),
-            swappability: swappability_for(matched.technology()),
-            version: file_metadata.version,
-            status: file_metadata.status,
-            sha256: file_metadata.sha256,
-            cache_key: file_metadata.cache_key,
-        }))
+            classification,
+            metadata,
+        )))
+    }
+
+    fn classify_file_name(&self, file_name: &str) -> Option<LibraryFileClassification> {
+        let matched = self
+            .patterns
+            .find_match_on_platform(file_name, self.platform)?;
+
+        Some(LibraryFileClassification::new(
+            matched.technology(),
+            matched.kind(),
+        ))
     }
 }
 
 impl ComponentDetector for LibraryPatternComponentDetector {
     fn name(&self) -> &str {
-        "library-pattern-detector"
+        DETECTOR_NAME
     }
 
     fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<GraphicsComponent>> {
@@ -222,8 +277,57 @@ impl ComponentDetector for LibraryPatternComponentDetector {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LibraryFileClassification {
+    technology: GraphicsTechnology,
+    kind: ComponentKind,
+    confidence: DetectionConfidence,
+    swappability: Swappability,
+}
+
+impl LibraryFileClassification {
+    fn new(technology: GraphicsTechnology, pattern_kind: PatternKind) -> Self {
+        Self {
+            technology,
+            kind: component_kind_for(technology),
+            confidence: confidence_for(pattern_kind, technology),
+            swappability: swappability_for(technology),
+        }
+    }
+}
+
+fn install_root_path(game: &GameInstallation) -> PathBuf {
+    PathBuf::from(game.install_path().as_str())
+}
+
+fn file_name_for_matching(path: &Path) -> Option<String> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+}
+
 fn path_ref_from_path(path: &Path) -> AppResult<PathRef> {
-    PathRef::new(path.to_string_lossy().as_ref()).map_err(detection_error)
+    let raw_path = path.to_string_lossy();
+    let normalized_path = raw_path.replace('\\', "/");
+
+    PathRef::new(normalized_path.as_str()).map_err(detection_error)
+}
+
+fn component_id_for(game: &GameInstallation, file_path: &PathRef) -> AppResult<ComponentId> {
+    ComponentId::new(format!("component:{}:{file_path}", game.id())).map_err(detection_error)
+}
+
+fn component_file_from_detection(
+    file_path: PathRef,
+    sha256: Sha256Hash,
+    version: Option<Version>,
+) -> ComponentFile {
+    let file = ComponentFile::new(file_path).with_sha256(sha256);
+
+    match version {
+        Some(version) => file.with_version(version),
+        None => file,
+    }
 }
 
 fn component_kind_for(technology: GraphicsTechnology) -> ComponentKind {
@@ -233,8 +337,11 @@ fn component_kind_for(technology: GraphicsTechnology) -> ComponentKind {
     }
 }
 
-fn confidence_for(kind: PatternKind, technology: GraphicsTechnology) -> DetectionConfidence {
-    match (kind, technology) {
+fn confidence_for(
+    pattern_kind: PatternKind,
+    technology: GraphicsTechnology,
+) -> DetectionConfidence {
+    match (pattern_kind, technology) {
         (_, GraphicsTechnology::Unknown) => DetectionConfidence::Low,
         (PatternKind::Exact, _) => DetectionConfidence::High,
         (PatternKind::Glob, _) => DetectionConfidence::Medium,

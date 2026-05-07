@@ -4,109 +4,122 @@ use renderpilot_application::{
     ComponentFileReplacementCandidates, OperationPlan, ReplacementCandidate,
 };
 use renderpilot_detection::DetectedLibraryFile;
-use renderpilot_domain::{GameInstallation, LibraryArtifact};
+use renderpilot_domain::{GameId, GameInstallation, LibraryArtifact};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::backup_manager::{
-    ApplyOperationCatalogItemResult, ApplyOperationCatalogResult, BackupCatalogItemResult,
-    BackupCatalogResult, RollbackOperationCatalogItemResult, RollbackOperationCatalogResult,
+use crate::{
+    backup_manager::{
+        ApplyOperationCatalogItemResult, ApplyOperationCatalogResult, BackupCatalogItemResult,
+        BackupCatalogResult, RollbackOperationCatalogItemResult, RollbackOperationCatalogResult,
+    },
+    catalog::{OperationListCatalogEntry, OperationListCatalogResult},
 };
-use crate::catalog::{OperationListCatalogEntry, OperationListCatalogResult};
+
+type JsonResult<T> = Result<T, serde_json::Error>;
+
+// -----------------------------------------------------------------------------
+// Public render functions
+// -----------------------------------------------------------------------------
 
 pub(crate) fn render_scan_folder_output(
     game: GameInstallation,
     components: Vec<DetectedLibraryFile>,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&ScanFolderOutput::new(game, components))
+) -> JsonResult<String> {
+    render_pretty_json(ScanFolderOutput::new(game, components))
 }
 
-pub(crate) fn render_list_artifacts_output(
-    artifacts: Vec<LibraryArtifact>,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&ArtifactListOutput::new(artifacts))
+pub(crate) fn render_scan_folder_batch_output(
+    scans: Vec<(GameInstallation, Vec<DetectedLibraryFile>)>,
+) -> JsonResult<String> {
+    render_pretty_json(ScanFolderBatchOutput::from_scans(scans))
+}
+
+pub(crate) fn render_list_artifacts_output(artifacts: Vec<LibraryArtifact>) -> JsonResult<String> {
+    render_pretty_json(ArtifactListOutput::from_artifacts(artifacts))
 }
 
 pub(crate) fn render_candidates_output(
-    game_id: &renderpilot_domain::GameId,
+    game_id: &GameId,
     groups: Vec<ComponentFileReplacementCandidates>,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&CandidateListOutput::new(game_id, groups))
+) -> JsonResult<String> {
+    render_pretty_json(CandidateListOutput::new(game_id, groups))
 }
 
 pub(crate) fn render_list_operations_output(
     result: &OperationListCatalogResult,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&OperationListOutput::from(result))
+) -> JsonResult<String> {
+    render_pretty_json(OperationListOutput::from(result))
 }
 
-pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> Result<String, serde_json::Error> {
-    render_pretty_json(&SwapPlanOutput::from(plan))
+pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String> {
+    render_pretty_json(SwapPlanOutput::from(plan))
 }
 
-pub(crate) fn render_backup_output(
-    result: &BackupCatalogResult,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&BackupOutput::from(result))
+pub(crate) fn render_backup_output(result: &BackupCatalogResult) -> JsonResult<String> {
+    render_pretty_json(BackupOutput::from(result))
 }
 
 pub(crate) fn render_apply_operation_output(
     result: &ApplyOperationCatalogResult,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&ApplyOperationOutput::from(result))
+) -> JsonResult<String> {
+    render_pretty_json(ApplyOperationOutput::from(result))
 }
 
 pub(crate) fn render_rollback_operation_output(
     result: &RollbackOperationCatalogResult,
-) -> Result<String, serde_json::Error> {
-    render_pretty_json(&RollbackOperationOutput::from(result))
+) -> JsonResult<String> {
+    render_pretty_json(RollbackOperationOutput::from(result))
 }
+
+// -----------------------------------------------------------------------------
+// Public JSON value helpers
+// -----------------------------------------------------------------------------
 
 pub(crate) fn candidate_groups_value(
     groups: Vec<ComponentFileReplacementCandidates>,
-) -> Result<Value, serde_json::Error> {
-    render_json_value(
-        groups
-            .into_iter()
-            .map(ComponentCandidateOutput::from)
-            .collect::<Vec<_>>(),
-    )
+) -> JsonResult<Value> {
+    render_json_value(component_candidate_outputs(groups))
 }
 
-pub(crate) fn operation_summaries_value(
-    result: &OperationListCatalogResult,
-) -> Result<Value, serde_json::Error> {
-    render_json_value(
-        result
-            .operations
-            .iter()
-            .map(OperationSummaryOutput::from)
-            .collect::<Vec<_>>(),
-    )
+pub(crate) fn operation_summaries_value(result: &OperationListCatalogResult) -> JsonResult<Value> {
+    render_json_value(operation_summary_outputs(result))
 }
 
-pub(crate) fn apply_operation_value(
-    result: &ApplyOperationCatalogResult,
-) -> Result<Value, serde_json::Error> {
+pub(crate) fn apply_operation_value(result: &ApplyOperationCatalogResult) -> JsonResult<Value> {
     render_json_value(ApplyOperationOutput::from(result))
 }
 
 pub(crate) fn rollback_operation_value(
     result: &RollbackOperationCatalogResult,
-) -> Result<Value, serde_json::Error> {
+) -> JsonResult<Value> {
     render_json_value(RollbackOperationOutput::from(result))
 }
 
-fn render_json_value(value: impl Serialize) -> Result<Value, serde_json::Error> {
+// -----------------------------------------------------------------------------
+// JSON serialization helpers
+// -----------------------------------------------------------------------------
+
+fn render_json_value<T>(value: T) -> JsonResult<Value>
+where
+    T: Serialize,
+{
     serde_json::to_value(value)
 }
 
-fn render_pretty_json(value: &impl Serialize) -> Result<String, serde_json::Error> {
-    let mut json = serde_json::to_string_pretty(value)?;
+fn render_pretty_json<T>(value: T) -> JsonResult<String>
+where
+    T: Serialize,
+{
+    let mut json = serde_json::to_string_pretty(&value)?;
     json.push('\n');
 
     Ok(json)
 }
+
+// -----------------------------------------------------------------------------
+// Scan folder output
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 struct ScanFolderOutput {
@@ -121,38 +134,35 @@ impl ScanFolderOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct ScanFolderBatchOutput {
+    games: Vec<ScanFolderOutput>,
+}
+
+impl ScanFolderBatchOutput {
+    fn from_scans(scans: Vec<(GameInstallation, Vec<DetectedLibraryFile>)>) -> Self {
+        let games = scans
+            .into_iter()
+            .map(|(game, components)| ScanFolderOutput::new(game, components))
+            .collect();
+
+        Self { games }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Artifact list output
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
 struct ArtifactListOutput {
     groups: Vec<ArtifactTechnologyGroupOutput>,
 }
 
 impl ArtifactListOutput {
-    fn new(artifacts: Vec<LibraryArtifact>) -> Self {
-        let mut groups = BTreeMap::<String, Vec<ArtifactOutput>>::new();
-
-        for artifact in artifacts {
-            groups
-                .entry(artifact.technology().as_slug().to_owned())
-                .or_default()
-                .push(ArtifactOutput::from(artifact));
+    fn from_artifacts(artifacts: Vec<LibraryArtifact>) -> Self {
+        Self {
+            groups: artifact_groups(artifacts),
         }
-
-        let groups = groups
-            .into_iter()
-            .map(|(technology, mut artifacts)| {
-                artifacts.sort_by(|left, right| {
-                    left.file_name
-                        .cmp(&right.file_name)
-                        .then(left.file_path.cmp(&right.file_path))
-                });
-
-                ArtifactTechnologyGroupOutput {
-                    technology,
-                    artifacts,
-                }
-            })
-            .collect();
-
-        Self { groups }
     }
 }
 
@@ -160,6 +170,17 @@ impl ArtifactListOutput {
 struct ArtifactTechnologyGroupOutput {
     technology: String,
     artifacts: Vec<ArtifactOutput>,
+}
+
+impl ArtifactTechnologyGroupOutput {
+    fn new(technology: String, mut artifacts: Vec<ArtifactOutput>) -> Self {
+        sort_artifacts_for_output(&mut artifacts);
+
+        Self {
+            technology,
+            artifacts,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -191,6 +212,42 @@ impl From<LibraryArtifact> for ArtifactOutput {
     }
 }
 
+fn artifact_groups(artifacts: Vec<LibraryArtifact>) -> Vec<ArtifactTechnologyGroupOutput> {
+    group_artifacts_by_technology(artifacts)
+        .into_iter()
+        .map(|(technology, artifacts)| ArtifactTechnologyGroupOutput::new(technology, artifacts))
+        .collect()
+}
+
+fn group_artifacts_by_technology(
+    artifacts: Vec<LibraryArtifact>,
+) -> BTreeMap<String, Vec<ArtifactOutput>> {
+    let mut groups = BTreeMap::<String, Vec<ArtifactOutput>>::new();
+
+    for artifact in artifacts {
+        let technology = artifact.technology().as_slug().to_owned();
+
+        groups
+            .entry(technology)
+            .or_default()
+            .push(ArtifactOutput::from(artifact));
+    }
+
+    groups
+}
+
+fn sort_artifacts_for_output(artifacts: &mut [ArtifactOutput]) {
+    artifacts.sort_by(|left, right| {
+        left.file_name
+            .cmp(&right.file_name)
+            .then_with(|| left.file_path.cmp(&right.file_path))
+    });
+}
+
+// -----------------------------------------------------------------------------
+// Candidates output
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, Serialize)]
 struct CandidateListOutput {
     game_id: String,
@@ -198,16 +255,10 @@ struct CandidateListOutput {
 }
 
 impl CandidateListOutput {
-    fn new(
-        game_id: &renderpilot_domain::GameId,
-        groups: Vec<ComponentFileReplacementCandidates>,
-    ) -> Self {
+    fn new(game_id: &GameId, groups: Vec<ComponentFileReplacementCandidates>) -> Self {
         Self {
             game_id: game_id.as_str().to_owned(),
-            groups: groups
-                .into_iter()
-                .map(ComponentCandidateOutput::from)
-                .collect(),
+            groups: component_candidate_outputs(groups),
         }
     }
 }
@@ -230,11 +281,7 @@ impl From<ComponentFileReplacementCandidates> for ComponentCandidateOutput {
             current_version: group
                 .current_version()
                 .map(|version| version.as_str().to_owned()),
-            candidates: group
-                .candidates()
-                .iter()
-                .map(CandidateOutput::from)
-                .collect(),
+            candidates: candidate_outputs(&group),
         }
     }
 }
@@ -270,6 +317,27 @@ impl From<&ReplacementCandidate> for CandidateOutput {
     }
 }
 
+fn component_candidate_outputs(
+    groups: Vec<ComponentFileReplacementCandidates>,
+) -> Vec<ComponentCandidateOutput> {
+    groups
+        .into_iter()
+        .map(ComponentCandidateOutput::from)
+        .collect()
+}
+
+fn candidate_outputs(group: &ComponentFileReplacementCandidates) -> Vec<CandidateOutput> {
+    group
+        .candidates()
+        .iter()
+        .map(CandidateOutput::from)
+        .collect()
+}
+
+// -----------------------------------------------------------------------------
+// Operation list output
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, Serialize)]
 struct OperationListOutput {
     game_id: String,
@@ -280,11 +348,7 @@ impl From<&OperationListCatalogResult> for OperationListOutput {
     fn from(result: &OperationListCatalogResult) -> Self {
         Self {
             game_id: result.game_id.as_str().to_owned(),
-            operations: result
-                .operations
-                .iter()
-                .map(OperationSummaryOutput::from)
-                .collect(),
+            operations: operation_summary_outputs(result),
         }
     }
 }
@@ -318,6 +382,18 @@ impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
         }
     }
 }
+
+fn operation_summary_outputs(result: &OperationListCatalogResult) -> Vec<OperationSummaryOutput> {
+    result
+        .operations
+        .iter()
+        .map(OperationSummaryOutput::from)
+        .collect()
+}
+
+// -----------------------------------------------------------------------------
+// Swap plan output
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 struct SwapPlanOutput {
@@ -374,6 +450,10 @@ impl From<&OperationPlan> for SwapPlanOutput {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Backup output
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, Serialize)]
 struct BackupOutput {
     operation_id: String,
@@ -415,6 +495,10 @@ impl From<&BackupCatalogItemResult> for BackupItemOutput {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Apply operation output
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 struct ApplyOperationOutput {
@@ -465,6 +549,10 @@ impl From<&ApplyOperationCatalogItemResult> for ApplyOperationItemOutput {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Rollback operation output
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, Serialize)]
 struct RollbackOperationOutput {
     operation_id: String,
@@ -512,14 +600,14 @@ impl From<&RollbackOperationCatalogItemResult> for RollbackOperationItemOutput {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Shared helpers
+// -----------------------------------------------------------------------------
+
 fn backup_status(item_count: usize, backup_count: usize) -> &'static str {
-    if item_count == 0 || backup_count == 0 {
-        return "missing";
+    match (item_count, backup_count) {
+        (0, _) | (_, 0) => "missing",
+        (items, backups) if backups < items => "partial",
+        _ => "ready",
     }
-
-    if backup_count < item_count {
-        return "partial";
-    }
-
-    "ready"
 }
