@@ -30,7 +30,11 @@
         {formatLabel(row.component.swappability)}
       </Badge>
       {#if row.group?.candidates.length}
-        <Badge>{row.group.candidates.length} compatible {row.group.candidates.length === 1 ? 'version' : 'versions'}</Badge>
+        <Badge
+          >{row.group.candidates.length} compatible {row.group.candidates.length === 1
+            ? 'version'
+            : 'versions'}</Badge
+        >
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
@@ -75,7 +79,8 @@
       size="sm"
       disabled={!row.canBuildPlan}
       loading={busy}
-      onclick={() => row.selectedCandidate && onBuildPlan(row.component.id, row.selectedCandidate.artifact_id)}
+      onclick={() =>
+        row.selectedCandidate && onBuildPlan(row.component.id, row.selectedCandidate.artifact_id)}
     >
       {busy ? 'Working...' : 'Build File Plan'}
     </Button>

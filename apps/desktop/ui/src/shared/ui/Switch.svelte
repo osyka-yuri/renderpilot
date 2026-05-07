@@ -14,7 +14,7 @@
   export let ariaDescribedBy: string | undefined = undefined;
 
   export let title: string | undefined = undefined;
-  export let className = "";
+  export let className = '';
 
   /**
    * Сохраняет старое поведение: на мобильных label и switch становятся колонкой.
@@ -25,8 +25,8 @@
   export let onfocus: FocusHandler | undefined = undefined;
   export let onblur: FocusHandler | undefined = undefined;
 
-  $: state = checked ? "checked" : "unchecked";
-  $: rootClass = ["switch-root", className].filter(Boolean).join(" ");
+  $: state = checked ? 'checked' : 'unchecked';
+  $: rootClass = ['switch-root', className].filter(Boolean).join(' ');
 
   $: normalizedAriaLabel = ariaLabel?.trim() || undefined;
   $: normalizedTitle = title?.trim() || undefined;
@@ -45,7 +45,7 @@
 <button
   type="button"
   role="switch"
-  aria-checked={checked ? "true" : "false"}
+  aria-checked={checked ? 'true' : 'false'}
   aria-label={normalizedAriaLabel}
   aria-labelledby={ariaLabelledBy}
   aria-describedby={ariaDescribedBy}
@@ -53,7 +53,7 @@
   {disabled}
   class={rootClass}
   data-state={state}
-  data-stack-on-mobile={stackOnMobile ? "true" : undefined}
+  data-stack-on-mobile={stackOnMobile ? 'true' : undefined}
   onclick={handleClick}
   {onfocus}
   {onblur}
@@ -140,15 +140,13 @@
       background-color 140ms ease;
   }
 
-  .switch-root[data-state="checked"] .switch-track {
+  .switch-root[data-state='checked'] .switch-track {
     background: var(--accent);
     border-color: transparent;
   }
 
-  .switch-root[data-state="checked"] .switch-thumb {
-    inset-inline-start: calc(
-      100% - var(--switch-padding) - var(--switch-thumb-size)
-    );
+  .switch-root[data-state='checked'] .switch-thumb {
+    inset-inline-start: calc(100% - var(--switch-padding) - var(--switch-thumb-size));
     background: var(--accent-contrast);
   }
 
@@ -161,12 +159,11 @@
   }
 
   @media (hover: hover) {
-    .switch-root:not(:disabled):not([data-state="checked"]):hover
-      .switch-track {
+    .switch-root:not(:disabled):not([data-state='checked']):hover .switch-track {
       background: var(--bg-control-hover);
     }
 
-    .switch-root:not(:disabled)[data-state="checked"]:hover .switch-track {
+    .switch-root:not(:disabled)[data-state='checked']:hover .switch-track {
       background: var(--accent-strong);
     }
   }
@@ -177,13 +174,13 @@
   }
 
   @media (max-width: 720px) {
-    .switch-root[data-stack-on-mobile="true"] {
+    .switch-root[data-stack-on-mobile='true'] {
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
     }
 
-    .switch-root[data-stack-on-mobile="true"] .switch-track {
+    .switch-root[data-stack-on-mobile='true'] .switch-track {
       align-self: flex-start;
     }
   }

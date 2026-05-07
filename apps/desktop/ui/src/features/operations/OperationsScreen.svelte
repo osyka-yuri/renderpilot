@@ -4,7 +4,12 @@
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
   import Surface from '@shared/ui/Surface.svelte';
-  import { formatLabel, formatTimestamp, riskBadgeTone, statusTone } from '@shared/utils/presenters';
+  import {
+    formatLabel,
+    formatTimestamp,
+    riskBadgeTone,
+    statusTone,
+  } from '@shared/utils/presenters';
 
   const noop: VoidHandler = (): void => {};
   const noopOperation: OperationHandler = (_operationId: string): void => {};
@@ -35,7 +40,9 @@
   {#if !details}
     <Surface className="empty-state">
       <h3>No operation context</h3>
-      <p>Select a game to inspect journal history, rollback readiness, and recovery-oriented status.</p>
+      <p>
+        Select a game to inspect journal history, rollback readiness, and recovery-oriented status.
+      </p>
     </Surface>
   {:else}
     <section class="section-shell">
@@ -43,7 +50,9 @@
         <div>
           <p class="eyebrow">Journal</p>
           <h3>Operation history</h3>
-          <p class="section-copy">Durable entries for swaps, rollback, and recovery state for this installation.</p>
+          <p class="section-copy">
+            Durable entries for swaps, rollback, and recovery state for this installation.
+          </p>
         </div>
 
         <Button variant="secondary" size="sm" onclick={handleOpenDetails}>Back To Details</Button>
@@ -76,7 +85,10 @@
     {#if details.operations.length === 0}
       <Surface className="empty-state">
         <h3>No operations yet</h3>
-        <p>Build a plan from Game Details, then apply it. Once a swap runs, the journal and rollback readiness will appear here.</p>
+        <p>
+          Build a plan from Game Details, then apply it. Once a swap runs, the journal and rollback
+          readiness will appear here.
+        </p>
       </Surface>
     {:else}
       <section class="section-shell">
@@ -84,7 +96,9 @@
           <div>
             <p class="eyebrow">Entries</p>
             <h3>Journal entries</h3>
-            <p class="section-copy">Structured history with rollback affordances instead of a raw log dump.</p>
+            <p class="section-copy">
+              Structured history with rollback affordances instead of a raw log dump.
+            </p>
           </div>
         </div>
 
@@ -127,7 +141,8 @@
                   {#if canRollback(operation)}
                     Rollback is available for this entry.
                   {:else}
-                    Rollback is unavailable because this entry does not have a restorable backup set.
+                    Rollback is unavailable because this entry does not have a restorable backup
+                    set.
                   {/if}
                 </p>
 

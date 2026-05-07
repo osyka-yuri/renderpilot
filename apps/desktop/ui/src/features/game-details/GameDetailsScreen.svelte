@@ -46,10 +46,14 @@
   $: configuredRows = componentRows.map((row) => buildConfiguredRow(row, selectedArtifacts, busy));
   $: technologySections = buildTechnologySections(configuredRows);
   $: vendorBlocks = buildVendorBlocks(technologySections);
-  $: visibleVendorBlocks = vendorBlocks.filter((block) => block.key !== 'other' || block.sections.length > 0);
+  $: visibleVendorBlocks = vendorBlocks.filter(
+    (block) => block.key !== 'other' || block.sections.length > 0,
+  );
   $: vendorAccordionItems = visibleVendorBlocks.map(buildVendorAccordionItem);
   $: preferredVendorKey =
-    visibleVendorBlocks.find((block) => block.sections.length > 0)?.key ?? visibleVendorBlocks[0]?.key ?? 'nvidia';
+    visibleVendorBlocks.find((block) => block.sections.length > 0)?.key ??
+    visibleVendorBlocks[0]?.key ??
+    'nvidia';
   $: currentVendorAccordionGameId = gameCard?.game_id ?? null;
   $: if (currentVendorAccordionGameId !== lastVendorAccordionGameId) {
     lastVendorAccordionGameId = currentVendorAccordionGameId;
@@ -152,7 +156,9 @@
   {#if !details}
     <div class="empty-state">
       <h3>No game selected</h3>
-      <p>Select a game card on the dashboard to open one coherent workspace for that installation.</p>
+      <p>
+        Select a game card on the dashboard to open one coherent workspace for that installation.
+      </p>
     </div>
   {:else}
     <InstallContextCards
@@ -176,7 +182,7 @@
       onBuildPlan={handleBuildPlan}
     />
 
-    <OperationPlanSummary {plan} {busy} onApply={onApply} />
+    <OperationPlanSummary {plan} {busy} {onApply} />
 
     <section class="lower-grid">
       <BackupOperationsPanel operations={backupOperations} />

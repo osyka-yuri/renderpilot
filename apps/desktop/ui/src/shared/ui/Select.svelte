@@ -1,5 +1,5 @@
 <script lang="ts">
-  type SelectSize = "md" | "sm";
+  type SelectSize = 'md' | 'sm';
 
   type SelectOption = Readonly<{
     value: string;
@@ -9,7 +9,7 @@
 
   export let options: readonly SelectOption[] = [];
 
-  export let value = "";
+  export let value = '';
   export let disabled = false;
   export let required = false;
 
@@ -17,11 +17,11 @@
   export let name: string | undefined = undefined;
   export let title: string | undefined = undefined;
 
-  export let ariaLabel: string | undefined = "Select option";
+  export let ariaLabel: string | undefined = 'Select option';
   export let ariaLabelledby: string | undefined = undefined;
   export let ariaDescribedby: string | undefined = undefined;
 
-  export let size: SelectSize = "md";
+  export let size: SelectSize = 'md';
 
   export let onValueChange: ((value: string) => void) | undefined = undefined;
 
@@ -43,7 +43,7 @@
 
 <span
   class="select-root"
-  class:select-root--sm={size === "sm"}
+  class:select-root--sm={size === 'sm'}
   class:select-root--disabled={disabled}
 >
   <select
@@ -75,7 +75,7 @@
   }
 
   .select-root::after {
-    content: "";
+    content: '';
     position: absolute;
     top: 50%;
     right: 0.78rem;

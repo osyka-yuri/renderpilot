@@ -4,7 +4,8 @@
   export let details: GameDetails | null = null;
   export let gameCard: GameCard | null = null;
 
-  $: backupCoverage = details?.operations.filter((operation) => operation.backup_count > 0).length ?? 0;
+  $: backupCoverage =
+    details?.operations.filter((operation) => operation.backup_count > 0).length ?? 0;
 </script>
 
 <section class="screen-shell">

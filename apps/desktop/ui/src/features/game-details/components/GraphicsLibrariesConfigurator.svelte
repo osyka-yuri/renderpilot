@@ -31,7 +31,9 @@
   </div>
 
   {#if isEmpty}
-    <div class="empty-inline">No graphics-related components were detected for this installation.</div>
+    <div class="empty-inline">
+      No graphics-related components were detected for this installation.
+    </div>
   {:else}
     <Accordion
       items={accordionItems}
@@ -42,7 +44,9 @@
     >
       {#each vendorBlocks.filter((block) => block.key === item.value) as vendorBlock}
         {#if vendorBlock.sections.length === 0}
-          <div class="vendor-empty">No {vendorBlock.label} technologies detected for this installation yet.</div>
+          <div class="vendor-empty">
+            No {vendorBlock.label} technologies detected for this installation yet.
+          </div>
         {:else}
           <div class="library-configurator">
             {#each vendorBlock.sections as section}

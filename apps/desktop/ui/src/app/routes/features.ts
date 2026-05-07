@@ -69,9 +69,7 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   },
 ];
 
-export function resolveFeatureItems(
-  context: FeatureAvailabilityContext,
-): FeatureItem[] {
+export function resolveFeatureItems(context: FeatureAvailabilityContext): FeatureItem[] {
   return FEATURE_DEFINITIONS.map((feature) => ({
     id: feature.id,
     title: feature.title,

@@ -43,7 +43,10 @@
     <div class="section-header">
       <p class="eyebrow">Interface</p>
       <h3>Appearance and language</h3>
-      <p class="section-copy">Keep the shell visually consistent across themes and languages without turning preferences into oversized cards.</p>
+      <p class="section-copy">
+        Keep the shell visually consistent across themes and languages without turning preferences
+        into oversized cards.
+      </p>
     </div>
 
     <Surface className="settings-panel" tone="elevated" shadow>
@@ -51,7 +54,10 @@
         <div class="setting-copy">
           <p class="setting-label">Display</p>
           <h4>Theme</h4>
-          <p>Follow the operating system appearance or choose a fixed theme while keeping the application palette internally consistent.</p>
+          <p>
+            Follow the operating system appearance or choose a fixed theme while keeping the
+            application palette internally consistent.
+          </p>
         </div>
 
         <span class="setting-control select-wrap">
@@ -68,7 +74,10 @@
         <div class="setting-copy">
           <p class="setting-label">Localization</p>
           <h4>Language</h4>
-          <p>Use a scalable selector so more interface languages can be added later without changing the page structure.</p>
+          <p>
+            Use a scalable selector so more interface languages can be added later without changing
+            the page structure.
+          </p>
         </div>
 
         <span class="setting-control select-wrap">
@@ -87,7 +96,10 @@
     <div class="section-header">
       <p class="eyebrow">Behavior</p>
       <h3>Workflow and provider posture</h3>
-      <p class="section-copy">Keep operational behavior predictable and expose lower-level controls only when they improve the workflow.</p>
+      <p class="section-copy">
+        Keep operational behavior predictable and expose lower-level controls only when they improve
+        the workflow.
+      </p>
     </div>
 
     <Surface className="settings-panel" tone="elevated" shadow>
@@ -96,7 +108,10 @@
           <span class="setting-copy">
             <span class="setting-label">Detail level</span>
             <span class="row-title">Advanced mode</span>
-            <span class="row-copy">Show lower-level actions and technical controls in detail screens only when you need them.</span>
+            <span class="row-copy"
+              >Show lower-level actions and technical controls in detail screens only when you need
+              them.</span
+            >
           </span>
         </Switch>
       </div>
@@ -105,7 +120,10 @@
         <div class="setting-copy">
           <p class="setting-label">Discovery</p>
           <h4>Scan source</h4>
-          <p>Manual folder scanning is active. Provider integrations can be added later without changing the overall settings hierarchy.</p>
+          <p>
+            Manual folder scanning is active. Provider integrations can be added later without
+            changing the overall settings hierarchy.
+          </p>
         </div>
 
         <div class="setting-status">

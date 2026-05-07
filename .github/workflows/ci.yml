@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -28,3 +35,35 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+  desktop-format:
+    name: Desktop UI quality gates
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Prettier
+        run: pnpm run format:check
+
+      - name: Build (tsc + Vite)
+        run: pnpm run build

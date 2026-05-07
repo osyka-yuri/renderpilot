@@ -25,7 +25,11 @@
     <div class="library-badges">
       <Badge>{section.rows.length} detected {section.rows.length === 1 ? 'file' : 'files'}</Badge>
       {#if section.totalCandidates > 0}
-        <Badge>{section.totalCandidates} replacement {section.totalCandidates === 1 ? 'version' : 'versions'}</Badge>
+        <Badge
+          >{section.totalCandidates} replacement {section.totalCandidates === 1
+            ? 'version'
+            : 'versions'}</Badge
+        >
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
@@ -64,8 +68,11 @@
     padding: var(--space-4);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-xl);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, white 4%), var(--bg-card));
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-card) 96%, white 4%),
+      var(--bg-card)
+    );
     box-shadow: var(--shadow-card);
   }
 

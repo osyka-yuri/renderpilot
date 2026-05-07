@@ -10,3 +10,5 @@
 /apps/desktop/dist/
 /apps/desktop/node_modules/
 /apps/desktop/src-tauri/gen/
+/apps/desktop/.prettiercache
+

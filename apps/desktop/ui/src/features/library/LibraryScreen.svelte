@@ -1,27 +1,34 @@
 <script lang="ts">
-  import type { GameCard } from "@shared/api/types";
-  import { formatRisk } from "@shared/utils/presenters";
+  import type { GameCard } from '@shared/api/types';
+  import { formatRisk } from '@shared/utils/presenters';
 
   export let gameCard: GameCard | null = null;
 
-  const previewRows = [
+  type ArtifactPreviewRow = {
+    fileName: string;
+    technologyLabel: string;
+    sourceLabel: string;
+    trustLabel: string;
+  };
+
+  const previewRows: ArtifactPreviewRow[] = [
     {
-      name: "nvngx_dlss.dll",
-      technology: "DLSS Super Resolution",
-      source: "Local observed",
-      trust: "Local observed",
+      fileName: 'nvngx_dlss.dll',
+      technologyLabel: 'DLSS Super Resolution',
+      sourceLabel: 'Local observed',
+      trustLabel: 'Local observed',
     },
     {
-      name: "sl.common.dll",
-      technology: "NVIDIA Streamline",
-      source: "Backup import",
-      trust: "Backup",
+      fileName: 'sl.common.dll',
+      technologyLabel: 'NVIDIA Streamline',
+      sourceLabel: 'Backup import',
+      trustLabel: 'Backup',
     },
     {
-      name: "libxess.dll",
-      technology: "Intel XeSS",
-      source: "User import",
-      trust: "User imported",
+      fileName: 'libxess.dll',
+      technologyLabel: 'Intel XeSS',
+      sourceLabel: 'User import',
+      trustLabel: 'User imported',
     },
   ];
 </script>
@@ -32,10 +39,9 @@
       <p class="eyebrow">Library</p>
       <h2>Local artifact library</h2>
       <p>
-        This surface is reserved for DLL and artifact inventory, with version,
-        SHA256, source, and trust level. Until the dedicated endpoint exists,
-        the UI shows a faithful placeholder layout instead of pretending data
-        already ships.
+        This surface is reserved for DLL and artifact inventory, with version, SHA256, source, and
+        trust level. Until the dedicated endpoint exists, the UI shows a faithful placeholder layout
+        instead of pretending data already ships.
       </p>
     </div>
 
@@ -44,7 +50,7 @@
       <p>
         {gameCard
           ? `${gameCard.title} · Risk ${formatRisk(gameCard.risk_level)}`
-          : "No focused game selected"}
+          : 'No focused game selected'}
       </p>
     </div>
   </section>
@@ -67,10 +73,10 @@
 
     {#each previewRows as row}
       <div class="row-grid">
-        <strong>{row.name}</strong>
-        <span>{row.technology}</span>
-        <span>{row.source}</span>
-        <span>{row.trust}</span>
+        <strong>{row.fileName}</strong>
+        <span>{row.technologyLabel}</span>
+        <span>{row.sourceLabel}</span>
+        <span>{row.trustLabel}</span>
       </div>
     {/each}
   </section>

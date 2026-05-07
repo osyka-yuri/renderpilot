@@ -1,0 +1,12 @@
+# Dependencies & build artifacts
+node_modules
+dist
+coverage
+.turbo
+*.log
+
+# Tooling output (pnpm / Rust / generated Tauri)
+pnpm-lock.yaml
+src-tauri/target
+src-tauri/gen
+src-tauri/**/*.rs

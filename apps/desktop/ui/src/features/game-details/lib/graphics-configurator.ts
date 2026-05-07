@@ -69,7 +69,8 @@ const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
     {
       id: 'preset',
       label: 'DLSS preset override',
-      description: 'Capability-based preset selection when the driver profile exposes a DLSS override.',
+      description:
+        'Capability-based preset selection when the driver profile exposes a DLSS override.',
       defaultValue: 'safe_original',
       options: [
         { value: 'safe_original', label: 'Safe Original' },
@@ -93,7 +94,8 @@ const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
     {
       id: 'fg_profile',
       label: 'DLSS FG profile',
-      description: 'Frame Generation profile when the driver can override the game-controlled default.',
+      description:
+        'Frame Generation profile when the driver can override the game-controlled default.',
       defaultValue: 'game_controlled',
       options: [
         { value: 'game_controlled', label: 'Game Controlled' },
@@ -290,7 +292,9 @@ export function reconcileArtifactSelections(
     const candidateIds = new Set(row.group.candidates.map((candidate) => candidate.artifact_id));
     const currentValue = currentSelections[row.component.id];
     const plannedValue =
-      activePlan && activePlan.target_path === row.group.file_path && candidateIds.has(activePlan.artifact_id)
+      activePlan &&
+      activePlan.target_path === row.group.file_path &&
+      candidateIds.has(activePlan.artifact_id)
         ? activePlan.artifact_id
         : null;
 
@@ -384,7 +388,10 @@ function candidateOptionLabel(candidate: Candidate): string {
   return candidate.version ? `v${candidate.version}` : 'Version unknown';
 }
 
-function selectedCandidate(row: ComponentConfiguratorRow, selections: Record<string, string>): Candidate | null {
+function selectedCandidate(
+  row: ComponentConfiguratorRow,
+  selections: Record<string, string>,
+): Candidate | null {
   const artifactId = selections[row.component.id];
 
   return row.group?.candidates.find((candidate) => candidate.artifact_id === artifactId) ?? null;
@@ -407,7 +414,10 @@ function selectedCandidatePath(row: ComponentConfiguratorRow, candidate: Candida
   return candidate.file_path;
 }
 
-function selectedCandidateSummary(row: ComponentConfiguratorRow, candidate: Candidate | null): string {
+function selectedCandidateSummary(
+  row: ComponentConfiguratorRow,
+  candidate: Candidate | null,
+): string {
   if (!candidate) {
     return row.group
       ? 'Current DLL is visible on the left, and the replacement list stays on the right.'

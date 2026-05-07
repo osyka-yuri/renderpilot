@@ -103,8 +103,11 @@
     padding: var(--space-4);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-xl);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, white 4%), var(--bg-card));
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-card) 96%, white 4%),
+      var(--bg-card)
+    );
     box-shadow: var(--shadow-card);
   }
 

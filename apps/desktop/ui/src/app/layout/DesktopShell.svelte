@@ -23,7 +23,10 @@
     onNavigate(nextScreen);
   }
 
-  function resolveWorkspaceCopy(currentScreen: Screen, gameTitle: string | null): {
+  function resolveWorkspaceCopy(
+    currentScreen: Screen,
+    gameTitle: string | null,
+  ): {
     label: string;
     heading: string;
   } {
@@ -59,7 +62,14 @@
         {#if canGoBack}
           <Button ariaLabel="Go back" iconOnly onclick={onBack}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path
+                d="M14.5 5.5L8 12l6.5 6.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
           </Button>
         {/if}
@@ -78,8 +88,21 @@
         {#if showSettingsButton}
           <Button ariaLabel="Open settings" iconOnly onclick={() => handleNavigate('settings')}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9.6 3.4h4.8l.6 2.3c.5.1 1 .3 1.5.6l2.1-1.2 2.4 4.2-1.8 1.5c.1.5.1 1 .1 1.5s0 1-.1 1.5l1.8 1.5-2.4 4.2-2.1-1.2c-.5.3-1 .5-1.5.6l-.6 2.3H9.6L9 18.3c-.5-.1-1-.3-1.5-.6l-2.1 1.2L3 14.7l1.8-1.5c-.1-.5-.1-1-.1-1.5s0-1 .1-1.5L3 8.7l2.4-4.2 2.1 1.2c.5-.3 1-.5 1.5-.6l.6-2.3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-              <circle cx="12" cy="12" r="2.7" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path
+                d="M9.6 3.4h4.8l.6 2.3c.5.1 1 .3 1.5.6l2.1-1.2 2.4 4.2-1.8 1.5c.1.5.1 1 .1 1.5s0 1-.1 1.5l1.8 1.5-2.4 4.2-2.1-1.2c-.5.3-1 .5-1.5.6l-.6 2.3H9.6L9 18.3c-.5-.1-1-.3-1.5-.6l-2.1 1.2L3 14.7l1.8-1.5c-.1-.5-.1-1-.1-1.5s0-1 .1-1.5L3 8.7l2.4-4.2 2.1 1.2c.5-.3 1-.5 1.5-.6l.6-2.3z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="2.7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
             </svg>
           </Button>
         {/if}

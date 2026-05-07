@@ -43,7 +43,7 @@
 
   $: currentGameCard =
     selectedGameId !== null
-      ? games.find((game) => game.game_id === selectedGameId) ?? null
+      ? (games.find((game) => game.game_id === selectedGameId) ?? null)
       : null;
 
   onMount(() => {
@@ -123,7 +123,11 @@
     const plan = currentPlan;
 
     if (!plan || plan.operation_id !== operationId) {
-      showError(new Error('The selected operation plan is no longer current. Rebuild the plan before applying it.'));
+      showError(
+        new Error(
+          'The selected operation plan is no longer current. Rebuild the plan before applying it.',
+        ),
+      );
       return;
     }
 

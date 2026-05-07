@@ -86,7 +86,7 @@
 
       {#if isExpanded(item)}
         <div class="accordion-panel" transition:slide={{ duration: 180, easing: cubicOut }}>
-          <slot item={item} />
+          <slot {item} />
         </div>
       {/if}
     </section>
@@ -146,8 +146,11 @@
   }
 
   .accordion-item[data-expanded] .accordion-trigger {
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 72%, var(--bg-control)), var(--bg-control));
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-soft) 72%, var(--bg-control)),
+      var(--bg-control)
+    );
     border-color: var(--accent-outline);
   }
 

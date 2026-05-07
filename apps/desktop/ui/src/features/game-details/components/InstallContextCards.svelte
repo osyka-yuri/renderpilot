@@ -26,7 +26,10 @@
 
   <div class="install-card install-card--graphics">
     <span>Graphics</span>
-    <div class="install-technology-badges" title={compactList(technologies, 'No graphics technologies detected', 12)}>
+    <div
+      class="install-technology-badges"
+      title={compactList(technologies, 'No graphics technologies detected', 12)}
+    >
       {#if technologies.length === 0}
         <Badge surface="outline" tone="muted">None detected</Badge>
       {:else}

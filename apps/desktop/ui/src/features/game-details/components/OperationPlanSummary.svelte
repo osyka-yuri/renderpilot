@@ -146,7 +146,13 @@
         <strong>Ready to apply</strong>
         <p>{readinessCopy(plan)}</p>
       </div>
-      <Button variant="primary" size="sm" disabled={!canApply} loading={busy} onclick={applyCurrentPlan}>
+      <Button
+        variant="primary"
+        size="sm"
+        disabled={!canApply}
+        loading={busy}
+        onclick={applyCurrentPlan}
+      >
         {busy ? 'Applying...' : 'Apply Operation'}
       </Button>
     </div>

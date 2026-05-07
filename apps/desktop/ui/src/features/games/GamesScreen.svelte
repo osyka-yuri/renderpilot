@@ -4,10 +4,7 @@
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
   import Surface from '@shared/ui/Surface.svelte';
-  import {
-    formatLabel,
-    titleMonogram,
-  } from '@shared/utils/presenters';
+  import { formatLabel, titleMonogram } from '@shared/utils/presenters';
 
   const noop: VoidHandler = (): void => {};
   const noopOpenGame: GameSelectionHandler = (_gameId: string): void => {};
@@ -63,7 +60,10 @@
       <div class="empty-icon" aria-hidden="true">RP</div>
       <div class="empty-copy">
         <h3>No scanned games yet</h3>
-        <p>Select a game folder to populate the dashboard with components, updates, backup state, and quick actions.</p>
+        <p>
+          Select a game folder to populate the dashboard with components, updates, backup state, and
+          quick actions.
+        </p>
       </div>
       <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
         {busy ? 'Scanning...' : 'Scan Folder'}
@@ -118,10 +118,20 @@
             </div>
 
             <div class="card-actions">
-              <Button variant="primary" size="sm" fullWidth onclick={() => handleOpenDetails(game.game_id)}>
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth
+                onclick={() => handleOpenDetails(game.game_id)}
+              >
                 Details
               </Button>
-              <Button variant="secondary" size="sm" fullWidth onclick={() => handleOpenOperations(game.game_id)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                fullWidth
+                onclick={() => handleOpenOperations(game.game_id)}
+              >
                 Journal
               </Button>
             </div>
@@ -209,8 +219,11 @@
     display: grid;
     align-content: center;
     justify-items: center;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--bg-control)) 0%, var(--bg-control) 100%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 16%, var(--bg-control)) 0%,
+      var(--bg-control) 100%
+    );
     color: var(--text-strong);
     border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
@@ -260,9 +273,6 @@
 
   .card-path {
     margin: 0;
-  }
-
-  .card-path {
     color: var(--text-muted);
     word-break: break-word;
     font-size: 0.8125rem;

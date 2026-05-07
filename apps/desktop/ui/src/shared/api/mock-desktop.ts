@@ -61,7 +61,9 @@ export async function mockBuildSwapPlan(
   artifactId: string,
 ): Promise<SwapPlan> {
   const details = requireGameDetails(gameId);
-  const candidateGroup = details.candidate_groups.find((group) => group.component_id === componentId);
+  const candidateGroup = details.candidate_groups.find(
+    (group) => group.component_id === componentId,
+  );
   const candidate = candidateGroup?.candidates.find((item) => item.artifact_id === artifactId);
 
   if (!candidateGroup || !candidate) {
@@ -107,7 +109,8 @@ export async function mockApplyOperationPlan(
 
   const details = requireGameDetails(plan.game_id);
   const componentId = mockState.componentIdByOperationId[operationId];
-  const component = details.components.find((item) => item.id === componentId) ?? details.components[0];
+  const component =
+    details.components.find((item) => item.id === componentId) ?? details.components[0];
 
   details.operations = [
     {
@@ -146,8 +149,14 @@ export async function mockApplyOperationPlan(
 }
 
 export async function mockRollbackOperation(operationId: string): Promise<RollbackOperationResult> {
-  const game = mockState.games.find((item) => item.last_operation_status === 'completed') ?? mockState.games[0];
+  const game =
+    mockState.games.find((item) => item.last_operation_status === 'completed') ??
+    mockState.games[0];
   const details = requireGameDetails(game.game_id);
+  const fallbackRestorePath = 'C:/Games/Preview/nvngx_dlss.dll';
+  const fallbackComponentId = 'component:preview';
+  const primaryComponent = details.components[0];
+  const restoredPath = primaryComponent?.files[0]?.path ?? fallbackRestorePath;
 
   details.operations = [
     {
@@ -176,9 +185,9 @@ export async function mockRollbackOperation(operationId: string): Promise<Rollba
     items: [
       {
         backup_id: `backup:${operationId}`,
-        component_id: details.components[0]?.id ?? 'component:preview',
-        restored_path: details.components[0]?.files[0]?.path ?? 'C:/Games/Preview/nvngx_dlss.dll',
-        backup_path: `${details.components[0]?.files[0]?.path ?? 'C:/Games/Preview/nvngx_dlss.dll'}.renderpilot-backup`,
+        component_id: primaryComponent?.id ?? fallbackComponentId,
+        restored_path: restoredPath,
+        backup_path: `${restoredPath}.renderpilot-backup`,
       },
     ],
   };
@@ -412,6 +421,9 @@ function createAlanWakeDetails(): GameDetails {
 }
 
 function createManualPreviewDetails(gameId: string, title: string, path: string): GameDetails {
+  const installPath = normalizeWindowsSlashes(path);
+  const dlssRelativePath = `${installPath}/nvngx_dlss.dll`;
+
   return {
     game: {
       identity: {
@@ -422,7 +434,7 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
       },
       platform: 'Windows',
       runtime: 'NativeWindows',
-      install_path: path.replace(/\\/g, '/'),
+      install_path: installPath,
       executable_candidates: [],
     },
     components: [
@@ -434,7 +446,7 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
         swappability: 'Swappable',
         files: [
           {
-            path: `${path.replace(/\\/g, '/')}/nvngx_dlss.dll`,
+            path: dlssRelativePath,
             version: '3.5.10',
             sha256: 'preview-manual-dlss',
           },
@@ -445,7 +457,7 @@ function createManualPreviewDetails(gameId: string, title: string, path: string)
       {
         component_id: `${gameId}:dlss`,
         technology: 'DlssSuperResolution',
-        file_path: `${path.replace(/\\/g, '/')}/nvngx_dlss.dll`,
+        file_path: dlssRelativePath,
         current_version: '3.5.10',
         candidates: [
           {
@@ -512,17 +524,23 @@ function requireGameDetails(gameId: string): GameDetails {
 }
 
 function lastPathSegment(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
+  const normalized = normalizeWindowsSlashes(path);
   const segments = normalized.split('/').filter(Boolean);
   return segments.length > 0 ? segments[segments.length - 1] : '';
 }
+
+function normalizeWindowsSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+type WindowWithTauri = Window & { __TAURI_INTERNALS__?: unknown };
 
 function hasTauriBridge(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
 
-  return typeof (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined';
+  return typeof (window as WindowWithTauri).__TAURI_INTERNALS__ !== 'undefined';
 }
 
 function clone<T>(value: T): T {

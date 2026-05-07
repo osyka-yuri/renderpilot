@@ -56,6 +56,9 @@ type DesktopCommandResults = {
   rollback_operation: RollbackOperationResult;
 };
 
+/** Path used only when preview invokes `scan_manual_folder` without a payload (should not occur in production). */
+const FALLBACK_PREVIEW_SCAN_PATH = 'C:/Preview Game';
+
 async function invokeDesktop<Command extends DesktopCommand>(
   command: Command,
   payload?: DesktopCommandPayloads[Command],
@@ -77,35 +80,40 @@ async function invokeDesktopPreview<Command extends DesktopCommand>(
 ): Promise<DesktopCommandResults[Command]> {
   switch (command) {
     case 'get_system_appearance':
-      return await mockGetSystemAppearance() as DesktopCommandResults[Command];
+      return (await mockGetSystemAppearance()) as DesktopCommandResults[Command];
     case 'scan_manual_folder': {
       const scanPayload = payload as DesktopCommandPayloads['scan_manual_folder'] | undefined;
-      return await mockScanManualFolder(scanPayload?.path ?? 'C:/Preview Game') as DesktopCommandResults[Command];
+      const path = scanPayload?.path ?? FALLBACK_PREVIEW_SCAN_PATH;
+      return (await mockScanManualFolder(path)) as DesktopCommandResults[Command];
     }
     case 'get_game_cards':
-      return await mockGetGameCards() as DesktopCommandResults[Command];
+      return (await mockGetGameCards()) as DesktopCommandResults[Command];
     case 'get_game_details': {
       const detailsPayload = payload as DesktopCommandPayloads['get_game_details'] | undefined;
-      return await mockGetGameDetails(detailsPayload?.gameId ?? '') as DesktopCommandResults[Command];
+      return (await mockGetGameDetails(
+        detailsPayload?.gameId ?? '',
+      )) as DesktopCommandResults[Command];
     }
     case 'build_swap_plan': {
       const planPayload = payload as DesktopCommandPayloads['build_swap_plan'] | undefined;
-      return await mockBuildSwapPlan(
+      return (await mockBuildSwapPlan(
         planPayload?.gameId ?? '',
         planPayload?.componentId ?? '',
         planPayload?.artifactId ?? '',
-      ) as DesktopCommandResults[Command];
+      )) as DesktopCommandResults[Command];
     }
     case 'apply_operation_plan': {
       const applyPayload = payload as DesktopCommandPayloads['apply_operation_plan'] | undefined;
-      return await mockApplyOperationPlan(
+      return (await mockApplyOperationPlan(
         applyPayload?.operationId ?? '',
         applyPayload?.confirmationToken ?? '',
-      ) as DesktopCommandResults[Command];
+      )) as DesktopCommandResults[Command];
     }
     case 'rollback_operation': {
       const rollbackPayload = payload as DesktopCommandPayloads['rollback_operation'] | undefined;
-      return await mockRollbackOperation(rollbackPayload?.operationId ?? '') as DesktopCommandResults[Command];
+      return (await mockRollbackOperation(
+        rollbackPayload?.operationId ?? '',
+      )) as DesktopCommandResults[Command];
     }
   }
 }

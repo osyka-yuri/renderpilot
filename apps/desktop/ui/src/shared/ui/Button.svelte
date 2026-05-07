@@ -1,13 +1,13 @@
 <script lang="ts">
-  type ButtonVariant = "primary" | "secondary" | "ghost";
-  type ButtonSize = "md" | "sm";
+  type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+  type ButtonSize = 'md' | 'sm';
 
   type ButtonClickHandler = (event: MouseEvent) => void;
   type ButtonFocusHandler = (event: FocusEvent) => void;
 
-  export let variant: ButtonVariant = "secondary";
-  export let size: ButtonSize = "md";
-  export let type: "button" | "submit" | "reset" = "button";
+  export let variant: ButtonVariant = 'secondary';
+  export let size: ButtonSize = 'md';
+  export let type: 'button' | 'submit' | 'reset' = 'button';
 
   export let disabled = false;
   export let active = false;
@@ -17,7 +17,7 @@
 
   export let title: string | undefined = undefined;
   export let ariaLabel: string | undefined = undefined;
-  export let ariaPressed: boolean | "mixed" | undefined = undefined;
+  export let ariaPressed: boolean | 'mixed' | undefined = undefined;
 
   export let onclick: ButtonClickHandler | undefined = undefined;
   export let onfocus: ButtonFocusHandler | undefined = undefined;
@@ -26,16 +26,16 @@
   $: resolvedAriaLabel = ariaLabel ?? (iconOnly ? title : undefined);
 
   $: buttonClass = [
-    "ui-button",
+    'ui-button',
     `ui-button--${variant}`,
     `ui-button--${size}`,
-    active && "is-active",
-    loading && "is-loading",
-    fullWidth && "is-full-width",
-    iconOnly && "is-icon-only",
+    active && 'is-active',
+    loading && 'is-loading',
+    fullWidth && 'is-full-width',
+    iconOnly && 'is-icon-only',
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
 
   function handleClick(event: MouseEvent) {
     onclick?.(event);
@@ -57,7 +57,7 @@
   class={buttonClass}
   aria-label={resolvedAriaLabel}
   aria-pressed={ariaPressed}
-  aria-busy={loading ? "true" : undefined}
+  aria-busy={loading ? 'true' : undefined}
   onclick={handleClick}
   onfocus={handleFocus}
   onblur={handleBlur}
@@ -183,7 +183,7 @@
   }
 
   .ui-button.is-loading::before {
-    content: "";
+    content: '';
     width: 0.75rem;
     height: 0.75rem;
     border: 1.5px solid currentColor;

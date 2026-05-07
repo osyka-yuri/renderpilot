@@ -1,27 +1,27 @@
 <script lang="ts">
-  type SurfaceTone = "panel" | "elevated" | "soft";
-  type SurfaceRadius = "md" | "lg";
+  type SurfaceTone = 'panel' | 'elevated' | 'soft';
+  type SurfaceRadius = 'md' | 'lg';
   type SurfaceElement = keyof HTMLElementTagNameMap;
 
-  export let as: SurfaceElement = "div";
-  export let tone: SurfaceTone = "panel";
-  export let radius: SurfaceRadius = "lg";
+  export let as: SurfaceElement = 'div';
+  export let tone: SurfaceTone = 'panel';
+  export let radius: SurfaceRadius = 'lg';
   export let shadow = false;
   export let interactive = false;
 
-  let classAttr = "";
+  let classAttr = '';
   export { classAttr as class };
-  export let className = "";
+  export let className = '';
 </script>
 
 <svelte:element
   this={as}
   {...$$restProps}
-  class={["surface", classAttr, className].filter(Boolean).join(" ")}
+  class={['surface', classAttr, className].filter(Boolean).join(' ')}
   data-tone={tone}
   data-radius={radius}
-  data-shadow={shadow ? "" : undefined}
-  data-interactive={interactive ? "" : undefined}
+  data-shadow={shadow ? '' : undefined}
+  data-interactive={interactive ? '' : undefined}
 >
   <slot />
 </svelte:element>
@@ -33,23 +33,23 @@
     color: var(--text-strong);
   }
 
-  .surface[data-tone="panel"] {
+  .surface[data-tone='panel'] {
     background: var(--bg-card);
   }
 
-  .surface[data-tone="elevated"] {
+  .surface[data-tone='elevated'] {
     background: var(--bg-elevated);
   }
 
-  .surface[data-tone="soft"] {
+  .surface[data-tone='soft'] {
     background: color-mix(in srgb, var(--bg-soft) 58%, var(--bg-panel) 42%);
   }
 
-  .surface[data-radius="md"] {
+  .surface[data-radius='md'] {
     border-radius: var(--radius-lg);
   }
 
-  .surface[data-radius="lg"] {
+  .surface[data-radius='lg'] {
     border-radius: var(--radius-xl);
   }
 

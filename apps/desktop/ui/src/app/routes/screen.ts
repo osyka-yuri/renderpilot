@@ -1,8 +1,8 @@
 export type Screen =
-	| 'games'
-	| 'details'
-	| 'library'
-	| 'profiles'
-	| 'backups'
-	| 'operations'
-	| 'settings';
+  | 'games'
+  | 'details'
+  | 'library'
+  | 'profiles'
+  | 'backups'
+  | 'operations'
+  | 'settings';

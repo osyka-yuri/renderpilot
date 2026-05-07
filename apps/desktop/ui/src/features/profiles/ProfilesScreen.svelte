@@ -9,8 +9,16 @@
   const profiles = [
     { name: 'Quality', note: 'Prefer image quality and safe replacement paths.', state: 'Preview' },
     { name: 'Balanced', note: 'Trade image quality for broader compatibility.', state: 'Preview' },
-    { name: 'Performance', note: 'Surface aggressive recommendations only when capability data allows it.', state: 'Preview' },
-    { name: 'Low Latency', note: 'Reserved for NVAPI and frame-generation capable games.', state: 'Experimental' },
+    {
+      name: 'Performance',
+      note: 'Surface aggressive recommendations only when capability data allows it.',
+      state: 'Preview',
+    },
+    {
+      name: 'Low Latency',
+      note: 'Reserved for NVAPI and frame-generation capable games.',
+      state: 'Experimental',
+    },
   ];
 
   function profileStateTone(value: string): 'muted' | 'warning' {
@@ -31,7 +39,11 @@
 
     <div class="hero-side">
       <strong>{gameCard?.title ?? 'No focused game selected'}</strong>
-      <p>{advancedMode ? 'Advanced mode exposes experimental profile lanes.' : 'Enable Advanced Mode to reveal experimental profile lanes.'}</p>
+      <p>
+        {advancedMode
+          ? 'Advanced mode exposes experimental profile lanes.'
+          : 'Enable Advanced Mode to reveal experimental profile lanes.'}
+      </p>
     </div>
   </section>
 
