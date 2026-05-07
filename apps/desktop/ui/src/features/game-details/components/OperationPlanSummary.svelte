@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SwapPlan } from '@shared/api/types';
   import type { OperationHandler } from '@shared/utils/callbacks';
+  import { cx } from '@shared/utils/cx';
   import { formatLabel, formatRisk, riskTone } from '@shared/utils/presenters';
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
@@ -208,7 +209,7 @@
     {#if hasPlanNotes}
       <div class="plan-notes">
         {#each planNoteGroups as noteGroup (noteGroup.id)}
-          <section class={`note-block ${noteGroup.className}`}>
+          <section class={cx('note-block', noteGroup.className)}>
             <div class="note-head">
               <strong>{noteGroup.title}</strong>
               <Badge pill tone={noteGroup.tone}>{noteGroup.items.length}</Badge>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cx } from '@shared/utils/cx';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
@@ -29,8 +30,6 @@
     'aria-labelledby'?: string | null;
     'aria-describedby'?: string | null;
   };
-
-  type ClassValue = string | false | null | undefined;
 
   let {
     children,
@@ -63,14 +62,6 @@
   function trimmedOrUndefined(value: string | null | undefined): string | undefined {
     const trimmed = value?.trim();
     return trimmed ?? undefined;
-  }
-
-  function cx(...values: ClassValue[]): string {
-    return values.filter(isNonEmptyString).join(' ');
-  }
-
-  function isNonEmptyString(value: ClassValue): value is string {
-    return typeof value === 'string' && value.trim().length > 0;
   }
 </script>
 

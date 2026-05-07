@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cx } from '@shared/utils/cx';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
@@ -79,16 +80,6 @@
     const label = title?.trim();
     return label ?? undefined;
   }
-
-  function cx(...values: ClassValue[]): string {
-    return values.filter(isNonEmptyString).join(' ');
-  }
-
-  function isNonEmptyString(value: ClassValue): value is string {
-    return typeof value === 'string' && value.trim().length > 0;
-  }
-
-  type ClassValue = string | false | null | undefined;
 </script>
 
 <button

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { cx } from '@shared/utils/cx';
+
   type SurfaceTone = 'panel' | 'elevated' | 'soft';
   type SurfaceRadius = 'md' | 'lg';
   type SurfaceElement = keyof HTMLElementTagNameMap;
@@ -17,7 +19,7 @@
 <svelte:element
   this={as}
   {...$$restProps}
-  class={['surface', classAttr, className].filter(Boolean).join(' ')}
+  class={cx('surface', classAttr, className)}
   data-tone={tone}
   data-radius={radius}
   data-shadow={shadow ? '' : undefined}

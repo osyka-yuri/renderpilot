@@ -5,6 +5,8 @@
 </script>
 
 <script lang="ts">
+  import { cx } from '@shared/utils/cx';
+
   export let tone: BadgeTone = 'neutral';
   export let surface: BadgeSurface = 'soft';
   export let size: BadgeSize = 'sm';
@@ -14,7 +16,7 @@
   let className = '';
   export { className as class };
 
-  $: classes = ['badge', pill && 'badge--pill', className].filter(Boolean).join(' ');
+  $: classes = cx('badge', pill && 'badge--pill', className);
 </script>
 
 <span {...$$restProps} class={classes} data-tone={tone} data-surface={surface} data-size={size}>

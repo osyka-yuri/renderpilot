@@ -20,6 +20,7 @@
 <script lang="ts">
   import { cubicOut } from 'svelte/easing';
   import { slide } from 'svelte/transition';
+  import { cx } from '@shared/utils/cx';
   import Badge from './Badge.svelte';
 
   export let items: AccordionItem[] = [];
@@ -85,7 +86,7 @@
   }
 </script>
 
-<div class={['accordion', className].filter(Boolean).join(' ')} aria-label={ariaLabel}>
+<div class={cx('accordion', className)} aria-label={ariaLabel}>
   {#each items as item, itemIndex (item.value)}
     {@const expanded = isExpanded(item)}
     {@const idPart = getSafeIdPart(item.value) || `item-${itemIndex}`}
