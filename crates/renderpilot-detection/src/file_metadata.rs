@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::Read,
+    io::{self, ErrorKind, Read},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -19,7 +19,10 @@ use crate::{
 const HASH_BUFFER_SIZE: usize = 64 * 1024;
 const UNIX_MILLIS_OVERFLOW_MESSAGE: &str = "modified time is too large to cache";
 
-/// Cached metadata that is expensive to recompute.
+/// Metadata that is relatively expensive to recompute for a file.
+///
+/// This is safe to reuse only when the cheap freshness guards still match:
+/// file size and modification time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CachedFileData {
     sha256: Sha256Hash,
@@ -32,37 +35,62 @@ impl CachedFileData {
     }
 }
 
-/// One cache entry for a previously scanned file.
-///
-/// `size` and `modified_at` are the freshness guards.
-/// `data` is reused only when both guards still match the current file stat.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CachedFileEntry {
+/// Cheap file identity used to decide whether cached expensive metadata
+/// can be reused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileStat {
     size: u64,
     modified_at: u64,
+}
+
+impl FileStat {
+    fn new(size: u64, modified_at: u64) -> Self {
+        Self { size, modified_at }
+    }
+
+    fn read(path: &Path) -> AppResult<Self> {
+        let metadata = read_fs_metadata(path)?;
+        let modified_at = read_modified_time(path, &metadata)?;
+
+        Ok(Self::new(
+            metadata.len(),
+            system_time_to_unix_millis(path, modified_at)?,
+        ))
+    }
+
+    fn into_cache_key(self, path: PathRef, sha256: Sha256Hash) -> FileCacheKey {
+        FileCacheKey::new(path, self.size, self.modified_at, sha256)
+    }
+}
+
+/// One cache entry for a previously scanned file.
+///
+/// `stat` is the freshness guard.
+/// `data` is reused only when `stat` still matches the current file stat.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CachedFileEntry {
+    stat: FileStat,
     data: CachedFileData,
 }
 
 impl CachedFileEntry {
-    fn new(size: u64, modified_at: u64, sha256: Sha256Hash, version: Option<Version>) -> Self {
+    fn new(stat: FileStat, sha256: Sha256Hash, version: Option<Version>) -> Self {
         Self {
-            size,
-            modified_at,
+            stat,
             data: CachedFileData::new(sha256, version),
         }
     }
 
-    fn is_fresh_for(&self, stat: FileStat) -> bool {
-        self.size == stat.size && self.modified_at == stat.modified_at
+    fn is_fresh_for(&self, current: FileStat) -> bool {
+        self.stat == current
     }
 }
 
-/// In-memory map of path → hash/version from prior scans.
+/// In-memory map of normalized path → hash/version from prior scans.
 ///
 /// On re-scan, unchanged size and mtime skip SHA-256 and PE version work.
 #[derive(Debug, Clone, Default)]
 pub struct FileHashCache {
-    /// Normalized path → cached stat/data.
     entries: HashMap<String, CachedFileEntry>,
 }
 
@@ -88,21 +116,17 @@ impl FileHashCache {
         sha256: Sha256Hash,
         version: Option<Version>,
     ) {
-        self.entries.insert(
-            path,
-            CachedFileEntry::new(size, modified_at, sha256, version),
-        );
+        let stat = FileStat::new(size, modified_at);
+        let entry = CachedFileEntry::new(stat, sha256, version);
+
+        self.entries.insert(path, entry);
     }
 
     /// Returns cached hash/version only when the stored size and mtime still match.
     fn fresh_data_for(&self, path: &str, stat: FileStat) -> Option<&CachedFileData> {
         let entry = self.entries.get(path)?;
 
-        if entry.is_fresh_for(stat) {
-            Some(&entry.data)
-        } else {
-            None
-        }
+        entry.is_fresh_for(stat).then_some(&entry.data)
     }
 
     /// Returns the number of entries in the cache.
@@ -113,6 +137,11 @@ impl FileHashCache {
     /// Returns `true` if the cache contains no entries.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Returns an iterator over the normalized paths in the cache.
+    pub fn keys(&self) -> impl Iterator<Item = &String> {
+        self.entries.keys()
     }
 }
 
@@ -189,30 +218,30 @@ pub(crate) struct DetectedFileMetadata {
 }
 
 impl DetectedFileMetadata {
-    fn new(version: Option<Version>, sha256: Sha256Hash, cache_key: FileCacheKey) -> Self {
-        Self {
-            status: VersionDetectionStatus::from_version(version.as_ref()),
-            version,
-            sha256,
-            cache_key,
-        }
-    }
-
-    fn from_cache(path_ref: PathRef, stat: FileStat, cached: &CachedFileData) -> Self {
-        let cache_key = stat.into_cache_key(path_ref, cached.sha256.clone());
-
-        Self::new(cached.version.clone(), cached.sha256.clone(), cache_key)
-    }
-
-    fn from_fresh_read(
+    fn from_parts(
         path_ref: PathRef,
         stat: FileStat,
         sha256: Sha256Hash,
         version: Option<Version>,
     ) -> Self {
+        let status = VersionDetectionStatus::from_version(version.as_ref());
         let cache_key = stat.into_cache_key(path_ref, sha256.clone());
 
-        Self::new(version, sha256, cache_key)
+        Self {
+            version,
+            status,
+            sha256,
+            cache_key,
+        }
+    }
+
+    fn from_cached(path_ref: PathRef, stat: FileStat, cached: &CachedFileData) -> Self {
+        Self::from_parts(
+            path_ref,
+            stat,
+            cached.sha256.clone(),
+            cached.version.clone(),
+        )
     }
 }
 
@@ -221,26 +250,26 @@ pub(crate) fn read_detected_file_metadata(
     path_ref: PathRef,
     hash_cache: Option<&FileHashCache>,
 ) -> AppResult<DetectedFileMetadata> {
-    let stat = read_file_stat(path)?;
+    let stat = FileStat::read(path)?;
 
-    if let Some(metadata) = metadata_from_cache(path_ref.clone(), stat, hash_cache) {
+    if let Some(metadata) = try_read_cached_metadata(path_ref.clone(), stat, hash_cache) {
         return Ok(metadata);
     }
 
-    read_metadata_from_file(path, path_ref, stat)
+    read_uncached_metadata(path, path_ref, stat)
 }
 
-fn metadata_from_cache(
+fn try_read_cached_metadata(
     path_ref: PathRef,
     stat: FileStat,
     hash_cache: Option<&FileHashCache>,
 ) -> Option<DetectedFileMetadata> {
     let cached = hash_cache?.fresh_data_for(path_ref.as_str(), stat)?;
 
-    Some(DetectedFileMetadata::from_cache(path_ref, stat, cached))
+    Some(DetectedFileMetadata::from_cached(path_ref, stat, cached))
 }
 
-fn read_metadata_from_file(
+fn read_uncached_metadata(
     path: &Path,
     path_ref: PathRef,
     stat: FileStat,
@@ -248,34 +277,8 @@ fn read_metadata_from_file(
     let sha256 = sha256_file(path)?;
     let version = read_windows_file_version(path);
 
-    Ok(DetectedFileMetadata::from_fresh_read(
+    Ok(DetectedFileMetadata::from_parts(
         path_ref, stat, sha256, version,
-    ))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct FileStat {
-    size: u64,
-    modified_at: u64,
-}
-
-impl FileStat {
-    fn new(size: u64, modified_at: u64) -> Self {
-        Self { size, modified_at }
-    }
-
-    fn into_cache_key(self, path: PathRef, sha256: Sha256Hash) -> FileCacheKey {
-        FileCacheKey::new(path, self.size, self.modified_at, sha256)
-    }
-}
-
-fn read_file_stat(path: &Path) -> AppResult<FileStat> {
-    let metadata = read_fs_metadata(path)?;
-    let modified_at = read_modified_time(path, &metadata)?;
-
-    Ok(FileStat::new(
-        metadata.len(),
-        system_time_to_unix_millis(path, modified_at)?,
     ))
 }
 
@@ -299,6 +302,10 @@ fn read_modified_time(path: &Path, metadata: &fs::Metadata) -> AppResult<SystemT
 
 pub(crate) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
     let file = open_file_for_hashing(path)?;
+
+    #[cfg(test)]
+    sha256_test_hooks::record_sha256_file_call();
+
     let hash = sha256_reader_hex(file).map_err(|error| {
         detection_context_error(format_args!("could not hash {}", path.display()), error)
     })?;
@@ -315,18 +322,17 @@ fn open_file_for_hashing(path: &Path) -> AppResult<File> {
     })
 }
 
-fn sha256_reader_hex(mut reader: impl Read) -> std::io::Result<String> {
+fn sha256_reader_hex(mut reader: impl Read) -> io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; HASH_BUFFER_SIZE];
 
     loop {
-        let bytes_read = reader.read(&mut buffer)?;
-
-        if bytes_read == 0 {
-            break;
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes_read) => hasher.update(&buffer[..bytes_read]),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
         }
-
-        hasher.update(&buffer[..bytes_read]);
     }
 
     Ok(hex::encode(hasher.finalize()))
@@ -351,17 +357,52 @@ fn unix_millis_overflow_error(path: &Path) -> renderpilot_application::AppError 
     ))
 }
 
+/// Test-only instrumentation for [`sha256_file`] (parallel-safe per OS thread).
+#[cfg(test)]
+mod sha256_test_hooks {
+    use std::cell::Cell;
+
+    thread_local! {
+        static SHA256_FILE_CALL_COUNT: Cell<usize> = Cell::new(0);
+    }
+
+    pub(super) fn record_sha256_file_call() {
+        SHA256_FILE_CALL_COUNT.with(|count| count.set(count.get() + 1));
+    }
+
+    pub(super) fn reset_sha256_file_call_count() {
+        SHA256_FILE_CALL_COUNT.with(|count| count.set(0));
+    }
+
+    pub(super) fn sha256_file_call_count() -> usize {
+        SHA256_FILE_CALL_COUNT.with(|count| count.get())
+    }
+}
+
+/// Resets the test-only counter used by [`sha256_file_call_count_for_tests`].
+#[cfg(test)]
+pub(crate) fn reset_sha256_file_call_count_for_tests() {
+    sha256_test_hooks::reset_sha256_file_call_count();
+}
+
+/// Returns how often [`sha256_file`] ran a SHA-256 pass (test builds only).
+#[cfg(test)]
+pub(crate) fn sha256_file_call_count_for_tests() -> usize {
+    sha256_test_hooks::sha256_file_call_count()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
         fs,
+        io::{self, ErrorKind, Read},
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use renderpilot_domain::Version;
+    use renderpilot_domain::{Sha256Hash, Version};
 
-    use super::{sha256_file, VersionDetectionStatus};
+    use super::{sha256_file, sha256_reader_hex, FileHashCache, FileStat, VersionDetectionStatus};
 
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
@@ -377,6 +418,58 @@ mod tests {
     }
 
     #[test]
+    fn sha256_reader_retries_interrupted_reads() {
+        let reader = InterruptedOnceReader::new(b"abc");
+
+        let hash = sha256_reader_hex(reader).expect("hashing should succeed after interruption");
+
+        assert_eq!(hash, ABC_SHA256);
+    }
+
+    #[test]
+    fn cache_returns_fresh_data_when_path_size_and_mtime_match() {
+        let mut cache = FileHashCache::new();
+        let hash = test_hash();
+
+        cache.insert("C:/test.dll".to_owned(), 123, 456, hash.clone(), None);
+
+        let cached = cache
+            .fresh_data_for("C:/test.dll", FileStat::new(123, 456))
+            .expect("cache entry should be fresh");
+
+        assert_eq!(cached.sha256, hash);
+        assert_eq!(cached.version, None);
+    }
+
+    #[test]
+    fn cache_misses_when_size_differs() {
+        let mut cache = FileHashCache::new();
+
+        cache.insert("C:/test.dll".to_owned(), 123, 456, test_hash(), None);
+
+        assert!(
+            cache
+                .fresh_data_for("C:/test.dll", FileStat::new(124, 456))
+                .is_none(),
+            "cache should miss when size changed"
+        );
+    }
+
+    #[test]
+    fn cache_misses_when_modified_time_differs() {
+        let mut cache = FileHashCache::new();
+
+        cache.insert("C:/test.dll".to_owned(), 123, 456, test_hash(), None);
+
+        assert!(
+            cache
+                .fresh_data_for("C:/test.dll", FileStat::new(123, 457))
+                .is_none(),
+            "cache should miss when modified time changed"
+        );
+    }
+
+    #[test]
     fn version_detection_status_tracks_version_presence() {
         let version = Version::parse("1.2.3").expect("version should parse");
 
@@ -389,6 +482,43 @@ mod tests {
             VersionDetectionStatus::from_version(None),
             VersionDetectionStatus::UnknownVersion,
         );
+    }
+
+    fn test_hash() -> Sha256Hash {
+        Sha256Hash::new(ABC_SHA256.to_owned()).expect("test hash should be valid")
+    }
+
+    struct InterruptedOnceReader {
+        bytes: &'static [u8],
+        interrupted: bool,
+    }
+
+    impl InterruptedOnceReader {
+        fn new(bytes: &'static [u8]) -> Self {
+            Self {
+                bytes,
+                interrupted: false,
+            }
+        }
+    }
+
+    impl Read for InterruptedOnceReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(io::Error::new(ErrorKind::Interrupted, "interrupted"));
+            }
+
+            if self.bytes.is_empty() {
+                return Ok(0);
+            }
+
+            let bytes_to_copy = self.bytes.len().min(buffer.len());
+            buffer[..bytes_to_copy].copy_from_slice(&self.bytes[..bytes_to_copy]);
+            self.bytes = &self.bytes[bytes_to_copy..];
+
+            Ok(bytes_to_copy)
+        }
     }
 
     struct TempFile {

@@ -41,7 +41,7 @@ pub struct DetectedLibraryFile {
 }
 
 impl DetectedLibraryFile {
-    fn new(
+    fn from_parts(
         file_name: String,
         file_path: PathRef,
         classification: LibraryFileClassification,
@@ -113,15 +113,25 @@ impl DetectedLibraryFile {
 
     /// Converts the detected file into a component record for the given game.
     pub fn into_component(self, game: &GameInstallation) -> AppResult<GraphicsComponent> {
-        let component_id = component_id_for(game, &self.file_path)?;
-        let file = component_file_from_detection(self.file_path, self.sha256, self.version);
+        let Self {
+            file_path,
+            technology,
+            kind,
+            swappability,
+            version,
+            sha256,
+            ..
+        } = self;
+
+        let component_id = component_id_for(game, &file_path)?;
+        let file = component_file_from_detection(file_path, sha256, version);
 
         Ok(GraphicsComponent::new(
             component_id,
             game.id().clone(),
-            self.kind,
-            self.technology,
-            self.swappability,
+            kind,
+            technology,
+            swappability,
         )
         .with_file(file))
     }
@@ -159,7 +169,6 @@ impl LibraryPatternComponentDetector {
     /// Creates a Windows detector from the workspace `data/library_patterns.json`.
     pub fn windows_default() -> Result<Self, LibraryPatternError> {
         let patterns = LibraryPatternSet::from_json_str(DEFAULT_LIBRARY_PATTERNS_JSON)?;
-
         Ok(Self::new(patterns, PatternPlatform::Windows))
     }
 
@@ -201,6 +210,19 @@ impl LibraryPatternComponentDetector {
         self.detect_library_files_with_optional_cache(game, Some(cache))
     }
 
+    /// Fast scan mode that ONLY checks the file paths present in the cache.
+    /// It completely skips full file system traversal (`collect_files`).
+    pub fn detect_library_files_fast_cached(
+        &self,
+        game: &GameInstallation,
+        cache: &FileHashCache,
+    ) -> AppResult<Vec<DetectedLibraryFile>> {
+        let root = install_root_path(game);
+        let files = cached_existing_files_under_root(cache, &root);
+
+        self.detect_library_files_from_paths(files, Some(cache))
+    }
+
     fn detect_library_files_with_optional_cache(
         &self,
         game: &GameInstallation,
@@ -219,11 +241,15 @@ impl LibraryPatternComponentDetector {
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let mut detected = Vec::new();
 
-        for file in files {
-            if let Some(library) = self.detect_library_file(&file, cache)? {
-                detected.push(library);
-            }
+        for file in sorted_unique_paths(files) {
+            let Some(library) = self.detect_library_file(&file, cache)? else {
+                continue;
+            };
+
+            detected.push(library);
         }
+
+        sort_detected_library_files(&mut detected);
 
         Ok(detected)
     }
@@ -244,7 +270,7 @@ impl LibraryPatternComponentDetector {
         let file_path = path_ref_from_path(file)?;
         let metadata = read_detected_file_metadata(file, file_path.clone(), cache)?;
 
-        Ok(Some(DetectedLibraryFile::new(
+        Ok(Some(DetectedLibraryFile::from_parts(
             file_name,
             file_path,
             classification,
@@ -296,14 +322,39 @@ impl LibraryFileClassification {
     }
 }
 
+fn cached_existing_files_under_root(cache: &FileHashCache, root: &Path) -> Vec<PathBuf> {
+    sorted_unique_paths(
+        cache
+            .keys()
+            .map(PathBuf::from)
+            .filter(|path| is_existing_file_under_root(path, root)),
+    )
+}
+
+fn is_existing_file_under_root(path: &Path, root: &Path) -> bool {
+    path.starts_with(root) && path.is_file()
+}
+
+fn sorted_unique_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut paths: Vec<_> = paths.into_iter().collect();
+
+    paths.sort_unstable();
+    paths.dedup();
+
+    paths
+}
+
+fn sort_detected_library_files(files: &mut Vec<DetectedLibraryFile>) {
+    files.sort_by_cached_key(|file| file.file_path.to_string());
+    files.dedup_by(|left, right| left.file_path == right.file_path);
+}
+
 fn install_root_path(game: &GameInstallation) -> PathBuf {
     PathBuf::from(game.install_path().as_str())
 }
 
 fn file_name_for_matching(path: &Path) -> Option<String> {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(str::to_owned)
+    path.file_name()?.to_str().map(str::to_owned)
 }
 
 fn path_ref_from_path(path: &Path) -> AppResult<PathRef> {

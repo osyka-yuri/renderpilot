@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use renderpilot_application::ComponentDetector;
 use renderpilot_domain::{
@@ -7,7 +11,12 @@ use renderpilot_domain::{
 };
 
 use super::{DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector};
-use crate::VersionDetectionStatus;
+use crate::{
+    file_metadata::{
+        reset_sha256_file_call_count_for_tests, sha256_file_call_count_for_tests, FileHashCache,
+    },
+    VersionDetectionStatus,
+};
 
 const FIXTURE_NEWLINE_FILE_SHA256: &str =
     "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b";
@@ -213,4 +222,100 @@ fn fixture_path() -> PathBuf {
         .join("tests")
         .join("fixtures")
         .join("game_with_dlls")
+}
+
+const TEMP_DLSS_NAME: &str = "nvngx_dlss.dll";
+
+fn file_hash_cache_from_libraries(libraries: &[DetectedLibraryFile]) -> FileHashCache {
+    let mut cache = FileHashCache::with_capacity(libraries.len());
+
+    for library in libraries {
+        cache.insert(
+            library.file_path().as_str().to_owned(),
+            library.cache_key().size(),
+            library.cache_key().modified_at(),
+            library.sha256().clone(),
+            library.version().cloned(),
+        );
+    }
+
+    cache
+}
+
+#[test]
+fn cache_hit_avoids_sha256_when_size_and_mtime_match() {
+    let folder = temp_dlss_folder(b"hello");
+    let game = game_installation(folder.clone());
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+
+    reset_sha256_file_call_count_for_tests();
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("detection should succeed");
+    assert!(
+        sha256_file_call_count_for_tests() >= 1,
+        "cold scan should hash at least one library file",
+    );
+
+    let cache = file_hash_cache_from_libraries(&libraries);
+
+    reset_sha256_file_call_count_for_tests();
+    let cached_libs = detector
+        .detect_library_files_with_cache(&game, &cache)
+        .expect("cached detection should succeed");
+
+    assert_eq!(
+        sha256_file_call_count_for_tests(),
+        0,
+        "warm cache should skip SHA-256 when size and mtime match",
+    );
+    assert_eq!(libraries.len(), cached_libs.len());
+    assert_eq!(
+        libraries[0].sha256().as_str(),
+        cached_libs[0].sha256().as_str(),
+    );
+}
+
+#[test]
+fn stale_cache_entry_triggers_fresh_sha256_after_file_change() {
+    let folder = temp_dlss_folder(b"a");
+    let game = game_installation(folder.clone());
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("detection should succeed");
+
+    let cache = file_hash_cache_from_libraries(&libraries);
+
+    let dll_path = folder.join(TEMP_DLSS_NAME);
+    fs::write(&dll_path, b"ab").expect("test file should update");
+
+    reset_sha256_file_call_count_for_tests();
+    let refreshed = detector
+        .detect_library_files_with_cache(&game, &cache)
+        .expect("detection after change should succeed");
+
+    assert!(
+        sha256_file_call_count_for_tests() >= 1,
+        "stale cache should trigger SHA-256 after content change",
+    );
+    assert_ne!(
+        libraries[0].sha256().as_str(),
+        refreshed[0].sha256().as_str(),
+    );
+}
+
+fn temp_dlss_folder(contents: &[u8]) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock should be valid")
+        .as_nanos();
+
+    let dir = std::env::temp_dir().join(format!("renderpilot-detect-cache-{nanos}"));
+    fs::create_dir_all(&dir).expect("temp game folder should be created");
+
+    fs::write(dir.join(TEMP_DLSS_NAME), contents).expect("temp dlss file should be written");
+
+    dir
 }

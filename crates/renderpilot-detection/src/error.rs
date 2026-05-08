@@ -65,7 +65,7 @@ mod tests {
     fn detection_error_uses_detection_failed_kind() {
         let error = detection_error("scan failed");
 
-        assert_eq!(error.kind(), AppErrorKind::DetectionFailed);
+        assert_eq!(error.kind(), &AppErrorKind::DetectionFailed);
         assert_eq!(error.message(), "scan failed");
     }
 
