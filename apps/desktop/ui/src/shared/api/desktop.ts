@@ -7,114 +7,108 @@ import {
   mockBuildSwapPlan,
   mockGetGameCards,
   mockGetGameDetails,
-  mockGetSystemAppearance,
   mockRollbackOperation,
+  mockScanAutoLibraries,
   mockScanManualFolder,
 } from './mock-desktop';
 import type {
   ApplyOperationResult,
+  AutoScanResponse,
   GameCard,
   GameDetails,
   RollbackOperationResult,
   SwapPlan,
 } from './types';
 
-type DesktopCommand =
-  | 'get_system_appearance'
-  | 'scan_manual_folder'
-  | 'get_game_cards'
-  | 'get_game_details'
-  | 'build_swap_plan'
-  | 'apply_operation_plan'
-  | 'rollback_operation';
-
-export type SystemAppearance = {
-  accentColor: string | null;
-};
-
-type DesktopCommandPayloads = {
-  get_system_appearance: undefined;
-  scan_manual_folder: { path: string };
-  get_game_cards: undefined;
-  get_game_details: { gameId: string };
-  build_swap_plan: { gameId: string; componentId: string; artifactId: string };
-  apply_operation_plan: { operationId: string; confirmationToken: string };
-  rollback_operation: { operationId: string };
-};
-
 export type ScanManualFolderResult = {
   games: GameDetails[];
 };
 
-type DesktopCommandResults = {
-  get_system_appearance: SystemAppearance;
-  scan_manual_folder: ScanManualFolderResult;
-  get_game_cards: GameCard[];
-  get_game_details: GameDetails;
-  build_swap_plan: SwapPlan;
-  apply_operation_plan: ApplyOperationResult;
-  rollback_operation: RollbackOperationResult;
+type DesktopCommandContract = {
+  scan_manual_folder: {
+    payload: { path: string };
+    result: ScanManualFolderResult;
+  };
+  scan_auto_libraries: {
+    payload: undefined;
+    result: AutoScanResponse;
+  };
+  get_game_cards: {
+    payload: undefined;
+    result: GameCard[];
+  };
+  get_game_details: {
+    payload: { gameId: string };
+    result: GameDetails;
+  };
+  build_swap_plan: {
+    payload: { gameId: string; componentId: string; artifactId: string };
+    result: SwapPlan;
+  };
+  apply_operation_plan: {
+    payload: { operationId: string; confirmationToken: string };
+    result: ApplyOperationResult;
+  };
+  rollback_operation: {
+    payload: { operationId: string };
+    result: RollbackOperationResult;
+  };
 };
 
-/** Path used only when preview invokes `scan_manual_folder` without a payload (should not occur in production). */
-const FALLBACK_PREVIEW_SCAN_PATH = 'C:/Preview Game';
+type DesktopCommand = keyof DesktopCommandContract;
 
-async function invokeDesktop<Command extends DesktopCommand>(
-  command: Command,
-  payload?: DesktopCommandPayloads[Command],
-): Promise<DesktopCommandResults[Command]> {
-  if (isDesktopPreviewMode()) {
-    return invokeDesktopPreview(command, payload);
-  }
+type CommandPayload<Command extends DesktopCommand> = DesktopCommandContract[Command]['payload'];
 
-  try {
-    return await invoke<DesktopCommandResults[Command]>(command, payload);
-  } catch (error) {
-    throw normalizeCommandError(error);
-  }
-}
+type CommandResult<Command extends DesktopCommand> = DesktopCommandContract[Command]['result'];
+
+type CommandArgs<Command extends DesktopCommand> =
+  CommandPayload<Command> extends undefined ? [] : [payload: CommandPayload<Command>];
+
+type PreviewHandlers = {
+  [Command in DesktopCommand]: (
+    payload: CommandPayload<Command>,
+  ) => Promise<CommandResult<Command>>;
+};
+
+const previewHandlers: PreviewHandlers = {
+  scan_manual_folder: ({ path }) => mockScanManualFolder(path),
+
+  scan_auto_libraries: () => mockScanAutoLibraries(),
+
+  get_game_cards: () => mockGetGameCards(),
+
+  get_game_details: ({ gameId }) => mockGetGameDetails(gameId),
+
+  build_swap_plan: ({ gameId, componentId, artifactId }) =>
+    mockBuildSwapPlan(gameId, componentId, artifactId),
+
+  apply_operation_plan: ({ operationId, confirmationToken }) =>
+    mockApplyOperationPlan(operationId, confirmationToken),
+
+  rollback_operation: ({ operationId }) => mockRollbackOperation(operationId),
+};
 
 async function invokeDesktopPreview<Command extends DesktopCommand>(
   command: Command,
-  payload?: DesktopCommandPayloads[Command],
-): Promise<DesktopCommandResults[Command]> {
-  switch (command) {
-    case 'get_system_appearance':
-      return (await mockGetSystemAppearance()) as DesktopCommandResults[Command];
-    case 'scan_manual_folder': {
-      const scanPayload = payload as DesktopCommandPayloads['scan_manual_folder'] | undefined;
-      const path = scanPayload?.path ?? FALLBACK_PREVIEW_SCAN_PATH;
-      return (await mockScanManualFolder(path)) as DesktopCommandResults[Command];
+  payload: CommandPayload<Command>,
+): Promise<CommandResult<Command>> {
+  return previewHandlers[command](payload);
+}
+
+async function invokeDesktop<Command extends DesktopCommand>(
+  command: Command,
+  ...args: CommandArgs<Command>
+): Promise<CommandResult<Command>> {
+  const payload = args[0];
+
+  try {
+    if (isDesktopPreviewMode()) {
+      return await invokeDesktopPreview(command, payload);
     }
-    case 'get_game_cards':
-      return (await mockGetGameCards()) as DesktopCommandResults[Command];
-    case 'get_game_details': {
-      const detailsPayload = payload as DesktopCommandPayloads['get_game_details'] | undefined;
-      return (await mockGetGameDetails(
-        detailsPayload?.gameId ?? '',
-      )) as DesktopCommandResults[Command];
-    }
-    case 'build_swap_plan': {
-      const planPayload = payload as DesktopCommandPayloads['build_swap_plan'] | undefined;
-      return (await mockBuildSwapPlan(
-        planPayload?.gameId ?? '',
-        planPayload?.componentId ?? '',
-        planPayload?.artifactId ?? '',
-      )) as DesktopCommandResults[Command];
-    }
-    case 'apply_operation_plan': {
-      const applyPayload = payload as DesktopCommandPayloads['apply_operation_plan'] | undefined;
-      return (await mockApplyOperationPlan(
-        applyPayload?.operationId ?? '',
-        applyPayload?.confirmationToken ?? '',
-      )) as DesktopCommandResults[Command];
-    }
-    case 'rollback_operation': {
-      const rollbackPayload = payload as DesktopCommandPayloads['rollback_operation'] | undefined;
-      return (await mockRollbackOperation(
-        rollbackPayload?.operationId ?? '',
-      )) as DesktopCommandResults[Command];
-    }
+
+    return await invoke<CommandResult<Command>>(command, payload);
+  } catch (error) {
+    throw normalizeCommandError(error);
   }
 }
 
@@ -122,8 +116,8 @@ export async function scanManualFolder(path: string): Promise<ScanManualFolderRe
   return invokeDesktop('scan_manual_folder', { path });
 }
 
-export async function getSystemAppearance(): Promise<SystemAppearance> {
-  return invokeDesktop('get_system_appearance');
+export async function scanAutoLibraries(): Promise<AutoScanResponse> {
+  return invokeDesktop('scan_auto_libraries');
 }
 
 export async function getGameCards(): Promise<GameCard[]> {

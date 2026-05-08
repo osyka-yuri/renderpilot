@@ -17,6 +17,7 @@
     getGameCards,
     getGameDetails,
     rollbackOperation,
+    scanAutoLibraries,
     scanManualFolder,
   } from '@shared/api/desktop';
   import type { GameCard, GameDetails, SwapPlan } from '@shared/api/types';
@@ -30,7 +31,19 @@
   type WorkspaceScreen = Extract<Screen, 'details' | 'operations'>;
   type BackTarget = 'games' | WorkspaceScreen;
 
+  type ScanError = {
+    root: string;
+    message: string;
+  };
+
+  type ExclusiveTaskOptions = {
+    clearErrorOnStart?: boolean;
+  };
+
   const DEFAULT_BACK_TARGET: BackTarget = 'games';
+
+  const STALE_PLAN_MESSAGE =
+    'The selected operation plan is no longer current. Rebuild the plan before applying it.';
 
   const MANUAL_SCAN_DIALOG_OPTIONS = {
     directory: true,
@@ -39,6 +52,8 @@
   } as const;
 
   let screen: Screen = 'games';
+  let backTarget: BackTarget = DEFAULT_BACK_TARGET;
+
   let games: GameCard[] = [];
   let currentDetails: GameDetails | null = null;
   let selectedGameId: string | null = null;
@@ -49,9 +64,10 @@
   let themeMode: ThemeMode = readStoredThemeMode();
   let languageMode: LanguageMode = 'system';
   let errorMessage = '';
-  let backTarget: BackTarget = DEFAULT_BACK_TARGET;
 
   let latestDetailsRequestToken = 0;
+
+  let currentGameCard: GameCard | null;
 
   $: currentGameCard = selectedGameId ? findGameCard(selectedGameId) : null;
 
@@ -62,28 +78,31 @@
       applyThemeMode(themeMode);
     });
 
-    void refreshGames();
+    void startupScanAndRefresh();
 
     return stopThemeObserver;
   });
 
-  async function refreshGames(): Promise<void> {
-    try {
+  async function startupScanAndRefresh(): Promise<void> {
+    await runExclusive(async () => {
+      const { errors } = await scanAutoLibraries();
+
       await refreshGameCards();
-      clearError();
-    } catch (error) {
-      showError(error);
-    }
+
+      if (errors.length > 0) {
+        showPartialScanWarning(errors);
+      }
+    });
   }
 
   async function handleScan(): Promise<void> {
-    const selectedFolder = await selectManualScanFolder();
-
-    if (selectedFolder === null) {
-      return;
-    }
-
     await runExclusive(async () => {
+      const selectedFolder = await selectManualScanFolder();
+
+      if (selectedFolder === null) {
+        return;
+      }
+
       await scanManualFolder(selectedFolder);
       await refreshGameCards();
     });
@@ -114,18 +133,14 @@
   }
 
   async function handleApply(operationId: string): Promise<void> {
-    const plan = currentPlan;
-
-    if (!isCurrentPlan(plan, operationId)) {
-      showError(
-        new Error(
-          'The selected operation plan is no longer current. Rebuild the plan before applying it.',
-        ),
-      );
+    if (!hasCurrentPlan(operationId)) {
+      showStalePlanError();
       return;
     }
 
     await runExclusive(async () => {
+      const plan = getCurrentPlanOrThrow(operationId);
+
       await applyOperationPlan(operationId, plan.confirmation_token);
 
       currentPlan = null;
@@ -137,6 +152,9 @@
   async function handleRollback(operationId: string): Promise<void> {
     await runExclusive(async () => {
       await rollbackOperation(operationId);
+
+      currentPlan = null;
+
       await reloadSelectedGame(getScreenAfterRollback());
     });
   }
@@ -152,7 +170,7 @@
       return;
     }
 
-    screen = 'games';
+    navigateToGames();
   }
 
   function handleBack(): void {
@@ -161,12 +179,12 @@
       return;
     }
 
-    if (screen === 'operations') {
+    if (screen === 'operations' && hasSelectedGameDetails()) {
       screen = 'details';
       return;
     }
 
-    screen = 'games';
+    navigateToGames();
   }
 
   function toggleAdvancedMode(): void {
@@ -178,12 +196,17 @@
       return;
     }
 
+    const previousMode = themeMode;
+
     try {
-      themeMode = mode;
       persistThemeMode(mode);
       applyThemeMode(mode);
+
+      themeMode = mode;
+
       clearError();
     } catch (error) {
+      restoreThemeMode(previousMode);
       showError(error);
     }
   }
@@ -194,6 +217,7 @@
     }
 
     languageMode = mode;
+
     clearError();
   }
 
@@ -202,10 +226,10 @@
   }
 
   async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
-    const requestToken = invalidatePendingGameDetailsRequests();
+    const requestToken = createDetailsRequestToken();
     const details = await getGameDetails(gameId);
 
-    if (requestToken !== latestDetailsRequestToken) {
+    if (!isLatestDetailsRequest(requestToken)) {
       return;
     }
 
@@ -224,7 +248,8 @@
 
   async function refreshGameCards(): Promise<void> {
     games = await getGameCards();
-    clearSelectionIfGameMissing();
+
+    clearSelectionIfSelectedGameMissing();
   }
 
   async function selectManualScanFolder(): Promise<string | null> {
@@ -233,18 +258,27 @@
     return typeof selected === 'string' ? selected : null;
   }
 
-  async function runExclusive(task: () => Promise<void>): Promise<void> {
+  async function runExclusive<T>(
+    task: () => Promise<T>,
+    options: ExclusiveTaskOptions = {},
+  ): Promise<T | null> {
     if (busy) {
-      return;
+      return null;
     }
+
+    const shouldClearError = options.clearErrorOnStart ?? true;
 
     busy = true;
 
-    try {
-      await task();
+    if (shouldClearError) {
       clearError();
+    }
+
+    try {
+      return await task();
     } catch (error) {
       showError(error);
+      return null;
     } finally {
       busy = false;
     }
@@ -253,8 +287,8 @@
   function presentGameDetails(details: GameDetails, nextScreen: WorkspaceScreen): void {
     const gameId = details.game.identity.id;
 
-    currentDetails = details;
     selectedGameId = gameId;
+    currentDetails = details;
     screen = nextScreen;
 
     if (currentPlan?.game_id !== gameId) {
@@ -264,7 +298,7 @@
     clearError();
   }
 
-  function clearSelectionIfGameMissing(): void {
+  function clearSelectionIfSelectedGameMissing(): void {
     if (selectedGameId !== null && !hasGameCard(selectedGameId)) {
       clearSelection();
     }
@@ -282,7 +316,7 @@
     }
 
     if (isWorkspaceScreen(screen)) {
-      screen = 'games';
+      navigateToGames();
     }
   }
 
@@ -293,11 +327,15 @@
 
   function openSelectedWorkspaceScreen(nextScreen: WorkspaceScreen): void {
     if (!hasSelectedGameDetails()) {
-      screen = 'games';
+      clearSelection();
       return;
     }
 
     screen = nextScreen;
+  }
+
+  function navigateToGames(): void {
+    screen = 'games';
   }
 
   function getSettingsBackTarget(): BackTarget {
@@ -316,14 +354,36 @@
     return screen === 'operations' ? 'operations' : 'details';
   }
 
-  function invalidatePendingGameDetailsRequests(): number {
+  function createDetailsRequestToken(): number {
     latestDetailsRequestToken += 1;
 
     return latestDetailsRequestToken;
   }
 
-  function isCurrentPlan(plan: SwapPlan | null, operationId: string): plan is SwapPlan {
-    return plan?.operation_id === operationId;
+  function invalidatePendingGameDetailsRequests(): void {
+    createDetailsRequestToken();
+  }
+
+  function isLatestDetailsRequest(requestToken: number): boolean {
+    return requestToken === latestDetailsRequestToken;
+  }
+
+  function getCurrentPlanOrThrow(operationId: string): SwapPlan {
+    const plan = currentPlan;
+
+    if (plan !== null && plan.operation_id === operationId) {
+      return plan;
+    }
+
+    throw new Error(STALE_PLAN_MESSAGE);
+  }
+
+  function hasCurrentPlan(operationId: string): boolean {
+    return currentPlan?.operation_id === operationId;
+  }
+
+  function showStalePlanError(): void {
+    showError(new Error(STALE_PLAN_MESSAGE));
   }
 
   function isSelectedGame(gameId: string): boolean {
@@ -346,14 +406,47 @@
     return value === 'details' || value === 'operations';
   }
 
+  function showPartialScanWarning(errors: ScanError[]): void {
+    const rootCount = errors.length;
+    const rootLabel = rootCount === 1 ? 'root' : 'roots';
+
+    setErrorMessage(
+      `Some game libraries could not be scanned (${rootCount} ${rootLabel} failed). Check logs for details.`,
+    );
+  }
+
+  function restoreThemeMode(mode: ThemeMode): void {
+    themeMode = mode;
+
+    ignoreError(() => {
+      persistThemeMode(mode);
+    });
+
+    ignoreError(() => {
+      applyThemeMode(mode);
+    });
+  }
+
+  function ignoreError(task: () => void): void {
+    try {
+      task();
+    } catch {
+      // Preserve the original error.
+    }
+  }
+
   function clearError(): void {
     errorMessage = '';
+  }
+
+  function setErrorMessage(message: string): void {
+    errorMessage = message;
   }
 
   function showError(error: unknown): void {
     const commandError = normalizeCommandError(error);
 
-    errorMessage = describeCommandError(commandError);
+    setErrorMessage(describeCommandError(commandError));
   }
 </script>
 
@@ -369,7 +462,7 @@
   onNavigate={handleNavigate}
   onBack={handleBack}
 >
-  {#if screen === 'details'}
+  {#if screen === 'details' && hasSelectedGameDetails()}
     <GameDetailsScreen
       details={currentDetails}
       gameCard={currentGameCard}
@@ -379,7 +472,7 @@
       onApply={handleApply}
       onRollback={handleRollback}
     />
-  {:else if screen === 'operations'}
+  {:else if screen === 'operations' && hasSelectedGameDetails()}
     <OperationsScreen
       details={currentDetails}
       gameCard={currentGameCard}
@@ -403,6 +496,7 @@
       {games}
       {busy}
       onScan={handleScan}
+      onRefresh={startupScanAndRefresh}
       onOpenDetails={openGameDetails}
       onOpenOperations={openGameOperations}
     />

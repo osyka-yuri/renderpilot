@@ -68,9 +68,9 @@ export type GameCard = {
 export type CommandErrorDto = {
   code: string;
   severity: CommandErrorSeverity;
-  message_key: string;
+  messageKey: string;
   details: string;
-  suggested_actions: string[];
+  suggestedActions: string[];
 };
 
 export type ComponentFile = {
@@ -121,6 +121,16 @@ export type OperationSummary = {
 
 export type GameListResponse = {
   games: GameInstallation[];
+};
+
+export type ScanError = {
+  root: string;
+  message: string;
+};
+
+export type AutoScanResponse = {
+  games: GameDetails[];
+  errors: ScanError[];
 };
 
 export type GameDetails = {

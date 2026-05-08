@@ -1,5 +1,6 @@
 import type {
   ApplyOperationResult,
+  AutoScanResponse,
   CandidateGroup,
   GameCard,
   GameDetails,
@@ -7,16 +8,17 @@ import type {
   RollbackOperationResult,
   SwapPlan,
 } from './types';
-import type { ScanManualFolderResult, SystemAppearance } from './desktop';
+
+type ScanManualFolderResult = {
+  games: GameDetails[];
+};
 
 type GameOperation = GameDetails['operations'][number];
 
 type GameCardBuildOverrides = Pick<
   GameCard,
-  'risk_level' | 'backup_available' | 'last_operation_status'
-> & {
-  update_count: GameCard['update_count'];
-};
+  'risk_level' | 'backup_available' | 'last_operation_status' | 'update_count'
+>;
 
 type GameCardPatch = Partial<
   Pick<GameCard, 'backup_available' | 'last_operation_status' | 'operation_count'>
@@ -27,12 +29,28 @@ type OperationTarget = {
   operation: GameOperation;
 };
 
+type PendingSwapPlan = {
+  plan: SwapPlan;
+  componentId: string;
+};
+
+type AppliedOperationSnapshot = {
+  gameId: string;
+  componentId: string;
+  targetPath: string;
+  originalVersion: string | null;
+  originalSha256: string | null;
+  backupPath: string;
+};
+
 type MockState = {
   games: GameCard[];
-  detailsByGameId: Record<string, GameDetails | undefined>;
-  plansByOperationId: Record<string, SwapPlan | undefined>;
-  componentIdByOperationId: Record<string, string | undefined>;
-  manualGameIdByInstallPath: Record<string, string | undefined>;
+  detailsByGameId: Map<string, GameDetails>;
+  autoGameIds: Set<string>;
+  pendingPlansByOperationId: Map<string, PendingSwapPlan>;
+  appliedOperationsById: Map<string, AppliedOperationSnapshot>;
+  manualGameIdByInstallPath: Map<string, string>;
+  rolledBackOperationIds: Set<string>;
   manualCounter: number;
   operationCounter: number;
 };
@@ -47,36 +65,50 @@ export function isDesktopPreviewMode(): boolean {
 }
 
 export function mockScanManualFolder(path: string): Promise<ScanManualFolderResult> {
-  const installPath = normalizeWindowsSlashes(path);
-  const gameId = getOrCreateManualGameId(installPath);
-  const title = lastPathSegment(installPath) || 'Manual Game';
+  return resolveMock(() => {
+    const installPath = normalizeInstallPath(path);
+    const gameId = getOrCreateManualGameId(installPath);
+    const title = lastPathSegment(installPath) || 'Manual Game';
 
-  const details = createManualPreviewDetails(gameId, title, installPath);
-  const card = createGameCardFromDetails(details, {
-    update_count: details.candidate_groups.length,
-    risk_level: 'medium',
-    backup_available: false,
-    last_operation_status: null,
+    const previousDetails = mockState.detailsByGameId.get(gameId);
+    const details = createManualPreviewDetails(gameId, title, installPath);
+
+    details.operations = previousDetails ? clone(previousDetails.operations) : [];
+
+    mockState.detailsByGameId.set(gameId, details);
+
+    upsertGameCard(
+      createGameCardFromDetails(details, {
+        update_count: details.candidate_groups.length,
+        risk_level: 'medium',
+        backup_available: hasAvailableBackup(details),
+        last_operation_status: getLatestOperationStatus(details),
+      }),
+    );
+
+    return {
+      games: [clone(details)],
+    };
   });
+}
 
-  upsertGameCard(card);
-  mockState.detailsByGameId[gameId] = details;
+export function mockScanAutoLibraries(): Promise<AutoScanResponse> {
+  return resolveMock(() => {
+    const games = [...mockState.autoGameIds].map((gameId) => requireGameDetails(gameId));
 
-  return Promise.resolve({ games: [clone(details)] });
+    return {
+      games: clone(games),
+      errors: [],
+    };
+  });
 }
 
 export function mockGetGameCards(): Promise<GameCard[]> {
-  return Promise.resolve(clone(mockState.games));
-}
-
-export function mockGetSystemAppearance(): Promise<SystemAppearance> {
-  return Promise.resolve({
-    accentColor: null,
-  });
+  return resolveMock(() => clone(mockState.games));
 }
 
 export function mockGetGameDetails(gameId: string): Promise<GameDetails> {
-  return Promise.resolve(clone(requireGameDetails(gameId)));
+  return resolveMock(() => clone(requireGameDetails(gameId)));
 }
 
 export function mockBuildSwapPlan(
@@ -84,178 +116,237 @@ export function mockBuildSwapPlan(
   componentId: string,
   artifactId: string,
 ): Promise<SwapPlan> {
-  const details = requireGameDetails(gameId);
-  const sourceComponent = requireComponent(details, componentId);
-  const candidateGroup = requireCandidateGroup(details, componentId);
-  const candidate = candidateGroup.candidates.find((item) => item.artifact_id === artifactId);
+  return resolveMock(() => {
+    const details = requireGameDetails(gameId);
+    const sourceComponent = requireComponent(details, componentId);
+    const candidateGroup = requireCandidateGroup(details, componentId);
+    const candidate = candidateGroup.candidates.find((item) => item.artifact_id === artifactId);
 
-  if (!candidate) {
-    throw new Error(
-      `Mock preview could not find artifact ${artifactId} for component ${componentId}.`,
-    );
-  }
+    if (!candidate) {
+      throw new Error(
+        `Mock preview could not find artifact ${artifactId} for component ${componentId}.`,
+      );
+    }
 
-  ensureComponentHasFiles(sourceComponent);
+    const sourceFile = requireFirstComponentFile(sourceComponent);
+    const operationId = createPreviewOperationId();
 
-  const sourceFile = sourceComponent.files[0];
-  const operationId = createPreviewOperationId();
+    const plan: SwapPlan = {
+      operation_id: operationId,
+      confirmation_token: `preview-token:${operationId}`,
+      game_id: gameId,
+      operation_type: 'replace_component',
+      target_path: candidateGroup.file_path,
+      replacement_path: candidate.file_path,
+      original_version: candidateGroup.current_version ?? sourceFile.version ?? null,
+      replacement_version: candidate.version ?? null,
+      original_sha256: sourceFile.sha256,
+      replacement_sha256: null,
+      risk_level: candidate.warning ? 'medium' : 'low',
+      requires_backup: true,
+      requires_elevation: false,
+      artifact_id: artifactId,
+      blockers: [],
+      warnings: candidate.warning
+        ? [candidate.warning]
+        : ['confirmation_required_for_swappability'],
+    };
 
-  const plan: SwapPlan = {
-    operation_id: operationId,
-    confirmation_token: `preview-token:${operationId}`,
-    game_id: gameId,
-    operation_type: 'replace_component',
-    target_path: candidateGroup.file_path,
-    replacement_path: candidate.file_path,
-    original_version: candidateGroup.current_version ?? sourceFile.version ?? null,
-    replacement_version: candidate.version ?? null,
-    original_sha256: sourceFile.sha256,
-    replacement_sha256: null,
-    risk_level: candidate.warning ? 'medium' : 'low',
-    requires_backup: true,
-    requires_elevation: false,
-    artifact_id: artifactId,
-    blockers: [],
-    warnings: candidate.warning ? [candidate.warning] : ['confirmation_required_for_swappability'],
-  };
+    mockState.pendingPlansByOperationId.set(operationId, {
+      plan,
+      componentId,
+    });
 
-  mockState.plansByOperationId[operationId] = plan;
-  mockState.componentIdByOperationId[operationId] = componentId;
-
-  return Promise.resolve(clone(plan));
+    return clone(plan);
+  });
 }
 
 export function mockApplyOperationPlan(
   operationId: string,
   confirmationToken: string,
 ): Promise<ApplyOperationResult> {
-  const plan = requireSwapPlan(operationId, confirmationToken);
-  const componentId = requireOperationComponentId(operationId);
-  const details = requireGameDetails(plan.game_id);
-  const component = requireComponent(details, componentId);
+  return resolveMock(() => {
+    const pending = requirePendingSwapPlan(operationId, confirmationToken);
+    const { plan, componentId } = pending;
 
-  prependOperation(
-    details,
-    createOperationRecord({
-      operationId,
-      kind: 'replace_component',
-      status: 'completed',
-      createdAt: Date.now() - 60_000,
-      completedAt: Date.now(),
-      itemCount: 1,
-      backupCount: 1,
-      backupStatus: 'available',
-    }),
-  );
+    const details = requireGameDetails(plan.game_id);
+    const component = requireComponent(details, componentId);
+    const sourceFile = requireFirstComponentFile(component);
 
-  updateGameCard(plan.game_id, {
-    backup_available: true,
-    last_operation_status: 'completed',
-    operation_count: details.operations.length,
-  });
+    const now = Date.now();
+    const backupPath = `${plan.target_path}${BACKUP_SUFFIX}`;
 
-  return Promise.resolve(
-    clone({
+    mockState.appliedOperationsById.set(operationId, {
+      gameId: plan.game_id,
+      componentId,
+      targetPath: plan.target_path,
+      originalVersion: plan.original_version ?? null,
+      originalSha256: plan.original_sha256 ?? null,
+      backupPath,
+    });
+
+    sourceFile.version = plan.replacement_version ?? sourceFile.version;
+    sourceFile.sha256 = plan.replacement_sha256 ?? sourceFile.sha256;
+
+    updateCandidateGroupCurrentVersion(details, componentId, sourceFile.version ?? null);
+
+    prependOperation(
+      details,
+      createOperationRecord({
+        operationId,
+        kind: 'replace_component',
+        status: 'completed',
+        createdAt: now - 60_000,
+        completedAt: now,
+        itemCount: 1,
+        backupCount: 1,
+        backupStatus: 'available',
+      }),
+    );
+
+    mockState.pendingPlansByOperationId.delete(operationId);
+
+    updateGameCard(plan.game_id, {
+      backup_available: true,
+      last_operation_status: 'completed',
+      operation_count: details.operations.length,
+    });
+
+    return clone({
       operation_id: operationId,
       game_id: plan.game_id,
       status: 'completed',
-      completed_at: Date.now(),
+      completed_at: now,
       items: [
         {
           backup_id: `backup:${operationId}`,
           component_id: component.id,
           applied_path: plan.target_path,
           replacement_path: plan.replacement_path,
-          backup_path: `${plan.target_path}${BACKUP_SUFFIX}`,
+          backup_path: backupPath,
         },
       ],
-    }),
-  );
+    });
+  });
 }
 
 export function mockRollbackOperation(operationId: string): Promise<RollbackOperationResult> {
-  const target = findOperationTarget(operationId);
+  return resolveMock(() => {
+    if (mockState.rolledBackOperationIds.has(operationId)) {
+      throw new Error(`Mock preview operation ${operationId} has already been rolled back.`);
+    }
 
-  if (!target) {
-    throw new Error(`Mock preview could not find operation ${operationId} to rollback.`);
-  }
+    const target = findOperationTarget(operationId);
 
-  const { details } = target;
-  const component = findPrimaryRollbackComponent(details);
+    if (!target) {
+      throw new Error(`Mock preview could not find operation ${operationId} to rollback.`);
+    }
 
-  if (!component) {
-    throw new Error(
-      `Mock preview rollback requires at least one component with files for ${details.game.identity.id}.`,
+    if (target.operation.kind === 'rollback_operation') {
+      throw new Error(`Mock preview cannot rollback rollback operation ${operationId}.`);
+    }
+
+    const { details } = target;
+    const snapshot = mockState.appliedOperationsById.get(operationId);
+
+    const component = snapshot
+      ? requireComponent(details, snapshot.componentId)
+      : findPrimaryRollbackComponent(details);
+
+    if (!component) {
+      throw new Error(
+        `Mock preview rollback requires at least one component with files for ${details.game.identity.id}.`,
+      );
+    }
+
+    const sourceFile = requireFirstComponentFile(component);
+
+    if (snapshot) {
+      sourceFile.version = snapshot.originalVersion ?? sourceFile.version;
+      sourceFile.sha256 = snapshot.originalSha256 ?? sourceFile.sha256;
+
+      updateCandidateGroupCurrentVersion(details, snapshot.componentId, snapshot.originalVersion);
+    }
+
+    const now = Date.now();
+    const rollbackOperationId = createRollbackOperationId(operationId);
+    const restoredPath = snapshot?.targetPath ?? sourceFile.path;
+    const backupPath = snapshot?.backupPath ?? `${sourceFile.path}${BACKUP_SUFFIX}`;
+
+    prependOperation(
+      details,
+      createOperationRecord({
+        operationId: rollbackOperationId,
+        kind: 'rollback_operation',
+        status: 'rolled_back',
+        createdAt: now - 20_000,
+        completedAt: now,
+        itemCount: 1,
+        backupCount: 1,
+        backupStatus: 'available',
+      }),
     );
-  }
 
-  const sourceFile = component.files[0];
-  const rollbackOperationId = createRollbackOperationId(operationId);
+    mockState.rolledBackOperationIds.add(operationId);
 
-  prependOperation(
-    details,
-    createOperationRecord({
-      operationId: rollbackOperationId,
-      kind: 'rollback_operation',
-      status: 'rolled_back',
-      createdAt: Date.now() - 20_000,
-      completedAt: Date.now(),
-      itemCount: 1,
-      backupCount: 1,
-      backupStatus: 'available',
-    }),
-  );
+    updateGameCard(details.game.identity.id, {
+      backup_available: true,
+      last_operation_status: 'rolled_back',
+      operation_count: details.operations.length,
+    });
 
-  updateGameCard(details.game.identity.id, {
-    backup_available: true,
-    last_operation_status: 'rolled_back',
-    operation_count: details.operations.length,
-  });
-
-  return Promise.resolve(
-    clone({
+    return clone({
       operation_id: rollbackOperationId,
       game_id: details.game.identity.id,
       status: 'rolled_back',
-      completed_at: Date.now(),
+      completed_at: now,
       items: [
         {
           backup_id: `backup:${operationId}`,
           component_id: component.id,
-          restored_path: sourceFile.path,
-          backup_path: `${sourceFile.path}${BACKUP_SUFFIX}`,
+          restored_path: restoredPath,
+          backup_path: backupPath,
         },
       ],
-    }),
-  );
+    });
+  });
 }
 
 function createMockState(): MockState {
   const cyberpunk = createCyberpunkDetails();
   const alanWake = createAlanWakeDetails();
 
-  return {
-    games: [
-      createGameCardFromDetails(cyberpunk, {
+  const seedGames = [
+    {
+      details: cyberpunk,
+      card: createGameCardFromDetails(cyberpunk, {
         update_count: cyberpunk.candidate_groups.length,
         risk_level: 'low',
         backup_available: true,
         last_operation_status: getLatestOperationStatus(cyberpunk),
       }),
-      createGameCardFromDetails(alanWake, {
+    },
+    {
+      details: alanWake,
+      card: createGameCardFromDetails(alanWake, {
         update_count: alanWake.candidate_groups.length,
         risk_level: 'medium',
         backup_available: false,
         last_operation_status: getLatestOperationStatus(alanWake),
       }),
-    ],
-    detailsByGameId: {
-      [cyberpunk.game.identity.id]: cyberpunk,
-      [alanWake.game.identity.id]: alanWake,
     },
-    plansByOperationId: {},
-    componentIdByOperationId: {},
-    manualGameIdByInstallPath: {},
+  ];
+
+  return {
+    games: seedGames.map(({ card }) => card),
+    detailsByGameId: new Map(
+      seedGames.map(({ details }) => [details.game.identity.id, details] as const),
+    ),
+    autoGameIds: new Set(seedGames.map(({ details }) => details.game.identity.id)),
+    pendingPlansByOperationId: new Map(),
+    appliedOperationsById: new Map(),
+    manualGameIdByInstallPath: new Map(),
+    rolledBackOperationIds: new Set(),
     manualCounter: 0,
     operationCounter: 0,
   };
@@ -582,7 +673,7 @@ function upsertGameCard(card: GameCard): void {
 }
 
 function requireGameDetails(gameId: string): GameDetails {
-  const details = mockState.detailsByGameId[gameId];
+  const details = mockState.detailsByGameId.get(gameId);
 
   if (!details) {
     throw new Error(`Mock preview could not find game ${gameId}.`);
@@ -591,28 +682,18 @@ function requireGameDetails(gameId: string): GameDetails {
   return details;
 }
 
-function requireSwapPlan(operationId: string, confirmationToken: string): SwapPlan {
-  const plan = mockState.plansByOperationId[operationId];
+function requirePendingSwapPlan(operationId: string, confirmationToken: string): PendingSwapPlan {
+  const pending = mockState.pendingPlansByOperationId.get(operationId);
 
-  if (!plan) {
+  if (!pending) {
     throw new Error(`Mock preview could not find operation plan ${operationId}.`);
   }
 
-  if (plan.confirmation_token !== confirmationToken) {
+  if (pending.plan.confirmation_token !== confirmationToken) {
     throw new Error('Confirmation token mismatch for operation preview.');
   }
 
-  return plan;
-}
-
-function requireOperationComponentId(operationId: string): string {
-  const componentId = mockState.componentIdByOperationId[operationId];
-
-  if (!componentId) {
-    throw new Error(`Mock preview could not resolve component for operation ${operationId}.`);
-  }
-
-  return componentId;
+  return pending;
 }
 
 function requireComponent(details: GameDetails, componentId: string): GraphicsComponent {
@@ -639,18 +720,32 @@ function requireCandidateGroup(details: GameDetails, componentId: string): Candi
   return candidateGroup;
 }
 
-function ensureComponentHasFiles(component: GraphicsComponent): void {
+function requireFirstComponentFile(
+  component: GraphicsComponent,
+): GraphicsComponent['files'][number] {
   if (component.files.length === 0) {
     throw new Error(`Mock preview component ${component.id} does not contain any files.`);
+  }
+
+  return component.files[0];
+}
+
+function updateCandidateGroupCurrentVersion(
+  details: GameDetails,
+  componentId: string,
+  version: string | null,
+): void {
+  const candidateGroup = details.candidate_groups.find(
+    (group) => group.component_id === componentId,
+  );
+
+  if (candidateGroup) {
+    candidateGroup.current_version = version;
   }
 }
 
 function findOperationTarget(operationId: string): OperationTarget | null {
-  for (const details of Object.values(mockState.detailsByGameId)) {
-    if (!details) {
-      continue;
-    }
-
+  for (const details of mockState.detailsByGameId.values()) {
     const operation = details.operations.find((item) => item.operation_id === operationId);
 
     if (operation) {
@@ -662,17 +757,22 @@ function findOperationTarget(operationId: string): OperationTarget | null {
 }
 
 function findPrimaryRollbackComponent(details: GameDetails): GraphicsComponent | null {
-  const component = details.components.find((item) => item.files.length > 0);
-
-  return component ?? null;
+  return details.components.find((item) => item.files.length > 0) ?? null;
 }
 
 function getLatestOperationStatus(details: GameDetails): GameCard['last_operation_status'] {
   return details.operations[0]?.status ?? null;
 }
 
+function hasAvailableBackup(details: GameDetails): boolean {
+  return details.operations.some(
+    (operation) => operation.backup_status === 'available' || operation.backup_status === 'partial',
+  );
+}
+
 function getOrCreateManualGameId(installPath: string): string {
-  const existingGameId = mockState.manualGameIdByInstallPath[installPath];
+  const key = createInstallPathKey(installPath);
+  const existingGameId = mockState.manualGameIdByInstallPath.get(key);
 
   if (existingGameId) {
     return existingGameId;
@@ -681,7 +781,7 @@ function getOrCreateManualGameId(installPath: string): string {
   mockState.manualCounter += 1;
 
   const gameId = `manual:preview:${mockState.manualCounter}`;
-  mockState.manualGameIdByInstallPath[installPath] = gameId;
+  mockState.manualGameIdByInstallPath.set(key, gameId);
 
   return gameId;
 }
@@ -699,24 +799,67 @@ function createRollbackOperationId(targetOperationId: string): string {
 }
 
 function lastPathSegment(path: string): string {
-  const normalized = normalizeWindowsSlashes(path);
-  const segments = normalized.split('/').filter(Boolean);
+  const segments = normalizeWindowsSlashes(path).split('/').filter(Boolean);
 
-  return segments.length > 0 ? segments[segments.length - 1] : '';
+  if (segments.length === 0) {
+    return '';
+  }
+
+  return segments[segments.length - 1];
+}
+
+function normalizeInstallPath(path: string): string {
+  const normalized = normalizeWindowsSlashes(path.trim()).replace(/\/+$/, '');
+
+  if (!normalized) {
+    throw new Error('Mock preview manual scan path is required.');
+  }
+
+  return normalized;
 }
 
 function normalizeWindowsSlashes(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
-function unique<T>(items: T[]): T[] {
+function createInstallPathKey(path: string): string {
+  return normalizeInstallPath(path).toLowerCase();
+}
+
+function unique<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
 }
 
 function hasTauriBridge(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  return typeof globalThis === 'object' && '__TAURI_INTERNALS__' in globalThis;
+}
+
+function resolveMock<T>(factory: () => T): Promise<T> {
+  try {
+    return Promise.resolve(factory());
+  } catch (error) {
+    return Promise.reject(toError(error));
+  }
+}
+
+function toError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  if (typeof error === 'string') {
+    return new Error(error);
+  }
+
+  return new Error('Mock preview command failed.');
 }
 
 function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  const serialized = JSON.stringify(value);
+
+  if (typeof serialized !== 'string') {
+    throw new Error('Mock preview could not clone a non-serializable value.');
+  }
+
+  return JSON.parse(serialized) as T;
 }

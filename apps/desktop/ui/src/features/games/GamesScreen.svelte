@@ -14,47 +14,76 @@
 
   type UpdateBadgeTone = 'success' | 'muted';
 
+  type UpdateBadge = {
+    label: string;
+    tone: UpdateBadgeTone;
+  };
+
+  type GameCardViewModel = {
+    id: string;
+    title: string;
+    installPath: string;
+    monogram: string;
+    updateBadge: UpdateBadge;
+    technologies: string[];
+  };
+
   const SCAN_LABEL = 'Scan Folder';
   const SCANNING_LABEL = 'Scanning...';
 
   const noop: VoidHandler = (): void => {
-    return;
+    // Intentionally empty.
   };
-  const noopOpenGame: GameSelectionHandler = (_gameId: string): void => {
-    return;
+
+  const noopOpenGame: GameSelectionHandler = (): void => {
+    // Intentionally empty.
   };
 
   export let games: GameCard[] = [];
   export let busy = false;
   export let onScan: VoidHandler = noop;
+  export let onRefresh: VoidHandler = noop;
   export let onOpenDetails: GameSelectionHandler = noopOpenGame;
   export let onOpenOperations: GameSelectionHandler = noopOpenGame;
 
-  $: hasGames = games.length > 0;
+  $: gameItems = games.map(toGameCardViewModel);
+  $: hasGames = gameItems.length > 0;
   $: scanButtonLabel = busy ? SCANNING_LABEL : SCAN_LABEL;
   $: dashboardStats = getDashboardStats(games);
+  $: hasBackupsReady = dashboardStats.backupsReady > 0;
 
-  function getDashboardStats(gameCards: GameCard[]): DashboardStats {
-    return gameCards.reduce<DashboardStats>(
-      (stats, game) => ({
-        games: stats.games + 1,
-        updates: stats.updates + getUpdateCount(game),
-        backupsReady: stats.backupsReady + Number(game.backup_available),
-      }),
-      {
-        games: 0,
-        updates: 0,
-        backupsReady: 0,
-      },
-    );
+  function toGameCardViewModel(game: GameCard): GameCardViewModel {
+    return {
+      id: game.game_id,
+      title: game.title,
+      installPath: game.install_path,
+      monogram: titleMonogram(game.title),
+      updateBadge: getUpdateBadge(game),
+      technologies: game.technology_tags.map(formatLabel),
+    };
   }
 
-  function getUpdateCount(game: GameCard): number {
-    return Math.max(0, game.update_count);
+  function getDashboardStats(gameCards: readonly GameCard[]): DashboardStats {
+    let updates = 0;
+    let backupsReady = 0;
+
+    for (const game of gameCards) {
+      updates += getUpdateCount(game);
+      backupsReady += Number(game.backup_available);
+    }
+
+    return {
+      games: gameCards.length,
+      updates,
+      backupsReady,
+    };
   }
 
-  function getUpdateBadgeTone(game: GameCard): UpdateBadgeTone {
-    return game.updates_available ? 'success' : 'muted';
+  function getUpdateBadge(game: GameCard): UpdateBadge {
+    return {
+      label: getUpdateBadgeLabel(game),
+      tone: game.updates_available ? 'success' : 'muted',
+    };
   }
 
   function getUpdateBadgeLabel(game: GameCard): string {
@@ -71,49 +100,27 @@
     return `${updateCount} update${updateCount === 1 ? '' : 's'} available`;
   }
 
-  function getGameIdFromEvent(event: MouseEvent): string | null {
-    const { currentTarget } = event;
-
-    if (!(currentTarget instanceof HTMLElement)) {
-      return null;
-    }
-
-    return currentTarget.dataset.gameId ?? null;
+  function getUpdateCount(game: GameCard): number {
+    return Math.max(0, game.update_count);
   }
 
   function handleScan(): void {
     onScan();
   }
 
-  function handleDetailsClick(event: MouseEvent): void {
-    const gameId = getGameIdFromEvent(event);
-
-    if (gameId === null) {
-      return;
-    }
-
-    onOpenDetails(gameId);
-  }
-
-  function handleOperationsClick(event: MouseEvent): void {
-    const gameId = getGameIdFromEvent(event);
-
-    if (gameId === null) {
-      return;
-    }
-
-    onOpenOperations(gameId);
+  function handleRefresh(): void {
+    onRefresh();
   }
 </script>
 
 <section class="screen-shell" aria-busy={busy}>
   <div class="overview-bar">
     {#if hasGames}
-      <div class="overview-stats" aria-label="Dashboard summary">
+      <div class="dashboard-summary" aria-label="Dashboard summary">
         <Badge pill surface="outline">{dashboardStats.games} games</Badge>
         <Badge pill surface="outline">{dashboardStats.updates} updates</Badge>
 
-        {#if dashboardStats.backupsReady > 0}
+        {#if hasBackupsReady}
           <Badge pill surface="outline" tone="success">
             {dashboardStats.backupsReady} backup-ready
           </Badge>
@@ -121,7 +128,11 @@
       </div>
     {/if}
 
-    <div class="overview-action">
+    <div class="action-group">
+      <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={handleRefresh}>
+        Refresh Libraries
+      </Button>
+
       <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
         {scanButtonLabel}
       </Button>
@@ -133,37 +144,54 @@
       <div class="empty-icon" aria-hidden="true">RP</div>
 
       <div class="empty-copy">
-        <h3>No scanned games yet</h3>
-        <p>
-          Select a game folder to populate the dashboard with components, updates, backup state, and
-          quick actions.
+        <h3 class="empty-title">No scanned games yet</h3>
+        <p class="empty-description">
+          Select a game folder to populate the dashboard with components, updates, backup state,
+          and quick actions.
         </p>
       </div>
 
-      <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
-        {scanButtonLabel}
-      </Button>
+      <div class="action-group">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          loading={busy}
+          onclick={handleRefresh}
+        >
+          Refresh Libraries
+        </Button>
+
+        <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
+          {scanButtonLabel}
+        </Button>
+      </div>
     </Surface>
   {:else}
     <div class="game-list">
-      {#each games as game (game.game_id)}
+      {#each gameItems as game (game.id)}
         <Surface as="article" interactive shadow class="game-card">
           <div class="card-body">
             <div class="card-header">
-              <div aria-hidden="true" class="cover-placeholder">
-                <span>{titleMonogram(game.title)}</span>
+              <div class="cover-placeholder" aria-hidden="true">
+                <span>{game.monogram}</span>
               </div>
 
               <div class="header-copy">
                 <div class="platform-row">
-                  <Badge pill surface="soft" tone={getUpdateBadgeTone(game)} class="updates-badge">
-                    {getUpdateBadgeLabel(game)}
+                  <Badge
+                    pill
+                    surface="soft"
+                    tone={game.updateBadge.tone}
+                    class="updates-badge"
+                  >
+                    {game.updateBadge.label}
                   </Badge>
                 </div>
 
                 <div class="title-copy">
-                  <h3>{game.title}</h3>
-                  <p class="card-path">{game.install_path}</p>
+                  <h3 class="game-title">{game.title}</h3>
+                  <p class="card-path">{game.installPath}</p>
                 </div>
               </div>
             </div>
@@ -172,11 +200,13 @@
               <p class="field-label">Detected libraries</p>
 
               <div class="technology-row">
-                {#if game.technology_tags.length === 0}
-                  <Badge pill surface="outline" tone="muted">No detected technologies yet</Badge>
+                {#if game.technologies.length === 0}
+                  <Badge pill surface="outline" tone="muted">
+                    No detected technologies yet
+                  </Badge>
                 {:else}
-                  {#each game.technology_tags as technology}
-                    <Badge pill surface="outline">{formatLabel(technology)}</Badge>
+                  {#each game.technologies as technology}
+                    <Badge pill surface="outline">{technology}</Badge>
                   {/each}
                 {/if}
               </div>
@@ -187,9 +217,10 @@
                 variant="primary"
                 size="sm"
                 fullWidth
-                data-game-id={game.game_id}
                 aria-label={`Open details for ${game.title}`}
-                onclick={handleDetailsClick}
+                onclick={(): void => {
+                  onOpenDetails(game.id);
+                }}
               >
                 Details
               </Button>
@@ -198,9 +229,10 @@
                 variant="secondary"
                 size="sm"
                 fullWidth
-                data-game-id={game.game_id}
                 aria-label={`Open journal for ${game.title}`}
-                onclick={handleOperationsClick}
+                onclick={(): void => {
+                  onOpenOperations(game.id);
+                }}
               >
                 Journal
               </Button>
@@ -227,29 +259,24 @@
     padding: 0 var(--space-1);
   }
 
-  .overview-stats {
+  .dashboard-summary,
+  .action-group,
+  .platform-row,
+  .technology-row {
     display: flex;
     flex-wrap: wrap;
+  }
+
+  .dashboard-summary {
     gap: var(--space-2);
   }
 
-  .overview-action {
+  .action-group {
+    gap: var(--space-2);
+  }
+
+  .overview-bar .action-group {
     margin-left: auto;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .field-label {
-    margin: 0 0 var(--space-1);
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   .game-list {
@@ -316,20 +343,39 @@
     gap: var(--space-3);
   }
 
-  .title-copy {
-    gap: var(--space-2);
-  }
-
+  .title-copy,
   .technology-group {
     gap: var(--space-2);
   }
 
   .platform-row,
   .technology-row {
-    display: flex;
-    flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.4rem;
+  }
+
+  .game-title,
+  .empty-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .field-label {
+    margin: 0 0 var(--space-1);
+    color: var(--text-subtle);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .card-path {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    word-break: break-word;
   }
 
   :global(.updates-badge) {
@@ -339,14 +385,6 @@
     line-height: 1.2;
     text-align: center;
     white-space: normal;
-  }
-
-  .card-path {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    word-break: break-word;
   }
 
   .card-actions {
@@ -382,7 +420,7 @@
     max-width: 36rem;
   }
 
-  .empty-copy p {
+  .empty-description {
     margin: 0;
   }
 
@@ -391,7 +429,7 @@
       align-items: flex-start;
     }
 
-    .overview-action {
+    .overview-bar .action-group {
       margin-inline: 0;
     }
   }
@@ -407,7 +445,7 @@
       min-height: 72px;
     }
 
-    .overview-stats {
+    .dashboard-summary {
       gap: 0.35rem;
     }
 
@@ -421,8 +459,12 @@
   }
 
   @media (max-width: 560px) {
-    .overview-action,
-    .overview-action :global(button) {
+    .action-group {
+      width: 100%;
+      flex-direction: column-reverse;
+    }
+
+    .action-group :global(button) {
       width: 100%;
     }
 
