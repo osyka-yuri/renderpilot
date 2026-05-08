@@ -71,6 +71,10 @@ fn scan_manual_folder_updates_catalog_and_returns_detected_components() {
     assert_eq!(cards[0]["updates_available"], false);
     assert_eq!(cards[0]["risk_level"], "low");
     assert_eq!(cards[0]["backup_available"], false);
+    assert!(
+        cards[0]["cover_updated_at_ms"].is_null(),
+        "cover timestamp should be absent before artwork is stored",
+    );
 }
 
 #[test]

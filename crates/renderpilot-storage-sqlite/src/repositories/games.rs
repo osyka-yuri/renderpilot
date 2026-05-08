@@ -6,6 +6,7 @@ use crate::{error::storage_error, mapping, sqlite_clock};
 
 use super::{
     catalog_select_sql::{FIND_GAME_SQL, LIST_GAMES_SQL},
+    game_covers::{find_cover_in_connection, DeletedGameInfo},
     row_mapping::game_from_row,
     SqliteStorage,
 };
@@ -83,7 +84,7 @@ impl SqliteStorage {
     ///
     /// Child rows are removed or detached according to foreign-key rules.
     /// Missing id is a no-op.
-    pub fn delete_game(&self, id: &GameId) -> AppResult<()> {
+    pub fn delete_game(&self, id: &GameId) -> AppResult<DeletedGameInfo> {
         self.with_connection(|connection| delete_game_in_connection(connection, id))
     }
 }
@@ -138,8 +139,14 @@ pub(super) fn upsert_games_within_transaction(
 ///
 /// This function intentionally does not start its own transaction.
 /// The caller owns transaction boundaries.
-pub(super) fn delete_game_in_connection(connection: &Connection, id: &GameId) -> AppResult<()> {
-    let _affected_rows = connection
+pub(super) fn delete_game_in_connection(
+    connection: &Connection,
+    id: &GameId,
+) -> AppResult<DeletedGameInfo> {
+    let old_cover_file_name =
+        find_cover_in_connection(connection, id)?.map(|record| record.file_name);
+
+    connection
         .execute(
             DELETE_GAME_SQL,
             named_params! {
@@ -148,7 +155,9 @@ pub(super) fn delete_game_in_connection(connection: &Connection, id: &GameId) ->
         )
         .map_err(storage_error)?;
 
-    Ok(())
+    Ok(DeletedGameInfo {
+        old_cover_file_name,
+    })
 }
 
 fn collect_game_sql_params<'a>(games: &'a [GameInstallation]) -> AppResult<Vec<GameSqlParams<'a>>> {
@@ -363,7 +372,8 @@ mod tests {
         let game = sample_game("game:delete-me", "Delete Me");
 
         storage.upsert_game(&game).expect("game should store");
-        storage.delete_game(game.id()).expect("game should delete");
+        let deleted = storage.delete_game(game.id()).expect("game should delete");
+        assert_eq!(deleted.old_cover_file_name, None);
 
         let found = storage
             .find_game(game.id())
@@ -377,9 +387,30 @@ mod tests {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
         let missing_id = GameId::new("game:missing").expect("game id should be valid");
 
-        storage
+        let deleted = storage
             .delete_game(&missing_id)
             .expect("delete missing game should be a no-op");
+
+        assert_eq!(deleted.old_cover_file_name, None);
+    }
+
+    #[test]
+    fn delete_game_returns_old_cover_file_name() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+
+        let game = sample_game("game:with-cover", "With Cover");
+
+        storage.upsert_game(&game).expect("game should store");
+        storage
+            .upsert_game_cover(game.id(), "cover-old.webp")
+            .expect("cover should store");
+
+        let deleted = storage.delete_game(game.id()).expect("game should delete");
+
+        assert_eq!(
+            deleted.old_cover_file_name.as_deref(),
+            Some("cover-old.webp")
+        );
     }
 
     fn sample_game(id: &str, title: &str) -> GameInstallation {

@@ -69,6 +69,43 @@ pub async fn get_game_details(game_id: String) -> JsonCommandResult {
 }
 
 #[tauri::command]
+pub async fn fetch_game_cover(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_arg("game_id", game_id)?;
+
+    run_desktop_command(move || desktop::fetch_game_cover(game_id)).await
+}
+
+#[tauri::command]
+pub async fn clear_game_cover(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_arg("game_id", game_id)?;
+
+    run_desktop_command(move || desktop::clear_game_cover(game_id)).await
+}
+
+#[tauri::command]
+pub async fn set_game_cover(game_id: String, source_path: String) -> JsonCommandResult {
+    let game_id = require_non_empty_arg("game_id", game_id)?;
+    let source_path = require_non_empty_arg("source_path", source_path)?;
+
+    run_desktop_command(move || desktop::set_game_cover(game_id, source_path)).await
+}
+
+#[tauri::command]
+pub async fn get_catalog_setting(key: String) -> JsonCommandResult {
+    let key = require_non_empty_arg("key", key)?;
+
+    run_desktop_command(move || desktop::get_catalog_setting(key)).await
+}
+
+#[tauri::command]
+pub async fn set_catalog_setting(key: String, value: String) -> JsonCommandResult {
+    let key = require_non_empty_arg("key", key)?;
+    let value = require_non_empty_arg("value", value)?;
+
+    run_desktop_command(move || desktop::set_catalog_setting(key, value)).await
+}
+
+#[tauri::command]
 pub async fn build_swap_plan(
     game_id: String,
     component_id: String,

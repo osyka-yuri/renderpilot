@@ -2,6 +2,8 @@ import type {
   ApplyOperationResult,
   AutoScanResponse,
   CandidateGroup,
+  CatalogSettingPayload,
+  CoverArtworkResult,
   GameCard,
   GameDetails,
   GraphicsComponent,
@@ -21,7 +23,10 @@ type GameCardBuildOverrides = Pick<
 >;
 
 type GameCardPatch = Partial<
-  Pick<GameCard, 'backup_available' | 'last_operation_status' | 'operation_count'>
+  Pick<
+    GameCard,
+    'backup_available' | 'last_operation_status' | 'operation_count' | 'cover_updated_at_ms'
+  >
 >;
 
 type OperationTarget = {
@@ -53,6 +58,7 @@ type MockState = {
   rolledBackOperationIds: Set<string>;
   manualCounter: number;
   operationCounter: number;
+  catalogSettings: Map<string, string>;
 };
 
 const RENDERPILOT_LIBRARY_PATH = 'C:/RenderPilot/Library';
@@ -109,6 +115,56 @@ export function mockGetGameCards(): Promise<GameCard[]> {
 
 export function mockGetGameDetails(gameId: string): Promise<GameDetails> {
   return resolveMock(() => clone(requireGameDetails(gameId)));
+}
+
+export function mockFetchGameCover(gameId: string): Promise<CoverArtworkResult> {
+  return resolveMock(() => {
+    requireGameDetails(gameId);
+    const updated_at_ms = Date.now();
+    updateGameCard(gameId, { cover_updated_at_ms: updated_at_ms });
+
+    return {
+      file_name: `cover-${gameId}-mock.png`,
+      updated_at_ms,
+    };
+  });
+}
+
+export function mockClearGameCover(gameId: string): Promise<{ cleared: boolean }> {
+  return resolveMock(() => {
+    requireGameDetails(gameId);
+    updateGameCard(gameId, { cover_updated_at_ms: null });
+
+    return { cleared: true };
+  });
+}
+
+export function mockSetGameCover(gameId: string, sourcePath: string): Promise<CoverArtworkResult> {
+  return resolveMock(() => {
+    void sourcePath;
+    requireGameDetails(gameId);
+    const updated_at_ms = Date.now();
+    updateGameCard(gameId, { cover_updated_at_ms: updated_at_ms });
+
+    return {
+      file_name: `cover-${gameId}-picked.png`,
+      updated_at_ms,
+    };
+  });
+}
+
+export function mockGetCatalogSetting(key: string): Promise<CatalogSettingPayload> {
+  return resolveMock(() => ({
+    value: mockState.catalogSettings.get(key) ?? null,
+  }));
+}
+
+export function mockSetCatalogSetting(key: string, value: string): Promise<{ saved: boolean }> {
+  return resolveMock(() => {
+    mockState.catalogSettings.set(key, value);
+
+    return { saved: true };
+  });
 }
 
 export function mockBuildSwapPlan(
@@ -349,6 +405,7 @@ function createMockState(): MockState {
     rolledBackOperationIds: new Set(),
     manualCounter: 0,
     operationCounter: 0,
+    catalogSettings: new Map(),
   };
 }
 
@@ -633,6 +690,7 @@ function createGameCardFromDetails(
     backup_available: overrides.backup_available,
     operation_count: details.operations.length,
     last_operation_status: overrides.last_operation_status,
+    cover_updated_at_ms: null,
   };
 }
 

@@ -143,6 +143,31 @@ command_error_kinds! {
         severity: Error,
         actions: suggested_action::RETRY_OR_RESTART,
     },
+    SteamGridDbApiKeyMissing => {
+        code: "steamgriddb_api_key_missing",
+        severity: Warning,
+        actions: suggested_action::INSPECT_LOGS,
+    },
+    UnsupportedCoverImageType => {
+        code: "unsupported_cover_image_type",
+        severity: Warning,
+        actions: suggested_action::RETRY_OR_RESTART,
+    },
+    CoverDownloadFailed => {
+        code: "cover_download_failed",
+        severity: Error,
+        actions: suggested_action::INSPECT_LOGS,
+    },
+    CoverNotFound => {
+        code: "cover_not_found",
+        severity: Warning,
+        actions: suggested_action::REFRESH_OR_SCAN_GAME_FOLDER,
+    },
+    CoverIoError => {
+        code: "cover_io_error",
+        severity: Error,
+        actions: suggested_action::INSPECT_LOGS,
+    },
 }
 
 #[cfg(test)]

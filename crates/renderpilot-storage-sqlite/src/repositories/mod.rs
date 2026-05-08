@@ -4,6 +4,7 @@ mod catalog_select_sql;
 mod columns;
 mod components;
 pub mod file_hash_cache;
+pub mod game_covers;
 mod games;
 mod operations;
 mod row_mapping;

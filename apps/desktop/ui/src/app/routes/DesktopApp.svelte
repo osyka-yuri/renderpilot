@@ -1,9 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
-  import { describeCommandError, normalizeCommandError } from '@shared/api/errors';
+  import {
+    describeCommandError,
+    describeCommandErrorBrief,
+    normalizeCommandError,
+  } from '@shared/api/errors';
   import {
     applyThemeMode,
     observeSystemTheme,
@@ -14,11 +18,14 @@
   import {
     applyOperationPlan,
     buildSwapPlan,
+    fetchGameCover,
+    getCatalogSetting,
     getGameCards,
     getGameDetails,
     rollbackOperation,
     scanAutoLibraries,
     scanManualFolder,
+    STEAMGRIDDB_SETTING_KEY,
   } from '@shared/api/desktop';
   import type { GameCard, GameDetails, SwapPlan } from '@shared/api/types';
   import GameDetailsScreen from '@features/game-details/GameDetailsScreen.svelte';
@@ -26,6 +33,15 @@
   import OperationsScreen from '@features/operations/OperationsScreen.svelte';
   import SettingsScreen from '@features/settings/SettingsScreen.svelte';
   import type { Screen } from '@app/routes/screen';
+  import {
+    combineCoverSyncMessages,
+    COVER_FETCH_CONCURRENCY,
+    fetchCoverRemotePolicy,
+    fetchSteamGridDbKeyConfigured,
+    filterGamesMissingStoredCoverForBackgroundSync,
+    formatCoverSyncBanner,
+    runCoverFetchBatch,
+  } from '@shared/covers/cover-sync';
 
   type LanguageMode = 'system' | 'en' | 'ru';
   type WorkspaceScreen = Extract<Screen, 'details' | 'operations'>;
@@ -58,6 +74,7 @@
   let currentDetails: GameDetails | null = null;
   let selectedGameId: string | null = null;
   let currentPlan: SwapPlan | null = null;
+  let currentGameCard: GameCard | null;
 
   let busy = false;
   let advancedMode = false;
@@ -67,9 +84,10 @@
 
   let latestDetailsRequestToken = 0;
 
-  let currentGameCard: GameCard | null;
+  let coversSyncing = false;
+  let coversAutoFetchingIds: ReadonlySet<string> = new Set();
 
-  $: currentGameCard = selectedGameId ? findGameCard(selectedGameId) : null;
+  $: currentGameCard = selectedGameId === null ? null : findGameCard(selectedGameId);
 
   onMount(() => {
     applyThemeMode(themeMode);
@@ -84,28 +102,39 @@
   });
 
   async function startupScanAndRefresh(): Promise<void> {
-    await runExclusive(async () => {
-      const { errors } = await scanAutoLibraries();
-
+    const refreshed = await runExclusive(async () => {
+      await scanAutoLibrariesSafely();
       await refreshGameCards();
 
-      if (errors.length > 0) {
-        showPartialScanWarning(errors);
-      }
+      return true;
     });
+
+    if (refreshed === true) {
+      startMissingCoverSync();
+    }
   }
 
   async function handleScan(): Promise<void> {
-    await runExclusive(async () => {
+    const scanned = await runExclusive(async () => {
       const selectedFolder = await selectManualScanFolder();
 
       if (selectedFolder === null) {
-        return;
+        return false;
       }
 
       await scanManualFolder(selectedFolder);
       await refreshGameCards();
+
+      return true;
     });
+
+    if (scanned === true) {
+      startMissingCoverSync();
+    }
+  }
+
+  async function handleReloadCards(): Promise<void> {
+    await runExclusive(refreshGameCards);
   }
 
   async function openGameDetails(gameId: string): Promise<void> {
@@ -246,10 +275,106 @@
     await loadGameDetails(gameId, nextScreen);
   }
 
+  async function scanAutoLibrariesSafely(): Promise<void> {
+    try {
+      const scanResult = await scanAutoLibraries();
+      const scanErrors = scanResult.errors ?? [];
+
+      if (scanErrors.length > 0) {
+        showPartialScanWarning(scanErrors);
+      }
+    } catch (error) {
+      setErrorMessage(
+        `Automatic library scan failed; your game list was still refreshed. ${describeCommandErrorBrief(
+          error,
+        )}`,
+      );
+    }
+  }
+
   async function refreshGameCards(): Promise<void> {
     games = await getGameCards();
 
     clearSelectionIfSelectedGameMissing();
+  }
+
+  function startMissingCoverSync(): void {
+    void syncMissingCoversAfterCardsLoad().catch((error: unknown) => {
+      setErrorMessage(`Background cover sync failed. ${describeCommandError(error)}`);
+    });
+  }
+
+  async function syncMissingCoversAfterCardsLoad(): Promise<void> {
+    if (coversSyncing) {
+      return;
+    }
+
+    coversSyncing = true;
+
+    try {
+      await tick();
+
+      const cardSnapshot = games.slice();
+
+      if (cardSnapshot.length === 0) {
+        return;
+      }
+
+      const missingCoverCards = await getMissingStoredCoverCards(cardSnapshot);
+
+      if (missingCoverCards.length === 0) {
+        return;
+      }
+
+      const { failures } = await runCoverFetchBatch({
+        games: missingCoverCards,
+        concurrency: COVER_FETCH_CONCURRENCY,
+        fetchCover: async (gameId): Promise<void> => {
+          await fetchGameCover(gameId);
+        },
+        onGameStart: (gameId) => {
+          setCoverAutoFetching(gameId, true);
+        },
+        onGameEnd: (gameId) => {
+          setCoverAutoFetching(gameId, false);
+        },
+      });
+
+      const refreshAfterSyncError = await refreshCardsAfterCoverSync();
+      const combinedMessage = combineCoverSyncMessages(
+        formatCoverSyncBanner(failures),
+        refreshAfterSyncError,
+      );
+
+      if (combinedMessage !== null) {
+        setErrorMessage(combinedMessage);
+      }
+    } finally {
+      clearCoverAutoFetching();
+      coversSyncing = false;
+    }
+  }
+
+  async function getMissingStoredCoverCards(cardSnapshot: GameCard[]): Promise<GameCard[]> {
+    const [policy, hasSteamGridDbApiKey] = await Promise.all([
+      fetchCoverRemotePolicy(getCatalogSetting),
+      fetchSteamGridDbKeyConfigured(getCatalogSetting, STEAMGRIDDB_SETTING_KEY),
+    ]);
+
+    return filterGamesMissingStoredCoverForBackgroundSync(
+      cardSnapshot,
+      policy,
+      hasSteamGridDbApiKey,
+    );
+  }
+
+  async function refreshCardsAfterCoverSync(): Promise<string | null> {
+    try {
+      await refreshGameCards();
+      return null;
+    } catch (error: unknown) {
+      return `${describeCommandError(error)} (covers may have downloaded; try Refresh Libraries.)`;
+    }
   }
 
   async function selectManualScanFolder(): Promise<string | null> {
@@ -427,6 +552,24 @@
     });
   }
 
+  function setCoverAutoFetching(gameId: string, isFetching: boolean): void {
+    const nextFetchingIds = new Set(coversAutoFetchingIds);
+
+    if (isFetching) {
+      nextFetchingIds.add(gameId);
+    } else {
+      nextFetchingIds.delete(gameId);
+    }
+
+    coversAutoFetchingIds = nextFetchingIds;
+  }
+
+  function clearCoverAutoFetching(): void {
+    if (coversAutoFetchingIds.size > 0) {
+      coversAutoFetchingIds = new Set();
+    }
+  }
+
   function ignoreError(task: () => void): void {
     try {
       task();
@@ -495,8 +638,12 @@
     <GamesScreen
       {games}
       {busy}
+      {coversAutoFetchingIds}
       onScan={handleScan}
       onRefresh={startupScanAndRefresh}
+      onReloadCards={handleReloadCards}
+      onClearError={clearError}
+      onCoverError={setErrorMessage}
       onOpenDetails={openGameDetails}
       onOpenOperations={openGameOperations}
     />

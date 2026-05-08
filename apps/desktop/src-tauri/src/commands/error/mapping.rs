@@ -6,6 +6,7 @@ use super::{
     CommandError,
 };
 
+// `from_cli_error` must handle every `CliError` variant; add a match arm when the enum grows.
 impl CommandError {
     pub(crate) fn from_cli_error(error: CliError) -> Self {
         match error {
@@ -113,6 +114,30 @@ impl CommandError {
                 Msg::OPERATION_COULD_NOT_COMPLETE,
                 message,
             ),
+
+            CliError::SteamGridDbApiKeyMissing => Self::user_facing(
+                Kind::SteamGridDbApiKeyMissing,
+                Msg::STEAMGRIDDB_API_KEY_MISSING,
+            ),
+
+            CliError::UnsupportedCoverImageType => Self::user_facing(
+                Kind::UnsupportedCoverImageType,
+                Msg::UNSUPPORTED_COVER_IMAGE_TYPE,
+            ),
+
+            CliError::CoverDownloadFailed(message) => Self::debug(
+                Kind::CoverDownloadFailed,
+                Msg::COVER_DOWNLOAD_FAILED,
+                message,
+            ),
+
+            CliError::CoverNotFound => {
+                Self::user_facing(Kind::CoverNotFound, Msg::COVER_ARTWORK_NOT_FOUND)
+            }
+
+            CliError::CoverIo(message) => {
+                Self::debug(Kind::CoverIoError, Msg::COVER_FILE_SYSTEM_ERROR, message)
+            }
         }
     }
 

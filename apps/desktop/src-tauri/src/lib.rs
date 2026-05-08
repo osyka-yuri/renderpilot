@@ -29,7 +29,18 @@ fn run_desktop_shell() -> tauri::Result<()> {
 
 /// Creates the Tauri builder used by the desktop shell.
 fn create_desktop_builder() -> DesktopBuilder {
-    configure_commands(configure_plugins(Builder::default()))
+    configure_cover_protocol(configure_commands(configure_plugins(Builder::default()))).setup(
+        |_| {
+            renderpilot_cli::desktop::gc_cover_orphans_on_startup();
+            Ok(())
+        },
+    )
+}
+
+fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
+    builder.register_uri_scheme_protocol("rp-cover", |_ctx, request| {
+        renderpilot_cli::cover_asset_protocol_response(request.uri().path())
+    })
 }
 
 /// Registers Tauri plugins.
@@ -50,6 +61,11 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // Game data
         commands::get_game_cards,
         commands::get_game_details,
+        commands::fetch_game_cover,
+        commands::clear_game_cover,
+        commands::set_game_cover,
+        commands::get_catalog_setting,
+        commands::set_catalog_setting,
         // Operations
         commands::build_swap_plan,
         commands::apply_operation_plan,

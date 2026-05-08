@@ -21,6 +21,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction};
 use crate::error::{storage_context, storage_error};
 
 pub use repositories::file_hash_cache::FileHashCacheRow;
+pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
 pub use repositories::SqliteStorage;
 
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -31,6 +32,11 @@ const SQL_UPSERT_SETTING: &str = "
     ON CONFLICT(key) DO UPDATE SET
         value = excluded.value,
         updated_at = excluded.updated_at
+";
+
+const SQL_DELETE_SETTING: &str = "
+    DELETE FROM settings
+    WHERE key = ?1
 ";
 
 const SQL_SELECT_SETTING: &str = "
@@ -169,6 +175,17 @@ impl SqliteStorage {
             connection
                 .execute(SQL_UPSERT_SETTING, (key, value, updated_at))
                 .map_err(|error| storage_context("failed to save setting", error))?;
+
+            Ok(())
+        })
+    }
+
+    /// Deletes a settings row by key. Missing keys are a no-op (SQLite `DELETE` affects zero rows).
+    pub fn delete_setting(&self, key: &str) -> AppResult<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(SQL_DELETE_SETTING, [key])
+                .map_err(|error| storage_context("failed to delete setting", error))?;
 
             Ok(())
         })

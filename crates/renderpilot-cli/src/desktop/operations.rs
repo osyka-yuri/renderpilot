@@ -5,7 +5,7 @@ use serde::Serialize;
 use super::utils::{
     parse_artifact_id, parse_component_id, parse_game_id, parse_operation_id, to_json, JsonResult,
 };
-use crate::{catalog, output, VERSION};
+use crate::{catalog, output, APP_VERSION};
 
 /// Persists a swap operation plan and returns the serialized plan details.
 pub fn build_swap_plan(
@@ -46,7 +46,7 @@ pub fn apply_operation_plan(
 }
 
 fn apply_operation_with_backup(operation_id: OperationId) -> JsonResult {
-    let _backup = catalog::create_backup(operation_id.clone(), VERSION)?;
+    let _backup = catalog::create_backup(operation_id.clone(), APP_VERSION)?;
     let result = catalog::apply_operation(operation_id)?;
 
     output::apply_operation_value(&result).map_err(Into::into)

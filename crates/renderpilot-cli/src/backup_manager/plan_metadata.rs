@@ -177,10 +177,10 @@ where
     })
 }
 
-fn required_metadata<'a>(
-    metadata_json: Option<&'a MetadataJson>,
+fn required_metadata(
+    metadata_json: Option<&MetadataJson>,
     missing_message: impl FnOnce() -> String,
-) -> AppResult<&'a MetadataJson> {
+) -> AppResult<&MetadataJson> {
     metadata_json.ok_or_else(|| AppError::invalid_input(missing_message()))
 }
 

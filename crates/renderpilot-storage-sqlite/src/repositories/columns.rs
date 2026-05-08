@@ -1,4 +1,7 @@
 //! SQLite column names: physical (`STRICT` tables) vs result-set aliases for row mappers.
+//!
+//! Bundled-schema contract: column spellings must match `migrations/0001_initial.sql`. There is no
+//! incremental migration from older on-disk catalogs; see [`crate::schema`] (`apply`).
 
 /// Physical column names as defined in SQLite migrations (`STRICT` tables).
 ///

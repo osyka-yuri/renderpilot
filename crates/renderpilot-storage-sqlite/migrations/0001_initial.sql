@@ -8,6 +8,8 @@ PRAGMA foreign_keys = ON;
 -- - Paths are normalized PathRef-style UTF-8 strings with "/" separators.
 -- - JSON fields are stored as TEXT and validated with json_valid/json_type.
 -- - Tables use STRICT mode.
+-- - Lifecycle: there is no incremental migration from older on-disk shapes; see `src/schema.rs`
+--   (`apply` / `validate_catalog_schema`) and `src/repositories/columns.rs` for the bundled-schema contract.
 -- =============================================================================
 
 
@@ -55,6 +57,30 @@ CREATE INDEX IF NOT EXISTS idx_games_launcher_install_path
 
 CREATE INDEX IF NOT EXISTS idx_games_updated_at
     ON games(updated_at DESC);
+
+
+-- =============================================================================
+-- Game covers (image files live beside catalog.db under covers/)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS game_covers (
+    game_id    TEXT    PRIMARY KEY NOT NULL,
+    file_name  TEXT    NOT NULL,
+    updated_at INTEGER NOT NULL,
+
+    FOREIGN KEY (game_id)
+        REFERENCES games(id)
+        ON DELETE CASCADE,
+
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (length(trim(file_name)) > 0),
+    CHECK (instr(file_name, '/') = 0),
+    CHECK (instr(file_name, '\') = 0),
+    CHECK (updated_at >= 0)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_game_covers_updated_at
+    ON game_covers(updated_at DESC);
 
 
 -- =============================================================================
@@ -469,6 +495,19 @@ BEGIN
            OLD.updated_at + 1
        )
      WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_game_covers_touch_updated_at
+AFTER UPDATE ON game_covers
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+    UPDATE game_covers
+       SET updated_at = max(
+           CAST(unixepoch('subsec') * 1000 AS INTEGER),
+           OLD.updated_at + 1
+       )
+     WHERE game_id = NEW.game_id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_components_touch_updated_at

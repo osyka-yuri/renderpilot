@@ -227,7 +227,12 @@ fn delete_stale_parent_game_if_needed(
         .any(|result| result.game.id() == selected_game.id());
 
     if !selected_game_is_current {
-        storage.delete_game(selected_game.id())?;
+        let catalog_path = crate::catalog::storage::catalog_database_path()?;
+        let deleted = storage.delete_game(selected_game.id())?;
+        crate::catalog::covers::unlink_cover_file_best_effort(
+            &catalog_path,
+            deleted.old_cover_file_name,
+        );
     }
 
     Ok(())

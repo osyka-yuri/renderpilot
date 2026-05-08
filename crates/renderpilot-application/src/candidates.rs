@@ -296,6 +296,40 @@ impl From<&ReplacementCandidate> for CandidateDedupeKey {
     }
 }
 
+fn candidate_comparison(
+    component: &GraphicsComponent,
+    file: &renderpilot_domain::ComponentFile,
+    artifact: &LibraryArtifact,
+) -> Option<CandidateComparison> {
+    if !artifact_matches_component_file(file, artifact) {
+        return None;
+    }
+
+    if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
+        return None;
+    }
+
+    if file.sha256() == Some(artifact.sha256()) {
+        return None;
+    }
+
+    compare_versions(file.version(), artifact.version())
+}
+
+fn artifact_matches_component_file(
+    file: &renderpilot_domain::ComponentFile,
+    artifact: &LibraryArtifact,
+) -> bool {
+    let Some(file_name) = std::path::Path::new(file.path().as_str())
+        .file_name()
+        .and_then(|name| name.to_str())
+    else {
+        return false;
+    };
+
+    artifact.file_name() == file_name
+}
+
 #[cfg(test)]
 mod tests {
     use renderpilot_domain::{
@@ -603,38 +637,4 @@ mod tests {
             None => artifact,
         }
     }
-}
-
-fn candidate_comparison(
-    component: &GraphicsComponent,
-    file: &renderpilot_domain::ComponentFile,
-    artifact: &LibraryArtifact,
-) -> Option<CandidateComparison> {
-    if !artifact_matches_component_file(file, artifact) {
-        return None;
-    }
-
-    if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
-        return None;
-    }
-
-    if file.sha256() == Some(artifact.sha256()) {
-        return None;
-    }
-
-    compare_versions(file.version(), artifact.version())
-}
-
-fn artifact_matches_component_file(
-    file: &renderpilot_domain::ComponentFile,
-    artifact: &LibraryArtifact,
-) -> bool {
-    let Some(file_name) = std::path::Path::new(file.path().as_str())
-        .file_name()
-        .and_then(|name| name.to_str())
-    else {
-        return false;
-    };
-
-    artifact.file_name() == file_name
 }

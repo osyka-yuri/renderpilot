@@ -25,6 +25,7 @@ use self::{
     swap::{build_swap_plan_with_storage, find_candidates_with_storage},
 };
 
+pub(crate) mod covers;
 mod operations;
 mod scan;
 mod storage;

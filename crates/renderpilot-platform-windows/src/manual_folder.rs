@@ -5,6 +5,8 @@ use renderpilot_domain::{
     GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
 };
 
+use crate::steam_appmanifest::steam_install_details;
+
 /// Manual game source backed by one user-selected folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManualFolderGameSource {
@@ -47,11 +49,10 @@ impl ManualFolderGameSource {
         let path_text = self.folder.to_string_lossy();
         let install_path = PathRef::new(path_text.as_ref())
             .map_err(|error| AppError::invalid_input(error.to_string()))?;
-        let title = folder_title(&self.folder);
-        let game_id = GameId::new(format!("manual:{}", install_path.as_str()))
-            .map_err(|error| AppError::invalid_input(error.to_string()))?;
-        let identity = GameIdentity::new(game_id, title, Launcher::Manual)
-            .map_err(|error| AppError::invalid_input(error.to_string()))?;
+        let folder_title = folder_title(&self.folder);
+
+        let identity =
+            game_identity_for_manual_install_folder(&self.folder, &install_path, folder_title)?;
 
         Ok(GameInstallation::new(
             identity,
@@ -79,6 +80,30 @@ fn folder_title(folder: &Path) -> String {
         .filter(|name| !name.trim().is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| folder.display().to_string())
+}
+
+fn game_identity_for_manual_install_folder(
+    folder: &Path,
+    install_path: &PathRef,
+    folder_title: String,
+) -> AppResult<GameIdentity> {
+    let game_id = GameId::new(format!("manual:{}", install_path.as_str()))
+        .map_err(|error| AppError::invalid_input(error.to_string()))?;
+
+    if let Some(steam) = steam_install_details(folder) {
+        let title = steam
+            .display_name
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| folder_title.clone());
+
+        GameIdentity::new(game_id, title, Launcher::Steam)
+            .map_err(|error| AppError::invalid_input(error.to_string()))?
+            .with_external_id(steam.app_id)
+            .map_err(|error| AppError::invalid_input(error.to_string()))
+    } else {
+        GameIdentity::new(game_id, folder_title, Launcher::Manual)
+            .map_err(|error| AppError::invalid_input(error.to_string()))
+    }
 }
 
 #[cfg(test)]

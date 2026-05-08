@@ -64,6 +64,12 @@ pub(crate) enum UserMessage {
 
     OperationCouldNotComplete,
     CommandTaskFailed,
+
+    SteamGridDbApiKeyMissing,
+    UnsupportedCoverImageType,
+    CoverDownloadFailed,
+    CoverArtworkNotFound,
+    CoverFileSystemError,
 }
 
 impl UserMessage {
@@ -88,6 +94,11 @@ impl UserMessage {
         Self::InvalidOperationState,
         Self::OperationCouldNotComplete,
         Self::CommandTaskFailed,
+        Self::SteamGridDbApiKeyMissing,
+        Self::UnsupportedCoverImageType,
+        Self::CoverDownloadFailed,
+        Self::CoverArtworkNotFound,
+        Self::CoverFileSystemError,
     ];
 
     #[must_use]
@@ -175,6 +186,31 @@ impl UserMessage {
                 "user_message.command_task_failed",
                 "The command could not be completed.",
             ),
+
+            Self::SteamGridDbApiKeyMissing => LocalizedText::new(
+                "user_message.steamgriddb_api_key_missing",
+                "Add a SteamGridDB API key to fetch artwork for this game.",
+            ),
+
+            Self::UnsupportedCoverImageType => LocalizedText::new(
+                "user_message.unsupported_cover_image_type",
+                "That image type cannot be used as a cover.",
+            ),
+
+            Self::CoverDownloadFailed => LocalizedText::new(
+                "user_message.cover_download_failed",
+                "The cover image could not be downloaded.",
+            ),
+
+            Self::CoverArtworkNotFound => LocalizedText::new(
+                "user_message.cover_artwork_not_found",
+                "No cover artwork was found for this game.",
+            ),
+
+            Self::CoverFileSystemError => LocalizedText::new(
+                "user_message.cover_file_system_error",
+                "Cover storage reported a filesystem error.",
+            ),
         }
     }
 
@@ -238,6 +274,14 @@ pub(crate) mod user_message {
     pub(crate) const OPERATION_COULD_NOT_COMPLETE: UserMessage =
         UserMessage::OperationCouldNotComplete;
     pub(crate) const COMMAND_TASK_FAILED: UserMessage = UserMessage::CommandTaskFailed;
+
+    pub(crate) const STEAMGRIDDB_API_KEY_MISSING: UserMessage =
+        UserMessage::SteamGridDbApiKeyMissing;
+    pub(crate) const UNSUPPORTED_COVER_IMAGE_TYPE: UserMessage =
+        UserMessage::UnsupportedCoverImageType;
+    pub(crate) const COVER_DOWNLOAD_FAILED: UserMessage = UserMessage::CoverDownloadFailed;
+    pub(crate) const COVER_ARTWORK_NOT_FOUND: UserMessage = UserMessage::CoverArtworkNotFound;
+    pub(crate) const COVER_FILE_SYSTEM_ERROR: UserMessage = UserMessage::CoverFileSystemError;
 
     #[cfg(test)]
     pub(crate) const ALL: &[UserMessage] = UserMessage::ALL;

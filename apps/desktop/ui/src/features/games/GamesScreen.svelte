@@ -1,35 +1,27 @@
 <script lang="ts">
   import type { GameCard } from '@shared/api/types';
   import type { GameSelectionHandler, VoidHandler } from '@shared/utils/callbacks';
+  import {
+    clearGameCover,
+    fetchGameCover,
+    isDesktopPreviewMode,
+    setGameCover,
+  } from '@shared/api/desktop';
+  import { describeCommandError } from '@shared/api/errors';
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
   import Surface from '@shared/ui/Surface.svelte';
-  import { formatLabel, titleMonogram } from '@shared/utils/presenters';
-
-  type DashboardStats = {
-    games: number;
-    updates: number;
-    backupsReady: number;
-  };
-
-  type UpdateBadgeTone = 'success' | 'muted';
-
-  type UpdateBadge = {
-    label: string;
-    tone: UpdateBadgeTone;
-  };
-
-  type GameCardViewModel = {
-    id: string;
-    title: string;
-    installPath: string;
-    monogram: string;
-    updateBadge: UpdateBadge;
-    technologies: string[];
-  };
+  import GameCardCoverMenu from '@features/games/GameCardCoverMenu.svelte';
+  import { getDashboardStats, toGameCardViewModel } from '@features/games/games-screen-model';
+  import { open } from '@tauri-apps/plugin-dialog';
 
   const SCAN_LABEL = 'Scan Folder';
   const SCANNING_LABEL = 'Scanning...';
+  const DESKTOP_APP_REQUIRED_MESSAGE = 'Choosing a cover file requires the desktop app.';
+
+  const COVER_IMAGE_FILTERS = [
+    { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+  ];
 
   const noop: VoidHandler = (): void => {
     // Intentionally empty.
@@ -39,77 +31,181 @@
     // Intentionally empty.
   };
 
+  const noopReloadCards = async (): Promise<void> => {
+    // Intentionally empty.
+  };
+
+  const noopCoverError = (): void => {
+    // Intentionally empty.
+  };
+
   export let games: GameCard[] = [];
   export let busy = false;
+  /** Game IDs currently receiving automatic cover fetch (DesktopApp background sync). */
+  export let coversAutoFetchingIds: ReadonlySet<string> = new Set();
+
   export let onScan: VoidHandler = noop;
   export let onRefresh: VoidHandler = noop;
+  /** Reload game cards only (e.g. after cover change); avoids full library rescan. */
+  export let onReloadCards: () => Promise<void> = noopReloadCards;
+
+  export let onClearError: VoidHandler = noop;
+  export let onCoverError: (message: string) => void = noopCoverError;
   export let onOpenDetails: GameSelectionHandler = noopOpenGame;
   export let onOpenOperations: GameSelectionHandler = noopOpenGame;
 
+  type GameCardCoverMenuHandle = {
+    focusTrigger: () => void;
+  };
+
+  type CoverMenuRefs = Record<string, GameCardCoverMenuHandle | undefined>;
+
+  let manualCoverBusyFor: string | null = null;
+  let menuOpenFor: string | null = null;
+  let coverMenuRefs: CoverMenuRefs = {};
+
   $: gameItems = games.map(toGameCardViewModel);
+  $: gameIds = gameItems.map((game) => game.id);
   $: hasGames = gameItems.length > 0;
   $: scanButtonLabel = busy ? SCANNING_LABEL : SCAN_LABEL;
   $: dashboardStats = getDashboardStats(games);
   $: hasBackupsReady = dashboardStats.backupsReady > 0;
+  $: hasManualCoverAction = manualCoverBusyFor !== null;
 
-  function toGameCardViewModel(game: GameCard): GameCardViewModel {
-    return {
-      id: game.game_id,
-      title: game.title,
-      installPath: game.install_path,
-      monogram: titleMonogram(game.title),
-      updateBadge: getUpdateBadge(game),
-      technologies: game.technology_tags.map(formatLabel),
-    };
+  $: pruneCoverMenuRefs(gameIds);
+
+  $: if (menuOpenFor !== null && (hasManualCoverAction || coversAutoFetchingIds.has(menuOpenFor))) {
+    menuOpenFor = null;
   }
 
-  function getDashboardStats(gameCards: readonly GameCard[]): DashboardStats {
-    let updates = 0;
-    let backupsReady = 0;
+  function pruneCoverMenuRefs(activeGameIds: readonly string[]): void {
+    const activeIds = new Set(activeGameIds);
+    let didPrune = false;
+    const nextRefs: CoverMenuRefs = {};
 
-    for (const game of gameCards) {
-      updates += getUpdateCount(game);
-      backupsReady += Number(game.backup_available);
+    for (const [gameId, menuRef] of Object.entries(coverMenuRefs)) {
+      if (activeIds.has(gameId)) {
+        nextRefs[gameId] = menuRef;
+      } else {
+        didPrune = true;
+      }
     }
 
-    return {
-      games: gameCards.length,
-      updates,
-      backupsReady,
-    };
-  }
-
-  function getUpdateBadge(game: GameCard): UpdateBadge {
-    return {
-      label: getUpdateBadgeLabel(game),
-      tone: game.updates_available ? 'success' : 'muted',
-    };
-  }
-
-  function getUpdateBadgeLabel(game: GameCard): string {
-    if (!game.updates_available) {
-      return 'Up to date';
+    if (didPrune) {
+      coverMenuRefs = nextRefs;
     }
 
-    const updateCount = getUpdateCount(game);
+    if (menuOpenFor !== null && !activeIds.has(menuOpenFor)) {
+      menuOpenFor = null;
+    }
+  }
 
-    if (updateCount === 0) {
-      return 'Updates available';
+  function isManualCoverBusy(gameId: string): boolean {
+    return manualCoverBusyFor === gameId;
+  }
+
+  /** Manual card cover action or background auto-fetch (overlay / aria-busy). */
+  function isCoverOperationBusy(gameId: string): boolean {
+    return isManualCoverBusy(gameId) || coversAutoFetchingIds.has(gameId);
+  }
+
+  function setMenuOpen(gameId: string, open: boolean): void {
+    menuOpenFor = open ? gameId : null;
+  }
+
+  function closeMenu(): void {
+    menuOpenFor = null;
+  }
+
+  function focusMenuTrigger(gameId: string): void {
+    const focus = (): void => {
+      coverMenuRefs[gameId]?.focusTrigger();
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(focus);
+      return;
     }
 
-    return `${updateCount} update${updateCount === 1 ? '' : 's'} available`;
+    focus();
   }
 
-  function getUpdateCount(game: GameCard): number {
-    return Math.max(0, game.update_count);
+  async function withManualCoverBusy(gameId: string, task: () => Promise<void>): Promise<void> {
+    if (manualCoverBusyFor !== null) {
+      return;
+    }
+
+    manualCoverBusyFor = gameId;
+
+    try {
+      await task();
+      onClearError();
+      await onReloadCards();
+    } catch (error: unknown) {
+      onCoverError(describeCommandError(error));
+    } finally {
+      manualCoverBusyFor = null;
+      focusMenuTrigger(gameId);
+    }
   }
 
-  function handleScan(): void {
-    onScan();
+  async function runCoverCommand(gameId: string, command: () => Promise<void>): Promise<void> {
+    closeMenu();
+    await withManualCoverBusy(gameId, command);
   }
 
-  function handleRefresh(): void {
-    onRefresh();
+  async function selectCoverPath(): Promise<string | null> {
+    const selected = await open({
+      multiple: false,
+      filters: COVER_IMAGE_FILTERS,
+    });
+
+    return selected;
+  }
+
+  async function handleFetchCover(gameId: string): Promise<void> {
+    await runCoverCommand(gameId, async () => {
+      await fetchGameCover(gameId);
+    });
+  }
+
+  async function handleClearCover(gameId: string): Promise<void> {
+    await runCoverCommand(gameId, async () => {
+      await clearGameCover(gameId);
+    });
+  }
+
+  async function handlePickCover(gameId: string): Promise<void> {
+    closeMenu();
+
+    if (manualCoverBusyFor !== null) {
+      return;
+    }
+
+    if (isDesktopPreviewMode()) {
+      onCoverError(DESKTOP_APP_REQUIRED_MESSAGE);
+      focusMenuTrigger(gameId);
+      return;
+    }
+
+    let selectedPath: string | null = null;
+
+    try {
+      selectedPath = await selectCoverPath();
+    } catch (error: unknown) {
+      onCoverError(describeCommandError(error));
+      focusMenuTrigger(gameId);
+      return;
+    }
+
+    if (selectedPath === null) {
+      focusMenuTrigger(gameId);
+      return;
+    }
+
+    await withManualCoverBusy(gameId, async () => {
+      await setGameCover(gameId, selectedPath);
+    });
   }
 </script>
 
@@ -129,11 +225,11 @@
     {/if}
 
     <div class="action-group">
-      <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={handleRefresh}>
+      <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
         Refresh Libraries
       </Button>
 
-      <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
+      <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
         {scanButtonLabel}
       </Button>
     </div>
@@ -146,23 +242,17 @@
       <div class="empty-copy">
         <h3 class="empty-title">No scanned games yet</h3>
         <p class="empty-description">
-          Select a game folder to populate the dashboard with components, updates, backup state,
-          and quick actions.
+          Select a game folder to populate the dashboard with components, updates, backup state, and
+          quick actions.
         </p>
       </div>
 
       <div class="action-group">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy}
-          loading={busy}
-          onclick={handleRefresh}
-        >
+        <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
           Refresh Libraries
         </Button>
 
-        <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={handleScan}>
+        <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
           {scanButtonLabel}
         </Button>
       </div>
@@ -170,21 +260,61 @@
   {:else}
     <div class="game-list">
       {#each gameItems as game (game.id)}
+        {@const coverBusy = isCoverOperationBusy(game.id)}
+        {@const backgroundCoverFetch = coversAutoFetchingIds.has(game.id)}
+        {@const menuDisabled = busy || hasManualCoverAction || backgroundCoverFetch}
+
         <Surface as="article" interactive shadow class="game-card">
           <div class="card-body">
+            <GameCardCoverMenu
+              bind:this={coverMenuRefs[game.id]}
+              title={game.title}
+              disabled={menuDisabled}
+              autoFetchInProgress={backgroundCoverFetch}
+              hasCover={game.hasCover}
+              open={menuOpenFor === game.id}
+              onOpenChange={(next: boolean): void => {
+                setMenuOpen(game.id, next);
+              }}
+              onFetchCover={(): void => {
+                void handleFetchCover(game.id);
+              }}
+              onPickCover={(): void => {
+                void handlePickCover(game.id);
+              }}
+              onClearCover={(): void => {
+                void handleClearCover(game.id);
+              }}
+            />
+
             <div class="card-header">
-              <div class="cover-placeholder" aria-hidden="true">
-                <span>{game.monogram}</span>
+              <div
+                class="cover-stack"
+                aria-busy={coverBusy ? 'true' : 'false'}
+                aria-label={`Cover artwork: ${game.title}`}
+              >
+                {#if game.coverSrc}
+                  <img
+                    class="cover-image"
+                    src={game.coverSrc}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                  />
+                {:else}
+                  <div class="cover-placeholder" aria-hidden="true">
+                    <span>{game.monogram}</span>
+                  </div>
+                {/if}
+
+                {#if coverBusy}
+                  <div class="cover-busy-overlay" aria-hidden="true"></div>
+                {/if}
               </div>
 
               <div class="header-copy">
                 <div class="platform-row">
-                  <Badge
-                    pill
-                    surface="soft"
-                    tone={game.updateBadge.tone}
-                    class="updates-badge"
-                  >
+                  <Badge pill surface="soft" tone={game.updateBadge.tone} class="updates-badge">
                     {game.updateBadge.label}
                   </Badge>
                 </div>
@@ -201,9 +331,7 @@
 
               <div class="technology-row">
                 {#if game.technologies.length === 0}
-                  <Badge pill surface="outline" tone="muted">
-                    No detected technologies yet
-                  </Badge>
+                  <Badge pill surface="outline" tone="muted">No detected technologies yet</Badge>
                 {:else}
                   {#each game.technologies as technology}
                     <Badge pill surface="outline">{technology}</Badge>
@@ -292,10 +420,12 @@
     min-width: 0;
     height: 100%;
     padding: var(--space-4);
-    overflow: hidden;
+    overflow: visible;
   }
 
   .card-body {
+    position: relative;
+
     display: grid;
     grid-template-rows: auto 1fr auto;
     gap: var(--space-4);
@@ -310,26 +440,63 @@
     gap: var(--space-3);
   }
 
+  .cover-stack {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 600 / 900;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+    background: var(--bg-control);
+  }
+
+  .cover-image,
+  .cover-placeholder {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 0;
+  }
+
+  .cover-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+    background: var(--bg-control);
+    pointer-events: none;
+    user-select: none;
+  }
+
   .cover-placeholder {
     display: grid;
-    min-height: 4.75rem;
+    height: 100%;
     align-content: center;
     justify-items: center;
-    border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
-    border-radius: var(--radius-lg);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--accent) 16%, var(--bg-control)) 0%,
       var(--bg-control) 100%
     );
     color: var(--text-strong);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+    pointer-events: none;
+    user-select: none;
   }
 
   .cover-placeholder span {
     font-size: 1.45rem;
     font-weight: 600;
     letter-spacing: 0.04em;
+  }
+
+  .cover-busy-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--bg-card) 45%, transparent);
+    pointer-events: none;
   }
 
   .header-copy,
@@ -341,6 +508,7 @@
 
   .header-copy {
     gap: var(--space-3);
+    padding-inline-end: 2.75rem;
   }
 
   .title-copy,
@@ -440,9 +608,13 @@
       gap: 0.9rem;
     }
 
-    .cover-placeholder {
-      width: 72px;
-      min-height: 72px;
+    .cover-stack {
+      width: min(7.125rem, 40vw);
+      justify-self: start;
+    }
+
+    .cover-placeholder span {
+      font-size: 1.2rem;
     }
 
     .dashboard-summary {

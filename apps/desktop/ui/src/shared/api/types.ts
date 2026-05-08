@@ -63,6 +63,9 @@ export type GameCard = {
 
   operation_count: number;
   last_operation_status?: Nullable<OperationStatus>;
+
+  /** Present when a cover image is stored for this game (Unix ms); drives custom-protocol artwork URLs. */
+  cover_updated_at_ms?: Nullable<number>;
 };
 
 export type CommandErrorDto = {
@@ -71,6 +74,15 @@ export type CommandErrorDto = {
   messageKey: string;
   details: string;
   suggestedActions: string[];
+};
+
+export type CoverArtworkResult = {
+  file_name: string;
+  updated_at_ms: number;
+};
+
+export type CatalogSettingPayload = {
+  value: string | null;
 };
 
 export type ComponentFile = {
@@ -130,7 +142,8 @@ export type ScanError = {
 
 export type AutoScanResponse = {
   games: GameDetails[];
-  errors: ScanError[];
+  /** Omitted by the Rust backend when empty; treat as `[]` when absent. */
+  errors?: ScanError[];
 };
 
 export type GameDetails = {

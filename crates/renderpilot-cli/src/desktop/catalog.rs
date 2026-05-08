@@ -18,11 +18,19 @@ pub fn list_games() -> JsonResult {
 pub fn get_game_cards() -> JsonResult {
     let storage = catalog::open_catalog_storage()?;
     let games = storage.list_games()?;
+    let covers_by_game = storage.list_all_game_covers().map_err(CliError::from)?;
     let mut cards = Vec::with_capacity(games.len());
 
     for game in &games {
         let details = catalog::get_game_details_with_storage(&storage, game.id().clone())?;
-        cards.push(GameCardOutput::from_details(game, &details));
+        let cover_updated_at_ms = covers_by_game
+            .get(game.id())
+            .map(|record| record.updated_at_ms);
+        cards.push(GameCardOutput::from_details(
+            game,
+            &details,
+            cover_updated_at_ms,
+        ));
     }
 
     to_json(cards)
@@ -57,12 +65,14 @@ struct GameCardOutput {
     backup_available: bool,
     operation_count: usize,
     last_operation_status: Option<String>,
+    cover_updated_at_ms: Option<i64>,
 }
 
 impl GameCardOutput {
     fn from_details(
         game: &renderpilot_domain::GameInstallation,
         details: &catalog::GameDetailsCatalogResult,
+        cover_updated_at_ms: Option<i64>,
     ) -> Self {
         let identity = game.identity();
         let metrics = GameCardMetrics::from_details(details);
@@ -83,6 +93,7 @@ impl GameCardOutput {
             backup_available: metrics.backup_available,
             operation_count: metrics.operation_count,
             last_operation_status: metrics.last_operation_status,
+            cover_updated_at_ms,
         }
     }
 }
@@ -137,4 +148,29 @@ impl GameDetailsOutput {
             operations,
         })
     }
+}
+
+/// Reads one persisted catalog settings value (typically used for integration keys).
+pub fn get_catalog_setting(key: impl Into<String>) -> JsonResult {
+    let key = key.into();
+    let storage = catalog::open_catalog_storage()?;
+    let value = storage.get_setting(&key).map_err(CliError::from)?;
+
+    to_json(serde_json::json!({ "value": value }))
+}
+
+/// Upserts a persisted catalog settings value, or deletes the row when `value` is blank after trim.
+pub fn set_catalog_setting(key: impl Into<String>, value: impl Into<String>) -> JsonResult {
+    let key = key.into();
+    let value = value.into();
+
+    let storage = catalog::open_catalog_storage()?;
+
+    if value.trim().is_empty() {
+        storage.delete_setting(&key).map_err(CliError::from)?;
+    } else {
+        storage.set_setting(&key, &value).map_err(CliError::from)?;
+    }
+
+    to_json(serde_json::json!({ "saved": true }))
 }

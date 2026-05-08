@@ -78,8 +78,14 @@ fn collect_stale_manual_game_ids(
 }
 
 fn delete_games(storage: &SqliteStorage, game_ids: Vec<GameId>) -> Result<(), CliError> {
+    let catalog_path = crate::catalog::storage::catalog_database_path()?;
+
     for game_id in game_ids {
-        storage.delete_game(&game_id)?;
+        let deleted = storage.delete_game(&game_id)?;
+        crate::catalog::covers::unlink_cover_file_best_effort(
+            &catalog_path,
+            deleted.old_cover_file_name,
+        );
     }
 
     Ok(())

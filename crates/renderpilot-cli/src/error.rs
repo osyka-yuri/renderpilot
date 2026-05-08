@@ -50,6 +50,16 @@ pub enum CliError {
     CommandFailed(String),
     /// CLI output could not be serialized.
     OutputSerializationFailed(String),
+    /// SteamGridDB API key is required for this cover lookup but is not configured.
+    SteamGridDbApiKeyMissing,
+    /// Cover bytes are not a supported raster image type.
+    UnsupportedCoverImageType,
+    /// Cover artwork could not be fetched over the network.
+    CoverDownloadFailed(String),
+    /// No cover artwork was available from providers.
+    CoverNotFound,
+    /// Local filesystem error while reading or writing cover files.
+    CoverIo(String),
 }
 
 impl CliError {
@@ -64,40 +74,56 @@ impl CliError {
 
     const fn category(&self) -> ErrorCategory {
         match self {
-            Self::CommandFailed(_) | Self::OutputSerializationFailed(_) => ErrorCategory::Runtime,
+            Self::CommandFailed(_)
+            | Self::OutputSerializationFailed(_)
+            | Self::SteamGridDbApiKeyMissing
+            | Self::UnsupportedCoverImageType
+            | Self::CoverDownloadFailed(_)
+            | Self::CoverNotFound
+            | Self::CoverIo(_) => ErrorCategory::Runtime,
             _ => ErrorCategory::Usage,
         }
     }
 
     fn usage_message(&self) -> Option<Cow<'_, str>> {
-        let message = match self {
-            Self::NonUnicodeArgument => Cow::Borrowed("arguments must be valid Unicode"),
-            Self::UnknownArgument(arg) => Cow::Owned(format!("unknown argument: {arg}")),
-            Self::UnexpectedArgument(arg) => Cow::Owned(format!("unexpected argument: {arg}")),
-            Self::MissingArgument(arg) => Cow::Owned(format!("missing required argument: {arg}")),
-            Self::InvalidGameId(id) => Cow::Owned(format!("invalid game id: {id}")),
-            Self::InvalidComponentId(id) => Cow::Owned(format!("invalid component id: {id}")),
-            Self::InvalidArtifactId(id) => Cow::Owned(format!("invalid artifact id: {id}")),
-            Self::InvalidOperationId(id) => Cow::Owned(format!("invalid operation id: {id}")),
-            Self::InvalidTechnology(tech) => Cow::Owned(format!("unknown technology: {tech}")),
-            Self::GameNotFound(id) => Cow::Owned(format!("game not found: {id}")),
-            Self::OperationNotFound(id) => Cow::Owned(format!("operation not found: {id}")),
-            Self::ArtifactNotFound(id) => Cow::Owned(format!("artifact not found: {id}")),
-            Self::ComponentNotFound(id) => Cow::Owned(format!("component not found: {id}")),
+        match self {
+            Self::NonUnicodeArgument => Some(Cow::Borrowed("arguments must be valid Unicode")),
+            Self::UnknownArgument(arg) => Some(Cow::Owned(format!("unknown argument: {arg}"))),
+            Self::UnexpectedArgument(arg) => {
+                Some(Cow::Owned(format!("unexpected argument: {arg}")))
+            }
+            Self::MissingArgument(arg) => {
+                Some(Cow::Owned(format!("missing required argument: {arg}")))
+            }
+            Self::InvalidGameId(id) => Some(Cow::Owned(format!("invalid game id: {id}"))),
+            Self::InvalidComponentId(id) => Some(Cow::Owned(format!("invalid component id: {id}"))),
+            Self::InvalidArtifactId(id) => Some(Cow::Owned(format!("invalid artifact id: {id}"))),
+            Self::InvalidOperationId(id) => Some(Cow::Owned(format!("invalid operation id: {id}"))),
+            Self::InvalidTechnology(tech) => {
+                Some(Cow::Owned(format!("unknown technology: {tech}")))
+            }
+            Self::GameNotFound(id) => Some(Cow::Owned(format!("game not found: {id}"))),
+            Self::OperationNotFound(id) => Some(Cow::Owned(format!("operation not found: {id}"))),
+            Self::ArtifactNotFound(id) => Some(Cow::Owned(format!("artifact not found: {id}"))),
+            Self::ComponentNotFound(id) => Some(Cow::Owned(format!("component not found: {id}"))),
             Self::ConfirmationTokenMismatch => {
-                Cow::Borrowed("confirmation token mismatch for operation")
+                Some(Cow::Borrowed("confirmation token mismatch for operation"))
             }
             Self::InvalidOperationState {
                 operation_id,
                 state,
-            } => Cow::Owned(invalid_operation_state_display_message(
+            } => Some(Cow::Owned(invalid_operation_state_display_message(
                 operation_id,
                 state.as_str(),
-            )),
-            Self::CommandFailed(_) | Self::OutputSerializationFailed(_) => return None,
-        };
-
-        Some(message)
+            ))),
+            Self::CommandFailed(_)
+            | Self::OutputSerializationFailed(_)
+            | Self::SteamGridDbApiKeyMissing
+            | Self::UnsupportedCoverImageType
+            | Self::CoverDownloadFailed(_)
+            | Self::CoverNotFound
+            | Self::CoverIo(_) => None,
+        }
     }
 }
 
@@ -118,6 +144,15 @@ impl fmt::Display for CliError {
             Self::OutputSerializationFailed(message) => {
                 write!(formatter, "could not serialize CLI output: {message}")
             }
+            Self::SteamGridDbApiKeyMissing => {
+                formatter.write_str("steamgriddb api key is not configured")
+            }
+            Self::UnsupportedCoverImageType => formatter.write_str("unsupported cover image type"),
+            Self::CoverDownloadFailed(message) => {
+                write!(formatter, "cover download failed: {message}")
+            }
+            Self::CoverNotFound => formatter.write_str("cover artwork was not found"),
+            Self::CoverIo(message) => write!(formatter, "cover file error: {message}"),
             _ => unreachable!("usage errors are handled by usage_message"),
         }
     }
@@ -246,8 +281,13 @@ mod tests {
     #[test]
     fn runtime_errors_use_general_failure_exit_code() {
         let errors = [
-            CliError::CommandFailed("scan failed".to_owned()),
-            CliError::OutputSerializationFailed("json failed".to_owned()),
+            CliError::CommandFailed("scan failed".into()),
+            CliError::OutputSerializationFailed("json failed".into()),
+            CliError::SteamGridDbApiKeyMissing,
+            CliError::UnsupportedCoverImageType,
+            CliError::CoverDownloadFailed("timeout".into()),
+            CliError::CoverNotFound,
+            CliError::CoverIo("permission denied".into()),
         ];
 
         for error in errors {

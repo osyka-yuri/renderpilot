@@ -5,5 +5,7 @@
 
 pub mod game_libraries;
 mod manual_folder;
+mod steam_appmanifest;
 
 pub use manual_folder::ManualFolderGameSource;
+pub use steam_appmanifest::{steam_install_details, SteamInstallDetails};

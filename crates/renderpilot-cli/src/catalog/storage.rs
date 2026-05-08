@@ -29,6 +29,11 @@ pub(crate) fn open_catalog_storage() -> Result<SqliteStorage, CliError> {
     })
 }
 
+/// Resolved absolute or relative path to the SQLite catalog file.
+pub(crate) fn catalog_database_path() -> Result<PathBuf, CliError> {
+    catalog_db_path()
+}
+
 fn catalog_db_path() -> Result<PathBuf, CliError> {
     catalog_db_path_from_env(|name| env::var_os(name))
 }

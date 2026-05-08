@@ -18,12 +18,28 @@ mod test_env;
 
 pub use error::CliError;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Serves image bytes for cover requests.
+///
+/// Handles requests of the form:
+///
+/// `http://rp-cover.localhost/<url-encoded-game-id>`
+#[must_use]
+pub fn cover_asset_protocol_response(request_path: &str) -> http::Response<Vec<u8>> {
+    catalog::covers::cover_protocol_http_response(request_path)
+}
 
 /// Parses CLI arguments, executes the selected command, and returns stdout text.
-pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<String, CliError> {
+///
+/// `args` should use the same shape as process arguments, usually including the
+/// executable name as the first item if `args::parse_args` expects it.
+pub fn run<I>(args: I) -> Result<String, CliError>
+where
+    I: IntoIterator<Item = OsString>,
+{
     let command = args::parse_args(args)?;
-    let info = app_info(VERSION);
+    let app_info = app_info(APP_VERSION);
 
-    commands::render_command(command, info)
+    commands::render_command(command, app_info)
 }

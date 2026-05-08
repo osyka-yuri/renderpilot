@@ -359,6 +359,7 @@ fn unix_millis_overflow_error(path: &Path) -> renderpilot_application::AppError 
 
 /// Test-only instrumentation for [`sha256_file`] (parallel-safe per OS thread).
 #[cfg(test)]
+#[allow(clippy::missing_const_for_thread_local)]
 mod sha256_test_hooks {
     use std::cell::Cell;
 

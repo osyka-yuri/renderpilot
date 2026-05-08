@@ -7,6 +7,7 @@ const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 
 const CURRENT_SCHEMA_VERSION: i32 = 1;
 const GAMES_TABLE: &str = "games";
+const GAME_COVERS_TABLE: &str = "game_covers";
 
 /// Applies the bundled catalog DDL.
 ///
@@ -92,6 +93,13 @@ fn validate_catalog_schema(connection: &Connection) -> AppResult<()> {
         ));
     }
 
+    if !table_exists(connection, GAME_COVERS_TABLE)? {
+        return Err(storage_context(
+            "sqlite catalog schema is missing the game_covers table",
+            SqliteError::InvalidQuery,
+        ));
+    }
+
     Ok(())
 }
 
@@ -126,6 +134,7 @@ mod tests {
 
         assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
         assert!(games_column_count(&connection) > 0);
+        assert!(game_covers_column_count(&connection) > 0);
     }
 
     #[test]
@@ -137,6 +146,7 @@ mod tests {
 
         assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
         assert!(games_column_count(&connection) > 0);
+        assert!(game_covers_column_count(&connection) > 0);
     }
 
     #[test]
@@ -177,5 +187,15 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("games table should exist")
+    }
+
+    fn game_covers_column_count(connection: &Connection) -> i64 {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('game_covers')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("game_covers table should exist")
     }
 }
