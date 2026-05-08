@@ -40,8 +40,12 @@ impl fmt::Display for ParseEnumError {
 
 impl Error for ParseEnumError {}
 
-macro_rules! stable_enum {
+// Implementation detail: only invoked from `stable_enum!`. Expands to the enum with serde
+// `rename` per wire literal, `ALL`, `as_str` (same literals), `from_stable_str` (trimmed
+// exact match on those literals), plus `Display`, `AsRef<str>`, and `FromStr`.
+macro_rules! define_stable_wire_enum {
     (
+        derives = [$($derive:ident),+ $(,)?],
         $(#[$enum_meta:meta])*
         pub enum $name:ident {
             $(
@@ -51,7 +55,7 @@ macro_rules! stable_enum {
         }
     ) => {
         $(#[$enum_meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive($($derive),+)]
         pub enum $name {
             $(
                 $(#[$variant_meta])*
@@ -100,6 +104,55 @@ macro_rules! stable_enum {
             fn from_str(value: &str) -> Result<Self, Self::Err> {
                 Self::from_stable_str(value)
                     .ok_or_else(|| ParseEnumError::new(stringify!($name), value))
+            }
+        }
+    };
+}
+
+/// Declares a wire-stable enum: serde and `as_str` use the given string literals;
+/// `from_stable_str` trims input then matches those literals exactly.
+///
+/// With a leading `default,`, `Default` is also derived. Mark **exactly one** variant with
+/// `#[default]` (the compiler rejects zero or multiple).
+macro_rules! stable_enum {
+    (
+        default,
+        $(#[$enum_meta:meta])*
+        pub enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident = $stable:literal
+            ),+ $(,)?
+        }
+    ) => {
+        define_stable_wire_enum! {
+            derives = [Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default],
+            $(#[$enum_meta])*
+            pub enum $name {
+                $(
+                    $(#[$variant_meta])*
+                    $variant = $stable
+                ),+
+            }
+        }
+    };
+    (
+        $(#[$enum_meta:meta])*
+        pub enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident = $stable:literal
+            ),+ $(,)?
+        }
+    ) => {
+        define_stable_wire_enum! {
+            derives = [Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize],
+            $(#[$enum_meta])*
+            pub enum $name {
+                $(
+                    $(#[$variant_meta])*
+                    $variant = $stable
+                ),+
             }
         }
     };
@@ -164,7 +217,7 @@ stable_enum! {
 }
 
 /// Graphics or presentation technology detected in a game installation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum GraphicsTechnology {
     /// NVIDIA DLSS Super Resolution.
     #[serde(rename = "dlss_super_resolution", alias = "DlssSuperResolution")]
@@ -207,6 +260,7 @@ pub enum GraphicsTechnology {
     OptiScaler,
 
     /// Technology is present but not classified yet.
+    #[default]
     #[serde(rename = "unknown", alias = "Unknown")]
     Unknown,
 }
@@ -257,12 +311,6 @@ impl GraphicsTechnology {
     }
 }
 
-impl Default for GraphicsTechnology {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
-
 impl fmt::Display for GraphicsTechnology {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str((*self).as_slug())
@@ -302,6 +350,7 @@ stable_enum! {
 }
 
 stable_enum! {
+    default,
     /// Replacement policy for a detected component.
     pub enum Swappability {
         /// Component can be replaced independently.
@@ -313,15 +362,10 @@ stable_enum! {
         /// Component is integrated into the game engine and cannot be swapped safely.
         IntegratedIntoEngine = "IntegratedIntoEngine",
         /// Replacement policy is not known yet.
+        #[default]
         Unknown = "Unknown",
         /// Replacement is known to be unsafe.
         Unsafe = "Unsafe",
-    }
-}
-
-impl Default for Swappability {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 
@@ -411,6 +455,23 @@ mod tests {
     fn defaults_are_unknown_when_available() {
         assert_eq!(GraphicsTechnology::default(), GraphicsTechnology::Unknown);
         assert_eq!(Swappability::default(), Swappability::Unknown);
+    }
+
+    #[test]
+    fn serde_swappability_unknown_round_trips() {
+        let json = serde_json::to_string(&Swappability::Unknown).unwrap();
+        assert_eq!(json, "\"Unknown\"");
+
+        let parsed: Swappability = serde_json::from_str("\"Unknown\"").unwrap();
+        assert_eq!(parsed, Swappability::Unknown);
+    }
+
+    #[test]
+    fn serde_swappability_default_matches_unknown_wire_value() {
+        assert_eq!(
+            serde_json::to_string(&Swappability::default()).unwrap(),
+            serde_json::to_string(&Swappability::Unknown).unwrap()
+        );
     }
 
     #[test]
