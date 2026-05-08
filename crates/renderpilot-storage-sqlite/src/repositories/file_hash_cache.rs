@@ -22,7 +22,12 @@ pub struct FileHashCacheRow {
 }
 
 const LOAD_FILE_HASH_CACHE_SQL: &str = "
-    SELECT path, size, modified_at, sha256, version
+    SELECT
+        path AS cache_path,
+        size AS cache_size,
+        modified_at AS cache_modified_at,
+        sha256 AS cache_sha256,
+        version AS cache_version
     FROM file_hash_cache
     WHERE path = ?1
        OR path LIKE ?2 ESCAPE '\\'
@@ -42,11 +47,11 @@ const UPSERT_FILE_HASH_CACHE_SQL: &str = "
         updated_at  = excluded.updated_at
 ";
 
-const COL_PATH: usize = 0;
-const COL_SIZE: usize = 1;
-const COL_MODIFIED_AT: usize = 2;
-const COL_SHA256: usize = 3;
-const COL_VERSION: usize = 4;
+const COL_PATH: &str = "cache_path";
+const COL_SIZE: &str = "cache_size";
+const COL_MODIFIED_AT: &str = "cache_modified_at";
+const COL_SHA256: &str = "cache_sha256";
+const COL_VERSION: &str = "cache_version";
 
 impl SqliteStorage {
     /// Loads cache rows for `path_prefix`.
@@ -128,32 +133,32 @@ fn cache_row_from_sql(row: &rusqlite::Row<'_>) -> AppResult<FileHashCacheRow> {
     })
 }
 
-fn read_string(row: &rusqlite::Row<'_>, column_index: usize) -> AppResult<String> {
-    row.get(column_index).map_err(storage_error)
+fn read_string(row: &rusqlite::Row<'_>, column_name: &str) -> AppResult<String> {
+    row.get(column_name).map_err(storage_error)
 }
 
-fn read_optional_string(row: &rusqlite::Row<'_>, column_index: usize) -> AppResult<Option<String>> {
-    row.get(column_index).map_err(storage_error)
+fn read_optional_string(row: &rusqlite::Row<'_>, column_name: &str) -> AppResult<Option<String>> {
+    row.get(column_name).map_err(storage_error)
 }
 
-fn read_i64(row: &rusqlite::Row<'_>, column_index: usize) -> AppResult<i64> {
-    row.get(column_index).map_err(storage_error)
+fn read_i64(row: &rusqlite::Row<'_>, column_name: &str) -> AppResult<i64> {
+    row.get(column_name).map_err(storage_error)
 }
 
-fn read_u64(row: &rusqlite::Row<'_>, column_index: usize, column_name: &str) -> AppResult<u64> {
-    let value = read_i64(row, column_index)?;
+fn read_u64(row: &rusqlite::Row<'_>, column_name: &str, entity_column: &str) -> AppResult<u64> {
+    let value = read_i64(row, column_name)?;
 
-    unsigned_integer(value, column_name)
+    unsigned_integer(value, entity_column)
 }
 
-fn read_sha256(row: &rusqlite::Row<'_>, column_index: usize) -> AppResult<Sha256Hash> {
-    let value = read_string(row, column_index)?;
+fn read_sha256(row: &rusqlite::Row<'_>, column_name: &str) -> AppResult<Sha256Hash> {
+    let value = read_string(row, column_name)?;
 
     Sha256Hash::new(value).map_err(invalid_row)
 }
 
-fn read_version(row: &rusqlite::Row<'_>, column_index: usize) -> AppResult<Option<Version>> {
-    let value = read_optional_string(row, column_index)?;
+fn read_version(row: &rusqlite::Row<'_>, column_name: &str) -> AppResult<Option<Version>> {
+    let value = read_optional_string(row, column_name)?;
 
     value
         .map(|version| Version::parse(&version).map_err(invalid_row))
@@ -391,7 +396,7 @@ mod tests {
         let error = sqlite_integer(u64::MAX, "file_hash_cache.size")
             .expect_err("oversized cache value should fail");
 
-        assert_eq!(error.kind(), AppErrorKind::StorageFailed);
+        assert_eq!(error.kind(), &AppErrorKind::StorageFailed);
         assert!(error.message().contains("does not fit"));
     }
 

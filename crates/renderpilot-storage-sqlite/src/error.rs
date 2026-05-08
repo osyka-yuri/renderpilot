@@ -22,7 +22,7 @@ mod tests {
     fn storage_error_preserves_message() {
         let error = storage_error("sqlite busy");
 
-        assert_eq!(error.kind(), AppErrorKind::StorageFailed);
+        assert_eq!(error.kind(), &AppErrorKind::StorageFailed);
         assert_eq!(error.message(), "sqlite busy");
     }
 

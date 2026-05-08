@@ -1,38 +1,14 @@
 use renderpilot_application::{AppResult, GameRepository};
 use renderpilot_domain::{GameId, GameInstallation};
-use rusqlite::{named_params, CachedStatement, Connection, OptionalExtension};
+use rusqlite::{named_params, Connection, OptionalExtension, Statement, Transaction};
 
-use crate::{error::storage_error, mapping};
+use crate::{error::storage_error, mapping, sqlite_clock};
 
-use super::{row_mapping::game_from_row, SqliteStorage};
-
-const FIND_GAME_SQL: &str = "
-    SELECT
-        id,
-        title,
-        launcher,
-        external_id,
-        platform,
-        runtime,
-        install_path,
-        executable_candidates_json
-    FROM games
-    WHERE id = :id
-";
-
-const LIST_GAMES_SQL: &str = "
-    SELECT
-        id,
-        title,
-        launcher,
-        external_id,
-        platform,
-        runtime,
-        install_path,
-        executable_candidates_json
-    FROM games
-    ORDER BY title, id
-";
+use super::{
+    catalog_select_sql::{FIND_GAME_SQL, LIST_GAMES_SQL},
+    row_mapping::game_from_row,
+    SqliteStorage,
+};
 
 const UPSERT_GAME_SQL: &str = "
     INSERT INTO games
@@ -45,6 +21,7 @@ const UPSERT_GAME_SQL: &str = "
             runtime,
             install_path,
             executable_candidates_json,
+            created_at,
             updated_at
         )
     VALUES
@@ -57,7 +34,8 @@ const UPSERT_GAME_SQL: &str = "
             :runtime,
             :install_path,
             :executable_candidates_json,
-            CAST(unixepoch('subsec') * 1000 AS INTEGER)
+            :created_at_ms,
+            :updated_at_ms
         )
     ON CONFLICT(id) DO UPDATE SET
         title                      = excluded.title,
@@ -77,9 +55,7 @@ const DELETE_GAME_SQL: &str = "
 
 impl GameRepository for SqliteStorage {
     fn upsert_game(&self, game: &GameInstallation) -> AppResult<()> {
-        let connection = self.connection()?;
-
-        upsert_game_in_connection(&connection, game)
+        self.with_transaction(|transaction| upsert_game_within_transaction(transaction, game))
     }
 
     fn upsert_games(&self, games: &[GameInstallation]) -> AppResult<()> {
@@ -87,7 +63,7 @@ impl GameRepository for SqliteStorage {
             return Ok(());
         }
 
-        self.with_transaction(|transaction| upsert_games_in_connection(transaction, games))
+        self.with_transaction(|transaction| upsert_games_within_transaction(transaction, games))
     }
 
     fn find_game(&self, id: &GameId) -> AppResult<Option<GameInstallation>> {
@@ -108,9 +84,7 @@ impl SqliteStorage {
     /// Child rows are removed or detached according to foreign-key rules.
     /// Missing id is a no-op.
     pub fn delete_game(&self, id: &GameId) -> AppResult<()> {
-        let connection = self.connection()?;
-
-        delete_game_in_connection(&connection, id)
+        self.with_connection(|connection| delete_game_in_connection(connection, id))
     }
 }
 
@@ -131,42 +105,33 @@ fn find_game_in_connection(
         .transpose()
 }
 
-/// Writes one game row using an existing connection or outer transaction.
+/// Writes one game row within a transaction.
 ///
-/// This function intentionally does not start its own transaction.
-/// The caller owns transaction boundaries.
-pub(super) fn upsert_game_in_connection(
-    connection: &Connection,
+/// This function requires an active `Transaction` object.
+pub(super) fn upsert_game_within_transaction(
+    transaction: &Transaction<'_>,
     game: &GameInstallation,
 ) -> AppResult<()> {
-    let mut statement = connection
-        .prepare_cached(UPSERT_GAME_SQL)
-        .map_err(storage_error)?;
+    let params = [GameSqlParams::from_game(game)?];
 
-    execute_game_upsert(&mut statement, game)
+    execute_game_upserts_within_transaction(transaction, &params)
 }
 
-/// Writes game rows using an existing connection or outer transaction.
+/// Writes game rows within a transaction.
 ///
-/// This function intentionally does not start its own transaction.
-/// The caller owns transaction boundaries.
-pub(super) fn upsert_games_in_connection(
-    connection: &Connection,
+/// This function requires an active `Transaction` object, ensuring that the
+/// multiple upserts are atomic. If any step fails, the caller's transaction
+/// will be rolled back.
+///
+/// All game parameters are prepared before the first database write, so
+/// mapping/serialization failures cannot produce a partially written batch.
+pub(super) fn upsert_games_within_transaction(
+    transaction: &Transaction<'_>,
     games: &[GameInstallation],
 ) -> AppResult<()> {
-    if games.is_empty() {
-        return Ok(());
-    }
+    let params = collect_game_sql_params(games)?;
 
-    let mut statement = connection
-        .prepare_cached(UPSERT_GAME_SQL)
-        .map_err(storage_error)?;
-
-    for game in games {
-        execute_game_upsert(&mut statement, game)?;
-    }
-
-    Ok(())
+    execute_game_upserts_within_transaction(transaction, &params)
 }
 
 /// Deletes one game row using an existing connection or outer transaction.
@@ -174,7 +139,7 @@ pub(super) fn upsert_games_in_connection(
 /// This function intentionally does not start its own transaction.
 /// The caller owns transaction boundaries.
 pub(super) fn delete_game_in_connection(connection: &Connection, id: &GameId) -> AppResult<()> {
-    connection
+    let _affected_rows = connection
         .execute(
             DELETE_GAME_SQL,
             named_params! {
@@ -186,22 +151,48 @@ pub(super) fn delete_game_in_connection(connection: &Connection, id: &GameId) ->
     Ok(())
 }
 
-fn execute_game_upsert(
-    statement: &mut CachedStatement<'_>,
-    game: &GameInstallation,
-) -> AppResult<()> {
-    let params = GameSqlParams::from_game(game)?;
+fn collect_game_sql_params<'a>(games: &'a [GameInstallation]) -> AppResult<Vec<GameSqlParams<'a>>> {
+    games.iter().map(GameSqlParams::from_game).collect()
+}
 
+fn execute_game_upserts_within_transaction(
+    transaction: &Transaction<'_>,
+    params: &[GameSqlParams<'_>],
+) -> AppResult<()> {
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    let timestamp_ms = sqlite_clock::now_ms(transaction)?;
+
+    let mut statement = transaction
+        .prepare_cached(UPSERT_GAME_SQL)
+        .map_err(storage_error)?;
+
+    for params in params {
+        execute_game_upsert(&mut statement, params, timestamp_ms)?;
+    }
+
+    Ok(())
+}
+
+fn execute_game_upsert(
+    statement: &mut Statement<'_>,
+    params: &GameSqlParams<'_>,
+    timestamp_ms: i64,
+) -> AppResult<()> {
     statement
         .execute(named_params! {
             ":id": params.id,
             ":title": params.title,
-            ":launcher": params.launcher,
+            ":launcher": params.launcher.as_str(),
             ":external_id": params.external_id,
-            ":platform": params.platform,
-            ":runtime": params.runtime,
+            ":platform": params.platform.as_str(),
+            ":runtime": params.runtime.as_str(),
             ":install_path": params.install_path,
-            ":executable_candidates_json": params.executable_candidates_json,
+            ":executable_candidates_json": params.executable_candidates_json.as_str(),
+            ":created_at_ms": timestamp_ms,
+            ":updated_at_ms": timestamp_ms,
         })
         .map_err(storage_error)?;
 
@@ -225,10 +216,10 @@ impl<'a> GameSqlParams<'a> {
         Ok(Self {
             id: game.id().as_str(),
             title: game.identity().title(),
-            launcher: mapping::enum_to_text(game.identity().launcher())?,
+            launcher: mapping::enum_to_text(&game.identity().launcher())?,
             external_id: game.identity().external_id(),
-            platform: mapping::enum_to_text(game.platform())?,
-            runtime: mapping::enum_to_text(game.runtime())?,
+            platform: mapping::enum_to_text(&game.platform())?,
+            runtime: mapping::enum_to_text(&game.runtime())?,
             install_path: game.install_path().as_str(),
             executable_candidates_json: mapping::serialize_json(game.executable_candidates())?,
         })
@@ -255,9 +246,11 @@ mod tests {
         storage
             .upsert_game(&later)
             .expect("later game should store");
+
         storage
             .upsert_game(&earlier_b)
             .expect("beta-b should store");
+
         storage
             .upsert_game(&earlier_a)
             .expect("beta-a should store");
@@ -304,6 +297,7 @@ mod tests {
         storage
             .upsert_game(&original)
             .expect("original game should store");
+
         storage
             .upsert_game(&updated)
             .expect("updated game should store");
@@ -327,6 +321,26 @@ mod tests {
         let games = storage.list_games().expect("games should list");
 
         assert_eq!(games, vec![game_a, game_b]);
+    }
+
+    #[test]
+    fn upsert_games_updates_existing_rows() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+
+        let original = sample_game("game:shared", "Original Title");
+        let updated = sample_game("game:shared", "Updated Title");
+
+        storage
+            .upsert_game(&original)
+            .expect("original game should store");
+
+        storage
+            .upsert_games(std::slice::from_ref(&updated))
+            .expect("updated game should store");
+
+        let games = storage.list_games().expect("games should list");
+
+        assert_eq!(games, vec![updated]);
     }
 
     #[test]

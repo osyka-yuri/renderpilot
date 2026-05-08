@@ -1,25 +1,12 @@
 use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_domain::LibraryArtifact;
-use rusqlite::{named_params, Connection};
+use rusqlite::{named_params, Statement, Transaction};
 
-use crate::{error::storage_error, mapping};
+use crate::{error::storage_error, mapping, sqlite_clock};
 
-use super::{row_mapping::artifact_from_row, SqliteStorage};
-
-const LIST_ARTIFACTS_SQL: &str = "
-    SELECT
-        id,
-        technology,
-        file_name,
-        file_path,
-        version,
-        sha256,
-        source,
-        source_game_id,
-        trust_level
-    FROM library_artifacts
-    ORDER BY technology, file_name, file_path
-";
+use super::{
+    catalog_select_sql::LIST_ARTIFACTS_SQL, row_mapping::artifact_from_row, SqliteStorage,
+};
 
 const UPSERT_ARTIFACT_SQL: &str = "
     INSERT INTO library_artifacts
@@ -33,6 +20,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             source,
             source_game_id,
             trust_level,
+            created_at,
             updated_at
         )
     VALUES
@@ -46,7 +34,8 @@ const UPSERT_ARTIFACT_SQL: &str = "
             :source,
             :source_game_id,
             :trust_level,
-            CAST(unixepoch('subsec') * 1000 AS INTEGER)
+            :created_at_ms,
+            :updated_at_ms
         )
     ON CONFLICT(sha256) DO UPDATE SET
         technology     = excluded.technology,
@@ -61,9 +50,9 @@ const UPSERT_ARTIFACT_SQL: &str = "
 
 impl ArtifactRepository for SqliteStorage {
     fn upsert_artifact(&self, artifact: &LibraryArtifact) -> AppResult<()> {
-        let connection = self.connection()?;
-
-        upsert_artifact_in_connection(&connection, artifact)
+        self.with_transaction(|transaction| {
+            upsert_artifact_within_transaction(transaction, artifact)
+        })
     }
 
     fn list_artifacts(&self) -> AppResult<Vec<LibraryArtifact>> {
@@ -71,74 +60,70 @@ impl ArtifactRepository for SqliteStorage {
     }
 }
 
-/// Upserts one artifact row using an existing connection or outer transaction.
+/// Upserts one artifact row within a transaction.
 ///
-/// This function intentionally does not start its own transaction.
-/// The caller owns transaction boundaries.
-pub(super) fn upsert_artifact_in_connection(
-    connection: &Connection,
+/// This function requires an active `Transaction` object.
+pub(super) fn upsert_artifact_within_transaction(
+    transaction: &Transaction<'_>,
     artifact: &LibraryArtifact,
 ) -> AppResult<()> {
-    let params = ArtifactSqlParams::from_artifact(artifact)?;
-
-    connection
-        .execute(
-            UPSERT_ARTIFACT_SQL,
-            named_params! {
-                ":id": params.id,
-                ":technology": params.technology,
-                ":file_name": params.file_name,
-                ":file_path": params.file_path,
-                ":version": params.version,
-                ":sha256": params.sha256,
-                ":source": params.source,
-                ":source_game_id": params.source_game_id,
-                ":trust_level": params.trust_level,
-            },
-        )
-        .map_err(storage_error)?;
-
-    Ok(())
+    upsert_artifacts_within_transaction(transaction, std::slice::from_ref(artifact))
 }
 
-/// Upserts artifact rows using an existing connection or outer transaction.
+/// Upserts artifact rows within a transaction.
 ///
-/// This function intentionally does not start its own transaction.
-pub(super) fn upsert_artifacts_in_connection(
-    connection: &Connection,
+/// This function requires an active `Transaction` object, ensuring that the
+/// multiple upserts are atomic. If any step fails, the caller's transaction
+/// will be rolled back.
+pub(super) fn upsert_artifacts_within_transaction(
+    transaction: &Transaction<'_>,
     artifacts: &[LibraryArtifact],
 ) -> AppResult<()> {
     if artifacts.is_empty() {
         return Ok(());
     }
 
-    let mut statement = connection
+    let now_ms = sqlite_clock::now_ms(transaction)?;
+
+    let mut statement = transaction
         .prepare_cached(UPSERT_ARTIFACT_SQL)
         .map_err(storage_error)?;
 
     for artifact in artifacts {
-        let params = ArtifactSqlParams::from_artifact(artifact)?;
-
-        statement
-            .execute(named_params! {
-                ":id": params.id,
-                ":technology": params.technology,
-                ":file_name": params.file_name,
-                ":file_path": params.file_path,
-                ":version": params.version,
-                ":sha256": params.sha256,
-                ":source": params.source,
-                ":source_game_id": params.source_game_id,
-                ":trust_level": params.trust_level,
-            })
-            .map_err(storage_error)?;
+        upsert_artifact_with_statement(&mut statement, artifact, now_ms)?;
     }
 
     Ok(())
 }
 
+fn upsert_artifact_with_statement(
+    statement: &mut Statement<'_>,
+    artifact: &LibraryArtifact,
+    stamp_ms: i64,
+) -> AppResult<()> {
+    let row = ArtifactSqlRow::from_artifact(artifact)?;
+
+    statement
+        .execute(named_params! {
+            ":id": row.id,
+            ":technology": row.technology,
+            ":file_name": row.file_name,
+            ":file_path": row.file_path,
+            ":version": row.version,
+            ":sha256": row.sha256,
+            ":source": row.source,
+            ":source_game_id": row.source_game_id,
+            ":trust_level": row.trust_level,
+            ":created_at_ms": stamp_ms,
+            ":updated_at_ms": stamp_ms,
+        })
+        .map_err(storage_error)?;
+
+    Ok(())
+}
+
 #[derive(Debug)]
-struct ArtifactSqlParams<'a> {
+struct ArtifactSqlRow<'a> {
     id: &'a str,
     technology: String,
     file_name: &'a str,
@@ -150,18 +135,18 @@ struct ArtifactSqlParams<'a> {
     trust_level: String,
 }
 
-impl<'a> ArtifactSqlParams<'a> {
+impl<'a> ArtifactSqlRow<'a> {
     fn from_artifact(artifact: &'a LibraryArtifact) -> AppResult<Self> {
         Ok(Self {
             id: artifact.id().as_str(),
-            technology: mapping::enum_to_text(artifact.technology())?,
+            technology: mapping::enum_to_text(&artifact.technology())?,
             file_name: artifact.file_name(),
             file_path: artifact.path().as_str(),
             version: artifact.version().map(|version| version.as_str()),
             sha256: artifact.sha256().as_str(),
             source: artifact.source(),
             source_game_id: artifact.source_game_id().map(|game_id| game_id.as_str()),
-            trust_level: mapping::enum_to_text(artifact.trust_level())?,
+            trust_level: mapping::enum_to_text(&artifact.trust_level())?,
         })
     }
 }
@@ -194,6 +179,7 @@ mod tests {
         .with_source_game_id(game.id().clone());
 
         storage.upsert_game(&game).expect("game should be stored");
+
         storage
             .upsert_artifact(&artifact)
             .expect("artifact should be stored");
@@ -248,6 +234,47 @@ mod tests {
     }
 
     #[test]
+    fn upsert_artifact_keeps_original_id_when_sha256_already_exists() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+
+        let first = sample_artifact(
+            "artifact:first",
+            "C:/Games/GameA/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_B,
+        );
+
+        let second = sample_artifact(
+            "artifact:second",
+            "C:/Games/GameB/bin/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_B,
+        );
+
+        storage
+            .upsert_artifact(&first)
+            .expect("first artifact should be stored");
+
+        storage
+            .upsert_artifact(&second)
+            .expect("second artifact should update the existing sha256 row");
+
+        let artifacts = storage.list_artifacts().expect("artifacts should load");
+
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].id(),
+            first.id(),
+            "sha256 conflict should preserve the first artifact id",
+        );
+        assert_eq!(artifacts[0].sha256(), first.sha256());
+        assert_eq!(
+            artifacts[0].path().as_str(),
+            "C:/Games/GameB/bin/nvngx_dlss.dll"
+        );
+    }
+
+    #[test]
     fn list_artifacts_returns_artifacts_sorted_by_technology_file_name_and_path() {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
 
@@ -275,9 +302,11 @@ mod tests {
         storage
             .upsert_artifact(&later)
             .expect("later artifact should store");
+
         storage
             .upsert_artifact(&earlier_b)
             .expect("earlier_b artifact should store");
+
         storage
             .upsert_artifact(&earlier_a)
             .expect("earlier_a artifact should store");
