@@ -163,6 +163,7 @@ pub(super) fn sample_game(id: &str, title: &str, install_path: &str) -> GameInst
     )
 }
 
+/// Normalizes a platform path to forward slashes (same convention as domain `PathRef` paths / scan).
 pub(super) fn path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }

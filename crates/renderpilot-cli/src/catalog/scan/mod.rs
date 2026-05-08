@@ -20,6 +20,21 @@ use crate::error::CliError;
 
 use super::{storage::open_catalog_storage, ScanFolderCatalogResult};
 
+#[derive(Clone, Copy)]
+enum DetectionMode {
+    /// Full filesystem pass, but reuse cached hashes where possible.
+    FullCached,
+
+    /// Prefer fast cached detection, but fall back to a full cached pass when
+    /// the fast path cannot produce a useful result.
+    FastCachedWithFullFallback,
+}
+
+struct DiscoveredInstall {
+    normalized_prefix: String,
+    game: GameInstallation,
+}
+
 /// Scans `path` for manual-folder game installations.
 ///
 /// The scan intentionally performs one filesystem detection pass over the selected root.
@@ -49,23 +64,30 @@ use super::{storage::open_catalog_storage, ScanFolderCatalogResult};
 /// ```
 ///
 /// Result: two separate manual game installations.
+pub(super) fn scan_auto_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    scan_impl(path, DetectionMode::FastCachedWithFullFallback)
+}
+
 pub(super) fn scan_folder_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    scan_impl(path, DetectionMode::FullCached)
+}
+
+fn scan_impl(
+    path: PathBuf,
+    detection_mode: DetectionMode,
+) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
     let storage = open_catalog_storage()?;
     let detector = LibraryPatternComponentDetector::windows_default()?;
 
     let selected_game = ManualFolderGameSource::new(path).discover_game()?;
     let scope_root = selected_game.install_path().as_str().to_owned();
 
-    let libraries = detect_libraries_with_cache(&storage, &detector, &selected_game)?;
+    let libraries = detect_libraries(&storage, &detector, &selected_game, detection_mode)?;
 
     let install_roots =
         detect_game_install_roots(&normalized_install_path_buf(&selected_game), &libraries);
 
-    let results = if install_roots.len() <= 1 {
-        vec![persist_scan_result(&storage, selected_game, libraries)?]
-    } else {
-        persist_split_scan_results(&storage, &selected_game, libraries, install_roots)?
-    };
+    let results = persist_scan_results(&storage, selected_game, libraries, install_roots)?;
 
     prune::prune_stale_manual_games_under_scope(
         &storage,
@@ -76,6 +98,81 @@ pub(super) fn scan_folder_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogRes
     Ok(results)
 }
 
+fn detect_libraries(
+    storage: &SqliteStorage,
+    detector: &LibraryPatternComponentDetector,
+    game: &GameInstallation,
+    mode: DetectionMode,
+) -> Result<Vec<DetectedLibraryFile>, CliError> {
+    let hash_cache = load_hash_cache(storage, game.install_path().as_str())?;
+
+    let libraries = match mode {
+        DetectionMode::FullCached => detect_libraries_full_cached(detector, game, &hash_cache)?,
+        DetectionMode::FastCachedWithFullFallback => {
+            detect_libraries_fast_cached_with_full_fallback(detector, game, &hash_cache)?
+        }
+    };
+
+    save_hash_cache(storage, &libraries)?;
+
+    Ok(libraries)
+}
+
+fn detect_libraries_full_cached(
+    detector: &LibraryPatternComponentDetector,
+    game: &GameInstallation,
+    hash_cache: &FileHashCache,
+) -> Result<Vec<DetectedLibraryFile>, CliError> {
+    if hash_cache.is_empty() {
+        detector.detect_library_files(game).map_err(Into::into)
+    } else {
+        detector
+            .detect_library_files_with_cache(game, hash_cache)
+            .map_err(Into::into)
+    }
+}
+
+fn detect_libraries_fast_cached_with_full_fallback(
+    detector: &LibraryPatternComponentDetector,
+    game: &GameInstallation,
+    hash_cache: &FileHashCache,
+) -> Result<Vec<DetectedLibraryFile>, CliError> {
+    if hash_cache.is_empty() {
+        return detector.detect_library_files(game).map_err(Into::into);
+    }
+
+    let fast_libraries = detector.detect_library_files_fast_cached(game, hash_cache)?;
+
+    if fast_libraries.is_empty() {
+        detector
+            .detect_library_files_with_cache(game, hash_cache)
+            .map_err(Into::into)
+    } else {
+        Ok(fast_libraries)
+    }
+}
+
+fn persist_scan_results(
+    storage: &SqliteStorage,
+    selected_game: GameInstallation,
+    libraries: Vec<DetectedLibraryFile>,
+    install_roots: Vec<PathBuf>,
+) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    if install_roots.len() <= 1 {
+        return persist_single_scan_result(storage, selected_game, libraries);
+    }
+
+    persist_split_scan_results(storage, &selected_game, libraries, install_roots)
+}
+
+fn persist_single_scan_result(
+    storage: &SqliteStorage,
+    game: GameInstallation,
+    libraries: Vec<DetectedLibraryFile>,
+) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    Ok(vec![persist_scan_result(storage, game, libraries)?])
+}
+
 fn persist_split_scan_results(
     storage: &SqliteStorage,
     selected_game: &GameInstallation,
@@ -83,12 +180,12 @@ fn persist_split_scan_results(
     install_roots: Vec<PathBuf>,
 ) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
     let installs = discover_sub_installations(install_roots)?;
-    let buckets = bucket_libraries_by_longest_install_prefix(libraries, &installs);
+    let buckets = bucket_libraries_by_longest_install_prefix(libraries, &installs)?;
 
     let mut results = Vec::with_capacity(installs.len());
 
-    for ((_, game), libraries) in installs.into_iter().zip(buckets) {
-        results.push(persist_scan_result(storage, game, libraries)?);
+    for (install, libraries) in installs.into_iter().zip(buckets) {
+        results.push(persist_scan_result(storage, install.game, libraries)?);
     }
 
     delete_stale_parent_game_if_needed(storage, selected_game, &results)?;
@@ -98,17 +195,21 @@ fn persist_split_scan_results(
 
 fn discover_sub_installations(
     install_roots: Vec<PathBuf>,
-) -> Result<Vec<(String, GameInstallation)>, CliError> {
-    let mut installs = Vec::with_capacity(install_roots.len());
+) -> Result<Vec<DiscoveredInstall>, CliError> {
+    install_roots
+        .into_iter()
+        .map(discover_sub_installation)
+        .collect()
+}
 
-    for install_root in install_roots {
-        let game = ManualFolderGameSource::new(install_root).discover_game()?;
-        let normalized_prefix = game.install_path().as_str().to_owned();
+fn discover_sub_installation(install_root: PathBuf) -> Result<DiscoveredInstall, CliError> {
+    let game = ManualFolderGameSource::new(install_root).discover_game()?;
+    let normalized_prefix = game.install_path().as_str().to_owned();
 
-        installs.push((normalized_prefix, game));
-    }
-
-    Ok(installs)
+    Ok(DiscoveredInstall {
+        normalized_prefix,
+        game,
+    })
 }
 
 /// Deletes an old parent scan row only when the selected game was not also detected
@@ -134,19 +235,32 @@ fn delete_stale_parent_game_if_needed(
 
 /// Assigns every detected library to exactly one install.
 /// The longest normalized install-path prefix wins.
+///
+/// Unlike the previous version, this function refuses to silently drop libraries
+/// that do not match any discovered install.
 fn bucket_libraries_by_longest_install_prefix(
     libraries: Vec<DetectedLibraryFile>,
-    installs: &[(String, GameInstallation)],
-) -> Vec<Vec<DetectedLibraryFile>> {
+    installs: &[DiscoveredInstall],
+) -> Result<Vec<Vec<DetectedLibraryFile>>, CliError> {
     let mut buckets = empty_library_buckets(installs.len());
+    let mut unmatched_paths = Vec::new();
 
     for library in libraries {
-        if let Some(bucket_idx) = best_install_bucket_idx(&library, installs) {
-            buckets[bucket_idx].push(library);
+        match best_install_bucket_idx(&library, installs) {
+            Some(bucket_idx) => buckets[bucket_idx].push(library),
+            None => unmatched_paths.push(library.file_path().as_str().to_owned()),
         }
     }
 
-    buckets
+    if !unmatched_paths.is_empty() {
+        return Err(AppError::detection_failed(format!(
+            "detected libraries could not be assigned to any discovered install: {}",
+            unmatched_paths.join(", ")
+        ))
+        .into());
+    }
+
+    Ok(buckets)
 }
 
 fn empty_library_buckets(count: usize) -> Vec<Vec<DetectedLibraryFile>> {
@@ -155,36 +269,18 @@ fn empty_library_buckets(count: usize) -> Vec<Vec<DetectedLibraryFile>> {
 
 fn best_install_bucket_idx(
     library: &DetectedLibraryFile,
-    installs: &[(String, GameInstallation)],
+    installs: &[DiscoveredInstall],
 ) -> Option<usize> {
     let library_path = library.file_path().as_str();
 
     installs
         .iter()
         .enumerate()
-        .filter(|(_, (install_prefix, _))| {
-            paths::normalized_path_within_scope(library_path, install_prefix)
+        .filter(|(_, install)| {
+            paths::normalized_path_within_scope(library_path, &install.normalized_prefix)
         })
-        .max_by_key(|(_, (install_prefix, _))| install_prefix.len())
+        .max_by_key(|(_, install)| install.normalized_prefix.len())
         .map(|(idx, _)| idx)
-}
-
-fn detect_libraries_with_cache(
-    storage: &SqliteStorage,
-    detector: &LibraryPatternComponentDetector,
-    game: &GameInstallation,
-) -> Result<Vec<DetectedLibraryFile>, CliError> {
-    let hash_cache = load_hash_cache(storage, game.install_path().as_str())?;
-
-    let libraries = if hash_cache.is_empty() {
-        detector.detect_library_files(game)?
-    } else {
-        detector.detect_library_files_with_cache(game, &hash_cache)?
-    };
-
-    save_hash_cache(storage, &libraries)?;
-
-    Ok(libraries)
 }
 
 fn persist_scan_result(
@@ -388,6 +484,13 @@ fn load_hash_cache(storage: &SqliteStorage, prefix: &str) -> Result<FileHashCach
     Ok(cache)
 }
 
+/// Persists per-file metadata for detected libraries into SQLite (`file_hash_cache`).
+///
+/// Invoked only after successful detection. Each row matches [`DetectedLibraryFile`]:
+/// cache hits reuse stored SHA-256 when size and `modified_at` still match the file;
+/// cache misses and stale entries persist the newly computed hash and PE version.
+/// If detection fails, this function is not called, so the table is not overwritten
+/// with partial or garbage data from an aborted scan.
 fn save_hash_cache(
     storage: &SqliteStorage,
     libraries: &[DetectedLibraryFile],

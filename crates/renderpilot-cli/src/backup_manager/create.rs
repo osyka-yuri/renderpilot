@@ -56,22 +56,22 @@ where
     F: Fn(&Path) -> std::io::Result<()>,
 {
     let created_at = current_timestamp_millis()?;
-    let components = storage.list_components_for_game(&operation.operation.game_id)?;
-    let backup_root = backup_operation_root(&operation.operation);
+    let components = storage.list_components_for_game(&operation.journal.operation().game_id)?;
+    let backup_root = backup_operation_root(operation.journal.operation());
 
     ensure_directory(&backup_root, "backup directory")?;
 
     let backup_context = BackupCreationContext {
-        operation: &operation.operation,
+        operation: operation.journal.operation(),
         backup_root: &backup_root,
         created_at,
         app_version,
         post_copy,
     };
-    let mut backup_items = Vec::with_capacity(operation.items.len());
+    let mut backup_items = Vec::with_capacity(operation.journal.len());
 
-    for (index, item) in operation.items.iter().enumerate() {
-        let _replacement_plan = require_replacement_plan_item(&operation.operation, item)?;
+    for (index, item) in operation.journal.items().iter().enumerate() {
+        let _replacement_plan = require_replacement_plan_item(operation.journal.operation(), item)?;
 
         let (component, component_file) = resolve_backup_component_file(&components, item)?;
         let backup_item =
@@ -82,8 +82,8 @@ where
     }
 
     Ok(BackupCatalogResult {
-        operation_id: operation.operation.id.clone(),
-        game_id: operation.operation.game_id.clone(),
+        operation_id: operation.journal.operation().id.clone(),
+        game_id: operation.journal.operation().game_id.clone(),
         backup_root: path_ref_from_path(&backup_root)?,
         items: backup_items,
     })

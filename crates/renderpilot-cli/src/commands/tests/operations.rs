@@ -173,15 +173,11 @@ fn apply_operation_uses_saved_backup_and_updates_catalog() {
         run(args(&["apply", "--operation", operation_id.as_str()])).expect("apply should succeed");
     let apply_json: serde_json::Value =
         serde_json::from_str(&apply_output).expect("valid apply json");
-    let operation = fixture
+    let entry = fixture
         .storage
-        .find_operation(&operation_id)
+        .find_operation_entry(&operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = fixture
-        .storage
-        .list_operation_items(&operation_id)
-        .expect("operation items should load");
     let components = fixture
         .storage
         .list_components_for_game(game.id())
@@ -194,10 +190,10 @@ fn apply_operation_uses_saved_backup_and_updates_catalog() {
         fs::read(&source_path).expect("applied bytes should be readable"),
         fs::read(&artifact_path).expect("artifact bytes should be readable")
     );
-    assert_eq!(operation.status, OperationStatus::Completed);
-    assert!(operation.completed_at.is_some());
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].status, OperationStatus::Completed);
+    assert_eq!(entry.operation().status, OperationStatus::Completed);
+    assert!(entry.operation().completed_at.is_some());
+    assert_eq!(entry.len(), 1);
+    assert_eq!(entry.items()[0].status, OperationStatus::Completed);
     assert_eq!(components.len(), 1);
     assert_eq!(components[0].files().len(), 1);
     assert_eq!(
@@ -278,22 +274,18 @@ fn apply_is_blocked_when_backup_is_missing() {
 
     let error = run(args(&["apply", "--operation", operation_id.as_str()]))
         .expect_err("apply should be blocked without backup");
-    let operation = fixture
+    let entry = fixture
         .storage
-        .find_operation(&operation_id)
+        .find_operation_entry(&operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = fixture
-        .storage
-        .list_operation_items(&operation_id)
-        .expect("operation items should load");
 
     assert!(error.to_string().contains("apply is blocked"));
     assert!(error.to_string().contains("backup is missing"));
-    assert_eq!(operation.status, OperationStatus::Blocked);
-    assert!(operation.completed_at.is_some());
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].status, OperationStatus::Blocked);
+    assert_eq!(entry.operation().status, OperationStatus::Blocked);
+    assert!(entry.operation().completed_at.is_some());
+    assert_eq!(entry.len(), 1);
+    assert_eq!(entry.items()[0].status, OperationStatus::Blocked);
     assert_eq!(
         fs::read(&source_path).expect("source bytes should remain unchanged"),
         b"backup-source-bytes"
@@ -367,22 +359,18 @@ fn apply_is_blocked_when_target_changed_after_plan_swap() {
 
     let error = run(args(&["apply", "--operation", operation_id.as_str()]))
         .expect_err("apply should be blocked after target mutation");
-    let operation = fixture
+    let entry = fixture
         .storage
-        .find_operation(&operation_id)
+        .find_operation_entry(&operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = fixture
-        .storage
-        .list_operation_items(&operation_id)
-        .expect("operation items should load");
 
     assert!(error.to_string().contains("apply is blocked"));
     assert!(error.to_string().contains("target changed since plan-swap"));
-    assert_eq!(operation.status, OperationStatus::Blocked);
-    assert!(operation.completed_at.is_some());
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].status, OperationStatus::Blocked);
+    assert_eq!(entry.operation().status, OperationStatus::Blocked);
+    assert!(entry.operation().completed_at.is_some());
+    assert_eq!(entry.len(), 1);
+    assert_eq!(entry.items()[0].status, OperationStatus::Blocked);
     assert_eq!(
         fs::read(&source_path).expect("mutated source bytes should remain in place"),
         b"mutated-target-bytes"
@@ -401,17 +389,12 @@ fn rollback_restores_original_file_and_updates_catalog() {
     .expect("rollback should succeed");
     let rollback_json: serde_json::Value =
         serde_json::from_str(&rollback_output).expect("valid rollback json");
-    let operation = scenario
+    let entry = scenario
         .fixture
         .storage
-        .find_operation(&scenario.operation_id)
+        .find_operation_entry(&scenario.operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = scenario
-        .fixture
-        .storage
-        .list_operation_items(&scenario.operation_id)
-        .expect("operation items should load");
     let components = scenario
         .fixture
         .storage
@@ -432,10 +415,10 @@ fn rollback_restores_original_file_and_updates_catalog() {
         ORIGINAL_BYTES
     );
     assert_eq!(sha256_hex(ORIGINAL_BYTES), scenario.original_sha256);
-    assert_eq!(operation.status, OperationStatus::RolledBack);
-    assert!(operation.completed_at.is_some());
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].status, OperationStatus::RolledBack);
+    assert_eq!(entry.operation().status, OperationStatus::RolledBack);
+    assert!(entry.operation().completed_at.is_some());
+    assert_eq!(entry.len(), 1);
+    assert_eq!(entry.items()[0].status, OperationStatus::RolledBack);
     assert_eq!(components.len(), 1);
     assert_eq!(components[0].files().len(), 1);
     assert_eq!(
@@ -470,10 +453,10 @@ fn rollback_is_idempotent_after_first_restore() {
     .expect("second rollback should succeed");
     let second_json: serde_json::Value =
         serde_json::from_str(&second_output).expect("valid rollback json");
-    let operation = scenario
+    let entry = scenario
         .fixture
         .storage
-        .find_operation(&scenario.operation_id)
+        .find_operation_entry(&scenario.operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
     let components = scenario
@@ -487,7 +470,7 @@ fn rollback_is_idempotent_after_first_restore() {
         fs::read(&scenario.source_path).expect("restored bytes should remain readable"),
         ORIGINAL_BYTES
     );
-    assert_eq!(operation.status, OperationStatus::RolledBack);
+    assert_eq!(entry.operation().status, OperationStatus::RolledBack);
     assert_eq!(
         components[0].files()[0]
             .sha256()
@@ -509,24 +492,19 @@ fn rollback_is_blocked_when_target_file_is_locked() {
     ]))
     .expect_err("rollback should be blocked while target is locked");
     drop(lock);
-    let operation = scenario
+    let entry = scenario
         .fixture
         .storage
-        .find_operation(&scenario.operation_id)
+        .find_operation_entry(&scenario.operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = scenario
-        .fixture
-        .storage
-        .list_operation_items(&scenario.operation_id)
-        .expect("operation items should load");
 
     assert!(error.to_string().contains("rollback is blocked"));
     assert!(error.to_string().contains("target file is locked"));
-    assert_eq!(operation.status, OperationStatus::Blocked);
-    assert!(operation.completed_at.is_some());
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].status, OperationStatus::Blocked);
+    assert_eq!(entry.operation().status, OperationStatus::Blocked);
+    assert!(entry.operation().completed_at.is_some());
+    assert_eq!(entry.len(), 1);
+    assert_eq!(entry.items()[0].status, OperationStatus::Blocked);
     assert_eq!(
         fs::read(&scenario.source_path).expect("applied bytes should remain in place"),
         REPLACEMENT_BYTES
@@ -622,13 +600,14 @@ fn setup_applied_operation_scenario(name: &str) -> AppliedOperationScenario {
         .storage
         .list_backups_for_game(game.id())
         .expect("backups should load after apply");
-    let items = fixture
+    let entry = fixture
         .storage
-        .list_operation_items(&operation_id)
-        .expect("operation items should load after apply");
+        .find_operation_entry(&operation_id)
+        .expect("operation entry lookup should succeed")
+        .expect("operation should exist after apply");
 
     assert_eq!(backups[0].operation_id, operation_id);
-    assert_eq!(backups[0].original_path, items[0].source_path);
+    assert_eq!(backups[0].original_path, entry.items()[0].source_path);
 
     AppliedOperationScenario {
         fixture,

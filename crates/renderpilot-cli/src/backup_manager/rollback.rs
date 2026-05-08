@@ -43,11 +43,14 @@ pub(crate) fn rollback_operation(
         "rollback",
         "roll back",
     )?;
-    let prepared_items =
-        match prepare_rollback_items(storage, &operation.operation, &operation.items) {
-            Ok(prepared_items) => prepared_items,
-            Err(error) => return Err(operation.capture_blocked(storage, error)),
-        };
+    let prepared_items = match prepare_rollback_items(
+        storage,
+        operation.journal.operation(),
+        operation.journal.items(),
+    ) {
+        Ok(prepared_items) => prepared_items,
+        Err(error) => return Err(operation.capture_blocked(storage, error)),
+    };
 
     match rollback_operation_records(storage, &mut operation, &prepared_items) {
         Ok(result) => Ok(result),
@@ -80,11 +83,15 @@ fn rollback_operation_records(
         prepared_item.restore()?;
     }
 
-    update_components_after_rollback(storage, &operation.operation.game_id, prepared_items)?;
+    update_components_after_rollback(
+        storage,
+        &operation.journal.operation().game_id,
+        prepared_items,
+    )?;
     operation.mark_rolled_back(storage)?;
 
     Ok(RollbackOperationCatalogResult {
-        operation: operation.operation.clone(),
+        operation: operation.journal.operation().clone(),
         items: prepared_items
             .iter()
             .map(|item| item.result.clone())

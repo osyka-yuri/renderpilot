@@ -1,12 +1,12 @@
-use std::{error::Error, fmt};
+use std::{borrow::Cow, error::Error, fmt};
 
-use renderpilot_application::AppError;
+use renderpilot_application::{invalid_operation_state_display_message, AppError, AppErrorKind};
 use renderpilot_detection::LibraryPatternError;
 
 use crate::output::HELP_HINT;
 
-const GENERAL_FAILURE_EXIT_CODE: u8 = 1;
-const USAGE_FAILURE_EXIT_CODE: u8 = 2;
+pub const GENERAL_FAILURE_EXIT_CODE: u8 = 1;
+pub const USAGE_FAILURE_EXIT_CODE: u8 = 2;
 
 /// Error returned when CLI arguments cannot be parsed or a command fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +29,23 @@ pub enum CliError {
     InvalidOperationId(String),
     /// The user passed a technology filter that RenderPilot does not recognize.
     InvalidTechnology(String),
+    /// The requested game was not found in the catalog.
+    GameNotFound(String),
+    /// The requested operation was not found in the catalog.
+    OperationNotFound(String),
+    /// The requested artifact was not found in the catalog.
+    ArtifactNotFound(String),
+    /// The requested component was not found for the given game.
+    ComponentNotFound(String),
+    /// A one-time confirmation token did not match.
+    ConfirmationTokenMismatch,
+    /// The operation is in an invalid state for the requested action.
+    InvalidOperationState {
+        /// The identifier of the operation in the invalid state.
+        operation_id: String,
+        /// The name of the invalid state, e.g. "Completed".
+        state: String,
+    },
     /// A command failed while running.
     CommandFailed(String),
     /// CLI output could not be serialized.
@@ -39,74 +56,92 @@ impl CliError {
     /// Returns the process exit code appropriate for this CLI error.
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
-        if self.is_usage_error() {
-            return USAGE_FAILURE_EXIT_CODE;
+        match self.category() {
+            ErrorCategory::Usage => USAGE_FAILURE_EXIT_CODE,
+            ErrorCategory::Runtime => GENERAL_FAILURE_EXIT_CODE,
         }
-
-        GENERAL_FAILURE_EXIT_CODE
     }
 
-    const fn is_usage_error(&self) -> bool {
-        matches!(
-            self,
-            Self::NonUnicodeArgument
-                | Self::UnknownArgument(_)
-                | Self::UnexpectedArgument(_)
-                | Self::MissingArgument(_)
-                | Self::InvalidGameId(_)
-                | Self::InvalidComponentId(_)
-                | Self::InvalidArtifactId(_)
-                | Self::InvalidOperationId(_)
-                | Self::InvalidTechnology(_)
-        )
+    const fn category(&self) -> ErrorCategory {
+        match self {
+            Self::CommandFailed(_) | Self::OutputSerializationFailed(_) => ErrorCategory::Runtime,
+            _ => ErrorCategory::Usage,
+        }
     }
+
+    fn usage_message(&self) -> Option<Cow<'_, str>> {
+        let message = match self {
+            Self::NonUnicodeArgument => Cow::Borrowed("arguments must be valid Unicode"),
+            Self::UnknownArgument(arg) => Cow::Owned(format!("unknown argument: {arg}")),
+            Self::UnexpectedArgument(arg) => Cow::Owned(format!("unexpected argument: {arg}")),
+            Self::MissingArgument(arg) => Cow::Owned(format!("missing required argument: {arg}")),
+            Self::InvalidGameId(id) => Cow::Owned(format!("invalid game id: {id}")),
+            Self::InvalidComponentId(id) => Cow::Owned(format!("invalid component id: {id}")),
+            Self::InvalidArtifactId(id) => Cow::Owned(format!("invalid artifact id: {id}")),
+            Self::InvalidOperationId(id) => Cow::Owned(format!("invalid operation id: {id}")),
+            Self::InvalidTechnology(tech) => Cow::Owned(format!("unknown technology: {tech}")),
+            Self::GameNotFound(id) => Cow::Owned(format!("game not found: {id}")),
+            Self::OperationNotFound(id) => Cow::Owned(format!("operation not found: {id}")),
+            Self::ArtifactNotFound(id) => Cow::Owned(format!("artifact not found: {id}")),
+            Self::ComponentNotFound(id) => Cow::Owned(format!("component not found: {id}")),
+            Self::ConfirmationTokenMismatch => {
+                Cow::Borrowed("confirmation token mismatch for operation")
+            }
+            Self::InvalidOperationState {
+                operation_id,
+                state,
+            } => Cow::Owned(invalid_operation_state_display_message(
+                operation_id,
+                state.as_str(),
+            )),
+            Self::CommandFailed(_) | Self::OutputSerializationFailed(_) => return None,
+        };
+
+        Some(message)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ErrorCategory {
+    Usage,
+    Runtime,
 }
 
 impl fmt::Display for CliError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(message) = self.usage_message() {
+            return write_usage_error(formatter, message);
+        }
+
         match self {
-            Self::NonUnicodeArgument => {
-                write_usage_error(formatter, "arguments must be valid Unicode")
-            }
-            Self::UnknownArgument(argument) => {
-                write_usage_error(formatter, format_args!("unknown argument: {argument}"))
-            }
-            Self::UnexpectedArgument(argument) => {
-                write_usage_error(formatter, format_args!("unexpected argument: {argument}"))
-            }
-            Self::MissingArgument(argument) => write_usage_error(
-                formatter,
-                format_args!("missing required argument: {argument}"),
-            ),
-            Self::InvalidGameId(game_id) => {
-                write_usage_error(formatter, format_args!("invalid game id: {game_id}"))
-            }
-            Self::InvalidComponentId(component_id) => write_usage_error(
-                formatter,
-                format_args!("invalid component id: {component_id}"),
-            ),
-            Self::InvalidArtifactId(artifact_id) => write_usage_error(
-                formatter,
-                format_args!("invalid artifact id: {artifact_id}"),
-            ),
-            Self::InvalidOperationId(operation_id) => write_usage_error(
-                formatter,
-                format_args!("invalid operation id: {operation_id}"),
-            ),
-            Self::InvalidTechnology(technology) => {
-                write_usage_error(formatter, format_args!("unknown technology: {technology}"))
-            }
             Self::CommandFailed(message) => formatter.write_str(message),
             Self::OutputSerializationFailed(message) => {
                 write!(formatter, "could not serialize CLI output: {message}")
             }
+            _ => unreachable!("usage errors are handled by usage_message"),
         }
     }
 }
 
 impl From<AppError> for CliError {
     fn from(error: AppError) -> Self {
-        Self::CommandFailed(error.to_string())
+        let (kind, message) = error.into_parts();
+
+        match kind {
+            AppErrorKind::ConfirmationTokenMismatch => Self::ConfirmationTokenMismatch,
+            AppErrorKind::GameNotFound => Self::GameNotFound(message),
+            AppErrorKind::OperationNotFound => Self::OperationNotFound(message),
+            AppErrorKind::ArtifactNotFound => Self::ArtifactNotFound(message),
+            AppErrorKind::ComponentNotFound => Self::ComponentNotFound(message),
+            AppErrorKind::InvalidOperationState {
+                operation_id,
+                state,
+            } => Self::InvalidOperationState {
+                operation_id,
+                state: state.as_str().to_owned(),
+            },
+            kind => Self::CommandFailed(format!("{kind}: {message}")),
+        }
     }
 }
 
@@ -133,7 +168,9 @@ fn write_usage_error(
 
 #[cfg(test)]
 mod tests {
-    use super::CliError;
+    use renderpilot_application::{AppError, AppErrorKind, OperationStatus};
+
+    use super::{CliError, GENERAL_FAILURE_EXIT_CODE, USAGE_FAILURE_EXIT_CODE};
 
     #[test]
     fn argument_errors_include_help_hint() {
@@ -146,36 +183,111 @@ mod tests {
     }
 
     #[test]
+    fn all_usage_errors_include_help_hint() {
+        let errors = [
+            CliError::NonUnicodeArgument,
+            CliError::UnknownArgument("--bad".to_owned()),
+            CliError::UnexpectedArgument("--bad".to_owned()),
+            CliError::MissingArgument("<path>"),
+            CliError::InvalidGameId("bad".to_owned()),
+            CliError::InvalidComponentId("bad".to_owned()),
+            CliError::InvalidArtifactId("bad".to_owned()),
+            CliError::InvalidOperationId("bad".to_owned()),
+            CliError::InvalidTechnology("bad".to_owned()),
+            CliError::GameNotFound("bad".to_owned()),
+            CliError::OperationNotFound("bad".to_owned()),
+            CliError::ArtifactNotFound("bad".to_owned()),
+            CliError::ComponentNotFound("bad".to_owned()),
+            CliError::ConfirmationTokenMismatch,
+            CliError::InvalidOperationState {
+                operation_id: "op".to_owned(),
+                state: "planned".to_owned(),
+            },
+        ];
+
+        for error in errors {
+            assert!(
+                error
+                    .to_string()
+                    .ends_with("Run `renderpilot --help` for usage."),
+                "{error:?} did not include help hint"
+            );
+        }
+    }
+
+    #[test]
     fn usage_errors_use_usage_exit_code() {
-        assert_eq!(CliError::NonUnicodeArgument.exit_code(), 2);
-        assert_eq!(CliError::UnknownArgument("--bad".to_owned()).exit_code(), 2);
-        assert_eq!(
-            CliError::UnexpectedArgument("--bad".to_owned()).exit_code(),
-            2
-        );
-        assert_eq!(CliError::MissingArgument("<path>").exit_code(), 2);
-        assert_eq!(CliError::InvalidGameId("bad".to_owned()).exit_code(), 2);
-        assert_eq!(
-            CliError::InvalidComponentId("bad".to_owned()).exit_code(),
-            2
-        );
-        assert_eq!(CliError::InvalidArtifactId("bad".to_owned()).exit_code(), 2);
-        assert_eq!(
-            CliError::InvalidOperationId("bad".to_owned()).exit_code(),
-            2
-        );
-        assert_eq!(CliError::InvalidTechnology("bad".to_owned()).exit_code(), 2);
+        let errors = [
+            CliError::NonUnicodeArgument,
+            CliError::UnknownArgument("--bad".to_owned()),
+            CliError::UnexpectedArgument("--bad".to_owned()),
+            CliError::MissingArgument("<path>"),
+            CliError::InvalidGameId("bad".to_owned()),
+            CliError::InvalidComponentId("bad".to_owned()),
+            CliError::InvalidArtifactId("bad".to_owned()),
+            CliError::InvalidOperationId("bad".to_owned()),
+            CliError::InvalidTechnology("bad".to_owned()),
+            CliError::GameNotFound("bad".to_owned()),
+            CliError::OperationNotFound("bad".to_owned()),
+            CliError::ArtifactNotFound("bad".to_owned()),
+            CliError::ComponentNotFound("bad".to_owned()),
+            CliError::ConfirmationTokenMismatch,
+            CliError::InvalidOperationState {
+                operation_id: "op".to_owned(),
+                state: "planned".to_owned(),
+            },
+        ];
+
+        for error in errors {
+            assert_eq!(error.exit_code(), USAGE_FAILURE_EXIT_CODE, "{error:?}");
+        }
     }
 
     #[test]
     fn runtime_errors_use_general_failure_exit_code() {
+        let errors = [
+            CliError::CommandFailed("scan failed".to_owned()),
+            CliError::OutputSerializationFailed("json failed".to_owned()),
+        ];
+
+        for error in errors {
+            assert_eq!(error.exit_code(), GENERAL_FAILURE_EXIT_CODE, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn runtime_errors_do_not_include_help_hint() {
+        let error = CliError::CommandFailed("scan failed".to_owned());
+
+        assert_eq!(error.to_string(), "scan failed");
+    }
+
+    #[test]
+    fn app_error_invalid_operation_state_maps_to_cli_error() {
+        let app_error = AppError::invalid_operation_state("op-123", OperationStatus::Completed);
+        assert!(matches!(
+            app_error.kind(),
+            &AppErrorKind::InvalidOperationState { .. }
+        ));
+
         assert_eq!(
-            CliError::CommandFailed("scan failed".to_owned()).exit_code(),
-            1
+            CliError::from(app_error),
+            CliError::InvalidOperationState {
+                operation_id: "op-123".to_owned(),
+                state: "completed".to_owned(),
+            }
         );
+    }
+
+    #[test]
+    fn app_error_invalid_operation_state_preserves_colon_in_operation_id() {
+        let app_error = AppError::invalid_operation_state("op:part", OperationStatus::Running);
         assert_eq!(
-            CliError::OutputSerializationFailed("json failed".to_owned()).exit_code(),
-            1
+            CliError::from(app_error),
+            CliError::InvalidOperationState {
+                operation_id: "op:part".to_owned(),
+                state: "running".to_owned(),
+            }
         );
     }
 }

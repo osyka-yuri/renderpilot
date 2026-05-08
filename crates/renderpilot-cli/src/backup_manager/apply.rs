@@ -43,8 +43,11 @@ pub(crate) fn apply_operation(
     operation_id: OperationId,
 ) -> AppResult<ApplyOperationCatalogResult> {
     let mut operation = RetryableReplaceOperation::load(storage, &operation_id, "apply", "apply")?;
-    let prepared_items = match prepare_apply_items(storage, &operation.operation, &operation.items)
-    {
+    let prepared_items = match prepare_apply_items(
+        storage,
+        operation.journal.operation(),
+        operation.journal.items(),
+    ) {
         Ok(prepared_items) => prepared_items,
         Err(error) => return Err(operation.capture_blocked(storage, error)),
     };
@@ -87,16 +90,18 @@ fn apply_operation_records(
         applied_items.push(prepared_item);
     }
 
-    if let Err(error) =
-        update_components_after_apply(storage, &operation.operation.game_id, prepared_items)
-    {
+    if let Err(error) = update_components_after_apply(
+        storage,
+        &operation.journal.operation().game_id,
+        prepared_items,
+    ) {
         return Err(rollback_after_apply_failure(error, &applied_items));
     }
 
     operation.mark_completed(storage)?;
 
     Ok(ApplyOperationCatalogResult {
-        operation: operation.operation.clone(),
+        operation: operation.journal.operation().clone(),
         items: prepared_items
             .iter()
             .map(|item| item.result.clone())

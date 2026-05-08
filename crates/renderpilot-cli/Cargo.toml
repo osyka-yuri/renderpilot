@@ -23,6 +23,9 @@ sha2 = "0.11"
 [lib]
 path = "src/lib.rs"
 
+[dev-dependencies]
+tempfile = "3"
+
 [[bin]]
 name = "renderpilot"
 path = "src/main.rs"

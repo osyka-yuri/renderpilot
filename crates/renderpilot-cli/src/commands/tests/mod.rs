@@ -10,3 +10,4 @@ mod general;
 mod operations;
 mod plan_swap;
 mod scan;
+mod scan_file_hash_cache;

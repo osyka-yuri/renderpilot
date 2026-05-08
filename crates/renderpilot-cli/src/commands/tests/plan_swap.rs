@@ -207,15 +207,13 @@ fn plan_swap_persists_planned_operation_and_item() {
     )
     .expect("operation id should parse");
 
-    let operation = fixture
+    let entry = fixture
         .storage
-        .find_operation(&operation_id)
+        .find_operation_entry(&operation_id)
         .expect("operation lookup should succeed")
         .expect("operation should exist");
-    let items = fixture
-        .storage
-        .list_operation_items(&operation_id)
-        .expect("operation items should load");
+    let operation = entry.operation();
+    let items = entry.items();
 
     assert_eq!(operation.kind.as_str(), "replace_component");
     assert_eq!(operation.status.as_str(), "planned");
