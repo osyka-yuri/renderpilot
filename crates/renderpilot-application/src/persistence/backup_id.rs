@@ -53,7 +53,7 @@ mod tests {
     fn rejects_empty_backup_id() {
         let error = BackupId::new("   ").unwrap_err();
 
-        assert_eq!(error.kind(), AppErrorKind::InvalidInput);
+        assert_eq!(error.kind(), &AppErrorKind::InvalidInput);
     }
 
     #[test]

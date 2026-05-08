@@ -18,7 +18,7 @@ pub use candidates::{
     find_replacement_candidates, CandidateComparison, CandidateWarning,
     ComponentFileReplacementCandidates, ReplacementCandidate,
 };
-pub use error::{AppError, AppErrorKind, AppResult};
+pub use error::{invalid_operation_state_display_message, AppError, AppErrorKind, AppResult};
 pub use info::{app_info, AppInfo};
 pub use operation_plan::{
     build_swap_operation_plan, OperationPlan, OperationPlanBlocker, OperationPlanRiskLevel,
@@ -26,8 +26,8 @@ pub use operation_plan::{
 };
 
 pub use persistence::{
-    BackupId, BackupRecord, MetadataJson, OperationItemRecord, OperationKind, OperationRecord,
-    OperationStatus, UnixTimestampMillis,
+    BackupId, BackupRecord, MetadataJson, OperationItemRecord, OperationJournalEntry,
+    OperationKind, OperationRecord, OperationStatus, UnixTimestampMillis,
 };
 
 pub use ports::{

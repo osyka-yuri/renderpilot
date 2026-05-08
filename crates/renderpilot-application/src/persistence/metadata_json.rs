@@ -83,7 +83,7 @@ mod tests {
     fn rejects_invalid_json() {
         let error = MetadataJson::new("{").unwrap_err();
 
-        assert_eq!(error.kind(), AppErrorKind::InvalidInput);
+        assert_eq!(error.kind(), &AppErrorKind::InvalidInput);
         assert!(error.message().contains("metadata json must be valid JSON"));
     }
 }

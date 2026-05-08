@@ -54,6 +54,6 @@ mod tests {
     fn rejects_negative_timestamp() {
         let error = UnixTimestampMillis::new(-1).unwrap_err();
 
-        assert_eq!(error.kind(), AppErrorKind::InvalidInput);
+        assert_eq!(error.kind(), &AppErrorKind::InvalidInput);
     }
 }
