@@ -13,3 +13,9 @@
 /apps/desktop/.prettiercache
 /apps/desktop/.eslintcache
 
+# Gemini / local assistant docs (not tracked)
+/.gemini/
+.geminiignore
+GEMINI.md
+gemini-debug.log
+
