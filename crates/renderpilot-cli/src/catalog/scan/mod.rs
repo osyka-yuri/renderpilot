@@ -1,6 +1,8 @@
 mod paths;
 mod prune;
 
+pub(super) use prune::prune_auto_scan_orphans;
+
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -28,6 +30,29 @@ enum DetectionMode {
     /// Prefer fast cached detection, but fall back to a full cached pass when
     /// the fast path cannot produce a useful result.
     FastCachedWithFullFallback,
+}
+
+/// Controls how the scan derives game install roots from a scan target.
+#[derive(Clone, Copy)]
+enum InstallRootStrategy {
+    /// The scan target is treated as a single game install. All detected
+    /// libraries are bucketed under the target as one install.
+    ///
+    /// Used by the auto-scan because every target it produces is already a
+    /// real game folder (per-app registry / manifest entry or immediate child
+    /// of a launcher library root). Splitting on the first diverging path
+    /// component would incorrectly turn one game with DLLs in several
+    /// sub-folders (e.g. `amd-ffx/`, `streamline/`, `Plugins/NVIDIA/Streamline/`)
+    /// into multiple sibling "games".
+    SingleInstall,
+
+    /// The scan target may be a parent folder containing many sibling game
+    /// installs as immediate sub-directories. Libraries are bucketed by the
+    /// first path component that diverges across detected files.
+    ///
+    /// Used by the manual scan because the user may select either a single
+    /// game folder or a parent of many.
+    SplitByFirstDiverge,
 }
 
 struct DiscoveredInstall {
@@ -64,33 +89,73 @@ struct DiscoveredInstall {
 /// ```
 ///
 /// Result: two separate manual game installations.
-pub(super) fn scan_auto_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
-    scan_impl(path, DetectionMode::FastCachedWithFullFallback)
+pub(super) fn scan_folder_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    let storage = open_catalog_storage()?;
+    let detector = LibraryPatternComponentDetector::windows_default()
+        .map_err(|error| AppError::detection_failed(error.to_string()))?;
+
+    scan_impl(
+        ScanInputs {
+            storage: &storage,
+            detector: &detector,
+        },
+        path,
+        DetectionMode::FullCached,
+        InstallRootStrategy::SplitByFirstDiverge,
+        None,
+    )
 }
 
-pub(super) fn scan_folder_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
-    scan_impl(path, DetectionMode::FullCached)
+/// Per-install auto-scan using a shared open catalog, detector, and full
+/// `file_hash_cache` prefetch (see [`crate::catalog::open_auto_scan_batch`]).
+pub(crate) fn scan_auto_in_shared_batch(
+    storage: &SqliteStorage,
+    detector: &LibraryPatternComponentDetector,
+    prefetched_cache: &FileHashCache,
+    path: PathBuf,
+) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    scan_impl(
+        ScanInputs { storage, detector },
+        path,
+        DetectionMode::FastCachedWithFullFallback,
+        InstallRootStrategy::SingleInstall,
+        Some(prefetched_cache),
+    )
+}
+
+/// Borrowed storage + detector for one [`scan_impl`] invocation.
+struct ScanInputs<'a> {
+    storage: &'a SqliteStorage,
+    detector: &'a LibraryPatternComponentDetector,
 }
 
 fn scan_impl(
+    inputs: ScanInputs<'_>,
     path: PathBuf,
     detection_mode: DetectionMode,
+    install_root_strategy: InstallRootStrategy,
+    prefetched_cache: Option<&FileHashCache>,
 ) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
-    let storage = open_catalog_storage()?;
-    let detector = LibraryPatternComponentDetector::windows_default()?;
+    let storage = inputs.storage;
+    let detector = inputs.detector;
 
     let selected_game = ManualFolderGameSource::new(path).discover_game()?;
     let scope_root = selected_game.install_path().as_str().to_owned();
 
-    let libraries = detect_libraries(&storage, &detector, &selected_game, detection_mode)?;
+    let libraries = detect_libraries(
+        storage,
+        detector,
+        &selected_game,
+        detection_mode,
+        prefetched_cache,
+    )?;
 
-    let install_roots =
-        detect_game_install_roots(&normalized_install_path_buf(&selected_game), &libraries);
+    let install_roots = derive_install_roots(&selected_game, &libraries, install_root_strategy);
 
-    let results = persist_scan_results(&storage, selected_game, libraries, install_roots)?;
+    let results = persist_scan_results(storage, selected_game, libraries, install_roots)?;
 
     prune::prune_stale_manual_games_under_scope(
-        &storage,
+        storage,
         &scope_root,
         &prune::game_ids_from_scan_results(&results),
     )?;
@@ -98,18 +163,45 @@ fn scan_impl(
     Ok(results)
 }
 
+fn derive_install_roots(
+    selected_game: &GameInstallation,
+    libraries: &[DetectedLibraryFile],
+    strategy: InstallRootStrategy,
+) -> Vec<PathBuf> {
+    let scan_root = normalized_install_path_buf(selected_game);
+
+    match strategy {
+        InstallRootStrategy::SingleInstall => vec![scan_root],
+        InstallRootStrategy::SplitByFirstDiverge => {
+            detect_game_install_roots(&scan_root, libraries)
+        }
+    }
+}
+
 fn detect_libraries(
     storage: &SqliteStorage,
     detector: &LibraryPatternComponentDetector,
     game: &GameInstallation,
     mode: DetectionMode,
+    prefetched_cache: Option<&FileHashCache>,
 ) -> Result<Vec<DetectedLibraryFile>, CliError> {
-    let hash_cache = load_hash_cache(storage, game.install_path().as_str())?;
+    // When a batch caller has already loaded the entire cache into memory,
+    // skip the per-game `SELECT … LIKE` round-trip and use that view
+    // directly. Per-install bytes that aren't under `game.install_path()` are
+    // ignored downstream by `cached_files_under_root`.
+    let owned_cache;
+    let hash_cache: &FileHashCache = match prefetched_cache {
+        Some(cache) => cache,
+        None => {
+            owned_cache = load_hash_cache(storage, game.install_path().as_str())?;
+            &owned_cache
+        }
+    };
 
     let libraries = match mode {
-        DetectionMode::FullCached => detect_libraries_full_cached(detector, game, &hash_cache)?,
+        DetectionMode::FullCached => detect_libraries_full_cached(detector, game, hash_cache)?,
         DetectionMode::FastCachedWithFullFallback => {
-            detect_libraries_fast_cached_with_full_fallback(detector, game, &hash_cache)?
+            detect_libraries_fast_cached_with_full_fallback(detector, game, hash_cache)?
         }
     };
 

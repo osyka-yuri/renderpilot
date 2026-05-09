@@ -15,7 +15,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::GameRepository;
-use renderpilot_domain::GameId;
+use renderpilot_domain::{GameId, GameInstallation};
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
 
@@ -52,20 +52,24 @@ impl CoverCatalog {
         })
     }
 
-    fn require_game_exists(&self, game_id: &GameId) -> Result<(), CliError> {
-        if self.sqlite.find_game(game_id)?.is_some() {
-            Ok(())
-        } else {
-            Err(game_not_found(game_id))
-        }
+    fn require_game(&self, game_id: &GameId) -> Result<GameInstallation, CliError> {
+        self.sqlite
+            .find_game(game_id)?
+            .ok_or_else(|| game_not_found(game_id))
     }
 
     fn install_cover(
         &self,
-        game_id: &GameId,
+        game: &GameInstallation,
         bytes: &[u8],
     ) -> Result<CoverMutationOutput, CliError> {
-        install::install_cover(&self.sqlite, &self.catalog_path, game_id, bytes)
+        install::install_cover(
+            &self.sqlite,
+            &self.catalog_path,
+            game.id(),
+            game.identity().title(),
+            bytes,
+        )
     }
 
     fn gc_orphans(&self) -> Result<(), CliError> {
@@ -86,11 +90,7 @@ fn open_catalog_for_covers() -> Result<(PathBuf, SqliteStorage), CliError> {
 
 pub(crate) fn fetch_game_cover_auto(game_id: GameId) -> Result<CoverMutationOutput, CliError> {
     let catalog = CoverCatalog::open()?;
-
-    let game = catalog
-        .sqlite
-        .find_game(&game_id)?
-        .ok_or_else(|| game_not_found(&game_id))?;
+    let game = catalog.require_game(&game_id)?;
 
     let client = http_client()?;
 
@@ -103,7 +103,7 @@ pub(crate) fn fetch_game_cover_auto(game_id: GameId) -> Result<CoverMutationOutp
 
     let bytes = providers::resolve_cover_bytes(&client, api_key.as_deref(), &remote_policy, &game)?;
 
-    catalog.install_cover(&game_id, &bytes)
+    catalog.install_cover(&game, &bytes)
 }
 
 pub(crate) fn set_game_cover_from_file(
@@ -111,18 +111,16 @@ pub(crate) fn set_game_cover_from_file(
     source: PathBuf,
 ) -> Result<CoverMutationOutput, CliError> {
     let catalog = CoverCatalog::open()?;
-
-    catalog.require_game_exists(&game_id)?;
+    let game = catalog.require_game(&game_id)?;
 
     let bytes = read_cover_source_file(&source)?;
 
-    catalog.install_cover(&game_id, &bytes)
+    catalog.install_cover(&game, &bytes)
 }
 
 pub(crate) fn clear_game_cover(game_id: GameId) -> Result<(), CliError> {
     let catalog = CoverCatalog::open()?;
-
-    catalog.require_game_exists(&game_id)?;
+    catalog.require_game(&game_id)?;
 
     let existing = catalog.sqlite.find_game_cover(&game_id)?;
 

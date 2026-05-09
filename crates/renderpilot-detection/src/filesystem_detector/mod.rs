@@ -14,12 +14,12 @@ use serde::Serialize;
 
 use crate::{
     error::detection_error,
-    file_metadata::{read_detected_file_metadata, DetectedFileMetadata, FileHashCache},
+    file_metadata::{try_read_detected_file_metadata, DetectedFileMetadata, FileHashCache},
     FileCacheKey, LibraryPatternError, LibraryPatternSet, PatternKind, PatternPlatform,
     VersionDetectionStatus,
 };
 
-use self::scan::collect_files;
+use self::scan::collect_files_filtered;
 
 const DEFAULT_LIBRARY_PATTERNS_JSON: &str = include_str!("../../../../data/library_patterns.json");
 const DEFAULT_MAX_RECURSION_DEPTH: usize = 8;
@@ -212,13 +212,16 @@ impl LibraryPatternComponentDetector {
 
     /// Fast scan mode that ONLY checks the file paths present in the cache.
     /// It completely skips full file system traversal (`collect_files`).
+    ///
+    /// Cached entries whose underlying file no longer exists are silently
+    /// dropped — the cache is treated as a hint, not a source of truth.
     pub fn detect_library_files_fast_cached(
         &self,
         game: &GameInstallation,
         cache: &FileHashCache,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let root = install_root_path(game);
-        let files = cached_existing_files_under_root(cache, &root);
+        let files = cached_files_under_root(cache, &root);
 
         self.detect_library_files_from_paths(files, Some(cache))
     }
@@ -229,7 +232,10 @@ impl LibraryPatternComponentDetector {
         cache: Option<&FileHashCache>,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let root = install_root_path(game);
-        let files = collect_files(&root, self.max_depth)?;
+        let candidate_extensions = self.patterns.candidate_file_extensions(self.platform);
+        let files = collect_files_filtered(&root, self.max_depth, |file_name: &str| {
+            candidate_extensions.allows_file_name(file_name)
+        })?;
 
         self.detect_library_files_from_paths(files, cache)
     }
@@ -263,15 +269,18 @@ impl LibraryPatternComponentDetector {
             return Ok(None);
         };
 
-        let Some(classification) = self.classify_file_name(&file_name) else {
+        let Some(classification) = self.classify_file_name(file_name) else {
             return Ok(None);
         };
 
         let file_path = path_ref_from_path(file)?;
-        let metadata = read_detected_file_metadata(file, file_path.clone(), cache)?;
+        let Some(metadata) = try_read_detected_file_metadata(file, file_path.clone(), cache)?
+        else {
+            return Ok(None);
+        };
 
         Ok(Some(DetectedLibraryFile::from_parts(
-            file_name,
+            file_name.to_owned(),
             file_path,
             classification,
             metadata,
@@ -322,17 +331,18 @@ impl LibraryFileClassification {
     }
 }
 
-fn cached_existing_files_under_root(cache: &FileHashCache, root: &Path) -> Vec<PathBuf> {
+/// Returns cached file paths that lexically belong under `root`.
+///
+/// Existence is **not** verified here. [`try_read_detected_file_metadata`]
+/// returns `Ok(None)` for missing files (stale cache entries), so those paths
+/// are skipped without failing the whole scan.
+fn cached_files_under_root(cache: &FileHashCache, root: &Path) -> Vec<PathBuf> {
     sorted_unique_paths(
         cache
             .keys()
             .map(PathBuf::from)
-            .filter(|path| is_existing_file_under_root(path, root)),
+            .filter(|path| path.starts_with(root)),
     )
-}
-
-fn is_existing_file_under_root(path: &Path, root: &Path) -> bool {
-    path.starts_with(root) && path.is_file()
 }
 
 fn sorted_unique_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
@@ -345,7 +355,7 @@ fn sorted_unique_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf>
 }
 
 fn sort_detected_library_files(files: &mut Vec<DetectedLibraryFile>) {
-    files.sort_by_cached_key(|file| file.file_path.to_string());
+    files.sort_by(|left, right| left.file_path.as_str().cmp(right.file_path.as_str()));
     files.dedup_by(|left, right| left.file_path == right.file_path);
 }
 
@@ -353,8 +363,8 @@ fn install_root_path(game: &GameInstallation) -> PathBuf {
     PathBuf::from(game.install_path().as_str())
 }
 
-fn file_name_for_matching(path: &Path) -> Option<String> {
-    path.file_name()?.to_str().map(str::to_owned)
+fn file_name_for_matching(path: &Path) -> Option<&str> {
+    path.file_name()?.to_str()
 }
 
 fn path_ref_from_path(path: &Path) -> AppResult<PathRef> {

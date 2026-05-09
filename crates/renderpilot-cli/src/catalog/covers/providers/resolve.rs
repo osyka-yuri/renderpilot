@@ -73,7 +73,14 @@ fn require_griddb_key_if_allowed(
         return Err(CliError::CoverNotFound);
     }
 
-    api_key.ok_or(CliError::SteamGridDbApiKeyMissing)
+    // A missing or blank SteamGridDB API key is treated identically to
+    // `policy.steamgriddb == false`: the resolver returns `CoverNotFound`
+    // instead of `SteamGridDbApiKeyMissing`. Auto cover sync runs per game,
+    // so a key-absent error would surface as a per-game warning even though
+    // the underlying issue is a single global setting. The UI already
+    // mirrors this in `gameMayReceiveRemoteCoverViaPolicy` (cover-sync.ts),
+    // which never flags a game as grid-eligible without a key.
+    api_key.ok_or(CliError::CoverNotFound)
 }
 
 fn resolve_steam_cover_bytes(

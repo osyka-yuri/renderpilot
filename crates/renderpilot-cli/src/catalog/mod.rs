@@ -4,7 +4,7 @@ use renderpilot_application::{
     AppError, ArtifactRepository, ComponentFileReplacementCandidates, ComponentRepository,
     GameRepository, OperationPlan, OperationRecord, OperationRepository, OperationStatus,
 };
-use renderpilot_detection::DetectedLibraryFile;
+use renderpilot_detection::{DetectedLibraryFile, FileHashCache, LibraryPatternComponentDetector};
 use renderpilot_domain::{
     ArtifactId, ComponentId, GameId, GameInstallation, GraphicsComponent, GraphicsTechnology,
     LibraryArtifact, OperationId,
@@ -21,7 +21,7 @@ use crate::{
 
 use self::{
     operations::list_operations_with_storage,
-    scan::{scan_auto_impl, scan_folder_impl},
+    scan::{prune_auto_scan_orphans, scan_auto_in_shared_batch, scan_folder_impl},
     swap::{build_swap_plan_with_storage, find_candidates_with_storage},
 };
 
@@ -72,8 +72,75 @@ pub(crate) fn scan_folder(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>,
     scan_folder_impl(path)
 }
 
-pub(crate) fn scan_auto(path: PathBuf) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
-    scan_auto_impl(path)
+/// Reusable per-batch state produced by [`open_auto_scan_batch`] and consumed
+/// by every call to [`scan_auto_in_batch`] in an auto-scan loop.
+pub(crate) struct AutoScanBatch {
+    storage: SqliteStorage,
+    detector: LibraryPatternComponentDetector,
+    prefetched_cache: FileHashCache,
+}
+
+/// Opens shared resources for a batched auto-scan.
+///
+/// Caller must drive the loop with [`scan_auto_in_batch`] for each install
+/// directory. Built once, the batch:
+///
+/// - holds a single open SQLite connection (one set of `PRAGMA`s + migrations),
+/// - reuses the compiled library-pattern detector,
+/// - prefetches the entire `file_hash_cache` table into memory in one query.
+pub(crate) fn open_auto_scan_batch() -> Result<AutoScanBatch, CliError> {
+    let storage = open_catalog_storage()?;
+    let detector = LibraryPatternComponentDetector::windows_default()
+        .map_err(|error| AppError::detection_failed(error.to_string()))?;
+    let prefetched_cache = load_full_hash_cache(&storage)?;
+
+    Ok(AutoScanBatch {
+        storage,
+        detector,
+        prefetched_cache,
+    })
+}
+
+/// Per-install entry point used inside an [`AutoScanBatch`] loop.
+pub(crate) fn scan_auto_in_batch(
+    batch: &AutoScanBatch,
+    path: PathBuf,
+) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
+    scan_auto_in_shared_batch(
+        &batch.storage,
+        &batch.detector,
+        &batch.prefetched_cache,
+        path,
+    )
+}
+
+fn load_full_hash_cache(storage: &SqliteStorage) -> Result<FileHashCache, CliError> {
+    let rows = storage.load_all_file_hash_cache()?;
+    let mut cache = FileHashCache::with_capacity(rows.len());
+
+    for row in rows {
+        cache.insert(row.path, row.size, row.modified_at, row.sha256, row.version);
+    }
+
+    Ok(cache)
+}
+
+/// Removes stale manual catalog rows that became orphans after the auto-scan
+/// re-classified launcher library roots and their non-game children.
+///
+/// `library_roots` are PathRef-style normalized launcher container folders
+/// (e.g. `C:/Program Files (x86)/Steam/steamapps/common`).
+/// `retained_install_paths` are the per-game install paths that the current
+/// auto-scan considers real games; rows at exactly those paths are kept.
+///
+/// Returns the number of rows deleted.
+pub(crate) fn prune_auto_scan_orphans_in_catalog(
+    library_roots: &[String],
+    retained_install_paths: &[String],
+) -> Result<usize, CliError> {
+    with_catalog_storage(|storage| {
+        prune_auto_scan_orphans(storage, library_roots, retained_install_paths)
+    })
 }
 
 pub(crate) fn list_games() -> Result<Vec<GameInstallation>, CliError> {

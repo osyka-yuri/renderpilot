@@ -3,15 +3,21 @@
 //! Each source can be turned off via catalog settings (see [`super::policy::CoverRemotePolicy`]).
 //! Defaults match previous behavior: all sources enabled when settings are absent.
 //!
-//! ## Resolution order (unchanged; toggles skip steps)
+//! ## Resolution order (toggles skip steps)
 //!
-//! | Launcher | Steps | `SteamGridDbApiKeyMissing` |
-//! |----------|-------|---------------------------|
-//! | **Steam** | Steam CDN → GridDB `steam-{app_id}` | When GridDB step is allowed but key missing |
-//! | **Gog** | GOG CDN → GridDB `gog-{id}` → autocomplete | Same |
-//! | **Other** | GridDB autocomplete only | When GridDB allowed but key missing |
+//! | Launcher | Steps |
+//! |----------|-------|
+//! | **Steam** | Steam CDN → GridDB `steam-{app_id}` |
+//! | **Gog** | GOG CDN → GridDB `gog-{id}` → autocomplete |
+//! | **Other** | GridDB autocomplete only |
 //!
-//! If SteamGridDB is disabled in policy, GridDB steps are skipped (`CoverNotFound` instead).
+//! GridDB steps are skipped (`CoverNotFound` instead) when *any* of the
+//! following holds, so background cover sync never produces per-game
+//! "Add a SteamGridDB API key" warnings purely because of a global
+//! configuration state:
+//!
+//! * `policy.steamgriddb` is `false`.
+//! * The configured SteamGridDB API key is missing or blank.
 //!
 //! CONTRACT: Launcher/policy branching here must stay aligned with background-sync eligibility in the
 //! desktop UI (`apps/desktop/ui/src/shared/covers/cover-sync.ts`,

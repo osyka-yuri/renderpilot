@@ -1,5 +1,6 @@
 //! Match a folder under `steamapps/common/<installdir>` to Steam `appmanifest_*.acf`.
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -34,6 +35,102 @@ pub fn steam_install_details(game_install_root: &Path) -> Option<SteamInstallDet
         .ok()?
         .filter_map(Result::ok)
         .find_map(|entry| details_from_manifest_entry(&entry, &install_path.installdir))
+}
+
+/// Returns the lowercased set of game `installdir` values declared by
+/// `appmanifest_*.acf` files in `steamapps_dir`.
+///
+/// Intended as a filter for sub-directories of `steamapps/common/`: only
+/// folders whose name appears in this set are real installed Steam games.
+///
+/// Steam-internal apps that are listed as Tools / runtimes / SDKs (rather
+/// than playable games) are excluded by app-id blacklist and installdir
+/// prefix matching:
+///
+/// * `Steamworks Common Redistributables` (app id `228980`) and the
+///   `Steamworks Shared` companion folder.
+/// * Proton variants (`Proton 7.0`, `Proton Experimental`, ...) and
+///   their anti-cheat runtimes.
+/// * Steam Linux Runtime layers (`scout`, `soldier`, `sniper`).
+/// * `Steam Audio`, `Steam Audio Tools`, `Steam Controller Configs`,
+///   `SteamVR`.
+///
+/// Returns an empty set when `steamapps_dir` cannot be enumerated, when
+/// no manifest is found, or when manifests cannot be parsed.
+pub fn steam_install_dirs_in_steamapps(steamapps_dir: &Path) -> HashSet<String> {
+    let Ok(entries) = fs::read_dir(steamapps_dir) else {
+        return HashSet::new();
+    };
+
+    entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| game_installdir_from_manifest_entry(&entry))
+        .map(|installdir| installdir.to_ascii_lowercase())
+        .collect()
+}
+
+fn game_installdir_from_manifest_entry(entry: &fs::DirEntry) -> Option<String> {
+    let app_id = app_id_from_manifest_file_name(&entry.file_name())?;
+
+    let content = fs::read_to_string(entry.path()).ok()?;
+    let manifest = parse_app_manifest(&content)?;
+
+    if is_steam_tool_app(&app_id, &manifest.installdir) {
+        return None;
+    }
+
+    Some(manifest.installdir)
+}
+
+/// Well-known Steam app IDs that are not playable games.
+///
+/// Each entry is a numeric `appmanifest_<id>.acf` published by Valve for
+/// runtimes, redistributables, SDKs, or platform tools. The list is
+/// hand-curated; adding more is a one-line change.
+const STEAM_TOOL_APP_IDS: &[&str] = &[
+    "228980",  // Steamworks Common Redistributables
+    "1054830", // Proton EasyAntiCheat Runtime
+    "1161040", // Proton BattlEye Runtime
+    "1070560", // Steam Linux Runtime 1.0 (scout)
+    "1391110", // Steam Linux Runtime 2.0 (soldier)
+    "1628350", // Steam Linux Runtime 3.0 (sniper)
+    "1493710", // Proton Experimental
+    "1887720", // Proton 7.0
+    "1420170", // Proton 6.3
+    "1245040", // Proton 5.13
+    "1826330", // Proton 8.0
+    "2348590", // Proton 9.0
+    "1180440", // Steam Audio
+    "1313800", // Steam Audio Tools
+    "250820",  // SteamVR
+];
+
+/// Lower-case prefixes of `installdir` values that identify Steam-internal
+/// runtime / tool sub-folders living under `steamapps/common/`.
+///
+/// These catch installs that share an appmanifest with a tool app but were
+/// not added to [`STEAM_TOOL_APP_IDS`], plus shared / companion folders such
+/// as `Steamworks Shared` whose underlying app id varies between Steam
+/// versions.
+const STEAM_TOOL_INSTALLDIR_PREFIXES: &[&str] = &[
+    "steamworks ",         // "Steamworks Common Redistributables", "Steamworks Shared"
+    "steam linux runtime", // "Steam Linux Runtime - Soldier", "... 3.0 (sniper)"
+    "steam audio",         // "Steam Audio", "Steam Audio Tools"
+    "steam controller",    // "Steam Controller Configs"
+    "steamvr",
+    "proton ", // "Proton 7.0", "Proton Experimental"
+    "proton-",
+];
+
+fn is_steam_tool_app(app_id: &str, installdir: &str) -> bool {
+    if STEAM_TOOL_APP_IDS.contains(&app_id) {
+        return true;
+    }
+
+    let lowered = installdir.to_ascii_lowercase();
+    STEAM_TOOL_INSTALLDIR_PREFIXES
+        .iter()
+        .any(|prefix| lowered.starts_with(prefix))
 }
 
 fn steam_install_path(game_install_root: &Path) -> Option<SteamInstallPath> {
@@ -389,6 +486,219 @@ mod tests {
         assert_eq!(details.app_id, "123");
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_dirs_in_steamapps_collects_installdir_values_from_acf_files() {
+        let root = temp_dir("steam-install-dirs");
+        let steamapps = root.join("steamapps");
+        fs::create_dir_all(&steamapps).expect("steamapps dir");
+
+        fs::write(
+            steamapps.join("appmanifest_111.acf"),
+            r#""AppState"
+{
+    "installdir" "GameAlpha"
+    "name" "Alpha"
+}
+"#,
+        )
+        .expect("alpha manifest");
+
+        fs::write(
+            steamapps.join("appmanifest_222.acf"),
+            r#""AppState"
+{
+    "installdir" "GameBeta"
+}
+"#,
+        )
+        .expect("beta manifest");
+
+        // Non-manifest files in steamapps should be ignored.
+        fs::write(steamapps.join("libraryfolders.vdf"), "// not a manifest").expect("vdf");
+        fs::write(
+            steamapps.join("appmanifest_abc.acf"),
+            r#""installdir" "Garbage""#,
+        )
+        .expect("non-numeric id");
+
+        let installdirs = steam_install_dirs_in_steamapps(&steamapps);
+
+        let mut sorted: Vec<String> = installdirs.into_iter().collect();
+        sorted.sort();
+
+        assert_eq!(
+            sorted,
+            vec!["gamealpha".to_owned(), "gamebeta".to_owned()],
+            "only valid installdirs from numeric appmanifest_*.acf should be collected, lowercased",
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_dirs_in_steamapps_returns_empty_for_missing_directory() {
+        let missing = temp_dir("steam-install-dirs-missing");
+        // Do NOT create the directory.
+
+        let installdirs = steam_install_dirs_in_steamapps(&missing);
+
+        assert!(
+            installdirs.is_empty(),
+            "missing steamapps directory should yield empty set",
+        );
+    }
+
+    #[test]
+    fn install_dirs_in_steamapps_excludes_tool_app_ids() {
+        let root = temp_dir("steam-install-dirs-tool-app-ids");
+        let steamapps = root.join("steamapps");
+        fs::create_dir_all(&steamapps).expect("steamapps dir");
+
+        // Steamworks Common Redistributables - real Steam tool app id.
+        fs::write(
+            steamapps.join("appmanifest_228980.acf"),
+            r#""AppState"
+{
+    "appid" "228980"
+    "installdir" "Steamworks Common Redistributables"
+    "name" "Steamworks Common Redistributables"
+}
+"#,
+        )
+        .expect("redist manifest");
+
+        // Proton Experimental.
+        fs::write(
+            steamapps.join("appmanifest_1493710.acf"),
+            r#""AppState"
+{
+    "installdir" "Proton Experimental"
+    "name" "Proton Experimental"
+}
+"#,
+        )
+        .expect("proton manifest");
+
+        fs::write(
+            steamapps.join("appmanifest_400.acf"),
+            r#""AppState"
+{
+    "installdir" "Portal"
+}
+"#,
+        )
+        .expect("portal manifest");
+
+        let installdirs = steam_install_dirs_in_steamapps(&steamapps);
+
+        assert_eq!(
+            installdirs.len(),
+            1,
+            "only the real game installdir should remain",
+        );
+        assert!(installdirs.contains("portal"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_dirs_in_steamapps_excludes_steamworks_shared_installdir_prefix() {
+        let root = temp_dir("steam-install-dirs-steamworks-shared");
+        let steamapps = root.join("steamapps");
+        fs::create_dir_all(&steamapps).expect("steamapps dir");
+
+        // "Steamworks Shared" appears with various app ids depending on
+        // the Steam version, so the prefix filter is what catches it.
+        fs::write(
+            steamapps.join("appmanifest_999999.acf"),
+            r#""AppState"
+{
+    "installdir" "Steamworks Shared"
+}
+"#,
+        )
+        .expect("shared manifest");
+
+        fs::write(
+            steamapps.join("appmanifest_400.acf"),
+            r#""AppState"
+{
+    "installdir" "Portal"
+}
+"#,
+        )
+        .expect("portal manifest");
+
+        let installdirs = steam_install_dirs_in_steamapps(&steamapps);
+
+        assert!(
+            !installdirs.contains("steamworks shared"),
+            "Steamworks Shared must be filtered out by installdir prefix"
+        );
+        assert!(installdirs.contains("portal"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_dirs_in_steamapps_excludes_steam_runtime_and_audio_and_controller_prefixes() {
+        let root = temp_dir("steam-install-dirs-runtime-prefixes");
+        let steamapps = root.join("steamapps");
+        fs::create_dir_all(&steamapps).expect("steamapps dir");
+
+        for (manifest_id, installdir) in [
+            ("888001", "Steam Linux Runtime - Soldier"),
+            ("888002", "Steam Audio Tools"),
+            ("888003", "Steam Controller Configs"),
+            ("888004", "SteamVR"),
+            ("888005", "Proton 9.0"),
+        ] {
+            fs::write(
+                steamapps.join(format!("appmanifest_{manifest_id}.acf")),
+                format!("\"AppState\" {{ \"installdir\" \"{installdir}\" }}"),
+            )
+            .expect("tool manifest");
+        }
+
+        fs::write(
+            steamapps.join("appmanifest_400.acf"),
+            r#""AppState"
+{
+    "installdir" "Portal"
+}
+"#,
+        )
+        .expect("portal manifest");
+
+        let installdirs = steam_install_dirs_in_steamapps(&steamapps);
+
+        assert_eq!(
+            installdirs,
+            std::iter::once("portal".to_owned()).collect(),
+            "only the real game installdir should survive prefix-based filtering",
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn is_steam_tool_app_by_id_includes_redistributables() {
+        assert!(super::is_steam_tool_app(
+            "228980",
+            "Steamworks Common Redistributables",
+        ));
+    }
+
+    #[test]
+    fn is_steam_tool_app_by_prefix_matches_steamworks_shared() {
+        assert!(super::is_steam_tool_app("999999", "Steamworks Shared"));
+    }
+
+    #[test]
+    fn is_steam_tool_app_rejects_normal_game() {
+        assert!(!super::is_steam_tool_app("1234567", "TestGameDir"));
     }
 
     #[test]

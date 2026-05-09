@@ -34,6 +34,17 @@ const LOAD_FILE_HASH_CACHE_SQL: &str = "
     ORDER BY path
 ";
 
+const LOAD_ALL_FILE_HASH_CACHE_SQL: &str = "
+    SELECT
+        path AS cache_path,
+        size AS cache_size,
+        modified_at AS cache_modified_at,
+        sha256 AS cache_sha256,
+        version AS cache_version
+    FROM file_hash_cache
+    ORDER BY path
+";
+
 const UPSERT_FILE_HASH_CACHE_SQL: &str = "
     INSERT INTO file_hash_cache
         (path, size, modified_at, sha256, version, updated_at)
@@ -72,6 +83,20 @@ impl SqliteStorage {
             params![scope.exact_path(), scope.descendants_like_pattern()],
             |row| Ok(cache_row_from_sql(row)),
         )
+    }
+
+    /// Loads every cache row in one round-trip.
+    ///
+    /// Used by the auto-scan path, which scans many install directories in a
+    /// row and benefits from a single bulk read of the cache instead of one
+    /// `SELECT … LIKE` per game. The detector itself only consults rows whose
+    /// path lies under the install directory it is currently scanning, so
+    /// extra rows in the in-memory cache are harmless (they simply never
+    /// match).
+    pub fn load_all_file_hash_cache(&self) -> AppResult<Vec<FileHashCacheRow>> {
+        self.query_list(LOAD_ALL_FILE_HASH_CACHE_SQL, params![], |row| {
+            Ok(cache_row_from_sql(row))
+        })
     }
 
     /// Upserts cache rows by normalized path.

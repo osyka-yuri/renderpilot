@@ -241,13 +241,35 @@ function createCoverFetchFailure(game: GameCard, error: unknown): CoverFetchFail
   };
 }
 
-/** User-visible banner when some automatic cover downloads failed. */
+/**
+ * User-facing hint appended to every cover-sync banner. Surfaced in one place
+ * so wording can evolve without touching every banner branch.
+ */
+const COVER_SYNC_SETTINGS_HINT = 'Check Game artwork sources and SteamGridDB settings.';
+
+/** User-visible banner when some automatic cover downloads failed.
+ *
+ * Returns `null` when `failures` is empty so callers (typically piped through
+ * `combineCoverSyncMessages`) can suppress the banner without an explicit
+ * branch. Without this guard, accessing `failures[0].title` on an empty array
+ * threw `TypeError: Cannot read properties of undefined (reading 'title')`,
+ * which propagated up to `startMissingCoverSync` and surfaced as a generic
+ * "Background cover sync failed" toast even when every cover had downloaded.
+ */
 export function formatCoverSyncBanner(failures: readonly CoverFetchFailure[]): string | null {
+  if (failures.length === 0) {
+    return null;
+  }
+
   const first = failures[0];
+
+  if (failures.length === 1) {
+    return `Could not download a cover for ${first.title}: ${first.message}. ${COVER_SYNC_SETTINGS_HINT}`;
+  }
 
   const summary = `${first.title}: ${first.message}`;
 
-  return `${failures.length} game(s): could not download a cover. First: ${summary}. Check Game artwork sources and SteamGridDB settings.`;
+  return `Could not download covers for ${failures.length} games. First failure: ${summary}. ${COVER_SYNC_SETTINGS_HINT}`;
 }
 
 /** Merges background sync banner text with a post-sync refresh error, if any. */

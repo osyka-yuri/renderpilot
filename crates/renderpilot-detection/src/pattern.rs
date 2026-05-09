@@ -9,6 +9,58 @@ use crate::{
     normalize::{normalize_file_name, normalize_pattern},
 };
 
+/// Whitelist of file extensions that any pattern in a [`LibraryPatternSet`] can
+/// match.
+///
+/// Used by the file-system walker as a cheap pre-filter: a file whose
+/// extension is not in this list cannot possibly match any pattern, so the
+/// walker can skip it without paying the cost of `fs::symlink_metadata` and
+/// the per-file pattern lookup. For RenderPilot's pattern catalog (every
+/// pattern targets `*.dll`) this throws away the vast majority of files in
+/// modern game installs (sounds, shaders, packed data, configs, ...).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CandidateFileExtensions {
+    /// At least one pattern's extension cannot be statically determined (no
+    /// `.` separator, or wildcard appears after it). The walker must not
+    /// pre-filter by extension — every file has to flow through the full
+    /// pattern matcher.
+    Any,
+    /// File is a candidate match only if its extension (case-insensitive) is
+    /// in this set. Always non-empty when this variant is returned.
+    Allowed(HashSet<String>),
+}
+
+impl CandidateFileExtensions {
+    /// Returns `true` if a file with `file_name` could possibly match any
+    /// pattern in the originating set.
+    ///
+    /// Callers should call this in tight loops (typically inside a directory
+    /// walker), so it must not allocate on the common path.
+    #[must_use]
+    pub fn allows_file_name(&self, file_name: &str) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Allowed(allowed) => {
+                extension_of_file_name(file_name).is_some_and(|ext| allowed.contains(ext.as_str()))
+            }
+        }
+    }
+}
+
+/// Lower-case ASCII extension of `file_name` (the slice after the **last**
+/// `.`), or `None` when the name has no extension.
+///
+/// Returns a new [`String`] (allocates; may lowercase ASCII in the extension).
+fn extension_of_file_name(file_name: &str) -> Option<String> {
+    let (_, ext) = file_name.rsplit_once('.')?;
+
+    if ext.is_empty() {
+        return None;
+    }
+
+    Some(ext.to_ascii_lowercase())
+}
+
 /// Set of library filename patterns loaded from JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryPatternSet {
@@ -71,6 +123,36 @@ impl LibraryPatternSet {
             .iter()
             .find(|pattern| pattern.matches(file_name.as_str(), platform))
             .map(LibraryPatternMatch::from)
+    }
+
+    /// Computes the set of file-extensions any pattern (filtered by `platform`)
+    /// could possibly match.
+    ///
+    /// Inspect the documentation on [`CandidateFileExtensions`] for the
+    /// intended use as a walker pre-filter.
+    pub fn candidate_file_extensions(&self, platform: PatternPlatform) -> CandidateFileExtensions {
+        let mut allowed = HashSet::new();
+
+        for pattern in &self.patterns {
+            if !pattern.platform.matches(platform) {
+                continue;
+            }
+
+            match static_extension_of_pattern(pattern.normalized_pattern.as_str()) {
+                Some(ext) => {
+                    allowed.insert(ext);
+                }
+                // A pattern with no static extension means we cannot safely
+                // pre-filter — fall back to "no filter, evaluate every file".
+                None => return CandidateFileExtensions::Any,
+            }
+        }
+
+        if allowed.is_empty() {
+            CandidateFileExtensions::Any
+        } else {
+            CandidateFileExtensions::Allowed(allowed)
+        }
     }
 
     fn validate(&self) -> Result<(), LibraryPatternError> {
@@ -313,6 +395,26 @@ fn default_pattern_platform() -> PatternPlatform {
     PatternPlatform::Any
 }
 
+/// Returns the static (no-wildcard) extension of a normalized pattern, or
+/// `None` when the pattern's extension cannot be inferred without running the
+/// matcher (no `.`, wildcard after the last `.`).
+///
+/// Inputs are already lower-case (see `normalize_pattern`), so the result is
+/// safe to compare with [`extension_of_file_name`] using `==`.
+fn static_extension_of_pattern(normalized_pattern: &str) -> Option<String> {
+    let (_, ext) = normalized_pattern.rsplit_once('.')?;
+
+    if ext.is_empty() {
+        return None;
+    }
+
+    if ext.contains('*') || ext.contains('?') {
+        return None;
+    }
+
+    Some(ext.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use renderpilot_domain::GraphicsTechnology;
@@ -477,5 +579,47 @@ mod tests {
 
     fn pattern_set() -> LibraryPatternSet {
         LibraryPatternSet::from_json_str(PATTERNS_JSON).expect("valid patterns")
+    }
+
+    #[test]
+    fn candidate_extensions_for_default_windows_set_is_only_dll() {
+        let patterns = pattern_set();
+
+        let candidates = patterns.candidate_file_extensions(PatternPlatform::Windows);
+
+        assert!(candidates.allows_file_name("nvngx_dlss.dll"));
+        assert!(candidates.allows_file_name("MyGame.DLL"));
+
+        assert!(!candidates.allows_file_name("config.ini"));
+        assert!(!candidates.allows_file_name("textures.pak"));
+        assert!(!candidates.allows_file_name("video.bik"));
+        assert!(!candidates.allows_file_name("README"));
+    }
+
+    #[test]
+    fn candidate_extensions_falls_back_to_any_when_pattern_has_wildcard_extension() {
+        let patterns = LibraryPatternSet::new(vec![LibraryPattern::new(
+            "weird.*",
+            super::PatternKind::Glob,
+            super::PatternPlatform::Windows,
+            renderpilot_domain::GraphicsTechnology::Unknown,
+        )
+        .expect("valid pattern")])
+        .expect("valid set");
+
+        let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Windows);
+
+        assert!(matches!(candidates, super::CandidateFileExtensions::Any));
+        assert!(candidates.allows_file_name("anything.txt"));
+    }
+
+    #[test]
+    fn candidate_extensions_returns_any_when_pattern_set_filters_to_empty() {
+        let patterns = pattern_set();
+
+        // Linux platform has no Windows-only patterns.
+        let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Linux);
+
+        assert!(matches!(candidates, super::CandidateFileExtensions::Any));
     }
 }

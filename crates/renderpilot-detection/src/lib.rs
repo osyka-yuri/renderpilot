@@ -17,5 +17,6 @@ pub use filesystem_detector::{
     DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector,
 };
 pub use pattern::{
-    LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind, PatternPlatform,
+    CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,
+    PatternPlatform,
 };

@@ -18,6 +18,9 @@ use super::{
     apply_operation_plan, build_swap_plan, get_game_cards, rollback_operation, scan_manual_folder,
     utils::{dashboard_risk_level, normalized_path_string as path_string, technology_tags},
 };
+use crate::catalog::{
+    open_auto_scan_batch, prune_auto_scan_orphans_in_catalog, scan_auto_in_batch,
+};
 use crate::hash::sha256_hex;
 use crate::test_env::lock_process_env;
 use crate::{backup_manager::BACKUP_ROOT_DIR_ENV, catalog::CATALOG_DB_PATH_ENV};
@@ -209,6 +212,333 @@ fn scan_manual_folder_no_duplicates_when_scanning_subdirectory_after_parent() {
     );
     assert!(titles.contains(&"GameAlpha"), "GameAlpha should be present");
     assert!(titles.contains(&"GameBeta"), "GameBeta should be present");
+}
+
+#[test]
+fn scan_auto_replaces_pre_existing_split_subfolder_entries_with_one_game() {
+    let fixture = DesktopFixture::new("scan-auto-cleans-split-entries");
+
+    let game_dir = tempfile::tempdir().expect("game dir");
+    let amd_dir = game_dir.path().join("amd-ffx");
+    let streamline_dir = game_dir.path().join("streamline");
+
+    fs::create_dir_all(&amd_dir).expect("amd-ffx dir");
+    fs::create_dir_all(&streamline_dir).expect("streamline dir");
+    fs::write(amd_dir.join("nvngx_dlss.dll"), b"amd").expect("amd dll");
+    fs::write(streamline_dir.join("nvngx_dlss.dll"), b"streamline").expect("streamline dll");
+
+    let amd_install_path = path_string(&amd_dir);
+    let streamline_install_path = path_string(&streamline_dir);
+
+    fixture.store_game(&sample_game(
+        &format!("manual:{amd_install_path}"),
+        "amd-ffx",
+        &amd_install_path,
+    ));
+    fixture.store_game(&sample_game(
+        &format!("manual:{streamline_install_path}"),
+        "streamline",
+        &streamline_install_path,
+    ));
+
+    let batch = open_auto_scan_batch().expect("auto scan batch should open");
+    let results = scan_auto_in_batch(&batch, game_dir.path().to_path_buf())
+        .expect("auto scan should succeed");
+
+    assert_eq!(results.len(), 1);
+
+    let games = fixture
+        .storage
+        .list_games()
+        .expect("list games should succeed");
+    let install_paths: Vec<&str> = games
+        .iter()
+        .map(|game| game.install_path().as_str())
+        .collect();
+
+    assert_eq!(games.len(), 1, "stale subfolder rows should be pruned");
+    assert!(install_paths.contains(&path_string(game_dir.path()).as_str()));
+    assert!(!install_paths.contains(&amd_install_path.as_str()));
+    assert!(!install_paths.contains(&streamline_install_path.as_str()));
+}
+
+#[test]
+fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("catalog.db");
+    let _guard = DesktopCatalogEnvGuard::new(db_path);
+
+    let game_dir = tempfile::tempdir().expect("game dir");
+    let amd_dir = game_dir.path().join("amd-ffx");
+    let streamline_dir = game_dir.path().join("streamline");
+    let nested_dir = game_dir
+        .path()
+        .join("Plugins")
+        .join("NVIDIA")
+        .join("Streamline");
+
+    fs::create_dir_all(&amd_dir).expect("amd-ffx dir should be created");
+    fs::create_dir_all(&streamline_dir).expect("streamline dir should be created");
+    fs::create_dir_all(&nested_dir).expect("nested streamline dir should be created");
+    fs::write(amd_dir.join("nvngx_dlss.dll"), b"amd-bytes").expect("amd dll");
+    fs::write(streamline_dir.join("nvngx_dlss.dll"), b"streamline-bytes").expect("streamline dll");
+    fs::write(nested_dir.join("nvngx_dlss.dll"), b"nested-bytes").expect("nested dll");
+
+    let batch = open_auto_scan_batch().expect("auto scan batch should open");
+    let results = scan_auto_in_batch(&batch, game_dir.path().to_path_buf())
+        .expect("auto scan should succeed");
+
+    assert_eq!(
+        results.len(),
+        1,
+        "auto scan must keep one game even when DLLs live in multiple sub-folders",
+    );
+
+    let cards = get_game_cards().expect("game cards should succeed");
+    let cards = cards.as_array().expect("game cards array");
+
+    assert_eq!(cards.len(), 1, "catalog must contain exactly one card");
+    assert_eq!(cards[0]["install_path"], path_string(game_dir.path()));
+    assert_eq!(
+        cards[0]["component_count"], 3,
+        "all three DLL sub-folders should bucket into the one game",
+    );
+}
+
+#[test]
+fn prune_auto_scan_orphans_removes_library_root_and_unmatched_direct_children() {
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-broad");
+
+    let library_root_path = "C:/Program Files (x86)/Steam/steamapps/common";
+    let real_game_path = "C:/Program Files (x86)/Steam/steamapps/common/RealGame";
+    let runtime_path = "C:/Program Files (x86)/Steam/steamapps/common/Steam Controller Configs";
+    let nested_path = "C:/Program Files (x86)/Steam/steamapps/common/RealGame/Plugins/MyMod";
+    let unrelated_path = "D:/Games/Unrelated";
+
+    fixture.store_game(&sample_game(
+        &format!("manual:{library_root_path}"),
+        "common",
+        library_root_path,
+    ));
+    fixture.store_game(&sample_game(
+        &format!("manual:{real_game_path}"),
+        "RealGame",
+        real_game_path,
+    ));
+    fixture.store_game(&sample_game(
+        &format!("manual:{runtime_path}"),
+        "Steam Controller Configs",
+        runtime_path,
+    ));
+    fixture.store_game(&sample_game(
+        &format!("manual:{nested_path}"),
+        "MyMod",
+        nested_path,
+    ));
+    fixture.store_game(&sample_game(
+        &format!("manual:{unrelated_path}"),
+        "Unrelated",
+        unrelated_path,
+    ));
+
+    let removed = prune_auto_scan_orphans_in_catalog(
+        &[library_root_path.to_owned()],
+        &[real_game_path.to_owned()],
+    )
+    .expect("prune should succeed");
+
+    assert_eq!(
+        removed, 2,
+        "library root and runtime sub-folder rows should be removed",
+    );
+
+    let remaining_paths: Vec<String> = fixture
+        .storage
+        .list_games()
+        .expect("list games should succeed")
+        .iter()
+        .map(|game| game.install_path().as_str().to_owned())
+        .collect();
+
+    assert!(!remaining_paths.iter().any(|p| p == library_root_path));
+    assert!(!remaining_paths.iter().any(|p| p == runtime_path));
+    assert!(remaining_paths.iter().any(|p| p == real_game_path));
+    assert!(
+        remaining_paths.iter().any(|p| p == nested_path),
+        "deeper-than-direct-child rows must be preserved",
+    );
+    assert!(remaining_paths.iter().any(|p| p == unrelated_path));
+}
+
+#[test]
+fn prune_auto_scan_orphans_is_case_insensitive_on_windows_paths() {
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-case");
+
+    let library_root_path = "C:/Program Files/EA Games";
+    let stored_path = "C:/Program Files/EA Games";
+    let game = sample_game(&format!("manual:{stored_path}"), "EA Games", stored_path);
+
+    fixture.store_game(&game);
+
+    let removed =
+        prune_auto_scan_orphans_in_catalog(&["c:/program files/ea games".to_owned()], &[])
+            .expect("prune should succeed");
+
+    assert_eq!(removed, 1);
+    assert!(
+        fixture.storage.list_games().expect("list games").is_empty(),
+        "case-insensitive match against {library_root_path} should remove the row",
+    );
+}
+
+#[test]
+fn prune_auto_scan_orphans_retains_case_and_trailing_slash_variants() {
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-retained-variants");
+
+    let library_root_path = "D:/SteamLibrary/steamapps/common";
+    let stored_game_path = "d:/steamlibrary/steamapps/common/Game";
+    let retained_path = "D:/SteamLibrary/steamapps/common/Game/";
+
+    fixture.store_game(&sample_game(
+        &format!("manual:{stored_game_path}"),
+        "Game",
+        stored_game_path,
+    ));
+
+    let removed = prune_auto_scan_orphans_in_catalog(
+        &[library_root_path.to_owned()],
+        &[retained_path.to_owned()],
+    )
+    .expect("prune should succeed");
+
+    assert_eq!(
+        removed, 0,
+        "retained path key must match stored install path"
+    );
+
+    let remaining: Vec<String> = fixture
+        .storage
+        .list_games()
+        .expect("list games")
+        .iter()
+        .map(|g| g.install_path().as_str().to_owned())
+        .collect();
+
+    assert!(
+        remaining.iter().any(|p| p == stored_game_path),
+        "game row must remain when retained list uses different case or trailing slash",
+    );
+}
+
+#[test]
+fn prune_auto_scan_orphans_removes_steam_launcher_direct_child_not_in_retained() {
+    // Reproduces the user-visible bug: previous catalog versions persisted
+    // `Steamworks Common Redistributables` and `Steamworks Shared` as
+    // Steam-launcher cards (because their folders carry an appmanifest).
+    // After the discovery filter excludes them, the orphan rows must still
+    // be cleaned up even though their launcher is not Manual.
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-steam-launcher");
+
+    let library_root_path = "C:/Program Files (x86)/Steam/steamapps/common";
+    let real_steam_game_path = "C:/Program Files (x86)/Steam/steamapps/common/Portal";
+    let steam_redist_path =
+        "C:/Program Files (x86)/Steam/steamapps/common/Steamworks Common Redistributables";
+    let steam_shared_path = "C:/Program Files (x86)/Steam/steamapps/common/Steamworks Shared";
+
+    fixture.store_game(&sample_game_with_launcher(
+        &format!("manual:{real_steam_game_path}"),
+        "Portal",
+        real_steam_game_path,
+        Launcher::Steam,
+        Some("400"),
+    ));
+    fixture.store_game(&sample_game_with_launcher(
+        &format!("manual:{steam_redist_path}"),
+        "Steamworks Common Redistributables",
+        steam_redist_path,
+        Launcher::Steam,
+        Some("228980"),
+    ));
+    fixture.store_game(&sample_game_with_launcher(
+        &format!("manual:{steam_shared_path}"),
+        "Steamworks Shared",
+        steam_shared_path,
+        Launcher::Steam,
+        Some("999999"),
+    ));
+
+    let removed = prune_auto_scan_orphans_in_catalog(
+        &[library_root_path.to_owned()],
+        &[real_steam_game_path.to_owned()],
+    )
+    .expect("prune should succeed");
+
+    assert_eq!(
+        removed, 2,
+        "both Steam-launcher orphan rows should be pruned",
+    );
+
+    let remaining_paths: Vec<String> = fixture
+        .storage
+        .list_games()
+        .expect("list games should succeed")
+        .iter()
+        .map(|game| game.install_path().as_str().to_owned())
+        .collect();
+
+    assert!(
+        remaining_paths.iter().any(|p| p == real_steam_game_path),
+        "real Steam game must be retained because it is in retained_install_paths",
+    );
+    assert!(!remaining_paths.iter().any(|p| p == steam_redist_path));
+    assert!(!remaining_paths.iter().any(|p| p == steam_shared_path));
+}
+
+#[test]
+fn prune_auto_scan_orphans_keeps_legit_steam_card_when_in_retained() {
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-steam-keep");
+
+    let library_root_path = "C:/Program Files (x86)/Steam/steamapps/common";
+    let portal_path = "C:/Program Files (x86)/Steam/steamapps/common/Portal";
+    let half_life_path = "C:/Program Files (x86)/Steam/steamapps/common/Half-Life";
+
+    fixture.store_game(&sample_game_with_launcher(
+        &format!("manual:{portal_path}"),
+        "Portal",
+        portal_path,
+        Launcher::Steam,
+        Some("400"),
+    ));
+    fixture.store_game(&sample_game_with_launcher(
+        &format!("manual:{half_life_path}"),
+        "Half-Life",
+        half_life_path,
+        Launcher::Steam,
+        Some("70"),
+    ));
+
+    let removed = prune_auto_scan_orphans_in_catalog(
+        &[library_root_path.to_owned()],
+        &[portal_path.to_owned(), half_life_path.to_owned()],
+    )
+    .expect("prune should succeed");
+
+    assert_eq!(removed, 0, "rediscovered Steam games must not be pruned");
+    assert_eq!(fixture.storage.list_games().expect("list games").len(), 2,);
+}
+
+#[test]
+fn prune_auto_scan_orphans_with_empty_library_roots_is_noop() {
+    let fixture = DesktopFixture::new("prune-auto-scan-orphans-noop");
+
+    let path = "C:/Games/Keep";
+    let game = sample_game(&format!("manual:{path}"), "Keep", path);
+    fixture.store_game(&game);
+
+    let removed = prune_auto_scan_orphans_in_catalog(&[], &[]).expect("prune should succeed");
+
+    assert_eq!(removed, 0);
+    assert_eq!(fixture.storage.list_games().expect("list games").len(), 1,);
 }
 
 #[test]
@@ -509,12 +839,28 @@ fn restore_env_var(key: &str, previous: &Option<OsString>) {
 }
 
 fn sample_game(id: &str, title: &str, install_path: &str) -> GameInstallation {
-    let identity = GameIdentity::new(
+    sample_game_with_launcher(id, title, install_path, Launcher::Manual, None)
+}
+
+fn sample_game_with_launcher(
+    id: &str,
+    title: &str,
+    install_path: &str,
+    launcher: Launcher,
+    external_id: Option<&str>,
+) -> GameInstallation {
+    let mut identity = GameIdentity::new(
         GameId::new(id).expect("game id should be valid"),
         title,
-        Launcher::Manual,
+        launcher,
     )
     .expect("game identity should be valid");
+
+    if let Some(external_id) = external_id {
+        identity = identity
+            .with_external_id(external_id)
+            .expect("external id should be valid");
+    }
 
     GameInstallation::new(
         identity,

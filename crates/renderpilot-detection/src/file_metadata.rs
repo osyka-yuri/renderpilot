@@ -48,14 +48,25 @@ impl FileStat {
         Self { size, modified_at }
     }
 
-    fn read(path: &Path) -> AppResult<Self> {
-        let metadata = read_fs_metadata(path)?;
-        let modified_at = read_modified_time(path, &metadata)?;
-
-        Ok(Self::new(
-            metadata.len(),
-            system_time_to_unix_millis(path, modified_at)?,
-        ))
+    /// Returns `Ok(None)` when the file no longer exists.
+    ///
+    /// Used for detection paths that skip an explicit `path.is_file()` check.
+    /// Stale hash-cache entries surface as `NotFound` and are skipped.
+    fn try_read(path: &Path) -> AppResult<Option<Self>> {
+        match fs::metadata(path) {
+            Ok(metadata) => {
+                let modified_at = read_modified_time(path, &metadata)?;
+                Ok(Some(Self::new(
+                    metadata.len(),
+                    system_time_to_unix_millis(path, modified_at)?,
+                )))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(detection_context_error(
+                format_args!("could not read metadata for {}", path.display()),
+                error,
+            )),
+        }
     }
 
     fn into_cache_key(self, path: PathRef, sha256: Sha256Hash) -> FileCacheKey {
@@ -245,18 +256,24 @@ impl DetectedFileMetadata {
     }
 }
 
-pub(crate) fn read_detected_file_metadata(
+/// Reads size/mtime, reuses cached hash/version when fresh, otherwise hashes the file.
+///
+/// Returns `Ok(None)` when the path no longer exists (e.g. race between directory listing
+/// and this read, or a stale hash-cache entry). Other I/O errors propagate.
+pub(crate) fn try_read_detected_file_metadata(
     path: &Path,
     path_ref: PathRef,
     hash_cache: Option<&FileHashCache>,
-) -> AppResult<DetectedFileMetadata> {
-    let stat = FileStat::read(path)?;
+) -> AppResult<Option<DetectedFileMetadata>> {
+    let Some(stat) = FileStat::try_read(path)? else {
+        return Ok(None);
+    };
 
     if let Some(metadata) = try_read_cached_metadata(path_ref.clone(), stat, hash_cache) {
-        return Ok(metadata);
+        return Ok(Some(metadata));
     }
 
-    read_uncached_metadata(path, path_ref, stat)
+    read_uncached_metadata(path, path_ref, stat).map(Some)
 }
 
 fn try_read_cached_metadata(
@@ -280,15 +297,6 @@ fn read_uncached_metadata(
     Ok(DetectedFileMetadata::from_parts(
         path_ref, stat, sha256, version,
     ))
-}
-
-fn read_fs_metadata(path: &Path) -> AppResult<fs::Metadata> {
-    fs::metadata(path).map_err(|error| {
-        detection_context_error(
-            format_args!("could not read metadata for {}", path.display()),
-            error,
-        )
-    })
 }
 
 fn read_modified_time(path: &Path, metadata: &fs::Metadata) -> AppResult<SystemTime> {

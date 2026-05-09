@@ -52,6 +52,21 @@ pub(super) fn normalized_path_within_scope(path: &str, scope_root: &str) -> bool
     is_root_scope(scope_root) || has_path_boundary_after_prefix(path, scope_root.len())
 }
 
+/// Normalized PathRef-style comparison key for auto-scan orphan pruning.
+///
+/// Lower-cases ASCII and strips trailing `/` so case-only and trailing-slash
+/// differences do not block matching catalog install paths against
+/// `prune_auto_scan_orphans` inputs.
+pub(super) fn install_path_match_key(path: &str) -> String {
+    let mut key = path.to_ascii_lowercase();
+
+    while key.ends_with('/') && key.len() > 1 {
+        key.pop();
+    }
+
+    key
+}
+
 fn trim_trailing_separators_except_root(path: &str) -> &str {
     let mut trimmed = path;
 
@@ -101,7 +116,15 @@ fn is_windows_drive_root(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::normalized_path_within_scope;
+    use super::{install_path_match_key, normalized_path_within_scope};
+
+    #[test]
+    fn install_path_match_key_unifies_case_and_trailing_slash() {
+        assert_eq!(
+            install_path_match_key("D:/SteamLibrary/steamapps/common/Game/"),
+            install_path_match_key("d:/steamlibrary/steamapps/common/Game"),
+        );
+    }
 
     #[test]
     fn same_path_is_within_scope() {
