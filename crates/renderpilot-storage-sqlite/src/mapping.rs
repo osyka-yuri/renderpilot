@@ -91,3 +91,29 @@ pub(crate) fn version(value: String) -> AppResult<Version> {
 pub(crate) fn component_files(value: String) -> AppResult<Vec<ComponentFile>> {
     deserialize_json(&value)
 }
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_domain::GraphicsTechnology;
+
+    use super::{enum_from_text, enum_to_text, graphics_technology};
+
+    #[test]
+    fn graphics_technology_codec_roundtrips_direct_storage_slug() {
+        let serialized =
+            enum_to_text(&GraphicsTechnology::DirectStorage).expect("enum should serialize");
+
+        assert_eq!(serialized, "direct_storage");
+
+        let parsed: GraphicsTechnology =
+            enum_from_text(&serialized).expect("enum should deserialize");
+        assert_eq!(parsed, GraphicsTechnology::DirectStorage);
+    }
+
+    #[test]
+    fn graphics_technology_parser_accepts_legacy_aliases() {
+        let parsed = graphics_technology("DirectStorage".to_owned())
+            .expect("legacy alias should deserialize through storage mapping");
+        assert_eq!(parsed, GraphicsTechnology::DirectStorage);
+    }
+}

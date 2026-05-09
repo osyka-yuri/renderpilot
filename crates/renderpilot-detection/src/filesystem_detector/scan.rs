@@ -257,7 +257,7 @@ fn is_system_directory(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     use super::{collect_files_filtered, read_symlink_metadata_tolerant};
 
@@ -319,5 +319,76 @@ mod tests {
             collected[0].file_name().unwrap().to_string_lossy(),
             "target.dll"
         );
+    }
+
+    #[test]
+    fn max_depth_includes_boundary_and_excludes_deeper_files() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp.path();
+        let depth_one = root.join("depth1");
+        let depth_two = depth_one.join("depth2");
+        let depth_three = depth_two.join("depth3");
+
+        fs::create_dir_all(&depth_three).expect("nested directories should be created");
+
+        let root_dll = root.join("root.dll");
+        let depth_two_dll = depth_two.join("depth-two.dll");
+        let depth_three_dll = depth_three.join("depth-three.dll");
+
+        fs::write(&root_dll, b"root").expect("root dll");
+        fs::write(&depth_two_dll, b"depth2").expect("depth2 dll");
+        fs::write(&depth_three_dll, b"depth3").expect("depth3 dll");
+
+        let collected = collect_files_filtered(root, 3, |name: &str| {
+            name.to_ascii_lowercase().ends_with(".dll")
+        })
+        .expect("walk should succeed");
+
+        let collected_set = collected
+            .into_iter()
+            .collect::<std::collections::BTreeSet<PathBuf>>();
+
+        assert!(collected_set.contains(&root_dll));
+        assert!(collected_set.contains(&depth_two_dll));
+        assert!(
+            !collected_set.contains(&depth_three_dll),
+            "files deeper than max_depth should be skipped",
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn walker_skips_symlinked_directories() {
+        use std::os::windows::fs::symlink_dir;
+
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp.path();
+        let real_dir = root.join("real");
+        let link_dir = root.join("linked");
+
+        fs::create_dir_all(&real_dir).expect("real dir should be created");
+        fs::write(real_dir.join("nvngx_dlss.dll"), b"real").expect("real dll");
+
+        if symlink_dir(&real_dir, &link_dir).is_err() {
+            return;
+        }
+
+        let collected = collect_files_filtered(root, 4, |name: &str| {
+            name.to_ascii_lowercase().ends_with(".dll")
+        })
+        .expect("walk should succeed");
+
+        let names = collected
+            .iter()
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names.len(),
+            1,
+            "symlinked dir should not duplicate or add entries"
+        );
+        assert!(names[0].contains("/real/"));
+        assert!(!names[0].contains("/linked/"));
     }
 }

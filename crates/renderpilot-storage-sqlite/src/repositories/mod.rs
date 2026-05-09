@@ -23,6 +23,42 @@ pub struct SqliteStorage {
     pub(crate) connection: Mutex<Connection>,
 }
 
+/// Atomic scan write payload stored as one transaction.
+#[derive(Debug, Clone)]
+pub struct ScanWriteUnit<'a> {
+    /// Game installation row that anchors the write.
+    pub game: &'a GameInstallation,
+    /// Full replacement component set for the game.
+    pub components: &'a [GraphicsComponent],
+    /// Artifact rows to upsert while persisting the scan.
+    pub artifacts: &'a [LibraryArtifact],
+}
+
+/// Summary of rows written by [`SqliteStorage::save_scan_write_unit`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScanWriteReport {
+    game_rows_written: usize,
+    components_written: usize,
+    artifacts_written: usize,
+}
+
+impl ScanWriteReport {
+    /// Number of game rows written.
+    pub fn game_rows_written(&self) -> usize {
+        self.game_rows_written
+    }
+
+    /// Number of component rows written.
+    pub fn components_written(&self) -> usize {
+        self.components_written
+    }
+
+    /// Number of artifact rows written.
+    pub fn artifacts_written(&self) -> usize {
+        self.artifacts_written
+    }
+}
+
 impl SqliteStorage {
     /// Stores a complete scan result atomically in one database transaction.
     ///
@@ -44,8 +80,23 @@ impl SqliteStorage {
         components: &[GraphicsComponent],
         artifacts: &[LibraryArtifact],
     ) -> AppResult<()> {
+        self.save_scan_write_unit(ScanWriteUnit {
+            game,
+            components,
+            artifacts,
+        })?;
+        Ok(())
+    }
+
+    /// Persists one atomic scan write-unit and returns write counters.
+    pub fn save_scan_write_unit(&self, unit: ScanWriteUnit<'_>) -> AppResult<ScanWriteReport> {
         self.with_transaction(|transaction| {
-            persist_scan_result_in_transaction(transaction, game, components, artifacts)
+            persist_scan_result_in_transaction(
+                transaction,
+                unit.game,
+                unit.components,
+                unit.artifacts,
+            )
         })
     }
 
@@ -67,12 +118,16 @@ fn persist_scan_result_in_transaction(
     game: &GameInstallation,
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
-) -> AppResult<()> {
+) -> AppResult<ScanWriteReport> {
     games::upsert_game_within_transaction(transaction, game)?;
     components::replace_components_for_game_within_transaction(transaction, game.id(), components)?;
     artifacts::upsert_artifacts_within_transaction(transaction, artifacts)?;
 
-    Ok(())
+    Ok(ScanWriteReport {
+        game_rows_written: 1,
+        components_written: components.len(),
+        artifacts_written: artifacts.len(),
+    })
 }
 
 #[cfg(test)]
@@ -126,6 +181,32 @@ mod tests {
         assert_storage_failed(&error);
         fixture.assert_game_absent(game.id());
         fixture.assert_components_empty(game.id());
+    }
+
+    #[test]
+    fn save_scan_write_unit_reports_written_counts() {
+        let fixture = StorageFixture::new();
+        let game = sample_game(GAME_EXISTING);
+        let component = sample_component(COMPONENT_EXISTING, game.id().as_str());
+        let artifact = sample_artifact(
+            "artifact:count-report",
+            "C:/Games/Test/nvngx_dlss.dll",
+            HASH_A,
+        )
+        .with_source_game_id(game.id().clone());
+
+        let report = fixture
+            .storage
+            .save_scan_write_unit(super::ScanWriteUnit {
+                game: &game,
+                components: &[component],
+                artifacts: &[artifact],
+            })
+            .expect("scan write unit should persist");
+
+        assert_eq!(report.game_rows_written(), 1);
+        assert_eq!(report.components_written(), 1);
+        assert_eq!(report.artifacts_written(), 1);
     }
 
     #[test]

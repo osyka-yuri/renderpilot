@@ -306,6 +306,50 @@ fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
 }
 
 #[test]
+fn scan_auto_recovers_from_partial_non_empty_hash_cache() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("catalog.db");
+    let _guard = DesktopCatalogEnvGuard::new(db_path);
+
+    let game_dir = tempfile::tempdir().expect("game dir");
+    let intel_dll = game_dir.path().join("libxess.dll");
+    let amd_dll = game_dir.path().join("amd_fidelityfx_framegeneration.dll");
+    let nvidia_dll = game_dir.path().join("nvngx_dlss.dll");
+
+    fs::write(&intel_dll, b"intel-bytes").expect("intel dll should be written");
+    scan_manual_folder(game_dir.path().to_path_buf()).expect("warmup scan should succeed");
+
+    fs::write(&amd_dll, b"amd-bytes").expect("amd dll should be written");
+    fs::write(&nvidia_dll, b"nvidia-bytes").expect("nvidia dll should be written");
+
+    let batch = open_auto_scan_batch().expect("auto scan batch should open");
+    let results = scan_auto_in_batch(&batch, game_dir.path().to_path_buf())
+        .expect("auto scan should succeed");
+
+    assert_eq!(results.len(), 1, "auto scan should keep one game result");
+
+    let cards = get_game_cards().expect("game cards should succeed");
+    let cards = cards.as_array().expect("game cards array");
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0]["install_path"], path_string(game_dir.path()));
+    assert_eq!(
+        cards[0]["component_count"], 3,
+        "auto scan should not keep stale partial fast-cache result",
+    );
+
+    let tags = cards[0]["technology_tags"]
+        .as_array()
+        .expect("technology tags array")
+        .iter()
+        .filter_map(|value| value.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(tags.contains(&"intel_xess"));
+    assert!(tags.contains(&"amd_fsr_frame_generation"));
+    assert!(tags.contains(&"dlss_super_resolution"));
+}
+
+#[test]
 fn prune_auto_scan_orphans_removes_library_root_and_unmatched_direct_children() {
     let fixture = DesktopFixture::new("prune-auto-scan-orphans-broad");
 

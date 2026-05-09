@@ -1,5 +1,7 @@
+mod install_partitioner;
 mod paths;
 mod prune;
+mod scan_plan;
 
 pub(super) use prune::prune_auto_scan_orphans;
 
@@ -9,51 +11,20 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use renderpilot_application::{AppError, AppResult};
+use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_detection::{DetectedLibraryFile, FileHashCache, LibraryPatternComponentDetector};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, GameInstallation, GraphicsComponent,
     LibraryArtifact,
 };
 use renderpilot_platform_windows::ManualFolderGameSource;
-use renderpilot_storage_sqlite::{FileHashCacheRow, SqliteStorage};
+use renderpilot_storage_sqlite::{FileHashCacheRow, ScanWriteUnit, SqliteStorage};
+use install_partitioner::derive_install_roots;
+use scan_plan::{decide_fast_scan_fallback, DetectionMode, InstallRootStrategy};
 
 use crate::error::CliError;
 
 use super::{storage::open_catalog_storage, ScanFolderCatalogResult};
-
-#[derive(Clone, Copy)]
-enum DetectionMode {
-    /// Full filesystem pass, but reuse cached hashes where possible.
-    FullCached,
-
-    /// Prefer fast cached detection, but fall back to a full cached pass when
-    /// the fast path cannot produce a useful result.
-    FastCachedWithFullFallback,
-}
-
-/// Controls how the scan derives game install roots from a scan target.
-#[derive(Clone, Copy)]
-enum InstallRootStrategy {
-    /// The scan target is treated as a single game install. All detected
-    /// libraries are bucketed under the target as one install.
-    ///
-    /// Used by the auto-scan because every target it produces is already a
-    /// real game folder (per-app registry / manifest entry or immediate child
-    /// of a launcher library root). Splitting on the first diverging path
-    /// component would incorrectly turn one game with DLLs in several
-    /// sub-folders (e.g. `amd-ffx/`, `streamline/`, `Plugins/NVIDIA/Streamline/`)
-    /// into multiple sibling "games".
-    SingleInstall,
-
-    /// The scan target may be a parent folder containing many sibling game
-    /// installs as immediate sub-directories. Libraries are bucketed by the
-    /// first path component that diverges across detected files.
-    ///
-    /// Used by the manual scan because the user may select either a single
-    /// game folder or a parent of many.
-    SplitByFirstDiverge,
-}
 
 struct DiscoveredInstall {
     normalized_prefix: String,
@@ -163,21 +134,6 @@ fn scan_impl(
     Ok(results)
 }
 
-fn derive_install_roots(
-    selected_game: &GameInstallation,
-    libraries: &[DetectedLibraryFile],
-    strategy: InstallRootStrategy,
-) -> Vec<PathBuf> {
-    let scan_root = normalized_install_path_buf(selected_game);
-
-    match strategy {
-        InstallRootStrategy::SingleInstall => vec![scan_root],
-        InstallRootStrategy::SplitByFirstDiverge => {
-            detect_game_install_roots(&scan_root, libraries)
-        }
-    }
-}
-
 fn detect_libraries(
     storage: &SqliteStorage,
     detector: &LibraryPatternComponentDetector,
@@ -198,10 +154,22 @@ fn detect_libraries(
         }
     };
 
+    let existing_component_count = match mode {
+        DetectionMode::FastCachedWithFullFallback => {
+            storage.list_components_for_game(game.id())?.len()
+        }
+        DetectionMode::FullCached => 0,
+    };
+
     let libraries = match mode {
         DetectionMode::FullCached => detect_libraries_full_cached(detector, game, hash_cache)?,
         DetectionMode::FastCachedWithFullFallback => {
-            detect_libraries_fast_cached_with_full_fallback(detector, game, hash_cache)?
+            detect_libraries_fast_cached_with_full_fallback(
+                detector,
+                game,
+                hash_cache,
+                existing_component_count,
+            )?
         }
     };
 
@@ -228,20 +196,32 @@ fn detect_libraries_fast_cached_with_full_fallback(
     detector: &LibraryPatternComponentDetector,
     game: &GameInstallation,
     hash_cache: &FileHashCache,
+    existing_component_count: usize,
 ) -> Result<Vec<DetectedLibraryFile>, CliError> {
     if hash_cache.is_empty() {
         return detector.detect_library_files(game).map_err(Into::into);
     }
 
-    let fast_libraries = detector.detect_library_files_fast_cached(game, hash_cache)?;
+    let fast_report = detector.detect_library_files_fast_cached_with_evidence(game, hash_cache)?;
+    let fast_libraries = fast_report.libraries();
+    let expected_detectable_count = fast_report.detectable_count();
+    let decision = decide_fast_scan_fallback(
+        fast_libraries.len(),
+        expected_detectable_count,
+        existing_component_count,
+    );
 
-    if fast_libraries.is_empty() {
+    if decision.should_fallback() || legacy_fast_fallback_forces_full_scan() {
         detector
             .detect_library_files_with_cache(game, hash_cache)
             .map_err(Into::into)
     } else {
-        Ok(fast_libraries)
+        Ok(fast_report.into_libraries())
     }
+}
+
+fn legacy_fast_fallback_forces_full_scan() -> bool {
+    std::env::var_os("RENDERPILOT_SCAN_FAST_FALLBACK_LEGACY").is_some()
 }
 
 fn persist_scan_results(
@@ -388,7 +368,11 @@ fn persist_scan_result(
     let components = build_graphics_components(&game, &libraries)?;
     let artifacts = build_library_artifacts(game.id(), &libraries)?;
 
-    storage.save_scan_result(&game, &components, &artifacts)?;
+    storage.save_scan_write_unit(ScanWriteUnit {
+        game: &game,
+        components: &components,
+        artifacts: &artifacts,
+    })?;
 
     Ok(ScanFolderCatalogResult { game, libraries })
 }
@@ -414,7 +398,7 @@ fn build_library_artifacts(
         .collect()
 }
 
-fn normalized_install_path_buf(game: &GameInstallation) -> PathBuf {
+pub(super) fn normalized_install_path_buf(game: &GameInstallation) -> PathBuf {
     PathBuf::from(game.install_path().as_str())
 }
 
@@ -425,7 +409,7 @@ fn library_file_path(library: &DetectedLibraryFile) -> &Path {
 /// Detects sub-directory roots that should be treated as separate game installs.
 ///
 /// Returns `[root]` when the scan result looks like a single installation.
-fn detect_game_install_roots(root: &Path, libraries: &[DetectedLibraryFile]) -> Vec<PathBuf> {
+pub(super) fn detect_game_install_roots(root: &Path, libraries: &[DetectedLibraryFile]) -> Vec<PathBuf> {
     let relative_library_dirs = relative_library_parent_dirs(root, libraries);
 
     if relative_library_dirs.is_empty() {
@@ -608,4 +592,42 @@ fn save_hash_cache(
         .collect::<Vec<_>>();
 
     storage.save_file_hash_cache(&entries).map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decide_fast_scan_fallback, scan_plan::FastScanFallbackReason};
+
+    #[test]
+    fn fallback_when_fast_result_is_empty() {
+        let decision = decide_fast_scan_fallback(0, 3, 2);
+        assert_eq!(
+            decision.fallback_reason,
+            Some(FastScanFallbackReason::EmptyFastResult)
+        );
+    }
+
+    #[test]
+    fn fallback_when_fast_result_is_incomplete_against_detectable_count() {
+        let decision = decide_fast_scan_fallback(2, 3, 0);
+        assert_eq!(
+            decision.fallback_reason,
+            Some(FastScanFallbackReason::IncompleteFastResult)
+        );
+    }
+
+    #[test]
+    fn fallback_when_fast_result_degrades_existing_catalog() {
+        let decision = decide_fast_scan_fallback(2, 2, 3);
+        assert_eq!(
+            decision.fallback_reason,
+            Some(FastScanFallbackReason::DegradedComparedToCatalog)
+        );
+    }
+
+    #[test]
+    fn keep_fast_result_when_complete_and_not_degraded() {
+        let decision = decide_fast_scan_fallback(3, 3, 3);
+        assert_eq!(decision.fallback_reason, None);
+    }
 }

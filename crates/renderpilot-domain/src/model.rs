@@ -255,6 +255,10 @@ pub enum GraphicsTechnology {
     #[serde(rename = "amd_fsr_frame_generation", alias = "AmdFsrFrameGeneration")]
     AmdFsrFrameGeneration,
 
+    /// Microsoft DirectStorage runtime.
+    #[serde(rename = "direct_storage", alias = "DirectStorage")]
+    DirectStorage,
+
     /// OptiScaler integration.
     #[serde(rename = "optiscaler", alias = "OptiScaler")]
     OptiScaler,
@@ -277,6 +281,7 @@ impl GraphicsTechnology {
         Self::IntelXeFg,
         Self::AmdFsr,
         Self::AmdFsrFrameGeneration,
+        Self::DirectStorage,
         Self::OptiScaler,
         Self::Unknown,
     ];
@@ -294,6 +299,7 @@ impl GraphicsTechnology {
             Self::IntelXeFg => "intel_xefg",
             Self::AmdFsr => "amd_fsr",
             Self::AmdFsrFrameGeneration => "amd_fsr_frame_generation",
+            Self::DirectStorage => "direct_storage",
             Self::OptiScaler => "optiscaler",
             Self::Unknown => "unknown",
         }

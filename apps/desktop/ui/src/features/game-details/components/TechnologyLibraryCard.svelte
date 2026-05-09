@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { TechnologySection } from '@features/game-details/lib/graphics-configurator';
   import Badge from '@shared/ui/Badge.svelte';
+  import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
   import ComponentSwapRow from './ComponentSwapRow.svelte';
   import NvapiDriverControls from './NvapiDriverControls.svelte';
 
@@ -22,7 +23,7 @@
       <h4>{section.label}</h4>
     </div>
 
-    <div class="library-badges">
+    <BadgeGroup class="library-badges">
       <Badge>{section.rows.length} detected {section.rows.length === 1 ? 'file' : 'files'}</Badge>
       {#if section.totalCandidates > 0}
         <Badge
@@ -33,7 +34,7 @@
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
-    </div>
+    </BadgeGroup>
   </div>
 
   {#if section.nvapiControls.length > 0}
@@ -85,7 +86,7 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: center;
+    align-items: flex-start;
     padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -104,13 +105,6 @@
     font-size: 1rem;
   }
 
-  .library-badges {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-top: var(--space-2);
-  }
-
   .technology-rows {
     display: grid;
     gap: var(--space-3);
@@ -124,10 +118,6 @@
     .technology-head {
       flex-direction: column;
       align-items: flex-start;
-    }
-
-    .library-badges {
-      justify-content: flex-start;
     }
   }
 </style>

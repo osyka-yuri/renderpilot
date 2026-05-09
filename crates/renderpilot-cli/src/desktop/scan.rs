@@ -174,6 +174,10 @@ fn effective_worker_count(install_path_count: usize) -> usize {
         .map(|nz| nz.get())
         .unwrap_or(1);
 
+    effective_worker_count_with_cpu(install_path_count, cpu_workers)
+}
+
+fn effective_worker_count_with_cpu(install_path_count: usize, cpu_workers: usize) -> usize {
     install_path_count
         .min(AUTO_SCAN_MAX_WORKERS)
         .min(cpu_workers)
@@ -266,5 +270,22 @@ impl ScanErrorOutput {
             root: label.to_owned(),
             message: error.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_worker_count_with_cpu, AUTO_SCAN_MAX_WORKERS};
+
+    #[test]
+    fn worker_count_is_bounded_by_install_count_cpu_and_cap() {
+        assert_eq!(effective_worker_count_with_cpu(0, 16), 1);
+        assert_eq!(effective_worker_count_with_cpu(1, 16), 1);
+        assert_eq!(effective_worker_count_with_cpu(2, 1), 1);
+        assert_eq!(effective_worker_count_with_cpu(2, 8), 2);
+        assert_eq!(
+            effective_worker_count_with_cpu(16, 16),
+            AUTO_SCAN_MAX_WORKERS
+        );
     }
 }

@@ -9,9 +9,13 @@
   } from '@shared/api/desktop';
   import { describeCommandError } from '@shared/api/errors';
   import Badge from '@shared/ui/Badge.svelte';
+  import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
   import Button from '@shared/ui/Button.svelte';
   import Surface from '@shared/ui/Surface.svelte';
+  import GameTechnologyBadges from '@features/games/GameTechnologyBadges.svelte';
   import GameCardCoverMenu from '@features/games/GameCardCoverMenu.svelte';
+  import GamesDashboardSummary from '@features/games/GamesDashboardSummary.svelte';
+  import GamesEmptyState from '@features/games/GamesEmptyState.svelte';
   import { getDashboardStats, toGameCardViewModel } from '@features/games/games-screen-model';
   import { open } from '@tauri-apps/plugin-dialog';
 
@@ -69,7 +73,6 @@
   $: hasGames = gameItems.length > 0;
   $: scanButtonLabel = busy ? SCANNING_LABEL : SCAN_LABEL;
   $: dashboardStats = getDashboardStats(games);
-  $: hasBackupsReady = dashboardStats.backupsReady > 0;
   $: hasManualCoverAction = manualCoverBusyFor !== null;
 
   $: pruneCoverMenuRefs(gameIds);
@@ -212,16 +215,7 @@
 <section class="screen-shell" aria-busy={busy}>
   <div class="overview-bar">
     {#if hasGames}
-      <div class="dashboard-summary" aria-label="Dashboard summary">
-        <Badge pill surface="outline">{dashboardStats.games} games</Badge>
-        <Badge pill surface="outline">{dashboardStats.updates} updates</Badge>
-
-        {#if hasBackupsReady}
-          <Badge pill surface="outline" tone="success">
-            {dashboardStats.backupsReady} backup-ready
-          </Badge>
-        {/if}
-      </div>
+      <GamesDashboardSummary stats={dashboardStats} />
     {/if}
 
     <div class="action-group">
@@ -236,27 +230,7 @@
   </div>
 
   {#if !hasGames}
-    <Surface class="empty-state">
-      <div class="empty-icon" aria-hidden="true">RP</div>
-
-      <div class="empty-copy">
-        <h3 class="empty-title">No scanned games yet</h3>
-        <p class="empty-description">
-          Select a game folder to populate the dashboard with components, updates, backup state, and
-          quick actions.
-        </p>
-      </div>
-
-      <div class="action-group">
-        <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
-          Refresh Libraries
-        </Button>
-
-        <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
-          {scanButtonLabel}
-        </Button>
-      </div>
-    </Surface>
+    <GamesEmptyState {busy} {scanButtonLabel} {onRefresh} {onScan} />
   {:else}
     <div class="game-list">
       {#each gameItems as game (game.id)}
@@ -313,11 +287,11 @@
               </div>
 
               <div class="header-copy">
-                <div class="platform-row">
-                  <Badge pill surface="soft" tone={game.updateBadge.tone} class="updates-badge">
+                <BadgeGroup class="platform-row">
+                  <Badge pill surface="soft" tone={game.updateBadge.tone} multiline>
                     {game.updateBadge.label}
                   </Badge>
-                </div>
+                </BadgeGroup>
 
                 <div class="title-copy">
                   <h3 class="game-title">{game.title}</h3>
@@ -328,16 +302,7 @@
 
             <div class="technology-group">
               <p class="field-label">Detected libraries</p>
-
-              <div class="technology-row">
-                {#if game.technologies.length === 0}
-                  <Badge pill surface="outline" tone="muted">No detected technologies yet</Badge>
-                {:else}
-                  {#each game.technologies as technology}
-                    <Badge pill surface="outline">{technology}</Badge>
-                  {/each}
-                {/if}
-              </div>
+              <GameTechnologyBadges technologies={game.technologies} />
             </div>
 
             <div class="card-actions">
@@ -387,15 +352,12 @@
     padding: 0 var(--space-1);
   }
 
-  .dashboard-summary,
-  .action-group,
-  .platform-row,
-  .technology-row {
+  .action-group {
     display: flex;
     flex-wrap: wrap;
   }
 
-  .dashboard-summary {
+  :global(.dashboard-summary) {
     gap: var(--space-2);
   }
 
@@ -516,14 +478,16 @@
     gap: var(--space-2);
   }
 
-  .platform-row,
-  .technology-row {
-    align-items: flex-start;
-    gap: 0.4rem;
+  .technology-group {
+    align-content: start;
   }
 
-  .game-title,
-  .empty-title {
+  :global(.platform-row),
+  :global(.technology-row) {
+    justify-content: flex-start;
+  }
+
+  .game-title {
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
@@ -546,50 +510,14 @@
     word-break: break-word;
   }
 
-  :global(.updates-badge) {
-    flex-shrink: 0;
-    align-self: start;
+  :global(.platform-row) :global(.badge) {
     max-width: min(100%, 15rem);
-    line-height: 1.2;
-    text-align: center;
-    white-space: normal;
   }
 
   .card-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2);
-  }
-
-  :global(.empty-state) {
-    display: grid;
-    justify-items: start;
-    gap: var(--space-3);
-    padding: var(--space-6);
-    border-style: dashed;
-    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
-  }
-
-  .empty-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    place-items: center;
-    border-radius: var(--radius-lg);
-    background: var(--accent-soft);
-    color: var(--accent-strong);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
-
-  .empty-copy {
-    display: grid;
-    gap: var(--space-1);
-    max-width: 36rem;
-  }
-
-  .empty-description {
-    margin: 0;
   }
 
   @media (max-width: 760px) {
@@ -617,7 +545,7 @@
       font-size: 1.2rem;
     }
 
-    .dashboard-summary {
+    :global(.dashboard-summary) {
       gap: 0.35rem;
     }
 
@@ -631,15 +559,6 @@
   }
 
   @media (max-width: 560px) {
-    .action-group {
-      width: 100%;
-      flex-direction: column-reverse;
-    }
-
-    .action-group :global(button) {
-      width: 100%;
-    }
-
     :global(.game-card) {
       padding: 0.9rem;
     }

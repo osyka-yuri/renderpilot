@@ -12,11 +12,12 @@
   export let size: BadgeSize = 'sm';
   export let pill = false;
   export let dot = false;
+  export let multiline = false;
 
   let className = '';
   export { className as class };
 
-  $: classes = cx('badge', pill && 'badge--pill', className);
+  $: classes = cx('badge', pill && 'badge--pill', multiline && 'badge--multiline', className);
 </script>
 
 <span {...$$restProps} class={classes} data-tone={tone} data-surface={surface} data-size={size}>
@@ -56,6 +57,12 @@
 
   .badge--pill {
     --badge-radius: 999px;
+  }
+
+  .badge--multiline {
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
   }
 
   .badge[data-size='sm'] {

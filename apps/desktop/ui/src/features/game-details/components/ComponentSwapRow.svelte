@@ -7,6 +7,7 @@
   } from '@features/game-details/lib/graphics-configurator';
   import { formatLabel, riskBadgeTone } from '@shared/utils/presenters';
   import Badge from '@shared/ui/Badge.svelte';
+  import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
   import Button from '@shared/ui/Button.svelte';
   import Select from '@shared/ui/Select.svelte';
 
@@ -62,7 +63,7 @@
       <p>{displayPath}</p>
     </div>
 
-    <div class="library-badges" aria-label="Compatibility information">
+    <BadgeGroup class="library-badges" align="end" aria-label="Compatibility information">
       <Badge tone={riskBadgeTone(riskLevel)}>
         {formatLabel(row.component.swappability)}
       </Badge>
@@ -72,7 +73,7 @@
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
-    </div>
+    </BadgeGroup>
   </header>
 
   <div class="config-grid">
@@ -173,13 +174,6 @@
     overflow-wrap: anywhere;
   }
 
-  .library-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    justify-content: flex-end;
-  }
-
   .config-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -230,10 +224,6 @@
     .file-meta,
     .action-row {
       flex-direction: column;
-    }
-
-    .library-badges {
-      justify-content: flex-start;
     }
 
     .action-row :global(button) {

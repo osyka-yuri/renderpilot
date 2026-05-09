@@ -22,7 +22,7 @@ use crate::{
 use self::scan::collect_files_filtered;
 
 const DEFAULT_LIBRARY_PATTERNS_JSON: &str = include_str!("../../../../data/library_patterns.json");
-const DEFAULT_MAX_RECURSION_DEPTH: usize = 8;
+const DEFAULT_MAX_RECURSION_DEPTH: usize = 12;
 const DETECTOR_NAME: &str = "library-pattern-detector";
 
 /// One graphics library file detected inside a game folder.
@@ -38,6 +38,26 @@ pub struct DetectedLibraryFile {
     status: VersionDetectionStatus,
     sha256: Sha256Hash,
     cache_key: FileCacheKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FastCachedDetectionReport {
+    libraries: Vec<DetectedLibraryFile>,
+    detectable_count: usize,
+}
+
+impl FastCachedDetectionReport {
+    pub fn libraries(&self) -> &[DetectedLibraryFile] {
+        &self.libraries
+    }
+
+    pub fn into_libraries(self) -> Vec<DetectedLibraryFile> {
+        self.libraries
+    }
+
+    pub fn detectable_count(&self) -> usize {
+        self.detectable_count
+    }
 }
 
 impl DetectedLibraryFile {
@@ -226,18 +246,60 @@ impl LibraryPatternComponentDetector {
         self.detect_library_files_from_paths(files, Some(cache))
     }
 
+    /// Fast scan with completeness evidence for fallback decisions in higher layers.
+    pub fn detect_library_files_fast_cached_with_evidence(
+        &self,
+        game: &GameInstallation,
+        cache: &FileHashCache,
+    ) -> AppResult<FastCachedDetectionReport> {
+        let libraries = self.detect_library_files_fast_cached(game, cache)?;
+        let detectable_count = self.count_detectable_library_files(game)?;
+
+        Ok(FastCachedDetectionReport {
+            libraries,
+            detectable_count,
+        })
+    }
+
+    /// Returns how many on-disk files under `game` currently match any
+    /// configured library pattern for this detector platform.
+    ///
+    /// This check does not read PE metadata or hash file contents, so it is
+    /// cheap enough to validate whether a fast cache-only result is complete.
+    pub fn count_detectable_library_files(&self, game: &GameInstallation) -> AppResult<usize> {
+        let files = self.collect_candidate_library_paths(game)?;
+        Ok(self.count_detectable_from_paths(files))
+    }
+
     fn detect_library_files_with_optional_cache(
         &self,
         game: &GameInstallation,
         cache: Option<&FileHashCache>,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
+        let files = self.collect_candidate_library_paths(game)?;
+
+        self.detect_library_files_from_paths(files, cache)
+    }
+
+    fn collect_candidate_library_paths(&self, game: &GameInstallation) -> AppResult<Vec<PathBuf>> {
         let root = install_root_path(game);
         let candidate_extensions = self.patterns.candidate_file_extensions(self.platform);
         let files = collect_files_filtered(&root, self.max_depth, |file_name: &str| {
             candidate_extensions.allows_file_name(file_name)
         })?;
 
-        self.detect_library_files_from_paths(files, cache)
+        Ok(sorted_unique_paths(files))
+    }
+
+    fn count_detectable_from_paths(&self, paths: Vec<PathBuf>) -> usize {
+        paths
+            .into_iter()
+            .filter(|path| {
+                file_name_for_matching(path)
+                    .and_then(|name| self.classify_file_name(name))
+                    .is_some()
+            })
+            .count()
     }
 
     fn detect_library_files_from_paths(
@@ -247,7 +309,7 @@ impl LibraryPatternComponentDetector {
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let mut detected = Vec::new();
 
-        for file in sorted_unique_paths(files) {
+        for file in files {
             let Some(library) = self.detect_library_file(&file, cache)? else {
                 continue;
             };
@@ -337,12 +399,33 @@ impl LibraryFileClassification {
 /// returns `Ok(None)` for missing files (stale cache entries), so those paths
 /// are skipped without failing the whole scan.
 fn cached_files_under_root(cache: &FileHashCache, root: &Path) -> Vec<PathBuf> {
+    let scope = normalized_scope_prefix(root);
+
     sorted_unique_paths(
         cache
             .keys()
             .map(PathBuf::from)
-            .filter(|path| path.starts_with(root)),
+            .filter(|path| path_in_scope(path, &scope)),
     )
+}
+
+fn path_in_scope(path: &Path, scope: &str) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+
+    normalized == scope
+        || normalized
+            .strip_prefix(scope)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn normalized_scope_prefix(root: &Path) -> String {
+    let normalized = root.to_string_lossy().replace('\\', "/");
+
+    if normalized.ends_with('/') && normalized.len() > 1 {
+        normalized.trim_end_matches('/').to_owned()
+    } else {
+        normalized
+    }
 }
 
 fn sorted_unique_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
@@ -412,6 +495,7 @@ fn confidence_for(
 fn swappability_for(technology: GraphicsTechnology) -> Swappability {
     match technology {
         GraphicsTechnology::NvidiaStreamline => Swappability::BundleOnly,
+        GraphicsTechnology::DirectStorage => Swappability::ReadOnly,
         GraphicsTechnology::Unknown => Swappability::Unknown,
         _ => Swappability::Swappable,
     }

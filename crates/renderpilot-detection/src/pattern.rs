@@ -40,25 +40,24 @@ impl CandidateFileExtensions {
     pub fn allows_file_name(&self, file_name: &str) -> bool {
         match self {
             Self::Any => true,
-            Self::Allowed(allowed) => {
-                extension_of_file_name(file_name).is_some_and(|ext| allowed.contains(ext.as_str()))
-            }
+            Self::Allowed(allowed) => extension_of_file_name(file_name).is_some_and(|ext| {
+                allowed.contains(ext) || allowed.iter().any(|known| known.eq_ignore_ascii_case(ext))
+            }),
         }
     }
 }
 
-/// Lower-case ASCII extension of `file_name` (the slice after the **last**
-/// `.`), or `None` when the name has no extension.
+/// ASCII extension slice of `file_name` (after the last `.`), or `None`.
 ///
-/// Returns a new [`String`] (allocates; may lowercase ASCII in the extension).
-fn extension_of_file_name(file_name: &str) -> Option<String> {
+/// This function borrows from the original file name and does not allocate.
+fn extension_of_file_name(file_name: &str) -> Option<&str> {
     let (_, ext) = file_name.rsplit_once('.')?;
 
     if ext.is_empty() {
         return None;
     }
 
-    Some(ext.to_ascii_lowercase())
+    Some(ext)
 }
 
 /// Set of library filename patterns loaded from JSON.
@@ -492,6 +491,104 @@ mod tests {
     }
 
     #[test]
+    fn detects_amd_fsr_runtime_variants_before_unknown_fsr_globs() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_denoiser_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_upscaler_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_vk.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+    }
+
+    #[test]
+    fn detects_fsr3_runtime_dlls_before_broad_unknown_fsr_globs() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("ffx_fsr3_x64.dll"),
+            Some(GraphicsTechnology::AmdFsrFrameGeneration)
+        );
+        assert_eq!(
+            patterns.match_file_name("ffx_fsr3upscaler_x64.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("dlssg_to_fsr3_amd_is_better.dll"),
+            Some(GraphicsTechnology::AmdFsrFrameGeneration)
+        );
+    }
+
+    #[test]
+    fn detects_fsr2_runtime_dlls_before_broad_unknown_fsr_globs() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("ffx_fsr2_api_dx12_x64.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("ffx_fsr2_api_vk_x64.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("ffx_fsr2_api_x64.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("fsr2-unity-plugin.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+        assert_eq!(
+            patterns.match_file_name("fsr2-unity-plugind.dll"),
+            Some(GraphicsTechnology::AmdFsr)
+        );
+    }
+
+    #[test]
+    fn detects_direct_storage_runtimes() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("dstorage.dll"),
+            Some(GraphicsTechnology::DirectStorage)
+        );
+        assert_eq!(
+            patterns.match_file_name("dstoragecore.dll"),
+            Some(GraphicsTechnology::DirectStorage)
+        );
+    }
+
+    #[test]
+    fn detects_additional_xess_runtime_variants_before_unknown_xess_glob() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("libxess_dx11.dll"),
+            Some(GraphicsTechnology::IntelXeSs)
+        );
+        assert_eq!(
+            patterns.match_file_name("libxell.dll"),
+            Some(GraphicsTechnology::IntelXeSs)
+        );
+    }
+
+    #[test]
     fn broad_fsr_patterns_are_unknown() {
         let patterns = pattern_set();
 
@@ -621,5 +718,31 @@ mod tests {
         let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Linux);
 
         assert!(matches!(candidates, super::CandidateFileExtensions::Any));
+    }
+
+    #[test]
+    fn specific_amd_and_fsr_patterns_are_ordered_before_broad_unknown_globs() {
+        let patterns = pattern_set();
+        let all = patterns.patterns();
+
+        let exact_dx12_idx = pattern_index(all, "amd_fidelityfx_dx12.dll", PatternKind::Exact);
+        let exact_framegen_idx = pattern_index(
+            all,
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            PatternKind::Exact,
+        );
+        let exact_fsr2_idx = pattern_index(all, "ffx_fsr2_api_dx12_x64.dll", PatternKind::Exact);
+        let broad_unknown_idx = pattern_index(all, "*fsr*.dll", PatternKind::Glob);
+
+        assert!(exact_dx12_idx < broad_unknown_idx);
+        assert!(exact_framegen_idx < broad_unknown_idx);
+        assert!(exact_fsr2_idx < broad_unknown_idx);
+    }
+
+    fn pattern_index(patterns: &[LibraryPattern], value: &str, kind: PatternKind) -> usize {
+        patterns
+            .iter()
+            .position(|pattern| pattern.pattern() == value && pattern.kind() == kind)
+            .expect("pattern should exist")
     }
 }

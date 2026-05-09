@@ -277,6 +277,28 @@ fn cache_hit_avoids_sha256_when_size_and_mtime_match() {
 }
 
 #[test]
+fn fast_cached_detection_report_contains_detectable_count() {
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+    let game = game_installation(fixture_path());
+    let full_libraries = detector
+        .detect_library_files(&game)
+        .expect("full detection should succeed");
+    let cache = file_hash_cache_from_libraries(&full_libraries);
+
+    let report = detector
+        .detect_library_files_fast_cached_with_evidence(&game, &cache)
+        .expect("fast report should succeed");
+
+    assert_eq!(
+        report.detectable_count(),
+        detector
+            .count_detectable_library_files(&game)
+            .expect("detectable count should be available"),
+    );
+    assert_eq!(report.libraries().len(), full_libraries.len());
+}
+
+#[test]
 fn stale_cache_entry_triggers_fresh_sha256_after_file_change() {
     let folder = temp_dlss_folder(b"a");
     let game = game_installation(folder.clone());
@@ -304,6 +326,71 @@ fn stale_cache_entry_triggers_fresh_sha256_after_file_change() {
         libraries[0].sha256().as_str(),
         refreshed[0].sha256().as_str(),
     );
+}
+
+#[test]
+fn fast_cached_scan_can_be_partial_when_new_dlls_are_added_after_cache_warmup() {
+    let folder = temp_dlss_folder(b"intel");
+    let game = game_installation(folder.clone());
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+
+    fs::rename(folder.join(TEMP_DLSS_NAME), folder.join("libxess.dll"))
+        .expect("fixture should rename to intel dll");
+
+    let baseline = detector
+        .detect_library_files(&game)
+        .expect("baseline detection should succeed");
+    assert_eq!(baseline.len(), 1, "baseline should only include intel");
+
+    let cache = file_hash_cache_from_libraries(&baseline);
+
+    fs::write(folder.join("amd_fidelityfx_framegeneration.dll"), b"amd")
+        .expect("amd dll should be written");
+    fs::write(folder.join("nvngx_dlss.dll"), b"nvidia").expect("nvidia dll should be written");
+
+    let fast = detector
+        .detect_library_files_fast_cached(&game, &cache)
+        .expect("fast cached scan should succeed");
+    let detectable_count = detector
+        .count_detectable_library_files(&game)
+        .expect("detectable count should succeed");
+    let full = detector
+        .detect_library_files_with_cache(&game, &cache)
+        .expect("full cached scan should succeed");
+
+    assert_eq!(fast.len(), 1, "fast cache sees only cached file paths");
+    assert_eq!(
+        detectable_count, 3,
+        "on-disk detectable DLL count should include newly added vendors",
+    );
+    assert_eq!(full.len(), 3, "full cached scan should recover all files");
+}
+
+#[test]
+fn default_detector_depth_finds_deeply_nested_nvidia_runtime_dlls() {
+    let root = temp_dlss_folder(b"root");
+    let nested = root
+        .join("Engine")
+        .join("Plugins")
+        .join("Runtime")
+        .join("Nvidia")
+        .join("DLSS")
+        .join("Binaries")
+        .join("ThirdParty")
+        .join("Win64");
+    fs::create_dir_all(&nested).expect("nested runtime path should be created");
+    fs::write(nested.join("nvngx_dlss.dll"), b"deep-nvidia").expect("deep nvidia dll");
+
+    let game = game_installation(root);
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("deep detection should succeed");
+
+    assert!(libraries.iter().any(|library| {
+        library.file_name() == "nvngx_dlss.dll"
+            && library.technology() == GraphicsTechnology::DlssSuperResolution
+    }));
 }
 
 fn temp_dlss_folder(contents: &[u8]) -> PathBuf {
