@@ -5,11 +5,14 @@ import type {
   CatalogSettingPayload,
   CoverArtworkResult,
   GameCard,
+  GameCardsQuery,
+  GameCardsResult,
   GameDetails,
   GraphicsComponent,
   RollbackOperationResult,
   SwapPlan,
 } from './types';
+import { normalizeGameCardsQuery } from './game-cards-query';
 
 type ScanManualFolderResult = {
   games: GameDetails[];
@@ -109,8 +112,42 @@ export function mockScanAutoLibraries(): Promise<AutoScanResponse> {
   });
 }
 
-export function mockGetGameCards(): Promise<GameCard[]> {
-  return resolveMock(() => clone(mockState.games));
+export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResult> {
+  return resolveMock(() => {
+    const normalizedQuery = normalizeGameCardsQuery(query);
+    const allCards = clone(mockState.games);
+    const availableLibraries = collectAvailableLibraries(allCards);
+    const selectedLibraries = normalizedQuery.selectedLibraries.filter((library) =>
+      availableLibraries.includes(library),
+    );
+
+    let filtered = allCards.filter((card) =>
+      normalizedQuery.searchQuery.length === 0
+        ? true
+        : card.title.toLowerCase().includes(normalizedQuery.searchQuery.toLowerCase()),
+    );
+
+    if (selectedLibraries.length > 0) {
+      const selected = new Set(selectedLibraries);
+      filtered = filtered.filter((card) =>
+        card.library_tags.some((library) => selected.has(library)),
+      );
+    }
+
+    filtered.sort((left, right) => compareCards(left, right, normalizedQuery.sort));
+    const total = filtered.length;
+    const items = filtered.slice(
+      normalizedQuery.page.offset,
+      normalizedQuery.page.offset + normalizedQuery.page.limit,
+    );
+
+    return {
+      items,
+      total,
+      availableLibraries,
+      queryFingerprint: JSON.stringify(normalizedQuery),
+    };
+  });
 }
 
 export function mockGetGameDetails(gameId: string): Promise<GameDetails> {
@@ -161,10 +198,28 @@ export function mockGetCatalogSetting(key: string): Promise<CatalogSettingPayloa
 
 export function mockSetCatalogSetting(key: string, value: string): Promise<{ saved: boolean }> {
   return resolveMock(() => {
-    mockState.catalogSettings.set(key, value);
+    if (value.trim().length === 0) {
+      mockState.catalogSettings.delete(key);
+    } else {
+      mockState.catalogSettings.set(key, value);
+    }
 
     return { saved: true };
   });
+}
+
+export function resetMockDesktopState(): void {
+  const nextState = createMockState();
+  mockState.games = nextState.games;
+  mockState.detailsByGameId = nextState.detailsByGameId;
+  mockState.autoGameIds = nextState.autoGameIds;
+  mockState.pendingPlansByOperationId = nextState.pendingPlansByOperationId;
+  mockState.appliedOperationsById = nextState.appliedOperationsById;
+  mockState.manualGameIdByInstallPath = nextState.manualGameIdByInstallPath;
+  mockState.rolledBackOperationIds = nextState.rolledBackOperationIds;
+  mockState.manualCounter = nextState.manualCounter;
+  mockState.operationCounter = nextState.operationCounter;
+  mockState.catalogSettings = nextState.catalogSettings;
 }
 
 export function mockBuildSwapPlan(
@@ -682,7 +737,7 @@ function createGameCardFromDetails(
     runtime: details.game.runtime,
     install_path: details.game.install_path,
     external_id: details.game.identity.external_id,
-    technology_tags: unique(details.components.map((component) => component.technology)),
+    library_tags: unique(details.components.map((component) => component.technology)),
     component_count: details.components.length,
     updates_available: overrides.update_count > 0,
     update_count: overrides.update_count,
@@ -886,6 +941,39 @@ function createInstallPathKey(path: string): string {
 
 function unique<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
+}
+
+function collectAvailableLibraries(cards: readonly GameCard[]): string[] {
+  const values = new Set<string>();
+  for (const card of cards) {
+    for (const library of card.library_tags) {
+      values.add(library);
+    }
+  }
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+function compareCards(left: GameCard, right: GameCard, sort: GameCardsQuery['sort']): number {
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  const byTitle =
+    left.title.localeCompare(right.title) || left.game_id.localeCompare(right.game_id);
+
+  if (sort.field === 'title') {
+    return byTitle * direction;
+  }
+  if (sort.field === 'updates') {
+    const updatesDiff = left.update_count - right.update_count;
+    if (updatesDiff !== 0) {
+      return updatesDiff * direction;
+    }
+    return byTitle;
+  }
+
+  const riskDiff = left.risk_level.localeCompare(right.risk_level);
+  if (riskDiff !== 0) {
+    return riskDiff * direction;
+  }
+  return byTitle;
 }
 
 function hasTauriBridge(): boolean {

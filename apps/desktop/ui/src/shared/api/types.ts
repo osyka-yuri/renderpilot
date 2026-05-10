@@ -52,7 +52,7 @@ export type GameCard = {
   install_path: FilePath;
   external_id?: Nullable<string>;
 
-  technology_tags: Technology[];
+  library_tags: Technology[];
   component_count: number;
 
   updates_available: boolean;
@@ -83,6 +83,29 @@ export type CoverArtworkResult = {
 
 export type CatalogSettingPayload = {
   value: string | null;
+};
+
+export type GameCardsSortField = 'title' | 'updates' | 'risk';
+export type GameCardsSortDirection = 'asc' | 'desc';
+
+export type GameCardsQuery = {
+  searchQuery: string;
+  selectedLibraries: string[];
+  sort: {
+    field: GameCardsSortField;
+    direction: GameCardsSortDirection;
+  };
+  page: {
+    limit: number;
+    offset: number;
+  };
+};
+
+export type GameCardsResult = {
+  items: GameCard[];
+  total: number;
+  availableLibraries: string[];
+  queryFingerprint: string;
 };
 
 export type ComponentFile = {

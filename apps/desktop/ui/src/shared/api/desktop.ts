@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import { normalizeCommandError } from './errors';
+import { normalizeGameCardsQuery } from './game-cards-query';
 import {
   isDesktopPreviewMode as shouldUseDesktopPreviewMode,
   mockApplyOperationPlan,
@@ -8,7 +9,7 @@ import {
   mockClearGameCover,
   mockFetchGameCover,
   mockGetCatalogSetting,
-  mockGetGameCards,
+  mockQueryGameCards,
   mockGetGameDetails,
   mockRollbackOperation,
   mockScanAutoLibraries,
@@ -21,7 +22,8 @@ import type {
   AutoScanResponse,
   CatalogSettingPayload,
   CoverArtworkResult,
-  GameCard,
+  GameCardsQuery,
+  GameCardsResult,
   GameDetails,
   RollbackOperationResult,
   SwapPlan,
@@ -52,9 +54,9 @@ type DesktopCommandContract = {
     payload: undefined;
     result: AutoScanResponse;
   };
-  get_game_cards: {
-    payload: undefined;
-    result: GameCard[];
+  query_game_cards: {
+    payload: { query: GameCardsQuery };
+    result: GameCardsResult;
   };
   get_game_details: {
     payload: { gameId: string };
@@ -112,7 +114,7 @@ type PreviewHandlers = {
 const DESKTOP_COMMAND = {
   scanManualFolder: 'scan_manual_folder',
   scanAutoLibraries: 'scan_auto_libraries',
-  getGameCards: 'get_game_cards',
+  queryGameCards: 'query_game_cards',
   getGameDetails: 'get_game_details',
   fetchGameCover: 'fetch_game_cover',
   clearGameCover: 'clear_game_cover',
@@ -129,7 +131,7 @@ const previewHandlers: PreviewHandlers = {
 
   scan_auto_libraries: () => mockScanAutoLibraries(),
 
-  get_game_cards: () => mockGetGameCards(),
+  query_game_cards: ({ query }) => mockQueryGameCards(query),
 
   get_game_details: ({ gameId }) => mockGetGameDetails(gameId),
 
@@ -237,8 +239,8 @@ export async function scanAutoLibraries(): Promise<AutoScanResponse> {
   return invokeDesktop(DESKTOP_COMMAND.scanAutoLibraries);
 }
 
-export async function getGameCards(): Promise<GameCard[]> {
-  return invokeDesktop(DESKTOP_COMMAND.getGameCards);
+export async function queryGameCards(query: GameCardsQuery): Promise<GameCardsResult> {
+  return invokeDesktop(DESKTOP_COMMAND.queryGameCards, { query: normalizeGameCardsQuery(query) });
 }
 
 export async function getGameDetails(gameId: string): Promise<GameDetails> {
@@ -278,8 +280,7 @@ export async function getCatalogSetting(key: string): Promise<CatalogSettingPayl
 export async function setCatalogSetting(key: string, value: string): Promise<{ saved: boolean }> {
   return invokeDesktop(DESKTOP_COMMAND.setCatalogSetting, {
     key: requireNonBlankString(key, 'key'),
-
-    // Empty string can be a meaningful setting value.
+    // Empty/blank values intentionally clear the persisted setting on backend.
     value: requireString(value, 'value'),
   });
 }
