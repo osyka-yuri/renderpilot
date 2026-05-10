@@ -7,7 +7,7 @@
   import {
     buildComponentRows,
     buildConfiguredRow,
-    buildTechnologySections,
+    buildLibrarySections,
     buildVendorBlocks,
     reconcileArtifactSelections,
     reconcileNvapiSelections,
@@ -18,7 +18,7 @@
   } from '@features/game-details/lib/graphics-configurator';
   import type { GameCard, GameDetails, SwapPlan } from '@shared/api/types';
   import type { BuildPlanHandler, OperationHandler } from '@shared/utils/callbacks';
-  import { formatTechnology } from '@shared/utils/presenters';
+  import { formatLibrary } from '@shared/utils/presenters';
   import type { AccordionItem } from '@shared/ui/Accordion.svelte';
 
   type SelectionMap = Record<string, string>;
@@ -34,31 +34,45 @@
   const noopBuildPlan: BuildPlanHandler = () => undefined;
   const noopOperation: OperationHandler = () => undefined;
 
-  export let details: GameDetails | null = null;
-  export let gameCard: GameCard | null = null;
-  export let plan: SwapPlan | null = null;
-  export let busy = false;
-  export let onBuildPlan: BuildPlanHandler = noopBuildPlan;
-  export let onApply: OperationHandler = noopOperation;
-  export let onRollback: OperationHandler = noopOperation;
+  type Props = {
+    details?: GameDetails | null;
+    gameCard?: GameCard | null;
+    plan?: SwapPlan | null;
+    busy?: boolean;
+    onBuildPlan?: BuildPlanHandler;
+    onApply?: OperationHandler;
+    onRollback?: OperationHandler;
+  };
 
-  let selectedArtifacts: SelectionMap = {};
-  let selectedNvapiSelections: SelectionMap = {};
+  let {
+    details = null,
+    gameCard = null,
+    plan = null,
+    busy = false,
+    onBuildPlan = noopBuildPlan,
+    onApply = noopOperation,
+    onRollback = noopOperation,
+  }: Props = $props();
 
-  let vendorAccordionState = createVendorAccordionState(null);
+  let selectedArtifacts = $state<SelectionMap>({});
+  let selectedNvapiSelections = $state<SelectionMap>({});
 
-  $: currentGameId = gameCard?.game_id ?? null;
+  let vendorAccordionState = $state<VendorAccordionState>(createVendorAccordionState(null));
 
-  $: if (currentGameId !== vendorAccordionState.gameId) {
-    vendorAccordionState = createVendorAccordionState(currentGameId);
-  }
+  const currentGameId = $derived(gameCard?.game_id ?? null);
 
-  $: technologies = details ? getTechnologies(details) : [];
-  $: backupOperations = details?.operations.filter(hasBackups) ?? [];
+  $effect.pre(() => {
+    if (currentGameId !== vendorAccordionState.gameId) {
+      vendorAccordionState = createVendorAccordionState(currentGameId);
+    }
+  });
 
-  $: componentRows = details ? buildComponentRows(details) : [];
+  const libraries = $derived(details ? getLibraries(details) : []);
+  const backupOperations = $derived(details?.operations.filter(hasBackups) ?? []);
 
-  $: {
+  const componentRows = $derived(details ? buildComponentRows(details) : []);
+
+  $effect.pre(() => {
     const reconciledArtifacts = details
       ? reconcileArtifactSelections(componentRows, selectedArtifacts, plan)
       : {};
@@ -66,9 +80,9 @@
     if (!sameSelectionMap(selectedArtifacts, reconciledArtifacts)) {
       selectedArtifacts = reconciledArtifacts;
     }
-  }
+  });
 
-  $: {
+  $effect.pre(() => {
     const reconciledNvapiSelections = details
       ? reconcileNvapiSelections(componentRows, selectedNvapiSelections)
       : {};
@@ -76,26 +90,28 @@
     if (!sameSelectionMap(selectedNvapiSelections, reconciledNvapiSelections)) {
       selectedNvapiSelections = reconciledNvapiSelections;
     }
-  }
+  });
 
-  $: configuredRows = componentRows.map((row) => buildConfiguredRow(row, selectedArtifacts, busy));
-
-  $: technologySections = buildTechnologySections(configuredRows);
-  $: vendorBlocks = buildVendorBlocks(technologySections);
-  $: visibleVendorBlocks = vendorBlocks.filter(hasVisibleVendorContent);
-  $: vendorAccordionItems = visibleVendorBlocks.map(buildVendorAccordionItem);
-
-  $: preferredVendorKey = resolvePreferredVendorKey(visibleVendorBlocks);
-
-  $: activeVendorKeyIsUsable = isActiveVendorKeyUsable(
-    visibleVendorBlocks,
-    vendorAccordionState.activeVendorKey,
+  const configuredRows = $derived(
+    componentRows.map((row) => buildConfiguredRow(row, selectedArtifacts, busy)),
   );
 
-  $: effectiveVendorKey =
+  const librarySections = $derived(buildLibrarySections(configuredRows));
+  const vendorBlocks = $derived(buildVendorBlocks(librarySections));
+  const visibleVendorBlocks = $derived(vendorBlocks.filter(hasVisibleVendorContent));
+  const vendorAccordionItems = $derived(visibleVendorBlocks.map(buildVendorAccordionItem));
+
+  const preferredVendorKey = $derived(resolvePreferredVendorKey(visibleVendorBlocks));
+
+  const activeVendorKeyIsUsable = $derived(
+    isActiveVendorKeyUsable(visibleVendorBlocks, vendorAccordionState.activeVendorKey),
+  );
+
+  const effectiveVendorKey = $derived(
     vendorAccordionState.hasSelectedVendorManually && activeVendorKeyIsUsable
       ? vendorAccordionState.activeVendorKey
-      : preferredVendorKey;
+      : preferredVendorKey,
+  );
 
   function createVendorAccordionState(gameId: string | null): VendorAccordionState {
     return {
@@ -105,9 +121,9 @@
     };
   }
 
-  function getTechnologies(gameDetails: GameDetails): string[] {
+  function getLibraries(gameDetails: GameDetails): string[] {
     return [
-      ...new Set(gameDetails.components.map((component) => formatTechnology(component.technology))),
+      ...new Set(gameDetails.components.map((component) => formatLibrary(component.technology))),
     ];
   }
 
@@ -141,11 +157,11 @@
     return DEFAULT_VENDOR_KEY;
   }
 
-  function vendorTechnologySummary(vendorBlock: VendorBlock): string {
+  function vendorLibrarySummary(vendorBlock: VendorBlock): string {
     const labels = vendorBlock.sections.map((section) => section.label);
 
     if (labels.length === 0) {
-      return 'No detected technologies yet.';
+      return 'No detected libraries yet.';
     }
 
     if (labels.length <= 2) {
@@ -162,11 +178,11 @@
       value: vendorBlock.key,
       title: vendorBlock.label,
       meta: hasSections ? formatFileCount(vendorBlock.totalFiles) : undefined,
-      summary: vendorTechnologySummary(vendorBlock),
+      summary: vendorLibrarySummary(vendorBlock),
       badges: hasSections
         ? [
             {
-              label: formatTechnologyCount(vendorBlock.sections.length),
+              label: formatLibraryCount(vendorBlock.sections.length),
             },
             {
               label: formatReplacementCount(vendorBlock.totalCandidates),
@@ -181,8 +197,8 @@
     return `${count} ${count === 1 ? 'file' : 'files'}`;
   }
 
-  function formatTechnologyCount(count: number): string {
-    return `${count} ${count === 1 ? 'technology' : 'technologies'}`;
+  function formatLibraryCount(count: number): string {
+    return `${count} ${count === 1 ? 'library' : 'libraries'}`;
   }
 
   function formatReplacementCount(count: number): string {
@@ -233,7 +249,7 @@
     <InstallContextCards
       installPath={details.game.install_path}
       launchCandidates={details.game.executable_candidates}
-      {technologies}
+      {libraries}
     />
 
     <GraphicsLibrariesConfigurator

@@ -3,7 +3,11 @@
   import { formatLabel, formatTimestamp, statusTone } from '@shared/utils/presenters';
   import Badge from '@shared/ui/Badge.svelte';
 
-  export let operations: OperationSummary[] = [];
+  type Props = {
+    operations?: OperationSummary[];
+  };
+
+  let { operations = [] }: Props = $props();
 </script>
 
 <section class="content-section">

@@ -30,10 +30,10 @@
   }: Props = $props();
 </script>
 
-<article class="library-card technology-card">
-  <div class="technology-head">
+<article class="library-card">
+  <div class="library-head">
     <div>
-      <p class="eyebrow">Technology</p>
+      <p class="eyebrow">Library</p>
       <h4>{section.label}</h4>
     </div>
 
@@ -62,8 +62,8 @@
     />
   {/if}
 
-  <div class="technology-rows">
-    {#each section.rows as row}
+  <div class="library-rows">
+    {#each section.rows as row (row.component.id)}
       <ComponentSwapRow
         {row}
         selectedArtifact={selectedArtifacts[row.component.id] ?? ''}
@@ -83,20 +83,11 @@
     padding: var(--space-4);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-xl);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-card) 96%, white 4%),
-      var(--bg-card)
-    );
+    background: var(--bg-panel);
     box-shadow: var(--shadow-card);
   }
 
-  .technology-card {
-    background: var(--bg-panel);
-    border-color: var(--border-subtle);
-  }
-
-  .technology-head {
+  .library-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
@@ -119,7 +110,7 @@
     font-size: 1rem;
   }
 
-  .technology-rows {
+  .library-rows {
     display: grid;
     gap: var(--space-3);
   }
@@ -129,7 +120,7 @@
       padding: var(--space-3);
     }
 
-    .technology-head {
+    .library-head {
       flex-direction: column;
       align-items: flex-start;
     }

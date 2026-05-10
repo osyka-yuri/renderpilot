@@ -7,28 +7,27 @@
     value: string;
   };
 
-  export let controls: NvApiControl[] = [];
-  export let ownerId = '';
-  export let selections: Record<string, string> = {};
-  export let busy = false;
-
-  export let selectionKey: (componentId: string, controlId: string) => string = (
-    componentId,
-    controlId,
-  ) => `${componentId}:${controlId}`;
-
-  export let onNvapiSelection: (
-    componentId: string,
-    controlId: string,
-    value: string,
-  ) => void = () => {
-    return;
+  type Props = {
+    controls?: NvApiControl[];
+    ownerId?: string;
+    selections?: Record<string, string>;
+    busy?: boolean;
+    selectionKey?: (componentId: string, controlId: string) => string;
+    onNvapiSelection?: (componentId: string, controlId: string, value: string) => void;
   };
 
-  $: hasControls = controls.length > 0;
-  $: controlsDisabled = busy || !ownerId;
+  let {
+    controls = [],
+    ownerId = '',
+    selections = {},
+    busy = false,
+    selectionKey = (componentId, controlId) => `${componentId}:${controlId}`,
+    onNvapiSelection = () => undefined,
+  }: Props = $props();
 
-  $: controlItems = controls.map(toControlViewModel);
+  const hasControls = $derived(controls.length > 0);
+  const controlsDisabled = $derived(busy || !ownerId);
+  const controlItems = $derived(controls.map(toControlViewModel));
 
   function toControlViewModel(control: NvApiControl): NvApiControlViewModel {
     const selectionId = selectionKey(ownerId, control.id);
@@ -68,7 +67,7 @@
           <Select
             size="sm"
             disabled={controlsDisabled}
-            ariaLabel={`NVAPI ${control.label}`}
+            aria-label={`NVAPI ${control.label}`}
             options={control.options}
             value={control.value}
             onValueChange={(value: string) => {

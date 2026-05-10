@@ -2,90 +2,139 @@
   import type { VendorBlock, VendorKey } from '@features/game-details/lib/graphics-configurator';
   import Accordion, { type AccordionItem } from '@shared/ui/Accordion.svelte';
   import Badge from '@shared/ui/Badge.svelte';
-  import TechnologyLibraryCard from './TechnologyLibraryCard.svelte';
+  import LibrarySectionCard from './LibrarySectionCard.svelte';
 
-  type UnknownRecord = Record<PropertyKey, unknown>;
-
-  export let vendorBlocks: VendorBlock[] = [];
-  export let accordionItems: AccordionItem[] = [];
-  export let activeVendorKey: VendorKey | null = null;
-  export let selectedArtifacts: Record<string, string> = {};
-  export let selectedNvapiSelections: Record<string, string> = {};
-  export let riskLevel: string | null | undefined = null;
-  export let busy = false;
-
-  export let selectionKey: (componentId: string, controlId: string) => string = (
-    componentId,
-    controlId,
-  ) => `${componentId}:${controlId}`;
-
-  export let onVendorChange: (vendorKey: VendorKey | null) => void = () => {
-    return;
-  };
-  export let onArtifactSelection: (componentId: string, value: string) => void = () => {
-    return;
-  };
-  export let onNvapiSelection: (
-    componentId: string,
-    controlId: string,
-    value: string,
-  ) => void = () => {
-    return;
-  };
-  export let onBuildPlan: (componentId: string, artifactId: string) => void = () => {
-    return;
+  type AccordionPanelItem = {
+    value: string;
   };
 
-  $: vendorGroupsCount = vendorBlocks.length;
-  $: vendorGroupsLabel =
-    vendorGroupsCount === 1 ? '1 vendor group' : `${vendorGroupsCount} vendor groups`;
+  type LibrarySection = VendorBlock['sections'][number];
 
-  $: hasDetectedSections = vendorBlocks.some((block) => block.sections.length > 0);
-  $: isEmpty = !hasDetectedSections;
+  type SelectionMap = Record<string, string>;
 
-  $: vendorBlocksByKey = groupVendorBlocksByKey(vendorBlocks);
+  type SelectionKeyFactory = (componentId: string, controlId: string) => string;
+  type VendorChangeHandler = (vendorKey: VendorKey | null) => void;
+  type ArtifactSelectionHandler = (componentId: string, value: string) => void;
+  type NvapiSelectionHandler = (componentId: string, controlId: string, value: string) => void;
+  type BuildPlanHandler = (componentId: string, artifactId: string) => void;
 
-  function isRecord(value: unknown): value is UnknownRecord {
-    return typeof value === 'object' && value !== null;
+  const VENDOR_KEYS = ['nvidia', 'amd', 'intel', 'other'] as const satisfies readonly VendorKey[];
+  const VALID_VENDOR_KEYS = new Set<string>(VENDOR_KEYS);
+
+  const noop = () => undefined;
+
+  type Props = {
+    vendorBlocks?: VendorBlock[];
+    accordionItems?: AccordionItem[];
+    activeVendorKey?: VendorKey | null;
+    selectedArtifacts?: SelectionMap;
+    selectedNvapiSelections?: SelectionMap;
+    riskLevel?: string | null | undefined;
+    busy?: boolean;
+    selectionKey?: SelectionKeyFactory;
+    onVendorChange?: VendorChangeHandler;
+    onArtifactSelection?: ArtifactSelectionHandler;
+    onNvapiSelection?: NvapiSelectionHandler;
+    onBuildPlan?: BuildPlanHandler;
+  };
+
+  let {
+    vendorBlocks = [],
+    accordionItems = [],
+    activeVendorKey = null,
+    selectedArtifacts = {},
+    selectedNvapiSelections = {},
+    riskLevel = null,
+    busy = false,
+    selectionKey = (componentId, controlId) => `${componentId}:${controlId}`,
+    onVendorChange = noop,
+    onArtifactSelection = noop,
+    onNvapiSelection = noop,
+    onBuildPlan = noop,
+  }: Props = $props();
+
+  const vendorGroupsLabel = $derived(formatVendorGroupsLabel(vendorBlocks.length));
+  const isEmpty = $derived(!vendorBlocks.some(hasSections));
+  const vendorBlocksByKey = $derived(groupVendorBlocksByKey(vendorBlocks));
+
+  function formatVendorGroupsLabel(count: number): string {
+    return `${count} vendor group${count === 1 ? '' : 's'}`;
   }
 
-  function getAccordionItemValue(item: unknown): VendorKey | null {
-    if (!isRecord(item)) {
-      return null;
-    }
-
-    const value = item.value;
-
-    return typeof value === 'string' ? (value as VendorKey) : null;
+  function hasSections(block: VendorBlock): boolean {
+    return block.sections.length > 0;
   }
 
-  function groupVendorBlocksByKey(blocks: VendorBlock[]): Map<VendorKey, VendorBlock[]> {
-    const grouped = new Map<VendorKey, VendorBlock[]>();
+  function isVendorKey(value: unknown): value is VendorKey {
+    return typeof value === 'string' && VALID_VENDOR_KEYS.has(value);
+  }
+
+  function groupVendorBlocksByKey(blocks: readonly VendorBlock[]): Map<VendorKey, VendorBlock[]> {
+    const groupedBlocks = new Map<VendorKey, VendorBlock[]>();
 
     for (const block of blocks) {
-      const existingBlocks = grouped.get(block.key) ?? [];
-      grouped.set(block.key, [...existingBlocks, block]);
+      const group = groupedBlocks.get(block.key);
+
+      if (group) {
+        group.push(block);
+      } else {
+        groupedBlocks.set(block.key, [block]);
+      }
     }
 
-    return grouped;
+    return groupedBlocks;
   }
 
-  function getVendorBlocksForAccordionItem(item: unknown): VendorBlock[] {
-    const vendorKey = getAccordionItemValue(item);
-
-    if (!vendorKey) {
+  function getVendorBlocksForAccordionItem(item: AccordionPanelItem): VendorBlock[] {
+    if (!isVendorKey(item.value)) {
       return [];
     }
 
-    return vendorBlocksByKey.get(vendorKey) ?? [];
+    return vendorBlocksByKey.get(item.value) ?? [];
   }
 
-  function handleVendorChange(nextValue: string | null) {
-    onVendorChange(nextValue as VendorKey | null);
+  function getVendorBlockRenderKey(block: VendorBlock, index: number): string {
+    return `${block.key}:${index}`;
+  }
+
+  function getSectionRenderKey(section: LibrarySection): string {
+    return `${section.libraryKey}:${section.nvapiOwnerId}`;
+  }
+
+  function handleVendorChange(nextValue: string | null): void {
+    onVendorChange(isVendorKey(nextValue) ? nextValue : null);
   }
 </script>
 
 <section class="content-section" aria-labelledby="graphics-libraries-title">
+  {#snippet itemContent(item: AccordionPanelItem)}
+    {@const itemVendorBlocks = getVendorBlocksForAccordionItem(item)}
+
+    {#each itemVendorBlocks as vendorBlock, vendorBlockIndex (getVendorBlockRenderKey(vendorBlock, vendorBlockIndex))}
+      {#if vendorBlock.sections.length === 0}
+        <div class="empty-state vendor-empty" role="status">
+          No {vendorBlock.label} libraries detected for this installation yet.
+        </div>
+      {:else}
+        <div class="library-configurator">
+          {#each vendorBlock.sections as section (getSectionRenderKey(section))}
+            <LibrarySectionCard
+              {section}
+              {selectedArtifacts}
+              {selectedNvapiSelections}
+              {riskLevel}
+              {busy}
+              {selectionKey}
+              {onArtifactSelection}
+              {onNvapiSelection}
+              {onBuildPlan}
+            />
+          {/each}
+        </div>
+      {/if}
+    {/each}
+  {/snippet}
+
   <header class="section-head">
     <div>
       <p class="eyebrow">Libraries</p>
@@ -97,41 +146,17 @@
   </header>
 
   {#if isEmpty}
-    <div class="empty-inline" role="status">
+    <div class="empty-state" role="status">
       No graphics-related components were detected for this installation.
     </div>
   {:else}
     <Accordion
       items={accordionItems}
       value={activeVendorKey}
-      ariaLabel="Graphics vendors"
+      aria-label="Graphics vendors"
       onValueChange={handleVendorChange}
-      let:item
-    >
-      {#each getVendorBlocksForAccordionItem(item) as vendorBlock (vendorBlock.key)}
-        {#if vendorBlock.sections.length === 0}
-          <div class="vendor-empty" role="status">
-            No {vendorBlock.label} technologies detected for this installation yet.
-          </div>
-        {:else}
-          <div class="library-configurator">
-            {#each vendorBlock.sections as section}
-              <TechnologyLibraryCard
-                {section}
-                {selectedArtifacts}
-                {selectedNvapiSelections}
-                {riskLevel}
-                {busy}
-                {selectionKey}
-                {onArtifactSelection}
-                {onNvapiSelection}
-                {onBuildPlan}
-              />
-            {/each}
-          </div>
-        {/if}
-      {/each}
-    </Accordion>
+      {itemContent}
+    />
   {/if}
 </section>
 
@@ -144,8 +169,8 @@
 
   .section-head {
     display: flex;
-    justify-content: space-between;
     align-items: flex-end;
+    justify-content: space-between;
     gap: var(--space-4);
     padding: 0 var(--space-1);
   }
@@ -160,8 +185,8 @@
     margin-bottom: 0.2rem;
     color: var(--text-subtle);
     font-size: 0.6875rem;
-    text-transform: uppercase;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   h3 {
@@ -179,8 +204,7 @@
     line-height: 1.45;
   }
 
-  .empty-inline,
-  .vendor-empty {
+  .empty-state {
     padding: var(--space-4);
     border: 1px dashed var(--border-subtle);
     border-radius: var(--radius-xl);
@@ -195,8 +219,8 @@
 
   @media (max-width: 820px) {
     .section-head {
-      flex-direction: column;
       align-items: flex-start;
+      flex-direction: column;
     }
   }
 </style>

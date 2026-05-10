@@ -3,8 +3,12 @@
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
 
-  export let gameCard: GameCard | null = null;
-  export let advancedMode = false;
+  type Props = {
+    gameCard?: GameCard | null;
+    advancedMode?: boolean;
+  };
+
+  let { gameCard = null, advancedMode = false }: Props = $props();
 
   const profiles = [
     { name: 'Quality', note: 'Prefer image quality and safe replacement paths.', state: 'Preview' },

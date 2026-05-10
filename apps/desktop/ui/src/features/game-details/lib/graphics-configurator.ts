@@ -6,7 +6,7 @@ import type {
   GraphicsComponent,
   SwapPlan,
 } from '@shared/api/types';
-import { formatLabel, formatTechnology } from '@shared/utils/presenters';
+import { formatLabel, formatLibrary } from '@shared/utils/presenters';
 
 const UNKNOWN_VALUE = 'Unknown';
 const DEFAULT_COMPACT_LIST_LIMIT = 3;
@@ -55,8 +55,8 @@ export type ConfiguredComponentRow = ComponentConfiguratorRow & {
   canBuildPlan: boolean;
 };
 
-export type TechnologySection = {
-  technologyKey: string;
+export type LibrarySection = {
+  libraryKey: string;
   label: string;
   rows: ConfiguredComponentRow[];
   nvapiControls: NvApiControl[];
@@ -69,12 +69,12 @@ export type VendorKey = 'nvidia' | 'amd' | 'intel' | 'other';
 export type VendorBlock = {
   key: VendorKey;
   label: string;
-  sections: TechnologySection[];
+  sections: LibrarySection[];
   totalFiles: number;
   totalCandidates: number;
 };
 
-const nvapiControlsByTechnology: Record<string, NvApiControl[]> = {
+const nvapiControlsByLibrary: Record<string, NvApiControl[]> = {
   DlssSuperResolution: [
     {
       id: 'preset',
@@ -186,7 +186,7 @@ export function buildComponentRows(gameDetails: GameDetails): ComponentConfigura
       group,
       installedOptions,
       installedValue,
-      nvapiControls: nvapiControlsByTechnology[component.technology] ?? [],
+      nvapiControls: nvapiControlsByLibrary[component.technology] ?? [],
     };
   });
 }
@@ -208,24 +208,24 @@ export function buildConfiguredRow(
   };
 }
 
-export function buildTechnologySections(rows: ConfiguredComponentRow[]): TechnologySection[] {
-  const sectionsByTechnology = new Map<string, TechnologySection>();
+export function buildLibrarySections(rows: ConfiguredComponentRow[]): LibrarySection[] {
+  const sectionsByLibrary = new Map<string, LibrarySection>();
 
   for (const row of rows) {
-    const section = getOrCreateTechnologySection(sectionsByTechnology, row);
+    const section = getOrCreateLibrarySection(sectionsByLibrary, row);
 
     section.rows.push(row);
     section.totalCandidates += candidateCount(row.group);
   }
 
-  return Array.from(sectionsByTechnology.values());
+  return Array.from(sectionsByLibrary.values());
 }
 
-export function buildVendorBlocks(sections: TechnologySection[]): VendorBlock[] {
+export function buildVendorBlocks(sections: LibrarySection[]): VendorBlock[] {
   const blocksByVendor = buildVendorBlockMap();
 
   for (const section of sections) {
-    const vendorKey = vendorKeyForTechnology(section.technologyKey);
+    const vendorKey = vendorKeyForLibrary(section.libraryKey);
     const vendorBlock = blocksByVendor.get(vendorKey);
 
     if (!vendorBlock) {
@@ -368,27 +368,27 @@ function resolveInstalledValue(
   return installedOptions[0]?.value ?? UNKNOWN_VALUE;
 }
 
-function getOrCreateTechnologySection(
-  sectionsByTechnology: Map<string, TechnologySection>,
+function getOrCreateLibrarySection(
+  sectionsByLibrary: Map<string, LibrarySection>,
   row: ConfiguredComponentRow,
-): TechnologySection {
-  const technologyKey = row.component.technology;
-  const existingSection = sectionsByTechnology.get(technologyKey);
+): LibrarySection {
+  const libraryKey = row.component.technology;
+  const existingSection = sectionsByLibrary.get(libraryKey);
 
   if (existingSection) {
     return existingSection;
   }
 
-  const section: TechnologySection = {
-    technologyKey,
-    label: formatTechnology(technologyKey),
+  const section: LibrarySection = {
+    libraryKey,
+    label: formatLibrary(libraryKey),
     rows: [],
     nvapiControls: row.nvapiControls,
     nvapiOwnerId: row.component.id,
     totalCandidates: 0,
   };
 
-  sectionsByTechnology.set(technologyKey, section);
+  sectionsByLibrary.set(libraryKey, section);
 
   return section;
 }
@@ -412,8 +412,8 @@ function shouldShowVendorBlock(block: VendorBlock): boolean {
   return block.key !== 'other' || block.sections.length > 0;
 }
 
-function vendorKeyForTechnology(technologyKey: string): VendorKey {
-  const normalizedKey = technologyKey.toLowerCase();
+function vendorKeyForLibrary(libraryKey: string): VendorKey {
+  const normalizedKey = libraryKey.toLowerCase();
 
   if (normalizedKey.startsWith('dlss') || normalizedKey.startsWith('nvidia')) {
     return 'nvidia';

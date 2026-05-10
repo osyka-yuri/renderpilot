@@ -11,56 +11,184 @@
   import Button from '@shared/ui/Button.svelte';
   import Select from '@shared/ui/Select.svelte';
 
-  export let row: ConfiguredComponentRow;
-  export let selectedArtifact = '';
-  export let riskLevel: string | null | undefined = null;
-  export let busy = false;
+  type ArtifactSelectionHandler = (componentId: string, value: string) => void;
+  type BuildPlanHandler = (componentId: string, artifactId: string) => void;
 
-  export let onArtifactSelection: (componentId: string, value: string) => void = () => {
-    return;
+  type Props = {
+    row: ConfiguredComponentRow;
+    selectedArtifact?: string;
+    riskLevel?: string | null | undefined;
+    busy?: boolean;
+    onArtifactSelection?: ArtifactSelectionHandler;
+    onBuildPlan?: BuildPlanHandler;
   };
-  export let onBuildPlan: (componentId: string, artifactId: string) => void = () => {
-    return;
+
+  const noopArtifactSelection = () => undefined;
+  const noopBuildPlan = () => undefined;
+
+  let {
+    row,
+    selectedArtifact = '',
+    riskLevel = null,
+    busy = false,
+    onArtifactSelection = noopArtifactSelection,
+    onBuildPlan = noopBuildPlan,
+  }: Props = $props();
+
+  type SelectedCandidate = ConfiguredComponentRow['selectedCandidate'];
+
+  type RowViewModel = {
+    componentId: string;
+    currentPath: string;
+    displayPath: string;
+    fileName: string;
+    installedValue: string;
+    replacementValue: string;
+    installedOptions: ReturnType<typeof installedOptionsForRow>;
+    candidateOptions: ReturnType<typeof candidateOptionsForRow>;
+    hasCandidates: boolean;
+    selectedCandidate: SelectedCandidate;
+    selectedArtifactId: string | undefined;
+    replacementSelectDisabled: boolean;
+    buildPlanDisabled: boolean;
+    compatibilityLabel: string;
+    candidatePath: string;
+    candidateSummary: string;
+    selectionSummaryTitle: string;
+    installedSelectLabel: string;
+    replacementSelectLabel: string;
   };
 
-  $: componentId = row.component.id;
-  $: currentPath = row.currentInstalled.path;
-  $: displayPath = row.group?.file_path ?? currentPath;
-  $: fileName = fileNameFromPath(currentPath);
+  const EMPTY_VALUE = '';
+  const FALLBACK_TEXT = '—';
+  const NO_REPLACEMENTS_TEXT = 'No replacement candidates found';
+  const SELECT_REPLACEMENT_TEXT = 'Choose a replacement version';
+  const UNKNOWN_PATH_TEXT = 'Path unavailable';
 
-  $: installedOptions = installedOptionsForRow(row);
-  $: candidateOptions = candidateOptionsForRow(row);
-
-  $: candidatesCount = row.group?.candidates.length ?? 0;
-  $: hasCandidates = candidatesCount > 0;
-
-  $: replacementSelectDisabled = !hasCandidates || busy;
-  $: selectedCandidate = row.selectedCandidate;
-  $: selectedArtifactId = selectedCandidate?.artifact_id;
-
-  $: buildPlanDisabled = busy || !row.canBuildPlan || !selectedArtifactId;
-
-  $: compatibilityLabel =
-    candidatesCount === 1 ? '1 compatible version' : `${candidatesCount} compatible versions`;
-
-  function handleArtifactSelection(value: string) {
-    onArtifactSelection(componentId, value);
+  function displayText(value: string | null | undefined, fallback = FALLBACK_TEXT) {
+    return value?.trim() ? value : fallback;
   }
 
-  function handleBuildPlan() {
-    if (!selectedArtifactId || buildPlanDisabled) {
+  function compatibleVersionsLabel(count: number) {
+    return count === 1 ? '1 compatible version' : `${count} compatible versions`;
+  }
+
+  function resolveSelectedArtifactId(
+    nextRow: ConfiguredComponentRow,
+    nextSelectedArtifact: string,
+  ) {
+    return nextSelectedArtifact || nextRow.selectedCandidate?.artifact_id;
+  }
+
+  function resolveSelectedCandidate(
+    nextRow: ConfiguredComponentRow,
+    selectedArtifactId: string | undefined,
+  ): SelectedCandidate {
+    if (!selectedArtifactId) {
+      return null;
+    }
+
+    if (nextRow.selectedCandidate?.artifact_id === selectedArtifactId) {
+      return nextRow.selectedCandidate;
+    }
+
+    return (
+      nextRow.group?.candidates.find((candidate) => candidate.artifact_id === selectedArtifactId) ??
+      null
+    );
+  }
+
+  function replacementHelperText(
+    nextRow: ConfiguredComponentRow,
+    hasCandidates: boolean,
+    selectedArtifactId: string | undefined,
+  ) {
+    if (!hasCandidates) {
+      return NO_REPLACEMENTS_TEXT;
+    }
+
+    if (!selectedArtifactId) {
+      return SELECT_REPLACEMENT_TEXT;
+    }
+
+    return displayText(nextRow.candidatePath, UNKNOWN_PATH_TEXT);
+  }
+
+  function replacementSummaryText(
+    nextRow: ConfiguredComponentRow,
+    selectedCandidate: SelectedCandidate,
+  ) {
+    return displayText(
+      nextRow.candidateSummary,
+      selectedCandidate ? 'Replacement details unavailable' : 'No replacement selected',
+    );
+  }
+
+  function buildRowViewModel(
+    nextRow: ConfiguredComponentRow,
+    nextSelectedArtifact: string,
+    nextBusy: boolean,
+  ): RowViewModel {
+    const componentId = nextRow.component.id;
+    const currentPath = displayText(nextRow.currentInstalled.path, UNKNOWN_PATH_TEXT);
+    const displayPath = displayText(nextRow.group?.file_path, currentPath);
+    const candidatesCount = nextRow.group?.candidates.length ?? 0;
+    const hasCandidates = candidatesCount > 0;
+
+    const selectedArtifactId = resolveSelectedArtifactId(nextRow, nextSelectedArtifact);
+    const selectedCandidate = resolveSelectedCandidate(nextRow, selectedArtifactId);
+
+    const canBuildPlan = Boolean(nextRow.canBuildPlan && selectedArtifactId && selectedCandidate);
+
+    const fileName = displayText(fileNameFromPath(currentPath), currentPath);
+
+    return {
+      componentId,
+      currentPath,
+      displayPath,
+      fileName,
+      installedValue: nextRow.installedValue,
+      replacementValue: selectedArtifactId ?? EMPTY_VALUE,
+      installedOptions: installedOptionsForRow(nextRow),
+      candidateOptions: candidateOptionsForRow(nextRow),
+      hasCandidates,
+      selectedCandidate,
+      selectedArtifactId,
+      replacementSelectDisabled: nextBusy || !hasCandidates,
+      buildPlanDisabled: nextBusy || !canBuildPlan,
+      compatibilityLabel: compatibleVersionsLabel(candidatesCount),
+      candidatePath: replacementHelperText(nextRow, hasCandidates, selectedArtifactId),
+      candidateSummary: replacementSummaryText(nextRow, selectedCandidate),
+      selectionSummaryTitle: selectedCandidate ? 'Selected replacement' : 'Replacement selection',
+      installedSelectLabel: `Installed version for ${fileName}`,
+      replacementSelectLabel: `Replacement version for ${fileName}`,
+    };
+  }
+
+  const view = $derived(buildRowViewModel(row, selectedArtifact, busy));
+
+  function handleArtifactSelection(value: string) {
+    if (view.replacementSelectDisabled || value === view.replacementValue) {
       return;
     }
 
-    onBuildPlan(componentId, selectedArtifactId);
+    onArtifactSelection(view.componentId, value);
+  }
+
+  function handleBuildPlan() {
+    if (view.buildPlanDisabled || !view.selectedArtifactId) {
+      return;
+    }
+
+    onBuildPlan(view.componentId, view.selectedArtifactId);
   }
 </script>
 
-<div class="technology-row">
+<div class="library-row">
   <header class="file-meta">
     <div class="file-info">
-      <strong>{fileName}</strong>
-      <p>{displayPath}</p>
+      <strong>{view.fileName}</strong>
+      <p title={view.displayPath}>{view.displayPath}</p>
     </div>
 
     <BadgeGroup class="library-badges" align="end" aria-label="Compatibility information">
@@ -68,8 +196,8 @@
         {formatLabel(row.component.swappability)}
       </Badge>
 
-      {#if hasCandidates}
-        <Badge>{compatibilityLabel}</Badge>
+      {#if view.hasCandidates}
+        <Badge>{view.compatibilityLabel}</Badge>
       {:else}
         <Badge tone="muted">No replacements</Badge>
       {/if}
@@ -77,46 +205,46 @@
   </header>
 
   <div class="config-grid">
-    <label class="config-field">
+    <div class="config-field">
       <span class="field-label">Installed version</span>
 
       <Select
         size="sm"
         disabled
-        ariaLabel={`Installed version for ${fileName}`}
-        options={installedOptions}
-        value={row.installedValue}
+        aria-label={view.installedSelectLabel}
+        options={view.installedOptions}
+        value={view.installedValue}
       />
 
-      <small>{currentPath}</small>
-    </label>
+      <small title={view.currentPath}>{view.currentPath}</small>
+    </div>
 
-    <label class="config-field">
+    <div class="config-field">
       <span class="field-label">Replacement version</span>
 
       <Select
         size="sm"
-        disabled={replacementSelectDisabled}
-        ariaLabel={`Replacement version for ${fileName}`}
-        options={candidateOptions}
-        value={selectedArtifact}
+        disabled={view.replacementSelectDisabled}
+        aria-label={view.replacementSelectLabel}
+        options={view.candidateOptions}
+        value={view.replacementValue}
         onValueChange={handleArtifactSelection}
       />
 
-      <small>{row.candidatePath}</small>
-    </label>
+      <small title={view.candidatePath}>{view.candidatePath}</small>
+    </div>
   </div>
 
   <footer class="action-row">
-    <div class="selection-summary">
-      <strong>{selectedCandidate ? 'Selected replacement' : 'Replacement selection'}</strong>
-      <p>{row.candidateSummary}</p>
+    <div class="selection-summary" aria-live="polite">
+      <strong>{view.selectionSummaryTitle}</strong>
+      <p>{view.candidateSummary}</p>
     </div>
 
     <Button
       variant="primary"
       size="sm"
-      disabled={buildPlanDisabled}
+      disabled={view.buildPlanDisabled}
       loading={busy}
       onclick={handleBuildPlan}
     >
@@ -126,7 +254,7 @@
 </div>
 
 <style>
-  .technology-row {
+  .library-row {
     display: grid;
     gap: var(--space-4);
     padding: var(--space-4);

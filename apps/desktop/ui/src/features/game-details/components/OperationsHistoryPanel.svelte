@@ -10,14 +10,25 @@
 
   const EMPTY_VALUE = '—';
 
-  export let operations: OperationSummary[] = [];
-  export let busy = false;
-  export let canRollback: CanRollback = () => false;
-  export let onRollback: RollbackHandler = () => undefined;
+  type Props = {
+    operations?: OperationSummary[];
+    busy?: boolean;
+    canRollback?: CanRollback;
+    onRollback?: RollbackHandler;
+  };
 
-  let pendingOperationId: string | null = null;
+  let {
+    operations = [],
+    busy = false,
+    canRollback = () => false,
+    onRollback = () => undefined,
+  }: Props = $props();
 
-  $: entriesLabel = `${operations.length} ${operations.length === 1 ? 'entry' : 'entries'}`;
+  let pendingOperationId = $state<string | null>(null);
+
+  const entriesLabel = $derived(
+    `${operations.length} ${operations.length === 1 ? 'entry' : 'entries'}`,
+  );
 
   function formatOptionalLabel(value: string | null | undefined): string {
     return value ? formatLabel(value) : EMPTY_VALUE;
@@ -52,10 +63,6 @@
     return `operation-title-${operationId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   }
 
-  function getOperationById(operationId: string): OperationSummary | undefined {
-    return operations.find((operation) => operation.operation_id === operationId);
-  }
-
   function getRollbackState(operation: OperationSummary) {
     const isPending = pendingOperationId === operation.operation_id;
     const rollbackAllowed = canRollbackSafely(operation.status);
@@ -80,23 +87,6 @@
     } finally {
       pendingOperationId = null;
     }
-  }
-
-  function handleRollbackClick(event: MouseEvent): void {
-    const button = event.currentTarget as HTMLElement;
-    const operationId = button.dataset.operationId;
-
-    if (!operationId) {
-      return;
-    }
-
-    const operation = getOperationById(operationId);
-
-    if (!operation) {
-      return;
-    }
-
-    void rollbackOperation(operation);
   }
 </script>
 
@@ -165,9 +155,10 @@
             size="sm"
             disabled={rollback.isDisabled}
             loading={rollback.isLoading}
-            data-operation-id={operation.operation_id}
             aria-label={`Rollback ${formatOptionalLabel(operation.kind)} operation`}
-            onclick={handleRollbackClick}
+            onclick={() => {
+              void rollbackOperation(operation);
+            }}
           >
             {rollback.label}
           </Button>

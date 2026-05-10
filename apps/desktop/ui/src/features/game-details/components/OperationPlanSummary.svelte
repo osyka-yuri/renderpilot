@@ -29,24 +29,32 @@
   const BLOCKED_RISK_LEVEL = 'blocked';
   const UNKNOWN_VALUE = 'Unknown';
 
-  export let plan: SwapPlan | null = null;
-  export let busy = false;
-  export let onApply: OperationHandler = () => {
-    return;
+  type Props = {
+    plan?: SwapPlan | null;
+    busy?: boolean;
+    onApply?: OperationHandler;
   };
 
-  $: canApply = plan ? canApplyPlan(plan, busy) : false;
+  let {
+    plan = null,
+    busy = false,
+    onApply = () => {
+      return;
+    },
+  }: Props = $props();
 
-  $: planTitle = plan ? formatLabel(plan.operation_type) : '';
-  $: planRiskLabel = plan ? formatRisk(plan.risk_level) : UNKNOWN_VALUE;
-  $: planRiskTone = plan ? getPlanRiskBadgeTone(plan.risk_level) : 'danger';
+  const canApply = $derived(plan ? canApplyPlan(plan, busy) : false);
 
-  $: planFlags = plan ? getPlanFlags(plan) : [];
-  $: planMetrics = plan ? getPlanMetrics(plan) : [];
-  $: planNoteGroups = plan ? getPlanNoteGroups(plan) : [];
+  const planTitle = $derived(plan ? formatLabel(plan.operation_type) : '');
+  const planRiskLabel = $derived(plan ? formatRisk(plan.risk_level) : UNKNOWN_VALUE);
+  const planRiskTone = $derived(plan ? getPlanRiskBadgeTone(plan.risk_level) : 'danger');
 
-  $: hasPlanNotes = planNoteGroups.length > 0;
-  $: readinessText = plan ? getReadinessCopy(plan) : '';
+  const planFlags = $derived(plan ? getPlanFlags(plan) : []);
+  const planMetrics = $derived(plan ? getPlanMetrics(plan) : []);
+  const planNoteGroups = $derived(plan ? getPlanNoteGroups(plan) : []);
+
+  const hasPlanNotes = $derived(planNoteGroups.length > 0);
+  const readinessText = $derived(plan ? getReadinessCopy(plan) : '');
 
   function canApplyPlan(currentPlan: SwapPlan, isBusy: boolean): boolean {
     return (

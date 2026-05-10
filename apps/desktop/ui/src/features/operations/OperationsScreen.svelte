@@ -33,41 +33,39 @@
     /* empty */
   };
 
-  export let details: GameDetails | null = null;
-  export let gameCard: GameCard | null = null;
-  export let busy = false;
-  export let onRollback: OperationHandler = noopOperation;
-  export let onOpenDetails: VoidHandler = noop;
+  type Props = {
+    details?: GameDetails | null;
+    gameCard?: GameCard | null;
+    busy?: boolean;
+    onRollback?: OperationHandler;
+    onOpenDetails?: VoidHandler;
+  };
 
-  $: operations = details?.operations ?? [];
-  $: operationRows = operations.map(toOperationViewModel);
+  let {
+    details = null,
+    gameCard = null,
+    busy = false,
+    onRollback = noopOperation,
+    onOpenDetails = noop,
+  }: Props = $props();
 
-  $: totalOperations = operations.length;
-  $: rollbackReadyCount = operationRows.filter((row) => row.canRollback).length;
-  $: latestResultLabel = formatLabel(operations[0]?.status ?? 'none');
+  const operations = $derived(details?.operations ?? []);
+  const operationRows = $derived(operations.map(toOperationViewModel));
 
-  $: riskLevel = gameCard?.risk_level ?? 'unknown';
-  $: riskLabel = formatLabel(riskLevel);
-  $: riskToneValue = riskBadgeTone(gameCard?.risk_level);
+  const totalOperations = $derived(operations.length);
+  const rollbackReadyCount = $derived(operationRows.filter((row) => row.canRollback).length);
+  const latestResultLabel = $derived(formatLabel(operations[0]?.status ?? 'none'));
+
+  const riskLevel = $derived(gameCard?.risk_level ?? 'unknown');
+  const riskLabel = $derived(formatLabel(riskLevel));
+  const riskToneValue = $derived(riskBadgeTone(gameCard?.risk_level));
 
   function handleOpenDetails(): void {
     onOpenDetails();
   }
 
-  function handleRollbackClick(event: MouseEvent): void {
+  function handleRollback(operationId: string): void {
     if (busy) {
-      return;
-    }
-
-    const target = event.currentTarget;
-
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    const operationId = target.dataset.operationId;
-
-    if (!operationId) {
       return;
     }
 
@@ -111,7 +109,7 @@
 
 <section class="screen-shell">
   {#if details === null}
-    <Surface className="empty-state">
+    <Surface class="empty-state">
       <h3>No operation context</h3>
       <p>
         Select a game to inspect journal history, rollback readiness, and recovery-oriented status.
@@ -131,7 +129,7 @@
         <Button variant="secondary" size="sm" onclick={handleOpenDetails}>Back to details</Button>
       </div>
 
-      <Surface className="summary-panel" tone="elevated" shadow>
+      <Surface class="summary-panel" tone="elevated" shadow>
         <div class="summary-grid">
           <div class="summary-item">
             <span>Total operations</span>
@@ -159,7 +157,7 @@
     </section>
 
     {#if operationRows.length === 0}
-      <Surface className="empty-state">
+      <Surface class="empty-state">
         <h3>No operations yet</h3>
         <p>
           Build a plan from Game Details, then apply it. Once a swap runs, the journal and rollback
@@ -180,7 +178,7 @@
 
         <div class="operation-list">
           {#each operationRows as row (row.operation.operation_id)}
-            <Surface as="article" className="operation-row" interactive>
+            <Surface as="article" class="operation-row" interactive>
               <div class="row-head">
                 <div class="row-copy">
                   <p class="eyebrow">{row.kindLabel}</p>
@@ -223,8 +221,9 @@
                   size="sm"
                   disabled={busy || !row.canRollback}
                   loading={busy}
-                  data-operation-id={row.operation.operation_id}
-                  onclick={handleRollbackClick}
+                  onclick={() => {
+                    handleRollback(row.operation.operation_id);
+                  }}
                 >
                   {busy ? 'Working...' : 'Rollback'}
                 </Button>

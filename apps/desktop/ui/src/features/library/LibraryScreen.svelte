@@ -2,11 +2,15 @@
   import type { GameCard } from '@shared/api/types';
   import { formatRisk } from '@shared/utils/presenters';
 
-  export let gameCard: GameCard | null = null;
+  type Props = {
+    gameCard?: GameCard | null;
+  };
+
+  let { gameCard = null }: Props = $props();
 
   type ArtifactPreviewRow = {
     fileName: string;
-    technologyLabel: string;
+    libraryLabel: string;
     sourceLabel: string;
     trustLabel: string;
   };
@@ -14,19 +18,19 @@
   const previewRows: ArtifactPreviewRow[] = [
     {
       fileName: 'nvngx_dlss.dll',
-      technologyLabel: 'DLSS Super Resolution',
+      libraryLabel: 'DLSS Super Resolution',
       sourceLabel: 'Local observed',
       trustLabel: 'Local observed',
     },
     {
       fileName: 'sl.common.dll',
-      technologyLabel: 'NVIDIA Streamline',
+      libraryLabel: 'NVIDIA Streamline',
       sourceLabel: 'Backup import',
       trustLabel: 'Backup',
     },
     {
       fileName: 'libxess.dll',
-      technologyLabel: 'Intel XeSS',
+      libraryLabel: 'Intel XeSS',
       sourceLabel: 'User import',
       trustLabel: 'User imported',
     },
@@ -66,7 +70,7 @@
 
     <div class="row-grid header-row">
       <span>Artifact</span>
-      <span>Technology</span>
+      <span>Library</span>
       <span>Source</span>
       <span>Trust</span>
     </div>
@@ -74,7 +78,7 @@
     {#each previewRows as row}
       <div class="row-grid">
         <strong>{row.fileName}</strong>
-        <span>{row.technologyLabel}</span>
+        <span>{row.libraryLabel}</span>
         <span>{row.sourceLabel}</span>
         <span>{row.trustLabel}</span>
       </div>

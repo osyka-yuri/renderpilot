@@ -2,11 +2,15 @@
   import { compactList, fileNameFromPath } from '@features/game-details/lib/graphics-configurator';
   import Badge from '@shared/ui/Badge.svelte';
 
-  export let installPath = '';
-  export let launchCandidates: string[] = [];
-  export let technologies: string[] = [];
+  type Props = {
+    installPath?: string;
+    launchCandidates?: string[];
+    libraries?: string[];
+  };
 
-  $: launchCandidateNames = launchCandidates.map(fileNameFromPath);
+  let { installPath = '', launchCandidates = [], libraries = [] }: Props = $props();
+
+  const launchCandidateNames = $derived(launchCandidates.map(fileNameFromPath));
 </script>
 
 <section class="install-context" aria-label="Game installation context">
@@ -27,14 +31,14 @@
   <div class="install-card install-card--graphics">
     <span>Graphics</span>
     <div
-      class="install-technology-badges"
-      title={compactList(technologies, 'No graphics technologies detected', 12)}
+      class="install-library-badges"
+      title={compactList(libraries, 'No graphics libraries detected', 12)}
     >
-      {#if technologies.length === 0}
+      {#if libraries.length === 0}
         <Badge surface="outline" tone="muted">None detected</Badge>
       {:else}
-        {#each technologies as technology}
-          <Badge surface="outline">{technology}</Badge>
+        {#each libraries as library}
+          <Badge surface="outline">{library}</Badge>
         {/each}
       {/if}
     </div>
@@ -91,14 +95,14 @@
     min-height: 100%;
   }
 
-  .install-technology-badges {
+  .install-library-badges {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
     min-width: 0;
   }
 
-  .install-technology-badges :global(.badge) {
+  .install-library-badges :global(.badge) {
     max-width: 100%;
   }
 

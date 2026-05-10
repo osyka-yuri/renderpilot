@@ -1,11 +1,16 @@
 <script lang="ts">
   import type { GameCard, GameDetails } from '@shared/api/types';
 
-  export let details: GameDetails | null = null;
-  export let gameCard: GameCard | null = null;
+  type Props = {
+    details?: GameDetails | null;
+    gameCard?: GameCard | null;
+  };
 
-  $: backupCoverage =
-    details?.operations.filter((operation) => operation.backup_count > 0).length ?? 0;
+  let { details = null, gameCard = null }: Props = $props();
+
+  const backupCoverage = $derived(
+    details?.operations.filter((operation) => operation.backup_count > 0).length ?? 0,
+  );
 </script>
 
 <section class="screen-shell">
@@ -14,7 +19,7 @@
       <p class="eyebrow">Backups</p>
       <h2>Rollback coverage and snapshot readiness</h2>
       <p>
-        The dedicated backup browser will list manifests, timestamps, technologies, and restore
+        The dedicated backup browser will list manifests, timestamps, libraries, and restore
         targets. Until that endpoint exists, this screen keeps the final product shape and reports
         available coverage from the operation journal.
       </p>
@@ -36,7 +41,7 @@
     <article class="coverage-card">
       <p class="eyebrow">Manifest</p>
       <h3>Snapshot metadata</h3>
-      <p>Operation ID, original path, technology, hash, and app version land here.</p>
+      <p>Operation ID, original path, library, hash, and app version land here.</p>
     </article>
     <article class="coverage-card">
       <p class="eyebrow">Restore</p>
