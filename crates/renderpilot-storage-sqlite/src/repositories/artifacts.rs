@@ -12,7 +12,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
     INSERT INTO library_artifacts
         (
             id,
-            technology,
+            library,
             file_name,
             file_path,
             version,
@@ -38,7 +38,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             :updated_at_ms
         )
     ON CONFLICT(sha256) DO UPDATE SET
-        technology     = excluded.technology,
+        library        = excluded.library,
         file_name      = excluded.file_name,
         file_path      = excluded.file_path,
         version        = excluded.version,

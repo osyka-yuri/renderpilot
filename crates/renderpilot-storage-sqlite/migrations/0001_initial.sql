@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS components (
     id           TEXT    PRIMARY KEY NOT NULL,
     game_id      TEXT    NOT NULL,
     kind         TEXT    NOT NULL,
-    technology   TEXT    NOT NULL,
+    library      TEXT    NOT NULL,
     swappability TEXT    NOT NULL,
     files_json   TEXT    NOT NULL,
     created_at   INTEGER NOT NULL DEFAULT (
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS components (
     CHECK (length(trim(id)) > 0),
     CHECK (length(trim(game_id)) > 0),
     CHECK (length(trim(kind)) > 0),
-    CHECK (length(trim(technology)) > 0),
+    CHECK (length(trim(library)) > 0),
     CHECK (length(trim(swappability)) > 0),
     CHECK (json_valid(files_json)),
     CHECK (json_type(files_json) = 'array'),
@@ -121,11 +121,11 @@ CREATE TABLE IF NOT EXISTS components (
 CREATE INDEX IF NOT EXISTS idx_components_game_id
     ON components(game_id);
 
-CREATE INDEX IF NOT EXISTS idx_components_game_id_technology
-    ON components(game_id, technology);
+CREATE INDEX IF NOT EXISTS idx_components_game_id_library
+    ON components(game_id, library);
 
-CREATE INDEX IF NOT EXISTS idx_components_technology
-    ON components(technology);
+CREATE INDEX IF NOT EXISTS idx_components_library
+    ON components(library);
 
 
 -- =============================================================================
@@ -134,7 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_components_technology
 
 CREATE TABLE IF NOT EXISTS library_artifacts (
     id             TEXT    PRIMARY KEY NOT NULL,
-    technology     TEXT    NOT NULL,
+    library        TEXT    NOT NULL,
     file_name      TEXT    NOT NULL,
     file_path      TEXT    NOT NULL,
     version        TEXT,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS library_artifacts (
         ON DELETE SET NULL,
 
     CHECK (length(trim(id)) > 0),
-    CHECK (length(trim(technology)) > 0),
+    CHECK (length(trim(library)) > 0),
     CHECK (length(trim(file_name)) > 0),
     CHECK (instr(file_name, '/') = 0),
     CHECK (instr(file_name, '\') = 0),
@@ -171,11 +171,11 @@ CREATE TABLE IF NOT EXISTS library_artifacts (
     CHECK (created_at >= 0),
     CHECK (updated_at >= created_at),
 
-    UNIQUE (id, technology)
+    UNIQUE (id, library)
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_library_artifacts_technology
-    ON library_artifacts(technology);
+CREATE INDEX IF NOT EXISTS idx_library_artifacts_library
+    ON library_artifacts(library);
 
 CREATE INDEX IF NOT EXISTS idx_library_artifacts_source_game_id
     ON library_artifacts(source_game_id);
@@ -445,35 +445,35 @@ BEGIN
     );
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_operation_items_artifact_technology_insert
+CREATE TRIGGER IF NOT EXISTS trg_operation_items_artifact_library_insert
 BEFORE INSERT ON operation_items
 FOR EACH ROW
 WHEN NEW.artifact_id IS NOT NULL
 BEGIN
-    SELECT RAISE(ABORT, 'operation_items artifact technology mismatch')
+    SELECT RAISE(ABORT, 'operation_items artifact library mismatch')
     WHERE NOT EXISTS (
         SELECT 1
         FROM components AS c
         JOIN library_artifacts AS a
           ON a.id = NEW.artifact_id
-         AND a.technology = c.technology
+         AND a.library = c.library
         WHERE c.id = NEW.component_id
           AND c.game_id = NEW.game_id
     );
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_operation_items_artifact_technology_update
+CREATE TRIGGER IF NOT EXISTS trg_operation_items_artifact_library_update
 BEFORE UPDATE OF game_id, component_id, artifact_id ON operation_items
 FOR EACH ROW
 WHEN NEW.artifact_id IS NOT NULL
 BEGIN
-    SELECT RAISE(ABORT, 'operation_items artifact technology mismatch')
+    SELECT RAISE(ABORT, 'operation_items artifact library mismatch')
     WHERE NOT EXISTS (
         SELECT 1
         FROM components AS c
         JOIN library_artifacts AS a
           ON a.id = NEW.artifact_id
-         AND a.technology = c.technology
+         AND a.library = c.library
         WHERE c.id = NEW.component_id
           AND c.game_id = NEW.game_id
     );

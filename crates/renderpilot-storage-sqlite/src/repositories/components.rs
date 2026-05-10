@@ -25,7 +25,7 @@ const INSERT_COMPONENT_SQL: &str = "
             id,
             game_id,
             kind,
-            technology,
+            library,
             swappability,
             files_json,
             created_at,

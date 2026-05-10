@@ -24,14 +24,14 @@ pub(super) mod physical {
         pub const ID: &str = "id";
         pub const GAME_ID: &str = "game_id";
         pub const KIND: &str = "kind";
-        pub const TECHNOLOGY: &str = "technology";
+        pub const TECHNOLOGY: &str = "library";
         pub const SWAPPABILITY: &str = "swappability";
         pub const FILES_JSON: &str = "files_json";
     }
 
     pub mod library_artifacts {
         pub const ID: &str = "id";
-        pub const TECHNOLOGY: &str = "technology";
+        pub const TECHNOLOGY: &str = "library";
         pub const FILE_NAME: &str = "file_name";
         pub const FILE_PATH: &str = "file_path";
         pub const VERSION: &str = "version";

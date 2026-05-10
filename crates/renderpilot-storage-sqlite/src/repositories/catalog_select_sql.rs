@@ -14,14 +14,14 @@ macro_rules! projection_game_sql {
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::component`].
 macro_rules! projection_component_sql {
     () => {
-        "components.id AS component_id,\n        components.game_id AS component_game_id,\n        components.kind AS component_kind,\n        components.technology AS component_technology,\n        components.swappability AS component_swappability,\n        components.files_json AS component_files_json"
+        "components.id AS component_id,\n        components.game_id AS component_game_id,\n        components.kind AS component_kind,\n        components.library AS component_technology,\n        components.swappability AS component_swappability,\n        components.files_json AS component_files_json"
     };
 }
 
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::artifact`].
 macro_rules! projection_artifact_sql {
     () => {
-        "library_artifacts.id AS artifact_id,\n        library_artifacts.technology AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.file_path AS artifact_file_path,\n        library_artifacts.version AS artifact_version,\n        library_artifacts.sha256 AS artifact_sha256,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
+        "library_artifacts.id AS artifact_id,\n        library_artifacts.library AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.file_path AS artifact_file_path,\n        library_artifacts.version AS artifact_version,\n        library_artifacts.sha256 AS artifact_sha256,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
     };
 }
 
@@ -68,6 +68,13 @@ pub(super) const LIST_GAMES_SQL: &str = concat!(
     "
 );
 
+pub(super) const LIST_DISTINCT_GAME_LIBRARIES_SQL: &str = "
+    SELECT DISTINCT components.library
+    FROM components
+    WHERE trim(components.library) <> ''
+    ORDER BY components.library
+";
+
 pub(super) const LIST_COMPONENTS_FOR_GAME_SQL: &str = concat!(
     "
     SELECT
@@ -87,7 +94,7 @@ pub(super) const LIST_ARTIFACTS_SQL: &str = concat!(
     projection_artifact_sql!(),
     "
     FROM library_artifacts
-    ORDER BY library_artifacts.technology, library_artifacts.file_name, library_artifacts.file_path
+    ORDER BY library_artifacts.library, library_artifacts.file_name, library_artifacts.file_path
     "
 );
 

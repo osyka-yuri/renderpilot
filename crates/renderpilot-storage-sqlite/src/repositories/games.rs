@@ -5,7 +5,7 @@ use rusqlite::{named_params, Connection, OptionalExtension, Statement, Transacti
 use crate::{error::storage_error, mapping, sqlite_clock};
 
 use super::{
-    catalog_select_sql::{FIND_GAME_SQL, LIST_GAMES_SQL},
+    catalog_select_sql::{FIND_GAME_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL, LIST_GAMES_SQL},
     game_covers::{find_cover_in_connection, DeletedGameInfo},
     row_mapping::game_from_row,
     SqliteStorage,
@@ -35,8 +35,8 @@ const UPSERT_GAME_SQL: &str = "
             :runtime,
             :install_path,
             :executable_candidates_json,
-            :created_at_ms,
-            :updated_at_ms
+            :created_at,
+            :updated_at
         )
     ON CONFLICT(id) DO UPDATE SET
         title                      = excluded.title,
@@ -80,12 +80,19 @@ impl SqliteStorage {
         self.query_list(LIST_GAMES_SQL, [], game_from_row)
     }
 
+    /// Lists distinct library values currently observed in `components`.
+    pub fn list_distinct_game_libraries(&self) -> AppResult<Vec<String>> {
+        self.query_list(LIST_DISTINCT_GAME_LIBRARIES_SQL, [], |row| {
+            Ok(Ok(row.get::<_, String>(0)?))
+        })
+    }
+
     /// Deletes a game row by id.
     ///
     /// Child rows are removed or detached according to foreign-key rules.
     /// Missing id is a no-op.
     pub fn delete_game(&self, id: &GameId) -> AppResult<DeletedGameInfo> {
-        self.with_connection(|connection| delete_game_in_connection(connection, id))
+        self.with_transaction(|transaction| delete_game_in_connection(transaction, id))
     }
 }
 
@@ -93,7 +100,7 @@ fn find_game_in_connection(
     connection: &Connection,
     id: &GameId,
 ) -> AppResult<Option<GameInstallation>> {
-    connection
+    let game = connection
         .query_row(
             FIND_GAME_SQL,
             named_params! {
@@ -102,8 +109,9 @@ fn find_game_in_connection(
             game_from_row,
         )
         .optional()
-        .map_err(storage_error)?
-        .transpose()
+        .map_err(storage_error)?;
+
+    game.transpose()
 }
 
 /// Writes one game row within a transaction.
@@ -113,9 +121,9 @@ pub(super) fn upsert_game_within_transaction(
     transaction: &Transaction<'_>,
     game: &GameInstallation,
 ) -> AppResult<()> {
-    let params = [GameSqlParams::from_game(game)?];
+    let params = GameSqlParams::from_game(game)?;
 
-    execute_game_upserts_within_transaction(transaction, &params)
+    execute_game_upserts_within_transaction(transaction, std::slice::from_ref(&params))
 }
 
 /// Writes game rows within a transaction.
@@ -172,14 +180,13 @@ fn execute_game_upserts_within_transaction(
         return Ok(());
     }
 
-    let timestamp_ms = sqlite_clock::now_ms(transaction)?;
-
+    let timestamps = GameWriteTimestamps::now(transaction)?;
     let mut statement = transaction
         .prepare_cached(UPSERT_GAME_SQL)
         .map_err(storage_error)?;
 
-    for params in params {
-        execute_game_upsert(&mut statement, params, timestamp_ms)?;
+    for game_params in params {
+        execute_game_upsert(&mut statement, game_params, timestamps)?;
     }
 
     Ok(())
@@ -188,7 +195,7 @@ fn execute_game_upserts_within_transaction(
 fn execute_game_upsert(
     statement: &mut Statement<'_>,
     params: &GameSqlParams<'_>,
-    timestamp_ms: i64,
+    timestamps: GameWriteTimestamps,
 ) -> AppResult<()> {
     statement
         .execute(named_params! {
@@ -200,12 +207,29 @@ fn execute_game_upsert(
             ":runtime": params.runtime.as_str(),
             ":install_path": params.install_path,
             ":executable_candidates_json": params.executable_candidates_json.as_str(),
-            ":created_at_ms": timestamp_ms,
-            ":updated_at_ms": timestamp_ms,
+            ":created_at": timestamps.created_at_ms,
+            ":updated_at": timestamps.updated_at_ms,
         })
         .map_err(storage_error)?;
 
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GameWriteTimestamps {
+    created_at_ms: i64,
+    updated_at_ms: i64,
+}
+
+impl GameWriteTimestamps {
+    fn now(connection: &Connection) -> AppResult<Self> {
+        let now_ms = sqlite_clock::now_ms(connection)?;
+
+        Ok(Self {
+            created_at_ms: now_ms,
+            updated_at_ms: now_ms,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -246,35 +270,25 @@ mod tests {
 
     #[test]
     fn list_games_returns_games_sorted_by_title_then_id() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let later = sample_game("game:zeta", "Zeta Game");
         let earlier_b = sample_game("game:beta-b", "Beta Game");
         let earlier_a = sample_game("game:beta-a", "Beta Game");
 
-        storage
-            .upsert_game(&later)
-            .expect("later game should store");
+        store_game(&storage, &later);
+        store_game(&storage, &earlier_b);
+        store_game(&storage, &earlier_a);
 
-        storage
-            .upsert_game(&earlier_b)
-            .expect("beta-b should store");
-
-        storage
-            .upsert_game(&earlier_a)
-            .expect("beta-a should store");
-
-        let games = storage.list_games().expect("games should list");
-
-        assert_eq!(games, vec![earlier_a, earlier_b, later]);
+        assert_stored_games(&storage, &[earlier_a, earlier_b, later]);
     }
 
     #[test]
     fn find_game_returns_stored_game_by_id() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
         let game = sample_game("game:cyberpunk", "Cyberpunk 2077");
 
-        storage.upsert_game(&game).expect("game should store");
+        store_game(&storage, &game);
 
         let found = storage
             .find_game(game.id())
@@ -286,39 +300,28 @@ mod tests {
 
     #[test]
     fn find_game_returns_none_for_missing_id() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
-        let missing_id = GameId::new("game:missing").expect("game id should be valid");
+        let storage = in_memory_storage();
+        let missing_id = sample_game_id("game:missing");
 
-        let found = storage
-            .find_game(&missing_id)
-            .expect("find_game should succeed");
-
-        assert_eq!(found, None);
+        assert_missing_game(&storage, &missing_id);
     }
 
     #[test]
     fn upsert_game_updates_existing_row() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let original = sample_game("game:shared", "Original Title");
         let updated = sample_game("game:shared", "Updated Title");
 
-        storage
-            .upsert_game(&original)
-            .expect("original game should store");
+        store_game(&storage, &original);
+        store_game(&storage, &updated);
 
-        storage
-            .upsert_game(&updated)
-            .expect("updated game should store");
-
-        let games = storage.list_games().expect("games should list");
-
-        assert_eq!(games, vec![updated]);
+        assert_stored_games(&storage, &[updated]);
     }
 
     #[test]
     fn upsert_games_stores_batch() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let game_a = sample_game("game:a", "Alpha");
         let game_b = sample_game("game:b", "Beta");
@@ -327,65 +330,54 @@ mod tests {
             .upsert_games(&[game_b.clone(), game_a.clone()])
             .expect("games should store");
 
-        let games = storage.list_games().expect("games should list");
-
-        assert_eq!(games, vec![game_a, game_b]);
+        assert_stored_games(&storage, &[game_a, game_b]);
     }
 
     #[test]
     fn upsert_games_updates_existing_rows() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let original = sample_game("game:shared", "Original Title");
         let updated = sample_game("game:shared", "Updated Title");
 
-        storage
-            .upsert_game(&original)
-            .expect("original game should store");
+        store_game(&storage, &original);
 
         storage
             .upsert_games(std::slice::from_ref(&updated))
             .expect("updated game should store");
 
-        let games = storage.list_games().expect("games should list");
-
-        assert_eq!(games, vec![updated]);
+        assert_stored_games(&storage, &[updated]);
     }
 
     #[test]
     fn upsert_games_accepts_empty_slice() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         storage
             .upsert_games(&[])
             .expect("empty batch should be a no-op");
 
-        let games = storage.list_games().expect("games should list");
-
-        assert!(games.is_empty());
+        assert_stored_games(&storage, &[]);
     }
 
     #[test]
     fn delete_game_removes_existing_game() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let game = sample_game("game:delete-me", "Delete Me");
 
-        storage.upsert_game(&game).expect("game should store");
+        store_game(&storage, &game);
+
         let deleted = storage.delete_game(game.id()).expect("game should delete");
+
         assert_eq!(deleted.old_cover_file_name, None);
-
-        let found = storage
-            .find_game(game.id())
-            .expect("find_game should succeed");
-
-        assert_eq!(found, None);
+        assert_missing_game(&storage, game.id());
     }
 
     #[test]
     fn delete_game_is_noop_for_missing_id() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
-        let missing_id = GameId::new("game:missing").expect("game id should be valid");
+        let storage = in_memory_storage();
+        let missing_id = sample_game_id("game:missing");
 
         let deleted = storage
             .delete_game(&missing_id)
@@ -396,11 +388,12 @@ mod tests {
 
     #[test]
     fn delete_game_returns_old_cover_file_name() {
-        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let storage = in_memory_storage();
 
         let game = sample_game("game:with-cover", "With Cover");
 
-        storage.upsert_game(&game).expect("game should store");
+        store_game(&storage, &game);
+
         storage
             .upsert_game_cover(game.id(), "cover-old.webp")
             .expect("cover should store");
@@ -413,13 +406,29 @@ mod tests {
         );
     }
 
+    fn in_memory_storage() -> SqliteStorage {
+        SqliteStorage::in_memory().expect("in-memory sqlite should open")
+    }
+
+    fn store_game(storage: &SqliteStorage, game: &GameInstallation) {
+        storage.upsert_game(game).expect("game should store");
+    }
+
+    fn assert_stored_games(storage: &SqliteStorage, expected: &[GameInstallation]) {
+        let games = storage.list_games().expect("games should list");
+
+        assert_eq!(games.as_slice(), expected);
+    }
+
+    fn assert_missing_game(storage: &SqliteStorage, id: &GameId) {
+        let found = storage.find_game(id).expect("find_game should succeed");
+
+        assert_eq!(found, None);
+    }
+
     fn sample_game(id: &str, title: &str) -> GameInstallation {
-        let identity = GameIdentity::new(
-            GameId::new(id).expect("game id should be valid"),
-            title,
-            Launcher::Manual,
-        )
-        .expect("identity should be valid");
+        let identity = GameIdentity::new(sample_game_id(id), title, Launcher::Manual)
+            .expect("identity should be valid");
 
         GameInstallation::new(
             identity,
@@ -427,6 +436,10 @@ mod tests {
             GameRuntime::NativeWindows,
             install_path_for_title(title),
         )
+    }
+
+    fn sample_game_id(id: &str) -> GameId {
+        GameId::new(id).expect("game id should be valid")
     }
 
     fn install_path_for_title(title: &str) -> PathRef {
