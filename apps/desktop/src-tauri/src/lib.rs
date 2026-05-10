@@ -59,7 +59,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::scan_manual_folder,
         commands::scan_auto_libraries,
         // Game data
-        commands::get_game_cards,
+        commands::query_game_cards,
         commands::get_game_details,
         commands::fetch_game_cover,
         commands::clear_game_cover,
