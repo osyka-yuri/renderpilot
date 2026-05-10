@@ -1,16 +1,20 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
   import { cx } from '@shared/utils/cx';
 
-  export let align: 'start' | 'end' = 'start';
+  type Props = HTMLAttributes<HTMLDivElement> & {
+    align?: 'start' | 'end';
+    children?: Snippet;
+  };
 
-  let className = '';
-  export { className as class };
+  let { align = 'start', class: className = '', children, ...rest }: Props = $props();
 
-  $: classes = cx('badge-group', align === 'end' && 'badge-group--end', className);
+  const classes = $derived(cx('badge-group', align === 'end' && 'badge-group--end', className));
 </script>
 
-<div {...$$restProps} class={classes}>
-  <slot />
+<div {...rest} class={classes}>
+  {@render children?.()}
 </div>
 
 <style>

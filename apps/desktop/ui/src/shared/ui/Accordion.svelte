@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
   import type { BadgeSurface, BadgeTone } from './Badge.svelte';
 
   export type AccordionBadge = {
@@ -15,29 +15,11 @@
     badges?: AccordionBadge[];
     disabled?: boolean;
   };
-</script>
 
-<script lang="ts">
-  import { cubicOut } from 'svelte/easing';
-  import { slide } from 'svelte/transition';
-  import { cx } from '@shared/utils/cx';
-  import Badge from './Badge.svelte';
+  const DEFAULT_ID_PREFIX = 'accordion';
+  const EMPTY_ITEMS: readonly AccordionItem[] = [];
 
-  export let items: AccordionItem[] = [];
-  export let value: string | null = null;
-  export let ariaLabel = 'Accordion';
-  export let allowCollapse = true;
-  export let idPrefix = 'accordion';
-  export let onValueChange: ((value: string | null) => void) | undefined = undefined;
-
-  let className = '';
-  export { className as class };
-
-  function isExpanded(item: AccordionItem): boolean {
-    return value === item.value;
-  }
-
-  function getSafeIdPart(value: string): string {
+  function normalizeDomIdPart(value: string): string {
     return value
       .toLowerCase()
       .trim()
@@ -45,8 +27,97 @@
       .replace(/^-+|-+$/g, '');
   }
 
-  function getItemId(idPart: string, suffix: 'trigger' | 'panel'): string {
-    return `${idPrefix}-${idPart}-${suffix}`;
+  function hashValue(value: string): string {
+    let hash = 0;
+
+    for (let index = 0; index < value.length; index += 1) {
+      hash = (hash * 33 + value.charCodeAt(index)) >>> 0;
+    }
+
+    return hash.toString(36);
+  }
+
+  function createStableIdPart(value: string, fallbackPrefix: string): string {
+    const normalizedPart = normalizeDomIdPart(value);
+    const hashPart = hashValue(value);
+
+    return normalizedPart ? `${normalizedPart}-${hashPart}` : `${fallbackPrefix}-${hashPart}`;
+  }
+
+  function createSafeIdPrefix(value: string): string {
+    return normalizeDomIdPart(value) || DEFAULT_ID_PREFIX;
+  }
+
+  function createAccordionElementId(
+    idPrefix: string,
+    itemValue: string,
+    suffix: 'trigger' | 'panel',
+  ): string {
+    return `${idPrefix}-${createStableIdPart(itemValue, 'item')}-${suffix}`;
+  }
+</script>
+
+<script lang="ts">
+  import { cubicOut } from 'svelte/easing';
+  import { slide } from 'svelte/transition';
+  import { normalizeA11yTextProps } from '@shared/utils/a11y';
+  import { cx } from '@shared/utils/cx';
+  import type { HTMLAttributes } from 'svelte/elements';
+  import type { Snippet } from 'svelte';
+  import Badge from './Badge.svelte';
+
+  type NativeAccordionProps = Omit<HTMLAttributes<HTMLDivElement>, 'class' | 'aria-label'>;
+
+  type AccordionProps = NativeAccordionProps & {
+    itemContent?: Snippet<[AccordionItem]>;
+    items?: readonly AccordionItem[];
+    value?: string | null;
+    allowCollapse?: boolean;
+    idPrefix?: string;
+    class?: string;
+    'aria-label'?: string | null;
+    onValueChange?: (value: string | null) => void;
+  };
+
+  const PANEL_TRANSITION = {
+    duration: 180,
+    easing: cubicOut,
+  } as const;
+
+  let {
+    itemContent,
+    items = EMPTY_ITEMS,
+    value = $bindable(null),
+    allowCollapse = true,
+    idPrefix = DEFAULT_ID_PREFIX,
+    class: className = '',
+    'aria-label': ariaLabel = null,
+    role,
+    onValueChange,
+    ...restProps
+  }: AccordionProps = $props();
+
+  const safeIdPrefix = $derived(createSafeIdPrefix(idPrefix));
+  const accordionClass = $derived(cx('accordion', className));
+
+  const a11yText = $derived(
+    normalizeA11yTextProps({
+      label: ariaLabel,
+    }),
+  );
+
+  const accordionRole = $derived(role ?? (a11yText.ariaLabel ? 'group' : undefined));
+
+  function getTriggerId(itemValue: string): string {
+    return createAccordionElementId(safeIdPrefix, itemValue, 'trigger');
+  }
+
+  function getPanelId(itemValue: string): string {
+    return createAccordionElementId(safeIdPrefix, itemValue, 'panel');
+  }
+
+  function isExpanded(item: AccordionItem): boolean {
+    return value === item.value;
   }
 
   function setValue(nextValue: string | null): void {
@@ -68,45 +139,96 @@
     setValue(nextValue);
   }
 
-  function handleTriggerClick(event: MouseEvent): void {
-    const trigger = event.currentTarget as HTMLButtonElement;
-    const itemValue = trigger.dataset.value;
-
-    if (!itemValue) {
-      return;
-    }
-
-    const item = items.find((candidate) => candidate.value === itemValue);
-
+  function focusTrigger(item: AccordionItem | undefined): void {
     if (!item) {
       return;
     }
 
-    selectItem(item);
+    const trigger = document.getElementById(getTriggerId(item.value));
+
+    if (trigger instanceof HTMLButtonElement) {
+      trigger.focus();
+    }
+  }
+
+  function getEnabledItems(): AccordionItem[] {
+    return items.filter((item) => !item.disabled);
+  }
+
+  function focusEnabledItemByOffset(currentItem: AccordionItem, offset: number): void {
+    const enabledItems = getEnabledItems();
+
+    if (enabledItems.length === 0) {
+      return;
+    }
+
+    const currentIndex = enabledItems.findIndex((item) => item.value === currentItem.value);
+
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const nextIndex = (currentIndex + offset + enabledItems.length) % enabledItems.length;
+
+    focusTrigger(enabledItems[nextIndex]);
+  }
+
+  function handleTriggerKeydown(event: KeyboardEvent, item: AccordionItem): void {
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    const enabledItems = getEnabledItems();
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusEnabledItemByOffset(item, 1);
+        break;
+
+      case 'ArrowUp':
+        event.preventDefault();
+        focusEnabledItemByOffset(item, -1);
+        break;
+
+      case 'Home':
+        event.preventDefault();
+        focusTrigger(enabledItems[0]);
+        break;
+
+      case 'End':
+        event.preventDefault();
+        focusTrigger(enabledItems[enabledItems.length - 1]);
+        break;
+    }
   }
 </script>
 
-<div class={cx('accordion', className)} aria-label={ariaLabel}>
-  {#each items as item, itemIndex (item.value)}
+<div {...restProps} class={accordionClass} role={accordionRole} aria-label={a11yText.ariaLabel}>
+  {#each items as item (item.value)}
     {@const expanded = isExpanded(item)}
-    {@const idPart = getSafeIdPart(item.value) || `item-${itemIndex}`}
-    {@const triggerId = getItemId(idPart, 'trigger')}
-    {@const panelId = getItemId(idPart, 'panel')}
+    {@const triggerId = getTriggerId(item.value)}
+    {@const panelId = getPanelId(item.value)}
+    {@const badges = item.badges ?? []}
 
-    <section class="accordion-item" data-expanded={expanded ? 'true' : undefined}>
+    <div class="accordion-item" data-expanded={expanded ? 'true' : undefined}>
       <button
         id={triggerId}
         type="button"
         class="accordion-trigger"
-        data-value={item.value}
         aria-expanded={expanded}
         aria-controls={panelId}
         disabled={item.disabled}
-        onclick={handleTriggerClick}
+        onclick={() => {
+          selectItem(item);
+        }}
+        onkeydown={(event) => {
+          handleTriggerKeydown(event, item);
+        }}
       >
         <span class="accordion-copy">
           <span class="accordion-title-row">
-            <strong>{item.title}</strong>
+            <strong class="accordion-title">{item.title}</strong>
 
             {#if item.meta}
               <span class="accordion-meta">{item.meta}</span>
@@ -119,9 +241,9 @@
         </span>
 
         <span class="accordion-side">
-          {#if item.badges?.length}
-            <span class="accordion-badges" aria-label="Badges">
-              {#each item.badges as badge, badgeIndex (`${badge.label}-${badgeIndex}`)}
+          {#if badges.length}
+            <span class="accordion-badges">
+              {#each badges as badge, badgeIndex (`${badge.label}-${badge.tone ?? 'neutral'}-${badge.surface ?? 'outline'}-${badgeIndex}`)}
                 <Badge surface={badge.surface ?? 'outline'} tone={badge.tone ?? 'neutral'}>
                   {badge.label}
                 </Badge>
@@ -139,12 +261,12 @@
           class="accordion-panel"
           role="region"
           aria-labelledby={triggerId}
-          transition:slide={{ duration: 180, easing: cubicOut }}
+          transition:slide={PANEL_TRANSITION}
         >
-          <slot {item} />
+          {@render itemContent?.(item)}
         </div>
       {/if}
-    </section>
+    </div>
   {/each}
 </div>
 
@@ -174,8 +296,10 @@
     padding: var(--space-4);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
+    appearance: none;
     background: var(--bg-control);
     color: inherit;
+    font: inherit;
     text-align: left;
     cursor: pointer;
     transition:
@@ -223,17 +347,19 @@
     gap: var(--space-3);
   }
 
-  .accordion-title-row strong {
+  .accordion-title {
     min-width: 0;
     color: var(--text-strong);
     font-size: 1.05rem;
     line-height: 1.2;
+    overflow-wrap: anywhere;
   }
 
   .accordion-meta {
     flex-shrink: 0;
     color: var(--text-subtle);
     font-size: 0.8125rem;
+    line-height: 1.3;
   }
 
   .accordion-summary {
@@ -272,6 +398,10 @@
     border-radius: var(--radius-md);
     background: var(--bg-soft);
     color: var(--text-muted);
+    transition:
+      color 140ms ease,
+      border-color 140ms ease,
+      background 140ms ease;
   }
 
   .accordion-chevron::before {
@@ -281,6 +411,7 @@
     border-right: 1.75px solid currentColor;
     border-bottom: 1.75px solid currentColor;
     transform: translateY(-0.12rem) rotate(45deg);
+    transition: transform 140ms ease;
   }
 
   .accordion-trigger:hover:not(:disabled) .accordion-chevron,
@@ -312,6 +443,14 @@
 
     .accordion-chevron {
       align-self: flex-start;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .accordion-trigger,
+    .accordion-chevron,
+    .accordion-chevron::before {
+      transition: none;
     }
   }
 </style>

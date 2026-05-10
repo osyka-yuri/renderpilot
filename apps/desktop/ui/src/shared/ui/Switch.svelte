@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { normalizeA11yTextProps } from '@shared/utils/a11y';
   import { cx } from '@shared/utils/cx';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
+
+  type SwitchState = 'checked' | 'unchecked';
 
   type NativeSwitchProps = Omit<
     HTMLButtonAttributes,
@@ -14,6 +17,7 @@
     | 'aria-label'
     | 'aria-labelledby'
     | 'aria-describedby'
+    | 'onclick'
   >;
 
   type SwitchProps = NativeSwitchProps & {
@@ -29,6 +33,9 @@
     'aria-label'?: string | null;
     'aria-labelledby'?: string | null;
     'aria-describedby'?: string | null;
+
+    onclick?: ((event: MouseEvent) => void) | undefined;
+    onCheckedChange?: ((nextChecked: boolean, event: MouseEvent) => void) | undefined;
   };
 
   let {
@@ -41,27 +48,39 @@
     class: className = '',
     title = null,
 
-    'aria-label': ariaLabel,
-    'aria-labelledby': ariaLabelledBy,
-    'aria-describedby': ariaDescribedBy,
+    'aria-label': ariaLabel = null,
+    'aria-labelledby': ariaLabelledBy = null,
+    'aria-describedby': ariaDescribedBy = null,
+
+    onclick: onClick,
+    onCheckedChange,
 
     ...restProps
   }: SwitchProps = $props();
 
+  const switchState = $derived<SwitchState>(checked ? 'checked' : 'unchecked');
   const ariaChecked = $derived(checked ? 'true' : 'false');
 
-  const normalizedTitle = $derived(trimmedOrUndefined(title));
-  const normalizedAriaLabel = $derived(trimmedOrUndefined(ariaLabel));
-  const normalizedAriaLabelledBy = $derived(trimmedOrUndefined(ariaLabelledBy));
-  const normalizedAriaDescribedBy = $derived(trimmedOrUndefined(ariaDescribedBy));
-
-  const stackOnMobileAttribute = $derived(stackOnMobile ? 'true' : undefined);
+  const a11yText = $derived(
+    normalizeA11yTextProps({
+      label: ariaLabel,
+      labelledBy: ariaLabelledBy,
+      describedBy: ariaDescribedBy,
+      title,
+    }),
+  );
 
   const switchClass = $derived(cx('switch-root', className));
+  const stackOnMobileAttribute = $derived(stackOnMobile ? 'true' : undefined);
 
-  function trimmedOrUndefined(value: string | null | undefined): string | undefined {
-    const trimmed = value?.trim();
-    return trimmed ?? undefined;
+  function handleClick(event: MouseEvent): void {
+    onClick?.(event);
+
+    if (event.defaultPrevented || disabled) {
+      return;
+    }
+
+    onCheckedChange?.(!checked, event);
   }
 </script>
 
@@ -70,13 +89,15 @@
   type="button"
   role="switch"
   aria-checked={ariaChecked}
-  aria-label={normalizedAriaLabel}
-  aria-labelledby={normalizedAriaLabelledBy}
-  aria-describedby={normalizedAriaDescribedBy}
-  title={normalizedTitle}
+  aria-label={a11yText.ariaLabel}
+  aria-labelledby={a11yText.ariaLabelledBy}
+  aria-describedby={a11yText.ariaDescribedBy}
+  title={a11yText.title}
   {disabled}
   class={switchClass}
+  data-state={switchState}
   data-stack-on-mobile={stackOnMobileAttribute}
+  onclick={handleClick}
 >
   <span class="switch-copy">
     {@render children?.()}
@@ -134,7 +155,7 @@
 
   .switch-track {
     position: relative;
-    flex: 0 0 auto;
+    flex: 0 0 var(--switch-width);
 
     inline-size: var(--switch-width);
     block-size: var(--switch-height);
@@ -168,7 +189,7 @@
       background-color 140ms ease;
   }
 
-  .switch-root[aria-checked='true'] {
+  .switch-root[data-state='checked'] {
     --switch-track-background: var(--accent);
     --switch-track-border-color: transparent;
     --switch-thumb-background: var(--accent-contrast);
@@ -184,11 +205,11 @@
   }
 
   @media (hover: hover) {
-    .switch-root:not(:disabled):not([aria-checked='true']):hover {
+    .switch-root:not(:disabled):not([data-state='checked']):hover {
       --switch-track-background: var(--bg-control-hover);
     }
 
-    .switch-root:not(:disabled)[aria-checked='true']:hover {
+    .switch-root:not(:disabled)[data-state='checked']:hover {
       --switch-track-background: var(--accent-strong);
     }
   }

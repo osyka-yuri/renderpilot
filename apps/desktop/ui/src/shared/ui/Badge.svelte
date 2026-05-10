@@ -1,31 +1,47 @@
-<script context="module" lang="ts">
+<script module lang="ts">
   export type BadgeTone = 'neutral' | 'muted' | 'success' | 'warning' | 'danger';
   export type BadgeSurface = 'soft' | 'outline';
   export type BadgeSize = 'sm' | 'md';
 </script>
 
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
   import { cx } from '@shared/utils/cx';
 
-  export let tone: BadgeTone = 'neutral';
-  export let surface: BadgeSurface = 'soft';
-  export let size: BadgeSize = 'sm';
-  export let pill = false;
-  export let dot = false;
-  export let multiline = false;
+  type Props = HTMLAttributes<HTMLSpanElement> & {
+    tone?: BadgeTone;
+    surface?: BadgeSurface;
+    size?: BadgeSize;
+    pill?: boolean;
+    dot?: boolean;
+    multiline?: boolean;
+    children?: Snippet;
+  };
 
-  let className = '';
-  export { className as class };
+  let {
+    tone = 'neutral',
+    surface = 'soft',
+    size = 'sm',
+    pill = false,
+    dot = false,
+    multiline = false,
+    class: className = '',
+    children,
+    ...rest
+  }: Props = $props();
 
-  $: classes = cx('badge', pill && 'badge--pill', multiline && 'badge--multiline', className);
+  const classes = $derived(
+    cx('badge', pill && 'badge--pill', multiline && 'badge--multiline', className),
+  );
 </script>
 
-<span {...$$restProps} class={classes} data-tone={tone} data-surface={surface} data-size={size}>
+<span {...rest} class={classes} data-tone={tone} data-surface={surface} data-size={size}>
   {#if dot}
     <span class="badge__dot" aria-hidden="true"></span>
   {/if}
 
-  <slot />
+  {@render children?.()}
 </span>
 
 <style>

@@ -1,66 +1,117 @@
-<script lang="ts">
-  type SelectSize = 'md' | 'sm';
+<script module lang="ts">
+  export type SelectSize = 'md' | 'sm';
 
-  type SelectOption = Readonly<{
+  export type SelectOption = Readonly<{
     value: string;
     label: string;
     disabled?: boolean;
   }>;
+</script>
 
-  export let options: readonly SelectOption[] = [];
+<script lang="ts">
+  import { normalizeA11yTextProps } from '@shared/utils/a11y';
+  import { cx } from '@shared/utils/cx';
+  import type { HTMLSelectAttributes } from 'svelte/elements';
 
-  export let value = '';
-  export let disabled = false;
-  export let required = false;
+  type NativeSelectProps = Omit<
+    HTMLSelectAttributes,
+    | 'class'
+    | 'value'
+    | 'size'
+    | 'disabled'
+    | 'required'
+    | 'onchange'
+    | 'aria-label'
+    | 'aria-labelledby'
+    | 'aria-describedby'
+    | 'title'
+  >;
 
-  export let id: string | undefined = undefined;
-  export let name: string | undefined = undefined;
-  export let title: string | undefined = undefined;
+  type SelectProps = NativeSelectProps & {
+    options?: readonly SelectOption[];
+    value?: string;
+    size?: SelectSize;
+    disabled?: boolean;
+    required?: boolean;
+    class?: string;
+    title?: string | null;
+    'aria-label'?: string | null;
+    'aria-labelledby'?: string | null;
+    'aria-describedby'?: string | null;
+    onValueChange?: ((nextValue: string) => void) | undefined;
+  };
 
-  export let ariaLabel: string | undefined = 'Select option';
-  export let ariaLabelledby: string | undefined = undefined;
-  export let ariaDescribedby: string | undefined = undefined;
+  let {
+    options = [],
+    value = $bindable(''),
+    disabled = false,
+    required = false,
+    size = 'md',
+    class: className = '',
+    title,
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
+    'aria-describedby': ariaDescribedBy,
+    onValueChange,
+    ...restProps
+  }: SelectProps = $props();
 
-  export let size: SelectSize = 'md';
+  const selectRootClass = $derived(
+    cx(
+      'select-root',
+      size === 'sm' && 'select-root--sm',
+      disabled && 'select-root--disabled',
+      className,
+    ),
+  );
 
-  export let onValueChange: ((value: string) => void) | undefined = undefined;
+  const a11yText = $derived(
+    normalizeA11yTextProps({
+      label: ariaLabel,
+      labelledBy: ariaLabelledBy,
+      describedBy: ariaDescribedBy,
+    }),
+  );
 
-  $: resolvedAriaLabel = ariaLabelledby ? undefined : ariaLabel;
+  const selectTitle = $derived(title ?? a11yText.title);
 
-  function handleChange(event: Event): void {
-    const select = event.currentTarget;
+  function getSelectValue(event: Event): string | null {
+    const target = event.currentTarget;
 
-    if (!(select instanceof HTMLSelectElement)) {
-      return;
+    if (!(target instanceof HTMLSelectElement)) {
+      return null;
     }
 
-    const nextValue = select.value;
+    return target.value;
+  }
+
+  function handleChange(event: Event): void {
+    const nextValue = getSelectValue(event);
+
+    if (nextValue === null) {
+      return;
+    }
 
     value = nextValue;
     onValueChange?.(nextValue);
   }
 </script>
 
-<span
-  class="select-root"
-  class:select-root--sm={size === 'sm'}
-  class:select-root--disabled={disabled}
->
+<span class={selectRootClass}>
   <select
-    {id}
-    {name}
-    {title}
+    {...restProps}
     {disabled}
     {required}
     {value}
+    title={selectTitle}
     class="select-field"
-    aria-label={resolvedAriaLabel}
-    aria-labelledby={ariaLabelledby}
-    aria-describedby={ariaDescribedby}
+    aria-label={a11yText.ariaLabel}
+    aria-labelledby={a11yText.ariaLabelledBy}
+    aria-describedby={a11yText.ariaDescribedBy}
     onchange={handleChange}
   >
-    {#each options as option (option.value)}
-      <option value={option.value} disabled={option.disabled}>
+    {#each options as option}
+      <option value={option.value} disabled={option.disabled === true}>
         {option.label}
       </option>
     {/each}
@@ -97,11 +148,21 @@
     opacity: 0.45;
   }
 
+  .select-root:not(.select-root--disabled):hover::after {
+    border-color: var(--text-soft);
+  }
+
+  .select-root:focus-within::after {
+    border-color: var(--text-strong);
+  }
+
   .select-field {
     width: 100%;
     min-width: 0;
-
     min-height: 2rem;
+
+    padding: 0.4rem 2.15rem 0.4rem 0.75rem;
+
     border: 1px solid var(--border-control);
     border-radius: var(--radius-md);
 
@@ -111,8 +172,6 @@
 
     font: inherit;
     line-height: 1.2;
-
-    padding: 0.4rem 2.15rem 0.4rem 0.75rem;
 
     appearance: none;
     cursor: pointer;
@@ -149,18 +208,10 @@
     background: var(--bg-control-pressed);
   }
 
-  .select-root:not(.select-root--disabled):hover::after {
-    border-color: var(--text-soft);
-  }
-
   .select-field:focus-visible {
     background: var(--bg-control);
     border-color: var(--accent-outline);
     box-shadow: var(--shadow-focus);
     outline: none;
-  }
-
-  .select-root:focus-within::after {
-    border-color: var(--text-strong);
   }
 </style>

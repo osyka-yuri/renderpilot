@@ -1,31 +1,45 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
   import { cx } from '@shared/utils/cx';
 
   type SurfaceTone = 'panel' | 'elevated' | 'soft';
   type SurfaceRadius = 'md' | 'lg';
   type SurfaceElement = keyof HTMLElementTagNameMap;
 
-  export let as: SurfaceElement = 'div';
-  export let tone: SurfaceTone = 'panel';
-  export let radius: SurfaceRadius = 'lg';
-  export let shadow = false;
-  export let interactive = false;
+  type Props = HTMLAttributes<HTMLElement> & {
+    as?: SurfaceElement;
+    tone?: SurfaceTone;
+    radius?: SurfaceRadius;
+    shadow?: boolean;
+    interactive?: boolean;
+    children?: Snippet;
+  };
 
-  let classAttr = '';
-  export { classAttr as class };
-  export let className = '';
+  let {
+    as = 'div',
+    tone = 'panel',
+    radius = 'lg',
+    shadow = false,
+    interactive = false,
+    class: className = '',
+    children,
+    ...rest
+  }: Props = $props();
+
+  const classes = $derived(cx('surface', className));
 </script>
 
 <svelte:element
   this={as}
-  {...$$restProps}
-  class={cx('surface', classAttr, className)}
+  {...rest}
+  class={classes}
   data-tone={tone}
   data-radius={radius}
   data-shadow={shadow ? '' : undefined}
   data-interactive={interactive ? '' : undefined}
 >
-  <slot />
+  {@render children?.()}
 </svelte:element>
 
 <style>
