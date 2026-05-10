@@ -18,7 +18,7 @@ pub fn gc_cover_orphans_on_startup() {
 }
 
 pub use self::catalog::{
-    get_catalog_setting, get_game_cards, get_game_details, list_games, set_catalog_setting,
+    get_catalog_setting, get_game_details, list_games, query_game_cards, set_catalog_setting,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::operations::{

@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     env,
     ffi::OsString,
     fs,
@@ -9,14 +10,16 @@ use std::{
 use renderpilot_application::{ArtifactRepository, ComponentRepository, GameRepository};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact,
-    PathRef, Platform, Sha256Hash, Swappability, Version,
+    GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher,
+    LibraryArtifact, PathRef, Platform, Sha256Hash, Swappability, Version,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
+use serde_json::Value;
 
 use super::{
-    apply_operation_plan, build_swap_plan, get_game_cards, rollback_operation, scan_manual_folder,
-    utils::{dashboard_risk_level, normalized_path_string as path_string, technology_tags},
+    apply_operation_plan, build_swap_plan, get_catalog_setting, query_game_cards,
+    rollback_operation, scan_manual_folder, set_catalog_setting,
+    utils::{dashboard_risk_level, library_tags, normalized_path_string as path_string},
 };
 use crate::catalog::{
     open_auto_scan_batch, prune_auto_scan_orphans_in_catalog, scan_auto_in_batch,
@@ -25,51 +28,36 @@ use crate::hash::sha256_hex;
 use crate::test_env::lock_process_env;
 use crate::{backup_manager::BACKUP_ROOT_DIR_ENV, catalog::CATALOG_DB_PATH_ENV};
 
+const DLSS_DLL: &str = "nvngx_dlss.dll";
+const DEFAULT_PAGE_LIMIT: i64 = 10_000;
+
+fn query_all_game_cards() -> Result<GameCardsQueryResult, crate::CliError> {
+    GameCardsQueryResult::query("", Vec::new(), "title", "asc", DEFAULT_PAGE_LIMIT, 0)
+}
+
 #[test]
 fn scan_manual_folder_updates_catalog_and_returns_detected_components() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
-
+    let _fixture = DesktopFixture::new("scan-manual-single-game");
     let game_dir = tempfile::tempdir().expect("game dir");
 
-    fs::write(
-        game_dir.path().join("nvngx_dlss.dll"),
-        b"desktop-scan-bytes",
-    )
-    .expect("test dll should be written");
+    write_component_file(game_dir.path(), DLSS_DLL, b"desktop-scan-bytes");
 
     let result = scan_manual_folder(game_dir.path().to_path_buf()).expect("scan should succeed");
-    let game_cards = get_game_cards().expect("game cards should succeed");
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
 
-    let games = result["games"].as_array().expect("games array");
+    let games = json_array_field(&result, "games");
     assert_eq!(games.len(), 1);
 
     let details = &games[0];
-    assert_eq!(
-        details["components"]
-            .as_array()
-            .expect("components array")
-            .len(),
-        1
-    );
-    assert_eq!(
-        details["components"][0]["technology"],
-        "dlss_super_resolution"
-    );
+    let components = json_array_field(details, "components");
+    assert_eq!(components.len(), 1);
+    assert_eq!(components[0]["technology"], "dlss_super_resolution");
 
-    let cards = game_cards.as_array().expect("game cards array");
+    let cards = game_cards.items();
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0]["install_path"], path_string(game_dir.path()));
-    assert_eq!(
-        cards[0]["title"],
-        game_dir
-            .path()
-            .file_name()
-            .and_then(|name| name.to_str())
-            .expect("folder name should be utf-8")
-    );
-    assert_eq!(cards[0]["technology_tags"][0], "dlss_super_resolution");
+    assert_eq!(cards[0]["title"], folder_title(game_dir.path()));
+    assert_eq!(cards[0]["library_tags"][0], "dlss_super_resolution");
     assert_eq!(cards[0]["component_count"], 1);
     assert_eq!(cards[0]["updates_available"], false);
     assert_eq!(cards[0]["risk_level"], "low");
@@ -82,136 +70,92 @@ fn scan_manual_folder_updates_catalog_and_returns_detected_components() {
 
 #[test]
 fn scan_manual_folder_parent_dir_produces_separate_games_per_subdirectory() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
-
+    let _fixture = DesktopFixture::new("scan-manual-parent-dir");
     let parent_dir = tempfile::tempdir().expect("parent dir");
 
     let game_a = parent_dir.path().join("GameA");
     let game_b = parent_dir.path().join("GameB");
 
-    fs::create_dir_all(&game_a).expect("GameA dir should be created");
-    fs::create_dir_all(&game_b).expect("GameB dir should be created");
-    fs::write(game_a.join("nvngx_dlss.dll"), b"game-a-bytes").expect("GameA dll should be written");
-    fs::write(game_b.join("nvngx_dlss.dll"), b"game-b-bytes").expect("GameB dll should be written");
+    write_component_file(&game_a, DLSS_DLL, b"game-a-bytes");
+    write_component_file(&game_b, DLSS_DLL, b"game-b-bytes");
 
     let result = scan_manual_folder(parent_dir.path().to_path_buf()).expect("scan should succeed");
-    let game_cards = get_game_cards().expect("game cards should succeed");
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
 
-    let games = result["games"].as_array().expect("games array");
+    let games = json_array_field(&result, "games");
     assert_eq!(
         games.len(),
         2,
-        "should detect two separate game installations"
+        "should detect two separate game installations",
     );
 
-    let cards = game_cards.as_array().expect("game cards array");
+    let cards = game_cards.items();
     assert_eq!(cards.len(), 2, "catalog should contain two game cards");
 
-    let install_paths: Vec<&str> = cards
-        .iter()
-        .map(|card| card["install_path"].as_str().expect("install_path string"))
-        .collect();
-
-    assert!(
-        install_paths.contains(&path_string(&game_a).as_str()),
-        "GameA install path should be in catalog"
+    assert_eq!(
+        card_field_string_set(cards, "install_path"),
+        BTreeSet::from([path_string(&game_a), path_string(&game_b)]),
     );
-    assert!(
-        install_paths.contains(&path_string(&game_b).as_str()),
-        "GameB install path should be in catalog"
-    );
-
-    let titles: Vec<&str> = cards
-        .iter()
-        .map(|card| card["title"].as_str().expect("title string"))
-        .collect();
-
-    assert!(
-        titles.contains(&"GameA"),
-        "GameA title should be in catalog"
-    );
-    assert!(
-        titles.contains(&"GameB"),
-        "GameB title should be in catalog"
+    assert_eq!(
+        card_field_string_set(cards, "title"),
+        string_set(&["GameA", "GameB"]),
     );
 }
 
 #[test]
 fn scan_manual_folder_removes_stale_parent_entry_on_multi_scan() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
-
+    let _fixture = DesktopFixture::new("scan-manual-removes-stale-parent");
     let parent_dir = tempfile::tempdir().expect("parent dir");
 
     let game_a = parent_dir.path().join("GameStaleA");
     let game_b = parent_dir.path().join("GameStaleB");
 
-    fs::create_dir_all(&game_a).expect("GameStaleA dir should be created");
-    fs::create_dir_all(&game_b).expect("GameStaleB dir should be created");
-    fs::write(game_a.join("nvngx_dlss.dll"), b"a-bytes").expect("dll a should be written");
-    fs::write(game_b.join("nvngx_dlss.dll"), b"b-bytes").expect("dll b should be written");
+    write_component_file(&game_a, DLSS_DLL, b"a-bytes");
+    write_component_file(&game_b, DLSS_DLL, b"b-bytes");
 
     scan_manual_folder(parent_dir.path().to_path_buf()).expect("first scan should succeed");
     scan_manual_folder(parent_dir.path().to_path_buf()).expect("second scan should succeed");
 
-    let game_cards = get_game_cards().expect("game cards should succeed");
-    let cards = game_cards.as_array().expect("game cards array");
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
+    let cards = game_cards.items();
 
     assert_eq!(
         cards.len(),
         2,
-        "parent ghost entry should not exist after multi-scan"
+        "parent ghost entry should not exist after multi-scan",
     );
-
-    let titles: Vec<&str> = cards
-        .iter()
-        .map(|card| card["title"].as_str().expect("title"))
-        .collect();
-
-    assert!(titles.contains(&"GameStaleA"));
-    assert!(titles.contains(&"GameStaleB"));
+    assert_eq!(
+        card_field_string_set(cards, "title"),
+        string_set(&["GameStaleA", "GameStaleB"]),
+    );
 }
 
 #[test]
 fn scan_manual_folder_no_duplicates_when_scanning_subdirectory_after_parent() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
-
+    let _fixture = DesktopFixture::new("scan-manual-no-parent-subdir-duplicates");
     let parent = tempfile::tempdir().expect("parent dir");
 
     let game_a = parent.path().join("Store").join("common").join("GameAlpha");
     let game_b = parent.path().join("Store").join("common").join("GameBeta");
 
-    fs::create_dir_all(&game_a).expect("GameAlpha dir should be created");
-    fs::create_dir_all(&game_b).expect("GameBeta dir should be created");
-    fs::write(game_a.join("nvngx_dlss.dll"), b"alpha-bytes")
-        .expect("GameAlpha dll should be written");
-    fs::write(game_b.join("nvngx_dlss.dll"), b"beta-bytes")
-        .expect("GameBeta dll should be written");
+    write_component_file(&game_a, DLSS_DLL, b"alpha-bytes");
+    write_component_file(&game_b, DLSS_DLL, b"beta-bytes");
 
     scan_manual_folder(parent.path().to_path_buf()).expect("parent scan should succeed");
     scan_manual_folder(parent.path().join("Store")).expect("store scan should succeed");
 
-    let game_cards = get_game_cards().expect("game cards should succeed");
-    let cards = game_cards.as_array().expect("game cards array");
-
-    let titles: Vec<&str> = cards
-        .iter()
-        .map(|card| card["title"].as_str().unwrap_or("?"))
-        .collect();
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
+    let cards = game_cards.items();
+    let titles = card_field_string_set(cards, "title");
 
     assert_eq!(
         cards.len(),
         2,
         "scanning parent then sub-directory must produce exactly 2 entries, got: {}",
-        titles.join(", ")
+        titles.iter().cloned().collect::<Vec<_>>().join(", "),
     );
-    assert!(titles.contains(&"GameAlpha"), "GameAlpha should be present");
-    assert!(titles.contains(&"GameBeta"), "GameBeta should be present");
+    assert!(titles.contains("GameAlpha"), "GameAlpha should be present");
+    assert!(titles.contains("GameBeta"), "GameBeta should be present");
 }
 
 #[test]
@@ -222,10 +166,8 @@ fn scan_auto_replaces_pre_existing_split_subfolder_entries_with_one_game() {
     let amd_dir = game_dir.path().join("amd-ffx");
     let streamline_dir = game_dir.path().join("streamline");
 
-    fs::create_dir_all(&amd_dir).expect("amd-ffx dir");
-    fs::create_dir_all(&streamline_dir).expect("streamline dir");
-    fs::write(amd_dir.join("nvngx_dlss.dll"), b"amd").expect("amd dll");
-    fs::write(streamline_dir.join("nvngx_dlss.dll"), b"streamline").expect("streamline dll");
+    write_component_file(&amd_dir, DLSS_DLL, b"amd");
+    write_component_file(&streamline_dir, DLSS_DLL, b"streamline");
 
     let amd_install_path = path_string(&amd_dir);
     let streamline_install_path = path_string(&streamline_dir);
@@ -251,22 +193,20 @@ fn scan_auto_replaces_pre_existing_split_subfolder_entries_with_one_game() {
         .storage
         .list_games()
         .expect("list games should succeed");
-    let install_paths: Vec<&str> = games
+    let install_paths = games
         .iter()
-        .map(|game| game.install_path().as_str())
-        .collect();
+        .map(|game| game.install_path().as_str().to_owned())
+        .collect::<BTreeSet<_>>();
 
     assert_eq!(games.len(), 1, "stale subfolder rows should be pruned");
-    assert!(install_paths.contains(&path_string(game_dir.path()).as_str()));
-    assert!(!install_paths.contains(&amd_install_path.as_str()));
-    assert!(!install_paths.contains(&streamline_install_path.as_str()));
+    assert!(install_paths.contains(path_string(game_dir.path()).as_str()));
+    assert!(!install_paths.contains(amd_install_path.as_str()));
+    assert!(!install_paths.contains(streamline_install_path.as_str()));
 }
 
 #[test]
 fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
+    let _fixture = DesktopFixture::new("scan-auto-multiple-subfolders-one-game");
 
     let game_dir = tempfile::tempdir().expect("game dir");
     let amd_dir = game_dir.path().join("amd-ffx");
@@ -277,12 +217,9 @@ fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
         .join("NVIDIA")
         .join("Streamline");
 
-    fs::create_dir_all(&amd_dir).expect("amd-ffx dir should be created");
-    fs::create_dir_all(&streamline_dir).expect("streamline dir should be created");
-    fs::create_dir_all(&nested_dir).expect("nested streamline dir should be created");
-    fs::write(amd_dir.join("nvngx_dlss.dll"), b"amd-bytes").expect("amd dll");
-    fs::write(streamline_dir.join("nvngx_dlss.dll"), b"streamline-bytes").expect("streamline dll");
-    fs::write(nested_dir.join("nvngx_dlss.dll"), b"nested-bytes").expect("nested dll");
+    write_component_file(&amd_dir, DLSS_DLL, b"amd-bytes");
+    write_component_file(&streamline_dir, DLSS_DLL, b"streamline-bytes");
+    write_component_file(&nested_dir, DLSS_DLL, b"nested-bytes");
 
     let batch = open_auto_scan_batch().expect("auto scan batch should open");
     let results = scan_auto_in_batch(&batch, game_dir.path().to_path_buf())
@@ -294,8 +231,8 @@ fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
         "auto scan must keep one game even when DLLs live in multiple sub-folders",
     );
 
-    let cards = get_game_cards().expect("game cards should succeed");
-    let cards = cards.as_array().expect("game cards array");
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
+    let cards = game_cards.items();
 
     assert_eq!(cards.len(), 1, "catalog must contain exactly one card");
     assert_eq!(cards[0]["install_path"], path_string(game_dir.path()));
@@ -307,20 +244,18 @@ fn scan_auto_treats_dlls_in_multiple_subfolders_as_a_single_game() {
 
 #[test]
 fn scan_auto_recovers_from_partial_non_empty_hash_cache() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let db_path = temp_dir.path().join("catalog.db");
-    let _guard = DesktopCatalogEnvGuard::new(db_path);
+    let _fixture = DesktopFixture::new("scan-auto-recovers-partial-hash-cache");
 
     let game_dir = tempfile::tempdir().expect("game dir");
     let intel_dll = game_dir.path().join("libxess.dll");
     let amd_dll = game_dir.path().join("amd_fidelityfx_framegeneration.dll");
-    let nvidia_dll = game_dir.path().join("nvngx_dlss.dll");
+    let nvidia_dll = game_dir.path().join(DLSS_DLL);
 
-    fs::write(&intel_dll, b"intel-bytes").expect("intel dll should be written");
+    write_file(&intel_dll, b"intel-bytes");
     scan_manual_folder(game_dir.path().to_path_buf()).expect("warmup scan should succeed");
 
-    fs::write(&amd_dll, b"amd-bytes").expect("amd dll should be written");
-    fs::write(&nvidia_dll, b"nvidia-bytes").expect("nvidia dll should be written");
+    write_file(&amd_dll, b"amd-bytes");
+    write_file(&nvidia_dll, b"nvidia-bytes");
 
     let batch = open_auto_scan_batch().expect("auto scan batch should open");
     let results = scan_auto_in_batch(&batch, game_dir.path().to_path_buf())
@@ -328,8 +263,9 @@ fn scan_auto_recovers_from_partial_non_empty_hash_cache() {
 
     assert_eq!(results.len(), 1, "auto scan should keep one game result");
 
-    let cards = get_game_cards().expect("game cards should succeed");
-    let cards = cards.as_array().expect("game cards array");
+    let game_cards = query_all_game_cards().expect("game cards should succeed");
+    let cards = game_cards.items();
+
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0]["install_path"], path_string(game_dir.path()));
     assert_eq!(
@@ -337,16 +273,189 @@ fn scan_auto_recovers_from_partial_non_empty_hash_cache() {
         "auto scan should not keep stale partial fast-cache result",
     );
 
-    let tags = cards[0]["technology_tags"]
-        .as_array()
-        .expect("technology tags array")
-        .iter()
-        .filter_map(|value| value.as_str())
-        .collect::<Vec<_>>();
+    let tags = json_string_array_set(&cards[0], "library_tags");
+    assert!(tags.contains("intel_xess"));
+    assert!(tags.contains("amd_fsr_frame_generation"));
+    assert!(tags.contains("dlss_super_resolution"));
+}
 
-    assert!(tags.contains(&"intel_xess"));
-    assert!(tags.contains(&"amd_fsr_frame_generation"));
-    assert!(tags.contains(&"dlss_super_resolution"));
+#[test]
+fn query_game_cards_applies_search_library_and_include_without_filters() {
+    let fixture = DesktopFixture::new("query-game-cards-filters");
+
+    let game_a = sample_game("manual:C:/Games/Alpha", "Alpha Quest", "C:/Games/Alpha");
+    let game_b = sample_game("manual:C:/Games/Beta", "Beta Ops", "C:/Games/Beta");
+    let game_c = sample_game("manual:C:/Games/Gamma", "Gamma", "C:/Games/Gamma");
+
+    fixture.store_game(&game_a);
+    fixture.store_game(&game_b);
+    fixture.store_game(&game_c);
+
+    fixture.store_components(
+        game_a.id(),
+        &[sample_component_from_bytes(
+            "component:alpha:dlss",
+            game_a.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            "C:/Games/Alpha/nvngx_dlss.dll",
+            None,
+            b"alpha",
+        )],
+    );
+    fixture.store_components(
+        game_b.id(),
+        &[sample_component_from_bytes(
+            "component:beta:streamline",
+            game_b.id().as_str(),
+            GraphicsTechnology::NvidiaStreamline,
+            Swappability::Swappable,
+            "C:/Games/Beta/sl.interposer.dll",
+            None,
+            b"beta",
+        )],
+    );
+    fixture.store_components(game_c.id(), &[]);
+
+    let result = GameCardsQueryResult::query(
+        "a",
+        vec![String::from("dlss_super_resolution")],
+        "title",
+        "asc",
+        50,
+        0,
+    )
+    .expect("query should succeed");
+
+    let items = result.items();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Alpha Quest");
+    assert_eq!(result.total(), 1);
+}
+
+#[test]
+fn query_game_cards_returns_total_available_libraries_and_paged_items() {
+    let fixture = DesktopFixture::new("query-game-cards-page");
+
+    let game_a = sample_game("manual:C:/Games/One", "One", "C:/Games/One");
+    let game_b = sample_game("manual:C:/Games/Two", "Two", "C:/Games/Two");
+
+    fixture.store_game(&game_a);
+    fixture.store_game(&game_b);
+
+    fixture.store_components(
+        game_a.id(),
+        &[sample_component_from_bytes(
+            "component:one:dlssg",
+            game_a.id().as_str(),
+            GraphicsTechnology::DlssFrameGeneration,
+            Swappability::Swappable,
+            "C:/Games/One/nvngx_dlssg.dll",
+            None,
+            b"one",
+        )],
+    );
+    fixture.store_components(
+        game_b.id(),
+        &[sample_component_from_bytes(
+            "component:two:xess",
+            game_b.id().as_str(),
+            GraphicsTechnology::IntelXeSs,
+            Swappability::Swappable,
+            "C:/Games/Two/libxess.dll",
+            None,
+            b"two",
+        )],
+    );
+
+    let result = GameCardsQueryResult::query("", Vec::new(), "title", "asc", 1, 0)
+        .expect("query should succeed");
+
+    let available = result.available_libraries();
+
+    assert_eq!(result.items().len(), 1, "limit=1 should page items");
+    assert_eq!(result.total(), 2, "total should be count before paging");
+    assert!(
+        available.contains("dlss_frame_generation"),
+        "available libraries should include detected tags",
+    );
+    assert!(
+        available.contains("intel_xess"),
+        "available libraries should include detected tags",
+    );
+    assert!(
+        !result.query_fingerprint().is_empty(),
+        "fingerprint should be present",
+    );
+}
+
+#[test]
+fn query_game_cards_sorts_risk_by_domain_severity() {
+    let fixture = DesktopFixture::new("query-game-cards-risk-order");
+
+    let low_game = sample_game("manual:C:/Games/Low", "Low", "C:/Games/Low");
+    let medium_game = sample_game("manual:C:/Games/Medium", "Medium", "C:/Games/Medium");
+    let high_game = sample_game("manual:C:/Games/High", "High", "C:/Games/High");
+
+    fixture.store_game(&low_game);
+    fixture.store_game(&medium_game);
+    fixture.store_game(&high_game);
+
+    fixture.store_components(
+        low_game.id(),
+        &[sample_component_from_bytes(
+            "component:low",
+            low_game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            "C:/Games/Low/a.dll",
+            None,
+            b"low",
+        )],
+    );
+    fixture.store_components(
+        medium_game.id(),
+        &[sample_component_from_bytes(
+            "component:medium",
+            medium_game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::ReadOnly,
+            "C:/Games/Medium/a.dll",
+            None,
+            b"medium",
+        )],
+    );
+    fixture.store_components(
+        high_game.id(),
+        &[sample_component_from_bytes(
+            "component:high",
+            high_game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Unsafe,
+            "C:/Games/High/a.dll",
+            None,
+            b"high",
+        )],
+    );
+
+    let result = GameCardsQueryResult::query("", Vec::new(), "risk", "desc", 10, 0)
+        .expect("query should succeed");
+
+    let items = result.items();
+    assert_eq!(items[0]["risk_level"], "high");
+    assert_eq!(items[1]["risk_level"], "medium");
+    assert_eq!(items[2]["risk_level"], "low");
+}
+
+#[test]
+fn set_catalog_setting_blank_value_removes_existing_setting() {
+    let _fixture = DesktopFixture::new("settings-blank-removes");
+
+    set_catalog_setting("games_filters_v3", r#"{"libraries":["x"]}"#).expect("set should succeed");
+    set_catalog_setting("games_filters_v3", "   ").expect("blank set should delete row");
+
+    let value = get_catalog_setting("games_filters_v3").expect("get should succeed");
+    assert!(value["value"].is_null());
 }
 
 #[test]
@@ -396,22 +505,16 @@ fn prune_auto_scan_orphans_removes_library_root_and_unmatched_direct_children() 
         "library root and runtime sub-folder rows should be removed",
     );
 
-    let remaining_paths: Vec<String> = fixture
-        .storage
-        .list_games()
-        .expect("list games should succeed")
-        .iter()
-        .map(|game| game.install_path().as_str().to_owned())
-        .collect();
+    let remaining_paths = stored_install_paths(&fixture.storage);
 
-    assert!(!remaining_paths.iter().any(|p| p == library_root_path));
-    assert!(!remaining_paths.iter().any(|p| p == runtime_path));
-    assert!(remaining_paths.iter().any(|p| p == real_game_path));
+    assert!(!remaining_paths.contains(library_root_path));
+    assert!(!remaining_paths.contains(runtime_path));
+    assert!(remaining_paths.contains(real_game_path));
     assert!(
-        remaining_paths.iter().any(|p| p == nested_path),
+        remaining_paths.contains(nested_path),
         "deeper-than-direct-child rows must be preserved",
     );
-    assert!(remaining_paths.iter().any(|p| p == unrelated_path));
+    assert!(remaining_paths.contains(unrelated_path));
 }
 
 #[test]
@@ -420,9 +523,12 @@ fn prune_auto_scan_orphans_is_case_insensitive_on_windows_paths() {
 
     let library_root_path = "C:/Program Files/EA Games";
     let stored_path = "C:/Program Files/EA Games";
-    let game = sample_game(&format!("manual:{stored_path}"), "EA Games", stored_path);
 
-    fixture.store_game(&game);
+    fixture.store_game(&sample_game(
+        &format!("manual:{stored_path}"),
+        "EA Games",
+        stored_path,
+    ));
 
     let removed =
         prune_auto_scan_orphans_in_catalog(&["c:/program files/ea games".to_owned()], &[])
@@ -457,30 +563,18 @@ fn prune_auto_scan_orphans_retains_case_and_trailing_slash_variants() {
 
     assert_eq!(
         removed, 0,
-        "retained path key must match stored install path"
+        "retained path key must match stored install path",
     );
 
-    let remaining: Vec<String> = fixture
-        .storage
-        .list_games()
-        .expect("list games")
-        .iter()
-        .map(|g| g.install_path().as_str().to_owned())
-        .collect();
-
+    let remaining_paths = stored_install_paths(&fixture.storage);
     assert!(
-        remaining.iter().any(|p| p == stored_game_path),
+        remaining_paths.contains(stored_game_path),
         "game row must remain when retained list uses different case or trailing slash",
     );
 }
 
 #[test]
 fn prune_auto_scan_orphans_removes_steam_launcher_direct_child_not_in_retained() {
-    // Reproduces the user-visible bug: previous catalog versions persisted
-    // `Steamworks Common Redistributables` and `Steamworks Shared` as
-    // Steam-launcher cards (because their folders carry an appmanifest).
-    // After the discovery filter excludes them, the orphan rows must still
-    // be cleaned up even though their launcher is not Manual.
     let fixture = DesktopFixture::new("prune-auto-scan-orphans-steam-launcher");
 
     let library_root_path = "C:/Program Files (x86)/Steam/steamapps/common";
@@ -522,20 +616,14 @@ fn prune_auto_scan_orphans_removes_steam_launcher_direct_child_not_in_retained()
         "both Steam-launcher orphan rows should be pruned",
     );
 
-    let remaining_paths: Vec<String> = fixture
-        .storage
-        .list_games()
-        .expect("list games should succeed")
-        .iter()
-        .map(|game| game.install_path().as_str().to_owned())
-        .collect();
+    let remaining_paths = stored_install_paths(&fixture.storage);
 
     assert!(
-        remaining_paths.iter().any(|p| p == real_steam_game_path),
+        remaining_paths.contains(real_steam_game_path),
         "real Steam game must be retained because it is in retained_install_paths",
     );
-    assert!(!remaining_paths.iter().any(|p| p == steam_redist_path));
-    assert!(!remaining_paths.iter().any(|p| p == steam_shared_path));
+    assert!(!remaining_paths.contains(steam_redist_path));
+    assert!(!remaining_paths.contains(steam_shared_path));
 }
 
 #[test]
@@ -568,7 +656,7 @@ fn prune_auto_scan_orphans_keeps_legit_steam_card_when_in_retained() {
     .expect("prune should succeed");
 
     assert_eq!(removed, 0, "rediscovered Steam games must not be pruned");
-    assert_eq!(fixture.storage.list_games().expect("list games").len(), 2,);
+    assert_eq!(fixture.storage.list_games().expect("list games").len(), 2);
 }
 
 #[test]
@@ -576,13 +664,12 @@ fn prune_auto_scan_orphans_with_empty_library_roots_is_noop() {
     let fixture = DesktopFixture::new("prune-auto-scan-orphans-noop");
 
     let path = "C:/Games/Keep";
-    let game = sample_game(&format!("manual:{path}"), "Keep", path);
-    fixture.store_game(&game);
+    fixture.store_game(&sample_game(&format!("manual:{path}"), "Keep", path));
 
     let removed = prune_auto_scan_orphans_in_catalog(&[], &[]).expect("prune should succeed");
 
     assert_eq!(removed, 0);
-    assert_eq!(fixture.storage.list_games().expect("list games").len(), 1,);
+    assert_eq!(fixture.storage.list_games().expect("list games").len(), 1);
 }
 
 #[test]
@@ -591,11 +678,11 @@ fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
     let game_folder = tempfile::tempdir().expect("game dir");
     let artifact_folder = tempfile::tempdir().expect("artifact dir");
 
-    let source_path = game_folder.path().join("nvngx_dlss.dll");
-    let artifact_path = artifact_folder.path().join("nvngx_dlss.dll");
+    let source_path = game_folder.path().join(DLSS_DLL);
+    let artifact_path = artifact_folder.path().join(DLSS_DLL);
 
-    fs::write(&source_path, b"original-bytes").expect("source file should be written");
-    fs::write(&artifact_path, b"replacement-bytes").expect("artifact file should be written");
+    write_file(&source_path, b"original-bytes");
+    write_file(&artifact_path, b"replacement-bytes");
 
     let install_path = path_string(game_folder.path());
     let game = sample_game(
@@ -607,22 +694,22 @@ fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
     fixture.store_game(&game);
     fixture.store_components(
         game.id(),
-        &[sample_component(
+        &[sample_component_from_bytes(
             "component:desktop:dlss",
             game.id().as_str(),
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&source_path),
             Some("3.5.0"),
-            &sha256_hex(b"original-bytes"),
+            b"original-bytes",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(sample_artifact_from_bytes(
         "artifact:desktop:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
         Some("3.7.0"),
-        &sha256_hex(b"replacement-bytes"),
+        b"replacement-bytes",
         None,
     ));
 
@@ -633,23 +720,17 @@ fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
     )
     .expect("plan should build");
 
-    let operation_id = plan["operation_id"]
-        .as_str()
-        .expect("operation id should be string")
-        .to_owned();
-    let confirmation_token = plan["confirmation_token"]
-        .as_str()
-        .expect("confirmation token should be string")
-        .to_owned();
+    let operation_id = json_str_field(&plan, "operation_id").to_owned();
+    let confirmation_token = json_str_field(&plan, "confirmation_token").to_owned();
 
     let applied = apply_operation_plan(operation_id.clone(), confirmation_token)
         .expect("apply should succeed");
 
     assert_eq!(applied["status"], "completed");
-    assert_eq!(applied["items"].as_array().expect("items array").len(), 1);
+    assert_eq!(json_array_field(&applied, "items").len(), 1);
     assert_eq!(
         fs::read(&source_path).expect("source bytes should be readable"),
-        b"replacement-bytes"
+        b"replacement-bytes",
     );
 
     let rolled_back = rollback_operation(operation_id).expect("rollback should succeed");
@@ -657,7 +738,7 @@ fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
     assert_eq!(rolled_back["status"], "rolled_back");
     assert_eq!(
         fs::read(&source_path).expect("restored bytes should be readable"),
-        b"original-bytes"
+        b"original-bytes",
     );
 }
 
@@ -667,11 +748,11 @@ fn desktop_apply_rejects_invalid_confirmation_token() {
     let game_folder = tempfile::tempdir().expect("game dir");
     let artifact_folder = tempfile::tempdir().expect("artifact dir");
 
-    let source_path = game_folder.path().join("nvngx_dlss.dll");
-    let artifact_path = artifact_folder.path().join("nvngx_dlss.dll");
+    let source_path = game_folder.path().join(DLSS_DLL);
+    let artifact_path = artifact_folder.path().join(DLSS_DLL);
 
-    fs::write(&source_path, b"original-bytes").expect("source file should be written");
-    fs::write(&artifact_path, b"replacement-bytes").expect("artifact file should be written");
+    write_file(&source_path, b"original-bytes");
+    write_file(&artifact_path, b"replacement-bytes");
 
     let install_path = path_string(game_folder.path());
     let game = sample_game(
@@ -683,22 +764,22 @@ fn desktop_apply_rejects_invalid_confirmation_token() {
     fixture.store_game(&game);
     fixture.store_components(
         game.id(),
-        &[sample_component(
+        &[sample_component_from_bytes(
             "component:desktop:invalid-token",
             game.id().as_str(),
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&source_path),
             Some("3.5.0"),
-            &sha256_hex(b"original-bytes"),
+            b"original-bytes",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(sample_artifact_from_bytes(
         "artifact:desktop:invalid-token-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
         Some("3.7.0"),
-        &sha256_hex(b"replacement-bytes"),
+        b"replacement-bytes",
         None,
     ));
 
@@ -709,19 +790,17 @@ fn desktop_apply_rejects_invalid_confirmation_token() {
     )
     .expect("plan should build");
 
-    let operation_id = plan["operation_id"]
-        .as_str()
-        .expect("operation id should be string");
+    let operation_id = json_str_field(&plan, "operation_id");
 
     let error = apply_operation_plan(operation_id, "invalid-confirmation-token")
         .expect_err("invalid token should fail");
 
     assert!(error
         .to_string()
-        .contains("confirmation token mismatch for operation"));
+        .contains("confirmation token mismatch for operation"),);
     assert_eq!(
         fs::read(&source_path).expect("source bytes should be readable"),
-        b"original-bytes"
+        b"original-bytes",
     );
 }
 
@@ -734,32 +813,32 @@ fn dashboard_risk_level_returns_unknown_without_components() {
 fn dashboard_risk_level_returns_highest_component_risk() {
     let game_id = "manual:C:/Games/RiskFixture";
     let components = vec![
-        sample_component(
+        sample_component_from_bytes(
             "component:risk:low",
             game_id,
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
             "C:/Games/RiskFixture/low/nvngx_dlss.dll",
             None,
-            &sha256_hex(b"risk-low"),
+            b"risk-low",
         ),
-        sample_component(
+        sample_component_from_bytes(
             "component:risk:medium",
             game_id,
             GraphicsTechnology::DlssSuperResolution,
             Swappability::ReadOnly,
             "C:/Games/RiskFixture/medium/nvngx_dlss.dll",
             None,
-            &sha256_hex(b"risk-medium"),
+            b"risk-medium",
         ),
-        sample_component(
+        sample_component_from_bytes(
             "component:risk:high",
             game_id,
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Unsafe,
             "C:/Games/RiskFixture/high/nvngx_dlss.dll",
             None,
-            &sha256_hex(b"risk-high"),
+            b"risk-high",
         ),
     ];
 
@@ -767,32 +846,32 @@ fn dashboard_risk_level_returns_highest_component_risk() {
 }
 
 #[test]
-fn technology_tags_are_deduplicated() {
+fn library_tags_are_deduplicated() {
     let game_id = "manual:C:/Games/TagsFixture";
     let components = vec![
-        sample_component(
+        sample_component_from_bytes(
             "component:tags:dlss-a",
             game_id,
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
             "C:/Games/TagsFixture/a/nvngx_dlss.dll",
             None,
-            &sha256_hex(b"tags-dlss-a"),
+            b"tags-dlss-a",
         ),
-        sample_component(
+        sample_component_from_bytes(
             "component:tags:dlss-b",
             game_id,
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
             "C:/Games/TagsFixture/b/nvngx_dlss.dll",
             None,
-            &sha256_hex(b"tags-dlss-b"),
+            b"tags-dlss-b",
         ),
     ];
 
     assert_eq!(
-        technology_tags(&components),
-        vec!["dlss_super_resolution".to_owned()]
+        library_tags(&components),
+        vec!["dlss_super_resolution".to_owned()],
     );
 }
 
@@ -803,6 +882,48 @@ fn normalized_path_string_uses_forward_slashes() {
     assert_eq!(path_string(path), "C:/Games/RenderPilot/nvngx_dlss.dll");
 }
 
+struct GameCardsQueryResult {
+    value: Value,
+}
+
+impl GameCardsQueryResult {
+    fn query(
+        search_query: impl Into<String>,
+        selected_libraries: Vec<String>,
+        sort_field: impl Into<String>,
+        sort_direction: impl Into<String>,
+        page_limit: i64,
+        page_offset: i64,
+    ) -> Result<Self, crate::CliError> {
+        let value = query_game_cards(
+            search_query.into(),
+            selected_libraries,
+            sort_field.into(),
+            sort_direction.into(),
+            page_limit,
+            page_offset,
+        )?;
+
+        Ok(Self { value })
+    }
+
+    fn items(&self) -> &[Value] {
+        json_array_field(&self.value, "items")
+    }
+
+    fn total(&self) -> i64 {
+        json_i64_field(&self.value, "total")
+    }
+
+    fn available_libraries(&self) -> BTreeSet<String> {
+        json_string_array_set(&self.value, "availableLibraries")
+    }
+
+    fn query_fingerprint(&self) -> &str {
+        json_str_field(&self.value, "queryFingerprint")
+    }
+}
+
 struct DesktopFixture {
     _temp_dir: tempfile::TempDir,
     _env: DesktopCatalogEnvGuard,
@@ -810,8 +931,12 @@ struct DesktopFixture {
 }
 
 impl DesktopFixture {
-    fn new(_name: &str) -> Self {
-        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    fn new(name: &str) -> Self {
+        let temp_dir = tempfile::Builder::new()
+            .prefix(name)
+            .tempdir()
+            .expect("temp dir should be created");
+
         let db_path = temp_dir.path().join("catalog.db");
         let env = DesktopCatalogEnvGuard::new(db_path.clone());
         let storage = SqliteStorage::open(&db_path).expect("sqlite should open");
@@ -827,11 +952,7 @@ impl DesktopFixture {
         self.storage.upsert_game(game).expect("game should store");
     }
 
-    fn store_components(
-        &self,
-        game_id: &GameId,
-        components: &[renderpilot_domain::GraphicsComponent],
-    ) {
+    fn store_components(&self, game_id: &GameId, components: &[GraphicsComponent]) {
         self.storage
             .replace_components_for_game(game_id, components)
             .expect("components should store");
@@ -914,6 +1035,28 @@ fn sample_game_with_launcher(
     )
 }
 
+fn sample_component_from_bytes(
+    component_id: &str,
+    game_id: &str,
+    technology: GraphicsTechnology,
+    swappability: Swappability,
+    path: &str,
+    version: Option<&str>,
+    bytes: &[u8],
+) -> GraphicsComponent {
+    let sha256 = sha256_hex(bytes);
+
+    sample_component(
+        component_id,
+        game_id,
+        technology,
+        swappability,
+        path,
+        version,
+        &sha256,
+    )
+}
+
 fn sample_component(
     component_id: &str,
     game_id: &str,
@@ -922,7 +1065,7 @@ fn sample_component(
     path: &str,
     version: Option<&str>,
     sha256: &str,
-) -> renderpilot_domain::GraphicsComponent {
+) -> GraphicsComponent {
     let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
         .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
@@ -930,7 +1073,7 @@ fn sample_component(
         file = file.with_version(Version::parse(version).expect("version should be valid"));
     }
 
-    renderpilot_domain::GraphicsComponent::new(
+    GraphicsComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,
@@ -938,6 +1081,26 @@ fn sample_component(
         swappability,
     )
     .with_file(file)
+}
+
+fn sample_artifact_from_bytes(
+    artifact_id: &str,
+    technology: GraphicsTechnology,
+    path: &str,
+    version: Option<&str>,
+    bytes: &[u8],
+    source_game_id: Option<&str>,
+) -> LibraryArtifact {
+    let sha256 = sha256_hex(bytes);
+
+    sample_artifact(
+        artifact_id,
+        technology,
+        path,
+        version,
+        &sha256,
+        source_game_id,
+    )
 }
 
 fn sample_artifact(
@@ -952,6 +1115,7 @@ fn sample_artifact(
         .file_name()
         .and_then(|name| name.to_str())
         .expect("artifact path should have file name");
+
     let mut file = ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
         .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
@@ -976,4 +1140,86 @@ fn sample_artifact(
         ),
         None => artifact,
     }
+}
+
+fn write_component_file(dir: &Path, file_name: &str, bytes: &[u8]) -> PathBuf {
+    fs::create_dir_all(dir).unwrap_or_else(|error| {
+        panic!(
+            "component directory should be created: {}: {error}",
+            dir.display(),
+        )
+    });
+
+    let path = dir.join(file_name);
+    write_file(&path, bytes);
+
+    path
+}
+
+fn write_file(path: &Path, bytes: &[u8]) {
+    fs::write(path, bytes)
+        .unwrap_or_else(|error| panic!("test file should be written: {}: {error}", path.display()));
+}
+
+fn folder_title(path: &Path) -> &str {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .expect("folder name should be utf-8")
+}
+
+fn stored_install_paths(storage: &SqliteStorage) -> BTreeSet<String> {
+    storage
+        .list_games()
+        .expect("list games should succeed")
+        .iter()
+        .map(|game| game.install_path().as_str().to_owned())
+        .collect()
+}
+
+fn card_field_string_set(cards: &[Value], field_name: &str) -> BTreeSet<String> {
+    cards
+        .iter()
+        .map(|card| json_str_field(card, field_name).to_owned())
+        .collect()
+}
+
+fn json_array_field<'a>(value: &'a Value, field_name: &str) -> &'a [Value] {
+    value
+        .get(field_name)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_else(|| panic!("expected `{field_name}` to be an array"))
+}
+
+fn json_str_field<'a>(value: &'a Value, field_name: &str) -> &'a str {
+    value
+        .get(field_name)
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("expected `{field_name}` to be a string"))
+}
+
+fn json_i64_field(value: &Value, field_name: &str) -> i64 {
+    let field = value
+        .get(field_name)
+        .unwrap_or_else(|| panic!("expected `{field_name}` field to exist"));
+
+    field
+        .as_i64()
+        .or_else(|| field.as_u64().and_then(|value| i64::try_from(value).ok()))
+        .unwrap_or_else(|| panic!("expected `{field_name}` to be an integer"))
+}
+
+fn json_string_array_set(value: &Value, field_name: &str) -> BTreeSet<String> {
+    json_array_field(value, field_name)
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .unwrap_or_else(|| panic!("expected `{field_name}` items to be strings"))
+                .to_owned()
+        })
+        .collect()
+}
+
+fn string_set(values: &[&str]) -> BTreeSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
 }

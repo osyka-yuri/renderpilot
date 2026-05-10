@@ -11,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use install_partitioner::derive_install_roots;
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_detection::{DetectedLibraryFile, FileHashCache, LibraryPatternComponentDetector};
 use renderpilot_domain::{
@@ -19,7 +20,6 @@ use renderpilot_domain::{
 };
 use renderpilot_platform_windows::ManualFolderGameSource;
 use renderpilot_storage_sqlite::{FileHashCacheRow, ScanWriteUnit, SqliteStorage};
-use install_partitioner::derive_install_roots;
 use scan_plan::{decide_fast_scan_fallback, DetectionMode, InstallRootStrategy};
 
 use crate::error::CliError;
@@ -409,7 +409,10 @@ fn library_file_path(library: &DetectedLibraryFile) -> &Path {
 /// Detects sub-directory roots that should be treated as separate game installs.
 ///
 /// Returns `[root]` when the scan result looks like a single installation.
-pub(super) fn detect_game_install_roots(root: &Path, libraries: &[DetectedLibraryFile]) -> Vec<PathBuf> {
+pub(super) fn detect_game_install_roots(
+    root: &Path,
+    libraries: &[DetectedLibraryFile],
+) -> Vec<PathBuf> {
     let relative_library_dirs = relative_library_parent_dirs(root, libraries);
 
     if relative_library_dirs.is_empty() {

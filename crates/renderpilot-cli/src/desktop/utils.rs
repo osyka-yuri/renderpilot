@@ -46,7 +46,7 @@ pub(crate) fn available_update_count(
         .count()
 }
 
-pub(crate) fn technology_tags(components: &[GraphicsComponent]) -> Vec<String> {
+pub(crate) fn library_tags(components: &[GraphicsComponent]) -> Vec<String> {
     components
         .iter()
         .map(|component| component.technology().as_slug().to_owned())
