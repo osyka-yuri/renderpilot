@@ -3,7 +3,11 @@
   import Badge from '@shared/ui/Badge.svelte';
   import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
 
-  export let stats: DashboardStats;
+  type Props = {
+    stats: DashboardStats;
+  };
+
+  let { stats }: Props = $props();
 </script>
 
 <BadgeGroup class="dashboard-summary" aria-label="Dashboard summary">

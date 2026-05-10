@@ -2,7 +2,11 @@
   import Badge from '@shared/ui/Badge.svelte';
   import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
 
-  export let technologies: string[] = [];
+  type Props = {
+    technologies?: string[];
+  };
+
+  let { technologies = [] }: Props = $props();
 </script>
 
 <BadgeGroup class="technology-row">

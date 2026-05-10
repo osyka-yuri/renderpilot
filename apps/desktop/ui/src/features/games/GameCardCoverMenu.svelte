@@ -1,39 +1,71 @@
+<script module lang="ts">
+  let nextCoverMenuPanelId = 0;
+
+  function createCoverMenuPanelId(): string {
+    nextCoverMenuPanelId += 1;
+
+    return `cover-menu-${nextCoverMenuPanelId}`;
+  }
+</script>
+
 <script lang="ts">
   import { onMount, tick } from 'svelte';
 
   import { isDesktopPreviewMode } from '@shared/api/desktop';
+  import Popover from '@shared/ui/Popover.svelte';
+  import type { PopoverOpenChangeEvent } from '@shared/ui/popover-types';
   import { portal } from '@shared/utils/portal';
 
   import { attachCoverMenuResizeScroll, layoutCoverMenuPanel } from './cover-menu-layout';
 
-  export let title: string;
-  export let disabled = false;
-  /** When true, disables only “Fetch cover online” (e.g. background auto-fetch already running). */
-  export let autoFetchInProgress = false;
-  export let hasCover = false;
-  export let open = false;
+  type MenuActionId = 'fetch-cover' | 'pick-cover' | 'clear-cover';
 
-  /** Parent coordinates exclusive menu: pass `true` when this card should show the panel. */
-  export let onOpenChange: (next: boolean) => void = (): void => {
-    // Intentionally empty.
+  type MenuActionHandler = () => void | Promise<void>;
+
+  type MenuAction = {
+    id: MenuActionId;
+    label: string;
+    title: string;
+    disabled: boolean;
+    danger?: boolean;
+    handler: MenuActionHandler;
   };
 
-  export let onFetchCover: () => void | Promise<void> = (): void => {
-    // Intentionally empty.
+  type Props = {
+    title: string;
+    disabled?: boolean;
+    autoFetchInProgress?: boolean;
+    hasCover?: boolean;
+    open?: boolean;
+
+    onOpenChange?: (next: boolean) => void;
+    onFetchCover?: MenuActionHandler;
+    onPickCover?: MenuActionHandler;
+    onClearCover?: MenuActionHandler;
   };
 
-  export let onPickCover: () => void | Promise<void> = (): void => {
-    // Intentionally empty.
-  };
+  const ENABLED_MENU_ITEM_SELECTOR = '.card-menu-item:not(:disabled)';
+  const noopMenuAction: MenuActionHandler = () => undefined;
 
-  export let onClearCover: () => void | Promise<void> = (): void => {
-    // Intentionally empty.
-  };
+  let {
+    title,
+    disabled = false,
+    autoFetchInProgress = false,
+    hasCover = false,
+    open = false,
 
-  let mounted = false;
+    onOpenChange,
+    onFetchCover,
+    onPickCover,
+    onClearCover,
+  }: Props = $props();
 
-  let triggerEl: HTMLButtonElement | null = null;
-  let panelEl: HTMLDivElement | null = null;
+  let mounted = $state(false);
+
+  let triggerEl = $state<HTMLButtonElement | null>(null);
+  let panelEl = $state<HTMLDivElement | null>(null);
+
+  const panelId = createCoverMenuPanelId();
 
   let cleanupOpenState: (() => void) | null = null;
 
@@ -42,22 +74,50 @@
 
   /**
    * Invalidates async work scheduled for a previous open-state.
-   * This prevents late tick()/RAF callbacks from touching a closed or destroyed menu.
+   * Prevents late tick()/RAF callbacks from touching a closed or destroyed menu.
    */
   let openStateVersion = 0;
 
-  $: fetchCoverDisabled = disabled || autoFetchInProgress;
-  $: pickCoverDisabled = disabled || isDesktopPreviewMode();
-  $: clearCoverDisabled = disabled || !hasCover;
+  const isMenuOpen = $derived(open && !disabled);
 
-  $: syncOpenState(open, mounted);
+  const menuActions = $derived<MenuAction[]>([
+    {
+      id: 'fetch-cover',
+      label: 'Fetch cover online',
+      disabled: disabled || autoFetchInProgress,
+      title:
+        'Uses Steam or GOG CDN when possible; otherwise SteamGridDB if you configured an API key in Settings.',
+      handler: onFetchCover ?? noopMenuAction,
+    },
+    {
+      id: 'pick-cover',
+      label: 'Use image file as cover…',
+      disabled: disabled || isDesktopPreviewMode(),
+      title: 'Choose a PNG, JPG, WebP, or GIF from disk and save it as this game’s cover.',
+      handler: onPickCover ?? noopMenuAction,
+    },
+    {
+      id: 'clear-cover',
+      label: 'Remove saved cover',
+      disabled: disabled || !hasCover,
+      danger: true,
+      title: 'Removes the saved cover file and clears the thumbnail for this game.',
+      handler: onClearCover ?? noopMenuAction,
+    },
+  ]);
 
-  $: if (disabled && open) {
-    closeMenu({ restoreFocus: false });
-  }
+  $effect(() => {
+    syncOpenLifecycle(isMenuOpen, mounted);
+  });
 
-  function syncOpenState(isOpen: boolean, isMounted: boolean): void {
-    if (!isMounted || !isOpen) {
+  $effect(() => {
+    if (disabled && open) {
+      closeMenu({ restoreFocus: false });
+    }
+  });
+
+  function syncOpenLifecycle(shouldBeOpen: boolean, shouldBeMounted: boolean): void {
+    if (!shouldBeMounted || !shouldBeOpen) {
       teardownOpenState();
       return;
     }
@@ -70,24 +130,14 @@
       return;
     }
 
-    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    document.addEventListener('keydown', handleDocumentKeydown, true);
-
-    const detachLayoutListeners = attachCoverMenuResizeScroll(requestLayout);
-
-    cleanupOpenState = (): void => {
-      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
-      document.removeEventListener('keydown', handleDocumentKeydown, true);
-      detachLayoutListeners();
-    };
-
+    cleanupOpenState = attachCoverMenuResizeScroll(requestLayout);
     scheduleInitialOpenWork();
   }
 
   function teardownOpenState(): void {
     const cleanup = cleanupOpenState;
-    cleanupOpenState = null;
 
+    cleanupOpenState = null;
     cleanup?.();
 
     invalidateScheduledOpenWork();
@@ -95,11 +145,7 @@
 
   function invalidateScheduledOpenWork(): void {
     openStateVersion += 1;
-
-    if (layoutRafId !== null) {
-      cancelAnimationFrame(layoutRafId);
-      layoutRafId = null;
-    }
+    cancelLayoutFrame();
   }
 
   function scheduleInitialOpenWork(): void {
@@ -112,59 +158,58 @@
 
       layoutNow();
       focusFirstMenuItem();
-
-      layoutRafId = requestAnimationFrame(() => {
-        layoutRafId = null;
-
-        if (isCurrentOpenState(version)) {
-          layoutNow();
-        }
-      });
+      scheduleLayoutFrame(version);
     });
   }
 
   function isCurrentOpenState(version: number): boolean {
-    return mounted && open && cleanupOpenState !== null && openStateVersion === version;
+    return mounted && isMenuOpen && cleanupOpenState !== null && openStateVersion === version;
   }
 
   function requestLayout(): void {
-    if (layoutRafId !== null) {
+    scheduleLayoutFrame();
+  }
+
+  function scheduleLayoutFrame(version?: number): void {
+    if (!mounted || !isMenuOpen || layoutRafId !== null) {
       return;
     }
 
     layoutRafId = requestAnimationFrame(() => {
       layoutRafId = null;
+
+      if (version !== undefined && !isCurrentOpenState(version)) {
+        return;
+      }
+
       layoutNow();
     });
   }
 
+  function cancelLayoutFrame(): void {
+    if (layoutRafId === null) {
+      return;
+    }
+
+    cancelAnimationFrame(layoutRafId);
+    layoutRafId = null;
+  }
+
+  function cancelFocusFrame(): void {
+    if (focusRafId === null) {
+      return;
+    }
+
+    cancelAnimationFrame(focusRafId);
+    focusRafId = null;
+  }
+
   function layoutNow(): void {
-    if (!open || triggerEl === null || panelEl === null) {
+    if (!mounted || !isMenuOpen || triggerEl === null || panelEl === null) {
       return;
     }
 
     layoutCoverMenuPanel(triggerEl, panelEl);
-  }
-
-  function handleDocumentPointerDown(event: PointerEvent): void {
-    if (!open) {
-      return;
-    }
-
-    if (eventTargetsNode(event, triggerEl) || eventTargetsNode(event, panelEl)) {
-      return;
-    }
-
-    closeMenu({ restoreFocus: false });
-  }
-
-  function handleDocumentKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || !open) {
-      return;
-    }
-
-    event.preventDefault();
-    closeMenu({ restoreFocus: true });
   }
 
   function handlePanelKeydown(event: KeyboardEvent): void {
@@ -188,21 +233,13 @@
 
       case 'End':
         event.preventDefault();
-        focusMenuItemAt(getEnabledMenuItems().length - 1);
+        focusMenuItemAt(-1);
+        break;
+
+      case 'Tab':
+        closeMenu({ restoreFocus: false });
         break;
     }
-  }
-
-  function eventTargetsNode(event: Event, node: Node | null): boolean {
-    if (node === null) {
-      return false;
-    }
-
-    if (event.composedPath().includes(node)) {
-      return true;
-    }
-
-    return event.target instanceof Node && node.contains(event.target);
   }
 
   function getEnabledMenuItems(): HTMLButtonElement[] {
@@ -210,16 +247,14 @@
       return [];
     }
 
-    return Array.from(
-      panelEl.querySelectorAll<HTMLButtonElement>('.card-menu-item:not(:disabled)'),
-    );
+    return Array.from(panelEl.querySelectorAll<HTMLButtonElement>(ENABLED_MENU_ITEM_SELECTOR));
   }
 
   function focusFirstMenuItem(): void {
     const enabledItems = getEnabledMenuItems();
 
     if (enabledItems.length > 0) {
-      enabledItems[0].focus({ preventScroll: true });
+      enabledItems[0]?.focus({ preventScroll: true });
       return;
     }
 
@@ -234,7 +269,8 @@
     }
 
     const activeIndex = enabledItems.indexOf(document.activeElement as HTMLButtonElement);
-    focusMenuItemAt(activeIndex + 1);
+
+    focusMenuItemAt(activeIndex + 1, enabledItems);
   }
 
   function focusPreviousMenuItem(): void {
@@ -245,12 +281,12 @@
     }
 
     const activeIndex = enabledItems.indexOf(document.activeElement as HTMLButtonElement);
-    focusMenuItemAt(activeIndex <= 0 ? enabledItems.length - 1 : activeIndex - 1);
+    const previousIndex = activeIndex === -1 ? enabledItems.length - 1 : activeIndex - 1;
+
+    focusMenuItemAt(previousIndex, enabledItems);
   }
 
-  function focusMenuItemAt(index: number): void {
-    const enabledItems = getEnabledMenuItems();
-
+  function focusMenuItemAt(index: number, enabledItems = getEnabledMenuItems()): void {
     if (enabledItems.length === 0) {
       return;
     }
@@ -258,16 +294,23 @@
     const normalizedIndex =
       ((index % enabledItems.length) + enabledItems.length) % enabledItems.length;
 
-    enabledItems[normalizedIndex].focus({ preventScroll: true });
+    enabledItems[normalizedIndex]?.focus({ preventScroll: true });
   }
 
   export function focusTrigger(): void {
-    if (focusRafId !== null) {
-      cancelAnimationFrame(focusRafId);
+    if (!mounted) {
+      return;
     }
+
+    cancelFocusFrame();
 
     focusRafId = requestAnimationFrame(() => {
       focusRafId = null;
+
+      if (!mounted) {
+        return;
+      }
+
       triggerEl?.focus({ preventScroll: true });
     });
   }
@@ -277,7 +320,7 @@
       return;
     }
 
-    onOpenChange(true);
+    onOpenChange?.(true);
   }
 
   function closeMenu(options: { restoreFocus?: boolean } = {}): void {
@@ -285,7 +328,7 @@
       return;
     }
 
-    onOpenChange(false);
+    onOpenChange?.(false);
 
     if (options.restoreFocus === true) {
       focusTrigger();
@@ -293,7 +336,7 @@
   }
 
   function toggleMenu(): void {
-    if (open) {
+    if (isMenuOpen) {
       closeMenu({ restoreFocus: false });
       return;
     }
@@ -306,20 +349,40 @@
     toggleMenu();
   }
 
-  function handleMenuActionClick(event: MouseEvent, action: () => void | Promise<void>): void {
-    event.stopPropagation();
+  function handlePopoverOpenChange(event: PopoverOpenChangeEvent): void {
+    if (event.open) {
+      openMenu();
+      return;
+    }
 
     closeMenu({ restoreFocus: false });
 
+    // Popover handles focus restore on dismiss paths.
+  }
+
+  function handleMenuActionClick(event: MouseEvent, action: MenuAction): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (action.disabled) {
+      return;
+    }
+
+    closeMenu({ restoreFocus: false });
+
+    void runMenuAction(action);
+  }
+
+  async function runMenuAction(action: MenuAction): Promise<void> {
     try {
-      void Promise.resolve(action()).catch(reportMenuActionError);
+      await action.handler();
     } catch (error) {
-      reportMenuActionError(error);
+      reportMenuActionError(action.id, error);
     }
   }
 
-  function reportMenuActionError(error: unknown): void {
-    console.error('Cover menu action failed.', error);
+  function reportMenuActionError(actionId: MenuActionId, error: unknown): void {
+    console.error(`Cover menu action "${actionId}" failed.`, error);
   }
 
   onMount(() => {
@@ -329,23 +392,35 @@
       mounted = false;
 
       teardownOpenState();
-
-      if (focusRafId !== null) {
-        cancelAnimationFrame(focusRafId);
-        focusRafId = null;
-      }
+      cancelLayoutFrame();
+      cancelFocusFrame();
     };
   });
 </script>
 
 <div class="card-corner-menu">
+  <Popover
+    anchor={triggerEl}
+    referenceElement={triggerEl}
+    contentElement={panelEl}
+    open={isMenuOpen}
+    renderPanel={false}
+    initialFocus={() => panelEl}
+    restoreFocusTarget={() => triggerEl}
+    restoreFocusOnClose
+    closeOnEscape
+    closeOnOutsidePointerDown
+    onOpenChange={handlePopoverOpenChange}
+  />
+
   <button
     bind:this={triggerEl}
     type="button"
     class="card-menu-trigger"
     aria-label={`Cover options for ${title}`}
     aria-haspopup="menu"
-    aria-expanded={open ? 'true' : 'false'}
+    aria-expanded={isMenuOpen ? 'true' : 'false'}
+    aria-controls={isMenuOpen ? panelId : undefined}
     {disabled}
     onclick={handleTriggerClick}
   >
@@ -362,56 +437,32 @@
     </svg>
   </button>
 
-  {#if open}
+  {#if isMenuOpen}
     <div
       bind:this={panelEl}
+      id={panelId}
       class="card-menu-panel"
       role="menu"
       tabindex="-1"
       use:portal
       onkeydown={handlePanelKeydown}
     >
-      <button
-        type="button"
-        class="card-menu-item"
-        role="menuitem"
-        tabindex="-1"
-        disabled={fetchCoverDisabled}
-        title="Uses Steam or GOG CDN when possible; otherwise SteamGridDB if you configured an API key in Settings."
-        onclick={(event: MouseEvent): void => {
-          handleMenuActionClick(event, onFetchCover);
-        }}
-      >
-        Fetch cover online
-      </button>
-
-      <button
-        type="button"
-        class="card-menu-item"
-        role="menuitem"
-        tabindex="-1"
-        disabled={pickCoverDisabled}
-        title="Choose a PNG, JPG, WebP, or GIF from disk and save it as this game’s cover."
-        onclick={(event: MouseEvent): void => {
-          handleMenuActionClick(event, onPickCover);
-        }}
-      >
-        Use image file as cover…
-      </button>
-
-      <button
-        type="button"
-        class="card-menu-item card-menu-item-danger"
-        role="menuitem"
-        tabindex="-1"
-        disabled={clearCoverDisabled}
-        title="Removes the saved cover file and clears the thumbnail for this game."
-        onclick={(event: MouseEvent): void => {
-          handleMenuActionClick(event, onClearCover);
-        }}
-      >
-        Remove saved cover
-      </button>
+      {#each menuActions as action (action.id)}
+        <button
+          type="button"
+          class="card-menu-item"
+          class:card-menu-item-danger={action.danger === true}
+          role="menuitem"
+          tabindex="-1"
+          disabled={action.disabled}
+          title={action.title}
+          onclick={(event: MouseEvent): void => {
+            handleMenuActionClick(event, action);
+          }}
+        >
+          {action.label}
+        </button>
+      {/each}
     </div>
   {/if}
 </div>

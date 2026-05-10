@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { open } from '@tauri-apps/plugin-dialog';
+
   import type { GameCard } from '@shared/api/types';
   import type { GameSelectionHandler, VoidHandler } from '@shared/utils/callbacks';
   import {
@@ -8,108 +11,329 @@
     setGameCover,
   } from '@shared/api/desktop';
   import { describeCommandError } from '@shared/api/errors';
-  import Badge from '@shared/ui/Badge.svelte';
-  import BadgeGroup from '@shared/ui/BadgeGroup.svelte';
-  import Button from '@shared/ui/Button.svelte';
-  import Surface from '@shared/ui/Surface.svelte';
-  import GameTechnologyBadges from '@features/games/GameTechnologyBadges.svelte';
-  import GameCardCoverMenu from '@features/games/GameCardCoverMenu.svelte';
-  import GamesDashboardSummary from '@features/games/GamesDashboardSummary.svelte';
+  import Popover from '@shared/ui/Popover.svelte';
+  import type { PopoverOpenChangeEvent } from '@shared/ui/popover-types';
+  import { formatLabel } from '@shared/utils/presenters';
+
   import GamesEmptyState from '@features/games/GamesEmptyState.svelte';
-  import { getDashboardStats, toGameCardViewModel } from '@features/games/games-screen-model';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import GamesHeaderBar from '@features/games/components/GamesHeaderBar.svelte';
+  import GamesFilterToolbar from '@features/games/components/GamesFilterToolbar.svelte';
+  import GamesGrid from '@features/games/components/GamesGrid.svelte';
+  import GamesLibraryFilterPopover from '@features/games/components/GamesLibraryFilterPopover.svelte';
+  import type { GameCardCoverMenuHandle } from '@features/games/components/game-card-types';
+  import {
+    createGamesFilterPersistence,
+    type GamesFilterPersistenceContext,
+  } from '@features/games/games-filter-persistence';
+  import {
+    applyDraftFilters,
+    cancelFilterPopover as cancelPopoverState,
+    createInitialGamesFilterState,
+    openFilterPopover as openPopoverState,
+    toggleDraftLibrary as toggleDraftLibraryState,
+    type GamesFilterState,
+    withSearchQuery,
+  } from '@features/games/games-filter-state';
+  import {
+    extractAvailableLibrariesFromCards,
+    type PersistedGamesFilters,
+  } from '@features/games/games-screen-filters';
+  import {
+    getDashboardStats,
+    type LibraryFilterOption,
+    toGameCardViewModel,
+  } from '@features/games/games-screen-model';
+  import { createGamesScreenQueryScheduler } from '@features/games/games-screen-query-scheduler';
+  import {
+    hasFilterIndicator as hasFilterIndicatorState,
+    isCoverOperationBusy as isCoverOperationBusyState,
+    loadPersistedGamesFilters,
+    pruneCoverMenuState,
+    shouldCloseOpenMenu,
+    shouldQueueAvailabilityPersist,
+    syncGamesFilterState,
+    withManualCoverBusy,
+  } from '@features/games/games-screen-controller';
 
   const SCAN_LABEL = 'Scan Folder';
   const SCANNING_LABEL = 'Scanning...';
   const DESKTOP_APP_REQUIRED_MESSAGE = 'Choosing a cover file requires the desktop app.';
 
   const COVER_IMAGE_FILTERS = [
-    { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+    {
+      name: 'Images',
+      extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+    },
   ];
-
-  const noop: VoidHandler = (): void => {
-    // Intentionally empty.
-  };
-
-  const noopOpenGame: GameSelectionHandler = (): void => {
-    // Intentionally empty.
-  };
-
-  const noopReloadCards = async (): Promise<void> => {
-    // Intentionally empty.
-  };
-
-  const noopCoverError = (): void => {
-    // Intentionally empty.
-  };
-
-  export let games: GameCard[] = [];
-  export let busy = false;
-  /** Game IDs currently receiving automatic cover fetch (DesktopApp background sync). */
-  export let coversAutoFetchingIds: ReadonlySet<string> = new Set();
-
-  export let onScan: VoidHandler = noop;
-  export let onRefresh: VoidHandler = noop;
-  /** Reload game cards only (e.g. after cover change); avoids full library rescan. */
-  export let onReloadCards: () => Promise<void> = noopReloadCards;
-
-  export let onClearError: VoidHandler = noop;
-  export let onCoverError: (message: string) => void = noopCoverError;
-  export let onOpenDetails: GameSelectionHandler = noopOpenGame;
-  export let onOpenOperations: GameSelectionHandler = noopOpenGame;
-
-  type GameCardCoverMenuHandle = {
-    focusTrigger: () => void;
-  };
 
   type CoverMenuRefs = Record<string, GameCardCoverMenuHandle | undefined>;
 
-  let manualCoverBusyFor: string | null = null;
-  let menuOpenFor: string | null = null;
-  let coverMenuRefs: CoverMenuRefs = {};
+  const filterPersistence = createGamesFilterPersistence();
 
-  $: gameItems = games.map(toGameCardViewModel);
-  $: gameIds = gameItems.map((game) => game.id);
-  $: hasGames = gameItems.length > 0;
-  $: scanButtonLabel = busy ? SCANNING_LABEL : SCAN_LABEL;
-  $: dashboardStats = getDashboardStats(games);
-  $: hasManualCoverAction = manualCoverBusyFor !== null;
+  const noop: VoidHandler = (): void => undefined;
+  const noopOpenGame: GameSelectionHandler = (): void => undefined;
+  const noopReloadCards = (): Promise<void> => Promise.resolve();
+  const noopCoverError = (): void => undefined;
 
-  $: pruneCoverMenuRefs(gameIds);
+  type Props = {
+    games?: GameCard[];
+    catalogVersion?: number;
+    busy?: boolean;
+    coversAutoFetchingIds?: ReadonlySet<string>;
 
-  $: if (menuOpenFor !== null && (hasManualCoverAction || coversAutoFetchingIds.has(menuOpenFor))) {
-    menuOpenFor = null;
+    onScan?: VoidHandler;
+    onRefresh?: VoidHandler;
+    onReloadCards?: () => Promise<void>;
+    onClearError?: VoidHandler;
+    onCoverError?: (message: string) => void;
+    onOpenDetails?: GameSelectionHandler;
+    onOpenOperations?: GameSelectionHandler;
+  };
+
+  let {
+    games = [],
+    catalogVersion = 0,
+    busy = false,
+    coversAutoFetchingIds = new Set(),
+
+    onScan = noop,
+    onRefresh = noop,
+    onReloadCards = noopReloadCards,
+    onClearError = noop,
+    onCoverError = noopCoverError,
+    onOpenDetails = noopOpenGame,
+    onOpenOperations = noopOpenGame,
+  }: Props = $props();
+
+  let manualCoverBusyFor = $state<string | null>(null);
+  let menuOpenFor = $state<string | null>(null);
+  let coverMenuRefs = $state<CoverMenuRefs>({});
+
+  let filtersState = $state(createInitialGamesFilterState());
+  let filterPreferenceLoaded = $state(false);
+  let persistedFilters = $state<PersistedGamesFilters | null>(null);
+  let filtersAnchorRef = $state<HTMLDivElement | null>(null);
+
+  let availabilityPersistSnapshot = $state('');
+
+  const scheduler = createGamesScreenQueryScheduler();
+
+  let queriedGames = $state<GameCard[]>([]);
+
+  const queryAvailableLibraries = $derived(extractAvailableLibrariesFromCards(games));
+  const libraryFilterOptions = $derived(queryAvailableLibraries.map(toLibraryFilterOption));
+  const gameItems = $derived(queriedGames.map(toGameCardViewModel));
+
+  $effect(() => {
+    syncAvailableLibraryFilters(
+      filtersState,
+      filterPreferenceLoaded,
+      persistedFilters,
+      queryAvailableLibraries,
+      availabilityPersistSnapshot,
+    );
+  });
+
+  $effect(() => {
+    if (shouldCloseOpenMenu(menuOpenFor, manualCoverBusyFor, coversAutoFetchingIds)) {
+      menuOpenFor = null;
+    }
+  });
+
+  $effect(() => {
+    pruneCoverMenuRefs(gameItems.map((game) => game.id));
+  });
+
+  $effect(() => {
+    const querySnapshot = scheduler.createGamesQuerySnapshot(
+      catalogVersion,
+      filtersState.ready,
+      filterPreferenceLoaded,
+      filtersState.searchQuery,
+      filtersState.appliedLibraries,
+    );
+
+    if (querySnapshot !== null && scheduler.canRunGamesQuery(querySnapshot.requestKey)) {
+      void scheduler.runGamesQuery(querySnapshot, {
+        setItems(next) {
+          queriedGames = next;
+        },
+        getLibraries() {
+          return queryAvailableLibraries;
+        },
+        setLibraries(_next) {
+          // Reactively driven by 'games' prop.
+        },
+      });
+    }
+  });
+
+  onMount(() => {
+    let disposed = false;
+
+    void loadFilterPreferences(() => disposed);
+
+    return () => {
+      disposed = true;
+      filterPersistence.flushQueuedSearchPersist(createFilterPersistenceContext());
+      filterPersistence.dispose();
+    };
+  });
+
+  function toLibraryFilterOption(value: string): LibraryFilterOption {
+    return {
+      value,
+      label: formatLabel(value),
+    };
+  }
+
+  function syncAvailableLibraryFilters(
+    currentState: GamesFilterState,
+    preferenceLoaded: boolean,
+    filters: PersistedGamesFilters | null,
+    availableLibraries: readonly string[],
+    currentPersistSnapshot: string,
+  ): void {
+    const syncResult = syncGamesFilterState(
+      currentState,
+      preferenceLoaded,
+      filters,
+      availableLibraries,
+    );
+
+    if (syncResult.state !== currentState) {
+      filtersState = syncResult.state;
+    }
+
+    if (!syncResult.didAdjustApplied) {
+      return;
+    }
+
+    queueAvailabilityPersist(syncResult.state, currentPersistSnapshot);
+  }
+
+  function queueAvailabilityPersist(
+    nextState: GamesFilterState,
+    currentPersistSnapshot: string,
+  ): void {
+    const persistResult = shouldQueueAvailabilityPersist(
+      nextState,
+      filterPreferenceLoaded,
+      currentPersistSnapshot,
+    );
+
+    if (!persistResult.shouldQueue) {
+      return;
+    }
+
+    availabilityPersistSnapshot = persistResult.nextSnapshot;
+
+    void persistFilters()
+      .catch((error: unknown) => {
+        console.error('Failed to persist adjusted game filters.', error);
+      })
+      .finally(() => {
+        if (availabilityPersistSnapshot === persistResult.nextSnapshot) {
+          availabilityPersistSnapshot = '';
+        }
+      });
+  }
+
+  async function loadFilterPreferences(isDisposed: () => boolean): Promise<void> {
+    try {
+      const value = await loadPersistedGamesFilters();
+
+      if (isDisposed()) {
+        return;
+      }
+
+      persistedFilters = value;
+    } catch (error: unknown) {
+      if (!isDisposed()) {
+        console.error('Failed to load persisted game filters.', error);
+      }
+    } finally {
+      if (!isDisposed()) {
+        filterPreferenceLoaded = true;
+      }
+    }
+  }
+
+  function createFilterPersistenceContext(): GamesFilterPersistenceContext {
+    return {
+      getState: () => filtersState,
+      setState(nextState: GamesFilterState): void {
+        filtersState = nextState;
+      },
+    };
+  }
+
+  function persistFilters(): Promise<void> {
+    return filterPersistence.persistFilters(createFilterPersistenceContext());
+  }
+
+  function openFilterPopover(): void {
+    filtersState = openPopoverState(filtersState);
+  }
+
+  function handleFilterPopoverOpenChange(event: PopoverOpenChangeEvent): void {
+    if (event.open) {
+      openFilterPopover();
+      return;
+    }
+
+    cancelFilterSelection();
+  }
+
+  async function applyFilterSelection(): Promise<void> {
+    filtersState = applyDraftFilters(filtersState);
+
+    try {
+      await persistFilters();
+    } catch (error: unknown) {
+      console.error('Failed to persist selected game filters.', error);
+    }
+  }
+
+  function handleApplyFilterSelection(): void {
+    void applyFilterSelection();
+  }
+
+  function cancelFilterSelection(): void {
+    filtersState = cancelPopoverState(filtersState);
+  }
+
+  function toggleFiltersPopover(): void {
+    handleFilterPopoverOpenChange({
+      open: !filtersState.isPopoverOpen,
+      reason: 'programmatic',
+    });
+  }
+
+  function handleDraftLibraryToggle(library: string): void {
+    filtersState = toggleDraftLibraryState(filtersState, library);
+  }
+
+  function handleSearchValueChange(nextValue: string): void {
+    const nextState = withSearchQuery(filtersState, nextValue);
+
+    if (nextState === filtersState) {
+      return;
+    }
+
+    filtersState = nextState;
+    filterPersistence.queueSearchPersist(createFilterPersistenceContext());
   }
 
   function pruneCoverMenuRefs(activeGameIds: readonly string[]): void {
-    const activeIds = new Set(activeGameIds);
-    let didPrune = false;
-    const nextRefs: CoverMenuRefs = {};
+    const nextState = pruneCoverMenuState(coverMenuRefs, menuOpenFor, activeGameIds);
 
-    for (const [gameId, menuRef] of Object.entries(coverMenuRefs)) {
-      if (activeIds.has(gameId)) {
-        nextRefs[gameId] = menuRef;
-      } else {
-        didPrune = true;
-      }
-    }
-
-    if (didPrune) {
-      coverMenuRefs = nextRefs;
-    }
-
-    if (menuOpenFor !== null && !activeIds.has(menuOpenFor)) {
-      menuOpenFor = null;
-    }
+    coverMenuRefs = nextState.refs;
+    menuOpenFor = nextState.menuOpenFor;
   }
 
-  function isManualCoverBusy(gameId: string): boolean {
-    return manualCoverBusyFor === gameId;
-  }
-
-  /** Manual card cover action or background auto-fetch (overlay / aria-busy). */
   function isCoverOperationBusy(gameId: string): boolean {
-    return isManualCoverBusy(gameId) || coversAutoFetchingIds.has(gameId);
+    return isCoverOperationBusyState(gameId, manualCoverBusyFor, coversAutoFetchingIds);
   }
 
   function setMenuOpen(gameId: string, open: boolean): void {
@@ -133,49 +357,48 @@
     focus();
   }
 
-  async function withManualCoverBusy(gameId: string, task: () => Promise<void>): Promise<void> {
-    if (manualCoverBusyFor !== null) {
-      return;
-    }
+  async function runCoverCommand(gameId: string, command: () => Promise<unknown>): Promise<void> {
+    closeMenu();
 
-    manualCoverBusyFor = gameId;
+    await withManualCoverBusy({
+      gameId,
+      manualCoverBusyFor,
+      setManualCoverBusyFor: (value) => {
+        manualCoverBusyFor = value;
+      },
+      task: command,
+      onClearError,
+      onReloadCards,
+      onCoverError,
+      describeError: describeCommandError,
+      focusMenuTrigger,
+    });
+  }
+
+  async function selectCoverFilePath(gameId: string): Promise<string | null> {
+    if (isDesktopPreviewMode()) {
+      onCoverError(DESKTOP_APP_REQUIRED_MESSAGE);
+      focusMenuTrigger(gameId);
+      return null;
+    }
 
     try {
-      await task();
-      onClearError();
-      await onReloadCards();
+      const selectedPath = await open({
+        multiple: false,
+        filters: COVER_IMAGE_FILTERS,
+      });
+
+      if (typeof selectedPath === 'string') {
+        return selectedPath;
+      }
+
+      focusMenuTrigger(gameId);
+      return null;
     } catch (error: unknown) {
       onCoverError(describeCommandError(error));
-    } finally {
-      manualCoverBusyFor = null;
       focusMenuTrigger(gameId);
+      return null;
     }
-  }
-
-  async function runCoverCommand(gameId: string, command: () => Promise<void>): Promise<void> {
-    closeMenu();
-    await withManualCoverBusy(gameId, command);
-  }
-
-  async function selectCoverPath(): Promise<string | null> {
-    const selected = await open({
-      multiple: false,
-      filters: COVER_IMAGE_FILTERS,
-    });
-
-    return selected;
-  }
-
-  async function handleFetchCover(gameId: string): Promise<void> {
-    await runCoverCommand(gameId, async () => {
-      await fetchGameCover(gameId);
-    });
-  }
-
-  async function handleClearCover(gameId: string): Promise<void> {
-    await runCoverCommand(gameId, async () => {
-      await clearGameCover(gameId);
-    });
   }
 
   async function handlePickCover(gameId: string): Promise<void> {
@@ -185,155 +408,93 @@
       return;
     }
 
-    if (isDesktopPreviewMode()) {
-      onCoverError(DESKTOP_APP_REQUIRED_MESSAGE);
-      focusMenuTrigger(gameId);
-      return;
-    }
-
-    let selectedPath: string | null = null;
-
-    try {
-      selectedPath = await selectCoverPath();
-    } catch (error: unknown) {
-      onCoverError(describeCommandError(error));
-      focusMenuTrigger(gameId);
-      return;
-    }
+    const selectedPath = await selectCoverFilePath(gameId);
 
     if (selectedPath === null) {
-      focusMenuTrigger(gameId);
       return;
     }
 
-    await withManualCoverBusy(gameId, async () => {
-      await setGameCover(gameId, selectedPath);
-    });
+    await runCoverCommand(gameId, () => setGameCover(gameId, selectedPath));
+  }
+
+  function handleFetchCoverAction(gameId: string): void {
+    void runCoverCommand(gameId, () => fetchGameCover(gameId));
+  }
+
+  function handlePickCoverAction(gameId: string): void {
+    void handlePickCover(gameId);
+  }
+
+  function handleClearCoverAction(gameId: string): void {
+    void runCoverCommand(gameId, () => clearGameCover(gameId));
   }
 </script>
 
 <section class="screen-shell" aria-busy={busy}>
-  <div class="overview-bar">
-    {#if hasGames}
-      <GamesDashboardSummary stats={dashboardStats} />
-    {/if}
+  <GamesHeaderBar
+    hasGames={games.length > 0}
+    {busy}
+    scanButtonLabel={busy ? SCANNING_LABEL : SCAN_LABEL}
+    dashboardStats={getDashboardStats(games)}
+    {onRefresh}
+    {onScan}
+  />
 
-    <div class="action-group">
-      <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
-        Refresh Libraries
-      </Button>
-
-      <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
-        {scanButtonLabel}
-      </Button>
-    </div>
-  </div>
-
-  {#if !hasGames}
-    <GamesEmptyState {busy} {scanButtonLabel} {onRefresh} {onScan} />
+  {#if games.length === 0}
+    <GamesEmptyState
+      {busy}
+      scanButtonLabel={busy ? SCANNING_LABEL : SCAN_LABEL}
+      {onRefresh}
+      {onScan}
+    />
   {:else}
-    <div class="game-list">
-      {#each gameItems as game (game.id)}
-        {@const coverBusy = isCoverOperationBusy(game.id)}
-        {@const backgroundCoverFetch = coversAutoFetchingIds.has(game.id)}
-        {@const menuDisabled = busy || hasManualCoverAction || backgroundCoverFetch}
+    <div class="filters-shell">
+      <div class="filters-anchor" bind:this={filtersAnchorRef}>
+        <GamesFilterToolbar
+          searchQuery={filtersState.searchQuery}
+          hasFilterIndicator={hasFilterIndicatorState(
+            filtersState.searchQuery,
+            filtersState.appliedLibraries,
+            queryAvailableLibraries,
+          )}
+          onSearchChange={handleSearchValueChange}
+          onToggleFilters={toggleFiltersPopover}
+        />
 
-        <Surface as="article" interactive shadow class="game-card">
-          <div class="card-body">
-            <GameCardCoverMenu
-              bind:this={coverMenuRefs[game.id]}
-              title={game.title}
-              disabled={menuDisabled}
-              autoFetchInProgress={backgroundCoverFetch}
-              hasCover={game.hasCover}
-              open={menuOpenFor === game.id}
-              onOpenChange={(next: boolean): void => {
-                setMenuOpen(game.id, next);
-              }}
-              onFetchCover={(): void => {
-                void handleFetchCover(game.id);
-              }}
-              onPickCover={(): void => {
-                void handlePickCover(game.id);
-              }}
-              onClearCover={(): void => {
-                void handleClearCover(game.id);
-              }}
-            />
-
-            <div class="card-header">
-              <div
-                class="cover-stack"
-                aria-busy={coverBusy ? 'true' : 'false'}
-                aria-label={`Cover artwork: ${game.title}`}
-              >
-                {#if game.coverSrc}
-                  <img
-                    class="cover-image"
-                    src={game.coverSrc}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                  />
-                {:else}
-                  <div class="cover-placeholder" aria-hidden="true">
-                    <span>{game.monogram}</span>
-                  </div>
-                {/if}
-
-                {#if coverBusy}
-                  <div class="cover-busy-overlay" aria-hidden="true"></div>
-                {/if}
-              </div>
-
-              <div class="header-copy">
-                <BadgeGroup class="platform-row">
-                  <Badge pill surface="soft" tone={game.updateBadge.tone} multiline>
-                    {game.updateBadge.label}
-                  </Badge>
-                </BadgeGroup>
-
-                <div class="title-copy">
-                  <h3 class="game-title">{game.title}</h3>
-                  <p class="card-path">{game.installPath}</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="technology-group">
-              <p class="field-label">Detected libraries</p>
-              <GameTechnologyBadges technologies={game.technologies} />
-            </div>
-
-            <div class="card-actions">
-              <Button
-                variant="primary"
-                size="sm"
-                fullWidth
-                aria-label={`Open details for ${game.title}`}
-                onclick={(): void => {
-                  onOpenDetails(game.id);
-                }}
-              >
-                Details
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                fullWidth
-                aria-label={`Open journal for ${game.title}`}
-                onclick={(): void => {
-                  onOpenOperations(game.id);
-                }}
-              >
-                Journal
-              </Button>
-            </div>
-          </div>
-        </Surface>
-      {/each}
+        <Popover
+          anchor={filtersAnchorRef}
+          referenceElement={filtersAnchorRef}
+          panelClassName="filters-popover"
+          open={filtersState.isPopoverOpen}
+          aria-label="Library filters"
+          onOpenChange={handleFilterPopoverOpenChange}
+        >
+          <GamesLibraryFilterPopover
+            {libraryFilterOptions}
+            draftLibraries={filtersState.draftLibraries}
+            onToggleLibrary={handleDraftLibraryToggle}
+            onCancel={cancelFilterSelection}
+            onApply={handleApplyFilterSelection}
+          />
+        </Popover>
+      </div>
     </div>
+
+    <GamesGrid
+      games={gameItems}
+      {busy}
+      hasManualCoverAction={manualCoverBusyFor !== null}
+      {coversAutoFetchingIds}
+      {menuOpenFor}
+      {coverMenuRefs}
+      {isCoverOperationBusy}
+      onMenuOpenChange={setMenuOpen}
+      onFetchCover={handleFetchCoverAction}
+      onPickCover={handlePickCoverAction}
+      onClearCover={handleClearCoverAction}
+      {onOpenDetails}
+      {onOpenOperations}
+    />
   {/if}
 </section>
 
@@ -343,224 +504,26 @@
     gap: var(--space-4);
   }
 
-  .overview-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3) var(--space-4);
+  .filters-shell {
+    display: grid;
+    gap: var(--space-2);
     padding: 0 var(--space-1);
   }
 
-  .action-group {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  :global(.dashboard-summary) {
-    gap: var(--space-2);
-  }
-
-  .action-group {
-    gap: var(--space-2);
-  }
-
-  .overview-bar .action-group {
-    margin-left: auto;
-  }
-
-  .game-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20.5rem, 1fr));
-    align-items: stretch;
-    gap: var(--space-3);
-  }
-
-  :global(.game-card) {
+  .filters-anchor {
     position: relative;
-    display: grid;
-    min-width: 0;
-    height: 100%;
-    padding: var(--space-4);
-    overflow: visible;
+    display: inline-flex;
+    flex-direction: column;
   }
 
-  .card-body {
-    position: relative;
-
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    gap: var(--space-4);
-    min-width: 0;
-    height: 100%;
-  }
-
-  .card-header {
-    display: grid;
-    grid-template-columns: 4.75rem minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-3);
-  }
-
-  .cover-stack {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 600 / 900;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--accent-outline) 48%, var(--border-subtle));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
-    background: var(--bg-control);
-  }
-
-  .cover-image,
-  .cover-placeholder {
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    min-height: 0;
-  }
-
-  .cover-image {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center top;
-    background: var(--bg-control);
-    pointer-events: none;
-    user-select: none;
-  }
-
-  .cover-placeholder {
-    display: grid;
-    height: 100%;
-    align-content: center;
-    justify-items: center;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent) 16%, var(--bg-control)) 0%,
-      var(--bg-control) 100%
-    );
-    color: var(--text-strong);
-    pointer-events: none;
-    user-select: none;
-  }
-
-  .cover-placeholder span {
-    font-size: 1.45rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-  }
-
-  .cover-busy-overlay {
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--bg-card) 45%, transparent);
-    pointer-events: none;
-  }
-
-  .header-copy,
-  .title-copy,
-  .technology-group {
-    display: grid;
-    min-width: 0;
-  }
-
-  .header-copy {
-    gap: var(--space-3);
-    padding-inline-end: 2.75rem;
-  }
-
-  .title-copy,
-  .technology-group {
-    gap: var(--space-2);
-  }
-
-  .technology-group {
-    align-content: start;
-  }
-
-  :global(.platform-row),
-  :global(.technology-row) {
-    justify-content: flex-start;
-  }
-
-  .game-title {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .field-label {
-    margin: 0 0 var(--space-1);
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .card-path {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    word-break: break-word;
-  }
-
-  :global(.platform-row) :global(.badge) {
-    max-width: min(100%, 15rem);
-  }
-
-  .card-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
+  :global(.filters-popover) {
+    min-width: min(28rem, 90vw);
+    max-width: min(34rem, 92vw);
   }
 
   @media (max-width: 760px) {
-    .overview-bar {
-      align-items: flex-start;
-    }
-
-    .overview-bar .action-group {
-      margin-inline: 0;
-    }
-  }
-
-  @media (max-width: 720px) {
-    .card-header {
-      grid-template-columns: 1fr;
-      gap: 0.9rem;
-    }
-
-    .cover-stack {
-      width: min(7.125rem, 40vw);
-      justify-self: start;
-    }
-
-    .cover-placeholder span {
-      font-size: 1.2rem;
-    }
-
-    :global(.dashboard-summary) {
-      gap: 0.35rem;
-    }
-
-    .card-body :global(button) {
-      width: 100%;
-    }
-
-    .card-actions {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 560px) {
-    :global(.game-card) {
-      padding: 0.9rem;
+    :global(.filters-popover) {
+      min-width: min(24rem, 92vw);
     }
   }
 </style>

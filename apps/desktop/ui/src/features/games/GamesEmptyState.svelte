@@ -1,5 +1,7 @@
 <script lang="ts">
+  import type { HTMLAttributes } from 'svelte/elements';
   import type { VoidHandler } from '@shared/utils/callbacks';
+  import { cx } from '@shared/utils/cx';
   import Button from '@shared/ui/Button.svelte';
   import Surface from '@shared/ui/Surface.svelte';
 
@@ -7,13 +9,24 @@
     // Intentionally empty.
   };
 
-  export let busy = false;
-  export let scanButtonLabel = 'Scan Folder';
-  export let onRefresh: VoidHandler = noop;
-  export let onScan: VoidHandler = noop;
+  type Props = HTMLAttributes<HTMLElement> & {
+    busy?: boolean;
+    scanButtonLabel?: string;
+    onRefresh?: VoidHandler;
+    onScan?: VoidHandler;
+  };
+
+  let {
+    busy = false,
+    scanButtonLabel = 'Scan Folder',
+    onRefresh = noop,
+    onScan = noop,
+    class: className = '',
+    ...rest
+  }: Props = $props();
 </script>
 
-<Surface class="empty-state">
+<Surface {...rest} class={cx('empty-state', className)}>
   <div class="empty-icon" aria-hidden="true">RP</div>
 
   <div class="empty-copy">

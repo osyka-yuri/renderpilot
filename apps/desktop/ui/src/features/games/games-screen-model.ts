@@ -22,16 +22,21 @@ export type GameCardViewModel = {
   installPath: string;
   monogram: string;
   updateBadge: UpdateBadge;
-  technologies: string[];
+  libraries: string[];
   coverSrc: string | null;
   hasCover: boolean;
+};
+
+export type LibraryFilterOption = {
+  value: string;
+  label: string;
 };
 
 type CoverViewData = Pick<GameCardViewModel, 'coverSrc' | 'hasCover'>;
 
 const UPDATE_BADGE_LABEL = {
   upToDate: 'Up to date',
-  available: 'Updates available',
+  genericAvailable: 'Updates available',
 } as const;
 
 export function toGameCardViewModel(game: GameCard): GameCardViewModel {
@@ -43,47 +48,53 @@ export function toGameCardViewModel(game: GameCard): GameCardViewModel {
     installPath: game.install_path,
     monogram: titleMonogram(game.title),
     updateBadge: getUpdateBadge(game),
-    technologies: getTechnologyLabels(game),
+    libraries: getLibraryLabels(game),
     coverSrc: cover.coverSrc,
     hasCover: cover.hasCover,
   };
 }
 
 export function getDashboardStats(gameCards: readonly GameCard[]): DashboardStats {
-  const stats: DashboardStats = {
-    games: gameCards.length,
-    updates: 0,
-    backupsReady: 0,
-  };
+  const stats = createDashboardStats(gameCards.length);
 
   for (const game of gameCards) {
-    stats.updates += game.updates_available ? getSafeUpdateCount(game) : 0;
-    stats.backupsReady += game.backup_available ? 1 : 0;
+    stats.updates += getAvailableUpdatesCount(game);
+    stats.backupsReady += getBackupsReadyCount(game);
   }
 
   return stats;
 }
 
-function getCoverViewData(game: GameCard): CoverViewData {
-  const hasCover = gameCardHasStoredCover(game);
-
-  if (!hasCover) {
-    return {
-      hasCover: false,
-      coverSrc: null,
-    };
-  }
-
-  const versionMs = gameCardCoverUpdatedAtMs(game);
-
+function createDashboardStats(games: number): DashboardStats {
   return {
-    hasCover: true,
-    coverSrc: versionMs === null ? null : gameCoverAssetSrcWithVersion(game.game_id, versionMs),
+    games,
+    updates: 0,
+    backupsReady: 0,
   };
 }
 
-function getTechnologyLabels(game: GameCard): string[] {
-  return game.technology_tags.map(formatLabel);
+function getCoverViewData(game: GameCard): CoverViewData {
+  if (!gameCardHasStoredCover(game)) {
+    return createEmptyCoverViewData();
+  }
+
+  const updatedAtMs = gameCardCoverUpdatedAtMs(game);
+
+  return {
+    hasCover: true,
+    coverSrc: updatedAtMs === null ? null : gameCoverAssetSrcWithVersion(game.game_id, updatedAtMs),
+  };
+}
+
+function createEmptyCoverViewData(): CoverViewData {
+  return {
+    hasCover: false,
+    coverSrc: null,
+  };
+}
+
+function getLibraryLabels(game: GameCard): string[] {
+  return game.library_tags.map(formatLabel);
 }
 
 function getUpdateBadge(game: GameCard): UpdateBadge {
@@ -101,22 +112,32 @@ function getUpdateBadge(game: GameCard): UpdateBadge {
 }
 
 function getAvailableUpdateLabel(game: GameCard): string {
-  const updateCount = getSafeUpdateCount(game);
+  const updateCount = getAvailableUpdatesCount(game);
 
   if (updateCount === 0) {
-    return UPDATE_BADGE_LABEL.available;
+    return UPDATE_BADGE_LABEL.genericAvailable;
   }
 
-  return `${updateCount} ${pluralizeUpdate(updateCount)} available`;
+  return `${updateCount} ${getUpdateNoun(updateCount)} available`;
 }
 
-function pluralizeUpdate(count: number): string {
+function getUpdateNoun(count: number): string {
   return count === 1 ? 'update' : 'updates';
 }
 
-function getSafeUpdateCount(game: GameCard): number {
-  const { update_count: updateCount } = game;
+function getAvailableUpdatesCount(game: GameCard): number {
+  if (!game.updates_available) {
+    return 0;
+  }
 
+  return normalizeUpdateCount(game.update_count);
+}
+
+function getBackupsReadyCount(game: GameCard): number {
+  return game.backup_available ? 1 : 0;
+}
+
+function normalizeUpdateCount(updateCount: number): number {
   if (!Number.isFinite(updateCount)) {
     return 0;
   }
