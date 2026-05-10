@@ -1,13 +1,49 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { open } from '@tauri-apps/plugin-dialog';
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
+  import type { Screen } from '@app/routes/screen';
+  import {
+    DEFAULT_BACK_TARGET,
+    formatPartialScanWarning,
+    getScreenAfterRollback,
+    getSettingsBackTarget,
+    isWorkspaceScreen,
+    resolveBackTarget,
+    type BackTarget,
+    type WorkspaceScreen,
+  } from '@app/routes/desktop-app-controller';
+  import {
+    canonicalGameIdentityId,
+    findGameCardForSelection,
+    normalizeSelectableGameId,
+    resolveSelectedGameDetails,
+    workspaceShellGameTitle,
+  } from '@app/routes/desktop-selection';
   import {
     describeCommandError,
     describeCommandErrorBrief,
     normalizeCommandError,
   } from '@shared/api/errors';
+  import {
+    DEFAULT_GAME_CARDS_CATALOG_PAGE,
+    DEFAULT_GAME_CARDS_CATALOG_SORT,
+  } from '@shared/api/game-cards-defaults';
+  import {
+    applyOperationPlan,
+    buildSwapPlan,
+    fetchGameCover,
+    getCatalogSetting,
+    getGameDetails,
+    queryGameCards,
+    rollbackOperation,
+    scanAutoLibraries,
+    scanManualFolder,
+    STEAMGRIDDB_SETTING_KEY,
+  } from '@shared/api/desktop';
+  import type { GameCard, GameDetails, SwapPlan } from '@shared/api/types';
   import {
     applyThemeMode,
     observeSystemTheme,
@@ -15,24 +51,6 @@
     readStoredThemeMode,
     type ThemeMode,
   } from '@shared/theme/theme-mode';
-  import {
-    applyOperationPlan,
-    buildSwapPlan,
-    fetchGameCover,
-    getCatalogSetting,
-    getGameCards,
-    getGameDetails,
-    rollbackOperation,
-    scanAutoLibraries,
-    scanManualFolder,
-    STEAMGRIDDB_SETTING_KEY,
-  } from '@shared/api/desktop';
-  import type { GameCard, GameDetails, SwapPlan } from '@shared/api/types';
-  import GameDetailsScreen from '@features/game-details/GameDetailsScreen.svelte';
-  import GamesScreen from '@features/games/GamesScreen.svelte';
-  import OperationsScreen from '@features/operations/OperationsScreen.svelte';
-  import SettingsScreen from '@features/settings/SettingsScreen.svelte';
-  import type { Screen } from '@app/routes/screen';
   import {
     combineCoverSyncMessages,
     COVER_FETCH_CONCURRENCY,
@@ -42,10 +60,14 @@
     formatCoverSyncBanner,
     runCoverFetchBatch,
   } from '@shared/covers/cover-sync';
+  import { createRequestChannel } from '@shared/utils/request-channel';
+
+  import GameDetailsScreen from '@features/game-details/GameDetailsScreen.svelte';
+  import GamesScreen from '@features/games/GamesScreen.svelte';
+  import OperationsScreen from '@features/operations/OperationsScreen.svelte';
+  import SettingsScreen from '@features/settings/SettingsScreen.svelte';
 
   type LanguageMode = 'system' | 'en' | 'ru';
-  type WorkspaceScreen = Extract<Screen, 'details' | 'operations'>;
-  type BackTarget = 'games' | WorkspaceScreen;
 
   type ScanError = {
     root: string;
@@ -56,8 +78,6 @@
     clearErrorOnStart?: boolean;
   };
 
-  const DEFAULT_BACK_TARGET: BackTarget = 'games';
-
   const STALE_PLAN_MESSAGE =
     'The selected operation plan is no longer current. Rebuild the plan before applying it.';
 
@@ -67,55 +87,64 @@
     title: 'Select a folder to scan for games',
   } as const;
 
-  let screen: Screen = 'games';
-  let backTarget: BackTarget = DEFAULT_BACK_TARGET;
+  let screen = $state<Screen>('games');
+  let backTarget = $state<BackTarget>(DEFAULT_BACK_TARGET);
 
-  let games: GameCard[] = [];
-  let currentDetails: GameDetails | null = null;
-  let selectedGameId: string | null = null;
-  let currentPlan: SwapPlan | null = null;
-  let currentGameCard: GameCard | null;
+  let games = $state<GameCard[]>([]);
+  let catalogVersion = $state(0);
+  let selectedGameId = $state<string | null>(null);
+  let currentDetails = $state<GameDetails | null>(null);
+  let currentPlan = $state<SwapPlan | null>(null);
 
-  let busy = false;
-  let advancedMode = false;
-  let themeMode: ThemeMode = readStoredThemeMode();
-  let languageMode: LanguageMode = 'system';
-  let errorMessage = '';
+  let busy = $state(false);
+  let advancedMode = $state(false);
+  let themeMode = $state<ThemeMode>(readStoredThemeMode());
+  let languageMode = $state<LanguageMode>('system');
+  let errorMessage = $state('');
 
-  let latestDetailsRequestToken = 0;
+  let coversSyncing = $state(false);
+  let coverSyncQueued = $state(false);
+  const coversAutoFetchingIds = new SvelteSet<string>();
 
-  let coversSyncing = false;
-  let coversAutoFetchingIds: ReadonlySet<string> = new Set();
+  const detailsRequests = createRequestChannel();
 
-  $: currentGameCard = selectedGameId === null ? null : findGameCard(selectedGameId);
+  const currentGameCard = $derived(findGameCardForSelection(selectedGameId, games));
+  const selectedDetails = $derived(
+    resolveSelectedGameDetails({
+      activeScreen: screen,
+      selectedGameId,
+      currentDetails,
+    }),
+  );
+  const selectedShellGameTitle = $derived(
+    workspaceShellGameTitle(currentGameCard, selectedDetails),
+  );
 
   onMount(() => {
-    applyThemeMode(themeMode);
+    applyCurrentTheme();
 
     const stopThemeObserver = observeSystemTheme(() => {
-      applyThemeMode(themeMode);
+      applyCurrentTheme();
     });
 
-    void startupScanAndRefresh();
+    void scanAutoLibrariesAndRefreshCards();
 
     return stopThemeObserver;
   });
 
-  async function startupScanAndRefresh(): Promise<void> {
-    const refreshed = await runExclusive(async () => {
-      await scanAutoLibrariesSafely();
-      await refreshGameCards();
+  // ---------------------------------------------------------------------------
+  // Catalog loading
+  // ---------------------------------------------------------------------------
 
+  async function scanAutoLibrariesAndRefreshCards(): Promise<void> {
+    await runCatalogRefreshWithCoverSync(async () => {
+      await scanAutoLibrariesSafely();
       return true;
     });
-
-    if (refreshed === true) {
-      startMissingCoverSync();
-    }
   }
 
   async function handleScan(): Promise<void> {
-    const scanned = await runExclusive(async () => {
+    await runCatalogRefreshWithCoverSync(async () => {
       const selectedFolder = await selectManualScanFolder();
 
       if (selectedFolder === null) {
@@ -123,156 +152,31 @@
       }
 
       await scanManualFolder(selectedFolder);
-      await refreshGameCards();
-
       return true;
     });
-
-    if (scanned === true) {
-      startMissingCoverSync();
-    }
   }
 
   async function handleReloadCards(): Promise<void> {
     await runExclusive(refreshGameCards);
   }
 
-  async function openGameDetails(gameId: string): Promise<void> {
-    await openGame(gameId, 'details');
-  }
+  async function runCatalogRefreshWithCoverSync(
+    prepareRefresh: () => Promise<boolean>,
+  ): Promise<void> {
+    const refreshed = await runExclusive(async () => {
+      const shouldRefresh = await prepareRefresh();
 
-  async function openGameOperations(gameId: string): Promise<void> {
-    await openGame(gameId, 'operations');
-  }
-
-  async function handleBuildPlan(componentId: string, artifactId: string): Promise<void> {
-    const gameId = selectedGameId;
-
-    if (gameId === null) {
-      return;
-    }
-
-    await runExclusive(async () => {
-      const plan = await buildSwapPlan(gameId, componentId, artifactId);
-
-      if (isSelectedGame(gameId)) {
-        currentPlan = plan;
+      if (!shouldRefresh) {
+        return false;
       }
+
+      await refreshGameCards();
+      return true;
     });
-  }
 
-  async function handleApply(operationId: string): Promise<void> {
-    if (!hasCurrentPlan(operationId)) {
-      showStalePlanError();
-      return;
+    if (refreshed === true) {
+      queueMissingCoverSync();
     }
-
-    await runExclusive(async () => {
-      const plan = getCurrentPlanOrThrow(operationId);
-
-      await applyOperationPlan(operationId, plan.confirmation_token);
-
-      currentPlan = null;
-
-      await reloadSelectedGame('details');
-    });
-  }
-
-  async function handleRollback(operationId: string): Promise<void> {
-    await runExclusive(async () => {
-      await rollbackOperation(operationId);
-
-      currentPlan = null;
-
-      await reloadSelectedGame(getScreenAfterRollback());
-    });
-  }
-
-  function handleNavigate(nextScreen: Screen): void {
-    if (nextScreen === 'settings') {
-      openSettings();
-      return;
-    }
-
-    if (isWorkspaceScreen(nextScreen)) {
-      openSelectedWorkspaceScreen(nextScreen);
-      return;
-    }
-
-    navigateToGames();
-  }
-
-  function handleBack(): void {
-    if (screen === 'settings') {
-      screen = resolveBackTarget();
-      return;
-    }
-
-    if (screen === 'operations' && hasSelectedGameDetails()) {
-      screen = 'details';
-      return;
-    }
-
-    navigateToGames();
-  }
-
-  function toggleAdvancedMode(): void {
-    advancedMode = !advancedMode;
-  }
-
-  function changeThemeMode(mode: ThemeMode): void {
-    if (themeMode === mode) {
-      return;
-    }
-
-    const previousMode = themeMode;
-
-    try {
-      persistThemeMode(mode);
-      applyThemeMode(mode);
-
-      themeMode = mode;
-
-      clearError();
-    } catch (error) {
-      restoreThemeMode(previousMode);
-      showError(error);
-    }
-  }
-
-  function changeLanguageMode(mode: LanguageMode): void {
-    if (languageMode === mode) {
-      return;
-    }
-
-    languageMode = mode;
-
-    clearError();
-  }
-
-  async function openGame(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
-    await runExclusive(() => loadGameDetails(gameId, nextScreen));
-  }
-
-  async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
-    const requestToken = createDetailsRequestToken();
-    const details = await getGameDetails(gameId);
-
-    if (!isLatestDetailsRequest(requestToken)) {
-      return;
-    }
-
-    presentGameDetails(details, nextScreen);
-  }
-
-  async function reloadSelectedGame(nextScreen: WorkspaceScreen): Promise<void> {
-    const gameId = selectedGameId;
-
-    if (gameId === null) {
-      return;
-    }
-
-    await loadGameDetails(gameId, nextScreen);
   }
 
   async function scanAutoLibrariesSafely(): Promise<void> {
@@ -293,18 +197,265 @@
   }
 
   async function refreshGameCards(): Promise<void> {
-    games = await getGameCards();
+    const result = await queryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
+      page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
+    });
+
+    games = result.items;
+    catalogVersion += 1;
 
     clearSelectionIfSelectedGameMissing();
   }
 
-  function startMissingCoverSync(): void {
-    void syncMissingCoversAfterCardsLoad().catch((error: unknown) => {
-      setErrorMessage(`Background cover sync failed. ${describeCommandError(error)}`);
+  async function selectManualScanFolder(): Promise<string | null> {
+    const selected = await open(MANUAL_SCAN_DIALOG_OPTIONS);
+
+    return typeof selected === 'string' ? selected : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Game details / operations
+  // ---------------------------------------------------------------------------
+
+  async function openGameDetails(gameId: string): Promise<void> {
+    await openGame(gameId, 'details');
+  }
+
+  async function openGameOperations(gameId: string): Promise<void> {
+    await openGame(gameId, 'operations');
+  }
+
+  async function openGame(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
+    const normalizedGameId = normalizeSelectableGameId(gameId);
+
+    if (normalizedGameId.length === 0) {
+      return;
+    }
+
+    await runExclusive(() => loadGameDetails(normalizedGameId, nextScreen));
+  }
+
+  async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
+    const requestToken = detailsRequests.begin();
+    const details = await getGameDetails(gameId);
+
+    if (!detailsRequests.isActive(requestToken)) {
+      return;
+    }
+
+    presentGameDetails(details, nextScreen);
+  }
+
+  async function reloadSelectedGame(nextScreen: WorkspaceScreen): Promise<void> {
+    const gameId = selectedGameId;
+
+    if (gameId === null) {
+      return;
+    }
+
+    await loadGameDetails(gameId, nextScreen);
+  }
+
+  function presentGameDetails(details: GameDetails, nextScreen: WorkspaceScreen): void {
+    const gameId = canonicalGameIdentityId(details);
+
+    if (gameId === null) {
+      showError(new Error('Catalog returned game details without a stable identifier.'));
+      return;
+    }
+
+    selectedGameId = gameId;
+    currentDetails = details;
+    screen = nextScreen;
+
+    if (!isPlanForGame(currentPlan, gameId)) {
+      currentPlan = null;
+    }
+
+    clearError();
+  }
+
+  async function handleBuildPlan(componentId: string, artifactId: string): Promise<void> {
+    const gameId = selectedGameId;
+
+    if (gameId === null) {
+      return;
+    }
+
+    await runExclusive(async () => {
+      if (isSelectedGame(gameId)) {
+        currentPlan = null;
+      }
+
+      const plan = await buildSwapPlan(gameId, componentId, artifactId);
+
+      if (isSelectedGame(gameId)) {
+        currentPlan = plan;
+      }
     });
   }
 
-  async function syncMissingCoversAfterCardsLoad(): Promise<void> {
+  async function handleApply(operationId: string): Promise<void> {
+    const plan = getCurrentPlan(operationId);
+
+    if (plan === null) {
+      showStalePlanError();
+      return;
+    }
+
+    await runExclusive(async () => {
+      await applyOperationPlan(operationId, plan.confirmation_token);
+
+      currentPlan = null;
+
+      await reloadSelectedGame('details');
+    });
+  }
+
+  async function handleRollback(operationId: string): Promise<void> {
+    await runExclusive(async () => {
+      await rollbackOperation(operationId);
+
+      currentPlan = null;
+
+      await reloadSelectedGame(getScreenAfterRollback(screen));
+    });
+  }
+
+  function getCurrentPlan(operationId: string): SwapPlan | null {
+    if (currentPlan?.operation_id !== operationId) {
+      return null;
+    }
+
+    return currentPlan;
+  }
+
+  function showStalePlanError(): void {
+    showError(new Error(STALE_PLAN_MESSAGE));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  function handleNavigate(nextScreen: Screen): void {
+    if (nextScreen === 'settings') {
+      openSettings();
+      return;
+    }
+
+    if (isWorkspaceScreen(nextScreen)) {
+      openSelectedWorkspaceScreen(nextScreen);
+      return;
+    }
+
+    navigateToGames();
+  }
+
+  function handleBack(): void {
+    if (screen === 'settings') {
+      screen = resolveBackTarget(backTarget, hasSelectedGameDetails());
+      return;
+    }
+
+    if (screen === 'operations' && hasSelectedGameDetails()) {
+      screen = 'details';
+      return;
+    }
+
+    navigateToGames();
+  }
+
+  function openSettings(): void {
+    backTarget = getSettingsBackTarget(screen, hasSelectedGameDetails());
+    screen = 'settings';
+  }
+
+  function openSelectedWorkspaceScreen(nextScreen: WorkspaceScreen): void {
+    if (!hasSelectedGameDetails()) {
+      clearSelection();
+      return;
+    }
+
+    screen = nextScreen;
+  }
+
+  function navigateToGames(): void {
+    screen = 'games';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Settings
+  // ---------------------------------------------------------------------------
+
+  function toggleAdvancedMode(): void {
+    advancedMode = !advancedMode;
+  }
+
+  function changeThemeMode(mode: ThemeMode): void {
+    if (themeMode === mode) {
+      return;
+    }
+
+    const previousMode = themeMode;
+
+    try {
+      persistThemeMode(mode);
+
+      themeMode = mode;
+      applyCurrentTheme();
+
+      clearError();
+    } catch (error) {
+      restoreThemeMode(previousMode);
+      showError(error);
+    }
+  }
+
+  function changeLanguageMode(mode: LanguageMode): void {
+    if (languageMode === mode) {
+      return;
+    }
+
+    languageMode = mode;
+
+    clearError();
+  }
+
+  function applyCurrentTheme(): void {
+    applyThemeMode(themeMode);
+  }
+
+  function restoreThemeMode(mode: ThemeMode): void {
+    themeMode = mode;
+
+    ignoreError(() => {
+      persistThemeMode(mode);
+    });
+
+    ignoreError(() => {
+      applyCurrentTheme();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background cover sync
+  // ---------------------------------------------------------------------------
+
+  function queueMissingCoverSync(): void {
+    coverSyncQueued = true;
+
+    if (coversSyncing) {
+      return;
+    }
+
+    void drainMissingCoverSyncQueue().catch(handleBackgroundCoverSyncError);
+  }
+
+  async function drainMissingCoverSyncQueue(): Promise<void> {
     if (coversSyncing) {
       return;
     }
@@ -312,46 +463,53 @@
     coversSyncing = true;
 
     try {
-      await tick();
-
-      const cardSnapshot = games.slice();
-
-      if (cardSnapshot.length === 0) {
-        return;
-      }
-
-      const missingCoverCards = await getMissingStoredCoverCards(cardSnapshot);
-
-      if (missingCoverCards.length === 0) {
-        return;
-      }
-
-      const { failures } = await runCoverFetchBatch({
-        games: missingCoverCards,
-        concurrency: COVER_FETCH_CONCURRENCY,
-        fetchCover: async (gameId): Promise<void> => {
-          await fetchGameCover(gameId);
-        },
-        onGameStart: (gameId) => {
-          setCoverAutoFetching(gameId, true);
-        },
-        onGameEnd: (gameId) => {
-          setCoverAutoFetching(gameId, false);
-        },
-      });
-
-      const refreshAfterSyncError = await refreshCardsAfterCoverSync();
-      const combinedMessage = combineCoverSyncMessages(
-        formatCoverSyncBanner(failures),
-        refreshAfterSyncError,
-      );
-
-      if (combinedMessage !== null) {
-        setErrorMessage(combinedMessage);
+      while (coverSyncQueued) {
+        coverSyncQueued = false;
+        await syncMissingCoversAfterCardsLoad();
       }
     } finally {
       clearCoverAutoFetching();
       coversSyncing = false;
+    }
+  }
+
+  async function syncMissingCoversAfterCardsLoad(): Promise<void> {
+    await tick();
+
+    const cardSnapshot = games.slice();
+
+    if (cardSnapshot.length === 0) {
+      return;
+    }
+
+    const missingCoverCards = await getMissingStoredCoverCards(cardSnapshot);
+
+    if (missingCoverCards.length === 0) {
+      return;
+    }
+
+    const { failures } = await runCoverFetchBatch({
+      games: missingCoverCards,
+      concurrency: COVER_FETCH_CONCURRENCY,
+      fetchCover: async (gameId): Promise<void> => {
+        await fetchGameCover(gameId);
+      },
+      onGameStart: (gameId) => {
+        setCoverAutoFetching(gameId, true);
+      },
+      onGameEnd: (gameId) => {
+        setCoverAutoFetching(gameId, false);
+      },
+    });
+
+    const refreshAfterSyncError = await refreshCardsAfterCoverSync();
+    const combinedMessage = combineCoverSyncMessages(
+      formatCoverSyncBanner(failures),
+      refreshAfterSyncError,
+    );
+
+    if (combinedMessage !== null) {
+      setErrorMessage(combinedMessage);
     }
   }
 
@@ -372,65 +530,41 @@
     try {
       await refreshGameCards();
       return null;
-    } catch (error: unknown) {
+    } catch (error) {
       return `${describeCommandError(error)} (covers may have downloaded; try Refresh Libraries.)`;
     }
   }
 
-  async function selectManualScanFolder(): Promise<string | null> {
-    const selected = await open(MANUAL_SCAN_DIALOG_OPTIONS);
-
-    return typeof selected === 'string' ? selected : null;
+  function handleBackgroundCoverSyncError(error: unknown): void {
+    setErrorMessage(`Background cover sync failed. ${describeCommandError(error)}`);
   }
 
-  async function runExclusive<T>(
-    task: () => Promise<T>,
-    options: ExclusiveTaskOptions = {},
-  ): Promise<T | null> {
-    if (busy) {
-      return null;
-    }
-
-    const shouldClearError = options.clearErrorOnStart ?? true;
-
-    busy = true;
-
-    if (shouldClearError) {
-      clearError();
-    }
-
-    try {
-      return await task();
-    } catch (error) {
-      showError(error);
-      return null;
-    } finally {
-      busy = false;
+  function setCoverAutoFetching(gameId: string, isFetching: boolean): void {
+    if (isFetching) {
+      coversAutoFetchingIds.add(gameId);
+    } else {
+      coversAutoFetchingIds.delete(gameId);
     }
   }
 
-  function presentGameDetails(details: GameDetails, nextScreen: WorkspaceScreen): void {
-    const gameId = details.game.identity.id;
-
-    selectedGameId = gameId;
-    currentDetails = details;
-    screen = nextScreen;
-
-    if (currentPlan?.game_id !== gameId) {
-      currentPlan = null;
-    }
-
-    clearError();
+  function clearCoverAutoFetching(): void {
+    coversAutoFetchingIds.clear();
   }
+
+  // ---------------------------------------------------------------------------
+  // Selection state
+  // ---------------------------------------------------------------------------
 
   function clearSelectionIfSelectedGameMissing(): void {
-    if (selectedGameId !== null && !hasGameCard(selectedGameId)) {
-      clearSelection();
+    if (selectedGameId === null || hasGameCard(selectedGameId)) {
+      return;
     }
+
+    clearSelection();
   }
 
   function clearSelection(): void {
-    invalidatePendingGameDetailsRequests();
+    detailsRequests.invalidate();
 
     selectedGameId = null;
     currentDetails = null;
@@ -445,129 +579,56 @@
     }
   }
 
-  function openSettings(): void {
-    backTarget = getSettingsBackTarget();
-    screen = 'settings';
-  }
-
-  function openSelectedWorkspaceScreen(nextScreen: WorkspaceScreen): void {
-    if (!hasSelectedGameDetails()) {
-      clearSelection();
-      return;
-    }
-
-    screen = nextScreen;
-  }
-
-  function navigateToGames(): void {
-    screen = 'games';
-  }
-
-  function getSettingsBackTarget(): BackTarget {
-    return isWorkspaceScreen(screen) && hasSelectedGameDetails() ? screen : DEFAULT_BACK_TARGET;
-  }
-
-  function resolveBackTarget(): BackTarget {
-    if (isWorkspaceScreen(backTarget) && !hasSelectedGameDetails()) {
-      return DEFAULT_BACK_TARGET;
-    }
-
-    return backTarget;
-  }
-
-  function getScreenAfterRollback(): WorkspaceScreen {
-    return screen === 'operations' ? 'operations' : 'details';
-  }
-
-  function createDetailsRequestToken(): number {
-    latestDetailsRequestToken += 1;
-
-    return latestDetailsRequestToken;
-  }
-
-  function invalidatePendingGameDetailsRequests(): void {
-    createDetailsRequestToken();
-  }
-
-  function isLatestDetailsRequest(requestToken: number): boolean {
-    return requestToken === latestDetailsRequestToken;
-  }
-
-  function getCurrentPlanOrThrow(operationId: string): SwapPlan {
-    const plan = currentPlan;
-
-    if (plan !== null && plan.operation_id === operationId) {
-      return plan;
-    }
-
-    throw new Error(STALE_PLAN_MESSAGE);
-  }
-
-  function hasCurrentPlan(operationId: string): boolean {
-    return currentPlan?.operation_id === operationId;
-  }
-
-  function showStalePlanError(): void {
-    showError(new Error(STALE_PLAN_MESSAGE));
-  }
-
-  function isSelectedGame(gameId: string): boolean {
-    return selectedGameId === gameId;
-  }
-
   function hasSelectedGameDetails(): boolean {
-    return selectedGameId !== null && currentDetails?.game.identity.id === selectedGameId;
-  }
-
-  function findGameCard(gameId: string): GameCard | null {
-    return games.find((game) => game.game_id === gameId) ?? null;
+    return selectedDetails !== null;
   }
 
   function hasGameCard(gameId: string): boolean {
-    return findGameCard(gameId) !== null;
+    return findGameCardForSelection(gameId, games) !== null;
   }
 
-  function isWorkspaceScreen(value: Screen | BackTarget): value is WorkspaceScreen {
-    return value === 'details' || value === 'operations';
+  function isSelectedGame(gameId: string): boolean {
+    return selectedGameId !== null && areSameGameIds(selectedGameId, gameId);
+  }
+
+  function isPlanForGame(plan: SwapPlan | null, gameId: string): boolean {
+    return plan !== null && areSameGameIds(plan.game_id, gameId);
+  }
+
+  function areSameGameIds(left: string, right: string): boolean {
+    return normalizeSelectableGameId(left) === normalizeSelectableGameId(right);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task / error helpers
+  // ---------------------------------------------------------------------------
+
+  async function runExclusive<T>(
+    task: () => Promise<T>,
+    options: ExclusiveTaskOptions = {},
+  ): Promise<T | null> {
+    if (busy) {
+      return null;
+    }
+
+    busy = true;
+
+    if (options.clearErrorOnStart ?? true) {
+      clearError();
+    }
+
+    try {
+      return await task();
+    } catch (error) {
+      showError(error);
+      return null;
+    } finally {
+      busy = false;
+    }
   }
 
   function showPartialScanWarning(errors: ScanError[]): void {
-    const rootCount = errors.length;
-    const rootLabel = rootCount === 1 ? 'root' : 'roots';
-
-    setErrorMessage(
-      `Some game libraries could not be scanned (${rootCount} ${rootLabel} failed). Check logs for details.`,
-    );
-  }
-
-  function restoreThemeMode(mode: ThemeMode): void {
-    themeMode = mode;
-
-    ignoreError(() => {
-      persistThemeMode(mode);
-    });
-
-    ignoreError(() => {
-      applyThemeMode(mode);
-    });
-  }
-
-  function setCoverAutoFetching(gameId: string, isFetching: boolean): void {
-    const nextFetchingIds = new Set(coversAutoFetchingIds);
-
-    if (isFetching) {
-      nextFetchingIds.add(gameId);
-    } else {
-      nextFetchingIds.delete(gameId);
-    }
-
-    coversAutoFetchingIds = nextFetchingIds;
-  }
-
-  function clearCoverAutoFetching(): void {
-    if (coversAutoFetchingIds.size > 0) {
-      coversAutoFetchingIds = new Set();
-    }
+    setErrorMessage(formatPartialScanWarning(errors.length));
   }
 
   function ignoreError(task: () => void): void {
@@ -600,14 +661,14 @@
 <DesktopShell
   {screen}
   {busy}
-  selectedGameTitle={currentGameCard?.title ?? null}
+  selectedGameTitle={selectedShellGameTitle}
   {errorMessage}
   onNavigate={handleNavigate}
   onBack={handleBack}
 >
-  {#if screen === 'details' && hasSelectedGameDetails()}
+  {#if screen === 'details'}
     <GameDetailsScreen
-      details={currentDetails}
+      details={selectedDetails}
       gameCard={currentGameCard}
       plan={currentPlan}
       {busy}
@@ -615,9 +676,9 @@
       onApply={handleApply}
       onRollback={handleRollback}
     />
-  {:else if screen === 'operations' && hasSelectedGameDetails()}
+  {:else if screen === 'operations'}
     <OperationsScreen
-      details={currentDetails}
+      details={selectedDetails}
       gameCard={currentGameCard}
       {busy}
       onRollback={handleRollback}
@@ -637,10 +698,11 @@
   {:else}
     <GamesScreen
       {games}
+      {catalogVersion}
       {busy}
       {coversAutoFetchingIds}
       onScan={handleScan}
-      onRefresh={startupScanAndRefresh}
+      onRefresh={scanAutoLibrariesAndRefreshCards}
       onReloadCards={handleReloadCards}
       onClearError={clearError}
       onCoverError={setErrorMessage}

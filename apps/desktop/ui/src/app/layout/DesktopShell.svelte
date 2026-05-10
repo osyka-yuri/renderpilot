@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import type { ScreenHandler, VoidHandler } from '@shared/utils/callbacks';
   import Badge from '@shared/ui/Badge.svelte';
   import Button from '@shared/ui/Button.svelte';
@@ -16,18 +17,31 @@
     return;
   };
 
-  export let screen: Screen;
-  export let busy = false;
-  export let selectedGameTitle: string | null = null;
-  export let errorMessage = '';
-  export let onNavigate: ScreenHandler = noopNavigate;
-  export let onBack: VoidHandler = noop;
+  type Props = {
+    screen: Screen;
+    busy?: boolean;
+    selectedGameTitle?: string | null;
+    errorMessage?: string;
+    onNavigate?: ScreenHandler;
+    onBack?: VoidHandler;
+    children?: Snippet;
+  };
 
-  $: workspaceCopy = resolveWorkspaceCopy(screen, selectedGameTitle);
-  $: normalizedErrorMessage = errorMessage.trim();
-  $: canGoBack = screen !== 'games';
-  $: showSettingsButton = screen !== 'settings';
-  $: showError = normalizedErrorMessage.length > 0;
+  let {
+    screen,
+    busy = false,
+    selectedGameTitle = null,
+    errorMessage = '',
+    onNavigate = noopNavigate,
+    onBack = noop,
+    children,
+  }: Props = $props();
+
+  const workspaceCopy = $derived(resolveWorkspaceCopy(screen, selectedGameTitle));
+  const normalizedErrorMessage = $derived(errorMessage.trim());
+  const canGoBack = $derived(screen !== 'games');
+  const showSettingsButton = $derived(screen !== 'settings');
+  const showError = $derived(normalizedErrorMessage.length > 0);
 
   function handleOpenSettings(): void {
     onNavigate('settings');
@@ -132,7 +146,7 @@
   </header>
 
   <main class="workspace-body">
-    <slot />
+    {@render children?.()}
   </main>
 </div>
 
