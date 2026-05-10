@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 const devHostEnv = process.env.TAURI_DEV_HOST;
@@ -29,5 +29,9 @@ export default defineConfig({
     watch: {
       ignored: ['**/src-tauri/**'],
     },
+  },
+  test: {
+    environment: 'node',
+    include: ['ui/src/**/*.test.ts'],
   },
 });
