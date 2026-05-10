@@ -68,7 +68,7 @@ export function formatLabel(value?: string | null): string {
   return LABELS[value] ?? humanizeToken(value);
 }
 
-export function formatTechnology(value?: string | null): string {
+export function formatLibrary(value?: string | null): string {
   return formatLabel(value);
 }
 
