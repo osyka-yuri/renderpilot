@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils/a11y';
-  import { cx } from '@shared/utils/cx';
+  import { normalizeA11yTextProps } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
@@ -70,7 +69,7 @@
     }),
   );
 
-  const switchClass = $derived(cx('switch-root', className));
+  const switchClass = $derived(['switch-root', className]);
   const stackOnMobileAttribute = $derived(stackOnMobile ? 'true' : undefined);
 
   function handleClick(event: MouseEvent): void {

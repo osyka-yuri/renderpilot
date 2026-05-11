@@ -2,8 +2,7 @@
   import { onDestroy, tick } from 'svelte';
   import type { Snippet } from 'svelte';
 
-  import { normalizeA11yTextProps } from '@shared/utils/a11y';
-  import { cx } from '@shared/utils/cx';
+  import { isHTMLElement, isNode, normalizeA11yTextProps } from '@shared/utils';
 
   import { registerDismissableLayer, type DismissableLayerEvent } from './dismissable-layer';
   import type { PopoverOpenChangeEvent, PopoverOpenChangeReason } from './popover-types';
@@ -93,8 +92,8 @@
   let previousOpen = false;
   let previousPanelRenderable = false;
 
-  const rootClass = $derived(cx('popover-root', className));
-  const panelClass = $derived(cx('popover-panel', panelClassName));
+  const rootClass = $derived(['popover-root', className]);
+  const panelClass = $derived(['popover-panel', panelClassName]);
   const isPanelRenderable = $derived(open && renderPanel);
 
   const fallbackReferenceElement = $derived(referenceElement ?? anchor);
@@ -223,14 +222,14 @@
 
   function uniqueElements(values: readonly unknown[]): HTMLElement[] {
     const elements: HTMLElement[] = [];
-    const seenElements = new Set<HTMLElement>();
+    const seenElements: HTMLElement[] = [];
 
     for (const value of values) {
-      if (!isHTMLElement(value) || seenElements.has(value)) {
+      if (!isHTMLElement(value) || seenElements.some((e) => e === value)) {
         continue;
       }
 
-      seenElements.add(value);
+      seenElements.push(value);
       elements.push(value);
     }
 
@@ -358,14 +357,6 @@
     return null;
   }
 
-  function isHTMLElement(value: unknown): value is HTMLElement {
-    return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement;
-  }
-
-  function isNode(value: unknown): value is Node {
-    return typeof Node !== 'undefined' && value instanceof Node;
-  }
-
   function canUseDom(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined';
   }
@@ -409,6 +400,8 @@
     z-index: 20;
     display: grid;
     gap: var(--space-2);
+    min-width: var(--popover-panel-min-width, auto);
+    max-width: var(--popover-panel-max-width, none);
     border: 1px solid color-mix(in srgb, var(--border-strong) 90%, transparent);
     background: color-mix(in srgb, var(--bg-panel-strong) 92%, var(--bg-card));
     box-shadow:

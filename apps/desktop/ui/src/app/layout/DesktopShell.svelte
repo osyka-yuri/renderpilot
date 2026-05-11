@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import type { ScreenHandler, VoidHandler } from '@shared/utils/callbacks';
-  import Badge from '@shared/ui/Badge.svelte';
-  import Button from '@shared/ui/Button.svelte';
-  import type { Screen } from '@app/routes/screen';
+  import { type VoidHandler } from '@shared/utils';
+  import type { ScreenHandler, Screen } from '@app/navigation/screen';
+
+  import { Badge, Button } from '@shared/ui';
 
   type WorkspaceCopy = {
     label: string;

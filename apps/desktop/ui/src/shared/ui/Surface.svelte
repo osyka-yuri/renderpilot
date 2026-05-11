@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cx } from '@shared/utils/cx';
 
-  type SurfaceTone = 'panel' | 'elevated' | 'soft';
+  type SurfaceTone = 'panel' | 'elevated' | 'soft' | 'sunken';
   type SurfaceRadius = 'md' | 'lg';
   type SurfaceElement = keyof HTMLElementTagNameMap;
 
@@ -27,7 +26,7 @@
     ...rest
   }: Props = $props();
 
-  const classes = $derived(cx('surface', className));
+  const classes = $derived(['surface', className]);
 </script>
 
 <svelte:element
@@ -44,6 +43,7 @@
 
 <style>
   .surface {
+    display: block;
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     color: var(--text-strong);
@@ -59,6 +59,12 @@
 
   .surface[data-tone='soft'] {
     background: color-mix(in srgb, var(--bg-soft) 58%, var(--bg-panel) 42%);
+  }
+
+  .surface[data-tone='sunken'] {
+    background: var(--bg-soft);
+    border-style: dashed;
+    border-color: var(--border-strong);
   }
 
   .surface[data-radius='md'] {

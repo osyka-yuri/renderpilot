@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { cx } from '@shared/utils/cx';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
-  type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+  type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
   type ButtonSize = 'md' | 'sm';
   type ButtonType = 'button' | 'submit' | 'reset';
   type AriaPressed = boolean | 'mixed';
@@ -61,18 +60,16 @@
 
   const resolvedAriaLabel = $derived(ariaLabel ?? getFallbackIconLabel(iconOnly, title));
 
-  const buttonClass = $derived(
-    cx(
-      'ui-button',
-      `ui-button--${variant}`,
-      `ui-button--${size}`,
-      active && 'is-active',
-      loading && 'is-loading',
-      fullWidth && 'is-full-width',
-      iconOnly && 'is-icon-only',
-      className,
-    ),
-  );
+  const buttonClass = $derived([
+    'ui-button',
+    `ui-button--${variant}`,
+    `ui-button--${size}`,
+    active && 'is-active',
+    loading && 'is-loading',
+    fullWidth && 'is-full-width',
+    iconOnly && 'is-icon-only',
+    className,
+  ]);
 
   function getFallbackIconLabel(iconOnly: boolean, title: string | null): string | undefined {
     if (!iconOnly) return undefined;
@@ -92,7 +89,13 @@
   aria-pressed={ariaPressed}
   aria-busy={loading ? true : undefined}
 >
-  {@render children?.()}
+  {#if iconOnly}
+    <span class="ui-button__icon">
+      {@render children?.()}
+    </span>
+  {:else}
+    {@render children?.()}
+  {/if}
 </button>
 
 <style>
@@ -163,6 +166,13 @@
     color: var(--text-soft);
   }
 
+  .ui-button--danger {
+    border-color: transparent;
+    background: var(--danger);
+    color: white;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+  }
+
   .ui-button--secondary.is-active,
   .ui-button--ghost.is-active {
     border-color: var(--accent-outline);
@@ -177,6 +187,15 @@
 
   .ui-button--primary:not(:disabled):active {
     background: var(--accent-pressed);
+  }
+
+  .ui-button--danger.is-active,
+  .ui-button--danger:not(:disabled):hover {
+    filter: brightness(1.1);
+  }
+
+  .ui-button--danger:not(:disabled):active {
+    filter: brightness(0.9);
   }
 
   .ui-button--secondary:not(:disabled):hover {
@@ -234,7 +253,8 @@
     padding: 0;
   }
 
-  .ui-button.is-icon-only :global(svg) {
+  .ui-button__icon {
+    display: inline-flex;
     width: var(--button-icon-size);
     height: var(--button-icon-size);
     flex-shrink: 0;

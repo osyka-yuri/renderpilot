@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cx } from '@shared/utils/cx';
 
   type Props = HTMLAttributes<HTMLDivElement> & {
     align?: 'start' | 'end';
@@ -10,7 +9,7 @@
 
   let { align = 'start', class: className = '', children, ...rest }: Props = $props();
 
-  const classes = $derived(cx('badge-group', align === 'end' && 'badge-group--end', className));
+  const classes = $derived(['badge-group', align === 'end' && 'badge-group--end', className]);
 </script>
 
 <div {...rest} class={classes}>

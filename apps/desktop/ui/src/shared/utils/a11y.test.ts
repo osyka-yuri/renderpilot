@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ariaLabelUnlessLabelledBy, normalizeA11yTextProps } from '@shared/utils/a11y';
+import { ariaLabelUnlessLabelledBy, normalizeA11yTextProps } from './a11y';
 
 describe('a11y utils', () => {
   it('omits aria-label when aria-labelledby is present', () => {

@@ -1,0 +1,113 @@
+<script lang="ts">
+  import { Badge, Switch } from '@shared/ui';
+  import SettingsSectionShell from './SettingsSectionShell.svelte';
+  import SettingRow from './SettingRow.svelte';
+  import SettingCopy from './SettingCopy.svelte';
+  import SettingLabel from './SettingLabel.svelte';
+
+  type ToggleAdvancedModeHandler = () => void;
+
+  const SECTION_TITLE_ID = 'workflow-title';
+  const ADVANCED_MODE_LABEL_ID = 'advanced-mode-label';
+  const ADVANCED_MODE_DESCRIPTION_ID = 'advanced-mode-description';
+
+  const sectionCopy = {
+    eyebrow: 'Behavior',
+    title: 'Workflow and provider posture',
+    description:
+      'Keep operational behavior predictability and expose lower-level controls only when they improve the workflow.',
+  } as const;
+
+  const advancedModeCopy = {
+    label: 'Detail level',
+    title: 'Advanced mode',
+    description:
+      'Show lower-level actions and technical controls in detail screens only when you need them.',
+  } as const;
+
+  const scanSourceCopy = {
+    label: 'Discovery',
+    title: 'Scan source',
+    description:
+      'Manual folder scanning is active. Provider integrations can be added later without changing the overall settings hierarchy.',
+    badge: 'Manual scan',
+    note: 'Current source',
+  } as const;
+
+  type Props = {
+    advancedMode?: boolean;
+    onToggleAdvancedMode?: ToggleAdvancedModeHandler;
+  };
+
+  let { advancedMode = false, onToggleAdvancedMode = () => undefined }: Props = $props();
+
+  function handleAdvancedModeChange(nextChecked: boolean): void {
+    if (nextChecked === advancedMode) {
+      return;
+    }
+
+    onToggleAdvancedMode();
+  }
+</script>
+
+<SettingsSectionShell
+  titleId={SECTION_TITLE_ID}
+  eyebrow={sectionCopy.eyebrow}
+  title={sectionCopy.title}
+  description={sectionCopy.description}
+>
+  <SettingRow>
+    <Switch
+      checked={advancedMode}
+      aria-labelledby={ADVANCED_MODE_LABEL_ID}
+      aria-describedby={ADVANCED_MODE_DESCRIPTION_ID}
+      onCheckedChange={handleAdvancedModeChange}
+    >
+      <SettingCopy>
+        <SettingLabel>{advancedModeCopy.label}</SettingLabel>
+        <span id={ADVANCED_MODE_LABEL_ID} class="row-title">
+          {advancedModeCopy.title}
+        </span>
+        <span id={ADVANCED_MODE_DESCRIPTION_ID} class="row-copy">
+          {advancedModeCopy.description}
+        </span>
+      </SettingCopy>
+    </Switch>
+  </SettingRow>
+
+  <SettingRow>
+    <SettingCopy>
+      <SettingLabel>{scanSourceCopy.label}</SettingLabel>
+      <h4>{scanSourceCopy.title}</h4>
+      <p>{scanSourceCopy.description}</p>
+    </SettingCopy>
+
+    <div class="setting-status" aria-label={scanSourceCopy.note}>
+      <Badge pill size="md" tone="muted">{scanSourceCopy.badge}</Badge>
+      <span class="status-note">{scanSourceCopy.note}</span>
+    </div>
+  </SettingRow>
+</SettingsSectionShell>
+
+<style>
+  .setting-status {
+    display: grid;
+    flex-shrink: 0;
+    gap: var(--space-2);
+    justify-items: end;
+    min-inline-size: max-content;
+  }
+
+  .status-note {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    line-height: 1.35;
+  }
+
+  @media (max-width: 720px) {
+    .setting-status {
+      justify-items: start;
+      min-inline-size: 0;
+    }
+  }
+</style>

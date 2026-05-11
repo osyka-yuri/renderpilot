@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { registerDismissableLayer } from '@shared/ui/dismissable-layer';
+import { registerDismissableLayer } from './dismissable-layer';
 
 type DismissableLayerOptions = Parameters<typeof registerDismissableLayer>[0];
 type DismissableLayerDispose = ReturnType<typeof registerDismissableLayer>;

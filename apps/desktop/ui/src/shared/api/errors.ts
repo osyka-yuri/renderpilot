@@ -1,4 +1,5 @@
 import type { CommandErrorDto, CommandErrorSeverity } from './types';
+import { isString, isNonEmptyString, isRecord, isErrorLike, isFunction } from '@shared/utils';
 
 const FALLBACK_CODE = 'command_failed';
 const FALLBACK_MESSAGE_KEY = 'errors.command_failed';
@@ -78,7 +79,7 @@ function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
     !isNonEmptyString(code) ||
     !isCommandErrorSeverity(severity) ||
     !isNonEmptyString(messageKey) ||
-    typeof details !== 'string' ||
+    !isString(details) ||
     !Array.isArray(suggestedActions)
   ) {
     return null;
@@ -135,7 +136,7 @@ function getErrorDetails(error: unknown): string {
     return firstNonEmptyString(error.message, error.name) ?? UNKNOWN_ERROR_DETAILS;
   }
 
-  if (typeof error === 'string') {
+  if (isString(error)) {
     return normalizeDetails(error);
   }
 
@@ -197,7 +198,7 @@ function normalizeSeverity(value: unknown): CommandErrorSeverity {
 }
 
 function normalizeDetails(value: unknown): string {
-  if (typeof value !== 'string') {
+  if (!isString(value)) {
     return UNKNOWN_ERROR_DETAILS;
   }
 
@@ -213,16 +214,16 @@ function normalizeSuggestedActions(value: unknown): string[] {
 }
 
 function normalizeSuggestedAction(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return isString(value) ? value.trim() : '';
 }
 
 function normalizeNonEmptyString(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+  return isNonEmptyString(value) ? value.trim() : fallback;
 }
 
 function firstNonEmptyString(...values: unknown[]): string | undefined {
   for (const value of values) {
-    if (typeof value !== 'string') {
+    if (!isString(value)) {
       continue;
     }
 
@@ -240,25 +241,13 @@ function isCommandErrorSeverity(value: unknown): value is CommandErrorSeverity {
   return typeof value === 'string' && COMMAND_ERROR_SEVERITIES.has(value as CommandErrorSeverity);
 }
 
-function isErrorLike(value: unknown): value is { message?: unknown; name?: unknown } {
-  return isRecord(value) && (typeof value.message === 'string' || typeof value.name === 'string');
-}
-
 function attachCause(error: Error, cause: unknown): void {
   (error as ErrorWithCause).cause = cause;
 }
 
 function captureStackTrace(error: Error, constructor: object): void {
   const capture = (Error as ErrorConstructorWithStackTrace).captureStackTrace;
-  if (typeof capture === 'function') {
+  if (isFunction(capture)) {
     capture(error, constructor);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
 }

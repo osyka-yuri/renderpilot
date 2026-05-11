@@ -1,20 +1,5 @@
 <script module lang="ts">
-  import type { BadgeSurface, BadgeTone } from './Badge.svelte';
-
-  export type AccordionBadge = {
-    label: string;
-    tone?: BadgeTone;
-    surface?: BadgeSurface;
-  };
-
-  export type AccordionItem = {
-    value: string;
-    title: string;
-    summary?: string;
-    meta?: string;
-    badges?: AccordionBadge[];
-    disabled?: boolean;
-  };
+  import type { AccordionItem } from './accordion-types';
 
   const DEFAULT_ID_PREFIX = 'accordion';
   const EMPTY_ITEMS: readonly AccordionItem[] = [];
@@ -60,8 +45,7 @@
 <script lang="ts">
   import { cubicOut } from 'svelte/easing';
   import { slide } from 'svelte/transition';
-  import { normalizeA11yTextProps } from '@shared/utils/a11y';
-  import { cx } from '@shared/utils/cx';
+  import { normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Snippet } from 'svelte';
   import Badge from './Badge.svelte';
@@ -98,7 +82,7 @@
   }: AccordionProps = $props();
 
   const safeIdPrefix = $derived(createSafeIdPrefix(idPrefix));
-  const accordionClass = $derived(cx('accordion', className));
+  const accordionClass = $derived(['accordion', className]);
 
   const a11yText = $derived(
     normalizeA11yTextProps({

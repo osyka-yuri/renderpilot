@@ -1,4 +1,4 @@
-import { trimToOptional } from '@shared/utils/normalize';
+import { trimToOptional } from './normalize';
 
 export type A11yTextPropsInput = Readonly<{
   label?: string | null;

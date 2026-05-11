@@ -9,8 +9,7 @@
 </script>
 
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils/a11y';
-  import { cx } from '@shared/utils/cx';
+  import { normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLSelectAttributes } from 'svelte/elements';
 
   type NativeSelectProps = Omit<
@@ -56,14 +55,12 @@
     ...restProps
   }: SelectProps = $props();
 
-  const selectRootClass = $derived(
-    cx(
-      'select-root',
-      size === 'sm' && 'select-root--sm',
-      disabled && 'select-root--disabled',
-      className,
-    ),
-  );
+  const selectRootClass = $derived([
+    'select-root',
+    size === 'sm' && 'select-root--sm',
+    disabled && 'select-root--disabled',
+    className,
+  ]);
 
   const a11yText = $derived(
     normalizeA11yTextProps({
@@ -110,7 +107,7 @@
     aria-describedby={a11yText.ariaDescribedBy}
     onchange={handleChange}
   >
-    {#each options as option}
+    {#each options as option (option.value)}
       <option value={option.value} disabled={option.disabled === true}>
         {option.label}
       </option>

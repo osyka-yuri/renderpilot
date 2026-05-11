@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils/a11y';
-  import { cx } from '@shared/utils/cx';
+  import { normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
   type InputSize = 'md' | 'sm';
@@ -45,7 +44,7 @@
     ...restProps
   }: InputProps = $props();
 
-  const inputClass = $derived(cx('ui-input', size === 'sm' && 'ui-input--sm', className));
+  const inputClass = $derived(['ui-input', size === 'sm' && 'ui-input--sm', className]);
 
   const a11yText = $derived(
     normalizeA11yTextProps({

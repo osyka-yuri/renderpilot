@@ -1,3 +1,5 @@
+import { isString } from '@shared/utils';
+
 export function trimToEmpty(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -22,7 +24,5 @@ export function normalizeUniqueTrimmedStrings(values: readonly string[]): string
 }
 
 export function normalizeUniqueTrimmedStringsFromUnknown(values: readonly unknown[]): string[] {
-  return normalizeUniqueTrimmedStrings(
-    values.filter((item): item is string => typeof item === 'string'),
-  );
+  return normalizeUniqueTrimmedStrings(values.filter(isString));
 }

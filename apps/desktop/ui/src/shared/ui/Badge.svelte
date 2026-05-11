@@ -1,13 +1,7 @@
-<script module lang="ts">
-  export type BadgeTone = 'neutral' | 'muted' | 'success' | 'warning' | 'danger';
-  export type BadgeSurface = 'soft' | 'outline';
-  export type BadgeSize = 'sm' | 'md';
-</script>
-
 <script lang="ts">
+  import type { BadgeSurface, BadgeSize, BadgeTone } from './badge-types';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cx } from '@shared/utils/cx';
 
   type Props = HTMLAttributes<HTMLSpanElement> & {
     tone?: BadgeTone;
@@ -31,9 +25,12 @@
     ...rest
   }: Props = $props();
 
-  const classes = $derived(
-    cx('badge', pill && 'badge--pill', multiline && 'badge--multiline', className),
-  );
+  const classes = $derived([
+    'badge',
+    pill && 'badge--pill',
+    multiline && 'badge--multiline',
+    className,
+  ]);
 </script>
 
 <span {...rest} class={classes} data-tone={tone} data-surface={surface} data-size={size}>

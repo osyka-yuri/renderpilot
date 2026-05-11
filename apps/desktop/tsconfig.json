@@ -9,7 +9,10 @@
     "moduleResolution": "bundler",
     "paths": {
       "@app/*": ["./ui/src/app/*"],
+      "@pages/*": ["./ui/src/pages/*"],
+      "@widgets/*": ["./ui/src/widgets/*"],
       "@features/*": ["./ui/src/features/*"],
+      "@entities/*": ["./ui/src/entities/*"],
       "@shared/*": ["./ui/src/shared/*"]
     },
     "allowImportingTsExtensions": true,
@@ -21,5 +24,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["ui/src/**/*.ts", "ui/src/**/*.d.ts", "ui/src/**/*.svelte", "vite.config.ts"]
+  "include": [
+    "ui/src/**/*.ts",
+    "ui/src/**/*.svelte.ts",
+    "ui/src/**/*.d.ts",
+    "ui/src/**/*.svelte",
+    "vite.config.ts"
+  ]
 }
