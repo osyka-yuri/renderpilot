@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasPartialLibrarySelection, intersectLibraries } from '../index';
+import { hasPartialLibrarySelection, intersectLibraries } from './library-filters';
 
 describe('library-filters', () => {
   describe('intersectLibraries', () => {

@@ -8,7 +8,7 @@
     libraries?: readonly string[];
   };
 
-  let { libraries = [], class: className = '', ...rest }: Props = $props();
+  const { libraries = [], class: className = '', ...rest }: Props = $props();
 
   const detectedLibraries = $derived(libraries.map((library) => library.trim()).filter(Boolean));
 </script>

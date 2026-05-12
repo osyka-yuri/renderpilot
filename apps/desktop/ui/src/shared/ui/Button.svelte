@@ -1,6 +1,89 @@
 <script lang="ts">
+  import { cva } from 'class-variance-authority';
+  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
+
+  const buttonVariants = cva(
+    'inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-border-control bg-bg-control px-3.5 py-1.5 text-sm/tight font-semibold whitespace-nowrap text-text-strong transition duration-150 ease-out select-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base focus-visible:outline-none motion-reduce:transition-none',
+    {
+      variants: {
+        variant: {
+          primary: 'border-transparent bg-accent text-accent-contrast',
+          secondary: '',
+          ghost: 'border-transparent bg-transparent text-text-soft',
+          danger: 'border-transparent bg-danger text-white',
+        },
+        size: {
+          md: '',
+          sm: 'min-h-8 px-3 py-1.5 text-xs',
+        },
+        active: {
+          true: '',
+          false: '',
+        },
+        disabled: {
+          true: 'cursor-not-allowed opacity-50',
+          false: '',
+        },
+        loading: {
+          true: 'relative',
+          false: '',
+        },
+        fullWidth: {
+          true: 'w-full',
+          false: '',
+        },
+        iconOnly: {
+          true: '',
+          false: '',
+        },
+      },
+      compoundVariants: [
+        {
+          variant: ['secondary', 'ghost'],
+          active: true,
+          class: 'border-accent-outline bg-accent-soft text-accent-strong',
+        },
+        { variant: 'primary', active: true, class: 'bg-accent-strong' },
+        { variant: 'danger', active: true, class: 'brightness-110' },
+
+        { variant: 'primary', disabled: false, class: 'hover:bg-accent-strong' },
+        { variant: 'danger', disabled: false, class: 'hover:brightness-110' },
+        {
+          variant: 'secondary',
+          disabled: false,
+          class: 'hover:border-border-strong hover:bg-bg-control-hover',
+        },
+        { variant: 'ghost', disabled: false, class: 'hover:bg-bg-soft' },
+
+        { variant: 'primary', disabled: false, class: 'active:bg-accent-pressed' },
+        { variant: 'danger', disabled: false, class: 'active:brightness-90' },
+        {
+          variant: 'secondary',
+          disabled: false,
+          class: 'active:translate-y-px active:bg-bg-control-pressed',
+        },
+        {
+          variant: 'ghost',
+          disabled: false,
+          class: 'active:translate-y-px active:bg-bg-control-pressed',
+        },
+
+        { iconOnly: true, size: 'md', class: 'size-8 min-h-8 p-0' },
+        { iconOnly: true, size: 'sm', class: 'size-8 min-h-8 p-0' },
+      ],
+      defaultVariants: {
+        variant: 'secondary',
+        size: 'md',
+        active: false,
+        disabled: false,
+        loading: false,
+        fullWidth: false,
+        iconOnly: false,
+      },
+    },
+  );
 
   type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
   type ButtonSize = 'md' | 'sm';
@@ -32,7 +115,7 @@
     'aria-pressed'?: AriaPressed;
   };
 
-  let {
+  const {
     children,
 
     variant = 'secondary',
@@ -60,16 +143,12 @@
 
   const resolvedAriaLabel = $derived(ariaLabel ?? getFallbackIconLabel(iconOnly, title));
 
-  const buttonClass = $derived([
-    'ui-button',
-    `ui-button--${variant}`,
-    `ui-button--${size}`,
-    active && 'is-active',
-    loading && 'is-loading',
-    fullWidth && 'is-full-width',
-    iconOnly && 'is-icon-only',
-    className,
-  ]);
+  const buttonClass = $derived(
+    cn(
+      buttonVariants({ variant, size, active, disabled: isDisabled, loading, fullWidth, iconOnly }),
+      className,
+    ),
+  );
 
   function getFallbackIconLabel(iconOnly: boolean, title: string | null): string | undefined {
     if (!iconOnly) return undefined;
@@ -89,190 +168,21 @@
   aria-pressed={ariaPressed}
   aria-busy={loading ? true : undefined}
 >
-  {#if iconOnly}
-    <span class="ui-button__icon">
+  <span class={cn('inline-flex items-center justify-center gap-1.5', loading && 'opacity-0')}>
+    {#if iconOnly}
+      <span class="inline-flex size-4 shrink-0">
+        {@render children?.()}
+      </span>
+    {:else}
       {@render children?.()}
+    {/if}
+  </span>
+
+  {#if loading}
+    <span class="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true">
+      <span
+        class="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none"
+      ></span>
     </span>
-  {:else}
-    {@render children?.()}
   {/if}
 </button>
-
-<style>
-  .ui-button {
-    --button-height: 2rem;
-    --button-padding-x: 0.85rem;
-    --button-padding-y: 0.42rem;
-    --button-radius: var(--radius-md);
-    --button-gap: 0.4rem;
-    --button-icon-size: 1rem;
-
-    box-sizing: border-box;
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    gap: var(--button-gap);
-
-    min-height: var(--button-height);
-    padding: var(--button-padding-y) var(--button-padding-x);
-
-    appearance: none;
-    border: 1px solid var(--border-control);
-    border-radius: var(--button-radius);
-    background: var(--bg-control);
-    color: var(--text-strong);
-
-    font: inherit;
-    font-weight: 600;
-    font-size: 0.875rem;
-    line-height: 1.15;
-    white-space: nowrap;
-    user-select: none;
-    cursor: pointer;
-
-    transition:
-      background 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease,
-      box-shadow 140ms ease,
-      opacity 140ms ease,
-      transform 80ms ease;
-  }
-
-  .ui-button--sm {
-    --button-height: 1.875rem;
-    --button-padding-x: 0.72rem;
-    --button-padding-y: 0.34rem;
-
-    font-size: 0.8125rem;
-  }
-
-  .ui-button--primary {
-    border-color: transparent;
-    background: var(--accent);
-    color: var(--accent-contrast);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
-  }
-
-  .ui-button--secondary {
-    background: var(--bg-control);
-    color: var(--text-strong);
-  }
-
-  .ui-button--ghost {
-    border-color: transparent;
-    background: transparent;
-    color: var(--text-soft);
-  }
-
-  .ui-button--danger {
-    border-color: transparent;
-    background: var(--danger);
-    color: white;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
-  }
-
-  .ui-button--secondary.is-active,
-  .ui-button--ghost.is-active {
-    border-color: var(--accent-outline);
-    background: var(--accent-soft);
-    color: var(--accent-strong);
-  }
-
-  .ui-button--primary.is-active,
-  .ui-button--primary:not(:disabled):hover {
-    background: var(--accent-strong);
-  }
-
-  .ui-button--primary:not(:disabled):active {
-    background: var(--accent-pressed);
-  }
-
-  .ui-button--danger.is-active,
-  .ui-button--danger:not(:disabled):hover {
-    filter: brightness(1.1);
-  }
-
-  .ui-button--danger:not(:disabled):active {
-    filter: brightness(0.9);
-  }
-
-  .ui-button--secondary:not(:disabled):hover {
-    border-color: var(--border-strong);
-    background: var(--bg-control-hover);
-  }
-
-  .ui-button--secondary:not(:disabled):active {
-    background: var(--bg-control-pressed);
-    transform: translateY(1px);
-  }
-
-  .ui-button--ghost:not(:disabled):hover {
-    background: var(--bg-soft);
-  }
-
-  .ui-button--ghost:not(:disabled):active {
-    background: var(--bg-control-pressed);
-    transform: translateY(1px);
-  }
-
-  .ui-button:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus);
-  }
-
-  .ui-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .ui-button.is-loading {
-    position: relative;
-  }
-
-  .ui-button.is-loading::before {
-    content: '';
-    width: 0.75rem;
-    height: 0.75rem;
-    border: 1.5px solid currentColor;
-    border-block-start-color: transparent;
-    border-radius: 999px;
-    opacity: 0.75;
-    animation: button-spin 900ms linear infinite;
-  }
-
-  .ui-button.is-full-width {
-    width: 100%;
-  }
-
-  .ui-button.is-icon-only {
-    width: var(--button-height);
-    height: var(--button-height);
-    min-height: var(--button-height);
-    padding: 0;
-  }
-
-  .ui-button__icon {
-    display: inline-flex;
-    width: var(--button-icon-size);
-    height: var(--button-icon-size);
-    flex-shrink: 0;
-  }
-
-  @keyframes button-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .ui-button {
-      transition: none;
-    }
-
-    .ui-button.is-loading::before {
-      animation: none;
-    }
-  }
-</style>

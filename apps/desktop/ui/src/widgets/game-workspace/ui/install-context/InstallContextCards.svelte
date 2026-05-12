@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { compactList, fileNameFromPath } from '@shared/utils';
-  import { Badge } from '@shared/ui';
+  import { cn, compactList, fileNameFromPath } from '@shared/utils';
+  import { Badge, InfoTile } from '@shared/ui';
 
   type Props = {
     installPath?: string;
@@ -8,30 +8,36 @@
     libraries?: string[];
   };
 
-  let { installPath = '', launchCandidates = [], libraries = [] }: Props = $props();
+  const { installPath = '', launchCandidates = [], libraries = [] }: Props = $props();
 
   const launchCandidateNames = $derived(launchCandidates.map(fileNameFromPath));
 </script>
 
-<section class="install-context" aria-label="Game installation context">
-  <div class="install-stack">
-    <div class="install-card">
-      <span>Folder</span>
-      <strong title={installPath}>{installPath}</strong>
-    </div>
+<section
+  class={cn('grid grid-cols-2 items-stretch gap-2', 'max-lg:grid-cols-1')}
+  aria-label="Game installation context"
+>
+  <div class="grid min-w-0 gap-2">
+    <InfoTile label="Folder" tone="card" class="min-h-18 gap-2">
+      <strong
+        class="min-w-0 truncate text-sm/tight font-semibold text-text-strong"
+        title={installPath}>{installPath}</strong
+      >
+    </InfoTile>
 
-    <div class="install-card">
-      <span>Launch</span>
-      <strong title={compactList(launchCandidateNames, 'No executable recorded', 8)}>
+    <InfoTile label="Launch" tone="card" class="min-h-18 gap-2">
+      <strong
+        class="min-w-0 truncate text-sm/tight font-semibold text-text-strong"
+        title={compactList(launchCandidateNames, 'No executable recorded', 8)}
+      >
         {compactList(launchCandidateNames, 'No executable recorded', 2)}
       </strong>
-    </div>
+    </InfoTile>
   </div>
 
-  <div class="install-card install-card--graphics">
-    <span>Graphics</span>
+  <InfoTile label="Graphics" tone="card" class="min-h-full gap-2">
     <div
-      class="install-library-badges"
+      class="flex min-w-0 flex-wrap gap-1"
       title={compactList(libraries, 'No graphics libraries detected', 12)}
     >
       {#if libraries.length === 0}
@@ -42,69 +48,5 @@
         {/each}
       {/if}
     </div>
-  </div>
+  </InfoTile>
 </section>
-
-<style>
-  .install-context {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-    align-items: stretch;
-  }
-
-  .install-stack {
-    min-width: 0;
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .install-card {
-    min-width: 0;
-    display: grid;
-    align-content: start;
-    gap: var(--space-2);
-    min-height: 4.55rem;
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--bg-card) 76%, transparent);
-    box-shadow: var(--shadow-card);
-  }
-
-  .install-card span {
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .install-card strong {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-strong);
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1.28;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .install-card--graphics {
-    min-height: 100%;
-  }
-
-  .install-library-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-
-  @media (max-width: 820px) {
-    .install-context {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>

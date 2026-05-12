@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils';
+  import { cn, normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
   type InputSize = 'md' | 'sm';
@@ -44,7 +44,20 @@
     ...restProps
   }: InputProps = $props();
 
-  const inputClass = $derived(['ui-input', size === 'sm' && 'ui-input--sm', className]);
+  const inputClass = $derived(
+    cn(
+      'min-h-8 w-full rounded-2xl border border-border-control bg-bg-control text-text-strong',
+      'px-3 py-1.5 leading-tight',
+      'transition duration-160',
+      'placeholder:text-text-muted',
+      'hover:border-border-strong hover:bg-bg-control-hover',
+      'focus-visible:border-accent-outline focus-visible:bg-bg-control focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base focus-visible:outline-none',
+      'disabled:cursor-not-allowed disabled:opacity-50',
+      'read-only:cursor-default',
+      size === 'sm' && 'min-h-7.5 px-2.5 py-1.5 text-xs',
+      className,
+    ),
+  );
 
   const a11yText = $derived(
     normalizeA11yTextProps({
@@ -84,53 +97,3 @@
   aria-describedby={a11yText.ariaDescribedBy}
   oninput={handleInput}
 />
-
-<style>
-  .ui-input {
-    width: 100%;
-    min-height: 2rem;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: var(--bg-control);
-    color: var(--text-strong);
-    font: inherit;
-    line-height: 1.2;
-    padding: 0.4rem 0.75rem;
-    transition:
-      border-color 160ms ease,
-      background 160ms ease,
-      box-shadow 160ms ease,
-      opacity 160ms ease;
-  }
-
-  .ui-input::placeholder {
-    color: var(--text-muted);
-  }
-
-  .ui-input:hover:not(:disabled):not(:read-only) {
-    background: var(--bg-control-hover);
-    border-color: var(--border-strong);
-  }
-
-  .ui-input:focus-visible {
-    background: var(--bg-control);
-    border-color: var(--accent-outline);
-    box-shadow: var(--shadow-focus);
-    outline: none;
-  }
-
-  .ui-input:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .ui-input:read-only {
-    cursor: default;
-  }
-
-  .ui-input--sm {
-    min-height: 1.875rem;
-    padding: 0.34rem 0.68rem;
-    font-size: 0.8125rem;
-  }
-</style>

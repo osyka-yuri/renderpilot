@@ -1,7 +1,64 @@
 <script lang="ts">
+  import { cva } from 'class-variance-authority';
+  import { cn } from '@shared/utils';
   import type { BadgeSurface, BadgeSize, BadgeTone } from './badge-types';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+
+  const badgeVariants = cva(
+    'inline-flex w-fit max-w-full items-center justify-center gap-1.5 border align-middle leading-none font-semibold whitespace-nowrap',
+    {
+      variants: {
+        tone: {
+          neutral: 'text-text-strong',
+          muted: 'text-text-muted',
+          success: 'text-success',
+          warning: 'text-warning',
+          danger: 'text-danger',
+        },
+        surface: {
+          soft: 'border-border-subtle bg-bg-control',
+          outline: 'border-border-subtle bg-bg-card/70',
+        },
+        size: {
+          sm: 'min-h-5 rounded-2xl px-2 py-1 text-xs',
+          md: 'min-h-7 rounded-2xl px-2.5 py-1.5 text-xs',
+        },
+        pill: {
+          true: 'rounded-full',
+          false: '',
+        },
+        multiline: {
+          true: 'text-center leading-tight whitespace-normal',
+          false: '',
+        },
+      },
+      compoundVariants: [
+        {
+          surface: 'soft',
+          tone: 'success',
+          class: 'border-success/25 bg-success/10',
+        },
+        {
+          surface: 'soft',
+          tone: 'warning',
+          class: 'border-warning/25 bg-warning/10',
+        },
+        {
+          surface: 'soft',
+          tone: 'danger',
+          class: 'border-danger/25 bg-danger/10',
+        },
+      ],
+      defaultVariants: {
+        tone: 'neutral',
+        surface: 'soft',
+        size: 'sm',
+        pill: false,
+        multiline: false,
+      },
+    },
+  );
 
   type Props = HTMLAttributes<HTMLSpanElement> & {
     tone?: BadgeTone;
@@ -13,7 +70,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     tone = 'neutral',
     surface = 'soft',
     size = 'sm',
@@ -25,116 +82,13 @@
     ...rest
   }: Props = $props();
 
-  const classes = $derived([
-    'badge',
-    pill && 'badge--pill',
-    multiline && 'badge--multiline',
-    className,
-  ]);
+  const classes = $derived(cn(badgeVariants({ tone, surface, size, pill, multiline }), className));
 </script>
 
-<span {...rest} class={classes} data-tone={tone} data-surface={surface} data-size={size}>
+<span {...rest} class={classes}>
   {#if dot}
-    <span class="badge__dot" aria-hidden="true"></span>
+    <span class="size-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true"></span>
   {/if}
 
   {@render children?.()}
 </span>
-
-<style>
-  .badge {
-    --badge-color: var(--text-strong);
-    --badge-background: color-mix(in srgb, var(--bg-control) 80%, var(--bg-soft) 20%);
-    --badge-border-color: var(--border-subtle);
-    --badge-radius: var(--radius-sm);
-
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-
-    width: fit-content;
-    max-width: 100%;
-
-    border: 1px solid var(--badge-border-color);
-    border-radius: var(--badge-radius);
-    background: var(--badge-background);
-    color: var(--badge-color);
-
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    vertical-align: middle;
-  }
-
-  .badge--pill {
-    --badge-radius: 999px;
-  }
-
-  .badge--multiline {
-    white-space: normal;
-    line-height: 1.2;
-    text-align: center;
-  }
-
-  .badge[data-size='sm'] {
-    min-height: 1.375rem;
-    padding: 0.22rem 0.5rem;
-    font-size: 0.75rem;
-  }
-
-  .badge[data-size='md'] {
-    min-height: 1.75rem;
-    padding: 0.34rem 0.68rem;
-    font-size: 0.8125rem;
-  }
-
-  .badge[data-surface='outline'] {
-    --badge-background: color-mix(in srgb, var(--bg-card) 70%, transparent);
-  }
-
-  .badge[data-tone='neutral'] {
-    --badge-color: var(--text-strong);
-  }
-
-  .badge[data-tone='muted'] {
-    --badge-color: var(--text-muted);
-  }
-
-  .badge[data-tone='success'] {
-    --badge-color: var(--success);
-  }
-
-  .badge[data-tone='warning'] {
-    --badge-color: var(--warning);
-  }
-
-  .badge[data-tone='danger'] {
-    --badge-color: var(--danger);
-  }
-
-  .badge[data-surface='soft'][data-tone='success'] {
-    --badge-background: color-mix(in srgb, var(--success) 13%, var(--bg-panel) 87%);
-    --badge-border-color: color-mix(in srgb, var(--success) 24%, var(--border-subtle));
-  }
-
-  .badge[data-surface='soft'][data-tone='warning'] {
-    --badge-background: color-mix(in srgb, var(--warning) 13%, var(--bg-panel) 87%);
-    --badge-border-color: color-mix(in srgb, var(--warning) 24%, var(--border-subtle));
-  }
-
-  .badge[data-surface='soft'][data-tone='danger'] {
-    --badge-background: color-mix(in srgb, var(--danger) 13%, var(--bg-panel) 87%);
-    --badge-border-color: color-mix(in srgb, var(--danger) 24%, var(--border-subtle));
-  }
-
-  .badge__dot {
-    width: 0.42rem;
-    height: 0.42rem;
-    flex: 0 0 auto;
-    border-radius: 999px;
-    background: currentColor;
-    opacity: 0.72;
-  }
-</style>

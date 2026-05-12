@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { VendorBlock, VendorKey } from '@features/graphics-configurator';
-  import { Accordion, Badge, type AccordionItem } from '@shared/ui';
+  import { Accordion, Badge, EmptyStatePanel, SectionHeader, type AccordionItem } from '@shared/ui';
   import LibrarySectionCard from './LibrarySectionCard.svelte';
 
   type AccordionPanelItem = {
@@ -37,7 +37,7 @@
     onBuildPlan?: BuildPlanHandler;
   };
 
-  let {
+  const {
     vendorBlocks = [],
     accordionItems = [],
     activeVendorKey = null,
@@ -107,17 +107,17 @@
   }
 </script>
 
-<section class="content-section" aria-labelledby="graphics-libraries-title">
+<section class="grid gap-3" aria-labelledby="graphics-libraries-title">
   {#snippet itemContent(item: AccordionPanelItem)}
     {@const itemVendorBlocks = getVendorBlocksForAccordionItem(item)}
 
     {#each itemVendorBlocks as vendorBlock, vendorBlockIndex (getVendorBlockRenderKey(vendorBlock, vendorBlockIndex))}
       {#if vendorBlock.sections.length === 0}
-        <div class="empty-state vendor-empty" role="status">
+        <EmptyStatePanel role="status">
           No {vendorBlock.label} libraries detected for this installation yet.
-        </div>
+        </EmptyStatePanel>
       {:else}
-        <div class="library-configurator">
+        <div class="grid gap-3">
           {#each vendorBlock.sections as section (getSectionRenderKey(section))}
             <LibrarySectionCard
               {section}
@@ -136,20 +136,19 @@
     {/each}
   {/snippet}
 
-  <header class="section-head">
-    <div>
-      <p class="eyebrow">Libraries</p>
-      <h3 id="graphics-libraries-title">Graphics libraries</h3>
-      <p class="section-copy">Detected graphics stacks and compatible local replacements.</p>
-    </div>
-
+  <SectionHeader
+    eyebrow="Libraries"
+    title="Graphics libraries"
+    titleId="graphics-libraries-title"
+    description="Detected graphics stacks and compatible local replacements."
+  >
     <Badge surface="outline" tone="muted">{vendorGroupsLabel}</Badge>
-  </header>
+  </SectionHeader>
 
   {#if isEmpty}
-    <div class="empty-state" role="status">
+    <EmptyStatePanel role="status">
       No graphics-related components were detected for this installation.
-    </div>
+    </EmptyStatePanel>
   {:else}
     <Accordion
       items={accordionItems}
@@ -160,68 +159,3 @@
     />
   {/if}
 </section>
-
-<style>
-  .content-section,
-  .library-configurator {
-    display: grid;
-    gap: var(--space-3);
-  }
-
-  .section-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: 0 var(--space-1);
-  }
-
-  .eyebrow,
-  h3,
-  .section-copy {
-    margin: 0;
-  }
-
-  .eyebrow {
-    margin-bottom: 0.2rem;
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h3 {
-    color: var(--text-strong);
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .section-copy {
-    max-width: 48rem;
-    margin-top: 0.25rem;
-    color: var(--text-muted);
-    font-size: 0.84rem;
-    line-height: 1.45;
-  }
-
-  .empty-state {
-    padding: var(--space-4);
-    border: 1px dashed var(--border-subtle);
-    border-radius: var(--radius-xl);
-    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
-    color: var(--text-muted);
-    box-shadow: none;
-  }
-
-  .vendor-empty {
-    border-radius: 0.75rem;
-  }
-
-  @media (max-width: 820px) {
-    .section-head {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-  }
-</style>

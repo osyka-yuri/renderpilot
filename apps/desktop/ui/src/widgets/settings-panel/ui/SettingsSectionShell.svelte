@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { Surface } from '@shared/ui';
+  import { SectionHeader, Surface } from '@shared/ui';
 
   type Props = HTMLAttributes<HTMLElement> & {
     titleId?: string;
@@ -11,7 +12,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     titleId = '',
     eyebrow = '',
     title = '',
@@ -38,79 +39,23 @@
 
 <article
   {...rest}
-  class={['settings-section-shell', className]}
+  class={cn('grid gap-3', className)}
   aria-labelledby={headingId}
   aria-label={articleLabel}
 >
   {#if hasHeader}
-    <header class="section-header">
-      {#if eyebrowText}
-        <p class="eyebrow">{eyebrowText}</p>
-      {/if}
-
-      {#if titleText}
-        <h3 id={headingId}>{titleText}</h3>
-      {/if}
-
-      {#if descriptionText}
-        <p class="section-copy">{descriptionText}</p>
-      {/if}
-    </header>
+    <SectionHeader
+      eyebrow={eyebrowText}
+      title={titleText}
+      titleId={headingId}
+      description={descriptionText}
+      class="max-md:px-0"
+    />
   {/if}
 
-  <div class="settings-section-shell__panel">
+  <div class="grid gap-0 overflow-hidden rounded-2xl">
     <Surface tone="elevated" shadow>
       {@render children?.()}
     </Surface>
   </div>
 </article>
-
-<style>
-  .settings-section-shell,
-  .section-header {
-    display: grid;
-  }
-
-  .settings-section-shell {
-    gap: var(--space-3);
-  }
-
-  .section-header {
-    gap: var(--space-1);
-    padding-inline: var(--space-1);
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-  }
-
-  .section-copy {
-    max-width: 56rem;
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.45;
-  }
-
-  .settings-section-shell__panel {
-    display: grid;
-    gap: 0;
-    overflow: hidden;
-    border-radius: var(--radius-xl);
-  }
-
-  @media (max-width: 720px) {
-    .section-header {
-      padding-inline: 0;
-    }
-  }
-</style>

@@ -16,6 +16,7 @@
     coverBusy?: boolean;
     backgroundCoverFetch?: boolean;
     menuDisabled?: boolean;
+    pickDisabled?: boolean;
     menuOpen?: boolean;
     coverMenuRef?: GameCardCoverMenuHandle;
 
@@ -68,6 +69,7 @@
     coverBusy = false,
     backgroundCoverFetch = false,
     menuDisabled = false,
+    pickDisabled = false,
     menuOpen = false,
     coverMenuRef = $bindable(),
 
@@ -86,13 +88,18 @@
   const journalAriaLabel = $derived(createActionAriaLabel('Open journal', game.title));
 </script>
 
-<div class="game-card">
+<div class="relative grid h-full min-w-0 overflow-visible p-4">
   <Surface as="article" interactive shadow aria-labelledby={titleId}>
-    <div class="card-content">
+    <div
+      class="
+        relative grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4
+      "
+    >
       <GameCardCoverMenu
         bind:this={coverMenuRef}
         title={game.title}
         disabled={menuDisabled}
+        {pickDisabled}
         autoFetchInProgress={backgroundCoverFetch}
         hasCover={game.hasCover}
         open={menuOpen}
@@ -102,7 +109,12 @@
         {onClearCover}
       />
 
-      <div class="card-header">
+      <div
+        class="
+          grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-3
+          max-md:grid-cols-1 max-md:gap-3.5
+        "
+      >
         <GameCardCoverPreview
           title={game.title}
           coverSrc={game.coverSrc}
@@ -110,28 +122,42 @@
           {coverBusy}
         />
 
-        <div class="header-content">
+        <div class="grid min-w-0 gap-3 pe-11">
           <BadgeGroup>
-            <div class="game-card__update-badge">
+            <div class="max-w-60">
               <Badge pill surface="soft" tone={game.updateBadge.tone} multiline>
                 {game.updateBadge.label}
               </Badge>
             </div>
           </BadgeGroup>
 
-          <div class="title-content">
-            <h3 id={titleId} class="game-title">{game.title}</h3>
-            <p class="card-path">{game.installPath}</p>
+          <div class="grid min-w-0 gap-2">
+            <h3
+              id={titleId}
+              class="
+              text-base/tight font-semibold wrap-break-word
+            "
+            >
+              {game.title}
+            </h3>
+            <p class="text-xs/snug wrap-break-word text-text-muted">
+              {game.installPath}
+            </p>
           </div>
         </div>
       </div>
 
-      <div class="library-group">
-        <p class="field-label">Detected libraries</p>
+      <div class="grid min-w-0 content-start gap-2">
+        <p class="mb-1 text-xs tracking-widest text-text-subtle uppercase">Detected libraries</p>
         <GameLibraryBadges libraries={game.libraries} />
       </div>
 
-      <div class="card-actions">
+      <div
+        class="
+          grid grid-cols-2 gap-2
+          max-md:grid-cols-1
+        "
+      >
         <Button
           variant="primary"
           size="sm"
@@ -155,103 +181,3 @@
     </div>
   </Surface>
 </div>
-
-<style>
-  .game-card {
-    position: relative;
-    display: grid;
-    min-width: 0;
-    height: 100%;
-    padding: var(--space-4);
-    overflow: visible;
-  }
-
-  .card-content {
-    position: relative;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: var(--space-4);
-    min-width: 0;
-    height: 100%;
-  }
-
-  .card-header {
-    display: grid;
-    grid-template-columns: 4.75rem minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-3);
-    min-width: 0;
-  }
-
-  .header-content,
-  .title-content,
-  .library-group {
-    display: grid;
-    min-width: 0;
-  }
-
-  .header-content {
-    gap: var(--space-3);
-    padding-inline-end: 2.75rem;
-  }
-
-  .title-content,
-  .library-group {
-    gap: var(--space-2);
-  }
-
-  .library-group {
-    align-content: start;
-  }
-
-  .game-card__update-badge {
-    max-width: min(100%, 15rem);
-  }
-
-  .game-title {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    line-height: 1.2;
-    overflow-wrap: anywhere;
-  }
-
-  .card-path {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-  }
-
-  .field-label {
-    margin: 0 0 var(--space-1);
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .card-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-
-  @media (max-width: 720px) {
-    .card-header {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.9rem;
-    }
-
-    .card-actions {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  @media (max-width: 560px) {
-    .game-card {
-      padding: 0.9rem;
-    }
-  }
-</style>

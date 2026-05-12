@@ -1,8 +1,7 @@
 <script lang="ts">
+  import { cn, isHTMLElement, isNode, normalizeA11yTextProps } from '@shared/utils';
   import { onDestroy, tick } from 'svelte';
   import type { Snippet } from 'svelte';
-
-  import { isHTMLElement, isNode, normalizeA11yTextProps } from '@shared/utils';
 
   import { registerDismissableLayer, type DismissableLayerEvent } from './dismissable-layer';
   import type { PopoverOpenChangeEvent, PopoverOpenChangeReason } from './popover-types';
@@ -48,7 +47,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     open = false,
     closeOnEscape = true,
     closeOnOutsidePointerDown = true,
@@ -56,7 +55,7 @@
     className = '',
     panelClassName = '',
     align = 'end',
-    sideOffset = 'var(--space-2)',
+    sideOffset = '0.5rem',
     role = 'dialog',
 
     referenceElement = null,
@@ -92,8 +91,19 @@
   let previousOpen = false;
   let previousPanelRenderable = false;
 
-  const rootClass = $derived(['popover-root', className]);
-  const panelClass = $derived(['popover-panel', panelClassName]);
+  const rootClass = $derived(cn('relative inline-flex', className));
+  const panelClass = $derived(
+    cn(
+      'absolute top-[calc(100%+var(--popover-side-offset))] z-20 grid gap-2',
+      'max-w-none',
+      'border border-border-strong/90',
+      'bg-bg-panel',
+      'shadow-2xl',
+      'rounded-2xl',
+      align === 'start' ? 'right-auto left-0' : 'right-0 left-auto',
+      panelClassName,
+    ),
+  );
   const isPanelRenderable = $derived(open && renderPanel);
 
   const fallbackReferenceElement = $derived(referenceElement ?? anchor);
@@ -375,7 +385,6 @@
       bind:this={panelElement}
       class={panelClass}
       {role}
-      data-align={align}
       tabindex="-1"
       aria-label={a11yText.ariaLabel}
       aria-labelledby={a11yText.ariaLabelledBy}
@@ -386,37 +395,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .popover-root {
-    position: relative;
-    display: inline-flex;
-  }
-
-  .popover-panel {
-    position: absolute;
-    top: calc(100% + var(--popover-side-offset));
-    right: 0;
-    z-index: 20;
-    display: grid;
-    gap: var(--space-2);
-    min-width: var(--popover-panel-min-width, auto);
-    max-width: var(--popover-panel-max-width, none);
-    border: 1px solid color-mix(in srgb, var(--border-strong) 90%, transparent);
-    background: color-mix(in srgb, var(--bg-panel-strong) 92%, var(--bg-card));
-    box-shadow:
-      0 14px 34px color-mix(in srgb, black 32%, transparent),
-      0 1px 0 color-mix(in srgb, white 8%, transparent);
-    border-radius: var(--radius-xl);
-  }
-
-  .popover-panel[data-align='start'] {
-    left: 0;
-    right: auto;
-  }
-
-  .popover-panel[data-align='end'] {
-    right: 0;
-    left: auto;
-  }
-</style>

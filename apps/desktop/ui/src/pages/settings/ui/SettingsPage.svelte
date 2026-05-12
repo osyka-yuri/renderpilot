@@ -29,7 +29,7 @@
     onToggleAdvancedMode?: VoidHandler;
   };
 
-  let {
+  const {
     themeMode = 'system',
     languageMode = 'system',
     advancedMode = false,
@@ -49,7 +49,7 @@
   });
 </script>
 
-<section class="screen-shell" aria-label="Settings">
+<section class="grid w-full gap-5" aria-label="Settings">
   <SettingsAppearanceSection
     {themeMode}
     {languageMode}
@@ -75,11 +75,3 @@
     onSteamGridDbKeyReload={model.handleSteamGridDbKeyReload}
   />
 </section>
-
-<style>
-  .screen-shell {
-    display: grid;
-    gap: var(--space-5);
-    width: 100%;
-  }
-</style>

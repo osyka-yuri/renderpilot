@@ -6,10 +6,10 @@
     stats: DashboardStats;
   };
 
-  let { stats }: Props = $props();
+  const { stats }: Props = $props();
 </script>
 
-<BadgeGroup class="dashboard-summary" aria-label="Dashboard summary">
+<BadgeGroup aria-label="Dashboard summary">
   <Badge pill surface="outline">{stats.games} games</Badge>
   <Badge pill surface="outline">{stats.updates} updates</Badge>
 

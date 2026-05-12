@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { cn } from '@shared/utils';
   import { formatRisk, riskTone, type OperationHandler, type SwapPlan } from '@entities/operation';
   import { formatLabel } from '@entities/component';
-  import { Badge, Button } from '@shared/ui';
+  import { Badge, Button, DefinitionMetric, SectionHeader, Surface } from '@shared/ui';
 
   type RiskBadgeTone = 'success' | 'warning' | 'danger';
 
@@ -32,7 +33,7 @@
     onApply?: OperationHandler;
   };
 
-  let {
+  const {
     plan = null,
     busy = false,
     onApply = () => {
@@ -178,51 +179,60 @@
 </script>
 
 {#if plan}
-  <section class="plan-card" aria-labelledby="operation-plan-title">
-    <header class="plan-head">
-      <div class="plan-copy">
-        <p class="eyebrow">Operation Plan</p>
+  <Surface as="section" shadow class="grid gap-3 p-4" aria-labelledby="operation-plan-title">
+    <header class="grid gap-3 border-b border-border-subtle pb-3">
+      <SectionHeader
+        eyebrow="Operation Plan"
+        title={planTitle}
+        titleId="operation-plan-title"
+        description={plan.operation_id}
+        class="px-0"
+      >
+        <Badge pill size="md" tone={planRiskTone}>
+          Risk {planRiskLabel}
+        </Badge>
+      </SectionHeader>
 
-        <div class="plan-title-row">
-          <div>
-            <h3 id="operation-plan-title">{planTitle}</h3>
-            <p class="plan-id">{plan.operation_id}</p>
-          </div>
-
-          <Badge pill size="md" tone={planRiskTone}>
-            Risk {planRiskLabel}
-          </Badge>
-        </div>
-
-        <div class="plan-flags" aria-label="Operation requirements">
-          {#each planFlags as flag (flag.label)}
-            <Badge surface="outline" tone={flag.tone}>{flag.label}</Badge>
-          {/each}
-        </div>
+      <div class="flex flex-wrap gap-2" aria-label="Operation requirements">
+        {#each planFlags as flag (flag.label)}
+          <Badge surface="outline" tone={flag.tone}>{flag.label}</Badge>
+        {/each}
       </div>
     </header>
 
-    <dl class="plan-grid">
+    <dl class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
       {#each planMetrics as metric (metric.label)}
-        <div class="plan-metric">
-          <dt>{metric.label}</dt>
-          <dd>{metric.value}</dd>
-        </div>
+        <DefinitionMetric label={metric.label}>{metric.value}</DefinitionMetric>
       {/each}
     </dl>
 
     {#if hasPlanNotes}
-      <div class="plan-notes">
+      <div class="grid gap-3">
         {#each planNoteGroups as noteGroup (noteGroup.id)}
-          <section class={['note-block', noteGroup.className]}>
-            <div class="note-head">
-              <strong>{noteGroup.title}</strong>
+          <section
+            class={cn(
+              'rounded-2xl border border-border-subtle p-3',
+              noteGroup.className === 'warning'
+                ? 'border-warning/20 bg-warning/10'
+                : 'border-danger/20 bg-danger/10',
+            )}
+          >
+            <div class="flex items-center justify-between gap-3">
+              <strong class="text-text-strong">{noteGroup.title}</strong>
               <Badge pill tone={noteGroup.tone}>{noteGroup.items.length}</Badge>
             </div>
 
-            <ul class="note-list">
+            <ul class="mt-2 grid list-none gap-2 p-0">
               {#each noteGroup.items as item, index (`${noteGroup.id}-${index}`)}
-                <li>{item}</li>
+                <li
+                  class={cn(
+                    'relative pl-4 leading-snug text-text-soft',
+                    'before:absolute before:top-2.5 before:left-0 before:size-1.5',
+                    'before:rounded-full before:bg-current before:opacity-55',
+                  )}
+                >
+                  {item}
+                </li>
               {/each}
             </ul>
           </section>
@@ -230,10 +240,18 @@
       </div>
     {/if}
 
-    <footer class="plan-actions">
-      <div class="action-copy">
-        <strong>{canApply ? 'Ready to apply' : 'Not ready to apply'}</strong>
-        <p>{readinessText}</p>
+    <footer
+      class={cn(
+        'flex flex-wrap items-center justify-between gap-3 border-t',
+        'border-border-subtle pt-3',
+        'max-md:flex-col max-md:items-stretch',
+      )}
+    >
+      <div class="grid gap-0.5">
+        <strong class="text-text-strong"
+          >{canApply ? 'Ready to apply' : 'Not ready to apply'}</strong
+        >
+        <p class="text-text-muted">{readinessText}</p>
       </div>
 
       <Button
@@ -246,181 +264,5 @@
         {busy ? 'Applying...' : 'Apply Operation'}
       </Button>
     </footer>
-  </section>
+  </Surface>
 {/if}
-
-<style>
-  .plan-card {
-    display: grid;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xl);
-    background: var(--bg-card);
-    box-shadow: var(--shadow-card);
-  }
-
-  .plan-head,
-  .plan-copy,
-  .plan-notes,
-  .note-list,
-  .action-copy {
-    display: grid;
-  }
-
-  .plan-head,
-  .plan-copy,
-  .plan-notes {
-    gap: var(--space-3);
-  }
-
-  .plan-copy,
-  .note-list {
-    gap: var(--space-2);
-  }
-
-  .action-copy {
-    gap: 0.18rem;
-  }
-
-  .plan-title-row,
-  .plan-flags,
-  .note-head,
-  .plan-actions {
-    display: flex;
-  }
-
-  .plan-title-row {
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-
-  .plan-flags {
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  .eyebrow,
-  h3,
-  .plan-id,
-  .plan-actions p {
-    margin: 0;
-  }
-
-  .eyebrow {
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  h3 {
-    color: var(--text-strong);
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .plan-id {
-    margin-top: var(--space-1);
-    color: var(--text-muted);
-    word-break: break-word;
-  }
-
-  .plan-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: var(--space-2);
-    margin: 0;
-  }
-
-  .plan-metric,
-  .note-block {
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    background: var(--bg-soft);
-  }
-
-  dt {
-    margin-bottom: var(--space-1);
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  dd {
-    margin: 0;
-    color: var(--text-strong);
-    word-break: break-word;
-  }
-
-  .note-head {
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .note-head strong,
-  .action-copy strong {
-    color: var(--text-strong);
-  }
-
-  .note-list {
-    margin: var(--space-2) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .note-list li {
-    position: relative;
-    padding-left: var(--space-4);
-    color: var(--text-soft);
-    line-height: 1.45;
-  }
-
-  .note-list li::before {
-    content: '';
-    position: absolute;
-    top: 0.6rem;
-    left: 0;
-    width: 0.35rem;
-    height: 0.35rem;
-    border-radius: 999px;
-    background: currentColor;
-    opacity: 0.55;
-  }
-
-  .warning {
-    border-color: color-mix(in srgb, var(--warning) 18%, var(--border-subtle));
-    background: color-mix(in srgb, var(--warning) 6%, var(--bg-control));
-  }
-
-  .blocked {
-    border-color: color-mix(in srgb, var(--danger) 18%, var(--border-subtle));
-    background: color-mix(in srgb, var(--danger) 7%, var(--bg-control));
-  }
-
-  .plan-actions {
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .plan-actions p {
-    color: var(--text-muted);
-  }
-
-  @media (max-width: 720px) {
-    .plan-actions {
-      flex-direction: column;
-      align-items: stretch;
-    }
-  }
-</style>

@@ -4,6 +4,7 @@
   import SettingRow from './SettingRow.svelte';
   import SettingCopy from './SettingCopy.svelte';
   import SettingLabel from './SettingLabel.svelte';
+  import { cn } from '@shared/utils';
 
   type ToggleAdvancedModeHandler = () => void;
 
@@ -39,7 +40,7 @@
     onToggleAdvancedMode?: ToggleAdvancedModeHandler;
   };
 
-  let { advancedMode = false, onToggleAdvancedMode = () => undefined }: Props = $props();
+  const { advancedMode = false, onToggleAdvancedMode = () => undefined }: Props = $props();
 
   function handleAdvancedModeChange(nextChecked: boolean): void {
     if (nextChecked === advancedMode) {
@@ -65,10 +66,10 @@
     >
       <SettingCopy>
         <SettingLabel>{advancedModeCopy.label}</SettingLabel>
-        <span id={ADVANCED_MODE_LABEL_ID} class="row-title">
+        <span id={ADVANCED_MODE_LABEL_ID} class="text-base font-semibold text-text-strong">
           {advancedModeCopy.title}
         </span>
-        <span id={ADVANCED_MODE_DESCRIPTION_ID} class="row-copy">
+        <span id={ADVANCED_MODE_DESCRIPTION_ID} class="text-sm/snug">
           {advancedModeCopy.description}
         </span>
       </SettingCopy>
@@ -82,32 +83,15 @@
       <p>{scanSourceCopy.description}</p>
     </SettingCopy>
 
-    <div class="setting-status" aria-label={scanSourceCopy.note}>
+    <div
+      class={cn(
+        'grid min-w-max shrink-0 justify-items-end gap-2',
+        'max-md:min-w-0 max-md:justify-items-start',
+      )}
+      aria-label={scanSourceCopy.note}
+    >
       <Badge pill size="md" tone="muted">{scanSourceCopy.badge}</Badge>
-      <span class="status-note">{scanSourceCopy.note}</span>
+      <span class="text-xs/snug text-text-muted">{scanSourceCopy.note}</span>
     </div>
   </SettingRow>
 </SettingsSectionShell>
-
-<style>
-  .setting-status {
-    display: grid;
-    flex-shrink: 0;
-    gap: var(--space-2);
-    justify-items: end;
-    min-inline-size: max-content;
-  }
-
-  .status-note {
-    color: var(--text-muted);
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-
-  @media (max-width: 720px) {
-    .setting-status {
-      justify-items: start;
-      min-inline-size: 0;
-    }
-  }
-</style>

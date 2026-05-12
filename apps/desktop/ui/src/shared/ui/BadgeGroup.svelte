@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -7,26 +8,17 @@
     children?: Snippet;
   };
 
-  let { align = 'start', class: className = '', children, ...rest }: Props = $props();
+  const { align = 'start', class: className = '', children, ...rest }: Props = $props();
 
-  const classes = $derived(['badge-group', align === 'end' && 'badge-group--end', className]);
+  const classes = $derived(
+    cn(
+      'flex flex-wrap content-start items-start gap-2',
+      align === 'end' && 'justify-end',
+      className,
+    ),
+  );
 </script>
 
 <div {...rest} class={classes}>
   {@render children?.()}
 </div>
-
-<style>
-  .badge-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    align-items: flex-start;
-    align-content: flex-start;
-    justify-content: flex-start;
-  }
-
-  .badge-group--end {
-    justify-content: flex-end;
-  }
-</style>

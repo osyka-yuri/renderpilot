@@ -5,10 +5,10 @@
     technologies?: string[];
   };
 
-  let { technologies = [] }: Props = $props();
+  const { technologies = [] }: Props = $props();
 </script>
 
-<BadgeGroup class="technology-row">
+<BadgeGroup>
   {#if technologies.length === 0}
     <Badge pill surface="outline" tone="muted">No detected technologies yet</Badge>
   {:else}

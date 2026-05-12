@@ -32,7 +32,7 @@
     onOpenOperations?: GameSelectionHandler;
   };
 
-  let {
+  const {
     games = [],
     catalogVersion = 0,
     busy = false,
@@ -77,7 +77,7 @@
   });
 </script>
 
-<section class="screen-shell" aria-busy={busy}>
+<section class="grid gap-4" aria-busy={busy}>
   <GamesHeaderBar
     hasGames={games.length > 0}
     {busy}
@@ -95,8 +95,8 @@
       {onScan}
     />
   {:else}
-    <div class="filters-shell">
-      <div class="filters-anchor" bind:this={model.filtersAnchorRef}>
+    <div class="grid gap-2 px-1">
+      <div class="relative inline-flex flex-col" bind:this={model.filtersAnchorRef}>
         <GamesFilterToolbar
           searchQuery={model.filtersState.searchQuery}
           hasFilterIndicator={model.hasFilterIndicator}
@@ -109,6 +109,7 @@
           referenceElement={model.filtersAnchorRef}
           open={model.filtersState.isPopoverOpen}
           aria-label="Library filters"
+          panelClassName="min-w-[min(28rem,90vw)] max-w-[min(34rem,92vw)] max-md:min-w-[min(24rem,92vw)]"
           onOpenChange={model.handlePopoverOpenChange}
         >
           <GamesLibraryFilterPopover
@@ -140,30 +141,3 @@
     />
   {/if}
 </section>
-
-<style>
-  .screen-shell {
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  .filters-shell {
-    display: grid;
-    gap: var(--space-2);
-    padding: 0 var(--space-1);
-  }
-
-  .filters-anchor {
-    position: relative;
-    display: inline-flex;
-    flex-direction: column;
-    --popover-panel-min-width: min(28rem, 90vw);
-    --popover-panel-max-width: min(34rem, 92vw);
-  }
-
-  @media (max-width: 760px) {
-    .filters-anchor {
-      --popover-panel-min-width: min(24rem, 92vw);
-    }
-  }
-</style>

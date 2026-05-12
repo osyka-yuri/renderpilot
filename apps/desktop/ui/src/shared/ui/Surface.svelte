@@ -1,6 +1,40 @@
 <script lang="ts">
+  import { cva } from 'class-variance-authority';
+  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+
+  const surfaceVariants = cva(
+    'block border border-border-subtle text-text-strong transition duration-150 motion-reduce:transition-none',
+    {
+      variants: {
+        tone: {
+          panel: 'bg-bg-card',
+          elevated: 'bg-bg-elevated',
+          soft: 'bg-bg-soft',
+          sunken: 'border-dashed border-border-strong bg-bg-soft',
+        },
+        radius: {
+          md: 'rounded-2xl',
+          lg: 'rounded-2xl',
+        },
+        shadow: {
+          true: 'shadow-sm',
+          false: '',
+        },
+        interactive: {
+          true: 'focus-within:border-accent-outline focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-2 focus-within:ring-offset-bg-base hover:border-border-strong hover:bg-bg-card-hover hover:shadow-sm',
+          false: '',
+        },
+      },
+      defaultVariants: {
+        tone: 'panel',
+        radius: 'lg',
+        shadow: false,
+        interactive: false,
+      },
+    },
+  );
 
   type SurfaceTone = 'panel' | 'elevated' | 'soft' | 'sunken';
   type SurfaceRadius = 'md' | 'lg';
@@ -15,7 +49,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     as = 'div',
     tone = 'panel',
     radius = 'lg',
@@ -26,80 +60,9 @@
     ...rest
   }: Props = $props();
 
-  const classes = $derived(['surface', className]);
+  const classes = $derived(cn(surfaceVariants({ tone, radius, shadow, interactive }), className));
 </script>
 
-<svelte:element
-  this={as}
-  {...rest}
-  class={classes}
-  data-tone={tone}
-  data-radius={radius}
-  data-shadow={shadow ? '' : undefined}
-  data-interactive={interactive ? '' : undefined}
->
+<svelte:element this={as} {...rest} class={classes}>
   {@render children?.()}
 </svelte:element>
-
-<style>
-  .surface {
-    display: block;
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-strong);
-  }
-
-  .surface[data-tone='panel'] {
-    background: var(--bg-card);
-  }
-
-  .surface[data-tone='elevated'] {
-    background: var(--bg-elevated);
-  }
-
-  .surface[data-tone='soft'] {
-    background: color-mix(in srgb, var(--bg-soft) 58%, var(--bg-panel) 42%);
-  }
-
-  .surface[data-tone='sunken'] {
-    background: var(--bg-soft);
-    border-style: dashed;
-    border-color: var(--border-strong);
-  }
-
-  .surface[data-radius='md'] {
-    border-radius: var(--radius-lg);
-  }
-
-  .surface[data-radius='lg'] {
-    border-radius: var(--radius-xl);
-  }
-
-  .surface[data-shadow] {
-    box-shadow: var(--shadow-card);
-  }
-
-  .surface[data-interactive] {
-    transition:
-      border-color 140ms ease,
-      background-color 140ms ease,
-      box-shadow 140ms ease;
-  }
-
-  .surface[data-interactive]:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-card);
-  }
-
-  .surface[data-interactive]:focus-within {
-    border-color: var(--accent-outline);
-    box-shadow: var(--shadow-focus, var(--shadow-card));
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .surface[data-interactive] {
-      transition: none;
-    }
-  }
-</style>

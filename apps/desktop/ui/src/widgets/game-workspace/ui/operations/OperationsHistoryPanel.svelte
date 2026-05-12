@@ -2,8 +2,15 @@
   import type { OperationSummary } from '@entities/operation';
   import { formatLabel } from '@entities/component';
   import { statusTone } from '@entities/operation';
-  import { Badge, Button } from '@shared/ui';
-  import { formatTimestamp } from '@shared/utils';
+  import {
+    Badge,
+    Button,
+    DefinitionMetric,
+    EmptyStatePanel,
+    SectionHeader,
+    Surface,
+  } from '@shared/ui';
+  import { cn, formatTimestamp } from '@shared/utils';
 
   type CanRollback = (status: string) => boolean;
   type RollbackHandler = (operationId: string) => void | Promise<void>;
@@ -18,7 +25,7 @@
     onRollback?: RollbackHandler;
   };
 
-  let {
+  const {
     operations = [],
     busy = false,
     canRollback = () => false,
@@ -91,30 +98,44 @@
   }
 </script>
 
-<section class="content-section" aria-labelledby="operation-history-title">
-  <div class="section-head">
-    <div>
-      <p class="eyebrow">History</p>
-      <h3 id="operation-history-title">History</h3>
-    </div>
-
-    <Badge surface="outline" tone="muted">{entriesLabel}</Badge>
-  </div>
+<section class="grid gap-3" aria-labelledby="operation-history-title">
+  <SectionHeader eyebrow="History" title="History" titleId="operation-history-title">
+    <svelte:fragment>
+      <Badge surface="outline" tone="muted">{entriesLabel}</Badge>
+    </svelte:fragment>
+  </SectionHeader>
 
   {#if operations.length === 0}
-    <div class="empty-inline">No operations have been recorded for this game yet.</div>
+    <EmptyStatePanel>No operations have been recorded for this game yet.</EmptyStatePanel>
   {:else}
-    <div class="operation-list">
+    <div class="grid gap-2">
       {#each operations as operation (operation.operation_id)}
         {@const titleId = getOperationTitleId(operation.operation_id)}
         {@const rollback = getRollbackState(operation)}
 
-        <article class="operation-card" aria-labelledby={titleId}>
-          <div class="operation-top">
-            <div class="operation-summary">
-              <strong id={titleId}>{formatOptionalLabel(operation.kind)}</strong>
+        <Surface
+          as="article"
+          shadow
+          class={cn(
+            'grid gap-3 p-4',
+            '*:last:justify-self-end',
+            'max-lg:p-3',
+            'max-lg:*:last:w-full max-lg:*:last:justify-self-stretch',
+          )}
+          aria-labelledby={titleId}
+        >
+          <div
+            class={cn(
+              'flex items-center justify-between gap-4',
+              'max-lg:flex-col max-lg:items-start',
+            )}
+          >
+            <div class="min-w-0">
+              <strong id={titleId} class="text-text-strong"
+                >{formatOptionalLabel(operation.kind)}</strong
+              >
 
-              <p>
+              <p class="text-text-muted">
                 <time datetime={toDateTimeValue(operation.created_at)}>
                   {formatOptionalTimestamp(operation.created_at)}
                 </time>
@@ -126,29 +147,28 @@
             </Badge>
           </div>
 
-          <dl class="operation-metrics three-up" aria-label="Operation details">
-            <div>
-              <dt>Completed</dt>
-              <dd>
-                {#if operation.completed_at != null}
-                  <time datetime={toDateTimeValue(operation.completed_at)}>
-                    {formatOptionalTimestamp(operation.completed_at)}
-                  </time>
-                {:else}
-                  {EMPTY_VALUE}
-                {/if}
-              </dd>
-            </div>
+          <dl
+            class={cn(
+              'grid grid-cols-3 gap-2 border-t border-border-subtle pt-3',
+              'max-lg:grid-cols-1',
+            )}
+            aria-label="Operation details"
+          >
+            <DefinitionMetric label="Completed">
+              {#if operation.completed_at != null}
+                <time datetime={toDateTimeValue(operation.completed_at)}>
+                  {formatOptionalTimestamp(operation.completed_at)}
+                </time>
+              {:else}
+                {EMPTY_VALUE}
+              {/if}
+            </DefinitionMetric>
 
-            <div>
-              <dt>Backup status</dt>
-              <dd>{formatOptionalLabel(operation.backup_status)}</dd>
-            </div>
+            <DefinitionMetric label="Backup status">
+              {formatOptionalLabel(operation.backup_status)}
+            </DefinitionMetric>
 
-            <div>
-              <dt>Items</dt>
-              <dd>{operation.item_count}</dd>
-            </div>
+            <DefinitionMetric label="Items">{operation.item_count}</DefinitionMetric>
           </dl>
 
           <Button
@@ -163,154 +183,8 @@
           >
             {rollback.label}
           </Button>
-        </article>
+        </Surface>
       {/each}
     </div>
   {/if}
 </section>
-
-<style>
-  .content-section,
-  .operation-list,
-  .operation-card {
-    display: grid;
-  }
-
-  .content-section {
-    gap: var(--space-3);
-  }
-
-  .operation-list {
-    gap: 0.5rem;
-  }
-
-  .operation-card {
-    gap: var(--space-3);
-  }
-
-  .section-head,
-  .operation-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: center;
-  }
-
-  .section-head {
-    align-items: end;
-    padding: 0 var(--space-1);
-  }
-
-  .section-head > div,
-  .operation-summary {
-    min-width: 0;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .operation-card,
-  .empty-inline {
-    padding: var(--space-4);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xl);
-  }
-
-  .operation-card {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-card) 96%, white 4%),
-      var(--bg-card)
-    );
-    box-shadow: var(--shadow-card);
-  }
-
-  .empty-inline {
-    border-style: dashed;
-    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
-    box-shadow: none;
-    color: var(--text-muted);
-  }
-
-  .operation-card p {
-    margin: 0;
-    color: var(--text-muted);
-  }
-
-  .operation-metrics {
-    display: grid;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-3) 0 0;
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .three-up {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .operation-metrics > div {
-    min-width: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    background: var(--bg-soft);
-  }
-
-  .operation-metrics dt {
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .operation-metrics dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-    color: var(--text-strong);
-    font-size: 0.92rem;
-    font-weight: 600;
-    line-height: 1.25;
-  }
-
-  .operation-top strong {
-    color: var(--text-strong);
-  }
-
-  .operation-card > :last-child {
-    justify-self: end;
-  }
-
-  @media (max-width: 820px) {
-    .three-up {
-      grid-template-columns: 1fr;
-    }
-
-    .section-head,
-    .operation-top {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .operation-card {
-      padding: var(--space-3);
-    }
-
-    .operation-card > :last-child {
-      width: 100%;
-      justify-self: stretch;
-    }
-  }
-</style>

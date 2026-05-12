@@ -12,6 +12,8 @@
     OperationPlanSummary,
     OperationsHistoryPanel,
   } from '@widgets/game-workspace';
+  import { EmptyStatePanel } from '@shared/ui';
+  import { cn } from '@shared/utils';
 
   const noopBuildPlan: BuildPlanHandler = () => undefined;
   const noopOperation: OperationHandler = () => undefined;
@@ -26,7 +28,7 @@
     onRollback?: OperationHandler;
   };
 
-  let {
+  const {
     details = null,
     gameCard = null,
     plan = null,
@@ -48,14 +50,14 @@
   }
 </script>
 
-<section class="screen-shell">
+<section class="grid gap-5">
   {#if !details}
-    <div class="empty-state">
-      <h3>No game selected</h3>
-      <p>
+    <EmptyStatePanel>
+      <h3 class="text-base/tight font-semibold text-text-strong">No game selected</h3>
+      <p class="mt-1 text-text-muted">
         Select a game card on the dashboard to open one coherent workspace for that installation.
       </p>
-    </div>
+    </EmptyStatePanel>
   {:else}
     <InstallContextCards
       installPath={details.game.install_path}
@@ -80,51 +82,12 @@
 
     <OperationPlanSummary {plan} {busy} {onApply} />
 
-    <section class="lower-grid">
+    <section
+      class={cn('grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-4', 'max-xl:grid-cols-1')}
+    >
       <BackupOperationsPanel operations={model.backupOperations} />
 
       <OperationsHistoryPanel operations={details.operations} {busy} {canRollback} {onRollback} />
     </section>
   {/if}
 </section>
-
-<style>
-  .screen-shell {
-    display: grid;
-    gap: var(--space-5);
-  }
-
-  .empty-state {
-    padding: var(--space-4);
-    border: 1px dashed var(--border-subtle);
-    border-radius: var(--radius-xl);
-    background: color-mix(in srgb, var(--bg-card) 62%, transparent);
-    box-shadow: none;
-    color: var(--text-muted);
-  }
-
-  .empty-state h3 {
-    margin: 0;
-    color: var(--text-strong);
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .empty-state p {
-    margin: var(--space-1) 0 0;
-    color: var(--text-muted);
-  }
-
-  .lower-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-    gap: var(--space-4);
-  }
-
-  @media (max-width: 1180px) {
-    .lower-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>

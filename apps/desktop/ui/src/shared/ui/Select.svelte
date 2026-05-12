@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils';
+  import { cn, normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLSelectAttributes } from 'svelte/elements';
 
   type NativeSelectProps = Omit<
@@ -55,12 +55,23 @@
     ...restProps
   }: SelectProps = $props();
 
-  const selectRootClass = $derived([
-    'select-root',
-    size === 'sm' && 'select-root--sm',
-    disabled && 'select-root--disabled',
-    className,
-  ]);
+  const selectRootClass = $derived(cn('group relative block w-full', className));
+
+  const selectFieldClass = $derived(
+    cn(
+      'min-h-8 w-full min-w-0 py-1.5 pr-9 pl-3',
+      'rounded-2xl border border-border-control',
+      'bg-bg-control text-text-strong',
+      'leading-tight',
+      'cursor-pointer appearance-none',
+      'transition duration-150',
+      'disabled:cursor-not-allowed disabled:opacity-45',
+      'hover:border-border-strong hover:bg-bg-control-hover',
+      'active:bg-bg-control-pressed',
+      'focus-visible:border-accent-outline focus-visible:bg-bg-control focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base focus-visible:outline-none',
+      size === 'sm' && 'min-h-8 py-1.5 pr-8 pl-3 text-xs',
+    ),
+  );
 
   const a11yText = $derived(
     normalizeA11yTextProps({
@@ -95,13 +106,24 @@
 </script>
 
 <span class={selectRootClass}>
+  <span
+    class={cn(
+      'pointer-events-none absolute top-1/2 right-3 size-2 -translate-y-2/3',
+      'rotate-45 border-r border-b border-text-muted transition duration-150',
+      'group-focus-within:border-text-strong',
+      'group-hover:border-text-soft',
+
+      disabled && 'opacity-45',
+    )}
+    aria-hidden="true"
+  ></span>
   <select
     {...restProps}
     {disabled}
     {required}
     {value}
     title={selectTitle}
-    class="select-field"
+    class={selectFieldClass}
     aria-label={a11yText.ariaLabel}
     aria-labelledby={a11yText.ariaLabelledBy}
     aria-describedby={a11yText.ariaDescribedBy}
@@ -114,101 +136,3 @@
     {/each}
   </select>
 </span>
-
-<style>
-  .select-root {
-    position: relative;
-    display: block;
-    width: 100%;
-  }
-
-  .select-root::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    right: 0.78rem;
-
-    width: 0.5rem;
-    height: 0.5rem;
-
-    border-right: 1.5px solid var(--text-muted);
-    border-bottom: 1.5px solid var(--text-muted);
-
-    pointer-events: none;
-    transform: translateY(-65%) rotate(45deg);
-    transition:
-      border-color 160ms ease,
-      opacity 160ms ease;
-  }
-
-  .select-root--disabled::after {
-    opacity: 0.45;
-  }
-
-  .select-root:not(.select-root--disabled):hover::after {
-    border-color: var(--text-soft);
-  }
-
-  .select-root:focus-within::after {
-    border-color: var(--text-strong);
-  }
-
-  .select-field {
-    width: 100%;
-    min-width: 0;
-    min-height: 2rem;
-
-    padding: 0.4rem 2.15rem 0.4rem 0.75rem;
-
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-
-    background: var(--bg-control);
-    color: var(--text-strong);
-    color-scheme: var(--native-color-scheme);
-
-    font: inherit;
-    line-height: 1.2;
-
-    appearance: none;
-    cursor: pointer;
-
-    transition:
-      border-color 160ms ease,
-      background 160ms ease,
-      box-shadow 160ms ease,
-      opacity 160ms ease;
-  }
-
-  .select-field option {
-    background: var(--bg-panel-strong);
-    color: var(--text-strong);
-  }
-
-  .select-root--sm .select-field {
-    min-height: 1.875rem;
-    padding: 0.34rem 2rem 0.34rem 0.68rem;
-    font-size: 0.8125rem;
-  }
-
-  .select-field:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .select-field:not(:disabled):hover {
-    background: var(--bg-control-hover);
-    border-color: var(--border-strong);
-  }
-
-  .select-field:not(:disabled):active {
-    background: var(--bg-control-pressed);
-  }
-
-  .select-field:focus-visible {
-    background: var(--bg-control);
-    border-color: var(--accent-outline);
-    box-shadow: var(--shadow-focus);
-    outline: none;
-  }
-</style>

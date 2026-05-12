@@ -43,9 +43,9 @@
 </script>
 
 <script lang="ts">
+  import { cn, normalizeA11yTextProps } from '@shared/utils';
   import { cubicOut } from 'svelte/easing';
   import { slide } from 'svelte/transition';
-  import { normalizeA11yTextProps } from '@shared/utils';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Snippet } from 'svelte';
   import Badge from './Badge.svelte';
@@ -82,7 +82,7 @@
   }: AccordionProps = $props();
 
   const safeIdPrefix = $derived(createSafeIdPrefix(idPrefix));
-  const accordionClass = $derived(['accordion', className]);
+  const accordionClass = $derived(cn('grid gap-2', className));
 
   const a11yText = $derived(
     normalizeA11yTextProps({
@@ -195,11 +195,23 @@
     {@const panelId = getPanelId(item.value)}
     {@const badges = item.badges ?? []}
 
-    <div class="accordion-item" data-expanded={expanded ? 'true' : undefined}>
+    <div
+      class={cn('grid gap-2 rounded-2xl border border-border-subtle bg-bg-card p-2', 'shadow-sm')}
+    >
       <button
         id={triggerId}
         type="button"
-        class="accordion-trigger"
+        class={cn(
+          'group flex min-w-0 items-stretch justify-between gap-3 p-4',
+          'rounded-2xl border border-border-control bg-bg-control text-left',
+          'cursor-pointer transition duration-140 motion-reduce:transition-none',
+          !expanded && 'hover:border-border-strong hover:bg-bg-control-hover',
+          'focus-visible:ring-2 focus-visible:ring-accent',
+          'focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
+          'focus-visible:outline-none',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          expanded && 'border-accent-outline bg-accent-soft',
+        )}
         aria-expanded={expanded}
         aria-controls={panelId}
         disabled={item.disabled}
@@ -210,23 +222,30 @@
           handleTriggerKeydown(event, item);
         }}
       >
-        <span class="accordion-copy">
-          <span class="accordion-title-row">
-            <strong class="accordion-title">{item.title}</strong>
+        <span class="grid min-w-0 gap-1">
+          <span class={cn('flex min-w-0 items-baseline justify-between gap-3', 'max-lg:flex-col')}>
+            <strong class="min-w-0 text-base/tight wrap-break-word text-text-strong"
+              >{item.title}</strong
+            >
 
             {#if item.meta}
-              <span class="accordion-meta">{item.meta}</span>
+              <span class="shrink-0 text-xs/snug text-text-subtle">{item.meta}</span>
             {/if}
           </span>
 
           {#if item.summary}
-            <span class="accordion-summary">{item.summary}</span>
+            <span class="min-w-0 text-sm/snug wrap-break-word text-text-muted">{item.summary}</span>
           {/if}
         </span>
 
-        <span class="accordion-side">
+        <span
+          class={cn(
+            'flex min-w-0 shrink-0 items-center justify-end gap-2 self-center',
+            'max-lg:justify-start',
+          )}
+        >
           {#if badges.length}
-            <span class="accordion-badges">
+            <span class={cn('flex min-w-0 flex-wrap justify-end gap-1', 'max-lg:justify-start')}>
               {#each badges as badge, badgeIndex (`${badge.label}-${badge.tone ?? 'neutral'}-${badge.surface ?? 'outline'}-${badgeIndex}`)}
                 <Badge surface={badge.surface ?? 'outline'} tone={badge.tone ?? 'neutral'}>
                   {badge.label}
@@ -235,14 +254,41 @@
             </span>
           {/if}
 
-          <span class="accordion-chevron" aria-hidden="true"></span>
+          <span
+            class={cn(
+              'relative grid size-7 shrink-0 place-items-center',
+
+              'rounded-2xl border border-border-subtle bg-bg-soft',
+              'text-text-muted',
+
+              'transition duration-140',
+              'motion-reduce:transition-none',
+
+              'group-hover:text-text-strong',
+              'group-focus-visible:text-text-strong',
+
+              expanded && 'text-text-strong',
+              'before:block before:size-1',
+
+              'before:border-r-2 before:border-b-2 before:border-r-current',
+              'before:border-b-current',
+
+              'before:transition-transform before:duration-140',
+              'motion-reduce:before:transition-none',
+
+              'before:-translate-y-0.5 before:rotate-45',
+              expanded && 'before:translate-y-0.5 before:rotate-225',
+              'max-lg:self-start',
+            )}
+            aria-hidden="true"
+          ></span>
         </span>
       </button>
 
       {#if expanded}
         <div
           id={panelId}
-          class="accordion-panel"
+          class="grid gap-3 p-2"
           role="region"
           aria-labelledby={triggerId}
           transition:slide={PANEL_TRANSITION}
@@ -253,188 +299,3 @@
     </div>
   {/each}
 </div>
-
-<style>
-  .accordion {
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .accordion-item {
-    display: grid;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xl);
-    background: var(--bg-card);
-    box-shadow: var(--shadow-card);
-  }
-
-  .accordion-trigger {
-    width: 100%;
-    min-width: 0;
-    display: flex;
-    align-items: stretch;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    appearance: none;
-    background: var(--bg-control);
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      background 140ms ease,
-      border-color 140ms ease,
-      box-shadow 140ms ease,
-      opacity 140ms ease;
-  }
-
-  .accordion-trigger:hover:not(:disabled) {
-    background: var(--bg-control-hover);
-    border-color: var(--border-strong);
-  }
-
-  .accordion-trigger:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus);
-  }
-
-  .accordion-trigger:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  .accordion-item[data-expanded='true'] .accordion-trigger {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-soft) 72%, var(--bg-control)),
-      var(--bg-control)
-    );
-    border-color: var(--accent-outline);
-  }
-
-  .accordion-copy {
-    min-width: 0;
-    display: grid;
-    gap: var(--space-1);
-  }
-
-  .accordion-title-row {
-    min-width: 0;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .accordion-title {
-    min-width: 0;
-    color: var(--text-strong);
-    font-size: 1.05rem;
-    line-height: 1.2;
-    overflow-wrap: anywhere;
-  }
-
-  .accordion-meta {
-    flex-shrink: 0;
-    color: var(--text-subtle);
-    font-size: 0.8125rem;
-    line-height: 1.3;
-  }
-
-  .accordion-summary {
-    min-width: 0;
-    color: var(--text-muted);
-    font-size: 0.84rem;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-  }
-
-  .accordion-side {
-    min-width: 0;
-    flex-shrink: 0;
-    align-self: center;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-
-  .accordion-badges {
-    min-width: 0;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--space-1);
-  }
-
-  .accordion-chevron {
-    width: 1.75rem;
-    height: 1.75rem;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--bg-soft);
-    color: var(--text-muted);
-    transition:
-      color 140ms ease,
-      border-color 140ms ease,
-      background 140ms ease;
-  }
-
-  .accordion-chevron::before {
-    content: '';
-    width: 0.48rem;
-    height: 0.48rem;
-    border-right: 1.75px solid currentColor;
-    border-bottom: 1.75px solid currentColor;
-    transform: translateY(-0.12rem) rotate(45deg);
-    transition: transform 140ms ease;
-  }
-
-  .accordion-trigger:hover:not(:disabled) .accordion-chevron,
-  .accordion-trigger:focus-visible .accordion-chevron,
-  .accordion-item[data-expanded='true'] .accordion-chevron {
-    color: var(--text-strong);
-  }
-
-  .accordion-item[data-expanded='true'] .accordion-chevron::before {
-    transform: translateY(0.12rem) rotate(225deg);
-  }
-
-  .accordion-panel {
-    display: grid;
-    gap: var(--space-3);
-    padding: var(--space-2);
-  }
-
-  @media (max-width: 820px) {
-    .accordion-trigger,
-    .accordion-title-row {
-      flex-direction: column;
-    }
-
-    .accordion-side,
-    .accordion-badges {
-      justify-content: flex-start;
-    }
-
-    .accordion-chevron {
-      align-self: flex-start;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .accordion-trigger,
-    .accordion-chevron,
-    .accordion-chevron::before {
-      transition: none;
-    }
-  }
-</style>

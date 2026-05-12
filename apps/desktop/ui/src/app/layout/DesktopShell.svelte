@@ -27,7 +27,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     screen,
     busy = false,
     selectedGameTitle = null,
@@ -81,10 +81,34 @@
   }
 </script>
 
-<div class="shell" aria-busy={busy}>
-  <header class="app-header">
-    <div class="command-row">
-      <div class="nav-group">
+<div
+  class="
+    mx-auto grid min-h-screen max-w-[min(var(--app-shell-width),100%)]
+    grid-rows-[auto_minmax(0,1fr)] items-start gap-3 p-4
+    max-md:p-3
+  "
+  aria-busy={busy}
+>
+  <header
+    class="
+      sticky top-4 z-20 grid gap-2 self-start
+      max-md:top-3
+    "
+  >
+    <div
+      class="
+        flex min-h-16 items-center justify-between gap-3 rounded-2xl border
+        border-border-subtle bg-bg-layer/90 p-3 px-4 shadow-sm backdrop-blur-xl
+        backdrop-saturate-120
+        max-md:flex-wrap max-md:items-start max-md:p-3
+      "
+    >
+      <div
+        class="
+          flex min-h-0 min-w-0 flex-1 items-center gap-3
+          max-md:w-full max-md:items-start
+        "
+      >
         {#if canGoBack}
           <Button aria-label="Go back" iconOnly onclick={onBack}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -100,15 +124,30 @@
           </Button>
         {/if}
 
-        <div class="title-stack">
-          <p class="eyebrow">RenderPilot / {workspaceCopy.label}</p>
-          <h1 title={workspaceCopy.heading}>{workspaceCopy.heading}</h1>
+        <div class="grid min-w-0 gap-0.5">
+          <p class="text-xs tracking-widest text-text-subtle uppercase">
+            RenderPilot / {workspaceCopy.label}
+          </p>
+          <h1
+            class="
+              truncate text-2xl/tight font-semibold text-text-strong
+              max-md:text-xl
+            "
+            title={workspaceCopy.heading}
+          >
+            {workspaceCopy.heading}
+          </h1>
         </div>
       </div>
 
-      <div class="action-group">
+      <div
+        class="
+          ml-auto flex shrink-0 items-center gap-2
+          max-md:ml-0 max-md:w-full max-md:justify-end
+        "
+      >
         {#if busy}
-          <span class="status-indicator" role="status" aria-live="polite">
+          <span class="inline-flex" role="status" aria-live="polite">
             <Badge pill dot tone="warning">Working</Badge>
           </span>
         {/if}
@@ -138,180 +177,26 @@
     </div>
 
     {#if showError}
-      <div class="info-bar" data-tone="danger" role="alert" aria-live="assertive">
+      <div
+        class="
+          flex min-h-10 items-center gap-3 rounded-2xl border
+          border-border-subtle bg-bg-layer/90 p-2 px-3 shadow-sm
+          backdrop-blur-xl backdrop-saturate-120
+          max-md:flex-col max-md:items-start max-md:gap-2
+        "
+        data-tone="danger"
+        role="alert"
+        aria-live="assertive"
+      >
         <Badge pill dot tone="danger">Needs attention</Badge>
-        <p class="feedback-copy error">{normalizedErrorMessage}</p>
+        <p class="min-w-0 text-xs/snug text-text-muted">
+          {normalizedErrorMessage}
+        </p>
       </div>
     {/if}
   </header>
 
-  <main class="workspace-body">
+  <main class="grid min-w-0 gap-4">
     {@render children?.()}
   </main>
 </div>
-
-<style>
-  .shell {
-    min-height: 100vh;
-    max-width: min(var(--app-shell-width), 100%);
-    margin: 0 auto;
-    padding: var(--space-4);
-
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-3);
-  }
-
-  .app-header {
-    position: sticky;
-    top: var(--space-4);
-    z-index: 20;
-
-    display: grid;
-    align-self: start;
-    gap: var(--space-2);
-  }
-
-  .command-row,
-  .info-bar {
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--bg-layer) 86%, transparent);
-    box-shadow: var(--shadow-card);
-    backdrop-filter: blur(20px) saturate(120%);
-  }
-
-  .command-row {
-    min-height: 4rem;
-    padding: var(--space-3) var(--space-4);
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .nav-group {
-    min-width: 0;
-    min-height: 0;
-    flex: 1;
-
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .title-stack {
-    min-width: 0;
-
-    display: grid;
-    gap: 0.12rem;
-  }
-
-  .eyebrow,
-  h1,
-  .feedback-copy {
-    margin: 0;
-  }
-
-  .eyebrow {
-    color: var(--text-subtle);
-    font-size: 0.6875rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    overflow: hidden;
-    color: var(--text-strong);
-    font-size: 1.45rem;
-    font-weight: 600;
-    line-height: 1.15;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .action-group {
-    flex-shrink: 0;
-    margin-left: auto;
-
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .status-indicator {
-    display: inline-flex;
-  }
-
-  .info-bar {
-    min-height: 2.4rem;
-    padding: var(--space-2) var(--space-3);
-
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .info-bar[data-tone='danger'] {
-    border-color: color-mix(in srgb, var(--danger) 30%, var(--border-subtle));
-    background: color-mix(in srgb, var(--danger) 8%, var(--bg-layer));
-  }
-
-  .feedback-copy {
-    min-width: 0;
-    color: var(--text-muted);
-    font-size: 0.8125rem;
-    line-height: 1.3;
-  }
-
-  .feedback-copy.error {
-    color: var(--danger);
-  }
-
-  .workspace-body {
-    min-width: 0;
-
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  @media (max-width: 720px) {
-    .shell {
-      padding: var(--space-3);
-    }
-
-    .app-header {
-      top: var(--space-3);
-    }
-
-    .command-row {
-      padding: var(--space-3);
-
-      align-items: flex-start;
-      flex-wrap: wrap;
-    }
-
-    .nav-group {
-      width: 100%;
-      align-items: flex-start;
-    }
-
-    .action-group {
-      width: 100%;
-      margin-left: 0;
-      justify-content: flex-end;
-    }
-
-    .info-bar {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: var(--space-2);
-    }
-
-    h1 {
-      font-size: 1.25rem;
-    }
-  }
-</style>

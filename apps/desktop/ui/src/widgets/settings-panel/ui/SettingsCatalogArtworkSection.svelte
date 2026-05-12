@@ -94,8 +94,8 @@
       >
         <SettingCopy>
           <SettingLabel>{row.eyebrow}</SettingLabel>
-          <span class="row-title">{row.title}</span>
-          <span class="row-copy">{row.description}</span>
+          <span class="text-base font-semibold text-text-strong">{row.title}</span>
+          <span class="text-sm/snug">{row.description}</span>
         </SettingCopy>
       </Switch>
     </SettingRow>
@@ -103,8 +103,8 @@
 
   {#if coverSourcesMessage}
     <SettingRow>
-      <div class="catalog-sources-hint">
-        <p class="catalog-setting-hint" role="status" aria-live="polite">
+      <div class="px-4 py-2">
+        <p class="text-xs text-text-muted" role="status" aria-live="polite">
           {coverSourcesMessage}
         </p>
       </div>
@@ -121,7 +121,13 @@
       </p>
     </SettingCopy>
 
-    <div class="catalog-setting-stack" aria-busy={steamKeyBusy}>
+    <div
+      class="
+        grid w-full max-w-88 shrink-0 gap-2
+        max-md:w-full
+      "
+      aria-busy={steamKeyBusy}
+    >
       <label class="sr-only" for={STEAM_GRID_DB_KEY_INPUT_ID}>SteamGridDB API key</label>
 
       <Input
@@ -134,7 +140,7 @@
         aria-describedby={steamKeyMessageId}
       />
 
-      <div class="catalog-setting-actions">
+      <div class="flex flex-wrap gap-2">
         <Button
           variant="primary"
           size="sm"
@@ -157,7 +163,7 @@
       {#if steamKeyMessage}
         <p
           id={STEAM_GRID_DB_KEY_MESSAGE_ID}
-          class="catalog-setting-hint"
+          class="text-xs text-text-muted"
           role="status"
           aria-live="polite"
         >
@@ -167,48 +173,3 @@
     </div>
   </SettingRow>
 </SettingsSectionShell>
-
-<style>
-  .catalog-sources-hint {
-    padding-block: var(--space-2);
-    padding-inline: var(--space-4);
-  }
-
-  .catalog-setting-stack {
-    display: grid;
-    gap: var(--space-2);
-    width: min(100%, 22rem);
-    flex-shrink: 0;
-  }
-
-  .catalog-setting-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  .catalog-setting-hint {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  @media (max-width: 720px) {
-    .catalog-setting-stack {
-      width: 100%;
-    }
-  }
-</style>

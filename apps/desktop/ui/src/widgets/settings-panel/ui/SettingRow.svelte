@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -6,32 +7,17 @@
     children?: Snippet;
   };
 
-  let { children, class: className = '', ...rest }: Props = $props();
+  const { children, class: className = '', ...rest }: Props = $props();
 </script>
 
-<div {...rest} class={['setting-row', className]}>
+<div
+  {...rest}
+  class={cn(
+    'flex items-center justify-between gap-4 border-b border-border-subtle p-4',
+    'last:border-b-0',
+    'max-md:flex-col max-md:items-stretch max-md:gap-3',
+    className,
+  )}
+>
   {@render children?.()}
 </div>
-
-<style>
-  .setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: var(--space-4);
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  .setting-row:last-child {
-    border-bottom: 0;
-  }
-
-  @media (max-width: 720px) {
-    .setting-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.75rem;
-    }
-  }
-</style>

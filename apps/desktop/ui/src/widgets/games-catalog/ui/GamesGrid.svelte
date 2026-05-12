@@ -33,7 +33,7 @@
 
   const isCoverOperationIdle: CoverBusyPredicate = () => false;
 
-  let {
+  const {
     games = EMPTY_GAMES,
     busy = false,
     hasManualCoverAction = false,
@@ -61,7 +61,10 @@
 </script>
 
 {#if games.length > 0}
-  <div class="game-list" aria-busy={busy}>
+  <div
+    class="grid grid-cols-[repeat(auto-fit,minmax(20.5rem,1fr))] items-stretch gap-3"
+    aria-busy={busy}
+  >
     {#each games as game (game.id)}
       {@const gameId = game.id}
       {@const coverBusy = isCoverOperationBusy(gameId)}
@@ -100,27 +103,7 @@
     {/each}
   </div>
 {:else}
-  <div class="filtered-empty-state" aria-live="polite">
-    <p class="filtered-empty-description">No games match current filters.</p>
+  <div class="px-1" aria-live="polite">
+    <p class="leading-snug text-text-muted">No games match current filters.</p>
   </div>
 {/if}
-
-<style>
-  .game-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20.5rem, 1fr));
-    align-items: stretch;
-    gap: var(--space-3);
-  }
-
-  .filtered-empty-state {
-    display: block;
-    padding: 0 var(--space-1);
-  }
-
-  .filtered-empty-description {
-    margin: 0;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-</style>

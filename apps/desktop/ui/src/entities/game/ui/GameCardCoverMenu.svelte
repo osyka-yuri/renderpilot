@@ -12,7 +12,7 @@
   import { onMount, tick } from 'svelte';
 
   import { Popover, type PopoverOpenChangeEvent } from '@shared/ui';
-  import { portal, attachFloatingPanelResizeScroll, layoutFloatingPanel } from '@shared/utils';
+  import { cn, portal, attachFloatingPanelResizeScroll, layoutFloatingPanel } from '@shared/utils';
 
   type MenuActionId = 'fetch-cover' | 'pick-cover' | 'clear-cover';
 
@@ -44,7 +44,7 @@
   const ENABLED_MENU_ITEM_SELECTOR = '.card-menu-item:not(:disabled)';
   const noopMenuAction: MenuActionHandler = () => undefined;
 
-  let {
+  const {
     title,
     disabled = false,
     pickDisabled = false,
@@ -396,7 +396,12 @@
   });
 </script>
 
-<div class="card-corner-menu">
+<div
+  class="
+    pointer-events-auto absolute top-0 right-0 z-4 flex flex-col items-end gap-1
+    max-md:top-[calc(min(7.125rem,40vw)*900/600+0.75rem)]
+  "
+>
   <Popover
     anchor={triggerEl}
     referenceElement={triggerEl}
@@ -414,7 +419,15 @@
   <button
     bind:this={triggerEl}
     type="button"
-    class="card-menu-trigger"
+    class={cn(
+      'inline-flex size-7 items-center justify-center rounded-2xl border',
+      'border-border-subtle/80 bg-bg-card/80 p-0 leading-0 text-text-strong',
+      'backdrop-blur-xs',
+      'hover:bg-bg-card/90',
+      'focus-visible:outline-2 focus-visible:outline-offset-2',
+      'focus-visible:outline-accent',
+      'disabled:cursor-not-allowed disabled:opacity-45',
+    )}
     aria-label={`Cover options for ${title}`}
     aria-haspopup="menu"
     aria-expanded={isMenuOpen ? 'true' : 'false'}
@@ -422,13 +435,7 @@
     {disabled}
     onclick={handleTriggerClick}
   >
-    <svg
-      class="card-menu-trigger-icon"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      aria-hidden="true"
-    >
+    <svg class="block shrink-0" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
       <circle cx="3" cy="8" r="1.5" fill="currentColor" />
       <circle cx="8" cy="8" r="1.5" fill="currentColor" />
       <circle cx="13" cy="8" r="1.5" fill="currentColor" />
@@ -439,7 +446,10 @@
     <div
       bind:this={panelEl}
       id={panelId}
-      class="card-menu-panel"
+      class={cn(
+        'max-w-72 min-w-60 rounded-2xl border border-border-subtle/90 bg-bg-card',
+        'p-1.5 shadow-xl',
+      )}
       role="menu"
       tabindex="-1"
       use:portal
@@ -448,8 +458,15 @@
       {#each menuActions as action (action.id)}
         <button
           type="button"
-          class="card-menu-item"
-          class:card-menu-item-danger={action.danger === true}
+          class={cn(
+            'block w-full rounded-2xl border-none bg-transparent p-1.5',
+            'text-left text-xs text-text-strong',
+            'hover:bg-accent-soft',
+            'focus-visible:outline-2 focus-visible:-outline-offset-2',
+            'focus-visible:outline-accent',
+            'disabled:cursor-not-allowed disabled:opacity-45',
+            action.danger === true && !action.disabled && 'text-accent-strong/70',
+          )}
           role="menuitem"
           tabindex="-1"
           disabled={action.disabled}
@@ -464,102 +481,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .card-corner-menu {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 4;
-
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.25rem;
-    pointer-events: auto;
-  }
-
-  .card-menu-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--bg-card) 82%, transparent);
-    color: var(--text-strong);
-    line-height: 0;
-    cursor: pointer;
-    backdrop-filter: blur(4px);
-  }
-
-  .card-menu-trigger-icon {
-    display: block;
-    flex-shrink: 0;
-  }
-
-  .card-menu-trigger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--bg-card) 92%, transparent);
-  }
-
-  .card-menu-trigger:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .card-menu-trigger:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .card-menu-panel {
-    min-width: 15rem;
-    max-width: min(18rem, calc(100vw - 2rem));
-    padding: 0.35rem;
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-    background: var(--bg-card);
-    box-shadow:
-      0 8px 28px color-mix(in srgb, black 28%, transparent),
-      0 1px 0 color-mix(in srgb, white 8%, transparent);
-  }
-
-  .card-menu-item {
-    display: block;
-    width: 100%;
-    padding: 0.45rem 0.55rem;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-strong);
-    font-size: 0.8125rem;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .card-menu-item:hover:not(:disabled) {
-    background: var(--accent-soft);
-  }
-
-  .card-menu-item:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-  }
-
-  .card-menu-item:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .card-menu-item-danger:not(:disabled) {
-    color: color-mix(in srgb, var(--accent-strong) 70%, var(--text-strong));
-  }
-
-  @media (max-width: 720px) {
-    .card-corner-menu {
-      top: calc(min(7.125rem, 40vw) * 900 / 600 + var(--space-3));
-    }
-  }
-</style>

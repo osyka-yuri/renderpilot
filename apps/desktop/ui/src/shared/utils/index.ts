@@ -1,6 +1,7 @@
 export * from './primitive-types';
 export * from './a11y';
 export * from './callbacks';
+export * from './cn';
 export * from './dom-guards';
 export * from './floating-panel';
 export * from './format';

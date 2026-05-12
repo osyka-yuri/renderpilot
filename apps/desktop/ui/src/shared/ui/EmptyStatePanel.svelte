@@ -7,9 +7,16 @@
     children?: Snippet;
   };
 
-  const { children, class: className = '', ...rest }: Props = $props();
+  const { class: className = '', children, ...rest }: Props = $props();
 </script>
 
-<div {...rest} class={cn('grid min-w-0 flex-1 gap-1', className)}>
+<div
+  {...rest}
+  class={cn(
+    'rounded-2xl border border-dashed border-border-subtle bg-bg-card/60 p-4',
+    'text-text-muted shadow-none',
+    className,
+  )}
+>
   {@render children?.()}
 </div>

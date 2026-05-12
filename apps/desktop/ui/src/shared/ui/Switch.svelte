@@ -1,7 +1,28 @@
 <script lang="ts">
-  import { normalizeA11yTextProps } from '@shared/utils';
+  import { cva } from 'class-variance-authority';
+  import { cn, normalizeA11yTextProps } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
+
+  const switchRootVariants = cva(
+    'group flex w-full min-w-0 touch-manipulation items-center justify-between gap-4 border-0 bg-transparent p-0 text-start select-none focus-visible:outline-none',
+    {
+      variants: {
+        disabled: {
+          true: 'cursor-not-allowed opacity-50',
+          false: '',
+        },
+        stackOnMobile: {
+          true: 'max-md:flex-col max-md:items-stretch max-md:gap-3',
+          false: '',
+        },
+      },
+      defaultVariants: {
+        disabled: false,
+        stackOnMobile: true,
+      },
+    },
+  );
 
   type SwitchState = 'checked' | 'unchecked';
 
@@ -37,7 +58,7 @@
     onCheckedChange?: ((nextChecked: boolean, event: MouseEvent) => void) | undefined;
   };
 
-  let {
+  const {
     children,
 
     checked = false,
@@ -69,8 +90,29 @@
     }),
   );
 
-  const switchClass = $derived(['switch-root', className]);
+  const switchClass = $derived(cn(switchRootVariants({ disabled, stackOnMobile }), className));
   const stackOnMobileAttribute = $derived(stackOnMobile ? 'true' : undefined);
+
+  const trackClass = $derived(
+    cn(
+      'relative h-5 w-10 shrink-0 grow-0 basis-10 rounded-full border',
+      'transition duration-140 motion-reduce:transition-none',
+      checked ? 'border-transparent bg-accent' : 'border-border-control bg-bg-control',
+      !disabled && !checked && 'group-hover:bg-bg-control-hover',
+      !disabled && checked && 'group-hover:bg-accent-strong',
+      'group-focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
+    ),
+  );
+
+  const thumbClass = $derived(
+    cn(
+      'pointer-events-none absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full',
+      'transition-[inset-inline-start,background-color] duration-140 motion-reduce:transition-none',
+      checked
+        ? 'inset-s-[calc(100%-0.125rem-0.875rem)] bg-accent-contrast'
+        : 'inset-s-0.5 bg-text-soft',
+    ),
+  );
 
   function handleClick(event: MouseEvent): void {
     onClick?.(event);
@@ -98,154 +140,11 @@
   data-stack-on-mobile={stackOnMobileAttribute}
   onclick={handleClick}
 >
-  <span class="switch-copy">
+  <span class="min-w-0 flex-auto">
     {@render children?.()}
   </span>
 
-  <span class="switch-track" aria-hidden="true">
-    <span class="switch-thumb"></span>
+  <span class={trackClass} aria-hidden="true">
+    <span class={thumbClass}></span>
   </span>
 </button>
-
-<style>
-  .switch-root,
-  .switch-root * {
-    box-sizing: border-box;
-  }
-
-  .switch-root {
-    --switch-width: 2.5rem;
-    --switch-height: 1.25rem;
-    --switch-padding: 0.125rem;
-    --switch-thumb-size: 0.875rem;
-
-    --switch-track-background: var(--bg-control);
-    --switch-track-border-color: var(--border-control);
-    --switch-thumb-background: var(--text-soft);
-    --switch-thumb-position: var(--switch-padding);
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-
-    inline-size: 100%;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-
-    appearance: none;
-    background: transparent;
-
-    font: inherit;
-    color: inherit;
-    text-align: start;
-
-    cursor: pointer;
-    user-select: none;
-    touch-action: manipulation;
-  }
-
-  .switch-copy {
-    min-inline-size: 0;
-    flex: 1 1 auto;
-  }
-
-  .switch-track {
-    position: relative;
-    flex: 0 0 var(--switch-width);
-
-    inline-size: var(--switch-width);
-    block-size: var(--switch-height);
-    border: 1px solid var(--switch-track-border-color);
-    border-radius: 999px;
-
-    background-color: var(--switch-track-background);
-
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      box-shadow 140ms ease;
-  }
-
-  .switch-thumb {
-    position: absolute;
-    inset-block-start: 50%;
-    inset-inline-start: var(--switch-thumb-position);
-
-    inline-size: var(--switch-thumb-size);
-    block-size: var(--switch-thumb-size);
-    border-radius: 999px;
-
-    background-color: var(--switch-thumb-background);
-    transform: translateY(-50%);
-
-    pointer-events: none;
-
-    transition:
-      inset-inline-start 140ms ease,
-      background-color 140ms ease;
-  }
-
-  .switch-root[data-state='checked'] {
-    --switch-track-background: var(--accent);
-    --switch-track-border-color: transparent;
-    --switch-thumb-background: var(--accent-contrast);
-    --switch-thumb-position: calc(100% - var(--switch-padding) - var(--switch-thumb-size));
-  }
-
-  .switch-root:focus-visible {
-    outline: none;
-  }
-
-  .switch-root:focus-visible .switch-track {
-    box-shadow: var(--shadow-focus);
-  }
-
-  @media (hover: hover) {
-    .switch-root:not(:disabled):not([data-state='checked']):hover {
-      --switch-track-background: var(--bg-control-hover);
-    }
-
-    .switch-root:not(:disabled)[data-state='checked']:hover {
-      --switch-track-background: var(--accent-strong);
-    }
-  }
-
-  .switch-root:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  @media (max-width: 720px) {
-    .switch-root[data-stack-on-mobile='true'] {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.75rem;
-    }
-
-    .switch-root[data-stack-on-mobile='true'] .switch-track {
-      align-self: flex-start;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .switch-track,
-    .switch-thumb {
-      transition: none;
-    }
-  }
-
-  @media (forced-colors: active) {
-    .switch-track {
-      border-color: CanvasText;
-    }
-
-    .switch-root:focus-visible .switch-track {
-      outline: 2px solid Highlight;
-      outline-offset: 2px;
-      box-shadow: none;
-    }
-  }
-</style>

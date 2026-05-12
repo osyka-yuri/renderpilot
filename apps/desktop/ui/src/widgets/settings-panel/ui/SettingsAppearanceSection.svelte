@@ -6,6 +6,7 @@
   import SettingLabel from './SettingLabel.svelte';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@entities/settings';
+  import { cn } from '@shared/utils';
 
   type SelectChangeHandler<TValue extends string> = (value: TValue) => void;
 
@@ -20,7 +21,7 @@
     onLanguageChange?: SelectChangeHandler<LanguageMode>;
   };
 
-  let {
+  const {
     themeMode = 'system',
     languageMode = 'system',
     themeOptions = [],
@@ -59,7 +60,7 @@
   title="Appearance and language"
   description="Keep the shell visually consistent across themes and languages without turning preferences into oversized cards."
 >
-  <div class="settings-list">
+  <div>
     <SettingRow>
       <SettingCopy>
         <SettingLabel>Display</SettingLabel>
@@ -70,7 +71,7 @@
         </p>
       </SettingCopy>
 
-      <span class="setting-control">
+      <span class={cn('block w-full max-w-60 min-w-52 shrink-0', 'max-md:w-full max-md:min-w-0')}>
         <Select
           aria-label="Theme mode"
           options={themeOptions}
@@ -90,7 +91,7 @@
         </p>
       </SettingCopy>
 
-      <span class="setting-control">
+      <span class={cn('block w-full max-w-60 min-w-52 shrink-0', 'max-md:w-full max-md:min-w-0')}>
         <Select
           aria-label="Interface language"
           options={languageOptions}
@@ -101,24 +102,3 @@
     </SettingRow>
   </div>
 </SettingsSectionShell>
-
-<style>
-  .settings-list {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .setting-control {
-    display: block;
-    width: min(100%, 15rem);
-    min-width: 13rem;
-    flex: 0 0 auto;
-  }
-
-  @media (max-width: 720px) {
-    .setting-control {
-      width: 100%;
-      min-width: 0;
-    }
-  }
-</style>
