@@ -1,7 +1,8 @@
 use std::{collections::BTreeSet, path::Path};
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, OperationId, Swappability,
+    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, OperationId,
+    Swappability,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -33,11 +34,11 @@ impl DashboardRiskLevel {
     }
 }
 
-pub(crate) fn available_update_count(
-    groups: &[renderpilot_application::ComponentFileReplacementCandidates],
+pub(crate) fn available_update_count<'a>(
+    groups: impl IntoIterator<Item = &'a renderpilot_application::ComponentFileReplacementCandidates>,
 ) -> usize {
     groups
-        .iter()
+        .into_iter()
         .filter(|group| {
             group.candidates().iter().any(|candidate| {
                 candidate.comparison() == renderpilot_application::CandidateComparison::NewerVersion
@@ -49,10 +50,15 @@ pub(crate) fn available_update_count(
 pub(crate) fn library_tags(components: &[GraphicsComponent]) -> Vec<String> {
     components
         .iter()
+        .filter(|component| is_visible_graphics_technology(component.technology()))
         .map(|component| component.technology().as_slug().to_owned())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
+}
+
+pub(crate) fn is_visible_graphics_technology(technology: GraphicsTechnology) -> bool {
+    technology != GraphicsTechnology::Unknown
 }
 
 pub(crate) fn dashboard_risk_level(components: &[GraphicsComponent]) -> DashboardRiskLevel {

@@ -111,9 +111,40 @@ mod tests {
     }
 
     #[test]
-    fn graphics_technology_parser_accepts_legacy_aliases() {
-        let parsed = graphics_technology("DirectStorage".to_owned())
-            .expect("legacy alias should deserialize through storage mapping");
+    fn graphics_technology_storage_parser_accepts_slug_values() {
+        let parsed = graphics_technology("direct_storage".to_owned())
+            .expect("slug value should deserialize through storage mapping");
         assert_eq!(parsed, GraphicsTechnology::DirectStorage);
+    }
+
+    #[test]
+    fn graphics_technology_codec_roundtrips_new_graphics_slugs() {
+        for technology in [
+            GraphicsTechnology::IntelXeLl,
+            GraphicsTechnology::AmdFsrRayRegeneration,
+        ] {
+            let serialized = enum_to_text(&technology).expect("enum should serialize");
+            assert_eq!(serialized, technology.as_slug());
+
+            let parsed: GraphicsTechnology =
+                enum_from_text(&serialized).expect("enum should deserialize");
+            assert_eq!(parsed, technology);
+        }
+    }
+
+    #[test]
+    fn graphics_technology_storage_parser_rejects_legacy_pascal_case_values() {
+        let intel = graphics_technology("IntelXeLl".to_owned());
+        let amd = graphics_technology("AmdFsrRayRegeneration".to_owned());
+
+        assert!(intel.is_err());
+        assert!(amd.is_err());
+    }
+
+    #[test]
+    fn enum_from_text_rejects_legacy_pascal_case_graphics_values() {
+        let parsed = enum_from_text::<GraphicsTechnology>("IntelXeLl");
+
+        assert!(parsed.is_err());
     }
 }

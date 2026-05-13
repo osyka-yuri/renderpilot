@@ -367,6 +367,67 @@ fn fast_cached_scan_can_be_partial_when_new_dlls_are_added_after_cache_warmup() 
 }
 
 #[test]
+fn detector_scans_intel_xell_runtime_files_from_disk() {
+    let folder = temp_dlss_folder(b"intel-xell");
+    let game = game_installation(folder.clone());
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+
+    fs::rename(folder.join(TEMP_DLSS_NAME), folder.join("libxell.dll"))
+        .expect("fixture should rename to XeLL dll");
+    fs::write(folder.join("libxell_dx11.dll"), b"intel-xell-dx11")
+        .expect("XeLL dx11 dll should be written");
+
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("detection should succeed");
+
+    assert_detects(&libraries, "libxell.dll", GraphicsTechnology::IntelXeLl);
+    assert_detects(&libraries, "libxell_dx11.dll", GraphicsTechnology::IntelXeLl);
+}
+
+#[test]
+fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
+    let folder = temp_dlss_folder(b"amd-denoiser");
+    let game = game_installation(folder.clone());
+    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
+
+    fs::remove_file(folder.join(TEMP_DLSS_NAME)).expect("temporary dlss file should be removed");
+    fs::write(folder.join("amd_fidelityfx_denoiser.dll"), b"amd-denoiser")
+        .expect("denoiser dll should be written");
+    fs::write(folder.join("amd_fidelityfx_denoiser_dx12.dll"), b"amd-denoiser-dx12")
+        .expect("denoiser dx12 dll should be written");
+    fs::write(folder.join("amd_fidelityfx_loader_dx12.dll"), b"amd-loader")
+        .expect("loader dll should be written");
+    fs::write(folder.join("amd_fidelityfx_upscaler.dll"), b"amd-upscaler")
+        .expect("upscaler dll should be written");
+
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("detection should succeed");
+
+    assert_detects(
+        &libraries,
+        "amd_fidelityfx_denoiser.dll",
+        GraphicsTechnology::AmdFsrRayRegeneration,
+    );
+    assert_detects(
+        &libraries,
+        "amd_fidelityfx_denoiser_dx12.dll",
+        GraphicsTechnology::AmdFsrRayRegeneration,
+    );
+    assert_detects(
+        &libraries,
+        "amd_fidelityfx_loader_dx12.dll",
+        GraphicsTechnology::Unknown,
+    );
+    assert_detects(
+        &libraries,
+        "amd_fidelityfx_upscaler.dll",
+        GraphicsTechnology::AmdFsr,
+    );
+}
+
+#[test]
 fn default_detector_depth_finds_deeply_nested_nvidia_runtime_dlls() {
     let root = temp_dlss_folder(b"root");
     let nested = root

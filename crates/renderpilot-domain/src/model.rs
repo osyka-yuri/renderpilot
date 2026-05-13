@@ -220,52 +220,56 @@ stable_enum! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum GraphicsTechnology {
     /// NVIDIA DLSS Super Resolution.
-    #[serde(rename = "dlss_super_resolution", alias = "DlssSuperResolution")]
+    #[serde(rename = "dlss_super_resolution")]
     DlssSuperResolution,
 
     /// NVIDIA DLSS Frame Generation.
-    #[serde(rename = "dlss_frame_generation", alias = "DlssFrameGeneration")]
+    #[serde(rename = "dlss_frame_generation")]
     DlssFrameGeneration,
 
     /// NVIDIA DLSS Ray Reconstruction.
-    #[serde(rename = "dlss_ray_reconstruction", alias = "DlssRayReconstruction")]
+    #[serde(rename = "dlss_ray_reconstruction")]
     DlssRayReconstruction,
 
     /// NVIDIA Streamline integration.
-    #[serde(rename = "nvidia_streamline", alias = "NvidiaStreamline")]
+    #[serde(rename = "nvidia_streamline")]
     NvidiaStreamline,
 
     /// NVIDIA Reflex.
-    #[serde(rename = "nvidia_reflex", alias = "NvidiaReflex")]
+    #[serde(rename = "nvidia_reflex")]
     NvidiaReflex,
 
     /// Intel XeSS Super Resolution.
-    #[serde(rename = "intel_xess", alias = "IntelXeSs")]
+    #[serde(rename = "intel_xess")]
     IntelXeSs,
 
     /// Intel Xe Frame Generation.
-    #[serde(rename = "intel_xefg", alias = "IntelXeFg")]
+    #[serde(rename = "intel_xefg")]
     IntelXeFg,
 
+    /// Intel Xe Low Latency.
+    #[serde(rename = "intel_xell")]
+    IntelXeLl,
+
     /// AMD FidelityFX Super Resolution.
-    #[serde(rename = "amd_fsr", alias = "AmdFsr")]
+    #[serde(rename = "amd_fsr")]
     AmdFsr,
 
     /// AMD FidelityFX Frame Generation.
-    #[serde(rename = "amd_fsr_frame_generation", alias = "AmdFsrFrameGeneration")]
+    #[serde(rename = "amd_fsr_frame_generation")]
     AmdFsrFrameGeneration,
 
-    /// Microsoft DirectStorage runtime.
-    #[serde(rename = "direct_storage", alias = "DirectStorage")]
-    DirectStorage,
+    /// AMD FSR Ray Regeneration (denoiser).
+    #[serde(rename = "amd_fsr_ray_regeneration")]
+    AmdFsrRayRegeneration,
 
-    /// OptiScaler integration.
-    #[serde(rename = "optiscaler", alias = "OptiScaler")]
-    OptiScaler,
+    /// Microsoft DirectStorage runtime.
+    #[serde(rename = "direct_storage")]
+    DirectStorage,
 
     /// Technology is present but not classified yet.
     #[default]
-    #[serde(rename = "unknown", alias = "Unknown")]
+    #[serde(rename = "unknown")]
     Unknown,
 }
 
@@ -279,10 +283,11 @@ impl GraphicsTechnology {
         Self::NvidiaReflex,
         Self::IntelXeSs,
         Self::IntelXeFg,
+        Self::IntelXeLl,
         Self::AmdFsr,
         Self::AmdFsrFrameGeneration,
+        Self::AmdFsrRayRegeneration,
         Self::DirectStorage,
-        Self::OptiScaler,
         Self::Unknown,
     ];
 
@@ -297,10 +302,11 @@ impl GraphicsTechnology {
             Self::NvidiaReflex => "nvidia_reflex",
             Self::IntelXeSs => "intel_xess",
             Self::IntelXeFg => "intel_xefg",
+            Self::IntelXeLl => "intel_xell",
             Self::AmdFsr => "amd_fsr",
             Self::AmdFsrFrameGeneration => "amd_fsr_frame_generation",
+            Self::AmdFsrRayRegeneration => "amd_fsr_ray_regeneration",
             Self::DirectStorage => "direct_storage",
-            Self::OptiScaler => "optiscaler",
             Self::Unknown => "unknown",
         }
     }
@@ -490,16 +496,19 @@ mod tests {
     }
 
     #[test]
-    fn serde_uses_graphics_slugs_but_accepts_legacy_variant_names() {
+    fn serde_uses_graphics_slugs_only() {
         let json = serde_json::to_string(&GraphicsTechnology::DlssSuperResolution).unwrap();
         assert_eq!(json, "\"dlss_super_resolution\"");
 
         let from_slug: GraphicsTechnology =
             serde_json::from_str("\"dlss_super_resolution\"").unwrap();
         assert_eq!(from_slug, GraphicsTechnology::DlssSuperResolution);
+    }
 
-        let from_legacy_name: GraphicsTechnology =
-            serde_json::from_str("\"DlssSuperResolution\"").unwrap();
-        assert_eq!(from_legacy_name, GraphicsTechnology::DlssSuperResolution);
+    #[test]
+    fn serde_rejects_legacy_graphics_variant_names() {
+        let legacy_name = serde_json::from_str::<GraphicsTechnology>("\"DlssSuperResolution\"");
+
+        assert!(legacy_name.is_err());
     }
 }

@@ -499,11 +499,7 @@ mod tests {
             Some(GraphicsTechnology::AmdFsr)
         );
         assert_eq!(
-            patterns.match_file_name("amd_fidelityfx_denoiser_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
+            patterns.match_file_name("amd_fidelityfx_upscaler.dll"),
             Some(GraphicsTechnology::AmdFsr)
         );
         assert_eq!(
@@ -513,6 +509,24 @@ mod tests {
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_vk.dll"),
             Some(GraphicsTechnology::AmdFsr)
+        );
+    }
+
+    #[test]
+    fn detects_amd_fsr_denoiser_and_loader() {
+        let patterns = pattern_set();
+
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_denoiser.dll"),
+            Some(GraphicsTechnology::AmdFsrRayRegeneration)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_denoiser_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsrRayRegeneration)
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
+            Some(GraphicsTechnology::Unknown)
         );
     }
 
@@ -584,7 +598,11 @@ mod tests {
         );
         assert_eq!(
             patterns.match_file_name("libxell.dll"),
-            Some(GraphicsTechnology::IntelXeSs)
+            Some(GraphicsTechnology::IntelXeLl)
+        );
+        assert_eq!(
+            patterns.match_file_name("libxell_dx11.dll"),
+            Some(GraphicsTechnology::IntelXeLl)
         );
     }
 
@@ -656,13 +674,13 @@ mod tests {
               "pattern": "nvngx_dlss.dll",
               "kind": "exact",
               "platform": "windows",
-              "technology": "DlssSuperResolution"
+              "technology": "dlss_super_resolution"
             },
             {
               "pattern": "NVNGX_DLSS.DLL",
               "kind": "exact",
               "platform": "windows",
-              "technology": "DlssSuperResolution"
+              "technology": "dlss_super_resolution"
             }
           ]
         }

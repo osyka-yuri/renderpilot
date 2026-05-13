@@ -1,12 +1,13 @@
-use renderpilot_domain::GameId;
+use renderpilot_application::ComponentFileReplacementCandidates;
+use renderpilot_domain::{GameId, GraphicsComponent, GraphicsTechnology};
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
 use serde_json::Value;
 use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::utils::{
-    available_update_count, dashboard_risk_level, library_tags, to_json, DashboardRiskLevel,
-    JsonResult,
+    available_update_count, dashboard_risk_level, is_visible_graphics_technology, library_tags,
+    to_json, DashboardRiskLevel, JsonResult,
 };
 use crate::{catalog, output, CliError};
 
@@ -326,11 +327,17 @@ struct GameCardMetrics {
 impl GameCardMetrics {
     fn from_details(details: &catalog::GameDetailsCatalogResult) -> Self {
         let operation_entries = &details.operations.operations;
+        let visible_component_ids = visible_component_ids(&details.components);
 
         Self {
             library_tags: library_tags(&details.components),
-            component_count: details.components.len(),
-            available_update_count: available_update_count(&details.candidate_groups),
+            component_count: visible_component_count(&details.components),
+            available_update_count: available_update_count(
+                details
+                    .candidate_groups
+                    .iter()
+                    .filter(|group| visible_component_ids.contains(group.component_id().as_str())),
+            ),
             risk_level: dashboard_risk_level(&details.components),
             backup_available: operation_entries.iter().any(|entry| entry.backup_count > 0),
             operation_count: operation_entries.len(),
@@ -353,12 +360,18 @@ pub(crate) struct GameDetailsOutput {
 impl GameDetailsOutput {
     pub(crate) fn load(game_id: GameId) -> Result<Self, CliError> {
         let details = catalog::get_game_details(game_id)?;
-        let candidate_groups = output::candidate_groups_value(details.candidate_groups)?;
+        let visible_components = filter_visible_components(details.components);
+        let visible_component_ids = visible_component_ids(&visible_components);
+        let visible_candidate_groups = filter_visible_candidate_groups(
+            details.candidate_groups,
+            &visible_component_ids,
+        );
+        let candidate_groups = output::candidate_groups_value(visible_candidate_groups)?;
         let operations = output::operation_summaries_value(&details.operations)?;
 
         Ok(Self {
             game: details.game,
-            components: details.components,
+            components: visible_components,
             candidate_groups,
             operations,
         })
@@ -405,13 +418,26 @@ fn normalize_page_offset(value: i64) -> usize {
 fn normalize_library_names(values: Vec<String>) -> Vec<String> {
     let mut normalized = values
         .into_iter()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
+        .filter_map(normalize_library_name)
         .collect::<Vec<_>>();
 
     normalized.sort();
     normalized.dedup();
     normalized
+}
+
+fn normalize_library_name(value: String) -> Option<String> {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    match parse_graphics_technology(trimmed) {
+        Some(GraphicsTechnology::Unknown) => None,
+        Some(technology) => Some(technology.as_slug().to_owned()),
+        None => None,
+    }
 }
 
 fn normalize_selected_libraries(
@@ -434,6 +460,42 @@ fn normalize_selected_libraries(
     selected_libraries
 }
 
+fn parse_graphics_technology(value: &str) -> Option<GraphicsTechnology> {
+    GraphicsTechnology::from_slug(value)
+}
+
+fn filter_visible_components(components: Vec<GraphicsComponent>) -> Vec<GraphicsComponent> {
+    components
+        .into_iter()
+        .filter(|component| is_visible_graphics_technology(component.technology()))
+        .collect()
+}
+
+fn filter_visible_candidate_groups(
+    candidate_groups: Vec<ComponentFileReplacementCandidates>,
+    visible_component_ids: &BTreeSet<String>,
+) -> Vec<ComponentFileReplacementCandidates> {
+    candidate_groups
+        .into_iter()
+        .filter(|group| visible_component_ids.contains(group.component_id().as_str()))
+        .collect()
+}
+
+fn visible_component_ids(components: &[GraphicsComponent]) -> BTreeSet<String> {
+    components
+        .iter()
+    .filter(|component| is_visible_graphics_technology(component.technology()))
+        .map(|component| component.id().as_str().to_owned())
+        .collect()
+}
+
+fn visible_component_count(components: &[GraphicsComponent]) -> usize {
+    components
+        .iter()
+        .filter(|component| is_visible_graphics_technology(component.technology()))
+        .count()
+}
+
 fn compare_game_card_identity(left: &GameCardOutput, right: &GameCardOutput) -> Ordering {
     left.title
         .cmp(&right.title)
@@ -450,4 +512,25 @@ fn page_items(items: &[GameCardOutput], page: QueryGameCardsPage) -> Vec<GameCar
 
 fn query_fingerprint(query: &QueryGameCards) -> String {
     serde_json::to_string(query).unwrap_or_else(|_| String::from("{}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_library_name;
+
+    #[test]
+    fn normalize_library_name_keeps_current_slugs_and_drops_unknown() {
+        assert_eq!(
+            normalize_library_name(String::from(" dlss_super_resolution ")),
+            Some(String::from("dlss_super_resolution")),
+        );
+        assert_eq!(normalize_library_name(String::from("unknown")), None);
+        assert_eq!(normalize_library_name(String::from("   ")), None);
+    }
+
+    #[test]
+    fn normalize_library_name_rejects_legacy_and_non_slug_values() {
+        assert_eq!(normalize_library_name(String::from("IntelXeLl")), None);
+        assert_eq!(normalize_library_name(String::from("steam")), None);
+    }
 }

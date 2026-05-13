@@ -564,7 +564,7 @@ mod tests {
                 'game:correct' AS {},
                 'component:c1' AS {},
                 'NativeLibrary' AS {},
-                'DlssSuperResolution' AS {},
+                'dlss_super_resolution' AS {},
                 'Swappable' AS {},
                 '[]' AS {}
             ",

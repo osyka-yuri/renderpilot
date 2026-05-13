@@ -17,7 +17,7 @@ use renderpilot_storage_sqlite::SqliteStorage;
 use serde_json::Value;
 
 use super::{
-    apply_operation_plan, build_swap_plan, get_catalog_setting, query_game_cards,
+    apply_operation_plan, build_swap_plan, get_catalog_setting, get_game_details, query_game_cards,
     rollback_operation, scan_manual_folder, set_catalog_setting,
     utils::{dashboard_risk_level, library_tags, normalized_path_string as path_string},
 };
@@ -387,6 +387,101 @@ fn query_game_cards_returns_total_available_libraries_and_paged_items() {
         !result.query_fingerprint().is_empty(),
         "fingerprint should be present",
     );
+}
+
+#[test]
+fn query_game_cards_excludes_unknown_from_tags_available_libraries_and_visible_count() {
+    let fixture = DesktopFixture::new("query-game-cards-hide-unknown");
+
+    let game = sample_game("manual:C:/Games/Visible", "Visible", "C:/Games/Visible");
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[
+            sample_component_from_bytes(
+                "component:visible:dlss",
+                game.id().as_str(),
+                GraphicsTechnology::DlssSuperResolution,
+                Swappability::Swappable,
+                "C:/Games/Visible/nvngx_dlss.dll",
+                None,
+                b"visible-dlss",
+            ),
+            sample_component_from_bytes(
+                "component:visible:unknown",
+                game.id().as_str(),
+                GraphicsTechnology::Unknown,
+                Swappability::ReadOnly,
+                "C:/Games/Visible/mystery.dll",
+                None,
+                b"visible-unknown",
+            ),
+        ],
+    );
+
+    let result = query_all_game_cards().expect("query should succeed");
+    let items = result.items();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(json_string_array_set(&items[0], "library_tags"), string_set(&["dlss_super_resolution"]));
+    assert_eq!(items[0]["component_count"], 1);
+    assert!(!result.available_libraries().contains("unknown"));
+}
+
+#[test]
+fn query_game_cards_excludes_unknown_from_visible_update_count() {
+    let fixture = DesktopFixture::new("query-game-cards-hide-unknown-updates");
+
+    let game = sample_game("manual:C:/Games/VisibleUpdates", "Visible Updates", "C:/Games/VisibleUpdates");
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[
+            sample_component_from_bytes(
+                "component:visible-updates:dlss",
+                game.id().as_str(),
+                GraphicsTechnology::DlssSuperResolution,
+                Swappability::Swappable,
+                "C:/Games/VisibleUpdates/nvngx_dlss.dll",
+                Some("1.0.0"),
+                b"visible-updates-dlss",
+            ),
+            sample_component_from_bytes(
+                "component:visible-updates:unknown",
+                game.id().as_str(),
+                GraphicsTechnology::Unknown,
+                Swappability::ReadOnly,
+                "C:/Games/VisibleUpdates/mystery.dll",
+                Some("1.0.0"),
+                b"visible-updates-unknown",
+            ),
+        ],
+    );
+    fixture.store_artifact(sample_artifact_from_bytes(
+        "artifact:visible-updates:dlss",
+        GraphicsTechnology::DlssSuperResolution,
+        "C:/Artifacts/visible-updates/nvngx_dlss.dll",
+        Some("2.0.0"),
+        b"artifact-visible-updates-dlss",
+        Some(game.id().as_str()),
+    ));
+    fixture.store_artifact(sample_artifact_from_bytes(
+        "artifact:visible-updates:unknown",
+        GraphicsTechnology::Unknown,
+        "C:/Artifacts/visible-updates/mystery.dll",
+        Some("2.0.0"),
+        b"artifact-visible-updates-unknown",
+        Some(game.id().as_str()),
+    ));
+
+    let result = query_all_game_cards().expect("query should succeed");
+    let items = result.items();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["update_count"], 1);
+    assert_eq!(items[0]["updates_available"], true);
 }
 
 #[test]
@@ -873,6 +968,93 @@ fn library_tags_are_deduplicated() {
         library_tags(&components),
         vec!["dlss_super_resolution".to_owned()],
     );
+}
+
+#[test]
+fn library_tags_exclude_unknown_components() {
+    let game_id = "manual:C:/Games/TagsUnknownFixture";
+    let components = vec![
+        sample_component_from_bytes(
+            "component:tags-known",
+            game_id,
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            "C:/Games/TagsUnknownFixture/nvngx_dlss.dll",
+            None,
+            b"tags-known",
+        ),
+        sample_component_from_bytes(
+            "component:tags-unknown",
+            game_id,
+            GraphicsTechnology::Unknown,
+            Swappability::ReadOnly,
+            "C:/Games/TagsUnknownFixture/mystery.dll",
+            None,
+            b"tags-unknown",
+        ),
+    ];
+
+    assert_eq!(
+        library_tags(&components),
+        vec!["dlss_super_resolution".to_owned()],
+    );
+}
+
+#[test]
+fn get_game_details_excludes_unknown_components_and_candidate_groups() {
+    let fixture = DesktopFixture::new("get-game-details-hide-unknown");
+
+    let game = sample_game("manual:C:/Games/Details", "Details", "C:/Games/Details");
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[
+            sample_component_from_bytes(
+                "component:details:dlss",
+                game.id().as_str(),
+                GraphicsTechnology::DlssSuperResolution,
+                Swappability::Swappable,
+                "C:/Games/Details/nvngx_dlss.dll",
+                Some("1.0.0"),
+                b"details-dlss",
+            ),
+            sample_component_from_bytes(
+                "component:details:unknown",
+                game.id().as_str(),
+                GraphicsTechnology::Unknown,
+                Swappability::ReadOnly,
+                "C:/Games/Details/mystery.dll",
+                Some("1.0.0"),
+                b"details-unknown",
+            ),
+        ],
+    );
+    fixture.store_artifact(sample_artifact_from_bytes(
+        "artifact:details:dlss",
+        GraphicsTechnology::DlssSuperResolution,
+        "C:/Artifacts/nvngx_dlss.dll",
+        Some("2.0.0"),
+        b"artifact-dlss",
+        Some(game.id().as_str()),
+    ));
+    fixture.store_artifact(sample_artifact_from_bytes(
+        "artifact:details:unknown",
+        GraphicsTechnology::Unknown,
+        "C:/Artifacts/mystery.dll",
+        Some("2.0.0"),
+        b"artifact-unknown",
+        Some(game.id().as_str()),
+    ));
+
+    let result = get_game_details(game.id().as_str()).expect("details should load");
+    let components = json_array_field(&result, "components");
+    let candidate_groups = json_array_field(&result, "candidate_groups");
+
+    assert_eq!(components.len(), 1);
+    assert_eq!(components[0]["technology"], "dlss_super_resolution");
+    assert_eq!(candidate_groups.len(), 1);
+    assert_eq!(candidate_groups[0]["technology"], "dlss_super_resolution");
 }
 
 #[test]
