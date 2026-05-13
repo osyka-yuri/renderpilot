@@ -30,10 +30,7 @@
     onApply,
   }: Props = $props();
 
-  function handleGroupValueChange(
-    vendorOptions: { value: string }[],
-    nextValue: string[],
-  ): void {
+  function handleGroupValueChange(vendorOptions: { value: string }[], nextValue: string[]): void {
     onDraftLibrariesChange?.(mergeVendorDraftLibraries(draftLibraries, vendorOptions, nextValue));
   }
 

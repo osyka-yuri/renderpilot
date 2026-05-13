@@ -111,11 +111,10 @@ describe('createDesktopAppModel', () => {
     expect(model.themeMode).toBe('light');
   });
 
-  it('handleNavigate switches to settings with correct backTarget', () => {
+  it('handleNavigate switches to settings', () => {
     const model = createDesktopAppModel();
     model.handleNavigate('settings');
     expect(model.screen).toBe('settings');
-    expect(model.backTarget).toBe('games');
   });
 
   it('handleNavigate opens workspace screen when selection exists', () => {
@@ -135,30 +134,6 @@ describe('createDesktopAppModel', () => {
   it('handleNavigate falls back to games for unknown screen', () => {
     const model = createDesktopAppModel();
     model.handleNavigate('unknown' as never);
-    expect(model.screen).toBe('games');
-  });
-
-  it('handleBack from settings returns to backTarget', () => {
-    const model = createDesktopAppModel();
-    model.presentGameDetails(createStubDetails('game-1'), 'details');
-    model.handleNavigate('settings');
-    expect(model.screen).toBe('settings');
-    model.handleBack();
-    expect(model.screen).toBe('details');
-  });
-
-  it('handleBack from operations goes to details when selection exists', () => {
-    const model = createDesktopAppModel();
-    model.presentGameDetails(createStubDetails('game-1'), 'operations');
-    expect(model.screen).toBe('operations');
-    model.handleBack();
-    expect(model.screen).toBe('details');
-  });
-
-  it('handleBack from operations goes to games when no selection', () => {
-    const model = createDesktopAppModel();
-    model.presentGameDetails(createStubDetails('game-1'), 'operations');
-    model.clearSelection();
     expect(model.screen).toBe('games');
   });
 
@@ -210,17 +185,6 @@ describe('createDesktopAppModel', () => {
     publishCommandErrorNotificationSpy.mockRestore();
   });
 
-  it('clearSelection resets backTarget when it was a workspace screen', () => {
-    const model = createDesktopAppModel();
-    model.presentGameDetails(createStubDetails('game-1'), 'details');
-    model.handleNavigate('settings');
-    expect(model.backTarget).toBe('details');
-
-    model.clearSelection();
-    expect(model.backTarget).toBe('games');
-    expect(model.screen).toBe('settings');
-  });
-
   it('changeThemeMode rolls back when persistThemeMode throws', () => {
     const spy = vi.spyOn(themeModule, 'persistThemeMode').mockImplementation(() => {
       throw new Error('disk error');
@@ -233,9 +197,10 @@ describe('createDesktopAppModel', () => {
     const previousMode = model.themeMode;
     model.changeThemeMode('dark');
 
-    const latestCall = publishCommandErrorNotificationSpy.mock.calls[
-      publishCommandErrorNotificationSpy.mock.calls.length - 1
-    ];
+    const latestCall =
+      publishCommandErrorNotificationSpy.mock.calls[
+        publishCommandErrorNotificationSpy.mock.calls.length - 1
+      ];
     const [error] = latestCall;
 
     expect(model.themeMode).toBe(previousMode);
@@ -256,9 +221,10 @@ describe('createDesktopAppModel', () => {
       throw new Error('task failed');
     });
 
-    const latestCall = publishCommandErrorNotificationSpy.mock.calls[
-      publishCommandErrorNotificationSpy.mock.calls.length - 1
-    ];
+    const latestCall =
+      publishCommandErrorNotificationSpy.mock.calls[
+        publishCommandErrorNotificationSpy.mock.calls.length - 1
+      ];
     const [error] = latestCall;
 
     expect(result).toBeNull();

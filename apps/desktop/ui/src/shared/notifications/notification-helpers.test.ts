@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  clearAllNotifications,
-  getActiveNotifications,
-} from './notification-center';
-import {
-  publishInfoNotification,
-  publishSuccessNotification,
-} from './notification-helpers';
+import { clearAllNotifications, getActiveNotifications } from './notification-center';
+import { publishInfoNotification, publishSuccessNotification } from './notification-helpers';
 
 describe('notification-helpers', () => {
   beforeEach(() => {
@@ -14,7 +8,10 @@ describe('notification-helpers', () => {
   });
 
   it('publishes transient success notifications with generated ids', () => {
-    const notificationId = publishSuccessNotification('  Changes applied  ', '  2 files updated.  ');
+    const notificationId = publishSuccessNotification(
+      '  Changes applied  ',
+      '  2 files updated.  ',
+    );
 
     expect(notificationId).toBe('notification-1');
     expect(getActiveNotifications()).toEqual([

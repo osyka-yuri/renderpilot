@@ -50,8 +50,9 @@ export function createGraphicsLibrariesModel(options: {
   );
 
   function getLibraries(gameDetails: GameDetails): string[] {
-    return createPresentedLibraries(gameDetails.components.map((component) => component.technology))
-      .map((library) => library.label);
+    return createPresentedLibraries(
+      gameDetails.components.map((component) => component.technology),
+    ).map((library) => library.label);
   }
 
   function handleArtifactSelection(componentId: string, artifactId: string): void {

@@ -239,7 +239,6 @@
   busy={model.busy}
   selectedGameTitle={model.selectedShellGameTitle}
   onNavigate={model.handleNavigate}
-  onBack={model.handleBack}
 >
   {#if model.screen === 'details'}
     <GameDetailsScreen

@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameSummary } from '@entities/game';
-import {
-  createGamesPageModel,
-  type GamesPageModelInput,
-} from './create-games-page-model.svelte';
+import { createGamesPageModel, type GamesPageModelInput } from './create-games-page-model.svelte';
 
 function createStubGame(id: string, title: string): GameSummary {
   return {

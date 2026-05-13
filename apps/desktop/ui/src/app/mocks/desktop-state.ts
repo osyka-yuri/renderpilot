@@ -262,7 +262,9 @@ export function createGameSummaryFromDetails(
   details: GameDetails,
   overrides: GameSummaryBuildOverrides,
 ): GameSummary {
-  const visibleComponents = details.components.filter((component) => isKnownLibrary(component.technology));
+  const visibleComponents = details.components.filter((component) =>
+    isKnownLibrary(component.technology),
+  );
   const visibleComponentIds = new Set(visibleComponents.map((component) => component.id));
   const visibleCandidateGroups = details.candidate_groups.filter((group) =>
     visibleComponentIds.has(group.component_id),

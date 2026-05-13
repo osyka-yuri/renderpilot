@@ -140,7 +140,9 @@
           role="menuitem"
           disabled={action.disabled}
           title={action.title}
-          onclick={() => { handleMenuActionClick(action); }}
+          onclick={() => {
+            handleMenuActionClick(action);
+          }}
         >
           {action.label}
         </Button>

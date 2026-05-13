@@ -8,12 +8,7 @@ export type PresentedLibrary = {
   vendorKey: LibraryVendorKey;
 };
 
-export const libraryVendorOrder: readonly LibraryVendorKey[] = [
-  'nvidia',
-  'amd',
-  'intel',
-  'other',
-];
+export const libraryVendorOrder: readonly LibraryVendorKey[] = ['nvidia', 'amd', 'intel', 'other'];
 
 const LIBRARY_UPPERCASE_WORDS = new Set([
   'AMD',

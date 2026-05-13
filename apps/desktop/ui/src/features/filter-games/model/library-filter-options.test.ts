@@ -143,11 +143,9 @@ describe('library-filter-options', () => {
       const nvidiaOptions = options.filter((option) => option.vendorKey === 'nvidia');
 
       expect(
-        mergeVendorDraftLibraries(
-          ['amd_fsr', 'nvidia_reflex'],
-          nvidiaOptions,
-          ['dlss_super_resolution'],
-        ),
+        mergeVendorDraftLibraries(['amd_fsr', 'nvidia_reflex'], nvidiaOptions, [
+          'dlss_super_resolution',
+        ]),
       ).toEqual(['amd_fsr', 'dlss_super_resolution']);
     });
   });

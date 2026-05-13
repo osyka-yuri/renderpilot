@@ -2,6 +2,15 @@ export { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 export { Alert, AlertDescription, AlertTitle } from './alert';
 export { AspectRatio } from './aspect-ratio';
 export { Badge, type BadgeVariant } from './badge';
+export {
+  Breadcrumb,
+  BreadcrumbEllipsis,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from './breadcrumb';
 export { Button, buttonVariants } from './button';
 export {
   Card,

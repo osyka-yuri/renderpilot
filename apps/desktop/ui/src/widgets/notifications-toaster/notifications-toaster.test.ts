@@ -11,10 +11,7 @@ import {
   publishInfoNotification,
   publishStatusNotification,
 } from '@shared/notifications';
-import {
-  dismissSonnerNotification,
-  publishSonnerNotification,
-} from './notification-adapter';
+import { dismissSonnerNotification, publishSonnerNotification } from './notification-adapter';
 import NotificationsToaster from './notifications-toaster.svelte';
 
 vi.mock('./notification-adapter', () => ({
@@ -76,9 +73,7 @@ describe('NotificationsToaster', () => {
 
     mountToaster();
 
-    expect(publishSonnerNotificationMock).toHaveBeenCalledTimes(
-      activeNotifications.length,
-    );
+    expect(publishSonnerNotificationMock).toHaveBeenCalledTimes(activeNotifications.length);
 
     expect(publishSonnerNotificationMock.mock.calls).toEqual(
       activeNotifications.map((notification) => [notification]),

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractAvailableLibrariesFromCards, hasPartialLibrarySelection, intersectLibraries } from './library-filters';
+import {
+  extractAvailableLibrariesFromCards,
+  hasPartialLibrarySelection,
+  intersectLibraries,
+} from './library-filters';
 import type { GameSummary } from './types';
 
 function createGameSummary(libraryTags: readonly string[]): GameSummary {

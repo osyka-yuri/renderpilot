@@ -10,12 +10,7 @@
     monogram?: string;
   };
 
-  let {
-    title = '',
-    coverBusy = false,
-    coverSrc = null,
-    monogram = '',
-  }: Props = $props();
+  let { title = '', coverBusy = false, coverSrc = null, monogram = '' }: Props = $props();
 
   let failedCoverSrc = $state<string | null>(null);
 
@@ -45,10 +40,7 @@
   }
 </script>
 
-<AspectRatio
-  class="relative overflow-hidden rounded-xl bg-muted"
-  ratio={2 / 3}
->
+<AspectRatio class="relative overflow-hidden rounded-xl bg-muted" ratio={2 / 3}>
   {#if normalizedCoverSrc !== null && normalizedCoverSrc !== failedCoverSrc}
     <img
       class="block size-full object-cover object-top"
@@ -61,7 +53,7 @@
     />
   {:else}
     <div class="grid size-full place-items-center text-foreground" aria-hidden="true">
-      <span class="max-md:text-lg text-2xl font-semibold leading-none tracking-wider">
+      <span class="text-2xl leading-none font-semibold tracking-wider max-md:text-lg">
         {placeholderLabel}
       </span>
     </div>

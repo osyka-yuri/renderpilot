@@ -113,8 +113,12 @@ describe('graphics-configurator', () => {
   describe('buildLibrarySections', () => {
     it('groups rows by technology/library', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
-        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({
+          component: createComponent({ technology: 'dlss_super_resolution' }),
+        }),
+        createConfiguredRow({
+          component: createComponent({ technology: 'dlss_super_resolution' }),
+        }),
         createConfiguredRow({ component: createComponent({ technology: 'amd_fsr' }) }),
       ];
 
@@ -125,7 +129,9 @@ describe('graphics-configurator', () => {
 
     it('uses compact labels for section headings', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({
+          component: createComponent({ technology: 'dlss_super_resolution' }),
+        }),
         createConfiguredRow({
           component: createComponent({ id: 'comp-2', technology: 'amd_fsr_frame_generation' }),
         }),
@@ -140,7 +146,9 @@ describe('graphics-configurator', () => {
   describe('buildVendorBlocks', () => {
     it('groups sections by vendor', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({
+          component: createComponent({ technology: 'dlss_super_resolution' }),
+        }),
         createConfiguredRow({ component: createComponent({ technology: 'amd_fsr' }) }),
       ];
       const sections = buildLibrarySections(rows);
@@ -155,7 +163,9 @@ describe('graphics-configurator', () => {
 
     it('omits empty other vendor block', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({
+          component: createComponent({ technology: 'dlss_super_resolution' }),
+        }),
       ];
       const sections = buildLibrarySections(rows);
       const blocks = buildVendorBlocks(sections);

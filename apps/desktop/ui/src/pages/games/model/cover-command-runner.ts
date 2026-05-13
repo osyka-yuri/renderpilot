@@ -67,21 +67,33 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       return;
     }
 
-    await runManualCoverCommand(gameId, () => setGameCover(gameId, selectedPath), () => {
-      publishCoverUpdatedNotification();
-    });
+    await runManualCoverCommand(
+      gameId,
+      () => setGameCover(gameId, selectedPath),
+      () => {
+        publishCoverUpdatedNotification();
+      },
+    );
   }
 
   function fetchCover(gameId: string): void {
-    void runManualCoverCommand(gameId, () => fetchGameCover(gameId), () => {
-      publishCoverDownloadedNotification();
-    });
+    void runManualCoverCommand(
+      gameId,
+      () => fetchGameCover(gameId),
+      () => {
+        publishCoverDownloadedNotification();
+      },
+    );
   }
 
   function clearCover(gameId: string): void {
-    void runManualCoverCommand(gameId, () => clearGameCover(gameId), () => {
-      publishCoverRemovedNotification();
-    });
+    void runManualCoverCommand(
+      gameId,
+      () => clearGameCover(gameId),
+      () => {
+        publishCoverRemovedNotification();
+      },
+    );
   }
 
   function pickCover(gameId: string): void {

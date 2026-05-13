@@ -12,9 +12,7 @@ export function extractAvailableLibrariesFromCards(cards: readonly GameSummary[]
     libraries.push(...card.library_tags);
   }
 
-  return normalizeLibraryValues(libraries).filter(
-    (library) => library.toLowerCase() !== 'unknown',
-  );
+  return normalizeLibraryValues(libraries).filter((library) => library.toLowerCase() !== 'unknown');
 }
 
 /** Keep only values still present in the catalog union. */

@@ -1,21 +1,13 @@
 import type { Screen } from '@app/navigation/screen';
-import type { BackTarget, WorkspaceScreen } from '@app/navigation/workspace';
-import {
-  DEFAULT_BACK_TARGET,
-  getSettingsBackTarget,
-  isWorkspaceScreen,
-  resolveBackTarget,
-} from '@app/navigation/workspace';
+import type { WorkspaceScreen } from '@app/navigation/workspace';
+import { isWorkspaceScreen } from '@app/navigation/workspace';
 import { resolveSelectedGameDetails, workspaceShellGameTitle } from '@app/navigation/selection';
 import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
 import type { LanguageMode } from '@entities/settings';
 import { ignoreError } from '@shared/callbacks';
-import {
-  clearStatusNotification,
-  publishCommandErrorNotification,
-} from '@shared/notifications';
+import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
 import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
 import { createGamesCatalogModel } from '@widgets/games-catalog';
@@ -33,7 +25,6 @@ export type RunExclusiveOptions = {
 
 export function createDesktopAppModel() {
   let screen = $state<Screen>('games');
-  let backTarget = $state<BackTarget>(DEFAULT_BACK_TARGET);
 
   const catalog = createGamesCatalogModel();
   const workspace = createGameWorkspaceModel();
@@ -62,50 +53,23 @@ export function createDesktopAppModel() {
   // Navigation
   // ---------------------------------------------------------------------------
 
-  function openSettings(): void {
-    backTarget = getSettingsBackTarget(screen, hasSelectedGameDetails);
-    screen = 'settings';
-  }
-
-  function openSelectedWorkspaceScreen(nextScreen: WorkspaceScreen): void {
-    if (!hasSelectedGameDetails) {
-      clearSelection();
-      return;
-    }
-
-    screen = nextScreen;
-  }
-
-  function navigateToGames(): void {
-    screen = 'games';
-  }
-
   function handleNavigate(nextScreen: Screen): void {
     if (nextScreen === 'settings') {
-      openSettings();
+      screen = 'settings';
       return;
     }
 
     if (isWorkspaceScreen(nextScreen)) {
-      openSelectedWorkspaceScreen(nextScreen);
+      if (!hasSelectedGameDetails) {
+        clearSelection();
+        return;
+      }
+
+      screen = nextScreen;
       return;
     }
 
-    navigateToGames();
-  }
-
-  function handleBack(): void {
-    if (screen === 'settings') {
-      screen = resolveBackTarget(backTarget, hasSelectedGameDetails);
-      return;
-    }
-
-    if (screen === 'operations' && hasSelectedGameDetails) {
-      screen = 'details';
-      return;
-    }
-
-    navigateToGames();
+    screen = 'games';
   }
 
   // ---------------------------------------------------------------------------
@@ -115,12 +79,8 @@ export function createDesktopAppModel() {
   function clearSelection(): void {
     workspace.clearSelection();
 
-    if (isWorkspaceScreen(backTarget)) {
-      backTarget = DEFAULT_BACK_TARGET;
-    }
-
     if (isWorkspaceScreen(screen)) {
-      navigateToGames();
+      screen = 'games';
     }
   }
 
@@ -267,9 +227,6 @@ export function createDesktopAppModel() {
     get screen() {
       return screen;
     },
-    get backTarget() {
-      return backTarget;
-    },
     get games() {
       return catalog.games;
     },
@@ -324,7 +281,6 @@ export function createDesktopAppModel() {
 
     // Actions
     handleNavigate,
-    handleBack,
     clearSelection,
     clearSelectionIfSelectedGameMissing,
     getCurrentPlan,

@@ -18,12 +18,7 @@
   const ICON_CLASS = 'size-4';
   const LOADING_ICON_CLASS = `${ICON_CLASS} animate-spin`;
 
-  let {
-    class: className,
-    style,
-    theme,
-    ...restProps
-  }: SonnerProps = $props();
+  let { class: className, style, theme, ...restProps }: SonnerProps = $props();
 
   const resolvedTheme = $derived(theme ?? mode.current);
   const toasterClass = $derived(mergeClassName(TOASTER_CLASS, className));
@@ -50,12 +45,7 @@
   }
 </script>
 
-<Sonner
-  {...restProps}
-  theme={resolvedTheme}
-  class={toasterClass}
-  style={toasterStyle}
->
+<Sonner {...restProps} theme={resolvedTheme} class={toasterClass} style={toasterStyle}>
   {#snippet loadingIcon()}
     <Loader2Icon class={LOADING_ICON_CLASS} aria-hidden="true" />
   {/snippet}

@@ -14,11 +14,7 @@ import {
   vendorLabelForLibraryVendorKey,
   type LibraryVendorKey,
 } from '@shared/graphics';
-import {
-  formatLabel,
-  nvapiControlsByLibrary,
-  type NvApiControl,
-} from '@entities/component';
+import { formatLabel, nvapiControlsByLibrary, type NvApiControl } from '@entities/component';
 import { fileNameFromPath } from '@shared/path';
 import { isDefined, isNonEmptyString } from '@shared/validation';
 

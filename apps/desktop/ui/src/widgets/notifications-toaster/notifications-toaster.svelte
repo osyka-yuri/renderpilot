@@ -1,16 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import {
-    getActiveNotifications,
-    subscribeToNotificationEvents,
-  } from '@shared/notifications';
+  import { getActiveNotifications, subscribeToNotificationEvents } from '@shared/notifications';
 
   import { Toaster } from '@shared/ui';
-  import {
-    dismissSonnerNotification,
-    publishSonnerNotification,
-  } from './notification-adapter';
+  import { dismissSonnerNotification, publishSonnerNotification } from './notification-adapter';
 
   onMount(() => {
     for (const notification of getActiveNotifications()) {

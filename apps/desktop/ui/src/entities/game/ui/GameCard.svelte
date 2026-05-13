@@ -112,7 +112,7 @@
             {game.title}
           </CardTitle>
 
-          <p class="min-w-0 break-all text-xs/snug text-muted-foreground">
+          <p class="min-w-0 text-xs/snug break-all text-muted-foreground">
             {game.installPath}
           </p>
         </div>
