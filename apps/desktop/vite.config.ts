@@ -59,6 +59,7 @@ export default defineConfig({
 
   resolve: {
     alias: createLayerAliases(UI_SOURCE_ROOT, LAYER_ALIAS_PATHS),
+    conditions: ['browser'],
   },
 
   server: {

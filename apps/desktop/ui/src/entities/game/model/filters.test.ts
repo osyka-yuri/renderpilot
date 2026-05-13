@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { hasPartialLibrarySelection, intersectLibraries } from './library-filters';
+import { extractAvailableLibrariesFromCards, hasPartialLibrarySelection, intersectLibraries } from './library-filters';
+import type { GameSummary } from './types';
+
+function createGameSummary(libraryTags: readonly string[]): GameSummary {
+  return {
+    game_id: 'game-1',
+    title: 'Game',
+    launcher: 'Steam',
+    platform: 'windows',
+    runtime: 'dx12',
+    install_path: 'C:/Games/Game',
+    library_tags: [...libraryTags],
+    component_count: 0,
+    updates_available: false,
+    update_count: 0,
+    risk_level: 'safe',
+    backup_available: false,
+    operation_count: 0,
+    last_operation_status: null,
+    cover_updated_at_ms: null,
+  };
+}
 
 describe('library-filters', () => {
+  describe('extractAvailableLibrariesFromCards', () => {
+    it('collects normalized libraries and excludes unknown entries', () => {
+      expect(
+        extractAvailableLibrariesFromCards([
+          createGameSummary([' steam ', 'unknown', 'dlss_super_resolution']),
+          createGameSummary(['UNKNOWN', 'steam', 'amd_fsr']),
+        ]),
+      ).toEqual(['steam', 'dlss_super_resolution', 'amd_fsr']);
+    });
+  });
+
   describe('intersectLibraries', () => {
     it('returns an empty list when catalog is empty', () => {
       expect(intersectLibraries(['LibraryAlpha'], [])).toEqual([]);

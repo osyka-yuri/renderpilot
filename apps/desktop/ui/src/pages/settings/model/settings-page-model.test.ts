@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { SelectOption } from '@shared/ui';
-import { isOptionValue, languageOptions, themeOptions } from './settings-page-model';
+import {
+  isOptionValue,
+  languageOptions,
+  type SettingsSelectOption,
+  themeOptions,
+} from './settings-page-model';
 
 type OptionValidationCase = {
   name: string;
-  options: readonly SelectOption[];
+  options: readonly SettingsSelectOption[];
   validValues: readonly string[];
   invalidValues: readonly string[];
 };

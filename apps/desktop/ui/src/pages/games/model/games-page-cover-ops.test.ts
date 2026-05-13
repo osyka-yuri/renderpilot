@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GameCardCoverMenuHandle } from '@entities/game';
+import type { GameCardMenuHandle } from '@entities/game';
 import { focusMenuTrigger } from './games-page-cover-ops';
 
 describe('games-page-cover-ops', () => {
   describe('focusMenuTrigger', () => {
     it('focuses trigger via rAF when available', () => {
       const focusSpy = vi.fn();
-      const refs: Record<string, GameCardCoverMenuHandle | undefined> = {
+      const refs: Record<string, GameCardMenuHandle | undefined> = {
         'game-1': { focusTrigger: focusSpy },
       };
 
@@ -27,7 +27,7 @@ describe('games-page-cover-ops', () => {
 
     it('focuses trigger directly when rAF is unavailable', () => {
       const focusSpy = vi.fn();
-      const refs: Record<string, GameCardCoverMenuHandle | undefined> = {
+      const refs: Record<string, GameCardMenuHandle | undefined> = {
         'game-1': { focusTrigger: focusSpy },
       };
 
@@ -42,7 +42,7 @@ describe('games-page-cover-ops', () => {
     });
 
     it('does not throw when ref is missing', () => {
-      const refs: Record<string, GameCardCoverMenuHandle | undefined> = {};
+      const refs: Record<string, GameCardMenuHandle | undefined> = {};
 
       expect(() => {
         focusMenuTrigger(refs, 'game-1');

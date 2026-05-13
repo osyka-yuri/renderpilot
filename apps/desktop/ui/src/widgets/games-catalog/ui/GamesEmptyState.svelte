@@ -1,13 +1,18 @@
 <script lang="ts">
-  import { cn, type VoidHandler } from '@shared/utils';
+  import { cn } from '@shared/classnames';
+  import type { VoidHandler } from '@shared/callbacks';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { Button, EmptyStatePanel } from '@shared/ui';
+  import {
+    Button,
+    Empty,
+    EmptyContent,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+    Spinner,
+  } from '@shared/ui';
 
-  const noop: VoidHandler = (): void => {
-    // Intentionally empty.
-  };
-
-  type Props = HTMLAttributes<HTMLElement> & {
+  type Props = HTMLAttributes<HTMLDivElement> & {
     busy?: boolean;
     scanButtonLabel?: string;
     onRefresh?: VoidHandler;
@@ -17,41 +22,42 @@
   const {
     busy = false,
     scanButtonLabel = 'Scan Folder',
-    onRefresh = noop,
-    onScan = noop,
+    onRefresh = () => undefined,
+    onScan = () => undefined,
     class: className = '',
     ...rest
   }: Props = $props();
 </script>
 
-<EmptyStatePanel {...rest} class={cn('grid justify-items-start gap-3 p-6', className)}>
-  <div
-    class={cn(
-      'grid size-10 place-items-center rounded-2xl bg-accent-soft font-bold',
-      'tracking-wider text-accent-strong',
-    )}
-    aria-hidden="true"
-  >
-    RP
-  </div>
-
-  <div class="grid max-w-xl gap-1">
-    <h3 class="text-base/tight font-semibold">No scanned games yet</h3>
-    <p>
+<Empty {...rest} class={cn(className)}>
+  <EmptyHeader>
+    <EmptyTitle>No scanned games yet</EmptyTitle>
+    <EmptyDescription>
       Select a game folder to populate the dashboard with components, updates, backup state, and
       quick actions.
-    </p>
-  </div>
+    </EmptyDescription>
+  </EmptyHeader>
 
-  <div
-    class={cn('flex flex-wrap gap-2', 'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch')}
-  >
-    <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
-      Refresh Libraries
-    </Button>
+  <EmptyContent>
+    <div
+      class={cn(
+        'flex flex-wrap gap-2',
+        'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch',
+      )}
+    >
+      <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
+        {#if busy}
+          <Spinner />
+        {/if}
+        Refresh Libraries
+      </Button>
 
-    <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
-      {scanButtonLabel}
-    </Button>
-  </div>
-</EmptyStatePanel>
+      <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
+        {#if busy}
+          <Spinner />
+        {/if}
+        {scanButtonLabel}
+      </Button>
+    </div>
+  </EmptyContent>
+</Empty>

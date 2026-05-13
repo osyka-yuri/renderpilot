@@ -14,7 +14,7 @@ import {
   type SettingsArtworkState,
 } from '@features/settings-artwork';
 import { getCatalogSetting, setCatalogSetting } from '@entities/settings';
-import { createDisposableRequestChannel } from '@shared/utils';
+import { createDisposableRequestChannel } from '@shared/requests';
 
 export type SettingsPanelModel = ReturnType<typeof createSettingsPanelModel>;
 

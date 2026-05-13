@@ -1,17 +1,20 @@
 <script lang="ts">
-  import { cn } from '@shared/utils';
-  import type { LibraryFilterOption } from '@entities/game';
+  import {
+    mergeVendorDraftLibraries,
+    selectedLibrariesForVendor,
+    type GroupedLibraryFilterOptions,
+  } from '../model/library-filter-options';
 
-  import { Badge, BadgeGroup, Button, Surface } from '@shared/ui';
+  import { Button, Separator, ToggleGroup, ToggleGroupItem } from '@shared/ui';
 
   type LibraryValue = string;
-  type LibraryToggleHandler = (library: LibraryValue) => void;
+  type LibrariesChangeHandler = (libraries: readonly LibraryValue[]) => void;
   type VoidHandler = () => void;
 
   type Props = {
-    libraryFilterOptions?: readonly LibraryFilterOption[];
+    groupedLibraryFilterOptions?: readonly GroupedLibraryFilterOptions[];
     draftLibraries?: readonly LibraryValue[];
-    onToggleLibrary?: LibraryToggleHandler;
+    onDraftLibrariesChange?: LibrariesChangeHandler;
     onCancel?: VoidHandler;
     onApply?: VoidHandler;
   };
@@ -20,93 +23,62 @@
   const EMPTY_LIBRARIES_LABEL = 'No libraries detected';
 
   const {
-    libraryFilterOptions = [],
+    groupedLibraryFilterOptions = [],
     draftLibraries = [],
-    onToggleLibrary,
+    onDraftLibrariesChange,
     onCancel,
     onApply,
   }: Props = $props();
 
-  const hasLibraryOptions = $derived(libraryFilterOptions.length > 0);
-  const selectedLibraries = $derived.by(() => new Set(draftLibraries));
-
-  function isLibrarySelected(library: LibraryValue): boolean {
-    return selectedLibraries.has(library);
+  function handleGroupValueChange(
+    vendorOptions: { value: string }[],
+    nextValue: string[],
+  ): void {
+    onDraftLibrariesChange?.(mergeVendorDraftLibraries(draftLibraries, vendorOptions, nextValue));
   }
 
-  function getLibraryFromEvent(event: MouseEvent): LibraryValue | null {
-    const trigger = event.currentTarget;
-
-    if (!(trigger instanceof HTMLButtonElement)) {
-      return null;
-    }
-
-    return trigger.dataset.library ?? null;
-  }
-
-  function handleLibraryToggle(event: MouseEvent): void {
-    const library = getLibraryFromEvent(event);
-
-    if (library === null) {
-      return;
-    }
-
-    onToggleLibrary?.(library);
-  }
-
-  function handleCancel(): void {
-    onCancel?.();
-  }
-
-  function handleApply(): void {
-    onApply?.();
-  }
-
-  function chipClass(selected: boolean): string {
-    return cn(
-      'px-2.5 py-1',
-      'rounded-full border border-border-control',
-      'bg-bg-control text-text-muted',
-      'cursor-pointer text-xs/tight select-none',
-      'transition duration-160',
-      'hover:border-border-strong hover:bg-bg-control-hover hover:text-text-strong',
-      'focus-visible:border-accent-outline focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base focus-visible:outline-none',
-      selected && 'border-accent bg-accent-soft text-accent-strong',
-    );
+  function groupValue(vendorOptions: { value: string }[]): string[] {
+    return selectedLibrariesForVendor(draftLibraries, vendorOptions);
   }
 </script>
 
-<div class="grid gap-3 p-3">
-  <Surface radius="md">
-    <p class="text-xs tracking-widest text-text-subtle uppercase">
-      {LIBRARIES_LABEL}
-    </p>
+<div class="grid gap-3">
+  <div class="grid gap-1 text-sm">
+    <h4 class="font-medium">{LIBRARIES_LABEL}</h4>
+  </div>
 
-    <BadgeGroup role="group" aria-label={LIBRARIES_LABEL}>
-      {#if hasLibraryOptions}
-        {#each libraryFilterOptions as option (option.value)}
-          {@const selected = isLibrarySelected(option.value)}
+  {#if groupedLibraryFilterOptions.length > 0}
+    <div class="grid gap-4">
+      {#each groupedLibraryFilterOptions as vendorGroup (vendorGroup.vendorKey)}
+        <div class="grid gap-2">
+          <h5 class="text-xs font-medium text-muted-foreground">{vendorGroup.vendorLabel}</h5>
 
-          <button
-            type="button"
-            class={chipClass(selected)}
-            data-library={option.value}
-            aria-pressed={selected}
-            onclick={handleLibraryToggle}
+          <ToggleGroup
+            type="multiple"
+            variant="outline"
+            class="w-full"
+            value={groupValue(vendorGroup.options)}
+            onValueChange={(next: string[]) => {
+              handleGroupValueChange(vendorGroup.options, next);
+            }}
           >
-            {option.label}
-          </button>
-        {/each}
-      {:else}
-        <Badge tone="muted">{EMPTY_LIBRARIES_LABEL}</Badge>
-      {/if}
-    </BadgeGroup>
-
-    <div class="h-px bg-border-subtle" aria-hidden="true"></div>
-
-    <div class="flex items-center justify-end gap-2">
-      <Button variant="secondary" size="sm" onclick={handleCancel}>Cancel</Button>
-      <Button variant="primary" size="sm" onclick={handleApply}>Apply</Button>
+            {#each vendorGroup.options as option (option.value)}
+              <ToggleGroupItem value={option.value} class="flex-1">
+                {option.label}
+              </ToggleGroupItem>
+            {/each}
+          </ToggleGroup>
+        </div>
+      {/each}
     </div>
-  </Surface>
+  {:else}
+    <span class="text-sm text-muted-foreground">{EMPTY_LIBRARIES_LABEL}</span>
+  {/if}
+
+  <Separator />
+
+  <div class="flex items-center justify-end gap-2">
+    <Button variant="secondary" size="sm" onclick={onCancel}>Cancel</Button>
+    <Button variant="default" size="sm" onclick={onApply}>Apply</Button>
+  </div>
 </div>

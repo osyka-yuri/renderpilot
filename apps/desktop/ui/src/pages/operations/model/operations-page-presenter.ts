@@ -3,10 +3,11 @@ import {
   formatBackupSummary,
   getCompletedDurationText,
   isRollbackableOperation,
-  statusTone,
+  statusBadgeVariant,
+  type OperationBadgeVariant,
   type OperationSummary,
 } from '@entities/operation';
-import { formatTimestamp } from '@shared/utils';
+import { formatTimestamp } from '@shared/format';
 
 export type OperationHistoryDetails = {
   operations: readonly OperationSummary[];
@@ -16,7 +17,7 @@ export type OperationViewModel = {
   id: string;
   kindLabel: string;
   statusLabel: string;
-  tone: ReturnType<typeof statusTone>;
+  badgeVariant: OperationBadgeVariant;
   createdAtText: string;
   itemCount: number;
   backupSummary: string;
@@ -40,6 +41,7 @@ export function createOperationViewModel(
   const kindLabel = formatOperationLabel(operation.kind);
   const statusLabel = formatOperationLabel(operation.status);
   const createdAtText = formatTimestamp(operation.created_at);
+  const badgeVariant: OperationBadgeVariant = statusBadgeVariant(operation.status);
   const isBusy = options.busyOperationId === id;
   const canRollback = Boolean(options.hasRollbackHandler) && isRollbackableOperation(operation);
 
@@ -47,7 +49,7 @@ export function createOperationViewModel(
     id,
     kindLabel,
     statusLabel,
-    tone: statusTone(operation.status),
+    badgeVariant,
     createdAtText,
     itemCount: operation.item_count,
     backupSummary: formatBackupSummary(operation.backup_count, operation.backup_status),

@@ -7,12 +7,20 @@ import type {
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
 import {
+  formatCompactLibraryLabel,
+  isKnownLibrary,
+  libraryVendorOrder,
+  libraryVendorKey,
+  vendorLabelForLibraryVendorKey,
+  type LibraryVendorKey,
+} from '@shared/graphics';
+import {
   formatLabel,
-  formatLibrary,
   nvapiControlsByLibrary,
   type NvApiControl,
 } from '@entities/component';
-import { fileNameFromPath, isDefined, isNonEmptyString } from '@shared/utils';
+import { fileNameFromPath } from '@shared/path';
+import { isDefined, isNonEmptyString } from '@shared/validation';
 
 const UNKNOWN_VALUE = 'Unknown';
 
@@ -58,7 +66,7 @@ export type LibrarySection = {
   totalCandidates: number;
 };
 
-export type VendorKey = 'nvidia' | 'amd' | 'intel' | 'other';
+export type VendorKey = LibraryVendorKey;
 
 export type VendorBlock = {
   key: VendorKey;
@@ -74,16 +82,6 @@ export type GraphicsConfiguratorViewModel = {
   librarySections: LibrarySection[];
   vendorBlocks: VendorBlock[];
 };
-
-const vendorBlueprints: {
-  key: VendorKey;
-  label: string;
-}[] = [
-  { key: 'nvidia', label: 'NVIDIA' },
-  { key: 'amd', label: 'AMD' },
-  { key: 'intel', label: 'Intel' },
-  { key: 'other', label: 'Additional' },
-];
 
 export function displayValue(value?: string | null): string {
   return normalizedText(value) ?? UNKNOWN_VALUE;
@@ -136,7 +134,7 @@ export function buildComponentRows(gameDetails: GameDetails): ComponentConfigura
     gameDetails.candidate_groups,
   );
 
-  return gameDetails.components.map((component) => {
+  return gameDetails.components.filter(isVisibleComponent).map((component) => {
     const group = candidateGroupsByComponentId.get(component.id) ?? null;
     const installedOptions = buildInstalledOptions(component);
     const installedValue = resolveInstalledValue(group, installedOptions);
@@ -185,7 +183,7 @@ export function buildVendorBlocks(sections: LibrarySection[]): VendorBlock[] {
   const blocksByVendor = buildVendorBlockMap();
 
   for (const section of sections) {
-    const vendorKey = vendorKeyForLibrary(section.libraryKey);
+    const vendorKey = libraryVendorKey(section.libraryKey);
     const vendorBlock = blocksByVendor.get(vendorKey);
 
     if (!vendorBlock) {
@@ -197,8 +195,8 @@ export function buildVendorBlocks(sections: LibrarySection[]): VendorBlock[] {
     vendorBlock.totalCandidates += section.totalCandidates;
   }
 
-  return vendorBlueprints
-    .map((blueprint) => blocksByVendor.get(blueprint.key))
+  return libraryVendorOrder
+    .map((vendorKey) => blocksByVendor.get(vendorKey))
     .filter(isDefined)
     .filter(shouldShowVendorBlock);
 }
@@ -352,7 +350,7 @@ function getOrCreateLibrarySection(
 
   const section: LibrarySection = {
     libraryKey,
-    label: formatLibrary(libraryKey),
+    label: formatCompactLibraryLabel(libraryKey),
     rows: [],
     nvapiControls: row.nvapiControls,
     nvapiOwnerId: row.component.id,
@@ -366,11 +364,11 @@ function getOrCreateLibrarySection(
 
 function buildVendorBlockMap(): Map<VendorKey, VendorBlock> {
   return new Map(
-    vendorBlueprints.map((blueprint) => [
-      blueprint.key,
+    libraryVendorOrder.map((vendorKey) => [
+      vendorKey,
       {
-        key: blueprint.key,
-        label: blueprint.label,
+        key: vendorKey,
+        label: vendorLabelForLibraryVendorKey(vendorKey),
         sections: [],
         totalFiles: 0,
         totalCandidates: 0,
@@ -383,22 +381,8 @@ function shouldShowVendorBlock(block: VendorBlock): boolean {
   return block.key !== 'other' || block.sections.length > 0;
 }
 
-function vendorKeyForLibrary(libraryKey: string): VendorKey {
-  const normalizedKey = libraryKey.toLowerCase();
-
-  if (normalizedKey.startsWith('dlss') || normalizedKey.startsWith('nvidia')) {
-    return 'nvidia';
-  }
-
-  if (normalizedKey.startsWith('amd')) {
-    return 'amd';
-  }
-
-  if (normalizedKey.startsWith('intel')) {
-    return 'intel';
-  }
-
-  return 'other';
+function isVisibleComponent(component: GraphicsComponent): boolean {
+  return isKnownLibrary(component.technology);
 }
 
 function resolveArtifactSelection(

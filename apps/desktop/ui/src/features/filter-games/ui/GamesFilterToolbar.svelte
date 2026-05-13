@@ -1,6 +1,7 @@
 <script lang="ts">
+  import FunnelIcon from '@lucide/svelte/icons/funnel';
   import { Button, Input } from '@shared/ui';
-  import { cn } from '@shared/utils';
+  import { cn } from '@shared/classnames';
 
   type SearchChangeHandler = (value: string) => void;
   type ToggleFiltersHandler = () => void;
@@ -21,20 +22,18 @@
   const {
     searchQuery = '',
     hasFilterIndicator = false,
-    onSearchChange,
-    onToggleFilters,
+    onSearchChange = () => undefined,
+    onToggleFilters = () => undefined,
   }: Props = $props();
 
   const filtersButtonLabel = $derived(
     hasFilterIndicator ? FILTERS_BUTTON_ACTIVE_LABEL : FILTERS_BUTTON_LABEL,
   );
 
-  function handleSearchChange(nextSearchQuery: string): void {
-    onSearchChange?.(nextSearchQuery);
-  }
-
-  function handleFiltersToggle(): void {
-    onToggleFilters?.();
+  function handleSearchInput(
+    event: Event & { currentTarget: EventTarget & HTMLInputElement },
+  ): void {
+    onSearchChange(event.currentTarget.value);
   }
 </script>
 
@@ -50,7 +49,7 @@
       type="search"
       placeholder={SEARCH_PLACEHOLDER}
       value={searchQuery}
-      onValueChange={handleSearchChange}
+      oninput={handleSearchInput}
     />
   </label>
 
@@ -58,28 +57,18 @@
     <Button
       aria-label={filtersButtonLabel}
       aria-haspopup="dialog"
-      iconOnly
       variant="secondary"
-      size="sm"
-      onclick={handleFiltersToggle}
+      size="icon-sm"
+      onclick={onToggleFilters}
     >
-      <svg class="size-4.5" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path
-          d="M4 6h16l-6.5 7.2v4.9l-3 1.9v-6.8z"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
+      <FunnelIcon class="size-4.5" aria-hidden="true" />
     </Button>
 
     {#if hasFilterIndicator}
       <span
         class={cn(
           'pointer-events-none absolute -top-0.5 -right-0.5 size-2 rounded-full',
-          'bg-accent ring-2 ring-bg-card',
+          'bg-accent ring-2 ring-background',
         )}
         aria-hidden="true"
       ></span>

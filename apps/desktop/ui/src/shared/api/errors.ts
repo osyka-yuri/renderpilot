@@ -1,5 +1,5 @@
 import type { CommandErrorDto, CommandErrorSeverity } from './types';
-import { isString, isNonEmptyString, isRecord, isErrorLike, isFunction } from '@shared/utils';
+import { isString, isNonEmptyString, isRecord, isErrorLike, isFunction } from '@shared/validation';
 
 const FALLBACK_CODE = 'command_failed';
 const FALLBACK_MESSAGE_KEY = 'errors.command_failed';

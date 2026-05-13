@@ -1,5 +1,5 @@
 import { invokeDesktop } from '@shared/api';
-import { requireNonBlankString } from '@shared/utils';
+import { requireNonBlankString } from '@shared/validation';
 import type { ApplyOperationResult, RollbackOperationResult, SwapPlan } from '../model/types';
 
 export async function buildSwapPlan(

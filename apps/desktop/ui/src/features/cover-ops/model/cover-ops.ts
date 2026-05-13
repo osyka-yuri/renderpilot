@@ -1,5 +1,7 @@
 import { openFilePicker, type DialogFilter } from '@shared/api';
 
+import { publishCoverPickerPreviewModeNotification } from './notifications';
+
 export type CoverMenuRefs<T> = Record<string, T | undefined>;
 
 export type PrunedCoverMenuState<T> = {
@@ -14,6 +16,7 @@ export type ManualCoverBusyParams = {
   task: () => Promise<unknown>;
   onClearError: () => void;
   onReloadCards: () => Promise<void>;
+  onSuccess?: () => void;
   onCoverError: (message: string) => void;
   describeError: (error: unknown) => string;
   focusMenuTrigger: (gameId: string) => void;
@@ -26,6 +29,7 @@ export async function withManualCoverBusy({
   task,
   onClearError,
   onReloadCards,
+  onSuccess,
   onCoverError,
   describeError,
   focusMenuTrigger,
@@ -41,6 +45,7 @@ export async function withManualCoverBusy({
 
     onClearError();
     await onReloadCards();
+    onSuccess?.();
   } catch (error: unknown) {
     onCoverError(describeError(error));
   } finally {
@@ -114,8 +119,6 @@ const COVER_IMAGE_FILTERS: DialogFilter[] = [
 ];
 
 type CoverFilePickerDeps = {
-  previewModeMessage: string;
-  onCoverError: (message: string) => void;
   focusMenuTrigger: (gameId: string) => void;
 };
 
@@ -124,10 +127,13 @@ export async function selectCoverFilePath(
   gameId: string,
   deps: CoverFilePickerDeps,
 ): Promise<string | null> {
+  let previewModeTriggered: true | undefined;
+
   const selectedPath = await openFilePicker({
     filters: COVER_IMAGE_FILTERS,
     onPreviewMode: () => {
-      deps.onCoverError(deps.previewModeMessage);
+      previewModeTriggered = true;
+      publishCoverPickerPreviewModeNotification();
       deps.focusMenuTrigger(gameId);
     },
   });
@@ -136,6 +142,9 @@ export async function selectCoverFilePath(
     return selectedPath;
   }
 
-  deps.focusMenuTrigger(gameId);
+  if (previewModeTriggered !== true) {
+    deps.focusMenuTrigger(gameId);
+  }
+
   return null;
 }

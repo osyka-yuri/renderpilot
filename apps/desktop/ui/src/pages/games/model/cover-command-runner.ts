@@ -1,6 +1,12 @@
 import { clearGameCover, fetchGameCover, setGameCover } from '@entities/game';
 import { describeCommandError } from '@shared/api';
-import { withManualCoverBusy } from '@features/cover-ops';
+import {
+  publishCoverDownloadedNotification,
+  publishCoverOperationErrorNotification,
+  publishCoverRemovedNotification,
+  publishCoverUpdatedNotification,
+  withManualCoverBusy,
+} from '@features/cover-ops';
 import type { CoverMenuRefs } from './games-page-cover-ops';
 import { focusMenuTrigger, selectCoverFilePath } from './games-page-cover-ops';
 
@@ -13,7 +19,6 @@ export type CoverCommandRunnerDeps = {
   getMenuOpenFor: () => string | null;
   setMenuOpenFor: (value: string | null) => void;
   onClearError: () => void;
-  onCoverError: (message: string) => void;
   onReloadCards: () => Promise<void>;
 };
 
@@ -25,6 +30,7 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
   async function runManualCoverCommand(
     gameId: string,
     command: () => Promise<unknown>,
+    onSuccess?: () => void,
   ): Promise<void> {
     closeMenu();
 
@@ -35,7 +41,8 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       task: command,
       onClearError: deps.onClearError,
       onReloadCards: deps.onReloadCards,
-      onCoverError: deps.onCoverError,
+      onSuccess,
+      onCoverError: publishCoverOperationErrorNotification,
       describeError: describeCommandError,
       focusMenuTrigger: (id) => {
         focusMenuTrigger(deps.getCoverMenuRefs(), id);
@@ -51,7 +58,6 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
     }
 
     const selectedPath = await selectCoverFilePath(gameId, {
-      onCoverError: deps.onCoverError,
       focusMenuTrigger: (id) => {
         focusMenuTrigger(deps.getCoverMenuRefs(), id);
       },
@@ -61,15 +67,21 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       return;
     }
 
-    await runManualCoverCommand(gameId, () => setGameCover(gameId, selectedPath));
+    await runManualCoverCommand(gameId, () => setGameCover(gameId, selectedPath), () => {
+      publishCoverUpdatedNotification();
+    });
   }
 
   function fetchCover(gameId: string): void {
-    void runManualCoverCommand(gameId, () => fetchGameCover(gameId));
+    void runManualCoverCommand(gameId, () => fetchGameCover(gameId), () => {
+      publishCoverDownloadedNotification();
+    });
   }
 
   function clearCover(gameId: string): void {
-    void runManualCoverCommand(gameId, () => clearGameCover(gameId));
+    void runManualCoverCommand(gameId, () => clearGameCover(gameId), () => {
+      publishCoverRemovedNotification();
+    });
   }
 
   function pickCover(gameId: string): void {

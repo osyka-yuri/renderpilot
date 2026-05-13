@@ -2,9 +2,7 @@
   import { Badge, Switch } from '@shared/ui';
   import SettingsSectionShell from './SettingsSectionShell.svelte';
   import SettingRow from './SettingRow.svelte';
-  import SettingCopy from './SettingCopy.svelte';
-  import SettingLabel from './SettingLabel.svelte';
-  import { cn } from '@shared/utils';
+  import { cn } from '@shared/classnames';
 
   type ToggleAdvancedModeHandler = () => void;
 
@@ -58,30 +56,34 @@
   description={sectionCopy.description}
 >
   <SettingRow>
+    <div class="grid min-w-0 flex-1 gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+        {advancedModeCopy.label}
+      </p>
+      <span id={ADVANCED_MODE_LABEL_ID} class="text-base/5 font-semibold text-foreground">
+        {advancedModeCopy.title}
+      </span>
+      <span id={ADVANCED_MODE_DESCRIPTION_ID} class="text-sm/snug">
+        {advancedModeCopy.description}
+      </span>
+    </div>
+
     <Switch
       checked={advancedMode}
       aria-labelledby={ADVANCED_MODE_LABEL_ID}
       aria-describedby={ADVANCED_MODE_DESCRIPTION_ID}
       onCheckedChange={handleAdvancedModeChange}
-    >
-      <SettingCopy>
-        <SettingLabel>{advancedModeCopy.label}</SettingLabel>
-        <span id={ADVANCED_MODE_LABEL_ID} class="text-base font-semibold text-text-strong">
-          {advancedModeCopy.title}
-        </span>
-        <span id={ADVANCED_MODE_DESCRIPTION_ID} class="text-sm/snug">
-          {advancedModeCopy.description}
-        </span>
-      </SettingCopy>
-    </Switch>
+    />
   </SettingRow>
 
   <SettingRow>
-    <SettingCopy>
-      <SettingLabel>{scanSourceCopy.label}</SettingLabel>
+    <div class="grid min-w-0 flex-1 gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+        {scanSourceCopy.label}
+      </p>
       <h4>{scanSourceCopy.title}</h4>
       <p>{scanSourceCopy.description}</p>
-    </SettingCopy>
+    </div>
 
     <div
       class={cn(
@@ -90,8 +92,8 @@
       )}
       aria-label={scanSourceCopy.note}
     >
-      <Badge pill size="md" tone="muted">{scanSourceCopy.badge}</Badge>
-      <span class="text-xs/snug text-text-muted">{scanSourceCopy.note}</span>
+      <Badge variant="outline">{scanSourceCopy.badge}</Badge>
+      <span class="text-xs/snug text-muted-foreground">{scanSourceCopy.note}</span>
     </div>
   </SettingRow>
 </SettingsSectionShell>

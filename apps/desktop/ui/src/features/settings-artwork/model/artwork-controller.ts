@@ -3,7 +3,7 @@ import {
   type CoverRemotePolicy,
   fetchCoverRemotePolicy,
 } from '@entities/settings';
-import type { DisposableRequestChannel } from '@shared/utils';
+import type { DisposableRequestChannel } from '@shared/requests';
 import type { CoverSourceToggleRow, CoverSourceSettingKey } from './artwork-model';
 import {
   artworkSettingsReadError,

@@ -752,6 +752,11 @@ export default defineConfig([
        * Use "error" here if class ordering is owned by ESLint instead.
        */
       'better-tailwindcss/enforce-consistent-class-order': 'off',
+
+      /*
+       * shadcn-svelte Sonner uses a non-Tailwind root hook class upstream.
+       */
+      'better-tailwindcss/no-unknown-classes': ['error', { ignore: ['^toaster$'] }],
     },
 
     settings: {

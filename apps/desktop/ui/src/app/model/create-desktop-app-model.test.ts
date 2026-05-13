@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
+import * as notificationsModule from '@shared/notifications';
 import * as themeModule from '@shared/theme';
 import { createDesktopAppModel } from './create-desktop-app-model.svelte';
+import * as appNotificationsModule from './notifications';
 
 function createStubPlan(operationId: string): SwapPlan {
   return {
@@ -47,12 +49,18 @@ describe('createDesktopAppModel', () => {
     expect(model.advancedMode).toBe(false);
   });
 
-  it('clears error message', () => {
+  it('clears the active status notification', () => {
+    const clearStatusNotificationSpy = vi
+      .spyOn(notificationsModule, 'clearStatusNotification')
+      .mockImplementation(() => undefined);
+
     const model = createDesktopAppModel();
-    model.setErrorMessage('Something went wrong');
-    expect(model.errorMessage).toBe('Something went wrong');
+
     model.clearError();
-    expect(model.errorMessage).toBe('');
+
+    expect(clearStatusNotificationSpy).toHaveBeenCalledTimes(1);
+
+    clearStatusNotificationSpy.mockRestore();
   });
 
   it('getCurrentPlan returns null when operation_id mismatches', () => {
@@ -154,11 +162,52 @@ describe('createDesktopAppModel', () => {
     expect(model.screen).toBe('games');
   });
 
-  it('presentGameDetails sets error when canonical id is null', () => {
+  it('presentGameDetails publishes the missing stable id notification when canonical id is null', () => {
+    const publishMissingStableGameDetailsNotificationSpy = vi
+      .spyOn(appNotificationsModule, 'publishMissingStableGameDetailsNotification')
+      .mockReturnValue('desktop-status');
+
     const model = createDesktopAppModel();
     model.presentGameDetails(createStubDetails(''), 'details');
-    expect(model.errorMessage).toBe('Catalog returned game details without a stable identifier.');
+
+    expect(publishMissingStableGameDetailsNotificationSpy).toHaveBeenCalledTimes(1);
     expect(model.screen).toBe('games');
+
+    publishMissingStableGameDetailsNotificationSpy.mockRestore();
+  });
+
+  it('showStalePlanError publishes the stale plan notification', () => {
+    const publishStalePlanNotificationSpy = vi
+      .spyOn(appNotificationsModule, 'publishStalePlanNotification')
+      .mockReturnValue('desktop-status');
+
+    const model = createDesktopAppModel();
+    model.showStalePlanError();
+
+    expect(publishStalePlanNotificationSpy).toHaveBeenCalledTimes(1);
+
+    publishStalePlanNotificationSpy.mockRestore();
+  });
+
+  it('showError respects warning severity for command warnings', () => {
+    const publishCommandErrorNotificationSpy = vi
+      .spyOn(notificationsModule, 'publishCommandErrorNotification')
+      .mockReturnValue('desktop-status');
+
+    const warning = {
+      code: 'catalog_partial_scan',
+      severity: 'warning' as const,
+      messageKey: 'warnings.catalog_partial_scan',
+      details: 'Some folders could not be scanned.',
+      suggestedActions: [],
+    };
+
+    const model = createDesktopAppModel();
+    model.showError(warning);
+
+    expect(publishCommandErrorNotificationSpy).toHaveBeenCalledWith(warning);
+
+    publishCommandErrorNotificationSpy.mockRestore();
   });
 
   it('clearSelection resets backTarget when it was a workspace screen', () => {
@@ -176,25 +225,48 @@ describe('createDesktopAppModel', () => {
     const spy = vi.spyOn(themeModule, 'persistThemeMode').mockImplementation(() => {
       throw new Error('disk error');
     });
+    const publishCommandErrorNotificationSpy = vi
+      .spyOn(notificationsModule, 'publishCommandErrorNotification')
+      .mockReturnValue('desktop-status');
 
     const model = createDesktopAppModel();
     const previousMode = model.themeMode;
     model.changeThemeMode('dark');
+
+    const latestCall = publishCommandErrorNotificationSpy.mock.calls[
+      publishCommandErrorNotificationSpy.mock.calls.length - 1
+    ];
+    const [error] = latestCall;
+
     expect(model.themeMode).toBe(previousMode);
-    expect(model.errorMessage).toContain('disk error');
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('disk error');
 
     spy.mockRestore();
+    publishCommandErrorNotificationSpy.mockRestore();
   });
 
   it('runExclusive shows error and returns null when task throws', async () => {
+    const publishCommandErrorNotificationSpy = vi
+      .spyOn(notificationsModule, 'publishCommandErrorNotification')
+      .mockReturnValue('desktop-status');
     const model = createDesktopAppModel();
     const result = await model.runExclusive(async () => {
       await Promise.resolve();
       throw new Error('task failed');
     });
+
+    const latestCall = publishCommandErrorNotificationSpy.mock.calls[
+      publishCommandErrorNotificationSpy.mock.calls.length - 1
+    ];
+    const [error] = latestCall;
+
     expect(result).toBeNull();
-    expect(model.errorMessage).toContain('task failed');
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('task failed');
     expect(model.busy).toBe(false);
+
+    publishCommandErrorNotificationSpy.mockRestore();
   });
 });
 

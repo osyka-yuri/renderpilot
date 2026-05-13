@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { cn } from '@shared/utils';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { SectionHeader, Surface } from '@shared/ui';
+  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@shared/ui';
 
   type Props = HTMLAttributes<HTMLElement> & {
     titleId?: string;
@@ -37,25 +36,28 @@
   const hasHeader = $derived(Boolean(eyebrowText ?? titleText ?? descriptionText));
 </script>
 
-<article
-  {...rest}
-  class={cn('grid gap-3', className)}
-  aria-labelledby={headingId}
-  aria-label={articleLabel}
->
-  {#if hasHeader}
-    <SectionHeader
-      eyebrow={eyebrowText}
-      title={titleText}
-      titleId={headingId}
-      description={descriptionText}
-      class="max-md:px-0"
-    />
-  {/if}
+<article {...rest} class={className} aria-labelledby={headingId} aria-label={articleLabel}>
+  <Card>
+    {#if hasHeader}
+      <CardHeader>
+        {#if eyebrowText}
+          <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            {eyebrowText}
+          </p>
+        {/if}
 
-  <div class="grid gap-0 overflow-hidden rounded-2xl">
-    <Surface tone="elevated" shadow>
+        {#if titleText}
+          <CardTitle id={headingId}>{titleText}</CardTitle>
+        {/if}
+
+        {#if descriptionText}
+          <CardDescription>{descriptionText}</CardDescription>
+        {/if}
+      </CardHeader>
+    {/if}
+
+    <CardContent>
       {@render children?.()}
-    </Surface>
-  </div>
+    </CardContent>
+  </Card>
 </article>

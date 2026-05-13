@@ -10,7 +10,7 @@ export type NvApiControl = {
 };
 
 export const nvapiControlsByLibrary: Record<string, NvApiControl[]> = {
-  DlssSuperResolution: [
+  dlss_super_resolution: [
     {
       id: 'preset',
       label: 'DLSS preset override',
@@ -36,7 +36,7 @@ export const nvapiControlsByLibrary: Record<string, NvApiControl[]> = {
     },
   ],
 
-  DlssFrameGeneration: [
+  dlss_frame_generation: [
     {
       id: 'fg_profile',
       label: 'DLSS FG profile',
@@ -52,7 +52,7 @@ export const nvapiControlsByLibrary: Record<string, NvApiControl[]> = {
     },
   ],
 
-  DlssRayReconstruction: [
+  dlss_ray_reconstruction: [
     {
       id: 'rr_profile',
       label: 'DLSS RR profile',

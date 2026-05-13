@@ -1,5 +1,5 @@
 import { invokeDesktop } from '@shared/api';
-import { requireNonBlankString, requireString } from '@shared/utils';
+import { requireNonBlankString, requireString } from '@shared/validation';
 import type { CatalogSettingPayload } from '../model/view-model';
 
 export async function getCatalogSetting(key: string): Promise<CatalogSettingPayload> {

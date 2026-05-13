@@ -1,5 +1,5 @@
 import { invokeDesktop } from '@shared/api';
-import { requireNonBlankString } from '@shared/utils';
+import { requireNonBlankString } from '@shared/validation';
 import type { AutoScanResponse, ScanManualFolderResult } from '@entities/game';
 
 export async function scanAutoLibraries(): Promise<AutoScanResponse> {

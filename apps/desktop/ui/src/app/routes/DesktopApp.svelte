@@ -7,29 +7,30 @@
   import { isGameSelected } from '@app/navigation/selection';
   import {
     fetchGameCover,
-    formatPartialScanWarning,
     getGameDetails,
     queryGameCards,
     DEFAULT_GAME_CARDS_CATALOG_PAGE,
     DEFAULT_GAME_CARDS_CATALOG_SORT,
     normalizeSelectableGameId,
-    type ScanError,
   } from '@entities/game';
-  import { rollbackOperation } from '@entities/operation';
+  import { publishRollbackCompletedNotification, rollbackOperation } from '@entities/operation';
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
+  import { NotificationsToaster } from '@widgets/notifications-toaster';
   import {
     createCoverSyncQueue,
     executeBackgroundCoverSync,
-    formatBackgroundCoverSyncError,
+    publishBackgroundCoverSyncFailureNotification,
+    publishBackgroundCoverSyncIssueNotification,
   } from '@features/sync-covers';
   import {
+    publishAutomaticLibraryScanFailedNotification,
+    publishPartialLibraryScanWarning,
     scanAutoLibrariesWithErrorRecovery,
     selectManualScanFolder,
     scanManualFolder,
   } from '@features/scan-libraries';
-
   import {
     GameDetailsPage as GameDetailsScreen,
     createGameDetailsPageModel,
@@ -76,12 +77,12 @@
       const scanResult = await scanAutoLibrariesWithErrorRecovery();
 
       if (scanResult.kind === 'error') {
-        model.setErrorMessage(scanResult.message);
+        publishAutomaticLibraryScanFailedNotification(scanResult.message);
         return true;
       }
 
       if (scanResult.errors.length > 0) {
-        showPartialScanWarning(scanResult.errors);
+        publishPartialLibraryScanWarning(scanResult.errors.length);
       }
 
       return true;
@@ -121,7 +122,7 @@
 
     if (refreshed === true) {
       coverSyncQueue.queue(syncMissingCoversAfterCardsLoad, (error) => {
-        model.setErrorMessage(formatBackgroundCoverSyncError(error));
+        publishBackgroundCoverSyncFailureNotification(error);
       });
     }
   }
@@ -184,17 +185,19 @@
   }
 
   async function handleRollback(operationId: string): Promise<void> {
-    await model.runExclusive(async () => {
-      await rollbackOperation(operationId);
+    const result = await model.runExclusive(async () => {
+      const rollbackResult = await rollbackOperation(operationId);
 
       model.setCurrentPlan(null);
 
       await reloadSelectedGame(getScreenAfterRollback(model.screen));
-    });
-  }
 
-  function showPartialScanWarning(errors: readonly ScanError[]): void {
-    model.setErrorMessage(formatPartialScanWarning(errors.length));
+      return rollbackResult;
+    });
+
+    if (result !== null) {
+      publishRollbackCompletedNotification(result.items.length);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -220,7 +223,7 @@
       onGameEnd: (gameId) => {
         coverSyncQueue.setAutoFetching(gameId, false);
       },
-      onError: model.setErrorMessage,
+      onError: publishBackgroundCoverSyncIssueNotification,
     });
   }
 </script>
@@ -229,11 +232,12 @@
   <title>RenderPilot Desktop</title>
 </svelte:head>
 
+<NotificationsToaster />
+
 <DesktopShell
   screen={model.screen}
   busy={model.busy}
   selectedGameTitle={model.selectedShellGameTitle}
-  errorMessage={model.errorMessage}
   onNavigate={model.handleNavigate}
   onBack={model.handleBack}
 >
@@ -277,7 +281,6 @@
       onRefresh={scanAutoLibrariesAndRefreshCards}
       onReloadCards={handleReloadCards}
       onClearError={model.clearError}
-      onCoverError={model.setErrorMessage}
       onOpenDetails={openGameDetails}
       onOpenOperations={openGameOperations}
     />

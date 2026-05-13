@@ -1,12 +1,6 @@
 import type { GameCardsQuery, GameCardsSortDirection, GameCardsSortField } from '../model/types';
-import {
-  isArray,
-  isNumber,
-  isRecord,
-  isString,
-  normalizeUniqueTrimmedStrings,
-  trimToEmpty,
-} from '@shared/utils';
+import { isArray, isNumber, isRecord, isString } from '@shared/validation';
+import { normalizeUniqueTrimmedStrings, trimToEmpty } from '@shared/text';
 
 const SORT_FIELDS = ['title', 'updates', 'risk'] as const satisfies readonly GameCardsSortField[];
 const SORT_DIRECTIONS = ['asc', 'desc'] as const satisfies readonly GameCardsSortDirection[];

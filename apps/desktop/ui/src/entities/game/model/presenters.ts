@@ -1,4 +1,4 @@
-import { humanizeToken } from '@shared/utils';
+import { humanizeToken } from '@shared/text';
 
 const LAUNCHER_LABELS: Record<string, string> = {
   NativeWindows: 'Native Windows',

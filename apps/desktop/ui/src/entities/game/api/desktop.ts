@@ -1,5 +1,5 @@
 import { invokeDesktop } from '@shared/api';
-import { requireNonBlankString } from '@shared/utils';
+import { requireNonBlankString } from '@shared/validation';
 import { normalizeGameCardsQuery } from './game-cards-query';
 import type {
   CoverArtworkResult,

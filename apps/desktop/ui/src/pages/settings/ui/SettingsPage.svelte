@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ThemeMode } from '@shared/theme';
-  import type { VoidHandler } from '@shared/utils';
+  import type { VoidHandler } from '@shared/callbacks';
   import type { LanguageMode } from '@entities/settings';
   import {
     type LanguageModeHandler,
@@ -16,10 +16,6 @@
     createSettingsPanelModel,
   } from '@widgets/settings-panel';
 
-  const noopThemeChange: ThemeModeHandler = () => undefined;
-  const noopLanguageChange: LanguageModeHandler = () => undefined;
-  const noopToggle: VoidHandler = () => undefined;
-
   type Props = {
     themeMode?: ThemeMode;
     languageMode?: LanguageMode;
@@ -33,9 +29,9 @@
     themeMode = 'system',
     languageMode = 'system',
     advancedMode = false,
-    onThemeModeChange = noopThemeChange,
-    onLanguageModeChange = noopLanguageChange,
-    onToggleAdvancedMode = noopToggle,
+    onThemeModeChange = () => undefined,
+    onLanguageModeChange = () => undefined,
+    onToggleAdvancedMode = () => undefined,
   }: Props = $props();
 
   const model = createSettingsPanelModel();

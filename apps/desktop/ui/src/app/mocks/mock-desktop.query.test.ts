@@ -5,6 +5,7 @@ import {
   mockSetCatalogSetting,
   resetMockDesktopState,
 } from './desktop';
+import { createGameSummaryFromDetails, createManualPreviewDetails } from './desktop-state';
 
 describe('mockQueryGameCards parity', () => {
   beforeEach(() => {
@@ -37,14 +38,14 @@ describe('mockQueryGameCards parity', () => {
   it('normalizes query fingerprint for equivalent input', async () => {
     const left = await mockQueryGameCards({
       searchQuery: '  cyber  ',
-      selectedLibraries: [' DlssSuperResolution ', 'DlssSuperResolution'],
+      selectedLibraries: [' dlss_super_resolution ', 'dlss_super_resolution'],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });
 
     const right = await mockQueryGameCards({
       searchQuery: 'cyber',
-      selectedLibraries: ['DlssSuperResolution'],
+      selectedLibraries: ['dlss_super_resolution'],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });
@@ -57,5 +58,56 @@ describe('mockQueryGameCards parity', () => {
     await mockSetCatalogSetting('games_filters_v3', '   ');
     const payload = await mockGetCatalogSetting('games_filters_v3');
     expect(payload.value).toBeNull();
+  });
+
+  it('builds mock card summaries with the same visible-only library semantics as runtime', () => {
+    const details = createManualPreviewDetails(
+      'manual:preview:test',
+      'Preview Test',
+      'C:/Games/Preview Test',
+    );
+
+    details.components.push({
+      id: 'manual:preview:test:unknown',
+      game_id: 'manual:preview:test',
+      kind: 'NativeLibrary',
+      technology: 'unknown',
+      swappability: 'ReadOnly',
+      files: [
+        {
+          path: 'C:/Games/Preview Test/mystery.dll',
+          version: '1.0.0',
+          sha256: 'preview-unknown',
+        },
+      ],
+    });
+    details.candidate_groups.push({
+      component_id: 'manual:preview:test:unknown',
+      technology: 'unknown',
+      file_path: 'C:/Games/Preview Test/mystery.dll',
+      current_version: '1.0.0',
+      candidates: [
+        {
+          artifact_id: 'artifact:preview:unknown',
+          file_name: 'mystery.dll',
+          file_path: 'C:/RenderPilot/Library/mystery.dll',
+          version: '2.0.0',
+          source_game_id: null,
+          comparison: 'newer_version',
+          warning: null,
+        },
+      ],
+    });
+
+    const summary = createGameSummaryFromDetails(details, {
+      risk_level: 'medium',
+      backup_available: false,
+      last_operation_status: null,
+    });
+
+    expect(summary.library_tags).toEqual(['dlss_super_resolution']);
+    expect(summary.component_count).toBe(1);
+    expect(summary.update_count).toBe(1);
+    expect(summary.updates_available).toBe(true);
   });
 });

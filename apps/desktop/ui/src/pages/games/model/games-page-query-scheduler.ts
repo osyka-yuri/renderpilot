@@ -4,7 +4,7 @@ import {
   DEFAULT_GAME_CARDS_CATALOG_SORT,
   type GameSummary,
 } from '@entities/game';
-import { createRequestChannel, type RequestChannel } from '@shared/utils';
+import { createRequestChannel, type RequestChannel } from '@shared/requests';
 
 export function buildGameCardsQueryKey(
   searchQuery: string,

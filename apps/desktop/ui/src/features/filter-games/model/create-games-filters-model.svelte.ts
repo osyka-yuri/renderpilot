@@ -1,4 +1,3 @@
-import type { PopoverOpenChangeEvent } from '@shared/ui';
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {
   applyDraftFilters,
@@ -6,7 +5,7 @@ import {
   createGamesFilterPersistence,
   createInitialGamesFilterState,
   openFilterPopover,
-  toggleDraftLibrary,
+  setDraftLibraries,
   type PersistedGamesFilters,
   withSearchQuery,
 } from './index-internal';
@@ -16,6 +15,7 @@ import {
   shouldQueueAvailabilityPersist,
   syncGamesFilterState,
 } from './games-filter-controller';
+import { buildLibraryFilterOptions, groupLibraryFilterOptions } from './library-filter-options';
 
 export type GamesFiltersModel = ReturnType<typeof createGamesFiltersModel>;
 
@@ -35,12 +35,9 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     settingKey: GAMES_FILTERS_CATALOG_SETTING_KEY,
   });
 
-  const libraryFilterOptions = $derived(
-    input.getAvailableLibraries().map((library) => ({
-      value: library,
-      label: library,
-    })),
-  );
+  const libraryFilterOptions = $derived(buildLibraryFilterOptions(input.getAvailableLibraries()));
+
+  const groupedLibraryFilterOptions = $derived(groupLibraryFilterOptions(libraryFilterOptions));
 
   const hasFilterIndicator = $derived(
     checkHasFilterIndicator(
@@ -119,8 +116,8 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     };
   }
 
-  function handlePopoverOpenChange(event: PopoverOpenChangeEvent): void {
-    if (event.open) {
+  function handlePopoverOpenChange(nextOpen: boolean): void {
+    if (nextOpen) {
       filtersState = openFilterPopover(filtersState);
       return;
     }
@@ -147,14 +144,11 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
   }
 
   function toggleFiltersPopover(): void {
-    handlePopoverOpenChange({
-      open: !filtersState.isPopoverOpen,
-      reason: 'programmatic',
-    });
+    handlePopoverOpenChange(!filtersState.isPopoverOpen);
   }
 
-  function handleToggleLibrary(library: string): void {
-    filtersState = toggleDraftLibrary(filtersState, library);
+  function handleDraftLibrariesChange(nextLibraries: readonly string[]): void {
+    filtersState = setDraftLibraries(filtersState, nextLibraries);
   }
 
   function setSearchQuery(nextValue: string): void {
@@ -186,8 +180,8 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     set filtersAnchorRef(value) {
       filtersAnchorRef = value;
     },
-    get libraryFilterOptions() {
-      return libraryFilterOptions;
+    get groupedLibraryFilterOptions() {
+      return groupedLibraryFilterOptions;
     },
     get hasFilterIndicator() {
       return hasFilterIndicator;
@@ -197,7 +191,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     applyFilterSelection,
     cancelFilterSelection,
     toggleFiltersPopover,
-    handleToggleLibrary,
+    handleDraftLibrariesChange,
     setSearchQuery,
     flushSearchPersist,
     dispose,

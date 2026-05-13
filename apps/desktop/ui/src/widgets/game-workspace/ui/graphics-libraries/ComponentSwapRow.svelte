@@ -5,9 +5,22 @@
     type ConfiguredComponentRow,
   } from '@features/graphics-configurator';
   import { formatLabel } from '@entities/component';
-  import { riskBadgeTone } from '@entities/operation';
-  import { cn, fileNameFromPath } from '@shared/utils';
-  import { Badge, BadgeGroup, Button, InfoTile, Select } from '@shared/ui';
+  import { riskBadgeVariant } from '@entities/operation';
+  import { cn } from '@shared/classnames';
+  import { fileNameFromPath } from '@shared/path';
+  import {
+    Badge,
+    Button,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+  } from '@shared/ui';
 
   type ArtifactSelectionHandler = (componentId: string, value: string) => void;
   type BuildPlanHandler = (componentId: string, artifactId: string) => void;
@@ -21,16 +34,13 @@
     onBuildPlan?: BuildPlanHandler;
   };
 
-  const noopArtifactSelection = () => undefined;
-  const noopBuildPlan = () => undefined;
-
   const {
     row,
     selectedArtifact = '',
     riskLevel = null,
     busy = false,
-    onArtifactSelection = noopArtifactSelection,
-    onBuildPlan = noopBuildPlan,
+    onArtifactSelection = () => undefined,
+    onBuildPlan = () => undefined,
   }: Props = $props();
 
   type SelectedCandidate = ConfiguredComponentRow['selectedCandidate'];
@@ -62,6 +72,12 @@
   const NO_REPLACEMENTS_TEXT = 'No replacement candidates found';
   const SELECT_REPLACEMENT_TEXT = 'Choose a replacement version';
   const UNKNOWN_PATH_TEXT = 'Path unavailable';
+
+  type SelectOption = {
+    value: string;
+    label: string;
+    disabled?: boolean;
+  };
 
   function displayText(value: string | null | undefined, fallback = FALLBACK_TEXT) {
     return value?.trim() ? value : fallback;
@@ -180,87 +196,112 @@
 
     onBuildPlan(view.componentId, view.selectedArtifactId);
   }
+
+  function optionLabel(options: readonly SelectOption[], value: string, fallback: string): string {
+    return options.find((option) => option.value === value)?.label ?? fallback;
+  }
+
+  const installedTriggerLabel = $derived(
+    optionLabel(view.installedOptions, view.installedValue, 'No detected file'),
+  );
+
+  const replacementTriggerLabel = $derived(
+    optionLabel(view.candidateOptions, view.replacementValue, SELECT_REPLACEMENT_TEXT),
+  );
 </script>
 
-<div class="grid gap-4 rounded-2xl border border-border-subtle bg-bg-elevated p-4">
-  <header
-    class={cn(
-      'flex items-start justify-between gap-4 border-b border-border-subtle pb-3',
-      'max-lg:flex-col max-lg:items-stretch',
-    )}
-  >
-    <div class="grid min-w-0 gap-1">
-      <strong class="text-base/tight text-text-strong">{view.fileName}</strong>
-      <p class="text-sm/snug wrap-break-word text-text-muted" title={view.displayPath}>
-        {view.displayPath}
+<Card>
+  <CardHeader>
+    <div
+      class={cn('flex items-start justify-between gap-4', 'max-lg:flex-col max-lg:items-stretch')}
+    >
+      <div class="grid min-w-0 gap-1">
+        <CardTitle>{view.fileName}</CardTitle>
+        <p class="min-w-0 text-sm/5 break-all text-muted-foreground" title={view.displayPath}>
+          {view.displayPath}
+        </p>
+      </div>
+
+      <div class="flex flex-wrap justify-end gap-2" aria-label="Compatibility information">
+        <Badge variant={riskBadgeVariant(riskLevel)}>
+          {formatLabel(row.component.swappability)}
+        </Badge>
+
+        {#if view.hasCandidates}
+          <Badge>{view.compatibilityLabel}</Badge>
+        {:else}
+          <Badge variant="secondary">No replacements</Badge>
+        {/if}
+      </div>
+    </div>
+  </CardHeader>
+
+  <CardContent>
+    <div class="grid min-w-0 gap-2">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+        Installed version
       </p>
+
+      <Select type="single" items={view.installedOptions} value={view.installedValue} disabled>
+        <SelectTrigger size="sm" class="w-full" aria-label={view.installedSelectLabel}>
+          {installedTriggerLabel}
+        </SelectTrigger>
+        <SelectContent>
+          {#each view.installedOptions as option (option.value)}
+            <SelectItem value={option.value} label={option.label}>
+              {option.label}
+            </SelectItem>
+          {/each}
+        </SelectContent>
+      </Select>
+
+      <small
+        class="block min-w-0 text-xs/snug break-all text-muted-foreground"
+        title={view.currentPath}>{view.currentPath}</small
+      >
     </div>
 
-    <BadgeGroup align="end" aria-label="Compatibility information">
-      <Badge tone={riskBadgeTone(riskLevel)}>
-        {formatLabel(row.component.swappability)}
-      </Badge>
+    <div class="grid min-w-0 gap-2">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+        Replacement version
+      </p>
 
-      {#if view.hasCandidates}
-        <Badge>{view.compatibilityLabel}</Badge>
-      {:else}
-        <Badge tone="muted">No replacements</Badge>
-      {/if}
-    </BadgeGroup>
-  </header>
-
-  <div class={cn('grid grid-cols-2 gap-3', 'max-lg:grid-cols-1')}>
-    <InfoTile label="Installed version" class="gap-2">
       <Select
-        size="sm"
-        disabled
-        aria-label={view.installedSelectLabel}
-        options={view.installedOptions}
-        value={view.installedValue}
-      />
-
-      <small class="block text-xs/snug wrap-break-word text-text-subtle" title={view.currentPath}
-        >{view.currentPath}</small
-      >
-    </InfoTile>
-
-    <InfoTile label="Replacement version" class="gap-2">
-      <Select
-        size="sm"
-        disabled={view.replacementSelectDisabled}
-        aria-label={view.replacementSelectLabel}
-        options={view.candidateOptions}
+        type="single"
+        items={view.candidateOptions}
         value={view.replacementValue}
+        disabled={view.replacementSelectDisabled}
         onValueChange={handleArtifactSelection}
-      />
-
-      <small class="block text-xs/snug wrap-break-word text-text-subtle" title={view.candidatePath}
-        >{view.candidatePath}</small
       >
-    </InfoTile>
-  </div>
+        <SelectTrigger size="sm" class="w-full" aria-label={view.replacementSelectLabel}>
+          {replacementTriggerLabel}
+        </SelectTrigger>
+        <SelectContent>
+          {#each view.candidateOptions as option (option.value)}
+            <SelectItem value={option.value} label={option.label} disabled={option.disabled}>
+              {option.label}
+            </SelectItem>
+          {/each}
+        </SelectContent>
+      </Select>
 
-  <footer
-    class={cn(
-      'flex items-start justify-between gap-4 border-t border-border-subtle pt-3',
-      'max-lg:flex-col max-lg:items-stretch',
-    )}
-  >
+      <small
+        class="block min-w-0 text-xs/snug break-all text-muted-foreground"
+        title={view.candidatePath}>{view.candidatePath}</small
+      >
+    </div>
+  </CardContent>
+
+  <CardFooter>
     <div class="grid max-w-176 min-w-0 gap-1">
-      <strong class="text-text-strong">{view.selectionSummaryTitle}</strong>
-      <p class="text-sm/snug wrap-break-word text-text-muted">
+      <strong class="text-foreground">{view.selectionSummaryTitle}</strong>
+      <p class="text-sm/5 wrap-break-word text-muted-foreground">
         {view.candidateSummary}
       </p>
     </div>
 
-    <Button
-      variant="primary"
-      size="sm"
-      disabled={view.buildPlanDisabled}
-      loading={busy}
-      onclick={handleBuildPlan}
-    >
+    <Button variant="default" size="sm" disabled={view.buildPlanDisabled} onclick={handleBuildPlan}>
       {busy ? 'Working...' : 'Build File Plan'}
     </Button>
-  </footer>
-</div>
+  </CardFooter>
+</Card>

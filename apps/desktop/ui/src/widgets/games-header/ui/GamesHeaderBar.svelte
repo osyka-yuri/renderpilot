@@ -1,13 +1,11 @@
 <script lang="ts">
   import { GamesDashboardSummary, type DashboardStats } from '@entities/game';
-  import { Button } from '@shared/ui';
-  import { cn } from '@shared/utils';
+  import { Button, Spinner } from '@shared/ui';
+  import { cn } from '@shared/classnames';
 
   type ActionHandler = () => void;
 
   const DEFAULT_SCAN_BUTTON_LABEL = 'Scan Folder';
-
-  const noop: ActionHandler = () => undefined;
 
   const createDefaultDashboardStats = (): DashboardStats => ({
     games: 0,
@@ -29,8 +27,8 @@
     busy = false,
     scanButtonLabel = DEFAULT_SCAN_BUTTON_LABEL,
     dashboardStats = createDefaultDashboardStats(),
-    onRefresh = noop,
-    onScan = noop,
+    onRefresh = () => undefined,
+    onScan = () => undefined,
   }: Props = $props();
 
   const normalizedScanButtonLabel = $derived(scanButtonLabel.trim() || DEFAULT_SCAN_BUTTON_LABEL);
@@ -52,11 +50,17 @@
     role="group"
     aria-label="Library actions"
   >
-    <Button variant="secondary" size="sm" disabled={busy} loading={busy} onclick={onRefresh}>
+    <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
+      {#if busy}
+        <Spinner />
+      {/if}
       Refresh Libraries
     </Button>
 
-    <Button variant="primary" size="sm" disabled={busy} loading={busy} onclick={onScan}>
+    <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
+      {#if busy}
+        <Spinner />
+      {/if}
       {normalizedScanButtonLabel}
     </Button>
   </div>

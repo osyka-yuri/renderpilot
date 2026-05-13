@@ -1,10 +1,5 @@
 import type { GameSummary } from './types';
-import { normalizeUniqueTrimmedStrings } from '@shared/utils';
-
-export type LibraryFilterOption = {
-  value: string;
-  label: string;
-};
+import { normalizeUniqueTrimmedStrings } from '@shared/text';
 
 export function normalizeLibraryValues(values: readonly string[]): string[] {
   return normalizeUniqueTrimmedStrings(values);
@@ -17,7 +12,9 @@ export function extractAvailableLibrariesFromCards(cards: readonly GameSummary[]
     libraries.push(...card.library_tags);
   }
 
-  return normalizeLibraryValues(libraries);
+  return normalizeLibraryValues(libraries).filter(
+    (library) => library.toLowerCase() !== 'unknown',
+  );
 }
 
 /** Keep only values still present in the catalog union. */

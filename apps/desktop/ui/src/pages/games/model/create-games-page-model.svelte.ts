@@ -1,5 +1,4 @@
-import type { GameSummary, GameCardCoverMenuHandle } from '@entities/game';
-import { formatLabel } from '@entities/component';
+import type { GameSummary, GameCardMenuHandle } from '@entities/game';
 import { extractAvailableLibrariesFromCards, toGameCardViewModel } from '@entities/game';
 import { createGamesFiltersModel } from '@features/filter-games';
 import {
@@ -16,14 +15,13 @@ export type GamesPageModelInput = {
   getBusy: () => boolean;
   getCoversAutoFetchingIds: () => ReadonlySet<string>;
   onClearError: () => void;
-  onCoverError: (message: string) => void;
   onReloadCards: () => Promise<void>;
 };
 
 export function createGamesPageModel(input: GamesPageModelInput) {
   let manualCoverBusyFor = $state<string | null>(null);
   let menuOpenFor = $state<string | null>(null);
-  let coverMenuRefs = $state<Record<string, GameCardCoverMenuHandle | undefined>>({});
+  let coverMenuRefs = $state<Record<string, GameCardMenuHandle | undefined>>({});
 
   let queriedGames = $state<GameSummary[]>([]);
   const scheduler = createGamesPageQueryScheduler();
@@ -32,8 +30,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   const filtersModel = createGamesFiltersModel({
     getAvailableLibraries: () => queryAvailableLibraries,
   });
-  const libraryFilterOptions = $derived(filtersModel.libraryFilterOptions);
-  const gameItems = $derived(queriedGames.map((game) => toGameCardViewModel(game, formatLabel)));
+  const gameItems = $derived(queriedGames.map((game) => toGameCardViewModel(game)));
 
   const coverCommandRunner = createCoverCommandRunner({
     getManualCoverBusyFor: () => manualCoverBusyFor,
@@ -46,7 +43,6 @@ export function createGamesPageModel(input: GamesPageModelInput) {
       menuOpenFor = value;
     },
     onClearError: input.onClearError,
-    onCoverError: input.onCoverError,
     onReloadCards: input.onReloadCards,
   });
 
@@ -135,8 +131,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     },
 
     // Derived
-    get libraryFilterOptions() {
-      return libraryFilterOptions;
+    get groupedLibraryFilterOptions() {
+      return filtersModel.groupedLibraryFilterOptions;
     },
     get gameItems() {
       return gameItems;
@@ -157,7 +153,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     applyFilterSelection: filtersModel.applyFilterSelection,
     cancelFilterSelection: filtersModel.cancelFilterSelection,
     toggleFiltersPopover: filtersModel.toggleFiltersPopover,
-    handleToggleLibrary: filtersModel.handleToggleLibrary,
+    handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,
     pickCover: coverCommandRunner.pickCover,

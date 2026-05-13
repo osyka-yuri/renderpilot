@@ -9,7 +9,7 @@ import type {
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type { SwapPlan, ApplyOperationResult, RollbackOperationResult } from '@entities/operation';
-import { isRecord, isString } from '@shared/utils';
+import { isRecord, isString } from '@shared/validation';
 
 type PayloadRecord = Record<PropertyKey, unknown>;
 

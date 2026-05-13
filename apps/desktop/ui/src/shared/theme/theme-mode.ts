@@ -1,3 +1,5 @@
+import { setMode } from 'mode-watcher';
+
 export type ThemeMode = 'system' | 'dark' | 'light';
 export type ResolvedThemeMode = Exclude<ThemeMode, 'system'>;
 
@@ -45,8 +47,18 @@ export function applyThemeMode(mode: ThemeMode): void {
     return;
   }
 
+  const resolved = resolveThemeMode(mode);
+
   root.dataset.themeMode = mode;
-  root.dataset.theme = resolveThemeMode(mode);
+  root.dataset.theme = resolved;
+
+  if (resolved === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+
+  setMode(mode);
 }
 
 export function observeSystemTheme(listener: () => void): () => void {

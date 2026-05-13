@@ -1,5 +1,5 @@
 import type { Screen } from './screen';
-import { isString } from '@shared/utils';
+import { isString } from '@shared/validation';
 
 const DETAILS_WORKSPACE_SCREEN = 'details' as const satisfies Screen;
 const OPERATIONS_WORKSPACE_SCREEN = 'operations' as const satisfies Screen;

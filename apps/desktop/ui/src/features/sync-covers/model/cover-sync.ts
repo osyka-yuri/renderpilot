@@ -7,7 +7,7 @@
  */
 
 import { describeCommandErrorBrief } from '@shared/api';
-import { isDefined } from '@shared/utils';
+import { isDefined } from '@shared/validation';
 import { type CoverRemotePolicy } from '@entities/settings';
 import {
   gameCardHasStoredCover,

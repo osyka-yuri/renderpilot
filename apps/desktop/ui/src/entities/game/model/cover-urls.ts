@@ -1,4 +1,4 @@
-import { requireNonBlankString, requireValidTimestampMs } from '@shared/utils';
+import { requireNonBlankString, requireValidTimestampMs } from '@shared/validation';
 
 /** Windows WebView2 resolves registered scheme `rp-cover` under this origin. */
 export const GAME_COVER_ORIGIN = 'http://rp-cover.localhost' as const;

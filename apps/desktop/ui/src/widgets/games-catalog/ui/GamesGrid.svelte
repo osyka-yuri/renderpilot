@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type GameCardViewModel, type GameCardCoverMenuHandle, GameCard } from '@entities/game';
+  import { type GameCardViewModel, type GameCardMenuHandle, GameCard } from '@entities/game';
 
   type GameId = GameCardViewModel['id'];
 
@@ -7,7 +7,7 @@
   type CoverBusyPredicate = (gameId: GameId) => boolean;
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
 
-  type CoverMenuRefs = Readonly<Partial<Record<GameId, GameCardCoverMenuHandle>>>;
+  type CoverMenuRefs = Readonly<Partial<Record<GameId, GameCardMenuHandle>>>;
 
   type Props = {
     games?: readonly GameCardViewModel[];
@@ -43,21 +43,13 @@
     coverMenuRefs = EMPTY_COVER_MENU_REFS,
 
     isCoverOperationBusy = isCoverOperationIdle,
-    onMenuOpenChange,
-    onFetchCover,
-    onPickCover,
-    onClearCover,
-    onOpenDetails,
-    onOpenOperations,
+    onMenuOpenChange = () => undefined,
+    onFetchCover = () => undefined,
+    onPickCover = () => undefined,
+    onClearCover = () => undefined,
+    onOpenDetails = () => undefined,
+    onOpenOperations = () => undefined,
   }: Props = $props();
-
-  function handleMenuOpenChange(gameId: GameId, next: boolean): void {
-    onMenuOpenChange?.(gameId, next);
-  }
-
-  function handleGameAction(handler: GameActionHandler | undefined, gameId: GameId): void {
-    handler?.(gameId);
-  }
 </script>
 
 {#if games.length > 0}
@@ -68,42 +60,42 @@
     {#each games as game (game.id)}
       {@const gameId = game.id}
       {@const coverBusy = isCoverOperationBusy(gameId)}
-      {@const backgroundCoverFetch = coversAutoFetchingIds.has(gameId)}
-      {@const menuDisabled = busy || hasManualCoverAction || backgroundCoverFetch}
+      {@const backgroundCoverFetching = coversAutoFetchingIds.has(gameId)}
+      {@const menuDisabled = busy || hasManualCoverAction || backgroundCoverFetching}
       {@const menuOpen = menuOpenFor === gameId}
       {@const coverMenuRef = coverMenuRefs[gameId]}
 
       <GameCard
         {game}
         {coverBusy}
-        {backgroundCoverFetch}
+        {backgroundCoverFetching}
         {menuDisabled}
         {pickDisabled}
         {menuOpen}
         {coverMenuRef}
         onMenuOpenChange={(next: boolean): void => {
-          handleMenuOpenChange(gameId, next);
+          onMenuOpenChange(gameId, next);
         }}
         onFetchCover={(): void => {
-          handleGameAction(onFetchCover, gameId);
+          onFetchCover(gameId);
         }}
         onPickCover={(): void => {
-          handleGameAction(onPickCover, gameId);
+          onPickCover(gameId);
         }}
         onClearCover={(): void => {
-          handleGameAction(onClearCover, gameId);
+          onClearCover(gameId);
         }}
         onOpenDetails={(): void => {
-          handleGameAction(onOpenDetails, gameId);
+          onOpenDetails(gameId);
         }}
         onOpenOperations={(): void => {
-          handleGameAction(onOpenOperations, gameId);
+          onOpenOperations(gameId);
         }}
       />
     {/each}
   </div>
 {:else}
   <div class="px-1" aria-live="polite">
-    <p class="leading-snug text-text-muted">No games match current filters.</p>
+    <p class="leading-snug text-muted-foreground">No games match current filters.</p>
   </div>
 {/if}

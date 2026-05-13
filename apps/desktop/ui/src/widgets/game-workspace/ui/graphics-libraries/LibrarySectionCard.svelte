@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { LibrarySection } from '@features/graphics-configurator';
-  import { Badge, BadgeGroup, SectionHeader, Surface } from '@shared/ui';
+  import { Badge, Card, CardContent, CardHeader, CardTitle } from '@shared/ui';
   import ComponentSwapRow from './ComponentSwapRow.svelte';
   import NvapiDriverControls from './NvapiDriverControls.svelte';
-  import { cn } from '@shared/utils';
 
   type Props = {
     section: LibrarySection;
@@ -32,51 +31,58 @@
   }: Props = $props();
 </script>
 
-<Surface as="article" tone="panel" shadow class={cn('grid gap-4 p-4', 'max-lg:p-3')}>
-  <SectionHeader
-    {eyebrow}
-    title={section.label}
-    titleTag="h4"
-    class={cn(
-      'flex items-start justify-between gap-4 border-b border-border-subtle pb-3',
-      'max-lg:flex-col max-lg:items-start',
-    )}
-  >
-    <BadgeGroup>
-      <Badge>{section.rows.length} detected {section.rows.length === 1 ? 'file' : 'files'}</Badge>
-      {#if section.totalCandidates > 0}
-        <Badge
-          >{section.totalCandidates} replacement {section.totalCandidates === 1
-            ? 'version'
-            : 'versions'}</Badge
-        >
-      {:else}
-        <Badge tone="muted">No replacements</Badge>
+<article>
+  <Card>
+    <CardHeader>
+      <div class="flex items-start justify-between gap-4 max-lg:flex-col max-lg:items-start">
+        <div class="grid gap-1">
+          <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            {eyebrow}
+          </p>
+          <CardTitle>{section.label}</CardTitle>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <Badge
+            >{section.rows.length} detected {section.rows.length === 1 ? 'file' : 'files'}</Badge
+          >
+          {#if section.totalCandidates > 0}
+            <Badge
+              >{section.totalCandidates} replacement {section.totalCandidates === 1
+                ? 'version'
+                : 'versions'}</Badge
+            >
+          {:else}
+            <Badge variant="secondary">No replacements</Badge>
+          {/if}
+        </div>
+      </div>
+    </CardHeader>
+
+    <CardContent>
+      {#if section.nvapiControls.length > 0}
+        <NvapiDriverControls
+          controls={section.nvapiControls}
+          ownerId={section.nvapiOwnerId}
+          selections={selectedNvapiSelections}
+          {busy}
+          {selectionKey}
+          {onNvapiSelection}
+        />
       {/if}
-    </BadgeGroup>
-  </SectionHeader>
 
-  {#if section.nvapiControls.length > 0}
-    <NvapiDriverControls
-      controls={section.nvapiControls}
-      ownerId={section.nvapiOwnerId}
-      selections={selectedNvapiSelections}
-      {busy}
-      {selectionKey}
-      {onNvapiSelection}
-    />
-  {/if}
-
-  <div class="grid gap-3">
-    {#each section.rows as row (row.component.id)}
-      <ComponentSwapRow
-        {row}
-        selectedArtifact={selectedArtifacts[row.component.id] ?? ''}
-        {riskLevel}
-        {busy}
-        {onArtifactSelection}
-        {onBuildPlan}
-      />
-    {/each}
-  </div>
-</Surface>
+      <div class="grid gap-3">
+        {#each section.rows as row (row.component.id)}
+          <ComponentSwapRow
+            {row}
+            selectedArtifact={selectedArtifacts[row.component.id] ?? ''}
+            {riskLevel}
+            {busy}
+            {onArtifactSelection}
+            {onBuildPlan}
+          />
+        {/each}
+      </div>
+    </CardContent>
+  </Card>
+</article>

@@ -1,4 +1,5 @@
 import type { GameSummary } from './types';
+import type { BadgeVariant } from '@shared/ui';
 import { gameCoverAssetSrcWithVersion } from './cover-urls';
 import {
   gameCardCoverUpdatedAtMs,
@@ -7,11 +8,9 @@ import {
 } from './game-card';
 import { titleMonogram } from './presenters';
 
-export type UpdateBadgeTone = 'success' | 'muted';
-
 export type UpdateBadge = {
   label: string;
-  tone: UpdateBadgeTone;
+  variant: BadgeVariant;
 };
 
 export type GameCardViewModel = {
@@ -32,12 +31,7 @@ const UPDATE_BADGE_LABEL = {
   genericAvailable: 'Updates available',
 } as const;
 
-export type GameLabelFormatter = (value?: string | null) => string;
-
-export function toGameCardViewModel(
-  game: GameSummary,
-  formatLabel: GameLabelFormatter,
-): GameCardViewModel {
+export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
   const cover = getCoverViewData(game);
 
   return {
@@ -46,7 +40,7 @@ export function toGameCardViewModel(
     installPath: game.install_path,
     monogram: titleMonogram(game.title),
     updateBadge: getUpdateBadge(game),
-    libraries: getLibraryLabels(game, formatLabel),
+    libraries: [...game.library_tags],
     coverSrc: cover.coverSrc,
     hasCover: cover.hasCover,
   };
@@ -72,21 +66,17 @@ function createEmptyCoverViewData(): CoverViewData {
   };
 }
 
-function getLibraryLabels(game: GameSummary, formatLabel: GameLabelFormatter): string[] {
-  return game.library_tags.map(formatLabel);
-}
-
 function getUpdateBadge(game: GameSummary): UpdateBadge {
   if (!game.updates_available) {
     return {
       label: UPDATE_BADGE_LABEL.upToDate,
-      tone: 'muted',
+      variant: 'secondary',
     };
   }
 
   return {
     label: getAvailableUpdateLabel(game),
-    tone: 'success',
+    variant: 'default',
   };
 }
 

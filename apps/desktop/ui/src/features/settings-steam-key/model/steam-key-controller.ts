@@ -1,5 +1,5 @@
 import type { CatalogSettingPayload } from '@entities/settings';
-import type { DisposableRequestChannel } from '@shared/utils';
+import type { DisposableRequestChannel } from '@shared/requests';
 import { catalogReadError, steamGridDbSettingKey, steamKeySaveError } from './steam-key-model';
 
 type GetCatalogSetting = (key: string) => Promise<CatalogSettingPayload>;

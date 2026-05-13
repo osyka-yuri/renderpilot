@@ -1,20 +1,13 @@
 <script lang="ts">
   import type { GameSummary } from '@entities/game';
   import { type OperationHandler } from '@entities/operation';
-  import {
-    Badge,
-    Button,
-    DefinitionMetric,
-    EmptyStatePanel,
-    SectionHeader,
-    Surface,
-  } from '@shared/ui';
+  import { Badge, Button, Card, CardContent, CardTitle, ScrollArea } from '@shared/ui';
   import {
     createOperationViewModel,
     type OperationHistoryDetails,
     type OperationViewModel,
   } from '../model/operations-page-presenter';
-  import { cn } from '@shared/utils';
+  import { cn } from '@shared/classnames';
 
   type Props = {
     gameCard?: GameSummary | null;
@@ -77,100 +70,127 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-5">
-  <header class="border-b border-border-subtle pb-4">
-    <SectionHeader title="Operations" titleTag="h1" description={pageSubtitle} class="px-0">
-      {#if canViewGame}
-        <Button variant="secondary" size="sm" onclick={handleViewGame}>View Game</Button>
-      {/if}
-    </SectionHeader>
+<section class="grid min-h-0 gap-4">
+  <header class="flex flex-wrap items-start justify-between gap-3">
+    <div class="grid gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Operations</p>
+      <h1 class="text-2xl/tight font-semibold text-foreground">Operations</h1>
+      <p class="text-sm text-muted-foreground">{pageSubtitle}</p>
+    </div>
+    {#if canViewGame}
+      <Button variant="secondary" size="sm" onclick={handleViewGame}>View Game</Button>
+    {/if}
   </header>
 
-  <div class="min-h-0 flex-1 overflow-y-auto">
-    {#if details === null}
-      <div class="p-5 text-center text-text-muted" role="status" aria-live="polite">
-        <p class="">Loading operation history...</p>
-      </div>
-    {:else if !hasOperations}
-      <EmptyStatePanel class="text-center">
-        <p>No operations recorded yet.</p>
-      </EmptyStatePanel>
-    {:else}
-      <div
-        class="flex flex-col gap-3 pb-5"
-        aria-label="Operation history"
-        aria-busy={isInteractionBusy}
-      >
-        {#each operations as operation (operation.id)}
-          <article class="flex min-w-0 flex-col" aria-label={operation.ariaLabel}>
-            <Surface>
-              <div class="p-4">
-                <div
-                  class={cn(
-                    'mb-3 flex items-center justify-between gap-3',
-                    'max-sm:flex-col max-sm:items-start max-sm:gap-1',
-                  )}
-                >
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge tone={operation.tone} surface="outline">
-                      {operation.statusLabel}
-                    </Badge>
+  <div class="min-h-0">
+    <ScrollArea>
+      {#if canViewGame}
+        <!-- handled by PageHeader actions -->
+      {/if}
 
-                    <span class="font-semibold text-text-strong">{operation.kindLabel}</span>
-                  </div>
-
-                  <div class="shrink-0 max-sm:shrink">
-                    <span class="text-sm text-text-muted">{operation.createdAtText}</span>
-                  </div>
-                </div>
-
-                <div
-                  class={cn(
-                    'flex items-end justify-between gap-3',
-                    'max-sm:flex-col max-sm:items-stretch',
-                  )}
-                >
-                  <dl
+      {#if details === null}
+        <Card>
+          <CardContent role="status" aria-live="polite">
+            <p>Loading operation history...</p>
+          </CardContent>
+        </Card>
+      {:else if !hasOperations}
+        <Card>
+          <CardContent>
+            <CardTitle>No operations recorded yet</CardTitle>
+          </CardContent>
+        </Card>
+      {:else}
+        <div
+          class="flex flex-col gap-3 pb-5"
+          aria-label="Operation history"
+          aria-busy={isInteractionBusy}
+        >
+          {#each operations as operation (operation.id)}
+            <article aria-label={operation.ariaLabel}>
+              <Card>
+                <CardContent>
+                  <div
                     class={cn(
-                      'grid min-w-0 flex-1',
-                      'grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3',
+                      'mb-3 flex items-center justify-between gap-3',
+                      'max-sm:flex-col max-sm:items-start max-sm:gap-1',
                     )}
                   >
-                    <DefinitionMetric label="Items">
-                      {operation.itemCount}
-                    </DefinitionMetric>
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
+                      <Badge variant={operation.badgeVariant}>
+                        {operation.statusLabel}
+                      </Badge>
 
-                    <DefinitionMetric label="Backups">
-                      {operation.backupSummary}
-                    </DefinitionMetric>
-                  </dl>
+                      <span class="font-semibold text-foreground">{operation.kindLabel}</span>
+                    </div>
 
-                  {#if operation.canRollback}
-                    <div class={cn('flex shrink-0 justify-end', 'max-sm:justify-stretch')}>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        disabled={operation.isRollbackDisabled}
-                        onclick={() => {
-                          handleRollback(operation.id);
-                        }}
+                    <div class="shrink-0 max-sm:shrink">
+                      <span class="text-sm text-muted-foreground">{operation.createdAtText}</span>
+                    </div>
+                  </div>
+
+                  <div
+                    class={cn(
+                      'flex items-end justify-between gap-3',
+                      'max-sm:flex-col max-sm:items-stretch',
+                    )}
+                  >
+                    <dl
+                      class={cn(
+                        'grid min-w-0 flex-1',
+                        'grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-4 gap-y-3',
+                      )}
+                    >
+                      <div class="grid min-w-0 gap-1">
+                        <p
+                          class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                        >
+                          Items
+                        </p>
+                        <p class="text-sm/5 font-semibold text-foreground">{operation.itemCount}</p>
+                      </div>
+
+                      <div class="grid min-w-0 gap-1">
+                        <p
+                          class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                        >
+                          Backups
+                        </p>
+                        <p class="text-sm/5 font-semibold text-foreground">
+                          {operation.backupSummary}
+                        </p>
+                      </div>
+                    </dl>
+
+                    {#if operation.canRollback}
+                      <div class={cn('flex shrink-0 justify-end', 'max-sm:justify-stretch')}>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={operation.isRollbackDisabled}
+                          onclick={() => {
+                            handleRollback(operation.id);
+                          }}
+                        >
+                          {operation.rollbackLabel}
+                        </Button>
+                      </div>
+                    {/if}
+                  </div>
+
+                  {#if operation.completedDurationText !== null}
+                    <div class="mt-3">
+                      <span class="text-xs text-muted-foreground"
+                        >{operation.completedDurationText}</span
                       >
-                        {operation.rollbackLabel}
-                      </Button>
                     </div>
                   {/if}
-                </div>
-
-                {#if operation.completedDurationText !== null}
-                  <div class="mt-3 border-t border-border-subtle pt-2">
-                    <span class="text-xs text-text-muted">{operation.completedDurationText}</span>
-                  </div>
-                {/if}
-              </div>
-            </Surface>
-          </article>
-        {/each}
-      </div>
-    {/if}
+                </CardContent>
+              </Card>
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </ScrollArea>
   </div>
-</div>
+</section>

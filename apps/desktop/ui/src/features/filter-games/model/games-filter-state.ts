@@ -1,4 +1,4 @@
-import { shallowStringArrayEqual } from '@shared/utils';
+import { shallowStringArrayEqual } from '@shared/text';
 import { intersectLibraries, normalizeLibraryValues } from '@entities/game';
 import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filter-persistence';
 
@@ -143,15 +143,38 @@ export function toggleDraftLibrary(state: GamesFilterState, library: string): Ga
   const draftLibraries = state.draftLibraries.includes(normalizedLibrary)
     ? state.draftLibraries.filter((value) => value !== normalizedLibrary)
     : [...state.draftLibraries, normalizedLibrary];
+  const normalizedDraftLibraries = canonicalizeSelectedLibraries(
+    draftLibraries,
+    state.availableLibraries,
+  );
 
   return {
     ...state,
-    draftLibraries,
+    draftLibraries: normalizedDraftLibraries,
+  };
+}
+
+export function setDraftLibraries(
+  state: GamesFilterState,
+  libraries: readonly string[],
+): GamesFilterState {
+  const normalized = canonicalizeSelectedLibraries(libraries, state.availableLibraries);
+
+  if (shallowStringArrayEqual(state.draftLibraries, normalized)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    draftLibraries: normalized,
   };
 }
 
 export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
-  const appliedLibraries = intersectLibraries(state.draftLibraries, state.availableLibraries);
+  const appliedLibraries = canonicalizeSelectedLibraries(
+    state.draftLibraries,
+    state.availableLibraries,
+  );
 
   if (
     !state.isPopoverOpen &&
@@ -238,7 +261,9 @@ function createLibraryFiltersFromPersistedState(
     });
   }
 
-  return createSelectedLibraryFilters(intersectLibraries(persistedLibraries, availableLibraries));
+  return createSelectedLibraryFilters(
+    canonicalizeSelectedLibraries(persistedLibraries, availableLibraries),
+  );
 }
 
 function createAvailableLibrariesUpdate(
@@ -251,7 +276,7 @@ function createAvailableLibrariesUpdate(
 
   if (shouldApplyPendingPersistedLibraries(state, availableLibraries)) {
     return createSelectedLibraryFilters(
-      intersectLibraries(state.pendingPersistedLibraries, availableLibraries),
+      canonicalizeSelectedLibraries(state.pendingPersistedLibraries, availableLibraries),
     );
   }
 
@@ -292,8 +317,11 @@ function createNormalizedLibraryUpdate(
   state: GamesFilterState,
   availableLibraries: string[],
 ): LibraryFilterUpdate | null {
-  const appliedLibraries = intersectLibraries(state.appliedLibraries, availableLibraries);
-  const draftLibraries = intersectLibraries(state.draftLibraries, availableLibraries);
+  const appliedLibraries = canonicalizeSelectedLibraries(
+    state.appliedLibraries,
+    availableLibraries,
+  );
+  const draftLibraries = canonicalizeSelectedLibraries(state.draftLibraries, availableLibraries);
 
   const hasAppliedLibrariesChanged = !shallowStringArrayEqual(
     state.appliedLibraries,
@@ -381,6 +409,23 @@ function normalizeLibraryName(library: string): string | null {
   const normalizedLibrary = library.trim();
 
   return normalizedLibrary.length === 0 ? null : normalizedLibrary;
+}
+
+function canonicalizeSelectedLibraries(
+  selectedLibraries: readonly string[],
+  availableLibraries: readonly string[],
+): string[] {
+  const normalizedAvailableLibraries = normalizeLibraryValues(availableLibraries);
+
+  if (normalizedAvailableLibraries.length === 0) {
+    return [];
+  }
+
+  const selectedLibrarySet = new Set(
+    intersectLibraries(selectedLibraries, normalizedAvailableLibraries),
+  );
+
+  return normalizedAvailableLibraries.filter((library) => selectedLibrarySet.has(library));
 }
 
 function copyLibraries(libraries: readonly string[]): string[] {

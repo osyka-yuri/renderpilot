@@ -2,8 +2,6 @@
   import { Button, Input, Switch } from '@shared/ui';
   import SettingsSectionShell from './SettingsSectionShell.svelte';
   import SettingRow from './SettingRow.svelte';
-  import SettingCopy from './SettingCopy.svelte';
-  import SettingLabel from './SettingLabel.svelte';
   import type { CoverRemotePolicy } from '@entities/settings';
   import type { CoverSourceToggleRow } from '@features/settings-artwork';
 
@@ -84,6 +82,14 @@
 >
   {#each coverSourceToggleRows as row (row.settingKey)}
     <SettingRow>
+      <div class="grid min-w-0 flex-1 gap-1">
+        <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {row.eyebrow}
+        </p>
+        <span class="text-base/5 font-semibold text-foreground">{row.title}</span>
+        <span class="text-sm/snug">{row.description}</span>
+      </div>
+
       <Switch
         checked={isCoverSourceChecked(row)}
         disabled={isCoverSourceDisabled(row)}
@@ -91,20 +97,14 @@
         onCheckedChange={() => {
           handleCoverSourceToggle(row);
         }}
-      >
-        <SettingCopy>
-          <SettingLabel>{row.eyebrow}</SettingLabel>
-          <span class="text-base font-semibold text-text-strong">{row.title}</span>
-          <span class="text-sm/snug">{row.description}</span>
-        </SettingCopy>
-      </Switch>
+      />
     </SettingRow>
   {/each}
 
   {#if coverSourcesMessage}
     <SettingRow>
       <div class="px-4 py-2">
-        <p class="text-xs text-text-muted" role="status" aria-live="polite">
+        <p class="text-xs text-muted-foreground" role="status" aria-live="polite">
           {coverSourcesMessage}
         </p>
       </div>
@@ -112,14 +112,14 @@
   {/if}
 
   <SettingRow>
-    <SettingCopy>
-      <SettingLabel>SteamGridDB</SettingLabel>
+    <div class="grid min-w-0 flex-1 gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">SteamGridDB</p>
       <h4>API key</h4>
       <p>
         Create a key at steamgriddb.com and paste it here to enable artwork search for non-Steam
         titles and CDN fallbacks.
       </p>
-    </SettingCopy>
+    </div>
 
     <div
       class="
@@ -142,7 +142,7 @@
 
       <div class="flex flex-wrap gap-2">
         <Button
-          variant="primary"
+          variant="default"
           size="sm"
           disabled={!isSteamKeyEditable}
           onclick={handleSteamGridDbKeySave}
@@ -163,7 +163,7 @@
       {#if steamKeyMessage}
         <p
           id={STEAM_GRID_DB_KEY_MESSAGE_ID}
-          class="text-xs text-text-muted"
+          class="text-xs text-muted-foreground"
           role="status"
           aria-live="polite"
         >

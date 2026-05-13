@@ -11,13 +11,19 @@ import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
 import type { LanguageMode } from '@entities/settings';
-import { describeCommandError } from '@shared/api';
-import { ignoreError } from '@shared/utils';
+import { ignoreError } from '@shared/callbacks';
+import {
+  clearStatusNotification,
+  publishCommandErrorNotification,
+} from '@shared/notifications';
 import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
 import { createGamesCatalogModel } from '@widgets/games-catalog';
 import { createGameWorkspaceModel } from '@widgets/game-workspace';
-import { STALE_PLAN_MESSAGE } from './messages';
+import {
+  publishMissingStableGameDetailsNotification,
+  publishStalePlanNotification,
+} from './notifications';
 
 export type DesktopAppModel = ReturnType<typeof createDesktopAppModel>;
 
@@ -30,13 +36,12 @@ export function createDesktopAppModel() {
   let backTarget = $state<BackTarget>(DEFAULT_BACK_TARGET);
 
   const catalog = createGamesCatalogModel();
-  const workspace = createGameWorkspaceModel({ stalePlanMessage: STALE_PLAN_MESSAGE });
+  const workspace = createGameWorkspaceModel();
 
   let busy = $state(false);
   let advancedMode = $state(false);
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
   let languageMode = $state<LanguageMode>('system');
-  let errorMessage = $state('');
 
   const currentGameCard = $derived(
     findGameSummaryForSelection(workspace.selectedGameId, catalog.games),
@@ -143,7 +148,7 @@ export function createDesktopAppModel() {
   }
 
   function showStalePlanError(): void {
-    showError(workspace.showStalePlanError());
+    publishStalePlanNotification();
   }
 
   // ---------------------------------------------------------------------------
@@ -154,7 +159,7 @@ export function createDesktopAppModel() {
     const gameId = workspace.presentGameDetails(details);
 
     if (gameId === null) {
-      showError(new Error('Catalog returned game details without a stable identifier.'));
+      publishMissingStableGameDetailsNotification();
       return;
     }
 
@@ -168,15 +173,11 @@ export function createDesktopAppModel() {
   // ---------------------------------------------------------------------------
 
   function clearError(): void {
-    errorMessage = '';
-  }
-
-  function setErrorMessage(message: string): void {
-    errorMessage = message;
+    clearStatusNotification();
   }
 
   function showError(error: unknown): void {
-    setErrorMessage(describeCommandError(error));
+    publishCommandErrorNotification(error);
   }
 
   // ---------------------------------------------------------------------------
@@ -296,9 +297,6 @@ export function createDesktopAppModel() {
     get languageMode() {
       return languageMode;
     },
-    get errorMessage() {
-      return errorMessage;
-    },
     // Derived
     get currentGameCard() {
       return currentGameCard;
@@ -333,7 +331,6 @@ export function createDesktopAppModel() {
     showStalePlanError,
     presentGameDetails,
     clearError,
-    setErrorMessage,
     showError,
     toggleAdvancedMode,
     changeThemeMode,

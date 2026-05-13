@@ -6,7 +6,7 @@ export {
   openFilterPopover,
   closeFilterPopover,
   cancelFilterPopover,
-  toggleDraftLibrary,
+  setDraftLibraries,
   applyDraftFilters,
   createPersistedSnapshot,
   commitPersistedSnapshot,

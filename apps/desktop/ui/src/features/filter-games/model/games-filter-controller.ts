@@ -1,4 +1,4 @@
-import { shallowStringArrayEqual } from '@shared/utils';
+import { shallowStringArrayEqual } from '@shared/text';
 import { hasPartialLibrarySelection } from '@entities/game';
 import { getCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {

@@ -1,4 +1,8 @@
-import { buildSwapPlan, applyOperationPlan } from '@entities/operation';
+import {
+  applyOperationPlan,
+  buildSwapPlan,
+  publishApplyCompletedNotification,
+} from '@entities/operation';
 import type { SwapPlan } from '@entities/operation';
 
 export type GameDetailsPageModelDeps = {
@@ -40,13 +44,19 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
       return;
     }
 
-    await deps.runExclusive(async () => {
-      await applyOperationPlan(operationId, plan.confirmation_token);
+    const result = await deps.runExclusive(async () => {
+      const appliedOperation = await applyOperationPlan(operationId, plan.confirmation_token);
 
       deps.setCurrentPlan(null);
 
       await deps.reloadGameDetails();
+
+      return appliedOperation;
     });
+
+    if (result !== null) {
+      publishApplyCompletedNotification(result.items.length);
+    }
   }
 
   return { handleBuildPlan, handleApply };

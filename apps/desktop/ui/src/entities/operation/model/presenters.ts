@@ -1,5 +1,7 @@
-import { humanizeToken } from '@shared/utils';
+import { humanizeToken } from '@shared/text';
 import type { SwapPlan } from './types';
+
+export type OperationBadgeVariant = 'outline' | 'secondary' | 'destructive';
 
 const OPERATION_LABELS: Record<string, string> = {
   low: 'Low',
@@ -41,37 +43,37 @@ export function riskTone(value?: string | null): 'low' | 'medium' | 'high' | 'bl
   }
 }
 
-export function riskBadgeTone(value?: string | null): 'success' | 'warning' | 'danger' | 'muted' {
+export function riskBadgeVariant(value?: string | null): OperationBadgeVariant {
   switch (riskTone(value)) {
     case 'low':
-      return 'success';
+      return 'outline';
     case 'medium':
-      return 'warning';
+      return 'secondary';
     case 'high':
     case 'blocked':
-      return 'danger';
+      return 'destructive';
     default:
-      return 'muted';
+      return 'outline';
   }
 }
 
-export function statusTone(value?: string | null): 'neutral' | 'warning' | 'danger' | 'success' {
+export function statusBadgeVariant(value?: string | null): OperationBadgeVariant {
   switch (value) {
     case 'completed':
     case 'rolled_back':
-      return 'success';
+      return 'secondary';
     case 'planned':
     case 'validating':
     case 'backup_created':
     case 'replacing':
-      return 'neutral';
+      return 'outline';
     case 'rollback_required':
-      return 'warning';
+      return 'secondary';
     case 'failed':
     case 'blocked':
-      return 'danger';
+      return 'destructive';
     default:
-      return 'neutral';
+      return 'outline';
   }
 }
 
@@ -108,6 +110,14 @@ export function formatBackupSummary(backupCount: number, backupStatus: string): 
   return `${backupCount} (${formatOperationLabel(backupStatus)})`;
 }
 
+export function formatUpdatedFilesSummary(itemCount: number): string {
+  return formatAffectedFilesSummary(itemCount, 'updated');
+}
+
+export function formatRestoredFilesSummary(itemCount: number): string {
+  return formatAffectedFilesSummary(itemCount, 'restored');
+}
+
 export function getCompletedDurationText(
   createdAt: number,
   completedAt: number | null,
@@ -119,4 +129,16 @@ export function getCompletedDurationText(
   const durationSeconds = Math.max(0, Math.round((completedAt - createdAt) / 1000));
 
   return `Completed in ${durationSeconds}s`;
+}
+
+function formatAffectedFilesSummary(itemCount: number, verb: 'updated' | 'restored'): string {
+  if (itemCount === 0) {
+    return verb === 'updated' ? 'No files were updated.' : 'No files were restored.';
+  }
+
+  if (itemCount === 1) {
+    return `1 file ${verb}.`;
+  }
+
+  return `${itemCount} files ${verb}.`;
 }

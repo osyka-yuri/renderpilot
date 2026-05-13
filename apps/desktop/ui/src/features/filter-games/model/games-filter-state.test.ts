@@ -9,6 +9,7 @@ import {
   hydrateGamesFilterState,
   isPersistedSnapshotStillCurrent,
   openFilterPopover,
+  setDraftLibraries,
   toggleDraftLibrary,
   withAvailableLibraries,
   withSearchQuery,
@@ -353,6 +354,46 @@ describe('games-filter-state', () => {
       expect(checkedAgain.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
     });
 
+    it('restores catalog order when toggling a library back on', () => {
+      const hydrated = createHydratedState({
+        persisted: createPersistedFilters({
+          libraries: [LIBRARY_ALPHA, LIBRARY_GAMMA],
+        }),
+        availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
+      });
+      const opened = openFilterPopover(hydrated);
+
+      const state = toggleDraftLibrary(opened, LIBRARY_BETA);
+
+      expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA]);
+    });
+
+    it('replaces draft libraries with normalized available values in catalog order', () => {
+      const opened = openFilterPopover(
+        createHydratedState({
+          availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
+        }),
+      );
+
+      const state = setDraftLibraries(opened, [
+        `  ${LIBRARY_BETA}  `,
+        LIBRARY_ALPHA,
+        LIBRARY_BETA,
+        MISSING_LIBRARY,
+        '   ',
+      ]);
+
+      expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
+    });
+
+    it('returns the same state when reordered draft libraries match the same catalog selection', () => {
+      const opened = openFilterPopover(createHydratedState());
+
+      const state = setDraftLibraries(opened, [LIBRARY_BETA, ` ${LIBRARY_ALPHA} `, LIBRARY_BETA]);
+
+      expect(state).toBe(opened);
+    });
+
     it('applies draft selection and closes popover', () => {
       const opened = openFilterPopover(createHydratedState());
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
@@ -385,6 +426,17 @@ describe('games-filter-state', () => {
       const state = applyDraftFilters(hydrated);
 
       expect(state).toBe(hydrated);
+    });
+
+    it('hydrates persisted library selection in catalog order', () => {
+      const state = createHydratedState({
+        persisted: createPersistedFilters({
+          libraries: [LIBRARY_GAMMA, LIBRARY_ALPHA],
+        }),
+        availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
+      });
+
+      expectSelectedLibraries(state, [LIBRARY_ALPHA, LIBRARY_GAMMA]);
     });
   });
 

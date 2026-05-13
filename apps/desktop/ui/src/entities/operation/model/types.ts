@@ -1,4 +1,4 @@
-import type { Nullable, UnixTimestampMs, FilePath, Version } from '@shared/utils';
+import type { FilePath, Nullable, UnixTimestampMs, Version } from '@shared/types';
 export type OperationId = string;
 export type BackupId = string;
 export type ConfirmationToken = string;

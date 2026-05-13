@@ -5,7 +5,6 @@ export { type GameCardViewModel, toGameCardViewModel } from './model/game-card-v
 export { type DashboardStats, getDashboardStats } from './model/dashboard-stats';
 
 export {
-  type LibraryFilterOption,
   normalizeLibraryValues,
   extractAvailableLibrariesFromCards,
   intersectLibraries,
@@ -50,6 +49,7 @@ export {
   getGameDetails,
 } from './api/desktop';
 export { default as GameCard } from './ui/GameCard.svelte';
-export { default as GameCardCoverMenu } from './ui/GameCardCoverMenu.svelte';
 export { default as GamesDashboardSummary } from './ui/GamesDashboardSummary.svelte';
-export type { GameCardCoverMenuHandle } from './ui/types';
+export type { GameCardMenuHandle } from './ui/types';
+
+export { createTitleId, createActionAriaLabel } from './model/dom-helpers';

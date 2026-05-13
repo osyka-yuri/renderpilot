@@ -1,9 +1,5 @@
-import {
-  normalizeUniqueTrimmedStringsFromUnknown,
-  trimToEmpty,
-  safeJsonParse,
-  isUnknownRecord,
-} from '@shared/utils';
+import { isUnknownRecord, safeJsonParse } from '@shared/validation';
+import { normalizeUniqueTrimmedStringsFromUnknown, trimToEmpty } from '@shared/text';
 import { normalizeLibraryValues } from '@entities/game';
 
 const EMPTY_SEARCH_QUERY = '';

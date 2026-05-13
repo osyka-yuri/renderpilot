@@ -1,5 +1,18 @@
-import type { AccordionItem } from '@shared/ui';
 import type { VendorBlock, VendorKey } from '@features/graphics-configurator';
+import type { BadgeVariant } from '@shared/ui';
+
+export type VendorAccordionBadge = {
+  label: string;
+  variant?: BadgeVariant;
+};
+
+export type VendorAccordionItem = {
+  value: VendorKey;
+  title: string;
+  meta?: string;
+  summary: string;
+  badges: VendorAccordionBadge[];
+};
 
 export type VendorAccordionState = {
   gameId: string | null;
@@ -73,11 +86,13 @@ export function resolveEffectiveVendorKey(
   return preferredVendorKey;
 }
 
-export function buildVendorAccordionItems(visibleVendorBlocks: VendorBlock[]): AccordionItem[] {
+export function buildVendorAccordionItems(
+  visibleVendorBlocks: VendorBlock[],
+): VendorAccordionItem[] {
   return visibleVendorBlocks.map(buildVendorAccordionItem);
 }
 
-function buildVendorAccordionItem(vendorBlock: VendorBlock): AccordionItem {
+function buildVendorAccordionItem(vendorBlock: VendorBlock): VendorAccordionItem {
   const hasSections = vendorBlock.sections.length > 0;
 
   return {
@@ -92,10 +107,10 @@ function buildVendorAccordionItem(vendorBlock: VendorBlock): AccordionItem {
           },
           {
             label: formatReplacementCount(vendorBlock.totalCandidates),
-            tone: vendorBlock.totalCandidates > 0 ? 'success' : 'muted',
+            variant: vendorBlock.totalCandidates > 0 ? 'secondary' : 'outline',
           },
         ]
-      : [{ label: 'Empty', tone: 'muted' }],
+      : [{ label: 'Empty', variant: 'outline' }],
   };
 }
 

@@ -1,11 +1,9 @@
-import type { GameCardCoverMenuHandle } from '@entities/game';
+import type { GameCardMenuHandle } from '@entities/game';
 import { selectCoverFilePath as selectCoverFilePathImpl } from '@features/cover-ops';
-import { DESKTOP_APP_REQUIRED_MESSAGE } from './games-page-constants';
 
-export type CoverMenuRefs = Record<string, GameCardCoverMenuHandle | undefined>;
+export type CoverMenuRefs = Record<string, GameCardMenuHandle | undefined>;
 
 export type CoverFilePickerDeps = {
-  onCoverError: (message: string) => void;
   focusMenuTrigger: (gameId: string) => void;
 };
 
@@ -29,8 +27,6 @@ export async function selectCoverFilePath(
   deps: CoverFilePickerDeps,
 ): Promise<string | null> {
   return selectCoverFilePathImpl(gameId, {
-    previewModeMessage: DESKTOP_APP_REQUIRED_MESSAGE,
-    onCoverError: deps.onCoverError,
     focusMenuTrigger: deps.focusMenuTrigger,
   });
 }

@@ -1,4 +1,4 @@
-import type { Nullable, FilePath } from '@shared/utils';
+import type { FilePath, Nullable } from '@shared/types';
 
 /**
  * Summary of a past operation as embedded in GameDetails.

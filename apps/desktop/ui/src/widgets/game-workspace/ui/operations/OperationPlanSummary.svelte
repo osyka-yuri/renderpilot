@@ -1,10 +1,25 @@
 <script lang="ts">
-  import { cn } from '@shared/utils';
-  import { formatRisk, riskTone, type OperationHandler, type SwapPlan } from '@entities/operation';
+  import { cn } from '@shared/classnames';
+  import {
+    formatRisk,
+    riskBadgeVariant,
+    type OperationBadgeVariant,
+    type OperationHandler,
+    type SwapPlan,
+  } from '@entities/operation';
   import { formatLabel } from '@entities/component';
-  import { Badge, Button, DefinitionMetric, SectionHeader, Surface } from '@shared/ui';
-
-  type RiskBadgeTone = 'success' | 'warning' | 'danger';
+  import {
+    Alert,
+    AlertDescription,
+    AlertTitle,
+    Badge,
+    Button,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+  } from '@shared/ui';
 
   type PlanMetric = {
     label: string;
@@ -13,13 +28,13 @@
 
   type PlanFlag = {
     label: string;
-    tone: 'warning' | 'muted';
+    variant: OperationBadgeVariant;
   };
 
   type PlanNoteGroup = {
     id: 'warnings' | 'blockers';
     title: string;
-    tone: 'warning' | 'danger';
+    variant: OperationBadgeVariant;
     className: 'warning' | 'blocked';
     items: string[];
   };
@@ -45,7 +60,9 @@
 
   const planTitle = $derived(plan ? formatLabel(plan.operation_type) : '');
   const planRiskLabel = $derived(plan ? formatRisk(plan.risk_level) : UNKNOWN_VALUE);
-  const planRiskTone = $derived(plan ? getPlanRiskBadgeTone(plan.risk_level) : 'danger');
+  const planRiskVariant = $derived.by(
+    (): OperationBadgeVariant => (plan ? riskBadgeVariant(plan.risk_level) : 'destructive'),
+  );
 
   const planFlags = $derived(plan ? getPlanFlags(plan) : []);
   const planMetrics = $derived(plan ? getPlanMetrics(plan) : []);
@@ -74,34 +91,21 @@
     return normalizedValue ?? UNKNOWN_VALUE;
   }
 
-  function getPlanRiskBadgeTone(level: string): RiskBadgeTone {
-    switch (riskTone(level)) {
-      case 'low':
-        return 'success';
-
-      case 'medium':
-        return 'warning';
-
-      default:
-        return 'danger';
-    }
-  }
-
   function getPlanFlags(currentPlan: SwapPlan): PlanFlag[] {
     return [
       {
         label: currentPlan.requires_backup ? 'Backup required' : 'Backup optional',
-        tone: currentPlan.requires_backup ? 'warning' : 'muted',
+        variant: currentPlan.requires_backup ? 'secondary' : 'outline',
       },
       {
         label: currentPlan.requires_elevation
           ? 'Elevation may be required'
           : 'No elevation expected',
-        tone: currentPlan.requires_elevation ? 'warning' : 'muted',
+        variant: currentPlan.requires_elevation ? 'secondary' : 'outline',
       },
       {
         label: 'Confirmation attached',
-        tone: 'muted',
+        variant: 'outline',
       },
     ];
   }
@@ -142,7 +146,7 @@
       noteGroups.push({
         id: 'warnings',
         title: 'Warnings',
-        tone: 'warning',
+        variant: 'secondary',
         className: 'warning',
         items: currentPlan.warnings.map(formatLabel),
       });
@@ -152,7 +156,7 @@
       noteGroups.push({
         id: 'blockers',
         title: 'Blockers',
-        tone: 'danger',
+        variant: 'destructive',
         className: 'blocked',
         items: currentPlan.blockers.map(formatLabel),
       });
@@ -179,90 +183,85 @@
 </script>
 
 {#if plan}
-  <Surface as="section" shadow class="grid gap-3 p-4" aria-labelledby="operation-plan-title">
-    <header class="grid gap-3 border-b border-border-subtle pb-3">
-      <SectionHeader
-        eyebrow="Operation Plan"
-        title={planTitle}
-        titleId="operation-plan-title"
-        description={plan.operation_id}
-        class="px-0"
-      >
-        <Badge pill size="md" tone={planRiskTone}>
-          Risk {planRiskLabel}
-        </Badge>
-      </SectionHeader>
+  <section aria-labelledby="operation-plan-title">
+    <Card>
+      <CardHeader>
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="grid gap-1">
+            <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              Operation Plan
+            </p>
+            <CardTitle id="operation-plan-title">{planTitle}</CardTitle>
+            <CardDescription>{plan.operation_id}</CardDescription>
+          </div>
 
-      <div class="flex flex-wrap gap-2" aria-label="Operation requirements">
-        {#each planFlags as flag (flag.label)}
-          <Badge surface="outline" tone={flag.tone}>{flag.label}</Badge>
-        {/each}
-      </div>
-    </header>
+          <Badge variant={planRiskVariant}>
+            Risk {planRiskLabel}
+          </Badge>
+        </div>
 
-    <dl class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
-      {#each planMetrics as metric (metric.label)}
-        <DefinitionMetric label={metric.label}>{metric.value}</DefinitionMetric>
-      {/each}
-    </dl>
+        <div class="flex flex-wrap gap-2" aria-label="Operation requirements">
+          {#each planFlags as flag (flag.label)}
+            <Badge variant={flag.variant}>
+              {flag.label}
+            </Badge>
+          {/each}
+        </div>
+      </CardHeader>
 
-    {#if hasPlanNotes}
-      <div class="grid gap-3">
-        {#each planNoteGroups as noteGroup (noteGroup.id)}
-          <section
-            class={cn(
-              'rounded-2xl border border-border-subtle p-3',
-              noteGroup.className === 'warning'
-                ? 'border-warning/20 bg-warning/10'
-                : 'border-danger/20 bg-danger/10',
-            )}
-          >
-            <div class="flex items-center justify-between gap-3">
-              <strong class="text-text-strong">{noteGroup.title}</strong>
-              <Badge pill tone={noteGroup.tone}>{noteGroup.items.length}</Badge>
+      <CardContent>
+        <dl class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3">
+          {#each planMetrics as metric (metric.label)}
+            <div class="grid min-w-0 gap-1">
+              <dt class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                {metric.label}
+              </dt>
+              <dd class="text-sm/5 font-semibold text-foreground">{metric.value}</dd>
             </div>
+          {/each}
+        </dl>
 
-            <ul class="mt-2 grid list-none gap-2 p-0">
-              {#each noteGroup.items as item, index (`${noteGroup.id}-${index}`)}
-                <li
-                  class={cn(
-                    'relative pl-4 leading-snug text-text-soft',
-                    'before:absolute before:top-2.5 before:left-0 before:size-1.5',
-                    'before:rounded-full before:bg-current before:opacity-55',
-                  )}
-                >
-                  {item}
-                </li>
-              {/each}
-            </ul>
-          </section>
-        {/each}
-      </div>
-    {/if}
+        {#if hasPlanNotes}
+          <div class="grid gap-3">
+            {#each planNoteGroups as noteGroup (noteGroup.id)}
+              <Alert variant={noteGroup.className === 'blocked' ? 'destructive' : 'default'}>
+                <div class="flex items-center justify-between gap-3">
+                  <AlertTitle>{noteGroup.title}</AlertTitle>
+                  <Badge variant={noteGroup.variant}>
+                    {noteGroup.items.length}
+                  </Badge>
+                </div>
 
-    <footer
-      class={cn(
-        'flex flex-wrap items-center justify-between gap-3 border-t',
-        'border-border-subtle pt-3',
-        'max-md:flex-col max-md:items-stretch',
-      )}
-    >
-      <div class="grid gap-0.5">
-        <strong class="text-text-strong"
-          >{canApply ? 'Ready to apply' : 'Not ready to apply'}</strong
+                <AlertDescription>
+                  <ul class="mt-2 grid list-disc gap-1.5 pl-4">
+                    {#each noteGroup.items as item, index (`${noteGroup.id}-${index}`)}
+                      <li class="leading-snug">{item}</li>
+                    {/each}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            {/each}
+          </div>
+        {/if}
+
+        <footer
+          class={cn(
+            'flex flex-wrap items-center justify-between gap-3',
+            'max-md:flex-col max-md:items-stretch',
+          )}
         >
-        <p class="text-text-muted">{readinessText}</p>
-      </div>
+          <div class="grid gap-0.5">
+            <strong class="text-foreground"
+              >{canApply ? 'Ready to apply' : 'Not ready to apply'}</strong
+            >
+            <p class="text-muted-foreground">{readinessText}</p>
+          </div>
 
-      <Button
-        variant="primary"
-        size="sm"
-        disabled={!canApply}
-        loading={busy}
-        onclick={applyCurrentPlan}
-      >
-        {busy ? 'Applying...' : 'Apply Operation'}
-      </Button>
-    </footer>
-  </Surface>
+          <Button variant="default" size="sm" disabled={!canApply} onclick={applyCurrentPlan}>
+            {busy ? 'Applying...' : 'Apply Operation'}
+          </Button>
+        </footer>
+      </CardContent>
+    </Card>
+  </section>
 {/if}

@@ -2,11 +2,11 @@ import { canonicalGameIdentityId } from '@entities/game';
 import { isPlanForGame } from '@entities/operation';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
-import { createRequestChannel } from '@shared/utils';
+import { createRequestChannel } from '@shared/requests';
 
 export type GameWorkspaceModel = ReturnType<typeof createGameWorkspaceModel>;
 
-export function createGameWorkspaceModel(options: { stalePlanMessage: string }) {
+export function createGameWorkspaceModel() {
   let selectedGameId = $state<string | null>(null);
   let currentDetails = $state<GameDetails | null>(null);
   let currentPlan = $state<SwapPlan | null>(null);
@@ -58,10 +58,6 @@ export function createGameWorkspaceModel(options: { stalePlanMessage: string }) 
     return currentPlan;
   }
 
-  function showStalePlanError(): Error {
-    return new Error(options.stalePlanMessage);
-  }
-
   return {
     get selectedGameId() {
       return selectedGameId;
@@ -78,6 +74,5 @@ export function createGameWorkspaceModel(options: { stalePlanMessage: string }) 
     beginDetailsRequest,
     isDetailsRequestActive,
     getCurrentPlan,
-    showStalePlanError,
   };
 }

@@ -1,20 +1,22 @@
 <script lang="ts">
+  import FunnelIcon from '@lucide/svelte/icons/funnel';
   import { onMount } from 'svelte';
 
   import { getDashboardStats, type GameSummary } from '@entities/game';
-  import { type VoidHandler } from '@shared/utils';
+  import { cn } from '@shared/classnames';
+  import type { VoidHandler } from '@shared/callbacks';
   import type { GameSelectionHandler } from '@entities/game';
-  import { Popover } from '@shared/ui';
+  import { Input, Popover, PopoverContent, PopoverTrigger, buttonVariants } from '@shared/ui';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
-  import { GamesFilterToolbar, GamesLibraryFilterPopover } from '@features/filter-games';
+  import { GamesLibraryFilterPopover } from '@features/filter-games';
   import { SCAN_LABEL, SCANNING_LABEL } from '../model/games-page-constants';
   import { createGamesPageModel } from '../model/create-games-page-model.svelte';
 
-  const noop: VoidHandler = (): void => undefined;
-  const noopOpenGame: GameSelectionHandler = (): void => undefined;
-  const noopReloadCards = (): Promise<void> => Promise.resolve();
-  const noopCoverError = (): void => undefined;
+  const SEARCH_LABEL = 'Search games';
+  const SEARCH_PLACEHOLDER = 'Search games';
+  const FILTERS_BUTTON_LABEL = 'Open library filters';
+  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open library filters, filters active';
 
   type Props = {
     games?: GameSummary[];
@@ -27,7 +29,6 @@
     onRefresh?: VoidHandler;
     onReloadCards?: () => Promise<void>;
     onClearError?: VoidHandler;
-    onCoverError?: (message: string) => void;
     onOpenDetails?: GameSelectionHandler;
     onOpenOperations?: GameSelectionHandler;
   };
@@ -39,30 +40,34 @@
     coversAutoFetchingIds = new Set(),
     pickCoverDisabled = false,
 
-    onScan = noop,
-    onRefresh = noop,
-    onReloadCards = noopReloadCards,
-    onClearError = noop,
-    onCoverError = noopCoverError,
-    onOpenDetails = noopOpenGame,
-    onOpenOperations = noopOpenGame,
+    onScan = () => undefined,
+    onRefresh = () => undefined,
+    onReloadCards = () => Promise.resolve(),
+    onClearError = () => undefined,
+    onOpenDetails = () => undefined,
+    onOpenOperations = () => undefined,
   }: Props = $props();
+
+  function handleClearError(): void {
+    onClearError();
+  }
+
+  function handleReloadCards(): Promise<void> {
+    return onReloadCards();
+  }
 
   const model = createGamesPageModel({
     getGames: () => games,
     getCatalogVersion: () => catalogVersion,
     getBusy: () => busy,
     getCoversAutoFetchingIds: () => coversAutoFetchingIds,
-    onClearError: () => {
-      onClearError();
-    },
-    onCoverError: (message) => {
-      onCoverError(message);
-    },
-    onReloadCards: () => {
-      return onReloadCards();
-    },
+    onClearError: handleClearError,
+    onReloadCards: handleReloadCards,
   });
+
+  const filtersButtonLabel = $derived(
+    model.hasFilterIndicator ? FILTERS_BUTTON_ACTIVE_LABEL : FILTERS_BUTTON_LABEL,
+  );
 
   onMount(() => {
     let disposed = false;
@@ -75,6 +80,12 @@
       model.dispose();
     };
   });
+
+  function handleSearchInput(
+    event: Event & { currentTarget: EventTarget & HTMLInputElement },
+  ): void {
+    model.setSearchQuery(event.currentTarget.value);
+  }
 </script>
 
 <section class="grid gap-4" aria-busy={busy}>
@@ -96,29 +107,58 @@
     />
   {:else}
     <div class="grid gap-2 px-1">
-      <div class="relative inline-flex flex-col" bind:this={model.filtersAnchorRef}>
-        <GamesFilterToolbar
-          searchQuery={model.filtersState.searchQuery}
-          hasFilterIndicator={model.hasFilterIndicator}
-          onSearchChange={model.setSearchQuery}
-          onToggleFilters={model.toggleFiltersPopover}
-        />
+      <div
+        class={cn('flex items-center justify-end gap-2', 'max-md:justify-stretch')}
+        role="search"
+      >
+        <label
+          class={cn(
+            'block max-w-88 min-w-48 shrink grow basis-88',
+            'max-md:max-w-none max-md:min-w-0',
+          )}
+        >
+          <span class="sr-only">{SEARCH_LABEL}</span>
+          <Input
+            type="search"
+            placeholder={SEARCH_PLACEHOLDER}
+            value={model.filtersState.searchQuery}
+            oninput={handleSearchInput}
+          />
+        </label>
 
         <Popover
-          anchor={model.filtersAnchorRef}
-          referenceElement={model.filtersAnchorRef}
           open={model.filtersState.isPopoverOpen}
-          aria-label="Library filters"
-          panelClassName="min-w-[min(28rem,90vw)] max-w-[min(34rem,92vw)] max-md:min-w-[min(24rem,92vw)]"
           onOpenChange={model.handlePopoverOpenChange}
         >
-          <GamesLibraryFilterPopover
-            libraryFilterOptions={model.libraryFilterOptions}
-            draftLibraries={model.filtersState.draftLibraries}
-            onToggleLibrary={model.handleToggleLibrary}
-            onCancel={model.cancelFilterSelection}
-            onApply={model.applyFilterSelection}
-          />
+          <div class="relative inline-flex flex-none">
+            <PopoverTrigger
+              class={buttonVariants({ variant: 'secondary', size: 'icon-sm' })}
+              aria-label={filtersButtonLabel}
+              aria-haspopup="dialog"
+            >
+              <FunnelIcon class="size-4.5" aria-hidden="true" />
+            </PopoverTrigger>
+
+            {#if model.hasFilterIndicator}
+              <span
+                class={cn(
+                  'pointer-events-none absolute -top-0.5 -right-0.5 size-2 rounded-full',
+                  'bg-accent ring-2 ring-background',
+                )}
+                aria-hidden="true"
+              ></span>
+            {/if}
+          </div>
+
+          <PopoverContent align="end" class="w-100">
+            <GamesLibraryFilterPopover
+              groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
+              draftLibraries={model.filtersState.draftLibraries}
+              onDraftLibrariesChange={model.handleDraftLibrariesChange}
+              onCancel={model.cancelFilterSelection}
+              onApply={model.applyFilterSelection}
+            />
+          </PopoverContent>
         </Popover>
       </div>
     </div>

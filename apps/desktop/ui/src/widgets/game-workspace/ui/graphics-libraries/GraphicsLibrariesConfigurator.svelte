@@ -1,11 +1,18 @@
 <script lang="ts">
   import type { VendorBlock, VendorKey } from '@features/graphics-configurator';
-  import { Accordion, Badge, EmptyStatePanel, SectionHeader, type AccordionItem } from '@shared/ui';
+  import type { VendorAccordionItem } from '../../model/vendor-accordion';
+  import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+    Badge,
+    Card,
+    CardContent,
+    CardDescription,
+    CardTitle,
+  } from '@shared/ui';
   import LibrarySectionCard from './LibrarySectionCard.svelte';
-
-  type AccordionPanelItem = {
-    value: string;
-  };
 
   type LibrarySection = VendorBlock['sections'][number];
 
@@ -20,11 +27,9 @@
   const VENDOR_KEYS = ['nvidia', 'amd', 'intel', 'other'] as const satisfies readonly VendorKey[];
   const VALID_VENDOR_KEYS = new Set<string>(VENDOR_KEYS);
 
-  const noop = () => undefined;
-
   type Props = {
     vendorBlocks?: VendorBlock[];
-    accordionItems?: AccordionItem[];
+    accordionItems?: VendorAccordionItem[];
     activeVendorKey?: VendorKey | null;
     selectedArtifacts?: SelectionMap;
     selectedNvapiSelections?: SelectionMap;
@@ -46,10 +51,10 @@
     riskLevel = null,
     busy = false,
     selectionKey = (componentId, controlId) => `${componentId}:${controlId}`,
-    onVendorChange = noop,
-    onArtifactSelection = noop,
-    onNvapiSelection = noop,
-    onBuildPlan = noop,
+    onVendorChange = () => undefined,
+    onArtifactSelection = () => undefined,
+    onNvapiSelection = () => undefined,
+    onBuildPlan = () => undefined,
   }: Props = $props();
 
   const vendorGroupsLabel = $derived(formatVendorGroupsLabel(vendorBlocks.length));
@@ -86,7 +91,7 @@
     return groupedBlocks;
   }
 
-  function getVendorBlocksForAccordionItem(item: AccordionPanelItem): VendorBlock[] {
+  function getVendorBlocksForAccordionItem(item: VendorAccordionItem): VendorBlock[] {
     if (!isVendorKey(item.value)) {
       return [];
     }
@@ -102,60 +107,104 @@
     return `${section.libraryKey}:${section.nvapiOwnerId}`;
   }
 
-  function handleVendorChange(nextValue: string | null): void {
+  function handleVendorChange(nextValue: string): void {
     onVendorChange(isVendorKey(nextValue) ? nextValue : null);
   }
 </script>
 
 <section class="grid gap-3" aria-labelledby="graphics-libraries-title">
-  {#snippet itemContent(item: AccordionPanelItem)}
-    {@const itemVendorBlocks = getVendorBlocksForAccordionItem(item)}
-
-    {#each itemVendorBlocks as vendorBlock, vendorBlockIndex (getVendorBlockRenderKey(vendorBlock, vendorBlockIndex))}
-      {#if vendorBlock.sections.length === 0}
-        <EmptyStatePanel role="status">
-          No {vendorBlock.label} libraries detected for this installation yet.
-        </EmptyStatePanel>
-      {:else}
-        <div class="grid gap-3">
-          {#each vendorBlock.sections as section (getSectionRenderKey(section))}
-            <LibrarySectionCard
-              {section}
-              {selectedArtifacts}
-              {selectedNvapiSelections}
-              {riskLevel}
-              {busy}
-              {selectionKey}
-              {onArtifactSelection}
-              {onNvapiSelection}
-              {onBuildPlan}
-            />
-          {/each}
-        </div>
-      {/if}
-    {/each}
-  {/snippet}
-
-  <SectionHeader
-    eyebrow="Libraries"
-    title="Graphics libraries"
-    titleId="graphics-libraries-title"
-    description="Detected graphics stacks and compatible local replacements."
-  >
-    <Badge surface="outline" tone="muted">{vendorGroupsLabel}</Badge>
-  </SectionHeader>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="grid gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Libraries</p>
+      <h3 id="graphics-libraries-title" class="text-base/5 font-semibold text-foreground">
+        Graphics libraries
+      </h3>
+      <p class="text-sm text-muted-foreground">
+        Detected graphics stacks and compatible local replacements.
+      </p>
+    </div>
+    <Badge variant="outline">{vendorGroupsLabel}</Badge>
+  </div>
 
   {#if isEmpty}
-    <EmptyStatePanel role="status">
-      No graphics-related components were detected for this installation.
-    </EmptyStatePanel>
+    <Card>
+      <CardContent role="status">
+        <CardTitle>No graphics components detected</CardTitle>
+        <CardDescription>
+          No graphics-related components were detected for this installation.
+        </CardDescription>
+      </CardContent>
+    </Card>
   {:else}
     <Accordion
-      items={accordionItems}
-      value={activeVendorKey}
+      type="single"
+      value={activeVendorKey ?? undefined}
       aria-label="Graphics vendors"
       onValueChange={handleVendorChange}
-      {itemContent}
-    />
+      class="w-full"
+    >
+      {#each accordionItems as item (item.value)}
+        <AccordionItem value={item.value}>
+          <AccordionTrigger>
+            <div class="grid w-full gap-2 text-left">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="grid gap-1">
+                  <span class="text-sm/5 font-semibold text-foreground">{item.title}</span>
+                  <span class="text-xs/snug text-muted-foreground">{item.summary}</span>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                  {#if item.meta}
+                    <span class="text-xs text-muted-foreground">{item.meta}</span>
+                  {/if}
+
+                  {#each item.badges as badge (`${badge.label}-${badge.variant ?? 'default'}`)}
+                    <Badge variant={badge.variant}>
+                      {badge.label}
+                    </Badge>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          </AccordionTrigger>
+
+          <AccordionContent>
+            {@const itemVendorBlocks = getVendorBlocksForAccordionItem(item)}
+
+            <div class="grid gap-3">
+              {#each itemVendorBlocks as vendorBlock, vendorBlockIndex (getVendorBlockRenderKey(vendorBlock, vendorBlockIndex))}
+                {#if vendorBlock.sections.length === 0}
+                  <Card>
+                    <CardContent role="status">
+                      <CardTitle>No {vendorBlock.label} libraries detected</CardTitle>
+                      <CardDescription>
+                        This vendor group does not expose any compatible libraries for the current
+                        installation yet.
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                {:else}
+                  <div class="grid gap-3">
+                    {#each vendorBlock.sections as section (getSectionRenderKey(section))}
+                      <LibrarySectionCard
+                        {section}
+                        {selectedArtifacts}
+                        {selectedNvapiSelections}
+                        {riskLevel}
+                        {busy}
+                        {selectionKey}
+                        {onArtifactSelection}
+                        {onNvapiSelection}
+                        {onBuildPlan}
+                      />
+                    {/each}
+                  </div>
+                {/if}
+              {/each}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      {/each}
+    </Accordion>
   {/if}
 </section>

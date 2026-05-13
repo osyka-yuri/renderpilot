@@ -1,4 +1,4 @@
-/** Menu handle exposed via `bind:this` on `GameCardCoverMenu`. */
-export type GameCardCoverMenuHandle = {
+/** Menu handle exposed via `bind:this` on `GameCardActionsMenu`. */
+export type GameCardMenuHandle = {
   focusTrigger: () => void;
 };

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { isPlainObject, requireNonBlankString } from '@shared/utils';
+import { isPlainObject, requireNonBlankString } from '@shared/validation';
 import {
   invokePreviewCommand,
   isDesktopPreviewMode,

@@ -1,4 +1,4 @@
-import type { Nullable, FilePath, Version, Sha256Hash } from '@shared/utils';
+import type { FilePath, Nullable, Sha256Hash, Version } from '@shared/types';
 export type ComponentId = string;
 export type ArtifactId = string;
 export type GameId = string;

@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { OperationSummary } from '@entities/operation';
   import { formatLabel } from '@entities/component';
-  import { statusTone } from '@entities/operation';
+  import { statusBadgeVariant } from '@entities/operation';
   import {
     Badge,
     Button,
-    DefinitionMetric,
-    EmptyStatePanel,
-    SectionHeader,
-    Surface,
+    Card,
+    CardContent,
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
   } from '@shared/ui';
-  import { cn, formatTimestamp } from '@shared/utils';
+  import { cn } from '@shared/classnames';
+  import { formatTimestamp } from '@shared/format';
 
   type CanRollback = (status: string) => boolean;
   type RollbackHandler = (operationId: string) => void | Promise<void>;
@@ -99,91 +102,105 @@
 </script>
 
 <section class="grid gap-3" aria-labelledby="operation-history-title">
-  <SectionHeader eyebrow="History" title="History" titleId="operation-history-title">
-    <svelte:fragment>
-      <Badge surface="outline" tone="muted">{entriesLabel}</Badge>
-    </svelte:fragment>
-  </SectionHeader>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="grid gap-1">
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">History</p>
+      <h3 id="operation-history-title" class="text-base/5 font-semibold text-foreground">
+        History
+      </h3>
+    </div>
+    <Badge variant="outline">{entriesLabel}</Badge>
+  </div>
 
   {#if operations.length === 0}
-    <EmptyStatePanel>No operations have been recorded for this game yet.</EmptyStatePanel>
+    <Empty>
+      <EmptyHeader>
+        <EmptyTitle>No history yet</EmptyTitle>
+        <EmptyDescription>No operations have been recorded for this game yet.</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   {:else}
     <div class="grid gap-2">
       {#each operations as operation (operation.operation_id)}
         {@const titleId = getOperationTitleId(operation.operation_id)}
         {@const rollback = getRollbackState(operation)}
 
-        <Surface
-          as="article"
-          shadow
-          class={cn(
-            'grid gap-3 p-4',
-            '*:last:justify-self-end',
-            'max-lg:p-3',
-            'max-lg:*:last:w-full max-lg:*:last:justify-self-stretch',
-          )}
-          aria-labelledby={titleId}
-        >
-          <div
-            class={cn(
-              'flex items-center justify-between gap-4',
-              'max-lg:flex-col max-lg:items-start',
-            )}
-          >
-            <div class="min-w-0">
-              <strong id={titleId} class="text-text-strong"
-                >{formatOptionalLabel(operation.kind)}</strong
+        <article>
+          <Card aria-labelledby={titleId}>
+            <CardContent>
+              <div
+                class={cn(
+                  'flex items-center justify-between gap-4',
+                  'max-lg:flex-col max-lg:items-start',
+                )}
               >
+                <div class="min-w-0">
+                  <strong id={titleId} class="text-foreground"
+                    >{formatOptionalLabel(operation.kind)}</strong
+                  >
 
-              <p class="text-text-muted">
-                <time datetime={toDateTimeValue(operation.created_at)}>
-                  {formatOptionalTimestamp(operation.created_at)}
-                </time>
-              </p>
-            </div>
+                  <p class="text-muted-foreground">
+                    <time datetime={toDateTimeValue(operation.created_at)}>
+                      {formatOptionalTimestamp(operation.created_at)}
+                    </time>
+                  </p>
+                </div>
 
-            <Badge pill tone={statusTone(operation.status)}>
-              {formatOptionalLabel(operation.status)}
-            </Badge>
-          </div>
+                <Badge variant={statusBadgeVariant(operation.status)}>
+                  {formatOptionalLabel(operation.status)}
+                </Badge>
+              </div>
 
-          <dl
-            class={cn(
-              'grid grid-cols-3 gap-2 border-t border-border-subtle pt-3',
-              'max-lg:grid-cols-1',
-            )}
-            aria-label="Operation details"
-          >
-            <DefinitionMetric label="Completed">
-              {#if operation.completed_at != null}
-                <time datetime={toDateTimeValue(operation.completed_at)}>
-                  {formatOptionalTimestamp(operation.completed_at)}
-                </time>
-              {:else}
-                {EMPTY_VALUE}
-              {/if}
-            </DefinitionMetric>
+              <dl
+                class={cn('grid grid-cols-3 gap-x-4 gap-y-3', 'max-lg:grid-cols-1')}
+                aria-label="Operation details"
+              >
+                <div class="grid min-w-0 gap-1">
+                  <dt class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    Completed
+                  </dt>
+                  <dd class="text-sm/5 font-semibold text-foreground">
+                    {#if operation.completed_at != null}
+                      <time datetime={toDateTimeValue(operation.completed_at)}>
+                        {formatOptionalTimestamp(operation.completed_at)}
+                      </time>
+                    {:else}
+                      {EMPTY_VALUE}
+                    {/if}
+                  </dd>
+                </div>
 
-            <DefinitionMetric label="Backup status">
-              {formatOptionalLabel(operation.backup_status)}
-            </DefinitionMetric>
+                <div class="grid min-w-0 gap-1">
+                  <dt class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    Backup status
+                  </dt>
+                  <dd class="text-sm/5 font-semibold text-foreground">
+                    {formatOptionalLabel(operation.backup_status)}
+                  </dd>
+                </div>
 
-            <DefinitionMetric label="Items">{operation.item_count}</DefinitionMetric>
-          </dl>
+                <div class="grid min-w-0 gap-1">
+                  <dt class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    Items
+                  </dt>
+                  <dd class="text-sm/5 font-semibold text-foreground">{operation.item_count}</dd>
+                </div>
+              </dl>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={rollback.isDisabled}
-            loading={rollback.isLoading}
-            aria-label={`Rollback ${formatOptionalLabel(operation.kind)} operation`}
-            onclick={() => {
-              void rollbackOperation(operation);
-            }}
-          >
-            {rollback.label}
-          </Button>
-        </Surface>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={rollback.isDisabled}
+                aria-label={`Rollback ${formatOptionalLabel(operation.kind)} operation`}
+                onclick={() => {
+                  void rollbackOperation(operation);
+                }}
+              >
+                {rollback.label}
+              </Button>
+            </CardContent>
+          </Card>
+        </article>
       {/each}
     </div>
   {/if}

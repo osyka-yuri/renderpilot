@@ -8,3 +8,10 @@ export {
   pruneCoverMenuState,
   selectCoverFilePath,
 } from './model/cover-ops';
+export {
+  publishCoverDownloadedNotification,
+  publishCoverOperationErrorNotification,
+  publishCoverPickerPreviewModeNotification,
+  publishCoverRemovedNotification,
+  publishCoverUpdatedNotification,
+} from './model/notifications';

@@ -1,7 +1,7 @@
 import { createGraphicsConfiguratorModel, type VendorKey } from '@features/graphics-configurator';
-import { formatLibrary } from '@entities/component';
 import type { GameDetails, GameSummary } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
+import { createPresentedLibraries } from '@shared/graphics';
 import {
   createVendorAccordionState,
   handleVendorChange as createVendorChange,
@@ -50,14 +50,8 @@ export function createGraphicsLibrariesModel(options: {
   );
 
   function getLibraries(gameDetails: GameDetails): string[] {
-    const result: string[] = [];
-    for (const component of gameDetails.components) {
-      const lib = formatLibrary(component.technology);
-      if (!result.includes(lib)) {
-        result.push(lib);
-      }
-    }
-    return result;
+    return createPresentedLibraries(gameDetails.components.map((component) => component.technology))
+      .map((library) => library.label);
   }
 
   function handleArtifactSelection(componentId: string, artifactId: string): void {

@@ -1,6 +1,7 @@
 import type { GameDetails, GameSummary } from '@entities/game';
 import type { CandidateGroup, GraphicsComponent } from '@entities/component';
 import type { SwapPlan } from '@entities/operation';
+import { isKnownLibrary } from '@shared/graphics';
 import { createInstallPathKey, unique } from './desktop-utils';
 
 type GameOperation = GameDetails['operations'][number];
@@ -8,7 +9,7 @@ type ComponentFile = GraphicsComponent['files'][number];
 
 export type GameSummaryBuildOverrides = Pick<
   GameSummary,
-  'risk_level' | 'backup_available' | 'last_operation_status' | 'update_count'
+  'risk_level' | 'backup_available' | 'last_operation_status'
 >;
 
 export type GameSummaryPatch = Partial<
@@ -63,7 +64,6 @@ export function createMockState(): MockState {
     {
       details: cyberpunk,
       card: createGameSummaryFromDetails(cyberpunk, {
-        update_count: cyberpunk.candidate_groups.length,
         risk_level: 'low',
         backup_available: true,
         last_operation_status: getLatestOperationStatus(cyberpunk),
@@ -72,7 +72,6 @@ export function createMockState(): MockState {
     {
       details: alanWake,
       card: createGameSummaryFromDetails(alanWake, {
-        update_count: alanWake.candidate_groups.length,
         risk_level: 'medium',
         backup_available: false,
         last_operation_status: getLatestOperationStatus(alanWake),
@@ -263,6 +262,12 @@ export function createGameSummaryFromDetails(
   details: GameDetails,
   overrides: GameSummaryBuildOverrides,
 ): GameSummary {
+  const visibleComponents = details.components.filter((component) => isKnownLibrary(component.technology));
+  const visibleComponentIds = new Set(visibleComponents.map((component) => component.id));
+  const visibleCandidateGroups = details.candidate_groups.filter((group) =>
+    visibleComponentIds.has(group.component_id),
+  );
+
   return {
     game_id: details.game.identity.id,
     title: details.game.identity.title,
@@ -271,16 +276,26 @@ export function createGameSummaryFromDetails(
     runtime: details.game.runtime,
     install_path: details.game.install_path,
     external_id: details.game.identity.external_id,
-    library_tags: unique(details.components.map((component) => component.technology)),
-    component_count: details.components.length,
-    updates_available: overrides.update_count > 0,
-    update_count: overrides.update_count,
+    library_tags: unique(visibleComponents.map((component) => component.technology.trim())),
+    component_count: visibleComponents.length,
+    updates_available: hasAvailableUpdates(visibleCandidateGroups),
+    update_count: countAvailableUpdates(visibleCandidateGroups),
     risk_level: overrides.risk_level,
     backup_available: overrides.backup_available,
     operation_count: details.operations.length,
     last_operation_status: overrides.last_operation_status,
     cover_updated_at_ms: null,
   };
+}
+
+function hasAvailableUpdates(candidateGroups: readonly CandidateGroup[]): boolean {
+  return countAvailableUpdates(candidateGroups) > 0;
+}
+
+function countAvailableUpdates(candidateGroups: readonly CandidateGroup[]): number {
+  return candidateGroups.filter((group) =>
+    group.candidates.some((candidate) => candidate.comparison === 'newer_version'),
+  ).length;
 }
 
 export function createOperationRecord(input: {
@@ -313,7 +328,7 @@ function createCyberpunkDetails(): GameDetails {
       id: 'component:cp2077:dlss',
       game_id: 'steam:1091500',
       kind: 'NativeLibrary',
-      technology: 'DlssSuperResolution',
+      technology: 'dlss_super_resolution',
       swappability: 'Swappable',
       files: [
         {
@@ -327,7 +342,7 @@ function createCyberpunkDetails(): GameDetails {
       id: 'component:cp2077:dlssg',
       game_id: 'steam:1091500',
       kind: 'NativeLibrary',
-      technology: 'DlssFrameGeneration',
+      technology: 'dlss_frame_generation',
       swappability: 'Swappable',
       files: [
         {
@@ -341,7 +356,7 @@ function createCyberpunkDetails(): GameDetails {
       id: 'component:cp2077:dlssd',
       game_id: 'steam:1091500',
       kind: 'NativeLibrary',
-      technology: 'DlssRayReconstruction',
+      technology: 'dlss_ray_reconstruction',
       swappability: 'Swappable',
       files: [
         {
@@ -356,7 +371,7 @@ function createCyberpunkDetails(): GameDetails {
   const candidateGroups: CandidateGroup[] = [
     {
       component_id: 'component:cp2077:dlss',
-      technology: 'DlssSuperResolution',
+      technology: 'dlss_super_resolution',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlss.dll',
       current_version: '3.5.10',
       candidates: [
@@ -373,7 +388,7 @@ function createCyberpunkDetails(): GameDetails {
     },
     {
       component_id: 'component:cp2077:dlssg',
-      technology: 'DlssFrameGeneration',
+      technology: 'dlss_frame_generation',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlssg.dll',
       current_version: '3.5.0',
       candidates: [
@@ -428,7 +443,7 @@ function createAlanWakeDetails(): GameDetails {
       id: 'component:aw2:streamline',
       game_id: 'epic:alanwake2',
       kind: 'StreamlineComponent',
-      technology: 'NvidiaStreamline',
+      technology: 'nvidia_streamline',
       swappability: 'BundleOnly',
       files: [
         {
@@ -447,7 +462,7 @@ function createAlanWakeDetails(): GameDetails {
       id: 'component:aw2:dlssg',
       game_id: 'epic:alanwake2',
       kind: 'NativeLibrary',
-      technology: 'DlssFrameGeneration',
+      technology: 'dlss_frame_generation',
       swappability: 'ReadOnly',
       files: [
         {
@@ -476,7 +491,7 @@ function createAlanWakeDetails(): GameDetails {
     candidate_groups: [
       {
         component_id: 'component:aw2:streamline',
-        technology: 'NvidiaStreamline',
+        technology: 'nvidia_streamline',
         file_path: 'D:/Epic Games/Alan Wake 2/sl.common.dll',
         current_version: '2.4.0',
         candidates: [
@@ -532,7 +547,7 @@ export function createManualPreviewDetails(
         id: `${gameId}:dlss`,
         game_id: gameId,
         kind: 'NativeLibrary',
-        technology: 'DlssSuperResolution',
+        technology: 'dlss_super_resolution',
         swappability: 'Swappable',
         files: [
           {
@@ -546,7 +561,7 @@ export function createManualPreviewDetails(
     candidate_groups: [
       {
         component_id: `${gameId}:dlss`,
-        technology: 'DlssSuperResolution',
+        technology: 'dlss_super_resolution',
         file_path: dlssPath,
         current_version: '3.5.10',
         candidates: [

@@ -49,7 +49,7 @@ function createComponent(overrides: Partial<GraphicsComponent> = {}): GraphicsCo
     id: 'comp-1',
     game_id: 'game-1',
     kind: 'dll',
-    technology: 'DlssSuperResolution',
+    technology: 'dlss_super_resolution',
     swappability: 'replaceable',
     files: [{ path: 'C:/game/dlss.dll', version: '1.0.0', sha256: null }],
     ...overrides,
@@ -59,7 +59,7 @@ function createComponent(overrides: Partial<GraphicsComponent> = {}): GraphicsCo
 function createCandidateGroup(overrides: Partial<CandidateGroup> = {}): CandidateGroup {
   return {
     component_id: 'comp-1',
-    technology: 'DlssSuperResolution',
+    technology: 'dlss_super_resolution',
     file_path: 'C:/game/dlss.dll',
     candidates: [
       createCandidate({ artifact_id: 'art-1' }),
@@ -90,7 +90,7 @@ function createGameDetails(overrides: Partial<GameDetails> = {}): GameDetails {
     },
     components: [
       createComponent({
-        technology: 'NvngxDlss',
+        technology: 'dlss_super_resolution',
       }),
     ],
     candidate_groups: [createCandidateGroup()],

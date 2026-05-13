@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameSummary } from '@entities/game';
-import { createGamesPageModel } from './create-games-page-model.svelte';
+import {
+  createGamesPageModel,
+  type GamesPageModelInput,
+} from './create-games-page-model.svelte';
 
 function createStubGame(id: string, title: string): GameSummary {
   return {
@@ -24,60 +27,48 @@ function createStubGame(id: string, title: string): GameSummary {
 
 describe('createGamesPageModel', () => {
   it('initializes with empty filter state', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.filtersState.ready).toBe(false);
     expect(model.filtersState.searchQuery).toBe('');
     expect(model.gameItems).toEqual([]);
   });
 
-  it('derives library filter options from games', () => {
-    const model = createGamesPageModel({
-      getGames: () => [createStubGame('1', 'A'), createStubGame('2', 'B')],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+  it('derives grouped library filter options from games', () => {
+    const model = createGamesPageModel(
+      createInput({
+        getGames: () => [createStubGame('1', 'A'), createStubGame('2', 'B')],
+      }),
+    );
 
-    expect(model.libraryFilterOptions.length).toBe(1);
-    expect(model.libraryFilterOptions[0]?.value).toBe('steam');
+    expect(model.groupedLibraryFilterOptions).toEqual([
+      {
+        vendorKey: 'other',
+        vendorLabel: 'Additional',
+        options: [
+          {
+            value: 'steam',
+            label: 'Steam',
+            vendorKey: 'other',
+            vendorLabel: 'Additional',
+          },
+        ],
+      },
+    ]);
   });
 
   it('hasFilterIndicator is true when not all libraries are selected', () => {
-    const model = createGamesPageModel({
-      getGames: () => [createStubGame('1', 'A')],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(
+      createInput({
+        getGames: () => [createStubGame('1', 'A')],
+      }),
+    );
 
     expect(model.hasFilterIndicator).toBe(true);
   });
 
   it('setMenuOpen updates menuOpenFor', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     model.setMenuOpen('game-1', true);
     expect(model.menuOpenFor).toBe('game-1');
@@ -86,29 +77,13 @@ describe('createGamesPageModel', () => {
   });
 
   it('isCoverOperationBusy returns false by default', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.isCoverOperationBusy('game-1')).toBe(false);
   });
 
   it('dispose does not throw', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(() => {
       model.dispose();
@@ -116,15 +91,7 @@ describe('createGamesPageModel', () => {
   });
 
   it('flushSearchPersist does not throw', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(() => {
       model.flushSearchPersist();
@@ -132,15 +99,7 @@ describe('createGamesPageModel', () => {
   });
 
   it('setSearchQuery updates searchQuery', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.filtersState.searchQuery).toBe('');
     model.setSearchQuery('test');
@@ -148,15 +107,7 @@ describe('createGamesPageModel', () => {
   });
 
   it('setSearchQuery with same value does not queue persist', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(() => {
       model.setSearchQuery('');
@@ -164,33 +115,17 @@ describe('createGamesPageModel', () => {
   });
 
   it('handlePopoverOpenChange opens and closes popover', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.filtersState.isPopoverOpen).toBe(false);
-    model.handlePopoverOpenChange({ open: true, reason: 'programmatic' });
+    model.handlePopoverOpenChange(true);
     expect(model.filtersState.isPopoverOpen).toBe(true);
-    model.handlePopoverOpenChange({ open: false, reason: 'outside-pointer' });
+    model.handlePopoverOpenChange(false);
     expect(model.filtersState.isPopoverOpen).toBe(false);
   });
 
   it('toggleFiltersPopover inverts popover state', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.filtersState.isPopoverOpen).toBe(false);
     model.toggleFiltersPopover();
@@ -200,46 +135,22 @@ describe('createGamesPageModel', () => {
   });
 
   it('cancelFilterSelection resets popover state', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
-    model.handlePopoverOpenChange({ open: true, reason: 'programmatic' });
+    model.handlePopoverOpenChange(true);
     expect(model.filtersState.isPopoverOpen).toBe(true);
     model.cancelFilterSelection();
     expect(model.filtersState.isPopoverOpen).toBe(false);
   });
 
   it('isCoverOperationBusy returns true when manual busy matches', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(model.isCoverOperationBusy('game-1')).toBe(false);
   });
 
   it('fetchCover does not throw (smoke test)', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(() => {
       model.fetchCover('game-1');
@@ -247,18 +158,22 @@ describe('createGamesPageModel', () => {
   });
 
   it('clearCover does not throw (smoke test)', () => {
-    const model = createGamesPageModel({
-      getGames: () => [],
-      getCatalogVersion: () => 0,
-      getBusy: () => false,
-      getCoversAutoFetchingIds: () => new Set(),
-      onClearError: vi.fn(),
-      onCoverError: vi.fn(),
-      onReloadCards: () => Promise.resolve(),
-    });
+    const model = createGamesPageModel(createInput());
 
     expect(() => {
       model.clearCover('game-1');
     }).not.toThrow();
   });
 });
+
+function createInput(overrides: Partial<GamesPageModelInput> = {}): GamesPageModelInput {
+  return {
+    getGames: () => [],
+    getCatalogVersion: () => 0,
+    getBusy: () => false,
+    getCoversAutoFetchingIds: () => new Set(),
+    onClearError: vi.fn(),
+    onReloadCards: () => Promise.resolve(),
+    ...overrides,
+  };
+}

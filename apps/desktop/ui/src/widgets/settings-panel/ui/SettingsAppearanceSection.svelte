@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { Select, type SelectOption } from '@shared/ui';
+  import { Select, SelectContent, SelectItem, SelectTrigger } from '@shared/ui';
   import SettingsSectionShell from './SettingsSectionShell.svelte';
   import SettingRow from './SettingRow.svelte';
-  import SettingCopy from './SettingCopy.svelte';
-  import SettingLabel from './SettingLabel.svelte';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@entities/settings';
-  import { cn } from '@shared/utils';
+  import { cn } from '@shared/classnames';
+
+  type SelectOption<TValue extends string = string> = {
+    value: TValue;
+    label: string;
+    disabled?: boolean;
+  };
 
   type SelectChangeHandler<TValue extends string> = (value: TValue) => void;
-
-  const noop = () => undefined;
 
   type Props = {
     themeMode?: ThemeMode;
@@ -26,8 +28,8 @@
     languageMode = 'system',
     themeOptions = [],
     languageOptions = [],
-    onThemeChange = noop,
-    onLanguageChange = noop,
+    onThemeChange = () => undefined,
+    onLanguageChange = () => undefined,
   }: Props = $props();
 
   function isSelectOptionValue<TValue extends string>(
@@ -52,6 +54,14 @@
 
     onLanguageChange(value);
   }
+
+  const themeTriggerLabel = $derived(
+    themeOptions.find((option) => option.value === themeMode)?.label ?? 'Select theme',
+  );
+
+  const languageTriggerLabel = $derived(
+    languageOptions.find((option) => option.value === languageMode)?.label ?? 'Select language',
+  );
 </script>
 
 <SettingsSectionShell
@@ -62,42 +72,64 @@
 >
   <div>
     <SettingRow>
-      <SettingCopy>
-        <SettingLabel>Display</SettingLabel>
+      <div class="grid min-w-0 flex-1 gap-1">
+        <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Display</p>
         <h4>Theme</h4>
         <p>
           Follow the operating system appearance or choose a fixed theme while keeping the
           application palette internally consistent.
         </p>
-      </SettingCopy>
+      </div>
 
       <span class={cn('block w-full max-w-60 min-w-52 shrink-0', 'max-md:w-full max-md:min-w-0')}>
         <Select
-          aria-label="Theme mode"
-          options={themeOptions}
+          type="single"
+          items={themeOptions as SelectOption[]}
           value={themeMode}
           onValueChange={handleThemeChange}
-        />
+        >
+          <SelectTrigger class="w-full" aria-label="Theme mode">{themeTriggerLabel}</SelectTrigger>
+          <SelectContent>
+            {#each themeOptions as option (option.value)}
+              <SelectItem value={option.value} label={option.label} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            {/each}
+          </SelectContent>
+        </Select>
       </span>
     </SettingRow>
 
     <SettingRow>
-      <SettingCopy>
-        <SettingLabel>Localization</SettingLabel>
+      <div class="grid min-w-0 flex-1 gap-1">
+        <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          Localization
+        </p>
         <h4>Language</h4>
         <p>
           Use a scalable selector so more interface languages can be added later without changing
           the page structure.
         </p>
-      </SettingCopy>
+      </div>
 
       <span class={cn('block w-full max-w-60 min-w-52 shrink-0', 'max-md:w-full max-md:min-w-0')}>
         <Select
-          aria-label="Interface language"
-          options={languageOptions}
+          type="single"
+          items={languageOptions as SelectOption[]}
           value={languageMode}
           onValueChange={handleLanguageChange}
-        />
+        >
+          <SelectTrigger class="w-full" aria-label="Interface language">
+            {languageTriggerLabel}
+          </SelectTrigger>
+          <SelectContent>
+            {#each languageOptions as option (option.value)}
+              <SelectItem value={option.value} label={option.label} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            {/each}
+          </SelectContent>
+        </Select>
       </span>
     </SettingRow>
   </div>

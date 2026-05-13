@@ -1,6 +1,6 @@
 export { type NvApiControl, nvapiControlsByLibrary } from './model/nvapi-controls';
 
-export { formatLabel, formatLibrary } from './model/presenters';
+export { formatLabel, formatLibrary, formatCompactLibraryLabel } from './model/presenters';
 
 export type {
   ComponentFile,

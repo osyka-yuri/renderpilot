@@ -38,7 +38,7 @@ describe('graphics-configurator', () => {
   describe('buildComponentRows', () => {
     it('builds rows from game details', () => {
       const details = createGameDetails({
-        components: [createComponent({ id: 'comp-1', technology: 'DlssSuperResolution' })],
+        components: [createComponent({ id: 'comp-1', technology: 'dlss_super_resolution' })],
         candidate_groups: [
           createCandidateGroup({ component_id: 'comp-1', file_path: 'C:/game/dlss.dll' }),
         ],
@@ -61,6 +61,21 @@ describe('graphics-configurator', () => {
       const rows = buildComponentRows(details);
 
       expect(rows[0].group).toBeNull();
+    });
+
+    it('filters unknown technology components out of the visible configurator rows', () => {
+      const details = createGameDetails({
+        components: [
+          createComponent({ id: 'comp-1', technology: 'dlss_super_resolution' }),
+          createComponent({ id: 'comp-2', technology: 'Unknown' }),
+        ],
+        candidate_groups: [createCandidateGroup({ component_id: 'comp-2' })],
+      });
+
+      const rows = buildComponentRows(details);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].component.id).toBe('comp-1');
     });
   });
 
@@ -98,22 +113,35 @@ describe('graphics-configurator', () => {
   describe('buildLibrarySections', () => {
     it('groups rows by technology/library', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'DlssSuperResolution' }) }),
-        createConfiguredRow({ component: createComponent({ technology: 'DlssSuperResolution' }) }),
-        createConfiguredRow({ component: createComponent({ technology: 'AmdFsr' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'amd_fsr' }) }),
       ];
 
       const sections = buildLibrarySections(rows);
 
       expect(sections).toHaveLength(2);
     });
+
+    it('uses compact labels for section headings', () => {
+      const rows = [
+        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({
+          component: createComponent({ id: 'comp-2', technology: 'amd_fsr_frame_generation' }),
+        }),
+      ];
+
+      const sections = buildLibrarySections(rows);
+
+      expect(sections.map((section) => section.label)).toEqual(['DLSS SR', 'FSR FG']);
+    });
   });
 
   describe('buildVendorBlocks', () => {
     it('groups sections by vendor', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'DlssSuperResolution' }) }),
-        createConfiguredRow({ component: createComponent({ technology: 'AmdFsr' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'amd_fsr' }) }),
       ];
       const sections = buildLibrarySections(rows);
       const blocks = buildVendorBlocks(sections);
@@ -127,7 +155,7 @@ describe('graphics-configurator', () => {
 
     it('omits empty other vendor block', () => {
       const rows = [
-        createConfiguredRow({ component: createComponent({ technology: 'DlssSuperResolution' }) }),
+        createConfiguredRow({ component: createComponent({ technology: 'dlss_super_resolution' }) }),
       ];
       const sections = buildLibrarySections(rows);
       const blocks = buildVendorBlocks(sections);
@@ -284,7 +312,7 @@ function createComponent(overrides: Partial<GraphicsComponent> = {}): GraphicsCo
     id: 'comp-1',
     game_id: 'game-1',
     kind: 'dll',
-    technology: 'DlssSuperResolution',
+    technology: 'dlss_super_resolution',
     swappability: 'replaceable',
     files: [{ path: 'C:/game/dlss.dll', version: '1.0.0', sha256: null }],
     ...overrides,
@@ -294,7 +322,7 @@ function createComponent(overrides: Partial<GraphicsComponent> = {}): GraphicsCo
 function createCandidateGroup(overrides: Partial<CandidateGroup> = {}): CandidateGroup {
   return {
     component_id: 'comp-1',
-    technology: 'DlssSuperResolution',
+    technology: 'dlss_super_resolution',
     file_path: 'C:/game/dlss.dll',
     candidates: [createCandidate()],
     ...overrides,

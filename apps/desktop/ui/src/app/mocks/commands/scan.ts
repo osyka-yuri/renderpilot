@@ -28,7 +28,6 @@ export function mockScanManualFolder(path: string): Promise<ScanManualFolderResu
 
     upsertGameSummary({
       ...createGameSummaryFromDetails(details, {
-        update_count: details.candidate_groups.length,
         risk_level: 'medium',
         backup_available: hasAvailableBackup(details),
         last_operation_status: getLatestOperationStatus(details),

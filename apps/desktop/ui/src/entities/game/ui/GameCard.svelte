@@ -1,11 +1,22 @@
 <script lang="ts">
-  import { Badge, BadgeGroup, Button, Surface } from '@shared/ui';
+  import {
+    Badge,
+    Button,
+    Card,
+    CardAction,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+  } from '@shared/ui';
 
-  import GameCardCoverMenu from './GameCardCoverMenu.svelte';
-  import GameLibraryBadges from './GameLibraryBadges.svelte';
+  import { createActionAriaLabel, createTitleId } from '../model/dom-helpers';
   import type { GameCardViewModel } from '../model/game-card-view-model';
-  import GameCardCoverPreview from './GameCardCoverPreview.svelte';
-  import type { GameCardCoverMenuHandle } from './types';
+
+  import GameCardActionsMenu from './GameCardActionsMenu.svelte';
+  import GameCardCover from './GameCardCover.svelte';
+  import GameLibraryBadges from './GameLibraryBadges.svelte';
+  import type { GameCardMenuHandle } from './types';
 
   type VoidHandler = () => void;
   type MenuOpenChangeHandler = (open: boolean) => void;
@@ -14,11 +25,11 @@
     game: GameCardViewModel;
 
     coverBusy?: boolean;
-    backgroundCoverFetch?: boolean;
+    backgroundCoverFetching?: boolean;
     menuDisabled?: boolean;
     pickDisabled?: boolean;
     menuOpen?: boolean;
-    coverMenuRef?: GameCardCoverMenuHandle;
+    coverMenuRef?: GameCardMenuHandle;
 
     onMenuOpenChange?: MenuOpenChangeHandler;
     onFetchCover?: VoidHandler;
@@ -28,46 +39,22 @@
     onOpenOperations?: VoidHandler;
   };
 
-  const TITLE_ID_PREFIX = 'game-card-title';
-  const UNKNOWN_ID_SEGMENT = 'unknown';
+  const noop: VoidHandler = () => undefined;
+  const noopMenuOpenChange: MenuOpenChangeHandler = () => undefined;
 
   const ACTION_LABELS = {
     details: 'Details',
     journal: 'Journal',
   } as const;
 
-  const noop = (): void => {
-    /* empty */
-  };
-  const noopMenuOpenChange: MenuOpenChangeHandler = () => {
-    /* empty */
-  };
-
-  const normalizeDomIdSegment = (value: string): string => {
-    const normalizedValue = value
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-zA-Z0-9_-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .toLowerCase();
-
-    return normalizedValue || UNKNOWN_ID_SEGMENT;
-  };
-
-  const createTitleId = (gameId: string): string => {
-    return `${TITLE_ID_PREFIX}-${normalizeDomIdSegment(gameId)}`;
-  };
-
-  const createActionAriaLabel = (action: string, gameTitle: string): string => {
-    return `${action} for ${gameTitle}`;
-  };
+  const HEADER_LAYOUT_CLASS =
+    'grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-3 max-md:grid-cols-1 max-md:gap-3.5';
 
   let {
     game,
 
     coverBusy = false,
-    backgroundCoverFetch = false,
+    backgroundCoverFetching = false,
     menuDisabled = false,
     pickDisabled = false,
     menuOpen = false,
@@ -83,24 +70,21 @@
 
   const titleId = $derived(createTitleId(game.id));
 
-  const detailsAriaLabel = $derived(createActionAriaLabel('Open details', game.title));
-
-  const journalAriaLabel = $derived(createActionAriaLabel('Open journal', game.title));
+  const actionAriaLabels = $derived({
+    details: createActionAriaLabel('Open details', game.title),
+    journal: createActionAriaLabel('Open journal', game.title),
+  });
 </script>
 
-<div class="relative grid h-full min-w-0 overflow-visible p-4">
-  <Surface as="article" interactive shadow aria-labelledby={titleId}>
-    <div
-      class="
-        relative grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4
-      "
-    >
-      <GameCardCoverMenu
+<Card aria-labelledby={titleId}>
+  <CardHeader>
+    <CardAction>
+      <GameCardActionsMenu
         bind:this={coverMenuRef}
         title={game.title}
         disabled={menuDisabled}
         {pickDisabled}
-        autoFetchInProgress={backgroundCoverFetch}
+        autoFetchInProgress={backgroundCoverFetching}
         hasCover={game.hasCover}
         open={menuOpen}
         onOpenChange={onMenuOpenChange}
@@ -108,76 +92,59 @@
         {onPickCover}
         {onClearCover}
       />
+    </CardAction>
 
-      <div
-        class="
-          grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-3
-          max-md:grid-cols-1 max-md:gap-3.5
-        "
-      >
-        <GameCardCoverPreview
-          title={game.title}
-          coverSrc={game.coverSrc}
-          monogram={game.monogram}
-          {coverBusy}
-        />
+    <div class={HEADER_LAYOUT_CLASS}>
+      <GameCardCover
+        title={game.title}
+        coverSrc={game.coverSrc}
+        monogram={game.monogram}
+        {coverBusy}
+      />
 
-        <div class="grid min-w-0 gap-3 pe-11">
-          <BadgeGroup>
-            <div class="max-w-60">
-              <Badge pill surface="soft" tone={game.updateBadge.tone} multiline>
-                {game.updateBadge.label}
-              </Badge>
-            </div>
-          </BadgeGroup>
+      <div class="grid min-w-0 gap-3">
+        <Badge class="w-fit" variant={game.updateBadge.variant}>
+          {game.updateBadge.label}
+        </Badge>
 
-          <div class="grid min-w-0 gap-2">
-            <h3
-              id={titleId}
-              class="
-              text-base/tight font-semibold wrap-break-word
-            "
-            >
-              {game.title}
-            </h3>
-            <p class="text-xs/snug wrap-break-word text-text-muted">
-              {game.installPath}
-            </p>
-          </div>
+        <div class="grid min-w-0 gap-2">
+          <CardTitle id={titleId} role="heading" aria-level={3}>
+            {game.title}
+          </CardTitle>
+
+          <p class="min-w-0 break-all text-xs/snug text-muted-foreground">
+            {game.installPath}
+          </p>
         </div>
       </div>
-
-      <div class="grid min-w-0 content-start gap-2">
-        <p class="mb-1 text-xs tracking-widest text-text-subtle uppercase">Detected libraries</p>
-        <GameLibraryBadges libraries={game.libraries} />
-      </div>
-
-      <div
-        class="
-          grid grid-cols-2 gap-2
-          max-md:grid-cols-1
-        "
-      >
-        <Button
-          variant="primary"
-          size="sm"
-          fullWidth
-          aria-label={detailsAriaLabel}
-          onclick={onOpenDetails}
-        >
-          {ACTION_LABELS.details}
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          fullWidth
-          aria-label={journalAriaLabel}
-          onclick={onOpenOperations}
-        >
-          {ACTION_LABELS.journal}
-        </Button>
-      </div>
     </div>
-  </Surface>
-</div>
+  </CardHeader>
+
+  <CardContent class="flex-1">
+    <p class="mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+      Detected libraries
+    </p>
+
+    <GameLibraryBadges libraries={game.libraries} />
+  </CardContent>
+
+  <CardFooter class="gap-2 *:flex-1">
+    <Button
+      variant="default"
+      size="sm"
+      aria-label={actionAriaLabels.details}
+      onclick={onOpenDetails}
+    >
+      {ACTION_LABELS.details}
+    </Button>
+
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-label={actionAriaLabels.journal}
+      onclick={onOpenOperations}
+    >
+      {ACTION_LABELS.journal}
+    </Button>
+  </CardFooter>
+</Card>

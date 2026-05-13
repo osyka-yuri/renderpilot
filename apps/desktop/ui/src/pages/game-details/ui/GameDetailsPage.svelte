@@ -12,11 +12,8 @@
     OperationPlanSummary,
     OperationsHistoryPanel,
   } from '@widgets/game-workspace';
-  import { EmptyStatePanel } from '@shared/ui';
-  import { cn } from '@shared/utils';
-
-  const noopBuildPlan: BuildPlanHandler = () => undefined;
-  const noopOperation: OperationHandler = () => undefined;
+  import { Card, CardContent, CardDescription, CardTitle } from '@shared/ui';
+  import { cn } from '@shared/classnames';
 
   type Props = {
     details?: GameDetails | null;
@@ -33,9 +30,9 @@
     gameCard = null,
     plan = null,
     busy = false,
-    onBuildPlan = noopBuildPlan,
-    onApply = noopOperation,
-    onRollback = noopOperation,
+    onBuildPlan = () => undefined,
+    onApply = () => undefined,
+    onRollback = () => undefined,
   }: Props = $props();
 
   const model = createGraphicsLibrariesModel({
@@ -50,44 +47,48 @@
   }
 </script>
 
-<section class="grid gap-5">
+<section class="grid gap-4">
   {#if !details}
-    <EmptyStatePanel>
-      <h3 class="text-base/tight font-semibold text-text-strong">No game selected</h3>
-      <p class="mt-1 text-text-muted">
-        Select a game card on the dashboard to open one coherent workspace for that installation.
-      </p>
-    </EmptyStatePanel>
+    <Card>
+      <CardContent>
+        <CardTitle>No game selected</CardTitle>
+        <CardDescription>
+          Select a game card on the dashboard to open one coherent workspace for that installation.
+        </CardDescription>
+      </CardContent>
+    </Card>
   {:else}
-    <InstallContextCards
-      installPath={details.game.install_path}
-      launchCandidates={details.game.executable_candidates}
-      libraries={model.libraries}
-    />
+    <div class="grid gap-4">
+      <InstallContextCards
+        installPath={details.game.install_path}
+        launchCandidates={details.game.executable_candidates}
+        libraries={model.libraries}
+      />
 
-    <GraphicsLibrariesConfigurator
-      vendorBlocks={model.visibleVendorBlocks}
-      accordionItems={model.vendorAccordionItems}
-      activeVendorKey={model.effectiveVendorKey}
-      selectedArtifacts={model.selectedArtifacts}
-      selectedNvapiSelections={model.selectedNvapiSelections}
-      riskLevel={gameCard?.risk_level}
-      {busy}
-      {selectionKey}
-      onVendorChange={model.handleVendorChange}
-      onArtifactSelection={model.handleArtifactSelection}
-      onNvapiSelection={model.handleNvapiSelection}
-      {onBuildPlan}
-    />
+      <GraphicsLibrariesConfigurator
+        vendorBlocks={model.visibleVendorBlocks}
+        accordionItems={model.vendorAccordionItems}
+        activeVendorKey={model.effectiveVendorKey}
+        selectedArtifacts={model.selectedArtifacts}
+        selectedNvapiSelections={model.selectedNvapiSelections}
+        riskLevel={gameCard?.risk_level}
+        {busy}
+        {selectionKey}
+        onVendorChange={model.handleVendorChange}
+        onArtifactSelection={model.handleArtifactSelection}
+        onNvapiSelection={model.handleNvapiSelection}
+        {onBuildPlan}
+      />
 
-    <OperationPlanSummary {plan} {busy} {onApply} />
+      <OperationPlanSummary {plan} {busy} {onApply} />
 
-    <section
-      class={cn('grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-4', 'max-xl:grid-cols-1')}
-    >
-      <BackupOperationsPanel operations={model.backupOperations} />
+      <section
+        class={cn('grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-4', 'max-xl:grid-cols-1')}
+      >
+        <BackupOperationsPanel operations={model.backupOperations} />
 
-      <OperationsHistoryPanel operations={details.operations} {busy} {canRollback} {onRollback} />
-    </section>
+        <OperationsHistoryPanel operations={details.operations} {busy} {canRollback} {onRollback} />
+      </section>
+    </div>
   {/if}
 </section>

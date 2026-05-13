@@ -16,6 +16,9 @@ describe('cover-ops', () => {
     it('runs successful command in the expected order', async () => {
       const calls: string[] = [];
       const onCoverError = vi.fn();
+      const onSuccess = vi.fn(() => {
+        calls.push('success');
+      });
 
       await withManualCoverBusy(
         createManualCoverBusyParams({
@@ -33,6 +36,7 @@ describe('cover-ops', () => {
             calls.push('reload');
             return Promise.resolve();
           },
+          onSuccess,
           onCoverError,
           focusMenuTrigger: (gameId) => {
             calls.push(`focus:${gameId}`);
@@ -45,9 +49,11 @@ describe('cover-ops', () => {
         'task',
         'clear-error',
         'reload',
+        'success',
         'busy:none',
         'focus:game-1',
       ]);
+      expect(onSuccess).toHaveBeenCalledTimes(1);
       expect(onCoverError).not.toHaveBeenCalled();
     });
 
@@ -90,6 +96,9 @@ describe('cover-ops', () => {
         calls.push('reload');
         return Promise.resolve();
       });
+      const onSuccess = vi.fn(() => {
+        calls.push('success');
+      });
       const onCoverError = vi.fn((message: string) => {
         calls.push(`error:${message}`);
       });
@@ -105,6 +114,7 @@ describe('cover-ops', () => {
           },
           onClearError,
           onReloadCards,
+          onSuccess,
           onCoverError,
           focusMenuTrigger: (gameId) => {
             calls.push(`focus:${gameId}`);
@@ -115,6 +125,7 @@ describe('cover-ops', () => {
       expect(calls).toEqual(['busy:game-1', 'task', 'error:failed', 'busy:none', 'focus:game-1']);
       expect(onClearError).not.toHaveBeenCalled();
       expect(onReloadCards).not.toHaveBeenCalled();
+      expect(onSuccess).not.toHaveBeenCalled();
       expect(onCoverError).toHaveBeenCalledWith('failed');
     });
 
@@ -124,6 +135,9 @@ describe('cover-ops', () => {
 
       const onClearError = vi.fn(() => {
         calls.push('clear-error');
+      });
+      const onSuccess = vi.fn(() => {
+        calls.push('success');
       });
       const onCoverError = vi.fn((message: string) => {
         calls.push(`error:${message}`);
@@ -143,6 +157,7 @@ describe('cover-ops', () => {
             calls.push('reload');
             return Promise.reject(reloadError);
           },
+          onSuccess,
           onCoverError,
           focusMenuTrigger: (gameId) => {
             calls.push(`focus:${gameId}`);
@@ -160,6 +175,7 @@ describe('cover-ops', () => {
         'focus:game-1',
       ]);
       expect(onClearError).toHaveBeenCalledTimes(1);
+      expect(onSuccess).not.toHaveBeenCalled();
       expect(onCoverError).toHaveBeenCalledWith('reload failed');
     });
   });
@@ -261,6 +277,7 @@ function createManualCoverBusyParams(
     task: vi.fn(() => Promise.resolve()),
     onClearError: vi.fn(),
     onReloadCards: vi.fn(() => Promise.resolve()),
+    onSuccess: vi.fn(),
     onCoverError: vi.fn(),
     describeError: (error) => (error instanceof Error ? error.message : 'unknown'),
     focusMenuTrigger: vi.fn(),

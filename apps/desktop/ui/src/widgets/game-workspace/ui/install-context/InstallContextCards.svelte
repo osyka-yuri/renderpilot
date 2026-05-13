@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { cn, compactList, fileNameFromPath } from '@shared/utils';
-  import { Badge, InfoTile } from '@shared/ui';
+  import { cn } from '@shared/classnames';
+  import { compactList } from '@shared/format';
+  import { fileNameFromPath } from '@shared/path';
+  import { Badge, Card, CardContent, CardHeader } from '@shared/ui';
 
   type Props = {
     installPath?: string;
@@ -18,35 +20,50 @@
   aria-label="Game installation context"
 >
   <div class="grid min-w-0 gap-2">
-    <InfoTile label="Folder" tone="card" class="min-h-18 gap-2">
-      <strong
-        class="min-w-0 truncate text-sm/tight font-semibold text-text-strong"
-        title={installPath}>{installPath}</strong
-      >
-    </InfoTile>
+    <Card>
+      <CardHeader>
+        <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Folder</p>
+      </CardHeader>
+      <CardContent>
+        <strong
+          class="block min-w-0 text-sm/5 font-semibold break-all text-foreground"
+          title={installPath}>{installPath}</strong
+        >
+      </CardContent>
+    </Card>
 
-    <InfoTile label="Launch" tone="card" class="min-h-18 gap-2">
-      <strong
-        class="min-w-0 truncate text-sm/tight font-semibold text-text-strong"
-        title={compactList(launchCandidateNames, 'No executable recorded', 8)}
-      >
-        {compactList(launchCandidateNames, 'No executable recorded', 2)}
-      </strong>
-    </InfoTile>
+    <Card>
+      <CardHeader>
+        <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Launch</p>
+      </CardHeader>
+      <CardContent>
+        <strong
+          class="block min-w-0 truncate text-sm/5 font-semibold text-foreground"
+          title={compactList(launchCandidateNames, 'No executable recorded', 8)}
+        >
+          {compactList(launchCandidateNames, 'No executable recorded', 2)}
+        </strong>
+      </CardContent>
+    </Card>
   </div>
 
-  <InfoTile label="Graphics" tone="card" class="min-h-full gap-2">
-    <div
-      class="flex min-w-0 flex-wrap gap-1"
-      title={compactList(libraries, 'No graphics libraries detected', 12)}
-    >
-      {#if libraries.length === 0}
-        <Badge surface="outline" tone="muted">None detected</Badge>
-      {:else}
-        {#each libraries as library (library)}
-          <Badge surface="outline">{library}</Badge>
-        {/each}
-      {/if}
-    </div>
-  </InfoTile>
+  <Card>
+    <CardHeader>
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Graphics</p>
+    </CardHeader>
+    <CardContent>
+      <div
+        class="flex min-w-0 flex-wrap gap-1"
+        title={compactList(libraries, 'No graphics libraries detected', 12)}
+      >
+        {#if libraries.length === 0}
+          <Badge variant="outline">None detected</Badge>
+        {:else}
+          {#each libraries as library (library)}
+            <Badge variant="outline">{library}</Badge>
+          {/each}
+        {/if}
+      </div>
+    </CardContent>
+  </Card>
 </section>
