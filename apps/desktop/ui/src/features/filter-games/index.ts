@@ -1,5 +1,5 @@
 export { default as GamesFilterToolbar } from './ui/GamesFilterToolbar.svelte';
-export { default as GamesLibraryFilterPopover } from './ui/GamesLibraryFilterPopover.svelte';
+export { default as GamesLibraryFilterDialog } from './ui/GamesLibraryFilterDialog.svelte';
 export {
   type GamesFiltersModel,
   type GamesFiltersModelInput,

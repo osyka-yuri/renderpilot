@@ -1,10 +1,10 @@
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {
   applyDraftFilters,
-  cancelFilterPopover,
+  cancelFilterDialog,
   createGamesFilterPersistence,
   createInitialGamesFilterState,
-  openFilterPopover,
+  openFilterDialog,
   setDraftLibraries,
   type PersistedGamesFilters,
   withSearchQuery,
@@ -116,13 +116,13 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     };
   }
 
-  function handlePopoverOpenChange(nextOpen: boolean): void {
+  function handleDialogOpenChange(nextOpen: boolean): void {
     if (nextOpen) {
-      filtersState = openFilterPopover(filtersState);
+      filtersState = openFilterDialog(filtersState);
       return;
     }
 
-    filtersState = cancelFilterPopover(filtersState);
+    filtersState = cancelFilterDialog(filtersState);
   }
 
   async function commitFilterSelection(): Promise<void> {
@@ -140,11 +140,11 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
   }
 
   function cancelFilterSelection(): void {
-    filtersState = cancelFilterPopover(filtersState);
+    filtersState = cancelFilterDialog(filtersState);
   }
 
-  function toggleFiltersPopover(): void {
-    handlePopoverOpenChange(!filtersState.isPopoverOpen);
+  function toggleFiltersDialog(): void {
+    handleDialogOpenChange(!filtersState.isDialogOpen);
   }
 
   function handleDraftLibrariesChange(nextLibraries: readonly string[]): void {
@@ -187,10 +187,10 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
       return hasFilterIndicator;
     },
     loadPreferences,
-    handlePopoverOpenChange,
+    handleDialogOpenChange,
     applyFilterSelection,
     cancelFilterSelection,
-    toggleFiltersPopover,
+    toggleFiltersDialog,
     handleDraftLibrariesChange,
     setSearchQuery,
     flushSearchPersist,

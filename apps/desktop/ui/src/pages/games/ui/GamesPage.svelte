@@ -6,10 +6,10 @@
   import { cn } from '@shared/classnames';
   import type { VoidHandler } from '@shared/callbacks';
   import type { GameSelectionHandler } from '@entities/game';
-  import { Input, Popover, PopoverContent, PopoverTrigger, buttonVariants } from '@shared/ui';
+  import { Input, Dialog, DialogContent, DialogTrigger, buttonVariants } from '@shared/ui';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
-  import { GamesLibraryFilterPopover } from '@features/filter-games';
+  import { GamesLibraryFilterDialog } from '@features/filter-games';
   import { SCAN_LABEL, SCANNING_LABEL } from '../model/games-page-constants';
   import { createGamesPageModel } from '../model/create-games-page-model.svelte';
 
@@ -126,18 +126,17 @@
           />
         </label>
 
-        <Popover
-          open={model.filtersState.isPopoverOpen}
-          onOpenChange={model.handlePopoverOpenChange}
+        <Dialog
+          open={model.filtersState.isDialogOpen}
+          onOpenChange={model.handleDialogOpenChange}
         >
           <div class="relative inline-flex flex-none">
-            <PopoverTrigger
+            <DialogTrigger
               class={buttonVariants({ variant: 'secondary', size: 'icon-sm' })}
               aria-label={filtersButtonLabel}
-              aria-haspopup="dialog"
             >
               <FunnelIcon class="size-4.5" aria-hidden="true" />
-            </PopoverTrigger>
+            </DialogTrigger>
 
             {#if model.hasFilterIndicator}
               <span
@@ -150,16 +149,16 @@
             {/if}
           </div>
 
-          <PopoverContent align="end" class="w-100">
-            <GamesLibraryFilterPopover
+          <DialogContent class="sm:max-w-lg">
+            <GamesLibraryFilterDialog
               groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
               draftLibraries={model.filtersState.draftLibraries}
               onDraftLibrariesChange={model.handleDraftLibrariesChange}
               onCancel={model.cancelFilterSelection}
               onApply={model.applyFilterSelection}
             />
-          </PopoverContent>
-        </Popover>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
 

@@ -149,10 +149,10 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     // Actions
     setMenuOpen,
     isCoverOperationBusy,
-    handlePopoverOpenChange: filtersModel.handlePopoverOpenChange,
+    handleDialogOpenChange: filtersModel.handleDialogOpenChange,
     applyFilterSelection: filtersModel.applyFilterSelection,
     cancelFilterSelection: filtersModel.cancelFilterSelection,
-    toggleFiltersPopover: filtersModel.toggleFiltersPopover,
+    toggleFiltersDialog: filtersModel.toggleFiltersDialog,
     handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,

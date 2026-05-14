@@ -4,7 +4,7 @@ import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filte
 
 export type GamesFilterState = {
   ready: boolean;
-  isPopoverOpen: boolean;
+  isDialogOpen: boolean;
   searchQuery: string;
   appliedLibraries: string[];
   draftLibraries: string[];
@@ -27,7 +27,7 @@ const EMPTY_PERSISTED_SNAPSHOT = '';
 export function createInitialGamesFilterState(): GamesFilterState {
   return {
     ready: false,
-    isPopoverOpen: false,
+    isDialogOpen: false,
     searchQuery: EMPTY_SEARCH_QUERY,
     appliedLibraries: [],
     draftLibraries: [],
@@ -92,9 +92,9 @@ export function withSearchQuery(state: GamesFilterState, searchQuery: string): G
   };
 }
 
-export function openFilterPopover(state: GamesFilterState): GamesFilterState {
+export function openFilterDialog(state: GamesFilterState): GamesFilterState {
   if (
-    state.isPopoverOpen &&
+    state.isDialogOpen &&
     shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries)
   ) {
     return state;
@@ -103,24 +103,24 @@ export function openFilterPopover(state: GamesFilterState): GamesFilterState {
   return {
     ...state,
     draftLibraries: copyLibraries(state.appliedLibraries),
-    isPopoverOpen: true,
+    isDialogOpen: true,
   };
 }
 
-export function closeFilterPopover(state: GamesFilterState): GamesFilterState {
-  if (!state.isPopoverOpen) {
+export function closeFilterDialog(state: GamesFilterState): GamesFilterState {
+  if (!state.isDialogOpen) {
     return state;
   }
 
   return {
     ...state,
-    isPopoverOpen: false,
+    isDialogOpen: false,
   };
 }
 
-export function cancelFilterPopover(state: GamesFilterState): GamesFilterState {
+export function cancelFilterDialog(state: GamesFilterState): GamesFilterState {
   if (
-    !state.isPopoverOpen &&
+    !state.isDialogOpen &&
     shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries)
   ) {
     return state;
@@ -129,7 +129,7 @@ export function cancelFilterPopover(state: GamesFilterState): GamesFilterState {
   return {
     ...state,
     draftLibraries: copyLibraries(state.appliedLibraries),
-    isPopoverOpen: false,
+    isDialogOpen: false,
   };
 }
 
@@ -177,7 +177,7 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
   );
 
   if (
-    !state.isPopoverOpen &&
+    !state.isDialogOpen &&
     shallowStringArrayEqual(state.appliedLibraries, appliedLibraries) &&
     shallowStringArrayEqual(state.draftLibraries, appliedLibraries)
   ) {
@@ -188,7 +188,7 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
     ...state,
     appliedLibraries,
     draftLibraries: copyLibraries(appliedLibraries),
-    isPopoverOpen: false,
+    isDialogOpen: false,
   };
 }
 

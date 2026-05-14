@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDraftFilters,
-  cancelFilterPopover,
+  cancelFilterDialog,
   createInitialGamesFilterState,
   hydrateGamesFilterState,
-  openFilterPopover,
+  openFilterDialog,
   toggleDraftLibrary,
   type GamesFilterState,
 } from './games-filter-state';
@@ -171,18 +171,18 @@ describe('games-filter-controller', () => {
     );
   });
 
-  describe('filter popover state smoke', () => {
+  describe('filter dialog state smoke', () => {
     it('cancels draft changes and applies draft changes as expected', () => {
       const hydrated = createReadyFilterState(AVAILABLE_LIBRARIES);
 
-      const opened = openFilterPopover(hydrated);
+      const opened = openFilterDialog(hydrated);
       const changedDraft = toggleDraftLibrary(opened, LIBRARY_BETA);
-      const canceled = cancelFilterPopover(changedDraft);
+      const canceled = cancelFilterDialog(changedDraft);
 
       expect(canceled.appliedLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
       expect(canceled.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
 
-      const reopened = openFilterPopover(canceled);
+      const reopened = openFilterDialog(canceled);
       const changedAgain = toggleDraftLibrary(reopened, LIBRARY_BETA);
       const applied = applyDraftFilters(changedAgain);
 

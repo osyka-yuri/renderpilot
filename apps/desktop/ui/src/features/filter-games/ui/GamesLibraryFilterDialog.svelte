@@ -5,7 +5,7 @@
     type GroupedLibraryFilterOptions,
   } from '../model/library-filter-options';
 
-  import { Button, Separator, ToggleGroup, ToggleGroupItem } from '@shared/ui';
+  import { Button, DialogFooter, DialogHeader, DialogTitle, ToggleGroup, ToggleGroupItem } from '@shared/ui';
 
   type LibraryValue = string;
   type LibrariesChangeHandler = (libraries: readonly LibraryValue[]) => void;
@@ -39,11 +39,11 @@
   }
 </script>
 
-<div class="grid gap-3">
-  <div class="grid gap-1 text-sm">
-    <h4 class="font-medium">{LIBRARIES_LABEL}</h4>
-  </div>
+<DialogHeader>
+  <DialogTitle>{LIBRARIES_LABEL}</DialogTitle>
+</DialogHeader>
 
+<div class="grid gap-4">
   {#if groupedLibraryFilterOptions.length > 0}
     <div class="grid gap-4">
       {#each groupedLibraryFilterOptions as vendorGroup (vendorGroup.vendorKey)}
@@ -71,11 +71,9 @@
   {:else}
     <span class="text-sm text-muted-foreground">{EMPTY_LIBRARIES_LABEL}</span>
   {/if}
-
-  <Separator />
-
-  <div class="flex items-center justify-end gap-2">
-    <Button variant="secondary" size="sm" onclick={onCancel}>Cancel</Button>
-    <Button variant="default" size="sm" onclick={onApply}>Apply</Button>
-  </div>
 </div>
+
+<DialogFooter>
+  <Button variant="secondary" size="sm" onclick={onCancel}>Cancel</Button>
+  <Button variant="default" size="sm" onclick={onApply}>Apply</Button>
+</DialogFooter>

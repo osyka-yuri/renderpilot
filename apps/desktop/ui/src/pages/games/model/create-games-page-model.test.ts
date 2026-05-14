@@ -111,33 +111,33 @@ describe('createGamesPageModel', () => {
     }).not.toThrow();
   });
 
-  it('handlePopoverOpenChange opens and closes popover', () => {
+  it('handleDialogOpenChange opens and closes dialog', () => {
     const model = createGamesPageModel(createInput());
 
-    expect(model.filtersState.isPopoverOpen).toBe(false);
-    model.handlePopoverOpenChange(true);
-    expect(model.filtersState.isPopoverOpen).toBe(true);
-    model.handlePopoverOpenChange(false);
-    expect(model.filtersState.isPopoverOpen).toBe(false);
+    expect(model.filtersState.isDialogOpen).toBe(false);
+    model.handleDialogOpenChange(true);
+    expect(model.filtersState.isDialogOpen).toBe(true);
+    model.handleDialogOpenChange(false);
+    expect(model.filtersState.isDialogOpen).toBe(false);
   });
 
-  it('toggleFiltersPopover inverts popover state', () => {
+  it('toggleFiltersDialog inverts dialog state', () => {
     const model = createGamesPageModel(createInput());
 
-    expect(model.filtersState.isPopoverOpen).toBe(false);
-    model.toggleFiltersPopover();
-    expect(model.filtersState.isPopoverOpen).toBe(true);
-    model.toggleFiltersPopover();
-    expect(model.filtersState.isPopoverOpen).toBe(false);
+    expect(model.filtersState.isDialogOpen).toBe(false);
+    model.toggleFiltersDialog();
+    expect(model.filtersState.isDialogOpen).toBe(true);
+    model.toggleFiltersDialog();
+    expect(model.filtersState.isDialogOpen).toBe(false);
   });
 
-  it('cancelFilterSelection resets popover state', () => {
+  it('cancelFilterSelection resets dialog state', () => {
     const model = createGamesPageModel(createInput());
 
-    model.handlePopoverOpenChange(true);
-    expect(model.filtersState.isPopoverOpen).toBe(true);
+    model.handleDialogOpenChange(true);
+    expect(model.filtersState.isDialogOpen).toBe(true);
     model.cancelFilterSelection();
-    expect(model.filtersState.isPopoverOpen).toBe(false);
+    expect(model.filtersState.isDialogOpen).toBe(false);
   });
 
   it('isCoverOperationBusy returns true when manual busy matches', () => {

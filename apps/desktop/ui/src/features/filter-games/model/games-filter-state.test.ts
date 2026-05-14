@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDraftFilters,
-  cancelFilterPopover,
-  closeFilterPopover,
+  cancelFilterDialog,
+  closeFilterDialog,
   commitPersistedSnapshot,
   createInitialGamesFilterState,
   createPersistedSnapshot,
   hydrateGamesFilterState,
   isPersistedSnapshotStillCurrent,
-  openFilterPopover,
+  openFilterDialog,
   setDraftLibraries,
   toggleDraftLibrary,
   withAvailableLibraries,
@@ -31,7 +31,7 @@ describe('games-filter-state', () => {
     it('creates a not-ready empty state', () => {
       expect(createInitialGamesFilterState()).toEqual({
         ready: false,
-        isPopoverOpen: false,
+        isDialogOpen: false,
         searchQuery: '',
         appliedLibraries: [],
         draftLibraries: [],
@@ -221,7 +221,7 @@ describe('games-filter-state', () => {
         availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
       });
 
-      const opened = openFilterPopover(hydrated);
+      const opened = openFilterDialog(hydrated);
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_ALPHA);
 
       const state = withAvailableLibraries(draftChanged, [LIBRARY_BETA, LIBRARY_GAMMA]);
@@ -235,7 +235,7 @@ describe('games-filter-state', () => {
         availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
       });
 
-      const opened = openFilterPopover(hydrated);
+      const opened = openFilterDialog(hydrated);
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_GAMMA);
 
       const state = withAvailableLibraries(draftChanged, [LIBRARY_ALPHA, LIBRARY_BETA]);
@@ -264,54 +264,54 @@ describe('games-filter-state', () => {
     });
   });
 
-  describe('popover lifecycle', () => {
-    it('opens popover and resets dirty draft to applied libraries', () => {
+  describe('dialog lifecycle', () => {
+    it('opens dialog and resets dirty draft to applied libraries', () => {
       const hydrated = createHydratedState();
       const dirtyDraft: GamesFilterState = {
         ...hydrated,
         draftLibraries: [LIBRARY_ALPHA],
       };
 
-      const state = openFilterPopover(dirtyDraft);
+      const state = openFilterDialog(dirtyDraft);
 
-      expect(state.isPopoverOpen).toBe(true);
+      expect(state.isDialogOpen).toBe(true);
       expect(state.appliedLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
       expect(state.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
     });
 
-    it('closes popover without changing draft libraries', () => {
-      const opened = openFilterPopover(createHydratedState());
+    it('closes dialog without changing draft libraries', () => {
+      const opened = openFilterDialog(createHydratedState());
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
 
-      const state = closeFilterPopover(draftChanged);
+      const state = closeFilterDialog(draftChanged);
 
-      expect(state.isPopoverOpen).toBe(false);
+      expect(state.isDialogOpen).toBe(false);
       expect(state.appliedLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
       expect(state.draftLibraries).toEqual([LIBRARY_ALPHA]);
     });
 
-    it('returns the same state when closing an already closed popover', () => {
+    it('returns the same state when closing an already closed dialog', () => {
       const hydrated = createHydratedState();
 
-      const state = closeFilterPopover(hydrated);
+      const state = closeFilterDialog(hydrated);
 
       expect(state).toBe(hydrated);
     });
 
-    it('cancels draft changes and closes popover', () => {
-      const opened = openFilterPopover(createHydratedState());
+    it('cancels draft changes and closes dialog', () => {
+      const opened = openFilterDialog(createHydratedState());
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
 
-      const state = cancelFilterPopover(draftChanged);
+      const state = cancelFilterDialog(draftChanged);
 
-      expect(state.isPopoverOpen).toBe(false);
+      expect(state.isDialogOpen).toBe(false);
       expectSelectedLibraries(state, DEFAULT_AVAILABLE_LIBRARIES);
     });
 
-    it('returns the same state when canceling a closed popover with clean draft', () => {
+    it('returns the same state when canceling a closed dialog with clean draft', () => {
       const hydrated = createHydratedState();
 
-      const state = cancelFilterPopover(hydrated);
+      const state = cancelFilterDialog(hydrated);
 
       expect(state).toBe(hydrated);
     });
@@ -319,7 +319,7 @@ describe('games-filter-state', () => {
 
   describe('draft library selection', () => {
     it('ignores draft toggle for unknown libraries', () => {
-      const opened = openFilterPopover(createHydratedState());
+      const opened = openFilterDialog(createHydratedState());
 
       const state = toggleDraftLibrary(opened, LIBRARY_GAMMA);
 
@@ -328,7 +328,7 @@ describe('games-filter-state', () => {
     });
 
     it('ignores draft toggle for blank library names', () => {
-      const opened = openFilterPopover(createHydratedState());
+      const opened = openFilterDialog(createHydratedState());
 
       const state = toggleDraftLibrary(opened, '   ');
 
@@ -337,7 +337,7 @@ describe('games-filter-state', () => {
     });
 
     it('normalizes library name before toggling draft selection', () => {
-      const opened = openFilterPopover(createHydratedState());
+      const opened = openFilterDialog(createHydratedState());
 
       const state = toggleDraftLibrary(opened, `  ${LIBRARY_BETA}  `);
 
@@ -345,7 +345,7 @@ describe('games-filter-state', () => {
     });
 
     it('toggles available draft libraries', () => {
-      const opened = openFilterPopover(createHydratedState());
+      const opened = openFilterDialog(createHydratedState());
 
       const unchecked = toggleDraftLibrary(opened, LIBRARY_BETA);
       const checkedAgain = toggleDraftLibrary(unchecked, LIBRARY_BETA);
@@ -357,19 +357,18 @@ describe('games-filter-state', () => {
     it('restores catalog order when toggling a library back on', () => {
       const hydrated = createHydratedState({
         persisted: createPersistedFilters({
-          libraries: [LIBRARY_ALPHA, LIBRARY_GAMMA],
+          libraries: [LIBRARY_GAMMA, LIBRARY_ALPHA],
         }),
         availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
       });
-      const opened = openFilterPopover(hydrated);
-
+      const opened = openFilterDialog(hydrated);
       const state = toggleDraftLibrary(opened, LIBRARY_BETA);
 
       expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA]);
     });
 
     it('replaces draft libraries with normalized available values in catalog order', () => {
-      const opened = openFilterPopover(
+      const opened = openFilterDialog(
         createHydratedState({
           availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
         }),
@@ -387,20 +386,20 @@ describe('games-filter-state', () => {
     });
 
     it('returns the same state when reordered draft libraries match the same catalog selection', () => {
-      const opened = openFilterPopover(createHydratedState());
+      const opened = openFilterDialog(createHydratedState());
 
       const state = setDraftLibraries(opened, [LIBRARY_BETA, ` ${LIBRARY_ALPHA} `, LIBRARY_BETA]);
 
       expect(state).toBe(opened);
     });
 
-    it('applies draft selection and closes popover', () => {
-      const opened = openFilterPopover(createHydratedState());
+    it('applies draft selection and closes dialog', () => {
+      const opened = openFilterDialog(createHydratedState());
       const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
 
       const state = applyDraftFilters(draftChanged);
 
-      expect(state.isPopoverOpen).toBe(false);
+      expect(state.isDialogOpen).toBe(false);
       expectSelectedLibraries(state, [LIBRARY_ALPHA]);
     });
 
@@ -410,17 +409,17 @@ describe('games-filter-state', () => {
       });
 
       const stateWithStaleDraft: GamesFilterState = {
-        ...openFilterPopover(hydrated),
+        ...openFilterDialog(hydrated),
         draftLibraries: [LIBRARY_ALPHA, MISSING_LIBRARY],
       };
 
       const state = applyDraftFilters(stateWithStaleDraft);
 
-      expect(state.isPopoverOpen).toBe(false);
+      expect(state.isDialogOpen).toBe(false);
       expectSelectedLibraries(state, [LIBRARY_ALPHA]);
     });
 
-    it('returns the same state when applying clean draft while popover is already closed', () => {
+    it('returns the same state when applying clean draft while dialog is already closed', () => {
       const hydrated = createHydratedState();
 
       const state = applyDraftFilters(hydrated);
@@ -512,7 +511,7 @@ describe('games-filter-state', () => {
       const inFlightSnapshot = createPersistedSnapshot(hydrated);
 
       const changed = applyDraftFilters(
-        toggleDraftLibrary(openFilterPopover(hydrated), LIBRARY_BETA),
+        toggleDraftLibrary(openFilterDialog(hydrated), LIBRARY_BETA),
       );
 
       expect(isPersistedSnapshotStillCurrent(hydrated, inFlightSnapshot)).toBe(true);
