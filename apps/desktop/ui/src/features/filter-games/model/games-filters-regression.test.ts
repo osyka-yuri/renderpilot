@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialGamesFilterState,
   hydrateGamesFilterState,
-  withAvailableLibraries,
+  withAvailableCatalogFilters,
 } from './games-filter-state';
 import type { PersistedGamesFilters } from './filter-persistence';
 
-type AvailableLibraries = Parameters<typeof hydrateGamesFilterState>[2];
+type AvailableLibraries = readonly string[];
 type GamesFilterState = ReturnType<typeof hydrateGamesFilterState>;
 
 const regressionLibraryCatalog = ['LibraryAlpha', 'LibraryBeta'] as const;
@@ -19,6 +19,7 @@ const createPersistedFilters = (
   overrides: Partial<PersistedGamesFilters> = {},
 ): PersistedGamesFilters => ({
   libraries: [],
+  launchers: [],
   searchQuery: '',
   ...overrides,
 });
@@ -27,7 +28,12 @@ const hydrateFilters = (
   persistedFilters: PersistedGamesFilters | null,
   availableLibraries: AvailableLibraries = createAvailableLibraries(),
 ): GamesFilterState =>
-  hydrateGamesFilterState(createInitialGamesFilterState(), persistedFilters, availableLibraries);
+  hydrateGamesFilterState(
+    createInitialGamesFilterState(),
+    persistedFilters,
+    availableLibraries,
+    [],
+  );
 
 const expectSelectedLibraries = (
   state: GamesFilterState,
@@ -55,14 +61,22 @@ describe('games filters regressions', () => {
 
   it('does not produce phantom filtering when libraries appear later', () => {
     const firstMount = hydrateFilters(null, createEmptyLibraries());
-    const afterCatalogLoaded = withAvailableLibraries(firstMount, createAvailableLibraries());
+    const afterCatalogLoaded = withAvailableCatalogFilters(
+      firstMount,
+      createAvailableLibraries(),
+      [],
+    );
 
     expectSelectedLibraries(afterCatalogLoaded, createAvailableLibraries());
   });
 
   it('does not hide games when catalog temporarily becomes unknown', () => {
     const hydrated = hydrateFilters(null);
-    const afterCatalogLost = withAvailableLibraries(hydrated, createEmptyLibraries());
+    const afterCatalogLost = withAvailableCatalogFilters(
+      hydrated,
+      createEmptyLibraries(),
+      [],
+    );
 
     expectSelectedLibraries(afterCatalogLost, createEmptyLibraries());
   });
@@ -76,7 +90,11 @@ describe('games filters regressions', () => {
 
     expect(firstHydrate.appliedLibraries).toEqual([]);
 
-    const afterCatalogLoaded = withAvailableLibraries(firstHydrate, createAvailableLibraries());
+    const afterCatalogLoaded = withAvailableCatalogFilters(
+      firstHydrate,
+      createAvailableLibraries(),
+      [],
+    );
 
     expectSelectedLibraries(afterCatalogLoaded, ['LibraryAlpha']);
   });

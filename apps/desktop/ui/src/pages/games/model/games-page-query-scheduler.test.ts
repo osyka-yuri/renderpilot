@@ -66,6 +66,7 @@ function makeResult(
   return {
     total: overrides.items.length,
     availableLibraries: [],
+    availableLaunchers: [],
     queryFingerprint: 'fp',
     ...overrides,
   };
@@ -92,6 +93,7 @@ function createReadySnapshot(
     version: number;
     searchQuery: string;
     selectedLibraries: readonly string[];
+    selectedLaunchers: readonly string[];
   }> = {},
 ): GamesQuerySnapshot {
   const snapshot = scheduler.createGamesQuerySnapshot(
@@ -100,6 +102,7 @@ function createReadySnapshot(
     true,
     overrides.searchQuery ?? '',
     overrides.selectedLibraries ?? [],
+    overrides.selectedLaunchers ?? [],
   );
 
   expect(snapshot).not.toBeNull();
@@ -114,16 +117,17 @@ function createReadySnapshot(
 describe('createGamesPageQueryScheduler', () => {
   describe('buildGameCardsQueryKey', () => {
     it('builds a stable key from search query and selected libraries', () => {
-      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y']);
+      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y'], []);
 
       expect(JSON.parse(queryKey)).toEqual({
         searchQuery: 'abc',
         selectedLibraries: ['x', 'y'],
+        selectedLaunchers: [],
       });
 
-      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y']));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z']));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('changed', ['x', 'y']));
+      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], []));
+      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z'], []));
+      expect(queryKey).not.toBe(buildGameCardsQueryKey('changed', ['x', 'y'], []));
     });
   });
 
@@ -150,7 +154,7 @@ describe('createGamesPageQueryScheduler', () => {
       });
 
       expect(
-        scheduler.createGamesQuerySnapshot(1, filtersReady, preferenceLoaded, '', []),
+        scheduler.createGamesQuerySnapshot(1, filtersReady, preferenceLoaded, '', [], []),
       ).toBeNull();
     });
 
@@ -215,6 +219,7 @@ describe('createGamesPageQueryScheduler', () => {
       expect(queryGameCardsFn).toHaveBeenCalledWith({
         searchQuery: 'doom',
         selectedLibraries: ['Steam'],
+        selectedLaunchers: [],
         sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
         page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
       });

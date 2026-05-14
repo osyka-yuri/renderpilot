@@ -208,6 +208,20 @@ export function collectAvailableLibraries(cards: readonly GameSummary[]): string
   return [...values].sort((left, right) => left.localeCompare(right));
 }
 
+export function collectAvailableLaunchers(cards: readonly GameSummary[]): string[] {
+  const values = new Set<string>();
+
+  for (const card of cards) {
+    const trimmed = card.launcher.trim();
+
+    if (trimmed.length > 0) {
+      values.add(trimmed);
+    }
+  }
+
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
 export function compareCards(
   left: GameSummary,
   right: GameSummary,

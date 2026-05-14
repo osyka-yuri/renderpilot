@@ -95,6 +95,7 @@ export function normalizeGameCardsQuery(value: unknown): GameCardsQuery {
   return {
     searchQuery: trimToEmpty(requireString(query.searchQuery, 'query.searchQuery')),
     selectedLibraries: normalizeStringList(query.selectedLibraries, 'query.selectedLibraries'),
+    selectedLaunchers: normalizeStringList(query.selectedLaunchers, 'query.selectedLaunchers'),
     sort: {
       field: requireSortField(sort.field),
       direction: requireSortDirection(sort.direction),

@@ -82,6 +82,7 @@ export type GameCardsSortDirection = 'asc' | 'desc';
 export type GameCardsQuery = {
   searchQuery: string;
   selectedLibraries: string[];
+  selectedLaunchers: string[];
   sort: {
     field: GameCardsSortField;
     direction: GameCardsSortDirection;
@@ -96,6 +97,7 @@ export type GameCardsResult = {
   items: GameSummary[];
   total: number;
   availableLibraries: string[];
+  availableLaunchers: string[];
   queryFingerprint: string;
 };
 

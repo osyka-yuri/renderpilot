@@ -6,6 +6,7 @@ import {
   createInitialGamesFilterState,
   openFilterDialog,
   setDraftLibraries,
+  setDraftLaunchers,
   type PersistedGamesFilters,
   withSearchQuery,
 } from './index-internal';
@@ -16,11 +17,13 @@ import {
   syncGamesFilterState,
 } from './games-filter-controller';
 import { buildLibraryFilterOptions, groupLibraryFilterOptions } from './library-filter-options';
+import { buildLauncherFilterOptions } from './launcher-filter-options';
 
 export type GamesFiltersModel = ReturnType<typeof createGamesFiltersModel>;
 
 export type GamesFiltersModelInput = {
   getAvailableLibraries: () => readonly string[];
+  getAvailableLaunchers: () => readonly string[];
 };
 
 export function createGamesFiltersModel(input: GamesFiltersModelInput) {
@@ -39,11 +42,15 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
 
   const groupedLibraryFilterOptions = $derived(groupLibraryFilterOptions(libraryFilterOptions));
 
+  const launcherFilterOptions = $derived(buildLauncherFilterOptions(input.getAvailableLaunchers()));
+
   const hasFilterIndicator = $derived(
     checkHasFilterIndicator(
       filtersState.searchQuery,
       filtersState.appliedLibraries,
       input.getAvailableLibraries(),
+      filtersState.appliedLaunchers,
+      input.getAvailableLaunchers(),
     ),
   );
 
@@ -53,6 +60,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
       filterPreferenceLoaded,
       persistedFilters,
       input.getAvailableLibraries(),
+      input.getAvailableLaunchers(),
     );
 
     if (syncResult.state !== filtersState) {
@@ -151,6 +159,10 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     filtersState = setDraftLibraries(filtersState, nextLibraries);
   }
 
+  function handleDraftLaunchersChange(nextLaunchers: readonly string[]): void {
+    filtersState = setDraftLaunchers(filtersState, nextLaunchers);
+  }
+
   function setSearchQuery(nextValue: string): void {
     const nextState = withSearchQuery(filtersState, nextValue);
 
@@ -183,6 +195,9 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     get groupedLibraryFilterOptions() {
       return groupedLibraryFilterOptions;
     },
+    get launcherFilterOptions() {
+      return launcherFilterOptions;
+    },
     get hasFilterIndicator() {
       return hasFilterIndicator;
     },
@@ -192,6 +207,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     cancelFilterSelection,
     toggleFiltersDialog,
     handleDraftLibrariesChange,
+    handleDraftLaunchersChange,
     setSearchQuery,
     flushSearchPersist,
     dispose,

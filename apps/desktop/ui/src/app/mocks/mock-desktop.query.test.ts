@@ -16,6 +16,7 @@ describe('mockQueryGameCards parity', () => {
     const baseline = await mockQueryGameCards({
       searchQuery: '',
       selectedLibraries: [],
+      selectedLaunchers: [],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 100, offset: 0 },
     });
@@ -26,6 +27,7 @@ describe('mockQueryGameCards parity', () => {
     const filtered = await mockQueryGameCards({
       searchQuery: '',
       selectedLibraries: [selectedLibrary],
+      selectedLaunchers: [],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 1, offset: 0 },
     });
@@ -39,6 +41,7 @@ describe('mockQueryGameCards parity', () => {
     const left = await mockQueryGameCards({
       searchQuery: '  cyber  ',
       selectedLibraries: [' dlss_super_resolution ', 'dlss_super_resolution'],
+      selectedLaunchers: [],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });
@@ -46,6 +49,7 @@ describe('mockQueryGameCards parity', () => {
     const right = await mockQueryGameCards({
       searchQuery: 'cyber',
       selectedLibraries: ['dlss_super_resolution'],
+      selectedLaunchers: [],
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });

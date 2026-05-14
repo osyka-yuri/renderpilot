@@ -1,5 +1,5 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import { hasPartialLibrarySelection } from '@entities/game';
+import { hasPartialLibrarySelection, hasPartialLauncherSelection } from '@entities/game';
 import { getCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {
   createPersistedSnapshot,
@@ -7,7 +7,7 @@ import {
   parsePersistedGamesFilters,
   type GamesFilterState,
   type PersistedGamesFilters,
-  withAvailableLibraries,
+  withAvailableCatalogFilters,
 } from './index-internal';
 
 export type GamesFilterSyncResult = {
@@ -24,19 +24,24 @@ export function syncGamesFilterState(
   state: GamesFilterState,
   preferenceLoaded: boolean,
   nextPersisted: PersistedGamesFilters | null,
-  nextAvailable: readonly string[],
+  nextAvailableLibraries: readonly string[],
+  nextAvailableLaunchers: readonly string[],
 ): GamesFilterSyncResult {
   const shouldHydrate = preferenceLoaded && !state.ready;
 
   const hydratedState = shouldHydrate
-    ? hydrateGamesFilterState(state, nextPersisted, nextAvailable)
+    ? hydrateGamesFilterState(state, nextPersisted, nextAvailableLibraries, nextAvailableLaunchers)
     : state;
 
-  const nextState = withAvailableLibraries(hydratedState, nextAvailable);
+  const nextState = withAvailableCatalogFilters(
+    hydratedState,
+    nextAvailableLibraries,
+    nextAvailableLaunchers,
+  );
 
   return {
     state: nextState,
-    didAdjustApplied: hasAppliedLibrariesChanged(state, nextState),
+    didAdjustApplied: hasAppliedFiltersChanged(state, nextState),
   };
 }
 
@@ -81,18 +86,24 @@ export function hasFilterIndicator(
   searchQuery: string,
   appliedLibraries: readonly string[],
   availableLibraries: readonly string[],
+  appliedLaunchers: readonly string[],
+  availableLaunchers: readonly string[],
 ): boolean {
   return (
     searchQuery.trim().length > 0 ||
-    hasPartialLibrarySelection(appliedLibraries, availableLibraries)
+    hasPartialLibrarySelection(appliedLibraries, availableLibraries) ||
+    hasPartialLauncherSelection(appliedLaunchers, availableLaunchers)
   );
 }
 
-function hasAppliedLibrariesChanged(
+function hasAppliedFiltersChanged(
   previousState: GamesFilterState,
   nextState: GamesFilterState,
 ): boolean {
-  return !shallowStringArrayEqual(previousState.appliedLibraries, nextState.appliedLibraries);
+  return (
+    !shallowStringArrayEqual(previousState.appliedLibraries, nextState.appliedLibraries) ||
+    !shallowStringArrayEqual(previousState.appliedLaunchers, nextState.appliedLaunchers)
+  );
 }
 
 function canPersistAvailability(state: GamesFilterState, filterPreferenceLoaded: boolean): boolean {

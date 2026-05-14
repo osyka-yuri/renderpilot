@@ -1,22 +1,20 @@
 <script lang="ts">
-  import FunnelIcon from '@lucide/svelte/icons/funnel';
   import { onMount } from 'svelte';
 
   import { getDashboardStats, type GameSummary } from '@entities/game';
-  import { cn } from '@shared/classnames';
   import type { VoidHandler } from '@shared/callbacks';
   import type { GameSelectionHandler } from '@entities/game';
-  import { Input, Dialog, DialogContent, DialogTrigger, buttonVariants } from '@shared/ui';
+  import { Input } from '@shared/ui';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
-  import { GamesLibraryFilterDialog } from '@features/filter-games';
+  import { GamesFilterDialog } from '@features/filter-games';
   import { SCAN_LABEL, SCANNING_LABEL } from '../model/games-page-constants';
   import { createGamesPageModel } from '../model/create-games-page-model.svelte';
 
   const SEARCH_LABEL = 'Search games';
   const SEARCH_PLACEHOLDER = 'Search games';
-  const FILTERS_BUTTON_LABEL = 'Open library filters';
-  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open library filters, filters active';
+  const FILTERS_BUTTON_LABEL = 'Open filters';
+  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open filters, filters active';
 
   type Props = {
     games?: GameSummary[];
@@ -108,14 +106,11 @@
   {:else}
     <div class="grid gap-2 px-1">
       <div
-        class={cn('flex items-center justify-end gap-2', 'max-md:justify-stretch')}
+        class="flex items-center justify-end gap-2 max-md:justify-stretch"
         role="search"
       >
         <label
-          class={cn(
-            'block max-w-88 min-w-48 shrink grow basis-88',
-            'max-md:max-w-none max-md:min-w-0',
-          )}
+          class="block max-w-88 min-w-48 shrink grow basis-88 max-md:max-w-none max-md:min-w-0"
         >
           <span class="sr-only">{SEARCH_LABEL}</span>
           <Input
@@ -126,39 +121,20 @@
           />
         </label>
 
-        <Dialog
+        <GamesFilterDialog
           open={model.filtersState.isDialogOpen}
           onOpenChange={model.handleDialogOpenChange}
-        >
-          <div class="relative inline-flex flex-none">
-            <DialogTrigger
-              class={buttonVariants({ variant: 'secondary', size: 'icon-sm' })}
-              aria-label={filtersButtonLabel}
-            >
-              <FunnelIcon class="size-4.5" aria-hidden="true" />
-            </DialogTrigger>
-
-            {#if model.hasFilterIndicator}
-              <span
-                class={cn(
-                  'pointer-events-none absolute -top-0.5 -right-0.5 size-2 rounded-full',
-                  'bg-accent ring-2 ring-background',
-                )}
-                aria-hidden="true"
-              ></span>
-            {/if}
-          </div>
-
-          <DialogContent class="sm:max-w-lg">
-            <GamesLibraryFilterDialog
-              groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
-              draftLibraries={model.filtersState.draftLibraries}
-              onDraftLibrariesChange={model.handleDraftLibrariesChange}
-              onCancel={model.cancelFilterSelection}
-              onApply={model.applyFilterSelection}
-            />
-          </DialogContent>
-        </Dialog>
+          hasFilterIndicator={model.hasFilterIndicator}
+          filtersButtonLabel={filtersButtonLabel}
+          groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
+          draftLibraries={model.filtersState.draftLibraries}
+          onDraftLibrariesChange={model.handleDraftLibrariesChange}
+          launcherFilterOptions={model.launcherFilterOptions}
+          draftLaunchers={model.filtersState.draftLaunchers}
+          onDraftLaunchersChange={model.handleDraftLaunchersChange}
+          onCancel={model.cancelFilterSelection}
+          onApply={model.applyFilterSelection}
+        />
       </div>
     </div>
 

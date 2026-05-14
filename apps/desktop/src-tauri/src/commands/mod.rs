@@ -165,6 +165,9 @@ pub struct QueryGameCardsDto {
     #[serde(default)]
     selected_libraries: Vec<String>,
 
+    #[serde(default)]
+    selected_launchers: Vec<String>,
+
     sort: GameCardsSortDto,
     page: GameCardsPageDto,
 }
@@ -172,6 +175,7 @@ pub struct QueryGameCardsDto {
 struct QueryGameCardsArgs {
     search_query: String,
     selected_libraries: Vec<String>,
+    selected_launchers: Vec<String>,
     sort_field: String,
     sort_direction: String,
     limit: i64,
@@ -182,8 +186,10 @@ impl QueryGameCardsDto {
     fn into_desktop_args(self) -> Result<QueryGameCardsArgs, CommandError> {
         let search_query = trim_string(self.search_query);
         let selected_libraries = trim_string_vec(self.selected_libraries);
+        let selected_launchers = trim_string_vec(self.selected_launchers);
 
         reject_empty_items("selected_libraries", &selected_libraries)?;
+        reject_empty_items("selected_launchers", &selected_launchers)?;
 
         let (sort_field, sort_direction) = self.sort.into_cli_values();
         let (limit, offset) = self.page.into_cli_values()?;
@@ -191,6 +197,7 @@ impl QueryGameCardsDto {
         Ok(QueryGameCardsArgs {
             search_query,
             selected_libraries,
+            selected_launchers,
             sort_field,
             sort_direction,
             limit,
@@ -204,6 +211,7 @@ pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
     let QueryGameCardsArgs {
         search_query,
         selected_libraries,
+        selected_launchers,
         sort_field,
         sort_direction,
         limit,
@@ -214,6 +222,7 @@ pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
         desktop::query_game_cards(
             search_query,
             selected_libraries,
+            selected_launchers,
             sort_field,
             sort_direction,
             limit,

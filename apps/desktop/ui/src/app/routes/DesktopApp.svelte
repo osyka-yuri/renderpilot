@@ -131,6 +131,7 @@
     const result = await queryGameCards({
       searchQuery: '',
       selectedLibraries: [],
+      selectedLaunchers: [],
       sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
       page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
     });

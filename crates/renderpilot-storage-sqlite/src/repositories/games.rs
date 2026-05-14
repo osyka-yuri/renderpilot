@@ -5,7 +5,10 @@ use rusqlite::{named_params, Connection, OptionalExtension, Statement, Transacti
 use crate::{error::storage_error, mapping, sqlite_clock};
 
 use super::{
-    catalog_select_sql::{FIND_GAME_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL, LIST_GAMES_SQL},
+    catalog_select_sql::{
+        FIND_GAME_SQL, LIST_DISTINCT_GAME_LAUNCHERS_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL,
+        LIST_GAMES_SQL,
+    },
     game_covers::{find_cover_in_connection, DeletedGameInfo},
     row_mapping::game_from_row,
     SqliteStorage,
@@ -83,6 +86,13 @@ impl SqliteStorage {
     /// Lists distinct library values currently observed in `components`.
     pub fn list_distinct_game_libraries(&self) -> AppResult<Vec<String>> {
         self.query_list(LIST_DISTINCT_GAME_LIBRARIES_SQL, [], |row| {
+            Ok(Ok(row.get::<_, String>(0)?))
+        })
+    }
+
+    /// Lists distinct launcher values currently observed in `games`.
+    pub fn list_distinct_game_launchers(&self) -> AppResult<Vec<String>> {
+        self.query_list(LIST_DISTINCT_GAME_LAUNCHERS_SQL, [], |row| {
             Ok(Ok(row.get::<_, String>(0)?))
         })
     }

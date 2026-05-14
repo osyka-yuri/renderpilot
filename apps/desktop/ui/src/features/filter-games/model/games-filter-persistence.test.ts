@@ -46,10 +46,12 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 function createReadyState(searchQuery?: string): GamesFilterState {
-  const readyState = hydrateGamesFilterState(createInitialGamesFilterState(), null, [
-    'LibraryAlpha',
-    'LibraryBeta',
-  ]);
+  const readyState = hydrateGamesFilterState(
+    createInitialGamesFilterState(),
+    null,
+    ['LibraryAlpha', 'LibraryBeta'],
+    [],
+  );
 
   return searchQuery === undefined ? readyState : withSearchQuery(readyState, searchQuery);
 }

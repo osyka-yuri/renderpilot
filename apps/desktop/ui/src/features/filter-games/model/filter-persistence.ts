@@ -1,11 +1,12 @@
 import { isUnknownRecord, safeJsonParse } from '@shared/validation';
 import { normalizeUniqueTrimmedStringsFromUnknown, trimToEmpty } from '@shared/text';
-import { normalizeLibraryValues } from '@entities/game';
+import { normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
 
 const EMPTY_SEARCH_QUERY = '';
 
 export type PersistedGamesFilters = {
   libraries: string[];
+  launchers: string[];
   searchQuery: string;
 };
 
@@ -18,6 +19,7 @@ export function normalizePersistedGamesFilters(
 ): PersistedGamesFilters {
   return {
     libraries: normalizeLibraryValues(filters.libraries),
+    launchers: normalizeLauncherValues(filters.launchers),
     searchQuery: normalizeSearchQuery(filters.searchQuery),
   };
 }
@@ -40,6 +42,7 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
   if (Array.isArray(value)) {
     return {
       libraries: normalizeUniqueTrimmedStringsFromUnknown(value),
+      launchers: [],
       searchQuery: EMPTY_SEARCH_QUERY,
     };
   }
@@ -49,12 +52,13 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
   }
 
   return {
-    libraries: readPersistedLibraries(value.libraries),
+    libraries: readPersistedStringList(value.libraries),
+    launchers: readPersistedStringList(value.launchers),
     searchQuery: readPersistedSearchQuery(value.searchQuery),
   };
 }
 
-function readPersistedLibraries(value: unknown): string[] {
+function readPersistedStringList(value: unknown): string[] {
   return Array.isArray(value) ? normalizeUniqueTrimmedStringsFromUnknown(value) : [];
 }
 

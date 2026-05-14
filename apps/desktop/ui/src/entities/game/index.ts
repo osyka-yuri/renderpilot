@@ -11,6 +11,18 @@ export {
   hasPartialLibrarySelection,
 } from './model/library-filters';
 
+export {
+  ALL_KNOWN_LAUNCHERS,
+  normalizeLauncherValues,
+  extractAvailableLaunchersFromCards,
+  hasPartialLauncherSelection,
+} from './model/launcher-filters';
+
+export {
+  LAUNCHER_DISPLAY_LABELS,
+  getLauncherDisplayLabel,
+} from './model/launcher-labels';
+
 export { LAUNCHER_STEAM, LAUNCHER_GOG } from './model/types';
 
 export type {

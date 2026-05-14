@@ -75,6 +75,13 @@ pub(super) const LIST_DISTINCT_GAME_LIBRARIES_SQL: &str = "
     ORDER BY components.library
 ";
 
+pub(super) const LIST_DISTINCT_GAME_LAUNCHERS_SQL: &str = "
+    SELECT DISTINCT games.launcher
+    FROM games
+    WHERE trim(games.launcher) <> ''
+    ORDER BY games.launcher
+";
+
 pub(super) const LIST_COMPONENTS_FOR_GAME_SQL: &str = concat!(
     "
     SELECT

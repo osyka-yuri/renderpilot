@@ -9,10 +9,12 @@ import { createRequestChannel, type RequestChannel } from '@shared/requests';
 export function buildGameCardsQueryKey(
   searchQuery: string,
   selectedLibraries: readonly string[],
+  selectedLaunchers: readonly string[],
 ): string {
   return JSON.stringify({
     searchQuery,
     selectedLibraries,
+    selectedLaunchers,
   });
 }
 
@@ -20,6 +22,7 @@ export type GamesQuerySnapshot = {
   requestKey: string;
   searchQuery: string;
   selectedLibraries: string[];
+  selectedLaunchers: string[];
 };
 
 export type GamesQueryResultSinks = {
@@ -37,8 +40,9 @@ function createRequestKey(
   version: number,
   searchQuery: string,
   selectedLibraries: readonly string[],
+  selectedLaunchers: readonly string[],
 ) {
-  return `${version}:${buildGameCardsQueryKey(searchQuery, selectedLibraries)}`;
+  return `${version}:${buildGameCardsQueryKey(searchQuery, selectedLibraries, selectedLaunchers)}`;
 }
 
 export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
@@ -54,6 +58,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
     preferenceLoaded: boolean,
     searchQuery: string,
     selectedLibraries: readonly string[],
+    selectedLaunchers: readonly string[],
   ): GamesQuerySnapshot | null {
     if (!filtersReady || !preferenceLoaded) {
       return null;
@@ -61,11 +66,18 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
 
     const normalizedSearchQuery = searchQuery.trim();
     const normalizedSelectedLibraries = [...selectedLibraries];
+    const normalizedSelectedLaunchers = [...selectedLaunchers];
 
     return {
-      requestKey: createRequestKey(version, normalizedSearchQuery, normalizedSelectedLibraries),
+      requestKey: createRequestKey(
+        version,
+        normalizedSearchQuery,
+        normalizedSelectedLibraries,
+        normalizedSelectedLaunchers,
+      ),
       searchQuery: normalizedSearchQuery,
       selectedLibraries: normalizedSelectedLibraries,
+      selectedLaunchers: normalizedSelectedLaunchers,
     };
   }
 
@@ -89,6 +101,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
       const result = await fetchCards({
         searchQuery: snapshot.searchQuery,
         selectedLibraries: snapshot.selectedLibraries,
+        selectedLaunchers: snapshot.selectedLaunchers,
         sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
         page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
       });

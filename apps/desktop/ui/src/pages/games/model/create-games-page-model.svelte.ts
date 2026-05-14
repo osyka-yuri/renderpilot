@@ -1,5 +1,9 @@
 import type { GameSummary, GameCardMenuHandle } from '@entities/game';
-import { extractAvailableLibrariesFromCards, toGameCardViewModel } from '@entities/game';
+import {
+  ALL_KNOWN_LAUNCHERS,
+  extractAvailableLibrariesFromCards,
+  toGameCardViewModel,
+} from '@entities/game';
 import { createGamesFiltersModel } from '@features/filter-games';
 import {
   isCoverOperationBusy as isCoverOperationBusyState,
@@ -29,6 +33,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   const queryAvailableLibraries = $derived(extractAvailableLibrariesFromCards(input.getGames()));
   const filtersModel = createGamesFiltersModel({
     getAvailableLibraries: () => queryAvailableLibraries,
+    getAvailableLaunchers: () => ALL_KNOWN_LAUNCHERS,
   });
   const gameItems = $derived(queriedGames.map((game) => toGameCardViewModel(game)));
 
@@ -53,6 +58,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
       filtersModel.filtersState.ready,
       filtersModel.filtersState.searchQuery,
       filtersModel.filtersState.appliedLibraries,
+      filtersModel.filtersState.appliedLaunchers,
     );
 
     if (querySnapshot !== null && scheduler.canRunGamesQuery(querySnapshot.requestKey)) {
@@ -134,6 +140,9 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     get groupedLibraryFilterOptions() {
       return filtersModel.groupedLibraryFilterOptions;
     },
+    get launcherFilterOptions() {
+      return filtersModel.launcherFilterOptions;
+    },
     get gameItems() {
       return gameItems;
     },
@@ -154,6 +163,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     cancelFilterSelection: filtersModel.cancelFilterSelection,
     toggleFiltersDialog: filtersModel.toggleFiltersDialog,
     handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
+    handleDraftLaunchersChange: filtersModel.handleDraftLaunchersChange,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,
     pickCover: coverCommandRunner.pickCover,

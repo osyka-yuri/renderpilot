@@ -16,8 +16,8 @@
   const SEARCH_LABEL = 'Search games';
   const SEARCH_PLACEHOLDER = 'Search games';
 
-  const FILTERS_BUTTON_LABEL = 'Open library filters';
-  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open library filters, filters active';
+  const FILTERS_BUTTON_LABEL = 'Open filters';
+  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open filters, filters active';
 
   const {
     searchQuery = '',

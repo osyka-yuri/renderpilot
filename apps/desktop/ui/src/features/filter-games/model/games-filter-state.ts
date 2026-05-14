@@ -1,6 +1,14 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import { intersectLibraries, normalizeLibraryValues } from '@entities/game';
+import { intersectLibraries, normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
 import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filter-persistence';
+import {
+  canonicalizeSelection,
+  createAvailableSliceUpdate,
+  createHydratedSlice,
+  applySliceUpdate,
+  type FilterSlice,
+  type FilterSliceUpdate,
+} from './filter-slice';
 
 export type GamesFilterState = {
   ready: boolean;
@@ -11,15 +19,13 @@ export type GamesFilterState = {
   deferSelectAllLibraries: boolean;
   pendingPersistedLibraries: string[] | null;
   availableLibraries: string[];
+  appliedLaunchers: string[];
+  draftLaunchers: string[];
+  deferSelectAllLaunchers: boolean;
+  pendingPersistedLaunchers: string[] | null;
+  availableLaunchers: string[];
   lastPersistedSnapshot: string;
 };
-
-type LibraryFilterState = Pick<
-  GamesFilterState,
-  'appliedLibraries' | 'draftLibraries' | 'deferSelectAllLibraries' | 'pendingPersistedLibraries'
->;
-
-type LibraryFilterUpdate = Partial<LibraryFilterState>;
 
 const EMPTY_SEARCH_QUERY = '';
 const EMPTY_PERSISTED_SNAPSHOT = '';
@@ -34,6 +40,11 @@ export function createInitialGamesFilterState(): GamesFilterState {
     deferSelectAllLibraries: false,
     pendingPersistedLibraries: null,
     availableLibraries: [],
+    appliedLaunchers: [],
+    draftLaunchers: [],
+    deferSelectAllLaunchers: false,
+    pendingPersistedLaunchers: null,
+    availableLaunchers: [],
     lastPersistedSnapshot: EMPTY_PERSISTED_SNAPSHOT,
   };
 }
@@ -42,15 +53,29 @@ export function hydrateGamesFilterState(
   state: GamesFilterState,
   persisted: PersistedGamesFilters | null,
   availableLibraries: readonly string[],
+  availableLaunchers: readonly string[],
 ): GamesFilterState {
-  const availableLibrariesSnapshot = copyLibraries(availableLibraries);
+  const availableLibrariesSnapshot = copyStringArray(availableLibraries);
+  const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
   const hydratedState: GamesFilterState = {
     ...state,
     ready: true,
     searchQuery: persisted?.searchQuery ?? EMPTY_SEARCH_QUERY,
     availableLibraries: availableLibrariesSnapshot,
-    ...createHydratedLibraryFilters(persisted, availableLibrariesSnapshot),
+    ...createHydratedSliceFilters(
+      persisted?.libraries ?? null,
+      availableLibrariesSnapshot,
+      normalizeLibraryValues,
+      LIBRARY_ADAPTER,
+    ),
+    availableLaunchers: availableLaunchersSnapshot,
+    ...createHydratedSliceFilters(
+      persisted?.launchers ?? null,
+      availableLaunchersSnapshot,
+      normalizeLauncherValues,
+      LAUNCHER_ADAPTER,
+    ),
   };
 
   return {
@@ -59,26 +84,38 @@ export function hydrateGamesFilterState(
   };
 }
 
-export function withAvailableLibraries(
+export function withAvailableCatalogFilters(
   state: GamesFilterState,
   availableLibraries: readonly string[],
+  availableLaunchers: readonly string[],
 ): GamesFilterState {
-  const availableLibrariesSnapshot = copyLibraries(availableLibraries);
-  const stateWithAvailableLibraries = withAvailableLibrariesSnapshot(
-    state,
-    availableLibrariesSnapshot,
-  );
+  const availableLibrariesSnapshot = copyStringArray(availableLibraries);
+  const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
-  if (!stateWithAvailableLibraries.ready) {
-    return stateWithAvailableLibraries;
+  let nextState = withAvailableSnapshot(state, availableLibrariesSnapshot, 'availableLibraries');
+  nextState = withAvailableSnapshot(nextState, availableLaunchersSnapshot, 'availableLaunchers');
+
+  if (!nextState.ready) {
+    return nextState;
   }
 
-  const libraryUpdate = createAvailableLibrariesUpdate(
-    stateWithAvailableLibraries,
+  const libraryUpdate = createAvailableSliceFiltersUpdate(
+    nextState,
     availableLibrariesSnapshot,
+    normalizeLibraryValues,
+    LIBRARY_ADAPTER,
   );
+  nextState = applySliceUpdate(nextState, libraryUpdate);
 
-  return applyLibraryFilterUpdate(stateWithAvailableLibraries, libraryUpdate);
+  const launcherUpdate = createAvailableSliceFiltersUpdate(
+    nextState,
+    availableLaunchersSnapshot,
+    normalizeLauncherValues,
+    LAUNCHER_ADAPTER,
+  );
+  nextState = applySliceUpdate(nextState, launcherUpdate);
+
+  return nextState;
 }
 
 export function withSearchQuery(state: GamesFilterState, searchQuery: string): GamesFilterState {
@@ -95,62 +132,34 @@ export function withSearchQuery(state: GamesFilterState, searchQuery: string): G
 export function openFilterDialog(state: GamesFilterState): GamesFilterState {
   if (
     state.isDialogOpen &&
-    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries)
+    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
+    shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers)
   ) {
     return state;
   }
 
   return {
     ...state,
-    draftLibraries: copyLibraries(state.appliedLibraries),
+    draftLibraries: copyStringArray(state.appliedLibraries),
+    draftLaunchers: copyStringArray(state.appliedLaunchers),
     isDialogOpen: true,
-  };
-}
-
-export function closeFilterDialog(state: GamesFilterState): GamesFilterState {
-  if (!state.isDialogOpen) {
-    return state;
-  }
-
-  return {
-    ...state,
-    isDialogOpen: false,
   };
 }
 
 export function cancelFilterDialog(state: GamesFilterState): GamesFilterState {
   if (
     !state.isDialogOpen &&
-    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries)
+    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
+    shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers)
   ) {
     return state;
   }
 
   return {
     ...state,
-    draftLibraries: copyLibraries(state.appliedLibraries),
+    draftLibraries: copyStringArray(state.appliedLibraries),
+    draftLaunchers: copyStringArray(state.appliedLaunchers),
     isDialogOpen: false,
-  };
-}
-
-export function toggleDraftLibrary(state: GamesFilterState, library: string): GamesFilterState {
-  const normalizedLibrary = normalizeLibraryName(library);
-
-  if (normalizedLibrary === null || !isAvailableLibrary(state, normalizedLibrary)) {
-    return state;
-  }
-
-  const draftLibraries = state.draftLibraries.includes(normalizedLibrary)
-    ? state.draftLibraries.filter((value) => value !== normalizedLibrary)
-    : [...state.draftLibraries, normalizedLibrary];
-  const normalizedDraftLibraries = canonicalizeSelectedLibraries(
-    draftLibraries,
-    state.availableLibraries,
-  );
-
-  return {
-    ...state,
-    draftLibraries: normalizedDraftLibraries,
   };
 }
 
@@ -158,7 +167,7 @@ export function setDraftLibraries(
   state: GamesFilterState,
   libraries: readonly string[],
 ): GamesFilterState {
-  const normalized = canonicalizeSelectedLibraries(libraries, state.availableLibraries);
+  const normalized = canonicalizeLibraries(libraries, state.availableLibraries);
 
   if (shallowStringArrayEqual(state.draftLibraries, normalized)) {
     return state;
@@ -170,16 +179,32 @@ export function setDraftLibraries(
   };
 }
 
+export function setDraftLaunchers(
+  state: GamesFilterState,
+  launchers: readonly string[],
+): GamesFilterState {
+  const normalized = canonicalizeLaunchers(launchers, state.availableLaunchers);
+
+  if (shallowStringArrayEqual(state.draftLaunchers, normalized)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    draftLaunchers: normalized,
+  };
+}
+
 export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
-  const appliedLibraries = canonicalizeSelectedLibraries(
-    state.draftLibraries,
-    state.availableLibraries,
-  );
+  const appliedLibraries = canonicalizeLibraries(state.draftLibraries, state.availableLibraries);
+  const appliedLaunchers = canonicalizeLaunchers(state.draftLaunchers, state.availableLaunchers);
 
   if (
     !state.isDialogOpen &&
     shallowStringArrayEqual(state.appliedLibraries, appliedLibraries) &&
-    shallowStringArrayEqual(state.draftLibraries, appliedLibraries)
+    shallowStringArrayEqual(state.draftLibraries, appliedLibraries) &&
+    shallowStringArrayEqual(state.appliedLaunchers, appliedLaunchers) &&
+    shallowStringArrayEqual(state.draftLaunchers, appliedLaunchers)
   ) {
     return state;
   }
@@ -187,7 +212,9 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
   return {
     ...state,
     appliedLibraries,
-    draftLibraries: copyLibraries(appliedLibraries),
+    draftLibraries: copyStringArray(appliedLibraries),
+    appliedLaunchers,
+    draftLaunchers: copyStringArray(appliedLaunchers),
     isDialogOpen: false,
   };
 }
@@ -195,6 +222,7 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
 export function createPersistedSnapshot(state: GamesFilterState): string {
   return encodePersistedGamesFilters({
     libraries: state.appliedLibraries,
+    launchers: state.appliedLaunchers,
     searchQuery: state.searchQuery,
   });
 }
@@ -224,214 +252,120 @@ export function isPersistedSnapshotStillCurrent(
   return createPersistedSnapshot(state) === snapshot;
 }
 
-function createHydratedLibraryFilters(
-  persisted: PersistedGamesFilters | null,
-  availableLibraries: string[],
-): LibraryFilterState {
-  if (persisted === null) {
-    return createLibraryFiltersWithoutPersistedState(availableLibraries);
+// ---------------------------------------------------------------------------
+// Slice adapters
+// ---------------------------------------------------------------------------
+
+type SliceFieldMapping = {
+  applied: 'appliedLibraries' | 'appliedLaunchers';
+  draft: 'draftLibraries' | 'draftLaunchers';
+  deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllLaunchers';
+  pendingPersisted: 'pendingPersistedLibraries' | 'pendingPersistedLaunchers';
+};
+
+function createSliceAdapter(fields: SliceFieldMapping) {
+  function fromState(state: GamesFilterState): FilterSlice {
+    return {
+      applied: state[fields.applied],
+      draft: state[fields.draft],
+      deferSelectAll: state[fields.deferSelectAll],
+      pendingPersisted: state[fields.pendingPersisted],
+    };
   }
 
-  return createLibraryFiltersFromPersistedState(persisted, availableLibraries);
-}
+  function toStateUpdate(slice: FilterSlice | FilterSliceUpdate): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
 
-function createLibraryFiltersWithoutPersistedState(
-  availableLibraries: string[],
-): LibraryFilterState {
-  if (availableLibraries.length === 0) {
-    return createEmptyLibraryFilters({
-      deferSelectAllLibraries: true,
-      pendingPersistedLibraries: null,
-    });
+    if ('applied' in slice) result[fields.applied] = slice.applied;
+    if ('draft' in slice) result[fields.draft] = slice.draft;
+    if ('deferSelectAll' in slice) result[fields.deferSelectAll] = slice.deferSelectAll;
+    if ('pendingPersisted' in slice) result[fields.pendingPersisted] = slice.pendingPersisted;
+
+    return result;
   }
 
-  return createSelectedLibraryFilters(availableLibraries);
+  return { fromState, toStateUpdate };
 }
 
-function createLibraryFiltersFromPersistedState(
-  persisted: PersistedGamesFilters,
-  availableLibraries: string[],
-): LibraryFilterState {
-  const persistedLibraries = normalizeLibraryValues(persisted.libraries);
+const LIBRARY_ADAPTER = createSliceAdapter({
+  applied: 'appliedLibraries',
+  draft: 'draftLibraries',
+  deferSelectAll: 'deferSelectAllLibraries',
+  pendingPersisted: 'pendingPersistedLibraries',
+});
 
-  if (availableLibraries.length === 0) {
-    return createEmptyLibraryFilters({
-      deferSelectAllLibraries: false,
-      pendingPersistedLibraries: persistedLibraries,
-    });
-  }
+const LAUNCHER_ADAPTER = createSliceAdapter({
+  applied: 'appliedLaunchers',
+  draft: 'draftLaunchers',
+  deferSelectAll: 'deferSelectAllLaunchers',
+  pendingPersisted: 'pendingPersistedLaunchers',
+});
 
-  return createSelectedLibraryFilters(
-    canonicalizeSelectedLibraries(persistedLibraries, availableLibraries),
-  );
+// ---------------------------------------------------------------------------
+// Canonicalization
+// ---------------------------------------------------------------------------
+
+function createCanonicalizeFn(
+  normalizeFn: (values: readonly string[]) => string[],
+): (selected: readonly string[], available: readonly string[]) => string[] {
+  return (selected, available) => canonicalizeSelection(selected, available, normalizeFn, intersectLibraries);
 }
 
-function createAvailableLibrariesUpdate(
+const canonicalizeLibraries = createCanonicalizeFn(normalizeLibraryValues);
+const canonicalizeLaunchers = createCanonicalizeFn(normalizeLauncherValues);
+
+// ---------------------------------------------------------------------------
+// Hydration helpers
+// ---------------------------------------------------------------------------
+
+function createHydratedSliceFilters(
+  persistedValues: readonly string[] | null,
+  availableValues: string[],
+  normalizeFn: (values: readonly string[]) => string[],
+  adapter: ReturnType<typeof createSliceAdapter>,
+): Record<string, unknown> {
+  const canonicalizeFn = createCanonicalizeFn(normalizeFn);
+  const slice = createHydratedSlice(persistedValues, availableValues, normalizeFn, canonicalizeFn);
+
+  return adapter.toStateUpdate(slice);
+}
+
+// ---------------------------------------------------------------------------
+// Availability helpers
+// ---------------------------------------------------------------------------
+
+function createAvailableSliceFiltersUpdate(
   state: GamesFilterState,
-  availableLibraries: string[],
-): LibraryFilterUpdate | null {
-  if (shouldSelectAllDeferredLibraries(state, availableLibraries)) {
-    return createSelectedLibraryFilters(availableLibraries);
-  }
-
-  if (shouldApplyPendingPersistedLibraries(state, availableLibraries)) {
-    return createSelectedLibraryFilters(
-      canonicalizeSelectedLibraries(state.pendingPersistedLibraries, availableLibraries),
-    );
-  }
-
-  if (availableLibraries.length === 0) {
-    return createEmptyAvailableLibrariesUpdate(state);
-  }
-
-  return createNormalizedLibraryUpdate(state, availableLibraries);
-}
-
-function shouldSelectAllDeferredLibraries(
-  state: GamesFilterState,
-  availableLibraries: string[],
-): boolean {
-  return state.deferSelectAllLibraries && availableLibraries.length > 0;
-}
-
-function shouldApplyPendingPersistedLibraries(
-  state: GamesFilterState,
-  availableLibraries: string[],
-): state is GamesFilterState & { pendingPersistedLibraries: string[] } {
-  return state.pendingPersistedLibraries !== null && availableLibraries.length > 0;
-}
-
-function createEmptyAvailableLibrariesUpdate(state: GamesFilterState): LibraryFilterUpdate | null {
-  if (state.appliedLibraries.length === 0 && state.draftLibraries.length === 0) {
-    return null;
-  }
-
-  return {
-    appliedLibraries: [],
-    draftLibraries: [],
-    pendingPersistedLibraries: copyNullableLibraries(state.pendingPersistedLibraries),
-  };
-}
-
-function createNormalizedLibraryUpdate(
-  state: GamesFilterState,
-  availableLibraries: string[],
-): LibraryFilterUpdate | null {
-  const appliedLibraries = canonicalizeSelectedLibraries(
-    state.appliedLibraries,
-    availableLibraries,
-  );
-  const draftLibraries = canonicalizeSelectedLibraries(state.draftLibraries, availableLibraries);
-
-  const hasAppliedLibrariesChanged = !shallowStringArrayEqual(
-    state.appliedLibraries,
-    appliedLibraries,
+  availableValues: string[],
+  normalizeFn: (values: readonly string[]) => string[],
+  adapter: ReturnType<typeof createSliceAdapter>,
+): Record<string, unknown> | null {
+  const canonicalizeFn = createCanonicalizeFn(normalizeFn);
+  const update = createAvailableSliceUpdate(
+    adapter.fromState(state),
+    availableValues,
+    canonicalizeFn,
   );
 
-  const hasDraftLibrariesChanged = !shallowStringArrayEqual(state.draftLibraries, draftLibraries);
-
-  if (!hasAppliedLibrariesChanged && !hasDraftLibrariesChanged) {
-    return null;
-  }
-
-  const update: LibraryFilterUpdate = {};
-
-  if (hasAppliedLibrariesChanged) {
-    update.appliedLibraries = appliedLibraries;
-  }
-
-  if (hasDraftLibrariesChanged) {
-    update.draftLibraries = draftLibraries;
-  }
-
-  return update;
+  return update ? adapter.toStateUpdate(update) : null;
 }
 
-function createSelectedLibraryFilters(libraries: readonly string[]): LibraryFilterState {
-  const appliedLibraries = copyLibraries(libraries);
-
-  return {
-    appliedLibraries,
-    draftLibraries: copyLibraries(appliedLibraries),
-    deferSelectAllLibraries: false,
-    pendingPersistedLibraries: null,
-  };
-}
-
-function createEmptyLibraryFilters({
-  deferSelectAllLibraries,
-  pendingPersistedLibraries,
-}: {
-  deferSelectAllLibraries: boolean;
-  pendingPersistedLibraries: readonly string[] | null;
-}): LibraryFilterState {
-  return {
-    appliedLibraries: [],
-    draftLibraries: [],
-    deferSelectAllLibraries,
-    pendingPersistedLibraries: copyNullableLibraries(pendingPersistedLibraries),
-  };
-}
-
-function applyLibraryFilterUpdate(
+function withAvailableSnapshot(
   state: GamesFilterState,
-  update: LibraryFilterUpdate | null,
+  availableValues: string[],
+  field: 'availableLibraries' | 'availableLaunchers',
 ): GamesFilterState {
-  if (update === null) {
+  if (shallowStringArrayEqual(state[field], availableValues)) {
     return state;
   }
 
-  return {
-    ...state,
-    ...update,
-  };
+  return { ...state, [field]: availableValues };
 }
 
-function withAvailableLibrariesSnapshot(
-  state: GamesFilterState,
-  availableLibraries: string[],
-): GamesFilterState {
-  if (shallowStringArrayEqual(state.availableLibraries, availableLibraries)) {
-    return state;
-  }
+// ---------------------------------------------------------------------------
+// String array copy helpers
+// ---------------------------------------------------------------------------
 
-  return {
-    ...state,
-    availableLibraries,
-  };
-}
-
-function isAvailableLibrary(state: GamesFilterState, library: string): boolean {
-  return state.availableLibraries.includes(library);
-}
-
-function normalizeLibraryName(library: string): string | null {
-  const normalizedLibrary = library.trim();
-
-  return normalizedLibrary.length === 0 ? null : normalizedLibrary;
-}
-
-function canonicalizeSelectedLibraries(
-  selectedLibraries: readonly string[],
-  availableLibraries: readonly string[],
-): string[] {
-  const normalizedAvailableLibraries = normalizeLibraryValues(availableLibraries);
-
-  if (normalizedAvailableLibraries.length === 0) {
-    return [];
-  }
-
-  const selectedLibrarySet = new Set(
-    intersectLibraries(selectedLibraries, normalizedAvailableLibraries),
-  );
-
-  return normalizedAvailableLibraries.filter((library) => selectedLibrarySet.has(library));
-}
-
-function copyLibraries(libraries: readonly string[]): string[] {
-  return [...libraries];
-}
-
-function copyNullableLibraries(libraries: readonly string[] | null): string[] | null {
-  return libraries === null ? null : copyLibraries(libraries);
+function copyStringArray(values: readonly string[]): string[] {
+  return [...values];
 }

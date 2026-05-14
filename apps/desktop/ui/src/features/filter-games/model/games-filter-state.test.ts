@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDraftFilters,
   cancelFilterDialog,
-  closeFilterDialog,
   commitPersistedSnapshot,
   createInitialGamesFilterState,
   createPersistedSnapshot,
@@ -10,8 +9,7 @@ import {
   isPersistedSnapshotStillCurrent,
   openFilterDialog,
   setDraftLibraries,
-  toggleDraftLibrary,
-  withAvailableLibraries,
+  withAvailableCatalogFilters,
   withSearchQuery,
   type GamesFilterState,
 } from './games-filter-state';
@@ -22,9 +20,14 @@ const LIBRARY_BETA = 'LibraryBeta';
 const LIBRARY_GAMMA = 'LibraryGamma';
 const MISSING_LIBRARY = 'Missing';
 
+const LAUNCHER_STEAM = 'Steam';
+const LAUNCHER_GOG = 'Gog';
+
 const EMPTY_AVAILABLE_LIBRARIES = [] as const;
 const DEFAULT_AVAILABLE_LIBRARIES = [LIBRARY_ALPHA, LIBRARY_BETA] as const;
 const EXTENDED_AVAILABLE_LIBRARIES = [LIBRARY_ALPHA, LIBRARY_GAMMA, LIBRARY_BETA] as const;
+
+const DEFAULT_AVAILABLE_LAUNCHERS = [LAUNCHER_STEAM, LAUNCHER_GOG] as const;
 
 describe('games-filter-state', () => {
   describe('createInitialGamesFilterState', () => {
@@ -38,6 +41,11 @@ describe('games-filter-state', () => {
         deferSelectAllLibraries: false,
         pendingPersistedLibraries: null,
         availableLibraries: [],
+        appliedLaunchers: [],
+        draftLaunchers: [],
+        deferSelectAllLaunchers: false,
+        pendingPersistedLaunchers: null,
+        availableLaunchers: [],
         lastPersistedSnapshot: '',
       });
     });
@@ -134,11 +142,11 @@ describe('games-filter-state', () => {
     });
   });
 
-  describe('withAvailableLibraries', () => {
+  describe('withAvailableCatalogFilters', () => {
     it('updates available libraries before state is ready without applying filters', () => {
       const initial = createInitialGamesFilterState();
 
-      const state = withAvailableLibraries(initial, DEFAULT_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(initial, DEFAULT_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state.ready).toBe(false);
       expect(state.availableLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
@@ -149,7 +157,7 @@ describe('games-filter-state', () => {
     it('uses defensive copies when available libraries are updated', () => {
       const availableLibraries = [LIBRARY_ALPHA, LIBRARY_BETA];
 
-      const state = withAvailableLibraries(createInitialGamesFilterState(), availableLibraries);
+      const state = withAvailableCatalogFilters(createInitialGamesFilterState(), availableLibraries, DEFAULT_AVAILABLE_LAUNCHERS);
 
       availableLibraries.push(LIBRARY_GAMMA);
 
@@ -162,7 +170,7 @@ describe('games-filter-state', () => {
         availableLibraries: EMPTY_AVAILABLE_LIBRARIES,
       });
 
-      const state = withAvailableLibraries(hydrated, DEFAULT_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, DEFAULT_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expectSelectedLibraries(state, DEFAULT_AVAILABLE_LIBRARIES);
       expectNoPendingLibrarySelection(state);
@@ -174,7 +182,7 @@ describe('games-filter-state', () => {
         availableLibraries: EMPTY_AVAILABLE_LIBRARIES,
       });
 
-      const state = withAvailableLibraries(hydrated, EMPTY_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, EMPTY_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state).toBe(hydrated);
       expectSelectedLibraries(state, []);
@@ -192,7 +200,7 @@ describe('games-filter-state', () => {
         availableLibraries: EMPTY_AVAILABLE_LIBRARIES,
       });
 
-      const state = withAvailableLibraries(hydrated, DEFAULT_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, DEFAULT_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expectSelectedLibraries(state, [LIBRARY_ALPHA]);
       expectNoPendingLibrarySelection(state);
@@ -208,7 +216,7 @@ describe('games-filter-state', () => {
         availableLibraries: EMPTY_AVAILABLE_LIBRARIES,
       });
 
-      const state = withAvailableLibraries(hydrated, EMPTY_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, EMPTY_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state).toBe(hydrated);
       expectSelectedLibraries(state, []);
@@ -222,9 +230,9 @@ describe('games-filter-state', () => {
       });
 
       const opened = openFilterDialog(hydrated);
-      const draftChanged = toggleDraftLibrary(opened, LIBRARY_ALPHA);
+      const draftChanged = setDraftLibraries(opened, [LIBRARY_BETA, LIBRARY_GAMMA]);
 
-      const state = withAvailableLibraries(draftChanged, [LIBRARY_BETA, LIBRARY_GAMMA]);
+      const state = withAvailableCatalogFilters(draftChanged, [LIBRARY_BETA, LIBRARY_GAMMA], DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state.availableLibraries).toEqual([LIBRARY_BETA, LIBRARY_GAMMA]);
       expectSelectedLibraries(state, [LIBRARY_BETA, LIBRARY_GAMMA]);
@@ -236,9 +244,9 @@ describe('games-filter-state', () => {
       });
 
       const opened = openFilterDialog(hydrated);
-      const draftChanged = toggleDraftLibrary(opened, LIBRARY_GAMMA);
+      const draftChanged = setDraftLibraries(opened, [LIBRARY_ALPHA, LIBRARY_BETA]);
 
-      const state = withAvailableLibraries(draftChanged, [LIBRARY_ALPHA, LIBRARY_BETA]);
+      const state = withAvailableCatalogFilters(draftChanged, [LIBRARY_ALPHA, LIBRARY_BETA], DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state.appliedLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
       expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
@@ -248,7 +256,7 @@ describe('games-filter-state', () => {
     it('clears applied and draft libraries when catalog becomes empty', () => {
       const hydrated = createHydratedState();
 
-      const state = withAvailableLibraries(hydrated, EMPTY_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, EMPTY_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state.availableLibraries).toEqual([]);
       expectSelectedLibraries(state, []);
@@ -258,7 +266,7 @@ describe('games-filter-state', () => {
     it('returns the same state when available libraries are unchanged and no normalization is needed', () => {
       const hydrated = createHydratedState();
 
-      const state = withAvailableLibraries(hydrated, DEFAULT_AVAILABLE_LIBRARIES);
+      const state = withAvailableCatalogFilters(hydrated, DEFAULT_AVAILABLE_LIBRARIES, DEFAULT_AVAILABLE_LAUNCHERS);
 
       expect(state).toBe(hydrated);
     });
@@ -279,28 +287,9 @@ describe('games-filter-state', () => {
       expect(state.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
     });
 
-    it('closes dialog without changing draft libraries', () => {
-      const opened = openFilterDialog(createHydratedState());
-      const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
-
-      const state = closeFilterDialog(draftChanged);
-
-      expect(state.isDialogOpen).toBe(false);
-      expect(state.appliedLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
-      expect(state.draftLibraries).toEqual([LIBRARY_ALPHA]);
-    });
-
-    it('returns the same state when closing an already closed dialog', () => {
-      const hydrated = createHydratedState();
-
-      const state = closeFilterDialog(hydrated);
-
-      expect(state).toBe(hydrated);
-    });
-
     it('cancels draft changes and closes dialog', () => {
       const opened = openFilterDialog(createHydratedState());
-      const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
+      const draftChanged = setDraftLibraries(opened, [LIBRARY_ALPHA]);
 
       const state = cancelFilterDialog(draftChanged);
 
@@ -318,37 +307,37 @@ describe('games-filter-state', () => {
   });
 
   describe('draft library selection', () => {
-    it('ignores draft toggle for unknown libraries', () => {
+    it('ignores draft set for unknown libraries', () => {
       const opened = openFilterDialog(createHydratedState());
 
-      const state = toggleDraftLibrary(opened, LIBRARY_GAMMA);
+      const state = setDraftLibraries(opened, [...DEFAULT_AVAILABLE_LIBRARIES, LIBRARY_GAMMA]);
 
       expect(state).toBe(opened);
       expect(state.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
     });
 
-    it('ignores draft toggle for blank library names', () => {
+    it('ignores draft set for blank library names', () => {
       const opened = openFilterDialog(createHydratedState());
 
-      const state = toggleDraftLibrary(opened, '   ');
+      const state = setDraftLibraries(opened, [...DEFAULT_AVAILABLE_LIBRARIES, '   ']);
 
       expect(state).toBe(opened);
       expect(state.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
     });
 
-    it('normalizes library name before toggling draft selection', () => {
+    it('normalizes library names when setting draft selection', () => {
       const opened = openFilterDialog(createHydratedState());
 
-      const state = toggleDraftLibrary(opened, `  ${LIBRARY_BETA}  `);
+      const state = setDraftLibraries(opened, [LIBRARY_ALPHA]);
 
       expect(state.draftLibraries).toEqual([LIBRARY_ALPHA]);
     });
 
-    it('toggles available draft libraries', () => {
+    it('sets available draft libraries', () => {
       const opened = openFilterDialog(createHydratedState());
 
-      const unchecked = toggleDraftLibrary(opened, LIBRARY_BETA);
-      const checkedAgain = toggleDraftLibrary(unchecked, LIBRARY_BETA);
+      const unchecked = setDraftLibraries(opened, [LIBRARY_ALPHA]);
+      const checkedAgain = setDraftLibraries(unchecked, DEFAULT_AVAILABLE_LIBRARIES);
 
       expect(unchecked.draftLibraries).toEqual([LIBRARY_ALPHA]);
       expect(checkedAgain.draftLibraries).toEqual(DEFAULT_AVAILABLE_LIBRARIES);
@@ -362,9 +351,9 @@ describe('games-filter-state', () => {
         availableLibraries: [LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA],
       });
       const opened = openFilterDialog(hydrated);
-      const state = toggleDraftLibrary(opened, LIBRARY_BETA);
+      const state = setDraftLibraries(opened, [LIBRARY_ALPHA, LIBRARY_GAMMA]);
 
-      expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA, LIBRARY_GAMMA]);
+      expect(state.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_GAMMA]);
     });
 
     it('replaces draft libraries with normalized available values in catalog order', () => {
@@ -395,7 +384,7 @@ describe('games-filter-state', () => {
 
     it('applies draft selection and closes dialog', () => {
       const opened = openFilterDialog(createHydratedState());
-      const draftChanged = toggleDraftLibrary(opened, LIBRARY_BETA);
+      const draftChanged = setDraftLibraries(opened, [LIBRARY_ALPHA]);
 
       const state = applyDraftFilters(draftChanged);
 
@@ -511,7 +500,7 @@ describe('games-filter-state', () => {
       const inFlightSnapshot = createPersistedSnapshot(hydrated);
 
       const changed = applyDraftFilters(
-        toggleDraftLibrary(openFilterDialog(hydrated), LIBRARY_BETA),
+        setDraftLibraries(openFilterDialog(hydrated), [LIBRARY_ALPHA]),
       );
 
       expect(isPersistedSnapshotStillCurrent(hydrated, inFlightSnapshot)).toBe(true);
@@ -553,13 +542,20 @@ describe('games-filter-state', () => {
 type HydrateOptions = {
   persisted?: PersistedGamesFilters | null;
   availableLibraries?: readonly string[];
+  availableLaunchers?: readonly string[];
 };
 
 function createHydratedState({
   persisted = null,
   availableLibraries = DEFAULT_AVAILABLE_LIBRARIES,
+  availableLaunchers = DEFAULT_AVAILABLE_LAUNCHERS,
 }: HydrateOptions = {}): GamesFilterState {
-  return hydrateGamesFilterState(createInitialGamesFilterState(), persisted, availableLibraries);
+  return hydrateGamesFilterState(
+    createInitialGamesFilterState(),
+    persisted,
+    availableLibraries,
+    availableLaunchers,
+  );
 }
 
 function createPersistedFilters(
@@ -567,6 +563,7 @@ function createPersistedFilters(
 ): PersistedGamesFilters {
   return {
     libraries: [LIBRARY_ALPHA],
+    launchers: [],
     searchQuery: '',
     ...overrides,
   };

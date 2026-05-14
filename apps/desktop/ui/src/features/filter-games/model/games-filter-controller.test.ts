@@ -5,7 +5,7 @@ import {
   createInitialGamesFilterState,
   hydrateGamesFilterState,
   openFilterDialog,
-  toggleDraftLibrary,
+  setDraftLibraries,
   type GamesFilterState,
 } from './games-filter-state';
 import type { PersistedGamesFilters } from './filter-persistence';
@@ -28,6 +28,7 @@ describe('games-filter-controller', () => {
       const persisted: PersistedGamesFilters = {
         searchQuery: 'witcher',
         libraries: [LIBRARY_ALPHA, UNKNOWN_LIBRARY],
+        launchers: [],
       };
 
       const result = syncGamesFilterState(
@@ -35,6 +36,7 @@ describe('games-filter-controller', () => {
         true,
         persisted,
         AVAILABLE_LIBRARIES,
+        [],
       );
 
       expect(result.didAdjustApplied).toBe(true);
@@ -49,16 +51,19 @@ describe('games-filter-controller', () => {
         {
           searchQuery: 'ready-query',
           libraries: [LIBRARY_ALPHA],
+          launchers: [],
         },
         AVAILABLE_LIBRARIES,
+        [],
       );
 
       const ignoredPersisted: PersistedGamesFilters = {
         searchQuery: 'ignored-query',
         libraries: [LIBRARY_BETA],
+        launchers: [],
       };
 
-      const result = syncGamesFilterState(readyState, true, ignoredPersisted, AVAILABLE_LIBRARIES);
+      const result = syncGamesFilterState(readyState, true, ignoredPersisted, AVAILABLE_LIBRARIES, []);
 
       expect(result.didAdjustApplied).toBe(false);
       expect(result.state.searchQuery).toBe('ready-query');
@@ -68,7 +73,7 @@ describe('games-filter-controller', () => {
     it('adjusts applied libraries when available libraries change', () => {
       const readyState = createReadyFilterState(AVAILABLE_LIBRARIES);
 
-      const result = syncGamesFilterState(readyState, true, null, [LIBRARY_ALPHA]);
+      const result = syncGamesFilterState(readyState, true, null, [LIBRARY_ALPHA], []);
 
       expect(result.didAdjustApplied).toBe(true);
       expect(result.state.appliedLibraries).toEqual([LIBRARY_ALPHA]);
@@ -164,9 +169,9 @@ describe('games-filter-controller', () => {
     it.each(cases)(
       '%s',
       (_caseName, searchQuery, appliedLibraries, availableLibraries, expected) => {
-        expect(hasFilterIndicator(searchQuery, appliedLibraries, availableLibraries)).toBe(
-          expected,
-        );
+        expect(
+          hasFilterIndicator(searchQuery, appliedLibraries, availableLibraries, [], []),
+        ).toBe(expected);
       },
     );
   });
@@ -176,14 +181,14 @@ describe('games-filter-controller', () => {
       const hydrated = createReadyFilterState(AVAILABLE_LIBRARIES);
 
       const opened = openFilterDialog(hydrated);
-      const changedDraft = toggleDraftLibrary(opened, LIBRARY_BETA);
+      const changedDraft = setDraftLibraries(opened, [LIBRARY_ALPHA]);
       const canceled = cancelFilterDialog(changedDraft);
 
       expect(canceled.appliedLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
       expect(canceled.draftLibraries).toEqual([LIBRARY_ALPHA, LIBRARY_BETA]);
 
       const reopened = openFilterDialog(canceled);
-      const changedAgain = toggleDraftLibrary(reopened, LIBRARY_BETA);
+      const changedAgain = setDraftLibraries(reopened, [LIBRARY_ALPHA]);
       const applied = applyDraftFilters(changedAgain);
 
       expect(applied.appliedLibraries).toEqual([LIBRARY_ALPHA]);
@@ -195,7 +200,7 @@ describe('games-filter-controller', () => {
 function createReadyFilterState(
   availableLibraries: readonly string[] = AVAILABLE_LIBRARIES,
 ): GamesFilterState {
-  return hydrateGamesFilterState(createInitialGamesFilterState(), null, availableLibraries);
+  return hydrateGamesFilterState(createInitialGamesFilterState(), null, availableLibraries, []);
 }
 
 function createReadyStateWithChangedSelection(): GamesFilterState {
@@ -205,5 +210,7 @@ function createReadyStateWithChangedSelection(): GamesFilterState {
     ...readyState,
     appliedLibraries: [],
     draftLibraries: [],
+    appliedLaunchers: [],
+    draftLaunchers: [],
   };
 }
