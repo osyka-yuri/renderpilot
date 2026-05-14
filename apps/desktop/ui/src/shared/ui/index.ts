@@ -113,6 +113,16 @@ export {
   SidebarTrigger,
 } from './sidebar';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './table';
 export { Toggle, toggleVariants } from './toggle';
 export { ToggleGroup, ToggleGroupItem } from './toggle-group';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
