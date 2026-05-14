@@ -7,6 +7,7 @@ import {
   openFilterDialog,
   setDraftLibraries,
   setDraftLaunchers,
+  setDraftLauncherOrder,
   type PersistedGamesFilters,
   withSearchQuery,
 } from './index-internal';
@@ -163,6 +164,10 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     filtersState = setDraftLaunchers(filtersState, nextLaunchers);
   }
 
+  function handleDraftLauncherOrderChange(nextOrder: readonly string[]): void {
+    filtersState = setDraftLauncherOrder(filtersState, nextOrder);
+  }
+
   function setSearchQuery(nextValue: string): void {
     const nextState = withSearchQuery(filtersState, nextValue);
 
@@ -208,6 +213,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     toggleFiltersDialog,
     handleDraftLibrariesChange,
     handleDraftLaunchersChange,
+    handleDraftLauncherOrderChange,
     setSearchQuery,
     flushSearchPersist,
     dispose,

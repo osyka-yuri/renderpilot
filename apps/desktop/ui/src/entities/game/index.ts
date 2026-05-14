@@ -18,15 +18,13 @@ export {
   hasPartialLauncherSelection,
 } from './model/launcher-filters';
 
-export {
-  LAUNCHER_DISPLAY_LABELS,
-  getLauncherDisplayLabel,
-} from './model/launcher-labels';
+export { LAUNCHER_DISPLAY_LABELS, getLauncherDisplayLabel } from './model/launcher-labels';
 
 export { LAUNCHER_STEAM, LAUNCHER_GOG } from './model/types';
 
 export type {
   GameSummary,
+  Launcher,
   CoverArtworkResult,
   GameCardsQuery,
   GameCardsResult,

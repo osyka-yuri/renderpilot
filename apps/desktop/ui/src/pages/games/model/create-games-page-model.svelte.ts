@@ -143,6 +143,9 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     get launcherFilterOptions() {
       return filtersModel.launcherFilterOptions;
     },
+    get appliedLauncherOrder() {
+      return filtersModel.filtersState.appliedLauncherOrder;
+    },
     get gameItems() {
       return gameItems;
     },
@@ -164,6 +167,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     toggleFiltersDialog: filtersModel.toggleFiltersDialog,
     handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
     handleDraftLaunchersChange: filtersModel.handleDraftLaunchersChange,
+    handleDraftLauncherOrderChange: filtersModel.handleDraftLauncherOrderChange,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,
     pickCover: coverCommandRunner.pickCover,

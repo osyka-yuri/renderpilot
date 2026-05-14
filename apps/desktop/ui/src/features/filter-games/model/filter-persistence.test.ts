@@ -25,6 +25,7 @@ describe('filter-persistence', () => {
       expectParsed('["LibraryAlpha","LibraryBeta"]', {
         libraries: ['LibraryAlpha', 'LibraryBeta'],
         launchers: [],
+        launcherOrder: [],
         searchQuery: '',
       });
     });
@@ -35,6 +36,7 @@ describe('filter-persistence', () => {
         {
           libraries: ['LibraryAlpha', 'LibraryBeta'],
           launchers: [],
+          launcherOrder: [],
           searchQuery: '',
         },
       );
@@ -49,6 +51,7 @@ describe('filter-persistence', () => {
         {
           libraries: ['LibraryAlpha'],
           launchers: [],
+          launcherOrder: [],
           searchQuery: 'alpha',
         },
       );
@@ -58,6 +61,7 @@ describe('filter-persistence', () => {
       expectParsed(JSON.stringify({}), {
         libraries: [],
         launchers: [],
+        launcherOrder: [],
         searchQuery: '',
       });
     });
@@ -71,6 +75,7 @@ describe('filter-persistence', () => {
         {
           libraries: ['LibraryAlpha'],
           launchers: [],
+          launcherOrder: [],
           searchQuery: '',
         },
       );
@@ -85,6 +90,7 @@ describe('filter-persistence', () => {
         {
           libraries: ['LibraryAlpha', 'LibraryBeta'],
           launchers: [],
+          launcherOrder: [],
           searchQuery: '',
         },
       );
@@ -99,6 +105,7 @@ describe('filter-persistence', () => {
         {
           libraries: [],
           launchers: [],
+          launcherOrder: [],
           searchQuery: 'alpha',
         },
       );
@@ -113,6 +120,7 @@ describe('filter-persistence', () => {
         {
           libraries: ['LibraryAlpha'],
           launchers: [],
+          launcherOrder: [],
           searchQuery: '',
         },
       );
@@ -126,12 +134,14 @@ describe('filter-persistence', () => {
           encodePersistedGamesFilters({
             libraries: ['LibraryAlpha'],
             launchers: [],
+            launcherOrder: [],
             searchQuery: 'alpha',
           }),
         ),
       ).toEqual({
         libraries: ['LibraryAlpha'],
         launchers: [],
+        launcherOrder: [],
         searchQuery: 'alpha',
       } satisfies PersistedGamesFilters);
     });
@@ -142,12 +152,14 @@ describe('filter-persistence', () => {
           encodePersistedGamesFilters({
             libraries: [' LibraryAlpha ', 'LibraryAlpha', '', 'LibraryBeta'],
             launchers: [],
+            launcherOrder: [],
             searchQuery: '',
           }),
         ),
       ).toEqual({
         libraries: ['LibraryAlpha', 'LibraryBeta'],
         launchers: [],
+        launcherOrder: [],
         searchQuery: '',
       } satisfies PersistedGamesFilters);
     });

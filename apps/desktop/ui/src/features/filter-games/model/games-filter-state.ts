@@ -1,11 +1,15 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import { intersectLibraries, normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
+import {
+  intersectLibraries,
+  normalizeLibraryValues,
+  normalizeLauncherValues,
+} from '@entities/game';
 import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filter-persistence';
+import { canonicalizeLauncherOrder, buildInitialLauncherOrder } from './launcher-order';
 import {
   canonicalizeSelection,
   createAvailableSliceUpdate,
   createHydratedSlice,
-  applySliceUpdate,
   type FilterSlice,
   type FilterSliceUpdate,
 } from './filter-slice';
@@ -13,38 +17,65 @@ import {
 export type GamesFilterState = {
   ready: boolean;
   isDialogOpen: boolean;
+
   searchQuery: string;
+
   appliedLibraries: string[];
   draftLibraries: string[];
   deferSelectAllLibraries: boolean;
   pendingPersistedLibraries: string[] | null;
   availableLibraries: string[];
+
   appliedLaunchers: string[];
   draftLaunchers: string[];
   deferSelectAllLaunchers: boolean;
   pendingPersistedLaunchers: string[] | null;
   availableLaunchers: string[];
+
+  appliedLauncherOrder: string[];
+  draftLauncherOrder: string[];
+
   lastPersistedSnapshot: string;
 };
 
 const EMPTY_SEARCH_QUERY = '';
 const EMPTY_PERSISTED_SNAPSHOT = '';
 
+type Normalizer = (values: readonly string[]) => string[];
+type Canonicalizer = (selected: readonly string[], available: readonly string[]) => string[];
+
+type DraftFilterFields = Pick<
+  GamesFilterState,
+  'draftLibraries' | 'draftLaunchers' | 'draftLauncherOrder'
+>;
+
+type AppliedFilterFields = Pick<
+  GamesFilterState,
+  'appliedLibraries' | 'appliedLaunchers' | 'appliedLauncherOrder'
+>;
+
 export function createInitialGamesFilterState(): GamesFilterState {
   return {
     ready: false,
     isDialogOpen: false,
+
     searchQuery: EMPTY_SEARCH_QUERY,
+
     appliedLibraries: [],
     draftLibraries: [],
     deferSelectAllLibraries: false,
     pendingPersistedLibraries: null,
     availableLibraries: [],
+
     appliedLaunchers: [],
     draftLaunchers: [],
     deferSelectAllLaunchers: false,
     pendingPersistedLaunchers: null,
     availableLaunchers: [],
+
+    appliedLauncherOrder: [],
+    draftLauncherOrder: [],
+
     lastPersistedSnapshot: EMPTY_PERSISTED_SNAPSHOT,
   };
 }
@@ -58,24 +89,37 @@ export function hydrateGamesFilterState(
   const availableLibrariesSnapshot = copyStringArray(availableLibraries);
   const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
+  const initialLauncherOrder = buildInitialLauncherOrder(
+    persisted?.launcherOrder ?? null,
+    availableLaunchersSnapshot,
+  );
+
   const hydratedState: GamesFilterState = {
     ...state,
     ready: true,
+
     searchQuery: persisted?.searchQuery ?? EMPTY_SEARCH_QUERY,
+
     availableLibraries: availableLibrariesSnapshot,
     ...createHydratedSliceFilters(
       persisted?.libraries ?? null,
       availableLibrariesSnapshot,
       normalizeLibraryValues,
+      canonicalizeLibraries,
       LIBRARY_ADAPTER,
     ),
+
     availableLaunchers: availableLaunchersSnapshot,
     ...createHydratedSliceFilters(
       persisted?.launchers ?? null,
       availableLaunchersSnapshot,
       normalizeLauncherValues,
+      canonicalizeLaunchers,
       LAUNCHER_ADAPTER,
     ),
+
+    appliedLauncherOrder: initialLauncherOrder,
+    draftLauncherOrder: copyStringArray(initialLauncherOrder),
   };
 
   return {
@@ -92,30 +136,37 @@ export function withAvailableCatalogFilters(
   const availableLibrariesSnapshot = copyStringArray(availableLibraries);
   const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
-  let nextState = withAvailableSnapshot(state, availableLibrariesSnapshot, 'availableLibraries');
-  nextState = withAvailableSnapshot(nextState, availableLaunchersSnapshot, 'availableLaunchers');
+  let nextState = withAvailableSnapshots(
+    state,
+    availableLibrariesSnapshot,
+    availableLaunchersSnapshot,
+  );
 
   if (!nextState.ready) {
     return nextState;
   }
 
-  const libraryUpdate = createAvailableSliceFiltersUpdate(
+  nextState = applyStateUpdate(
     nextState,
-    availableLibrariesSnapshot,
-    normalizeLibraryValues,
-    LIBRARY_ADAPTER,
+    createAvailableSliceFiltersUpdate(
+      nextState,
+      availableLibrariesSnapshot,
+      canonicalizeLibraries,
+      LIBRARY_ADAPTER,
+    ),
   );
-  nextState = applySliceUpdate(nextState, libraryUpdate);
 
-  const launcherUpdate = createAvailableSliceFiltersUpdate(
+  nextState = applyStateUpdate(
     nextState,
-    availableLaunchersSnapshot,
-    normalizeLauncherValues,
-    LAUNCHER_ADAPTER,
+    createAvailableSliceFiltersUpdate(
+      nextState,
+      availableLaunchersSnapshot,
+      canonicalizeLaunchers,
+      LAUNCHER_ADAPTER,
+    ),
   );
-  nextState = applySliceUpdate(nextState, launcherUpdate);
 
-  return nextState;
+  return reconcileLauncherOrderWithAvailability(nextState, availableLaunchersSnapshot);
 }
 
 export function withSearchQuery(state: GamesFilterState, searchQuery: string): GamesFilterState {
@@ -130,35 +181,26 @@ export function withSearchQuery(state: GamesFilterState, searchQuery: string): G
 }
 
 export function openFilterDialog(state: GamesFilterState): GamesFilterState {
-  if (
-    state.isDialogOpen &&
-    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
-    shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers)
-  ) {
+  // Важно: повторный open не должен сбрасывать уже измененный draft.
+  if (state.isDialogOpen) {
     return state;
   }
 
   return {
     ...state,
-    draftLibraries: copyStringArray(state.appliedLibraries),
-    draftLaunchers: copyStringArray(state.appliedLaunchers),
+    ...createDraftsFromApplied(state),
     isDialogOpen: true,
   };
 }
 
 export function cancelFilterDialog(state: GamesFilterState): GamesFilterState {
-  if (
-    !state.isDialogOpen &&
-    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
-    shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers)
-  ) {
+  if (!state.isDialogOpen && areDraftsEqualToApplied(state)) {
     return state;
   }
 
   return {
     ...state,
-    draftLibraries: copyStringArray(state.appliedLibraries),
-    draftLaunchers: copyStringArray(state.appliedLaunchers),
+    ...createDraftsFromApplied(state),
     isDialogOpen: false,
   };
 }
@@ -167,15 +209,15 @@ export function setDraftLibraries(
   state: GamesFilterState,
   libraries: readonly string[],
 ): GamesFilterState {
-  const normalized = canonicalizeLibraries(libraries, state.availableLibraries);
+  const draftLibraries = canonicalizeLibraries(libraries, state.availableLibraries);
 
-  if (shallowStringArrayEqual(state.draftLibraries, normalized)) {
+  if (shallowStringArrayEqual(state.draftLibraries, draftLibraries)) {
     return state;
   }
 
   return {
     ...state,
-    draftLibraries: normalized,
+    draftLibraries,
   };
 }
 
@@ -183,38 +225,50 @@ export function setDraftLaunchers(
   state: GamesFilterState,
   launchers: readonly string[],
 ): GamesFilterState {
-  const normalized = canonicalizeLaunchers(launchers, state.availableLaunchers);
+  const draftLaunchers = canonicalizeLaunchers(launchers, state.availableLaunchers);
 
-  if (shallowStringArrayEqual(state.draftLaunchers, normalized)) {
+  if (shallowStringArrayEqual(state.draftLaunchers, draftLaunchers)) {
     return state;
   }
 
   return {
     ...state,
-    draftLaunchers: normalized,
+    draftLaunchers,
+  };
+}
+
+export function setDraftLauncherOrder(
+  state: GamesFilterState,
+  order: readonly string[],
+): GamesFilterState {
+  const draftLauncherOrder = canonicalizeLauncherOrder(order, state.availableLaunchers);
+
+  if (shallowStringArrayEqual(state.draftLauncherOrder, draftLauncherOrder)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    draftLauncherOrder,
   };
 }
 
 export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
-  const appliedLibraries = canonicalizeLibraries(state.draftLibraries, state.availableLibraries);
-  const appliedLaunchers = canonicalizeLaunchers(state.draftLaunchers, state.availableLaunchers);
+  const appliedFilters = createAppliedFiltersFromDrafts(state);
 
-  if (
-    !state.isDialogOpen &&
-    shallowStringArrayEqual(state.appliedLibraries, appliedLibraries) &&
-    shallowStringArrayEqual(state.draftLibraries, appliedLibraries) &&
-    shallowStringArrayEqual(state.appliedLaunchers, appliedLaunchers) &&
-    shallowStringArrayEqual(state.draftLaunchers, appliedLaunchers)
-  ) {
+  if (!state.isDialogOpen && areAppliedFiltersEqual(state, appliedFilters)) {
     return state;
   }
 
   return {
     ...state,
-    appliedLibraries,
-    draftLibraries: copyStringArray(appliedLibraries),
-    appliedLaunchers,
-    draftLaunchers: copyStringArray(appliedLaunchers),
+
+    ...appliedFilters,
+
+    draftLibraries: copyStringArray(appliedFilters.appliedLibraries),
+    draftLaunchers: copyStringArray(appliedFilters.appliedLaunchers),
+    draftLauncherOrder: copyStringArray(appliedFilters.appliedLauncherOrder),
+
     isDialogOpen: false,
   };
 }
@@ -223,6 +277,7 @@ export function createPersistedSnapshot(state: GamesFilterState): string {
   return encodePersistedGamesFilters({
     libraries: state.appliedLibraries,
     launchers: state.appliedLaunchers,
+    launcherOrder: state.appliedLauncherOrder,
     searchQuery: state.searchQuery,
   });
 }
@@ -253,6 +308,99 @@ export function isPersistedSnapshotStillCurrent(
 }
 
 // ---------------------------------------------------------------------------
+// Draft / applied helpers
+// ---------------------------------------------------------------------------
+
+function createDraftsFromApplied(state: GamesFilterState): DraftFilterFields {
+  return {
+    draftLibraries: copyStringArray(state.appliedLibraries),
+    draftLaunchers: copyStringArray(state.appliedLaunchers),
+    draftLauncherOrder: copyStringArray(state.appliedLauncherOrder),
+  };
+}
+
+function createAppliedFiltersFromDrafts(state: GamesFilterState): AppliedFilterFields {
+  return {
+    appliedLibraries: canonicalizeLibraries(state.draftLibraries, state.availableLibraries),
+    appliedLaunchers: canonicalizeLaunchers(state.draftLaunchers, state.availableLaunchers),
+    appliedLauncherOrder: canonicalizeLauncherOrder(
+      state.draftLauncherOrder,
+      state.availableLaunchers,
+    ),
+  };
+}
+
+function areDraftsEqualToApplied(state: GamesFilterState): boolean {
+  return (
+    shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
+    shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers) &&
+    shallowStringArrayEqual(state.draftLauncherOrder, state.appliedLauncherOrder)
+  );
+}
+
+function areAppliedFiltersEqual(
+  state: GamesFilterState,
+  appliedFilters: AppliedFilterFields,
+): boolean {
+  return (
+    shallowStringArrayEqual(state.appliedLibraries, appliedFilters.appliedLibraries) &&
+    shallowStringArrayEqual(state.appliedLaunchers, appliedFilters.appliedLaunchers) &&
+    shallowStringArrayEqual(state.appliedLauncherOrder, appliedFilters.appliedLauncherOrder)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Availability helpers
+// ---------------------------------------------------------------------------
+
+function withAvailableSnapshots(
+  state: GamesFilterState,
+  availableLibraries: string[],
+  availableLaunchers: string[],
+): GamesFilterState {
+  const librariesChanged = !shallowStringArrayEqual(state.availableLibraries, availableLibraries);
+  const launchersChanged = !shallowStringArrayEqual(state.availableLaunchers, availableLaunchers);
+
+  if (!librariesChanged && !launchersChanged) {
+    return state;
+  }
+
+  return {
+    ...state,
+    availableLibraries: librariesChanged ? availableLibraries : state.availableLibraries,
+    availableLaunchers: launchersChanged ? availableLaunchers : state.availableLaunchers,
+  };
+}
+
+function reconcileLauncherOrderWithAvailability(
+  state: GamesFilterState,
+  availableLaunchers: readonly string[],
+): GamesFilterState {
+  const appliedLauncherOrder = canonicalizeLauncherOrder(
+    state.appliedLauncherOrder,
+    availableLaunchers,
+  );
+
+  const draftLauncherOrder = state.isDialogOpen
+    ? canonicalizeLauncherOrder(state.draftLauncherOrder, availableLaunchers)
+    : copyStringArray(appliedLauncherOrder);
+
+  const appliedChanged = !shallowStringArrayEqual(state.appliedLauncherOrder, appliedLauncherOrder);
+
+  const draftChanged = !shallowStringArrayEqual(state.draftLauncherOrder, draftLauncherOrder);
+
+  if (!appliedChanged && !draftChanged) {
+    return state;
+  }
+
+  return {
+    ...state,
+    appliedLauncherOrder: appliedChanged ? appliedLauncherOrder : state.appliedLauncherOrder,
+    draftLauncherOrder: draftChanged ? draftLauncherOrder : state.draftLauncherOrder,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Slice adapters
 // ---------------------------------------------------------------------------
 
@@ -262,6 +410,12 @@ type SliceFieldMapping = {
   deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllLaunchers';
   pendingPersisted: 'pendingPersistedLibraries' | 'pendingPersistedLaunchers';
 };
+
+type SliceStateField = SliceFieldMapping[keyof SliceFieldMapping];
+
+type SliceStateUpdate = Partial<Pick<GamesFilterState, SliceStateField>>;
+
+type SliceAdapter = ReturnType<typeof createSliceAdapter>;
 
 function createSliceAdapter(fields: SliceFieldMapping) {
   function fromState(state: GamesFilterState): FilterSlice {
@@ -273,15 +427,26 @@ function createSliceAdapter(fields: SliceFieldMapping) {
     };
   }
 
-  function toStateUpdate(slice: FilterSlice | FilterSliceUpdate): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
+  function toStateUpdate(slice: FilterSlice | FilterSliceUpdate): SliceStateUpdate {
+    const update: SliceStateUpdate = {};
 
-    if ('applied' in slice) result[fields.applied] = slice.applied;
-    if ('draft' in slice) result[fields.draft] = slice.draft;
-    if ('deferSelectAll' in slice) result[fields.deferSelectAll] = slice.deferSelectAll;
-    if ('pendingPersisted' in slice) result[fields.pendingPersisted] = slice.pendingPersisted;
+    if (slice.applied !== undefined) {
+      update[fields.applied] = slice.applied;
+    }
 
-    return result;
+    if (slice.draft !== undefined) {
+      update[fields.draft] = slice.draft;
+    }
+
+    if (slice.deferSelectAll !== undefined) {
+      update[fields.deferSelectAll] = slice.deferSelectAll;
+    }
+
+    if (slice.pendingPersisted !== undefined) {
+      update[fields.pendingPersisted] = slice.pendingPersisted;
+    }
+
+    return update;
   }
 
   return { fromState, toStateUpdate };
@@ -302,45 +467,27 @@ const LAUNCHER_ADAPTER = createSliceAdapter({
 });
 
 // ---------------------------------------------------------------------------
-// Canonicalization
-// ---------------------------------------------------------------------------
-
-function createCanonicalizeFn(
-  normalizeFn: (values: readonly string[]) => string[],
-): (selected: readonly string[], available: readonly string[]) => string[] {
-  return (selected, available) => canonicalizeSelection(selected, available, normalizeFn, intersectLibraries);
-}
-
-const canonicalizeLibraries = createCanonicalizeFn(normalizeLibraryValues);
-const canonicalizeLaunchers = createCanonicalizeFn(normalizeLauncherValues);
-
-// ---------------------------------------------------------------------------
-// Hydration helpers
+// Slice hydration / availability
 // ---------------------------------------------------------------------------
 
 function createHydratedSliceFilters(
   persistedValues: readonly string[] | null,
-  availableValues: string[],
-  normalizeFn: (values: readonly string[]) => string[],
-  adapter: ReturnType<typeof createSliceAdapter>,
-): Record<string, unknown> {
-  const canonicalizeFn = createCanonicalizeFn(normalizeFn);
+  availableValues: readonly string[],
+  normalizeFn: Normalizer,
+  canonicalizeFn: Canonicalizer,
+  adapter: SliceAdapter,
+): SliceStateUpdate {
   const slice = createHydratedSlice(persistedValues, availableValues, normalizeFn, canonicalizeFn);
 
   return adapter.toStateUpdate(slice);
 }
 
-// ---------------------------------------------------------------------------
-// Availability helpers
-// ---------------------------------------------------------------------------
-
 function createAvailableSliceFiltersUpdate(
   state: GamesFilterState,
-  availableValues: string[],
-  normalizeFn: (values: readonly string[]) => string[],
-  adapter: ReturnType<typeof createSliceAdapter>,
-): Record<string, unknown> | null {
-  const canonicalizeFn = createCanonicalizeFn(normalizeFn);
+  availableValues: readonly string[],
+  canonicalizeFn: Canonicalizer,
+  adapter: SliceAdapter,
+): SliceStateUpdate | null {
   const update = createAvailableSliceUpdate(
     adapter.fromState(state),
     availableValues,
@@ -350,20 +497,34 @@ function createAvailableSliceFiltersUpdate(
   return update ? adapter.toStateUpdate(update) : null;
 }
 
-function withAvailableSnapshot(
+function applyStateUpdate(
   state: GamesFilterState,
-  availableValues: string[],
-  field: 'availableLibraries' | 'availableLaunchers',
+  update: SliceStateUpdate | null,
 ): GamesFilterState {
-  if (shallowStringArrayEqual(state[field], availableValues)) {
+  if (!update || Object.keys(update).length === 0) {
     return state;
   }
 
-  return { ...state, [field]: availableValues };
+  return {
+    ...state,
+    ...update,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// String array copy helpers
+// Canonicalization
+// ---------------------------------------------------------------------------
+
+function createCanonicalizeFn(normalizeFn: Normalizer): Canonicalizer {
+  return (selected, available) =>
+    canonicalizeSelection(selected, available, normalizeFn, intersectLibraries);
+}
+
+const canonicalizeLibraries = createCanonicalizeFn(normalizeLibraryValues);
+const canonicalizeLaunchers = createCanonicalizeFn(normalizeLauncherValues);
+
+// ---------------------------------------------------------------------------
+// String array helpers
 // ---------------------------------------------------------------------------
 
 function copyStringArray(values: readonly string[]): string[] {

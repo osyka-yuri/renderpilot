@@ -29,6 +29,7 @@ describe('games-filter-controller', () => {
         searchQuery: 'witcher',
         libraries: [LIBRARY_ALPHA, UNKNOWN_LIBRARY],
         launchers: [],
+        launcherOrder: [],
       };
 
       const result = syncGamesFilterState(
@@ -52,6 +53,7 @@ describe('games-filter-controller', () => {
           searchQuery: 'ready-query',
           libraries: [LIBRARY_ALPHA],
           launchers: [],
+          launcherOrder: [],
         },
         AVAILABLE_LIBRARIES,
         [],
@@ -61,9 +63,16 @@ describe('games-filter-controller', () => {
         searchQuery: 'ignored-query',
         libraries: [LIBRARY_BETA],
         launchers: [],
+        launcherOrder: [],
       };
 
-      const result = syncGamesFilterState(readyState, true, ignoredPersisted, AVAILABLE_LIBRARIES, []);
+      const result = syncGamesFilterState(
+        readyState,
+        true,
+        ignoredPersisted,
+        AVAILABLE_LIBRARIES,
+        [],
+      );
 
       expect(result.didAdjustApplied).toBe(false);
       expect(result.state.searchQuery).toBe('ready-query');
@@ -169,9 +178,9 @@ describe('games-filter-controller', () => {
     it.each(cases)(
       '%s',
       (_caseName, searchQuery, appliedLibraries, availableLibraries, expected) => {
-        expect(
-          hasFilterIndicator(searchQuery, appliedLibraries, availableLibraries, [], []),
-        ).toBe(expected);
+        expect(hasFilterIndicator(searchQuery, appliedLibraries, availableLibraries, [], [])).toBe(
+          expected,
+        );
       },
     );
   });

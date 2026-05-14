@@ -7,6 +7,7 @@ export {
   cancelFilterDialog,
   setDraftLibraries,
   setDraftLaunchers,
+  setDraftLauncherOrder,
   applyDraftFilters,
   createPersistedSnapshot,
   commitPersistedSnapshot,

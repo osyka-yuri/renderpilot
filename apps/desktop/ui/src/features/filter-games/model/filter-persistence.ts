@@ -7,6 +7,7 @@ const EMPTY_SEARCH_QUERY = '';
 export type PersistedGamesFilters = {
   libraries: string[];
   launchers: string[];
+  launcherOrder: string[];
   searchQuery: string;
 };
 
@@ -20,6 +21,7 @@ export function normalizePersistedGamesFilters(
   return {
     libraries: normalizeLibraryValues(filters.libraries),
     launchers: normalizeLauncherValues(filters.launchers),
+    launcherOrder: normalizeLauncherValues(filters.launcherOrder),
     searchQuery: normalizeSearchQuery(filters.searchQuery),
   };
 }
@@ -43,6 +45,7 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
     return {
       libraries: normalizeUniqueTrimmedStringsFromUnknown(value),
       launchers: [],
+      launcherOrder: [],
       searchQuery: EMPTY_SEARCH_QUERY,
     };
   }
@@ -54,6 +57,7 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
   return {
     libraries: readPersistedStringList(value.libraries),
     launchers: readPersistedStringList(value.launchers),
+    launcherOrder: readPersistedStringList(value.launcherOrder),
     searchQuery: readPersistedSearchQuery(value.searchQuery),
   };
 }

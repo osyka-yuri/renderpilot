@@ -20,6 +20,7 @@ const createPersistedFilters = (
 ): PersistedGamesFilters => ({
   libraries: [],
   launchers: [],
+  launcherOrder: [],
   searchQuery: '',
   ...overrides,
 });
@@ -72,11 +73,7 @@ describe('games filters regressions', () => {
 
   it('does not hide games when catalog temporarily becomes unknown', () => {
     const hydrated = hydrateFilters(null);
-    const afterCatalogLost = withAvailableCatalogFilters(
-      hydrated,
-      createEmptyLibraries(),
-      [],
-    );
+    const afterCatalogLost = withAvailableCatalogFilters(hydrated, createEmptyLibraries(), []);
 
     expectSelectedLibraries(afterCatalogLost, createEmptyLibraries());
   });

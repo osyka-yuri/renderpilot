@@ -16,6 +16,7 @@ export type UpdateBadge = {
 export type GameCardViewModel = {
   id: string;
   title: string;
+  launcher: string;
   installPath: string;
   monogram: string;
   updateBadge: UpdateBadge;
@@ -37,6 +38,7 @@ export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
   return {
     id: game.game_id,
     title: game.title,
+    launcher: game.launcher,
     installPath: game.install_path,
     monogram: titleMonogram(game.title),
     updateBadge: getUpdateBadge(game),

@@ -8,19 +8,13 @@
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-    Label,
     Separator,
-    Switch,
-    ToggleGroup,
-    ToggleGroupItem,
     buttonVariants,
   } from '@shared/ui';
-  import {
-    mergeVendorDraftLibraries,
-    selectedLibrariesForVendor,
-    type GroupedLibraryFilterOptions,
-  } from '../model/library-filter-options';
+  import { type GroupedLibraryFilterOptions } from '../model/library-filter-options';
   import { type LauncherFilterOption } from '../model/launcher-filter-options';
+  import LauncherFilterSection from './LauncherFilterSection.svelte';
+  import LibraryFilterSection from './LibraryFilterSection.svelte';
 
   type Props = {
     open: boolean;
@@ -33,55 +27,34 @@
     launcherFilterOptions?: readonly LauncherFilterOption[];
     draftLaunchers?: readonly string[];
     onDraftLaunchersChange?: (launchers: readonly string[]) => void;
+    draftLauncherOrder?: readonly string[];
+    onDraftLauncherOrderChange?: (order: readonly string[]) => void;
     onCancel?: () => void;
     onApply?: () => void;
   };
 
   const DIALOG_TITLE = 'Filters';
-  const LAUNCHERS_LABEL = 'Launchers';
-  const EMPTY_LAUNCHERS_LABEL = 'No launchers detected';
-  const LIBRARIES_LABEL = 'Libraries';
-  const EMPTY_LIBRARIES_LABEL = 'No libraries detected';
+  const EMPTY_ARRAY = [] as const;
 
-  const {
+  let {
     open,
     onOpenChange,
     hasFilterIndicator,
     filtersButtonLabel,
-    groupedLibraryFilterOptions = [],
-    draftLibraries = [],
+    groupedLibraryFilterOptions = EMPTY_ARRAY,
+    draftLibraries = EMPTY_ARRAY,
     onDraftLibrariesChange,
-    launcherFilterOptions = [],
-    draftLaunchers = [],
+    launcherFilterOptions = EMPTY_ARRAY,
+    draftLaunchers = EMPTY_ARRAY,
     onDraftLaunchersChange,
+    draftLauncherOrder = EMPTY_ARRAY,
+    onDraftLauncherOrderChange,
     onCancel,
     onApply,
   }: Props = $props();
-
-  function handleGroupValueChange(vendorOptions: { value: string }[], nextValue: string[]): void {
-    onDraftLibrariesChange?.(mergeVendorDraftLibraries(draftLibraries, vendorOptions, nextValue));
-  }
-
-  function groupValue(vendorOptions: { value: string }[]): string[] {
-    return selectedLibrariesForVendor(draftLibraries, vendorOptions);
-  }
-
-  function isLauncherSelected(value: string): boolean {
-    return draftLaunchers.includes(value);
-  }
-
-  function handleLauncherToggle(value: string, checked: boolean): void {
-    const hasValue = draftLaunchers.includes(value);
-
-    if (checked && !hasValue) {
-      onDraftLaunchersChange?.([...draftLaunchers, value]);
-    } else if (!checked && hasValue) {
-      onDraftLaunchersChange?.(draftLaunchers.filter((launcher) => launcher !== value));
-    }
-  }
 </script>
 
-<Dialog {open} onOpenChange={onOpenChange}>
+<Dialog {open} {onOpenChange}>
   <div class="relative inline-flex flex-none">
     <DialogTrigger
       class={buttonVariants({ variant: 'secondary', size: 'icon-sm' })}
@@ -103,63 +76,42 @@
       <DialogTitle>{DIALOG_TITLE}</DialogTitle>
     </DialogHeader>
 
-    <h3 class="text-sm font-medium">{LAUNCHERS_LABEL}</h3>
-
-    {#if launcherFilterOptions.length > 0}
-      <div class="grid gap-3">
-        {#each launcherFilterOptions as option (option.value)}
-          {@const switchId = `launcher-switch-${option.value}`}
-          <div class="flex items-center justify-between gap-3">
-            <Label for={switchId}>{option.label}</Label>
-            <Switch
-              id={switchId}
-              checked={isLauncherSelected(option.value)}
-              onCheckedChange={(checked: boolean) => {
-                handleLauncherToggle(option.value, checked);
-              }}
-            />
-          </div>
-        {/each}
-      </div>
-    {:else}
-      <span class="text-sm text-muted-foreground">{EMPTY_LAUNCHERS_LABEL}</span>
-    {/if}
+    <LauncherFilterSection
+      options={launcherFilterOptions}
+      {draftLaunchers}
+      {draftLauncherOrder}
+      onLaunchersChange={onDraftLaunchersChange}
+      onOrderChange={onDraftLauncherOrderChange}
+    />
 
     <Separator />
 
-    <h3 class="text-sm font-medium">{LIBRARIES_LABEL}</h3>
-
-    {#if groupedLibraryFilterOptions.length > 0}
-      <div class="grid gap-4">
-        {#each groupedLibraryFilterOptions as vendorGroup (vendorGroup.vendorKey)}
-          <div class="grid gap-2">
-            <h5 class="text-xs font-medium text-muted-foreground">{vendorGroup.vendorLabel}</h5>
-
-            <ToggleGroup
-              type="multiple"
-              variant="outline"
-              class="w-full"
-              value={groupValue(vendorGroup.options)}
-              onValueChange={(next: string[]) => {
-                handleGroupValueChange(vendorGroup.options, next);
-              }}
-            >
-              {#each vendorGroup.options as option (option.value)}
-                <ToggleGroupItem value={option.value} class="flex-1" size="sm">
-                  {option.label}
-                </ToggleGroupItem>
-              {/each}
-            </ToggleGroup>
-          </div>
-        {/each}
-      </div>
-    {:else}
-      <span class="text-sm text-muted-foreground">{EMPTY_LIBRARIES_LABEL}</span>
-    {/if}
+    <LibraryFilterSection
+      groupedOptions={groupedLibraryFilterOptions}
+      {draftLibraries}
+      onLibrariesChange={onDraftLibrariesChange}
+    />
 
     <DialogFooter>
-      <Button variant="secondary" size="sm" onclick={onCancel}>Cancel</Button>
-      <Button variant="default" size="sm" onclick={onApply}>Apply</Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={() => {
+          onCancel?.();
+        }}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        variant="default"
+        size="sm"
+        onclick={() => {
+          onApply?.();
+        }}
+      >
+        Apply
+      </Button>
     </DialogFooter>
   </DialogContent>
 </Dialog>

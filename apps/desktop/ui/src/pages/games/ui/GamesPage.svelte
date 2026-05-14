@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import { getDashboardStats, type GameSummary } from '@entities/game';
+  import { getDashboardStats, type GameSelectionHandler, type GameSummary } from '@entities/game';
   import type { VoidHandler } from '@shared/callbacks';
-  import type { GameSelectionHandler } from '@entities/game';
   import { Input } from '@shared/ui';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
@@ -35,7 +34,7 @@
     games = [],
     catalogVersion = 0,
     busy = false,
-    coversAutoFetchingIds = new Set(),
+    coversAutoFetchingIds = new Set<string>(),
     pickCoverDisabled = false,
 
     onScan = () => undefined,
@@ -45,6 +44,10 @@
     onOpenDetails = () => undefined,
     onOpenOperations = () => undefined,
   }: Props = $props();
+
+  const hasGames = $derived(games.length > 0);
+  const scanButtonLabel = $derived(busy ? SCANNING_LABEL : SCAN_LABEL);
+  const dashboardStats = $derived(getDashboardStats(games));
 
   function handleClearError(): void {
     onClearError();
@@ -67,6 +70,8 @@
     model.hasFilterIndicator ? FILTERS_BUTTON_ACTIVE_LABEL : FILTERS_BUTTON_LABEL,
   );
 
+  const hasManualCoverAction = $derived(model.manualCoverBusyFor !== null);
+
   onMount(() => {
     let disposed = false;
 
@@ -74,45 +79,33 @@
 
     return () => {
       disposed = true;
-      model.flushSearchPersist();
-      model.dispose();
+
+      try {
+        model.flushSearchPersist();
+      } finally {
+        model.dispose();
+      }
     };
   });
 
-  function handleSearchInput(
-    event: Event & { currentTarget: EventTarget & HTMLInputElement },
-  ): void {
+  function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
     model.setSearchQuery(event.currentTarget.value);
   }
 </script>
 
 <section class="grid gap-4" aria-busy={busy}>
-  <GamesHeaderBar
-    hasGames={games.length > 0}
-    {busy}
-    scanButtonLabel={busy ? SCANNING_LABEL : SCAN_LABEL}
-    dashboardStats={getDashboardStats(games)}
-    {onRefresh}
-    {onScan}
-  />
+  <GamesHeaderBar {hasGames} {busy} {scanButtonLabel} {dashboardStats} {onRefresh} {onScan} />
 
-  {#if games.length === 0}
-    <GamesEmptyState
-      {busy}
-      scanButtonLabel={busy ? SCANNING_LABEL : SCAN_LABEL}
-      {onRefresh}
-      {onScan}
-    />
+  {#if !hasGames}
+    <GamesEmptyState {busy} {scanButtonLabel} {onRefresh} {onScan} />
   {:else}
     <div class="grid gap-2 px-1">
-      <div
-        class="flex items-center justify-end gap-2 max-md:justify-stretch"
-        role="search"
-      >
+      <div class="flex items-center justify-end gap-2 max-md:justify-stretch" role="search">
         <label
           class="block max-w-88 min-w-48 shrink grow basis-88 max-md:max-w-none max-md:min-w-0"
         >
           <span class="sr-only">{SEARCH_LABEL}</span>
+
           <Input
             type="search"
             placeholder={SEARCH_PLACEHOLDER}
@@ -125,13 +118,15 @@
           open={model.filtersState.isDialogOpen}
           onOpenChange={model.handleDialogOpenChange}
           hasFilterIndicator={model.hasFilterIndicator}
-          filtersButtonLabel={filtersButtonLabel}
+          {filtersButtonLabel}
           groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
           draftLibraries={model.filtersState.draftLibraries}
           onDraftLibrariesChange={model.handleDraftLibrariesChange}
           launcherFilterOptions={model.launcherFilterOptions}
           draftLaunchers={model.filtersState.draftLaunchers}
           onDraftLaunchersChange={model.handleDraftLaunchersChange}
+          draftLauncherOrder={model.filtersState.draftLauncherOrder}
+          onDraftLauncherOrderChange={model.handleDraftLauncherOrderChange}
           onCancel={model.cancelFilterSelection}
           onApply={model.applyFilterSelection}
         />
@@ -140,8 +135,9 @@
 
     <GamesGrid
       games={model.gameItems}
+      launcherOrder={model.appliedLauncherOrder}
       {busy}
-      hasManualCoverAction={model.manualCoverBusyFor !== null}
+      {hasManualCoverAction}
       pickDisabled={pickCoverDisabled}
       {coversAutoFetchingIds}
       menuOpenFor={model.menuOpenFor}
