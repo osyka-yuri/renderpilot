@@ -169,8 +169,8 @@ function createInput(overrides: Partial<GamesPageModelInput> = {}): GamesPageMod
     getCatalogVersion: () => 0,
     getBusy: () => false,
     getCoversAutoFetchingIds: () => new Set(),
-    onClearError: vi.fn(),
-    onReloadCards: () => Promise.resolve(),
+    getOnClearError: () => vi.fn(),
+    getOnReloadCards: () => () => Promise.resolve(),
     ...overrides,
   };
 }

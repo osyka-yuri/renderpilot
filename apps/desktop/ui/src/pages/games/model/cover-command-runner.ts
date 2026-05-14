@@ -18,8 +18,8 @@ export type CoverCommandRunnerDeps = {
   getCoverMenuRefs: () => CoverMenuRefs;
   getMenuOpenFor: () => string | null;
   setMenuOpenFor: (value: string | null) => void;
-  onClearError: () => void;
-  onReloadCards: () => Promise<void>;
+  getOnClearError: () => () => void;
+  getOnReloadCards: () => () => Promise<void>;
 };
 
 export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
@@ -39,8 +39,8 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       manualCoverBusyFor: deps.getManualCoverBusyFor(),
       setManualCoverBusyFor: deps.setManualCoverBusyFor,
       task: command,
-      onClearError: deps.onClearError,
-      onReloadCards: deps.onReloadCards,
+      onClearError: deps.getOnClearError(),
+      onReloadCards: deps.getOnReloadCards(),
       onSuccess,
       onCoverError: publishCoverOperationErrorNotification,
       describeError: describeCommandError,

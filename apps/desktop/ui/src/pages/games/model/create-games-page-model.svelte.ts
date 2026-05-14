@@ -18,8 +18,8 @@ export type GamesPageModelInput = {
   getCatalogVersion: () => number;
   getBusy: () => boolean;
   getCoversAutoFetchingIds: () => ReadonlySet<string>;
-  onClearError: () => void;
-  onReloadCards: () => Promise<void>;
+  getOnClearError: () => () => void;
+  getOnReloadCards: () => () => Promise<void>;
 };
 
 export function createGamesPageModel(input: GamesPageModelInput) {
@@ -47,8 +47,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     setMenuOpenFor: (value) => {
       menuOpenFor = value;
     },
-    onClearError: input.onClearError,
-    onReloadCards: input.onReloadCards,
+    getOnClearError: input.getOnClearError,
+    getOnReloadCards: input.getOnReloadCards,
   });
 
   $effect(() => {
@@ -168,6 +168,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
     handleDraftLaunchersChange: filtersModel.handleDraftLaunchersChange,
     handleDraftLauncherOrderChange: filtersModel.handleDraftLauncherOrderChange,
+    resetFilters: filtersModel.resetFilters,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,
     pickCover: coverCommandRunner.pickCover,

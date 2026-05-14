@@ -6,6 +6,7 @@
     GameCard,
     getLauncherDisplayLabel,
   } from '@entities/game';
+  import GamesFilterEmptyState from './GamesFilterEmptyState.svelte';
 
   type GameId = GameCardViewModel['id'];
 
@@ -32,6 +33,7 @@
     onClearCover?: GameActionHandler;
     onOpenDetails?: GameActionHandler;
     onOpenOperations?: GameActionHandler;
+    onResetFilters?: () => void;
   };
 
   type LauncherGameGroup = {
@@ -76,7 +78,7 @@
   const noopMenuOpenChange: MenuOpenChangeHandler = () => undefined;
   const isCoverOperationIdle: CoverBusyPredicate = () => false;
 
-  let {
+  const {
     games = EMPTY_GAMES,
     launcherOrder = EMPTY_LAUNCHER_ORDER,
     busy = false,
@@ -93,6 +95,7 @@
     onClearCover = noopAction,
     onOpenDetails = noopAction,
     onOpenOperations = noopAction,
+    onResetFilters = () => undefined,
   }: Props = $props();
 
   const hasGames = $derived(games.length > 0);
@@ -229,48 +232,48 @@
   }
 </script>
 
-{#if hasGames}
-  <div class="flex flex-col gap-6" aria-busy={busy}>
-    {#each launcherGroups as group (group.launcher)}
-      <section class="flex flex-col gap-3">
-        <h2 class="text-lg font-semibold text-foreground">{group.label}</h2>
+<div class="flex flex-1 flex-col">
+  {#if hasGames}
+    <div class="flex flex-col gap-6" aria-busy={busy}>
+      {#each launcherGroups as group (group.launcher)}
+        <section class="flex flex-col gap-3">
+          <h2 class="text-lg font-semibold text-foreground">{group.label}</h2>
 
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(20.5rem,1fr))] items-stretch gap-3">
-          {#each group.cards as card (card.id)}
-            <GameCard
-              game={card.game}
-              coverBusy={card.isCoverBusy}
-              backgroundCoverFetching={card.isBackgroundCoverFetching}
-              menuDisabled={card.isMenuDisabled}
-              pickDisabled={card.isPickDisabled}
-              menuOpen={card.isMenuOpen}
-              coverMenuRef={card.menuRef}
-              onMenuOpenChange={(next: boolean): void => {
-                onMenuOpenChange(card.id, next);
-              }}
-              onFetchCover={(): void => {
-                onFetchCover(card.id);
-              }}
-              onPickCover={(): void => {
-                onPickCover(card.id);
-              }}
-              onClearCover={(): void => {
-                onClearCover(card.id);
-              }}
-              onOpenDetails={(): void => {
-                onOpenDetails(card.id);
-              }}
-              onOpenOperations={(): void => {
-                onOpenOperations(card.id);
-              }}
-            />
-          {/each}
-        </div>
-      </section>
-    {/each}
-  </div>
-{:else}
-  <div class="px-1" aria-live="polite">
-    <p class="leading-snug text-muted-foreground">No games match current filters.</p>
-  </div>
-{/if}
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(20.5rem,1fr))] items-stretch gap-3">
+            {#each group.cards as card (card.id)}
+              <GameCard
+                game={card.game}
+                coverBusy={card.isCoverBusy}
+                backgroundCoverFetching={card.isBackgroundCoverFetching}
+                menuDisabled={card.isMenuDisabled}
+                pickDisabled={card.isPickDisabled}
+                menuOpen={card.isMenuOpen}
+                coverMenuRef={card.menuRef}
+                onMenuOpenChange={(next: boolean): void => {
+                  onMenuOpenChange(card.id, next);
+                }}
+                onFetchCover={(): void => {
+                  onFetchCover(card.id);
+                }}
+                onPickCover={(): void => {
+                  onPickCover(card.id);
+                }}
+                onClearCover={(): void => {
+                  onClearCover(card.id);
+                }}
+                onOpenDetails={(): void => {
+                  onOpenDetails(card.id);
+                }}
+                onOpenOperations={(): void => {
+                  onOpenOperations(card.id);
+                }}
+              />
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
+  {:else}
+    <GamesFilterEmptyState {onResetFilters} />
+  {/if}
+</div>

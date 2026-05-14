@@ -111,7 +111,7 @@ function createDeps() {
     getCoverMenuRefs: () => ({}),
     getMenuOpenFor: () => null,
     setMenuOpenFor: vi.fn(),
-    onClearError: vi.fn(),
-    onReloadCards: vi.fn(() => Promise.resolve()),
+    getOnClearError: () => vi.fn(),
+    getOnReloadCards: () => vi.fn(() => Promise.resolve()),
   };
 }

@@ -19,6 +19,7 @@ import {
 } from './games-filter-controller';
 import { buildLibraryFilterOptions, groupLibraryFilterOptions } from './library-filter-options';
 import { buildLauncherFilterOptions } from './launcher-filter-options';
+import { canonicalizeLauncherOrder } from './launcher-order';
 
 export type GamesFiltersModel = ReturnType<typeof createGamesFiltersModel>;
 
@@ -168,6 +169,21 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     filtersState = setDraftLauncherOrder(filtersState, nextOrder);
   }
 
+  function resetFilters(): void {
+    filtersState = withSearchQuery(filtersState, '');
+    filtersState = setDraftLibraries(filtersState, filtersState.availableLibraries);
+    filtersState = setDraftLaunchers(filtersState, filtersState.availableLaunchers);
+    filtersState = setDraftLauncherOrder(
+      filtersState,
+      canonicalizeLauncherOrder([], filtersState.availableLaunchers),
+    );
+    filtersState = applyDraftFilters(filtersState);
+
+    void filterPersistence.persistFilters(createPersistenceContext()).catch((error: unknown) => {
+      console.error('Failed to persist reset game filters.', error);
+    });
+  }
+
   function setSearchQuery(nextValue: string): void {
     const nextState = withSearchQuery(filtersState, nextValue);
 
@@ -214,6 +230,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     handleDraftLibrariesChange,
     handleDraftLaunchersChange,
     handleDraftLauncherOrderChange,
+    resetFilters,
     setSearchQuery,
     flushSearchPersist,
     dispose,

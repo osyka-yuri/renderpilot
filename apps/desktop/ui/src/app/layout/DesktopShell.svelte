@@ -1,11 +1,10 @@
 <script lang="ts">
   import LibraryIcon from '@lucide/svelte/icons/library';
   import SettingsIcon from '@lucide/svelte/icons/settings';
-  import type { Snippet } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
 
   import {
-    Badge,
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -32,6 +31,43 @@
     children?: Snippet;
   };
 
+  type PrimaryScreen = Extract<Screen, 'games' | 'settings'>;
+
+  type NavigationItem = {
+    screen: PrimaryScreen;
+    label: string;
+    tooltip: string;
+    icon: Component;
+  };
+
+  type BreadcrumbEntry =
+    | {
+        id: string;
+        kind: 'link';
+        label: string;
+        target: Screen;
+      }
+    | {
+        id: string;
+        kind: 'page';
+        label: string;
+      };
+
+  const NAVIGATION_ITEMS = [
+    {
+      screen: 'games',
+      label: 'Games',
+      tooltip: 'Games',
+      icon: LibraryIcon,
+    },
+    {
+      screen: 'settings',
+      label: 'Settings',
+      tooltip: 'Settings',
+      icon: SettingsIcon,
+    },
+  ] satisfies readonly NavigationItem[];
+
   const {
     screen,
     busy = false,
@@ -43,6 +79,35 @@
   let sidebarOpen = $state(false);
 
   const resolvedGameTitle = $derived(selectedGameTitle?.trim() ?? 'Game');
+
+  const breadcrumbs = $derived(createBreadcrumbs(screen, resolvedGameTitle));
+
+  function createBreadcrumbs(currentScreen: Screen, gameTitle: string): BreadcrumbEntry[] {
+    switch (currentScreen) {
+      case 'games':
+        return [{ id: 'games-page', kind: 'page', label: 'Games' }];
+
+      case 'settings':
+        return [{ id: 'settings-page', kind: 'page', label: 'Settings' }];
+
+      case 'details':
+        return [
+          { id: 'games-link', kind: 'link', label: 'Games', target: 'games' },
+          { id: 'game-page', kind: 'page', label: gameTitle },
+        ];
+
+      case 'operations':
+        return [
+          { id: 'games-link', kind: 'link', label: 'Games', target: 'games' },
+          { id: 'game-link', kind: 'link', label: gameTitle, target: 'details' },
+          { id: 'operations-page', kind: 'page', label: 'Operations' },
+        ];
+
+      default: {
+        return [{ id: 'fallback-games-page', kind: 'page', label: 'Games' }];
+      }
+    }
+  }
 </script>
 
 <SidebarProvider bind:open={sidebarOpen}>
@@ -50,34 +115,26 @@
     <SidebarContent>
       <SidebarGroup>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={screen === 'games'}
-              onclick={() => {
-                onNavigate('games');
-              }}
-              tooltipContent="Games"
-            >
-              <LibraryIcon />
-              <span>Games</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {#each NAVIGATION_ITEMS as item (item.screen)}
+            {@const Icon = item.icon}
 
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={screen === 'settings'}
-              onclick={() => {
-                onNavigate('settings');
-              }}
-              tooltipContent="Settings"
-            >
-              <SettingsIcon />
-              <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={screen === item.screen}
+                onclick={() => {
+                  onNavigate(item.screen);
+                }}
+                tooltipContent={item.tooltip}
+              >
+                <Icon />
+                <span>{item.label}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          {/each}
         </SidebarMenu>
       </SidebarGroup>
     </SidebarContent>
+
     <SidebarRail />
   </Sidebar>
 
@@ -87,64 +144,32 @@
 
       <Breadcrumb>
         <BreadcrumbList>
-          {#if screen === 'games'}
-            <BreadcrumbItem>
-              <BreadcrumbPage>Games</BreadcrumbPage>
-            </BreadcrumbItem>
-          {:else if screen === 'settings'}
-            <BreadcrumbItem>
-              <BreadcrumbPage>Settings</BreadcrumbPage>
-            </BreadcrumbItem>
-          {:else}
-            <BreadcrumbItem>
-              <BreadcrumbLink
-                href="#"
-                onclick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  onNavigate('games');
-                }}
-              >
-                Games
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
+          {#each breadcrumbs as item, index (item.id)}
+            {#if index > 0}
+              <BreadcrumbSeparator />
+            {/if}
 
-            {#if screen === 'details'}
-              <BreadcrumbItem>
-                <BreadcrumbPage>{resolvedGameTitle}</BreadcrumbPage>
-              </BreadcrumbItem>
-            {:else if screen === 'operations'}
-              <BreadcrumbItem>
+            <BreadcrumbItem>
+              {#if item.kind === 'link'}
                 <BreadcrumbLink
-                  href="#"
-                  onclick={(e: MouseEvent) => {
-                    e.preventDefault();
-                    onNavigate('details');
+                  href={`#${item.target}`}
+                  onclick={(event: MouseEvent) => {
+                    event.preventDefault();
+                    onNavigate(item.target);
                   }}
                 >
-                  {resolvedGameTitle}
+                  {item.label}
                 </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Operations</BreadcrumbPage>
-              </BreadcrumbItem>
-            {/if}
-          {/if}
+              {:else}
+                <BreadcrumbPage>{item.label}</BreadcrumbPage>
+              {/if}
+            </BreadcrumbItem>
+          {/each}
         </BreadcrumbList>
       </Breadcrumb>
-
-      {#if busy}
-        <span class="ml-auto inline-flex" role="status" aria-live="polite">
-          <Badge variant="secondary">
-            <span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
-            Working
-          </Badge>
-        </span>
-      {/if}
     </header>
 
-    <main class="grid min-w-0 gap-4 p-4">
+    <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 p-4" aria-busy={busy}>
       {@render children?.()}
     </main>
   </SidebarInset>

@@ -38,26 +38,24 @@
     </EmptyDescription>
   </EmptyHeader>
 
-  <EmptyContent>
-    <div
-      class={cn(
-        'flex flex-wrap gap-2',
-        'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch',
-      )}
-    >
-      <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
-        {#if busy}
-          <Spinner />
-        {/if}
-        Refresh Libraries
-      </Button>
+  <EmptyContent
+    class={cn(
+      'flex-row flex-wrap items-start gap-2',
+      'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch',
+    )}
+  >
+    <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
+      {#if busy}
+        <Spinner />
+      {/if}
+      Refresh Libraries
+    </Button>
 
-      <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
-        {#if busy}
-          <Spinner />
-        {/if}
-        {scanButtonLabel}
-      </Button>
-    </div>
+    <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
+      {#if busy}
+        <Spinner />
+      {/if}
+      {scanButtonLabel}
+    </Button>
   </EmptyContent>
 </Empty>
