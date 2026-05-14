@@ -264,10 +264,8 @@
     <SettingsScreen
       themeMode={model.themeMode}
       languageMode={model.languageMode}
-      advancedMode={model.advancedMode}
       onThemeModeChange={model.changeThemeMode}
       onLanguageModeChange={model.changeLanguageMode}
-      onToggleAdvancedMode={model.toggleAdvancedMode}
     />
   {:else}
     <GamesScreen

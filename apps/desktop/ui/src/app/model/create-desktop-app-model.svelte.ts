@@ -30,7 +30,6 @@ export function createDesktopAppModel() {
   const workspace = createGameWorkspaceModel();
 
   let busy = $state(false);
-  let advancedMode = $state(false);
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
   let languageMode = $state<LanguageMode>('system');
 
@@ -144,10 +143,6 @@ export function createDesktopAppModel() {
   // Settings
   // ---------------------------------------------------------------------------
 
-  function toggleAdvancedMode(): void {
-    advancedMode = !advancedMode;
-  }
-
   function changeThemeMode(mode: ThemeMode): void {
     if (themeMode === mode) {
       return;
@@ -245,9 +240,6 @@ export function createDesktopAppModel() {
     get busy() {
       return busy;
     },
-    get advancedMode() {
-      return advancedMode;
-    },
     get themeMode() {
       return themeMode;
     },
@@ -288,7 +280,6 @@ export function createDesktopAppModel() {
     presentGameDetails,
     clearError,
     showError,
-    toggleAdvancedMode,
     changeThemeMode,
     changeLanguageMode,
     applyCurrentTheme,

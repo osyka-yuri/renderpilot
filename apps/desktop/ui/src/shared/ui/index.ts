@@ -30,6 +30,18 @@ export {
   EmptyTitle,
 } from './empty';
 export { Input } from './input';
+export {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemFooter,
+  ItemGroup,
+  ItemHeader,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from './item';
 export { Label } from './label';
 export { Popover, PopoverClose, PopoverContent, PopoverPortal, PopoverTrigger } from './popover';
 export { ScrollArea, ScrollAreaScrollbar } from './scroll-area';

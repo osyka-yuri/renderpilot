@@ -30,23 +30,23 @@ const coverSourceToggleRowDefinitions = [
     settingKey: COVERS_STEAM_CDN_SETTING_KEY,
     ariaLabel: 'Use Steam CDN for artwork',
     eyebrow: 'Steam',
-    title: 'Steam CDN',
-    description: 'Public Steam library artwork when the catalog has a Steam app id.',
+    title: 'Steam artwork',
+    description: 'Uses public Steam library artwork when a Steam app ID is available.',
   },
   {
     settingKey: COVERS_GOG_CDN_SETTING_KEY,
     ariaLabel: 'Use GOG CDN for artwork',
     eyebrow: 'GOG',
-    title: 'GOG CDN',
-    description: 'GOG vertical covers when the catalog has a numeric GOG product id.',
+    title: 'GOG artwork',
+    description: 'Uses official GOG cover artwork when a numeric GOG product ID is available.',
   },
   {
     settingKey: COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
-    ariaLabel: 'Use SteamGridDB for artwork search',
+    ariaLabel: 'Use SteamGridDB as an artwork source',
     eyebrow: 'SteamGridDB',
-    title: 'Remote search',
+    title: 'SteamGridDB artwork',
     description:
-      'Slug lookups, autocomplete, and grid images via the SteamGridDB API (requires a key).',
+      'Uses SteamGridDB as an additional source for missing artwork and non-Steam titles. Requires an API key.',
   },
 ] as const satisfies readonly CoverSourceToggleRowDefinition[];
 

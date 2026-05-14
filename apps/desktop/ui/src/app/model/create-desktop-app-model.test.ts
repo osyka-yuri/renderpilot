@@ -40,15 +40,6 @@ describe('createDesktopAppModel', () => {
     expect(model.currentPlan).toBeNull();
   });
 
-  it('toggles advanced mode', () => {
-    const model = createDesktopAppModel();
-    expect(model.advancedMode).toBe(false);
-    model.toggleAdvancedMode();
-    expect(model.advancedMode).toBe(true);
-    model.toggleAdvancedMode();
-    expect(model.advancedMode).toBe(false);
-  });
-
   it('clears the active status notification', () => {
     const clearStatusNotificationSpy = vi
       .spyOn(notificationsModule, 'clearStatusNotification')

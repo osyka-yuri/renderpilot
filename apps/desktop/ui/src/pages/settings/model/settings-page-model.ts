@@ -22,6 +22,16 @@ export const languageOptions = [
   { value: 'ru', label: 'Russian' },
 ] as const satisfies readonly SettingsSelectOption<LanguageMode>[];
 
+export type SettingsTabOption = {
+  value: string;
+  label: string;
+};
+
+export const tabOptions = [
+  { value: 'appearance', label: 'Appearance' },
+  { value: 'catalog', label: 'Catalog' },
+] as const satisfies readonly SettingsTabOption[];
+
 export function isOptionValue<Value extends string>(
   value: string,
   options: readonly SettingsSelectOption<Value>[],

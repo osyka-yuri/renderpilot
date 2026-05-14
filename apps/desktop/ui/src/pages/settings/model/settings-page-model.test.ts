@@ -3,6 +3,7 @@ import {
   isOptionValue,
   languageOptions,
   type SettingsSelectOption,
+  tabOptions,
   themeOptions,
 } from './settings-page-model';
 
@@ -59,6 +60,16 @@ describe('settings-page-model', () => {
     it.each(optionValidationCases)('keeps $name option labels non-empty', ({ options }) => {
       for (const option of options) {
         expectNonEmptyString(option.label);
+      }
+    });
+  });
+
+  describe('tabOptions', () => {
+    it('has exactly 2 tabs with non-empty labels and unique values', () => {
+      expect(tabOptions.length).toBe(2);
+      expectUniqueValues(tabOptions.map((t) => t.value));
+      for (const tab of tabOptions) {
+        expectNonEmptyString(tab.label);
       }
     });
   });

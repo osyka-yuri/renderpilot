@@ -85,24 +85,12 @@ export function createSettingsPanelModel() {
     return steamKeyLoaded && !steamKeyBusy;
   }
 
-  function canReloadSteamGridDbKey(): boolean {
-    return !steamKeyBusy;
-  }
-
   function handleSteamGridDbKeySave(): void {
     if (!canSaveSteamGridDbKey()) {
       return;
     }
 
     void saveSteamGridDbKey(steamKeyContext);
-  }
-
-  function handleSteamGridDbKeyReload(): void {
-    if (!canReloadSteamGridDbKey()) {
-      return;
-    }
-
-    void loadSteamGridDbKey(steamKeyContext);
   }
 
   function isCoverSourceDisabledState(row: CoverSourceToggleRow): boolean {
@@ -145,7 +133,6 @@ export function createSettingsPanelModel() {
     init,
     dispose,
     handleSteamGridDbKeySave,
-    handleSteamGridDbKeyReload,
     isCoverSourceDisabled: isCoverSourceDisabledState,
     handleCoverSourceToggle,
   };
