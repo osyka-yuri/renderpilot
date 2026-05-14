@@ -4,6 +4,7 @@ import { mockState, requireGameDetails } from '../desktop-state';
 import {
   clone,
   collectAvailableLibraries,
+  collectAvailableLaunchers,
   compareCards,
   requireNonEmptyText,
   resolveMock,
@@ -19,6 +20,14 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
     const selectedLibrarySet = new Set(
       normalizedQuery.selectedLibraries.filter((library) => availableLibrarySet.has(library)),
     );
+    const hasLibraryFilter = normalizedQuery.selectedLibraries.length > 0;
+
+    const availableLaunchers = collectAvailableLaunchers(allCards);
+    const availableLauncherSet = new Set(availableLaunchers);
+    const selectedLauncherSet = new Set(
+      normalizedQuery.selectedLaunchers.filter((launcher) => availableLauncherSet.has(launcher)),
+    );
+    const hasLauncherFilter = normalizedQuery.selectedLaunchers.length > 0;
 
     const searchQuery = normalizedQuery.searchQuery.trim().toLowerCase();
 
@@ -28,10 +37,11 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
           searchQuery.length === 0 || card.title.toLowerCase().includes(searchQuery);
 
         const matchesLibraries =
-          selectedLibrarySet.size === 0 ||
-          card.library_tags.some((library) => selectedLibrarySet.has(library));
+          !hasLibraryFilter || card.library_tags.some((library) => selectedLibrarySet.has(library));
 
-        return matchesSearch && matchesLibraries;
+        const matchesLaunchers = !hasLauncherFilter || selectedLauncherSet.has(card.launcher);
+
+        return matchesSearch && matchesLibraries && matchesLaunchers;
       })
       .sort((left, right) => compareCards(left, right, normalizedQuery.sort));
 
@@ -42,6 +52,7 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
       items: filtered.slice(offset, offset + limit),
       total: filtered.length,
       availableLibraries,
+      availableLaunchers,
       queryFingerprint: JSON.stringify(normalizedQuery),
     };
   });

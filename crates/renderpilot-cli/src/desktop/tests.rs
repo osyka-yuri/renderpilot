@@ -32,7 +32,7 @@ const DLSS_DLL: &str = "nvngx_dlss.dll";
 const DEFAULT_PAGE_LIMIT: i64 = 10_000;
 
 fn query_all_game_cards() -> Result<GameCardsQueryResult, crate::CliError> {
-    GameCardsQueryResult::query("", Vec::new(), "title", "asc", DEFAULT_PAGE_LIMIT, 0)
+    GameCardsQueryResult::query("", Vec::new(), Vec::new(), "title", "asc", DEFAULT_PAGE_LIMIT, 0)
 }
 
 #[test]
@@ -320,6 +320,7 @@ fn query_game_cards_applies_search_library_and_include_without_filters() {
     let result = GameCardsQueryResult::query(
         "a",
         vec![String::from("dlss_super_resolution")],
+        Vec::new(),
         "title",
         "asc",
         50,
@@ -368,7 +369,7 @@ fn query_game_cards_returns_total_available_libraries_and_paged_items() {
         )],
     );
 
-    let result = GameCardsQueryResult::query("", Vec::new(), "title", "asc", 1, 0)
+    let result = GameCardsQueryResult::query("", Vec::new(), Vec::new(), "title", "asc", 1, 0)
         .expect("query should succeed");
 
     let available = result.available_libraries();
@@ -533,7 +534,7 @@ fn query_game_cards_sorts_risk_by_domain_severity() {
         )],
     );
 
-    let result = GameCardsQueryResult::query("", Vec::new(), "risk", "desc", 10, 0)
+    let result = GameCardsQueryResult::query("", Vec::new(), Vec::new(), "risk", "desc", 10, 0)
         .expect("query should succeed");
 
     let items = result.items();
@@ -1072,6 +1073,7 @@ impl GameCardsQueryResult {
     fn query(
         search_query: impl Into<String>,
         selected_libraries: Vec<String>,
+        selected_launchers: Vec<String>,
         sort_field: impl Into<String>,
         sort_direction: impl Into<String>,
         page_limit: i64,
@@ -1080,6 +1082,7 @@ impl GameCardsQueryResult {
         let value = query_game_cards(
             search_query.into(),
             selected_libraries,
+            selected_launchers,
             sort_field.into(),
             sort_direction.into(),
             page_limit,

@@ -22,6 +22,7 @@ pub fn list_games() -> JsonResult {
 pub fn query_game_cards(
     search_query: String,
     selected_libraries: Vec<String>,
+    selected_launchers: Vec<String>,
     sort_field: String,
     sort_direction: String,
     page_limit: i64,
@@ -35,15 +36,22 @@ pub fn query_game_cards(
             .list_distinct_game_libraries()
             .map_err(CliError::from)?,
     );
+    let available_launchers = normalize_launcher_names(
+        storage
+            .list_distinct_game_launchers()
+            .map_err(CliError::from)?,
+    );
 
     let query = QueryGameCards::new(
         search_query,
         selected_libraries,
+        selected_launchers,
         sort_field,
         sort_direction,
         page_limit,
         page_offset,
         &available_libraries,
+        &available_launchers,
     );
 
     let query_fingerprint = query_fingerprint(&query);
@@ -62,6 +70,7 @@ pub fn query_game_cards(
         items,
         total,
         available_libraries,
+        available_launchers,
         query_fingerprint,
     })
 }
@@ -134,6 +143,7 @@ struct QueryGameCardsOutput {
     items: Vec<GameCardOutput>,
     total: usize,
     available_libraries: Vec<String>,
+    available_launchers: Vec<String>,
     query_fingerprint: String,
 }
 
@@ -142,11 +152,21 @@ struct QueryGameCardsOutput {
 struct QueryGameCards {
     search_query: String,
     selected_libraries: Vec<String>,
+    selected_launchers: Vec<String>,
     sort: QueryGameCardsSort,
     page: QueryGameCardsPage,
 
     #[serde(skip_serializing)]
     selected_library_set: BTreeSet<String>,
+
+    #[serde(skip_serializing)]
+    selected_launcher_set: BTreeSet<String>,
+
+    #[serde(skip_serializing)]
+    has_library_filter: bool,
+
+    #[serde(skip_serializing)]
+    has_launcher_filter: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -201,28 +221,41 @@ impl QueryGameCards {
     fn new(
         search_query: String,
         selected_libraries: Vec<String>,
+        selected_launchers: Vec<String>,
         sort_field: String,
         sort_direction: String,
         page_limit: i64,
         page_offset: i64,
         available_libraries: &[String],
+        available_launchers: &[String],
     ) -> Self {
         let search_query = normalize_search_query(search_query);
+        let has_library_filter = !selected_libraries.is_empty();
+        let has_launcher_filter = !selected_launchers.is_empty();
         let selected_libraries =
             normalize_selected_libraries(selected_libraries, available_libraries);
         let selected_library_set = selected_libraries.iter().cloned().collect();
+        let selected_launchers =
+            normalize_selected_launchers(selected_launchers, available_launchers);
+        let selected_launcher_set = selected_launchers.iter().cloned().collect();
 
         Self {
             search_query,
             selected_libraries,
-            selected_library_set,
+            selected_launchers,
             sort: QueryGameCardsSort::new(&sort_field, &sort_direction),
             page: QueryGameCardsPage::new(page_limit, page_offset),
+            selected_library_set,
+            selected_launcher_set,
+            has_library_filter,
+            has_launcher_filter,
         }
     }
 
     fn matches(&self, card: &GameCardOutput) -> bool {
-        self.matches_search_query(card) && self.matches_selected_libraries(card)
+        self.matches_search_query(card)
+            && self.matches_selected_libraries(card)
+            && self.matches_selected_launchers(card)
     }
 
     fn matches_search_query(&self, card: &GameCardOutput) -> bool {
@@ -230,11 +263,15 @@ impl QueryGameCards {
     }
 
     fn matches_selected_libraries(&self, card: &GameCardOutput) -> bool {
-        self.selected_library_set.is_empty()
+        !self.has_library_filter
             || card
                 .library_tags
                 .iter()
                 .any(|tag| self.selected_library_set.contains(tag))
+    }
+
+    fn matches_selected_launchers(&self, card: &GameCardOutput) -> bool {
+        !self.has_launcher_filter || self.selected_launcher_set.contains(&card.launcher)
     }
 
     fn compare(&self, left: &GameCardOutput, right: &GameCardOutput) -> Ordering {
@@ -460,6 +497,38 @@ fn normalize_selected_libraries(
     selected_libraries
 }
 
+fn normalize_launcher_names(values: Vec<String>) -> Vec<String> {
+    let mut normalized = values
+        .into_iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn normalize_selected_launchers(
+    selected_launchers: Vec<String>,
+    available_launchers: &[String],
+) -> Vec<String> {
+    if available_launchers.is_empty() {
+        return Vec::new();
+    }
+
+    let allowed_launchers = available_launchers
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+
+    let mut selected_launchers = normalize_launcher_names(selected_launchers);
+
+    selected_launchers.retain(|launcher| allowed_launchers.contains(launcher.as_str()));
+
+    selected_launchers
+}
+
 fn parse_graphics_technology(value: &str) -> Option<GraphicsTechnology> {
     GraphicsTechnology::from_slug(value)
 }
@@ -516,7 +585,31 @@ fn query_fingerprint(query: &QueryGameCards) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_library_name;
+    use crate::desktop::utils::DashboardRiskLevel;
+    use super::{normalize_library_name, GameCardOutput, QueryGameCards};
+
+    fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
+        GameCardOutput {
+            game_id: String::from("test-id"),
+            title: String::from("Test Game"),
+            title_search_key: String::from("test game"),
+            launcher: String::from(launcher),
+            platform: String::from("windows"),
+            runtime: String::from("dx11"),
+            install_path: String::from("/games/test"),
+            external_id: None,
+            library_tags: library_tags.iter().map(|&t| String::from(t)).collect(),
+            component_count: 1,
+            updates_available: false,
+            update_count: 0,
+            risk_level: String::from("safe"),
+            risk_order: DashboardRiskLevel::Low,
+            backup_available: false,
+            operation_count: 0,
+            last_operation_status: None,
+            cover_updated_at_ms: None,
+        }
+    }
 
     #[test]
     fn normalize_library_name_keeps_current_slugs_and_drops_unknown() {
@@ -532,5 +625,125 @@ mod tests {
     fn normalize_library_name_rejects_legacy_and_non_slug_values() {
         assert_eq!(normalize_library_name(String::from("IntelXeLl")), None);
         assert_eq!(normalize_library_name(String::from("steam")), None);
+    }
+
+    #[test]
+    fn empty_selected_launchers_matches_all_cards() {
+        let query = QueryGameCards::new(
+            String::new(),
+            Vec::new(),
+            Vec::new(),
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[String::from("steam")],
+            &[String::from("Steam")],
+        );
+        let steam_card = stub_card("Steam", &["steam"]);
+        let epic_card = stub_card("Epic", &["epic"]);
+
+        assert!(query.matches(&steam_card));
+        assert!(query.matches(&epic_card));
+    }
+
+    #[test]
+    fn selected_launcher_matches_only_same_launcher() {
+        let query = QueryGameCards::new(
+            String::new(),
+            Vec::new(),
+            vec![String::from("Steam")],
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[String::from("steam")],
+            &[String::from("Steam")],
+        );
+        let steam_card = stub_card("Steam", &["steam"]);
+        let epic_card = stub_card("Epic", &["epic"]);
+
+        assert!(query.matches(&steam_card));
+        assert!(!query.matches(&epic_card));
+    }
+
+    #[test]
+    fn selected_launcher_not_in_available_excludes_all() {
+        let query = QueryGameCards::new(
+            String::new(),
+            Vec::new(),
+            vec![String::from("Epic")],
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[String::from("steam")],
+            &[String::from("Steam")],
+        );
+        let steam_card = stub_card("Steam", &["steam"]);
+
+        assert!(!query.matches(&steam_card));
+    }
+
+    #[test]
+    fn empty_selected_libraries_matches_all_cards() {
+        let query = QueryGameCards::new(
+            String::new(),
+            Vec::new(),
+            Vec::new(),
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[
+                String::from("dlss_super_resolution"),
+                String::from("intel_xess"),
+            ],
+            &[String::from("Steam")],
+        );
+        let steam_card = stub_card("Steam", &["dlss_super_resolution"]);
+
+        assert!(query.matches(&steam_card));
+    }
+
+    #[test]
+    fn selected_library_matches_only_same_library() {
+        let query = QueryGameCards::new(
+            String::new(),
+            vec![String::from("dlss_super_resolution")],
+            Vec::new(),
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[
+                String::from("dlss_super_resolution"),
+                String::from("intel_xess"),
+            ],
+            &[String::from("Steam")],
+        );
+        let dlss_card = stub_card("Steam", &["dlss_super_resolution"]);
+        let xess_card = stub_card("Epic", &["intel_xess"]);
+
+        assert!(query.matches(&dlss_card));
+        assert!(!query.matches(&xess_card));
+    }
+
+    #[test]
+    fn selected_library_not_in_available_excludes_all() {
+        let query = QueryGameCards::new(
+            String::new(),
+            vec![String::from("intel_xess")],
+            Vec::new(),
+            String::from("title"),
+            String::from("asc"),
+            100,
+            0,
+            &[String::from("dlss_super_resolution")],
+            &[String::from("Steam")],
+        );
+        let dlss_card = stub_card("Steam", &["dlss_super_resolution"]);
+
+        assert!(!query.matches(&dlss_card));
     }
 }

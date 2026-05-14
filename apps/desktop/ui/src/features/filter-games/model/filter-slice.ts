@@ -41,7 +41,12 @@ export function createHydratedSlice(
 
     const selected = canonicalizeFn(availableValues, availableValues);
 
-    return { applied: selected, draft: [...selected], deferSelectAll: false, pendingPersisted: null };
+    return {
+      applied: selected,
+      draft: [...selected],
+      deferSelectAll: false,
+      pendingPersisted: null,
+    };
   }
 
   if (availableValues.length === 0) {
@@ -66,13 +71,23 @@ export function createAvailableSliceUpdate(
   if (slice.deferSelectAll && availableValues.length > 0) {
     const selected = canonicalizeFn(availableValues, availableValues);
 
-    return { applied: selected, draft: [...selected], deferSelectAll: false, pendingPersisted: null };
+    return {
+      applied: selected,
+      draft: [...selected],
+      deferSelectAll: false,
+      pendingPersisted: null,
+    };
   }
 
   if (slice.pendingPersisted !== null && availableValues.length > 0) {
     const selected = canonicalizeFn(slice.pendingPersisted, availableValues);
 
-    return { applied: selected, draft: [...selected], deferSelectAll: false, pendingPersisted: null };
+    return {
+      applied: selected,
+      draft: [...selected],
+      deferSelectAll: false,
+      pendingPersisted: null,
+    };
   }
 
   if (availableValues.length === 0) {
