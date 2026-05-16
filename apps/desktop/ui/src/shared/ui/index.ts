@@ -126,3 +126,4 @@ export {
 export { Toggle, toggleVariants } from './toggle';
 export { ToggleGroup, ToggleGroupItem } from './toggle-group';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
+export { FlexRender, renderComponent, renderSnippet, createSvelteTable } from './data-table';
