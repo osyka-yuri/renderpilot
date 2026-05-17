@@ -57,6 +57,7 @@ pub(super) fn normalized_path_within_scope(path: &str, scope_root: &str) -> bool
 /// Lower-cases ASCII and strips trailing `/` so case-only and trailing-slash
 /// differences do not block matching catalog install paths against
 /// `prune_auto_scan_orphans` inputs.
+#[cfg(windows)]
 pub(super) fn install_path_match_key(path: &str) -> String {
     let mut key = path.to_ascii_lowercase();
 
@@ -116,8 +117,11 @@ fn is_windows_drive_root(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{install_path_match_key, normalized_path_within_scope};
+    #[cfg(windows)]
+    use super::install_path_match_key;
+    use super::normalized_path_within_scope;
 
+    #[cfg(windows)]
     #[test]
     fn install_path_match_key_unifies_case_and_trailing_slash() {
         assert_eq!(

@@ -3,7 +3,13 @@ mod paths;
 mod prune;
 mod scan_plan;
 
-pub(super) use prune::prune_auto_scan_orphans;
+#[cfg(windows)]
+mod auto;
+
+#[cfg(windows)]
+pub(super) use auto::scan_auto_in_shared_batch;
+#[cfg(windows)]
+pub(crate) use prune::prune_auto_scan_orphans;
 
 use std::{
     collections::BTreeMap,
@@ -77,23 +83,6 @@ pub(super) fn scan_folder_impl(path: PathBuf) -> Result<Vec<ScanFolderCatalogRes
     )
 }
 
-/// Per-install auto-scan using a shared open catalog, detector, and full
-/// `file_hash_cache` prefetch (see [`crate::catalog::open_auto_scan_batch`]).
-pub(crate) fn scan_auto_in_shared_batch(
-    storage: &SqliteStorage,
-    detector: &LibraryPatternComponentDetector,
-    prefetched_cache: &FileHashCache,
-    path: PathBuf,
-) -> Result<Vec<ScanFolderCatalogResult>, CliError> {
-    scan_impl(
-        ScanInputs { storage, detector },
-        path,
-        DetectionMode::FastCachedWithFullFallback,
-        InstallRootStrategy::SingleInstall,
-        Some(prefetched_cache),
-    )
-}
-
 /// Borrowed storage + detector for one [`scan_impl`] invocation.
 struct ScanInputs<'a> {
     storage: &'a SqliteStorage,
@@ -102,7 +91,7 @@ struct ScanInputs<'a> {
 
 fn scan_impl(
     inputs: ScanInputs<'_>,
-    path: PathBuf,
+    path: impl Into<PathBuf>,
     detection_mode: DetectionMode,
     install_root_strategy: InstallRootStrategy,
     prefetched_cache: Option<&FileHashCache>,
@@ -557,15 +546,19 @@ fn domain_to_detection_error(error: impl std::fmt::Display) -> AppError {
     AppError::detection_failed(error.to_string())
 }
 
-fn load_hash_cache(storage: &SqliteStorage, prefix: &str) -> Result<FileHashCache, CliError> {
-    let rows = storage.load_file_hash_cache(prefix)?;
+pub(super) fn populate_file_hash_cache(rows: Vec<FileHashCacheRow>) -> FileHashCache {
     let mut cache = FileHashCache::with_capacity(rows.len());
 
     for row in rows {
         cache.insert(row.path, row.size, row.modified_at, row.sha256, row.version);
     }
 
-    Ok(cache)
+    cache
+}
+
+fn load_hash_cache(storage: &SqliteStorage, prefix: &str) -> Result<FileHashCache, CliError> {
+    let rows = storage.load_file_hash_cache(prefix)?;
+    Ok(populate_file_hash_cache(rows))
 }
 
 /// Persists per-file metadata for detected libraries into SQLite (`file_hash_cache`).

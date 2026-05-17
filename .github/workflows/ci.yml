@@ -26,6 +26,11 @@ jobs:
       - name: Show Rust toolchain
         run: rustup show
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

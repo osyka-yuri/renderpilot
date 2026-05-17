@@ -1,4 +1,5 @@
 #[derive(Clone, Copy)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(super) enum DetectionMode {
     /// Full filesystem pass, but reuse cached hashes where possible.
     FullCached,
@@ -10,6 +11,7 @@ pub(super) enum DetectionMode {
 
 /// Controls how the scan derives game install roots from a scan target.
 #[derive(Clone, Copy)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(super) enum InstallRootStrategy {
     /// The scan target is treated as a single game install.
     SingleInstall,

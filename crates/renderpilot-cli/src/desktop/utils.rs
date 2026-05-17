@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, path::Path};
+use std::collections::BTreeSet;
+#[cfg(any(windows, test))]
+use std::path::Path;
 
 use renderpilot_domain::{
     ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, OperationId,
@@ -99,6 +101,7 @@ pub(crate) fn is_low_risk_component(component: &GraphicsComponent) -> bool {
     component.swappability() == Swappability::Swappable
 }
 
+#[cfg(any(windows, test))]
 pub(crate) fn normalized_path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }

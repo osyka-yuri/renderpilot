@@ -1,4 +1,6 @@
-use std::{fs, path::Path};
+use std::fs;
+#[cfg(windows)]
+use std::path::Path;
 
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt as _;
