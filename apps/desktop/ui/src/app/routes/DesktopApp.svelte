@@ -38,6 +38,7 @@
   import { GamesPage as GamesScreen } from '@pages/games';
   import { OperationsPage as OperationsScreen } from '@pages/operations';
   import { SettingsPage as SettingsScreen } from '@pages/settings';
+  import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
   import { createDesktopAppModel } from '@app/model/create-desktop-app-model.svelte';
 
   const model = createDesktopAppModel();
@@ -268,6 +269,8 @@
       onThemeModeChange={model.changeThemeMode}
       onLanguageModeChange={model.changeLanguageMode}
     />
+  {:else if model.screen === 'libraries'}
+    <LibrariesScreen />
   {:else}
     <GamesScreen
       games={model.games}

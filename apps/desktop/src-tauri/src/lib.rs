@@ -32,9 +32,18 @@ fn create_desktop_builder() -> DesktopBuilder {
     configure_cover_protocol(configure_commands(configure_plugins(Builder::default()))).setup(
         |_| {
             renderpilot_cli::desktop::gc_cover_orphans_on_startup();
+            refresh_libraries_manifest_in_background();
             Ok(())
         },
     )
+}
+
+fn refresh_libraries_manifest_in_background() {
+    tauri::async_runtime::spawn(async {
+        if let Err(error) = renderpilot_cli::desktop::fetch_libraries_manifest().await {
+            eprintln!("Failed to refresh libraries manifest on startup: {error}");
+        }
+    });
 }
 
 fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
@@ -70,6 +79,12 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::build_swap_plan,
         commands::apply_operation_plan,
         commands::rollback_operation,
+        // Libraries
+        commands::fetch_libraries_manifest,
+        commands::get_libraries_manifest,
+        commands::download_library,
+        commands::delete_library,
+        commands::get_library_states,
     ])
 }
 

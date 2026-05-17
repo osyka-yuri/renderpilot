@@ -382,7 +382,11 @@ fn detector_scans_intel_xell_runtime_files_from_disk() {
         .expect("detection should succeed");
 
     assert_detects(&libraries, "libxell.dll", GraphicsTechnology::IntelXeLl);
-    assert_detects(&libraries, "libxell_dx11.dll", GraphicsTechnology::IntelXeLl);
+    assert_detects(
+        &libraries,
+        "libxell_dx11.dll",
+        GraphicsTechnology::IntelXeLl,
+    );
 }
 
 #[test]
@@ -394,8 +398,11 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
     fs::remove_file(folder.join(TEMP_DLSS_NAME)).expect("temporary dlss file should be removed");
     fs::write(folder.join("amd_fidelityfx_denoiser.dll"), b"amd-denoiser")
         .expect("denoiser dll should be written");
-    fs::write(folder.join("amd_fidelityfx_denoiser_dx12.dll"), b"amd-denoiser-dx12")
-        .expect("denoiser dx12 dll should be written");
+    fs::write(
+        folder.join("amd_fidelityfx_denoiser_dx12.dll"),
+        b"amd-denoiser-dx12",
+    )
+    .expect("denoiser dx12 dll should be written");
     fs::write(folder.join("amd_fidelityfx_loader_dx12.dll"), b"amd-loader")
         .expect("loader dll should be written");
     fs::write(folder.join("amd_fidelityfx_upscaler.dll"), b"amd-upscaler")

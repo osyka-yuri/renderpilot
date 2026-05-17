@@ -399,10 +399,8 @@ impl GameDetailsOutput {
         let details = catalog::get_game_details(game_id)?;
         let visible_components = filter_visible_components(details.components);
         let visible_component_ids = visible_component_ids(&visible_components);
-        let visible_candidate_groups = filter_visible_candidate_groups(
-            details.candidate_groups,
-            &visible_component_ids,
-        );
+        let visible_candidate_groups =
+            filter_visible_candidate_groups(details.candidate_groups, &visible_component_ids);
         let candidate_groups = output::candidate_groups_value(visible_candidate_groups)?;
         let operations = output::operation_summaries_value(&details.operations)?;
 
@@ -553,7 +551,7 @@ fn filter_visible_candidate_groups(
 fn visible_component_ids(components: &[GraphicsComponent]) -> BTreeSet<String> {
     components
         .iter()
-    .filter(|component| is_visible_graphics_technology(component.technology()))
+        .filter(|component| is_visible_graphics_technology(component.technology()))
         .map(|component| component.id().as_str().to_owned())
         .collect()
 }
@@ -585,8 +583,8 @@ fn query_fingerprint(query: &QueryGameCards) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::desktop::utils::DashboardRiskLevel;
     use super::{normalize_library_name, GameCardOutput, QueryGameCards};
+    use crate::desktop::utils::DashboardRiskLevel;
 
     fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
         GameCardOutput {

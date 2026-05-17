@@ -32,7 +32,15 @@ const DLSS_DLL: &str = "nvngx_dlss.dll";
 const DEFAULT_PAGE_LIMIT: i64 = 10_000;
 
 fn query_all_game_cards() -> Result<GameCardsQueryResult, crate::CliError> {
-    GameCardsQueryResult::query("", Vec::new(), Vec::new(), "title", "asc", DEFAULT_PAGE_LIMIT, 0)
+    GameCardsQueryResult::query(
+        "",
+        Vec::new(),
+        Vec::new(),
+        "title",
+        "asc",
+        DEFAULT_PAGE_LIMIT,
+        0,
+    )
 }
 
 #[test]
@@ -425,7 +433,10 @@ fn query_game_cards_excludes_unknown_from_tags_available_libraries_and_visible_c
     let items = result.items();
 
     assert_eq!(items.len(), 1);
-    assert_eq!(json_string_array_set(&items[0], "library_tags"), string_set(&["dlss_super_resolution"]));
+    assert_eq!(
+        json_string_array_set(&items[0], "library_tags"),
+        string_set(&["dlss_super_resolution"])
+    );
     assert_eq!(items[0]["component_count"], 1);
     assert!(!result.available_libraries().contains("unknown"));
 }
@@ -434,7 +445,11 @@ fn query_game_cards_excludes_unknown_from_tags_available_libraries_and_visible_c
 fn query_game_cards_excludes_unknown_from_visible_update_count() {
     let fixture = DesktopFixture::new("query-game-cards-hide-unknown-updates");
 
-    let game = sample_game("manual:C:/Games/VisibleUpdates", "Visible Updates", "C:/Games/VisibleUpdates");
+    let game = sample_game(
+        "manual:C:/Games/VisibleUpdates",
+        "Visible Updates",
+        "C:/Games/VisibleUpdates",
+    );
 
     fixture.store_game(&game);
     fixture.store_components(

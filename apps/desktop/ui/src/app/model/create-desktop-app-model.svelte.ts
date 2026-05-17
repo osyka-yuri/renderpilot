@@ -58,6 +58,11 @@ export function createDesktopAppModel() {
       return;
     }
 
+    if (nextScreen === 'libraries') {
+      screen = 'libraries';
+      return;
+    }
+
     if (isWorkspaceScreen(nextScreen)) {
       if (!hasSelectedGameDetails) {
         clearSelection();

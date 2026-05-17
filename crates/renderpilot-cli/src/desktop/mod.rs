@@ -5,6 +5,7 @@
 
 mod catalog;
 mod covers;
+mod libraries;
 mod operations;
 mod scan;
 mod utils;
@@ -21,6 +22,10 @@ pub use self::catalog::{
     get_catalog_setting, get_game_details, list_games, query_game_cards, set_catalog_setting,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
+pub use self::libraries::{
+    delete_library, download_library, fetch_libraries_manifest, get_libraries_manifest,
+    get_library_states, LibraryManifest, LibraryManifestEntry, LibraryState,
+};
 pub use self::operations::{
     apply_operation, apply_operation_plan, build_swap_plan, rollback_operation,
 };

@@ -29,6 +29,17 @@ where
         .map_err(CommandError::from)
 }
 
+async fn run_desktop_async_command<F, Fut>(command: F) -> JsonCommandResult
+where
+    F: FnOnce() -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = DesktopCommandResult> + Send + 'static,
+{
+    tauri::async_runtime::spawn(command())
+        .await
+        .map_err(CommandError::task_failed)?
+        .map_err(CommandError::from)
+}
+
 fn require_non_empty_string(
     name: &'static str,
     value: impl Into<String>,
@@ -305,4 +316,33 @@ pub async fn rollback_operation(operation_id: String) -> JsonCommandResult {
     let operation_id = require_non_empty_string("operation_id", operation_id)?;
 
     run_desktop_command(move || desktop::rollback_operation(operation_id)).await
+}
+
+#[tauri::command]
+pub async fn fetch_libraries_manifest() -> JsonCommandResult {
+    run_desktop_async_command(desktop::fetch_libraries_manifest).await
+}
+
+#[tauri::command]
+pub async fn get_libraries_manifest() -> JsonCommandResult {
+    run_desktop_async_command(desktop::get_libraries_manifest).await
+}
+
+#[tauri::command]
+pub async fn download_library(entry_id: String) -> JsonCommandResult {
+    let entry_id = require_non_empty_string("entry_id", entry_id)?;
+
+    run_desktop_async_command(move || desktop::download_library(entry_id)).await
+}
+
+#[tauri::command]
+pub async fn delete_library(entry_id: String) -> JsonCommandResult {
+    let entry_id = require_non_empty_string("entry_id", entry_id)?;
+
+    run_desktop_async_command(move || desktop::delete_library(entry_id)).await
+}
+
+#[tauri::command]
+pub async fn get_library_states() -> JsonCommandResult {
+    run_desktop_async_command(desktop::get_library_states).await
 }

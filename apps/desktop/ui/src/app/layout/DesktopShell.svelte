@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BoxIcon from '@lucide/svelte/icons/box';
   import LibraryIcon from '@lucide/svelte/icons/library';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import type { Component, Snippet } from 'svelte';
@@ -31,7 +32,7 @@
     children?: Snippet;
   };
 
-  type PrimaryScreen = Extract<Screen, 'games' | 'settings'>;
+  type PrimaryScreen = Extract<Screen, 'games' | 'libraries' | 'settings'>;
 
   type NavigationItem = {
     screen: PrimaryScreen;
@@ -59,6 +60,12 @@
       label: 'Games',
       tooltip: 'Games',
       icon: LibraryIcon,
+    },
+    {
+      screen: 'libraries',
+      label: 'Libraries',
+      tooltip: 'Libraries',
+      icon: BoxIcon,
     },
     {
       screen: 'settings',
@@ -89,6 +96,9 @@
 
       case 'settings':
         return [{ id: 'settings-page', kind: 'page', label: 'Settings' }];
+
+      case 'libraries':
+        return [{ id: 'libraries-page', kind: 'page', label: 'Libraries' }];
 
       case 'details':
         return [
@@ -138,8 +148,8 @@
     <SidebarRail />
   </Sidebar>
 
-  <SidebarInset>
-    <header class="flex items-center gap-2 border-b px-4 py-2">
+  <SidebarInset class="min-h-0 overflow-hidden">
+    <header class="flex shrink-0 items-center gap-2 border-b px-4 py-2">
       <SidebarTrigger />
 
       <Breadcrumb>
@@ -169,7 +179,7 @@
       </Breadcrumb>
     </header>
 
-    <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 p-4" aria-busy={busy}>
+    <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 overflow-hidden p-4" aria-busy={busy}>
       {@render children?.()}
     </main>
   </SidebarInset>

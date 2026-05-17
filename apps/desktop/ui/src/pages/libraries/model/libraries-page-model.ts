@@ -1,0 +1,206 @@
+// Types below intentionally duplicate the Rust DTO shape from
+// `renderpilot-cli::desktop::libraries::types`.
+// Cross-slice entity import is forbidden by FSD rules, so conscious
+// duplication is preferred over an incorrect shared dependency.
+import { trimToEmpty } from '@shared/text';
+
+export type BuildType = 'stable' | 'beta' | 'debug';
+
+export type Signature = Readonly<{ status: 'signed'; signed_at: string } | { status: 'unsigned' }>;
+
+export type LibraryGroupKey =
+  | 'dlss'
+  | 'dlss_g'
+  | 'dlss_d'
+  | 'fsr_31_dx12'
+  | 'fsr_31_vk'
+  | 'fsr_loader_dx12'
+  | 'fsr_upscaler_dx12'
+  | 'fsr_framegeneration_dx12'
+  | 'fsr_denoiser_dx12'
+  | 'fsr_radiancecache_dx12'
+  | 'xess'
+  | 'xess_dx11'
+  | 'xess_fg'
+  | 'xell'
+  | 'other';
+
+export type Vendor = 'nvidia' | 'amd' | 'intel';
+
+export type VendorOption = Readonly<{
+  value: Vendor;
+  label: string;
+}>;
+
+export type LibraryTypeOption = Readonly<{
+  value: string;
+  label: string;
+  groupKey: LibraryGroupKey;
+}>;
+
+export type LibraryManifest = Readonly<{
+  schema_version: number;
+  generated_at: string;
+  entries: readonly LibraryManifestEntry[];
+}>;
+
+export type LibraryManifestEntry = Readonly<{
+  entry_id: string;
+
+  library: Readonly<{
+    id: string;
+    file_name: string;
+  }>;
+
+  version: Readonly<{
+    value: string;
+    sort_key: string;
+  }>;
+
+  build: Readonly<{
+    type: BuildType;
+    label: string | null;
+  }>;
+
+  files: Readonly<{
+    dll: Readonly<{
+      size_bytes: number;
+      hashes: Readonly<{
+        md5: string;
+      }>;
+    }>;
+
+    zip: Readonly<{
+      size_bytes: number;
+      download_url: string;
+    }>;
+  }>;
+
+  signature: Signature;
+}>;
+
+export type LibraryState = Readonly<{
+  id: string;
+  version: string;
+  is_downloaded: boolean;
+  local_path: string | null;
+}>;
+
+const DEFAULT_GROUP_KEY: LibraryGroupKey = 'other';
+
+const UNSIGNED_LABEL = 'Unsigned';
+const INVALID_DATE_LABEL = 'Invalid date';
+
+export const vendorOptions = [
+  { value: 'nvidia', label: 'NVIDIA' },
+  { value: 'amd', label: 'AMD' },
+  { value: 'intel', label: 'Intel' },
+] as const satisfies readonly VendorOption[];
+
+export const typeOptionsByVendor = {
+  nvidia: [
+    { value: 'dlss', label: 'DLSS', groupKey: 'dlss' },
+    { value: 'dlss_fg', label: 'DLSS FG', groupKey: 'dlss_g' },
+    { value: 'dlss_rr', label: 'DLSS RR', groupKey: 'dlss_d' },
+  ],
+  amd: [
+    { value: 'fsr', label: 'FSR 3.1 DX12', groupKey: 'fsr_31_dx12' },
+    { value: 'fsr_vk', label: 'FSR 3.1 VK', groupKey: 'fsr_31_vk' },
+    { value: 'fsr_loader', label: 'FSR Loader', groupKey: 'fsr_loader_dx12' },
+    { value: 'fsr_upscaler', label: 'FSR Upscaler', groupKey: 'fsr_upscaler_dx12' },
+    { value: 'fsr_framegen', label: 'FSR FrameGen', groupKey: 'fsr_framegeneration_dx12' },
+    { value: 'fsr_denoiser', label: 'FSR Denoiser', groupKey: 'fsr_denoiser_dx12' },
+    { value: 'fsr_radiancecache', label: 'FSR RadianceCache', groupKey: 'fsr_radiancecache_dx12' },
+  ],
+  intel: [
+    { value: 'xess', label: 'XeSS', groupKey: 'xess' },
+    { value: 'xess_dx11', label: 'XeSS DX11', groupKey: 'xess_dx11' },
+    { value: 'xefg', label: 'XeFG', groupKey: 'xess_fg' },
+    { value: 'xell', label: 'XeLL', groupKey: 'xell' },
+  ],
+} as const satisfies Record<Vendor, readonly LibraryTypeOption[]>;
+
+export type LibraryTypeValue = (typeof typeOptionsByVendor)[Vendor][number]['value'];
+
+const vendorValues = new Set<Vendor>(vendorOptions.map(({ value }) => value));
+
+const typeToGroupKey = Object.freeze(
+  Object.fromEntries(
+    Object.values(typeOptionsByVendor).flatMap((options) =>
+      options.map(({ value, groupKey }) => [value, groupKey] as const),
+    ),
+  ),
+) as Readonly<Partial<Record<LibraryTypeValue, LibraryGroupKey>>>;
+
+const libraryIdToGroupKeyMap: Readonly<Record<string, LibraryGroupKey | undefined>> = {
+  nvngx_dlss: 'dlss',
+  nvngx_dlssg: 'dlss_g',
+  nvngx_dlssd: 'dlss_d',
+  amd_fidelityfx_dx12: 'fsr_31_dx12',
+  amd_fidelityfx_vk: 'fsr_31_vk',
+  amd_fidelityfx_loader_dx12: 'fsr_loader_dx12',
+  amd_fidelityfx_upscaler_dx12: 'fsr_upscaler_dx12',
+  amd_fidelityfx_framegeneration_dx12: 'fsr_framegeneration_dx12',
+  amd_fidelityfx_denoiser_dx12: 'fsr_denoiser_dx12',
+  amd_fidelityfx_radiancecache_dx12: 'fsr_radiancecache_dx12',
+  libxess: 'xess',
+  libxess_dx11: 'xess_dx11',
+  libxess_fg: 'xess_fg',
+  libxell: 'xell',
+};
+
+function isValidDate(date: Date): boolean {
+  return !Number.isNaN(date.getTime());
+}
+
+export function groupKeyForType(typeValue: LibraryTypeValue): LibraryGroupKey {
+  return typeToGroupKey[typeValue] ?? DEFAULT_GROUP_KEY;
+}
+
+export function libraryIdToGroupKey(libraryId: string): LibraryGroupKey {
+  return libraryIdToGroupKeyMap[libraryId] ?? DEFAULT_GROUP_KEY;
+}
+
+export function getDefaultTypeForVendor(vendor: Vendor): LibraryTypeValue {
+  return typeOptionsByVendor[vendor][0].value;
+}
+
+export function getTypeOptionsForVendor(vendor: Vendor): readonly LibraryTypeOption[] {
+  return typeOptionsByVendor[vendor];
+}
+
+export function isVendor(value: unknown): value is Vendor {
+  return typeof value === 'string' && vendorValues.has(value as Vendor);
+}
+
+export function formatVersionLabel(entry: LibraryManifestEntry): string {
+  const version = trimToEmpty(entry.version.value);
+  const label = trimToEmpty(entry.build.label);
+
+  if (label) {
+    return `${version || '—'} (${label})`;
+  }
+
+  return version || '—';
+}
+
+const signedDateFormatter = new Intl.DateTimeFormat('en', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'UTC',
+});
+
+export function formatSignedDate(signature: LibraryManifestEntry['signature']): string {
+  if (signature.status !== 'signed') {
+    return UNSIGNED_LABEL;
+  }
+
+  const signedDate = new Date(signature.signed_at);
+
+  if (!isValidDate(signedDate)) {
+    return INVALID_DATE_LABEL;
+  }
+
+  return signedDateFormatter.format(signedDate);
+}

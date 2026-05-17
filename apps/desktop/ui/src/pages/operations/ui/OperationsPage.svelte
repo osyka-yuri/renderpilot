@@ -70,7 +70,7 @@
   }
 </script>
 
-<section class="grid min-h-0 gap-4">
+<section class="grid h-full min-h-0 gap-4 overflow-hidden">
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div class="grid gap-1">
       <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Operations</p>

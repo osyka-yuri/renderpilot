@@ -3,7 +3,15 @@
 
   import { getDashboardStats, type GameSelectionHandler, type GameSummary } from '@entities/game';
   import type { VoidHandler } from '@shared/callbacks';
-  import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, Input, Spinner } from '@shared/ui';
+  import {
+    Empty,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+    Input,
+    ScrollArea,
+    Spinner,
+  } from '@shared/ui';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
@@ -121,7 +129,7 @@
   }
 </script>
 
-<section class="flex min-h-0 flex-col gap-4" aria-busy={busy}>
+<section class="flex h-full min-h-0 flex-col gap-4" aria-busy={busy}>
   {#if showEmptyState}
     <div class="flex flex-1 flex-col items-center justify-center">
       <GamesEmptyState {busy} {scanButtonLabel} {onRefresh} {onScan} />
@@ -138,7 +146,7 @@
   {:else}
     <GamesHeaderBar {hasGames} {busy} {scanButtonLabel} {dashboardStats} {onRefresh} {onScan} />
 
-    <div class="grid gap-2 px-1">
+    <div class="grid shrink-0 gap-2 px-1">
       <div
         class="flex items-center justify-end gap-2 max-md:justify-stretch"
         role="search"
@@ -176,23 +184,25 @@
       </div>
     </div>
 
-    <GamesGrid
-      games={model.gameItems}
-      launcherOrder={model.appliedLauncherOrder}
-      {busy}
-      {hasManualCoverAction}
-      pickDisabled={pickCoverDisabled}
-      {coversAutoFetchingIds}
-      menuOpenFor={model.menuOpenFor}
-      coverMenuRefs={model.coverMenuRefs}
-      isCoverOperationBusy={model.isCoverOperationBusy}
-      onMenuOpenChange={model.setMenuOpen}
-      onFetchCover={model.fetchCover}
-      onPickCover={model.pickCover}
-      onClearCover={model.clearCover}
-      onResetFilters={model.resetFilters}
-      {onOpenDetails}
-      {onOpenOperations}
-    />
+    <ScrollArea class="min-h-0 flex-1">
+      <GamesGrid
+        games={model.gameItems}
+        launcherOrder={model.appliedLauncherOrder}
+        {busy}
+        {hasManualCoverAction}
+        pickDisabled={pickCoverDisabled}
+        {coversAutoFetchingIds}
+        menuOpenFor={model.menuOpenFor}
+        coverMenuRefs={model.coverMenuRefs}
+        isCoverOperationBusy={model.isCoverOperationBusy}
+        onMenuOpenChange={model.setMenuOpen}
+        onFetchCover={model.fetchCover}
+        onPickCover={model.pickCover}
+        onClearCover={model.clearCover}
+        onResetFilters={model.resetFilters}
+        {onOpenDetails}
+        {onOpenOperations}
+      />
+    </ScrollArea>
   {/if}
 </section>
