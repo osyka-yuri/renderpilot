@@ -12,7 +12,7 @@ mod sqlite_clock;
 use std::{
     path::Path,
     sync::{Mutex, MutexGuard},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use renderpilot_application::{AppError, AppResult};
@@ -169,9 +169,9 @@ impl SqliteStorage {
 
     /// Sets a string setting value.
     pub fn set_setting(&self, key: &str, value: &str) -> AppResult<()> {
-        let updated_at = unix_time_millis()?;
-
         self.with_connection(|connection| {
+            let updated_at = sqlite_clock::now_ms(connection)?;
+
             connection
                 .execute(SQL_UPSERT_SETTING, (key, value, updated_at))
                 .map_err(|error| storage_context("failed to save setting", error))?;
@@ -251,13 +251,4 @@ fn read_journal_mode(connection: &Connection) -> AppResult<String> {
     connection
         .pragma_query_value(None, "journal_mode", |row| row.get(0))
         .map_err(|error| storage_context("failed to read sqlite journal mode", error))
-}
-
-fn unix_time_millis() -> AppResult<i64> {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| storage_context("failed to create unix timestamp", error))?;
-
-    i64::try_from(duration.as_millis())
-        .map_err(|_| storage_error("unix timestamp in milliseconds does not fit into i64"))
 }
