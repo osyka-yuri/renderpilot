@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology, OperationId};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
 use crate::CliError;
 
@@ -26,14 +26,14 @@ pub(crate) enum Command {
         component_id: ComponentId,
         artifact_id: ArtifactId,
     },
-    Backup {
-        operation_id: OperationId,
-    },
     ApplyOperation {
-        operation_id: OperationId,
+        game_id: GameId,
+        component_id: ComponentId,
+        artifact_id: ArtifactId,
     },
     RollbackOperation {
-        operation_id: OperationId,
+        game_id: GameId,
+        component_id: ComponentId,
     },
 }
 
@@ -51,7 +51,6 @@ pub(crate) fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Com
         "list-operations" => parse_list_operations_command(&mut args),
         "candidates" => parse_candidates_command(&mut args),
         "plan-swap" => parse_plan_swap_command(&mut args),
-        "backup" => parse_backup_command(&mut args),
         "apply" | "apply-operation" => parse_apply_command(&mut args),
         "rollback" => parse_rollback_command(&mut args),
         _ => Err(CliError::UnknownArgument(first)),
@@ -138,34 +137,73 @@ fn parse_plan_swap_command(args: &mut ArgCursor) -> Result<Command, CliError> {
     })
 }
 
-fn parse_backup_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let operation_id = parse_named_identifier(
-        args,
-        "--operation",
-        "<operation_id>",
-        CliError::InvalidOperationId,
-    )?;
-    Ok(Command::Backup { operation_id })
-}
-
 fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let operation_id = parse_named_identifier(
-        args,
-        "--operation",
-        "<operation_id>",
-        CliError::InvalidOperationId,
-    )?;
-    Ok(Command::ApplyOperation { operation_id })
+    let mut game_id = None;
+    let mut component_id = None;
+    let mut artifact_id = None;
+
+    while let Some(argument) = args.next_keyword()? {
+        match argument.as_str() {
+            "--game" => {
+                game_id = Some(parse_identifier_argument(
+                    args,
+                    "<game_id>",
+                    CliError::InvalidGameId,
+                )?);
+            }
+            "--component" => {
+                component_id = Some(parse_identifier_argument(
+                    args,
+                    "<component_id>",
+                    CliError::InvalidComponentId,
+                )?);
+            }
+            "--artifact" => {
+                artifact_id = Some(parse_identifier_argument(
+                    args,
+                    "<artifact_id>",
+                    CliError::InvalidArtifactId,
+                )?);
+            }
+            _ => return Err(CliError::UnexpectedArgument(argument)),
+        }
+    }
+
+    Ok(Command::ApplyOperation {
+        game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
+        component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
+        artifact_id: artifact_id.ok_or(CliError::MissingArgument("<artifact_id>"))?,
+    })
 }
 
 fn parse_rollback_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let operation_id = parse_named_identifier(
-        args,
-        "--operation",
-        "<operation_id>",
-        CliError::InvalidOperationId,
-    )?;
-    Ok(Command::RollbackOperation { operation_id })
+    let mut game_id = None;
+    let mut component_id = None;
+
+    while let Some(argument) = args.next_keyword()? {
+        match argument.as_str() {
+            "--game" => {
+                game_id = Some(parse_identifier_argument(
+                    args,
+                    "<game_id>",
+                    CliError::InvalidGameId,
+                )?);
+            }
+            "--component" => {
+                component_id = Some(parse_identifier_argument(
+                    args,
+                    "<component_id>",
+                    CliError::InvalidComponentId,
+                )?);
+            }
+            _ => return Err(CliError::UnexpectedArgument(argument)),
+        }
+    }
+
+    Ok(Command::RollbackOperation {
+        game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
+        component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
+    })
 }
 
 #[derive(Debug)]
@@ -253,7 +291,7 @@ where
 mod tests {
     use std::ffi::OsString;
 
-    use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology, OperationId};
+    use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
     use super::{parse_args, Command};
     use crate::CliError;
@@ -414,94 +452,80 @@ mod tests {
     }
 
     #[test]
-    fn backup_requires_operation_id() {
-        let error = parse_args(args(&["backup"])).expect_err("operation id should be required");
+    fn apply_requires_all_identifiers() {
+        let error = parse_args(args(&["apply"])).expect_err("game id should be required");
 
-        assert_eq!(error, CliError::MissingArgument("<operation_id>"));
+        assert_eq!(error, CliError::MissingArgument("<game_id>"));
     }
 
     #[test]
-    fn backup_parses_operation_id() {
-        assert_eq!(
-            parse_args(args(&[
-                "backup",
-                "--operation",
-                "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7",
-            ]))
-            .expect("valid args"),
-            Command::Backup {
-                operation_id: OperationId::new(
-                    "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7"
-                )
-                .expect("operation id should parse"),
-            }
-        );
-    }
-
-    #[test]
-    fn apply_requires_operation_id() {
-        let error = parse_args(args(&["apply"])).expect_err("operation id should be required");
-
-        assert_eq!(error, CliError::MissingArgument("<operation_id>"));
-    }
-
-    #[test]
-    fn apply_parses_operation_id() {
+    fn apply_parses_all_identifiers() {
         assert_eq!(
             parse_args(args(&[
                 "apply",
-                "--operation",
-                "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7",
+                "--game",
+                "manual:C:/Games/GameA",
+                "--component",
+                "component:game-a:dlss",
+                "--artifact",
+                "artifact:dlss-3.7",
             ]))
             .expect("valid args"),
             Command::ApplyOperation {
-                operation_id: OperationId::new(
-                    "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7"
-                )
-                .expect("operation id should parse"),
+                game_id: GameId::new("manual:C:/Games/GameA").expect("game id should parse"),
+                component_id: ComponentId::new("component:game-a:dlss")
+                    .expect("component id should parse"),
+                artifact_id: ArtifactId::new("artifact:dlss-3.7")
+                    .expect("artifact id should parse"),
             }
         );
     }
 
     #[test]
-    fn apply_operation_alias_parses_operation_id() {
+    fn apply_operation_alias_parses_all_identifiers() {
         assert_eq!(
             parse_args(args(&[
                 "apply-operation",
-                "--operation",
-                "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7",
+                "--game",
+                "manual:C:/Games/GameA",
+                "--component",
+                "component:game-a:dlss",
+                "--artifact",
+                "artifact:dlss-3.7",
             ]))
             .expect("valid args"),
             Command::ApplyOperation {
-                operation_id: OperationId::new(
-                    "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7"
-                )
-                .expect("operation id should parse"),
+                game_id: GameId::new("manual:C:/Games/GameA").expect("game id should parse"),
+                component_id: ComponentId::new("component:game-a:dlss")
+                    .expect("component id should parse"),
+                artifact_id: ArtifactId::new("artifact:dlss-3.7")
+                    .expect("artifact id should parse"),
             }
         );
     }
 
     #[test]
-    fn rollback_requires_operation_id() {
-        let error = parse_args(args(&["rollback"])).expect_err("operation id should be required");
+    fn rollback_requires_game_and_component() {
+        let error = parse_args(args(&["rollback"])).expect_err("game id should be required");
 
-        assert_eq!(error, CliError::MissingArgument("<operation_id>"));
+        assert_eq!(error, CliError::MissingArgument("<game_id>"));
     }
 
     #[test]
-    fn rollback_parses_operation_id() {
+    fn rollback_parses_game_and_component() {
         assert_eq!(
             parse_args(args(&[
                 "rollback",
-                "--operation",
-                "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7",
+                "--game",
+                "manual:C:/Games/GameA",
+                "--component",
+                "component:game-a:dlss",
             ]))
             .expect("valid args"),
             Command::RollbackOperation {
-                operation_id: OperationId::new(
-                    "operation:replace_component:1:component:game-a:dlss:artifact:dlss-3.7"
-                )
-                .expect("operation id should parse"),
+                game_id: GameId::new("manual:C:/Games/GameA").expect("game id should parse"),
+                component_id: ComponentId::new("component:game-a:dlss")
+                    .expect("component id should parse"),
             }
         );
     }

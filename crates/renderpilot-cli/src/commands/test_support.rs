@@ -14,7 +14,6 @@ use renderpilot_domain::{
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use crate::backup_manager::BACKUP_ROOT_DIR_ENV;
 use crate::catalog::CATALOG_DB_PATH_ENV;
 use crate::test_env::lock_process_env;
 
@@ -29,8 +28,6 @@ pub(super) struct TempGameFolder {
 
 pub(super) struct CatalogEnvironmentGuard {
     previous: Option<PlatformString>,
-    previous_backup_root: Option<PlatformString>,
-    backup_root: PathBuf,
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -60,16 +57,10 @@ impl CatalogEnvironmentGuard {
     pub(super) fn new(path: PathBuf) -> Self {
         let lock = lock_process_env();
         let previous = std::env::var_os(CATALOG_DB_PATH_ENV);
-        let previous_backup_root = std::env::var_os(BACKUP_ROOT_DIR_ENV);
-        let backup_root = temp_backup_root(&path);
-
         std::env::set_var(CATALOG_DB_PATH_ENV, &path);
-        std::env::set_var(BACKUP_ROOT_DIR_ENV, &backup_root);
 
         Self {
             previous,
-            previous_backup_root,
-            backup_root,
             _lock: lock,
         }
     }
@@ -114,18 +105,6 @@ impl Drop for CatalogEnvironmentGuard {
     fn drop(&mut self) {
         if let Some(previous) = &self.previous {
             std::env::set_var(CATALOG_DB_PATH_ENV, previous);
-        } else {
-            std::env::remove_var(CATALOG_DB_PATH_ENV);
-        }
-
-        if let Some(previous_backup_root) = &self.previous_backup_root {
-            std::env::set_var(BACKUP_ROOT_DIR_ENV, previous_backup_root);
-        } else {
-            std::env::remove_var(BACKUP_ROOT_DIR_ENV);
-        }
-
-        if self.backup_root.exists() {
-            let _ = fs::remove_dir_all(&self.backup_root);
         }
     }
 }
@@ -230,8 +209,4 @@ pub(super) fn sample_artifact(
         ),
         None => artifact,
     }
-}
-
-fn temp_backup_root(db_path: &Path) -> PathBuf {
-    db_path.with_extension("backups")
 }

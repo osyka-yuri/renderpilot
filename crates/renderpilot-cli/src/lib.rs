@@ -5,7 +5,6 @@ use std::ffi::OsString;
 use renderpilot_application::app_info;
 
 mod args;
-mod backup_manager;
 mod catalog;
 mod commands;
 pub mod desktop;

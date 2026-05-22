@@ -1,5 +1,3 @@
-mod backup_id;
-mod backup_record;
 mod metadata_json;
 mod operation_item_record;
 mod operation_journal_entry;
@@ -26,8 +24,6 @@ fn normalize_non_empty_text(
     Ok(trimmed.to_owned())
 }
 
-pub use backup_id::BackupId;
-pub use backup_record::BackupRecord;
 pub use metadata_json::MetadataJson;
 pub use operation_item_record::OperationItemRecord;
 pub use operation_journal_entry::OperationJournalEntry;

@@ -236,8 +236,8 @@ pub enum ArtifactTrustLevel {
     LocalObserved,
     /// Artifact was imported directly by the user.
     UserImported,
-    /// Artifact came from a backup created by RenderPilot.
-    Backup,
+    /// Artifact was downloaded from the remote manifest.
+    ManifestDownloaded,
     /// Trust level is not known yet.
     Unknown,
 }
@@ -248,7 +248,7 @@ impl ArtifactTrustLevel {
         match self {
             Self::LocalObserved => "local_observed",
             Self::UserImported => "user_imported",
-            Self::Backup => "backup",
+            Self::ManifestDownloaded => "manifest_downloaded",
             Self::Unknown => "unknown",
         }
     }

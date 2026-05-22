@@ -6,5 +6,5 @@ pub use component_detector::ComponentDetector;
 pub use game_source::GameSourceProvider;
 
 pub use repositories::{
-    ArtifactRepository, BackupRepository, ComponentRepository, GameRepository, OperationRepository,
+    ArtifactRepository, ComponentRepository, GameRepository, OperationRepository,
 };
