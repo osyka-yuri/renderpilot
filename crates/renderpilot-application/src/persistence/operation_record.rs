@@ -23,7 +23,7 @@ pub struct OperationRecord {
     /// Completion timestamp, when known.
     pub completed_at: Option<UnixTimestampMillis>,
 
-    /// Optional adapter-owned metadata JSON.
+    /// Optional metadata JSON. Business-level semantics should use typed wrappers.
     pub metadata_json: Option<MetadataJson>,
 }
 
@@ -55,7 +55,19 @@ impl OperationRecord {
         self
     }
 
-    /// Sets adapter-owned metadata JSON.
+    /// Sets the record status and completion timestamp together.
+    #[must_use]
+    pub fn with_state(
+        mut self,
+        status: OperationStatus,
+        completed_at: Option<UnixTimestampMillis>,
+    ) -> Self {
+        self.status = status;
+        self.completed_at = completed_at;
+        self
+    }
+
+    /// Sets metadata JSON for this record.
     #[must_use]
     pub fn with_metadata_json(mut self, metadata_json: impl Into<MetadataJson>) -> Self {
         self.metadata_json = Some(metadata_json.into());

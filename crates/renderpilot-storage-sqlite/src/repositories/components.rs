@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use renderpilot_application::{AppResult, ComponentRepository};
 use renderpilot_domain::{GameId, GraphicsComponent};
 use rusqlite::{named_params, CachedStatement, Connection, OptionalExtension, Transaction};
+use serde_json::json;
 
 use crate::{
     error::{invalid_row, storage_error},
@@ -14,9 +15,10 @@ use super::{
     SqliteStorage,
 };
 
-const DELETE_COMPONENTS_FOR_GAME_SQL: &str = "
+const DELETE_STALE_COMPONENTS_SQL: &str = "
     DELETE FROM components
     WHERE game_id = :game_id
+      AND id NOT IN (SELECT value FROM json_each(:new_ids))
 ";
 
 const INSERT_COMPONENT_SQL: &str = "
@@ -42,6 +44,17 @@ const INSERT_COMPONENT_SQL: &str = "
             :created_at_ms,
             :updated_at_ms
         )
+";
+
+const UPDATE_COMPONENT_SQL: &str = "
+    UPDATE components
+       SET kind = :kind,
+           library = :technology,
+           swappability = :swappability,
+           files_json = :files_json,
+           updated_at = :updated_at_ms
+     WHERE id = :id
+       AND game_id = :game_id
 ";
 
 const FIND_COMPONENT_IN_OTHER_GAME_SQL: &str = "
@@ -97,11 +110,21 @@ pub(super) fn replace_components_for_game_within_transaction(
 
     let now_ms = prepare_timestamp_if_needed(transaction, &rows)?;
     let mut insert_statement = prepare_insert_statement_if_needed(transaction, &rows)?;
+    let mut update_statement = transaction
+        .prepare_cached(UPDATE_COMPONENT_SQL)
+        .map_err(storage_error)?;
 
-    delete_components_for_game(transaction, game_id)?;
+    let new_ids: Vec<&str> = rows.iter().map(|r| r.id).collect();
+    delete_stale_components_for_game(transaction, game_id, &new_ids)?;
 
-    if let (Some(statement), Some(timestamp_ms)) = (&mut insert_statement, now_ms) {
-        insert_component_rows(statement, &rows, timestamp_ms)?;
+    if let Some(timestamp_ms) = now_ms {
+        for row in rows.iter() {
+            if component_exists(transaction, game_id, row.id)? {
+                update_component_row(&mut update_statement, row, timestamp_ms)?;
+            } else if let Some(ref mut stmt) = insert_statement {
+                insert_component_row(stmt, row, timestamp_ms)?;
+            }
+        }
     }
 
     Ok(())
@@ -170,12 +193,30 @@ fn validate_no_component_ids_owned_by_other_games(
     Ok(())
 }
 
-fn delete_components_for_game(connection: &Connection, game_id: &GameId) -> AppResult<()> {
+fn delete_stale_components_for_game(
+    connection: &Connection,
+    game_id: &GameId,
+    new_ids: &[&str],
+) -> AppResult<()> {
+    if new_ids.is_empty() {
+        connection
+            .execute(
+                "DELETE FROM components WHERE game_id = :game_id",
+                named_params! {
+                    ":game_id": game_id.as_str(),
+                },
+            )
+            .map_err(storage_error)?;
+        return Ok(());
+    }
+
+    let new_ids_json = json!(new_ids).to_string();
     connection
         .execute(
-            DELETE_COMPONENTS_FOR_GAME_SQL,
+            DELETE_STALE_COMPONENTS_SQL,
             named_params! {
                 ":game_id": game_id.as_str(),
+                ":new_ids": new_ids_json.as_str(),
             },
         )
         .map_err(storage_error)?;
@@ -183,15 +224,40 @@ fn delete_components_for_game(connection: &Connection, game_id: &GameId) -> AppR
     Ok(())
 }
 
-fn insert_component_rows(
+fn component_exists(
+    connection: &Connection,
+    game_id: &GameId,
+    component_id: &str,
+) -> AppResult<bool> {
+    let count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM components WHERE id = :id AND game_id = :game_id",
+            named_params! {
+                ":id": component_id,
+                ":game_id": game_id.as_str(),
+            },
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    Ok(count > 0)
+}
+
+fn update_component_row(
     statement: &mut CachedStatement<'_>,
-    rows: &ComponentSqlRows<'_>,
+    row: &ComponentSqlRow<'_>,
     timestamp_ms: i64,
 ) -> AppResult<()> {
-    for row in rows.iter() {
-        insert_component_row(statement, row, timestamp_ms)?;
-    }
-
+    statement
+        .execute(named_params! {
+            ":id": row.id,
+            ":game_id": row.game_id,
+            ":kind": row.kind,
+            ":technology": row.technology,
+            ":swappability": row.swappability,
+            ":files_json": row.files_json,
+            ":updated_at_ms": timestamp_ms,
+        })
+        .map_err(storage_error)?;
     Ok(())
 }
 

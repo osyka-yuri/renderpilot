@@ -14,7 +14,6 @@ const REQUIRED_TABLES: &[&str] = &[
     "library_artifacts",
     "operations",
     "operation_items",
-    "backups",
     "settings",
     "file_hash_cache",
 ];
@@ -25,13 +24,10 @@ const REQUIRED_INDEXES: &[&str] = &[
     "idx_library_artifacts_library",
     "idx_operations_game_id_created_at",
     "idx_operation_items_operation_id",
-    "idx_backups_operation_id",
     "idx_settings_updated_at",
 ];
 
 const REQUIRED_TRIGGERS: &[&str] = &[
-    "trg_backups_component_game_insert",
-    "trg_backups_component_game_update",
     "trg_operation_items_artifact_library_insert",
     "trg_operation_items_artifact_library_update",
 ];
@@ -482,26 +478,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_recovers_missing_required_trigger() {
-        let mut connection = open_test_connection();
-
-        apply(&mut connection).expect("migration should succeed");
-
-        connection
-            .execute_batch("DROP TRIGGER trg_backups_component_game_insert;")
-            .expect("trigger should drop");
-
-        apply(&mut connection).expect("broken schema should be rebuilt");
-
-        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-        assert!(schema_object_exists(
-            &connection,
-            "trigger",
-            "trg_backups_component_game_insert"
-        ));
-    }
-
-    #[test]
     fn apply_restores_foreign_keys_state() {
         let mut connection = open_test_connection();
 
@@ -542,7 +518,7 @@ mod tests {
         assert!(schema_object_exists(
             connection,
             "trigger",
-            "trg_backups_component_game_insert"
+            "trg_operation_items_artifact_library_insert"
         ));
     }
 

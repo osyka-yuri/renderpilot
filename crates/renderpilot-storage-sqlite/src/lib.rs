@@ -27,8 +27,8 @@ pub use repositories::{ScanWriteReport, ScanWriteUnit, SqliteStorage};
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 const SQL_UPSERT_SETTING: &str = "
-    INSERT INTO settings (key, value, updated_at)
-    VALUES (?1, ?2, ?3)
+    INSERT INTO settings (key, value, created_at, updated_at)
+    VALUES (?1, ?2, ?3, ?3)
     ON CONFLICT(key) DO UPDATE SET
         value = excluded.value,
         updated_at = excluded.updated_at

@@ -1,8 +1,10 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::{AppError, AppResult};
 
 /// Unix timestamp in milliseconds.
 ///
-/// Used for persisted journal and backup records.
+/// Used for persisted operation journal entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnixTimestampMillis(i64);
 
@@ -16,6 +18,18 @@ impl UnixTimestampMillis {
         }
 
         Ok(Self(value))
+    }
+
+    /// Returns the current system time as a Unix timestamp in milliseconds.
+    pub fn now() -> AppResult<Self> {
+        let duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| {
+                AppError::provider_failed(format!("failed to get system time: {error}"))
+            })?;
+
+        Self::new(duration.as_millis() as i64)
+            .map_err(|error| AppError::provider_failed(error.to_string()))
     }
 
     /// Returns the raw timestamp value.

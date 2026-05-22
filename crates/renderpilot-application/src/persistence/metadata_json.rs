@@ -2,12 +2,12 @@ use std::{fmt, ops::Deref, str::FromStr};
 
 use crate::{AppError, AppResult};
 
-/// Opaque JSON metadata owned by infrastructure adapters.
+/// Valid JSON metadata text persisted with operation headers or items.
 ///
-/// The application layer stores this value but does not interpret it, but it
-/// does require the payload to be valid JSON before persisting or rehydrating
-/// records. If metadata becomes part of business logic, replace this type with
-/// a more specific value object or `serde_json::Value`.
+/// The application layer requires the payload to be valid JSON before
+/// persisting or rehydrating records. Generic adapters may keep using this as
+/// opaque JSON, but metadata that participates in business logic should be
+/// wrapped by a typed value object that owns its own validation rules.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MetadataJson(String);
 

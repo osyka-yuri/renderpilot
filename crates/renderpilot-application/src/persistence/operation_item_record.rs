@@ -23,7 +23,7 @@ pub struct OperationItemRecord {
     /// Current item status.
     pub status: OperationStatus,
 
-    /// Optional adapter-owned metadata JSON.
+    /// Optional metadata JSON. Business-level semantics should use typed wrappers.
     pub metadata_json: Option<MetadataJson>,
 }
 
@@ -61,7 +61,14 @@ impl OperationItemRecord {
         self
     }
 
-    /// Sets adapter-owned metadata JSON.
+    /// Sets the item status.
+    #[must_use]
+    pub fn with_status(mut self, status: OperationStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    /// Sets metadata JSON for this item.
     #[must_use]
     pub fn with_metadata_json(mut self, metadata_json: impl Into<MetadataJson>) -> Self {
         self.metadata_json = Some(metadata_json.into());

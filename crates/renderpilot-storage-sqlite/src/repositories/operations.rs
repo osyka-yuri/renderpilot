@@ -1,6 +1,5 @@
 use renderpilot_application::{
-    AppError, AppResult, OperationItemRecord, OperationJournalEntry, OperationRecord,
-    OperationRepository,
+    AppResult, OperationItemRecord, OperationJournalEntry, OperationRecord, OperationRepository,
 };
 use renderpilot_domain::{GameId, OperationId};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
@@ -67,10 +66,9 @@ impl OperationRepository for SqliteStorage {
         self.with_transaction(|transaction| {
             upsert_operation_within_transaction(transaction, entry.operation())?;
 
-            replace_operation_items_for_game_within_transaction(
+            replace_operation_items_within_transaction(
                 transaction,
-                entry.operation_id(),
-                entry.operation().game_id.as_str(),
+                entry.operation(),
                 entry.items(),
             )
         })
@@ -159,14 +157,6 @@ fn find_operation_entry_in_transaction(
         return Ok(None);
     };
 
-    if &operation.id != operation_id {
-        return Err(AppError::invalid_input(format!(
-            "stored operation row id ({}) does not match requested operation id ({})",
-            operation.id.as_str(),
-            operation_id.as_str(),
-        )));
-    }
-
     let items = list_operation_items_on_connection(connection, operation_id)?;
     OperationJournalEntry::try_new(operation, items).map(Some)
 }
@@ -198,14 +188,13 @@ fn upsert_operation_within_transaction(
     Ok(())
 }
 
-fn replace_operation_items_for_game_within_transaction(
+fn replace_operation_items_within_transaction(
     transaction: &Transaction<'_>,
-    operation_id: &OperationId,
-    game_id: &str,
+    operation: &OperationRecord,
     items: &[OperationItemRecord],
 ) -> AppResult<()> {
-    delete_operation_items_within_transaction(transaction, operation_id)?;
-    insert_operation_items_within_transaction(transaction, operation_id, game_id, items)
+    delete_operation_items_within_transaction(transaction, &operation.id)?;
+    insert_operation_items_within_transaction(transaction, operation, items)
 }
 
 fn delete_operation_items_within_transaction(
@@ -221,8 +210,7 @@ fn delete_operation_items_within_transaction(
 
 fn insert_operation_items_within_transaction(
     transaction: &Transaction<'_>,
-    operation_id: &OperationId,
-    game_id: &str,
+    operation: &OperationRecord,
     items: &[OperationItemRecord],
 ) -> AppResult<()> {
     let mut statement = transaction
@@ -232,8 +220,8 @@ fn insert_operation_items_within_transaction(
     for item in items {
         statement
             .execute(params![
-                operation_id.as_str(),
-                game_id,
+                operation.id.as_str(),
+                operation.game_id.as_str(),
                 item.component_id.as_str(),
                 item.artifact_id.as_ref().map(|id| id.as_str()),
                 item.source_path.as_str(),

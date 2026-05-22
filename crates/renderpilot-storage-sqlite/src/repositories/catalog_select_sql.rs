@@ -39,13 +39,6 @@ macro_rules! projection_operation_item_sql {
     };
 }
 
-/// `SELECT` list body; must match [`crate::repositories::columns::projection::backup`].
-macro_rules! projection_backup_sql {
-    () => {
-        "backups.id AS backup_id,\n        backups.operation_id AS backup_operation_id,\n        backups.game_id AS backup_game_id,\n        backups.component_id AS backup_component_id,\n        backups.original_path AS backup_original_path,\n        backups.backup_path AS backup_path,\n        backups.sha256 AS backup_sha256,\n        backups.created_at AS backup_created_at,\n        backups.metadata_json AS backup_metadata_json"
-    };
-}
-
 pub(super) const FIND_GAME_SQL: &str = concat!(
     "
     SELECT
@@ -138,18 +131,6 @@ pub(super) const SELECT_OPERATION_ITEMS_SQL: &str = concat!(
     WHERE operation_items.operation_id = ?1
     ORDER BY operation_items.id
     "
-);
-
-pub(super) const LIST_BACKUPS_FOR_GAME_SQL: &str = concat!(
-    r#"
-    SELECT
-    "#,
-    projection_backup_sql!(),
-    r#"
-    FROM backups
-    WHERE backups.game_id = ?1
-    ORDER BY backups.created_at ASC, backups.id ASC
-"#
 );
 
 #[cfg(test)]
@@ -324,39 +305,6 @@ mod tests {
                 ("operation_items", phys::operation_items::TARGET_PATH),
                 ("operation_items", phys::operation_items::STATUS),
                 ("operation_items", phys::operation_items::METADATA_JSON),
-            ],
-        );
-    }
-
-    #[test]
-    fn backup_projection_sql_matches_projection_aliases() {
-        let f = projection_backup_sql!();
-        assert_fragment_has_as_aliases(
-            f,
-            &[
-                proj::backup::ID,
-                proj::backup::OPERATION_ID,
-                proj::backup::GAME_ID,
-                proj::backup::COMPONENT_ID,
-                proj::backup::ORIGINAL_PATH,
-                proj::backup::BACKUP_PATH,
-                proj::backup::SHA256,
-                proj::backup::CREATED_AT,
-                proj::backup::METADATA_JSON,
-            ],
-        );
-        assert_fragment_uses_physical_columns(
-            f,
-            &[
-                ("backups", phys::backups::ID),
-                ("backups", phys::backups::OPERATION_ID),
-                ("backups", phys::backups::GAME_ID),
-                ("backups", phys::backups::COMPONENT_ID),
-                ("backups", phys::backups::ORIGINAL_PATH),
-                ("backups", phys::backups::BACKUP_PATH),
-                ("backups", phys::backups::SHA256),
-                ("backups", phys::backups::CREATED_AT),
-                ("backups", phys::backups::METADATA_JSON),
             ],
         );
     }

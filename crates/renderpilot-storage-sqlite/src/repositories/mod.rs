@@ -1,5 +1,4 @@
 mod artifacts;
-mod backups;
 mod catalog_select_sql;
 mod columns;
 mod components;

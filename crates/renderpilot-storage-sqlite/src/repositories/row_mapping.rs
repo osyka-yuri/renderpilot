@@ -1,6 +1,6 @@
 use renderpilot_application::{
-    AppResult, BackupId, BackupRecord, OperationItemRecord, OperationKind, OperationRecord,
-    OperationStatus, UnixTimestampMillis,
+    AppResult, OperationItemRecord, OperationKind, OperationRecord, OperationStatus,
+    UnixTimestampMillis,
 };
 use renderpilot_domain::{
     ComponentFile, GameIdentity, GameInstallation, GraphicsComponent, LibraryArtifact, PathRef,
@@ -42,12 +42,6 @@ pub(super) fn operation_item_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<AppResult<OperationItemRecord>> {
     read_domain_row::<OperationItemRow>(row)
-}
-
-pub(super) fn backup_from_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<AppResult<BackupRecord>> {
-    read_domain_row::<BackupRow>(row)
 }
 
 pub(super) fn collect_rows<T, F>(rows: rusqlite::MappedRows<'_, F>) -> AppResult<Vec<T>>
@@ -97,10 +91,6 @@ fn operation_status(value: String) -> AppResult<OperationStatus> {
 
 fn timestamp_millis(value: i64) -> AppResult<UnixTimestampMillis> {
     UnixTimestampMillis::new(value).map_err(invalid_row)
-}
-
-fn backup_id(value: String) -> AppResult<BackupId> {
-    BackupId::new(value).map_err(invalid_row)
 }
 
 fn with_optional<T, V>(
@@ -430,83 +420,14 @@ impl DomainRow for OperationItemRow {
     }
 }
 
-#[derive(Debug)]
-struct BackupRow {
-    id: String,
-    operation_id: String,
-    game_id: String,
-    component_id: Option<String>,
-    original_path: String,
-    backup_path: String,
-    sha256: Option<String>,
-    created_at: i64,
-    metadata_json: Option<String>,
-}
-
-impl DomainRow for BackupRow {
-    type Domain = BackupRecord;
-
-    fn from_sqlite_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
-        use columns::projection::backup as b;
-
-        Ok(Self {
-            id: row.read(b::ID)?,
-            operation_id: row.read(b::OPERATION_ID)?,
-            game_id: row.read(b::GAME_ID)?,
-            component_id: row.read(b::COMPONENT_ID)?,
-            original_path: row.read(b::ORIGINAL_PATH)?,
-            backup_path: row.read(b::BACKUP_PATH)?,
-            sha256: row.read(b::SHA256)?,
-            created_at: row.read(b::CREATED_AT)?,
-            metadata_json: row.read(b::METADATA_JSON)?,
-        })
-    }
-
-    fn into_domain(self) -> AppResult<BackupRecord> {
-        let Self {
-            id,
-            operation_id,
-            game_id,
-            component_id,
-            original_path,
-            backup_path,
-            sha256,
-            created_at,
-            metadata_json,
-        } = self;
-
-        let backup = BackupRecord::new(
-            backup_id(id)?,
-            mapping::operation_id(operation_id)?,
-            mapping::game_id(game_id)?,
-            mapping::path_ref(original_path)?,
-            mapping::path_ref(backup_path)?,
-            timestamp_millis(created_at)?,
-        );
-
-        let backup = with_optional(backup, component_id, |backup, component_id| {
-            Ok(backup.with_component_id(mapping::component_id(component_id)?))
-        })?;
-
-        let backup = with_optional(backup, sha256, |backup, sha256| {
-            Ok(backup.with_sha256(mapping::sha256_hash(sha256)?))
-        })?;
-
-        with_optional(backup, metadata_json, |backup, metadata_json| {
-            Ok(backup.with_metadata_json(mapping::metadata_json(metadata_json)?))
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use renderpilot_application::{AppErrorKind, BackupRecord, OperationItemRecord};
-    use renderpilot_domain::ComponentId;
+    use renderpilot_application::{AppErrorKind, OperationItemRecord};
     use rusqlite::Connection;
 
     use super::{
-        backup_from_row, columns::projection, component_from_row, game_from_row,
-        operation_item_from_row, DomainRow, OperationRow,
+        columns::projection, component_from_row, game_from_row, operation_item_from_row, DomainRow,
+        OperationRow,
     };
 
     #[test]
@@ -614,50 +535,6 @@ mod tests {
 
         assert_eq!(item.operation_id.as_str(), "operation:correct");
         assert_eq!(item.component_id.as_str(), "component:correct");
-    }
-
-    #[test]
-    fn backup_mapping_uses_backup_aliases_when_foreign_tables_collide() {
-        let conn = Connection::open_in_memory().unwrap();
-        let sql = format!(
-            "SELECT
-                'operation:wrong' AS {},
-                'operation:correct' AS {},
-                'game:wrong' AS {},
-                'game:correct' AS {},
-                'component:wrong' AS {},
-                'component:correct' AS {},
-                'backup:b1' AS {},
-                'C:/orig' AS {},
-                'C:/bak' AS {},
-                NULL AS {},
-                42 AS {},
-                NULL AS {}
-            ",
-            projection::operation::ID,
-            projection::backup::OPERATION_ID,
-            projection::game::ID,
-            projection::backup::GAME_ID,
-            projection::component::ID,
-            projection::backup::COMPONENT_ID,
-            projection::backup::ID,
-            projection::backup::ORIGINAL_PATH,
-            projection::backup::BACKUP_PATH,
-            projection::backup::SHA256,
-            projection::backup::CREATED_AT,
-            projection::backup::METADATA_JSON,
-        );
-
-        let mut stmt = conn.prepare(&sql).unwrap();
-        let backup: BackupRecord = stmt.query_row([], backup_from_row).unwrap().unwrap();
-
-        assert_eq!(backup.operation_id.as_str(), "operation:correct");
-        assert_eq!(backup.game_id.as_str(), "game:correct");
-        assert_eq!(
-            backup.component_id,
-            Some(ComponentId::new("component:correct").unwrap())
-        );
-        assert_eq!(backup.id.as_str(), "backup:b1");
     }
 
     #[test]

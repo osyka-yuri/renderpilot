@@ -61,18 +61,6 @@ pub(super) mod physical {
         pub const STATUS: &str = "status";
         pub const METADATA_JSON: &str = "metadata_json";
     }
-
-    pub mod backups {
-        pub const ID: &str = "id";
-        pub const OPERATION_ID: &str = "operation_id";
-        pub const GAME_ID: &str = "game_id";
-        pub const COMPONENT_ID: &str = "component_id";
-        pub const ORIGINAL_PATH: &str = "original_path";
-        pub const BACKUP_PATH: &str = "backup_path";
-        pub const SHA256: &str = "sha256";
-        pub const CREATED_AT: &str = "created_at";
-        pub const METADATA_JSON: &str = "metadata_json";
-    }
 }
 
 /// Globally unique result-column names for every `SELECT` consumed by row mappers.
@@ -127,17 +115,5 @@ pub mod projection {
         pub const TARGET_PATH: &str = "item_target_path";
         pub const STATUS: &str = "item_status";
         pub const METADATA_JSON: &str = "item_metadata_json";
-    }
-
-    pub mod backup {
-        pub const ID: &str = "backup_id";
-        pub const OPERATION_ID: &str = "backup_operation_id";
-        pub const GAME_ID: &str = "backup_game_id";
-        pub const COMPONENT_ID: &str = "backup_component_id";
-        pub const ORIGINAL_PATH: &str = "backup_original_path";
-        pub const BACKUP_PATH: &str = "backup_path";
-        pub const SHA256: &str = "backup_sha256";
-        pub const CREATED_AT: &str = "backup_created_at";
-        pub const METADATA_JSON: &str = "backup_metadata_json";
     }
 }

@@ -1,6 +1,6 @@
 use renderpilot_domain::OperationId;
 
-use super::{OperationItemRecord, OperationRecord};
+use super::{OperationItemRecord, OperationRecord, OperationStatus, UnixTimestampMillis};
 use crate::{AppError, AppResult};
 
 /// One **operation journal entry**: the persisted operation header together with every
@@ -37,6 +37,26 @@ impl OperationJournalEntry {
     /// Validates that this entry satisfies the same invariant as [`Self::try_new`].
     pub fn validate(&self) -> AppResult<()> {
         Self::validate_items_match_header(&self.operation, &self.items)
+    }
+
+    /// Returns a new entry with the same header/items moved to one shared state.
+    pub fn with_state(
+        &self,
+        status: OperationStatus,
+        completed_at: Option<UnixTimestampMillis>,
+    ) -> AppResult<Self> {
+        let operation = self
+            .operation
+            .clone()
+            .with_state(status.clone(), completed_at);
+        let items = self
+            .items
+            .iter()
+            .cloned()
+            .map(|item| item.with_status(status.clone()))
+            .collect();
+
+        Self::try_new(operation, items)
     }
 
     /// Validates that every item's [`OperationItemRecord::operation_id`] equals
@@ -242,6 +262,27 @@ mod tests {
         let entry = OperationJournalEntry::try_new(op, vec![sample_item(&id, "x")]).expect("entry");
 
         entry.validate().expect("validate");
+    }
+
+    #[test]
+    fn with_state_updates_header_and_items() {
+        let op = sample_operation("op:state");
+        let id = op.id.clone();
+        let entry =
+            OperationJournalEntry::try_new(op, vec![sample_item(&id, "a"), sample_item(&id, "b")])
+                .expect("entry");
+
+        let completed_at = UnixTimestampMillis::new(42).expect("timestamp");
+        let updated = entry
+            .with_state(OperationStatus::Completed, Some(completed_at))
+            .expect("updated entry");
+
+        assert_eq!(updated.operation().status, OperationStatus::Completed);
+        assert_eq!(updated.operation().completed_at, Some(completed_at));
+        assert!(updated
+            .items()
+            .iter()
+            .all(|item| item.status == OperationStatus::Completed));
     }
 
     #[test]
