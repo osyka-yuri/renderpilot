@@ -10,7 +10,8 @@ use renderpilot_domain::Version;
 
 use self::{image::PeResourceImage, version_info::VersionInfo};
 
-pub(crate) fn read_windows_file_version(path: &Path) -> Option<Version> {
+/// Reads the Windows file version from the PE resource table at the given path.
+pub fn read_windows_file_version(path: &Path) -> Option<Version> {
     let bytes = fs::read(path).ok()?;
     read_windows_file_version_from_bytes(&bytes)
 }

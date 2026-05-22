@@ -308,7 +308,8 @@ fn read_modified_time(path: &Path, metadata: &fs::Metadata) -> AppResult<SystemT
     })
 }
 
-pub(crate) fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
+/// Computes the SHA-256 hash of the file at the given path.
+pub fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
     let file = open_file_for_hashing(path)?;
 
     #[cfg(test)]

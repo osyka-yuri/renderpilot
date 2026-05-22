@@ -9,6 +9,11 @@ use crate::{
     normalize::{normalize_file_name, normalize_pattern},
 };
 
+const BUNDLED_LIBRARY_PATTERNS_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/library_patterns.json"
+));
+
 /// Whitelist of file extensions that any pattern in a [`LibraryPatternSet`] can
 /// match.
 ///
@@ -77,6 +82,11 @@ impl LibraryPatternSet {
     /// Parses a pattern set from JSON text.
     pub fn from_json_str(json: &str) -> Result<Self, LibraryPatternError> {
         serde_json::from_str(json).map_err(LibraryPatternError::Json)
+    }
+
+    /// Loads the bundled RenderPilot pattern catalog shipped with this crate.
+    pub fn bundled_defaults() -> Result<Self, LibraryPatternError> {
+        Self::from_json_str(BUNDLED_LIBRARY_PATTERNS_JSON)
     }
 
     /// Loads a pattern set from a JSON file.
@@ -421,11 +431,9 @@ mod tests {
     use super::{LibraryPattern, LibraryPatternSet, PatternKind, PatternPlatform};
     use crate::LibraryPatternError;
 
-    const PATTERNS_JSON: &str = include_str!("../../../data/library_patterns.json");
-
     #[test]
     fn loads_library_patterns_json() {
-        let patterns = LibraryPatternSet::from_json_str(PATTERNS_JSON).expect("valid patterns");
+        let patterns = LibraryPatternSet::bundled_defaults().expect("valid patterns");
 
         assert!(!patterns.patterns().is_empty());
     }
@@ -693,7 +701,7 @@ mod tests {
     }
 
     fn pattern_set() -> LibraryPatternSet {
-        LibraryPatternSet::from_json_str(PATTERNS_JSON).expect("valid patterns")
+        LibraryPatternSet::bundled_defaults().expect("valid patterns")
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::desktop::libraries::group::library_id_to_group_key;
+use crate::desktop::libraries::local_library::library_id_to_group_key;
 use crate::desktop::libraries::storage::sanitize_path_component;
 use crate::desktop::libraries::types::{
     BuildInfo, DllFileInfo, FilesInfo, HashesInfo, LibraryInfo, LibraryManifest,
@@ -130,7 +130,8 @@ fn sample_entry(id: &str, version: &str, sort_key: &str, build_type: &str) -> Li
             dll: DllFileInfo {
                 size_bytes: 1024,
                 hashes: HashesInfo {
-                    md5: "00000000000000000000000000000000".to_string(),
+                    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                        .to_string(),
                 },
             },
             zip: ZipFileInfo {

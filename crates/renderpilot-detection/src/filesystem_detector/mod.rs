@@ -21,7 +21,6 @@ use crate::{
 
 use self::scan::collect_files_filtered;
 
-const DEFAULT_LIBRARY_PATTERNS_JSON: &str = include_str!("../../../../data/library_patterns.json");
 const DEFAULT_MAX_RECURSION_DEPTH: usize = 12;
 const DETECTOR_NAME: &str = "library-pattern-detector";
 
@@ -186,9 +185,9 @@ impl LibraryPatternComponentDetector {
         }
     }
 
-    /// Creates a Windows detector from the workspace `data/library_patterns.json`.
+    /// Creates a Windows detector from the bundled RenderPilot pattern catalog.
     pub fn windows_default() -> Result<Self, LibraryPatternError> {
-        let patterns = LibraryPatternSet::from_json_str(DEFAULT_LIBRARY_PATTERNS_JSON)?;
+        let patterns = LibraryPatternSet::bundled_defaults()?;
         Ok(Self::new(patterns, PatternPlatform::Windows))
     }
 

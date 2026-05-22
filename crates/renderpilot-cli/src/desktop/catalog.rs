@@ -3,7 +3,7 @@ use renderpilot_domain::{GameId, GraphicsComponent, GraphicsTechnology};
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
 use serde_json::Value;
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::{cmp::Ordering, collections::BTreeSet, path::Path};
 
 use super::utils::{
     available_update_count, dashboard_risk_level, is_visible_graphics_technology, library_tags,
@@ -131,7 +131,7 @@ struct GameCardOutput {
     #[serde(skip_serializing)]
     risk_order: DashboardRiskLevel,
 
-    backup_available: bool,
+    rollback_available: bool,
     operation_count: usize,
     last_operation_status: Option<String>,
     cover_updated_at_ms: Option<i64>,
@@ -343,7 +343,7 @@ impl GameCardOutput {
             update_count: metrics.available_update_count,
             risk_level: metrics.risk_level.as_str().to_owned(),
             risk_order: metrics.risk_level,
-            backup_available: metrics.backup_available,
+            rollback_available: metrics.rollback_available,
             operation_count: metrics.operation_count,
             last_operation_status: metrics.last_operation_status,
             cover_updated_at_ms,
@@ -356,7 +356,7 @@ struct GameCardMetrics {
     component_count: usize,
     available_update_count: usize,
     risk_level: DashboardRiskLevel,
-    backup_available: bool,
+    rollback_available: bool,
     operation_count: usize,
     last_operation_status: Option<String>,
 }
@@ -376,7 +376,12 @@ impl GameCardMetrics {
                     .filter(|group| visible_component_ids.contains(group.component_id().as_str())),
             ),
             risk_level: dashboard_risk_level(&details.components),
-            backup_available: operation_entries.iter().any(|entry| entry.backup_count > 0),
+            rollback_available: details.components.iter().any(|component| {
+                component.files().iter().any(|file| {
+                    let bak_path = format!("{}.bak", file.path().as_str());
+                    Path::new(&bak_path).exists()
+                })
+            }),
             operation_count: operation_entries.len(),
             last_operation_status: operation_entries
                 .iter()
@@ -387,9 +392,16 @@ impl GameCardMetrics {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct GameComponentOutput {
+    #[serde(flatten)]
+    component: GraphicsComponent,
+    rollback_available: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct GameDetailsOutput {
     game: renderpilot_domain::GameInstallation,
-    components: Vec<renderpilot_domain::GraphicsComponent>,
+    components: Vec<GameComponentOutput>,
     candidate_groups: Value,
     operations: Value,
 }
@@ -404,9 +416,23 @@ impl GameDetailsOutput {
         let candidate_groups = output::candidate_groups_value(visible_candidate_groups)?;
         let operations = output::operation_summaries_value(&details.operations)?;
 
+        let components = visible_components
+            .into_iter()
+            .map(|component| {
+                let rollback_available = component.files().iter().any(|file| {
+                    let bak_path = format!("{}.bak", file.path().as_str());
+                    Path::new(&bak_path).exists()
+                });
+                GameComponentOutput {
+                    component,
+                    rollback_available,
+                }
+            })
+            .collect();
+
         Ok(Self {
             game: details.game,
-            components: visible_components,
+            components,
             candidate_groups,
             operations,
         })
@@ -602,7 +628,7 @@ mod tests {
             update_count: 0,
             risk_level: String::from("safe"),
             risk_order: DashboardRiskLevel::Low,
-            backup_available: false,
+            rollback_available: false,
             operation_count: 0,
             last_operation_status: None,
             cover_updated_at_ms: None,

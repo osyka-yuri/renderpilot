@@ -7,7 +7,7 @@ use reqwest::{Client, Response, Url};
 
 use crate::CliError;
 
-use super::command_failed;
+use super::library_error;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -34,11 +34,11 @@ pub(super) async fn get_successful_response(
         .get(url)
         .send()
         .await
-        .map_err(|error| command_failed(format!("{operation} failed: {error}")))?;
+        .map_err(|error| library_error(format!("{operation} failed: {error}")))?;
 
     let status = response.status();
     if !status.is_success() {
-        return Err(command_failed(format!(
+        return Err(library_error(format!(
             "{operation} failed with status {status}"
         )));
     }
@@ -58,10 +58,10 @@ pub(super) async fn download_limited_bytes(
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| command_failed(format!("failed to read {operation} response: {error}")))?;
+        .map_err(|error| library_error(format!("failed to read {operation} response: {error}")))?;
 
     if bytes.len() as u64 > max_size_bytes {
-        return Err(command_failed(format!(
+        return Err(library_error(format!(
             "{operation} response is too large: expected at most {max_size_bytes} bytes, got {} bytes",
             bytes.len()
         )));
@@ -82,10 +82,10 @@ pub(super) async fn download_exact_bytes(
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| command_failed(format!("failed to read {operation} response: {error}")))?;
+        .map_err(|error| library_error(format!("failed to read {operation} response: {error}")))?;
 
     if bytes.len() as u64 != expected_size_bytes {
-        return Err(command_failed(format!(
+        return Err(library_error(format!(
             "{operation} size mismatch: expected {expected_size_bytes} bytes, got {} bytes",
             bytes.len()
         )));
@@ -96,10 +96,10 @@ pub(super) async fn download_exact_bytes(
 
 pub(super) fn parse_https_url(url: &str, operation: &str) -> Result<Url, CliError> {
     let url = Url::parse(url)
-        .map_err(|error| command_failed(format!("invalid URL for {operation}: {error}")))?;
+        .map_err(|error| library_error(format!("invalid URL for {operation}: {error}")))?;
 
     if url.scheme() != "https" {
-        return Err(command_failed(format!(
+        return Err(library_error(format!(
             "invalid URL for {operation}: only HTTPS URLs are allowed"
         )));
     }
@@ -114,7 +114,7 @@ fn ensure_content_length_at_most(
 ) -> Result<(), CliError> {
     if let Some(content_length) = content_length {
         if content_length > max_size_bytes {
-            return Err(command_failed(format!(
+            return Err(library_error(format!(
                 "{operation} response is too large: expected at most {max_size_bytes} bytes, got {content_length} bytes"
             )));
         }
@@ -130,7 +130,7 @@ fn ensure_exact_content_length(
 ) -> Result<(), CliError> {
     if let Some(content_length) = content_length {
         if content_length != expected_size_bytes {
-            return Err(command_failed(format!(
+            return Err(library_error(format!(
                 "{operation} size mismatch: expected {expected_size_bytes} bytes, got {content_length} bytes"
             )));
         }

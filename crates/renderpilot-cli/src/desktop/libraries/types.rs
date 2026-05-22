@@ -89,8 +89,8 @@ pub struct DllFileInfo {
 /// Hash metadata for a library artifact.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HashesInfo {
-    /// MD5 checksum published by the manifest.
-    pub md5: String,
+    /// SHA-256 checksum published by the manifest.
+    pub sha256: String,
 }
 
 /// Metadata for a downloadable ZIP archive.
@@ -128,4 +128,6 @@ pub struct LibraryState {
     pub is_downloaded: bool,
     /// Absolute local archive path when the library is downloaded.
     pub local_path: Option<String>,
+    /// Registered artifact id when the library has been materialized.
+    pub artifact_id: Option<String>,
 }

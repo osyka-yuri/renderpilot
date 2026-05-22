@@ -9,7 +9,7 @@ use std::{
 
 use crate::CliError;
 
-use super::command_failed;
+use super::library_error;
 
 const APP_DIR_NAME: &str = "RenderPilot";
 const LIBRARIES_DIR_NAME: &str = "libraries";
@@ -19,7 +19,7 @@ pub(super) fn app_data_dir() -> Result<PathBuf, CliError> {
     std::env::var_os("LOCALAPPDATA")
         .or_else(|| std::env::var_os("APPDATA"))
         .map(PathBuf::from)
-        .ok_or_else(|| command_failed("could not find app data directory"))
+        .ok_or_else(|| library_error("could not find app data directory"))
 }
 
 pub(super) fn app_dir() -> Result<PathBuf, CliError> {
@@ -43,9 +43,20 @@ pub(super) fn local_archive_path(
         .join(archive_file_name))
 }
 
+pub(super) fn local_dll_path(
+    group_key: &str,
+    entry_id: &str,
+    file_name: &str,
+) -> Result<PathBuf, CliError> {
+    Ok(libraries_storage_dir()?
+        .join(group_key)
+        .join(sanitize_path_component(entry_id))
+        .join(file_name))
+}
+
 pub(super) fn read_file(path: &Path) -> Result<Vec<u8>, CliError> {
     fs::read(path).map_err(|error| {
-        command_failed(format!("failed to read file `{}`: {error}", path.display()))
+        library_error(format!("failed to read file `{}`: {error}", path.display()))
     })
 }
 
@@ -53,23 +64,48 @@ pub(super) fn remove_file_if_exists(path: &Path) -> Result<(), CliError> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(command_failed(format!(
+        Err(error) => Err(library_error(format!(
             "failed to delete library file `{}`: {error}",
             path.display()
         ))),
     }
 }
 
+/// Writes a sidecar `.sha256` file next to the given file.
+pub(super) fn write_sha256_cache(path: &Path, sha256: &str) -> Result<(), CliError> {
+    let cache_path = path.with_extension(format!(
+        "{}.sha256",
+        path.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ));
+    write_file_atomically(&cache_path, sha256.as_bytes())
+}
+
+/// Reads a sidecar `.sha256` file next to the given file, if it exists.
+pub(super) fn read_sha256_cache(path: &Path) -> Result<Option<String>, CliError> {
+    let cache_path = path.with_extension(format!(
+        "{}.sha256",
+        path.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ));
+    match fs::read_to_string(&cache_path) {
+        Ok(content) => Ok(Some(content.trim().to_owned())),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(library_error(format!(
+            "failed to read sha256 cache `{}`: {error}",
+            cache_path.display()
+        ))),
+    }
+}
+
 pub(super) fn write_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
     let parent = path.parent().ok_or_else(|| {
-        command_failed(format!(
+        library_error(format!(
             "cannot write file `{}` because it has no parent directory",
             path.display()
         ))
     })?;
 
     fs::create_dir_all(parent).map_err(|error| {
-        command_failed(format!(
+        library_error(format!(
             "failed to create directory `{}`: {error}",
             parent.display()
         ))
@@ -87,7 +123,7 @@ fn write_temp_file(temp_path: &Path, bytes: &[u8]) -> Result<(), CliError> {
         .create_new(true)
         .open(temp_path)
         .map_err(|error| {
-            command_failed(format!(
+            library_error(format!(
                 "failed to create temporary file `{}`: {error}",
                 temp_path.display()
             ))
@@ -95,7 +131,7 @@ fn write_temp_file(temp_path: &Path, bytes: &[u8]) -> Result<(), CliError> {
 
     temp_file.write_all(bytes).map_err(|error| {
         let _ = fs::remove_file(temp_path);
-        command_failed(format!(
+        library_error(format!(
             "failed to write temporary file `{}`: {error}",
             temp_path.display()
         ))
@@ -103,7 +139,7 @@ fn write_temp_file(temp_path: &Path, bytes: &[u8]) -> Result<(), CliError> {
 
     temp_file.sync_all().map_err(|error| {
         let _ = fs::remove_file(temp_path);
-        command_failed(format!(
+        library_error(format!(
             "failed to flush temporary file `{}`: {error}",
             temp_path.display()
         ))
@@ -115,7 +151,7 @@ fn write_temp_file(temp_path: &Path, bytes: &[u8]) -> Result<(), CliError> {
 fn replace_with_temp_file(temp_path: &Path, destination_path: &Path) -> Result<(), CliError> {
     fs::rename(temp_path, destination_path).map_err(|error| {
         let _ = fs::remove_file(temp_path);
-        command_failed(format!(
+        library_error(format!(
             "failed to move temporary file `{}` to `{}`: {error}",
             temp_path.display(),
             destination_path.display()
