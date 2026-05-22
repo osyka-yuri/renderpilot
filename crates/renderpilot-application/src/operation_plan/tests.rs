@@ -51,7 +51,6 @@ fn builds_valid_swap_plan_for_swappable_component() {
     );
 
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Low);
-    assert!(plan.requires_backup());
     assert!(!plan.requires_elevation());
     assert!(plan.blockers().is_empty());
     assert!(plan.warnings().is_empty());
@@ -159,7 +158,7 @@ fn blocks_invalid_artifact_with_same_hash() {
     let artifact = sample_artifact(
         "artifact:dlss-3.5",
         GraphicsTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss_backup.dll",
+        "D:/Library/nvngx_dlss_original.dll",
         Some("3.5.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     );

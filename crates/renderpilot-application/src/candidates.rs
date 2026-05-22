@@ -5,11 +5,40 @@ use renderpilot_domain::{
     PathRef, Version,
 };
 
+/// Context for candidate lookup that carries source metadata for artifacts.
+#[derive(Debug, Clone)]
+pub struct CandidateContext {
+    downloaded_ids: HashSet<ArtifactId>,
+    manifest_entry_ids: HashMap<ArtifactId, String>,
+}
+
+impl CandidateContext {
+    /// Creates a new candidate context from the given lookup tables.
+    pub fn new(
+        downloaded_ids: HashSet<ArtifactId>,
+        manifest_entry_ids: HashMap<ArtifactId, String>,
+    ) -> Self {
+        Self {
+            downloaded_ids,
+            manifest_entry_ids,
+        }
+    }
+
+    /// Returns an empty context with no source metadata.
+    pub fn empty() -> Self {
+        Self {
+            downloaded_ids: HashSet::new(),
+            manifest_entry_ids: HashMap::new(),
+        }
+    }
+}
+
 /// Finds replacement candidates for the detected component files of one game.
 #[must_use]
 pub fn find_replacement_candidates(
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
+    context: &CandidateContext,
 ) -> Vec<ComponentFileReplacementCandidates> {
     let artifacts_by_technology = group_artifacts_by_technology(artifacts);
     let mut groups = Vec::new();
@@ -23,7 +52,15 @@ pub fn find_replacement_candidates(
             let mut candidates = component_artifacts
                 .iter()
                 .filter_map(|artifact| {
-                    ReplacementCandidate::for_component_file(component, file, artifact)
+                    let is_downloaded = context.downloaded_ids.contains(artifact.id());
+                    let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
+                    ReplacementCandidate::for_component_file(
+                        component,
+                        file,
+                        artifact,
+                        is_downloaded,
+                        entry_id,
+                    )
                 })
                 .collect::<Vec<_>>();
 
@@ -70,7 +107,8 @@ pub struct ComponentFileReplacementCandidates {
 }
 
 impl ComponentFileReplacementCandidates {
-    fn new(
+    /// Creates a new candidate group for a component file.
+    pub fn new(
         component: &GraphicsComponent,
         file: &renderpilot_domain::ComponentFile,
         candidates: Vec<ReplacementCandidate>,
@@ -129,12 +167,14 @@ impl ComponentFileReplacementCandidates {
 pub struct ReplacementCandidate {
     artifact_id: ArtifactId,
     file_name: String,
-    file_path: PathRef,
+    file_path: Option<PathRef>,
     version: Option<Version>,
     sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
     warning: Option<CandidateWarning>,
+    manifest_entry_id: Option<String>,
+    is_downloaded: bool,
 }
 
 impl ReplacementCandidate {
@@ -142,18 +182,26 @@ impl ReplacementCandidate {
         component: &GraphicsComponent,
         file: &renderpilot_domain::ComponentFile,
         artifact: &LibraryArtifact,
+        is_downloaded: bool,
+        manifest_entry_id: Option<String>,
     ) -> Option<Self> {
         let comparison = candidate_comparison(component, file, artifact)?;
 
         Some(Self {
             artifact_id: artifact.id().clone(),
             file_name: artifact.file_name().to_owned(),
-            file_path: artifact.path().clone(),
+            file_path: if is_downloaded {
+                Some(artifact.path().clone())
+            } else {
+                None
+            },
             version: artifact.version().cloned(),
             sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
             warning: candidate_warning(component),
+            manifest_entry_id,
+            is_downloaded,
         })
     }
 
@@ -162,7 +210,7 @@ impl ReplacementCandidate {
             self.comparison.priority(),
             std::cmp::Reverse(self.version.clone()),
             self.file_name.as_str(),
-            self.file_path.as_str(),
+            self.file_path.as_ref().map(|p| p.as_str()).unwrap_or(""),
         )
     }
 
@@ -176,9 +224,14 @@ impl ReplacementCandidate {
         &self.file_name
     }
 
-    /// Returns the candidate file path.
-    pub fn file_path(&self) -> &PathRef {
-        &self.file_path
+    /// Returns the candidate file path when the artifact is materialized locally.
+    pub fn file_path(&self) -> Option<&PathRef> {
+        self.file_path.as_ref()
+    }
+
+    /// Returns whether this candidate is already downloaded locally.
+    pub fn is_downloaded(&self) -> bool {
+        self.is_downloaded
     }
 
     /// Returns the candidate version, when known.
@@ -196,9 +249,14 @@ impl ReplacementCandidate {
         self.comparison
     }
 
-    /// Returns a warning that must be shown before offering this candidate, when required.
+    /// Returns a warning that must be surfaced with a replacement candidate.
     pub fn warning(&self) -> Option<CandidateWarning> {
         self.warning
+    }
+
+    /// Returns the manifest entry id if this candidate is from a manifest entry.
+    pub fn manifest_entry_id(&self) -> Option<&str> {
+        self.manifest_entry_id.as_deref()
     }
 }
 
@@ -209,6 +267,8 @@ pub enum CandidateComparison {
     NewerVersion,
     /// At least one side has no version, so the candidate can only be reviewed manually.
     UnknownVersion,
+    /// Both versions were known and the candidate is older than the current file.
+    OlderVersion,
 }
 
 impl CandidateComparison {
@@ -217,6 +277,7 @@ impl CandidateComparison {
         match self {
             Self::NewerVersion => "newer_version",
             Self::UnknownVersion => "unknown_version",
+            Self::OlderVersion => "older_version",
         }
     }
 
@@ -224,6 +285,7 @@ impl CandidateComparison {
         match self {
             Self::NewerVersion => 0,
             Self::UnknownVersion => 1,
+            Self::OlderVersion => 2,
         }
     }
 }
@@ -249,10 +311,11 @@ fn compare_versions(
     candidate: Option<&Version>,
 ) -> Option<CandidateComparison> {
     match (current, candidate) {
-        (Some(current), Some(candidate)) if candidate > current => {
-            Some(CandidateComparison::NewerVersion)
-        }
-        (Some(current), Some(candidate)) if candidate <= current => None,
+        (Some(current), Some(candidate)) => match current.cmp(candidate) {
+            std::cmp::Ordering::Less => Some(CandidateComparison::NewerVersion),
+            std::cmp::Ordering::Equal => Some(CandidateComparison::UnknownVersion),
+            std::cmp::Ordering::Greater => Some(CandidateComparison::OlderVersion),
+        },
         _ => Some(CandidateComparison::UnknownVersion),
     }
 }
@@ -296,38 +359,103 @@ impl From<&ReplacementCandidate> for CandidateDedupeKey {
     }
 }
 
+/// Policy that determines whether a candidate artifact can replace a component file
+/// based on their version compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompatibilityPolicy {
+    /// Any version transition is allowed.
+    AlwaysCompatible,
+    /// DLSS Super Resolution specific rules: v1 cannot be replaced by v2+,
+    /// but all other transitions are allowed.
+    DlssSuperResolution,
+}
+
+impl CompatibilityPolicy {
+    /// Returns true if the candidate version can replace the current version.
+    fn is_compatible(self, current: Option<&Version>, candidate: Option<&Version>) -> bool {
+        match self {
+            Self::AlwaysCompatible => true,
+            Self::DlssSuperResolution => match (current, candidate) {
+                (Some(current), Some(candidate)) => {
+                    !(current.major() == 1 && candidate.major() > 1)
+                }
+                _ => true,
+            },
+        }
+    }
+}
+
+impl From<GraphicsTechnology> for CompatibilityPolicy {
+    fn from(technology: GraphicsTechnology) -> Self {
+        match technology {
+            GraphicsTechnology::DlssSuperResolution => Self::DlssSuperResolution,
+            _ => Self::AlwaysCompatible,
+        }
+    }
+}
+
 fn candidate_comparison(
     component: &GraphicsComponent,
     file: &renderpilot_domain::ComponentFile,
     artifact: &LibraryArtifact,
 ) -> Option<CandidateComparison> {
-    if !artifact_matches_component_file(file, artifact) {
-        return None;
-    }
-
-    if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
-        return None;
-    }
-
-    if file.sha256() == Some(artifact.sha256()) {
-        return None;
-    }
+    require_matching_file_name(file, artifact)?;
+    require_different_origin(component, file, artifact)?;
+    require_different_content(file, artifact)?;
+    require_version_compatible(component.technology(), file.version(), artifact.version())?;
 
     compare_versions(file.version(), artifact.version())
 }
 
-fn artifact_matches_component_file(
+fn require_matching_file_name(
     file: &renderpilot_domain::ComponentFile,
     artifact: &LibraryArtifact,
-) -> bool {
-    let Some(file_name) = std::path::Path::new(file.path().as_str())
+) -> Option<()> {
+    let file_name = std::path::Path::new(file.path().as_str())
         .file_name()
-        .and_then(|name| name.to_str())
-    else {
-        return false;
-    };
+        .and_then(|name| name.to_str())?;
 
-    artifact.file_name() == file_name
+    if artifact.file_name() == file_name {
+        Some(())
+    } else {
+        None
+    }
+}
+
+fn require_different_origin(
+    component: &GraphicsComponent,
+    file: &renderpilot_domain::ComponentFile,
+    artifact: &LibraryArtifact,
+) -> Option<()> {
+    if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
+        None
+    } else {
+        Some(())
+    }
+}
+
+fn require_different_content(
+    file: &renderpilot_domain::ComponentFile,
+    artifact: &LibraryArtifact,
+) -> Option<()> {
+    if file.sha256() == Some(artifact.sha256()) {
+        None
+    } else {
+        Some(())
+    }
+}
+
+fn require_version_compatible(
+    technology: GraphicsTechnology,
+    current: Option<&Version>,
+    candidate: Option<&Version>,
+) -> Option<()> {
+    let policy = CompatibilityPolicy::from(technology);
+    if policy.is_compatible(current, candidate) {
+        Some(())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -338,7 +466,12 @@ mod tests {
         Version,
     };
 
-    use super::{find_replacement_candidates, CandidateComparison, CandidateWarning};
+    use super::{
+        find_replacement_candidates, require_different_content, require_different_origin,
+        require_matching_file_name, require_version_compatible, CandidateComparison,
+        CandidateContext, CandidateWarning, CompatibilityPolicy,
+        ComponentFileReplacementCandidates,
+    };
 
     #[test]
     fn selects_only_same_technology_candidates() {
@@ -377,16 +510,16 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(
+        let groups = find_test_candidates(
             &[component],
-            &[sr_candidate.clone(), fg_candidate, rr_candidate],
+            &[
+                sr_candidate.clone(),
+                fg_candidate.clone(),
+                rr_candidate.clone(),
+            ],
         );
 
         assert_eq!(groups.len(), 1);
-        assert_eq!(
-            groups[0].technology(),
-            GraphicsTechnology::DlssSuperResolution
-        );
         assert_eq!(groups[0].candidates().len(), 1);
         assert_eq!(groups[0].candidates()[0].artifact_id(), sr_candidate.id());
         assert_eq!(
@@ -396,7 +529,79 @@ mod tests {
     }
 
     #[test]
-    fn skips_same_or_older_known_versions() {
+    fn dlss_v1_is_incompatible_with_v2_and_ignored() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("1.0.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let v2_artifact = sample_artifact(
+            "artifact:dlss-v2",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("2.0.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+        let v1_artifact = sample_artifact(
+            "artifact:dlss-v1-other",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("1.5.0"),
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "C:/Games/GameC/nvngx_dlss.dll",
+            Some("game:c"),
+        );
+
+        let groups = find_test_candidates(&[component], &[v2_artifact, v1_artifact]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 1);
+        assert_eq!(
+            groups[0].candidates()[0].artifact_id().as_str(),
+            "artifact:dlss-v1-other"
+        );
+    }
+
+    #[test]
+    fn dlss_v2_is_compatible_with_v3_and_v1() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("2.0.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let v3_artifact = sample_artifact(
+            "artifact:dlss-v3",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.0.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+        let v1_artifact = sample_artifact(
+            "artifact:dlss-v1",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("1.0.0"),
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "C:/Games/GameC/nvngx_dlss.dll",
+            Some("game:c"),
+        );
+
+        let groups = find_test_candidates(&[component], &[v3_artifact, v1_artifact]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 2);
+    }
+
+    #[test]
+    fn includes_all_known_versions_for_replacement() {
         let component = sample_component(
             "component:game-a:dlss",
             "game:a",
@@ -422,10 +627,31 @@ mod tests {
             "C:/Games/GameC/nvngx_dlss.dll",
             Some("game:c"),
         );
+        let newer = sample_artifact(
+            "artifact:newer",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.8.0"),
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "C:/Games/GameD/nvngx_dlss.dll",
+            Some("game:d"),
+        );
 
-        let groups = find_replacement_candidates(&[component], &[older, same]);
+        let groups = find_test_candidates(&[component], &[older, same, newer]);
 
-        assert!(groups.is_empty());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 3);
+        assert_eq!(
+            groups[0].candidates()[0].comparison(),
+            CandidateComparison::NewerVersion
+        );
+        assert_eq!(
+            groups[0].candidates()[1].comparison(),
+            CandidateComparison::UnknownVersion
+        );
+        assert_eq!(
+            groups[0].candidates()[2].comparison(),
+            CandidateComparison::OlderVersion
+        );
     }
 
     #[test]
@@ -448,7 +674,7 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[candidate]);
+        let groups = find_test_candidates(&[component], &[candidate]);
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].candidates().len(), 1);
@@ -478,7 +704,7 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[candidate]);
+        let groups = find_test_candidates(&[component], &[candidate]);
 
         assert_eq!(groups.len(), 1);
         assert_eq!(
@@ -507,7 +733,7 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[artifact]);
+        let groups = find_test_candidates(&[component], &[artifact]);
 
         assert!(groups.is_empty());
     }
@@ -540,7 +766,7 @@ mod tests {
             Some("game:c"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[duplicate_a.clone(), duplicate_b]);
+        let groups = find_test_candidates(&[component], &[duplicate_a.clone(), duplicate_b]);
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].candidates().len(), 1);
@@ -567,9 +793,246 @@ mod tests {
             Some("game:b"),
         );
 
-        let groups = find_replacement_candidates(&[component], &[artifact]);
+        let groups = find_test_candidates(&[component], &[artifact]);
 
         assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn compatibility_policy_always_compatible_allows_any_transition() {
+        let policy = CompatibilityPolicy::AlwaysCompatible;
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("2.0.0").unwrap();
+
+        assert!(policy.is_compatible(Some(&v1), Some(&v2)));
+        assert!(policy.is_compatible(Some(&v2), Some(&v1)));
+        assert!(policy.is_compatible(None, Some(&v1)));
+        assert!(policy.is_compatible(Some(&v1), None));
+        assert!(policy.is_compatible(None, None));
+    }
+
+    #[test]
+    fn compatibility_policy_dlss_blocks_v1_to_v2_plus() {
+        let policy = CompatibilityPolicy::DlssSuperResolution;
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("2.0.0").unwrap();
+        let v3 = Version::parse("3.7.0").unwrap();
+
+        assert!(!policy.is_compatible(Some(&v1), Some(&v2)));
+        assert!(!policy.is_compatible(Some(&v1), Some(&v3)));
+    }
+
+    #[test]
+    fn compatibility_policy_dlss_allows_v2_to_v3_and_back() {
+        let policy = CompatibilityPolicy::DlssSuperResolution;
+        let v2 = Version::parse("2.0.0").unwrap();
+        let v3 = Version::parse("3.7.0").unwrap();
+
+        assert!(policy.is_compatible(Some(&v2), Some(&v3)));
+        assert!(policy.is_compatible(Some(&v3), Some(&v2)));
+    }
+
+    #[test]
+    fn compatibility_policy_dlss_allows_v2_to_v1() {
+        let policy = CompatibilityPolicy::DlssSuperResolution;
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("2.0.0").unwrap();
+
+        assert!(policy.is_compatible(Some(&v2), Some(&v1)));
+    }
+
+    #[test]
+    fn compatibility_policy_dlss_allows_unknown_versions() {
+        let policy = CompatibilityPolicy::DlssSuperResolution;
+        let v1 = Version::parse("1.0.0").unwrap();
+
+        assert!(policy.is_compatible(None, Some(&v1)));
+        assert!(policy.is_compatible(Some(&v1), None));
+        assert!(policy.is_compatible(None, None));
+    }
+
+    #[test]
+    fn require_matching_file_name_accepts_same_name() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:dlss-3.7",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+
+        assert!(require_matching_file_name(&component.files()[0], &artifact).is_some());
+    }
+
+    #[test]
+    fn require_matching_file_name_rejects_different_name() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:dlssg-3.7",
+            GraphicsTechnology::DlssFrameGeneration,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlssg.dll",
+            Some("game:b"),
+        );
+
+        assert!(require_matching_file_name(&component.files()[0], &artifact).is_none());
+    }
+
+    #[test]
+    fn require_different_origin_rejects_same_game_and_path() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:same",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameA/nvngx_dlss.dll",
+            Some("game:a"),
+        );
+
+        assert!(require_different_origin(&component, &component.files()[0], &artifact).is_none());
+    }
+
+    #[test]
+    fn require_different_origin_accepts_different_game() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:other",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+
+        assert!(require_different_origin(&component, &component.files()[0], &artifact).is_some());
+    }
+
+    #[test]
+    fn require_different_content_rejects_same_sha256() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:same-sha",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+
+        assert!(require_different_content(&component.files()[0], &artifact).is_none());
+    }
+
+    #[test]
+    fn require_different_content_accepts_different_sha256() {
+        let component = sample_component(
+            "component:game-a:dlss",
+            "game:a",
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            Some("3.5.0"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "C:/Games/GameA/nvngx_dlss.dll",
+        );
+        let artifact = sample_artifact(
+            "artifact:different-sha",
+            GraphicsTechnology::DlssSuperResolution,
+            Some("3.7.0"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        );
+
+        assert!(require_different_content(&component.files()[0], &artifact).is_some());
+    }
+
+    #[test]
+    fn require_version_compatible_blocks_v1_to_v2_for_dlss() {
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("2.0.0").unwrap();
+
+        assert!(require_version_compatible(
+            GraphicsTechnology::DlssSuperResolution,
+            Some(&v1),
+            Some(&v2),
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn require_version_compatible_allows_v2_to_v3_for_dlss() {
+        let v2 = Version::parse("2.0.0").unwrap();
+        let v3 = Version::parse("3.7.0").unwrap();
+
+        assert!(require_version_compatible(
+            GraphicsTechnology::DlssSuperResolution,
+            Some(&v2),
+            Some(&v3),
+        )
+        .is_some());
+    }
+
+    #[test]
+    fn require_version_compatible_allows_any_transition_for_non_dlss() {
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("2.0.0").unwrap();
+
+        assert!(require_version_compatible(
+            GraphicsTechnology::DlssFrameGeneration,
+            Some(&v1),
+            Some(&v2),
+        )
+        .is_some());
+    }
+
+    fn find_test_candidates(
+        components: &[GraphicsComponent],
+        artifacts: &[LibraryArtifact],
+    ) -> Vec<ComponentFileReplacementCandidates> {
+        find_replacement_candidates(components, artifacts, &CandidateContext::empty())
     }
 
     fn sample_component(

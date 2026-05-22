@@ -8,13 +8,7 @@ use renderpilot_domain::{GameId, GameInstallation, LibraryArtifact};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{
-    backup_manager::{
-        ApplyOperationCatalogItemResult, ApplyOperationCatalogResult, BackupCatalogItemResult,
-        BackupCatalogResult, RollbackOperationCatalogItemResult, RollbackOperationCatalogResult,
-    },
-    catalog::{OperationListCatalogEntry, OperationListCatalogResult},
-};
+use crate::catalog::{OperationListCatalogEntry, OperationListCatalogResult};
 
 type JsonResult<T> = Result<T, serde_json::Error>;
 
@@ -56,22 +50,6 @@ pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String
     render_pretty_json(SwapPlanOutput::from(plan))
 }
 
-pub(crate) fn render_backup_output(result: &BackupCatalogResult) -> JsonResult<String> {
-    render_pretty_json(BackupOutput::from(result))
-}
-
-pub(crate) fn render_apply_operation_output(
-    result: &ApplyOperationCatalogResult,
-) -> JsonResult<String> {
-    render_pretty_json(ApplyOperationOutput::from(result))
-}
-
-pub(crate) fn render_rollback_operation_output(
-    result: &RollbackOperationCatalogResult,
-) -> JsonResult<String> {
-    render_pretty_json(RollbackOperationOutput::from(result))
-}
-
 // -----------------------------------------------------------------------------
 // Public JSON value helpers
 // -----------------------------------------------------------------------------
@@ -84,16 +62,6 @@ pub(crate) fn candidate_groups_value(
 
 pub(crate) fn operation_summaries_value(result: &OperationListCatalogResult) -> JsonResult<Value> {
     render_json_value(operation_summary_outputs(result))
-}
-
-pub(crate) fn apply_operation_value(result: &ApplyOperationCatalogResult) -> JsonResult<Value> {
-    render_json_value(ApplyOperationOutput::from(result))
-}
-
-pub(crate) fn rollback_operation_value(
-    result: &RollbackOperationCatalogResult,
-) -> JsonResult<Value> {
-    render_json_value(RollbackOperationOutput::from(result))
 }
 
 // -----------------------------------------------------------------------------
@@ -290,11 +258,13 @@ impl From<ComponentFileReplacementCandidates> for ComponentCandidateOutput {
 struct CandidateOutput {
     artifact_id: String,
     file_name: String,
-    file_path: String,
+    file_path: Option<String>,
     version: Option<String>,
     source_game_id: Option<String>,
     comparison: String,
     warning: Option<String>,
+    manifest_entry_id: Option<String>,
+    is_downloaded: bool,
 }
 
 impl From<&ReplacementCandidate> for CandidateOutput {
@@ -302,7 +272,7 @@ impl From<&ReplacementCandidate> for CandidateOutput {
         Self {
             artifact_id: candidate.artifact_id().as_str().to_owned(),
             file_name: candidate.file_name().to_owned(),
-            file_path: candidate.file_path().as_str().to_owned(),
+            file_path: candidate.file_path().map(|path| path.as_str().to_owned()),
             version: candidate
                 .version()
                 .map(|version| version.as_str().to_owned()),
@@ -313,6 +283,8 @@ impl From<&ReplacementCandidate> for CandidateOutput {
             warning: candidate
                 .warning()
                 .map(|warning| warning.as_str().to_owned()),
+            manifest_entry_id: candidate.manifest_entry_id().map(String::from),
+            is_downloaded: candidate.is_downloaded(),
         }
     }
 }
@@ -361,8 +333,7 @@ struct OperationSummaryOutput {
     created_at: i64,
     completed_at: Option<i64>,
     item_count: usize,
-    backup_count: usize,
-    backup_status: String,
+    component_id: String,
 }
 
 impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
@@ -377,8 +348,7 @@ impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
                 .completed_at
                 .map(|timestamp| timestamp.as_i64()),
             item_count: entry.item_count,
-            backup_count: entry.backup_count,
-            backup_status: backup_status(entry.item_count, entry.backup_count).to_owned(),
+            component_id: entry.component_ids.first().cloned().unwrap_or_default(),
         }
     }
 }
@@ -407,7 +377,6 @@ struct SwapPlanOutput {
     original_sha256: Option<String>,
     replacement_sha256: Option<String>,
     risk_level: String,
-    requires_backup: bool,
     requires_elevation: bool,
     artifact_id: String,
     blockers: Vec<String>,
@@ -433,7 +402,6 @@ impl From<&OperationPlan> for SwapPlanOutput {
                 .replacement_sha256()
                 .map(|hash| hash.as_str().to_owned()),
             risk_level: plan.risk_level().as_str().to_owned(),
-            requires_backup: plan.requires_backup(),
             requires_elevation: plan.requires_elevation(),
             artifact_id: plan.artifact_id().as_str().to_owned(),
             blockers: plan
@@ -451,163 +419,5 @@ impl From<&OperationPlan> for SwapPlanOutput {
 }
 
 // -----------------------------------------------------------------------------
-// Backup output
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct BackupOutput {
-    operation_id: String,
-    game_id: String,
-    backup_root: String,
-    items: Vec<BackupItemOutput>,
-}
-
-impl From<&BackupCatalogResult> for BackupOutput {
-    fn from(result: &BackupCatalogResult) -> Self {
-        Self {
-            operation_id: result.operation_id.as_str().to_owned(),
-            game_id: result.game_id.as_str().to_owned(),
-            backup_root: result.backup_root.as_str().to_owned(),
-            items: result.items.iter().map(BackupItemOutput::from).collect(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct BackupItemOutput {
-    backup_id: String,
-    component_id: String,
-    original_path: String,
-    backup_path: String,
-    manifest_path: String,
-    sha256: String,
-}
-
-impl From<&BackupCatalogItemResult> for BackupItemOutput {
-    fn from(item: &BackupCatalogItemResult) -> Self {
-        Self {
-            backup_id: item.backup_id.as_str().to_owned(),
-            component_id: item.component_id.as_str().to_owned(),
-            original_path: item.original_path.as_str().to_owned(),
-            backup_path: item.backup_path.as_str().to_owned(),
-            manifest_path: item.manifest_path.as_str().to_owned(),
-            sha256: item.sha256.as_str().to_owned(),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Apply operation output
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct ApplyOperationOutput {
-    operation_id: String,
-    game_id: String,
-    status: String,
-    completed_at: Option<i64>,
-    items: Vec<ApplyOperationItemOutput>,
-}
-
-impl From<&ApplyOperationCatalogResult> for ApplyOperationOutput {
-    fn from(result: &ApplyOperationCatalogResult) -> Self {
-        Self {
-            operation_id: result.operation.id.as_str().to_owned(),
-            game_id: result.operation.game_id.as_str().to_owned(),
-            status: result.operation.status.as_str().to_owned(),
-            completed_at: result
-                .operation
-                .completed_at
-                .map(|timestamp| timestamp.as_i64()),
-            items: result
-                .items
-                .iter()
-                .map(ApplyOperationItemOutput::from)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ApplyOperationItemOutput {
-    backup_id: String,
-    component_id: String,
-    applied_path: String,
-    replacement_path: String,
-    backup_path: String,
-}
-
-impl From<&ApplyOperationCatalogItemResult> for ApplyOperationItemOutput {
-    fn from(item: &ApplyOperationCatalogItemResult) -> Self {
-        Self {
-            backup_id: item.backup_id.as_str().to_owned(),
-            component_id: item.component_id.as_str().to_owned(),
-            applied_path: item.applied_path.as_str().to_owned(),
-            replacement_path: item.replacement_path.as_str().to_owned(),
-            backup_path: item.backup_path.as_str().to_owned(),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Rollback operation output
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct RollbackOperationOutput {
-    operation_id: String,
-    game_id: String,
-    status: String,
-    completed_at: Option<i64>,
-    items: Vec<RollbackOperationItemOutput>,
-}
-
-impl From<&RollbackOperationCatalogResult> for RollbackOperationOutput {
-    fn from(result: &RollbackOperationCatalogResult) -> Self {
-        Self {
-            operation_id: result.operation.id.as_str().to_owned(),
-            game_id: result.operation.game_id.as_str().to_owned(),
-            status: result.operation.status.as_str().to_owned(),
-            completed_at: result
-                .operation
-                .completed_at
-                .map(|timestamp| timestamp.as_i64()),
-            items: result
-                .items
-                .iter()
-                .map(RollbackOperationItemOutput::from)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct RollbackOperationItemOutput {
-    backup_id: String,
-    component_id: String,
-    restored_path: String,
-    backup_path: String,
-}
-
-impl From<&RollbackOperationCatalogItemResult> for RollbackOperationItemOutput {
-    fn from(item: &RollbackOperationCatalogItemResult) -> Self {
-        Self {
-            backup_id: item.backup_id.as_str().to_owned(),
-            component_id: item.component_id.as_str().to_owned(),
-            restored_path: item.restored_path.as_str().to_owned(),
-            backup_path: item.backup_path.as_str().to_owned(),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Shared helpers
 // -----------------------------------------------------------------------------
-
-fn backup_status(item_count: usize, backup_count: usize) -> &'static str {
-    match (item_count, backup_count) {
-        (0, _) | (_, 0) => "missing",
-        (items, backups) if backups < items => "partial",
-        _ => "ready",
-    }
-}

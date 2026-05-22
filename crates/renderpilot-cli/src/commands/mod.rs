@@ -1,16 +1,15 @@
 use std::path::PathBuf;
 
 use renderpilot_application::AppInfo;
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology, OperationId};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
 use crate::{
     args::Command,
     catalog,
     error::CliError,
     output::{
-        render_apply_operation_output, render_backup_output, render_candidates_output, render_help,
-        render_list_artifacts_output, render_list_operations_output, render_plan_swap_output,
-        render_rollback_operation_output, render_scan_folder_batch_output,
+        render_candidates_output, render_help, render_list_artifacts_output,
+        render_list_operations_output, render_plan_swap_output, render_scan_folder_batch_output,
         render_scan_folder_output, render_summary, render_version,
     },
 };
@@ -40,9 +39,15 @@ pub(crate) fn render_command(command: Command, info: AppInfo) -> CliOutput {
             artifact_id,
         } => plan_swap(game_id, component_id, artifact_id),
 
-        Command::Backup { operation_id } => backup(operation_id, info),
-        Command::ApplyOperation { operation_id } => apply_operation(operation_id),
-        Command::RollbackOperation { operation_id } => rollback_operation(operation_id),
+        Command::ApplyOperation {
+            game_id,
+            component_id,
+            artifact_id,
+        } => apply_swap(game_id, component_id, artifact_id),
+        Command::RollbackOperation {
+            game_id,
+            component_id,
+        } => rollback_component(game_id, component_id),
     }
 }
 
@@ -119,27 +124,21 @@ fn candidates(game_id: GameId) -> CliOutput {
 }
 
 fn plan_swap(game_id: GameId, component_id: ComponentId, artifact_id: ArtifactId) -> CliOutput {
-    let result = catalog::build_swap_plan(game_id, component_id, artifact_id)?;
+    let plan = catalog::execute::build_swap_plan(game_id, component_id, artifact_id)?;
 
-    render_output(render_plan_swap_output(&result.plan))
+    render_output(render_plan_swap_output(&plan))
 }
 
-fn backup(operation_id: OperationId, info: AppInfo) -> CliOutput {
-    let result = catalog::create_backup(operation_id, info.version())?;
+fn apply_swap(game_id: GameId, component_id: ComponentId, artifact_id: ArtifactId) -> CliOutput {
+    let result = catalog::execute::apply_swap(game_id, component_id, artifact_id)?;
 
-    render_output(render_backup_output(&result))
+    render_output(serde_json::to_string_pretty(&result))
 }
 
-fn apply_operation(operation_id: OperationId) -> CliOutput {
-    let result = catalog::apply_operation(operation_id)?;
+fn rollback_component(game_id: GameId, component_id: ComponentId) -> CliOutput {
+    let result = catalog::execute::rollback_component(game_id, component_id)?;
 
-    render_output(render_apply_operation_output(&result))
-}
-
-fn rollback_operation(operation_id: OperationId) -> CliOutput {
-    let result = catalog::rollback_operation(operation_id)?;
-
-    render_output(render_rollback_operation_output(&result))
+    render_output(serde_json::to_string_pretty(&result))
 }
 
 fn render_output<E>(output: Result<String, E>) -> CliOutput

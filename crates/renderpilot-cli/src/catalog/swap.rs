@@ -1,17 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use renderpilot_application::{
     build_swap_operation_plan, find_replacement_candidates, AppError, AppResult,
-    ArtifactRepository, ComponentRepository, GameRepository, OperationItemRecord,
-    OperationJournalEntry, OperationKind, OperationPlan, OperationPlanRiskLevel, OperationRecord,
-    OperationRepository, OperationStatus, UnixTimestampMillis,
+    ArtifactRepository, ComponentRepository, GameRepository,
 };
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
+use renderpilot_domain::{
+    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact,
+};
 
-use crate::{
-    backup_manager::{metadata_json_for_planned_item, metadata_json_for_planned_operation},
-    error::CliError,
-};
+use crate::error::CliError;
 
 use super::{CandidateCatalogResult, SwapPlanCatalogResult};
 
@@ -29,7 +24,11 @@ where
 
     Ok(CandidateCatalogResult {
         game_id: game_id.clone(),
-        groups: find_replacement_candidates(&components, &artifacts),
+        groups: find_replacement_candidates(
+            &components,
+            &artifacts,
+            &renderpilot_application::CandidateContext::empty(),
+        ),
     })
 }
 
@@ -40,13 +39,13 @@ pub(super) fn build_swap_plan_with_storage<S>(
     artifact_id: &ArtifactId,
 ) -> Result<SwapPlanCatalogResult, CliError>
 where
-    S: GameRepository + ComponentRepository + ArtifactRepository + OperationRepository,
+    S: GameRepository + ComponentRepository + ArtifactRepository,
 {
     let (component, artifact) = require_swap_inputs(storage, game_id, component_id, artifact_id)?;
 
-    let plan = build_swap_operation_plan(&component, &artifact)?;
+    let component_for_plan = component_with_backup_original(&component);
 
-    persist_planned_swap_if_allowed(storage, &plan, &component)?;
+    let plan = build_swap_operation_plan(&component_for_plan, &artifact)?;
 
     Ok(SwapPlanCatalogResult { plan })
 }
@@ -68,7 +67,7 @@ where
     Ok((component, artifact))
 }
 
-fn require_game<S>(storage: &S, game_id: &GameId) -> AppResult<()>
+pub(super) fn require_game<S>(storage: &S, game_id: &GameId) -> AppResult<()>
 where
     S: GameRepository,
 {
@@ -78,7 +77,7 @@ where
         .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
 }
 
-fn require_component_for_game<S>(
+pub(super) fn require_component_for_game<S>(
     storage: &S,
     game_id: &GameId,
     component_id: &ComponentId,
@@ -93,7 +92,10 @@ where
     )
 }
 
-fn require_artifact<S>(storage: &S, artifact_id: &ArtifactId) -> AppResult<LibraryArtifact>
+pub(super) fn require_artifact<S>(
+    storage: &S,
+    artifact_id: &ArtifactId,
+) -> AppResult<LibraryArtifact>
 where
     S: ArtifactRepository,
 {
@@ -104,7 +106,7 @@ where
     )
 }
 
-fn find_required<T>(
+pub(super) fn find_required<T>(
     items: impl IntoIterator<Item = T>,
     predicate: impl FnMut(&T) -> bool,
     not_found: impl FnOnce() -> AppError,
@@ -112,104 +114,36 @@ fn find_required<T>(
     items.into_iter().find(predicate).ok_or_else(not_found)
 }
 
-fn persist_planned_swap_if_allowed<S>(
-    storage: &S,
-    plan: &OperationPlan,
-    component: &GraphicsComponent,
-) -> AppResult<()>
-where
-    S: OperationRepository,
-{
-    if !should_persist_planned_swap(plan) {
-        return Ok(());
+/// If a `.bak` sidecar exists for the component's target file, treat the
+/// backup as the true original and use its version / SHA-256 for the swap
+/// plan.  This keeps the original metadata stable across multiple swaps.
+fn component_with_backup_original(component: &GraphicsComponent) -> GraphicsComponent {
+    let Some(target_file) = component.files().first() else {
+        return component.clone();
+    };
+
+    let backup_path = std::path::PathBuf::from(target_file.path().as_str().to_owned() + ".bak");
+    if !backup_path.exists() {
+        return component.clone();
     }
 
-    persist_planned_swap_operation(storage, plan, component)
-}
+    let sha256 = match renderpilot_detection::sha256_file(&backup_path) {
+        Ok(hash) => hash,
+        Err(_) => return component.clone(),
+    };
+    let version = renderpilot_detection::read_windows_file_version(&backup_path);
 
-/// Blocked plans describe incompatible pairings; persisting them would violate catalog triggers.
-fn should_persist_planned_swap(plan: &OperationPlan) -> bool {
-    plan.risk_level() != OperationPlanRiskLevel::Blocked
-}
-
-fn persist_planned_swap_operation<S>(
-    storage: &S,
-    plan: &OperationPlan,
-    component: &GraphicsComponent,
-) -> AppResult<()>
-where
-    S: OperationRepository,
-{
-    persist_planned_swap_operation_at(storage, plan, component, current_timestamp_millis()?)
-}
-
-fn persist_planned_swap_operation_at<S>(
-    storage: &S,
-    plan: &OperationPlan,
-    component: &GraphicsComponent,
-    created_at: UnixTimestampMillis,
-) -> AppResult<()>
-where
-    S: OperationRepository,
-{
-    // Defensive check: keep the invariant local to the write path too,
-    // not only at the call site.
-    if !should_persist_planned_swap(plan) {
-        return Err(AppError::storage_failed(
-            "blocked swap plans must not be persisted",
-        ));
+    let mut modified_file = ComponentFile::new(target_file.path().clone()).with_sha256(sha256);
+    if let Some(version) = version {
+        modified_file = modified_file.with_version(version);
     }
 
-    let operation = planned_operation_record(plan, created_at)?;
-    let item = planned_operation_item(plan, component)?;
-    let entry = OperationJournalEntry::try_new(operation, vec![item])?;
-
-    storage.save_operation_entry(&entry)
-}
-
-fn planned_operation_record(
-    plan: &OperationPlan,
-    created_at: UnixTimestampMillis,
-) -> AppResult<OperationRecord> {
-    let record = OperationRecord::new(
-        plan.operation_id().clone(),
-        plan.game_id().clone(),
-        OperationKind::ReplaceComponent,
-        OperationStatus::Planned,
-        created_at,
-    );
-
-    Ok(record.with_metadata_json(metadata_json_for_planned_operation(plan)?))
-}
-
-fn planned_operation_item(
-    plan: &OperationPlan,
-    component: &GraphicsComponent,
-) -> AppResult<OperationItemRecord> {
-    let item = OperationItemRecord::new(
-        plan.operation_id().clone(),
+    GraphicsComponent::new(
         component.id().clone(),
-        plan.target_path().clone(),
-        OperationStatus::Planned,
-    );
-
-    Ok(item
-        .with_artifact_id(plan.artifact_id().clone())
-        .with_target_path(plan.replacement_path().clone())
-        .with_metadata_json(metadata_json_for_planned_item(plan)?))
-}
-
-fn current_timestamp_millis() -> AppResult<UnixTimestampMillis> {
-    unix_timestamp_millis(SystemTime::now())
-}
-
-fn unix_timestamp_millis(time: SystemTime) -> AppResult<UnixTimestampMillis> {
-    let duration = time
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| AppError::storage_failed("system clock is before Unix epoch"))?;
-
-    let millis = i64::try_from(duration.as_millis())
-        .map_err(|_| AppError::storage_failed("system clock is too large to persist"))?;
-
-    UnixTimestampMillis::new(millis)
+        component.game_id().clone(),
+        component.kind(),
+        component.technology(),
+        component.swappability(),
+    )
+    .with_file(modified_file)
 }

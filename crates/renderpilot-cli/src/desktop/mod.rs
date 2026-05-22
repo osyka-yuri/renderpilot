@@ -5,7 +5,7 @@
 
 mod catalog;
 mod covers;
-mod libraries;
+pub(crate) mod libraries;
 mod operations;
 mod scan;
 mod utils;
@@ -26,7 +26,5 @@ pub use self::libraries::{
     delete_library, download_library, fetch_libraries_manifest, get_libraries_manifest,
     get_library_states, LibraryManifest, LibraryManifestEntry, LibraryState,
 };
-pub use self::operations::{
-    apply_operation, apply_operation_plan, build_swap_plan, rollback_operation,
-};
+pub use self::operations::{apply_swap, rollback_component};
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};

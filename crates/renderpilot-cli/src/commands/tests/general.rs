@@ -38,9 +38,10 @@ fn help_flag_prints_usage() {
     assert!(output.contains(
         "renderpilot plan-swap --game <game_id> --component <component_id> --artifact <artifact_id>"
     ));
-    assert!(output.contains("renderpilot backup --operation <operation_id>"));
-    assert!(output.contains("renderpilot apply --operation <operation_id>"));
-    assert!(output.contains("renderpilot rollback --operation <operation_id>"));
+    assert!(output.contains(
+        "renderpilot apply --game <game_id> --component <component_id> --artifact <artifact_id>"
+    ));
+    assert!(output.contains("renderpilot rollback --game <game_id> --component <component_id>"));
     assert!(output.contains("renderpilot --version"));
 }
 

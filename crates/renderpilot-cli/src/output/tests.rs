@@ -27,7 +27,8 @@ fn usage_lists_artifact_command() {
     assert!(help.contains(
         "renderpilot plan-swap --game <game_id> --component <component_id> --artifact <artifact_id>"
     ));
-    assert!(help.contains("renderpilot backup --operation <operation_id>"));
-    assert!(help.contains("renderpilot apply --operation <operation_id>"));
-    assert!(help.contains("renderpilot rollback --operation <operation_id>"));
+    assert!(help.contains(
+        "renderpilot apply --game <game_id> --component <component_id> --artifact <artifact_id>"
+    ));
+    assert!(help.contains("renderpilot rollback --game <game_id> --component <component_id>"));
 }

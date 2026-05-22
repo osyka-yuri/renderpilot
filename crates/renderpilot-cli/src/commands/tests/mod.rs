@@ -4,7 +4,6 @@ pub(super) use super::test_support::{
 };
 
 mod artifacts;
-mod backup;
 mod candidates;
 mod general;
 mod operations;

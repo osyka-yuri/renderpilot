@@ -3,8 +3,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, OperationId,
-    Swappability,
+    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, Swappability,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -116,10 +115,6 @@ pub(crate) fn parse_component_id(value: impl Into<String>) -> Result<ComponentId
 
 pub(crate) fn parse_artifact_id(value: impl Into<String>) -> Result<ArtifactId, CliError> {
     parse_identifier(value, CliError::InvalidArtifactId)
-}
-
-pub(crate) fn parse_operation_id(value: impl Into<String>) -> Result<OperationId, CliError> {
-    parse_identifier(value, CliError::InvalidOperationId)
 }
 
 pub(crate) fn parse_identifier<T>(

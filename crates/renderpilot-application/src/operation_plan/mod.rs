@@ -3,6 +3,7 @@
 mod assessment;
 mod builder;
 mod findings;
+mod identity;
 mod plan;
 
 #[cfg(test)]
@@ -13,3 +14,4 @@ pub use findings::{OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWa
 pub use plan::OperationPlan;
 
 pub(crate) use assessment::OperationPlanAssessment;
+pub(crate) use identity::{generate_operation_plan_identity, OperationPlanIdentity};

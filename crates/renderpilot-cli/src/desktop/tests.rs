@@ -17,17 +17,17 @@ use renderpilot_storage_sqlite::SqliteStorage;
 use serde_json::Value;
 
 use super::{
-    apply_operation_plan, build_swap_plan, get_catalog_setting, get_game_details, query_game_cards,
-    rollback_operation, scan_manual_folder, set_catalog_setting,
+    apply_swap, get_catalog_setting, get_game_details, query_game_cards, rollback_component,
+    scan_manual_folder, set_catalog_setting,
     utils::{dashboard_risk_level, library_tags, normalized_path_string as path_string},
 };
 
 #[cfg(windows)]
 mod auto_scan;
 
+use crate::catalog::CATALOG_DB_PATH_ENV;
 use crate::hash::sha256_hex;
 use crate::test_env::lock_process_env;
-use crate::{backup_manager::BACKUP_ROOT_DIR_ENV, catalog::CATALOG_DB_PATH_ENV};
 
 const DLSS_DLL: &str = "nvngx_dlss.dll";
 const DEFAULT_PAGE_LIMIT: i64 = 10_000;
@@ -70,7 +70,7 @@ fn scan_manual_folder_updates_catalog_and_returns_detected_components() {
     assert_eq!(cards[0]["component_count"], 1);
     assert_eq!(cards[0]["updates_available"], false);
     assert_eq!(cards[0]["risk_level"], "low");
-    assert_eq!(cards[0]["backup_available"], false);
+    assert_eq!(cards[0]["rollback_available"], false);
     assert!(
         cards[0]["cover_updated_at_ms"].is_null(),
         "cover timestamp should be absent before artwork is stored",
@@ -450,7 +450,7 @@ fn set_catalog_setting_blank_value_removes_existing_setting() {
 }
 
 #[test]
-fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
+fn desktop_apply_creates_sidecar_and_rollback_restores_original_bytes() {
     let fixture = DesktopFixture::new("desktop-apply-rollback");
     let game_folder = tempfile::tempdir().expect("game dir");
     let artifact_folder = tempfile::tempdir().expect("artifact dir");
@@ -490,93 +490,38 @@ fn desktop_apply_creates_backup_and_rollback_restores_original_bytes() {
         None,
     ));
 
-    let plan = build_swap_plan(
+    let applied = apply_swap(
         game.id().as_str(),
         "component:desktop:dlss",
         "artifact:desktop:dlss-3.7",
     )
-    .expect("plan should build");
+    .expect("apply should succeed");
 
-    let operation_id = json_str_field(&plan, "operation_id").to_owned();
-    let confirmation_token = json_str_field(&plan, "confirmation_token").to_owned();
-
-    let applied = apply_operation_plan(operation_id.clone(), confirmation_token)
-        .expect("apply should succeed");
-
-    assert_eq!(applied["status"], "completed");
-    assert_eq!(json_array_field(&applied, "items").len(), 1);
+    assert_eq!(applied["game_id"], game.id().as_str());
+    assert_eq!(applied["component_id"], "component:desktop:dlss");
     assert_eq!(
         fs::read(&source_path).expect("source bytes should be readable"),
         b"replacement-bytes",
     );
 
-    let rolled_back = rollback_operation(operation_id).expect("rollback should succeed");
+    let sidecar_path = source_path.with_extension("dll.bak");
+    assert!(
+        sidecar_path.exists(),
+        ".bak sidecar should exist next to target after apply"
+    );
+    assert_eq!(
+        fs::read(&sidecar_path).expect("sidecar bytes should be readable"),
+        b"original-bytes",
+        ".bak sidecar should contain original bytes"
+    );
 
-    assert_eq!(rolled_back["status"], "rolled_back");
+    let rolled_back = rollback_component(game.id().as_str(), "component:desktop:dlss")
+        .expect("rollback should succeed");
+
+    assert_eq!(rolled_back["game_id"], game.id().as_str());
+    assert_eq!(rolled_back["component_id"], "component:desktop:dlss");
     assert_eq!(
         fs::read(&source_path).expect("restored bytes should be readable"),
-        b"original-bytes",
-    );
-}
-
-#[test]
-fn desktop_apply_rejects_invalid_confirmation_token() {
-    let fixture = DesktopFixture::new("desktop-invalid-confirmation-token");
-    let game_folder = tempfile::tempdir().expect("game dir");
-    let artifact_folder = tempfile::tempdir().expect("artifact dir");
-
-    let source_path = game_folder.path().join(DLSS_DLL);
-    let artifact_path = artifact_folder.path().join(DLSS_DLL);
-
-    write_file(&source_path, b"original-bytes");
-    write_file(&artifact_path, b"replacement-bytes");
-
-    let install_path = path_string(game_folder.path());
-    let game = sample_game(
-        &format!("manual:{install_path}"),
-        "Desktop Invalid Token Game",
-        &install_path,
-    );
-
-    fixture.store_game(&game);
-    fixture.store_components(
-        game.id(),
-        &[sample_component_from_bytes(
-            "component:desktop:invalid-token",
-            game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            &path_string(&source_path),
-            Some("3.5.0"),
-            b"original-bytes",
-        )],
-    );
-    fixture.store_artifact(sample_artifact_from_bytes(
-        "artifact:desktop:invalid-token-3.7",
-        GraphicsTechnology::DlssSuperResolution,
-        &path_string(&artifact_path),
-        Some("3.7.0"),
-        b"replacement-bytes",
-        None,
-    ));
-
-    let plan = build_swap_plan(
-        game.id().as_str(),
-        "component:desktop:invalid-token",
-        "artifact:desktop:invalid-token-3.7",
-    )
-    .expect("plan should build");
-
-    let operation_id = json_str_field(&plan, "operation_id");
-
-    let error = apply_operation_plan(operation_id, "invalid-confirmation-token")
-        .expect_err("invalid token should fail");
-
-    assert!(error
-        .to_string()
-        .contains("confirmation token mismatch for operation"),);
-    assert_eq!(
-        fs::read(&source_path).expect("source bytes should be readable"),
         b"original-bytes",
     );
 }
@@ -833,7 +778,6 @@ impl DesktopFixture {
 
 struct DesktopCatalogEnvGuard {
     previous_db: Option<OsString>,
-    previous_backup_root: Option<OsString>,
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -841,15 +785,11 @@ impl DesktopCatalogEnvGuard {
     fn new(db_path: PathBuf) -> Self {
         let lock = lock_process_env();
         let previous_db = env::var_os(CATALOG_DB_PATH_ENV);
-        let previous_backup_root = env::var_os(BACKUP_ROOT_DIR_ENV);
-        let backup_root = db_path.with_extension("backups");
 
         env::set_var(CATALOG_DB_PATH_ENV, &db_path);
-        env::set_var(BACKUP_ROOT_DIR_ENV, &backup_root);
 
         Self {
             previous_db,
-            previous_backup_root,
             _lock: lock,
         }
     }
@@ -858,7 +798,6 @@ impl DesktopCatalogEnvGuard {
 impl Drop for DesktopCatalogEnvGuard {
     fn drop(&mut self) {
         restore_env_var(CATALOG_DB_PATH_ENV, &self.previous_db);
-        restore_env_var(BACKUP_ROOT_DIR_ENV, &self.previous_backup_root);
     }
 }
 

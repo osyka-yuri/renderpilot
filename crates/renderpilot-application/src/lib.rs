@@ -15,7 +15,7 @@ mod persistence;
 mod ports;
 
 pub use candidates::{
-    find_replacement_candidates, CandidateComparison, CandidateWarning,
+    find_replacement_candidates, CandidateComparison, CandidateContext, CandidateWarning,
     ComponentFileReplacementCandidates, ReplacementCandidate,
 };
 pub use error::{invalid_operation_state_display_message, AppError, AppErrorKind, AppResult};
@@ -26,11 +26,11 @@ pub use operation_plan::{
 };
 
 pub use persistence::{
-    BackupId, BackupRecord, MetadataJson, OperationItemRecord, OperationJournalEntry,
-    OperationKind, OperationRecord, OperationStatus, UnixTimestampMillis,
+    MetadataJson, OperationItemRecord, OperationJournalEntry, OperationKind, OperationRecord,
+    OperationStatus, UnixTimestampMillis,
 };
 
 pub use ports::{
-    ArtifactRepository, BackupRepository, ComponentDetector, ComponentRepository, GameRepository,
-    GameSourceProvider, OperationRepository,
+    ArtifactRepository, ComponentDetector, ComponentRepository, GameRepository, GameSourceProvider,
+    OperationRepository,
 };

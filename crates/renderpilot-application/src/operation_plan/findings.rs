@@ -1,7 +1,7 @@
 /// Risk level assigned to a swap operation plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperationPlanRiskLevel {
-    /// No special risk beyond the standard backup flow.
+    /// No special risk beyond the standard replacement flow.
     Low,
     /// User should review the plan before execution.
     Medium,

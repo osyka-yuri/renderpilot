@@ -54,6 +54,11 @@ impl Version {
     pub fn segments(&self) -> &[u64] {
         &self.segments
     }
+
+    /// Returns the major version number (first segment).
+    pub fn major(&self) -> u64 {
+        self.segments[0]
+    }
 }
 
 impl fmt::Display for Version {

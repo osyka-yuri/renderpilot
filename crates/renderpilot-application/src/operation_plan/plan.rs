@@ -5,9 +5,9 @@ use renderpilot_domain::{
 
 use crate::OperationKind;
 
-use super::builder::{generate_confirmation_token, generate_operation_id, REQUIRES_BACKUP};
 use super::{
-    OperationPlanAssessment, OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWarning,
+    OperationPlanAssessment, OperationPlanBlocker, OperationPlanIdentity, OperationPlanRiskLevel,
+    OperationPlanWarning,
 };
 
 /// Read-only operation plan for a DLL replacement.
@@ -24,7 +24,6 @@ pub struct OperationPlan {
     original_sha256: Option<Sha256Hash>,
     replacement_sha256: Option<Sha256Hash>,
     risk_level: OperationPlanRiskLevel,
-    requires_backup: bool,
     requires_elevation: bool,
     artifact_id: ArtifactId,
     blockers: Vec<OperationPlanBlocker>,
@@ -37,6 +36,7 @@ impl OperationPlan {
         artifact: &LibraryArtifact,
         target_file: &ComponentFile,
         assessment: OperationPlanAssessment,
+        identity: OperationPlanIdentity,
     ) -> Self {
         let OperationPlanAssessment {
             blockers,
@@ -44,10 +44,14 @@ impl OperationPlan {
             risk_level,
             requires_elevation,
         } = assessment;
+        let OperationPlanIdentity {
+            operation_id,
+            confirmation_token,
+        } = identity;
 
         Self {
-            operation_id: generate_operation_id(component, artifact),
-            confirmation_token: generate_confirmation_token(),
+            operation_id,
+            confirmation_token,
             game_id: component.game_id().clone(),
             operation_type: OperationKind::ReplaceComponent,
             target_path: target_file.path().clone(),
@@ -57,7 +61,6 @@ impl OperationPlan {
             original_sha256: target_file.sha256().cloned(),
             replacement_sha256: Some(artifact.sha256().clone()),
             risk_level,
-            requires_backup: REQUIRES_BACKUP,
             requires_elevation,
             artifact_id: artifact.id().clone(),
             blockers,
@@ -118,11 +121,6 @@ impl OperationPlan {
     /// Returns the derived risk level of this plan.
     pub fn risk_level(&self) -> OperationPlanRiskLevel {
         self.risk_level
-    }
-
-    /// Returns whether a backup is required before execution.
-    pub const fn requires_backup(&self) -> bool {
-        self.requires_backup
     }
 
     /// Returns whether the target path likely requires elevation.
