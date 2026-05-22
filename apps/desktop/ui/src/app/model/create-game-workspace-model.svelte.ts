@@ -50,8 +50,8 @@ export function createGameWorkspaceModel() {
     return detailsRequests.isActive(token);
   }
 
-  function getCurrentPlan(operationId: string): SwapPlan | null {
-    if (currentPlan?.operation_id !== operationId) {
+  function getCurrentPlan(gameId: string): SwapPlan | null {
+    if (!isPlanForGame(currentPlan, gameId)) {
       return null;
     }
 

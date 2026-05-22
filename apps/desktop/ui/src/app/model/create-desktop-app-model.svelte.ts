@@ -11,7 +11,8 @@ import { clearStatusNotification, publishCommandErrorNotification } from '@share
 import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
 import { createGamesCatalogModel } from '@widgets/games-catalog';
-import { createGameWorkspaceModel } from '@widgets/game-workspace';
+import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
+import { createExclusiveTaskRunner } from '@shared/concurrency';
 import {
   publishMissingStableGameDetailsNotification,
   publishStalePlanNotification,
@@ -29,7 +30,6 @@ export function createDesktopAppModel() {
   const catalog = createGamesCatalogModel();
   const workspace = createGameWorkspaceModel();
 
-  let busy = $state(false);
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
   let languageMode = $state<LanguageMode>('system');
 
@@ -107,8 +107,8 @@ export function createDesktopAppModel() {
     workspace.setCurrentPlan(plan);
   }
 
-  function getCurrentPlan(operationId: string): SwapPlan | null {
-    return workspace.getCurrentPlan(operationId);
+  function getCurrentPlan(gameId: string): SwapPlan | null {
+    return workspace.getCurrentPlan(gameId);
   }
 
   function showStalePlanError(): void {
@@ -198,28 +198,19 @@ export function createDesktopAppModel() {
   // Exclusive task runner
   // ---------------------------------------------------------------------------
 
+  const taskRunner = createExclusiveTaskRunner({
+    onBeforeRun: clearError,
+    onError: showError,
+  });
+
   async function runExclusive<T>(
     task: () => Promise<T>,
     options: RunExclusiveOptions = {},
   ): Promise<T | null> {
-    if (busy) {
-      return null;
-    }
-
-    busy = true;
-
-    if (options.clearErrorOnStart ?? true) {
-      clearError();
-    }
-
-    try {
-      return await task();
-    } catch (error) {
-      showError(error);
-      return null;
-    } finally {
-      busy = false;
-    }
+    return taskRunner.run(
+      task,
+      options.clearErrorOnStart === false ? { onBeforeRun: undefined } : {},
+    );
   }
 
   return {
@@ -243,7 +234,7 @@ export function createDesktopAppModel() {
       return workspace.currentPlan;
     },
     get busy() {
-      return busy;
+      return taskRunner.busy;
     },
     get themeMode() {
       return themeMode;

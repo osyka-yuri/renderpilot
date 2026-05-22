@@ -1,31 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameDetails } from '@entities/game';
-import type { SwapPlan } from '@entities/operation';
 import * as notificationsModule from '@shared/notifications';
 import * as themeModule from '@shared/theme';
 import { createDesktopAppModel } from './create-desktop-app-model.svelte';
 import * as appNotificationsModule from './notifications';
-
-function createStubPlan(operationId: string): SwapPlan {
-  return {
-    operation_id: operationId,
-    confirmation_token: 'token',
-    game_id: 'game-1',
-    operation_type: 'swap',
-    target_path: '/a',
-    replacement_path: '/b',
-    original_version: null,
-    replacement_version: null,
-    original_sha256: null,
-    replacement_sha256: null,
-    risk_level: 'safe',
-    requires_backup: false,
-    requires_elevation: false,
-    artifact_id: 'art-1',
-    blockers: [],
-    warnings: [],
-  };
-}
 
 describe('createDesktopAppModel', () => {
   it('initializes with default screen "games"', () => {
@@ -54,17 +32,29 @@ describe('createDesktopAppModel', () => {
     clearStatusNotificationSpy.mockRestore();
   });
 
-  it('getCurrentPlan returns null when operation_id mismatches', () => {
+  it('getCurrentPlan returns null when gameId mismatches', () => {
     const model = createDesktopAppModel();
-    model.setCurrentPlan(createStubPlan('op-1'));
-    expect(model.getCurrentPlan('op-2')).toBeNull();
+    model.setCurrentPlan({
+      game_id: 'game-1',
+      artifact_id: 'art-1',
+      component_id: 'comp-1',
+      target_path: '/a',
+      replacement_path: '/b',
+    });
+    expect(model.getCurrentPlan('game-2')).toBeNull();
   });
 
-  it('getCurrentPlan returns plan when operation_id matches', () => {
+  it('getCurrentPlan returns plan when game_id matches', () => {
     const model = createDesktopAppModel();
-    const plan = createStubPlan('op-1');
+    const plan = {
+      game_id: 'game-1',
+      artifact_id: 'art-1',
+      component_id: 'comp-1',
+      target_path: '/a',
+      replacement_path: '/b',
+    };
     model.setCurrentPlan(plan);
-    expect(model.getCurrentPlan('op-1')).toBe(plan);
+    expect(model.getCurrentPlan('game-1')).toBe(plan);
   });
 
   it('runExclusive returns null when busy', async () => {
@@ -85,7 +75,13 @@ describe('createDesktopAppModel', () => {
 
   it('clearSelection resets selected game', () => {
     const model = createDesktopAppModel();
-    model.setCurrentPlan(createStubPlan('op-1'));
+    model.setCurrentPlan({
+      game_id: 'game-1',
+      artifact_id: 'art-1',
+      component_id: 'comp-1',
+      target_path: '/a',
+      replacement_path: '/b',
+    });
 
     model.clearSelection();
     expect(model.selectedGameId).toBeNull();
