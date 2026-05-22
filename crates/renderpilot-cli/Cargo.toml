@@ -18,6 +18,7 @@ renderpilot-domain = { path = "../renderpilot-domain" }
 renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
 renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

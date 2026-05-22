@@ -4,20 +4,20 @@
 //! [`run_desktop_command`].
 
 mod error;
+mod query_game_cards;
+mod validation;
 
 pub use error::CommandError;
 
-use std::path::PathBuf;
-
 use renderpilot_cli::{desktop, CliError};
-use serde::Deserialize;
 use serde_json::Value;
 
 pub type JsonCommandResult = Result<Value, CommandError>;
 
 type DesktopCommandResult = Result<Value, CliError>;
 
-const MAX_GAME_CARDS_PAGE_LIMIT: u32 = 10_000;
+use query_game_cards::{QueryGameCardsArgs, QueryGameCardsDto};
+use validation::{require_non_empty_path, require_non_empty_string};
 
 async fn run_desktop_command<F>(command: F) -> JsonCommandResult
 where
@@ -40,44 +40,6 @@ where
         .map_err(CommandError::from)
 }
 
-fn require_non_empty_string(
-    name: &'static str,
-    value: impl Into<String>,
-) -> Result<String, CommandError> {
-    let value = value.into().trim().to_owned();
-
-    if value.is_empty() {
-        return Err(CommandError::invalid_argument(name, "must not be empty"));
-    }
-
-    Ok(value)
-}
-
-fn require_non_empty_path(path: String) -> Result<PathBuf, CommandError> {
-    let path = require_non_empty_string("path", path)?;
-
-    Ok(PathBuf::from(path))
-}
-
-fn trim_string(value: String) -> String {
-    value.trim().to_owned()
-}
-
-fn trim_string_vec(values: Vec<String>) -> Vec<String> {
-    values.into_iter().map(trim_string).collect()
-}
-
-fn reject_empty_items(name: &'static str, values: &[String]) -> Result<(), CommandError> {
-    if values.iter().any(|value| value.is_empty()) {
-        return Err(CommandError::invalid_argument(
-            name,
-            "items must not be empty",
-        ));
-    }
-
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn scan_manual_folder(path: String) -> JsonCommandResult {
     let path = require_non_empty_path(path)?;
@@ -88,133 +50,6 @@ pub async fn scan_manual_folder(path: String) -> JsonCommandResult {
 #[tauri::command]
 pub async fn scan_auto_libraries() -> JsonCommandResult {
     run_desktop_command(desktop::scan_auto_libraries).await
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum GameCardsSortFieldDto {
-    Title,
-    Updates,
-    Risk,
-}
-
-impl GameCardsSortFieldDto {
-    fn as_cli_value(&self) -> &'static str {
-        match self {
-            Self::Title => "title",
-            Self::Updates => "updates",
-            Self::Risk => "risk",
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum GameCardsSortDirectionDto {
-    Asc,
-    Desc,
-}
-
-impl GameCardsSortDirectionDto {
-    fn as_cli_value(&self) -> &'static str {
-        match self {
-            Self::Asc => "asc",
-            Self::Desc => "desc",
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GameCardsSortDto {
-    field: GameCardsSortFieldDto,
-    direction: GameCardsSortDirectionDto,
-}
-
-impl GameCardsSortDto {
-    fn into_cli_values(self) -> (String, String) {
-        (
-            self.field.as_cli_value().to_owned(),
-            self.direction.as_cli_value().to_owned(),
-        )
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GameCardsPageDto {
-    limit: u32,
-    offset: u32,
-}
-
-impl GameCardsPageDto {
-    fn into_cli_values(self) -> Result<(i64, i64), CommandError> {
-        if self.limit == 0 {
-            return Err(CommandError::invalid_argument(
-                "limit",
-                "must be greater than 0",
-            ));
-        }
-
-        if self.limit > MAX_GAME_CARDS_PAGE_LIMIT {
-            return Err(CommandError::invalid_argument(
-                "limit",
-                "must not exceed maximum page size",
-            ));
-        }
-
-        Ok((i64::from(self.limit), i64::from(self.offset)))
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct QueryGameCardsDto {
-    #[serde(default)]
-    search_query: String,
-
-    #[serde(default)]
-    selected_libraries: Vec<String>,
-
-    #[serde(default)]
-    selected_launchers: Vec<String>,
-
-    sort: GameCardsSortDto,
-    page: GameCardsPageDto,
-}
-
-struct QueryGameCardsArgs {
-    search_query: String,
-    selected_libraries: Vec<String>,
-    selected_launchers: Vec<String>,
-    sort_field: String,
-    sort_direction: String,
-    limit: i64,
-    offset: i64,
-}
-
-impl QueryGameCardsDto {
-    fn into_desktop_args(self) -> Result<QueryGameCardsArgs, CommandError> {
-        let search_query = trim_string(self.search_query);
-        let selected_libraries = trim_string_vec(self.selected_libraries);
-        let selected_launchers = trim_string_vec(self.selected_launchers);
-
-        reject_empty_items("selected_libraries", &selected_libraries)?;
-        reject_empty_items("selected_launchers", &selected_launchers)?;
-
-        let (sort_field, sort_direction) = self.sort.into_cli_values();
-        let (limit, offset) = self.page.into_cli_values()?;
-
-        Ok(QueryGameCardsArgs {
-            search_query,
-            selected_libraries,
-            selected_launchers,
-            sort_field,
-            sort_direction,
-            limit,
-            offset,
-        })
-    }
 }
 
 #[tauri::command]
@@ -287,7 +122,7 @@ pub async fn set_catalog_setting(key: String, value: String) -> JsonCommandResul
 }
 
 #[tauri::command]
-pub async fn build_swap_plan(
+pub async fn apply_swap(
     game_id: String,
     component_id: String,
     artifact_id: String,
@@ -296,26 +131,15 @@ pub async fn build_swap_plan(
     let component_id = require_non_empty_string("component_id", component_id)?;
     let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
 
-    run_desktop_command(move || desktop::build_swap_plan(game_id, component_id, artifact_id)).await
+    run_desktop_command(move || desktop::apply_swap(game_id, component_id, artifact_id)).await
 }
 
 #[tauri::command]
-pub async fn apply_operation_plan(
-    operation_id: String,
-    confirmation_token: String,
-) -> JsonCommandResult {
-    let operation_id = require_non_empty_string("operation_id", operation_id)?;
-    let confirmation_token = require_non_empty_string("confirmation_token", confirmation_token)?;
+pub async fn rollback_component(game_id: String, component_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let component_id = require_non_empty_string("component_id", component_id)?;
 
-    run_desktop_command(move || desktop::apply_operation_plan(operation_id, confirmation_token))
-        .await
-}
-
-#[tauri::command]
-pub async fn rollback_operation(operation_id: String) -> JsonCommandResult {
-    let operation_id = require_non_empty_string("operation_id", operation_id)?;
-
-    run_desktop_command(move || desktop::rollback_operation(operation_id)).await
+    run_desktop_command(move || desktop::rollback_component(game_id, component_id)).await
 }
 
 #[tauri::command]

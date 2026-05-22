@@ -2768,6 +2768,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "http",
+ "log",
  "md5",
  "renderpilot-application",
  "renderpilot-detection",
@@ -2788,6 +2789,7 @@ dependencies = [
 name = "renderpilot-desktop"
 version = "0.1.0"
 dependencies = [
+ "log",
  "renderpilot-cli",
  "serde",
  "serde_json",

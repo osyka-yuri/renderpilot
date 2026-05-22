@@ -41,7 +41,7 @@ fn create_desktop_builder() -> DesktopBuilder {
 fn refresh_libraries_manifest_in_background() {
     tauri::async_runtime::spawn(async {
         if let Err(error) = renderpilot_cli::desktop::fetch_libraries_manifest().await {
-            eprintln!("Failed to refresh libraries manifest on startup: {error}");
+            log::warn!("Failed to refresh libraries manifest on startup: {error}");
         }
     });
 }
@@ -76,9 +76,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::get_catalog_setting,
         commands::set_catalog_setting,
         // Operations
-        commands::build_swap_plan,
-        commands::apply_operation_plan,
-        commands::rollback_operation,
+        commands::apply_swap,
+        commands::rollback_component,
         // Libraries
         commands::fetch_libraries_manifest,
         commands::get_libraries_manifest,

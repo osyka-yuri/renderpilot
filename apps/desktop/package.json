@@ -57,12 +57,5 @@
     "typescript-eslint": "^8.59.3",
     "vite": "8.0.13",
     "vitest": "^4.1.6"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "eslint-plugin-import>eslint": "10.3.0"
-      }
-    }
   }
 }
