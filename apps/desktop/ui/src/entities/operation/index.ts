@@ -1,54 +1,28 @@
-import {
-  formatOperationLabel,
-  formatRisk,
-  riskTone,
-  riskBadgeVariant,
-  statusBadgeVariant,
-  isRollbackableOperation,
-  isPlanForGame,
-  formatBackupSummary,
-  formatRestoredFilesSummary,
-  formatUpdatedFilesSummary,
-  getCompletedDurationText,
-  type OperationBadgeVariant,
-} from './model/presenters';
-import {
-  publishApplyCompletedNotification,
-  publishRollbackCompletedNotification,
-} from './model/notifications';
-import type {
-  SwapPlan,
-  ApplyOperationResult,
-  RollbackOperationResult,
-  OperationSummary,
-  OperationHandler,
-} from './model/types';
-import { buildSwapPlan, applyOperationPlan, rollbackOperation } from './api/desktop';
-
 export {
   formatOperationLabel,
   formatRisk,
   riskTone,
   riskBadgeVariant,
   statusBadgeVariant,
-  isRollbackableOperation,
   isPlanForGame,
-  formatBackupSummary,
+  isPlanForComponent,
   formatRestoredFilesSummary,
   formatUpdatedFilesSummary,
   getCompletedDurationText,
+} from './model/presenters';
+
+export {
   publishApplyCompletedNotification,
   publishRollbackCompletedNotification,
-  buildSwapPlan,
-  applyOperationPlan,
-  rollbackOperation,
-};
+} from './model/notifications';
+
+export { applySwap, rollbackComponent } from './api/desktop';
+
+export type { OperationBadgeVariant } from './model/presenters';
 
 export type {
-  OperationBadgeVariant,
   SwapPlan,
-  ApplyOperationResult,
-  RollbackOperationResult,
+  ApplySwapResult,
+  RollbackComponentResult,
   OperationSummary,
-  OperationHandler,
-};
+} from './model/types';

@@ -99,13 +99,14 @@ describe('mockQueryGameCards parity', () => {
           source_game_id: null,
           comparison: 'newer_version',
           warning: null,
+          is_downloaded: true,
         },
       ],
     });
 
     const summary = createGameSummaryFromDetails(details, {
       risk_level: 'medium',
-      backup_available: false,
+      rollback_available: false,
       last_operation_status: null,
     });
 

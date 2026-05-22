@@ -4,7 +4,7 @@ import { normalizeUpdateCount } from './game-card';
 export type DashboardStats = {
   games: number;
   updates: number;
-  backupsReady: number;
+  rollbacksReady: number;
 };
 
 export function getDashboardStats(gameCards: readonly GameSummary[]): DashboardStats {
@@ -12,7 +12,7 @@ export function getDashboardStats(gameCards: readonly GameSummary[]): DashboardS
 
   for (const game of gameCards) {
     stats.updates += getAvailableUpdatesCount(game);
-    stats.backupsReady += getBackupsReadyCount(game);
+    stats.rollbacksReady += getRollbacksReadyCount(game);
   }
 
   return stats;
@@ -22,7 +22,7 @@ function createDashboardStats(games: number): DashboardStats {
   return {
     games,
     updates: 0,
-    backupsReady: 0,
+    rollbacksReady: 0,
   };
 }
 
@@ -34,6 +34,6 @@ function getAvailableUpdatesCount(game: GameSummary): number {
   return normalizeUpdateCount(game.update_count);
 }
 
-function getBackupsReadyCount(game: GameSummary): number {
-  return game.backup_available ? 1 : 0;
+function getRollbacksReadyCount(game: GameSummary): number {
+  return game.rollback_available ? 1 : 0;
 }

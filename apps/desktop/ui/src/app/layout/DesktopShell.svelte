@@ -1,6 +1,7 @@
 <script lang="ts">
   import BoxIcon from '@lucide/svelte/icons/box';
   import LibraryIcon from '@lucide/svelte/icons/library';
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import type { Component, Snippet } from 'svelte';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
@@ -12,6 +13,7 @@
     BreadcrumbList,
     BreadcrumbPage,
     BreadcrumbSeparator,
+    Button,
     Sidebar,
     SidebarContent,
     SidebarGroup,
@@ -27,8 +29,10 @@
   type Props = {
     screen: Screen;
     busy?: boolean;
+    refreshing?: boolean;
     selectedGameTitle?: string | null;
     onNavigate?: ScreenHandler;
+    onRefresh?: () => void;
     children?: Snippet;
   };
 
@@ -78,8 +82,10 @@
   const {
     screen,
     busy = false,
+    refreshing = false,
     selectedGameTitle = null,
     onNavigate = () => undefined,
+    onRefresh = () => undefined,
     children,
   }: Props = $props();
 
@@ -177,6 +183,18 @@
           {/each}
         </BreadcrumbList>
       </Breadcrumb>
+
+      <div class="ml-auto">
+        <Button
+          variant="outline"
+          size="icon"
+          disabled={busy}
+          onclick={onRefresh}
+          aria-label="Refresh"
+        >
+          <RefreshCwIcon class={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+        </Button>
+      </div>
     </header>
 
     <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 overflow-hidden p-4" aria-busy={busy}>

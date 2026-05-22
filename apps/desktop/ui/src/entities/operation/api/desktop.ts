@@ -1,31 +1,25 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
-import type { ApplyOperationResult, RollbackOperationResult, SwapPlan } from '../model/types';
+import type { ApplySwapResult, RollbackComponentResult } from '../model/types';
 
-export async function buildSwapPlan(
+export async function applySwap(
   gameId: string,
   componentId: string,
   artifactId: string,
-): Promise<SwapPlan> {
-  return invokeDesktop<SwapPlan>('build_swap_plan', {
+): Promise<ApplySwapResult> {
+  return invokeDesktop<ApplySwapResult>('apply_swap', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     componentId: requireNonBlankString(componentId, 'componentId'),
     artifactId: requireNonBlankString(artifactId, 'artifactId'),
   });
 }
 
-export async function applyOperationPlan(
-  operationId: string,
-  confirmationToken: string,
-): Promise<ApplyOperationResult> {
-  return invokeDesktop<ApplyOperationResult>('apply_operation_plan', {
-    operationId: requireNonBlankString(operationId, 'operationId'),
-    confirmationToken: requireNonBlankString(confirmationToken, 'confirmationToken'),
-  });
-}
-
-export async function rollbackOperation(operationId: string): Promise<RollbackOperationResult> {
-  return invokeDesktop<RollbackOperationResult>('rollback_operation', {
-    operationId: requireNonBlankString(operationId, 'operationId'),
+export async function rollbackComponent(
+  gameId: string,
+  componentId: string,
+): Promise<RollbackComponentResult> {
+  return invokeDesktop<RollbackComponentResult>('rollback_component', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+    componentId: requireNonBlankString(componentId, 'componentId'),
   });
 }

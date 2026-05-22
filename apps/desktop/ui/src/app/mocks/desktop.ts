@@ -4,11 +4,7 @@ import { mockScanManualFolder, mockScanAutoLibraries } from './commands/scan';
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
-import {
-  mockBuildSwapPlan,
-  mockApplyOperationPlan,
-  mockRollbackOperation,
-} from './commands/operations';
+import { mockApplySwap, mockRollbackComponent } from './commands/operations';
 import { mockState, createMockState } from './desktop-state';
 import { isDesktopCommand, type DesktopCommand } from './desktop-utils';
 
@@ -62,19 +58,14 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
       return mockSetCatalogSetting(key, value);
     }
 
-    case 'build_swap_plan': {
-      const { gameId, componentId, artifactId } = readBuildSwapPlanPayload(payload);
-      return mockBuildSwapPlan(gameId, componentId, artifactId);
+    case 'apply_swap': {
+      const { gameId, componentId, artifactId } = readApplySwapPayload(payload);
+      return mockApplySwap(gameId, componentId, artifactId);
     }
 
-    case 'apply_operation_plan': {
-      const { operationId, confirmationToken } = readApplyOperationPlanPayload(payload);
-      return mockApplyOperationPlan(operationId, confirmationToken);
-    }
-
-    case 'rollback_operation': {
-      const { operationId } = readRollbackOperationPayload(payload);
-      return mockRollbackOperation(operationId);
+    case 'rollback_component': {
+      const { gameId, componentId } = readRollbackComponentPayload(payload);
+      return mockRollbackComponent(gameId, componentId);
     }
 
     default:
@@ -114,7 +105,7 @@ function readSetCatalogSettingPayload(payload: unknown): { key: string; value: s
   return payload as { key: string; value: string };
 }
 
-function readBuildSwapPlanPayload(payload: unknown): {
+function readApplySwapPayload(payload: unknown): {
   gameId: string;
   componentId: string;
   artifactId: string;
@@ -122,15 +113,11 @@ function readBuildSwapPlanPayload(payload: unknown): {
   return payload as { gameId: string; componentId: string; artifactId: string };
 }
 
-function readApplyOperationPlanPayload(payload: unknown): {
-  operationId: string;
-  confirmationToken: string;
+function readRollbackComponentPayload(payload: unknown): {
+  gameId: string;
+  componentId: string;
 } {
-  return payload as { operationId: string; confirmationToken: string };
-}
-
-function readRollbackOperationPayload(payload: unknown): { operationId: string } {
-  return payload as { operationId: string };
+  return payload as { gameId: string; componentId: string };
 }
 
 async function previewInvoker(command: string, payload: unknown): Promise<unknown> {
@@ -163,7 +150,6 @@ export {
   mockSetGameCover,
   mockGetCatalogSetting,
   mockSetCatalogSetting,
-  mockBuildSwapPlan,
-  mockApplyOperationPlan,
-  mockRollbackOperation,
+  mockApplySwap,
+  mockRollbackComponent,
 };

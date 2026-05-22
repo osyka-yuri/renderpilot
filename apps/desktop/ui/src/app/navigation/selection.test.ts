@@ -62,7 +62,7 @@ function createGameSummary(gameId = DEFAULT_GAME_ID, title = DEFAULT_GAME_TITLE)
     updates_available: false,
     update_count: 0,
     risk_level: 'unknown',
-    backup_available: false,
+    rollback_available: false,
     operation_count: 0,
   };
 }

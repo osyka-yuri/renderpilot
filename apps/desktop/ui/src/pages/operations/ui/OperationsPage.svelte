@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { GameSummary } from '@entities/game';
-  import { type OperationHandler } from '@entities/operation';
   import { Badge, Button, Card, CardContent, CardTitle, ScrollArea } from '@shared/ui';
   import {
     createOperationViewModel,
@@ -12,54 +11,27 @@
   type Props = {
     gameCard?: GameSummary | null;
     details?: OperationHistoryDetails | null;
-    busy?: boolean;
-    busyOperationId?: string | null;
-    onRollback?: OperationHandler;
     onViewGame?: () => void;
   };
 
   const EMPTY_OPERATIONS: readonly OperationViewModel[] = [];
 
-  const {
-    gameCard = null,
-    details = null,
-    busy = false,
-    busyOperationId = null,
-    onRollback,
-    onViewGame,
-  }: Props = $props();
+  const { gameCard = null, details = null, onViewGame }: Props = $props();
 
-  const hasRollbackHandler = $derived(typeof onRollback === 'function');
   const canViewGame = $derived(gameCard !== null && typeof onViewGame === 'function');
   const pageSubtitle = $derived(
     gameCard === null ? 'Full system activity log' : `History for ${gameCard.title}`,
   );
-
-  const isInteractionBusy = $derived(busy || busyOperationId !== null);
 
   const operations = $derived.by((): readonly OperationViewModel[] => {
     if (details === null) {
       return EMPTY_OPERATIONS;
     }
 
-    return details.operations.map((operation) =>
-      createOperationViewModel(operation, {
-        busyOperationId,
-        isInteractionBusy,
-        hasRollbackHandler,
-      }),
-    );
+    return details.operations.map((operation) => createOperationViewModel(operation));
   });
 
   const hasOperations = $derived(operations.length > 0);
-
-  function handleRollback(operationId: string): void {
-    if (isInteractionBusy || typeof onRollback !== 'function') {
-      return;
-    }
-
-    onRollback(operationId);
-  }
 
   function handleViewGame(): void {
     if (typeof onViewGame !== 'function') {
@@ -101,11 +73,7 @@
           </CardContent>
         </Card>
       {:else}
-        <div
-          class="flex flex-col gap-3 pb-5"
-          aria-label="Operation history"
-          aria-busy={isInteractionBusy}
-        >
+        <div class="flex flex-col gap-3 pb-5" aria-label="Operation history">
           {#each operations as operation (operation.id)}
             <article aria-label={operation.ariaLabel}>
               <Card>
@@ -149,33 +117,7 @@
                         </p>
                         <p class="text-sm/5 font-semibold text-foreground">{operation.itemCount}</p>
                       </div>
-
-                      <div class="grid min-w-0 gap-1">
-                        <p
-                          class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                          Backups
-                        </p>
-                        <p class="text-sm/5 font-semibold text-foreground">
-                          {operation.backupSummary}
-                        </p>
-                      </div>
                     </dl>
-
-                    {#if operation.canRollback}
-                      <div class={cn('flex shrink-0 justify-end', 'max-sm:justify-stretch')}>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={operation.isRollbackDisabled}
-                          onclick={() => {
-                            handleRollback(operation.id);
-                          }}
-                        >
-                          {operation.rollbackLabel}
-                        </Button>
-                      </div>
-                    {/if}
                   </div>
 
                   {#if operation.completedDurationText !== null}

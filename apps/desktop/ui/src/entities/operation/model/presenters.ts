@@ -13,7 +13,6 @@ const OPERATION_LABELS: Record<string, string> = {
   completed: 'Completed',
   failed: 'Failed',
   rolled_back: 'Rolled Back',
-  rollback_required: 'Rollback Required',
   replace_component: 'Replace Component',
 };
 
@@ -63,39 +62,13 @@ export function statusBadgeVariant(value?: string | null): OperationBadgeVariant
     case 'rolled_back':
       return 'secondary';
     case 'planned':
-    case 'validating':
-    case 'backup_created':
-    case 'replacing':
       return 'outline';
-    case 'rollback_required':
-      return 'secondary';
     case 'failed':
     case 'blocked':
       return 'destructive';
     default:
       return 'outline';
   }
-}
-
-const COMPLETED_STATUS = 'completed';
-const ROLLBACK_OPERATION_KIND = 'rollback_operation';
-const BACKUP_STATUS_AVAILABLE = 'available';
-const BACKUP_STATUS_PARTIAL = 'partial';
-
-export function isRollbackableOperation(operation: {
-  status: string;
-  kind: string;
-  backup_status: string;
-}): boolean {
-  return (
-    operation.status === COMPLETED_STATUS &&
-    operation.kind !== ROLLBACK_OPERATION_KIND &&
-    isRollbackableBackupStatus(operation.backup_status)
-  );
-}
-
-export function isRollbackableBackupStatus(status: string): boolean {
-  return status === BACKUP_STATUS_AVAILABLE || status === BACKUP_STATUS_PARTIAL;
 }
 
 function areSameGameIds(left: string, right: string): boolean {
@@ -106,8 +79,8 @@ export function isPlanForGame(plan: SwapPlan | null, gameId: string): boolean {
   return plan !== null && areSameGameIds(plan.game_id, gameId);
 }
 
-export function formatBackupSummary(backupCount: number, backupStatus: string): string {
-  return `${backupCount} (${formatOperationLabel(backupStatus)})`;
+export function isPlanForComponent(plan: SwapPlan | null, componentId: string): boolean {
+  return plan !== null && plan.component_id === componentId;
 }
 
 export function formatUpdatedFilesSummary(itemCount: number): string {

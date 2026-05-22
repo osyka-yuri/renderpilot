@@ -2,7 +2,7 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { toast } from 'svelte-sonner';
-  import type { LibraryManifestEntry } from '../model/libraries-page-model';
+  import type { LibraryManifestEntry } from '@entities/library';
 
   type CopyStatus = 'idle' | 'copied' | 'failed';
 
@@ -14,7 +14,7 @@
 
   let { entry }: { entry: LibraryManifestEntry } = $props();
 
-  const dllMd5Hash = $derived(entry.files.dll.hashes.md5);
+  const dllSha256Hash = $derived(entry.files.dll.hashes.sha256);
 
   let copyStatus = $state<CopyStatus>('idle');
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -43,13 +43,13 @@
 
   async function copyHashToClipboard() {
     try {
-      await navigator.clipboard.writeText(dllMd5Hash);
+      await navigator.clipboard.writeText(dllSha256Hash);
 
       copyStatus = 'copied';
       toast.success('Hash copied to clipboard');
       scheduleReset(2000);
     } catch (error) {
-      console.error('Failed to copy DLL MD5 hash:', error);
+      console.error('Failed to copy DLL SHA-256 hash:', error);
 
       copyStatus = 'failed';
       toast.error('Failed to copy hash');
@@ -60,7 +60,7 @@
 
 <div class="flex min-w-0 items-center gap-1">
   <code class="truncate rounded-sm bg-muted px-1 text-xs">
-    {dllMd5Hash}
+    {dllSha256Hash}
   </code>
 
   <Tooltip>

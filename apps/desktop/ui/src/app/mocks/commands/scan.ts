@@ -6,7 +6,6 @@ import {
   upsertGameSummary,
   createManualPreviewDetails,
   createGameSummaryFromDetails,
-  hasAvailableBackup,
   getLatestOperationStatus,
   requireGameDetails,
 } from '../desktop-state';
@@ -29,7 +28,7 @@ export function mockScanManualFolder(path: string): Promise<ScanManualFolderResu
     upsertGameSummary({
       ...createGameSummaryFromDetails(details, {
         risk_level: 'medium',
-        backup_available: hasAvailableBackup(details),
+        rollback_available: false,
         last_operation_status: getLatestOperationStatus(details),
       }),
       cover_updated_at_ms: previousSummary?.cover_updated_at_ms ?? null,

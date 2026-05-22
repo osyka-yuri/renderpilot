@@ -3,17 +3,8 @@
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
   import type { WorkspaceScreen } from '@app/navigation/workspace';
-  import { getScreenAfterRollback } from '@app/navigation/workspace';
   import { isGameSelected } from '@app/navigation/selection';
-  import {
-    fetchGameCover,
-    getGameDetails,
-    queryGameCards,
-    DEFAULT_GAME_CARDS_CATALOG_PAGE,
-    DEFAULT_GAME_CARDS_CATALOG_SORT,
-    normalizeSelectableGameId,
-  } from '@entities/game';
-  import { publishRollbackCompletedNotification, rollbackOperation } from '@entities/operation';
+  import { fetchGameCover, getGameDetails } from '@entities/game';
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
@@ -40,20 +31,22 @@
   import { SettingsPage as SettingsScreen } from '@pages/settings';
   import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
   import { createDesktopAppModel } from '@app/model/create-desktop-app-model.svelte';
+  import {
+    loadAndPresentGameDetails,
+    openDesktopGame,
+    refreshDesktopCatalog,
+    reloadSelectedGame as reloadSelectedGameWorkflow,
+  } from '@app/model/desktop-app-workflows';
 
   const model = createDesktopAppModel();
   const coverSyncQueue = createCoverSyncQueue();
+
+  let refreshCounter = $state(0);
+  let isRefreshing = $state(false);
   const gameDetailsModel = createGameDetailsPageModel({
     getSelectedGameId: () => model.selectedGameId,
     checkIsGameStillSelected: (gameId) => isGameSelected(model.selectedGameId, gameId),
     runExclusive: (task) => model.runExclusive(task),
-    setCurrentPlan: (plan) => {
-      model.setCurrentPlan(plan);
-    },
-    getCurrentPlan: (id) => model.getCurrentPlan(id),
-    showStalePlanError: () => {
-      model.showStalePlanError();
-    },
     reloadGameDetails: () => reloadSelectedGame('details'),
   });
 
@@ -129,18 +122,11 @@
   }
 
   async function refreshGameCards(): Promise<void> {
-    const result = await queryGameCards({
-      searchQuery: '',
-      selectedLibraries: [],
-      selectedLaunchers: [],
-      sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
-      page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
+    await refreshDesktopCatalog({
+      setGames: model.catalog.setGames,
+      incrementCatalogVersion: model.catalog.incrementCatalogVersion,
+      clearSelectionIfSelectedGameMissing: model.clearSelectionIfSelectedGameMissing,
     });
-
-    model.catalog.setGames(result.items);
-    model.catalog.incrementCatalogVersion();
-
-    model.clearSelectionIfSelectedGameMissing();
   }
 
   // ---------------------------------------------------------------------------
@@ -148,63 +134,48 @@
   // ---------------------------------------------------------------------------
 
   async function openGameDetails(gameId: string): Promise<void> {
-    await openGame(gameId, 'details');
+    await openDesktopGame(gameId, 'details', {
+      runExclusive: (task) => model.runExclusive(task),
+      loadGameDetails,
+    });
   }
 
   async function openGameOperations(gameId: string): Promise<void> {
-    await openGame(gameId, 'operations');
-  }
-
-  async function openGame(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
-    const normalizedGameId = normalizeSelectableGameId(gameId);
-
-    if (normalizedGameId.length === 0) {
-      return;
-    }
-
-    await model.runExclusive(() => loadGameDetails(normalizedGameId, nextScreen));
+    await openDesktopGame(gameId, 'operations', {
+      runExclusive: (task) => model.runExclusive(task),
+      loadGameDetails,
+    });
   }
 
   async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
-    const requestToken = model.workspace.beginDetailsRequest();
-    const details = await getGameDetails(gameId);
-
-    if (!model.workspace.isDetailsRequestActive(requestToken)) {
-      return;
-    }
-
-    model.presentGameDetails(details, nextScreen);
+    await loadAndPresentGameDetails(gameId, nextScreen, {
+      getGameDetails,
+      beginDetailsRequest: model.workspace.beginDetailsRequest,
+      isDetailsRequestActive: model.workspace.isDetailsRequestActive,
+      presentGameDetails: model.presentGameDetails,
+    });
   }
 
   async function reloadSelectedGame(nextScreen: WorkspaceScreen): Promise<void> {
-    const gameId = model.selectedGameId;
-
-    if (gameId === null) {
-      return;
-    }
-
-    await loadGameDetails(gameId, nextScreen);
-  }
-
-  async function handleRollback(operationId: string): Promise<void> {
-    const result = await model.runExclusive(async () => {
-      const rollbackResult = await rollbackOperation(operationId);
-
-      model.setCurrentPlan(null);
-
-      await reloadSelectedGame(getScreenAfterRollback(model.screen));
-
-      return rollbackResult;
+    await reloadSelectedGameWorkflow(nextScreen, {
+      selectedGameId: model.selectedGameId,
+      loadGameDetails,
     });
-
-    if (result !== null) {
-      publishRollbackCompletedNotification(result.items.length);
-    }
   }
 
   // ---------------------------------------------------------------------------
   // Background cover sync
   // ---------------------------------------------------------------------------
+
+  async function handleRefresh(): Promise<void> {
+    isRefreshing = true;
+    try {
+      await scanAutoLibrariesAndRefreshCards();
+      refreshCounter++;
+    } finally {
+      isRefreshing = false;
+    }
+  }
 
   async function syncMissingCoversAfterCardsLoad(): Promise<void> {
     await tick();
@@ -239,25 +210,22 @@
 <DesktopShell
   screen={model.screen}
   busy={model.busy}
+  refreshing={isRefreshing}
   selectedGameTitle={model.selectedShellGameTitle}
   onNavigate={model.handleNavigate}
+  onRefresh={handleRefresh}
 >
   {#if model.screen === 'details'}
     <GameDetailsScreen
       details={model.selectedDetails}
-      gameCard={model.currentGameCard}
-      plan={model.currentPlan}
       busy={model.busy}
-      onBuildPlan={gameDetailsModel.handleBuildPlan}
-      onApply={gameDetailsModel.handleApply}
-      onRollback={handleRollback}
+      onSwap={gameDetailsModel.handleSwap}
+      onRollback={gameDetailsModel.handleRollback}
     />
   {:else if model.screen === 'operations'}
     <OperationsScreen
       details={model.selectedDetails}
       gameCard={model.currentGameCard}
-      busy={model.busy}
-      onRollback={handleRollback}
       onViewGame={() => {
         model.handleNavigate('details');
       }}
@@ -270,7 +238,7 @@
       onLanguageModeChange={model.changeLanguageMode}
     />
   {:else if model.screen === 'libraries'}
-    <LibrariesScreen />
+    <LibrariesScreen refreshKey={refreshCounter} />
   {:else}
     <GamesScreen
       games={model.games}
@@ -279,7 +247,6 @@
       coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
       pickCoverDisabled={isDesktopPreviewMode()}
       onScan={handleScan}
-      onRefresh={scanAutoLibrariesAndRefreshCards}
       onReloadCards={handleReloadCards}
       onClearError={model.clearError}
       onOpenDetails={openGameDetails}

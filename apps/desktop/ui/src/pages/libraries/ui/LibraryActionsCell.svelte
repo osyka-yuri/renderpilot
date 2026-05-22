@@ -5,7 +5,7 @@
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { describeCommandError } from '@shared/api';
   import { toast } from 'svelte-sonner';
-  import type { LibraryManifestEntry } from '../model/libraries-page-model';
+  import type { LibraryManifestEntry } from '@entities/library';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   type Props = {

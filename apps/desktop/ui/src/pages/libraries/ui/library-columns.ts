@@ -2,11 +2,8 @@ import type { Component, ComponentProps } from 'svelte';
 import type { ColumnDef } from '@tanstack/table-core';
 import { renderComponent } from '@shared/ui';
 import { formatBytes } from '@shared/format';
-import {
-  formatSignedDate,
-  formatVersionLabel,
-  type LibraryManifestEntry,
-} from '../model/libraries-page-model';
+import type { LibraryManifestEntry } from '@entities/library';
+import { formatSignedDate, formatVersionLabel } from '../model/libraries-page-model';
 import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 import LibraryActionsCell from './LibraryActionsCell.svelte';
 import LibraryHashCell from './LibraryHashCell.svelte';

@@ -28,22 +28,30 @@
     getSortedRowModel,
   } from '@tanstack/table-core';
 
-  import {
-    type LibraryManifestEntry,
-    typeOptionsByVendor,
-    vendorOptions,
-  } from '../model/libraries-page-model';
+  import type { LibraryManifestEntry } from '@entities/library';
+  import { typeOptionsByVendor, vendorOptions } from '../model/libraries-page-model';
   import { createLibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   import { createLibraryColumns } from './library-columns';
-  import ManifestRefreshButton from './ManifestRefreshButton.svelte';
   import {
     getBottomVirtualPadding,
     getTopVirtualPadding,
     resetVirtualizerAfterLayout,
   } from './virtualizer-reset';
 
+  type Props = {
+    refreshKey?: number;
+  };
+
+  const { refreshKey = 0 }: Props = $props();
+
   const model = createLibrariesPageModel();
+
+  $effect(() => {
+    if (refreshKey > 0) {
+      void model.refreshManifest();
+    }
+  });
 
   const DEFAULT_SORTING: SortingState = [{ id: 'version', desc: true }];
 
@@ -287,12 +295,4 @@
       </TabsContent>
     {/each}
   </Tabs>
-
-  <div class="absolute top-4 right-2">
-    <ManifestRefreshButton
-      refreshing={model.refreshing}
-      disabled={model.isBusy}
-      onRefresh={model.refreshManifest}
-    />
-  </div>
 </section>

@@ -37,15 +37,15 @@
       },
     ];
 
-    if (stats.backupsReady <= 0) {
+    if (stats.rollbacksReady <= 0) {
       return baseBadges;
     }
 
     return [
       ...baseBadges,
       {
-        id: 'backups-ready',
-        label: `${stats.backupsReady} backup-ready`,
+        id: 'rollbacks-ready',
+        label: `${stats.rollbacksReady} rollback-ready`,
         variant: 'secondary',
       },
     ];

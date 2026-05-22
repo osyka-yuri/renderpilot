@@ -1,58 +1,31 @@
 import type { GameDetails, GameSummary } from '@entities/game';
 import type { CandidateGroup, GraphicsComponent } from '@entities/component';
-import type { SwapPlan } from '@entities/operation';
 import { isKnownLibrary } from '@shared/graphics';
 import { createInstallPathKey, unique } from './desktop-utils';
-
-type GameOperation = GameDetails['operations'][number];
 type ComponentFile = GraphicsComponent['files'][number];
 
 export type GameSummaryBuildOverrides = Pick<
   GameSummary,
-  'risk_level' | 'backup_available' | 'last_operation_status'
+  'risk_level' | 'rollback_available' | 'last_operation_status'
 >;
 
 export type GameSummaryPatch = Partial<
   Pick<
     GameSummary,
-    'backup_available' | 'last_operation_status' | 'operation_count' | 'cover_updated_at_ms'
+    'rollback_available' | 'last_operation_status' | 'operation_count' | 'cover_updated_at_ms'
   >
 >;
-
-export type OperationTarget = {
-  details: GameDetails;
-  operation: GameOperation;
-};
-
-export type PendingSwapPlan = {
-  plan: SwapPlan;
-  componentId: string;
-};
-
-export type AppliedOperationSnapshot = {
-  gameId: string;
-  componentId: string;
-  targetPath: string;
-  originalVersion: string | null;
-  originalSha256: string | null;
-  backupPath: string;
-};
 
 export type MockState = {
   games: GameSummary[];
   detailsByGameId: Map<string, GameDetails>;
   autoGameIds: Set<string>;
-  pendingPlansByOperationId: Map<string, PendingSwapPlan>;
-  appliedOperationsById: Map<string, AppliedOperationSnapshot>;
   manualGameIdByInstallPath: Map<string, string>;
-  rolledBackOperationIds: Set<string>;
   manualCounter: number;
-  operationCounter: number;
   catalogSettings: Map<string, string>;
 };
 
 export const RENDERPILOT_LIBRARY_PATH = 'C:/RenderPilot/Library';
-export const BACKUP_SUFFIX = '.renderpilot-backup';
 
 export const mockState: MockState = createMockState();
 
@@ -65,7 +38,7 @@ export function createMockState(): MockState {
       details: cyberpunk,
       card: createGameSummaryFromDetails(cyberpunk, {
         risk_level: 'low',
-        backup_available: true,
+        rollback_available: true,
         last_operation_status: getLatestOperationStatus(cyberpunk),
       }),
     },
@@ -73,7 +46,7 @@ export function createMockState(): MockState {
       details: alanWake,
       card: createGameSummaryFromDetails(alanWake, {
         risk_level: 'medium',
-        backup_available: false,
+        rollback_available: false,
         last_operation_status: getLatestOperationStatus(alanWake),
       }),
     },
@@ -85,12 +58,8 @@ export function createMockState(): MockState {
       seedGames.map(({ details }) => [details.game.identity.id, details] as const),
     ),
     autoGameIds: new Set(seedGames.map(({ details }) => details.game.identity.id)),
-    pendingPlansByOperationId: new Map(),
-    appliedOperationsById: new Map(),
     manualGameIdByInstallPath: new Map(),
-    rolledBackOperationIds: new Set(),
     manualCounter: 0,
-    operationCounter: 0,
     catalogSettings: new Map(),
   };
 }
@@ -128,23 +97,6 @@ export function requireGameDetails(gameId: string): GameDetails {
   }
 
   return details;
-}
-
-export function requirePendingSwapPlan(
-  operationId: string,
-  confirmationToken: string,
-): PendingSwapPlan {
-  const pending = mockState.pendingPlansByOperationId.get(operationId);
-
-  if (!pending) {
-    throw new Error(`Mock preview could not find operation plan ${operationId}.`);
-  }
-
-  if (pending.plan.confirmation_token !== confirmationToken) {
-    throw new Error('Confirmation token mismatch for operation preview.');
-  }
-
-  return pending;
 }
 
 export function requireComponent(details: GameDetails, componentId: string): GraphicsComponent {
@@ -193,22 +145,6 @@ export function updateCandidateGroupCurrentVersion(
   }
 }
 
-export function findOperationTarget(operationId: string): OperationTarget | null {
-  for (const details of mockState.detailsByGameId.values()) {
-    const operation = details.operations.find((item) => item.operation_id === operationId);
-
-    if (operation) {
-      return { details, operation };
-    }
-  }
-
-  return null;
-}
-
-export function findPrimaryRollbackComponent(details: GameDetails): GraphicsComponent | null {
-  return details.components.find((item) => item.files.length > 0) ?? null;
-}
-
 export function getLatestOperationStatus(
   details: GameDetails,
 ): GameSummary['last_operation_status'] {
@@ -217,12 +153,6 @@ export function getLatestOperationStatus(
   }
 
   return details.operations[0].status;
-}
-
-export function hasAvailableBackup(details: GameDetails): boolean {
-  return details.operations.some(
-    (operation) => operation.backup_status === 'available' || operation.backup_status === 'partial',
-  );
 }
 
 export function getOrCreateManualGameId(installPath: string): string {
@@ -240,22 +170,6 @@ export function getOrCreateManualGameId(installPath: string): string {
   mockState.manualGameIdByInstallPath.set(key, gameId);
 
   return gameId;
-}
-
-export function createPreviewOperationId(): string {
-  mockState.operationCounter += 1;
-
-  return `operation:preview:${mockState.operationCounter}`;
-}
-
-export function createRollbackOperationId(targetOperationId: string): string {
-  mockState.operationCounter += 1;
-
-  return `operation:rollback:${mockState.operationCounter}:${targetOperationId}`;
-}
-
-export function prependOperation(details: GameDetails, operation: GameOperation): void {
-  details.operations = [operation, ...details.operations];
 }
 
 export function createGameSummaryFromDetails(
@@ -283,7 +197,7 @@ export function createGameSummaryFromDetails(
     updates_available: hasAvailableUpdates(visibleCandidateGroups),
     update_count: countAvailableUpdates(visibleCandidateGroups),
     risk_level: overrides.risk_level,
-    backup_available: overrides.backup_available,
+    rollback_available: overrides.rollback_available,
     operation_count: details.operations.length,
     last_operation_status: overrides.last_operation_status,
     cover_updated_at_ms: null,
@@ -300,31 +214,7 @@ function countAvailableUpdates(candidateGroups: readonly CandidateGroup[]): numb
   ).length;
 }
 
-export function createOperationRecord(input: {
-  operationId: string;
-  kind: GameOperation['kind'];
-  status: GameOperation['status'];
-  createdAt: number;
-  completedAt: number | null;
-  itemCount: number;
-  backupCount: number;
-  backupStatus: GameOperation['backup_status'];
-}): GameOperation {
-  return {
-    operation_id: input.operationId,
-    kind: input.kind,
-    status: input.status,
-    created_at: input.createdAt,
-    completed_at: input.completedAt,
-    item_count: input.itemCount,
-    backup_count: input.backupCount,
-    backup_status: input.backupStatus,
-  };
-}
-
 function createCyberpunkDetails(): GameDetails {
-  const now = Date.now();
-
   const components: GraphicsComponent[] = [
     {
       id: 'component:cp2077:dlss',
@@ -385,6 +275,7 @@ function createCyberpunkDetails(): GameDetails {
           source_game_id: 'steam:1245620',
           comparison: 'newer_version',
           warning: null,
+          is_downloaded: true,
         },
       ],
     },
@@ -402,6 +293,7 @@ function createCyberpunkDetails(): GameDetails {
           source_game_id: 'steam:1716740',
           comparison: 'newer_version',
           warning: null,
+          is_downloaded: true,
         },
       ],
     },
@@ -422,24 +314,11 @@ function createCyberpunkDetails(): GameDetails {
     },
     components,
     candidate_groups: candidateGroups,
-    operations: [
-      {
-        operation_id: 'operation:cp2077:last-swap',
-        kind: 'replace_component',
-        status: 'completed',
-        created_at: now - 86_400_000,
-        completed_at: now - 86_340_000,
-        item_count: 1,
-        backup_count: 1,
-        backup_status: 'available',
-      },
-    ],
+    operations: [],
   };
 }
 
 function createAlanWakeDetails(): GameDetails {
-  const now = Date.now();
-
   const components: GraphicsComponent[] = [
     {
       id: 'component:aw2:streamline',
@@ -505,22 +384,12 @@ function createAlanWakeDetails(): GameDetails {
             source_game_id: 'steam:1888930',
             comparison: 'newer_version',
             warning: 'streamline_partial_swap',
+            is_downloaded: true,
           },
         ],
       },
     ],
-    operations: [
-      {
-        operation_id: 'operation:aw2:failed-bundle',
-        kind: 'replace_component',
-        status: 'rollback_required',
-        created_at: now - 3_600_000,
-        completed_at: null,
-        item_count: 2,
-        backup_count: 1,
-        backup_status: 'partial',
-      },
-    ],
+    operations: [],
   };
 }
 
@@ -575,6 +444,7 @@ export function createManualPreviewDetails(
             source_game_id: null,
             comparison: 'newer_version',
             warning: null,
+            is_downloaded: true,
           },
         ],
       },

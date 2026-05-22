@@ -13,8 +13,7 @@ export type GameOperationSummary = {
   created_at: number;
   completed_at?: number | null;
   item_count: number;
-  backup_count: number;
-  backup_status: string;
+  component_id?: string;
 };
 
 export type GameId = string;
@@ -62,7 +61,7 @@ export type GameSummary = {
   update_count: number;
 
   risk_level: GameRiskLevel;
-  backup_available: boolean;
+  rollback_available: boolean;
 
   operation_count: number;
   last_operation_status?: Nullable<string>;
@@ -118,16 +117,19 @@ export type GameGraphicsComponent = {
     version?: string | null;
     sha256?: string | null;
   }[];
+  rollback_available?: boolean;
 };
 
 export type GameCandidate = {
   artifact_id: string;
   file_name: string;
-  file_path: string;
+  file_path: string | null;
   version?: string | null;
   source_game_id?: string | null;
   comparison: string;
   warning?: string | null;
+  manifest_entry_id?: string | null;
+  is_downloaded: boolean;
 };
 
 export type GameCandidateGroup = {

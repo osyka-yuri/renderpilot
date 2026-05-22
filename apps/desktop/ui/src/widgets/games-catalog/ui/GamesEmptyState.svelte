@@ -15,14 +15,12 @@
   type Props = HTMLAttributes<HTMLDivElement> & {
     busy?: boolean;
     scanButtonLabel?: string;
-    onRefresh?: VoidHandler;
     onScan?: VoidHandler;
   };
 
   const {
     busy = false,
     scanButtonLabel = 'Scan Folder',
-    onRefresh = () => undefined,
     onScan = () => undefined,
     class: className = '',
     ...rest
@@ -33,8 +31,8 @@
   <EmptyHeader>
     <EmptyTitle>No scanned games yet</EmptyTitle>
     <EmptyDescription>
-      Select a game folder to populate the dashboard with components, updates, backup state, and
-      quick actions.
+      Select a game folder to populate the dashboard with components, updates, operation history,
+      and quick actions.
     </EmptyDescription>
   </EmptyHeader>
 
@@ -44,13 +42,6 @@
       'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch',
     )}
   >
-    <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
-      {#if busy}
-        <Spinner />
-      {/if}
-      Refresh Libraries
-    </Button>
-
     <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
       {#if busy}
         <Spinner />

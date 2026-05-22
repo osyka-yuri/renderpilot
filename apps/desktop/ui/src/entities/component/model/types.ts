@@ -27,11 +27,13 @@ export type CandidateComparison = string;
 export type Candidate = {
   artifact_id: ArtifactId;
   file_name: string;
-  file_path: FilePath;
+  file_path: FilePath | null;
   version?: Nullable<Version>;
   source_game_id?: Nullable<GameId>;
   comparison: CandidateComparison;
   warning?: Nullable<string>;
+  manifest_entry_id?: Nullable<string>;
+  is_downloaded: boolean;
 };
 
 export type CandidateGroup = {

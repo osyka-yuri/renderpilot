@@ -3,7 +3,7 @@
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { cn } from '@shared/classnames';
   import type { Column } from '@tanstack/table-core';
-  import type { LibraryManifestEntry } from '../model/libraries-page-model';
+  import type { LibraryManifestEntry } from '@entities/library';
 
   type SortState = false | 'asc' | 'desc';
 

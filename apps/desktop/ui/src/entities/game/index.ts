@@ -30,6 +30,7 @@ export type {
   GameCardsResult,
   GameSelectionHandler,
   GameDetails,
+  GameGraphicsComponent,
   ScanError,
   AutoScanResponse,
   ScanManualFolderResult,

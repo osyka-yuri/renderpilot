@@ -8,7 +8,7 @@ import type {
   GameSummary,
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
-import type { SwapPlan, ApplyOperationResult, RollbackOperationResult } from '@entities/operation';
+import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
 import { isRecord, isString } from '@shared/validation';
 
 type PayloadRecord = Record<PropertyKey, unknown>;
@@ -23,9 +23,8 @@ export type DesktopCommandPayloadMap = {
   set_game_cover: { gameId: string; sourcePath: string };
   get_catalog_setting: { key: string };
   set_catalog_setting: { key: string; value: string };
-  build_swap_plan: { gameId: string; componentId: string; artifactId: string };
-  apply_operation_plan: { operationId: string; confirmationToken: string };
-  rollback_operation: { operationId: string };
+  apply_swap: { gameId: string; componentId: string; artifactId: string };
+  rollback_component: { gameId: string; componentId: string };
 };
 
 export type DesktopCommandResultMap = {
@@ -38,9 +37,8 @@ export type DesktopCommandResultMap = {
   set_game_cover: CoverArtworkResult;
   get_catalog_setting: CatalogSettingPayload;
   set_catalog_setting: { saved: boolean };
-  build_swap_plan: SwapPlan;
-  apply_operation_plan: ApplyOperationResult;
-  rollback_operation: RollbackOperationResult;
+  apply_swap: ApplySwapResult;
+  rollback_component: RollbackComponentResult;
 };
 
 export type DesktopCommand = keyof DesktopCommandPayloadMap & keyof DesktopCommandResultMap;
@@ -55,9 +53,8 @@ const ALL_DESKTOP_COMMANDS = [
   'set_game_cover',
   'get_catalog_setting',
   'set_catalog_setting',
-  'build_swap_plan',
-  'apply_operation_plan',
-  'rollback_operation',
+  'apply_swap',
+  'rollback_component',
 ] as const satisfies readonly DesktopCommand[];
 
 const DESKTOP_COMMAND_SET = new Set<string>(ALL_DESKTOP_COMMANDS);

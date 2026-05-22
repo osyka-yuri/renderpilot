@@ -15,7 +15,7 @@ function createGameSummary(overrides: Partial<GameSummary> = {}): GameSummary {
     updates_available: false,
     update_count: 0,
     risk_level: 'safe',
-    backup_available: false,
+    rollback_available: false,
     operation_count: 0,
     last_operation_status: null,
     cover_updated_at_ms: null,

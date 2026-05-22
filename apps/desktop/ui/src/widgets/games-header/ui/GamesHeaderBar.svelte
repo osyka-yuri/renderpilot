@@ -10,7 +10,7 @@
   const createDefaultDashboardStats = (): DashboardStats => ({
     games: 0,
     updates: 0,
-    backupsReady: 0,
+    rollbacksReady: 0,
   });
 
   type Props = {
@@ -18,7 +18,6 @@
     busy?: boolean;
     scanButtonLabel?: string;
     dashboardStats?: DashboardStats;
-    onRefresh?: ActionHandler;
     onScan?: ActionHandler;
   };
 
@@ -27,7 +26,6 @@
     busy = false,
     scanButtonLabel = DEFAULT_SCAN_BUTTON_LABEL,
     dashboardStats = createDefaultDashboardStats(),
-    onRefresh = () => undefined,
     onScan = () => undefined,
   }: Props = $props();
 
@@ -50,13 +48,6 @@
     role="group"
     aria-label="Library actions"
   >
-    <Button variant="secondary" size="sm" disabled={busy} onclick={onRefresh}>
-      {#if busy}
-        <Spinner />
-      {/if}
-      Refresh Libraries
-    </Button>
-
     <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
       {#if busy}
         <Spinner />

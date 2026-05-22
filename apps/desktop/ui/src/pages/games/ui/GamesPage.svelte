@@ -34,7 +34,6 @@
     pickCoverDisabled?: boolean;
 
     onScan?: VoidHandler;
-    onRefresh?: VoidHandler;
     onReloadCards?: () => Promise<void>;
     onClearError?: VoidHandler;
     onOpenDetails?: GameSelectionHandler;
@@ -53,7 +52,6 @@
     pickCoverDisabled = false,
 
     onScan = noop,
-    onRefresh = noop,
     onReloadCards = noopReloadCards,
     onClearError = noop,
     onOpenDetails = noopGameSelection,
@@ -132,7 +130,7 @@
 <section class="flex h-full min-h-0 flex-col gap-4" aria-busy={busy}>
   {#if showEmptyState}
     <div class="flex flex-1 flex-col items-center justify-center">
-      <GamesEmptyState {busy} {scanButtonLabel} {onRefresh} {onScan} />
+      <GamesEmptyState {busy} {scanButtonLabel} {onScan} />
     </div>
   {:else if showInitialBusyState}
     <Empty class="border-0" role="status" aria-live="polite" aria-atomic="true">
@@ -144,7 +142,7 @@
       </EmptyHeader>
     </Empty>
   {:else}
-    <GamesHeaderBar {hasGames} {busy} {scanButtonLabel} {dashboardStats} {onRefresh} {onScan} />
+    <GamesHeaderBar {hasGames} {busy} {scanButtonLabel} {dashboardStats} {onScan} />
 
     <div class="grid shrink-0 gap-2 px-1">
       <div

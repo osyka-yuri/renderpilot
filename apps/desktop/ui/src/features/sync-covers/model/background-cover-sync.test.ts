@@ -19,7 +19,7 @@ function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
     updates_available: false,
     update_count: 0,
     risk_level: 'safe',
-    backup_available: false,
+    rollback_available: false,
     operation_count: 0,
     cover_updated_at_ms: 1234567890,
     ...overrides,
@@ -39,7 +39,7 @@ function gameWithoutCover(overrides: Partial<GameSummary> = {}): GameSummary {
     updates_available: false,
     update_count: 0,
     risk_level: 'safe',
-    backup_available: false,
+    rollback_available: false,
     operation_count: 0,
     ...overrides,
   };
