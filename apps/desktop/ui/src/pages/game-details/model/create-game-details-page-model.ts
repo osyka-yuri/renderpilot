@@ -1,53 +1,53 @@
 import {
-  applyOperationPlan,
-  buildSwapPlan,
   publishApplyCompletedNotification,
+  publishRollbackCompletedNotification,
+  rollbackComponent,
 } from '@entities/operation';
-import type { SwapPlan } from '@entities/operation';
+import { executeGraphicsSwap } from '@features/swap-graphics-component';
+
+export type SwapHandler = (
+  componentId: string,
+  artifactId: string,
+  entryId?: string | null,
+) => Promise<void> | void;
+
+export type RollbackHandler = (componentId: string) => Promise<void> | void;
 
 export type GameDetailsPageModelDeps = {
   getSelectedGameId: () => string | null;
   checkIsGameStillSelected: (gameId: string) => boolean;
   runExclusive: <T>(task: () => Promise<T>) => Promise<T | null>;
-  setCurrentPlan: (plan: SwapPlan | null) => void;
-  getCurrentPlan: (operationId: string) => SwapPlan | null;
-  showStalePlanError: () => void;
   reloadGameDetails: () => Promise<void>;
 };
 
 export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
-  async function handleBuildPlan(componentId: string, artifactId: string): Promise<void> {
+  async function handleSwap(
+    componentId: string,
+    artifactId: string,
+    entryId?: string | null,
+  ): Promise<void> {
     const gameId = deps.getSelectedGameId();
 
     if (gameId === null) {
       return;
     }
 
-    await deps.runExclusive(async () => {
-      if (deps.checkIsGameStillSelected(gameId)) {
-        deps.setCurrentPlan(null);
-      }
-
-      const plan = await buildSwapPlan(gameId, componentId, artifactId);
-
-      if (deps.checkIsGameStillSelected(gameId)) {
-        deps.setCurrentPlan(plan);
-      }
-    });
-  }
-
-  async function handleApply(operationId: string): Promise<void> {
-    const plan = deps.getCurrentPlan(operationId);
-
-    if (plan === null) {
-      deps.showStalePlanError();
-      return;
-    }
-
     const result = await deps.runExclusive(async () => {
-      const appliedOperation = await applyOperationPlan(operationId, plan.confirmation_token);
+      const controller = new AbortController();
+      if (!deps.checkIsGameStillSelected(gameId)) {
+        controller.abort();
+      }
+      const appliedOperation = await executeGraphicsSwap({
+        gameId,
+        componentId,
+        artifactId,
+        entryId,
+        signal: controller.signal,
+      });
 
-      deps.setCurrentPlan(null);
+      if (appliedOperation === null) {
+        return null;
+      }
 
       await deps.reloadGameDetails();
 
@@ -55,9 +55,27 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     });
 
     if (result !== null) {
-      publishApplyCompletedNotification(result.items.length);
+      publishApplyCompletedNotification(1);
     }
   }
 
-  return { handleBuildPlan, handleApply };
+  async function handleRollback(componentId: string): Promise<void> {
+    const gameId = deps.getSelectedGameId();
+
+    if (gameId === null) {
+      return;
+    }
+
+    const result = await deps.runExclusive(async () => {
+      const rollbackResult = await rollbackComponent(gameId, componentId);
+      await deps.reloadGameDetails();
+      return rollbackResult;
+    });
+
+    if (result !== null) {
+      publishRollbackCompletedNotification(1);
+    }
+  }
+
+  return { handleSwap, handleRollback };
 }

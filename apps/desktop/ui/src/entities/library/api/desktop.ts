@@ -1,6 +1,6 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
-import type { LibraryManifest, LibraryState } from '../model/libraries-page-model';
+import type { LibraryManifest, LibraryState } from '../model/types';
 
 export async function fetchLibrariesManifest(): Promise<LibraryManifest> {
   return invokeDesktop<LibraryManifest>('fetch_libraries_manifest');

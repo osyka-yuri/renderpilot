@@ -8,18 +8,16 @@ import {
   isVendor,
   type Vendor,
   type LibraryTypeValue,
-  type LibraryManifest,
-  type LibraryManifestEntry,
-  type LibraryState,
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
+import type { LibraryManifest, LibraryManifestEntry, LibraryState } from '@entities/library';
 import {
   getLibrariesManifest,
   fetchLibrariesManifest,
   getLibraryStates,
   downloadLibrary,
   deleteLibrary,
-} from '../api/desktop';
+} from '@entities/library';
 
 type EntryAction = 'download' | 'delete';
 type PendingEntryAction = { entryId: string; action: EntryAction } | null;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LibraryManifestEntry } from '@entities/library';
 import {
   formatSignedDate,
   formatVersionLabel,
@@ -7,7 +8,6 @@ import {
   groupKeyForType,
   isVendor,
   libraryIdToGroupKey,
-  type LibraryManifestEntry,
 } from './libraries-page-model';
 
 describe('libraries-page-model', () => {
@@ -103,7 +103,10 @@ function sampleEntry(options: {
     version: { value: options.versionValue ?? '1.0.0', sort_key: options.versionValue ?? '1.0.0' },
     build: { type: 'stable', label: options.buildLabel ?? null },
     files: {
-      dll: { size_bytes: 1024, hashes: { md5: '00000000000000000000000000000000' } },
+      dll: {
+        size_bytes: 1024,
+        hashes: { sha256: '0000000000000000000000000000000000000000000000000000000000000000' },
+      },
       zip: { size_bytes: 2048, download_url: 'https://example.com/file.zip' },
     },
     signature:
