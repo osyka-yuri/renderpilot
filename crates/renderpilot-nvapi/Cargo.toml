@@ -1,0 +1,17 @@
+[package]
+name = "renderpilot-nvapi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "NVAPI FFI bindings for RenderPilot."
+
+[lints.rust]
+unsafe_code = "allow"
+
+[dependencies]
+libloading = "0.8"
+thiserror = "2"
+
+[lib]
+path = "src/lib.rs"

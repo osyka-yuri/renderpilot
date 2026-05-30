@@ -6,6 +6,7 @@ members = [
     "crates/renderpilot-detection",
     "crates/renderpilot-storage-sqlite",
     "crates/renderpilot-platform-windows",
+    "crates/renderpilot-nvapi",
     "crates/renderpilot-cli",
 ]
 resolver = "2"
