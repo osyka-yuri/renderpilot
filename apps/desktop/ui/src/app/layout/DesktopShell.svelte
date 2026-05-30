@@ -33,6 +33,9 @@
     selectedGameTitle?: string | null;
     onNavigate?: ScreenHandler;
     onRefresh?: () => void;
+    /** Optional banner rendered between the header and main content area,
+     *  inside SidebarInset so it is never obscured by the sidebar overlay. */
+    banner?: Snippet;
     children?: Snippet;
   };
 
@@ -86,6 +89,7 @@
     selectedGameTitle = null,
     onNavigate = () => undefined,
     onRefresh = () => undefined,
+    banner,
     children,
   }: Props = $props();
 
@@ -196,6 +200,8 @@
         </Button>
       </div>
     </header>
+
+    {@render banner?.()}
 
     <main class="grid min-h-0 flex-1 grid-rows-[1fr] gap-4 overflow-hidden p-4" aria-busy={busy}>
       {@render children?.()}

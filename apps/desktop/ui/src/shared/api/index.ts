@@ -3,6 +3,7 @@ export {
   DesktopCommandError,
   describeCommandError,
   describeCommandErrorBrief,
+  describeCommandErrorTechnical,
   normalizeCommandError,
 } from './errors';
 export { invokeDesktop } from './desktop-transport';

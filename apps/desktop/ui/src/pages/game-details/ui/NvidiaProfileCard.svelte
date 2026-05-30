@@ -1,0 +1,137 @@
+<script lang="ts">
+  import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemTitle,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+  } from '@shared/ui';
+  import { fileNameFromPath } from '@shared/path';
+  import type { NvapiContext } from '../model/create-nvapi-context.svelte';
+
+  type Props = {
+    gameId: string;
+    nvapi: NvapiContext;
+  };
+
+  const { gameId, nvapi }: Props = $props();
+
+  const AUTO_DETECT_VALUE = '__auto__';
+
+  function handleCandidateChange(value: string | undefined) {
+    if (!value) return;
+    if (value === AUTO_DETECT_VALUE) {
+      void nvapi.clearExecutableOverride(gameId);
+    } else {
+      void nvapi.setExecutableOverride(gameId, value);
+    }
+  }
+</script>
+
+<Card>
+  <CardHeader class="pb-2">
+    <CardTitle>NVIDIA driver profile</CardTitle>
+    <CardDescription>
+      Applies NVAPI overrides (DLSS preset, etc.) to the selected executable.
+    </CardDescription>
+  </CardHeader>
+
+  <CardContent class="grid gap-2">
+    <Item size="sm" variant="muted" class="rounded-md">
+      <ItemContent>
+        <ItemTitle>Profile target</ItemTitle>
+        <ItemDescription>
+          {#if !nvapi.hasSnapshot && nvapi.busy}
+            Loading driver state…
+          {:else if nvapi.effectiveExeSource === 'override'}
+            Manually pinned to this executable.
+          {:else if nvapi.effectiveExeSource === 'auto'}
+            Auto-detected (file size, path depth, NVAPI profile probe).
+          {:else}
+            No executable detected for this installation.
+          {/if}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Select type="single" disabled={nvapi.busy} onValueChange={handleCandidateChange}>
+          <SelectTrigger size="sm" class="w-72">
+            {#if nvapi.effectiveExe}
+              <span class="truncate">{fileNameFromPath(nvapi.effectiveExe)}</span>
+            {:else}
+              <span class="text-muted-foreground">No exe</span>
+            {/if}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={AUTO_DETECT_VALUE} label="Auto-detect (top candidate)">
+              Auto-detect (top candidate)
+            </SelectItem>
+            {#each nvapi.supportedCandidates as candidate (candidate.absolute_path)}
+              <SelectItem value={candidate.absolute_path} label={candidate.file_name}>
+                <span class="flex flex-col">
+                  <span>{candidate.file_name}</span>
+                  <span class="text-xs text-muted-foreground">{candidate.relative_path}</span>
+                </span>
+              </SelectItem>
+            {/each}
+            {#each nvapi.filteredOutCandidates as candidate (candidate.absolute_path)}
+              <SelectItem
+                value={candidate.absolute_path}
+                label={`${candidate.file_name} (filtered)`}
+              >
+                <span class="flex flex-col">
+                  <span
+                    >{candidate.file_name}
+                    <span class="text-muted-foreground">(filtered)</span></span
+                  >
+                  <span class="text-xs text-muted-foreground">{candidate.relative_path}</span>
+                </span>
+              </SelectItem>
+            {/each}
+          </SelectContent>
+        </Select>
+      </ItemActions>
+    </Item>
+
+    {#if nvapi.hasSnapshot && !nvapi.hasProfile && nvapi.effectiveExe}
+      <p class="px-4 text-xs text-muted-foreground">
+        NVIDIA has no profile for <code class="font-mono"
+          >{fileNameFromPath(nvapi.effectiveExe)}</code
+        > yet. Launch the game once, then come back.
+      </p>
+    {/if}
+
+    {#if !nvapi.canWrite}
+      <p
+        class="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700"
+      >
+        DLSS preset overrides are disabled — administrator privileges required. Use the banner at
+        the top of the window to relaunch.
+      </p>
+    {/if}
+
+    {#if nvapi.loadError}
+      <div
+        class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive"
+      >
+        {nvapi.loadError}
+      </div>
+    {/if}
+
+    {#each nvapi.warnings as warning (warning)}
+      <div
+        class="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700"
+      >
+        {warning}
+      </div>
+    {/each}
+  </CardContent>
+</Card>

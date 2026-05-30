@@ -9,6 +9,7 @@
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
   import { NotificationsToaster } from '@widgets/notifications-toaster';
+  import { ElevationBanner } from '@widgets/elevation-banner';
   import {
     createCoverSyncQueue,
     executeBackgroundCoverSync,
@@ -37,8 +38,15 @@
     refreshDesktopCatalog,
     reloadSelectedGame as reloadSelectedGameWorkflow,
   } from '@app/model/desktop-app-workflows';
+  import type { AppInitializationState } from '@entities/app';
 
-  const model = createDesktopAppModel();
+  type Props = {
+    initState: AppInitializationState;
+  };
+
+  const { initState }: Props = $props();
+
+  const model = createDesktopAppModel(() => initState);
   const coverSyncQueue = createCoverSyncQueue();
 
   let refreshCounter = $state(0);
@@ -215,10 +223,14 @@
   onNavigate={model.handleNavigate}
   onRefresh={handleRefresh}
 >
+  {#snippet banner()}
+    <ElevationBanner isElevated={model.isElevated} elevationSupported={model.elevationSupported} />
+  {/snippet}
   {#if model.screen === 'details'}
     <GameDetailsScreen
       details={model.selectedDetails}
       busy={model.busy}
+      isElevated={model.isElevated}
       onSwap={gameDetailsModel.handleSwap}
       onRollback={gameDetailsModel.handleRollback}
     />

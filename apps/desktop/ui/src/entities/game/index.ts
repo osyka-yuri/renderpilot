@@ -31,6 +31,7 @@ export type {
   GameSelectionHandler,
   GameDetails,
   GameGraphicsComponent,
+  GameCandidateGroup,
   ScanError,
   AutoScanResponse,
   ScanManualFolderResult,

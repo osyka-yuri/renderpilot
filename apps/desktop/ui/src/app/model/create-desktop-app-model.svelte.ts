@@ -2,6 +2,7 @@ import type { Screen } from '@app/navigation/screen';
 import type { WorkspaceScreen } from '@app/navigation/workspace';
 import { isWorkspaceScreen } from '@app/navigation/workspace';
 import { resolveSelectedGameDetails, workspaceShellGameTitle } from '@app/navigation/selection';
+import type { AppInitializationState } from '@entities/app';
 import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
@@ -24,7 +25,22 @@ export type RunExclusiveOptions = {
   clearErrorOnStart?: boolean;
 };
 
-export function createDesktopAppModel() {
+/**
+ * Safe initialization snapshot for tests and any code path that runs
+ * before the Tauri shell has booted. Real prod calls always pass an
+ * explicit snapshot fetched in bootstrap.ts.
+ */
+const DEFAULT_INITIALIZATION: AppInitializationState = {
+  isElevated: true,
+  elevationSupported: false,
+  elevationUserDeclined: false,
+  elevationAttempted: false,
+};
+
+export function createDesktopAppModel(
+  getInitialization: () => AppInitializationState = () => DEFAULT_INITIALIZATION,
+) {
+  const initialization = getInitialization();
   let screen = $state<Screen>('games');
 
   const catalog = createGamesCatalogModel();
@@ -241,6 +257,16 @@ export function createDesktopAppModel() {
     },
     get languageMode() {
       return languageMode;
+    },
+    // Process-wide initialization snapshot (elevation, etc.). Session-stable.
+    get isElevated() {
+      return initialization.isElevated;
+    },
+    get elevationSupported() {
+      return initialization.elevationSupported;
+    },
+    get elevationUserDeclined() {
+      return initialization.elevationUserDeclined;
     },
     // Derived
     get currentGameCard() {

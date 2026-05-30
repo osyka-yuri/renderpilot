@@ -13,7 +13,12 @@ export {
   STATUS_NOTIFICATION_ID,
 } from './notification-status';
 
-export { publishInfoNotification, publishSuccessNotification } from './notification-helpers';
+export {
+  publishErrorNotification,
+  publishInfoNotification,
+  publishSuccessNotification,
+  publishWarningNotification,
+} from './notification-helpers';
 
 export type {
   Notification,

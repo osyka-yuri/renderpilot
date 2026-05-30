@@ -58,14 +58,31 @@ export function describeCommandError(error: unknown): string {
 }
 
 /**
- * Short error details only, without suggested-actions suffix.
- * Prefer for compact banners and inline hints.
+ * Extracts a concise error description, explicitly omitting any appended suggested-action suffixes.
+ * This format is optimal for space-constrained UI elements such as compact banners or inline validation hints.
  *
- * Use {@link describeCommandError} when the user should see the full message,
- * including suggested actions.
+ * For scenarios requiring comprehensive user context—including actionable remediation steps—utilize 
+ * {@link describeCommandError} instead.
  */
 export function describeCommandErrorBrief(error: unknown): string {
   return normalizeCommandError(error).dto.details;
+}
+
+/**
+ * Synthesizes the most actionable, single-line technical description of a given command error.
+ *
+ * The resolution strategy prioritizes `debugDetails` (which surfaces the exact backend failure 
+ * reason, exclusively available in development builds) before gracefully falling back to `details` 
+ * (the generic, localized text guaranteed to be present). This is highly recommended for error 
+ * toasts or diagnostic logs where actionable clarity is required over generic "operation failed" messaging.
+ */
+export function describeCommandErrorTechnical(error: unknown): string {
+  const dto = normalizeCommandError(error).dto;
+  const debug = dto.debugDetails;
+  if (typeof debug === 'string' && debug.trim().length > 0) {
+    return debug.trim();
+  }
+  return dto.details;
 }
 
 function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
@@ -73,7 +90,7 @@ function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
     return null;
   }
 
-  const { code, severity, messageKey, details, suggestedActions } = value;
+  const { code, severity, messageKey, details, suggestedActions, debugDetails } = value;
 
   if (
     !isNonEmptyString(code) ||
@@ -93,6 +110,7 @@ function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
     messageKey,
     details,
     suggestedActions: normalizedSuggestedActions,
+    debugDetails: isString(debugDetails) ? debugDetails : undefined,
   });
 }
 
@@ -101,12 +119,18 @@ function normalizeCommandErrorDto(dto: CommandErrorDto): CommandErrorDto {
     return createFallbackDto(UNKNOWN_ERROR_DETAILS);
   }
 
+  const debugDetails =
+    isString(dto.debugDetails) && dto.debugDetails.trim().length > 0
+      ? dto.debugDetails.trim()
+      : undefined;
+
   return {
     code: normalizeNonEmptyString(dto.code, FALLBACK_CODE),
     severity: normalizeSeverity(dto.severity),
     messageKey: normalizeNonEmptyString(dto.messageKey, FALLBACK_MESSAGE_KEY),
     details: normalizeDetails(dto.details),
     suggestedActions: normalizeSuggestedActions(dto.suggestedActions),
+    debugDetails,
   };
 }
 
