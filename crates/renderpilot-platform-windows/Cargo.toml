@@ -12,11 +12,16 @@ workspace = true
 [dependencies]
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-domain = { path = "../renderpilot-domain" }
+renderpilot-nvapi = { path = "../renderpilot-nvapi" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+pelite = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lib]
 path = "src/lib.rs"

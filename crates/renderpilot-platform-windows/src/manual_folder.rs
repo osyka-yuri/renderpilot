@@ -54,12 +54,32 @@ impl ManualFolderGameSource {
         let identity =
             game_identity_for_manual_install_folder(&self.folder, &install_path, folder_title)?;
 
-        Ok(GameInstallation::new(
+        let mut installation = GameInstallation::new(
             identity,
             Platform::Windows,
             GameRuntime::NativeWindows,
             install_path,
-        ))
+        );
+
+        // Populate executable candidates from the install dir so the
+        // NVAPI layer has something to query later. Only the
+        // not-rejected ones are persisted — the full ranked list
+        // (with rejection reasons) is recomputed on demand for the
+        // UI override picker.
+        #[cfg(windows)]
+        {
+            for candidate in crate::executable_detection::detect_executable_candidates(&self.folder)
+            {
+                if candidate.rejection.is_some() {
+                    continue;
+                }
+                if let Ok(path_ref) = PathRef::new(&candidate.relative_path) {
+                    installation = installation.with_executable_candidate(path_ref);
+                }
+            }
+        }
+
+        Ok(installation)
     }
 }
 
