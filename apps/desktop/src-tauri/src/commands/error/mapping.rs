@@ -138,6 +138,11 @@ impl CommandError {
             CliError::CoverIo(message) => {
                 Self::debug(Kind::CoverIoError, Msg::COVER_FILE_SYSTEM_ERROR, message)
             }
+
+            CliError::NvapiRequiresElevation => Self::user_facing(
+                Kind::NvapiRequiresElevation,
+                Msg::NVAPI_REQUIRES_ADMINISTRATOR,
+            ),
         }
     }
 

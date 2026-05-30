@@ -1,7 +1,8 @@
-//! Tauri commands invoked from the desktop UI.
+//! Exposes an expansive suite of Tauri commands directly invocable from the desktop frontend.
 //!
-//! Potentially blocking catalog work is executed on Tauri's blocking pool via
-//! [`run_desktop_command`].
+//! To prevent thread starvation and maintain UI responsiveness, any potentially blocking catalog 
+//! or filesystem operations are strictly delegated to Tauri's dedicated blocking thread pool 
+//! utilizing the `run_desktop_command` utility.
 
 mod error;
 mod query_game_cards;
@@ -169,4 +170,112 @@ pub async fn delete_library(entry_id: String) -> JsonCommandResult {
 #[tauri::command]
 pub async fn get_library_states() -> JsonCommandResult {
     run_desktop_async_command(desktop::get_library_states).await
+}
+
+// ---------------------------------------------------------------------------
+// NVAPI / DLSS preset commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn list_nvapi_supported_settings(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    run_desktop_command(move || desktop::list_nvapi_supported_settings(game_id)).await
+}
+
+#[tauri::command]
+pub async fn list_game_executable_candidates(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    run_desktop_command(move || desktop::list_game_executable_candidates(game_id)).await
+}
+
+#[tauri::command]
+pub async fn set_game_executable_override(
+    game_id: String,
+    absolute_path: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
+    run_desktop_command(move || desktop::set_game_executable_override(game_id, absolute_path)).await
+}
+
+#[tauri::command]
+pub async fn clear_game_executable_override(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    run_desktop_command(move || desktop::clear_game_executable_override(game_id)).await
+}
+
+#[tauri::command]
+pub async fn get_nvapi_setting_state(game_id: String, setting_key: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let setting_key = require_non_empty_string("setting_key", setting_key)?;
+    run_desktop_command(move || desktop::get_nvapi_setting_state(game_id, setting_key)).await
+}
+
+#[tauri::command]
+pub async fn set_nvapi_setting_value(
+    game_id: String,
+    setting_key: String,
+    value: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let setting_key = require_non_empty_string("setting_key", setting_key)?;
+    let value = require_non_empty_string("value", value)?;
+    run_desktop_command(move || desktop::set_nvapi_setting_value(game_id, setting_key, value)).await
+}
+
+#[tauri::command]
+pub async fn revert_nvapi_setting(
+    game_id: String,
+    setting_key: String,
+    target: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let setting_key = require_non_empty_string("setting_key", setting_key)?;
+    let target = require_non_empty_string("target", target)?;
+    run_desktop_command(move || desktop::revert_nvapi_setting(game_id, setting_key, target)).await
+}
+
+/// Retrieves the initialization snapshot securely computed during process instantiation.
+///
+/// This operation executes synchronously. The `AppInitializationState` constitutes lightweight `Copy` 
+/// semantics already resident within Tauri's managed state, guaranteeing zero I/O latency.
+#[tauri::command]
+pub fn get_app_initialization_state(
+    state: tauri::State<'_, crate::AppInitializationState>,
+) -> crate::AppInitializationState {
+    *state.inner()
+}
+
+/// Orchestrates the spawning of an elevated RenderPilot instance utilizing `ShellExecuteW(verb="runas")`.
+/// Upon successful elevation acquisition, the current unelevated process is systematically terminated. 
+/// Conversely, should the user decline the UAC prompt—or if system policies restrict elevation—this command 
+/// gracefully yields a `CommandFailed` error payload. The frontend UI subsequently intercepts this to display 
+/// a non-fatal diagnostic toast without interrupting the application's lifecycle.
+#[tauri::command]
+pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
+    #[cfg(windows)]
+    {
+        use crate::elevation::{attempt_self_relaunch_elevated, ElevationStartupDecision};
+        match attempt_self_relaunch_elevated() {
+            ElevationStartupDecision::Relaunched => {
+                app.exit(0);
+                Ok(serde_json::json!({ "relaunched": true }))
+            }
+            ElevationStartupDecision::UserCancelled => Err(CommandError::from(
+                CliError::CommandFailed("UAC consent was declined".to_owned()),
+            )),
+            ElevationStartupDecision::PolicyBlocked(code) => {
+                Err(CommandError::from(CliError::CommandFailed(format!(
+                    "OS denied the elevation request (ShellExecute code {code})"
+                ))))
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err(CommandError::from(CliError::CommandFailed(
+            "administrator relaunch is only supported on Windows".to_owned(),
+        )))
+    }
 }

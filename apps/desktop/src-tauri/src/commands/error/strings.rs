@@ -1,7 +1,8 @@
-//! Stable fallback copy and localization keys for the UI.
+//! Defines the definitive registry of stable localization keys and fallback English copy for the frontend UI.
 //!
-//! Localization keys are stable API.
-//! Default English copy is fallback text and may be changed more freely.
+//! The defined localization keys constitute a strictly stable API contract between the Rust backend and the 
+//! TypeScript frontend. Conversely, the default English fallback strings are treated as implementation details 
+//! and may be refined without requiring corresponding frontend modifications.
 
 use std::fmt;
 
@@ -70,6 +71,8 @@ pub(crate) enum UserMessage {
     CoverDownloadFailed,
     CoverArtworkNotFound,
     CoverFileSystemError,
+
+    NvapiRequiresAdministrator,
 }
 
 impl UserMessage {
@@ -99,6 +102,7 @@ impl UserMessage {
         Self::CoverDownloadFailed,
         Self::CoverArtworkNotFound,
         Self::CoverFileSystemError,
+        Self::NvapiRequiresAdministrator,
     ];
 
     #[must_use]
@@ -211,6 +215,11 @@ impl UserMessage {
                 "user_message.cover_file_system_error",
                 "Cover storage reported a filesystem error.",
             ),
+
+            Self::NvapiRequiresAdministrator => LocalizedText::new(
+                "user_message.nvapi_requires_administrator",
+                "Administrator privileges are required to change this NVIDIA setting.",
+            ),
         }
     }
 
@@ -283,6 +292,9 @@ pub(crate) mod user_message {
     pub(crate) const COVER_ARTWORK_NOT_FOUND: UserMessage = UserMessage::CoverArtworkNotFound;
     pub(crate) const COVER_FILE_SYSTEM_ERROR: UserMessage = UserMessage::CoverFileSystemError;
 
+    pub(crate) const NVAPI_REQUIRES_ADMINISTRATOR: UserMessage =
+        UserMessage::NvapiRequiresAdministrator;
+
     #[cfg(test)]
     pub(crate) const ALL: &[UserMessage] = UserMessage::ALL;
 }
@@ -300,6 +312,8 @@ pub(crate) enum SuggestedAction {
     RetryOrRestart,
     RebuildOperationPlan,
     RefreshOrScanGameFolder,
+
+    RelaunchAsAdministrator,
 }
 
 impl SuggestedAction {
@@ -316,6 +330,7 @@ impl SuggestedAction {
         Self::RetryOrRestart,
         Self::RebuildOperationPlan,
         Self::RefreshOrScanGameFolder,
+        Self::RelaunchAsAdministrator,
     ];
 
     #[must_use]
@@ -364,6 +379,11 @@ impl SuggestedAction {
             Self::RefreshOrScanGameFolder => LocalizedText::new(
                 "suggested_action.refresh_or_scan_game_folder",
                 "Refresh the catalog or scan the game folder again.",
+            ),
+
+            Self::RelaunchAsAdministrator => LocalizedText::new(
+                "suggested_action.relaunch_as_administrator",
+                "Relaunch RenderPilot as administrator to apply NVIDIA settings.",
             ),
         }
     }
@@ -418,6 +438,9 @@ pub(crate) mod suggested_action {
 
     pub(crate) const REFRESH_OR_SCAN_GAME_FOLDER: SuggestedActions =
         &[SuggestedAction::RefreshOrScanGameFolder];
+
+    pub(crate) const RELAUNCH_AS_ADMINISTRATOR: SuggestedActions =
+        &[SuggestedAction::RelaunchAsAdministrator];
 
     #[cfg(test)]
     pub(crate) const ALL: &[SuggestedAction] = SuggestedAction::ALL;

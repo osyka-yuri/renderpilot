@@ -168,6 +168,11 @@ command_error_kinds! {
         severity: Error,
         actions: suggested_action::INSPECT_LOGS,
     },
+    NvapiRequiresElevation => {
+        code: "nvapi_requires_elevation",
+        severity: Warning,
+        actions: suggested_action::RELAUNCH_AS_ADMINISTRATOR,
+    },
 }
 
 #[cfg(test)]

@@ -7,8 +7,12 @@ license.workspace = true
 description = "Tauri desktop shell for RenderPilot."
 build = "build.rs"
 
-[lints]
-workspace = true
+[lints.rust]
+# The workspace forbids unsafe, but this crate needs Win32 FFI for:
+# - OpenProcessToken / GetTokenInformation (current_elevation)
+# - ShellExecuteExW (self-relaunch elevated)
+# All FFI is isolated in src/elevation.rs and cfg-gated to Windows.
+unsafe_code = "allow"
 
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
@@ -23,6 +27,13 @@ tauri-plugin-dialog = "2.7.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [lib]
 name = "renderpilot_desktop"
