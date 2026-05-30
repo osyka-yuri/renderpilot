@@ -8,12 +8,34 @@ use super::{http, library_error, storage, validate};
 
 const DEFAULT_MANIFEST_URL: &str =
     "https://osyka-yuri.github.io/renderpilot-libraries/manifest.json";
+const PRESET_URLS: &[&str] = &[
+    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_presets.json",
+    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_g_presets.json",
+    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_d_presets.json",
+];
 const MAX_MANIFEST_SIZE_BYTES: u64 = 2 * 1024 * 1024;
 
 pub(super) async fn fetch_manifest() -> JsonResult {
     let manifest = download_manifest(DEFAULT_MANIFEST_URL).await?;
     save_local_manifest(&manifest)?;
+
+    for url in PRESET_URLS {
+        if let Err(error) = download_and_save_preset(url).await {
+            log::warn!("failed to download preset manifest {url}: {error}");
+        }
+    }
+
     to_json(manifest)
+}
+
+async fn download_and_save_preset(url: &str) -> Result<(), CliError> {
+    let client = http::http_client();
+    let bytes = http::download_limited_bytes(client, url, MAX_MANIFEST_SIZE_BYTES, "preset fetch").await?;
+    if let Some(file_name) = url.split('/').next_back() {
+        let path = storage::local_preset_manifest_path(file_name)?;
+        storage::write_file_atomically(&path, &bytes)?;
+    }
+    Ok(())
 }
 
 pub(super) async fn get_or_fetch_manifest() -> JsonResult {

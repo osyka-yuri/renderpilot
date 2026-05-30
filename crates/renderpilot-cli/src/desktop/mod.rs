@@ -5,7 +5,9 @@
 
 mod catalog;
 mod covers;
+pub(crate) mod dlss;
 pub(crate) mod libraries;
+mod nvapi;
 mod operations;
 mod scan;
 mod utils;
@@ -25,6 +27,11 @@ pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::libraries::{
     delete_library, download_library, fetch_libraries_manifest, get_libraries_manifest,
     get_library_states, LibraryManifest, LibraryManifestEntry, LibraryState,
+};
+pub use self::nvapi::{
+    clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
+    list_nvapi_supported_settings, revert_nvapi_setting, set_game_executable_override,
+    set_nvapi_setting_value,
 };
 pub use self::operations::{apply_swap, rollback_component};
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};

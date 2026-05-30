@@ -34,6 +34,10 @@ pub(super) fn local_manifest_path() -> Result<PathBuf, CliError> {
     Ok(app_dir()?.join(MANIFEST_FILE_NAME))
 }
 
+pub(crate) fn local_preset_manifest_path(file_name: &str) -> Result<PathBuf, CliError> {
+    Ok(libraries_storage_dir()?.join(file_name))
+}
+
 pub(super) fn local_archive_path(
     group_key: &str,
     archive_file_name: &str,

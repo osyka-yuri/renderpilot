@@ -8,10 +8,11 @@ use crate::output::HELP_HINT;
 pub const GENERAL_FAILURE_EXIT_CODE: u8 = 1;
 pub const USAGE_FAILURE_EXIT_CODE: u8 = 2;
 
-/// Error returned when CLI arguments cannot be parsed or a command fails.
+/// Represents an enumerated collection of failure states encountered during CLI argument 
+/// parsing, command orchestration, or execution runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliError {
-    /// The user passed an argument that is not valid Unicode.
+    /// Indicates that the provided command-line argument contains invalid, non-Unicode sequences.
     NonUnicodeArgument,
     /// The user passed an argument that RenderPilot does not recognize.
     UnknownArgument(String),
@@ -60,6 +61,12 @@ pub enum CliError {
     CoverNotFound,
     /// Local filesystem error while reading or writing cover files.
     CoverIo(String),
+    /// Denotes a failure scenario where an NVAPI write operation was attempted, but the 
+    /// executing process lacked the requisite administrator privileges. This variant is 
+    /// intentionally distinct from `CommandFailed` to enable the desktop frontend to reliably 
+    /// intercept the error and present a targeted "Relaunch as administrator" remediation flow, 
+    /// avoiding ambiguous generic error states.
+    NvapiRequiresElevation,
 }
 
 impl CliError {
@@ -80,7 +87,8 @@ impl CliError {
             | Self::UnsupportedCoverImageType
             | Self::CoverDownloadFailed(_)
             | Self::CoverNotFound
-            | Self::CoverIo(_) => ErrorCategory::Runtime,
+            | Self::CoverIo(_)
+            | Self::NvapiRequiresElevation => ErrorCategory::Runtime,
             _ => ErrorCategory::Usage,
         }
     }
@@ -122,7 +130,8 @@ impl CliError {
             | Self::UnsupportedCoverImageType
             | Self::CoverDownloadFailed(_)
             | Self::CoverNotFound
-            | Self::CoverIo(_) => None,
+            | Self::CoverIo(_)
+            | Self::NvapiRequiresElevation => None,
         }
     }
 }
@@ -153,6 +162,8 @@ impl fmt::Display for CliError {
             }
             Self::CoverNotFound => formatter.write_str("cover artwork was not found"),
             Self::CoverIo(message) => write!(formatter, "cover file error: {message}"),
+            Self::NvapiRequiresElevation => formatter
+                .write_str("administrator privileges are required to modify NVAPI settings"),
             _ => unreachable!("usage errors are handled by usage_message"),
         }
     }
@@ -288,6 +299,7 @@ mod tests {
             CliError::CoverDownloadFailed("timeout".into()),
             CliError::CoverNotFound,
             CliError::CoverIo("permission denied".into()),
+            CliError::NvapiRequiresElevation,
         ];
 
         for error in errors {
@@ -297,9 +309,19 @@ mod tests {
 
     #[test]
     fn runtime_errors_do_not_include_help_hint() {
-        let error = CliError::CommandFailed("scan failed".to_owned());
+        let errors = [
+            CliError::CommandFailed("scan failed".to_owned()),
+            CliError::NvapiRequiresElevation,
+        ];
 
-        assert_eq!(error.to_string(), "scan failed");
+        for error in errors {
+            assert!(
+                !error
+                    .to_string()
+                    .ends_with("Run `renderpilot --help` for usage."),
+                "{error:?} should not include help hint",
+            );
+        }
     }
 
     #[test]

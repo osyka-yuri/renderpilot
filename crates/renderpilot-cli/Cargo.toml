@@ -15,6 +15,7 @@ http = "1"
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-detection = { path = "../renderpilot-detection" }
 renderpilot-domain = { path = "../renderpilot-domain" }
+renderpilot-nvapi = { path = "../renderpilot-nvapi" }
 renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
 renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }

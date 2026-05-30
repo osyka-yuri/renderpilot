@@ -1,0 +1,27 @@
+{
+  "$schema": "https://osyka-yuri.github.io/renderpilot-libraries/schemas/dlss_preset_manifest.schema.json",
+  "schema_version": 1,
+  "library_family": "nvngx_dlssg",
+  "dll_kind": "fg",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "presets": {
+    "0": { "label": "Default (Game Controlled)" },
+    "1": { "label": "Preset A" },
+    "2": { "label": "Preset B" },
+    "3": { "label": "Preset C", "deprecated": true },
+    "4": { "label": "Preset D", "deprecated": true },
+    "5": { "label": "Preset E", "deprecated": true }
+  },
+  "version_support": [
+    {
+      "version": "3.0.0.0",
+      "supported_presets": [0, 1, 2],
+      "label": "DLSS Frame Generation (3.x)"
+    }
+  ],
+  "notes": [
+    "Frame Generation (nvngx_dlssg.dll) was introduced with DLSS 3.0 (Sept 2022) — earlier versions don't ship this DLL.",
+    "Presets C/D/E are listed as deprecated in DLSS Swapper data and are not exposed in supported_presets.",
+    "Inheritance: for an unknown DLL version V, the largest entry with version <= V applies (semver compare)."
+  ]
+}

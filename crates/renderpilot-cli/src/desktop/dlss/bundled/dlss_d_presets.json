@@ -1,0 +1,27 @@
+{
+  "$schema": "https://osyka-yuri.github.io/renderpilot-libraries/schemas/dlss_preset_manifest.schema.json",
+  "schema_version": 1,
+  "library_family": "nvngx_dlssd",
+  "dll_kind": "rr",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "presets": {
+    "0": { "label": "Default (Game Controlled)" },
+    "1": { "label": "Preset A", "deprecated": true },
+    "2": { "label": "Preset B", "deprecated": true },
+    "3": { "label": "Preset C", "deprecated": true },
+    "4": { "label": "Preset D" },
+    "5": { "label": "Preset E" }
+  },
+  "version_support": [
+    {
+      "version": "3.5.0.0",
+      "supported_presets": [0, 4, 5],
+      "label": "DLSS Ray Reconstruction (3.5+)"
+    }
+  ],
+  "notes": [
+    "Ray Reconstruction (nvngx_dlssd.dll) was introduced with DLSS 3.5 (Sept 2023) — earlier versions don't ship this DLL.",
+    "Presets A/B/C are marked deprecated in DLSS Swapper data and not exposed in supported_presets.",
+    "Inheritance: for an unknown DLL version V, the largest entry with version <= V applies (semver compare)."
+  ]
+}

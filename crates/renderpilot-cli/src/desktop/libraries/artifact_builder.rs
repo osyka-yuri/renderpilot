@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use renderpilot_detection::LibraryPatternSet;
 use renderpilot_domain::{
@@ -12,16 +13,31 @@ use super::{library_error, manifest::load_local_manifest, types::LibraryManifest
 
 const MANIFEST_DOWNLOAD_SOURCE: &str = "manifest-download";
 
+static BUNDLED_PATTERNS: LazyLock<LibraryPatternSet> = LazyLock::new(|| {
+    LibraryPatternSet::bundled_defaults().expect("bundled library patterns are always valid")
+});
+
+/// Builds a `LibraryArtifact` instance representing a locally cached library file
+/// backed by a downloaded manifest entry.
+///
+/// This resolves the library pattern technology using the known file name and
+/// constructs an artifact definition that can be used for swap operations.
 pub(super) fn build_manifest_artifact(
     entry: &LibraryManifestEntry,
     dll_path: &std::path::Path,
     sha256: &str,
 ) -> Result<LibraryArtifact, CliError> {
-    let patterns = load_library_patterns()?;
+    let patterns = load_library_patterns();
 
-    build_entry_artifact(entry, &dll_path.to_string_lossy(), sha256, &patterns, None)
+    build_entry_artifact(entry, &dll_path.to_string_lossy(), sha256, patterns, None)
 }
 
+/// Reads the local library manifest and converts all successfully parsed entries
+/// into abstract `LibraryArtifact` instances without checking local file presence.
+///
+/// Returns a tuple containing:
+/// - The parsed list of `LibraryArtifact`s.
+/// - A mapping between the generated `ArtifactId` and the raw manifest `entry_id`.
 pub(crate) fn manifest_entries_as_artifacts(
 ) -> Result<(Vec<LibraryArtifact>, HashMap<ArtifactId, String>), CliError> {
     let manifest = match load_local_manifest()? {
@@ -29,13 +45,13 @@ pub(crate) fn manifest_entries_as_artifacts(
         None => return Ok((Vec::new(), HashMap::new())),
     };
 
-    let patterns = load_library_patterns()?;
+    let patterns = load_library_patterns();
 
     let mut artifacts = Vec::new();
     let mut entry_ids = HashMap::new();
 
     for entry in &manifest.entries {
-        let artifact = match build_manifest_index_artifact(entry, &patterns) {
+        let artifact = match build_manifest_index_artifact(entry, patterns) {
             Ok(artifact) => artifact,
             Err(error) => {
                 log_manifest_entry_skip(entry, &error);
@@ -51,9 +67,8 @@ pub(crate) fn manifest_entries_as_artifacts(
     Ok((artifacts, entry_ids))
 }
 
-fn load_library_patterns() -> Result<LibraryPatternSet, CliError> {
-    LibraryPatternSet::bundled_defaults()
-        .map_err(|error| library_error(format!("failed to load library patterns: {error}")))
+fn load_library_patterns() -> &'static LibraryPatternSet {
+    &BUNDLED_PATTERNS
 }
 
 fn build_manifest_index_artifact(

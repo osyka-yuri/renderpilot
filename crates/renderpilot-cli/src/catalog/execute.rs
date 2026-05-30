@@ -216,5 +216,28 @@ fn upsert_component_file(
         }
     }
 
-    storage.replace_components_for_game(game_id, &[rebuilt])
+    // `replace_components_for_game` performs a delete-all-then-reinsert on the
+    // game's component set, so we must pass the **full** post-swap set, not
+    // just the one we touched. Without this, swapping one component (DLSS,
+    // FSR, ...) silently wiped the game's other components from SQLite until
+    // the next full rescan — which made every other selector on the
+    // GameDetailsPage tab list disappear after any apply/rollback.
+    let existing_components = storage.list_components_for_game(game_id)?;
+    let mut next: Vec<GraphicsComponent> = Vec::with_capacity(existing_components.len().max(1));
+    let mut replaced = false;
+    for current in existing_components {
+        if current.id() == rebuilt.id() {
+            next.push(rebuilt.clone());
+            replaced = true;
+        } else {
+            next.push(current);
+        }
+    }
+    if !replaced {
+        // Component wasn't in the catalog yet (edge case: swap of a freshly
+        // discovered component before its first persisted scan landed).
+        next.push(rebuilt);
+    }
+
+    storage.replace_components_for_game(game_id, &next)
 }

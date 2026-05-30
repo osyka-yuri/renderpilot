@@ -18,6 +18,7 @@ pub use self::types::{LibraryManifest, LibraryManifestEntry, LibraryState};
 
 pub(crate) use self::artifact_builder::manifest_entries_as_artifacts;
 use self::local_library::{library_state, library_states, local_archive_path};
+pub(crate) use self::storage::local_preset_manifest_path;
 
 pub(super) fn library_error(message: impl Into<String>) -> CliError {
     CliError::CommandFailed(message.into())

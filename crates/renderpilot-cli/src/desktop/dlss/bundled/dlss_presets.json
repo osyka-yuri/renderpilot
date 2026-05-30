@@ -1,0 +1,62 @@
+{
+  "$schema": "https://osyka-yuri.github.io/renderpilot-libraries/schemas/dlss_preset_manifest.schema.json",
+  "schema_version": 1,
+  "library_family": "nvngx_dlss",
+  "dll_kind": "sr",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "presets": {
+    "0": { "label": "Default (Game Controlled)" },
+    "1": { "label": "Preset A" },
+    "2": { "label": "Preset B" },
+    "3": { "label": "Preset C" },
+    "4": { "label": "Preset D" },
+    "5": { "label": "Preset E" },
+    "6": { "label": "Preset F" },
+    "7": { "label": "Preset G", "deprecated": true },
+    "8": { "label": "Preset H", "deprecated": true },
+    "9": { "label": "Preset I", "deprecated": true },
+    "10": { "label": "Preset J" },
+    "11": { "label": "Preset K" },
+    "12": { "label": "Preset L" },
+    "13": { "label": "Preset M" },
+    "14": { "label": "Preset N", "deprecated": true }
+  },
+  "version_support": [
+    {
+      "version": "1.0.0.0",
+      "supported_presets": [0],
+      "label": "DLSS 1.x (no forced presets)"
+    },
+    {
+      "version": "2.0.34.0",
+      "supported_presets": [0, 1, 2, 3, 4, 5, 6],
+      "label": "DLSS 2.0"
+    },
+    {
+      "version": "2.4.0.0",
+      "supported_presets": [0, 1, 2, 3, 4, 5, 6, 10],
+      "label": "DLSS 2.4"
+    },
+    {
+      "version": "3.1.1.0",
+      "supported_presets": [0, 1, 2, 3, 4, 5, 6, 10, 11],
+      "label": "DLSS 3.1"
+    },
+    {
+      "version": "310.1.0.0",
+      "supported_presets": [0, 6, 10, 11],
+      "label": "DLSS 4.0 / 310.1.0 (1st-gen Transformer)"
+    },
+    {
+      "version": "310.5.0.0",
+      "supported_presets": [0, 6, 10, 11, 12, 13],
+      "label": "DLSS 4.5 / 310.5+ (2nd-gen Transformer, adds L+M)"
+    }
+  ],
+  "notes": [
+    "Inheritance: for an unknown DLL version V, the largest entry with version <= V applies (semver compare).",
+    "Presets 7-9 (G, H, I) and 14 (N) are deprecated in DLSS Swapper data and are not exposed in any supported_presets list.",
+    "DLSS 4.0 (310.1.0+) introduced 1st-gen Transformer presets J and K and dropped most CNN presets, keeping only F.",
+    "DLSS 4.5 (310.5.0+) introduced 2nd-gen Transformer presets L and M. NVIDIA App's 'Recommended' setting maps Performance->M, Ultra Performance->L, others->K."
+  ]
+}

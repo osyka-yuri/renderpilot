@@ -35,11 +35,7 @@ struct CoverPayload {
 pub(crate) fn cover_protocol_http_response(request_path: &str) -> Response<Vec<u8>> {
     match load_cover_payload(request_path) {
         Ok(payload) => ok_response(payload),
-        Err(_err) => {
-            // Если в проекте есть tracing/log, здесь удобно оставить debug-лог:
-            // tracing::debug!(?err, request_path, "failed to load cover");
-            empty_response(StatusCode::NOT_FOUND)
-        }
+        Err(_) => empty_response(StatusCode::NOT_FOUND),
     }
 }
 
