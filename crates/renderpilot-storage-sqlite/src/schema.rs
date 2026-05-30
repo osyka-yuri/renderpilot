@@ -4,8 +4,9 @@ use rusqlite::{Connection, Error as SqliteError, OptionalExtension, TransactionB
 use crate::error::storage_context;
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
+const NVAPI_MIGRATION: &str = include_str!("../migrations/0002_nvapi.sql");
 
-const CURRENT_SCHEMA_VERSION: i32 = 1;
+const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 const REQUIRED_TABLES: &[&str] = &[
     "games",
@@ -16,6 +17,8 @@ const REQUIRED_TABLES: &[&str] = &[
     "operation_items",
     "settings",
     "file_hash_cache",
+    "nvapi_executable_overrides",
+    "nvapi_setting_baselines",
 ];
 
 const REQUIRED_INDEXES: &[&str] = &[
@@ -105,7 +108,10 @@ fn reset_catalog_schema(connection: &Connection) -> AppResult<()> {
 fn apply_initial_migration(connection: &Connection) -> AppResult<()> {
     connection
         .execute_batch(INITIAL_MIGRATION)
-        .map_err(|error| storage_context("could not apply sqlite initial migration", error))
+        .map_err(|error| storage_context("could not apply sqlite initial migration", error))?;
+    connection
+        .execute_batch(NVAPI_MIGRATION)
+        .map_err(|error| storage_context("could not apply sqlite nvapi migration", error))
 }
 
 fn read_user_version(connection: &Connection) -> AppResult<i32> {

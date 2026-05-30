@@ -5,6 +5,7 @@ mod components;
 pub mod file_hash_cache;
 pub mod game_covers;
 mod games;
+pub mod nvapi;
 mod operations;
 mod row_mapping;
 
