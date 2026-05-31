@@ -6,11 +6,13 @@
 // API
 export {
   clearGameExecutableOverride,
+  getDlssIndicatorState,
   getNvapiSettingState,
   listGameExecutableCandidates,
   listNvapiSettingStates,
   listNvapiSupportedSettings,
   revertNvapiSetting,
+  setDlssIndicatorEnabled,
   setGameExecutableOverride,
   setNvapiSettingValue,
 } from './api/desktop';
@@ -19,6 +21,7 @@ export {
 export type {
   BaselineDto,
   DllInfoDto,
+  DlssIndicatorState,
   ExecutableCandidate,
   SettingDescriptor,
   SettingFamily,

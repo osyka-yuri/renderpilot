@@ -270,6 +270,9 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::get_nvapi_setting_state,
         commands::set_nvapi_setting_value,
         commands::revert_nvapi_setting,
+        // DLSS indicator (system-wide)
+        commands::get_dlss_indicator_state,
+        commands::set_dlss_indicator_enabled,
         // App initialization / elevation
         commands::get_app_initialization_state,
         commands::request_admin_relaunch,

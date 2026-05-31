@@ -11,7 +11,9 @@
 //! one set of vocabulary for DLSS concepts.
 
 mod dll_search;
+mod indicator;
 mod version;
 
 pub use dll_search::{find_dlss_dlls, DllSearchResult};
+pub use indicator::{read_dlss_indicator_enabled, set_dlss_indicator_enabled};
 pub use version::{read_dll_version, DllVersionError};

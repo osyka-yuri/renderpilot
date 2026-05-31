@@ -240,6 +240,22 @@ pub async fn revert_nvapi_setting(
     run_desktop_command(move || desktop::revert_nvapi_setting(game_id, setting_key, target)).await
 }
 
+// ---------------------------------------------------------------------------
+// DLSS indicator (system-wide overlay)
+// ---------------------------------------------------------------------------
+
+/// Reads whether the global NVIDIA DLSS indicator overlay is currently enabled.
+#[tauri::command]
+pub async fn get_dlss_indicator_state() -> JsonCommandResult {
+    run_desktop_command(desktop::get_dlss_indicator_state).await
+}
+
+/// Enables or disables the global NVIDIA DLSS indicator overlay (requires admin).
+#[tauri::command]
+pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
+    run_desktop_command(move || desktop::set_dlss_indicator_enabled(enabled)).await
+}
+
 /// Returns the `AppInitializationState` snapshot computed at startup.
 /// Synchronous: the state is already in managed memory, no I/O.
 #[tauri::command]

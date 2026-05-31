@@ -6,6 +6,7 @@
 mod catalog;
 mod covers;
 pub(crate) mod dlss;
+mod dlss_indicator;
 pub(crate) mod libraries;
 mod nvapi;
 mod operations;
@@ -24,6 +25,7 @@ pub use self::catalog::{
     get_catalog_setting, get_game_details, list_games, query_game_cards, set_catalog_setting,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
+pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
 pub use self::libraries::{
     delete_library, download_library, fetch_libraries_manifest, get_libraries_manifest,
     get_library_states, LibraryManifest, LibraryManifestEntry, LibraryState,

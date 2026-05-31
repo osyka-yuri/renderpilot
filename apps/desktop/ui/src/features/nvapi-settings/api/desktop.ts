@@ -1,7 +1,12 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
 
-import type { ExecutableCandidate, SettingDescriptor, SettingStateResponse } from '../model/types';
+import type {
+  DlssIndicatorState,
+  ExecutableCandidate,
+  SettingDescriptor,
+  SettingStateResponse,
+} from '../model/types';
 
 export async function listNvapiSupportedSettings(gameId: string): Promise<SettingDescriptor[]> {
   return invokeDesktop<SettingDescriptor[]>('list_nvapi_supported_settings', {
@@ -74,4 +79,21 @@ export async function revertNvapiSetting(
     settingKey: requireNonBlankString(settingKey, 'settingKey'),
     target,
   });
+}
+
+/**
+ * Reads the system-wide DLSS indicator overlay state. The indicator is a single
+ * machine-wide registry value (not per-game), so this takes no arguments.
+ */
+export async function getDlssIndicatorState(): Promise<DlssIndicatorState> {
+  return invokeDesktop<DlssIndicatorState>('get_dlss_indicator_state');
+}
+
+/**
+ * Enables or disables the system-wide DLSS indicator overlay. Writing the
+ * registry value requires an elevated process; the backend surfaces a
+ * "Relaunch as administrator" error otherwise.
+ */
+export async function setDlssIndicatorEnabled(enabled: boolean): Promise<DlssIndicatorState> {
+  return invokeDesktop<DlssIndicatorState>('set_dlss_indicator_enabled', { enabled });
 }
