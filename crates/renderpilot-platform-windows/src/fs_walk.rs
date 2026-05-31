@@ -15,7 +15,7 @@ pub const SKIP_DIRS: &[&str] = &[
     "_renderpilot_backups",
 ];
 
-/// Recursively traverses the `dir` directory up to `MAX_DEPTH` levels deep, 
+/// Recursively traverses the `dir` directory up to `MAX_DEPTH` levels deep,
 /// ignoring any subdirectories whose names match entries in `SKIP_DIRS` (case-insensitive).
 ///
 /// The `on_file` callback is invoked for every regular file found.
@@ -24,7 +24,11 @@ pub const SKIP_DIRS: &[&str] = &[
 /// Directory read errors are silently ignored to ensure that a single unreadable folder
 /// does not interrupt the entire traversal process. This maintains the same behavior
 /// as previous per-module private traversal functions.
-pub(crate) fn walk_files(dir: &Path, depth: u32, on_file: &mut dyn FnMut(&fs::DirEntry, &Path, u32)) {
+pub(crate) fn walk_files(
+    dir: &Path,
+    depth: u32,
+    on_file: &mut dyn FnMut(&fs::DirEntry, &Path, u32),
+) {
     if depth > MAX_DEPTH {
         return;
     }

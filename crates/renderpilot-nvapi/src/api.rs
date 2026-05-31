@@ -37,12 +37,12 @@ unsafe fn zeroed_with_version<T>(ver: u32) -> T {
 }
 
 /// Represents an immutable snapshot of a DWORD configuration state associated with a specific profile.
-/// This encompasses both the authoritative predefined value configured by the driver and the 
+/// This encompasses both the authoritative predefined value configured by the driver and the
 /// boolean state denoting equivalence between the current and predefined values.
 ///
-/// Within the NVIDIA Driver Settings (DRS) architecture, profiles persist a dual-state schema: 
-/// the **current** value (the effective override utilized during execution) alongside the 
-/// **predefined** value (the factory default inherently baked into the driver for recognized applications). 
+/// Within the NVIDIA Driver Settings (DRS) architecture, profiles persist a dual-state schema:
+/// the **current** value (the effective override utilized during execution) alongside the
+/// **predefined** value (the factory default inherently baked into the driver for recognized applications).
 /// The `get_dword_full` procedure surfaces this complete triad to enable deterministic behaviors:
 ///   - Identifying external overrides executed independently of the default driver specification.
 ///   - Facilitating definitive reversion to the manufacturer's baseline via [`Profile::delete_setting`].
@@ -324,8 +324,6 @@ impl Nvapi {
         })
     }
 
-
-
     fn delete_profile_setting(
         &self,
         session: NvDRSSessionHandle,
@@ -469,13 +467,11 @@ pub struct Profile<'a> {
 }
 
 impl Profile<'_> {
-
-
-    /// Executes a comprehensive read operation to retrieve the definitive state of a DWORD setting, 
-    /// encapsulating the active value, the optionally available predefined baseline, and the deterministic 
+    /// Executes a comprehensive read operation to retrieve the definitive state of a DWORD setting,
+    /// encapsulating the active value, the optionally available predefined baseline, and the deterministic
     /// equivalency status between the two.
     ///
-    /// This represents the primary interrogation mechanism utilized to orchestrate precise "user override vs. driver default" 
+    /// This represents the primary interrogation mechanism utilized to orchestrate precise "user override vs. driver default"
     /// UI representations or to rigorously evaluate the prerequisite conditions for capturing an initial baseline snapshot.
     pub fn get_dword_full(&self, setting_id: u32) -> Result<DwordSettingState, NvapiError> {
         self.session
@@ -492,9 +488,9 @@ impl Profile<'_> {
 
     /// Systematically purges a designated setting from the active profile's configuration space.
     ///
-    /// Following the execution of a subsequent [`DrsSession::save`] commit, a re-interrogation of the specified setting 
-    /// will deterministically yield either the authoritative predefined value (assuming the NVIDIA driver maintains one) 
-    /// or `NVAPI_SETTING_NOT_FOUND`. Consequently, this operation serves as the fundamental primitive for orchestrating 
+    /// Following the execution of a subsequent [`DrsSession::save`] commit, a re-interrogation of the specified setting
+    /// will deterministically yield either the authoritative predefined value (assuming the NVIDIA driver maintains one)
+    /// or `NVAPI_SETTING_NOT_FOUND`. Consequently, this operation serves as the fundamental primitive for orchestrating
     /// reliable "revert to driver default" workflows within the user interface.
     pub fn delete_setting(&self, setting_id: u32) -> Result<(), NvapiError> {
         self.session

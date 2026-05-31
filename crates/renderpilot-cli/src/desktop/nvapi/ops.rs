@@ -296,7 +296,9 @@ fn assemble_response(
         description: setting.description().map(str::to_owned),
         min_driver: setting.min_driver().map(str::to_owned),
         current: value_descriptor(setting, live.current),
-        predefined: live.predefined.map(|dword| value_descriptor(setting, dword)),
+        predefined: live
+            .predefined
+            .map(|dword| value_descriptor(setting, dword)),
         baseline: baseline_row.as_ref().map(|row| {
             build_baseline_dto(
                 setting,
@@ -330,7 +332,9 @@ fn read_pre_state(
                 is_current_predefined: true,
             })
         }
-        Err(e) => Err(CliError::CommandFailed(format!("could not read setting: {e}"))),
+        Err(e) => Err(CliError::CommandFailed(format!(
+            "could not read setting: {e}"
+        ))),
     }
 }
 
@@ -338,7 +342,9 @@ fn read_pre_state(
 /// falling back to a raw representation for values outside the setting's table.
 fn value_descriptor(setting: &dyn NvapiSetting, dword: u32) -> ValueDescriptorDto {
     ValueDescriptorDto {
-        wire: setting.format_wire(dword).unwrap_or_else(|| dword.to_string()),
+        wire: setting
+            .format_wire(dword)
+            .unwrap_or_else(|| dword.to_string()),
         label: setting
             .label_for_dword(dword)
             .unwrap_or_else(|| format!("dword {dword}")),
@@ -493,7 +499,9 @@ fn read_live_or_default(setting: &dyn NvapiSetting, ctx: &SettingContext) -> Liv
     let profile = match session.find_profile_by_exe(exe) {
         Ok(profile) => profile,
         Err(_) => {
-            return unavailable(&format!("no NVIDIA profile for {exe} (launch the game once)"))
+            return unavailable(&format!(
+                "no NVIDIA profile for {exe} (launch the game once)"
+            ))
         }
     };
     read_dword_or_default(&profile, setting)
@@ -554,7 +562,10 @@ mod tests {
 
         let supported_set = supported_preset_set(&setting, &ctx);
         let known_set = known_preset_set(&setting, &ctx);
-        assert!(!supported_set.is_empty(), "DLSS 4 version should match a manifest entry");
+        assert!(
+            !supported_set.is_empty(),
+            "DLSS 4 version should match a manifest entry"
+        );
 
         let values = build_available_values(&setting, &ctx, &supported_set, &known_set);
         let supported = |wire: &str| {
@@ -568,9 +579,9 @@ mod tests {
         // Manifest-managed and supported on DLSS 4.
         assert!(supported("default")); // 0
         assert!(supported("f")); // preset F = 6
-        // Manifest-managed but not supported on DLSS 4 → greyed.
+                                 // Manifest-managed but not supported on DLSS 4 → greyed.
         assert!(!supported("a")); // preset A = 1
-        // Not managed by the manifest → always selectable.
+                                  // Not managed by the manifest → always selectable.
         assert!(supported("recommended")); // 0x00FFFFFF sentinel
         assert!(supported("o")); // preset O = 15, beyond the manifest table
 

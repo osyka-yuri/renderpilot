@@ -1,16 +1,16 @@
 //! Utilities and helpers for managing Windows User Account Control (UAC) elevation.
 //!
-//! The desktop executable is compiled with an `asInvoker` manifest (the default 
-//! for Tauri applications), which causes it to inherit the caller's access token 
-//! upon launch. During startup, the application verifies its elevation status. 
-//! If the process lacks administrator privileges, it attempts to relaunch itself 
-//! using `ShellExecuteExW` with the `runas` verb. Should the user grant UAC 
-//! consent, the initial process terminates to allow the newly elevated instance 
-//! to proceed. Conversely, if the user declines the prompt—or if system policies 
-//! prohibit elevation—the original process continues execution but with NVAPI 
+//! The desktop executable is compiled with an `asInvoker` manifest (the default
+//! for Tauri applications), which causes it to inherit the caller's access token
+//! upon launch. During startup, the application verifies its elevation status.
+//! If the process lacks administrator privileges, it attempts to relaunch itself
+//! using `ShellExecuteExW` with the `runas` verb. Should the user grant UAC
+//! consent, the initial process terminates to allow the newly elevated instance
+//! to proceed. Conversely, if the user declines the prompt—or if system policies
+//! prohibit elevation—the original process continues execution but with NVAPI
 //! write operations disabled.
 //!
-//! All underlying Win32 Foreign Function Interface (FFI) bindings are encapsulated 
+//! All underlying Win32 Foreign Function Interface (FFI) bindings are encapsulated
 //! within this module, guarded by a `#[cfg(windows)]` attribute at the module declaration.
 #![cfg(windows)]
 
@@ -25,16 +25,16 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-/// The `ShellExecuteW` function yields an `HINSTANCE` value greater than `32` 
-/// upon successful execution, or an `SE_ERR_*` error code upon failure. 
-/// Within this context, the primary concern is isolating the `access-denied` error 
+/// The `ShellExecuteW` function yields an `HINSTANCE` value greater than `32`
+/// upon successful execution, or an `SE_ERR_*` error code upon failure.
+/// Within this context, the primary concern is isolating the `access-denied` error
 /// (the standard result when a user dismisses a UAC prompt) from all other outcomes.
 const SE_ERR_ACCESSDENIED: isize = 5;
 const SHELL_EXECUTE_SUCCESS_THRESHOLD: isize = 32;
 
 /// A sentinel command-line argument appended during an elevation relaunch.
-/// This prevents recursive and infinite UAC prompt loops in edge cases where 
-/// the subsequently launched process still fails to acquire elevated privileges 
+/// This prevents recursive and infinite UAC prompt loops in edge cases where
+/// the subsequently launched process still fails to acquire elevated privileges
 /// (e.g., split-token scenarios or restrictive Group Policy configurations).
 pub const ELEVATION_ATTEMPTED_MARKER: &str = "--rp-elevation-attempted";
 
@@ -60,10 +60,10 @@ pub enum ElevationStartupDecision {
 
 /// Retrieves the current elevation state of the executing process.
 ///
-/// Any underlying FFI failure is safely mapped to `NotElevated`. This conservative 
-/// fallback ensures that in the worst-case scenario—where the API fails despite 
-/// the user possessing administrator privileges—the UI will merely display the 
-/// "Relaunch as administrator" banner, and the subsequent relaunch workflow 
+/// Any underlying FFI failure is safely mapped to `NotElevated`. This conservative
+/// fallback ensures that in the worst-case scenario—where the API fails despite
+/// the user possessing administrator privileges—the UI will merely display the
+/// "Relaunch as administrator" banner, and the subsequent relaunch workflow
 /// will quickly short-circuit upon verifying existing permissions.
 pub fn current_elevation() -> ElevationState {
     unsafe {
@@ -104,17 +104,17 @@ pub fn has_elevation_attempted_marker() -> bool {
 }
 
 /// Spawns an identical instance of the current executable using `ShellExecuteExW`
-/// configured with the `runas` verb, prompting the Windows OS to display a UAC 
+/// configured with the `runas` verb, prompting the Windows OS to display a UAC
 /// consent dialog to the user.
 ///
 /// Outcomes:
-/// - `Relaunched`: The newly elevated process is initializing. The invoking caller 
-///   must return from the `main` function to ensure the current (unelevated) process 
+/// - `Relaunched`: The newly elevated process is initializing. The invoking caller
+///   must return from the `main` function to ensure the current (unelevated) process
 ///   terminates gracefully.
-/// - `UserCancelled`: The user proactively dismissed the UAC dialog. The caller 
+/// - `UserCancelled`: The user proactively dismissed the UAC dialog. The caller
 ///   should proceed in a degraded operational mode.
-/// - `PolicyBlocked(err)`: `ShellExecuteExW` encountered a distinct failure (e.g., 
-///   UAC is disabled via Group Policy, or the user is on a restricted standard account). 
+/// - `PolicyBlocked(err)`: `ShellExecuteExW` encountered a distinct failure (e.g.,
+///   UAC is disabled via Group Policy, or the user is on a restricted standard account).
 ///   The caller must also proceed in a degraded mode.
 pub fn attempt_self_relaunch_elevated() -> ElevationStartupDecision {
     let exe = match std::env::current_exe() {

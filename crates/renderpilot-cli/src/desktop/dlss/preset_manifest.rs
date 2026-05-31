@@ -129,7 +129,7 @@ impl std::error::Error for PresetManifestError {}
 
 /// Retrieves the static, compile-time bundled manifest corresponding to the specified `kind`.
 ///
-/// Upon initial access, the manifest is parsed and subsequently cached in memory 
+/// Upon initial access, the manifest is parsed and subsequently cached in memory
 /// for the entire duration of the application's lifecycle.
 pub fn bundled_manifest(kind: DlssDllKind) -> &'static DlssPresetManifest {
     match kind {
@@ -176,7 +176,7 @@ fn validate_manifest(manifest: &DlssPresetManifest) -> Result<(), PresetManifest
 // -----------------------------------------------------------------------------
 
 /// Retrieves the `version_support` entry applicable to the specified `version`.
-/// Returns `None` if no entry satisfies the condition `entry_version <= version` 
+/// Returns `None` if no entry satisfies the condition `entry_version <= version`
 /// (meaning the provided DLL version is older than any documented entry).
 ///
 /// Version comparison relies on [`DlssVersion`]'s component-wise lexicographical

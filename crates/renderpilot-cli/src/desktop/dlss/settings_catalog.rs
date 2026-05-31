@@ -37,7 +37,9 @@ fn load_catalog_from_disk_or_fallback(file_name: &str, bundled_json: &str) -> Ve
         .ok()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|json| parse_catalog(&json).ok())
-        .unwrap_or_else(|| parse_catalog(bundled_json).expect("bundled dlss settings catalog valid"))
+        .unwrap_or_else(|| {
+            parse_catalog(bundled_json).expect("bundled dlss settings catalog valid")
+        })
 }
 
 // -----------------------------------------------------------------------------
@@ -163,7 +165,10 @@ impl fmt::Display for CatalogError {
                 write!(f, "setting `{key}` has duplicate dword {dword}")
             }
             Self::DefaultNotInValues { key, dword } => {
-                write!(f, "setting `{key}` default dword {dword} is not one of its values")
+                write!(
+                    f,
+                    "setting `{key}` default dword {dword} is not one of its values"
+                )
             }
         }
     }
@@ -179,7 +184,9 @@ fn parse_catalog(json: &str) -> Result<Vec<DlssSettingDef>, CatalogError> {
     let catalog: DlssSettingsCatalog =
         serde_json::from_str(json).map_err(|e| CatalogError::InvalidJson(e.to_string()))?;
     if catalog.schema_version != 1 {
-        return Err(CatalogError::UnsupportedSchemaVersion(catalog.schema_version));
+        return Err(CatalogError::UnsupportedSchemaVersion(
+            catalog.schema_version,
+        ));
     }
 
     let mut seen_keys = std::collections::HashSet::new();
@@ -206,7 +213,11 @@ fn parse_catalog(json: &str) -> Result<Vec<DlssSettingDef>, CatalogError> {
                 });
             }
         }
-        if !def.values.iter().any(|value| value.dword == def.default_dword) {
+        if !def
+            .values
+            .iter()
+            .any(|value| value.dword == def.default_dword)
+        {
             return Err(CatalogError::DefaultNotInValues {
                 key: def.key.clone(),
                 dword: def.default_dword,
@@ -435,7 +446,10 @@ mod tests {
             {"key":"x","label":"X","family":"sr","nvapi_id":"0x1","values":[{"label":"A","wire":"a","dword":"0x0"}]},
             {"key":"x","label":"Y","family":"sr","nvapi_id":"0x2","values":[{"label":"B","wire":"b","dword":"0x0"}]}
         ]}"#;
-        assert!(matches!(parse_catalog(bad), Err(CatalogError::DuplicateKey(_))));
+        assert!(matches!(
+            parse_catalog(bad),
+            Err(CatalogError::DuplicateKey(_))
+        ));
     }
 
     #[test]

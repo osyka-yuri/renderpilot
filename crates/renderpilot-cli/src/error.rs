@@ -8,7 +8,7 @@ use crate::output::HELP_HINT;
 pub const GENERAL_FAILURE_EXIT_CODE: u8 = 1;
 pub const USAGE_FAILURE_EXIT_CODE: u8 = 2;
 
-/// Represents an enumerated collection of failure states encountered during CLI argument 
+/// Represents an enumerated collection of failure states encountered during CLI argument
 /// parsing, command orchestration, or execution runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliError {
@@ -61,10 +61,10 @@ pub enum CliError {
     CoverNotFound,
     /// Local filesystem error while reading or writing cover files.
     CoverIo(String),
-    /// Denotes a failure scenario where an NVAPI write operation was attempted, but the 
-    /// executing process lacked the requisite administrator privileges. This variant is 
-    /// intentionally distinct from `CommandFailed` to enable the desktop frontend to reliably 
-    /// intercept the error and present a targeted "Relaunch as administrator" remediation flow, 
+    /// Denotes a failure scenario where an NVAPI write operation was attempted, but the
+    /// executing process lacked the requisite administrator privileges. This variant is
+    /// intentionally distinct from `CommandFailed` to enable the desktop frontend to reliably
+    /// intercept the error and present a targeted "Relaunch as administrator" remediation flow,
     /// avoiding ambiguous generic error states.
     NvapiRequiresElevation,
 }

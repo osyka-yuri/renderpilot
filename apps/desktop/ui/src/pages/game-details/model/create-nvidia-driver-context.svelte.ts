@@ -42,6 +42,15 @@ function isSessionWarning(warning: string): boolean {
   return SESSION_WARNING_MARKERS.some((marker) => warning.includes(marker));
 }
 
+function distinct(values: string[]): string[] {
+  const result: string[] = [];
+  for (const value of values) {
+    if (!result.includes(value)) {
+      result.push(value);
+    }
+  }
+  return result;
+}
 
 export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverContextOptions) {
   // ── reactive state ───────────────────────────────────────────────
@@ -68,7 +77,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
 
   const profileWarnings = $derived.by((): string[] =>
-    [...new Set(states.flatMap((s) => s.warnings).filter(isSessionWarning))],
+    distinct(states.flatMap((s) => s.warnings).filter(isSessionWarning)),
   );
 
   // ── per-family selectors ─────────────────────────────────────────
@@ -78,7 +87,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
 
   function familyWarnings(family: SettingFamily): string[] {
     const all = settingsForFamily(family).flatMap((s) => s.warnings);
-    return [...new Set(all.filter((warning) => !isSessionWarning(warning)))];
+    return distinct(all.filter((warning) => !isSessionWarning(warning)));
   }
 
   function dllInfoForFamily(family: SettingFamily): DllInfoDto | null {
@@ -153,9 +162,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
     if (!gameId || !ensureElevated('change this NVIDIA setting')) return;
-    await runWrite(key, 'Could not change setting', () =>
-      setNvapiSettingValue(gameId, key, wire),
-    );
+    await runWrite(key, 'Could not change setting', () => setNvapiSettingValue(gameId, key, wire));
   }
 
   async function revert(

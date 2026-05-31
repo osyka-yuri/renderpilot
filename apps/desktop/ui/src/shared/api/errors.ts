@@ -61,7 +61,7 @@ export function describeCommandError(error: unknown): string {
  * Extracts a concise error description, explicitly omitting any appended suggested-action suffixes.
  * This format is optimal for space-constrained UI elements such as compact banners or inline validation hints.
  *
- * For scenarios requiring comprehensive user context—including actionable remediation steps—utilize 
+ * For scenarios requiring comprehensive user context—including actionable remediation steps—utilize
  * {@link describeCommandError} instead.
  */
 export function describeCommandErrorBrief(error: unknown): string {
@@ -71,9 +71,9 @@ export function describeCommandErrorBrief(error: unknown): string {
 /**
  * Synthesizes the most actionable, single-line technical description of a given command error.
  *
- * The resolution strategy prioritizes `debugDetails` (which surfaces the exact backend failure 
- * reason, exclusively available in development builds) before gracefully falling back to `details` 
- * (the generic, localized text guaranteed to be present). This is highly recommended for error 
+ * The resolution strategy prioritizes `debugDetails` (which surfaces the exact backend failure
+ * reason, exclusively available in development builds) before gracefully falling back to `details`
+ * (the generic, localized text guaranteed to be present). This is highly recommended for error
  * toasts or diagnostic logs where actionable clarity is required over generic "operation failed" messaging.
  */
 export function describeCommandErrorTechnical(error: unknown): string {

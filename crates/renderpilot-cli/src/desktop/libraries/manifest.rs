@@ -30,7 +30,8 @@ pub(super) async fn fetch_manifest() -> JsonResult {
 
 async fn download_and_save_preset(url: &str) -> Result<(), CliError> {
     let client = http::http_client();
-    let bytes = http::download_limited_bytes(client, url, MAX_MANIFEST_SIZE_BYTES, "preset fetch").await?;
+    let bytes =
+        http::download_limited_bytes(client, url, MAX_MANIFEST_SIZE_BYTES, "preset fetch").await?;
     if let Some(file_name) = url.split('/').next_back() {
         let path = storage::local_preset_manifest_path(file_name)?;
         storage::write_file_atomically(&path, &bytes)?;

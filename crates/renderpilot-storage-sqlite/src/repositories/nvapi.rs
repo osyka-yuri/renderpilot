@@ -30,9 +30,9 @@ pub struct NvapiExecutableOverrideRow {
 // -----------------------------------------------------------------------------
 
 /// Represents a single immutable row within the `nvapi_setting_baselines` table.
-/// This acts as a historical snapshot recorded by RenderPilot immediately prior to 
-/// modifying a specific `(game, setting)` pair for the first time. To ensure 
-/// fidelity of the "revert to baseline" functionality, this snapshot is strictly 
+/// This acts as a historical snapshot recorded by RenderPilot immediately prior to
+/// modifying a specific `(game, setting)` pair for the first time. To ensure
+/// fidelity of the "revert to baseline" functionality, this snapshot is strictly
 /// preserved and never overwritten by subsequent modification attempts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NvapiSettingBaselineRow {
@@ -121,14 +121,14 @@ impl SqliteStorage {
             .map_err(|error| storage_context("could not delete nvapi executable override", error))
     }
 
-    /// Records an initial baseline snapshot exclusively if no preexisting record 
-    /// is found for the specified `(game_id, setting_key)` tuple. Yields `true` 
-    /// upon successfully inserting a new snapshot, or `false` if a baseline was 
+    /// Records an initial baseline snapshot exclusively if no preexisting record
+    /// is found for the specified `(game_id, setting_key)` tuple. Yields `true`
+    /// upon successfully inserting a new snapshot, or `false` if a baseline was
     /// already recorded.
     ///
-    /// This mechanism serves as the foundational pillar for the "revert to baseline" 
-    /// capability. Because the captured value strictly reflects the driver's state 
-    /// *before* any RenderPilot intervention, subsequent application-driven writes 
+    /// This mechanism serves as the foundational pillar for the "revert to baseline"
+    /// capability. Because the captured value strictly reflects the driver's state
+    /// *before* any RenderPilot intervention, subsequent application-driven writes
     /// will purposefully bypass this function, safeguarding the original baseline.
     pub fn capture_nvapi_baseline_if_missing(
         &self,
@@ -192,9 +192,9 @@ impl SqliteStorage {
             .map_err(|error| storage_context("could not read nvapi setting baseline", error))
     }
 
-    /// Erases any existing baseline snapshot associated with the `(game_id, setting_key)` 
-    /// tuple. This capability is primarily utilized within testing environments, as 
-    /// production workflows generally require the baseline to be durably persisted 
+    /// Erases any existing baseline snapshot associated with the `(game_id, setting_key)`
+    /// tuple. This capability is primarily utilized within testing environments, as
+    /// production workflows generally require the baseline to be durably persisted
     /// for the entire lifecycle of the game's registration.
     pub fn delete_nvapi_baseline(&self, game_id: &str, setting_key: &str) -> AppResult<()> {
         let connection = self.connection()?;

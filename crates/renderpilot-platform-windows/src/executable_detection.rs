@@ -1,15 +1,15 @@
 //! Orchestrates the heuristic detection and classification of game executables.
 //!
-//! The NVIDIA Driver Settings (DRS) architecture exclusively indexes application profiles by 
-//! executable basename. Consequently, RenderPilot must deterministically identify a "primary" 
-//! executable for each game installation to guarantee accurate profile resolution and writes. 
-//! This module surfaces a rigorously ranked list of candidates evaluated against exclusion filters 
-//! and positive heuristic signals (e.g., proximity to root, stem matching, binary payload size). 
-//! This enables the upstream orchestration layer to either autonomously select the optimal target 
+//! The NVIDIA Driver Settings (DRS) architecture exclusively indexes application profiles by
+//! executable basename. Consequently, RenderPilot must deterministically identify a "primary"
+//! executable for each game installation to guarantee accurate profile resolution and writes.
+//! This module surfaces a rigorously ranked list of candidates evaluated against exclusion filters
+//! and positive heuristic signals (e.g., proximity to root, stem matching, binary payload size).
+//! This enables the upstream orchestration layer to either autonomously select the optimal target
 //! or expose the ranked collection for manual user override.
 //!
-//! Detection execution is strictly bounded to a designated install directory and operates purely 
-//! via filesystem metadata—deliberately eschewing deep PE parsing. Version-specific PE introspection 
+//! Detection execution is strictly bounded to a designated install directory and operates purely
+//! via filesystem metadata—deliberately eschewing deep PE parsing. Version-specific PE introspection
 //! is structurally isolated within [`crate::dlss::version`].
 
 use std::path::{Path, PathBuf};
@@ -87,9 +87,9 @@ const NON_GAME_EXE_SUBSTRINGS: &[&str] = &[
 // Public types
 // -----------------------------------------------------------------------------
 
-/// Articulates the specific heuristic rationale for segregating a `.exe` from the pool of 
-/// primary game candidates. This classification is preserved alongside the candidate record, 
-/// enabling the frontend UI to transparently justify the rejection and facilitate manual 
+/// Articulates the specific heuristic rationale for segregating a `.exe` from the pool of
+/// primary game candidates. This classification is preserved alongside the candidate record,
+/// enabling the frontend UI to transparently justify the rejection and facilitate manual
 /// override workflows should the heuristic prove overly aggressive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RejectionReason {

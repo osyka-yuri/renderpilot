@@ -1,7 +1,7 @@
 //! Defines the definitive registry of stable localization keys and fallback English copy for the frontend UI.
 //!
-//! The defined localization keys constitute a strictly stable API contract between the Rust backend and the 
-//! TypeScript frontend. Conversely, the default English fallback strings are treated as implementation details 
+//! The defined localization keys constitute a strictly stable API contract between the Rust backend and the
+//! TypeScript frontend. Conversely, the default English fallback strings are treated as implementation details
 //! and may be refined without requiring corresponding frontend modifications.
 
 use std::fmt;

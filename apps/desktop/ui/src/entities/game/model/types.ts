@@ -2,10 +2,10 @@ import type { FilePath, Nullable } from '@shared/types';
 
 /**
  * Encapsulates the summary of a historical operation, natively embedded within `GameDetails`.
- * 
- * Structurally, this mirrors `OperationSummary` from the `entities/operation` slice 
- * (representing an identical underlying Rust type). It is deliberately duplicated here 
- * to operate within a distinct Tauri command context and strictly prevent architectural 
+ *
+ * Structurally, this mirrors `OperationSummary` from the `entities/operation` slice
+ * (representing an identical underlying Rust type). It is deliberately duplicated here
+ * to operate within a distinct Tauri command context and strictly prevent architectural
  * cross-slice dependencies between entities.
  */
 export type GameOperationSummary = {
@@ -68,10 +68,10 @@ export type GameSummary = {
   operation_count: number;
   last_operation_status?: Nullable<string>;
 
-  /** 
-   * Populated with a Unix timestamp (milliseconds) exclusively when local cover artwork 
-   * is successfully cached for this game. This value actively drives cache-busting for 
-   * custom-protocol artwork URLs. 
+  /**
+   * Populated with a Unix timestamp (milliseconds) exclusively when local cover artwork
+   * is successfully cached for this game. This value actively drives cache-busting for
+   * custom-protocol artwork URLs.
    */
   cover_updated_at_ms?: Nullable<number>;
 };
@@ -160,9 +160,9 @@ export type ScanError = {
 
 export type AutoScanResponse = {
   games: GameDetails[];
-  /** 
-   * Explicitly omitted during serialization by the Rust backend when the collection is empty. 
-   * Clients must robustly handle absence by substituting an empty array `[]`. 
+  /**
+   * Explicitly omitted during serialization by the Rust backend when the collection is empty.
+   * Clients must robustly handle absence by substituting an empty array `[]`.
    */
   errors?: ScanError[];
 };
