@@ -7,3 +7,4 @@
 //! source of truth at runtime.
 
 pub(crate) mod preset_manifest;
+pub(crate) mod settings_catalog;

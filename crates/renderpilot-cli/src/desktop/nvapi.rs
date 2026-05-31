@@ -1,24 +1,9 @@
-//! The desktop-layer facade responsible for orchestrating NVAPI operations and DLSS preset management.
+//! Desktop-layer facade for NVAPI and DLSS preset operations.
 //!
-//! These entry points serve as handlers for asynchronous Tauri commands. A typical 
-//! execution flow for these handlers involves:
-//!
-//!   1. Resolving the target game profile from the local SQLite catalog.
-//!   2. Constructing a `SettingContext` exclusively once per request, ensuring that 
-//!      costly operations such as DLSS DLL detection and PE (Portable Executable) 
-//!      parsing are not duplicated.
-//!   3. Determining the effective executable by evaluating explicit user overrides, 
-//!      falling back to auto-detected candidates, or yielding an error.
-//!   4. Initializing an NVAPI session (if the driver is involved), performing the 
-//!      requested read/write/delete operations on the setting, and committing the changes.
-//!   5. Capturing a pristine baseline snapshot prior to the first write operation, 
-//!      guaranteeing the availability of a "Revert to baseline" feature.
-//!   6. Producing a comprehensive `SettingStateResponse` that describes the post-operation 
-//!      state, including predefined driver values, the baseline snapshot, valid configuration 
-//!      options, and any diagnostic warnings.
-//!
-//! Any encountered failures are mapped to `CliError::CommandFailed` containing 
-//! actionable, human-readable context, which the frontend UI subsequently displays.
+//! Each public function is a thin handler for a Tauri command: it resolves the game,
+//! builds a `SettingContext` once (DLL detection + exe resolution), opens a DRS session
+//! as needed, and returns a `SettingStateResponse`. Errors map to `CliError::CommandFailed`
+//! with human-readable context for the frontend.
 
 mod dto;
 mod ops;
@@ -36,7 +21,10 @@ use crate::{
 use self::dto::{
     executable_candidate_dto, setting_descriptor_dto, ExecutableCandidateDto, SettingDescriptorDto,
 };
-use self::ops::{read_setting_state, validate_value_supported, write_setting_value, WriteOp};
+use self::ops::{
+    read_all_setting_states, read_setting_state, validate_value_supported, write_setting_value,
+    WriteOp,
+};
 use self::registry::{lookup_setting, supported_settings};
 use self::resolve::{
     build_setting_context_with_storage, collect_executable_candidates, load_game,
@@ -48,13 +36,25 @@ use self::resolve::{
 // ---------------------------------------------------------------------------
 
 /// Retrieves a comprehensive list of all NVAPI settings currently supported and recognized by RenderPilot.
-pub fn list_nvapi_supported_settings(game_id: String) -> JsonResult {
-    let _ = game_id;
+pub fn list_nvapi_supported_settings(_game_id: String) -> JsonResult {
     let dtos: Vec<SettingDescriptorDto> = supported_settings()
         .iter()
         .map(|setting| setting_descriptor_dto(setting.as_ref()))
         .collect();
     to_json(dtos)
+}
+
+/// Reads the live state of **every** supported NVAPI setting for `game_id`
+/// through a single DRS session. Backs the grouped "DLSS driver settings" UI;
+/// far cheaper than calling [`get_nvapi_setting_state`] once per setting.
+pub fn list_nvapi_setting_states(game_id: String) -> JsonResult {
+    let storage = open_catalog_storage()?;
+    let game = load_game_with_storage(&storage, &game_id)?;
+    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
+    let ctx = build_setting_context_with_storage(&storage, &install_dir, &game_id)?;
+    let settings = supported_settings();
+    let responses = read_all_setting_states(&game_id, &settings, &ctx)?;
+    to_json(responses)
 }
 
 /// Scans the game's installation directory and returns a comprehensive list of all detected executables.
@@ -187,11 +187,10 @@ pub fn revert_nvapi_setting(game_id: String, setting_key: String, target: String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use renderpilot_nvapi::dlss::DlssRenderPresetSetting;
 
     #[test]
     fn setting_registry_finds_dlss_render_preset() {
-        let s = lookup_setting(DlssRenderPresetSetting::KEY).expect("known setting should resolve");
+        let s = lookup_setting("dlss_sr_render_preset").expect("known setting should resolve");
         assert_eq!(s.key(), "dlss_sr_render_preset");
         assert_eq!(s.dll_kind(), Some(renderpilot_nvapi::DlssDllKind::Sr));
     }
@@ -205,6 +204,20 @@ mod tests {
     fn supported_settings_lists_dlss_render_preset_first() {
         let settings = supported_settings();
         assert!(!settings.is_empty());
-        assert_eq!(settings[0].key(), DlssRenderPresetSetting::KEY);
+        assert_eq!(settings[0].key(), "dlss_sr_render_preset");
+    }
+
+    #[test]
+    fn supported_settings_covers_new_dlss_family() {
+        let keys: Vec<&str> = supported_settings().iter().map(|s| s.key()).collect();
+        for key in [
+            "dlss_sr_quality_level",
+            "dlss_sr_scaling_ratio",
+            "dlss_fg_render_preset",
+            "dlss_mfg_fixed_count",
+            "dlss_rr_quality_level",
+        ] {
+            assert!(keys.contains(&key), "missing {key}");
+        }
     }
 }

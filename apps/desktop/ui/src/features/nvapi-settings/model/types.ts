@@ -11,7 +11,11 @@ export type SettingDescriptor = {
   setting_label: string;
   value_type: string;
   dll_kind: string | null;
+  family: string | null;
 };
+
+/** Grouping family of a DLSS setting, used for UI sectioning. */
+export type SettingFamily = 'sr' | 'fg' | 'rr';
 
 export type ExecutableCandidate = {
   relative_path: string;
@@ -56,6 +60,10 @@ export type SettingStateResponse = {
   setting_key: string;
   setting_label: string;
   value_type: string;
+  family: string | null;
+  category: string | null;
+  description: string | null;
+  min_driver: string | null;
   current: ValueDescriptor;
   predefined: ValueDescriptor | null;
   baseline: BaselineDto | null;

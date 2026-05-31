@@ -8,6 +8,7 @@ pub struct SettingDescriptorDto {
     pub setting_label: String,
     pub value_type: String,
     pub dll_kind: Option<String>,
+    pub family: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -59,6 +60,14 @@ pub struct SettingStateResponse {
     pub setting_key: String,
     pub setting_label: String,
     pub value_type: String,
+    /// Grouping family for the UI: `"sr"` / `"fg"` / `"rr"` (or `None`).
+    pub family: Option<String>,
+    /// Human-readable family label derived from `family` (display only).
+    pub category: Option<String>,
+    /// Optional help text shown beside the control.
+    pub description: Option<String>,
+    /// Optional minimum driver-version hint (display only; not enforced).
+    pub min_driver: Option<String>,
     pub current: ValueDescriptorDto,
     pub predefined: Option<ValueDescriptorDto>,
     pub baseline: Option<BaselineDto>,
@@ -78,7 +87,19 @@ pub fn setting_descriptor_dto(setting: &dyn NvapiSetting) -> SettingDescriptorDt
         setting_label: setting.label().to_owned(),
         value_type: value_type_str(setting.value_type()).to_owned(),
         dll_kind: setting.dll_kind().map(|k| k.manifest_tag().to_owned()),
+        family: setting.family().map(str::to_owned),
     }
+}
+
+/// Maps a grouping `family` tag to a human-readable category label for the UI.
+pub fn category_for_family(family: &str) -> Option<String> {
+    let label = match family {
+        "sr" => "DLSS Super Resolution",
+        "fg" => "DLSS Frame Generation",
+        "rr" => "DLSS Ray Reconstruction",
+        _ => return None,
+    };
+    Some(label.to_owned())
 }
 
 #[cfg(windows)]

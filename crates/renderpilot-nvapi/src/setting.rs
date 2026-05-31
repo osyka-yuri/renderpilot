@@ -1,15 +1,8 @@
-//! Defines the foundational architectural traits and polymorphic interfaces for NVIDIA API (NVAPI) configurations.
+//! Core [`NvapiSetting`] trait and supporting types shared across crates.
 //!
-//! Concrete setting definitions (e.g., DLSS Render Presets, DLAA toggles, Frame Generation) inherently implement 
-//! the core [`NvapiSetting`] trait. The upstream CLI and application layers interoperate exclusively through 
-//! this polymorphic abstraction, ensuring that the integration of novel settings necessitates solely a localized 
-//! trait implementation and its corresponding frontend UI control representation.
-//!
-//! It is critical to note that the dynamic filtering of supported configuration variants against the DLSS preset 
-//! manifest is strictly **NOT** executed within this crate boundary. That authority is delegated to the `renderpilot-libraries` 
-//! sub-system and enforced by the central orchestration layer. This trait architecture restricts itself to merely 
-//! declaring structural DLL family dependencies (via [`NvapiSetting::dll_kind`]), enabling the orchestrator to 
-//! deterministically resolve the appropriate manifest mapping.
+//! Preset-manifest filtering (which values a given DLSS DLL version supports) is **not** done
+//! here — it lives in `renderpilot-cli`. This crate only declares the DLL family dependency via
+//! [`NvapiSetting::dll_kind`] so the orchestration layer can resolve the right manifest.
 
 use std::{collections::HashMap, fmt, path::PathBuf};
 
@@ -228,6 +221,36 @@ pub trait NvapiSetting: Send + Sync {
     /// orchestration layer needs to render `current.label` /
     /// `predefined.label` / `baseline.label` in a response).
     fn label_for_dword(&self, dword: u32) -> Option<String>;
+
+    /// DWORD shown as the current value when the setting is **absent** from the
+    /// driver profile (no override). Most settings use `0`, but some — e.g.
+    /// DLSS Forced Quality Level, whose `0` means "Performance" — must declare
+    /// the dword that actually represents "not overridden" (its "N/A" entry),
+    /// so reverting to the driver default does not look like a real value.
+    fn default_dword(&self) -> u32 {
+        0
+    }
+
+    /// Optional grouping family used purely for UI presentation, e.g.
+    /// `"sr"` / `"fg"` / `"rr"`. Distinct from [`NvapiSetting::dll_kind`]:
+    /// `family` groups *every* setting of a family in the UI, whereas
+    /// `dll_kind` is set only where the DLL version constrains valid values.
+    /// Defaults to `None` for settings that do not belong to a displayed group.
+    fn family(&self) -> Option<&str> {
+        None
+    }
+
+    /// Optional human-readable help text shown beside the control.
+    fn description(&self) -> Option<&str> {
+        None
+    }
+
+    /// Optional minimum driver-version hint (e.g. `"595.97"`). Display only —
+    /// not enforced, since RenderPilot does not currently read the driver
+    /// version. Defaults to `None`.
+    fn min_driver(&self) -> Option<&str> {
+        None
+    }
 }
 
 // -----------------------------------------------------------------------------

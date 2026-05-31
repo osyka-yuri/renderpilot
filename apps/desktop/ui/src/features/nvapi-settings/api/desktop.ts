@@ -41,6 +41,17 @@ export async function getNvapiSettingState(
   });
 }
 
+/**
+ * Reads the live state of every supported NVAPI setting for a game in one
+ * backend call (a single DRS session), backing the grouped DLSS driver
+ * settings card.
+ */
+export async function listNvapiSettingStates(gameId: string): Promise<SettingStateResponse[]> {
+  return invokeDesktop<SettingStateResponse[]>('list_nvapi_setting_states', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
 export async function setNvapiSettingValue(
   gameId: string,
   settingKey: string,

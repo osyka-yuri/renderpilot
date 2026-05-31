@@ -1,8 +1,7 @@
-//! Exposes an expansive suite of Tauri commands directly invocable from the desktop frontend.
+//! Tauri command handlers for the desktop frontend.
 //!
-//! To prevent thread starvation and maintain UI responsiveness, any potentially blocking catalog 
-//! or filesystem operations are strictly delegated to Tauri's dedicated blocking thread pool 
-//! utilizing the `run_desktop_command` utility.
+//! Blocking catalog / filesystem work is dispatched via `run_desktop_command` to avoid
+//! stalling the async runtime.
 
 mod error;
 mod query_game_cards;
@@ -183,6 +182,12 @@ pub async fn list_nvapi_supported_settings(game_id: String) -> JsonCommandResult
 }
 
 #[tauri::command]
+pub async fn list_nvapi_setting_states(game_id: String) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    run_desktop_command(move || desktop::list_nvapi_setting_states(game_id)).await
+}
+
+#[tauri::command]
 pub async fn list_game_executable_candidates(game_id: String) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     run_desktop_command(move || desktop::list_game_executable_candidates(game_id)).await
@@ -235,10 +240,8 @@ pub async fn revert_nvapi_setting(
     run_desktop_command(move || desktop::revert_nvapi_setting(game_id, setting_key, target)).await
 }
 
-/// Retrieves the initialization snapshot securely computed during process instantiation.
-///
-/// This operation executes synchronously. The `AppInitializationState` constitutes lightweight `Copy` 
-/// semantics already resident within Tauri's managed state, guaranteeing zero I/O latency.
+/// Returns the `AppInitializationState` snapshot computed at startup.
+/// Synchronous: the state is already in managed memory, no I/O.
 #[tauri::command]
 pub fn get_app_initialization_state(
     state: tauri::State<'_, crate::AppInitializationState>,
@@ -246,11 +249,9 @@ pub fn get_app_initialization_state(
     *state.inner()
 }
 
-/// Orchestrates the spawning of an elevated RenderPilot instance utilizing `ShellExecuteW(verb="runas")`.
-/// Upon successful elevation acquisition, the current unelevated process is systematically terminated. 
-/// Conversely, should the user decline the UAC prompt—or if system policies restrict elevation—this command 
-/// gracefully yields a `CommandFailed` error payload. The frontend UI subsequently intercepts this to display 
-/// a non-fatal diagnostic toast without interrupting the application's lifecycle.
+/// Relaunches the app elevated via `ShellExecuteW(verb="runas")` and exits this process.
+/// Returns `CommandFailed` if the user declines the UAC prompt or policy blocks elevation;
+/// the frontend shows a non-fatal toast in that case.
 #[tauri::command]
 pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
     #[cfg(windows)]

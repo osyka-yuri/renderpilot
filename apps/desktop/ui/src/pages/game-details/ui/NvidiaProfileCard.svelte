@@ -16,11 +16,11 @@
     SelectTrigger,
   } from '@shared/ui';
   import { fileNameFromPath } from '@shared/path';
-  import type { NvapiContext } from '../model/create-nvapi-context.svelte';
+  import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
 
   type Props = {
     gameId: string;
-    nvapi: NvapiContext;
+    nvapi: NvidiaDriverContext;
   };
 
   const { gameId, nvapi }: Props = $props();
@@ -41,7 +41,7 @@
   <CardHeader class="pb-2">
     <CardTitle>NVIDIA driver profile</CardTitle>
     <CardDescription>
-      Applies NVAPI overrides (DLSS preset, etc.) to the selected executable.
+      The driver overrides below are written to this executable's NVIDIA profile.
     </CardDescription>
   </CardHeader>
 
@@ -50,7 +50,7 @@
       <ItemContent>
         <ItemTitle>Profile target</ItemTitle>
         <ItemDescription>
-          {#if !nvapi.hasSnapshot && nvapi.busy}
+          {#if !nvapi.hasStates && nvapi.busy}
             Loading driver state…
           {:else if nvapi.effectiveExeSource === 'override'}
             Manually pinned to this executable.
@@ -67,7 +67,7 @@
             {#if nvapi.effectiveExe}
               <span class="truncate">{fileNameFromPath(nvapi.effectiveExe)}</span>
             {:else}
-              <span class="text-muted-foreground">No exe</span>
+              <span class="text-muted-foreground">No executable</span>
             {/if}
           </SelectTrigger>
           <SelectContent>
@@ -101,20 +101,11 @@
       </ItemActions>
     </Item>
 
-    {#if nvapi.hasSnapshot && !nvapi.hasProfile && nvapi.effectiveExe}
+    {#if nvapi.hasStates && !nvapi.hasProfile && nvapi.effectiveExe}
       <p class="px-4 text-xs text-muted-foreground">
         NVIDIA has no profile for <code class="font-mono"
           >{fileNameFromPath(nvapi.effectiveExe)}</code
         > yet. Launch the game once, then come back.
-      </p>
-    {/if}
-
-    {#if !nvapi.canWrite}
-      <p
-        class="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700"
-      >
-        DLSS preset overrides are disabled — administrator privileges required. Use the banner at
-        the top of the window to relaunch.
       </p>
     {/if}
 
@@ -126,7 +117,7 @@
       </div>
     {/if}
 
-    {#each nvapi.warnings as warning (warning)}
+    {#each nvapi.profileWarnings as warning (warning)}
       <div
         class="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700"
       >

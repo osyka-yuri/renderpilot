@@ -17,22 +17,31 @@
     CardTitle,
     ScrollArea,
   } from '@shared/ui';
+  import type { SettingFamily } from '@features/nvapi-settings';
   import type { SwapHandler, RollbackHandler } from '../model/create-game-details-page-model';
-  import { createNvapiContext } from '../model/create-nvapi-context.svelte';
+  import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
-  import DlssSrComponentCard from './DlssSrComponentCard.svelte';
+  import DlssComponentCard from './DlssComponentCard.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
 
-  const DLSS_SR_TECHNOLOGY = 'dlss_super_resolution';
   const NVIDIA_STREAMLINE_TECHNOLOGY = 'nvidia_streamline';
+
+  // Each DLSS DLL family is its own card (physical DLL swap + NVAPI driver
+  // overrides), exactly like Super Resolution — keyed off the component's
+  // technology. Streamline (sl.*.dll) is unrelated and keeps its own card.
+  const DLSS_FAMILY_CARDS: Record<string, { family: SettingFamily; title: string }> = {
+    dlss_super_resolution: { family: 'sr', title: 'NVIDIA DLSS Super Resolution' },
+    dlss_frame_generation: { family: 'fg', title: 'NVIDIA DLSS Frame Generation' },
+    dlss_ray_reconstruction: { family: 'rr', title: 'NVIDIA DLSS Ray Reconstruction' },
+  };
 
   type Props = {
     details?: GameDetails | null;
     busy?: boolean;
     /**
      * Whether the process is running elevated; controls NVAPI write
-     * affordances (preset Select / revert buttons) inside DLSS cards.
+     * affordances (setting Select / revert buttons) inside the DLSS cards.
      */
     isElevated?: boolean;
     onSwap?: SwapHandler;
@@ -81,30 +90,34 @@
   const gameId = $derived(details?.game.identity.id ?? null);
 
   /**
-   * Fingerprint of the currently installed DLSS SR DLL. Changes when the user
-   * swaps the DLL (the new file has a different sha256 / version), which we
-   * read inside the NVAPI reload effect so the DLL info badge and the
-   * supported-preset list stay in sync without requiring a page revisit.
+   * Fingerprint of all installed DLSS DLLs. Changes when the user swaps any of
+   * them (the new file has a different sha256 / version), which we read inside
+   * the NVAPI reload effect so the DLL info badge and the supported-value lists
+   * stay in sync without requiring a page revisit.
    */
-  const dlssSrFingerprint = $derived.by(() => {
+  const dlssFingerprint = $derived.by(() => {
     if (!details) return null;
-    const sr = details.components.find((c) => c.technology === DLSS_SR_TECHNOLOGY);
-    const file = sr?.files[0];
-    return file?.sha256 ?? file?.version ?? null;
+    return details.components
+      .filter((c) => c.technology in DLSS_FAMILY_CARDS)
+      .map((c) => c.files[0]?.sha256 ?? c.files[0]?.version ?? '')
+      .join('|');
   });
 
-  // ── NVAPI shared context, owned by the page ──────────────────────
-  const nvapi = createNvapiContext({ isElevated: () => isElevated });
+  // ── Single NVIDIA driver context, owned by the page ──────────────
+  // Owns every DLSS setting's live state plus the profile executable
+  // selection. One reload covers both, so changing the executable refreshes
+  // every family card's values.
+  const nvidia = createNvidiaDriverContext({ isElevated: () => isElevated });
 
   $effect(() => {
     // Reactive reads inside the effect determine when it re-runs:
     //   - gameId / hasNvidiaTab: standard load/teardown
-    //   - dlssSrFingerprint:    re-load after DLL swap so the badge updates
-    void dlssSrFingerprint;
+    //   - dlssFingerprint:       re-load after any DLSS DLL swap
+    void dlssFingerprint;
     if (hasNvidiaTab && gameId) {
-      void nvapi.reload(gameId);
+      void nvidia.reload(gameId);
     } else {
-      nvapi.clear();
+      nvidia.clear();
     }
   });
 
@@ -112,8 +125,10 @@
     return details?.candidate_groups.find((g) => g.component_id === componentId) ?? null;
   }
 
-  function isDlssSr(component: GameGraphicsComponent): boolean {
-    return component.technology === DLSS_SR_TECHNOLOGY;
+  function dlssFamilyCard(
+    component: GameGraphicsComponent,
+  ): { family: SettingFamily; title: string } | null {
+    return DLSS_FAMILY_CARDS[component.technology] ?? null;
   }
 
   function isStreamline(component: GameGraphicsComponent): boolean {
@@ -154,7 +169,7 @@
           <TabsContent value={tab.key} class="grid gap-3">
             {#if tab.key === 'nvidia'}
               {#if gameId}
-                <NvidiaProfileCard {gameId} {nvapi} />
+                <NvidiaProfileCard {gameId} nvapi={nvidia} />
               {/if}
 
               {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
@@ -162,12 +177,15 @@
 
               {#each nonStreamline as component (component.id)}
                 {@const group = getCandidateGroup(component.id)}
-                {#if isDlssSr(component) && gameId}
-                  <DlssSrComponentCard
+                {@const dlssCard = dlssFamilyCard(component)}
+                {#if dlssCard && gameId}
+                  <DlssComponentCard
                     {gameId}
                     {component}
                     {group}
-                    {nvapi}
+                    family={dlssCard.family}
+                    title={dlssCard.title}
+                    {nvidia}
                     {busy}
                     {onSwap}
                     {onRollback}

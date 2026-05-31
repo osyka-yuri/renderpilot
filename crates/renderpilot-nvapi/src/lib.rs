@@ -5,13 +5,11 @@
 //! the library gracefully degrades on non-NVIDIA systems.
 
 mod api;
-pub mod dlss;
 mod error;
 mod ffi;
 pub mod setting;
 
 pub use api::{DrsSession, DwordSettingState, Nvapi, Profile};
-pub use dlss::{DlssRenderPreset, DlssRenderPresetSetting};
 pub use error::{NvapiError, NVAPI_SETTING_NOT_FOUND};
 pub use setting::{
     BaselineSnapshot, DllInfo, DlssDllKind, DlssVersion, NvapiSetting, NvapiValueOption,

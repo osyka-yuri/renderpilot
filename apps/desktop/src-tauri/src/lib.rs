@@ -263,6 +263,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::get_library_states,
         // NVAPI / DLSS presets
         commands::list_nvapi_supported_settings,
+        commands::list_nvapi_setting_states,
         commands::list_game_executable_candidates,
         commands::set_game_executable_override,
         commands::clear_game_executable_override,

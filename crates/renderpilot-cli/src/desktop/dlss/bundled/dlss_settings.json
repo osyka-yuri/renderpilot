@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "settings": [
+    {
+      "key": "dlss_sr_render_preset",
+      "label": "Render Preset",
+      "family": "sr",
+      "nvapi_id": "0x10E41DF3",
+      "dll_kind": "sr",
+      "description": "Forces a specific DLSS Super Resolution preset across all quality levels. Some games also need 'Forced Model Preset Profile' set for this to take effect.",
+      "values": [
+        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        { "label": "Preset A (CNN)", "wire": "a", "dword": "0x00000001" },
+        { "label": "Preset B (CNN)", "wire": "b", "dword": "0x00000002" },
+        { "label": "Preset C (CNN)", "wire": "c", "dword": "0x00000003" },
+        { "label": "Preset D (CNN)", "wire": "d", "dword": "0x00000004" },
+        { "label": "Preset E (CNN)", "wire": "e", "dword": "0x00000005" },
+        { "label": "Preset F (CNN)", "wire": "f", "dword": "0x00000006" },
+        { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
+        { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
+        { "label": "Preset I (unused)", "wire": "i", "dword": "0x00000009" },
+        { "label": "Preset J (Transformer Gen 1)", "wire": "j", "dword": "0x0000000A" },
+        { "label": "Preset K (Transformer Gen 1)", "wire": "k", "dword": "0x0000000B" },
+        { "label": "Preset L (Transformer Gen 2)", "wire": "l", "dword": "0x0000000C" },
+        { "label": "Preset M (Transformer Gen 2)", "wire": "m", "dword": "0x0000000D" },
+        { "label": "Preset N (unused)", "wire": "n", "dword": "0x0000000E" },
+        { "label": "Preset O (unused)", "wire": "o", "dword": "0x0000000F" },
+        { "label": "Recommended", "wire": "recommended", "dword": "0x00FFFFFF" }
+      ]
+    },
+    {
+      "key": "dlss_sr_quality_level",
+      "label": "Forced Quality Level",
+      "family": "sr",
+      "nvapi_id": "0x10AFB768",
+      "description": "Forces a fixed DLSS Super Resolution quality level, overriding the in-game selection.",
+      "default": "0x00000003",
+      "values": [
+        { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
+        { "label": "Balanced", "wire": "balanced", "dword": "0x00000001" },
+        { "label": "Quality", "wire": "quality", "dword": "0x00000002" },
+        { "label": "N/A", "wire": "na", "dword": "0x00000003" },
+        { "label": "DLAA", "wire": "dlaa", "dword": "0x00000004" },
+        { "label": "Ultra Performance", "wire": "ultra_performance", "dword": "0x00000005" },
+        { "label": "Custom", "wire": "custom", "dword": "0x00000006" }
+      ]
+    },
+    {
+      "key": "dlss_sr_scaling_ratio",
+      "label": "Forced Scaling Ratio",
+      "family": "sr",
+      "nvapi_id": "0x10E41DF5",
+      "min_driver": "572.83",
+      "description": "Custom render-resolution ratio. Set 'Forced Quality Level' to Custom before choosing a value.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
+        { "label": "40%", "wire": "40", "dword": "0x00000028" },
+        { "label": "45%", "wire": "45", "dword": "0x0000002D" },
+        { "label": "50% (Performance)", "wire": "50", "dword": "0x00000032" },
+        { "label": "58% (Balanced)", "wire": "58", "dword": "0x0000003A" },
+        { "label": "60%", "wire": "60", "dword": "0x0000003C" },
+        { "label": "67% (Quality)", "wire": "67", "dword": "0x00000043" },
+        { "label": "70%", "wire": "70", "dword": "0x00000046" },
+        { "label": "77% (Ultra Quality)", "wire": "77", "dword": "0x0000004D" },
+        { "label": "85%", "wire": "85", "dword": "0x00000055" },
+        { "label": "90%", "wire": "90", "dword": "0x0000005A" },
+        { "label": "100% (DLAA)", "wire": "100", "dword": "0x00000064" }
+      ]
+    },
+    {
+      "key": "dlss_sr_dll_override",
+      "label": "Enable DLL Override",
+      "family": "sr",
+      "nvapi_id": "0x10E41E01",
+      "description": "Override DLSS-SR with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+      ]
+    },
+    {
+      "key": "dlss_sr_model_preset_profile",
+      "label": "Forced Model Preset Profile",
+      "family": "sr",
+      "nvapi_id": "0x00634291",
+      "description": "If 'Render Preset' has no effect, switching this can let the game apply a custom preset.",
+      "values": [
+        { "label": "N/A", "wire": "na", "dword": "0x00000000" },
+        { "label": "Recommended", "wire": "recommended", "dword": "0x00000001" },
+        { "label": "Custom", "wire": "custom", "dword": "0x00000002" }
+      ]
+    },
+    {
+      "key": "dlss_sr_override_dlaa",
+      "label": "Force DLAA (full-resolution)",
+      "family": "sr",
+      "nvapi_id": "0x10E41DF4",
+      "description": "Make every DLSS quality mode render at full resolution (DLAA).",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "On", "wire": "on", "dword": "0x00000001" }
+      ]
+    },
+    {
+      "key": "dlss_sr_override_perf_to_ultraperf",
+      "label": "Remap Performance to Ultra Performance",
+      "family": "sr",
+      "nvapi_id": "0x10AFB76C",
+      "description": "Remap the Performance quality mode to use the Ultra Performance path.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "On", "wire": "on", "dword": "0x00000001" }
+      ]
+    },
+    {
+      "key": "dlss_fg_render_preset",
+      "label": "Render Preset",
+      "family": "fg",
+      "nvapi_id": "0x10E41DF1",
+      "dll_kind": "fg",
+      "description": "Forces a specific DLSS Frame Generation preset.",
+      "values": [
+        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        { "label": "Preset A", "wire": "a", "dword": "0x00000001" },
+        { "label": "Preset B", "wire": "b", "dword": "0x00000002" },
+        { "label": "Preset C (unused)", "wire": "c", "dword": "0x00000003" },
+        { "label": "Preset D (unused)", "wire": "d", "dword": "0x00000004" },
+        { "label": "Preset E (unused)", "wire": "e", "dword": "0x00000005" },
+        { "label": "Preset F (unused)", "wire": "f", "dword": "0x00000006" },
+        { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
+        { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
+        { "label": "Preset I (unused)", "wire": "i", "dword": "0x00000009" },
+        { "label": "Preset J (unused)", "wire": "j", "dword": "0x0000000A" },
+        { "label": "Preset K (unused)", "wire": "k", "dword": "0x0000000B" },
+        { "label": "Preset L (unused)", "wire": "l", "dword": "0x0000000C" },
+        { "label": "Preset M (unused)", "wire": "m", "dword": "0x0000000D" },
+        { "label": "Preset N (unused)", "wire": "n", "dword": "0x0000000E" },
+        { "label": "Preset O (unused)", "wire": "o", "dword": "0x0000000F" },
+        { "label": "Recommended", "wire": "recommended", "dword": "0x00FFFFFE" }
+      ]
+    },
+    {
+      "key": "dlss_fg_mode",
+      "label": "Forced Mode",
+      "family": "fg",
+      "nvapi_id": "0x10308298",
+      "description": "Frame Generation mode. Dynamic requires driver 595.97 or newer for full functionality.",
+      "values": [
+        { "label": "N/A", "wire": "na", "dword": "0x00000000" },
+        { "label": "Fixed", "wire": "fixed", "dword": "0x00000002" },
+        { "label": "Dynamic", "wire": "dynamic", "dword": "0x00000004" }
+      ]
+    },
+    {
+      "key": "dlss_fg_dll_override",
+      "label": "Enable DLL Override",
+      "family": "fg",
+      "nvapi_id": "0x10E41E03",
+      "description": "Override DLSS-FG with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+      ]
+    },
+    {
+      "key": "dlss_mfg_fixed_count",
+      "label": "Multi-Frame Generation — Fixed Count",
+      "family": "fg",
+      "nvapi_id": "0x104D6667",
+      "description": "How many frames Frame Generation outputs per rendered frame (fixed cadence).",
+      "values": [
+        { "label": "N/A", "wire": "na", "dword": "0x00000000" },
+        { "label": "2x", "wire": "2x", "dword": "0x00000001" },
+        { "label": "3x", "wire": "3x", "dword": "0x00000002" },
+        { "label": "4x", "wire": "4x", "dword": "0x00000003" },
+        { "label": "5x", "wire": "5x", "dword": "0x00000004" },
+        { "label": "6x", "wire": "6x", "dword": "0x00000005" }
+      ]
+    },
+    {
+      "key": "dlss_mfg_dynamic_count",
+      "label": "Multi-Frame Generation — Dynamic Count",
+      "family": "fg",
+      "nvapi_id": "0x10562D0F",
+      "min_driver": "595.97",
+      "description": "Upper limit on generated frames when Frame Generation runs in Dynamic mode.",
+      "values": [
+        { "label": "N/A", "wire": "na", "dword": "0x00000000" },
+        { "label": "Up to 2x", "wire": "up_to_2x", "dword": "0x00000001" },
+        { "label": "Up to 3x", "wire": "up_to_3x", "dword": "0x00000002" },
+        { "label": "Up to 4x", "wire": "up_to_4x", "dword": "0x00000003" },
+        { "label": "Up to 5x", "wire": "up_to_5x", "dword": "0x00000004" },
+        { "label": "Up to 6x", "wire": "up_to_6x", "dword": "0x00000005" }
+      ]
+    },
+    {
+      "key": "dlss_mfg_target_frame_rate",
+      "label": "Multi-Frame Generation — Target Dynamic Frame Rate",
+      "family": "fg",
+      "nvapi_id": "0x10CF4125",
+      "min_driver": "595.97",
+      "description": "Target frame rate Dynamic Frame Generation aims to hold.",
+      "values": [
+        { "label": "N/A", "wire": "na", "dword": "0x00000000" },
+        { "label": "Max Refresh Rate", "wire": "max_refresh", "dword": "0x01000000" },
+        { "label": "60 FPS", "wire": "60", "dword": "0x0000003C" },
+        { "label": "72 FPS", "wire": "72", "dword": "0x00000048" },
+        { "label": "90 FPS", "wire": "90", "dword": "0x0000005A" },
+        { "label": "100 FPS", "wire": "100", "dword": "0x00000064" },
+        { "label": "120 FPS", "wire": "120", "dword": "0x00000078" },
+        { "label": "144 FPS", "wire": "144", "dword": "0x00000090" },
+        { "label": "165 FPS", "wire": "165", "dword": "0x000000A5" },
+        { "label": "175 FPS", "wire": "175", "dword": "0x000000AF" },
+        { "label": "180 FPS", "wire": "180", "dword": "0x000000B4" },
+        { "label": "200 FPS", "wire": "200", "dword": "0x000000C8" },
+        { "label": "240 FPS", "wire": "240", "dword": "0x000000F0" },
+        { "label": "280 FPS", "wire": "280", "dword": "0x00000118" },
+        { "label": "360 FPS", "wire": "360", "dword": "0x00000168" },
+        { "label": "480 FPS", "wire": "480", "dword": "0x000001E0" },
+        { "label": "500 FPS", "wire": "500", "dword": "0x000001F4" }
+      ]
+    },
+    {
+      "key": "dlss_rr_render_preset",
+      "label": "Render Preset",
+      "family": "rr",
+      "nvapi_id": "0x10E41DF7",
+      "dll_kind": "rr",
+      "description": "Forces a specific DLSS Ray Reconstruction preset.",
+      "values": [
+        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        { "label": "Preset A (CNN)", "wire": "a", "dword": "0x00000001" },
+        { "label": "Preset B (CNN)", "wire": "b", "dword": "0x00000002" },
+        { "label": "Preset C (CNN)", "wire": "c", "dword": "0x00000003" },
+        { "label": "Preset D (Transformer Gen 1)", "wire": "d", "dword": "0x00000004" },
+        { "label": "Preset E (Transformer Gen 1)", "wire": "e", "dword": "0x00000005" },
+        { "label": "Preset F (unused)", "wire": "f", "dword": "0x00000006" },
+        { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
+        { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
+        { "label": "Preset I (unused)", "wire": "i", "dword": "0x00000009" },
+        { "label": "Preset J (unused)", "wire": "j", "dword": "0x0000000A" },
+        { "label": "Preset K (unused)", "wire": "k", "dword": "0x0000000B" },
+        { "label": "Preset L (unused)", "wire": "l", "dword": "0x0000000C" },
+        { "label": "Preset M (unused)", "wire": "m", "dword": "0x0000000D" },
+        { "label": "Preset N (unused)", "wire": "n", "dword": "0x0000000E" },
+        { "label": "Preset O (unused)", "wire": "o", "dword": "0x0000000F" },
+        { "label": "Recommended", "wire": "recommended", "dword": "0x00FFFFFF" }
+      ]
+    },
+    {
+      "key": "dlss_rr_quality_level",
+      "label": "Forced Quality Level",
+      "family": "rr",
+      "nvapi_id": "0x10BD9423",
+      "description": "Forces a fixed DLSS Ray Reconstruction quality level, overriding the in-game selection.",
+      "default": "0x00000003",
+      "values": [
+        { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
+        { "label": "Balanced", "wire": "balanced", "dword": "0x00000001" },
+        { "label": "Quality", "wire": "quality", "dword": "0x00000002" },
+        { "label": "N/A", "wire": "na", "dword": "0x00000003" },
+        { "label": "DLAA", "wire": "dlaa", "dword": "0x00000004" },
+        { "label": "Ultra Performance", "wire": "ultra_performance", "dword": "0x00000005" },
+        { "label": "Custom", "wire": "custom", "dword": "0x00000006" }
+      ]
+    },
+    {
+      "key": "dlss_rr_scaling_ratio",
+      "label": "Forced Scaling Ratio",
+      "family": "rr",
+      "nvapi_id": "0x10C7D4A2",
+      "min_driver": "572.83",
+      "description": "Custom render-resolution ratio. Set 'Forced Quality Level' to Custom before choosing a value.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
+        { "label": "40%", "wire": "40", "dword": "0x00000028" },
+        { "label": "45%", "wire": "45", "dword": "0x0000002D" },
+        { "label": "50% (Performance)", "wire": "50", "dword": "0x00000032" },
+        { "label": "58% (Balanced)", "wire": "58", "dword": "0x0000003A" },
+        { "label": "60%", "wire": "60", "dword": "0x0000003C" },
+        { "label": "67% (Quality)", "wire": "67", "dword": "0x00000043" },
+        { "label": "70%", "wire": "70", "dword": "0x00000046" },
+        { "label": "77% (Ultra Quality)", "wire": "77", "dword": "0x0000004D" },
+        { "label": "85%", "wire": "85", "dword": "0x00000055" },
+        { "label": "90%", "wire": "90", "dword": "0x0000005A" },
+        { "label": "100% (DLAA)", "wire": "100", "dword": "0x00000064" }
+      ]
+    },
+    {
+      "key": "dlss_rr_dll_override",
+      "label": "Enable DLL Override",
+      "family": "rr",
+      "nvapi_id": "0x10E41E02",
+      "description": "Override DLSS-RR with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "values": [
+        { "label": "Off", "wire": "off", "dword": "0x00000000" },
+        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+      ]
+    }
+  ]
+}

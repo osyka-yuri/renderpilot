@@ -1,12 +1,14 @@
 // This feature is now headless: API + types only. The page-side composition
-// (NvidiaProfileCard + DlssSrComponentCard) lives in `pages/game-details/ui`
-// and owns the layout, since it is tightly bound to that page's tab structure.
+// (NvidiaProfileCard + the per-family DlssComponentCard) lives in
+// `pages/game-details/ui` and owns the layout, since it is tightly bound to
+// that page's tab structure.
 
 // API
 export {
   clearGameExecutableOverride,
   getNvapiSettingState,
   listGameExecutableCandidates,
+  listNvapiSettingStates,
   listNvapiSupportedSettings,
   revertNvapiSetting,
   setGameExecutableOverride,
@@ -19,6 +21,7 @@ export type {
   DllInfoDto,
   ExecutableCandidate,
   SettingDescriptor,
+  SettingFamily,
   SettingStateResponse,
   ValueDescriptor,
   ValueOption,
