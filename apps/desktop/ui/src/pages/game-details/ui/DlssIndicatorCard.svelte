@@ -59,7 +59,7 @@
         </div>
       {/if}
 
-      <Item size="sm" variant="muted" class="rounded-md">
+      <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
         <ItemContent>
           <ItemTitle>On-screen DLSS overlay</ItemTitle>
           <ItemDescription>Affects every DLSS game on this PC, not just this one.</ItemDescription>

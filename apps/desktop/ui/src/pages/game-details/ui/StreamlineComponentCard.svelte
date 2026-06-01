@@ -97,7 +97,7 @@
 
   <CardContent class="grid gap-3">
     <!-- Primary: safe bundle swap — one version across every plugin -->
-    <Item size="sm" variant="muted" class="rounded-md">
+    <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
       <ItemContent>
         <ItemTitle>Streamline version · all plugins</ItemTitle>
         <ItemDescription>Applies one version across every plugin at once.</ItemDescription>

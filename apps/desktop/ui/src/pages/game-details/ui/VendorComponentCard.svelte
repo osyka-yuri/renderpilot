@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
-  import { Card, CardContent } from '@shared/ui';
+  import { formatCanonicalLibraryLabel } from '@shared/graphics';
+  import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
 
   type Props = {
@@ -12,12 +13,19 @@
   };
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();
+
+  const title = $derived(formatCanonicalLibraryLabel(component.technology));
 </script>
 
 <Card>
-  <CardContent class="grid gap-3">
-    <div class="rounded-md border bg-muted/30">
+  <CardHeader class="pb-2">
+    <CardTitle>{title}</CardTitle>
+    <CardDescription>Swap the on-disk library file to a different version.</CardDescription>
+  </CardHeader>
+
+  <CardContent>
+    <ItemGroup class="rounded-md border bg-muted/30">
       <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
-    </div>
+    </ItemGroup>
   </CardContent>
 </Card>

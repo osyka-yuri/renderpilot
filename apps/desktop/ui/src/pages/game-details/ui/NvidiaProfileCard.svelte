@@ -49,7 +49,7 @@
   </CardHeader>
 
   <CardContent class="grid gap-2">
-    <Item size="sm" variant="muted" class="rounded-md">
+    <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
       <ItemContent>
         <ItemTitle>Profile target</ItemTitle>
         <ItemDescription>
