@@ -66,6 +66,20 @@ describe('i18n', () => {
       expect(translated.length).toBeGreaterThan(0);
     });
 
+    it('uses the NVAPI override for ru and the backend fallback for en', () => {
+      setLanguageMode('ru');
+      const ruLabel = translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset');
+      expect(ruLabel).not.toBe('Render Preset');
+      expect(ruLabel.length).toBeGreaterThan(0);
+
+      // English is intentionally omitted from the overrides, so the caller's
+      // fallback (the backend dlss_settings.json text) is used.
+      setLanguageMode('en');
+      expect(translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset')).toBe(
+        'Render Preset',
+      );
+    });
+
     it('returns the fallback for an unknown key', () => {
       setLanguageMode('en');
       expect(translateKey('does.not.exist', 'Fallback text')).toBe('Fallback text');

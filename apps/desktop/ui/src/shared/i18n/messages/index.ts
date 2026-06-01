@@ -5,4 +5,6 @@ import type { MessageDictionary } from './types';
 
 export const messages: Record<Locale, MessageDictionary> = { en, ru };
 
+export { nvapiOverrides } from './nvapi';
+
 export type { MessageKey };

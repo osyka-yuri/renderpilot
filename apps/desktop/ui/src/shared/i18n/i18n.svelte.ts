@@ -13,8 +13,13 @@ import {
   type LanguageMode,
   type Locale,
 } from './locale';
-import { messages, type MessageKey } from './messages';
-import type { InterpolationParams, MessageValue, PluralForms } from './messages/types';
+import { messages, nvapiOverrides, type MessageKey } from './messages';
+import type {
+  InterpolationParams,
+  MessageDictionary,
+  MessageValue,
+  PluralForms,
+} from './messages/types';
 
 let currentMode = $state<LanguageMode>('system');
 
@@ -67,7 +72,16 @@ function applyLanguageMode(mode: LanguageMode): void {
 }
 
 function lookup(key: string, locale: Locale): MessageValue | undefined {
-  return messages[locale][key] ?? messages.en[key];
+  // Typed catalog first (static UI strings + backend error keys), then the
+  // locale's NVAPI overrides. NVAPI English is omitted from the overrides, so
+  // `en` falls through to the caller's fallback (the backend `dlss_settings.json`
+  // text) — a single source of English truth. `entry()` models the index access
+  // as possibly-undefined: callers pass arbitrary runtime keys that may be absent.
+  return entry(messages[locale], key) ?? entry(messages.en, key) ?? nvapiOverrides[locale]?.[key];
+}
+
+function entry(dict: MessageDictionary, key: string): MessageValue | undefined {
+  return dict[key];
 }
 
 function render(
