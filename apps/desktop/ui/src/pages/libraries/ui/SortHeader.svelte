@@ -2,6 +2,7 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
   import type { Column } from '@tanstack/table-core';
   import type { LibraryManifestEntry } from '@entities/library';
 
@@ -23,13 +24,13 @@
   function getSortButtonLabel(label: string, state: SortState): string {
     switch (state) {
       case 'asc':
-        return `${label}: sorted ascending. Click to change sort.`;
+        return t('libraries.sort.asc', { label });
 
       case 'desc':
-        return `${label}: sorted descending. Click to change sort.`;
+        return t('libraries.sort.desc', { label });
 
       default:
-        return `${label}: not sorted. Click to sort.`;
+        return t('libraries.sort.none', { label });
     }
   }
 

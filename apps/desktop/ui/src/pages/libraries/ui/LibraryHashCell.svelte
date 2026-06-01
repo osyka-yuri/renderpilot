@@ -1,16 +1,11 @@
 <script lang="ts">
   import CopyIcon from '@lucide/svelte/icons/copy';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
   import type { LibraryManifestEntry } from '@entities/library';
 
   type CopyStatus = 'idle' | 'copied' | 'failed';
-
-  const STATUS_CONFIG: Record<CopyStatus, { label: string; announcement: string }> = {
-    idle: { label: 'Copy hash', announcement: '' },
-    copied: { label: 'Hash copied', announcement: 'Hash copied' },
-    failed: { label: 'Failed to copy hash', announcement: 'Failed to copy hash' },
-  };
 
   let { entry }: { entry: LibraryManifestEntry } = $props();
 
@@ -19,8 +14,20 @@
   let copyStatus = $state<CopyStatus>('idle');
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const copyButtonLabel = $derived(STATUS_CONFIG[copyStatus].label);
-  const statusMessage = $derived(STATUS_CONFIG[copyStatus].announcement);
+  const copyButtonLabel = $derived(
+    copyStatus === 'copied'
+      ? t('libraries.hash.copied')
+      : copyStatus === 'failed'
+        ? t('libraries.hash.failed')
+        : t('libraries.hash.copy'),
+  );
+  const statusMessage = $derived(
+    copyStatus === 'copied'
+      ? t('libraries.hash.copied')
+      : copyStatus === 'failed'
+        ? t('libraries.hash.failed')
+        : '',
+  );
 
   $effect(() => {
     return () => {
@@ -46,13 +53,13 @@
       await navigator.clipboard.writeText(dllSha256Hash);
 
       copyStatus = 'copied';
-      toast.success('Hash copied to clipboard');
+      toast.success(t('libraries.hash.copiedToast'));
       scheduleReset(2000);
     } catch (error) {
       console.error('Failed to copy DLL SHA-256 hash:', error);
 
       copyStatus = 'failed';
-      toast.error('Failed to copy hash');
+      toast.error(t('libraries.hash.failed'));
       scheduleReset(3000);
     }
   }
@@ -75,7 +82,7 @@
         <CopyIcon class="size-3" />
       </Button>
     </TooltipTrigger>
-    <TooltipContent>Copy hash</TooltipContent>
+    <TooltipContent>{t('libraries.hash.copy')}</TooltipContent>
   </Tooltip>
 
   <span class="sr-only" aria-live="polite">

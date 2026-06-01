@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   publishApplyCompletedNotification,
   publishRollbackCompletedNotification,
@@ -18,8 +19,8 @@ describe('operation notifications', () => {
       {
         id: 'notification-1',
         severity: 'success',
-        title: 'Changes applied',
-        description: '2 files updated.',
+        title: t('notify.applyCompleted'),
+        description: t('operation.filesUpdated.count', { count: 2 }),
         important: undefined,
       },
     ]);
@@ -33,8 +34,8 @@ describe('operation notifications', () => {
       {
         id: 'notification-1',
         severity: 'success',
-        title: 'Rollback completed',
-        description: 'No files were restored.',
+        title: t('notify.rollbackCompleted'),
+        description: t('operation.filesRestored.none'),
         important: undefined,
       },
     ]);

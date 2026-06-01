@@ -1,5 +1,6 @@
-import type { CommandErrorDto, CommandErrorSeverity } from './types';
+import type { CommandErrorDto, CommandErrorSeverity, SuggestedActionDto } from './types';
 import { isString, isNonEmptyString, isRecord, isErrorLike, isFunction } from '@shared/validation';
+import { translateKey } from '@shared/i18n';
 
 const FALLBACK_CODE = 'command_failed';
 const FALLBACK_MESSAGE_KEY = 'errors.command_failed';
@@ -65,7 +66,9 @@ export function describeCommandError(error: unknown): string {
  * {@link describeCommandError} instead.
  */
 export function describeCommandErrorBrief(error: unknown): string {
-  return normalizeCommandError(error).dto.details;
+  const dto = normalizeCommandError(error).dto;
+
+  return translateKey(dto.messageKey, dto.details);
 }
 
 /**
@@ -145,14 +148,16 @@ function createFallbackDto(details: string): CommandErrorDto {
 }
 
 function formatCommandError(error: CommandErrorDto): string {
-  const details = normalizeDetails(error.details);
-  const suggestedActions = normalizeSuggestedActions(error.suggestedActions);
+  const message = translateKey(error.messageKey, normalizeDetails(error.details));
+  const actions = error.suggestedActions
+    .map((action) => translateKey(action.key, action.text))
+    .filter(isNonEmptyString);
 
-  if (suggestedActions.length === 0) {
-    return details;
+  if (actions.length === 0) {
+    return message;
   }
 
-  return [details, ...suggestedActions].join(' ');
+  return [message, ...actions].join(' ');
 }
 
 function getErrorDetails(error: unknown): string {
@@ -229,16 +234,29 @@ function normalizeDetails(value: unknown): string {
   return value.trim() || UNKNOWN_ERROR_DETAILS;
 }
 
-function normalizeSuggestedActions(value: unknown): string[] {
+function normalizeSuggestedActions(value: unknown): SuggestedActionDto[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.map(normalizeSuggestedAction).filter(isNonEmptyString);
+  return value
+    .map(normalizeSuggestedAction)
+    .filter((action): action is SuggestedActionDto => action !== null);
 }
 
-function normalizeSuggestedAction(value: unknown): string {
-  return isString(value) ? value.trim() : '';
+function normalizeSuggestedAction(value: unknown): SuggestedActionDto | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const key = isString(value.key) ? value.key.trim() : '';
+  const text = isString(value.text) ? value.text.trim() : '';
+
+  if (key.length === 0 && text.length === 0) {
+    return null;
+  }
+
+  return { key, text };
 }
 
 function normalizeNonEmptyString(value: unknown, fallback: string): string {

@@ -1,4 +1,5 @@
 import { trimToEmpty } from '@shared/text';
+import { t, getLocale } from '@shared/i18n';
 import type { LibraryManifestEntry } from '@entities/library';
 
 export type LibraryGroupKey =
@@ -34,9 +35,6 @@ export type LibraryTypeOption = Readonly<{
 export type LibraryTypeValue = (typeof typeOptionsByVendor)[Vendor][number]['value'];
 
 const DEFAULT_GROUP_KEY: LibraryGroupKey = 'other';
-
-const UNSIGNED_LABEL = 'Unsigned';
-const INVALID_DATE_LABEL = 'Invalid date';
 
 export const vendorOptions = [
   { value: 'nvidia', label: 'NVIDIA' },
@@ -129,23 +127,21 @@ export function formatVersionLabel(entry: LibraryManifestEntry): string {
   return version || '—';
 }
 
-const signedDateFormatter = new Intl.DateTimeFormat('en', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  timeZone: 'UTC',
-});
-
 export function formatSignedDate(signature: LibraryManifestEntry['signature']): string {
   if (signature.status !== 'signed') {
-    return UNSIGNED_LABEL;
+    return t('libraries.unsigned');
   }
 
   const signedDate = new Date(signature.signed_at);
 
   if (!isValidDate(signedDate)) {
-    return INVALID_DATE_LABEL;
+    return t('libraries.invalidDate');
   }
 
-  return signedDateFormatter.format(signedDate);
+  return new Intl.DateTimeFormat(getLocale(), {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'UTC',
+  }).format(signedDate);
 }

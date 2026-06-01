@@ -5,6 +5,7 @@
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import type { Component, Snippet } from 'svelte';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
+  import { t, type MessageKey } from '@shared/i18n';
 
   import {
     Breadcrumb,
@@ -43,8 +44,7 @@
 
   type NavigationItem = {
     screen: PrimaryScreen;
-    label: string;
-    tooltip: string;
+    labelKey: MessageKey;
     icon: Component;
   };
 
@@ -64,20 +64,17 @@
   const NAVIGATION_ITEMS = [
     {
       screen: 'games',
-      label: 'Games',
-      tooltip: 'Games',
+      labelKey: 'nav.games',
       icon: LibraryIcon,
     },
     {
       screen: 'libraries',
-      label: 'Libraries',
-      tooltip: 'Libraries',
+      labelKey: 'nav.libraries',
       icon: BoxIcon,
     },
     {
       screen: 'settings',
-      label: 'Settings',
-      tooltip: 'Settings',
+      labelKey: 'nav.settings',
       icon: SettingsIcon,
     },
   ] satisfies readonly NavigationItem[];
@@ -95,36 +92,36 @@
 
   let sidebarOpen = $state(false);
 
-  const resolvedGameTitle = $derived(selectedGameTitle?.trim() ?? 'Game');
+  const resolvedGameTitle = $derived(selectedGameTitle?.trim() ?? t('nav.gameFallback'));
 
   const breadcrumbs = $derived(createBreadcrumbs(screen, resolvedGameTitle));
 
   function createBreadcrumbs(currentScreen: Screen, gameTitle: string): BreadcrumbEntry[] {
     switch (currentScreen) {
       case 'games':
-        return [{ id: 'games-page', kind: 'page', label: 'Games' }];
+        return [{ id: 'games-page', kind: 'page', label: t('nav.games') }];
 
       case 'settings':
-        return [{ id: 'settings-page', kind: 'page', label: 'Settings' }];
+        return [{ id: 'settings-page', kind: 'page', label: t('nav.settings') }];
 
       case 'libraries':
-        return [{ id: 'libraries-page', kind: 'page', label: 'Libraries' }];
+        return [{ id: 'libraries-page', kind: 'page', label: t('nav.libraries') }];
 
       case 'details':
         return [
-          { id: 'games-link', kind: 'link', label: 'Games', target: 'games' },
+          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
           { id: 'game-page', kind: 'page', label: gameTitle },
         ];
 
       case 'operations':
         return [
-          { id: 'games-link', kind: 'link', label: 'Games', target: 'games' },
+          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
           { id: 'game-link', kind: 'link', label: gameTitle, target: 'details' },
-          { id: 'operations-page', kind: 'page', label: 'Operations' },
+          { id: 'operations-page', kind: 'page', label: t('nav.operations') },
         ];
 
       default: {
-        return [{ id: 'fallback-games-page', kind: 'page', label: 'Games' }];
+        return [{ id: 'fallback-games-page', kind: 'page', label: t('nav.games') }];
       }
     }
   }
@@ -144,10 +141,10 @@
                 onclick={() => {
                   onNavigate(item.screen);
                 }}
-                tooltipContent={item.tooltip}
+                tooltipContent={t(item.labelKey)}
               >
                 <Icon />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           {/each}
@@ -194,7 +191,7 @@
           size="icon"
           disabled={busy}
           onclick={onRefresh}
-          aria-label="Refresh"
+          aria-label={t('shell.refresh')}
         >
           <RefreshCwIcon class={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
         </Button>

@@ -9,7 +9,10 @@ import {
 import { titleMonogram } from './presenters';
 
 export type UpdateBadge = {
-  label: string;
+  /** Discriminator resolved to localized text in the view layer (keeps i18n reactive). */
+  kind: 'up-to-date' | 'updates-available';
+  /** Number of available updates; 0 for up-to-date or a generic "updates available" badge. */
+  count: number;
   variant: BadgeVariant;
 };
 
@@ -26,11 +29,6 @@ export type GameCardViewModel = {
 };
 
 type CoverViewData = Pick<GameCardViewModel, 'coverSrc' | 'hasCover'>;
-
-const UPDATE_BADGE_LABEL = {
-  upToDate: 'Up to date',
-  genericAvailable: 'Updates available',
-} as const;
 
 export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
   const cover = getCoverViewData(game);
@@ -71,29 +69,17 @@ function createEmptyCoverViewData(): CoverViewData {
 function getUpdateBadge(game: GameSummary): UpdateBadge {
   if (!game.updates_available) {
     return {
-      label: UPDATE_BADGE_LABEL.upToDate,
+      kind: 'up-to-date',
+      count: 0,
       variant: 'secondary',
     };
   }
 
   return {
-    label: getAvailableUpdateLabel(game),
+    kind: 'updates-available',
+    count: getAvailableUpdatesCount(game),
     variant: 'default',
   };
-}
-
-function getAvailableUpdateLabel(game: GameSummary): string {
-  const updateCount = getAvailableUpdatesCount(game);
-
-  if (updateCount === 0) {
-    return UPDATE_BADGE_LABEL.genericAvailable;
-  }
-
-  return `${updateCount} ${getUpdateNoun(updateCount)} available`;
-}
-
-function getUpdateNoun(count: number): string {
-  return count === 1 ? 'update' : 'updates';
 }
 
 function getAvailableUpdatesCount(game: GameSummary): number {

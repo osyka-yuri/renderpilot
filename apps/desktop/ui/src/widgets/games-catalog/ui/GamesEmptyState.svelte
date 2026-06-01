@@ -2,6 +2,7 @@
   import { cn } from '@shared/classnames';
   import type { VoidHandler } from '@shared/callbacks';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { t } from '@shared/i18n';
   import {
     Button,
     Empty,
@@ -20,19 +21,20 @@
 
   const {
     busy = false,
-    scanButtonLabel = 'Scan Folder',
+    scanButtonLabel = '',
     onScan = () => undefined,
     class: className = '',
     ...rest
   }: Props = $props();
+
+  const resolvedScanButtonLabel = $derived(scanButtonLabel.trim() || t('games.scanFolder'));
 </script>
 
 <Empty {...rest} class={cn(className)}>
   <EmptyHeader>
-    <EmptyTitle>No scanned games yet</EmptyTitle>
+    <EmptyTitle>{t('games.empty.title')}</EmptyTitle>
     <EmptyDescription>
-      Select a game folder to populate the dashboard with components, updates, operation history,
-      and quick actions.
+      {t('games.empty.description')}
     </EmptyDescription>
   </EmptyHeader>
 
@@ -46,7 +48,7 @@
       {#if busy}
         <Spinner />
       {/if}
-      {scanButtonLabel}
+      {resolvedScanButtonLabel}
     </Button>
   </EmptyContent>
 </Empty>

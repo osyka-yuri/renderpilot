@@ -57,19 +57,19 @@ describe('settings-page-model', () => {
       expectUniqueValues(options.map((option) => option.value));
     });
 
-    it.each(optionValidationCases)('keeps $name option labels non-empty', ({ options }) => {
+    it.each(optionValidationCases)('keeps $name option label keys non-empty', ({ options }) => {
       for (const option of options) {
-        expectNonEmptyString(option.label);
+        expectNonEmptyString(option.labelKey);
       }
     });
   });
 
   describe('tabOptions', () => {
-    it('has exactly 2 tabs with non-empty labels and unique values', () => {
+    it('has exactly 2 tabs with non-empty label keys and unique values', () => {
       expect(tabOptions.length).toBe(2);
       expectUniqueValues(tabOptions.map((t) => t.value));
       for (const tab of tabOptions) {
-        expectNonEmptyString(tab.label);
+        expectNonEmptyString(tab.labelKey);
       }
     });
   });

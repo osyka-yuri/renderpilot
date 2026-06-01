@@ -2,6 +2,7 @@
   import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
   import { dragHandleZone, dragHandle } from 'svelte-dnd-action';
   import { Label, Switch } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import { type LauncherFilterOption } from '../model/launcher-filter-options';
 
   type DndLauncherItem = {
@@ -22,9 +23,7 @@
     onOrderChange?: (order: readonly string[]) => void;
   };
 
-  const LAUNCHERS_LABEL = 'Launchers';
   const LAUNCHERS_HEADING_ID = 'launcher-filters-heading';
-  const EMPTY_LAUNCHERS_LABEL = 'No launchers detected';
 
   const DND_FLIP_DURATION_MS = 150;
   const EMPTY_ARRAY = [] as const;
@@ -162,7 +161,7 @@
 
 <section class="grid gap-3" aria-labelledby={LAUNCHERS_HEADING_ID}>
   <h3 id={LAUNCHERS_HEADING_ID} class="text-sm font-medium">
-    {LAUNCHERS_LABEL}
+    {t('filters.launchers.title')}
   </h3>
 
   {#if options.length > 0}
@@ -185,7 +184,7 @@
               type="button"
               use:dragHandle
               class="shrink-0 cursor-grab rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
-              aria-label={`Reorder ${item.label}`}
+              aria-label={t('filters.launchers.reorder', { label: item.label })}
             >
               <GripVerticalIcon class="size-4" aria-hidden="true" />
             </button>
@@ -207,7 +206,7 @@
     </div>
   {:else}
     <p class="text-sm text-muted-foreground">
-      {EMPTY_LAUNCHERS_LABEL}
+      {t('filters.launchers.empty')}
     </p>
   {/if}
 </section>

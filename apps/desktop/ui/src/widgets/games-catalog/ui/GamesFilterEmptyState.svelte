@@ -9,6 +9,7 @@
     EmptyTitle,
   } from '@shared/ui';
   import SearchIcon from '@lucide/svelte/icons/search';
+  import { t } from '@shared/i18n';
 
   type Props = {
     onResetFilters?: () => void;
@@ -23,13 +24,15 @@
       <EmptyMedia variant="icon">
         <SearchIcon />
       </EmptyMedia>
-      <EmptyTitle>No games match current filters</EmptyTitle>
+      <EmptyTitle>{t('games.filterEmpty.title')}</EmptyTitle>
       <EmptyDescription>
-        Try adjusting your search or filter criteria, or reset filters to see all games.
+        {t('games.filterEmpty.description')}
       </EmptyDescription>
     </EmptyHeader>
     <EmptyContent>
-      <Button variant="outline" size="sm" onclick={onResetFilters}>Reset Filters</Button>
+      <Button variant="outline" size="sm" onclick={onResetFilters}>
+        {t('games.filterEmpty.reset')}
+      </Button>
     </EmptyContent>
   </Empty>
 </div>

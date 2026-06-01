@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ToggleGroup, ToggleGroupItem } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import {
     mergeVendorDraftLibraries,
     selectedLibrariesForVendor,
@@ -15,9 +16,7 @@
   type VendorKey = GroupedLibraryFilterOptions['vendorKey'];
   type VendorOptions = GroupedLibraryFilterOptions['options'];
 
-  const LIBRARIES_LABEL = 'Libraries';
   const LIBRARIES_HEADING_ID = 'library-filters-heading';
-  const EMPTY_LIBRARIES_LABEL = 'No libraries detected';
 
   const EMPTY_GROUPED_OPTIONS = [] as const satisfies readonly GroupedLibraryFilterOptions[];
   const EMPTY_DRAFT_LIBRARIES = [] as const satisfies readonly string[];
@@ -65,7 +64,7 @@
 
 <section class="grid gap-3" aria-labelledby={LIBRARIES_HEADING_ID}>
   <h3 id={LIBRARIES_HEADING_ID} class="text-sm font-medium">
-    {LIBRARIES_LABEL}
+    {t('filters.libraries.title')}
   </h3>
 
   {#if groupedOptions.length > 0}
@@ -99,7 +98,7 @@
     </div>
   {:else}
     <p class="text-sm text-muted-foreground">
-      {EMPTY_LIBRARIES_LABEL}
+      {t('filters.libraries.empty')}
     </p>
   {/if}
 </section>

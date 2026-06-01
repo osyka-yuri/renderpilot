@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary } from '@entities/game';
+import { t } from '@shared/i18n';
 import {
   refreshCardsAfterCoverSync,
   formatBackgroundCoverSyncError,
@@ -81,8 +82,7 @@ describe('background-cover-sync', () => {
 
       const result = await refreshCardsAfterCoverSync(refreshGameCards);
 
-      expect(result).toContain('refresh failed');
-      expect(result).toContain('covers may have downloaded');
+      expect(result).toBe(t('coverSync.refreshFailed'));
     });
   });
 
@@ -92,8 +92,7 @@ describe('background-cover-sync', () => {
 
       const result = formatBackgroundCoverSyncError(error);
 
-      expect(result).toContain('Background cover sync failed');
-      expect(result).toContain('network failure');
+      expect(result).toBe(t('coverSync.failed'));
     });
   });
 

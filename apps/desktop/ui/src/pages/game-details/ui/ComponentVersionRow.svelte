@@ -18,6 +18,7 @@
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
 
   type Props = {
     component: GameGraphicsComponent;
@@ -29,7 +30,7 @@
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();
 
-  const filePath = $derived(component.files[0]?.path ?? 'Unknown');
+  const filePath = $derived(component.files[0]?.path ?? t('common.unknown'));
   const fileName = $derived(fileNameFromPath(filePath));
   const candidates = $derived(group?.candidates ?? []);
 
@@ -54,15 +55,17 @@
   </ItemContent>
   <ItemActions>
     {#if candidates.length === 0}
-      <span class="text-xs text-muted-foreground">No replacement versions</span>
+      <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
       <Select type="single" disabled={busy} onValueChange={handleSwapChange}>
         <SelectTrigger size="sm" class="w-60">
-          <span class="truncate">{group?.current_version ?? 'Unknown'}</span>
+          <span class="truncate">{group?.current_version ?? t('common.unknown')}</span>
         </SelectTrigger>
         <SelectContent>
           {#each candidates as candidate (candidate.artifact_id)}
-            {@const versionLabel = `v${candidate.version ?? 'Unknown'}`}
+            {@const versionLabel = candidate.version
+              ? `v${candidate.version}`
+              : t('common.unknown')}
             <SelectItem value={candidate.artifact_id} label={versionLabel}>
               <span class="flex items-center gap-2">
                 {versionLabel}
@@ -82,12 +85,12 @@
               size="icon-sm"
               disabled={busy}
               onclick={handleRollback}
-              aria-label={`Restore original ${fileName}`}
+              aria-label={t('gameDetails.version.restoreOriginal', { fileName })}
             >
               <Undo2Icon class="size-4" aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Restore original {fileName}</TooltipContent>
+          <TooltipContent>{t('gameDetails.version.restoreOriginal', { fileName })}</TooltipContent>
         </Tooltip>
       {/if}
     {/if}

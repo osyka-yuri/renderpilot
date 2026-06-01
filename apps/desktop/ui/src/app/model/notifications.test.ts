@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   publishMissingStableGameDetailsNotification,
   publishStalePlanNotification,
@@ -18,9 +19,8 @@ describe('app notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
-        description:
-          'The selected operation plan is no longer current. Rebuild the plan before applying it.',
+        title: t('notify.statusError'),
+        description: t('notify.stalePlan'),
         important: true,
       },
     ]);
@@ -34,8 +34,8 @@ describe('app notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
-        description: 'Catalog returned game details without a stable identifier.',
+        title: t('notify.statusError'),
+        description: t('notify.missingStableGameId'),
         important: true,
       },
     ]);

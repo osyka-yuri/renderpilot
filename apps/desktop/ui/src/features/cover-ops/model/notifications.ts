@@ -3,19 +3,21 @@ import {
   publishStatusNotification,
   publishSuccessNotification,
 } from '@shared/notifications';
-
-const COVER_PICKER_PREVIEW_MODE_MESSAGE = 'Choosing a cover file requires the desktop app.';
+import { t } from '@shared/i18n';
 
 export function publishCoverUpdatedNotification(): string {
-  return publishSuccessNotification('Cover updated', 'The custom artwork has been saved.');
+  return publishSuccessNotification(t('notify.coverUpdated.title'), t('notify.coverUpdated.body'));
 }
 
 export function publishCoverDownloadedNotification(): string {
-  return publishInfoNotification('Cover downloaded', 'The game artwork has been refreshed.');
+  return publishInfoNotification(
+    t('notify.coverDownloaded.title'),
+    t('notify.coverDownloaded.body'),
+  );
 }
 
 export function publishCoverRemovedNotification(): string {
-  return publishSuccessNotification('Cover removed', 'The game now uses the default artwork.');
+  return publishSuccessNotification(t('notify.coverRemoved.title'), t('notify.coverRemoved.body'));
 }
 
 export function publishCoverOperationErrorNotification(message: string): string | null {
@@ -23,5 +25,5 @@ export function publishCoverOperationErrorNotification(message: string): string 
 }
 
 export function publishCoverPickerPreviewModeNotification(): string | null {
-  return publishStatusNotification(COVER_PICKER_PREVIEW_MODE_MESSAGE, 'error');
+  return publishStatusNotification(t('notify.coverPickerPreview'), 'error');
 }

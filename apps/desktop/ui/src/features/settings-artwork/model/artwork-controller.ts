@@ -4,12 +4,9 @@ import {
   fetchCoverRemotePolicy,
 } from '@entities/settings';
 import type { DisposableRequestChannel } from '@shared/requests';
+import { t } from '@shared/i18n';
 import type { CoverSourceToggleRow, CoverSourceSettingKey } from './artwork-model';
-import {
-  artworkSettingsReadError,
-  artworkSourceSaveError,
-  formatBooleanSetting,
-} from './artwork-model';
+import { formatBooleanSetting } from './artwork-model';
 import {
   beginCoverSourceMutation,
   isCurrentCoverSourceMutation,
@@ -60,7 +57,7 @@ export async function loadCoverRemoteSources(context: ArtworkControllerContext):
     }
   } catch {
     if (canWriteLatestRequest(context.request, requestId)) {
-      context.state.setMessage(artworkSettingsReadError);
+      context.state.setMessage(t('settings.catalog.artworkReadError'));
     }
   } finally {
     if (canWriteLatestRequest(context.request, requestId)) {
@@ -99,7 +96,7 @@ export async function persistCoverSourceToggle(
         withCoverSourceValue(state, row.policyKey, previousEnabled),
       );
 
-      context.state.setMessage(artworkSourceSaveError);
+      context.state.setMessage(t('settings.catalog.artworkSaveError'));
     }
   } finally {
     if (isCurrentArtworkMutation(context, row.settingKey, mutation.version)) {

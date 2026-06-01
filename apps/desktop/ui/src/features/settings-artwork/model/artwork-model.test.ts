@@ -65,10 +65,10 @@ describe('artwork-model', () => {
 
     it('provides complete non-empty UI metadata for every cover source row', () => {
       for (const row of coverSourceToggleRows) {
-        expectNonEmptyString(row.ariaLabel);
+        expectNonEmptyString(row.ariaLabelKey);
         expectNonEmptyString(row.eyebrow);
-        expectNonEmptyString(row.title);
-        expectNonEmptyString(row.description);
+        expectNonEmptyString(row.titleKey);
+        expectNonEmptyString(row.descriptionKey);
       }
     });
   });

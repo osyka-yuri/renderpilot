@@ -15,16 +15,8 @@
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
-  import { SCAN_LABEL, SCANNING_LABEL } from '../model/games-page-constants';
+  import { t } from '@shared/i18n';
   import { createGamesPageModel } from '../model/create-games-page-model.svelte';
-
-  const SEARCH_LABEL = 'Search games';
-  const SEARCH_PLACEHOLDER = 'Search games';
-
-  const FILTERS_BUTTON_LABEL = 'Open filters';
-  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open filters, filters active';
-
-  const LOADING_GAMES_LABEL = 'Loading games';
 
   type Props = {
     games?: GameSummary[];
@@ -62,7 +54,7 @@
   const showEmptyState = $derived(!hasGames && !busy);
   const showInitialBusyState = $derived(!hasGames && busy);
 
-  const scanButtonLabel = $derived(busy ? SCANNING_LABEL : SCAN_LABEL);
+  const scanButtonLabel = $derived(busy ? t('games.scanning') : t('games.scanFolder'));
   const dashboardStats = $derived(getDashboardStats(games));
 
   const model = createGamesPageModel({
@@ -75,7 +67,7 @@
   });
 
   const filtersButtonLabel = $derived(
-    model.hasFilterIndicator ? FILTERS_BUTTON_ACTIVE_LABEL : FILTERS_BUTTON_LABEL,
+    model.hasFilterIndicator ? t('games.openFiltersActive') : t('games.openFilters'),
   );
 
   const hasManualCoverAction = $derived(model.manualCoverBusyFor !== null);
@@ -138,7 +130,7 @@
         <EmptyMedia>
           <Spinner class="size-10" />
         </EmptyMedia>
-        <EmptyTitle>{LOADING_GAMES_LABEL}</EmptyTitle>
+        <EmptyTitle>{t('games.loading')}</EmptyTitle>
       </EmptyHeader>
     </Empty>
   {:else}
@@ -148,16 +140,16 @@
       <div
         class="flex items-center justify-end gap-2 max-md:justify-stretch"
         role="search"
-        aria-label={SEARCH_LABEL}
+        aria-label={t('games.search')}
       >
         <label
           class="block max-w-88 min-w-48 shrink grow basis-88 max-md:max-w-none max-md:min-w-0"
         >
-          <span class="sr-only">{SEARCH_LABEL}</span>
+          <span class="sr-only">{t('games.search')}</span>
 
           <Input
             type="search"
-            placeholder={SEARCH_PLACEHOLDER}
+            placeholder={t('games.search')}
             value={model.filtersState.searchQuery}
             oninput={handleSearchInput}
           />

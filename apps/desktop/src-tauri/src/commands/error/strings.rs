@@ -389,7 +389,6 @@ impl SuggestedAction {
     }
 
     #[must_use]
-    #[cfg(test)]
     pub(crate) const fn key(self) -> &'static str {
         self.localized_text().key()
     }
@@ -407,11 +406,20 @@ impl fmt::Display for SuggestedAction {
 }
 
 impl Serialize for SuggestedAction {
+    /// Serializes as `{ key, text }`: the stable localization key drives the
+    /// frontend translation, with `text` as the English fallback if the key is
+    /// not present in the UI catalog. Symmetric with the (messageKey, details)
+    /// pair carried for the primary user message.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(self.default_text())
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("SuggestedAction", 2)?;
+        state.serialize_field("key", self.key())?;
+        state.serialize_field("text", self.default_text())?;
+        state.end()
     }
 }
 
@@ -497,11 +505,14 @@ mod tests {
     }
 
     #[test]
-    fn suggested_action_serializes_as_default_text() {
+    fn suggested_action_serializes_with_key_and_text() {
         assert_eq!(
             serde_json::to_value(suggested_action::REFRESH_GAMES)
                 .expect("serialize suggested actions"),
-            json!(["Refresh the games list and open the game again."])
+            json!([{
+                "key": "suggested_action.refresh_games",
+                "text": "Refresh the games list and open the game again.",
+            }])
         );
     }
 

@@ -26,7 +26,7 @@ describe('notification-adapter', () => {
     const notification: Notification = {
       id: 'desktop-status',
       severity: 'error',
-      title: 'Needs attention',
+      title: 'Error',
       description: 'Missing file',
       important: true,
     };
@@ -37,7 +37,7 @@ describe('notification-adapter', () => {
 
     const [title, options] = vi.mocked(toast.error).mock.calls[0];
 
-    expect(title).toBe('Needs attention');
+    expect(title).toBe('Error');
     expect(options).toMatchObject({
       id: 'desktop-status',
       description: 'Missing file',
@@ -68,7 +68,7 @@ describe('notification-adapter', () => {
     publishSonnerNotification({
       id: 'desktop-status',
       severity: 'warning',
-      title: 'Review warning',
+      title: 'Warning',
       description: 'Some folders could not be scanned.',
       important: false,
     });
@@ -82,7 +82,7 @@ describe('notification-adapter', () => {
       expect.objectContaining({ id: 'notification-2' }),
     );
     expect(toast.warning).toHaveBeenCalledWith(
-      'Review warning',
+      'Warning',
       expect.objectContaining({ id: 'desktop-status' }),
     );
   });

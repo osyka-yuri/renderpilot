@@ -1,5 +1,6 @@
 import { describeCommandErrorTechnical } from '@shared/api';
 import { publishErrorNotification } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import { getDlssIndicatorState, setDlssIndicatorEnabled } from '@features/nvapi-settings';
 
 /**
@@ -56,10 +57,7 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
 
   function ensureElevated(): boolean {
     if (isElevated()) return true;
-    reportActionError(
-      'Administrator privileges required',
-      new Error('Relaunch RenderPilot as administrator to toggle the DLSS indicator.'),
-    );
+    reportActionError(t('nvidia.adminRequired'), new Error(t('indicator.relaunchToToggle')));
     return false;
   }
 
@@ -77,7 +75,7 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
       supported = state.supported;
     } catch (e) {
       enabled = previous;
-      reportActionError('Could not change the DLSS indicator', e);
+      reportActionError(t('indicator.changeFailed'), e);
     } finally {
       busy = false;
     }

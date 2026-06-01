@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge } from '@shared/ui';
+  import { t } from '@shared/i18n';
 
   import type { DashboardStats } from '../model/dashboard-stats';
 
@@ -15,24 +16,18 @@
     variant: DashboardBadgeVariant;
   };
 
-  const SUMMARY_LABEL = 'Dashboard summary';
-
   let { stats }: Props = $props();
-
-  const formatCountLabel = (count: number, singular: string, plural = `${singular}s`): string => {
-    return `${count} ${count === 1 ? singular : plural}`;
-  };
 
   const badges = $derived.by<DashboardBadge[]>(() => {
     const baseBadges: DashboardBadge[] = [
       {
         id: 'games',
-        label: formatCountLabel(stats.games, 'game'),
+        label: t('game.dashboard.games', { count: stats.games }),
         variant: 'outline',
       },
       {
         id: 'updates',
-        label: formatCountLabel(stats.updates, 'update'),
+        label: t('game.dashboard.updates', { count: stats.updates }),
         variant: 'outline',
       },
     ];
@@ -45,14 +40,14 @@
       ...baseBadges,
       {
         id: 'rollbacks-ready',
-        label: `${stats.rollbacksReady} rollback-ready`,
+        label: t('game.dashboard.rollbacksReady', { count: stats.rollbacksReady }),
         variant: 'secondary',
       },
     ];
   });
 </script>
 
-<div class="flex flex-wrap gap-1.5" aria-label={SUMMARY_LABEL}>
+<div class="flex flex-wrap gap-1.5" aria-label={t('game.dashboard.summary')}>
   {#each badges as badge (badge.id)}
     <Badge variant={badge.variant}>
       {badge.label}

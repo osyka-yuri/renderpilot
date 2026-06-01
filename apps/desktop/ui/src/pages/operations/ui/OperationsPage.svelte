@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GameSummary } from '@entities/game';
   import { Badge, Button, Card, CardContent, CardTitle, ScrollArea } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import {
     createOperationViewModel,
     type OperationHistoryDetails,
@@ -20,7 +21,9 @@
 
   const canViewGame = $derived(gameCard !== null && typeof onViewGame === 'function');
   const pageSubtitle = $derived(
-    gameCard === null ? 'Full system activity log' : `History for ${gameCard.title}`,
+    gameCard === null
+      ? t('operations.subtitleAll')
+      : t('operations.subtitleGame', { title: gameCard.title }),
   );
 
   const operations = $derived.by((): readonly OperationViewModel[] => {
@@ -45,12 +48,16 @@
 <section class="grid h-full min-h-0 gap-4 overflow-hidden">
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div class="grid gap-1">
-      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Operations</p>
-      <h1 class="text-2xl/tight font-semibold text-foreground">Operations</h1>
+      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+        {t('operations.title')}
+      </p>
+      <h1 class="text-2xl/tight font-semibold text-foreground">{t('operations.title')}</h1>
       <p class="text-sm text-muted-foreground">{pageSubtitle}</p>
     </div>
     {#if canViewGame}
-      <Button variant="secondary" size="sm" onclick={handleViewGame}>View Game</Button>
+      <Button variant="secondary" size="sm" onclick={handleViewGame}>
+        {t('operations.viewGame')}
+      </Button>
     {/if}
   </header>
 
@@ -63,17 +70,17 @@
       {#if details === null}
         <Card>
           <CardContent role="status" aria-live="polite">
-            <p>Loading operation history...</p>
+            <p>{t('operations.loading')}</p>
           </CardContent>
         </Card>
       {:else if !hasOperations}
         <Card>
           <CardContent>
-            <CardTitle>No operations recorded yet</CardTitle>
+            <CardTitle>{t('operations.empty')}</CardTitle>
           </CardContent>
         </Card>
       {:else}
-        <div class="flex flex-col gap-3 pb-5" aria-label="Operation history">
+        <div class="flex flex-col gap-3 pb-5" aria-label={t('operations.historyAria')}>
           {#each operations as operation (operation.id)}
             <article aria-label={operation.ariaLabel}>
               <Card>
@@ -113,7 +120,7 @@
                         <p
                           class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                         >
-                          Items
+                          {t('operations.items')}
                         </p>
                         <p class="text-sm/5 font-semibold text-foreground">{operation.itemCount}</p>
                       </div>

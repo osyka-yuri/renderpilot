@@ -1,12 +1,12 @@
 import { normalizeCommandError } from '@shared/api';
+import { t } from '@shared/i18n';
 import { dismissNotification, publishNotification } from './notification-center';
 
 export const STATUS_NOTIFICATION_ID = 'desktop-status';
 
-const STATUS_TITLES: Record<'error' | 'warning', string> = {
-  error: 'Needs attention',
-  warning: 'Review warning',
-};
+function statusTitle(severity: 'error' | 'warning'): string {
+  return severity === 'error' ? t('notify.statusError') : t('notify.statusWarning');
+}
 
 export function publishStatusNotification(
   message: string,
@@ -22,7 +22,7 @@ export function publishStatusNotification(
   return publishNotification({
     id: STATUS_NOTIFICATION_ID,
     severity,
-    title: STATUS_TITLES[severity],
+    title: statusTitle(severity),
     description,
     important: severity === 'error',
   });

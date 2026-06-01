@@ -1,6 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { describeCommandErrorTechnical } from '@shared/api';
 import { publishErrorNotification } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   clearGameExecutableOverride,
   listGameExecutableCandidates,
@@ -136,10 +137,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
 
   function ensureElevated(action: string): boolean {
     if (isElevated()) return true;
-    reportActionError(
-      'Administrator privileges required',
-      new Error(`Relaunch RenderPilot as administrator to ${action}.`),
-    );
+    reportActionError(t('nvidia.adminRequired'), new Error(t('nvidia.relaunchTo', { action })));
     return false;
   }
 
@@ -161,8 +159,10 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   }
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
-    if (!gameId || !ensureElevated('change this NVIDIA setting')) return;
-    await runWrite(key, 'Could not change setting', () => setNvapiSettingValue(gameId, key, wire));
+    if (!gameId || !ensureElevated(t('nvidia.action.changeSetting'))) return;
+    await runWrite(key, t('nvidia.changeSettingFailed'), () =>
+      setNvapiSettingValue(gameId, key, wire),
+    );
   }
 
   async function revert(
@@ -170,11 +170,9 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     key: string,
     target: 'predefined' | 'baseline',
   ): Promise<void> {
-    if (!gameId || !ensureElevated('revert this NVIDIA setting')) return;
+    if (!gameId || !ensureElevated(t('nvidia.action.revertSetting'))) return;
     const label =
-      target === 'predefined'
-        ? 'Could not revert to driver default'
-        : 'Could not revert to baseline';
+      target === 'predefined' ? t('nvidia.revertDefaultFailed') : t('nvidia.revertBaselineFailed');
     await runWrite(key, label, () => revertNvapiSetting(gameId, key, target));
   }
 
@@ -185,7 +183,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
       await setGameExecutableOverride(gameId, absolutePath);
       await reload(gameId);
     } catch (e) {
-      reportActionError('Could not set executable override', e);
+      reportActionError(t('nvidia.setExeFailed'), e);
     } finally {
       busy = false;
     }
@@ -198,7 +196,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
       await clearGameExecutableOverride(gameId);
       await reload(gameId);
     } catch (e) {
-      reportActionError('Could not clear executable override', e);
+      reportActionError(t('nvidia.clearExeFailed'), e);
     } finally {
       busy = false;
     }

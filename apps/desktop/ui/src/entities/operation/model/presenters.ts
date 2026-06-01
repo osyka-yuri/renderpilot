@@ -1,26 +1,30 @@
 import { humanizeToken } from '@shared/text';
+import { t, type MessageKey } from '@shared/i18n';
 import type { SwapPlan } from './types';
 
 export type OperationBadgeVariant = 'outline' | 'secondary' | 'destructive';
 
-const OPERATION_LABELS: Record<string, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  blocked: 'Blocked',
-  unknown: 'Unknown',
-  planned: 'Planned',
-  completed: 'Completed',
-  failed: 'Failed',
-  rolled_back: 'Rolled Back',
-  replace_component: 'Replace Component',
+const OPERATION_LABEL_KEYS: Partial<Record<string, MessageKey>> = {
+  low: 'operation.label.low',
+  medium: 'operation.label.medium',
+  high: 'operation.label.high',
+  blocked: 'operation.label.blocked',
+  unknown: 'common.unknown',
+  planned: 'operation.label.planned',
+  completed: 'operation.label.completed',
+  failed: 'operation.label.failed',
+  rolled_back: 'operation.label.rolledBack',
+  replace_component: 'operation.label.replaceComponent',
 };
 
 export function formatOperationLabel(value?: string | null): string {
   if (!value) {
-    return 'Unknown';
+    return t('common.unknown');
   }
-  return OPERATION_LABELS[value] ?? humanizeToken(value);
+
+  const key = OPERATION_LABEL_KEYS[value];
+
+  return key ? t(key) : humanizeToken(value);
 }
 
 export function formatRisk(value?: string | null): string {
@@ -101,17 +105,15 @@ export function getCompletedDurationText(
 
   const durationSeconds = Math.max(0, Math.round((completedAt - createdAt) / 1000));
 
-  return `Completed in ${durationSeconds}s`;
+  return t('operation.duration', { seconds: durationSeconds });
 }
 
 function formatAffectedFilesSummary(itemCount: number, verb: 'updated' | 'restored'): string {
   if (itemCount === 0) {
-    return verb === 'updated' ? 'No files were updated.' : 'No files were restored.';
+    return t(verb === 'updated' ? 'operation.filesUpdated.none' : 'operation.filesRestored.none');
   }
 
-  if (itemCount === 1) {
-    return `1 file ${verb}.`;
-  }
-
-  return `${itemCount} files ${verb}.`;
+  return t(verb === 'updated' ? 'operation.filesUpdated.count' : 'operation.filesRestored.count', {
+    count: itemCount,
+  });
 }

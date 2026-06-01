@@ -2,6 +2,7 @@
   import FunnelIcon from '@lucide/svelte/icons/funnel';
   import { Button, Input } from '@shared/ui';
   import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
 
   type SearchChangeHandler = (value: string) => void;
   type ToggleFiltersHandler = () => void;
@@ -13,12 +14,6 @@
     onToggleFilters?: ToggleFiltersHandler;
   };
 
-  const SEARCH_LABEL = 'Search games';
-  const SEARCH_PLACEHOLDER = 'Search games';
-
-  const FILTERS_BUTTON_LABEL = 'Open filters';
-  const FILTERS_BUTTON_ACTIVE_LABEL = 'Open filters, filters active';
-
   const {
     searchQuery = '',
     hasFilterIndicator = false,
@@ -27,7 +22,7 @@
   }: Props = $props();
 
   const filtersButtonLabel = $derived(
-    hasFilterIndicator ? FILTERS_BUTTON_ACTIVE_LABEL : FILTERS_BUTTON_LABEL,
+    hasFilterIndicator ? t('games.openFiltersActive') : t('games.openFilters'),
   );
 
   function handleSearchInput(
@@ -42,12 +37,12 @@
     class={cn('block max-w-88 min-w-48 shrink grow basis-88', 'max-md:max-w-none max-md:min-w-0')}
   >
     <span class="sr-only">
-      {SEARCH_LABEL}
+      {t('games.search')}
     </span>
 
     <Input
       type="search"
-      placeholder={SEARCH_PLACEHOLDER}
+      placeholder={t('games.search')}
       value={searchQuery}
       oninput={handleSearchInput}
     />

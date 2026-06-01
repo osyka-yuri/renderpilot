@@ -4,6 +4,7 @@
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { describeCommandError } from '@shared/api';
+  import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
   import type { LibraryManifestEntry } from '@entities/library';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
@@ -21,7 +22,9 @@
   const entryId = $derived(entry.entry_id);
   const isBusy = $derived(pendingEntryAction !== null && pendingEntryAction.entryId === entryId);
 
-  const actionLabel = $derived(isDownloaded ? 'Delete' : 'Download');
+  const actionLabel = $derived(
+    isDownloaded ? t('libraries.actions.delete') : t('libraries.actions.download'),
+  );
 
   async function handleActionClick() {
     if (isBusy) return;
@@ -29,14 +32,19 @@
     try {
       if (isDownloaded) {
         await onDelete(entryId);
-        toast.success(`Library ${entry.version.value} deleted`);
+        toast.success(t('libraries.actions.deletedToast', { version: entry.version.value }));
         return;
       }
 
       await onDownload(entryId);
-      toast.success(`Library ${entry.version.value} downloaded`);
+      toast.success(t('libraries.actions.downloadedToast', { version: entry.version.value }));
     } catch (error) {
-      toast.error(`${actionLabel} failed: ${describeCommandError(error)}`);
+      toast.error(
+        t('libraries.actions.failedToast', {
+          action: actionLabel,
+          error: describeCommandError(error),
+        }),
+      );
     }
   }
 </script>

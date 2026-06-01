@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { t } from '@shared/i18n';
 import {
   clearAllNotifications,
   getActiveNotifications,
@@ -27,7 +28,7 @@ describe('notification-status', () => {
       {
         id: STATUS_NOTIFICATION_ID,
         severity: 'error',
-        title: 'Needs attention',
+        title: t('notify.statusError'),
         description: 'Something went wrong',
         important: true,
       },
@@ -38,7 +39,7 @@ describe('notification-status', () => {
         notification: {
           id: STATUS_NOTIFICATION_ID,
           severity: 'error',
-          title: 'Needs attention',
+          title: t('notify.statusError'),
           description: 'Something went wrong',
           important: true,
         },
@@ -73,7 +74,7 @@ describe('notification-status', () => {
       {
         id: STATUS_NOTIFICATION_ID,
         severity: 'warning',
-        title: 'Review warning',
+        title: t('notify.statusWarning'),
         description: 'Some folders could not be scanned.',
         important: false,
       },

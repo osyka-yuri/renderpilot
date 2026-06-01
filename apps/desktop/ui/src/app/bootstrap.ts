@@ -3,12 +3,16 @@ import { mount } from 'svelte';
 
 import DesktopApp from '@app/routes/DesktopApp.svelte';
 import { isDesktopPreviewMode } from '@shared/api-preview';
+import { initI18n } from '@shared/i18n';
 import { registerMockInvoker } from '@app/mocks/desktop';
 import { getAppInitializationState, type AppInitializationState } from '@entities/app';
 
 if (isDesktopPreviewMode()) {
   registerMockInvoker();
 }
+
+// Apply the persisted language before the first render so the UI mounts localized.
+initI18n();
 
 const target = document.getElementById('app');
 

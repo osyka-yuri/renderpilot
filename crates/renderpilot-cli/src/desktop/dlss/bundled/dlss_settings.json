@@ -7,7 +7,7 @@
       "family": "sr",
       "nvapi_id": "0x10E41DF3",
       "dll_kind": "sr",
-      "description": "Forces a specific DLSS Super Resolution preset across all quality levels. Some games also need 'Forced Model Preset Profile' set for this to take effect.",
+      "description": "Forces a specific DLSS Super Resolution preset. Some games may require 'Forced Model Preset Profile' to apply custom presets.",
       "values": [
         { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
         { "label": "Preset A (CNN)", "wire": "a", "dword": "0x00000001" },
@@ -33,7 +33,7 @@
       "label": "Forced Quality Level",
       "family": "sr",
       "nvapi_id": "0x10AFB768",
-      "description": "Forces a fixed DLSS Super Resolution quality level, overriding the in-game selection.",
+      "description": "Overrides the in-game DLSS Super Resolution quality selection.",
       "default": "0x00000003",
       "values": [
         { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
@@ -51,7 +51,7 @@
       "family": "sr",
       "nvapi_id": "0x10E41DF5",
       "min_driver": "572.83",
-      "description": "Custom render-resolution ratio. Set 'Forced Quality Level' to Custom before choosing a value.",
+      "description": "Sets a custom render-resolution ratio. Requires 'Forced Quality Level' to be set to Custom.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
@@ -73,7 +73,7 @@
       "label": "Enable DLL Override",
       "family": "sr",
       "nvapi_id": "0x10E41E01",
-      "description": "Override DLSS-SR with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "description": "Forces the game to use the latest DLSS-SR version installed system-wide. Supported by most DLSS 2+ titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
@@ -84,7 +84,7 @@
       "label": "Forced Model Preset Profile",
       "family": "sr",
       "nvapi_id": "0x00634291",
-      "description": "If 'Render Preset' has no effect, switching this can let the game apply a custom preset.",
+      "description": "Allows applying a custom preset in games where 'Render Preset' has no effect by default.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
         { "label": "Recommended", "wire": "recommended", "dword": "0x00000001" },
@@ -96,7 +96,7 @@
       "label": "Force DLAA (full-resolution)",
       "family": "sr",
       "nvapi_id": "0x10E41DF4",
-      "description": "Make every DLSS quality mode render at full resolution (DLAA).",
+      "description": "Renders every DLSS quality mode at full resolution, acting as an anti-aliasing solution (DLAA).",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "On", "wire": "on", "dword": "0x00000001" }
@@ -107,7 +107,7 @@
       "label": "Remap Performance to Ultra Performance",
       "family": "sr",
       "nvapi_id": "0x10AFB76C",
-      "description": "Remap the Performance quality mode to use the Ultra Performance path.",
+      "description": "Forces the Performance quality mode to use the Ultra Performance rendering path.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "On", "wire": "on", "dword": "0x00000001" }
@@ -145,7 +145,7 @@
       "label": "Forced Mode",
       "family": "fg",
       "nvapi_id": "0x10308298",
-      "description": "Frame Generation mode. Dynamic requires driver 595.97 or newer for full functionality.",
+      "description": "Sets the Frame Generation mode. Dynamic mode requires driver 595.97 or newer.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
         { "label": "Fixed", "wire": "fixed", "dword": "0x00000002" },
@@ -157,7 +157,7 @@
       "label": "Enable DLL Override",
       "family": "fg",
       "nvapi_id": "0x10E41E03",
-      "description": "Override DLSS-FG with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "description": "Forces the game to use the latest DLSS-FG version installed system-wide. Supported by most DLSS 3 titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
@@ -168,7 +168,7 @@
       "label": "Multi-Frame Generation — Fixed Count",
       "family": "fg",
       "nvapi_id": "0x104D6667",
-      "description": "How many frames Frame Generation outputs per rendered frame (fixed cadence).",
+      "description": "Sets a fixed number of generated frames per rendered frame.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
         { "label": "2x", "wire": "2x", "dword": "0x00000001" },
@@ -184,7 +184,7 @@
       "family": "fg",
       "nvapi_id": "0x10562D0F",
       "min_driver": "595.97",
-      "description": "Upper limit on generated frames when Frame Generation runs in Dynamic mode.",
+      "description": "Sets an upper limit on generated frames when Frame Generation is in Dynamic mode.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
         { "label": "Up to 2x", "wire": "up_to_2x", "dword": "0x00000001" },
@@ -200,7 +200,7 @@
       "family": "fg",
       "nvapi_id": "0x10CF4125",
       "min_driver": "595.97",
-      "description": "Target frame rate Dynamic Frame Generation aims to hold.",
+      "description": "Sets the target frame rate that Dynamic Frame Generation aims to maintain.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
         { "label": "Max Refresh Rate", "wire": "max_refresh", "dword": "0x01000000" },
@@ -253,7 +253,7 @@
       "label": "Forced Quality Level",
       "family": "rr",
       "nvapi_id": "0x10BD9423",
-      "description": "Forces a fixed DLSS Ray Reconstruction quality level, overriding the in-game selection.",
+      "description": "Overrides the in-game DLSS Ray Reconstruction quality selection.",
       "default": "0x00000003",
       "values": [
         { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
@@ -271,7 +271,7 @@
       "family": "rr",
       "nvapi_id": "0x10C7D4A2",
       "min_driver": "572.83",
-      "description": "Custom render-resolution ratio. Set 'Forced Quality Level' to Custom before choosing a value.",
+      "description": "Sets a custom render-resolution ratio. Requires 'Forced Quality Level' to be set to Custom.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
@@ -293,7 +293,7 @@
       "label": "Enable DLL Override",
       "family": "rr",
       "nvapi_id": "0x10E41E02",
-      "description": "Override DLSS-RR with the latest version installed system-wide. Only DLSS 2+ titles support this, and some block it.",
+      "description": "Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
         { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }

@@ -11,6 +11,7 @@
     Separator,
     buttonVariants,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import { type GroupedLibraryFilterOptions } from '../model/library-filter-options';
   import { type LauncherFilterOption } from '../model/launcher-filter-options';
   import LauncherFilterSection from './LauncherFilterSection.svelte';
@@ -33,7 +34,6 @@
     onApply?: () => void;
   };
 
-  const DIALOG_TITLE = 'Filters';
   const EMPTY_ARRAY = [] as const;
 
   let {
@@ -73,7 +73,7 @@
 
   <DialogContent class="sm:max-w-lg">
     <DialogHeader>
-      <DialogTitle>{DIALOG_TITLE}</DialogTitle>
+      <DialogTitle>{t('filters.title')}</DialogTitle>
     </DialogHeader>
 
     <LauncherFilterSection
@@ -100,7 +100,7 @@
           onCancel?.();
         }}
       >
-        Cancel
+        {t('common.cancel')}
       </Button>
 
       <Button
@@ -110,7 +110,7 @@
           onApply?.();
         }}
       >
-        Apply
+        {t('common.apply')}
       </Button>
     </DialogFooter>
   </DialogContent>

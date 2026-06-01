@@ -18,7 +18,8 @@
     SelectTrigger,
   } from '@shared/ui';
   import type { ThemeMode } from '@shared/theme';
-  import type { LanguageMode } from '@entities/settings';
+  import type { LanguageMode } from '@shared/i18n';
+  import { t } from '@shared/i18n';
 
   type SelectOption<TValue extends string = string> = {
     value: TValue;
@@ -68,26 +69,28 @@
   }
 
   const themeTriggerLabel = $derived(
-    themeOptions.find((option) => option.value === themeMode)?.label ?? 'Select theme',
+    themeOptions.find((option) => option.value === themeMode)?.label ??
+      t('settings.appearance.theme.placeholder'),
   );
 
   const languageTriggerLabel = $derived(
-    languageOptions.find((option) => option.value === languageMode)?.label ?? 'Select language',
+    languageOptions.find((option) => option.value === languageMode)?.label ??
+      t('settings.appearance.language.placeholder'),
   );
 </script>
 
 <Card>
   <CardHeader>
-    <CardTitle>Appearance and language</CardTitle>
-    <CardDescription>Choose how the application looks and which language it uses.</CardDescription>
+    <CardTitle>{t('settings.appearance.title')}</CardTitle>
+    <CardDescription>{t('settings.appearance.description')}</CardDescription>
   </CardHeader>
   <CardContent>
     <ItemGroup>
       <Item>
         <ItemContent>
-          <ItemTitle>Theme</ItemTitle>
+          <ItemTitle>{t('settings.appearance.theme.title')}</ItemTitle>
           <ItemDescription>
-            Follow the operating system appearance or choose a fixed theme.
+            {t('settings.appearance.theme.description')}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -97,7 +100,7 @@
             value={themeMode}
             onValueChange={handleThemeChange}
           >
-            <SelectTrigger class="w-60" aria-label="Theme mode">
+            <SelectTrigger class="w-60" aria-label={t('settings.appearance.theme.triggerLabel')}>
               {themeTriggerLabel}
             </SelectTrigger>
             <SelectContent>
@@ -115,9 +118,9 @@
 
       <Item>
         <ItemContent>
-          <ItemTitle>Language</ItemTitle>
+          <ItemTitle>{t('settings.appearance.language.title')}</ItemTitle>
           <ItemDescription>
-            Select the interface language. More languages can be added later.
+            {t('settings.appearance.language.description')}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -127,7 +130,7 @@
             value={languageMode}
             onValueChange={handleLanguageChange}
           >
-            <SelectTrigger class="w-60" aria-label="Interface language">
+            <SelectTrigger class="w-60" aria-label={t('settings.appearance.language.triggerLabel')}>
               {languageTriggerLabel}
             </SelectTrigger>
             <SelectContent>

@@ -18,6 +18,7 @@
   } from '@shared/ui';
   import type { CoverRemotePolicy } from '@entities/settings';
   import type { CoverSourceToggleRow } from '@features/settings-artwork';
+  import { t } from '@shared/i18n';
 
   const STEAM_GRID_DB_KEY_INPUT_ID = 'steamgriddb-api-key';
   const STEAM_GRID_DB_KEY_MESSAGE_ID = 'steamgriddb-api-key-message';
@@ -53,7 +54,11 @@
   }: Props = $props();
 
   const isSteamKeyEditable = $derived(steamKeyLoaded && !steamKeyBusy);
-  const steamKeyPlaceholder = $derived(steamKeyLoaded ? 'Bearer token' : 'Loading…');
+  const steamKeyPlaceholder = $derived(
+    steamKeyLoaded
+      ? t('settings.catalog.steamKey.placeholder')
+      : t('settings.catalog.steamKey.loading'),
+  );
   const steamKeyMessageId = $derived(steamKeyMessage ? STEAM_GRID_DB_KEY_MESSAGE_ID : undefined);
 
   const isCoverSourceChecked = (row: CoverSourceToggleRow): boolean => {
@@ -77,10 +82,8 @@
 
 <Card>
   <CardHeader>
-    <CardTitle>Cover sources</CardTitle>
-    <CardDescription
-      >Choose which remote sources may run when downloading artwork automatically.</CardDescription
-    >
+    <CardTitle>{t('settings.catalog.title')}</CardTitle>
+    <CardDescription>{t('settings.catalog.description')}</CardDescription>
   </CardHeader>
   <CardContent>
     <ItemGroup>
@@ -90,14 +93,14 @@
         {/if}
         <Item>
           <ItemContent>
-            <ItemTitle>{row.title}</ItemTitle>
-            <ItemDescription>{row.description}</ItemDescription>
+            <ItemTitle>{t(row.titleKey)}</ItemTitle>
+            <ItemDescription>{t(row.descriptionKey)}</ItemDescription>
           </ItemContent>
           <ItemActions>
             <Switch
               checked={isCoverSourceChecked(row)}
               disabled={isCoverSourceDisabled(row)}
-              aria-label={row.ariaLabel}
+              aria-label={t(row.ariaLabelKey)}
               onCheckedChange={() => {
                 handleCoverSourceToggle(row);
               }}
@@ -107,7 +110,9 @@
 
         {#if row.policyKey === 'steamgriddb'}
           <div class="grid w-full max-w-88 gap-2 px-4" aria-busy={steamKeyBusy}>
-            <label class="sr-only" for={STEAM_GRID_DB_KEY_INPUT_ID}>SteamGridDB API key</label>
+            <label class="sr-only" for={STEAM_GRID_DB_KEY_INPUT_ID}>
+              {t('settings.catalog.steamKey.srLabel')}
+            </label>
             <div class="flex items-center gap-2">
               <Input
                 id={STEAM_GRID_DB_KEY_INPUT_ID}
@@ -124,7 +129,7 @@
                 disabled={!isSteamKeyEditable}
                 onclick={handleSteamGridDbKeySave}
               >
-                Save
+                {t('settings.catalog.steamKey.save')}
               </Button>
             </div>
 

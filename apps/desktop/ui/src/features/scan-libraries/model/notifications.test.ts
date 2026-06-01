@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   publishAutomaticLibraryScanFailedNotification,
   publishPartialLibraryScanWarning,
@@ -20,7 +21,7 @@ describe('scan-libraries notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
+        title: t('notify.statusError'),
         description:
           'Automatic library scan failed; your game list was still refreshed. Disk error.',
         important: true,
@@ -36,9 +37,8 @@ describe('scan-libraries notifications', () => {
       {
         id: 'desktop-status',
         severity: 'warning',
-        title: 'Review warning',
-        description:
-          'Some game libraries could not be scanned (2 roots failed). Check logs for details.',
+        title: t('notify.statusWarning'),
+        description: t('scan.partialWarning', { count: 2 }),
         important: false,
       },
     ]);

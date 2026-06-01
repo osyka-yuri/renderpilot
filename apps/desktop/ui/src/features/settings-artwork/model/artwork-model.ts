@@ -3,6 +3,7 @@ import {
   COVERS_STEAM_CDN_SETTING_KEY,
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
 } from '@entities/settings';
+import type { MessageKey } from '@shared/i18n';
 
 export type CoverSourcePolicyKey = 'steamCdn' | 'gogCdn' | 'steamgriddb';
 
@@ -17,10 +18,10 @@ export type CoverSourceSettingKey = keyof typeof coverSourcePolicyBySetting;
 export type CoverSourceToggleRow = {
   settingKey: CoverSourceSettingKey;
   policyKey: CoverSourcePolicyKey;
-  ariaLabel: string;
+  ariaLabelKey: MessageKey;
   eyebrow: string;
-  title: string;
-  description: string;
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
 };
 
 type CoverSourceToggleRowDefinition = Omit<CoverSourceToggleRow, 'policyKey'>;
@@ -28,25 +29,24 @@ type CoverSourceToggleRowDefinition = Omit<CoverSourceToggleRow, 'policyKey'>;
 const coverSourceToggleRowDefinitions = [
   {
     settingKey: COVERS_STEAM_CDN_SETTING_KEY,
-    ariaLabel: 'Use Steam CDN for artwork',
+    ariaLabelKey: 'settings.catalog.source.steam.aria',
     eyebrow: 'Steam',
-    title: 'Steam artwork',
-    description: 'Uses public Steam library artwork when a Steam app ID is available.',
+    titleKey: 'settings.catalog.source.steam.title',
+    descriptionKey: 'settings.catalog.source.steam.description',
   },
   {
     settingKey: COVERS_GOG_CDN_SETTING_KEY,
-    ariaLabel: 'Use GOG CDN for artwork',
+    ariaLabelKey: 'settings.catalog.source.gog.aria',
     eyebrow: 'GOG',
-    title: 'GOG artwork',
-    description: 'Uses official GOG cover artwork when a numeric GOG product ID is available.',
+    titleKey: 'settings.catalog.source.gog.title',
+    descriptionKey: 'settings.catalog.source.gog.description',
   },
   {
     settingKey: COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
-    ariaLabel: 'Use SteamGridDB as an artwork source',
+    ariaLabelKey: 'settings.catalog.source.steamgriddb.aria',
     eyebrow: 'SteamGridDB',
-    title: 'SteamGridDB artwork',
-    description:
-      'Uses SteamGridDB as an additional source for missing artwork and non-Steam titles. Requires an API key.',
+    titleKey: 'settings.catalog.source.steamgriddb.title',
+    descriptionKey: 'settings.catalog.source.steamgriddb.description',
   },
 ] as const satisfies readonly CoverSourceToggleRowDefinition[];
 
@@ -54,9 +54,6 @@ export const coverSourceToggleRows = coverSourceToggleRowDefinitions.map((row) =
   ...row,
   policyKey: coverSourcePolicyBySetting[row.settingKey],
 })) satisfies readonly CoverSourceToggleRow[];
-
-export const artworkSettingsReadError = 'Could not read automatic artwork settings.';
-export const artworkSourceSaveError = 'Could not save artwork source setting.';
 
 export function formatBooleanSetting(value: boolean): string {
   return String(value);

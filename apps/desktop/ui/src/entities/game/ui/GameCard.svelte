@@ -10,8 +10,9 @@
     CardTitle,
   } from '@shared/ui';
 
-  import { createActionAriaLabel, createTitleId } from '../model/dom-helpers';
-  import type { GameCardViewModel } from '../model/game-card-view-model';
+  import { t } from '@shared/i18n';
+  import { createTitleId } from '../model/dom-helpers';
+  import type { GameCardViewModel, UpdateBadge } from '../model/game-card-view-model';
 
   import GameCardActionsMenu from './GameCardActionsMenu.svelte';
   import GameCardCover from './GameCardCover.svelte';
@@ -42,11 +43,6 @@
   const noop: VoidHandler = () => undefined;
   const noopMenuOpenChange: MenuOpenChangeHandler = () => undefined;
 
-  const ACTION_LABELS = {
-    details: 'Details',
-    journal: 'Journal',
-  } as const;
-
   const HEADER_LAYOUT_CLASS =
     'grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-3 max-md:grid-cols-1 max-md:gap-3.5';
 
@@ -71,9 +67,21 @@
   const titleId = $derived(createTitleId(game.id));
 
   const actionAriaLabels = $derived({
-    details: createActionAriaLabel('Open details', game.title),
-    journal: createActionAriaLabel('Open journal', game.title),
+    details: t('game.card.action.detailsAria', { title: game.title }),
+    journal: t('game.card.action.journalAria', { title: game.title }),
   });
+
+  function updateBadgeLabel(badge: UpdateBadge): string {
+    if (badge.kind === 'up-to-date') {
+      return t('game.card.badge.upToDate');
+    }
+
+    if (badge.count <= 0) {
+      return t('game.card.badge.updatesAvailable');
+    }
+
+    return t('game.card.badge.updatesAvailableCount', { count: badge.count });
+  }
 </script>
 
 <Card aria-labelledby={titleId}>
@@ -104,7 +112,7 @@
 
       <div class="grid min-w-0 gap-3">
         <Badge class="w-fit" variant={game.updateBadge.variant}>
-          {game.updateBadge.label}
+          {updateBadgeLabel(game.updateBadge)}
         </Badge>
 
         <div class="grid min-w-0 gap-2">
@@ -122,7 +130,7 @@
 
   <CardContent class="flex-1">
     <p class="mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-      Detected libraries
+      {t('game.card.detectedLibraries')}
     </p>
 
     <GameLibraryBadges libraries={game.libraries} />
@@ -135,7 +143,7 @@
       aria-label={actionAriaLabels.details}
       onclick={onOpenDetails}
     >
-      {ACTION_LABELS.details}
+      {t('game.card.action.details')}
     </Button>
 
     <Button
@@ -144,7 +152,7 @@
       aria-label={actionAriaLabels.journal}
       onclick={onOpenOperations}
     >
-      {ACTION_LABELS.journal}
+      {t('game.card.action.journal')}
     </Button>
   </CardFooter>
 </Card>

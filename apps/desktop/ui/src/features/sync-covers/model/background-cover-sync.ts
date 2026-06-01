@@ -1,5 +1,6 @@
 import { type GameSummary } from '@entities/game';
 import { describeCommandError } from '@shared/api';
+import { t } from '@shared/i18n';
 import {
   STEAMGRIDDB_SETTING_KEY,
   fetchCoverRemotePolicy,
@@ -34,12 +35,12 @@ export async function refreshCardsAfterCoverSync(
     await refreshGameCards();
     return null;
   } catch (error) {
-    return `${describeCommandError(error)} (covers may have downloaded; try Refresh Libraries.)`;
+    return t('coverSync.refreshFailed', { error: describeCommandError(error) });
   }
 }
 
 export function formatBackgroundCoverSyncError(error: unknown): string {
-  return `Background cover sync failed. ${describeCommandError(error)}`;
+  return t('coverSync.failed', { error: describeCommandError(error) });
 }
 
 export async function executeBackgroundCoverSync(

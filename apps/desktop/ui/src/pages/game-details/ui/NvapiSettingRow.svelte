@@ -16,6 +16,7 @@
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
+  import { t, translateKey } from '@shared/i18n';
   import type { SettingStateResponse } from '@features/nvapi-settings';
 
   type Props = {
@@ -65,12 +66,17 @@
 
 <Item size="sm">
   <ItemContent>
-    <ItemTitle>{state.setting_label}</ItemTitle>
+    <ItemTitle>{translateKey(`nvapi.${state.setting_key}.label`, state.setting_label)}</ItemTitle>
     {#if state.description !== null || state.min_driver !== null}
       <ItemDescription>
-        {#if state.description}{state.description}{/if}
+        {#if state.description}{translateKey(
+            `nvapi.${state.setting_key}.description`,
+            state.description,
+          )}{/if}
         {#if state.min_driver}
-          <span class="text-muted-foreground"> · requires driver {state.min_driver} or newer</span>
+          <span class="text-muted-foreground">
+            · {t('gameDetails.nvapi.requiresDriver', { version: state.min_driver })}</span
+          >
         {/if}
       </ItemDescription>
     {/if}
@@ -78,15 +84,31 @@
   <ItemActions>
     <Select type="single" {disabled} bind:value={selected} onValueChange={handleChange}>
       <SelectTrigger size="sm" class="w-60">
-        <span class="truncate">{state.current.label}</span>
+        <span class="truncate"
+          >{translateKey(
+            `nvapi.${state.setting_key}.value.${state.current.wire}`,
+            state.current.label,
+          )}</span
+        >
       </SelectTrigger>
       <SelectContent>
         {#each orderedValues as option (option.wire)}
-          <SelectItem value={option.wire} label={option.label} disabled={!option.supported}>
+          <SelectItem
+            value={option.wire}
+            label={translateKey(`nvapi.${state.setting_key}.value.${option.wire}`, option.label)}
+            disabled={!option.supported}
+          >
             <span class="flex w-full items-center justify-between gap-2">
-              <span>{option.label}</span>
+              <span
+                >{translateKey(
+                  `nvapi.${state.setting_key}.value.${option.wire}`,
+                  option.label,
+                )}</span
+              >
               {#if !option.supported}
-                <span class="text-xs text-muted-foreground">unavailable</span>
+                <span class="text-xs text-muted-foreground"
+                  >{t('gameDetails.nvapi.unavailable')}</span
+                >
               {/if}
             </span>
           </SelectItem>
@@ -101,13 +123,13 @@
           size="icon-sm"
           disabled={disabled || !canReset}
           onclick={onRevertPredefined}
-          aria-label="Reset to driver default"
+          aria-label={t('gameDetails.nvapi.resetDefault')}
         >
           <Undo2Icon class="size-4" aria-hidden="true" />
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {canReset ? 'Reset to driver default' : 'Already at the driver default'}
+        {canReset ? t('gameDetails.nvapi.resetDefault') : t('gameDetails.nvapi.alreadyDefault')}
       </TooltipContent>
     </Tooltip>
 
@@ -118,18 +140,18 @@
           size="icon-sm"
           disabled={disabled || !canRestore}
           onclick={onRevertBaseline}
-          aria-label="Restore the value from before RenderPilot first changed this setting"
+          aria-label={t('gameDetails.nvapi.restoreBaselineAria')}
         >
           <HistoryIcon class="size-4" aria-hidden="true" />
         </Button>
       </TooltipTrigger>
       <TooltipContent>
         {#if canRestore}
-          Restore the value from before RenderPilot
+          {t('gameDetails.nvapi.restoreBaseline')}
         {:else if hasBaseline}
-          Already at the pre-RenderPilot value
+          {t('gameDetails.nvapi.alreadyBaseline')}
         {:else}
-          No pre-RenderPilot value saved yet
+          {t('gameDetails.nvapi.noBaseline')}
         {/if}
       </TooltipContent>
     </Tooltip>

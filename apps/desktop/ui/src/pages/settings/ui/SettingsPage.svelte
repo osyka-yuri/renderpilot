@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ThemeMode } from '@shared/theme';
-  import type { LanguageMode } from '@entities/settings';
+  import type { LanguageMode } from '@shared/i18n';
+  import { t } from '@shared/i18n';
   import { ScrollArea, Tabs, TabsContent, TabsList, TabsTrigger } from '@shared/ui';
   import {
     type LanguageModeHandler,
@@ -32,6 +33,13 @@
 
   const model = createSettingsPanelModel();
 
+  const localizedThemeOptions = $derived(
+    themeOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
+  );
+  const localizedLanguageOptions = $derived(
+    languageOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
+  );
+
   onMount(() => {
     model.init();
 
@@ -44,7 +52,7 @@
 <Tabs value="appearance" class="flex h-full flex-col">
   <TabsList class="grid w-full max-w-md shrink-0 grid-cols-2">
     {#each tabOptions as tab (tab.value)}
-      <TabsTrigger value={tab.value}>{tab.label}</TabsTrigger>
+      <TabsTrigger value={tab.value}>{t(tab.labelKey)}</TabsTrigger>
     {/each}
   </TabsList>
 
@@ -53,8 +61,8 @@
       <SettingsAppearanceSection
         {themeMode}
         {languageMode}
-        {themeOptions}
-        {languageOptions}
+        themeOptions={localizedThemeOptions}
+        languageOptions={localizedLanguageOptions}
         onThemeChange={onThemeModeChange}
         onLanguageChange={onLanguageModeChange}
       />

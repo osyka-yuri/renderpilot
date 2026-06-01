@@ -2,6 +2,7 @@
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
   import { formatCanonicalLibraryLabel } from '@shared/graphics';
   import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
 
   type Props = {
@@ -20,7 +21,7 @@
 <Card>
   <CardHeader class="pb-2">
     <CardTitle>{title}</CardTitle>
-    <CardDescription>Swap the on-disk library file to a different version.</CardDescription>
+    <CardDescription>{t('gameDetails.vendor.description')}</CardDescription>
   </CardHeader>
 
   <CardContent>

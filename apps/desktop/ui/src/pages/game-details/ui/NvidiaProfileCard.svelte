@@ -19,6 +19,7 @@
     SelectTrigger,
   } from '@shared/ui';
   import { fileNameFromPath } from '@shared/path';
+  import { t } from '@shared/i18n';
   import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
 
   type Props = {
@@ -42,25 +43,25 @@
 
 <Card>
   <CardHeader class="pb-2">
-    <CardTitle>NVIDIA driver profile</CardTitle>
+    <CardTitle>{t('gameDetails.profile.title')}</CardTitle>
     <CardDescription>
-      The driver overrides below are written to this executable's NVIDIA profile.
+      {t('gameDetails.profile.description')}
     </CardDescription>
   </CardHeader>
 
   <CardContent class="grid gap-2">
     <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
       <ItemContent>
-        <ItemTitle>Profile target</ItemTitle>
+        <ItemTitle>{t('gameDetails.profile.target')}</ItemTitle>
         <ItemDescription>
           {#if !nvapi.hasStates && nvapi.busy}
-            Loading driver state…
+            {t('gameDetails.profile.loading')}
           {:else if nvapi.effectiveExeSource === 'override'}
-            Manually pinned to this executable.
+            {t('gameDetails.profile.pinnedManual')}
           {:else if nvapi.effectiveExeSource === 'auto'}
-            Auto-detected (file size, path depth, NVAPI profile probe).
+            {t('gameDetails.profile.autoDetected')}
           {:else}
-            No executable detected for this installation.
+            {t('gameDetails.profile.noExeDetected')}
           {/if}
         </ItemDescription>
       </ItemContent>
@@ -70,12 +71,12 @@
             {#if nvapi.effectiveExe}
               <span class="truncate">{fileNameFromPath(nvapi.effectiveExe)}</span>
             {:else}
-              <span class="text-muted-foreground">No executable</span>
+              <span class="text-muted-foreground">{t('gameDetails.profile.noExe')}</span>
             {/if}
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={AUTO_DETECT_VALUE} label="Auto-detect (top candidate)">
-              Auto-detect (top candidate)
+            <SelectItem value={AUTO_DETECT_VALUE} label={t('gameDetails.profile.autoDetect')}>
+              {t('gameDetails.profile.autoDetect')}
             </SelectItem>
             {#each nvapi.supportedCandidates as candidate (candidate.absolute_path)}
               <SelectItem value={candidate.absolute_path} label={candidate.file_name}>
@@ -88,12 +89,13 @@
             {#each nvapi.filteredOutCandidates as candidate (candidate.absolute_path)}
               <SelectItem
                 value={candidate.absolute_path}
-                label={`${candidate.file_name} (filtered)`}
+                label={t('gameDetails.profile.filteredLabel', { fileName: candidate.file_name })}
               >
                 <span class="flex flex-col">
                   <span
                     >{candidate.file_name}
-                    <span class="text-muted-foreground">(filtered)</span></span
+                    <span class="text-muted-foreground">{t('gameDetails.profile.filteredTag')}</span
+                    ></span
                   >
                   <span class="text-xs text-muted-foreground">{candidate.relative_path}</span>
                 </span>
@@ -106,9 +108,7 @@
 
     {#if nvapi.hasStates && !nvapi.hasProfile && nvapi.effectiveExe}
       <p class="px-4 text-xs text-muted-foreground">
-        NVIDIA has no profile for <code class="font-mono"
-          >{fileNameFromPath(nvapi.effectiveExe)}</code
-        > yet. Launch the game once, then come back.
+        {t('gameDetails.profile.noProfile', { exe: fileNameFromPath(nvapi.effectiveExe) })}
       </p>
     {/if}
 

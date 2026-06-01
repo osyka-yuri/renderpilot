@@ -64,4 +64,4 @@ export { default as GameCard } from './ui/GameCard.svelte';
 export { default as GamesDashboardSummary } from './ui/GamesDashboardSummary.svelte';
 export type { GameCardMenuHandle } from './ui/types';
 
-export { createTitleId, createActionAriaLabel } from './model/dom-helpers';
+export { createTitleId } from './model/dom-helpers';

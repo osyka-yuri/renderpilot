@@ -17,6 +17,7 @@
     CardTitle,
     ScrollArea,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import type { SettingFamily } from '@features/nvapi-settings';
   import type {
     SwapHandler,
@@ -162,19 +163,18 @@
     {#if !details}
       <Card>
         <CardContent>
-          <CardTitle>No game selected</CardTitle>
+          <CardTitle>{t('gameDetails.noGameSelected.title')}</CardTitle>
           <CardDescription>
-            Select a game card on the dashboard to open one coherent workspace for that
-            installation.
+            {t('gameDetails.noGameSelected.description')}
           </CardDescription>
         </CardContent>
       </Card>
     {:else if tabs.length === 0}
       <Card>
         <CardContent>
-          <CardTitle>No graphics components detected</CardTitle>
+          <CardTitle>{t('gameDetails.noComponents.title')}</CardTitle>
           <CardDescription>
-            No graphics-related components were detected for this installation.
+            {t('gameDetails.noComponents.description')}
           </CardDescription>
         </CardContent>
       </Card>

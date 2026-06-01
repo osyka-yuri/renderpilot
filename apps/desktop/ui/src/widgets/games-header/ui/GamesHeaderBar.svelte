@@ -2,10 +2,9 @@
   import { GamesDashboardSummary, type DashboardStats } from '@entities/game';
   import { Button, Spinner } from '@shared/ui';
   import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
 
   type ActionHandler = () => void;
-
-  const DEFAULT_SCAN_BUTTON_LABEL = 'Scan Folder';
 
   const createDefaultDashboardStats = (): DashboardStats => ({
     games: 0,
@@ -24,12 +23,12 @@
   const {
     hasGames = false,
     busy = false,
-    scanButtonLabel = DEFAULT_SCAN_BUTTON_LABEL,
+    scanButtonLabel = '',
     dashboardStats = createDefaultDashboardStats(),
     onScan = () => undefined,
   }: Props = $props();
 
-  const normalizedScanButtonLabel = $derived(scanButtonLabel.trim() || DEFAULT_SCAN_BUTTON_LABEL);
+  const normalizedScanButtonLabel = $derived(scanButtonLabel.trim() || t('games.scanFolder'));
 </script>
 
 <div
@@ -46,7 +45,7 @@
   <div
     class={cn('ml-auto flex flex-wrap justify-end gap-2', 'max-md:ml-0 max-md:justify-start')}
     role="group"
-    aria-label="Library actions"
+    aria-label={t('games.libraryActions')}
   >
     <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
       {#if busy}

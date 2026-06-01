@@ -16,7 +16,3 @@ export function normalizeDomIdSegment(value: string): string {
 export function createTitleId(gameId: string): string {
   return `${TITLE_ID_PREFIX}-${normalizeDomIdSegment(gameId)}`;
 }
-
-export function createActionAriaLabel(action: string, gameTitle: string): string {
-  return `${action} for ${gameTitle}`;
-}

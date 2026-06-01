@@ -6,6 +6,7 @@ import {
   type OperationSummary,
 } from '@entities/operation';
 import { formatTimestamp } from '@shared/format';
+import { t } from '@shared/i18n';
 
 export type OperationHistoryDetails = {
   operations: readonly OperationSummary[];
@@ -39,6 +40,10 @@ export function createOperationViewModel(operation: OperationSummary): Operation
       operation.created_at,
       operation.completed_at ?? null,
     ),
-    ariaLabel: `${kindLabel}, ${statusLabel}, created ${createdAtText}`,
+    ariaLabel: t('operation.itemAria', {
+      kind: kindLabel,
+      status: statusLabel,
+      createdAt: createdAtText,
+    }),
   };
 }

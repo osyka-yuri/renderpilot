@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { t } from '@shared/i18n';
 import type { LibraryManifestEntry } from '@entities/library';
 import {
   formatSignedDate,
@@ -29,19 +30,23 @@ describe('libraries-page-model', () => {
   });
 
   describe('formatSignedDate', () => {
-    it('returns "Unsigned" for unsigned signature', () => {
+    it('returns the unsigned label for unsigned signature', () => {
       const entry = sampleEntry({ signedAt: null });
-      expect(formatSignedDate(entry.signature)).toBe('Unsigned');
+      expect(formatSignedDate(entry.signature)).toBe(t('libraries.unsigned'));
     });
 
-    it('returns formatted date for signed signature', () => {
+    it('returns a formatted date for a signed signature', () => {
       const entry = sampleEntry({ signedAt: '2024-03-15T10:30:00Z' });
-      expect(formatSignedDate(entry.signature)).toBe('03/15/2024');
+      // Format follows the active locale (en: 03/15/2024, ru: 15.03.2024), so
+      // assert on the locale-agnostic day/year parts rather than exact layout.
+      const formatted = formatSignedDate(entry.signature);
+      expect(formatted).toContain('2024');
+      expect(formatted).toContain('15');
     });
 
-    it('returns "Invalid date" for malformed date', () => {
+    it('returns the invalid-date label for malformed date', () => {
       const entry = sampleEntry({ signedAt: 'not-a-date' });
-      expect(formatSignedDate(entry.signature)).toBe('Invalid date');
+      expect(formatSignedDate(entry.signature)).toBe(t('libraries.invalidDate'));
     });
   });
 

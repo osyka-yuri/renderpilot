@@ -1,28 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { t } from '@shared/i18n';
 import { formatPartialScanWarning } from './scan-presenters';
 
 type PartialScanWarningCase = {
   name: string;
   scanErrorCount: number;
-  expected: string;
 };
 
 const partialScanWarningCases = [
-  {
-    name: 'single failed root',
-    scanErrorCount: 1,
-    expected: 'Some game libraries could not be scanned (1 root failed). Check logs for details.',
-  },
-  {
-    name: 'two failed roots',
-    scanErrorCount: 2,
-    expected: 'Some game libraries could not be scanned (2 roots failed). Check logs for details.',
-  },
-  {
-    name: 'many failed roots',
-    scanErrorCount: 10,
-    expected: 'Some game libraries could not be scanned (10 roots failed). Check logs for details.',
-  },
+  { name: 'single failed root', scanErrorCount: 1 },
+  { name: 'two failed roots', scanErrorCount: 2 },
+  { name: 'many failed roots', scanErrorCount: 10 },
 ] satisfies readonly PartialScanWarningCase[];
 
 const invalidScanErrorCounts = [
@@ -38,8 +26,10 @@ const invalidScanErrorCounts = [
 
 describe('scan-presenters', () => {
   describe('formatPartialScanWarning', () => {
-    it.each(partialScanWarningCases)('$name', ({ scanErrorCount, expected }) => {
-      expect(formatPartialScanWarning(scanErrorCount)).toBe(expected);
+    it.each(partialScanWarningCases)('$name', ({ scanErrorCount }) => {
+      expect(formatPartialScanWarning(scanErrorCount)).toBe(
+        t('scan.partialWarning', { count: scanErrorCount }),
+      );
     });
 
     it.each(invalidScanErrorCounts)(

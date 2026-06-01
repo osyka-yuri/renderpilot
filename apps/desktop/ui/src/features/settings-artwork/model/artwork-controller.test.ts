@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  coverSourceToggleRows,
-  artworkSettingsReadError,
-  artworkSourceSaveError,
-  type CoverSourceToggleRow,
-} from './artwork-model';
+import { coverSourceToggleRows, type CoverSourceToggleRow } from './artwork-model';
+import { t } from '@shared/i18n';
 import type { CatalogSettingPayload, CoverRemotePolicy } from '@entities/settings';
 import {
   loadCoverRemoteSources,
@@ -54,7 +50,7 @@ describe('artwork-controller', () => {
 
       expect(harness.state.coverSourcesLoaded).toBe(true);
       expect(harness.state.coverSourcesBusy).toBe(false);
-      expect(harness.message).toBe(artworkSettingsReadError);
+      expect(harness.message).toBe(t('settings.catalog.artworkReadError'));
     });
 
     it('ignores stale cover policy response and keeps pending state untouched', async () => {
@@ -142,7 +138,7 @@ describe('artwork-controller', () => {
 
       expect(harness.state.coverSourcesState[row.policyKey]).toBe(previousEnabled);
       expect(harness.state.savingCoverSourceKeys.has(row.settingKey)).toBe(false);
-      expect(harness.message).toBe(artworkSourceSaveError);
+      expect(harness.message).toBe(t('settings.catalog.artworkSaveError'));
     });
 
     it('ignores stale toggle error when a newer mutation exists', async () => {

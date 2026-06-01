@@ -2,6 +2,7 @@
   import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 
   import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
   import { Button, Popover, PopoverContent, PopoverTrigger, buttonVariants } from '@shared/ui';
 
   type MenuActionId = 'fetch-cover' | 'pick-cover' | 'clear-cover';
@@ -51,7 +52,7 @@
   let triggerEl = $state<HTMLButtonElement | null>(null);
 
   const isMenuOpen = $derived(open && !disabled);
-  const coverOptionsLabel = $derived(`Cover options for ${title}`);
+  const coverOptionsLabel = $derived(t('game.cover.menu.ariaLabel', { title }));
 
   const isFetchCoverDisabled = $derived(disabled || autoFetchInProgress);
   const isPickCoverDisabled = $derived(disabled || pickDisabled);
@@ -60,25 +61,24 @@
   const menuActions = $derived.by((): MenuAction[] => [
     {
       id: 'fetch-cover',
-      label: autoFetchInProgress ? 'Fetching cover…' : 'Fetch cover online',
+      label: autoFetchInProgress ? t('game.cover.menu.fetching') : t('game.cover.menu.fetch'),
       disabled: isFetchCoverDisabled,
-      title:
-        'Uses Steam or GOG CDN when possible; otherwise SteamGridDB if you configured an API key in Settings.',
+      title: t('game.cover.menu.fetchHint'),
       handler: onFetchCover,
     },
     {
       id: 'pick-cover',
-      label: 'Use image file as cover…',
+      label: t('game.cover.menu.pick'),
       disabled: isPickCoverDisabled,
-      title: 'Choose a PNG, JPG, WebP, or GIF from disk and save it as this game’s cover.',
+      title: t('game.cover.menu.pickHint'),
       handler: onPickCover,
     },
     {
       id: 'clear-cover',
-      label: 'Remove saved cover',
+      label: t('game.cover.menu.clear'),
       disabled: isClearCoverDisabled,
       danger: true,
-      title: 'Removes the saved cover file and clears the thumbnail for this game.',
+      title: t('game.cover.menu.clearHint'),
       handler: onClearCover,
     },
   ]);

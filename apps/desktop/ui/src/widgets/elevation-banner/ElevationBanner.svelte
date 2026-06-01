@@ -3,6 +3,7 @@
   import { requestAdminRelaunch } from '@entities/app';
   import { describeCommandErrorTechnical } from '@shared/api';
   import { publishErrorNotification } from '@shared/notifications';
+  import { t } from '@shared/i18n';
   import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
   import XIcon from '@lucide/svelte/icons/x';
 
@@ -34,10 +35,7 @@
       // failure (cancel UAC, OS policy) it rejects with a CommandError.
       await requestAdminRelaunch();
     } catch (e) {
-      publishErrorNotification(
-        'Could not relaunch as administrator',
-        describeCommandErrorTechnical(e),
-      );
+      publishErrorNotification(t('elevation.relaunchFailed'), describeCommandErrorTechnical(e));
     } finally {
       busy = false;
     }
@@ -51,20 +49,19 @@
   >
     <ShieldAlertIcon class="size-5 shrink-0 text-warning" aria-hidden="true" />
     <div class="grid min-w-0 flex-1 gap-1">
-      <div class="text-sm font-medium text-foreground">Administrator privileges required</div>
+      <div class="text-sm font-medium text-foreground">{t('elevation.title')}</div>
       <div class="text-xs text-muted-foreground">
-        RenderPilot is running without administrator rights. NVIDIA driver settings (DLSS render
-        preset) cannot be changed in this session.
+        {t('elevation.description')}
       </div>
     </div>
     <div class="flex items-center gap-2">
       <Button variant="default" size="sm" disabled={busy} onclick={handleRelaunch}>
-        Relaunch as administrator
+        {t('elevation.relaunch')}
       </Button>
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Dismiss for this session"
+        aria-label={t('elevation.dismiss')}
         onclick={() => (dismissed = true)}
       >
         <XIcon class="size-4" aria-hidden="true" />

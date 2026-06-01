@@ -1,13 +1,9 @@
+import { t } from '@shared/i18n';
+
 export function formatPartialScanWarning(scanErrorCount: number): string {
   assertPositiveInteger(scanErrorCount, 'scanErrorCount');
 
-  const failedRootLabel = getFailedRootLabel(scanErrorCount);
-
-  return `Some game libraries could not be scanned (${scanErrorCount} ${failedRootLabel} failed). Check logs for details.`;
-}
-
-function getFailedRootLabel(count: number): 'root' | 'roots' {
-  return count === 1 ? 'root' : 'roots';
+  return t('scan.partialWarning', { count: scanErrorCount });
 }
 
 function assertPositiveInteger(value: number, name: string): void {

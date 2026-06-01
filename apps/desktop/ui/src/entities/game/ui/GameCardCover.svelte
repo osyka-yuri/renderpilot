@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AspectRatio, Spinner } from '@shared/ui';
+  import { t } from '@shared/i18n';
 
   const FALLBACK_MONOGRAM = '—';
 
@@ -19,7 +20,9 @@
   const placeholderLabel = $derived(normalizeOptionalText(monogram) ?? FALLBACK_MONOGRAM);
 
   const coverAlt = $derived(
-    normalizedTitle ? `Cover artwork: ${normalizedTitle}` : 'Cover artwork',
+    normalizedTitle
+      ? t('game.cover.altWithTitle', { title: normalizedTitle })
+      : t('game.cover.alt'),
   );
 
   function normalizeOptionalText(value: string | null | undefined): string | null {

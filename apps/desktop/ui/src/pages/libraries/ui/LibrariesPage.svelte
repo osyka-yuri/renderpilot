@@ -20,6 +20,7 @@
     ToggleGroupItem,
     createSvelteTable,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import {
     type ColumnDef,
     type Row,
@@ -187,7 +188,7 @@
 >
   {#if model.errorMessage}
     <Alert variant="destructive" class="shrink-0">
-      <AlertTitle>Error</AlertTitle>
+      <AlertTitle>{t('libraries.error')}</AlertTitle>
       <AlertDescription>{model.errorMessage}</AlertDescription>
     </Alert>
   {/if}

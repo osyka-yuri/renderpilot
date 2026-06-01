@@ -1,9 +1,9 @@
 import type { ThemeMode } from '@shared/theme';
-import { type LanguageMode } from '@entities/settings';
+import { type LanguageMode, type MessageKey } from '@shared/i18n';
 
 export type SettingsSelectOption<Value extends string = string> = {
   value: Value;
-  label: string;
+  labelKey: MessageKey;
   disabled?: boolean;
 };
 
@@ -11,25 +11,25 @@ export type ThemeModeHandler = (mode: ThemeMode) => void;
 export type LanguageModeHandler = (mode: LanguageMode) => void;
 
 export const themeOptions = [
-  { value: 'system', label: 'System' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
+  { value: 'system', labelKey: 'settings.theme.system' },
+  { value: 'dark', labelKey: 'settings.theme.dark' },
+  { value: 'light', labelKey: 'settings.theme.light' },
 ] as const satisfies readonly SettingsSelectOption<ThemeMode>[];
 
 export const languageOptions = [
-  { value: 'system', label: 'Follow system' },
-  { value: 'en', label: 'English' },
-  { value: 'ru', label: 'Russian' },
+  { value: 'system', labelKey: 'settings.language.system' },
+  { value: 'en', labelKey: 'settings.language.en' },
+  { value: 'ru', labelKey: 'settings.language.ru' },
 ] as const satisfies readonly SettingsSelectOption<LanguageMode>[];
 
 export type SettingsTabOption = {
   value: string;
-  label: string;
+  labelKey: MessageKey;
 };
 
 export const tabOptions = [
-  { value: 'appearance', label: 'Appearance' },
-  { value: 'catalog', label: 'Catalog' },
+  { value: 'appearance', labelKey: 'settings.tabs.appearance' },
+  { value: 'catalog', labelKey: 'settings.tabs.catalog' },
 ] as const satisfies readonly SettingsTabOption[];
 
 export function isOptionValue<Value extends string>(

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   publishCoverDownloadedNotification,
   publishCoverOperationErrorNotification,
@@ -21,8 +22,8 @@ describe('cover notifications', () => {
       {
         id: 'notification-1',
         severity: 'success',
-        title: 'Cover updated',
-        description: 'The custom artwork has been saved.',
+        title: t('notify.coverUpdated.title'),
+        description: t('notify.coverUpdated.body'),
         important: undefined,
       },
     ]);
@@ -36,8 +37,8 @@ describe('cover notifications', () => {
       {
         id: 'notification-1',
         severity: 'info',
-        title: 'Cover downloaded',
-        description: 'The game artwork has been refreshed.',
+        title: t('notify.coverDownloaded.title'),
+        description: t('notify.coverDownloaded.body'),
         important: undefined,
       },
     ]);
@@ -51,8 +52,8 @@ describe('cover notifications', () => {
       {
         id: 'notification-1',
         severity: 'success',
-        title: 'Cover removed',
-        description: 'The game now uses the default artwork.',
+        title: t('notify.coverRemoved.title'),
+        description: t('notify.coverRemoved.body'),
         important: undefined,
       },
     ]);
@@ -66,7 +67,7 @@ describe('cover notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
+        title: t('notify.statusError'),
         description: 'reload failed',
         important: true,
       },
@@ -81,8 +82,8 @@ describe('cover notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
-        description: 'Choosing a cover file requires the desktop app.',
+        title: t('notify.statusError'),
+        description: t('notify.coverPickerPreview'),
         important: true,
       },
     ]);

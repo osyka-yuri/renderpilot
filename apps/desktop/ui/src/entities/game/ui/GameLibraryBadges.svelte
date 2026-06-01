@@ -3,9 +3,9 @@
 
   import { createPresentedLibraries } from '@shared/graphics';
   import { cn } from '@shared/classnames';
+  import { t } from '@shared/i18n';
   import { Badge } from '@shared/ui';
 
-  const EMPTY_LIBRARIES_LABEL = 'No detected libraries yet';
   const ROOT_CLASS_NAME = 'flex flex-wrap gap-1.5';
 
   type Props = HTMLAttributes<HTMLDivElement> & {
@@ -28,7 +28,7 @@
     {/each}
   {:else}
     <Badge variant="outline">
-      {EMPTY_LIBRARIES_LABEL}
+      {t('game.libraries.empty')}
     </Badge>
   {/if}
 </div>

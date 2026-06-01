@@ -32,6 +32,7 @@
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
   import { buildStreamlineVersionModel, type BulkSwapItem } from '../model/streamline-versions';
 
@@ -64,8 +65,8 @@
     versionModel.currentVersion
       ? `v${versionModel.currentVersion}`
       : versionModel.isMixed
-        ? 'Mixed versions'
-        : 'Unknown',
+        ? t('gameDetails.streamline.mixed')
+        : t('common.unknown'),
   );
 
   function handleBulkChange(value: string | undefined) {
@@ -91,7 +92,7 @@
   <CardHeader class="pb-2">
     <CardTitle>NVIDIA Streamline</CardTitle>
     <CardDescription>
-      Multi-plugin framework. Every plugin must run the same version — set them all together here.
+      {t('gameDetails.streamline.description')}
     </CardDescription>
   </CardHeader>
 
@@ -99,12 +100,14 @@
     <!-- Primary: safe bundle swap — one version across every plugin -->
     <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
       <ItemContent>
-        <ItemTitle>Streamline version · all plugins</ItemTitle>
-        <ItemDescription>Applies one version across every plugin at once.</ItemDescription>
+        <ItemTitle>{t('gameDetails.streamline.versionTitle')}</ItemTitle>
+        <ItemDescription>{t('gameDetails.streamline.versionDescription')}</ItemDescription>
       </ItemContent>
       <ItemActions>
         {#if versionModel.options.length === 0}
-          <span class="text-xs text-muted-foreground">No other versions</span>
+          <span class="text-xs text-muted-foreground"
+            >{t('gameDetails.streamline.noOtherVersions')}</span
+          >
         {:else}
           <Select type="single" disabled={busy} onValueChange={handleBulkChange}>
             <SelectTrigger size="sm" class="w-60">
@@ -121,8 +124,11 @@
                       {/if}
                     </span>
                     {#if !option.isComplete}
-                      <span class="text-xs text-muted-foreground"
-                        >updates {option.updateCount} · {option.missingCount} unavailable</span
+                      <span class="text-xs text-muted-foreground">
+                        {t('gameDetails.streamline.updatesSummary', {
+                          updates: option.updateCount,
+                          missing: option.missingCount,
+                        })}</span
                       >
                     {/if}
                   </span>
@@ -139,12 +145,12 @@
                 size="icon-sm"
                 disabled={busy}
                 onclick={handleRestoreAll}
-                aria-label="Restore all plugins to their original versions"
+                aria-label={t('gameDetails.streamline.restoreAllAria')}
               >
                 <Undo2Icon class="size-4" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Restore all plugins to original</TooltipContent>
+            <TooltipContent>{t('gameDetails.streamline.restoreAllTooltip')}</TooltipContent>
           </Tooltip>
         {/if}
       </ItemActions>
@@ -154,7 +160,7 @@
       <Alert variant="warning" size="sm" role="note">
         <TriangleAlertIcon aria-hidden="true" />
         <AlertDescription>
-          Plugins are on different versions — choose one above to bring them back in sync.
+          {t('gameDetails.streamline.mixedWarning')}
         </AlertDescription>
       </Alert>
     {/if}
@@ -163,14 +169,13 @@
     <Accordion type="single">
       <AccordionItem value="per-plugin" class="border-b-0">
         <AccordionTrigger class="text-muted-foreground">
-          Advanced — per-plugin ({orderedComponents.length})
+          {t('gameDetails.streamline.advanced', { count: orderedComponents.length })}
         </AccordionTrigger>
         <AccordionContent class="grid gap-2">
           <Alert variant="warning" size="sm" role="note">
             <TriangleAlertIcon aria-hidden="true" />
             <AlertDescription>
-              Changing one plugin on its own can desync Streamline. Prefer the version selector
-              above unless a specific plugin needs a different build.
+              {t('gameDetails.streamline.perPluginWarning')}
             </AlertDescription>
           </Alert>
           <ItemGroup class="rounded-md border bg-muted/30">

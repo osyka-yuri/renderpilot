@@ -16,6 +16,7 @@
     ItemTitle,
     Switch,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import type { DlssIndicatorContext } from '../model/create-dlss-indicator-context.svelte';
 
   type Props = {
@@ -30,13 +31,12 @@
     <CardHeader class="pb-2">
       <div class="flex items-start justify-between gap-3">
         <div class="grid min-w-0 gap-1">
-          <CardTitle>DLSS indicator</CardTitle>
+          <CardTitle>{t('gameDetails.indicator.title')}</CardTitle>
           <CardDescription>
-            A diagnostic overlay that draws the active DLSS version, preset, and mode in the corner
-            of the screen while a game runs.
+            {t('gameDetails.indicator.description')}
           </CardDescription>
         </div>
-        <Badge variant="secondary" class="shrink-0">System-wide</Badge>
+        <Badge variant="secondary" class="shrink-0">{t('gameDetails.indicator.systemWide')}</Badge>
       </div>
     </CardHeader>
 
@@ -45,8 +45,7 @@
         <Alert variant="warning" size="sm" role="note">
           <TriangleAlertIcon aria-hidden="true" />
           <AlertDescription>
-            Changing this requires administrator privileges — use the banner at the top of the
-            window to relaunch.
+            {t('gameDetails.indicator.adminRequired')}
           </AlertDescription>
         </Alert>
       {/if}
@@ -61,14 +60,14 @@
 
       <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
         <ItemContent>
-          <ItemTitle>On-screen DLSS overlay</ItemTitle>
-          <ItemDescription>Affects every DLSS game on this PC, not just this one.</ItemDescription>
+          <ItemTitle>{t('gameDetails.indicator.overlayTitle')}</ItemTitle>
+          <ItemDescription>{t('gameDetails.indicator.overlayDescription')}</ItemDescription>
         </ItemContent>
         <ItemActions>
           <Switch
             checked={indicator.enabled}
             disabled={!indicator.canWrite || indicator.busy}
-            aria-label="Toggle the system-wide DLSS indicator overlay"
+            aria-label={t('gameDetails.indicator.toggleAria')}
             onCheckedChange={(checked: boolean) => {
               void indicator.setEnabled(checked);
             }}

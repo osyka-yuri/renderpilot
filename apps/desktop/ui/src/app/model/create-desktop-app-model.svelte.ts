@@ -6,11 +6,12 @@ import type { AppInitializationState } from '@entities/app';
 import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
 import type { SwapPlan } from '@entities/operation';
-import type { LanguageMode } from '@entities/settings';
 import { ignoreError } from '@shared/callbacks';
 import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
 import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
+import type { LanguageMode } from '@shared/i18n';
+import { readStoredLanguageMode, setLanguageMode } from '@shared/i18n';
 import { createGamesCatalogModel } from '@widgets/games-catalog';
 import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
 import { createExclusiveTaskRunner } from '@shared/concurrency';
@@ -47,7 +48,7 @@ export function createDesktopAppModel(
   const workspace = createGameWorkspaceModel();
 
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
-  let languageMode = $state<LanguageMode>('system');
+  let languageMode = $state<LanguageMode>(readStoredLanguageMode());
 
   const currentGameCard = $derived(
     findGameSummaryForSelection(workspace.selectedGameId, catalog.games),
@@ -189,9 +190,26 @@ export function createDesktopAppModel(
       return;
     }
 
+    const previousMode = languageMode;
+
+    try {
+      setLanguageMode(mode);
+
+      languageMode = mode;
+
+      clearError();
+    } catch (error) {
+      restoreLanguageMode(previousMode);
+      showError(error);
+    }
+  }
+
+  function restoreLanguageMode(mode: LanguageMode): void {
     languageMode = mode;
 
-    clearError();
+    ignoreError(() => {
+      setLanguageMode(mode);
+    });
   }
 
   function applyCurrentTheme(): void {

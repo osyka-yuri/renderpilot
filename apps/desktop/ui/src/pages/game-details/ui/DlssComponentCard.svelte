@@ -16,6 +16,7 @@
     ItemGroup,
     ItemSeparator,
   } from '@shared/ui';
+  import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
   import NvapiSettingRow from './NvapiSettingRow.svelte';
 
@@ -55,7 +56,7 @@
       <div class="grid min-w-0 gap-1">
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          Swap the on-disk DLL, or override DLSS settings through the NVIDIA driver profile.
+          {t('gameDetails.dlss.description')}
         </CardDescription>
       </div>
       {#if dllInfo}
@@ -74,7 +75,7 @@
     <div class="grid gap-1.5">
       <div class="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
         <HardDriveIcon class="size-3.5" aria-hidden="true" />
-        <span>Library file — on disk in the game folder</span>
+        <span>{t('gameDetails.dlss.libraryFileLabel')}</span>
       </div>
       <ItemGroup class="rounded-md border bg-muted/30">
         <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
@@ -86,15 +87,14 @@
       <div class="grid gap-1.5">
         <div class="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
           <CpuIcon class="size-3.5" aria-hidden="true" />
-          <span>Driver overrides — NVIDIA profile (NVAPI)</span>
+          <span>{t('gameDetails.dlss.driverOverridesLabel')}</span>
         </div>
 
         {#if !nvidia.canWrite}
           <Alert variant="warning" size="sm" role="note">
             <TriangleAlertIcon aria-hidden="true" />
             <AlertDescription>
-              Changing these requires administrator privileges — use the banner at the top of the
-              window to relaunch.
+              {t('gameDetails.dlss.adminRequired')}
             </AlertDescription>
           </Alert>
         {/if}

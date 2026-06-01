@@ -5,7 +5,8 @@ import {
   saveSteamGridDbKey,
   type SteamKeyControllerContext,
 } from './steam-key-controller';
-import { catalogReadError, steamGridDbSettingKey, steamKeySaveError } from './steam-key-model';
+import { steamGridDbSettingKey } from './steam-key-model';
+import { t } from '@shared/i18n';
 
 type SteamGetCatalogSetting = SteamKeyControllerContext['getCatalogSetting'];
 type SteamSetCatalogSetting = SteamKeyControllerContext['setCatalogSetting'];
@@ -55,7 +56,7 @@ describe('steam-key-controller', () => {
 
       expect(harness.input).toBe('');
       expect(harness.loaded).toBe(true);
-      expect(harness.message).toBe(catalogReadError);
+      expect(harness.message).toBe(t('settings.catalog.steamKey.readError'));
       expect(harness.busy).toBe(false);
     });
 
@@ -110,7 +111,7 @@ describe('steam-key-controller', () => {
 
       expect(setCatalogSetting).toHaveBeenCalledWith(steamGridDbSettingKey, 'abc123');
       expect(harness.input).toBe('abc123');
-      expect(harness.message).toBe('Saved.');
+      expect(harness.message).toBe(t('settings.catalog.steamKey.saved'));
       expect(harness.busy).toBe(false);
     });
 
@@ -128,7 +129,7 @@ describe('steam-key-controller', () => {
 
       expect(setCatalogSetting).toHaveBeenCalledWith(steamGridDbSettingKey, '');
       expect(harness.input).toBe('');
-      expect(harness.message).toBe('Key cleared.');
+      expect(harness.message).toBe(t('settings.catalog.steamKey.cleared'));
       expect(harness.busy).toBe(false);
     });
 
@@ -141,7 +142,7 @@ describe('steam-key-controller', () => {
       await saveSteamGridDbKey(harness.context);
 
       expect(harness.input).toBe('abc123');
-      expect(harness.message).toBe(steamKeySaveError);
+      expect(harness.message).toBe(t('settings.catalog.steamKey.saveError'));
       expect(harness.busy).toBe(false);
     });
 

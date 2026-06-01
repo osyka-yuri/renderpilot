@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import {
   publishBackgroundCoverSyncFailureNotification,
   publishBackgroundCoverSyncIssueNotification,
@@ -20,8 +21,8 @@ describe('sync-covers notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
-        description: 'Background cover sync failed. network failure',
+        title: t('notify.statusError'),
+        description: t('coverSync.failed'),
         important: true,
       },
     ]);
@@ -37,7 +38,7 @@ describe('sync-covers notifications', () => {
       {
         id: 'desktop-status',
         severity: 'error',
-        title: 'Needs attention',
+        title: t('notify.statusError'),
         description: 'Could not download 2 covers. Try Refresh Libraries.',
         important: true,
       },

@@ -470,7 +470,10 @@ mod tests {
 
         assert_eq!(
             value.get("suggestedActions"),
-            Some(&json!(["Refresh the games list and open the game again."]))
+            Some(&json!([{
+                "key": "suggested_action.refresh_games",
+                "text": "Refresh the games list and open the game again.",
+            }]))
         );
     }
 }
