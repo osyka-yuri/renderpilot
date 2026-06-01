@@ -27,13 +27,24 @@
     family: SettingFamily;
     title: string;
     nvidia: NvidiaDriverContext;
+    nvapiAvailable: boolean;
     busy: boolean;
     onSwap: (componentId: string, artifactId: string, entryId: string | null) => void;
     onRollback: (componentId: string) => void;
   };
 
-  const { gameId, component, group, family, title, nvidia, busy, onSwap, onRollback }: Props =
-    $props();
+  const {
+    gameId,
+    component,
+    group,
+    family,
+    title,
+    nvidia,
+    nvapiAvailable,
+    busy,
+    onSwap,
+    onRollback,
+  }: Props = $props();
 
   const settings = $derived(nvidia.settingsForFamily(family));
   const warnings = $derived(nvidia.familyWarnings(family));
@@ -56,7 +67,9 @@
       <div class="grid min-w-0 gap-1">
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          {t('gameDetails.dlss.description')}
+          {nvapiAvailable
+            ? t('gameDetails.dlss.description')
+            : t('gameDetails.dlss.descriptionSwapOnly')}
         </CardDescription>
       </div>
       {#if dllInfo}
@@ -83,7 +96,7 @@
     </div>
 
     <!-- ── Driver overrides: NVIDIA profile via NVAPI, no game files touched ── -->
-    {#if settings.length > 0}
+    {#if nvapiAvailable && settings.length > 0}
       <div class="grid gap-1.5">
         <div class="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
           <CpuIcon class="size-3.5" aria-hidden="true" />

@@ -140,6 +140,7 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Game details: DLSS component card ──
   'gameDetails.dlss.description': 'Изменить версию DLSS или переопределить настройки.',
+  'gameDetails.dlss.descriptionSwapOnly': 'Изменить версию DLSS.',
   'gameDetails.dlss.libraryFileLabel': 'Версия файла',
   'gameDetails.dlss.driverOverridesLabel': 'Настройки драйвера NVIDIA',
   'gameDetails.dlss.adminRequired':

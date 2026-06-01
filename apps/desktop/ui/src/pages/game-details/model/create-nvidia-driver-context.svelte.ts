@@ -73,6 +73,9 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   const effectiveExe = $derived(representative?.effective_exe ?? null);
   const effectiveExeSource = $derived(representative?.effective_exe_source ?? null);
   const hasProfile = $derived(representative?.has_profile_for_exe ?? false);
+  // NVAPI (NVIDIA driver) presence — session-level, identical on every state row.
+  // Optimistic default so NVIDIA users don't see a flash before the reload lands.
+  const nvapiAvailable = $derived(representative?.nvapi_available ?? true);
 
   const supportedCandidates = $derived(candidates.filter((c) => c.rejection === null));
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
@@ -221,6 +224,9 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     },
     get hasProfile() {
       return hasProfile;
+    },
+    get nvapiAvailable() {
+      return nvapiAvailable;
     },
     get supportedCandidates() {
       return supportedCandidates;

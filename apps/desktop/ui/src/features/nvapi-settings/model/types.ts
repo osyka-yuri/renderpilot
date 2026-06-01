@@ -72,6 +72,7 @@ export type SettingStateResponse = {
   effective_exe: string | null;
   effective_exe_source: 'auto' | 'override' | null;
   has_profile_for_exe: boolean;
+  nvapi_available: boolean;
   available_values: ValueOption[];
   dll_info: DllInfoDto | null;
   warnings: string[];

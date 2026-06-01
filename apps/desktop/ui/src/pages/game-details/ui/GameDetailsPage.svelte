@@ -189,7 +189,7 @@
         {#each tabs as tab (tab.key)}
           <TabsContent value={tab.key} class="grid gap-3">
             {#if tab.key === 'nvidia'}
-              {#if gameId}
+              {#if gameId && nvidia.nvapiAvailable}
                 <NvidiaProfileCard {gameId} nvapi={nvidia} />
               {/if}
 
@@ -209,6 +209,7 @@
                     family={dlssCard.family}
                     title={dlssCard.title}
                     {nvidia}
+                    nvapiAvailable={nvidia.nvapiAvailable}
                     {busy}
                     {onSwap}
                     {onRollback}

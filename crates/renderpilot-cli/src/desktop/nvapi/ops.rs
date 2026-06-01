@@ -313,6 +313,9 @@ fn assemble_response(
         effective_exe,
         effective_exe_source,
         has_profile_for_exe: live.has_profile_for_exe,
+        // Session-level: identical on every row. Drives UI gating of the NVIDIA
+        // driver-profile affordances. `Nvapi::get()` is cached, so this is cheap.
+        nvapi_available: Nvapi::get().is_some(),
         available_values: build_available_values(setting, ctx, &supported_set, &known_set),
         dll_info,
         warnings,

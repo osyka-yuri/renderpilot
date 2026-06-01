@@ -20,12 +20,15 @@ const ERROR_ACCESS_DENIED: i32 = 5;
 #[cfg(windows)]
 pub fn get_dlss_indicator_state() -> JsonResult {
     use crate::error::CliError;
+    use renderpilot_nvapi::Nvapi;
     use renderpilot_platform_windows::dlss::read_dlss_indicator_enabled;
 
     let enabled = read_dlss_indicator_enabled().map_err(|error| {
         CliError::CommandFailed(format!("could not read the DLSS indicator state: {error}"))
     })?;
-    to_json(serde_json::json!({ "enabled": enabled, "supported": true }))
+    // The indicator is an NGX feature; absence of nvapi64.dll means no NVIDIA driver
+    // (hence no NGX), so report it unsupported and let the UI hide the toggle.
+    to_json(serde_json::json!({ "enabled": enabled, "supported": Nvapi::get().is_some() }))
 }
 
 /// Non-Windows stub: the DLSS indicator registry toggle does not exist.
@@ -39,6 +42,7 @@ pub fn get_dlss_indicator_state() -> JsonResult {
 #[cfg(windows)]
 pub fn set_dlss_indicator_enabled(enabled: bool) -> JsonResult {
     use crate::error::CliError;
+    use renderpilot_nvapi::Nvapi;
     use renderpilot_platform_windows::dlss::set_dlss_indicator_enabled as write_indicator;
 
     write_indicator(enabled).map_err(|error| {
@@ -48,7 +52,7 @@ pub fn set_dlss_indicator_enabled(enabled: bool) -> JsonResult {
             CliError::CommandFailed(format!("could not update the DLSS indicator: {error}"))
         }
     })?;
-    to_json(serde_json::json!({ "enabled": enabled, "supported": true }))
+    to_json(serde_json::json!({ "enabled": enabled, "supported": Nvapi::get().is_some() }))
 }
 
 /// Non-Windows stub: changing the DLSS indicator is unsupported.

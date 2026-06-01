@@ -76,6 +76,9 @@ pub struct SettingStateResponse {
     pub effective_exe: Option<String>,
     pub effective_exe_source: Option<String>,
     pub has_profile_for_exe: bool,
+    /// Whether NVAPI (the NVIDIA driver) is present on this machine. When false the
+    /// UI hides driver-profile affordances and keeps only the on-disk DLL swap.
+    pub nvapi_available: bool,
     pub available_values: Vec<ValueOptionDto>,
     pub dll_info: Option<DllInfoDto>,
     pub warnings: Vec<String>,

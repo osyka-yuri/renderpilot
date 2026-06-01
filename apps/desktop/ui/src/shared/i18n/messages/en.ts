@@ -129,6 +129,7 @@ export const en = {
 
   // ── Game details: DLSS component card ──
   'gameDetails.dlss.description': 'Change the DLSS version or override its settings.',
+  'gameDetails.dlss.descriptionSwapOnly': 'Change the DLSS version.',
   'gameDetails.dlss.libraryFileLabel': 'File version',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA profile overrides',
   'gameDetails.dlss.adminRequired': 'Restart the app as administrator to change these settings.',
