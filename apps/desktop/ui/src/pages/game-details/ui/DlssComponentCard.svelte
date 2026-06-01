@@ -4,7 +4,10 @@
   import type { SettingFamily, SettingStateResponse } from '@features/nvapi-settings';
   import CpuIcon from '@lucide/svelte/icons/cpu';
   import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import {
+    Alert,
+    AlertDescription,
     Card,
     CardContent,
     CardDescription,
@@ -87,20 +90,20 @@
         </div>
 
         {#if !nvidia.canWrite}
-          <p
-            class="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700"
-          >
-            Changing these requires administrator privileges — use the banner at the top of the
-            window to relaunch.
-          </p>
+          <Alert variant="warning" size="sm" role="note">
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertDescription>
+              Changing these requires administrator privileges — use the banner at the top of the
+              window to relaunch.
+            </AlertDescription>
+          </Alert>
         {/if}
 
         {#each warnings as warning (warning)}
-          <div
-            class="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700"
-          >
-            {warning}
-          </div>
+          <Alert variant="warning" size="sm" role="note">
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertDescription>{warning}</AlertDescription>
+          </Alert>
         {/each}
 
         <ItemGroup class="rounded-md border bg-muted/30">

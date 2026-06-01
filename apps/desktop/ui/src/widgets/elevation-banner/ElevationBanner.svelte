@@ -47,9 +47,9 @@
 {#if visible}
   <div
     role="alert"
-    class="mx-4 my-2 flex items-center gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-4 py-3"
+    class="mx-4 my-2 flex items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3"
   >
-    <ShieldAlertIcon class="size-5 shrink-0 text-yellow-700" aria-hidden="true" />
+    <ShieldAlertIcon class="size-5 shrink-0 text-warning" aria-hidden="true" />
     <div class="grid min-w-0 flex-1 gap-1">
       <div class="text-sm font-medium text-foreground">Administrator privileges required</div>
       <div class="text-xs text-muted-foreground">

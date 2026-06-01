@@ -2,7 +2,7 @@ import Root from './alert.svelte';
 import Description from './alert-description.svelte';
 import Title from './alert-title.svelte';
 import { alertVariants } from './alert.variants';
-import type { AlertVariant } from './alert.types';
+import type { AlertVariant, AlertSize } from './alert.types';
 
 export {
   Root,
@@ -10,6 +10,7 @@ export {
   Title,
   alertVariants,
   type AlertVariant,
+  type AlertSize,
   //
   Root as Alert,
   Description as AlertDescription,

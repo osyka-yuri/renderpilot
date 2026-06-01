@@ -1,5 +1,8 @@
 <script lang="ts">
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import {
+    Alert,
+    AlertDescription,
     Badge,
     Card,
     CardContent,
@@ -39,12 +42,13 @@
 
     <CardContent class="grid gap-2">
       {#if !indicator.canWrite}
-        <p
-          class="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700"
-        >
-          Changing this requires administrator privileges — use the banner at the top of the window
-          to relaunch.
-        </p>
+        <Alert variant="warning" size="sm" role="note">
+          <TriangleAlertIcon aria-hidden="true" />
+          <AlertDescription>
+            Changing this requires administrator privileges — use the banner at the top of the
+            window to relaunch.
+          </AlertDescription>
+        </Alert>
       {/if}
 
       {#if indicator.error}

@@ -1,5 +1,8 @@
 <script lang="ts">
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import {
+    Alert,
+    AlertDescription,
     Card,
     CardContent,
     CardDescription,
@@ -118,11 +121,10 @@
     {/if}
 
     {#each nvapi.profileWarnings as warning (warning)}
-      <div
-        class="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700"
-      >
-        {warning}
-      </div>
+      <Alert variant="warning" size="sm" role="note">
+        <TriangleAlertIcon aria-hidden="true" />
+        <AlertDescription>{warning}</AlertDescription>
+      </Alert>
     {/each}
   </CardContent>
 </Card>

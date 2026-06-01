@@ -233,6 +233,8 @@
       isElevated={model.isElevated}
       onSwap={gameDetailsModel.handleSwap}
       onRollback={gameDetailsModel.handleRollback}
+      onBulkSwap={gameDetailsModel.handleBulkSwap}
+      onBulkRollback={gameDetailsModel.handleBulkRollback}
     />
   {:else if model.screen === 'operations'}
     <OperationsScreen

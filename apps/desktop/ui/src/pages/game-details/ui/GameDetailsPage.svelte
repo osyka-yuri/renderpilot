@@ -18,7 +18,12 @@
     ScrollArea,
   } from '@shared/ui';
   import type { SettingFamily } from '@features/nvapi-settings';
-  import type { SwapHandler, RollbackHandler } from '../model/create-game-details-page-model';
+  import type {
+    SwapHandler,
+    RollbackHandler,
+    BulkSwapHandler,
+    BulkRollbackHandler,
+  } from '../model/create-game-details-page-model';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createDlssIndicatorContext } from '../model/create-dlss-indicator-context.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
@@ -48,6 +53,8 @@
     isElevated?: boolean;
     onSwap?: SwapHandler;
     onRollback?: RollbackHandler;
+    onBulkSwap?: BulkSwapHandler;
+    onBulkRollback?: BulkRollbackHandler;
   };
 
   const {
@@ -56,6 +63,8 @@
     isElevated = true,
     onSwap = () => undefined,
     onRollback = () => undefined,
+    onBulkSwap = () => undefined,
+    onBulkRollback = () => undefined,
   }: Props = $props();
 
   type VendorTab = {
@@ -219,6 +228,8 @@
                   {busy}
                   {onSwap}
                   {onRollback}
+                  {onBulkSwap}
+                  {onBulkRollback}
                 />
               {/if}
             {:else}
