@@ -7,6 +7,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'nav.settings': '设置',
   'nav.operations': '操作记录',
   'nav.gameFallback': '游戏',
+  'nav.donate': '捐赠',
   'shell.refresh': '刷新',
 
   'settings.appearance.title': '外观',

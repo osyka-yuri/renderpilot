@@ -233,7 +233,9 @@ fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
 ///
 /// Keep this function focused on plugin registration only.
 fn configure_plugins(builder: DesktopBuilder) -> DesktopBuilder {
-    builder.plugin(tauri_plugin_dialog::init())
+    builder
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
 }
 
 /// Registers commands exposed to the frontend.

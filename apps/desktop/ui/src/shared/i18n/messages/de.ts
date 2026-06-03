@@ -7,6 +7,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'nav.settings': 'Einstellungen',
   'nav.operations': 'Vorgänge',
   'nav.gameFallback': 'Spiel',
+  'nav.donate': 'Spenden',
   'shell.refresh': 'Aktualisieren',
 
   'settings.appearance.title': 'Erscheinungsbild',

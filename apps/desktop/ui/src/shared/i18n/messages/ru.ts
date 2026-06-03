@@ -12,6 +12,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'nav.settings': 'Настройки',
   'nav.operations': 'Операции',
   'nav.gameFallback': 'Игра',
+  'nav.donate': 'Поддержать',
   'shell.refresh': 'Обновить',
 
   // ── Settings: appearance section ──

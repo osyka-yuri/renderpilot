@@ -14,6 +14,7 @@ export const en = {
   'nav.settings': 'Settings',
   'nav.operations': 'Operations',
   'nav.gameFallback': 'Game',
+  'nav.donate': 'Donate',
   'shell.refresh': 'Refresh',
 
   // ── Settings: appearance section ──

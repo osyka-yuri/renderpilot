@@ -7,6 +7,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'nav.settings': '設定',
   'nav.operations': '操作履歴',
   'nav.gameFallback': 'ゲーム',
+  'nav.donate': '寄付する',
   'shell.refresh': '更新',
 
   'settings.appearance.title': '外観',

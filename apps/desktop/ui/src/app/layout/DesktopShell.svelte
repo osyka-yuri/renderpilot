@@ -1,31 +1,11 @@
 <script lang="ts">
-  import BoxIcon from '@lucide/svelte/icons/box';
-  import LibraryIcon from '@lucide/svelte/icons/library';
-  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-  import SettingsIcon from '@lucide/svelte/icons/settings';
-  import type { Component, Snippet } from 'svelte';
+  import type { Snippet } from 'svelte';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
-  import { t, type MessageKey } from '@shared/i18n';
-
-  import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-    Button,
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarInset,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarProvider,
-    SidebarRail,
-    SidebarTrigger,
-  } from '@shared/ui';
+  import { t } from '@shared/i18n';
+  import { SidebarProvider, SidebarInset } from '@shared/ui';
+  
+  import ShellSidebar from './ShellSidebar.svelte';
+  import ShellHeader from './ShellHeader.svelte';
 
   type Props = {
     screen: Screen;
@@ -39,45 +19,6 @@
     banner?: Snippet;
     children?: Snippet;
   };
-
-  type PrimaryScreen = Extract<Screen, 'games' | 'libraries' | 'settings'>;
-
-  type NavigationItem = {
-    screen: PrimaryScreen;
-    labelKey: MessageKey;
-    icon: Component;
-  };
-
-  type BreadcrumbEntry =
-    | {
-        id: string;
-        kind: 'link';
-        label: string;
-        target: Screen;
-      }
-    | {
-        id: string;
-        kind: 'page';
-        label: string;
-      };
-
-  const NAVIGATION_ITEMS = [
-    {
-      screen: 'games',
-      labelKey: 'nav.games',
-      icon: LibraryIcon,
-    },
-    {
-      screen: 'libraries',
-      labelKey: 'nav.libraries',
-      icon: BoxIcon,
-    },
-    {
-      screen: 'settings',
-      labelKey: 'nav.settings',
-      icon: SettingsIcon,
-    },
-  ] satisfies readonly NavigationItem[];
 
   const {
     screen,
@@ -93,110 +34,20 @@
   let sidebarOpen = $state(false);
 
   const resolvedGameTitle = $derived(selectedGameTitle?.trim() ?? t('nav.gameFallback'));
-
-  const breadcrumbs = $derived(createBreadcrumbs(screen, resolvedGameTitle));
-
-  function createBreadcrumbs(currentScreen: Screen, gameTitle: string): BreadcrumbEntry[] {
-    switch (currentScreen) {
-      case 'games':
-        return [{ id: 'games-page', kind: 'page', label: t('nav.games') }];
-
-      case 'settings':
-        return [{ id: 'settings-page', kind: 'page', label: t('nav.settings') }];
-
-      case 'libraries':
-        return [{ id: 'libraries-page', kind: 'page', label: t('nav.libraries') }];
-
-      case 'details':
-        return [
-          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
-          { id: 'game-page', kind: 'page', label: gameTitle },
-        ];
-
-      case 'operations':
-        return [
-          { id: 'games-link', kind: 'link', label: t('nav.games'), target: 'games' },
-          { id: 'game-link', kind: 'link', label: gameTitle, target: 'details' },
-          { id: 'operations-page', kind: 'page', label: t('nav.operations') },
-        ];
-
-      default: {
-        return [{ id: 'fallback-games-page', kind: 'page', label: t('nav.games') }];
-      }
-    }
-  }
 </script>
 
 <SidebarProvider bind:open={sidebarOpen}>
-  <Sidebar collapsible="icon" variant="sidebar">
-    <SidebarContent>
-      <SidebarGroup>
-        <SidebarMenu>
-          {#each NAVIGATION_ITEMS as item (item.screen)}
-            {@const Icon = item.icon}
-
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={screen === item.screen}
-                onclick={() => {
-                  onNavigate(item.screen);
-                }}
-                tooltipContent={t(item.labelKey)}
-              >
-                <Icon />
-                <span>{t(item.labelKey)}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          {/each}
-        </SidebarMenu>
-      </SidebarGroup>
-    </SidebarContent>
-
-    <SidebarRail />
-  </Sidebar>
+  <ShellSidebar {screen} {onNavigate} />
 
   <SidebarInset class="min-h-0 overflow-hidden">
-    <header class="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-      <SidebarTrigger />
-
-      <Breadcrumb>
-        <BreadcrumbList>
-          {#each breadcrumbs as item, index (item.id)}
-            {#if index > 0}
-              <BreadcrumbSeparator />
-            {/if}
-
-            <BreadcrumbItem>
-              {#if item.kind === 'link'}
-                <BreadcrumbLink
-                  href={`#${item.target}`}
-                  onclick={(event: MouseEvent) => {
-                    event.preventDefault();
-                    onNavigate(item.target);
-                  }}
-                >
-                  {item.label}
-                </BreadcrumbLink>
-              {:else}
-                <BreadcrumbPage>{item.label}</BreadcrumbPage>
-              {/if}
-            </BreadcrumbItem>
-          {/each}
-        </BreadcrumbList>
-      </Breadcrumb>
-
-      <div class="ml-auto">
-        <Button
-          variant="outline"
-          size="icon"
-          disabled={busy}
-          onclick={onRefresh}
-          aria-label={t('shell.refresh')}
-        >
-          <RefreshCwIcon class={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
-        </Button>
-      </div>
-    </header>
+    <ShellHeader 
+      {screen} 
+      {resolvedGameTitle} 
+      {busy} 
+      {refreshing} 
+      {onNavigate} 
+      {onRefresh} 
+    />
 
     {@render banner?.()}
 
