@@ -89,7 +89,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'games.filterEmpty.reset': 'フィルターをリセット',
 
   'settings.catalog.title': 'カバー画像のソース',
-  'settings.catalog.description': 'ゲームのカバー画像をダウンロードするオンラインソースを選択します。',
+  'settings.catalog.description':
+    'ゲームのカバー画像をダウンロードするオンラインソースを選択します。',
   'settings.catalog.steamKey.srLabel': 'SteamGridDB API キー',
   'settings.catalog.steamKey.placeholder': 'API キー',
   'settings.catalog.steamKey.loading': '読み込み中…',
@@ -102,9 +103,11 @@ export const ja: Record<MessageKey, MessageValue> = {
   'common.unknown': '不明',
 
   'gameDetails.noGameSelected.title': 'ゲームが選択されていません',
-  'gameDetails.noGameSelected.description': '詳細を表示するには、ダッシュボードからゲームを選択してください。',
+  'gameDetails.noGameSelected.description':
+    '詳細を表示するには、ダッシュボードからゲームを選択してください。',
   'gameDetails.noComponents.title': 'コンポーネントが見つかりません',
-  'gameDetails.noComponents.description': 'このゲームにはサポートされているグラフィックコンポーネントがありません。',
+  'gameDetails.noComponents.description':
+    'このゲームにはサポートされているグラフィックコンポーネントがありません。',
 
   'gameDetails.version.noReplacements': '代替バージョンなし',
   'gameDetails.version.restoreOriginal': '元の {fileName} を復元',
@@ -115,7 +118,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.dlss.descriptionSwapOnly': 'DLSS バージョンを変更します。',
   'gameDetails.dlss.libraryFileLabel': 'ファイルバージョン',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA プロファイルの上書き',
-  'gameDetails.dlss.adminRequired': 'これらの設定を変更するには、アプリを管理者として再起動してください。',
+  'gameDetails.dlss.adminRequired':
+    'これらの設定を変更するには、アプリを管理者として再起動してください。',
 
   'gameDetails.streamline.description': 'Streamline プラグインを管理します。',
   'gameDetails.streamline.versionTitle': 'グローバル Streamline バージョン',
@@ -125,7 +129,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} 件のアップデート · {missing} 個の不足',
   'gameDetails.streamline.restoreAllAria': 'すべてのプラグインを元の状態に復元',
   'gameDetails.streamline.restoreAllTooltip': 'すべて元の状態に復元',
-  'gameDetails.streamline.mixedWarning': 'プラグインのバージョンが異なります。同期するには、上記からバージョンを選択してください。',
+  'gameDetails.streamline.mixedWarning':
+    'プラグインのバージョンが異なります。同期するには、上記からバージョンを選択してください。',
 
   'gameDetails.profile.title': 'NVIDIA プロファイル',
   'gameDetails.profile.description': 'このゲームの NVIDIA ドライバ設定を構成します。',
@@ -138,12 +143,15 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': '自動検出',
   'gameDetails.profile.filteredTag': '（フィルター済み）',
   'gameDetails.profile.filteredLabel': '{fileName}（フィルター済み）',
-  'gameDetails.profile.noProfile': 'NVIDIA プロファイルが見つかりません。ゲームを一度起動して再試行してください。',
+  'gameDetails.profile.noProfile':
+    'NVIDIA プロファイルが見つかりません。ゲームを一度起動して再試行してください。',
 
   'gameDetails.indicator.title': 'DLSS インジケーター',
-  'gameDetails.indicator.description': 'ゲームプレイ中に、アクティブな DLSS バージョンと設定を含むオーバーレイを表示します。',
+  'gameDetails.indicator.description':
+    'ゲームプレイ中に、アクティブな DLSS バージョンと設定を含むオーバーレイを表示します。',
   'gameDetails.indicator.systemWide': 'システム全体',
-  'gameDetails.indicator.adminRequired': 'この設定を変更するには、アプリを管理者として再起動してください。',
+  'gameDetails.indicator.adminRequired':
+    'この設定を変更するには、アプリを管理者として再起動してください。',
   'gameDetails.indicator.overlayTitle': '画面オーバーレイ',
   'gameDetails.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
   'gameDetails.indicator.toggleAria': 'DLSS インジケーターの切り替え',
@@ -201,9 +209,15 @@ export const ja: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'バージョン変更',
   'operation.duration': '{seconds}秒で完了',
   'operation.filesUpdated.none': '更新されたファイルはありません。',
-  'operation.filesUpdated.count': { one: '1個のファイルが更新されました。', other: '{count}個のファイルが更新されました。' },
+  'operation.filesUpdated.count': {
+    one: '1個のファイルが更新されました。',
+    other: '{count}個のファイルが更新されました。',
+  },
   'operation.filesRestored.none': '復元されたファイルはありません。',
-  'operation.filesRestored.count': { one: '1個のファイルが復元されました。', other: '{count}個のファイルが復元されました。' },
+  'operation.filesRestored.count': {
+    one: '1個のファイルが復元されました。',
+    other: '{count}個のファイルが復元されました。',
+  },
   'operation.itemAria': '{kind}、{status}',
 
   'notify.stalePlan': '操作プランが古くなっています。再試行してください。',
@@ -238,7 +252,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'nvidia.setExeFailed': '実行可能ファイルの設定に失敗しました',
   'nvidia.clearExeFailed': '実行可能ファイルの設定のクリアに失敗しました',
 
-  'indicator.relaunchToToggle': 'DLSS インジケーターを切り替えるには、管理者として再起動してください。',
+  'indicator.relaunchToToggle':
+    'DLSS インジケーターを切り替えるには、管理者として再起動してください。',
   'indicator.changeFailed': 'DLSS インジケーターの切り替えに失敗しました',
 
   'libraries.column.version': 'バージョン',
@@ -251,13 +266,16 @@ export const ja: Record<MessageKey, MessageValue> = {
 
   'settings.catalog.source.steam.aria': 'Steam からカバー画像をダウンロード',
   'settings.catalog.source.steam.title': 'Steam',
-  'settings.catalog.source.steam.description': 'パブリック Steam カタログからカバー画像をダウンロードします。',
+  'settings.catalog.source.steam.description':
+    'パブリック Steam カタログからカバー画像をダウンロードします。',
   'settings.catalog.source.gog.aria': 'GOG からカバー画像をダウンロード',
   'settings.catalog.source.gog.title': 'GOG',
-  'settings.catalog.source.gog.description': '公式 GOG カタログからカバー画像をダウンロードします。',
+  'settings.catalog.source.gog.description':
+    '公式 GOG カタログからカバー画像をダウンロードします。',
   'settings.catalog.source.steamgriddb.aria': 'SteamGridDB からカバー画像をダウンロード',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
-  'settings.catalog.source.steamgriddb.description': 'SteamGridDB からコミュニティのカバー画像をダウンロードします。API キーが必要です。',
+  'settings.catalog.source.steamgriddb.description':
+    'SteamGridDB からコミュニティのカバー画像をダウンロードします。API キーが必要です。',
   'settings.catalog.artworkReadError': 'カバー画像の設定の読み込みに失敗しました。',
   'settings.catalog.artworkSaveError': 'カバー画像の設定の保存に失敗しました。',
 
@@ -297,6 +315,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'suggested_action.inspect_logs': '問題が解決しない場合は、アプリを再起動してみてください。',
   'suggested_action.retry_or_restart': '問題が解決しない場合は、アプリを再起動してみてください。',
   'suggested_action.rebuild_operation_plan': 'アクションをやり直してください。',
-  'suggested_action.refresh_or_scan_game_folder': 'リストを更新するか、フォルダを再スキャンしてください。',
-  'suggested_action.relaunch_as_administrator': 'アプリを管理者として再起動して再試行してください。',
+  'suggested_action.refresh_or_scan_game_folder':
+    'リストを更新するか、フォルダを再スキャンしてください。',
+  'suggested_action.relaunch_as_administrator':
+    'アプリを管理者として再起動して再試行してください。',
 };

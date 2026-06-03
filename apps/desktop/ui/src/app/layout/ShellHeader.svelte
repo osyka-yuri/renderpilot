@@ -23,14 +23,7 @@
     onRefresh: () => void;
   };
 
-  const {
-    screen,
-    resolvedGameTitle,
-    busy,
-    refreshing,
-    onNavigate,
-    onRefresh,
-  }: Props = $props();
+  const { screen, resolvedGameTitle, busy, refreshing, onNavigate, onRefresh }: Props = $props();
 
   type BreadcrumbEntry =
     | {
@@ -109,7 +102,7 @@
 
   <div class="ml-auto flex items-center gap-2">
     <DonateButton />
-    
+
     <Button
       variant="outline"
       size="icon"

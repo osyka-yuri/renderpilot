@@ -3,7 +3,7 @@
   import LibraryIcon from '@lucide/svelte/icons/library';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import type { Component } from 'svelte';
-  
+
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
   import { t, type MessageKey } from '@shared/i18n';
   import {

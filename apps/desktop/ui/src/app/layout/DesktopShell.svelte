@@ -3,7 +3,7 @@
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
   import { t } from '@shared/i18n';
   import { SidebarProvider, SidebarInset } from '@shared/ui';
-  
+
   import ShellSidebar from './ShellSidebar.svelte';
   import ShellHeader from './ShellHeader.svelte';
 
@@ -40,14 +40,7 @@
   <ShellSidebar {screen} {onNavigate} />
 
   <SidebarInset class="min-h-0 overflow-hidden">
-    <ShellHeader 
-      {screen} 
-      {resolvedGameTitle} 
-      {busy} 
-      {refreshing} 
-      {onNavigate} 
-      {onRefresh} 
-    />
+    <ShellHeader {screen} {resolvedGameTitle} {busy} {refreshing} {onNavigate} {onRefresh} />
 
     {@render banner?.()}
 

@@ -7,6 +7,7 @@
 pub mod dlss;
 #[cfg(windows)]
 pub mod executable_detection;
+#[cfg(windows)]
 pub(crate) mod fs_walk;
 #[cfg(windows)]
 pub mod game_libraries;

@@ -70,7 +70,8 @@ export const es: Record<MessageKey, MessageValue> = {
   },
 
   'elevation.title': 'Se requieren privilegios de administrador',
-  'elevation.description': 'Algunas configuraciones no se pueden cambiar sin derechos de administrador.',
+  'elevation.description':
+    'Algunas configuraciones no se pueden cambiar sin derechos de administrador.',
   'elevation.relaunch': 'Reiniciar como administrador',
   'elevation.relaunchFailed': 'No se pudo reiniciar como administrador',
   'elevation.dismiss': 'Descartar',
@@ -104,7 +105,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.noGameSelected.title': 'Ningún juego seleccionado',
   'gameDetails.noGameSelected.description': 'Selecciona un juego del panel para ver sus detalles.',
   'gameDetails.noComponents.title': 'No se encontraron componentes',
-  'gameDetails.noComponents.description': 'Este juego no tiene ningún componente gráfico compatible.',
+  'gameDetails.noComponents.description':
+    'Este juego no tiene ningún componente gráfico compatible.',
 
   'gameDetails.version.noReplacements': 'Sin versiones alternativas',
   'gameDetails.version.restoreOriginal': 'Restaurar {fileName} original',
@@ -115,7 +117,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.dlss.descriptionSwapOnly': 'Cambiar la versión de DLSS.',
   'gameDetails.dlss.libraryFileLabel': 'Versión del archivo',
   'gameDetails.dlss.driverOverridesLabel': 'Anulaciones de perfil de NVIDIA',
-  'gameDetails.dlss.adminRequired': 'Reinicia la aplicación como administrador para cambiar esta configuración.',
+  'gameDetails.dlss.adminRequired':
+    'Reinicia la aplicación como administrador para cambiar esta configuración.',
 
   'gameDetails.streamline.description': 'Administrar complementos de Streamline.',
   'gameDetails.streamline.versionTitle': 'Versión global de Streamline',
@@ -125,10 +128,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} actualizaciones · {missing} faltantes',
   'gameDetails.streamline.restoreAllAria': 'Restaurar todos los complementos a su estado original',
   'gameDetails.streamline.restoreAllTooltip': 'Restaurar todo a su estado original',
-  'gameDetails.streamline.mixedWarning': 'Los complementos utilizan versiones diferentes. Selecciona una versión de arriba para sincronizarlos.',
+  'gameDetails.streamline.mixedWarning':
+    'Los complementos utilizan versiones diferentes. Selecciona una versión de arriba para sincronizarlos.',
 
   'gameDetails.profile.title': 'Perfil de NVIDIA',
-  'gameDetails.profile.description': 'Configura los ajustes del controlador NVIDIA para este juego.',
+  'gameDetails.profile.description':
+    'Configura los ajustes del controlador NVIDIA para este juego.',
   'gameDetails.profile.target': 'Archivo ejecutable',
   'gameDetails.profile.loading': 'Cargando...',
   'gameDetails.profile.pinnedManual': 'Seleccionado manualmente.',
@@ -138,12 +143,15 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Autodetectar',
   'gameDetails.profile.filteredTag': '(filtrado)',
   'gameDetails.profile.filteredLabel': '{fileName} (filtrado)',
-  'gameDetails.profile.noProfile': 'No se encontró el perfil de NVIDIA. Inicia el juego una vez y vuelve a intentarlo.',
+  'gameDetails.profile.noProfile':
+    'No se encontró el perfil de NVIDIA. Inicia el juego una vez y vuelve a intentarlo.',
 
   'gameDetails.indicator.title': 'Indicador DLSS',
-  'gameDetails.indicator.description': 'Muestra una superposición con la versión y configuración activa de DLSS durante el juego.',
+  'gameDetails.indicator.description':
+    'Muestra una superposición con la versión y configuración activa de DLSS durante el juego.',
   'gameDetails.indicator.systemWide': 'En todo el sistema',
-  'gameDetails.indicator.adminRequired': 'Reinicia la aplicación como administrador para cambiar esta configuración.',
+  'gameDetails.indicator.adminRequired':
+    'Reinicia la aplicación como administrador para cambiar esta configuración.',
   'gameDetails.indicator.overlayTitle': 'Superposición en pantalla',
   'gameDetails.indicator.overlayDescription': 'Se aplica a todos los juegos en esta PC.',
   'gameDetails.indicator.toggleAria': 'Alternar indicador DLSS',
@@ -201,14 +209,21 @@ export const es: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'Cambiar versión',
   'operation.duration': 'Finalizado en {seconds}s',
   'operation.filesUpdated.none': 'Ningún archivo actualizado.',
-  'operation.filesUpdated.count': { one: '1 archivo actualizado.', other: '{count} archivos actualizados.' },
+  'operation.filesUpdated.count': {
+    one: '1 archivo actualizado.',
+    other: '{count} archivos actualizados.',
+  },
   'operation.filesRestored.none': 'Ningún archivo restaurado.',
-  'operation.filesRestored.count': { one: '1 archivo restaurado.', other: '{count} archivos restaurados.' },
+  'operation.filesRestored.count': {
+    one: '1 archivo restaurado.',
+    other: '{count} archivos restaurados.',
+  },
   'operation.itemAria': '{kind}, {status}',
 
   'notify.stalePlan': 'El plan de operación está desactualizado. Por favor, inténtalo de nuevo.',
   'notify.missingStableGameId': 'No se pudo identificar el juego.',
-  'notify.coverPickerPreview': 'Por favor, utiliza la aplicación de escritorio para elegir una carátula.',
+  'notify.coverPickerPreview':
+    'Por favor, utiliza la aplicación de escritorio para elegir una carátula.',
   'notify.coverUpdated.title': 'Carátula actualizada',
   'notify.coverUpdated.body': 'Tu carátula personalizada se ha guardado.',
   'notify.coverDownloaded.title': 'Carátula descargada',
@@ -257,7 +272,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.catalog.source.gog.description': 'Descarga carátulas del catálogo oficial de GOG.',
   'settings.catalog.source.steamgriddb.aria': 'Descargar carátulas de SteamGridDB',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
-  'settings.catalog.source.steamgriddb.description': 'Descarga carátulas de la comunidad desde SteamGridDB. Requiere una clave API.',
+  'settings.catalog.source.steamgriddb.description':
+    'Descarga carátulas de la comunidad desde SteamGridDB. Requiere una clave API.',
   'settings.catalog.artworkReadError': 'Error al cargar la configuración de carátulas.',
   'settings.catalog.artworkSaveError': 'Error al guardar la configuración de carátulas.',
 
@@ -272,7 +288,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'user_message.unsupported_technology_filter': 'Filtro no compatible.',
   'user_message.non_unicode_input': 'El texto contiene caracteres no válidos.',
   'user_message.response_serialization_failed': 'Error al procesar la solicitud.',
-  'user_message.plan_changed_rebuild': 'La tarea está desactualizada. Por favor, inténtalo de nuevo.',
+  'user_message.plan_changed_rebuild':
+    'La tarea está desactualizada. Por favor, inténtalo de nuevo.',
   'user_message.game_not_in_catalog': 'El juego no es compatible.',
   'user_message.operation_not_found': 'Acción no encontrada.',
   'user_message.artifact_not_found': 'Elemento no encontrado.',
@@ -280,12 +297,14 @@ export const es: Record<MessageKey, MessageValue> = {
   'user_message.invalid_operation_state': 'Esta acción no está disponible actualmente.',
   'user_message.operation_could_not_complete': 'No se pudo completar la acción.',
   'user_message.command_task_failed': 'No se pudo ejecutar el comando.',
-  'user_message.steamgriddb_api_key_missing': 'Por favor, proporciona una clave API de SteamGridDB en la configuración.',
+  'user_message.steamgriddb_api_key_missing':
+    'Por favor, proporciona una clave API de SteamGridDB en la configuración.',
   'user_message.unsupported_cover_image_type': 'Formato de imagen no compatible.',
   'user_message.cover_download_failed': 'Error al descargar la carátula.',
   'user_message.cover_artwork_not_found': 'No se encontró carátula para este juego.',
   'user_message.cover_file_system_error': 'Error al guardar la carátula en el disco.',
-  'user_message.nvapi_requires_administrator': 'Se requieren derechos de administrador para cambiar esta configuración.',
+  'user_message.nvapi_requires_administrator':
+    'Se requieren derechos de administrador para cambiar esta configuración.',
 
   'suggested_action.refresh_games': 'Actualiza la lista de juegos y vuelve a intentarlo.',
   'suggested_action.reload_game_details': 'Actualiza los detalles del juego y vuelve a intentarlo.',
@@ -297,6 +316,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'suggested_action.inspect_logs': 'Si el problema persiste, intenta reiniciar la aplicación.',
   'suggested_action.retry_or_restart': 'Si el problema persiste, intenta reiniciar la aplicación.',
   'suggested_action.rebuild_operation_plan': 'Por favor, reinicia la acción.',
-  'suggested_action.refresh_or_scan_game_folder': 'Actualiza la lista o escanea la carpeta de nuevo.',
-  'suggested_action.relaunch_as_administrator': 'Reinicia la aplicación como administrador y vuelve a intentarlo.',
+  'suggested_action.refresh_or_scan_game_folder':
+    'Actualiza la lista o escanea la carpeta de nuevo.',
+  'suggested_action.relaunch_as_administrator':
+    'Reinicia la aplicación como administrador y vuelve a intentarlo.',
 };

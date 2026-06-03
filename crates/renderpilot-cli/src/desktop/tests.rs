@@ -341,7 +341,7 @@ fn query_game_cards_excludes_unknown_from_visible_update_count() {
                 GraphicsTechnology::DlssSuperResolution,
                 Swappability::Swappable,
                 "C:/Games/VisibleUpdates/nvngx_dlss.dll",
-                Some("1.0.0"),
+                Some("2.0.0"),
                 b"visible-updates-dlss",
             ),
             sample_component_from_bytes(
@@ -359,7 +359,7 @@ fn query_game_cards_excludes_unknown_from_visible_update_count() {
         "artifact:visible-updates:dlss",
         GraphicsTechnology::DlssSuperResolution,
         "C:/Artifacts/visible-updates/nvngx_dlss.dll",
-        Some("2.0.0"),
+        Some("3.0.0"),
         b"artifact-visible-updates-dlss",
         Some(game.id().as_str()),
     ));
@@ -643,7 +643,7 @@ fn get_game_details_excludes_unknown_components_and_candidate_groups() {
                 GraphicsTechnology::DlssSuperResolution,
                 Swappability::Swappable,
                 "C:/Games/Details/nvngx_dlss.dll",
-                Some("1.0.0"),
+                Some("2.0.0"),
                 b"details-dlss",
             ),
             sample_component_from_bytes(
@@ -661,7 +661,7 @@ fn get_game_details_excludes_unknown_components_and_candidate_groups() {
         "artifact:details:dlss",
         GraphicsTechnology::DlssSuperResolution,
         "C:/Artifacts/nvngx_dlss.dll",
-        Some("2.0.0"),
+        Some("3.0.0"),
         b"artifact-dlss",
         Some(game.id().as_str()),
     ));

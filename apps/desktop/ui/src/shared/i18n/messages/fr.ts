@@ -70,7 +70,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   },
 
   'elevation.title': 'Privilèges d’administrateur requis',
-  'elevation.description': 'Certains paramètres nécessitent des droits d’administrateur pour être modifiés.',
+  'elevation.description':
+    'Certains paramètres nécessitent des droits d’administrateur pour être modifiés.',
   'elevation.relaunch': 'Redémarrer en tant qu’administrateur',
   'elevation.relaunchFailed': 'Impossible de redémarrer en tant qu’administrateur',
   'elevation.dismiss': 'Ignorer',
@@ -89,7 +90,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'games.filterEmpty.reset': 'Réinitialiser les filtres',
 
   'settings.catalog.title': 'Sources de jaquettes',
-  'settings.catalog.description': 'Sélectionnez des sources en ligne pour télécharger les jaquettes.',
+  'settings.catalog.description':
+    'Sélectionnez des sources en ligne pour télécharger les jaquettes.',
   'settings.catalog.steamKey.srLabel': 'Clé API SteamGridDB',
   'settings.catalog.steamKey.placeholder': 'Clé API',
   'settings.catalog.steamKey.loading': 'Chargement…',
@@ -102,7 +104,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'common.unknown': 'Inconnu',
 
   'gameDetails.noGameSelected.title': 'Aucun jeu sélectionné',
-  'gameDetails.noGameSelected.description': 'Sélectionnez un jeu dans le tableau de bord pour voir ses détails.',
+  'gameDetails.noGameSelected.description':
+    'Sélectionnez un jeu dans le tableau de bord pour voir ses détails.',
   'gameDetails.noComponents.title': 'Aucun composant trouvé',
   'gameDetails.noComponents.description': 'Ce jeu n’a aucun composant graphique pris en charge.',
 
@@ -115,7 +118,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.dlss.descriptionSwapOnly': 'Modifier la version de DLSS.',
   'gameDetails.dlss.libraryFileLabel': 'Version du fichier',
   'gameDetails.dlss.driverOverridesLabel': 'Remplacements de profil NVIDIA',
-  'gameDetails.dlss.adminRequired': 'Redémarrez l’application en tant qu’administrateur pour modifier ces paramètres.',
+  'gameDetails.dlss.adminRequired':
+    'Redémarrez l’application en tant qu’administrateur pour modifier ces paramètres.',
 
   'gameDetails.streamline.description': 'Gérer les plugins Streamline.',
   'gameDetails.streamline.versionTitle': 'Version globale de Streamline',
@@ -125,7 +129,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} mises à jour · {missing} manquants',
   'gameDetails.streamline.restoreAllAria': 'Restaurer tous les plugins à l’original',
   'gameDetails.streamline.restoreAllTooltip': 'Tout restaurer à l’original',
-  'gameDetails.streamline.mixedWarning': 'Les plugins utilisent des versions différentes. Sélectionnez une version ci-dessus pour les synchroniser.',
+  'gameDetails.streamline.mixedWarning':
+    'Les plugins utilisent des versions différentes. Sélectionnez une version ci-dessus pour les synchroniser.',
 
   'gameDetails.profile.title': 'Profil NVIDIA',
   'gameDetails.profile.description': 'Configurer les paramètres du pilote NVIDIA pour ce jeu.',
@@ -138,12 +143,15 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Détection auto',
   'gameDetails.profile.filteredTag': '(filtré)',
   'gameDetails.profile.filteredLabel': '{fileName} (filtré)',
-  'gameDetails.profile.noProfile': 'Profil NVIDIA introuvable. Lancez le jeu une fois et réessayez.',
+  'gameDetails.profile.noProfile':
+    'Profil NVIDIA introuvable. Lancez le jeu une fois et réessayez.',
 
   'gameDetails.indicator.title': 'Indicateur DLSS',
-  'gameDetails.indicator.description': 'Affiche une superposition avec la version et les paramètres DLSS actifs pendant le jeu.',
+  'gameDetails.indicator.description':
+    'Affiche une superposition avec la version et les paramètres DLSS actifs pendant le jeu.',
   'gameDetails.indicator.systemWide': 'Tout le système',
-  'gameDetails.indicator.adminRequired': 'Redémarrez l’application en tant qu’administrateur pour modifier ce paramètre.',
+  'gameDetails.indicator.adminRequired':
+    'Redémarrez l’application en tant qu’administrateur pour modifier ce paramètre.',
   'gameDetails.indicator.overlayTitle': 'Superposition à l’écran',
   'gameDetails.indicator.overlayDescription': 'S’applique à tous les jeux de ce PC.',
   'gameDetails.indicator.toggleAria': 'Basculer l’indicateur DLSS',
@@ -201,14 +209,21 @@ export const fr: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'Modifier la version',
   'operation.duration': 'Terminé en {seconds}s',
   'operation.filesUpdated.none': 'Aucun fichier mis à jour.',
-  'operation.filesUpdated.count': { one: '1 fichier mis à jour.', other: '{count} fichiers mis à jour.' },
+  'operation.filesUpdated.count': {
+    one: '1 fichier mis à jour.',
+    other: '{count} fichiers mis à jour.',
+  },
   'operation.filesRestored.none': 'Aucun fichier restauré.',
-  'operation.filesRestored.count': { one: '1 fichier restauré.', other: '{count} fichiers restaurés.' },
+  'operation.filesRestored.count': {
+    one: '1 fichier restauré.',
+    other: '{count} fichiers restaurés.',
+  },
   'operation.itemAria': '{kind}, {status}',
 
   'notify.stalePlan': 'Le plan d’opération est obsolète. Veuillez réessayer.',
   'notify.missingStableGameId': 'Impossible d’identifier le jeu.',
-  'notify.coverPickerPreview': 'Veuillez utiliser l’application de bureau pour choisir une jaquette.',
+  'notify.coverPickerPreview':
+    'Veuillez utiliser l’application de bureau pour choisir une jaquette.',
   'notify.coverUpdated.title': 'Jaquette mise à jour',
   'notify.coverUpdated.body': 'Votre jaquette personnalisée a été enregistrée.',
   'notify.coverDownloaded.title': 'Jaquette téléchargée',
@@ -238,7 +253,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'nvidia.setExeFailed': 'Échec de la configuration de l’exécutable',
   'nvidia.clearExeFailed': 'Échec de l’effacement de la configuration de l’exécutable',
 
-  'indicator.relaunchToToggle': 'Redémarrez en tant qu’administrateur pour basculer l’indicateur DLSS.',
+  'indicator.relaunchToToggle':
+    'Redémarrez en tant qu’administrateur pour basculer l’indicateur DLSS.',
   'indicator.changeFailed': 'Échec de la bascule de l’indicateur DLSS',
 
   'libraries.column.version': 'Version',
@@ -251,13 +267,16 @@ export const fr: Record<MessageKey, MessageValue> = {
 
   'settings.catalog.source.steam.aria': 'Télécharger les jaquettes depuis Steam',
   'settings.catalog.source.steam.title': 'Steam',
-  'settings.catalog.source.steam.description': 'Télécharger les jaquettes du catalogue public de Steam.',
+  'settings.catalog.source.steam.description':
+    'Télécharger les jaquettes du catalogue public de Steam.',
   'settings.catalog.source.gog.aria': 'Télécharger les jaquettes depuis GOG',
   'settings.catalog.source.gog.title': 'GOG',
-  'settings.catalog.source.gog.description': 'Télécharger les jaquettes du catalogue officiel de GOG.',
+  'settings.catalog.source.gog.description':
+    'Télécharger les jaquettes du catalogue officiel de GOG.',
   'settings.catalog.source.steamgriddb.aria': 'Télécharger les jaquettes depuis SteamGridDB',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
-  'settings.catalog.source.steamgriddb.description': 'Télécharger les jaquettes communautaires depuis SteamGridDB. Nécessite une clé API.',
+  'settings.catalog.source.steamgriddb.description':
+    'Télécharger les jaquettes communautaires depuis SteamGridDB. Nécessite une clé API.',
   'settings.catalog.artworkReadError': 'Échec du chargement des paramètres de jaquette.',
   'settings.catalog.artworkSaveError': 'Échec de l’enregistrement des paramètres de jaquette.',
 
@@ -280,12 +299,14 @@ export const fr: Record<MessageKey, MessageValue> = {
   'user_message.invalid_operation_state': 'Cette action est actuellement indisponible.',
   'user_message.operation_could_not_complete': 'Échec de l’exécution de l’action.',
   'user_message.command_task_failed': 'Échec de l’exécution de la commande.',
-  'user_message.steamgriddb_api_key_missing': 'Veuillez fournir une clé API SteamGridDB dans les paramètres.',
+  'user_message.steamgriddb_api_key_missing':
+    'Veuillez fournir une clé API SteamGridDB dans les paramètres.',
   'user_message.unsupported_cover_image_type': 'Format d’image non pris en charge.',
   'user_message.cover_download_failed': 'Échec du téléchargement de la jaquette.',
   'user_message.cover_artwork_not_found': 'Aucune jaquette trouvée pour ce jeu.',
   'user_message.cover_file_system_error': 'Échec de l’enregistrement de la jaquette sur le disque.',
-  'user_message.nvapi_requires_administrator': 'Les droits d’administrateur sont requis pour modifier ce paramètre.',
+  'user_message.nvapi_requires_administrator':
+    'Les droits d’administrateur sont requis pour modifier ce paramètre.',
 
   'suggested_action.refresh_games': 'Actualisez la liste des jeux et réessayez.',
   'suggested_action.reload_game_details': 'Actualisez les détails du jeu et réessayez.',
@@ -295,8 +316,11 @@ export const fr: Record<MessageKey, MessageValue> = {
   'suggested_action.reload_desktop': 'Redémarrez l’application et réessayez.',
   'suggested_action.normalize_text': 'Vérifiez votre saisie et réessayez.',
   'suggested_action.inspect_logs': 'Si le problème persiste, essayez de redémarrer l’application.',
-  'suggested_action.retry_or_restart': 'Si le problème persiste, essayez de redémarrer l’application.',
+  'suggested_action.retry_or_restart':
+    'Si le problème persiste, essayez de redémarrer l’application.',
   'suggested_action.rebuild_operation_plan': 'Veuillez recommencer l’action.',
-  'suggested_action.refresh_or_scan_game_folder': 'Actualisez la liste ou analysez à nouveau le dossier.',
-  'suggested_action.relaunch_as_administrator': 'Redémarrez l’application en tant qu’administrateur et réessayez.',
+  'suggested_action.refresh_or_scan_game_folder':
+    'Actualisez la liste ou analysez à nouveau le dossier.',
+  'suggested_action.relaunch_as_administrator':
+    'Redémarrez l’application en tant qu’administrateur et réessayez.',
 };

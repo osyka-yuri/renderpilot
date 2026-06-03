@@ -2,10 +2,7 @@ use std::path::Path;
 
 use renderpilot_application::GameRepository;
 use renderpilot_domain::GameId;
-use renderpilot_nvapi::{
-    setting::{DllInfo, DlssDllKind, SettingContext},
-    Nvapi,
-};
+use renderpilot_nvapi::setting::{DllInfo, DlssDllKind, SettingContext};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::{catalog::open_catalog_storage, error::CliError};
@@ -49,12 +46,10 @@ pub fn build_setting_context_with_storage(
 
     let effective_exe = effective_exe.or_else(|| pick_exe_with_profile_fallback(install_dir));
 
-    #[allow(unused_mut)]
-    let mut dlls: std::collections::HashMap<DlssDllKind, DllInfo> =
-        std::collections::HashMap::new();
-
     #[cfg(windows)]
-    {
+    let dlls = {
+        let mut dlls: std::collections::HashMap<DlssDllKind, DllInfo> =
+            std::collections::HashMap::new();
         for hit in platform_dlss::find_dlss_dlls(install_dir) {
             if let Ok(version) = platform_dlss::read_dll_version(&hit.path) {
                 dlls.entry(hit.kind).or_insert(DllInfo {
@@ -63,7 +58,11 @@ pub fn build_setting_context_with_storage(
                 });
             }
         }
-    }
+        dlls
+    };
+
+    #[cfg(not(windows))]
+    let dlls: std::collections::HashMap<DlssDllKind, DllInfo> = std::collections::HashMap::new();
 
     Ok(SettingContext {
         game_install_dir: install_dir.to_path_buf(),
@@ -84,6 +83,8 @@ pub fn collect_executable_candidates(_install_dir: &Path) -> Vec<()> {
 
 #[cfg(windows)]
 fn pick_exe_with_profile_fallback(install_dir: &Path) -> Option<String> {
+    use renderpilot_nvapi::Nvapi;
+
     let supported: Vec<ExecutableCandidate> = detect_executable_candidates(install_dir)
         .into_iter()
         .filter(|c| c.rejection.is_none())

@@ -70,7 +70,8 @@ export const de: Record<MessageKey, MessageValue> = {
   },
 
   'elevation.title': 'Administratorrechte erforderlich',
-  'elevation.description': 'Einige Einstellungen können nicht ohne Administratorrechte geändert werden.',
+  'elevation.description':
+    'Einige Einstellungen können nicht ohne Administratorrechte geändert werden.',
   'elevation.relaunch': 'Als Administrator neu starten',
   'elevation.relaunchFailed': 'Konnte nicht als Administrator neu gestartet werden',
   'elevation.dismiss': 'Ausblenden',
@@ -89,7 +90,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'games.filterEmpty.reset': 'Filter zurücksetzen',
 
   'settings.catalog.title': 'Cover-Quellen',
-  'settings.catalog.description': 'Wählen Sie Online-Quellen zum Herunterladen von Spiel-Covern aus.',
+  'settings.catalog.description':
+    'Wählen Sie Online-Quellen zum Herunterladen von Spiel-Covern aus.',
   'settings.catalog.steamKey.srLabel': 'SteamGridDB API-Schlüssel',
   'settings.catalog.steamKey.placeholder': 'API-Schlüssel',
   'settings.catalog.steamKey.loading': 'Laden…',
@@ -102,7 +104,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'common.unknown': 'Unbekannt',
 
   'gameDetails.noGameSelected.title': 'Kein Spiel ausgewählt',
-  'gameDetails.noGameSelected.description': 'Wählen Sie ein Spiel aus dem Dashboard, um die Details anzuzeigen.',
+  'gameDetails.noGameSelected.description':
+    'Wählen Sie ein Spiel aus dem Dashboard, um die Details anzuzeigen.',
   'gameDetails.noComponents.title': 'Keine Komponenten gefunden',
   'gameDetails.noComponents.description': 'Dieses Spiel hat keine unterstützten Grafikkomponenten.',
 
@@ -111,11 +114,13 @@ export const de: Record<MessageKey, MessageValue> = {
 
   'gameDetails.vendor.description': 'Ändern Sie die Komponentenversion.',
 
-  'gameDetails.dlss.description': 'Ändern Sie die DLSS-Version oder überschreiben Sie die Einstellungen.',
+  'gameDetails.dlss.description':
+    'Ändern Sie die DLSS-Version oder überschreiben Sie die Einstellungen.',
   'gameDetails.dlss.descriptionSwapOnly': 'Ändern Sie die DLSS-Version.',
   'gameDetails.dlss.libraryFileLabel': 'Dateiversion',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA-Profil-Überschreibungen',
-  'gameDetails.dlss.adminRequired': 'Starten Sie die App als Administrator neu, um diese Einstellungen zu ändern.',
+  'gameDetails.dlss.adminRequired':
+    'Starten Sie die App als Administrator neu, um diese Einstellungen zu ändern.',
 
   'gameDetails.streamline.description': 'Streamline-Plugins verwalten.',
   'gameDetails.streamline.versionTitle': 'Globale Streamline-Version',
@@ -125,10 +130,12 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} Updates · {missing} fehlen',
   'gameDetails.streamline.restoreAllAria': 'Alle Plugins auf Original wiederherstellen',
   'gameDetails.streamline.restoreAllTooltip': 'Alle auf Original wiederherstellen',
-  'gameDetails.streamline.mixedWarning': 'Plugins verwenden unterschiedliche Versionen. Wählen Sie oben eine Version aus, um sie zu synchronisieren.',
+  'gameDetails.streamline.mixedWarning':
+    'Plugins verwenden unterschiedliche Versionen. Wählen Sie oben eine Version aus, um sie zu synchronisieren.',
 
   'gameDetails.profile.title': 'NVIDIA Profil',
-  'gameDetails.profile.description': 'Konfigurieren Sie die NVIDIA-Treibereinstellungen für dieses Spiel.',
+  'gameDetails.profile.description':
+    'Konfigurieren Sie die NVIDIA-Treibereinstellungen für dieses Spiel.',
   'gameDetails.profile.target': 'Ausführbare Datei',
   'gameDetails.profile.loading': 'Laden...',
   'gameDetails.profile.pinnedManual': 'Manuell ausgewählt.',
@@ -138,12 +145,15 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Automatisch erkennen',
   'gameDetails.profile.filteredTag': '(gefiltert)',
   'gameDetails.profile.filteredLabel': '{fileName} (gefiltert)',
-  'gameDetails.profile.noProfile': 'NVIDIA-Profil nicht gefunden. Starten Sie das Spiel einmal und versuchen Sie es erneut.',
+  'gameDetails.profile.noProfile':
+    'NVIDIA-Profil nicht gefunden. Starten Sie das Spiel einmal und versuchen Sie es erneut.',
 
   'gameDetails.indicator.title': 'DLSS-Indikator',
-  'gameDetails.indicator.description': 'Zeigt ein Overlay mit der aktiven DLSS-Version und den Einstellungen während des Spiels.',
+  'gameDetails.indicator.description':
+    'Zeigt ein Overlay mit der aktiven DLSS-Version und den Einstellungen während des Spiels.',
   'gameDetails.indicator.systemWide': 'Systemweit',
-  'gameDetails.indicator.adminRequired': 'Starten Sie die App als Administrator neu, um diese Einstellung zu ändern.',
+  'gameDetails.indicator.adminRequired':
+    'Starten Sie die App als Administrator neu, um diese Einstellung zu ändern.',
   'gameDetails.indicator.overlayTitle': 'Bildschirm-Overlay',
   'gameDetails.indicator.overlayDescription': 'Gilt für alle Spiele auf diesem PC.',
   'gameDetails.indicator.toggleAria': 'DLSS-Indikator umschalten',
@@ -201,9 +211,15 @@ export const de: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'Version ändern',
   'operation.duration': 'Abgeschlossen in {seconds}s',
   'operation.filesUpdated.none': 'Keine Dateien aktualisiert.',
-  'operation.filesUpdated.count': { one: '1 Datei aktualisiert.', other: '{count} Dateien aktualisiert.' },
+  'operation.filesUpdated.count': {
+    one: '1 Datei aktualisiert.',
+    other: '{count} Dateien aktualisiert.',
+  },
   'operation.filesRestored.none': 'Keine Dateien wiederhergestellt.',
-  'operation.filesRestored.count': { one: '1 Datei wiederhergestellt.', other: '{count} Dateien wiederhergestellt.' },
+  'operation.filesRestored.count': {
+    one: '1 Datei wiederhergestellt.',
+    other: '{count} Dateien wiederhergestellt.',
+  },
   'operation.itemAria': '{kind}, {status}',
 
   'notify.stalePlan': 'Der Vorgangsplan ist veraltet. Bitte versuchen Sie es erneut.',
@@ -238,7 +254,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'nvidia.setExeFailed': 'Fehler beim Konfigurieren der ausführbaren Datei',
   'nvidia.clearExeFailed': 'Fehler beim Löschen der Konfiguration der ausführbaren Datei',
 
-  'indicator.relaunchToToggle': 'Starten Sie als Administrator neu, um den DLSS-Indikator umzuschalten.',
+  'indicator.relaunchToToggle':
+    'Starten Sie als Administrator neu, um den DLSS-Indikator umzuschalten.',
   'indicator.changeFailed': 'DLSS-Indikator konnte nicht umgeschaltet werden',
 
   'libraries.column.version': 'Version',
@@ -251,13 +268,15 @@ export const de: Record<MessageKey, MessageValue> = {
 
   'settings.catalog.source.steam.aria': 'Cover von Steam herunterladen',
   'settings.catalog.source.steam.title': 'Steam',
-  'settings.catalog.source.steam.description': 'Cover aus dem öffentlichen Steam-Katalog herunterladen.',
+  'settings.catalog.source.steam.description':
+    'Cover aus dem öffentlichen Steam-Katalog herunterladen.',
   'settings.catalog.source.gog.aria': 'Cover von GOG herunterladen',
   'settings.catalog.source.gog.title': 'GOG',
   'settings.catalog.source.gog.description': 'Cover aus dem offiziellen GOG-Katalog herunterladen.',
   'settings.catalog.source.steamgriddb.aria': 'Cover von SteamGridDB herunterladen',
   'settings.catalog.source.steamgriddb.title': 'SteamGridDB',
-  'settings.catalog.source.steamgriddb.description': 'Community-Cover von SteamGridDB herunterladen. Erfordert API-Schlüssel.',
+  'settings.catalog.source.steamgriddb.description':
+    'Community-Cover von SteamGridDB herunterladen. Erfordert API-Schlüssel.',
   'settings.catalog.artworkReadError': 'Cover-Einstellungen konnten nicht geladen werden.',
   'settings.catalog.artworkSaveError': 'Cover-Einstellungen konnten nicht gespeichert werden.',
 
@@ -280,23 +299,34 @@ export const de: Record<MessageKey, MessageValue> = {
   'user_message.invalid_operation_state': 'Diese Aktion ist derzeit nicht verfügbar.',
   'user_message.operation_could_not_complete': 'Aktion konnte nicht abgeschlossen werden.',
   'user_message.command_task_failed': 'Befehl konnte nicht ausgeführt werden.',
-  'user_message.steamgriddb_api_key_missing': 'Bitte geben Sie in den Einstellungen einen SteamGridDB API-Schlüssel ein.',
+  'user_message.steamgriddb_api_key_missing':
+    'Bitte geben Sie in den Einstellungen einen SteamGridDB API-Schlüssel ein.',
   'user_message.unsupported_cover_image_type': 'Nicht unterstütztes Bildformat.',
   'user_message.cover_download_failed': 'Cover konnte nicht heruntergeladen werden.',
   'user_message.cover_artwork_not_found': 'Kein Cover für dieses Spiel gefunden.',
-  'user_message.cover_file_system_error': 'Cover konnte nicht auf der Festplatte gespeichert werden.',
-  'user_message.nvapi_requires_administrator': 'Zum Ändern dieser Einstellung sind Administratorrechte erforderlich.',
+  'user_message.cover_file_system_error':
+    'Cover konnte nicht auf der Festplatte gespeichert werden.',
+  'user_message.nvapi_requires_administrator':
+    'Zum Ändern dieser Einstellung sind Administratorrechte erforderlich.',
 
-  'suggested_action.refresh_games': 'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',
-  'suggested_action.reload_game_details': 'Aktualisieren Sie die Spieldetails und versuchen Sie es erneut.',
+  'suggested_action.refresh_games':
+    'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',
+  'suggested_action.reload_game_details':
+    'Aktualisieren Sie die Spieldetails und versuchen Sie es erneut.',
   'suggested_action.refresh_candidates': 'Aktualisieren Sie die Liste und versuchen Sie es erneut.',
-  'suggested_action.rebuild_plan_or_reload_operations': 'Aktualisieren Sie die Ansicht und versuchen Sie es erneut.',
-  'suggested_action.retry_after_required_data': 'Bitte warten Sie und versuchen Sie es später noch einmal.',
+  'suggested_action.rebuild_plan_or_reload_operations':
+    'Aktualisieren Sie die Ansicht und versuchen Sie es erneut.',
+  'suggested_action.retry_after_required_data':
+    'Bitte warten Sie und versuchen Sie es später noch einmal.',
   'suggested_action.reload_desktop': 'Starten Sie die App neu und versuchen Sie es erneut.',
   'suggested_action.normalize_text': 'Überprüfen Sie Ihre Eingabe und versuchen Sie es erneut.',
-  'suggested_action.inspect_logs': 'Wenn das Problem weiterhin besteht, versuchen Sie, die App neu zu starten.',
-  'suggested_action.retry_or_restart': 'Wenn das Problem weiterhin besteht, versuchen Sie, die App neu zu starten.',
+  'suggested_action.inspect_logs':
+    'Wenn das Problem weiterhin besteht, versuchen Sie, die App neu zu starten.',
+  'suggested_action.retry_or_restart':
+    'Wenn das Problem weiterhin besteht, versuchen Sie, die App neu zu starten.',
   'suggested_action.rebuild_operation_plan': 'Bitte starten Sie die Aktion neu.',
-  'suggested_action.refresh_or_scan_game_folder': 'Aktualisieren Sie die Liste oder scannen Sie den Ordner erneut.',
-  'suggested_action.relaunch_as_administrator': 'Starten Sie die App als Administrator neu und versuchen Sie es erneut.',
+  'suggested_action.refresh_or_scan_game_folder':
+    'Aktualisieren Sie die Liste oder scannen Sie den Ordner erneut.',
+  'suggested_action.relaunch_as_administrator':
+    'Starten Sie die App als Administrator neu und versuchen Sie es erneut.',
 };
