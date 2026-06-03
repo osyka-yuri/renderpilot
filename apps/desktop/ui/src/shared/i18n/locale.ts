@@ -8,7 +8,7 @@
  * while `Locale` is the concrete, resolved language the catalog is keyed by.
  */
 
-export type Locale = 'en' | 'ru';
+export type Locale = 'en' | 'ru' | 'es' | 'zh' | 'fr' | 'de' | 'ja';
 export type LanguageMode = 'system' | Locale;
 
 const STORAGE_KEY = 'renderpilot.language-mode';
@@ -16,7 +16,7 @@ const STORAGE_KEY = 'renderpilot.language-mode';
 const DEFAULT_LANGUAGE_MODE: LanguageMode = 'system';
 const DEFAULT_LOCALE: Locale = 'en';
 
-const LANGUAGE_MODES = ['system', 'en', 'ru'] as const;
+const LANGUAGE_MODES = ['system', 'en', 'ru', 'es', 'zh', 'fr', 'de', 'ja'] as const;
 
 export function readStoredLanguageMode(): LanguageMode {
   const storage = getLocalStorage();
@@ -65,7 +65,14 @@ function detectSystemLocale(): Locale {
 
   const language = navigator.language.toLowerCase();
 
-  return language.startsWith('ru') ? 'ru' : DEFAULT_LOCALE;
+  if (language.startsWith('ru')) return 'ru';
+  if (language.startsWith('es')) return 'es';
+  if (language.startsWith('zh')) return 'zh';
+  if (language.startsWith('fr')) return 'fr';
+  if (language.startsWith('de')) return 'de';
+  if (language.startsWith('ja')) return 'ja';
+
+  return DEFAULT_LOCALE;
 }
 
 function getLocalStorage(): Storage | null {

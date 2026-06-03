@@ -35,6 +35,11 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.language.system': 'Как в системе',
   'settings.language.en': 'English',
   'settings.language.ru': 'Русский',
+  'settings.language.es': 'Español',
+  'settings.language.zh': '中文',
+  'settings.language.fr': 'Français',
+  'settings.language.de': 'Deutsch',
+  'settings.language.ja': '日本語',
 
   // ── Settings: tabs ──
   'settings.tabs.appearance': 'Оформление',

@@ -20,6 +20,11 @@ export const languageOptions = [
   { value: 'system', labelKey: 'settings.language.system' },
   { value: 'en', labelKey: 'settings.language.en' },
   { value: 'ru', labelKey: 'settings.language.ru' },
+  { value: 'es', labelKey: 'settings.language.es' },
+  { value: 'zh', labelKey: 'settings.language.zh' },
+  { value: 'fr', labelKey: 'settings.language.fr' },
+  { value: 'de', labelKey: 'settings.language.de' },
+  { value: 'ja', labelKey: 'settings.language.ja' },
 ] as const satisfies readonly SettingsSelectOption<LanguageMode>[];
 
 export type SettingsTabOption = {
