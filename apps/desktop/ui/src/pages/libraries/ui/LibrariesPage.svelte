@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createVirtualizer } from '@tanstack/svelte-virtual';
+  import { untrack } from 'svelte';
   import {
     Alert,
     AlertDescription,
@@ -173,7 +174,7 @@
 
     void resetVirtualizerAfterLayout({
       viewport: scrollViewportRef,
-      virtualizer: $rowVirtualizer,
+      virtualizer: untrack(() => $rowVirtualizer),
       resetId,
       resetKey,
       currentResetId: () => virtualizerResetId,
