@@ -6,6 +6,7 @@ export type LibraryGroupKey =
   | 'dlss'
   | 'dlss_g'
   | 'dlss_d'
+  | 'streamline'
   | 'fsr_31_dx12'
   | 'fsr_31_vk'
   | 'fsr_loader_dx12'
@@ -47,6 +48,7 @@ export const typeOptionsByVendor = {
     { value: 'dlss', label: 'DLSS', groupKey: 'dlss' },
     { value: 'dlss_fg', label: 'DLSS FG', groupKey: 'dlss_g' },
     { value: 'dlss_rr', label: 'DLSS RR', groupKey: 'dlss_d' },
+    { value: 'streamline', label: 'Streamline', groupKey: 'streamline' },
   ],
   amd: [
     { value: 'fsr', label: 'FSR 3.1 DX12', groupKey: 'fsr_31_dx12' },
@@ -101,6 +103,9 @@ export function groupKeyForType(typeValue: LibraryTypeValue): LibraryGroupKey {
 }
 
 export function libraryIdToGroupKey(libraryId: string): LibraryGroupKey {
+  if (libraryId.startsWith('sl_')) {
+    return 'streamline';
+  }
   return libraryIdToGroupKeyMap[libraryId] ?? DEFAULT_GROUP_KEY;
 }
 
