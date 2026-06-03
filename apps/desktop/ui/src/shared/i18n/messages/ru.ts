@@ -93,11 +93,11 @@ export const ru: Record<MessageKey, MessageValue> = {
   'elevation.title': 'Требуются права администратора',
   'elevation.description': 'Для изменения некоторых настроек требуются права администратора.',
   'elevation.relaunch': 'Перезапустить от имени администратора',
-  'elevation.relaunchFailed': 'Не удалось перезапустить приложение',
+  'elevation.relaunchFailed': 'Не удалось перезапустить от имени администратора',
   'elevation.dismiss': 'Скрыть',
 
   // ── Games page / catalog ──
-  'games.scanFolder': 'Добавить папку',
+  'games.scanFolder': 'Сканировать папку',
   'games.scanning': 'Поиск игр...',
   'games.libraryActions': 'Действия',
   'games.search': 'Поиск игр',
@@ -105,7 +105,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'games.openFiltersActive': 'Фильтры (активны)',
   'games.loading': 'Загрузка...',
   'games.empty.title': 'Игры не найдены',
-  'games.empty.description': 'Укажите папку с играми, чтобы добавить их в список.',
+  'games.empty.description': 'Просканируйте папку, чтобы добавить игры в список.',
   'games.filterEmpty.title': 'Ничего не найдено',
   'games.filterEmpty.description': 'Попробуйте изменить условия поиска или фильтры.',
   'games.filterEmpty.reset': 'Сбросить фильтры',
@@ -133,7 +133,7 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'Нет альтернативных версий',
-  'gameDetails.version.restoreOriginal': 'Восстановить {fileName}',
+  'gameDetails.version.restoreOriginal': 'Восстановить исходный {fileName}',
 
   // ── Game details: vendor component card ──
   'gameDetails.vendor.description': 'Изменить версию компонента.',
@@ -166,7 +166,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.pinnedManual': 'Выбрано вручную.',
   'gameDetails.profile.autoDetected': 'Определено автоматически.',
   'gameDetails.profile.noExeDetected': 'Исполняемый файл не найден.',
-  'gameDetails.profile.noExe': 'Файл не найден',
+  'gameDetails.profile.noExe': 'Нет файла',
   'gameDetails.profile.autoDetect': 'Автоопределение',
   'gameDetails.profile.filteredTag': '(скрыто)',
   'gameDetails.profile.filteredLabel': '{fileName} (скрыто)',
@@ -238,7 +238,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'operation.label.planned': 'Запланировано',
   'operation.label.completed': 'Завершено',
   'operation.label.failed': 'Ошибка',
-  'operation.label.rolledBack': 'Отменено',
+  'operation.label.rolledBack': 'Откат',
   'operation.label.replaceComponent': 'Изменение версии',
   'operation.duration': 'Выполнено за {seconds} с',
   'operation.filesUpdated.none': 'Файлы не обновлялись.',
@@ -270,7 +270,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'notify.applyCompleted': 'Изменения применены',
   'notify.rollbackCompleted': 'Откат выполнен',
   'notify.statusError': 'Ошибка',
-  'notify.statusWarning': 'Внимание',
+  'notify.statusWarning': 'Предупреждение',
 
   // ── Library scan ──
   'scan.partialWarning': {
@@ -358,7 +358,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'suggested_action.rebuild_plan_or_reload_operations': 'Обновите страницу и попробуйте снова.',
   'suggested_action.retry_after_required_data': 'Подождите немного и попробуйте снова.',
   'suggested_action.reload_desktop': 'Перезапустите приложение и попробуйте снова.',
-  'suggested_action.normalize_text': 'Проверьте введенные данные и попробуйте снова.',
+  'suggested_action.normalize_text': 'Проверьте введённые данные и попробуйте снова.',
   'suggested_action.inspect_logs':
     'Если проблема сохраняется, попробуйте перезапустить приложение.',
   'suggested_action.retry_or_restart':
