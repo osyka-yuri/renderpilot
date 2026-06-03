@@ -25,7 +25,6 @@ function candidate(version: string, overrides: Partial<Candidate> = {}): Candida
     version,
     source_game_id: null,
     comparison: 'newer_version',
-    warning: 'streamline_single_file_swap_requires_warning',
     manifest_entry_id: `entry:${version}`,
     is_downloaded: true,
     ...overrides,
@@ -111,14 +110,13 @@ describe('buildStreamlineVersionModel', () => {
     expect(v250?.isComplete).toBe(false);
   });
 
-  it('flags allDownloaded=false and carries the manifest entry id', () => {
+  it('flags allDownloaded=false and carries each item download state', () => {
     const components = [component('a'), component('b')];
     const groupsById = {
       a: group('a', '2.3.0', [
         candidate('2.4.0', {
           artifact_id: 'a-240',
           is_downloaded: false,
-          manifest_entry_id: 'e-a',
         }),
       ]),
       b: group('b', '2.3.0', [candidate('2.4.0', { artifact_id: 'b-240', is_downloaded: true })]),
@@ -128,7 +126,8 @@ describe('buildStreamlineVersionModel', () => {
 
     const v240 = model.options.find((option) => option.version === '2.4.0');
     expect(v240?.allDownloaded).toBe(false);
-    expect(v240?.items.find((item) => item.componentId === 'a')?.entryId).toBe('e-a');
+    expect(v240?.items.find((item) => item.componentId === 'a')?.isDownloaded).toBe(false);
+    expect(v240?.items.find((item) => item.componentId === 'b')?.isDownloaded).toBe(true);
   });
 
   it('never offers the version a plugin is already on as a target', () => {

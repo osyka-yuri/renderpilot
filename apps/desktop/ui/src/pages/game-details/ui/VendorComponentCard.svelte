@@ -9,7 +9,7 @@
     component: GameGraphicsComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
-    onSwap: (componentId: string, artifactId: string, entryId: string | null) => void;
+    onSwap: (componentId: string, artifactId: string, isDownloaded: boolean) => void;
     onRollback: (componentId: string) => void;
   };
 

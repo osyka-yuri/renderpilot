@@ -3,7 +3,7 @@ use renderpilot_application::{
     UnixTimestampMillis,
 };
 use renderpilot_domain::{
-    ComponentFile, GameIdentity, GameInstallation, GraphicsComponent, LibraryArtifact, PathRef,
+    GameIdentity, GameInstallation, GraphicsComponent, LibraryArtifact, PathRef,
 };
 use rusqlite::types::FromSql;
 
@@ -230,9 +230,7 @@ struct ArtifactRow {
     id: String,
     technology: String,
     file_name: String,
-    file_path: String,
-    version: Option<String>,
-    sha256: String,
+    files_json: String,
     source: Option<String>,
     source_game_id: Option<String>,
     trust_level: String,
@@ -248,9 +246,7 @@ impl DomainRow for ArtifactRow {
             id: row.read(a::ID)?,
             technology: row.read(a::TECHNOLOGY)?,
             file_name: row.read(a::FILE_NAME)?,
-            file_path: row.read(a::FILE_PATH)?,
-            version: row.read(a::VERSION)?,
-            sha256: row.read(a::SHA256)?,
+            files_json: row.read(a::FILES_JSON)?,
             source: row.read(a::SOURCE)?,
             source_game_id: row.read(a::SOURCE_GAME_ID)?,
             trust_level: row.read(a::TRUST_LEVEL)?,
@@ -262,20 +258,18 @@ impl DomainRow for ArtifactRow {
             id,
             technology,
             file_name,
-            file_path,
-            version,
-            sha256,
+            files_json,
             source,
             source_game_id,
             trust_level,
         } = self;
 
-        let file = component_file(file_path, sha256, version)?;
+        let files = mapping::component_files(files_json)?;
         let artifact = LibraryArtifact::new(
             mapping::artifact_id(id)?,
             mapping::graphics_technology(technology)?,
             file_name,
-            file,
+            files,
             mapping::artifact_trust_level(trust_level)?,
         )
         .map_err(invalid_row)?;
@@ -288,19 +282,6 @@ impl DomainRow for ArtifactRow {
             Ok(artifact.with_source_game_id(mapping::game_id(source_game_id)?))
         })
     }
-}
-
-fn component_file(
-    file_path: String,
-    sha256: String,
-    version: Option<String>,
-) -> AppResult<ComponentFile> {
-    let file = ComponentFile::new(mapping::path_ref(file_path)?)
-        .with_sha256(mapping::sha256_hash(sha256)?);
-
-    with_optional(file, version, |file, version| {
-        Ok(file.with_version(mapping::version(version)?))
-    })
 }
 
 #[derive(Debug)]

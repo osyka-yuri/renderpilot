@@ -47,7 +47,7 @@ describe('createGameDetailsPageModel', () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult());
     const { model, reloadGameDetails } = createModel();
 
-    await model.handleSwap('component-1', 'artifact-1');
+    await model.handleSwap('component-1', 'artifact-1', true);
 
     expect(applySwap).toHaveBeenCalledWith(ACTIVE_GAME_ID, 'component-1', 'artifact-1');
     expect(reloadGameDetails).toHaveBeenCalledTimes(1);
@@ -58,15 +58,15 @@ describe('createGameDetailsPageModel', () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult());
     const { model } = createModel({ runExclusive: () => Promise.resolve(null) });
 
-    await model.handleSwap('component-1', 'artifact-1');
+    await model.handleSwap('component-1', 'artifact-1', true);
 
     expect(publishApplyCompletedNotification).not.toHaveBeenCalled();
   });
 
   describe('handleBulkSwap', () => {
     const items = [
-      { componentId: 'c1', artifactId: 'a1', entryId: null },
-      { componentId: 'c2', artifactId: 'a2', entryId: null },
+      { componentId: 'c1', artifactId: 'a1', isDownloaded: true },
+      { componentId: 'c2', artifactId: 'a2', isDownloaded: true },
     ];
 
     it('swaps every plugin, reloads once and notifies the applied count', async () => {

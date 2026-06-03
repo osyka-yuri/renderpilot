@@ -51,6 +51,12 @@ pub(crate) fn manifest_entries_as_artifacts(
     let mut entry_ids = HashMap::new();
 
     for entry in &manifest.entries {
+        // FSR split DLLs (loader/upscaler/framegen) are offered only as a
+        // version-matched package, composed below — not as individual artifacts.
+        if super::fsr_packages::is_packaged_fsr_library(&entry.library.id) {
+            continue;
+        }
+
         let artifact = match build_manifest_index_artifact(entry, patterns) {
             Ok(artifact) => artifact,
             Err(error) => {
@@ -62,6 +68,11 @@ pub(crate) fn manifest_entries_as_artifacts(
 
         entry_ids.insert(artifact_id, entry.entry_id.clone());
         artifacts.push(artifact);
+    }
+
+    // One composed artifact per FSR release (loader + upscaler + framegen).
+    for package in super::fsr_packages::compose_fsr_packages(&manifest.entries) {
+        artifacts.push(package.artifact);
     }
 
     Ok((artifacts, entry_ids))
@@ -96,8 +107,6 @@ fn build_entry_artifact(
     let technology = patterns
         .match_file_name(&entry.library.file_name)
         .unwrap_or(GraphicsTechnology::Unknown);
-    let artifact_id = ArtifactId::new(format!("artifact:{sha256}"))
-        .map_err(|error| library_error(format!("invalid artifact id: {error}")))?;
     let path = PathRef::new(artifact_path)
         .map_err(|error| library_error(format!("invalid artifact path: {error}")))?;
     let sha256_hash = Sha256Hash::new(sha256)
@@ -105,6 +114,10 @@ fn build_entry_artifact(
     let version = Version::parse(&entry.version.value)
         .map_err(|error| library_error(format!("invalid version: {error}")))?;
 
+    // Manifest entries are single-file (bundle support for downloads is a
+    // follow-up), but the id uses the same bundle scheme as locally-scanned
+    // artifacts so the same DLL from a scan and from the manifest dedupes.
+    let artifact_id = ArtifactId::for_bundle([&sha256_hash]);
     let file = ComponentFile::new(path)
         .with_sha256(sha256_hash)
         .with_version(version);
@@ -112,7 +125,7 @@ fn build_entry_artifact(
         artifact_id,
         technology,
         &entry.library.file_name,
-        file,
+        vec![file],
         ArtifactTrustLevel::ManifestDownloaded,
     )
     .map_err(|error| library_error(format!("failed to build artifact: {error}")))?;

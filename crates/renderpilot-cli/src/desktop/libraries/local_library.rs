@@ -5,9 +5,16 @@ use sha2::{Digest, Sha256};
 
 use crate::{catalog, CliError};
 use renderpilot_application::ArtifactRepository;
+use renderpilot_domain::{
+    ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
+};
 
 use super::{
-    artifact_builder, http, library_error, storage, types::LibraryManifestEntry, validate,
+    artifact_builder,
+    fsr_packages::FsrPackage,
+    http, library_error, storage,
+    types::{LibraryManifest, LibraryManifestEntry},
+    validate,
 };
 
 pub(super) struct DownloadedLibrary {
@@ -183,6 +190,85 @@ fn extract_dll_from_archive(
     })?;
 
     Ok(dll_bytes)
+}
+
+// ---------------------------------------------------------------------------
+// FSR package materialization
+// ---------------------------------------------------------------------------
+
+/// Downloads and extracts a single member DLL to local storage **without**
+/// registering a single-file artifact (FSR members are only offered as packages).
+async fn ensure_member_dll(entry: &LibraryManifestEntry) -> Result<PathBuf, CliError> {
+    let archive_path = local_archive_path(entry)?;
+    ensure_local_archive(entry, &archive_path).await?;
+
+    let dll_path = local_dll_path(entry)?;
+    if dll_path.exists() {
+        if let Ok(metadata) = std::fs::metadata(&dll_path) {
+            if metadata.len() == entry.files.dll.size_bytes {
+                return Ok(dll_path);
+            }
+        }
+    }
+
+    let payload = storage::read_file(&archive_path)?;
+    let dll_bytes = extract_dll_from_archive(entry, &payload)?;
+    let sha256 = hex::encode(Sha256::digest(&dll_bytes));
+    storage::write_file_atomically(&dll_path, &dll_bytes)?;
+    storage::write_sha256_cache(&dll_path, &sha256)?;
+
+    Ok(dll_path)
+}
+
+/// Materializes every member of an FSR package, then registers a single composed
+/// `LibraryArtifact` whose files point at the local DLLs and carry their install
+/// targets. Returns the registered package artifact id. All-or-nothing: the
+/// package artifact is registered only after every member is on disk.
+pub(super) async fn ensure_package_downloaded(
+    manifest: &LibraryManifest,
+    package: &FsrPackage,
+) -> Result<String, CliError> {
+    let mut local_files = Vec::with_capacity(package.member_entry_ids.len());
+
+    for (index, entry_id) in package.member_entry_ids.iter().enumerate() {
+        let entry = super::manifest::require_entry(manifest, entry_id)?;
+        let dll_path = ensure_member_dll(entry).await?;
+
+        // Mirror the virtual package file (sha / version / install_as) but point
+        // it at the local DLL.
+        let template = &package.artifact.files()[index];
+        let path = PathRef::new(dll_path.to_string_lossy().as_ref())
+            .map_err(|error| library_error(format!("invalid member dll path: {error}")))?;
+        let mut file = ComponentFile::new(path);
+        if let Some(sha256) = template.sha256() {
+            file = file.with_sha256(sha256.clone());
+        }
+        if let Some(version) = template.version() {
+            file = file.with_version(version.clone());
+        }
+        if let Some(install_as) = template.install_as() {
+            file = file.with_install_as(install_as);
+        }
+        local_files.push(file);
+    }
+
+    let artifact = LibraryArtifact::new(
+        package.artifact.id().clone(),
+        GraphicsTechnology::AmdFsr,
+        package.artifact.file_name(),
+        local_files,
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .map_err(|error| library_error(format!("failed to build FSR package artifact: {error}")))?
+    .with_source("manifest-download")
+    .map_err(|error| library_error(format!("failed to attach package source: {error}")))?;
+
+    let artifact_id = artifact.id().as_str().to_owned();
+    catalog::open_catalog_storage()?
+        .upsert_artifact(&artifact)
+        .map_err(CliError::from)?;
+
+    Ok(artifact_id)
 }
 
 // ---------------------------------------------------------------------------

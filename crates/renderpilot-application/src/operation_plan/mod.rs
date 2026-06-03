@@ -11,7 +11,7 @@ mod tests;
 
 pub use builder::build_swap_operation_plan;
 pub use findings::{OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWarning};
-pub use plan::OperationPlan;
+pub use plan::{OperationPlan, OperationPlanFile, OperationPlanFileAction};
 
 pub(crate) use assessment::OperationPlanAssessment;
 pub(crate) use identity::{generate_operation_plan_identity, OperationPlanIdentity};

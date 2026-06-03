@@ -157,9 +157,6 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'Восстановить исходные',
   'gameDetails.streamline.mixedWarning':
     'Плагины используют разные версии. Выберите версию выше для синхронизации.',
-  'gameDetails.streamline.advanced': 'Дополнительные настройки ({count})',
-  'gameDetails.streamline.perPluginWarning':
-    'Рекомендуется использовать одну версию для всех плагинов. Меняйте отдельные плагины только при необходимости.',
 
   // ── Game details: NVIDIA profile card ──
   'gameDetails.profile.title': 'Профиль NVIDIA',

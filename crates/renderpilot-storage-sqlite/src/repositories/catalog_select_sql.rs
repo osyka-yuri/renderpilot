@@ -21,7 +21,7 @@ macro_rules! projection_component_sql {
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::artifact`].
 macro_rules! projection_artifact_sql {
     () => {
-        "library_artifacts.id AS artifact_id,\n        library_artifacts.library AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.file_path AS artifact_file_path,\n        library_artifacts.version AS artifact_version,\n        library_artifacts.sha256 AS artifact_sha256,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
+        "library_artifacts.id AS artifact_id,\n        library_artifacts.library AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.files_json AS artifact_files_json,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
     };
 }
 
@@ -94,7 +94,7 @@ pub(super) const LIST_ARTIFACTS_SQL: &str = concat!(
     projection_artifact_sql!(),
     "
     FROM library_artifacts
-    ORDER BY library_artifacts.library, library_artifacts.file_name, library_artifacts.file_path
+    ORDER BY library_artifacts.library, library_artifacts.file_name, library_artifacts.id
     "
 );
 
@@ -130,6 +130,19 @@ pub(super) const SELECT_OPERATION_ITEMS_SQL: &str = concat!(
     FROM operation_items
     WHERE operation_items.operation_id = ?1
     ORDER BY operation_items.id
+    "
+);
+
+pub(super) const SELECT_OPERATION_ITEMS_FOR_GAME_SQL: &str = concat!(
+    "
+    SELECT
+    ",
+    projection_operation_item_sql!(),
+    "
+    FROM operation_items
+    INNER JOIN operations ON operations.id = operation_items.operation_id
+    WHERE operations.game_id = ?1
+    ORDER BY operations.created_at, operations.id, operation_items.id
     "
 );
 
@@ -227,9 +240,7 @@ mod tests {
                 proj::artifact::ID,
                 proj::artifact::TECHNOLOGY,
                 proj::artifact::FILE_NAME,
-                proj::artifact::FILE_PATH,
-                proj::artifact::VERSION,
-                proj::artifact::SHA256,
+                proj::artifact::FILES_JSON,
                 proj::artifact::SOURCE,
                 proj::artifact::SOURCE_GAME_ID,
                 proj::artifact::TRUST_LEVEL,
@@ -241,9 +252,7 @@ mod tests {
                 ("library_artifacts", phys::library_artifacts::ID),
                 ("library_artifacts", phys::library_artifacts::TECHNOLOGY),
                 ("library_artifacts", phys::library_artifacts::FILE_NAME),
-                ("library_artifacts", phys::library_artifacts::FILE_PATH),
-                ("library_artifacts", phys::library_artifacts::VERSION),
-                ("library_artifacts", phys::library_artifacts::SHA256),
+                ("library_artifacts", phys::library_artifacts::FILES_JSON),
                 ("library_artifacts", phys::library_artifacts::SOURCE),
                 ("library_artifacts", phys::library_artifacts::SOURCE_GAME_ID),
                 ("library_artifacts", phys::library_artifacts::TRUST_LEVEL),

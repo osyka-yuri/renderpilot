@@ -1,17 +1,18 @@
 import { applySwap, type ApplySwapResult } from '@entities/operation';
-import { downloadLibrary, type LibraryState } from '@entities/library';
+import { downloadArtifact, type LibraryState } from '@entities/library';
 
 export type ExecuteGraphicsSwapInput = {
   gameId: string;
   componentId: string;
   artifactId: string;
-  entryId?: string | null;
+  /** Whether the artifact is already downloaded locally; if not, it is fetched first. */
+  isDownloaded: boolean;
   signal?: AbortSignal;
 };
 
 export type ExecuteGraphicsSwapDeps = {
   applySwap?: typeof applySwap;
-  downloadLibrary?: (entryId: string) => Promise<LibraryState>;
+  downloadArtifact?: (artifactId: string) => Promise<LibraryState>;
 };
 
 export async function executeGraphicsSwap(
@@ -19,10 +20,10 @@ export async function executeGraphicsSwap(
   deps: ExecuteGraphicsSwapDeps = {},
 ): Promise<ApplySwapResult | null> {
   const resolvedDeps = resolveDeps(deps);
-  const artifactId = await resolveSwapArtifactId(
+  const artifactId = await ensureArtifactDownloaded(
     input.artifactId,
-    input.entryId ?? null,
-    resolvedDeps.downloadLibrary,
+    input.isDownloaded,
+    resolvedDeps.downloadArtifact,
   );
 
   if (input.signal?.aborted) {
@@ -32,19 +33,24 @@ export async function executeGraphicsSwap(
   return resolvedDeps.applySwap(input.gameId, input.componentId, artifactId);
 }
 
-async function resolveSwapArtifactId(
+/**
+ * Returns the artifact id ready to apply, downloading it first when it is not yet
+ * local. Download keys on the artifact id, so a single manifest DLL and a composed
+ * FSR release package resolve through the same path.
+ */
+async function ensureArtifactDownloaded(
   artifactId: string,
-  entryId: string | null,
-  downloadLibrary: (entryId: string) => Promise<LibraryState>,
+  isDownloaded: boolean,
+  downloadArtifact: (artifactId: string) => Promise<LibraryState>,
 ): Promise<string> {
-  if (!entryId) {
+  if (isDownloaded) {
     return artifactId;
   }
 
-  const libraryState = await downloadLibrary(entryId);
+  const libraryState = await downloadArtifact(artifactId);
 
   if (!libraryState.artifact_id) {
-    throw new Error('Downloaded library did not return an artifact id');
+    throw new Error('Downloaded artifact did not return an artifact id');
   }
 
   return libraryState.artifact_id;
@@ -53,6 +59,6 @@ async function resolveSwapArtifactId(
 function resolveDeps(deps: ExecuteGraphicsSwapDeps): Required<ExecuteGraphicsSwapDeps> {
   return {
     applySwap: deps.applySwap ?? applySwap,
-    downloadLibrary: deps.downloadLibrary ?? downloadLibrary,
+    downloadArtifact: deps.downloadArtifact ?? downloadArtifact,
   };
 }

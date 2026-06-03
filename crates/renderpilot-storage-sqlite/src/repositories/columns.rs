@@ -33,9 +33,7 @@ pub(super) mod physical {
         pub const ID: &str = "id";
         pub const TECHNOLOGY: &str = "library";
         pub const FILE_NAME: &str = "file_name";
-        pub const FILE_PATH: &str = "file_path";
-        pub const VERSION: &str = "version";
-        pub const SHA256: &str = "sha256";
+        pub const FILES_JSON: &str = "files_json";
         pub const SOURCE: &str = "source";
         pub const SOURCE_GAME_ID: &str = "source_game_id";
         pub const TRUST_LEVEL: &str = "trust_level";
@@ -89,9 +87,7 @@ pub mod projection {
         pub const ID: &str = "artifact_id";
         pub const TECHNOLOGY: &str = "artifact_technology";
         pub const FILE_NAME: &str = "artifact_file_name";
-        pub const FILE_PATH: &str = "artifact_file_path";
-        pub const VERSION: &str = "artifact_version";
-        pub const SHA256: &str = "artifact_sha256";
+        pub const FILES_JSON: &str = "artifact_files_json";
         pub const SOURCE: &str = "artifact_source";
         pub const SOURCE_GAME_ID: &str = "artifact_source_game_id";
         pub const TRUST_LEVEL: &str = "artifact_trust_level";

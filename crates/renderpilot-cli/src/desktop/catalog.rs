@@ -1,9 +1,9 @@
-use renderpilot_application::ComponentFileReplacementCandidates;
+use renderpilot_application::ComponentReplacementCandidates;
 use renderpilot_domain::{GameId, GraphicsComponent, GraphicsTechnology};
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
 use serde_json::Value;
-use std::{cmp::Ordering, collections::BTreeSet, path::Path};
+use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::utils::{
     available_update_count, dashboard_risk_level, is_visible_graphics_technology, library_tags,
@@ -86,11 +86,13 @@ fn load_game_cards(storage: &SqliteStorage) -> Result<Vec<GameCardOutput>, CliEr
         let cover_updated_at_ms = covers_by_game
             .get(game.id())
             .map(|record| record.updated_at_ms);
+        let rollback_available = !storage.component_backup_ids_for_game(game.id())?.is_empty();
 
         cards.push(GameCardOutput::from_details(
             game,
             &details,
             cover_updated_at_ms,
+            rollback_available,
         ));
     }
 
@@ -323,10 +325,11 @@ impl GameCardOutput {
         game: &renderpilot_domain::GameInstallation,
         details: &catalog::GameDetailsCatalogResult,
         cover_updated_at_ms: Option<i64>,
+        rollback_available: bool,
     ) -> Self {
         let identity = game.identity();
         let title = identity.title().to_owned();
-        let metrics = GameCardMetrics::from_details(details);
+        let metrics = GameCardMetrics::from_details(details, rollback_available);
 
         Self {
             game_id: game.id().as_str().to_owned(),
@@ -362,7 +365,7 @@ struct GameCardMetrics {
 }
 
 impl GameCardMetrics {
-    fn from_details(details: &catalog::GameDetailsCatalogResult) -> Self {
+    fn from_details(details: &catalog::GameDetailsCatalogResult, rollback_available: bool) -> Self {
         let operation_entries = &details.operations.operations;
         let visible_component_ids = visible_component_ids(&details.components);
 
@@ -376,12 +379,7 @@ impl GameCardMetrics {
                     .filter(|group| visible_component_ids.contains(group.component_id().as_str())),
             ),
             risk_level: dashboard_risk_level(&details.components),
-            rollback_available: details.components.iter().any(|component| {
-                component.files().iter().any(|file| {
-                    let bak_path = format!("{}.bak", file.path().as_str());
-                    Path::new(&bak_path).exists()
-                })
-            }),
+            rollback_available,
             operation_count: operation_entries.len(),
             last_operation_status: operation_entries
                 .iter()
@@ -408,7 +406,9 @@ pub(crate) struct GameDetailsOutput {
 
 impl GameDetailsOutput {
     pub(crate) fn load(game_id: GameId) -> Result<Self, CliError> {
-        let details = catalog::get_game_details(game_id)?;
+        let storage = catalog::open_catalog_storage()?;
+        let backup_ids = storage.component_backup_ids_for_game(&game_id)?;
+        let details = catalog::get_game_details_with_storage(&storage, game_id)?;
         let visible_components = filter_visible_components(details.components);
         let visible_component_ids = visible_component_ids(&visible_components);
         let visible_candidate_groups =
@@ -419,10 +419,7 @@ impl GameDetailsOutput {
         let components = visible_components
             .into_iter()
             .map(|component| {
-                let rollback_available = component.files().iter().any(|file| {
-                    let bak_path = format!("{}.bak", file.path().as_str());
-                    Path::new(&bak_path).exists()
-                });
+                let rollback_available = backup_ids.contains(component.id().as_str());
                 GameComponentOutput {
                     component,
                     rollback_available,
@@ -565,9 +562,9 @@ fn filter_visible_components(components: Vec<GraphicsComponent>) -> Vec<Graphics
 }
 
 fn filter_visible_candidate_groups(
-    candidate_groups: Vec<ComponentFileReplacementCandidates>,
+    candidate_groups: Vec<ComponentReplacementCandidates>,
     visible_component_ids: &BTreeSet<String>,
-) -> Vec<ComponentFileReplacementCandidates> {
+) -> Vec<ComponentReplacementCandidates> {
     candidate_groups
         .into_iter()
         .filter(|group| visible_component_ids.contains(group.component_id().as_str()))

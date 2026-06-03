@@ -14,7 +14,8 @@ mod pe_version;
 pub use error::LibraryPatternError;
 pub use file_metadata::{sha256_file, FileCacheKey, FileHashCache, VersionDetectionStatus};
 pub use filesystem_detector::{
-    DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector,
+    group_into_artifacts, group_into_components, DetectedLibraryFile, DetectionConfidence,
+    LibraryPatternComponentDetector,
 };
 pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,

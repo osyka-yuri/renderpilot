@@ -10,7 +10,10 @@ use renderpilot_domain::{
     Platform, Swappability,
 };
 
-use super::{DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector};
+use super::{
+    group_into_artifacts, group_into_components, DetectedLibraryFile, DetectionConfidence,
+    LibraryPatternComponentDetector,
+};
 use crate::{
     file_metadata::{
         reset_sha256_file_call_count_for_tests, sha256_file_call_count_for_tests, FileHashCache,
@@ -425,13 +428,49 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
     assert_detects(
         &libraries,
         "amd_fidelityfx_loader_dx12.dll",
-        GraphicsTechnology::Unknown,
+        GraphicsTechnology::AmdFsr,
     );
     assert_detects(
         &libraries,
         "amd_fidelityfx_upscaler.dll",
         GraphicsTechnology::AmdFsr,
     );
+
+    // All four files belong to the AMD FSR family in the same directory, so they
+    // must collapse into a single bundle component, not four independent ones.
+    let components = group_into_components(&game, &libraries).expect("grouping should succeed");
+    let fsr: Vec<_> = components
+        .iter()
+        .filter(|component| component.technology() == GraphicsTechnology::AmdFsr)
+        .collect();
+
+    assert_eq!(
+        fsr.len(),
+        1,
+        "AMD FSR family files collapse into one component"
+    );
+    assert_eq!(
+        fsr[0].files().len(),
+        4,
+        "the bundle keeps all four FSR files"
+    );
+    assert_eq!(
+        fsr[0].swappability(),
+        Swappability::BundleOnly,
+        "a multi-file bundle must require confirmation"
+    );
+
+    // The matching artifact bundle groups identically: one AMD FSR artifact with
+    // all four files, carrying a content-derived bundle id.
+    let artifacts = group_into_artifacts(game.id(), &libraries).expect("artifact grouping");
+    let fsr_artifacts: Vec<_> = artifacts
+        .iter()
+        .filter(|artifact| artifact.technology() == GraphicsTechnology::AmdFsr)
+        .collect();
+
+    assert_eq!(fsr_artifacts.len(), 1, "one AMD FSR artifact bundle");
+    assert_eq!(fsr_artifacts[0].files().len(), 4);
+    assert!(fsr_artifacts[0].id().as_str().starts_with("artifact:"));
 }
 
 #[test]

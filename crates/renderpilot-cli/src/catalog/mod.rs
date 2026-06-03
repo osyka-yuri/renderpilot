@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use renderpilot_application::{
-    find_replacement_candidates, AppError, ArtifactRepository, ComponentFileReplacementCandidates,
+    find_replacement_candidates, AppError, ArtifactRepository, ComponentReplacementCandidates,
     ComponentRepository, GameRepository, OperationPlan, OperationRecord,
 };
 use renderpilot_detection::DetectedLibraryFile;
@@ -44,13 +44,13 @@ pub(crate) struct ScanFolderCatalogResult {
 
 pub(crate) struct CandidateCatalogResult {
     pub(crate) game_id: GameId,
-    pub(crate) groups: Vec<ComponentFileReplacementCandidates>,
+    pub(crate) groups: Vec<ComponentReplacementCandidates>,
 }
 
 pub(crate) struct GameDetailsCatalogResult {
     pub(crate) game: GameInstallation,
     pub(crate) components: Vec<GraphicsComponent>,
-    pub(crate) candidate_groups: Vec<ComponentFileReplacementCandidates>,
+    pub(crate) candidate_groups: Vec<ComponentReplacementCandidates>,
     pub(crate) operations: OperationListCatalogResult,
 }
 
@@ -77,10 +77,6 @@ pub(crate) fn list_games() -> Result<Vec<GameInstallation>, CliError> {
     with_catalog_storage(|storage| storage.list_games().map_err(Into::into))
 }
 
-pub(crate) fn get_game_details(game_id: GameId) -> Result<GameDetailsCatalogResult, CliError> {
-    with_catalog_storage(|storage| get_game_details_with_storage(storage, game_id))
-}
-
 pub(crate) fn get_game_details_with_storage(
     storage: &SqliteStorage,
     game_id: GameId,
@@ -88,7 +84,16 @@ pub(crate) fn get_game_details_with_storage(
     let game = require_game(storage, &game_id)?;
     let components = storage.list_components_for_game(&game_id)?;
 
-    let local_artifacts = storage.list_artifacts()?;
+    // FSR split members are only offered as packages; drop any stray single-file
+    // member artifact (e.g. one downloaded directly via library management).
+    let local_artifacts: Vec<_> = storage
+        .list_artifacts()?
+        .into_iter()
+        .filter(|artifact| {
+            artifact.files().len() > 1
+                || !renderpilot_application::fsr::is_split_member(artifact.file_name())
+        })
+        .collect();
     let mut all_artifacts = local_artifacts.clone();
 
     let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();

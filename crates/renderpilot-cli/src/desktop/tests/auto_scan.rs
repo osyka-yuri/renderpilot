@@ -118,7 +118,9 @@ fn scan_auto_recovers_from_partial_non_empty_hash_cache() {
 
     let tags = json_string_array_set(&cards[0], "library_tags");
     assert!(tags.contains("intel_xess"));
-    assert!(tags.contains("amd_fsr_frame_generation"));
+    // The AMD FidelityFX frame-generation DLL is canonicalized to the AMD FSR
+    // family, so the surfaced tag is `amd_fsr`, not `amd_fsr_frame_generation`.
+    assert!(tags.contains("amd_fsr"));
     assert!(tags.contains("dlss_super_resolution"));
 }
 

@@ -321,6 +321,22 @@ impl GraphicsTechnology {
             .copied()
             .find(|technology| technology.as_slug().eq_ignore_ascii_case(value))
     }
+
+    /// Returns the technology that represents this technology's swap family.
+    ///
+    /// AMD FSR upscaling, frame generation, and ray regeneration ship together as
+    /// one bundle, so they collapse onto [`GraphicsTechnology::AmdFsr`]. Every other
+    /// technology is its own family (DLSS variants stay independent, Streamline is
+    /// already a single technology).
+    #[must_use]
+    pub const fn family(self) -> Self {
+        match self {
+            Self::AmdFsr | Self::AmdFsrFrameGeneration | Self::AmdFsrRayRegeneration => {
+                Self::AmdFsr
+            }
+            other => other,
+        }
+    }
 }
 
 impl fmt::Display for GraphicsTechnology {

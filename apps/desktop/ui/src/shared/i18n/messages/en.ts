@@ -145,9 +145,6 @@ export const en = {
   'gameDetails.streamline.restoreAllTooltip': 'Restore all to original',
   'gameDetails.streamline.mixedWarning':
     'Plugins are using different versions. Select a version above to sync them.',
-  'gameDetails.streamline.advanced': 'Advanced configuration ({count})',
-  'gameDetails.streamline.perPluginWarning':
-    'It is recommended to use the same version for all plugins. Change individual plugins only if necessary.',
 
   // ── Game details: NVIDIA profile card ──
   'gameDetails.profile.title': 'NVIDIA Profile',

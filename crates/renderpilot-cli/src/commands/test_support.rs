@@ -173,6 +173,37 @@ pub(super) fn sample_component(
     .with_file(file)
 }
 
+/// Builds a multi-file component — e.g. a game already on the FSR 4 split set
+/// (the loader installed as `amd_fidelityfx_dx12.dll`, plus the upscaler and frame
+/// generation). Each `(path, version, sha256)` becomes one file, in order.
+pub(super) fn sample_bundle_component(
+    component_id: &str,
+    game_id: &str,
+    technology: GraphicsTechnology,
+    swappability: Swappability,
+    files: &[(&str, Option<&str>, &str)],
+) -> renderpilot_domain::GraphicsComponent {
+    let mut component = renderpilot_domain::GraphicsComponent::new(
+        ComponentId::new(component_id).expect("component id should be valid"),
+        GameId::new(game_id).expect("game id should be valid"),
+        ComponentKind::NativeLibrary,
+        technology,
+        swappability,
+    );
+
+    for (path, version, sha256) in files {
+        let mut file =
+            ComponentFile::new(PathRef::new(*path).expect("component path should be valid"))
+                .with_sha256(Sha256Hash::new(*sha256).expect("sha256 should be valid"));
+        if let Some(version) = *version {
+            file = file.with_version(Version::parse(version).expect("version should be valid"));
+        }
+        component = component.with_file(file);
+    }
+
+    component
+}
+
 pub(super) fn sample_artifact(
     artifact_id: &str,
     technology: GraphicsTechnology,
@@ -196,7 +227,7 @@ pub(super) fn sample_artifact(
         ArtifactId::new(artifact_id).expect("artifact id should be valid"),
         technology,
         file_name,
-        file,
+        vec![file],
         ArtifactTrustLevel::LocalObserved,
     )
     .expect("artifact should be valid")

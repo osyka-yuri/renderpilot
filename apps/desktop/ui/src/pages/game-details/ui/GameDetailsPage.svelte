@@ -32,6 +32,7 @@
   import DlssComponentCard from './DlssComponentCard.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
+  import { untrack } from 'svelte';
 
   const NVIDIA_STREAMLINE_TECHNOLOGY = 'nvidia_streamline';
 
@@ -100,6 +101,23 @@
 
   const hasNvidiaTab = $derived(tabs.some((tab) => tab.key === 'nvidia'));
   const gameId = $derived(details?.game.identity.id ?? null);
+
+  // The active vendor tab is user-controlled state, not derived: a post-swap
+  // details reload re-derives `tabs`, and a hardcoded `value={tabs[0].key}`
+  // would snap the user back to the first vendor (NVIDIA) every time. Reconcile
+  // only when the set of available tabs changes — keep the current selection if
+  // that vendor still has components, otherwise fall back to the first tab.
+  let selectedVendor = $state('');
+  $effect(() => {
+    const keys = tabs.map((tab) => tab.key as string);
+    untrack(() => {
+      if (keys.length === 0) {
+        selectedVendor = '';
+      } else if (!keys.includes(selectedVendor)) {
+        selectedVendor = keys[0];
+      }
+    });
+  });
 
   /**
    * Fingerprint of all installed DLSS DLLs. Changes when the user swaps any of
@@ -179,7 +197,7 @@
         </CardContent>
       </Card>
     {:else}
-      <Tabs value={tabs[0].key}>
+      <Tabs bind:value={selectedVendor}>
         <TabsList>
           {#each tabs as tab (tab.key)}
             <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
@@ -227,8 +245,6 @@
                   components={streamline}
                   {groupsById}
                   {busy}
-                  {onSwap}
-                  {onRollback}
                   {onBulkSwap}
                   {onBulkRollback}
                 />

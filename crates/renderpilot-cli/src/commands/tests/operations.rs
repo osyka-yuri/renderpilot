@@ -1,22 +1,230 @@
 use std::fs;
-#[cfg(windows)]
 use std::path::Path;
 
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt as _;
 
-use renderpilot_application::ComponentRepository;
-use renderpilot_domain::{GraphicsTechnology, Swappability};
+use renderpilot_application::{
+    ComponentRepository, OperationItemRecord, OperationJournalEntry, OperationKind,
+    OperationRecord, OperationRepository, OperationStatus, UnixTimestampMillis,
+};
+use renderpilot_domain::{
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, GraphicsTechnology,
+    LibraryArtifact, OperationId, PathRef, Sha256Hash, Swappability, Version,
+};
 
 use crate::hash::sha256_hex;
 use crate::run;
 
 use super::{
-    args, path_string, sample_artifact, sample_component, sample_game, CatalogFixture,
-    TempGameFolder,
+    args, path_string, sample_artifact, sample_bundle_component, sample_component, sample_game,
+    CatalogFixture, TempGameFolder,
 };
 
 const REPLACEMENT_SHA256: &str = "70bf69c13743b7193ffd7a3718caab18522b61d4643fe13ac80caa5301e2345a";
+
+#[test]
+fn list_operations_renders_item_counts_from_aggregate_entries() {
+    let fixture = CatalogFixture::new("list-operations");
+    let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[
+            sample_component(
+                "component:game-a:dlss",
+                game.id().as_str(),
+                GraphicsTechnology::DlssSuperResolution,
+                Swappability::Swappable,
+                "C:/Games/GameA/nvngx_dlss.dll",
+                Some("3.5.0"),
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+            sample_component(
+                "component:game-a:fg",
+                game.id().as_str(),
+                GraphicsTechnology::DlssFrameGeneration,
+                Swappability::Swappable,
+                "C:/Games/GameA/nvngx_dlssg.dll",
+                Some("3.5.0"),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            ),
+        ],
+    );
+
+    let operation_id =
+        OperationId::new("operation:replace_component:list").expect("operation id should be valid");
+    let entry = OperationJournalEntry::try_new(
+        OperationRecord::new(
+            operation_id.clone(),
+            game.id().clone(),
+            OperationKind::ReplaceComponent,
+            OperationStatus::Completed,
+            UnixTimestampMillis::new(10).expect("timestamp should be valid"),
+        ),
+        vec![
+            OperationItemRecord::new(
+                operation_id.clone(),
+                ComponentId::new("component:game-a:dlss").expect("component id should be valid"),
+                PathRef::new("C:/Games/GameA/nvngx_dlss.dll").expect("path should be valid"),
+                OperationStatus::Completed,
+            ),
+            OperationItemRecord::new(
+                operation_id,
+                ComponentId::new("component:game-a:fg").expect("component id should be valid"),
+                PathRef::new("C:/Games/GameA/nvngx_dlssg.dll").expect("path should be valid"),
+                OperationStatus::Completed,
+            ),
+        ],
+    )
+    .expect("journal entry should be valid");
+    fixture
+        .storage
+        .save_operation_entry(&entry)
+        .expect("journal entry should be stored");
+
+    let output = run(args(&["list-operations", "--game", game.id().as_str()]))
+        .expect("list operations should succeed");
+    let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
+    let operations = json["operations"]
+        .as_array()
+        .expect("operations array should be present");
+
+    assert_eq!(json["game_id"], game.id().as_str());
+    assert_eq!(operations.len(), 1);
+    assert_eq!(
+        operations[0]["operation_id"],
+        "operation:replace_component:list"
+    );
+    assert_eq!(operations[0]["item_count"], 2);
+    assert_eq!(operations[0]["component_id"], "component:game-a:dlss");
+}
+
+#[test]
+fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
+    let fixture = CatalogFixture::new("apply-mismatch");
+    let game_folder = TempGameFolder::new("apply-mismatch-game");
+    let artifact_folder = TempGameFolder::new("apply-mismatch-artifact");
+
+    fs::create_dir_all(game_folder.path()).expect("game folder should be created");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder should be created");
+
+    let source_path = game_folder.path().join("nvngx_dlss.dll");
+    let artifact_path = artifact_folder.path().join("nvngx_dlssg.dll");
+    fs::write(&source_path, b"original-bytes").expect("source file should be written");
+    fs::write(&artifact_path, b"mismatched-artifact").expect("artifact file should be written");
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "Game A", &install_path);
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_component(
+            "component:game-a:dlss",
+            game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            &path_string(&source_path),
+            Some("3.5.0"),
+            &sha256_hex(b"original-bytes"),
+        )],
+    );
+    fixture.store_artifact(sample_artifact(
+        "artifact:fg-3.7",
+        GraphicsTechnology::DlssFrameGeneration,
+        &path_string(&artifact_path),
+        Some("3.7.0"),
+        &sha256_hex(b"mismatched-artifact"),
+        None,
+    ));
+
+    let error = run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:game-a:dlss",
+        "--artifact",
+        "artifact:fg-3.7",
+    ]))
+    .expect_err("apply should reject blocked mismatch");
+
+    assert!(error.to_string().contains("technology_mismatch"));
+    assert_eq!(
+        fs::read(&source_path).expect("source bytes should remain unchanged"),
+        b"original-bytes"
+    );
+    assert!(
+        !source_path.with_extension("dll.bak").exists(),
+        "blocked apply must not create a backup sidecar"
+    );
+}
+
+#[test]
+fn apply_rejects_artifact_that_already_matches_current_component() {
+    let fixture = CatalogFixture::new("apply-noop");
+    let game_folder = TempGameFolder::new("apply-noop-game");
+    let artifact_folder = TempGameFolder::new("apply-noop-artifact");
+
+    fs::create_dir_all(game_folder.path()).expect("game folder should be created");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder should be created");
+
+    let source_path = game_folder.path().join("nvngx_dlss.dll");
+    let artifact_path = artifact_folder.path().join("nvngx_dlss.dll");
+    fs::write(&source_path, b"same-bytes").expect("source file should be written");
+    fs::write(&artifact_path, b"same-bytes").expect("artifact file should be written");
+
+    let install_path = path_string(game_folder.path());
+    let source_sha256 = sha256_hex(b"same-bytes");
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "Game A", &install_path);
+
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_component(
+            "component:game-a:dlss",
+            game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            &path_string(&source_path),
+            Some("3.7.0"),
+            &source_sha256,
+        )],
+    );
+    fixture.store_artifact(sample_artifact(
+        "artifact:dlss-3.7",
+        GraphicsTechnology::DlssSuperResolution,
+        &path_string(&artifact_path),
+        Some("3.7.0"),
+        &source_sha256,
+        None,
+    ));
+
+    let error = run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:game-a:dlss",
+        "--artifact",
+        "artifact:dlss-3.7",
+    ]))
+    .expect_err("apply should reject a no-op artifact");
+
+    assert!(error.to_string().contains("artifact_matches_current_file"));
+    assert_eq!(
+        fs::read(&source_path).expect("source bytes should remain unchanged"),
+        b"same-bytes"
+    );
+    assert!(
+        !source_path.with_extension("dll.bak").exists(),
+        "no-op apply must not create a backup sidecar"
+    );
+}
 
 #[test]
 fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
@@ -438,13 +646,11 @@ fn rollback_consumes_bak_on_first_restore_and_second_fails() {
         "--component",
         "component:game-a:dlss",
     ]))
-    .expect_err("second rollback should fail because .bak is consumed");
+    .expect_err("second rollback should fail because the baseline is cleared");
 
     assert!(
-        second_error
-            .to_string()
-            .contains("backup file does not exist"),
-        "expected missing backup error, got: {}",
+        second_error.to_string().contains("no swap to roll back"),
+        "expected no-baseline error, got: {}",
         second_error
     );
 }
@@ -466,7 +672,7 @@ fn rollback_fails_when_target_file_is_locked() {
     drop(lock);
 
     assert!(
-        error.to_string().contains("failed to restore backup"),
+        error.to_string().contains("before restore"),
         "expected restore failure error, got: {}",
         error
     );
@@ -478,6 +684,692 @@ fn rollback_fails_when_target_file_is_locked() {
 
 const ORIGINAL_BYTES: &[u8] = b"original-bytes";
 const REPLACEMENT_BYTES: &[u8] = b"replacement-bytes";
+
+/// Writes a multi-file artifact bundle to disk and builds a `LibraryArtifact`
+/// whose id follows the production bundle-id scheme. Returns the artifact and its
+/// id string for use as the `--artifact` argument.
+fn write_bundle_artifact(
+    folder: &Path,
+    technology: GraphicsTechnology,
+    files: &[(&str, &[u8], Option<&str>)],
+) -> (LibraryArtifact, String) {
+    let component_files: Vec<ComponentFile> = files
+        .iter()
+        .map(|(name, bytes, install_as)| {
+            let path = folder.join(name);
+            fs::write(&path, bytes).expect("artifact file should be written");
+            let mut file =
+                ComponentFile::new(PathRef::new(path_string(&path)).expect("artifact path valid"))
+                    .with_sha256(Sha256Hash::new(sha256_hex(bytes)).expect("sha256 valid"))
+                    .with_version(Version::parse("4.0.0").expect("version valid"));
+            if let Some(install_as) = install_as {
+                file = file.with_install_as(*install_as);
+            }
+            file
+        })
+        .collect();
+
+    let id = ArtifactId::for_bundle(component_files.iter().filter_map(ComponentFile::sha256));
+    let id_string = id.as_str().to_owned();
+    let artifact = LibraryArtifact::new(
+        id,
+        technology,
+        files[0].0,
+        component_files,
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("bundle artifact should be valid");
+
+    (artifact, id_string)
+}
+
+fn dir_file_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .expect("directory should be readable")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// Headline FSR 3.1 → FSR 4 scenario: the loader installs *as* the game's
+/// `amd_fidelityfx_dx12.dll` entry point (replacing it; the original is backed up
+/// once), while the upscaler and frame-generation members are added alongside under
+/// their own names. Rollback restores the original entry point and removes the two
+/// added members, leaving the directory clean. Exercises first-swap backup of an
+/// overwritten file, additive copies (no `.bak` for adds), and a deterministic N→1
+/// rollback.
+#[test]
+fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
+    let fixture = CatalogFixture::new("fsr-upgrade");
+    let game_folder = TempGameFolder::new("fsr-upgrade-game");
+    let artifact_folder = TempGameFolder::new("fsr-upgrade-artifact");
+    fs::create_dir_all(game_folder.path()).expect("game folder");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder");
+
+    // The FSR 3.1 game loads a single `amd_fidelityfx_dx12.dll` entry point.
+    let original_name = "amd_fidelityfx_dx12.dll";
+    let original_path = game_folder.path().join(original_name);
+    fs::write(&original_path, b"fsr3-original").expect("original written");
+    let original_sha = sha256_hex(b"fsr3-original");
+
+    // FSR 4 package: the loader takes over `amd_fidelityfx_dx12.dll` via `install_as`;
+    // the upscaler (the representative member) and frame generation are added under
+    // their own names.
+    let bundle: [(&str, &[u8], Option<&str>); 3] = [
+        ("amd_fidelityfx_upscaler_dx12.dll", b"fsr4-upscaler", None),
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            b"fsr4-loader",
+            Some(original_name),
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"fsr4-framegen",
+            None,
+        ),
+    ];
+    let (artifact, artifact_id) =
+        write_bundle_artifact(artifact_folder.path(), GraphicsTechnology::AmdFsr, &bundle);
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "FSR Game", &install_path);
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_component(
+            "component:fsr",
+            game.id().as_str(),
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            &path_string(&original_path),
+            Some("3.1.0"),
+            &original_sha,
+        )],
+    );
+    fixture.store_artifact(artifact);
+
+    // --- apply (1 -> 3) ---
+    run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+        "--artifact",
+        &artifact_id,
+    ]))
+    .expect("apply should succeed");
+
+    // The loader took over the entry-point name; the original is backed up once.
+    let original_bak = game_folder.path().join(format!("{original_name}.bak"));
+    assert_eq!(
+        fs::read(&original_path).expect("entry point present"),
+        b"fsr4-loader",
+        "the loader is installed as the entry point"
+    );
+    assert_eq!(
+        fs::read(&original_bak).expect("entry point backed up"),
+        b"fsr3-original",
+        "the original FSR 3.1 entry point is preserved as .bak"
+    );
+
+    // The other members are added under their own names, with no `.bak`.
+    let added: [(&str, &[u8]); 2] = [
+        ("amd_fidelityfx_upscaler_dx12.dll", b"fsr4-upscaler"),
+        ("amd_fidelityfx_framegeneration_dx12.dll", b"fsr4-framegen"),
+    ];
+    for (name, bytes) in added {
+        let placed = game_folder.path().join(name);
+        assert_eq!(fs::read(&placed).expect("member copied"), bytes);
+        assert!(
+            !game_folder.path().join(format!("{name}.bak")).exists(),
+            "no .bak should be created for added member {name}"
+        );
+    }
+    let components = fixture
+        .storage
+        .list_components_for_game(game.id())
+        .expect("components load");
+    assert_eq!(components.len(), 1);
+    assert_eq!(
+        components[0].files().len(),
+        3,
+        "active set becomes the three-file FSR 4 package"
+    );
+
+    // --- rollback (3 -> 1) ---
+    run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+    ]))
+    .expect("rollback should succeed");
+
+    assert_eq!(
+        fs::read(&original_path).expect("original restored"),
+        b"fsr3-original",
+        "rollback restores the original FSR 3.1 entry point"
+    );
+    assert!(!original_bak.exists(), ".bak consumed on restore");
+    assert_eq!(
+        dir_file_names(game_folder.path()),
+        vec![original_name.to_string()],
+        "directory is clean: only the original remains, no FSR 4 orphans"
+    );
+    let components = fixture
+        .storage
+        .list_components_for_game(game.id())
+        .expect("components load");
+    assert_eq!(
+        components[0].files().len(),
+        1,
+        "catalog rolled back to the single original file"
+    );
+
+    let second = run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+    ]))
+    .expect_err("second rollback should fail because the baseline is cleared");
+    assert!(second.to_string().contains("no swap to roll back"));
+}
+
+/// Re-swapping a component (A → B → C) must keep the *original* A baseline so a
+/// later rollback restores A, not the intermediate release B. Both FSR 4 releases
+/// install their loader as the same `amd_fidelityfx_dx12.dll` entry point, so the
+/// re-swap reverts to A before overlaying C — the backup always holds A, and B's
+/// dropped member leaves no orphan.
+#[test]
+fn reswap_preserves_original_baseline_then_rollback_restores_it() {
+    let fixture = CatalogFixture::new("bundle-reswap");
+    let game_folder = TempGameFolder::new("bundle-reswap-game");
+    let lib_b = TempGameFolder::new("bundle-reswap-b");
+    let lib_c = TempGameFolder::new("bundle-reswap-c");
+    fs::create_dir_all(game_folder.path()).expect("game folder");
+    fs::create_dir_all(lib_b.path()).expect("lib b");
+    fs::create_dir_all(lib_c.path()).expect("lib c");
+
+    // The FSR 3.1 game loads a single `amd_fidelityfx_dx12.dll` entry point = A.
+    let original_name = "amd_fidelityfx_dx12.dll";
+    let original_path = game_folder.path().join(original_name);
+    fs::write(&original_path, b"original-A").expect("original written");
+    let original_sha = sha256_hex(b"original-A");
+
+    // Release B = loader(as dx12) + upscaler; release C = loader(as dx12) + framegen.
+    // Each loader takes over the entry point; C drops B's upscaler member.
+    let bundle_b: [(&str, &[u8], Option<&str>); 2] = [
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            b"B-loader",
+            Some(original_name),
+        ),
+        ("amd_fidelityfx_upscaler_dx12.dll", b"B-upscaler", None),
+    ];
+    let bundle_c: [(&str, &[u8], Option<&str>); 2] = [
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            b"C-loader",
+            Some(original_name),
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"C-framegen",
+            None,
+        ),
+    ];
+    let (artifact_b, id_b) =
+        write_bundle_artifact(lib_b.path(), GraphicsTechnology::AmdFsr, &bundle_b);
+    let (artifact_c, id_c) =
+        write_bundle_artifact(lib_c.path(), GraphicsTechnology::AmdFsr, &bundle_c);
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "Reswap Game", &install_path);
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_component(
+            "component:fsr",
+            game.id().as_str(),
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            &path_string(&original_path),
+            Some("3.1.0"),
+            &original_sha,
+        )],
+    );
+    fixture.store_artifact(artifact_b);
+    fixture.store_artifact(artifact_c);
+
+    let apply = |artifact_id: &str| {
+        run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            artifact_id,
+        ]))
+        .expect("apply should succeed");
+    };
+
+    apply(&id_b);
+    apply(&id_c);
+
+    // After A → B → C the directory holds release C plus the original A backup.
+    let original_bak = game_folder.path().join(format!("{original_name}.bak"));
+    assert_eq!(
+        dir_file_names(game_folder.path()),
+        vec![
+            "amd_fidelityfx_dx12.dll".to_string(),
+            "amd_fidelityfx_dx12.dll.bak".to_string(),
+            "amd_fidelityfx_framegeneration_dx12.dll".to_string(),
+        ],
+        "B's upscaler member is gone; the entry point is backed up once"
+    );
+    assert_eq!(
+        fs::read(&original_path).expect("entry point present"),
+        b"C-loader",
+        "the current entry point is release C's loader"
+    );
+    assert_eq!(
+        fs::read(&original_bak).expect("backup present"),
+        b"original-A",
+        "the backup still holds the original A, not the intermediate release B"
+    );
+
+    run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+    ]))
+    .expect("rollback should succeed");
+
+    assert_eq!(
+        fs::read(&original_path).expect("original A restored"),
+        b"original-A",
+        "rollback restores the original A, not intermediate release B"
+    );
+    assert_eq!(
+        dir_file_names(game_folder.path()),
+        vec![original_name.to_string()],
+        "directory clean after rollback across re-swaps"
+    );
+}
+
+/// A game **already on FSR 4** (the three split DLLs, with the loader installed as
+/// `amd_fidelityfx_dx12.dll`) upgraded to a newer FSR 4 release: every member is a
+/// Replace (each backed up once), and rollback restores the *previous FSR 4
+/// release* — never a synthetic FSR 3. There is no FSR 3 to fall back to here, so
+/// the baseline is the FSR 4 set that was present when RenderPilot first swapped.
+#[test]
+fn already_fsr4_upgrade_replaces_all_members_then_rollback_restores_prior_release() {
+    let fixture = CatalogFixture::new("fsr4-to-fsr4");
+    let game_folder = TempGameFolder::new("fsr4-to-fsr4-game");
+    let artifact_folder = TempGameFolder::new("fsr4-to-fsr4-artifact");
+    fs::create_dir_all(game_folder.path()).expect("game folder");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder");
+
+    // The game is already on FSR 4 release X: the loader sits under the entry-point
+    // name `amd_fidelityfx_dx12.dll`, alongside the upscaler and frame generation.
+    let members: [(&str, &[u8], &str); 3] = [
+        ("amd_fidelityfx_dx12.dll", b"X-loader", "2.0.0"),
+        ("amd_fidelityfx_upscaler_dx12.dll", b"X-upscaler", "4.0.2"),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"X-framegen",
+            "3.1.5",
+        ),
+    ];
+    let mut written: Vec<(String, Option<&str>, String)> = Vec::new();
+    for (name, bytes, version) in members {
+        let path = game_folder.path().join(name);
+        fs::write(&path, bytes).expect("member written");
+        written.push((path_string(&path), Some(version), sha256_hex(bytes)));
+    }
+    let component_files: Vec<(&str, Option<&str>, &str)> = written
+        .iter()
+        .map(|(path, version, sha)| (path.as_str(), *version, sha.as_str()))
+        .collect();
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "FSR4 Game", &install_path);
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_bundle_component(
+            "component:fsr",
+            game.id().as_str(),
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            &component_files,
+        )],
+    );
+
+    // FSR 4 release Y package: loader (as the dx12 entry point) + upscaler + framegen.
+    let bundle: [(&str, &[u8], Option<&str>); 3] = [
+        ("amd_fidelityfx_upscaler_dx12.dll", b"Y-upscaler", None),
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            b"Y-loader",
+            Some("amd_fidelityfx_dx12.dll"),
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"Y-framegen",
+            None,
+        ),
+    ];
+    let (artifact, artifact_id) =
+        write_bundle_artifact(artifact_folder.path(), GraphicsTechnology::AmdFsr, &bundle);
+    fixture.store_artifact(artifact);
+
+    // --- apply X -> Y: every member is replaced, each backed up once ---
+    run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+        "--artifact",
+        &artifact_id,
+    ]))
+    .expect("apply should succeed");
+
+    let expectations: [(&str, &[u8], &[u8]); 3] = [
+        ("amd_fidelityfx_dx12.dll", b"Y-loader", b"X-loader"),
+        (
+            "amd_fidelityfx_upscaler_dx12.dll",
+            b"Y-upscaler",
+            b"X-upscaler",
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"Y-framegen",
+            b"X-framegen",
+        ),
+    ];
+    for (name, current, backup) in expectations {
+        assert_eq!(
+            fs::read(game_folder.path().join(name)).expect("member present"),
+            current
+        );
+        assert_eq!(
+            fs::read(game_folder.path().join(format!("{name}.bak"))).expect("member backup"),
+            backup,
+            "each replaced FSR 4 member is backed up once"
+        );
+    }
+    let components = fixture
+        .storage
+        .list_components_for_game(game.id())
+        .expect("components load");
+    assert_eq!(
+        components[0].files().len(),
+        3,
+        "the active set is still the three-file FSR 4 release"
+    );
+
+    // --- rollback Y -> X: restores the prior FSR 4 release, not FSR 3 ---
+    run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+    ]))
+    .expect("rollback should succeed");
+
+    let originals: [(&str, &[u8]); 3] = [
+        ("amd_fidelityfx_dx12.dll", b"X-loader"),
+        ("amd_fidelityfx_upscaler_dx12.dll", b"X-upscaler"),
+        ("amd_fidelityfx_framegeneration_dx12.dll", b"X-framegen"),
+    ];
+    for (name, original) in originals {
+        assert_eq!(
+            fs::read(game_folder.path().join(name)).expect("restored member"),
+            original,
+            "rollback restores the prior FSR 4 release, not FSR 3"
+        );
+    }
+    assert_eq!(
+        dir_file_names(game_folder.path()),
+        vec![
+            "amd_fidelityfx_dx12.dll".to_string(),
+            "amd_fidelityfx_framegeneration_dx12.dll".to_string(),
+            "amd_fidelityfx_upscaler_dx12.dll".to_string(),
+        ],
+        "exactly the prior FSR 4 release remains, with no .bak leftovers"
+    );
+}
+
+/// A game **natively on FSR 4** loads the loader under its own name
+/// `amd_fidelityfx_loader_dx12.dll` (it was never an FSR 3.1 game, so there is no
+/// `amd_fidelityfx_dx12.dll`). An update must overwrite the loader *in place* — not
+/// strand it behind a fresh `amd_fidelityfx_dx12.dll`. Every member is replaced, no
+/// orphan entry point appears, and rollback restores the prior release.
+#[test]
+fn native_split_fsr4_update_targets_the_loader_in_place_without_orphan_entrypoint() {
+    let fixture = CatalogFixture::new("native-fsr4");
+    let game_folder = TempGameFolder::new("native-fsr4-game");
+    let artifact_folder = TempGameFolder::new("native-fsr4-artifact");
+    fs::create_dir_all(game_folder.path()).expect("game folder");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder");
+
+    // Native FSR 4 release X: the loader is under its OWN name; no `amd_fidelityfx_dx12.dll`.
+    let members: [(&str, &[u8], &str); 3] = [
+        ("amd_fidelityfx_loader_dx12.dll", b"X-loader", "2.0.0"),
+        ("amd_fidelityfx_upscaler_dx12.dll", b"X-upscaler", "4.0.2"),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"X-framegen",
+            "3.1.5",
+        ),
+    ];
+    let mut written: Vec<(String, Option<&str>, String)> = Vec::new();
+    for (name, bytes, version) in members {
+        let path = game_folder.path().join(name);
+        fs::write(&path, bytes).expect("member written");
+        written.push((path_string(&path), Some(version), sha256_hex(bytes)));
+    }
+    let component_files: Vec<(&str, Option<&str>, &str)> = written
+        .iter()
+        .map(|(path, version, sha)| (path.as_str(), *version, sha.as_str()))
+        .collect();
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "Native FSR4 Game", &install_path);
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_bundle_component(
+            "component:fsr",
+            game.id().as_str(),
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            &component_files,
+        )],
+    );
+
+    // FSR 4 release Y package: the loader's `install_as` default is `amd_fidelityfx_dx12.dll`,
+    // but it must adapt to the game's real entry point (`amd_fidelityfx_loader_dx12.dll`).
+    let bundle: [(&str, &[u8], Option<&str>); 3] = [
+        ("amd_fidelityfx_upscaler_dx12.dll", b"Y-upscaler", None),
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            b"Y-loader",
+            Some("amd_fidelityfx_dx12.dll"),
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"Y-framegen",
+            None,
+        ),
+    ];
+    let (artifact, artifact_id) =
+        write_bundle_artifact(artifact_folder.path(), GraphicsTechnology::AmdFsr, &bundle);
+    fixture.store_artifact(artifact);
+
+    run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+        "--artifact",
+        &artifact_id,
+    ]))
+    .expect("apply should succeed");
+
+    // The loader was updated IN PLACE under its own name; no orphan dx12 entry point.
+    assert!(
+        !game_folder.path().join("amd_fidelityfx_dx12.dll").exists(),
+        "no stray amd_fidelityfx_dx12.dll is created for a natively split game"
+    );
+    let expectations: [(&str, &[u8], &[u8]); 3] = [
+        ("amd_fidelityfx_loader_dx12.dll", b"Y-loader", b"X-loader"),
+        (
+            "amd_fidelityfx_upscaler_dx12.dll",
+            b"Y-upscaler",
+            b"X-upscaler",
+        ),
+        (
+            "amd_fidelityfx_framegeneration_dx12.dll",
+            b"Y-framegen",
+            b"X-framegen",
+        ),
+    ];
+    for (name, current, backup) in expectations {
+        assert_eq!(
+            fs::read(game_folder.path().join(name)).expect("member present"),
+            current,
+            "the loader and members are updated in place"
+        );
+        assert_eq!(
+            fs::read(game_folder.path().join(format!("{name}.bak"))).expect("member backup"),
+            backup,
+        );
+    }
+
+    // Rollback restores release X exactly, still no orphan dx12.
+    run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:fsr",
+    ]))
+    .expect("rollback should succeed");
+
+    assert!(!game_folder.path().join("amd_fidelityfx_dx12.dll").exists());
+    assert_eq!(
+        dir_file_names(game_folder.path()),
+        vec![
+            "amd_fidelityfx_framegeneration_dx12.dll".to_string(),
+            "amd_fidelityfx_loader_dx12.dll".to_string(),
+            "amd_fidelityfx_upscaler_dx12.dll".to_string(),
+        ],
+        "rollback restores the prior native FSR 4 release in place"
+    );
+}
+
+/// A stale `.bak` left over from a crashed earlier run (no baseline row) must be
+/// replaced by the *current* original on the first swap, so rollback restores the
+/// real current bytes rather than the stale leftover.
+#[test]
+fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
+    let fixture = CatalogFixture::new("stale-bak");
+    let game_folder = TempGameFolder::new("stale-bak-game");
+    let artifact_folder = TempGameFolder::new("stale-bak-artifact");
+    fs::create_dir_all(game_folder.path()).expect("game folder");
+    fs::create_dir_all(artifact_folder.path()).expect("artifact folder");
+
+    let name = "nvngx_dlss.dll";
+    let original_path = game_folder.path().join(name);
+    fs::write(&original_path, b"current-original").expect("original written");
+    let original_sha = sha256_hex(b"current-original");
+
+    // A stale leftover backup with unrelated bytes and no baseline row in the DB.
+    let bak_path = game_folder.path().join(format!("{name}.bak"));
+    fs::write(&bak_path, b"STALE-garbage").expect("stale bak written");
+
+    let artifact_path = artifact_folder.path().join(name);
+    fs::write(&artifact_path, b"replacement-bytes").expect("artifact written");
+
+    let install_path = path_string(game_folder.path());
+    let game_id = format!("manual:{install_path}");
+    let game = sample_game(&game_id, "Game", &install_path);
+    fixture.store_game(&game);
+    fixture.store_components(
+        game.id(),
+        &[sample_component(
+            "component:dlss",
+            game.id().as_str(),
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+            &path_string(&original_path),
+            Some("3.5.0"),
+            &original_sha,
+        )],
+    );
+    fixture.store_artifact(sample_artifact(
+        "artifact:dlss-3.7",
+        GraphicsTechnology::DlssSuperResolution,
+        &path_string(&artifact_path),
+        Some("3.7.0"),
+        REPLACEMENT_SHA256,
+        None,
+    ));
+
+    run(args(&[
+        "apply",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:dlss",
+        "--artifact",
+        "artifact:dlss-3.7",
+    ]))
+    .expect("apply should succeed");
+
+    assert_eq!(
+        fs::read(&bak_path).expect("backup readable"),
+        b"current-original",
+        "the stale backup must be replaced by the current original"
+    );
+    assert_eq!(
+        fs::read(&original_path).expect("target readable"),
+        b"replacement-bytes"
+    );
+
+    run(args(&[
+        "rollback",
+        "--game",
+        game.id().as_str(),
+        "--component",
+        "component:dlss",
+    ]))
+    .expect("rollback should succeed");
+
+    assert_eq!(
+        fs::read(&original_path).expect("restored readable"),
+        b"current-original",
+        "rollback restores the current original, never the stale leftover"
+    );
+}
 
 struct AppliedScenario {
     fixture: CatalogFixture,

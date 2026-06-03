@@ -40,4 +40,5 @@ export type OperationSummary = {
   created_at: number;
   completed_at?: number | null;
   item_count: number;
+  component_id?: string;
 };

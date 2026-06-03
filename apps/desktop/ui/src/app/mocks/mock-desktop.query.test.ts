@@ -98,7 +98,6 @@ describe('mockQueryGameCards parity', () => {
           version: '2.0.0',
           source_game_id: null,
           comparison: 'newer_version',
-          warning: null,
           is_downloaded: true,
         },
       ],

@@ -160,6 +160,13 @@ pub async fn download_library(entry_id: String) -> JsonCommandResult {
 }
 
 #[tauri::command]
+pub async fn download_artifact(artifact_id: String) -> JsonCommandResult {
+    let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+
+    run_desktop_async_command(move || desktop::download_artifact(artifact_id)).await
+}
+
+#[tauri::command]
 pub async fn delete_library(entry_id: String) -> JsonCommandResult {
     let entry_id = require_non_empty_string("entry_id", entry_id)?;
 

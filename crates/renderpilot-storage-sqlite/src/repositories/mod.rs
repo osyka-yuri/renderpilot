@@ -1,6 +1,7 @@
 mod artifacts;
 mod catalog_select_sql;
 mod columns;
+mod component_backups;
 mod components;
 pub mod file_hash_cache;
 pub mod game_covers;
@@ -154,6 +155,7 @@ mod tests {
     const COMPONENT_EXISTING: &str = "component:existing";
     const COMPONENT_MISSING: &str = "component:missing";
     const COMPONENT_ORPHAN: &str = "component:orphan";
+    const COMPONENT_SECOND: &str = "component:second";
     const COMPONENT_SCAN_ROLLBACK: &str = "component:scan-rollback";
 
     const OPERATION_EXISTING: &str = "operation:existing";
@@ -278,6 +280,38 @@ mod tests {
 
         assert_storage_failed(&error);
         fixture.assert_operation_absent(&operation.id);
+    }
+
+    #[test]
+    fn list_operation_entries_for_game_returns_full_entries_in_stable_order() {
+        let fixture = StorageFixture::new();
+
+        let game = sample_game(GAME_EXISTING);
+        let component_a = sample_component(COMPONENT_EXISTING, game.id().as_str());
+        let component_b = sample_component(COMPONENT_SECOND, game.id().as_str());
+        let operation_a = sample_operation(OPERATION_EXISTING, game.id().as_str());
+        let operation_b = sample_operation(OPERATION_NEW, game.id().as_str());
+        let operation_a_items = vec![
+            sample_operation_item(OPERATION_EXISTING, COMPONENT_EXISTING),
+            sample_operation_item(OPERATION_EXISTING, COMPONENT_SECOND),
+        ];
+        let operation_b_items = vec![sample_operation_item(OPERATION_NEW, COMPONENT_SECOND)];
+
+        fixture.store_game(&game);
+        fixture.replace_components(game.id(), &[component_a, component_b]);
+        fixture.save_operation_entry_parts(&operation_b, &operation_b_items);
+        fixture.save_operation_entry_parts(&operation_a, &operation_a_items);
+
+        let entries = fixture
+            .storage
+            .list_operation_entries_for_game(game.id())
+            .expect("operation entries should list");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].operation(), &operation_a);
+        assert_eq!(entries[0].items(), operation_a_items.as_slice());
+        assert_eq!(entries[1].operation(), &operation_b);
+        assert_eq!(entries[1].items(), operation_b_items.as_slice());
     }
 
     struct StorageFixture {
@@ -429,7 +463,7 @@ mod tests {
             ArtifactId::new(id).expect("artifact id should be valid"),
             GraphicsTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
-            ComponentFile::new(path_ref(path)).with_sha256(sha256_hash(sha256)),
+            vec![ComponentFile::new(path_ref(path)).with_sha256(sha256_hash(sha256))],
             ArtifactTrustLevel::LocalObserved,
         )
         .expect("artifact should be valid")

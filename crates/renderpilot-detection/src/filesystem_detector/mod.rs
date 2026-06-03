@@ -3,12 +3,14 @@ mod scan;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
-    ComponentFile, ComponentId, ComponentKind, GameInstallation, GraphicsComponent,
-    GraphicsTechnology, PathRef, Sha256Hash, Swappability, Version,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+    GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash,
+    Swappability, Version,
 };
 use serde::Serialize;
 
@@ -128,31 +130,6 @@ impl DetectedLibraryFile {
     /// Returns the cache key derived from path, size, modification time, and hash.
     pub fn cache_key(&self) -> &FileCacheKey {
         &self.cache_key
-    }
-
-    /// Converts the detected file into a component record for the given game.
-    pub fn into_component(self, game: &GameInstallation) -> AppResult<GraphicsComponent> {
-        let Self {
-            file_path,
-            technology,
-            kind,
-            swappability,
-            version,
-            sha256,
-            ..
-        } = self;
-
-        let component_id = component_id_for(game, &file_path)?;
-        let file = component_file_from_detection(file_path, sha256, version);
-
-        Ok(GraphicsComponent::new(
-            component_id,
-            game.id().clone(),
-            kind,
-            technology,
-            swappability,
-        )
-        .with_file(file))
     }
 }
 
@@ -366,10 +343,8 @@ impl ComponentDetector for LibraryPatternComponentDetector {
     }
 
     fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<GraphicsComponent>> {
-        self.detect_library_files(game)?
-            .into_iter()
-            .map(|library| library.into_component(game))
-            .collect()
+        let libraries = self.detect_library_files(game)?;
+        group_into_components(game, &libraries)
     }
 }
 
@@ -456,10 +431,6 @@ fn path_ref_from_path(path: &Path) -> AppResult<PathRef> {
     PathRef::new(normalized_path.as_str()).map_err(detection_error)
 }
 
-fn component_id_for(game: &GameInstallation, file_path: &PathRef) -> AppResult<ComponentId> {
-    ComponentId::new(format!("component:{}:{file_path}", game.id())).map_err(detection_error)
-}
-
 fn component_file_from_detection(
     file_path: PathRef,
     sha256: Sha256Hash,
@@ -498,4 +469,198 @@ fn swappability_for(technology: GraphicsTechnology) -> Swappability {
         GraphicsTechnology::Unknown => Swappability::Unknown,
         _ => Swappability::Swappable,
     }
+}
+
+/// Groups detected library files into one [`GraphicsComponent`] per
+/// `(directory, technology family)`.
+///
+/// Files that belong to the same technology *family* in the same directory are
+/// merged into a single bundle component, so AMD FSR 4's three DLLs surface as
+/// one "AMD FSR" component instead of three independent entries. Technologies
+/// that are their own family (DLSS variants, XeSS, ...) keep one component per
+/// file as before.
+pub fn group_into_components(
+    game: &GameInstallation,
+    libraries: &[DetectedLibraryFile],
+) -> AppResult<Vec<GraphicsComponent>> {
+    group_detected_files(libraries)
+        .into_iter()
+        .map(|group| build_grouped_component(game, &group))
+        .collect()
+}
+
+/// Groups detected library files into one locally-observed [`LibraryArtifact`]
+/// bundle per `(directory, technology family)`, mirroring
+/// [`group_into_components`].
+pub fn group_into_artifacts(
+    game_id: &GameId,
+    libraries: &[DetectedLibraryFile],
+) -> AppResult<Vec<LibraryArtifact>> {
+    group_detected_files(libraries)
+        .into_iter()
+        .map(|group| build_grouped_artifact(game_id, &group))
+        .collect()
+}
+
+/// Partitions detected files into groups keyed by `(parent_dir, family)`,
+/// preserving first-seen order so component/artifact ordering is deterministic.
+fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<Vec<&DetectedLibraryFile>> {
+    let mut groups: Vec<Vec<&DetectedLibraryFile>> = Vec::new();
+    let mut index: HashMap<(String, &'static str), usize> = HashMap::new();
+
+    for library in libraries {
+        let key = (
+            parent_directory(library.file_path()),
+            library.technology().family().as_slug(),
+        );
+
+        if let Some(&existing) = index.get(&key) {
+            groups[existing].push(library);
+        } else {
+            index.insert(key, groups.len());
+            groups.push(vec![library]);
+        }
+    }
+
+    groups
+}
+
+fn build_grouped_component(
+    game: &GameInstallation,
+    group: &[&DetectedLibraryFile],
+) -> AppResult<GraphicsComponent> {
+    let ordered = order_with_primary_first(group);
+    let family = ordered[0].technology().family();
+    let parent_dir = parent_directory(ordered[0].file_path());
+    let component_id = grouped_component_id(game, family, &parent_dir)?;
+
+    let mut component = GraphicsComponent::new(
+        component_id,
+        game.id().clone(),
+        group_kind(&ordered),
+        family,
+        group_swappability(&ordered),
+    );
+
+    for file in &ordered {
+        component = component.with_file(component_file_from_detection(
+            file.file_path().clone(),
+            file.sha256().clone(),
+            file.version().cloned(),
+        ));
+    }
+
+    Ok(component)
+}
+
+fn build_grouped_artifact(
+    game_id: &GameId,
+    group: &[&DetectedLibraryFile],
+) -> AppResult<LibraryArtifact> {
+    let ordered = order_with_primary_first(group);
+    let family = ordered[0].technology().family();
+    let artifact_id = ArtifactId::for_bundle(ordered.iter().map(|file| file.sha256()));
+
+    let files: Vec<ComponentFile> = ordered
+        .iter()
+        .map(|file| {
+            component_file_from_detection(
+                file.file_path().clone(),
+                file.sha256().clone(),
+                file.version().cloned(),
+            )
+        })
+        .collect();
+
+    LibraryArtifact::new(
+        artifact_id,
+        family,
+        ordered[0].file_name(),
+        files,
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .map_err(detection_error)?
+    .with_source("scan-folder")
+    .map_err(detection_error)
+    .map(|artifact| artifact.with_source_game_id(game_id.clone()))
+}
+
+/// Orders a group's files so the representative comes first, then alphabetically
+/// for determinism. The first file becomes the bundle's primary/display file.
+fn order_with_primary_first<'a>(group: &[&'a DetectedLibraryFile]) -> Vec<&'a DetectedLibraryFile> {
+    let family = group
+        .first()
+        .map(|file| file.technology().family())
+        .unwrap_or_default();
+
+    let mut ordered = group.to_vec();
+    ordered.sort_by(|left, right| {
+        primary_rank(left, family)
+            .cmp(&primary_rank(right, family))
+            .then_with(|| left.file_name().cmp(right.file_name()))
+    });
+
+    ordered
+}
+
+/// Lower rank = more representative. For AMD FSR the upscaler DLL carries the FSR
+/// version (e.g. `4.0.x`) — not the loader's own `2.x` — so it is the
+/// representative; otherwise the file whose technology equals the family is.
+fn primary_rank(file: &DetectedLibraryFile, family: GraphicsTechnology) -> u8 {
+    if family == GraphicsTechnology::AmdFsr {
+        return match file.file_name().to_ascii_lowercase().as_str() {
+            "amd_fidelityfx_upscaler_dx12.dll" => 0,
+            "amd_fidelityfx_dx12.dll" => 1,
+            _ => 2,
+        };
+    }
+
+    if file.technology() == family {
+        0
+    } else {
+        1
+    }
+}
+
+fn group_kind(ordered: &[&DetectedLibraryFile]) -> ComponentKind {
+    if ordered
+        .iter()
+        .any(|file| file.kind() == ComponentKind::StreamlineComponent)
+    {
+        ComponentKind::StreamlineComponent
+    } else {
+        ordered[0].kind()
+    }
+}
+
+/// A multi-file bundle must be swapped as a unit ([`Swappability::BundleOnly`]);
+/// a single file keeps its own detected policy. (A single restrictive sibling no
+/// longer blocks an otherwise-swappable bundle.)
+fn group_swappability(ordered: &[&DetectedLibraryFile]) -> Swappability {
+    if ordered.len() > 1 {
+        return Swappability::BundleOnly;
+    }
+
+    ordered
+        .first()
+        .map(|file| file.swappability())
+        .unwrap_or(Swappability::Unknown)
+}
+
+fn grouped_component_id(
+    game: &GameInstallation,
+    family: GraphicsTechnology,
+    parent_dir: &str,
+) -> AppResult<ComponentId> {
+    ComponentId::new(format!(
+        "component:{}:{}:{parent_dir}",
+        game.id(),
+        family.as_slug()
+    ))
+    .map_err(detection_error)
+}
+
+/// Returns the normalized parent directory of a file path (forward slashes).
+fn parent_directory(path: &PathRef) -> String {
+    path.parent().unwrap_or_default().to_owned()
 }

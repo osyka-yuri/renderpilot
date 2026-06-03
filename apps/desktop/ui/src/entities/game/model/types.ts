@@ -133,7 +133,6 @@ export type GameCandidate = {
   version?: string | null;
   source_game_id?: string | null;
   comparison: string;
-  warning?: string | null;
   manifest_entry_id?: string | null;
   is_downloaded: boolean;
 };

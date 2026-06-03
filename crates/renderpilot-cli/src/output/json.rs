@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use renderpilot_application::{
-    ComponentFileReplacementCandidates, OperationPlan, ReplacementCandidate,
+    ComponentReplacementCandidates, OperationPlan, OperationPlanFile, ReplacementCandidate,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{GameId, GameInstallation, LibraryArtifact};
@@ -35,7 +35,7 @@ pub(crate) fn render_list_artifacts_output(artifacts: Vec<LibraryArtifact>) -> J
 
 pub(crate) fn render_candidates_output(
     game_id: &GameId,
-    groups: Vec<ComponentFileReplacementCandidates>,
+    groups: Vec<ComponentReplacementCandidates>,
 ) -> JsonResult<String> {
     render_pretty_json(CandidateListOutput::new(game_id, groups))
 }
@@ -55,7 +55,7 @@ pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String
 // -----------------------------------------------------------------------------
 
 pub(crate) fn candidate_groups_value(
-    groups: Vec<ComponentFileReplacementCandidates>,
+    groups: Vec<ComponentReplacementCandidates>,
 ) -> JsonResult<Value> {
     render_json_value(component_candidate_outputs(groups))
 }
@@ -223,7 +223,7 @@ struct CandidateListOutput {
 }
 
 impl CandidateListOutput {
-    fn new(game_id: &GameId, groups: Vec<ComponentFileReplacementCandidates>) -> Self {
+    fn new(game_id: &GameId, groups: Vec<ComponentReplacementCandidates>) -> Self {
         Self {
             game_id: game_id.as_str().to_owned(),
             groups: component_candidate_outputs(groups),
@@ -240,8 +240,8 @@ struct ComponentCandidateOutput {
     candidates: Vec<CandidateOutput>,
 }
 
-impl From<ComponentFileReplacementCandidates> for ComponentCandidateOutput {
-    fn from(group: ComponentFileReplacementCandidates) -> Self {
+impl From<ComponentReplacementCandidates> for ComponentCandidateOutput {
+    fn from(group: ComponentReplacementCandidates) -> Self {
         Self {
             component_id: group.component_id().as_str().to_owned(),
             technology: group.technology().as_slug().to_owned(),
@@ -262,7 +262,6 @@ struct CandidateOutput {
     version: Option<String>,
     source_game_id: Option<String>,
     comparison: String,
-    warning: Option<String>,
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
 }
@@ -280,9 +279,6 @@ impl From<&ReplacementCandidate> for CandidateOutput {
                 .source_game_id()
                 .map(|game_id| game_id.as_str().to_owned()),
             comparison: candidate.comparison().as_str().to_owned(),
-            warning: candidate
-                .warning()
-                .map(|warning| warning.as_str().to_owned()),
             manifest_entry_id: candidate.manifest_entry_id().map(String::from),
             is_downloaded: candidate.is_downloaded(),
         }
@@ -290,7 +286,7 @@ impl From<&ReplacementCandidate> for CandidateOutput {
 }
 
 fn component_candidate_outputs(
-    groups: Vec<ComponentFileReplacementCandidates>,
+    groups: Vec<ComponentReplacementCandidates>,
 ) -> Vec<ComponentCandidateOutput> {
     groups
         .into_iter()
@@ -298,7 +294,7 @@ fn component_candidate_outputs(
         .collect()
 }
 
-fn candidate_outputs(group: &ComponentFileReplacementCandidates) -> Vec<CandidateOutput> {
+fn candidate_outputs(group: &ComponentReplacementCandidates) -> Vec<CandidateOutput> {
     group
         .candidates()
         .iter()
@@ -381,6 +377,41 @@ struct SwapPlanOutput {
     artifact_id: String,
     blockers: Vec<String>,
     warnings: Vec<String>,
+    files: Vec<SwapPlanFileOutput>,
+}
+
+/// One file in a bundle swap plan. `target_path`/`replacement_path` at the plan
+/// level remain the primary file for backward compatibility; this enumerates the
+/// whole bundle so a client can show "1 replaced, 2 added".
+#[derive(Debug, Serialize)]
+struct SwapPlanFileOutput {
+    action: String,
+    target_path: String,
+    replacement_path: Option<String>,
+    original_version: Option<String>,
+    replacement_version: Option<String>,
+    original_sha256: Option<String>,
+    replacement_sha256: Option<String>,
+}
+
+impl From<&OperationPlanFile> for SwapPlanFileOutput {
+    fn from(file: &OperationPlanFile) -> Self {
+        Self {
+            action: file.action().as_str().to_owned(),
+            target_path: file.target_path().as_str().to_owned(),
+            replacement_path: file.replacement_path().map(|path| path.as_str().to_owned()),
+            original_version: file
+                .original_version()
+                .map(|version| version.as_str().to_owned()),
+            replacement_version: file
+                .replacement_version()
+                .map(|version| version.as_str().to_owned()),
+            original_sha256: file.original_sha256().map(|hash| hash.as_str().to_owned()),
+            replacement_sha256: file
+                .replacement_sha256()
+                .map(|hash| hash.as_str().to_owned()),
+        }
+    }
 }
 
 impl From<&OperationPlan> for SwapPlanOutput {
@@ -414,6 +445,7 @@ impl From<&OperationPlan> for SwapPlanOutput {
                 .iter()
                 .map(|warning| warning.as_str().to_owned())
                 .collect(),
+            files: plan.files().iter().map(SwapPlanFileOutput::from).collect(),
         }
     }
 }

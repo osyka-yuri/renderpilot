@@ -3,7 +3,7 @@ use std::any::type_name;
 use renderpilot_application::{AppResult, MetadataJson};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId, GameRuntime,
-    GraphicsTechnology, Launcher, PathRef, Platform, Sha256Hash, Swappability, Version,
+    GraphicsTechnology, Launcher, PathRef, Platform, Swappability,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -73,7 +73,6 @@ validated_parser!(
     renderpilot_domain::OperationId::new
 );
 validated_parser!(path_ref, PathRef, PathRef::new);
-validated_parser!(sha256_hash, Sha256Hash, Sha256Hash::new);
 validated_parser!(metadata_json, MetadataJson, MetadataJson::new);
 
 enum_parser!(launcher, Launcher);
@@ -83,10 +82,6 @@ enum_parser!(component_kind, ComponentKind);
 enum_parser!(graphics_technology, GraphicsTechnology);
 enum_parser!(artifact_trust_level, ArtifactTrustLevel);
 enum_parser!(swappability, Swappability);
-
-pub(crate) fn version(value: String) -> AppResult<Version> {
-    Version::parse(value).map_err(invalid_row)
-}
 
 pub(crate) fn component_files(value: String) -> AppResult<Vec<ComponentFile>> {
     deserialize_json(&value)

@@ -111,7 +111,7 @@ fn plan_swap_blocks_invalid_artifact() {
 }
 
 #[test]
-fn plan_swap_surfaces_streamline_partial_swap_warning() {
+fn plan_swap_surfaces_streamline_confirmation_warning() {
     let fixture = CatalogFixture::new("plan-swap-streamline");
     let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
 
@@ -150,11 +150,16 @@ fn plan_swap_surfaces_streamline_partial_swap_warning() {
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let warnings = json["warnings"].as_array().expect("warnings array");
 
+    // Streamline stays HIGH risk via the bundle-only confirmation warning now
+    // that the dedicated streamline_partial_swap warning is gone.
     assert_eq!(json["risk_level"], "high");
     assert!(warnings
         .iter()
-        .any(|warning| warning == "streamline_partial_swap"));
-    assert!(warnings
-        .iter()
         .any(|warning| warning == "confirmation_required_for_swappability"));
+    assert!(
+        !warnings
+            .iter()
+            .any(|warning| warning == "streamline_partial_swap"),
+        "streamline_partial_swap warning should no longer be emitted"
+    );
 }

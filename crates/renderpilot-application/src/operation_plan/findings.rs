@@ -80,8 +80,6 @@ impl OperationPlanBlocker {
 pub enum OperationPlanWarning {
     /// Component swap requires explicit confirmation because it is not independently swappable.
     ConfirmationRequiredForSwappability,
-    /// Streamline single-file replacement is a partial swap and needs an explicit warning.
-    StreamlinePartialSwap,
     /// One or both versions are unknown and the user must compare manually.
     ManualVersionComparisonRequired,
 }
@@ -91,15 +89,11 @@ impl OperationPlanWarning {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ConfirmationRequiredForSwappability => "confirmation_required_for_swappability",
-            Self::StreamlinePartialSwap => "streamline_partial_swap",
             Self::ManualVersionComparisonRequired => "manual_version_comparison_required",
         }
     }
 
     pub(crate) const fn raises_risk_to_high(self) -> bool {
-        matches!(
-            self,
-            Self::ConfirmationRequiredForSwappability | Self::StreamlinePartialSwap
-        )
+        matches!(self, Self::ConfirmationRequiredForSwappability)
     }
 }

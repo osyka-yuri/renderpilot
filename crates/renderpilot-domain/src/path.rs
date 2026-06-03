@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::{error::Error, fmt};
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -40,6 +41,25 @@ impl PathRef {
     /// Returns normalized path text.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Returns the final path component (the file name), when present.
+    ///
+    /// The path is already forward-slash normalized, so this is a pure lexical
+    /// lookup that never touches the filesystem.
+    pub fn file_name(&self) -> Option<&str> {
+        Path::new(&self.0)
+            .file_name()
+            .and_then(|name| name.to_str())
+    }
+
+    /// Returns the parent directory as normalized text, when present.
+    ///
+    /// A bare file name yields `Some("")`; a root (`/`, `C:/`) yields `None`.
+    pub fn parent(&self) -> Option<&str> {
+        Path::new(&self.0)
+            .parent()
+            .and_then(|parent| parent.to_str())
     }
 }
 
@@ -254,5 +274,46 @@ mod tests {
         let path = PathRef::new(r"C:\Games\Game\").expect("valid path");
 
         assert_eq!(path.as_ref(), "C:/Games/Game");
+    }
+
+    #[test]
+    fn path_ref_file_name_returns_final_component() {
+        assert_eq!(
+            PathRef::new("/games/game/nvngx_dlss.dll")
+                .unwrap()
+                .file_name(),
+            Some("nvngx_dlss.dll")
+        );
+        assert_eq!(
+            PathRef::new("nvngx_dlss.dll").unwrap().file_name(),
+            Some("nvngx_dlss.dll")
+        );
+    }
+
+    #[test]
+    fn path_ref_parent_returns_directory() {
+        assert_eq!(
+            PathRef::new("/games/game/nvngx_dlss.dll").unwrap().parent(),
+            Some("/games/game")
+        );
+        // A bare file name has an empty parent; a root has none.
+        assert_eq!(PathRef::new("nvngx_dlss.dll").unwrap().parent(), Some(""));
+        assert_eq!(PathRef::new("/").unwrap().parent(), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn path_ref_parent_preserves_windows_drive_root() {
+        // Drive semantics only apply on Windows targets, where the bundle engine runs.
+        assert_eq!(
+            PathRef::new("C:/nvngx_dlss.dll").unwrap().parent(),
+            Some("C:/")
+        );
+        assert_eq!(
+            PathRef::new("C:/Games/Game/nvngx_dlss.dll")
+                .unwrap()
+                .parent(),
+            Some("C:/Games/Game")
+        );
     }
 }

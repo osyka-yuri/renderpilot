@@ -5,7 +5,8 @@ use renderpilot_domain::{
 };
 
 use super::{
-    build_swap_operation_plan, OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWarning,
+    build_swap_operation_plan, OperationPlanBlocker, OperationPlanFileAction,
+    OperationPlanRiskLevel, OperationPlanWarning,
 };
 
 #[test]
@@ -222,7 +223,9 @@ fn non_swappable_component_requires_confirmation_or_blocks() {
 }
 
 #[test]
-fn streamline_partial_swap_gets_warning() {
+fn streamline_bundle_requires_confirmation_warning() {
+    // Streamline is BundleOnly, so it must still surface a confirmation warning
+    // (and HIGH risk) now that the dedicated StreamlinePartialSwap warning is gone.
     let component = sample_component(
         "component:game-a:streamline",
         "game:a",
@@ -244,7 +247,8 @@ fn streamline_partial_swap_gets_warning() {
 
     assert!(plan
         .warnings()
-        .contains(&OperationPlanWarning::StreamlinePartialSwap));
+        .contains(&OperationPlanWarning::ConfirmationRequiredForSwappability));
+    assert_eq!(plan.risk_level(), OperationPlanRiskLevel::High);
 }
 
 #[test]
@@ -272,6 +276,83 @@ fn missing_versions_require_manual_review_and_medium_risk() {
     assert!(plan
         .warnings()
         .contains(&OperationPlanWarning::ManualVersionComparisonRequired));
+}
+
+#[test]
+fn native_split_fsr_loader_targets_existing_loader_file_in_plan() {
+    let component = sample_bundle_component(
+        "component:game-a:fsr",
+        "game:a",
+        GraphicsTechnology::AmdFsr,
+        Swappability::BundleOnly,
+        &[
+            (
+                "C:/Games/GameA/amd_fidelityfx_loader_dx12.dll",
+                Some("2.0.0"),
+                Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                None,
+            ),
+            (
+                "C:/Games/GameA/amd_fidelityfx_upscaler_dx12.dll",
+                Some("4.0.2"),
+                Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                None,
+            ),
+            (
+                "C:/Games/GameA/amd_fidelityfx_framegeneration_dx12.dll",
+                Some("3.1.5"),
+                Some("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                None,
+            ),
+        ],
+    );
+    let artifact = sample_bundle_artifact(
+        "artifact:fsr-4.1",
+        GraphicsTechnology::AmdFsr,
+        &[
+            (
+                "D:/Library/amd_fidelityfx_upscaler_dx12.dll",
+                Some("4.1.0"),
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                None,
+            ),
+            (
+                "D:/Library/amd_fidelityfx_loader_dx12.dll",
+                Some("2.1.0"),
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                Some("amd_fidelityfx_dx12.dll"),
+            ),
+            (
+                "D:/Library/amd_fidelityfx_framegeneration_dx12.dll",
+                Some("4.1.0"),
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                None,
+            ),
+        ],
+    );
+
+    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
+
+    let loader_file = plan
+        .files()
+        .iter()
+        .find(|file| {
+            file.replacement_path().map(|path| path.as_str())
+                == Some("D:/Library/amd_fidelityfx_loader_dx12.dll")
+        })
+        .expect("loader file should be present in plan");
+
+    assert_eq!(loader_file.action(), OperationPlanFileAction::Replace);
+    assert_eq!(
+        loader_file.target_path().as_str(),
+        "C:/Games/GameA/amd_fidelityfx_loader_dx12.dll"
+    );
+    assert!(
+        plan.files()
+            .iter()
+            .all(|file| file.action() == OperationPlanFileAction::Replace),
+        "native split update should replace every existing member in place"
+    );
 }
 
 #[test]
@@ -446,7 +527,84 @@ fn sample_artifact(
         ArtifactId::new(artifact_id).expect("artifact id should be valid"),
         technology,
         file_name,
-        file,
+        vec![file],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact should be valid")
+    .with_source("scan-folder")
+    .expect("source should be valid")
+}
+
+/// `(path, version, sha256, install_as)` spec for one file in a test bundle.
+type ComponentFileSpec<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>);
+
+fn sample_bundle_component(
+    component_id: &str,
+    game_id: &str,
+    technology: GraphicsTechnology,
+    swappability: Swappability,
+    files: &[ComponentFileSpec<'_>],
+) -> GraphicsComponent {
+    let mut component = GraphicsComponent::new(
+        ComponentId::new(component_id).expect("component id should be valid"),
+        GameId::new(game_id).expect("game id should be valid"),
+        ComponentKind::NativeLibrary,
+        technology,
+        swappability,
+    );
+
+    for (path, version, sha256, install_as) in files {
+        let mut file =
+            ComponentFile::new(PathRef::new(*path).expect("component path should be valid"));
+
+        if let Some(version) = version {
+            file = file.with_version(Version::parse(*version).expect("version should be valid"));
+        }
+        if let Some(sha256) = sha256 {
+            file = file.with_sha256(Sha256Hash::new(*sha256).expect("sha256 should be valid"));
+        }
+        if let Some(install_as) = install_as {
+            file = file.with_install_as(*install_as);
+        }
+
+        component = component.with_file(file);
+    }
+
+    component
+}
+
+fn sample_bundle_artifact(
+    artifact_id: &str,
+    technology: GraphicsTechnology,
+    files: &[(&str, Option<&str>, &str, Option<&str>)],
+) -> LibraryArtifact {
+    let component_files = files
+        .iter()
+        .map(|(path, version, sha256, install_as)| {
+            let mut file =
+                ComponentFile::new(PathRef::new(*path).expect("artifact path should be valid"))
+                    .with_sha256(Sha256Hash::new(*sha256).expect("sha256 should be valid"));
+
+            if let Some(version) = version {
+                file =
+                    file.with_version(Version::parse(*version).expect("version should be valid"));
+            }
+            if let Some(install_as) = install_as {
+                file = file.with_install_as(*install_as);
+            }
+
+            file
+        })
+        .collect();
+
+    LibraryArtifact::new(
+        ArtifactId::new(artifact_id).expect("artifact id should be valid"),
+        technology,
+        std::path::Path::new(files[0].0)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("artifact path should contain a file name"),
+        component_files,
         ArtifactTrustLevel::LocalObserved,
     )
     .expect("artifact should be valid")

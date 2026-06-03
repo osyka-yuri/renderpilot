@@ -9,20 +9,21 @@
 
 mod candidates;
 mod error;
+pub mod fsr;
 mod info;
 mod operation_plan;
 mod persistence;
 mod ports;
 
 pub use candidates::{
-    find_replacement_candidates, CandidateComparison, CandidateContext, CandidateWarning,
-    ComponentFileReplacementCandidates, ReplacementCandidate,
+    find_replacement_candidates, CandidateComparison, CandidateContext,
+    ComponentReplacementCandidates, ReplacementCandidate,
 };
 pub use error::{invalid_operation_state_display_message, AppError, AppErrorKind, AppResult};
 pub use info::{app_info, AppInfo};
 pub use operation_plan::{
-    build_swap_operation_plan, OperationPlan, OperationPlanBlocker, OperationPlanRiskLevel,
-    OperationPlanWarning,
+    build_swap_operation_plan, OperationPlan, OperationPlanBlocker, OperationPlanFile,
+    OperationPlanFileAction, OperationPlanRiskLevel, OperationPlanWarning,
 };
 
 pub use persistence::{

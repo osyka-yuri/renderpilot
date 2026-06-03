@@ -88,7 +88,7 @@
       "pattern": "amd_fidelityfx_loader_dx12.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "unknown"
+      "technology": "amd_fsr"
     },
     {
       "pattern": "amd_fidelityfx_upscaler.dll",

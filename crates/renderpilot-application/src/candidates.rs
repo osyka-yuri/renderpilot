@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    PathRef, Version,
+    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology,
+    LibraryArtifact, PathRef, Version,
 };
 
 /// Context for candidate lookup that carries source metadata for artifacts.
@@ -33,61 +33,74 @@ impl CandidateContext {
     }
 }
 
-/// Finds replacement candidates for the detected component files of one game.
+/// Finds replacement candidates for the detected components of one game.
+///
+/// Matching is per *component bundle*, not per file: a component is matched
+/// against artifacts of the same technology family whose bundle content differs
+/// from what is currently installed. This is what lets an FSR 3 (single-file)
+/// component be replaced by an FSR 4 (three-file) artifact.
 #[must_use]
 pub fn find_replacement_candidates(
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
     context: &CandidateContext,
-) -> Vec<ComponentFileReplacementCandidates> {
-    let artifacts_by_technology = group_artifacts_by_technology(artifacts);
+) -> Vec<ComponentReplacementCandidates> {
+    let artifacts_by_family = group_artifacts_by_family(artifacts);
     let mut groups = Vec::new();
 
     for component in components {
-        let Some(component_artifacts) = artifacts_by_technology.get(&component.technology()) else {
+        if component.files().is_empty() {
+            continue;
+        }
+
+        let Some(component_artifacts) = artifacts_by_family.get(&component.technology().family())
+        else {
             continue;
         };
 
-        for file in component.files() {
-            let mut candidates = component_artifacts
-                .iter()
-                .filter_map(|artifact| {
-                    let is_downloaded = context.downloaded_ids.contains(artifact.id());
-                    let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
-                    ReplacementCandidate::for_component_file(
-                        component,
-                        file,
-                        artifact,
-                        is_downloaded,
-                        entry_id,
-                    )
-                })
-                .collect::<Vec<_>>();
+        // Hoisted out of the per-artifact loop: the component's content id is
+        // invariant across candidates.
+        let component_bundle_id = ArtifactId::for_component_files(component.files());
 
-            if candidates.is_empty() {
-                continue;
-            }
+        let mut candidates = component_artifacts
+            .iter()
+            .filter_map(|artifact| {
+                let is_downloaded = context.downloaded_ids.contains(artifact.id());
+                let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
+                ReplacementCandidate::for_component(
+                    component,
+                    component_bundle_id.as_ref(),
+                    artifact,
+                    is_downloaded,
+                    entry_id,
+                )
+            })
+            .collect::<Vec<_>>();
 
-            candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
-            let candidates = deduplicate_candidates(candidates);
-            groups.push(ComponentFileReplacementCandidates::new(
-                component, file, candidates,
-            ));
+        if candidates.is_empty() {
+            continue;
         }
+
+        candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
+        let candidates = deduplicate_candidates(candidates);
+        groups.push(ComponentReplacementCandidates::new(component, candidates));
     }
 
     groups.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
     groups
 }
 
-fn group_artifacts_by_technology(
+/// Groups artifacts by their (family-canonical) technology. Both components and
+/// artifacts carry family-canonical technologies after detection grouping, so an
+/// exact technology match is a family match.
+fn group_artifacts_by_family(
     artifacts: &[LibraryArtifact],
 ) -> HashMap<GraphicsTechnology, Vec<&LibraryArtifact>> {
     let mut grouped = HashMap::<GraphicsTechnology, Vec<&LibraryArtifact>>::new();
 
     for artifact in artifacts {
         grouped
-            .entry(artifact.technology())
+            .entry(artifact.technology().family())
             .or_default()
             .push(artifact);
     }
@@ -95,9 +108,9 @@ fn group_artifacts_by_technology(
     grouped
 }
 
-/// Replacement candidates applicable to one detected component file.
+/// Replacement candidates applicable to one detected component (bundle).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ComponentFileReplacementCandidates {
+pub struct ComponentReplacementCandidates {
     component_id: ComponentId,
     game_id: GameId,
     technology: GraphicsTechnology,
@@ -106,19 +119,21 @@ pub struct ComponentFileReplacementCandidates {
     candidates: Vec<ReplacementCandidate>,
 }
 
-impl ComponentFileReplacementCandidates {
-    /// Creates a new candidate group for a component file.
-    pub fn new(
-        component: &GraphicsComponent,
-        file: &renderpilot_domain::ComponentFile,
-        candidates: Vec<ReplacementCandidate>,
-    ) -> Self {
+impl ComponentReplacementCandidates {
+    /// Creates a per-component candidate group. The displayed `file_path` and
+    /// `current_version` describe the component's primary (representative) file.
+    pub fn new(component: &GraphicsComponent, candidates: Vec<ReplacementCandidate>) -> Self {
+        let primary = component
+            .files()
+            .first()
+            .expect("component candidate group requires at least one file");
+
         Self {
             component_id: component.id().clone(),
             game_id: component.game_id().clone(),
             technology: component.technology(),
-            file_path: file.path().clone(),
-            current_version: file.version().cloned(),
+            file_path: primary.path().clone(),
+            current_version: primary.version().cloned(),
             candidates,
         }
     }
@@ -172,20 +187,19 @@ pub struct ReplacementCandidate {
     sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
-    warning: Option<CandidateWarning>,
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
 }
 
 impl ReplacementCandidate {
-    fn for_component_file(
+    fn for_component(
         component: &GraphicsComponent,
-        file: &renderpilot_domain::ComponentFile,
+        component_bundle_id: Option<&ArtifactId>,
         artifact: &LibraryArtifact,
         is_downloaded: bool,
         manifest_entry_id: Option<String>,
     ) -> Option<Self> {
-        let comparison = candidate_comparison(component, file, artifact)?;
+        let comparison = candidate_comparison(component, component_bundle_id, artifact)?;
 
         Some(Self {
             artifact_id: artifact.id().clone(),
@@ -199,7 +213,6 @@ impl ReplacementCandidate {
             sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
-            warning: candidate_warning(component),
             manifest_entry_id,
             is_downloaded,
         })
@@ -249,11 +262,6 @@ impl ReplacementCandidate {
         self.comparison
     }
 
-    /// Returns a warning that must be surfaced with a replacement candidate.
-    pub fn warning(&self) -> Option<CandidateWarning> {
-        self.warning
-    }
-
     /// Returns the manifest entry id if this candidate is from a manifest entry.
     pub fn manifest_entry_id(&self) -> Option<&str> {
         self.manifest_entry_id.as_deref()
@@ -290,22 +298,6 @@ impl CandidateComparison {
     }
 }
 
-/// Warning that must be surfaced with a replacement candidate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CandidateWarning {
-    /// The candidate targets one Streamline file only and should not be treated as a safe bundle swap.
-    StreamlineSingleFileSwap,
-}
-
-impl CandidateWarning {
-    /// Returns the stable CLI text for this warning.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::StreamlineSingleFileSwap => "streamline_single_file_swap_requires_warning",
-        }
-    }
-}
-
 fn compare_versions(
     current: Option<&Version>,
     candidate: Option<&Version>,
@@ -320,43 +312,21 @@ fn compare_versions(
     }
 }
 
-fn candidate_warning(component: &GraphicsComponent) -> Option<CandidateWarning> {
-    match component.technology() {
-        GraphicsTechnology::NvidiaStreamline => Some(CandidateWarning::StreamlineSingleFileSwap),
-        _ => None,
-    }
-}
-
+/// Collapses candidates that are the same artifact. The artifact id is the
+/// bundle's content identity (`ArtifactId::for_bundle`), so distinct bundles that
+/// merely share a primary DLL keep their separate entries, while the same content
+/// observed twice (e.g. two manifest entries) collapses to one.
 fn deduplicate_candidates(candidates: Vec<ReplacementCandidate>) -> Vec<ReplacementCandidate> {
-    let mut seen = HashSet::<CandidateDedupeKey>::new();
+    let mut seen = HashSet::<ArtifactId>::new();
     let mut deduplicated = Vec::with_capacity(candidates.len());
 
     for candidate in candidates {
-        if seen.insert(CandidateDedupeKey::from(&candidate)) {
+        if seen.insert(candidate.artifact_id.clone()) {
             deduplicated.push(candidate);
         }
     }
 
     deduplicated
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CandidateDedupeKey {
-    file_name: String,
-    comparison: CandidateComparison,
-    version: Option<Version>,
-    sha256: String,
-}
-
-impl From<&ReplacementCandidate> for CandidateDedupeKey {
-    fn from(candidate: &ReplacementCandidate) -> Self {
-        Self {
-            file_name: candidate.file_name.clone(),
-            comparison: candidate.comparison,
-            version: candidate.version.clone(),
-            sha256: candidate.sha256.clone(),
-        }
-    }
 }
 
 /// Policy that determines whether a candidate artifact can replace a component file
@@ -396,53 +366,59 @@ impl From<GraphicsTechnology> for CompatibilityPolicy {
 
 fn candidate_comparison(
     component: &GraphicsComponent,
-    file: &renderpilot_domain::ComponentFile,
+    component_bundle_id: Option<&ArtifactId>,
     artifact: &LibraryArtifact,
 ) -> Option<CandidateComparison> {
-    require_matching_file_name(file, artifact)?;
-    require_different_origin(component, file, artifact)?;
-    require_different_content(file, artifact)?;
-    require_version_compatible(component.technology(), file.version(), artifact.version())?;
+    require_different_bundle(component_bundle_id, artifact)?;
+    require_not_split_downgrade(component, artifact)?;
+    require_version_compatible(
+        component.technology(),
+        primary_component_version(component),
+        artifact.version(),
+    )?;
 
-    compare_versions(file.version(), artifact.version())
+    compare_versions(primary_component_version(component), artifact.version())
 }
 
-fn require_matching_file_name(
-    file: &renderpilot_domain::ComponentFile,
+/// Skips artifacts whose bundle content is byte-identical to what is currently
+/// installed (comparing bundle ids). Replaces the old per-file name+hash match so
+/// a 1→N upgrade with different file names is still offered. When the current
+/// content is not fully known, the artifact is offered.
+fn require_different_bundle(
+    component_bundle_id: Option<&ArtifactId>,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
-    let file_name = std::path::Path::new(file.path().as_str())
-        .file_name()
-        .and_then(|name| name.to_str())?;
-
-    if artifact.file_name() == file_name {
-        Some(())
-    } else {
-        None
+    match (
+        component_bundle_id,
+        ArtifactId::for_component_files(artifact.files()),
+    ) {
+        (Some(active), Some(candidate)) if *active == candidate => None,
+        _ => Some(()),
     }
 }
 
-fn require_different_origin(
+/// A split FSR set (loader + upscaler + frame generation) must only be replaced by
+/// another split package — never by the unified single-file FSR 3.x backend, which
+/// would strand the split members and downgrade the entry point. Upgrades
+/// (unified → split) and split → split updates stay allowed; returning to the
+/// unified original after our own upgrade is the job of rollback, not a swap.
+fn require_not_split_downgrade(
     component: &GraphicsComponent,
-    file: &renderpilot_domain::ComponentFile,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
-    if artifact.source_game_id() == Some(component.game_id()) && artifact.path() == file.path() {
-        None
-    } else {
-        Some(())
+    // A composed FSR package's primary file name is the upscaler (the split marker);
+    // the unified FSR 3.x backend's is the entry point — so the decision is exact on
+    // both sides even though a package's member paths are virtual.
+    if crate::fsr::is_split_set(component.files())
+        && !crate::fsr::is_split_marker(artifact.file_name())
+    {
+        return None;
     }
+    Some(())
 }
 
-fn require_different_content(
-    file: &renderpilot_domain::ComponentFile,
-    artifact: &LibraryArtifact,
-) -> Option<()> {
-    if file.sha256() == Some(artifact.sha256()) {
-        None
-    } else {
-        Some(())
-    }
+fn primary_component_version(component: &GraphicsComponent) -> Option<&Version> {
+    component.files().first().and_then(ComponentFile::version)
 }
 
 fn require_version_compatible(
@@ -467,10 +443,8 @@ mod tests {
     };
 
     use super::{
-        find_replacement_candidates, require_different_content, require_different_origin,
-        require_matching_file_name, require_version_compatible, CandidateComparison,
-        CandidateContext, CandidateWarning, CompatibilityPolicy,
-        ComponentFileReplacementCandidates,
+        find_replacement_candidates, require_version_compatible, CandidateComparison,
+        CandidateContext, CompatibilityPolicy, ComponentReplacementCandidates,
     };
 
     #[test]
@@ -685,36 +659,10 @@ mod tests {
     }
 
     #[test]
-    fn streamline_candidates_require_warning() {
-        let component = sample_component(
-            "component:game-a:streamline",
-            "game:a",
-            GraphicsTechnology::NvidiaStreamline,
-            Swappability::BundleOnly,
-            Some("2.4.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/sl.interposer.dll",
-        );
-        let candidate = sample_artifact(
-            "artifact:streamline",
-            GraphicsTechnology::NvidiaStreamline,
-            Some("2.5.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameB/sl.interposer.dll",
-            Some("game:b"),
-        );
-
-        let groups = find_test_candidates(&[component], &[candidate]);
-
-        assert_eq!(groups.len(), 1);
-        assert_eq!(
-            groups[0].candidates()[0].warning(),
-            Some(CandidateWarning::StreamlineSingleFileSwap)
-        );
-    }
-
-    #[test]
-    fn skips_same_technology_artifacts_with_different_file_names() {
+    fn matches_same_family_artifacts_across_file_names() {
+        // A Streamline component and a Streamline artifact with different file
+        // names are a valid bundle swap now (the engine swaps the whole bundle),
+        // so the candidate is offered instead of skipped on a name mismatch.
         let component = sample_component(
             "component:game-a:streamline",
             "game:a",
@@ -735,7 +683,8 @@ mod tests {
 
         let groups = find_test_candidates(&[component], &[artifact]);
 
-        assert!(groups.is_empty());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 1);
     }
 
     #[test]
@@ -749,8 +698,10 @@ mod tests {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "C:/Games/GameA/nvngx_dlss.dll",
         );
+        // Identical content has the same bundle id (`ArtifactId::for_bundle`), so
+        // the same DLL observed in two different games is one artifact id.
         let duplicate_a = sample_artifact(
-            "artifact:dlss-3.7-a",
+            "artifact:dlss-3.7",
             GraphicsTechnology::DlssSuperResolution,
             Some("3.7.0"),
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -758,7 +709,7 @@ mod tests {
             Some("game:b"),
         );
         let duplicate_b = sample_artifact(
-            "artifact:dlss-3.7-b",
+            "artifact:dlss-3.7",
             GraphicsTechnology::DlssSuperResolution,
             Some("3.7.0"),
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -852,144 +803,6 @@ mod tests {
     }
 
     #[test]
-    fn require_matching_file_name_accepts_same_name() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:dlss-3.7",
-            GraphicsTechnology::DlssSuperResolution,
-            Some("3.7.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameB/nvngx_dlss.dll",
-            Some("game:b"),
-        );
-
-        assert!(require_matching_file_name(&component.files()[0], &artifact).is_some());
-    }
-
-    #[test]
-    fn require_matching_file_name_rejects_different_name() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:dlssg-3.7",
-            GraphicsTechnology::DlssFrameGeneration,
-            Some("3.7.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameB/nvngx_dlssg.dll",
-            Some("game:b"),
-        );
-
-        assert!(require_matching_file_name(&component.files()[0], &artifact).is_none());
-    }
-
-    #[test]
-    fn require_different_origin_rejects_same_game_and_path() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:same",
-            GraphicsTechnology::DlssSuperResolution,
-            Some("3.7.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameA/nvngx_dlss.dll",
-            Some("game:a"),
-        );
-
-        assert!(require_different_origin(&component, &component.files()[0], &artifact).is_none());
-    }
-
-    #[test]
-    fn require_different_origin_accepts_different_game() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:other",
-            GraphicsTechnology::DlssSuperResolution,
-            Some("3.7.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameB/nvngx_dlss.dll",
-            Some("game:b"),
-        );
-
-        assert!(require_different_origin(&component, &component.files()[0], &artifact).is_some());
-    }
-
-    #[test]
-    fn require_different_content_rejects_same_sha256() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:same-sha",
-            GraphicsTechnology::DlssSuperResolution,
-            Some("3.7.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameB/nvngx_dlss.dll",
-            Some("game:b"),
-        );
-
-        assert!(require_different_content(&component.files()[0], &artifact).is_none());
-    }
-
-    #[test]
-    fn require_different_content_accepts_different_sha256() {
-        let component = sample_component(
-            "component:game-a:dlss",
-            "game:a",
-            GraphicsTechnology::DlssSuperResolution,
-            Swappability::Swappable,
-            Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "C:/Games/GameA/nvngx_dlss.dll",
-        );
-        let artifact = sample_artifact(
-            "artifact:different-sha",
-            GraphicsTechnology::DlssSuperResolution,
-            Some("3.7.0"),
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "C:/Games/GameB/nvngx_dlss.dll",
-            Some("game:b"),
-        );
-
-        assert!(require_different_content(&component.files()[0], &artifact).is_some());
-    }
-
-    #[test]
     fn require_version_compatible_blocks_v1_to_v2_for_dlss() {
         let v1 = Version::parse("1.0.0").unwrap();
         let v2 = Version::parse("2.0.0").unwrap();
@@ -1031,7 +844,7 @@ mod tests {
     fn find_test_candidates(
         components: &[GraphicsComponent],
         artifacts: &[LibraryArtifact],
-    ) -> Vec<ComponentFileReplacementCandidates> {
+    ) -> Vec<ComponentReplacementCandidates> {
         find_replacement_candidates(components, artifacts, &CandidateContext::empty())
     }
 
@@ -1086,7 +899,7 @@ mod tests {
             ArtifactId::new(artifact_id).expect("artifact id should be valid"),
             technology,
             file_name,
-            file,
+            vec![file],
             ArtifactTrustLevel::LocalObserved,
         )
         .expect("artifact should be valid")
@@ -1099,5 +912,101 @@ mod tests {
             ),
             None => artifact,
         }
+    }
+
+    /// Builds a multi-file (split) FSR package artifact with virtual `manifest://`
+    /// member paths — like a composed FSR 4 release: upscaler (primary) + loader.
+    fn split_package_artifact(artifact_id: &str, version: &str) -> LibraryArtifact {
+        let upscaler = ComponentFile::new(PathRef::new("manifest://upscaler").unwrap())
+            .with_sha256(Sha256Hash::new("a".repeat(64)).unwrap())
+            .with_version(Version::parse(version).unwrap());
+        let loader = ComponentFile::new(PathRef::new("manifest://loader").unwrap())
+            .with_sha256(Sha256Hash::new("b".repeat(64)).unwrap())
+            .with_version(Version::parse("2.1.0").unwrap());
+
+        LibraryArtifact::new(
+            ArtifactId::new(artifact_id).expect("artifact id should be valid"),
+            GraphicsTechnology::AmdFsr,
+            "amd_fidelityfx_upscaler_dx12.dll",
+            vec![upscaler, loader],
+            ArtifactTrustLevel::ManifestDownloaded,
+        )
+        .expect("split package artifact should be valid")
+    }
+
+    #[test]
+    fn split_fsr_component_is_not_offered_a_unified_single_file_downgrade() {
+        let component = sample_component(
+            "component:game-a:fsr",
+            "game:a",
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            Some("4.0.3"),
+            &"f".repeat(64),
+            "C:/Game/amd_fidelityfx_upscaler_dx12.dll",
+        );
+        // The unified FSR 3.x backend is a single `amd_fidelityfx_dx12.dll`.
+        let unified = sample_artifact(
+            "artifact:fsr-3.1",
+            GraphicsTechnology::AmdFsr,
+            Some("3.1.0"),
+            &"e".repeat(64),
+            "C:/Lib/amd_fidelityfx_dx12.dll",
+            None,
+        );
+
+        let groups = find_test_candidates(&[component], &[unified]);
+        assert!(
+            groups.is_empty(),
+            "a split FSR set must not be offered a unified single-file downgrade"
+        );
+    }
+
+    #[test]
+    fn split_fsr_component_accepts_another_split_package() {
+        let component = sample_component(
+            "component:game-a:fsr",
+            "game:a",
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+            Some("4.0.3"),
+            &"f".repeat(64),
+            "C:/Game/amd_fidelityfx_upscaler_dx12.dll",
+        );
+        let newer = split_package_artifact("artifact:fsr-4.1", "4.1.0");
+
+        let groups = find_test_candidates(&[component], &[newer]);
+        assert_eq!(groups.len(), 1, "a newer split package is a valid update");
+        assert_eq!(groups[0].candidates().len(), 1);
+    }
+
+    #[test]
+    fn unified_fsr_component_accepts_both_unified_and_split() {
+        let component = sample_component(
+            "component:game-a:fsr",
+            "game:a",
+            GraphicsTechnology::AmdFsr,
+            Swappability::Swappable,
+            Some("3.1.0"),
+            &"f".repeat(64),
+            "C:/Game/amd_fidelityfx_dx12.dll",
+        );
+        let unified = sample_artifact(
+            "artifact:fsr-3.1.1",
+            GraphicsTechnology::AmdFsr,
+            Some("3.1.1"),
+            &"e".repeat(64),
+            "C:/Lib/amd_fidelityfx_dx12.dll",
+            None,
+        );
+        let split = split_package_artifact("artifact:fsr-4.0", "4.0.3");
+
+        let groups = find_test_candidates(&[component], &[unified, split]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].candidates().len(),
+            2,
+            "a unified FSR 3.x set accepts both a unified swap and a split upgrade"
+        );
     }
 }

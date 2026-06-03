@@ -259,6 +259,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::fetch_libraries_manifest,
         commands::get_libraries_manifest,
         commands::download_library,
+        commands::download_artifact,
         commands::delete_library,
         commands::get_library_states,
         // NVAPI / DLSS presets

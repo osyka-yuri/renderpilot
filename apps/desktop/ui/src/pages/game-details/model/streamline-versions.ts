@@ -2,10 +2,10 @@ import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
 
 /**
  * Streamline plugins (`sl.*.dll`) are `BundleOnly`: they must all run on the same
- * release, and the backend flags single-file swaps as unsafe
- * (`streamline_single_file_swap_requires_warning`). This module turns the
- * per-plugin candidate groups into a single list of versions that can be applied
- * across every plugin at once — the safe bundle swap.
+ * release. The backend now groups them into a single Streamline component and
+ * swaps the whole bundle as a unit, but this module still presents the available
+ * releases as one list of versions that can be applied across every plugin at
+ * once — the safe bundle swap.
  *
  * A candidate never repeats a plugin's *current* version (the backend filters by
  * content hash), so a plugin already on the target version simply contributes
@@ -16,7 +16,7 @@ import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
 export type BulkSwapItem = {
   componentId: string;
   artifactId: string;
-  entryId: string | null;
+  isDownloaded: boolean;
 };
 
 /** A Streamline release that can be applied across all installed plugins. */
@@ -111,7 +111,7 @@ function buildOption(
     items.push({
       componentId: component.id,
       artifactId: candidate.artifact_id,
-      entryId: candidate.manifest_entry_id ?? null,
+      isDownloaded: candidate.is_downloaded,
     });
     if (!candidate.is_downloaded) {
       allDownloaded = false;

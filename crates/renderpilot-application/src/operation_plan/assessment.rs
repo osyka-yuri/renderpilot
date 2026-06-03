@@ -1,5 +1,5 @@
 use renderpilot_domain::{
-    ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Swappability,
+    ArtifactId, ComponentFile, GraphicsComponent, LibraryArtifact, PathRef, Swappability,
 };
 
 use crate::{AppError, AppResult};
@@ -17,14 +17,10 @@ pub(crate) struct OperationPlanAssessment {
 }
 
 impl OperationPlanAssessment {
-    pub(crate) fn assess(
-        component: &GraphicsComponent,
-        artifact: &LibraryArtifact,
-        target_file: &ComponentFile,
-    ) -> Self {
-        let blockers = collect_blockers(component, artifact, target_file);
-        let warnings = collect_warnings(component, artifact, target_file);
-        let requires_elevation = path_requires_elevation(target_file.path());
+    pub(crate) fn assess(component: &GraphicsComponent, artifact: &LibraryArtifact) -> Self {
+        let blockers = collect_blockers(component, artifact);
+        let warnings = collect_warnings(component, artifact);
+        let requires_elevation = component_requires_elevation(component);
 
         let risk_level =
             OperationPlanRiskLevel::from_findings(&blockers, &warnings, requires_elevation);
@@ -41,7 +37,6 @@ impl OperationPlanAssessment {
 fn collect_blockers(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
-    target_file: &ComponentFile,
 ) -> Vec<OperationPlanBlocker> {
     let mut blockers = Vec::new();
 
@@ -49,10 +44,7 @@ fn collect_blockers(
         blockers.push(OperationPlanBlocker::TechnologyMismatch);
     }
 
-    if target_file
-        .sha256()
-        .is_some_and(|sha256| sha256 == artifact.sha256())
-    {
+    if artifact_matches_active_bundle(component, artifact) {
         blockers.push(OperationPlanBlocker::ArtifactMatchesCurrentFile);
     }
 
@@ -66,7 +58,6 @@ fn collect_blockers(
 fn collect_warnings(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
-    target_file: &ComponentFile,
 ) -> Vec<OperationPlanWarning> {
     let mut warnings = Vec::new();
 
@@ -74,15 +65,41 @@ fn collect_warnings(
         warnings.push(warning);
     }
 
-    if is_streamline_partial_swap(component) {
-        warnings.push(OperationPlanWarning::StreamlinePartialSwap);
-    }
-
-    if target_file.version().is_none() || artifact.version().is_none() {
+    if primary_version_unknown(component) || artifact.version().is_none() {
         warnings.push(OperationPlanWarning::ManualVersionComparisonRequired);
     }
 
     warnings
+}
+
+/// Returns true when the artifact bundle is byte-identical to the component's
+/// currently active file set, i.e. applying it would be a no-op. Compared by
+/// content identity (the bundle id of each file set).
+fn artifact_matches_active_bundle(
+    component: &GraphicsComponent,
+    artifact: &LibraryArtifact,
+) -> bool {
+    match (
+        ArtifactId::for_component_files(component.files()),
+        ArtifactId::for_component_files(artifact.files()),
+    ) {
+        (Some(active), Some(candidate)) => active == candidate,
+        _ => false,
+    }
+}
+
+fn component_requires_elevation(component: &GraphicsComponent) -> bool {
+    component
+        .files()
+        .iter()
+        .any(|file| path_requires_elevation(file.path()))
+}
+
+fn primary_version_unknown(component: &GraphicsComponent) -> bool {
+    component
+        .files()
+        .first()
+        .is_none_or(|file| file.version().is_none())
 }
 
 pub(crate) fn primary_component_file(component: &GraphicsComponent) -> AppResult<&ComponentFile> {
@@ -148,9 +165,4 @@ fn swappability_warning(swappability: Swappability) -> Option<OperationPlanWarni
         | Swappability::IntegratedIntoEngine
         | Swappability::Unsafe => None,
     }
-}
-
-fn is_streamline_partial_swap(component: &GraphicsComponent) -> bool {
-    component.swappability() == Swappability::BundleOnly
-        && component.technology() == GraphicsTechnology::NvidiaStreamline
 }

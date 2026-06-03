@@ -24,7 +24,7 @@
     component: GameGraphicsComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
-    onSwap: (componentId: string, artifactId: string, entryId: string | null) => void;
+    onSwap: (componentId: string, artifactId: string, isDownloaded: boolean) => void;
     onRollback: (componentId: string) => void;
   };
 
@@ -34,10 +34,30 @@
   const fileName = $derived(fileNameFromPath(filePath));
   const candidates = $derived(group?.candidates ?? []);
 
+  const currentLabel = $derived(
+    group?.current_version ? `v${group.current_version}` : t('common.unknown'),
+  );
+  // The dropdown always marks the installed version as selected. Its value is the
+  // installed file's content id, so after a swap/rollback the highlight follows the
+  // new current version automatically — no stale pick lingers.
+  const currentValue = $derived(component.files[0]?.sha256 ?? group?.current_version ?? 'current');
+
+  // Bound selection, re-pinned to the installed version whenever an operation
+  // settles (`busy` → false). This keeps the highlight correct even when a swap
+  // FAILS — a clicked-but-never-installed version cannot stay selected.
+  let selected = $state<string | undefined>(undefined);
+  $effect(() => {
+    if (!busy) {
+      selected = currentValue;
+    }
+  });
+
   function handleSwapChange(value: string | undefined) {
-    if (!value || busy) return;
+    if (!value || value === currentValue || busy) return;
     const candidate = candidates.find((c) => c.artifact_id === value);
-    onSwap(component.id, value, candidate?.manifest_entry_id ?? null);
+    if (candidate) {
+      onSwap(component.id, value, candidate.is_downloaded);
+    }
   }
 
   function handleRollback() {
@@ -57,11 +77,13 @@
     {#if candidates.length === 0}
       <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
-      <Select type="single" disabled={busy} onValueChange={handleSwapChange}>
+      <Select type="single" bind:value={selected} disabled={busy} onValueChange={handleSwapChange}>
         <SelectTrigger size="sm" class="w-60">
-          <span class="truncate">{group?.current_version ?? t('common.unknown')}</span>
+          <span class="truncate">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
+          <!-- Installed version: always the selected entry; selecting it is a no-op. -->
+          <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
           {#each candidates as candidate (candidate.artifact_id)}
             {@const versionLabel = candidate.version
               ? `v${candidate.version}`

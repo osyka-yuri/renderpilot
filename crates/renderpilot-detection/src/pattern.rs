@@ -534,7 +534,8 @@ mod tests {
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
-            Some(GraphicsTechnology::Unknown)
+            Some(GraphicsTechnology::AmdFsr),
+            "the FSR loader must join the AMD FSR family so it groups into the bundle"
         );
     }
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use renderpilot_application::{
     AppResult, OperationItemRecord, OperationJournalEntry, OperationRecord, OperationRepository,
 };
@@ -11,7 +13,8 @@ use crate::{
 
 use super::{
     catalog_select_sql::{
-        SELECT_OPERATIONS_FOR_GAME_SQL, SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL,
+        SELECT_OPERATIONS_FOR_GAME_SQL, SELECT_OPERATION_ITEMS_FOR_GAME_SQL,
+        SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL,
     },
     row_mapping::{collect_rows, operation_from_row, operation_item_from_row},
     SqliteStorage,
@@ -51,12 +54,6 @@ const INSERT_OPERATION_ITEM_SQL: &str = "
         )
     VALUES
         (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-";
-
-const COUNT_OPERATION_ITEMS_SQL: &str = "
-    SELECT COUNT(*)
-    FROM operation_items
-    WHERE operation_id = ?1
 ";
 
 impl OperationRepository for SqliteStorage {
@@ -104,19 +101,42 @@ impl OperationRepository for SqliteStorage {
         )
     }
 
-    fn count_operation_items(&self, operation_id: &OperationId) -> AppResult<usize> {
-        self.with_connection(|connection| {
-            let count: i64 = connection
-                .query_row(COUNT_OPERATION_ITEMS_SQL, [operation_id.as_str()], |row| {
-                    row.get(0)
-                })
-                .map_err(storage_error)?;
+    fn list_operation_entries_for_game(
+        &self,
+        game_id: &GameId,
+    ) -> AppResult<Vec<OperationJournalEntry>> {
+        self.with_connection_mut(|connection| {
+            let tx = connection.transaction().map_err(|error| {
+                storage_context(
+                    "failed to begin read transaction for operation journal list",
+                    error,
+                )
+            })?;
 
-            usize::try_from(count).map_err(|_| {
-                storage_error("operation item count returned by sqlite does not fit usize")
-            })
+            let result = list_operation_entries_in_transaction(&tx, game_id);
+
+            // Do not commit this transaction; dropping it rolls back. Avoid `rollback()?`
+            // so a rollback failure cannot mask the primary error in `result`.
+            drop(tx);
+
+            result
         })
     }
+}
+
+fn list_operation_headers_on_connection(
+    connection: &Connection,
+    game_id: &GameId,
+) -> AppResult<Vec<OperationRecord>> {
+    let mut statement = connection
+        .prepare_cached(SELECT_OPERATIONS_FOR_GAME_SQL)
+        .map_err(storage_error)?;
+
+    let rows = statement
+        .query_map([game_id.as_str()], operation_from_row)
+        .map_err(storage_error)?;
+
+    collect_rows(rows)
 }
 
 fn find_operation_on_connection(
@@ -147,6 +167,70 @@ fn list_operation_items_on_connection(
         .map_err(storage_error)?;
 
     collect_rows(rows)
+}
+
+fn list_operation_items_for_game_on_connection(
+    connection: &Connection,
+    game_id: &GameId,
+) -> AppResult<Vec<OperationItemRecord>> {
+    let mut statement = connection
+        .prepare_cached(SELECT_OPERATION_ITEMS_FOR_GAME_SQL)
+        .map_err(storage_error)?;
+
+    let rows = statement
+        .query_map([game_id.as_str()], operation_item_from_row)
+        .map_err(storage_error)?;
+
+    collect_rows(rows)
+}
+
+fn list_operation_entries_in_transaction(
+    connection: &Connection,
+    game_id: &GameId,
+) -> AppResult<Vec<OperationJournalEntry>> {
+    let operations = list_operation_headers_on_connection(connection, game_id)?;
+    let mut items_by_operation = group_operation_items_by_operation_id(
+        list_operation_items_for_game_on_connection(connection, game_id)?,
+    );
+
+    let entries = operations
+        .into_iter()
+        .map(|operation| {
+            let items = items_by_operation
+                .remove(operation.id.as_str())
+                .unwrap_or_default();
+
+            OperationJournalEntry::try_new(operation, items)
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+
+    if items_by_operation.is_empty() {
+        return Ok(entries);
+    }
+
+    let dangling_ids = items_by_operation
+        .into_keys()
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(storage_error(format!(
+        "operation item query returned rows without matching headers for game {}: {dangling_ids}",
+        game_id.as_str()
+    )))
+}
+
+fn group_operation_items_by_operation_id(
+    items: Vec<OperationItemRecord>,
+) -> HashMap<String, Vec<OperationItemRecord>> {
+    let mut grouped = HashMap::<String, Vec<OperationItemRecord>>::new();
+
+    for item in items {
+        grouped
+            .entry(item.operation_id.as_str().to_owned())
+            .or_default()
+            .push(item);
+    }
+
+    grouped
 }
 
 fn find_operation_entry_in_transaction(

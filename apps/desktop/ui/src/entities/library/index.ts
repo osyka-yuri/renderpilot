@@ -10,6 +10,7 @@ export {
   fetchLibrariesManifest,
   getLibrariesManifest,
   downloadLibrary,
+  downloadArtifact,
   deleteLibrary,
   getLibraryStates,
 } from './api/desktop';

@@ -66,7 +66,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
 }
 
 #[test]
-fn candidates_surface_streamline_warning() {
+fn candidates_offer_streamline_bundle_swap() {
     let fixture = CatalogFixture::new("candidates-streamline");
     let game_a = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
     let game_b = sample_game("manual:C:/Games/GameB", "Game B", "C:/Games/GameB");
@@ -98,8 +98,13 @@ fn candidates_surface_streamline_warning() {
         .expect("candidates should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
-    assert_eq!(
-        json["groups"][0]["candidates"][0]["warning"],
-        "streamline_single_file_swap_requires_warning"
+    // Streamline is now a full bundle swap: the candidate is offered, and the
+    // dedicated per-candidate streamline warning is gone.
+    let candidate = &json["groups"][0]["candidates"][0];
+    assert_eq!(candidate["artifact_id"], "artifact:streamline-2.5");
+    assert_eq!(candidate["comparison"], "newer_version");
+    assert!(
+        candidate.get("warning").is_none(),
+        "candidate warning field should be removed, got: {candidate}"
     );
 }

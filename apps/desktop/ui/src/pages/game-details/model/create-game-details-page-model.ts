@@ -11,7 +11,7 @@ import type { BulkSwapItem } from './streamline-versions';
 export type SwapHandler = (
   componentId: string,
   artifactId: string,
-  entryId?: string | null,
+  isDownloaded: boolean,
 ) => Promise<void> | void;
 
 export type RollbackHandler = (componentId: string) => Promise<void> | void;
@@ -28,28 +28,41 @@ export type GameDetailsPageModelDeps = {
 };
 
 export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
-  async function handleSwap(
-    componentId: string,
-    artifactId: string,
-    entryId?: string | null,
-  ): Promise<void> {
+  async function runForSelectedGame<T>(task: (gameId: string) => Promise<T>): Promise<T | null> {
     const gameId = deps.getSelectedGameId();
 
     if (gameId === null) {
-      return;
+      return null;
     }
 
-    const result = await deps.runExclusive(async () => {
+    return deps.runExclusive(() => task(gameId));
+  }
+
+  async function runForSelectedGameWithSignal<T>(
+    task: (gameId: string, signal: AbortSignal) => Promise<T>,
+  ): Promise<T | null> {
+    return runForSelectedGame((gameId) => {
       const controller = new AbortController();
       if (!deps.checkIsGameStillSelected(gameId)) {
         controller.abort();
       }
+
+      return task(gameId, controller.signal);
+    });
+  }
+
+  async function handleSwap(
+    componentId: string,
+    artifactId: string,
+    isDownloaded: boolean,
+  ): Promise<void> {
+    const result = await runForSelectedGameWithSignal(async (gameId, signal) => {
       const appliedOperation = await executeGraphicsSwap({
         gameId,
         componentId,
         artifactId,
-        entryId,
-        signal: controller.signal,
+        isDownloaded,
+        signal,
       });
 
       if (appliedOperation === null) {
@@ -80,24 +93,17 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     items: readonly T[],
     perItem: (gameId: string, item: T, signal: AbortSignal) => Promise<boolean>,
   ): Promise<{ succeeded: number; failed: number } | null> {
-    const gameId = deps.getSelectedGameId();
-
-    if (gameId === null || items.length === 0) {
+    if (items.length === 0) {
       return null;
     }
 
-    return deps.runExclusive(async () => {
-      const controller = new AbortController();
-      if (!deps.checkIsGameStillSelected(gameId)) {
-        controller.abort();
-      }
-
+    return runForSelectedGameWithSignal(async (gameId, signal) => {
       let succeeded = 0;
       let failed = 0;
 
       for (const item of items) {
         try {
-          if (await perItem(gameId, item, controller.signal)) {
+          if (await perItem(gameId, item, signal)) {
             succeeded += 1;
           }
         } catch {
@@ -122,7 +128,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
         gameId,
         componentId: item.componentId,
         artifactId: item.artifactId,
-        entryId: item.entryId,
+        isDownloaded: item.isDownloaded,
         signal,
       });
       return appliedOperation !== null;
@@ -145,13 +151,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
   }
 
   async function handleRollback(componentId: string): Promise<void> {
-    const gameId = deps.getSelectedGameId();
-
-    if (gameId === null) {
-      return;
-    }
-
-    const result = await deps.runExclusive(async () => {
+    const result = await runForSelectedGame(async (gameId) => {
       const rollbackResult = await rollbackComponent(gameId, componentId);
       await deps.reloadGameDetails();
       return rollbackResult;

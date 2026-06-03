@@ -20,10 +20,7 @@ use std::{
 use install_partitioner::derive_install_roots;
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_detection::{DetectedLibraryFile, FileHashCache, LibraryPatternComponentDetector};
-use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, GameInstallation, GraphicsComponent,
-    LibraryArtifact,
-};
+use renderpilot_domain::{GameId, GameInstallation, GraphicsComponent, LibraryArtifact};
 use renderpilot_platform_windows::ManualFolderGameSource;
 use renderpilot_storage_sqlite::{FileHashCacheRow, ScanWriteUnit, SqliteStorage};
 use scan_plan::{decide_fast_scan_fallback, DetectionMode, InstallRootStrategy};
@@ -370,21 +367,17 @@ fn build_graphics_components(
     game: &GameInstallation,
     libraries: &[DetectedLibraryFile],
 ) -> AppResult<Vec<GraphicsComponent>> {
-    libraries
-        .iter()
-        .cloned()
-        .map(|library| library.into_component(game))
-        .collect()
+    // Components and artifacts are grouped by the same `(directory, family)` rule
+    // so a detected bundle (e.g. FSR 4's three DLLs) yields one component and one
+    // matching artifact instead of three independent single-file entries.
+    renderpilot_detection::group_into_components(game, libraries)
 }
 
 fn build_library_artifacts(
     game_id: &GameId,
     libraries: &[DetectedLibraryFile],
 ) -> AppResult<Vec<LibraryArtifact>> {
-    libraries
-        .iter()
-        .map(|library| build_scanned_artifact(library, game_id))
-        .collect()
+    renderpilot_detection::group_into_artifacts(game_id, libraries)
 }
 
 pub(super) fn normalized_install_path_buf(game: &GameInstallation) -> PathBuf {
@@ -507,43 +500,6 @@ fn shared_prefix_len(left: &[OsString], right: &[OsString]) -> usize {
         .zip(right.iter())
         .take_while(|(a, b)| a == b)
         .count()
-}
-
-fn build_scanned_artifact(
-    library: &DetectedLibraryFile,
-    game_id: &GameId,
-) -> AppResult<LibraryArtifact> {
-    let artifact_id = ArtifactId::new(format!("artifact:{}", library.sha256().as_str()))
-        .map_err(domain_to_detection_error)?;
-
-    let file = component_file_from_detected_library(library);
-
-    LibraryArtifact::new(
-        artifact_id,
-        library.technology(),
-        library.file_name(),
-        file,
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .map_err(domain_to_detection_error)?
-    .with_source("scan-folder")
-    .map_err(domain_to_detection_error)
-    .map(|artifact| artifact.with_source_game_id(game_id.clone()))
-}
-
-fn component_file_from_detected_library(library: &DetectedLibraryFile) -> ComponentFile {
-    let mut file =
-        ComponentFile::new(library.file_path().clone()).with_sha256(library.sha256().clone());
-
-    if let Some(version) = library.version().cloned() {
-        file = file.with_version(version);
-    }
-
-    file
-}
-
-fn domain_to_detection_error(error: impl std::fmt::Display) -> AppError {
-    AppError::detection_failed(error.to_string())
 }
 
 pub(super) fn populate_file_hash_cache(rows: Vec<FileHashCacheRow>) -> FileHashCache {

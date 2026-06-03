@@ -932,7 +932,7 @@ fn sample_artifact(
         ArtifactId::new(artifact_id).expect("artifact id should be valid"),
         technology,
         file_name,
-        file,
+        vec![file],
         ArtifactTrustLevel::LocalObserved,
     )
     .expect("artifact should be valid")

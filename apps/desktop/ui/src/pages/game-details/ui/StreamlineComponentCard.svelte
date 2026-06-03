@@ -1,14 +1,9 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
-  import { fileNameFromPath } from '@shared/path';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
   import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
     Alert,
     AlertDescription,
     Button,
@@ -21,8 +16,6 @@
     ItemActions,
     ItemContent,
     ItemDescription,
-    ItemGroup,
-    ItemSeparator,
     ItemTitle,
     Select,
     SelectContent,
@@ -33,44 +26,50 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import ComponentVersionRow from './ComponentVersionRow.svelte';
   import { buildStreamlineVersionModel, type BulkSwapItem } from '../model/streamline-versions';
 
   type Props = {
     components: GameGraphicsComponent[];
     groupsById: Record<string, GameCandidateGroup | null>;
     busy: boolean;
-    onSwap: (componentId: string, artifactId: string, entryId: string | null) => void;
-    onRollback: (componentId: string) => void;
     onBulkSwap: (items: BulkSwapItem[]) => void;
     onBulkRollback: (componentIds: string[]) => void;
   };
 
-  const { components, groupsById, busy, onSwap, onRollback, onBulkSwap, onBulkRollback }: Props =
-    $props();
+  const { components, groupsById, busy, onBulkSwap, onBulkRollback }: Props = $props();
 
-  // Sort by file name so the row order is stable across re-renders and matches
-  // NVIDIA's canonical plugin ordering (sl.common, sl.dlss, sl.dlss_g, ...).
-  const orderedComponents = $derived(
-    [...components].sort((a, b) => {
-      const aName = fileNameFromPath(a.files[0]?.path ?? '');
-      const bName = fileNameFromPath(b.files[0]?.path ?? '');
-      return aName.localeCompare(bName);
-    }),
-  );
-
+  // Streamline plugins are a matched set: one chosen version is applied to every
+  // plugin at once. The model lists the versions that change at least one plugin.
   const versionModel = $derived(buildStreamlineVersionModel(components, groupsById));
+
+  const currentLabel = $derived(
+    versionModel.currentVersion ? `v${versionModel.currentVersion}` : '',
+  );
 
   const triggerLabel = $derived(
     versionModel.currentVersion
-      ? `v${versionModel.currentVersion}`
+      ? currentLabel
       : versionModel.isMixed
         ? t('gameDetails.streamline.mixed')
         : t('common.unknown'),
   );
 
+  // The dropdown marks the common current version as selected; after a swap it
+  // follows the new version automatically. When plugins are on mixed versions there
+  // is no single current, so nothing is marked.
+  const currentValue = $derived(versionModel.currentVersion ?? undefined);
+
+  // Bound selection, re-pinned to the current version whenever an operation settles
+  // (`busy` → false) so a FAILED bulk swap cannot leave a stale highlight.
+  let selected = $state<string | undefined>(undefined);
+  $effect(() => {
+    if (!busy) {
+      selected = currentValue;
+    }
+  });
+
   function handleBulkChange(value: string | undefined) {
-    if (!value || busy) return;
+    if (!value || value === versionModel.currentVersion || busy) return;
     const option = versionModel.options.find((candidate) => candidate.version === value);
     if (option) {
       onBulkSwap(option.items);
@@ -97,7 +96,7 @@
   </CardHeader>
 
   <CardContent class="grid gap-3">
-    <!-- Primary: safe bundle swap — one version across every plugin -->
+    <!-- Safe bundle swap: one version applied across every plugin together. -->
     <Item size="sm" variant="outline" class="rounded-md bg-muted/30">
       <ItemContent>
         <ItemTitle>{t('gameDetails.streamline.versionTitle')}</ItemTitle>
@@ -109,11 +108,22 @@
             >{t('gameDetails.streamline.noOtherVersions')}</span
           >
         {:else}
-          <Select type="single" disabled={busy} onValueChange={handleBulkChange}>
+          <Select
+            type="single"
+            bind:value={selected}
+            disabled={busy}
+            onValueChange={handleBulkChange}
+          >
             <SelectTrigger size="sm" class="w-60">
               <span class="truncate">{triggerLabel}</span>
             </SelectTrigger>
             <SelectContent>
+              {#if versionModel.currentVersion}
+                <!-- Common current version: the selected entry; selecting it is a no-op. -->
+                <SelectItem value={versionModel.currentVersion} label={currentLabel}>
+                  {currentLabel}
+                </SelectItem>
+              {/if}
               {#each versionModel.options as option (option.version)}
                 <SelectItem value={option.version} label={option.label}>
                   <span class="flex w-full items-center justify-between gap-2">
@@ -164,33 +174,5 @@
         </AlertDescription>
       </Alert>
     {/if}
-
-    <!-- Advanced: per-plugin overrides — single-file swaps can desync Streamline -->
-    <Accordion type="single">
-      <AccordionItem value="per-plugin" class="border-b-0">
-        <AccordionTrigger class="text-muted-foreground">
-          {t('gameDetails.streamline.advanced', { count: orderedComponents.length })}
-        </AccordionTrigger>
-        <AccordionContent class="grid gap-2">
-          <Alert variant="warning" size="sm" role="note">
-            <TriangleAlertIcon aria-hidden="true" />
-            <AlertDescription>
-              {t('gameDetails.streamline.perPluginWarning')}
-            </AlertDescription>
-          </Alert>
-          <ItemGroup class="rounded-md border bg-muted/30">
-            {#each orderedComponents as component, index (component.id)}
-              {@const group = groupsById[component.id] ?? null}
-
-              {#if index > 0}
-                <ItemSeparator />
-              {/if}
-
-              <ComponentVersionRow {component} {group} {busy} {onSwap} {onRollback} />
-            {/each}
-          </ItemGroup>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
   </CardContent>
 </Card>

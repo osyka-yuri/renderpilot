@@ -36,7 +36,7 @@ impl DashboardRiskLevel {
 }
 
 pub(crate) fn available_update_count<'a>(
-    groups: impl IntoIterator<Item = &'a renderpilot_application::ComponentFileReplacementCandidates>,
+    groups: impl IntoIterator<Item = &'a renderpilot_application::ComponentReplacementCandidates>,
 ) -> usize {
     groups
         .into_iter()

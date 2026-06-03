@@ -6,12 +6,16 @@ use crate::error::storage_context;
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const NVAPI_MIGRATION: &str = include_str!("../migrations/0002_nvapi.sql");
 
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+// Bumped to 3 for the bundle-swap reshape of `library_artifacts` (files_json) and
+// the new `component_backups` table: a stale v2 catalog has the old column shape,
+// so it must be rebuilt rather than kept.
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 const REQUIRED_TABLES: &[&str] = &[
     "games",
     "game_covers",
     "components",
+    "component_backups",
     "library_artifacts",
     "operations",
     "operation_items",
@@ -24,6 +28,7 @@ const REQUIRED_TABLES: &[&str] = &[
 const REQUIRED_INDEXES: &[&str] = &[
     "uq_games_launcher_external_id",
     "idx_components_game_id",
+    "idx_component_backups_game_id",
     "idx_library_artifacts_library",
     "idx_operations_game_id_created_at",
     "idx_operation_items_operation_id",
@@ -470,6 +475,45 @@ mod tests {
     }
 
     #[test]
+    fn apply_rebuilds_stale_v2_schema_with_old_artifact_shape() {
+        let mut connection = open_test_connection();
+
+        // Simulate a pre-bundle v2 catalog: `library_artifacts` with the OLD scalar
+        // columns and no `component_backups` table.
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE games (id TEXT PRIMARY KEY);
+                CREATE TABLE library_artifacts (
+                    id TEXT PRIMARY KEY, library TEXT, file_name TEXT,
+                    file_path TEXT, version TEXT, sha256 TEXT
+                );
+                PRAGMA user_version = 2;
+                "#,
+            )
+            .expect("legacy v2 schema should be created");
+
+        apply(&mut connection).expect("stale v2 schema should be rebuilt");
+
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        assert!(table_has_column(
+            &connection,
+            "library_artifacts",
+            "files_json"
+        ));
+        assert!(!table_has_column(
+            &connection,
+            "library_artifacts",
+            "file_path"
+        ));
+        assert!(schema_object_exists(
+            &connection,
+            "table",
+            "component_backups"
+        ));
+    }
+
+    #[test]
     fn apply_resets_unknown_schema_version() {
         let mut connection = open_test_connection();
 
@@ -546,6 +590,20 @@ mod tests {
         let sql = format!(
             "SELECT COUNT(*) FROM pragma_table_info({})",
             quote_sql_literal(table_name)
+        );
+
+        let column_count: i64 = connection
+            .query_row(&sql, [], |row| row.get(0))
+            .expect("table info should be readable");
+
+        column_count > 0
+    }
+
+    fn table_has_column(connection: &Connection, table_name: &str, column_name: &str) -> bool {
+        let sql = format!(
+            "SELECT COUNT(*) FROM pragma_table_info({}) WHERE name = {}",
+            quote_sql_literal(table_name),
+            quote_sql_literal(column_name)
         );
 
         let column_count: i64 = connection

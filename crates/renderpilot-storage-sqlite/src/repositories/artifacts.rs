@@ -14,9 +14,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             id,
             library,
             file_name,
-            file_path,
-            version,
-            sha256,
+            files_json,
             source,
             source_game_id,
             trust_level,
@@ -28,20 +26,17 @@ const UPSERT_ARTIFACT_SQL: &str = "
             :id,
             :technology,
             :file_name,
-            :file_path,
-            :version,
-            :sha256,
+            :files_json,
             :source,
             :source_game_id,
             :trust_level,
             :created_at_ms,
             :updated_at_ms
         )
-    ON CONFLICT(sha256) DO UPDATE SET
+    ON CONFLICT(id) DO UPDATE SET
         library        = excluded.library,
         file_name      = excluded.file_name,
-        file_path      = excluded.file_path,
-        version        = excluded.version,
+        files_json     = excluded.files_json,
         source         = excluded.source,
         source_game_id = excluded.source_game_id,
         trust_level    = excluded.trust_level,
@@ -108,9 +103,7 @@ fn upsert_artifact_with_statement(
             ":id": row.id,
             ":technology": row.technology,
             ":file_name": row.file_name,
-            ":file_path": row.file_path,
-            ":version": row.version,
-            ":sha256": row.sha256,
+            ":files_json": row.files_json,
             ":source": row.source,
             ":source_game_id": row.source_game_id,
             ":trust_level": row.trust_level,
@@ -127,9 +120,7 @@ struct ArtifactSqlRow<'a> {
     id: &'a str,
     technology: String,
     file_name: &'a str,
-    file_path: &'a str,
-    version: Option<&'a str>,
-    sha256: &'a str,
+    files_json: String,
     source: Option<&'a str>,
     source_game_id: Option<&'a str>,
     trust_level: String,
@@ -141,9 +132,7 @@ impl<'a> ArtifactSqlRow<'a> {
             id: artifact.id().as_str(),
             technology: mapping::enum_to_text(&artifact.technology())?,
             file_name: artifact.file_name(),
-            file_path: artifact.path().as_str(),
-            version: artifact.version().map(|version| version.as_str()),
-            sha256: artifact.sha256().as_str(),
+            files_json: mapping::serialize_json(artifact.files())?,
             source: artifact.source(),
             source_game_id: artifact.source_game_id().map(|game_id| game_id.as_str()),
             trust_level: mapping::enum_to_text(&artifact.trust_level())?,
@@ -190,21 +179,23 @@ mod tests {
     }
 
     #[test]
-    fn upsert_artifact_updates_existing_artifact_with_same_sha256() {
+    fn upsert_artifact_updates_existing_artifact_with_same_id() {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
 
+        // The artifact id is the bundle's content identity, so the same id means
+        // the same bundle and the second upsert updates the row in place.
         let first = sample_artifact(
-            "artifact:first",
+            "artifact:bundle",
             "C:/Games/GameA/nvngx_dlss.dll",
             "nvngx_dlss.dll",
             HASH_B,
         );
 
         let second = sample_artifact(
-            "artifact:second",
+            "artifact:bundle",
             "C:/Games/GameB/bin/nvngx_dlss.dll",
             "nvngx_dlss.dll",
-            HASH_B,
+            HASH_A,
         );
 
         storage
@@ -213,19 +204,19 @@ mod tests {
 
         storage
             .upsert_artifact(&second)
-            .expect("second artifact should update the existing sha256 row");
+            .expect("second artifact should update the existing id row");
 
         let artifacts = storage.list_artifacts().expect("artifacts should load");
 
         assert_eq!(
             artifacts.len(),
             1,
-            "same sha256 should be stored as one reusable artifact",
+            "same artifact id should be stored as one reusable artifact",
         );
 
         let artifact = &artifacts[0];
 
-        assert_eq!(artifact.sha256(), first.sha256());
+        assert_eq!(artifact.sha256().as_str(), HASH_A, "row updated in place");
         assert_eq!(artifact.file_name(), "nvngx_dlss.dll");
         assert_eq!(
             artifact.path().as_str(),
@@ -234,14 +225,14 @@ mod tests {
     }
 
     #[test]
-    fn upsert_artifact_keeps_original_id_when_sha256_already_exists() {
+    fn upsert_artifact_with_distinct_ids_keeps_separate_rows() {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
 
         let first = sample_artifact(
             "artifact:first",
             "C:/Games/GameA/nvngx_dlss.dll",
             "nvngx_dlss.dll",
-            HASH_B,
+            HASH_A,
         );
 
         let second = sample_artifact(
@@ -257,20 +248,14 @@ mod tests {
 
         storage
             .upsert_artifact(&second)
-            .expect("second artifact should update the existing sha256 row");
+            .expect("second artifact should be stored");
 
         let artifacts = storage.list_artifacts().expect("artifacts should load");
 
-        assert_eq!(artifacts.len(), 1);
         assert_eq!(
-            artifacts[0].id(),
-            first.id(),
-            "sha256 conflict should preserve the first artifact id",
-        );
-        assert_eq!(artifacts[0].sha256(), first.sha256());
-        assert_eq!(
-            artifacts[0].path().as_str(),
-            "C:/Games/GameB/bin/nvngx_dlss.dll"
+            artifacts.len(),
+            2,
+            "distinct ids are distinct bundles and keep separate rows",
         );
     }
 
@@ -337,8 +322,10 @@ mod tests {
             ArtifactId::new(id).expect("artifact id should be valid"),
             GraphicsTechnology::DlssSuperResolution,
             file_name,
-            ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
-                .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid")),
+            vec![
+                ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
+                    .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid")),
+            ],
             ArtifactTrustLevel::LocalObserved,
         )
         .expect("artifact should be valid")

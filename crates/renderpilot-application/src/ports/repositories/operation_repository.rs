@@ -21,6 +21,8 @@ use crate::{AppResult, OperationJournalEntry, OperationRecord};
 ///   snapshot of the header and items.
 /// - [`list_operation_headers_for_game`](Self::list_operation_headers_for_game)
 ///   returns headers only.
+/// - [`list_operation_entries_for_game`](Self::list_operation_entries_for_game)
+///   returns full aggregates from one logical snapshot.
 /// - Saved item rows replace the previous item set completely, including the empty
 ///   set, which clears all stored items.
 /// - Read item order must be stable and match save order where the storage backend
@@ -60,9 +62,13 @@ pub trait OperationRepository: Send + Sync {
     /// operation id.
     fn list_operation_headers_for_game(&self, game_id: &GameId) -> AppResult<Vec<OperationRecord>>;
 
-    /// Counts persisted item rows for an operation.
+    /// Lists full journal entries for one game.
     ///
-    /// Returns `0` when no item rows exist. This method is intended for summaries
-    /// and must not load item payloads.
-    fn count_operation_items(&self, operation_id: &OperationId) -> AppResult<usize>;
+    /// Results must use the same stable order as
+    /// [`list_operation_headers_for_game`](Self::list_operation_headers_for_game).
+    /// Each entry's items must preserve stable persistence order.
+    fn list_operation_entries_for_game(
+        &self,
+        game_id: &GameId,
+    ) -> AppResult<Vec<OperationJournalEntry>>;
 }

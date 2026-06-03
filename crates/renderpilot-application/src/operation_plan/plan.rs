@@ -28,6 +28,7 @@ pub struct OperationPlan {
     artifact_id: ArtifactId,
     blockers: Vec<OperationPlanBlocker>,
     warnings: Vec<OperationPlanWarning>,
+    files: Vec<OperationPlanFile>,
 }
 
 impl OperationPlan {
@@ -35,6 +36,7 @@ impl OperationPlan {
         component: &GraphicsComponent,
         artifact: &LibraryArtifact,
         target_file: &ComponentFile,
+        files: Vec<OperationPlanFile>,
         assessment: OperationPlanAssessment,
         identity: OperationPlanIdentity,
     ) -> Self {
@@ -65,6 +67,7 @@ impl OperationPlan {
             artifact_id: artifact.id().clone(),
             blockers,
             warnings,
+            files,
         }
     }
 
@@ -141,5 +144,108 @@ impl OperationPlan {
     /// Returns warnings that should be shown before execution.
     pub fn warnings(&self) -> &[OperationPlanWarning] {
         &self.warnings
+    }
+
+    /// Returns every file the swap would write, add, or remove.
+    ///
+    /// For a single-file swap this contains one [`OperationPlanFile`]; for a
+    /// bundle it enumerates the whole set so the UI can show, e.g., "1 replaced,
+    /// 2 added".
+    pub fn files(&self) -> &[OperationPlanFile] {
+        &self.files
+    }
+}
+
+/// What a swap will do to one file in the package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OperationPlanFileAction {
+    /// An existing file at the install target is backed up and replaced.
+    Replace,
+    /// A new file is added at an install target the component did not have.
+    Add,
+}
+
+impl OperationPlanFileAction {
+    /// Returns the stable text form used by CLI output.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Replace => "replace",
+            Self::Add => "add",
+        }
+    }
+}
+
+/// One file affected by a planned bundle swap.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationPlanFile {
+    action: OperationPlanFileAction,
+    target_path: PathRef,
+    replacement_path: Option<PathRef>,
+    original_version: Option<Version>,
+    replacement_version: Option<Version>,
+    original_sha256: Option<Sha256Hash>,
+    replacement_sha256: Option<Sha256Hash>,
+}
+
+impl OperationPlanFile {
+    /// An artifact file replaces an existing component file of the same name.
+    pub(crate) fn replace(current: &ComponentFile, artifact_file: &ComponentFile) -> Self {
+        Self {
+            action: OperationPlanFileAction::Replace,
+            target_path: current.path().clone(),
+            replacement_path: Some(artifact_file.path().clone()),
+            original_version: current.version().cloned(),
+            replacement_version: artifact_file.version().cloned(),
+            original_sha256: current.sha256().cloned(),
+            replacement_sha256: artifact_file.sha256().cloned(),
+        }
+    }
+
+    /// A new artifact file is added at `target_path` (no prior component file).
+    pub(crate) fn add(target_path: PathRef, artifact_file: &ComponentFile) -> Self {
+        Self {
+            action: OperationPlanFileAction::Add,
+            target_path,
+            replacement_path: Some(artifact_file.path().clone()),
+            original_version: None,
+            replacement_version: artifact_file.version().cloned(),
+            original_sha256: None,
+            replacement_sha256: artifact_file.sha256().cloned(),
+        }
+    }
+
+    /// Returns what the swap does to this file.
+    pub fn action(&self) -> OperationPlanFileAction {
+        self.action
+    }
+
+    /// Returns the on-disk path that will be written, added, or removed.
+    pub fn target_path(&self) -> &PathRef {
+        &self.target_path
+    }
+
+    /// Returns the source artifact path copied into place, when applicable.
+    pub fn replacement_path(&self) -> Option<&PathRef> {
+        self.replacement_path.as_ref()
+    }
+
+    /// Returns the currently installed version of this file, when known.
+    pub fn original_version(&self) -> Option<&Version> {
+        self.original_version.as_ref()
+    }
+
+    /// Returns the replacement version of this file, when known.
+    pub fn replacement_version(&self) -> Option<&Version> {
+        self.replacement_version.as_ref()
+    }
+
+    /// Returns the currently installed hash of this file, when known.
+    pub fn original_sha256(&self) -> Option<&Sha256Hash> {
+        self.original_sha256.as_ref()
+    }
+
+    /// Returns the replacement hash of this file, when known.
+    pub fn replacement_sha256(&self) -> Option<&Sha256Hash> {
+        self.replacement_sha256.as_ref()
     }
 }

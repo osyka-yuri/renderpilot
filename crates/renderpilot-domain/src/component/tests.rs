@@ -73,20 +73,23 @@ fn graphics_component_collects_component_files() {
 
 #[test]
 fn library_artifact_normalizes_source() {
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
-        " nvngx_dlss.dll ",
-        ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
+    let artifact =
+        LibraryArtifact::new(
+            ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
+            GraphicsTechnology::DlssSuperResolution,
+            " nvngx_dlss.dll ",
+            vec![ComponentFile::new(
+                PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"),
+            )
             .with_sha256(
                 Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
                     .expect("valid hash"),
-            ),
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact should be valid")
-    .with_source(" NVIDIA ")
-    .expect("valid source");
+            )],
+            ArtifactTrustLevel::LocalObserved,
+        )
+        .expect("artifact should be valid")
+        .with_source(" NVIDIA ")
+        .expect("valid source");
 
     assert_eq!(artifact.file_name(), "nvngx_dlss.dll");
     assert_eq!(artifact.source(), Some("NVIDIA"));
@@ -95,20 +98,23 @@ fn library_artifact_normalizes_source() {
 
 #[test]
 fn library_artifact_rejects_empty_source() {
-    let error = LibraryArtifact::new(
-        ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
-        "nvngx_dlss.dll",
-        ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
+    let error =
+        LibraryArtifact::new(
+            ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
+            GraphicsTechnology::DlssSuperResolution,
+            "nvngx_dlss.dll",
+            vec![ComponentFile::new(
+                PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"),
+            )
             .with_sha256(
                 Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
                     .expect("valid hash"),
-            ),
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact should be valid")
-    .with_source(" ")
-    .expect_err("source should be required when present");
+            )],
+            ArtifactTrustLevel::LocalObserved,
+        )
+        .expect("artifact should be valid")
+        .with_source(" ")
+        .expect_err("source should be required when present");
 
     assert_eq!(error, ComponentError::EmptyText("artifact_source"));
 }
@@ -116,19 +122,22 @@ fn library_artifact_rejects_empty_source() {
 #[test]
 fn library_artifact_tracks_source_game() {
     let source_game_id = GameId::new("manual:C:/Games/Test").expect("valid game id");
-    let artifact = LibraryArtifact::new(
-        ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
-        "nvngx_dlss.dll",
-        ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
+    let artifact =
+        LibraryArtifact::new(
+            ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
+            GraphicsTechnology::DlssSuperResolution,
+            "nvngx_dlss.dll",
+            vec![ComponentFile::new(
+                PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"),
+            )
             .with_sha256(
                 Sha256Hash::new("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
                     .expect("valid hash"),
-            ),
-        ArtifactTrustLevel::LocalObserved,
-    )
-    .expect("artifact should be valid")
-    .with_source_game_id(source_game_id.clone());
+            )],
+            ArtifactTrustLevel::LocalObserved,
+        )
+        .expect("artifact should be valid")
+        .with_source_game_id(source_game_id.clone());
 
     assert_eq!(artifact.source_game_id(), Some(&source_game_id));
 }
@@ -139,7 +148,9 @@ fn library_artifact_requires_sha256() {
         ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
         GraphicsTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
-        ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path")),
+        vec![ComponentFile::new(
+            PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"),
+        )],
         ArtifactTrustLevel::LocalObserved,
     )
     .expect_err("artifact without sha256 should fail");

@@ -136,9 +136,7 @@ CREATE TABLE IF NOT EXISTS library_artifacts (
     id             TEXT    PRIMARY KEY NOT NULL,
     library        TEXT    NOT NULL,
     file_name      TEXT    NOT NULL,
-    file_path      TEXT    NOT NULL,
-    version        TEXT,
-    sha256         TEXT    NOT NULL UNIQUE,
+    files_json     TEXT    NOT NULL,
     source         TEXT,
     source_game_id TEXT,
     trust_level    TEXT    NOT NULL,
@@ -158,20 +156,14 @@ CREATE TABLE IF NOT EXISTS library_artifacts (
     CHECK (length(trim(file_name)) > 0),
     CHECK (instr(file_name, '/') = 0),
     CHECK (instr(file_name, '\') = 0),
-    CHECK (length(trim(file_path)) > 0),
-    CHECK (instr(file_path, char(0)) = 0),
-    CHECK (instr(file_path, '\') = 0),
-    CHECK (version IS NULL OR length(trim(version)) > 0),
-    CHECK (length(sha256) = 64),
-    CHECK (lower(sha256) = sha256),
-    CHECK (sha256 NOT GLOB '*[^0-9a-f]*'),
+    CHECK (json_valid(files_json)),
+    CHECK (json_type(files_json) = 'array'),
+    CHECK (json_array_length(files_json) >= 1),
     CHECK (source IS NULL OR length(trim(source)) > 0),
     CHECK (source_game_id IS NULL OR length(trim(source_game_id)) > 0),
     CHECK (length(trim(trust_level)) > 0),
     CHECK (created_at >= 0),
-    CHECK (updated_at >= created_at),
-
-    UNIQUE (id, library)
+    CHECK (updated_at >= created_at)
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_library_artifacts_library
@@ -182,6 +174,46 @@ CREATE INDEX IF NOT EXISTS idx_library_artifacts_source_game_id
 
 CREATE INDEX IF NOT EXISTS idx_library_artifacts_updated_at
     ON library_artifacts(updated_at DESC);
+
+
+-- =============================================================================
+-- Component swap backups (baseline manifest for deterministic rollback)
+-- =============================================================================
+--
+-- Records the *original* file set that existed before a component's first swap,
+-- so an N-to-1 rollback can restore exactly those files regardless of how the
+-- currently active bundle is named. The `.bak` sidecars hold the original bytes;
+-- this table holds their identity.
+--
+-- Intentionally NOT foreign-keyed to components(id): scans delete-and-reinsert
+-- the component set, which would otherwise cascade-wipe baselines on every
+-- rescan. The game foreign key still cleans backups up when a game is removed.
+
+CREATE TABLE IF NOT EXISTS component_backups (
+    component_id TEXT    PRIMARY KEY NOT NULL,
+    game_id      TEXT    NOT NULL,
+    files_json   TEXT    NOT NULL,
+    created_at   INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+    updated_at   INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+
+    FOREIGN KEY (game_id)
+        REFERENCES games(id)
+        ON DELETE CASCADE,
+
+    CHECK (length(trim(component_id)) > 0),
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (json_valid(files_json)),
+    CHECK (json_type(files_json) = 'array'),
+    CHECK (created_at >= 0),
+    CHECK (updated_at >= created_at)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_component_backups_game_id
+    ON component_backups(game_id);
 
 
 -- =============================================================================

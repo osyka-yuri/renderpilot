@@ -88,6 +88,11 @@ pub struct ComponentFile {
     path: PathRef,
     version: Option<Version>,
     sha256: Option<Sha256Hash>,
+    /// Basename this file must be installed *as*, when it differs from the file's
+    /// own name. Used by curated packages such as the FSR 4 upgrade, where the
+    /// loader DLL is installed as `amd_fidelityfx_dx12.dll`. `None` = own name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    install_as: Option<String>,
 }
 
 impl ComponentFile {
@@ -97,6 +102,7 @@ impl ComponentFile {
             path,
             version: None,
             sha256: None,
+            install_as: None,
         }
     }
 
@@ -115,6 +121,12 @@ impl ComponentFile {
         self.sha256.as_ref()
     }
 
+    /// Returns the basename this file must be installed as, when it differs from
+    /// the file's own name.
+    pub fn install_as(&self) -> Option<&str> {
+        self.install_as.as_deref()
+    }
+
     /// Sets a file version and returns the updated file.
     pub fn with_version(mut self, version: Version) -> Self {
         self.version = Some(version);
@@ -126,30 +138,48 @@ impl ComponentFile {
         self.sha256 = Some(sha256);
         self
     }
+
+    /// Sets the install-as target basename and returns the updated file.
+    pub fn with_install_as(mut self, install_as: impl Into<String>) -> Self {
+        self.install_as = Some(install_as.into());
+        self
+    }
 }
 
 /// Library artifact available in the local replacement library.
+///
+/// An artifact is a *bundle* of one or more files that are swapped together as a
+/// unit (e.g. the three AMD FSR 4 DLLs, or the Nvidia Streamline interposer and
+/// its siblings). `files[0]` is the primary/representative file and `file_name`
+/// is its name; callers are responsible for placing the representative first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryArtifact {
     id: ArtifactId,
     technology: GraphicsTechnology,
     file_name: String,
-    file: ComponentFile,
+    files: Vec<ComponentFile>,
     source: Option<String>,
     source_game_id: Option<GameId>,
     trust_level: ArtifactTrustLevel,
 }
 
 impl LibraryArtifact {
-    /// Creates a library artifact.
+    /// Creates a library artifact from a non-empty bundle of files.
+    ///
+    /// Every file must carry a SHA-256 hash, and `files[0]` is treated as the
+    /// primary file surfaced by [`LibraryArtifact::primary_file`] and the
+    /// single-file convenience accessors.
     pub fn new(
         id: ArtifactId,
         technology: GraphicsTechnology,
         file_name: impl Into<String>,
-        file: ComponentFile,
+        files: Vec<ComponentFile>,
         trust_level: ArtifactTrustLevel,
     ) -> Result<Self, ComponentError> {
-        if file.sha256().is_none() {
+        if files.is_empty() {
+            return Err(ComponentError::EmptyArtifactFiles);
+        }
+        if files.iter().any(|file| file.sha256().is_none()) {
             return Err(ComponentError::MissingArtifactSha256);
         }
 
@@ -157,7 +187,7 @@ impl LibraryArtifact {
             id,
             technology,
             file_name: normalize_required_text("artifact_file_name", file_name)?,
-            file,
+            files,
             source: None,
             source_game_id: None,
             trust_level,
@@ -179,24 +209,31 @@ impl LibraryArtifact {
         &self.file_name
     }
 
-    /// Returns the artifact file.
-    pub fn file(&self) -> &ComponentFile {
-        &self.file
+    /// Returns every file that makes up this artifact bundle.
+    pub fn files(&self) -> &[ComponentFile] {
+        &self.files
     }
 
-    /// Returns the artifact file path.
+    /// Returns the primary (representative) file of the bundle.
+    pub fn primary_file(&self) -> &ComponentFile {
+        self.files
+            .first()
+            .expect("library artifact invariant violated: files must be non-empty")
+    }
+
+    /// Returns the primary artifact file path.
     pub fn path(&self) -> &PathRef {
-        self.file.path()
+        self.primary_file().path()
     }
 
-    /// Returns the optional artifact version.
+    /// Returns the optional primary artifact version.
     pub fn version(&self) -> Option<&Version> {
-        self.file.version()
+        self.primary_file().version()
     }
 
-    /// Returns the required artifact SHA-256 hash.
+    /// Returns the required primary artifact SHA-256 hash.
     pub fn sha256(&self) -> &Sha256Hash {
-        self.file
+        self.primary_file()
             .sha256()
             .expect("library artifact invariant violated: sha256 must be present")
     }
@@ -263,6 +300,8 @@ pub enum ComponentError {
     InvalidSha256Hash,
     /// A library artifact was created without a required SHA-256 hash.
     MissingArtifactSha256,
+    /// A library artifact was created without any files.
+    EmptyArtifactFiles,
 }
 
 impl fmt::Display for ComponentError {
@@ -274,6 +313,9 @@ impl fmt::Display for ComponentError {
             }
             Self::MissingArtifactSha256 => {
                 formatter.write_str("library artifact sha256 is required")
+            }
+            Self::EmptyArtifactFiles => {
+                formatter.write_str("library artifact must contain at least one file")
             }
         }
     }
