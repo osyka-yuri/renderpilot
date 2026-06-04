@@ -51,12 +51,6 @@ pub(crate) fn manifest_entries_as_artifacts(
     let mut entry_ids = HashMap::new();
 
     for entry in &manifest.entries {
-        // FSR split DLLs (loader/upscaler/framegen) are offered only as a
-        // version-matched package, composed below — not as individual artifacts.
-        if super::fsr_packages::is_packaged_fsr_library(&entry.library.id) {
-            continue;
-        }
-
         let artifact = match build_manifest_index_artifact(entry, patterns) {
             Ok(artifact) => artifact,
             Err(error) => {
@@ -70,7 +64,8 @@ pub(crate) fn manifest_entries_as_artifacts(
         artifacts.push(artifact);
     }
 
-    // One composed artifact per FSR release (loader + upscaler + framegen).
+    // One composed artifact per cohesive FSR release (loader + upscaler +
+    // framegen) is added alongside the individual member artifacts above.
     for package in super::fsr_packages::compose_fsr_packages(&manifest.entries) {
         artifacts.push(package.artifact);
     }

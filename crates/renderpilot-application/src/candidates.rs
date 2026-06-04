@@ -36,16 +36,17 @@ impl CandidateContext {
 /// Finds replacement candidates for the detected components of one game.
 ///
 /// Matching is per *component bundle*, not per file: a component is matched
-/// against artifacts of the same technology family whose bundle content differs
-/// from what is currently installed. This is what lets an FSR 3 (single-file)
-/// component be replaced by an FSR 4 (three-file) artifact.
+/// against artifacts of the same exact technology whose bundle content differs
+/// from what is currently installed. A cohesive FSR component still uses
+/// [`GraphicsTechnology::AmdFsr`], so an FSR 3 (single-file) component can still
+/// be replaced by an FSR 4 (three-file) artifact.
 #[must_use]
 pub fn find_replacement_candidates(
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
-    let artifacts_by_family = group_artifacts_by_family(artifacts);
+    let artifacts_by_technology = group_artifacts_by_technology(artifacts);
     let mut groups = Vec::new();
 
     for component in components {
@@ -53,8 +54,7 @@ pub fn find_replacement_candidates(
             continue;
         }
 
-        let Some(component_artifacts) = artifacts_by_family.get(&component.technology().family())
-        else {
+        let Some(component_artifacts) = artifacts_by_technology.get(&component.technology()) else {
             continue;
         };
 
@@ -90,17 +90,15 @@ pub fn find_replacement_candidates(
     groups
 }
 
-/// Groups artifacts by their (family-canonical) technology. Both components and
-/// artifacts carry family-canonical technologies after detection grouping, so an
-/// exact technology match is a family match.
-fn group_artifacts_by_family(
+/// Groups artifacts by their exact technology.
+fn group_artifacts_by_technology(
     artifacts: &[LibraryArtifact],
 ) -> HashMap<GraphicsTechnology, Vec<&LibraryArtifact>> {
     let mut grouped = HashMap::<GraphicsTechnology, Vec<&LibraryArtifact>>::new();
 
     for artifact in artifacts {
         grouped
-            .entry(artifact.technology().family())
+            .entry(artifact.technology())
             .or_default()
             .push(artifact);
     }
@@ -120,20 +118,26 @@ pub struct ComponentReplacementCandidates {
 }
 
 impl ComponentReplacementCandidates {
-    /// Creates a per-component candidate group. The displayed `file_path` and
-    /// `current_version` describe the component's primary (representative) file.
+    /// Creates a per-component candidate group.
+    ///
+    /// `current_version` describes the component's version representative, while
+    /// `file_path` is the user-facing display path. For cohesive FSR these may be
+    /// different files: the upscaler carries the FSR 4.x version, but the dx12
+    /// entry point is still the path the user expects to see.
     pub fn new(component: &GraphicsComponent, candidates: Vec<ReplacementCandidate>) -> Self {
-        let primary = component
+        let representative = component
             .files()
             .first()
             .expect("component candidate group requires at least one file");
+        let display = crate::fsr::display_component_file(component.files())
+            .expect("component candidate group requires at least one display file");
 
         Self {
             component_id: component.id().clone(),
             game_id: component.game_id().clone(),
             technology: component.technology(),
-            file_path: primary.path().clone(),
-            current_version: primary.version().cloned(),
+            file_path: display.path().clone(),
+            current_version: representative.version().cloned(),
             candidates,
         }
     }
@@ -397,20 +401,26 @@ fn require_different_bundle(
     }
 }
 
-/// A split FSR set (loader + upscaler + frame generation) must only be replaced by
-/// another split package — never by the unified single-file FSR 3.x backend, which
-/// would strand the split members and downgrade the entry point. Upgrades
-/// (unified → split) and split → split updates stay allowed; returning to the
-/// unified original after our own upgrade is the job of rollback, not a swap.
+/// Whether a unified single-file FSR 3.x backend may replace this component.
+///
+/// The deciding factor is the entry-point file. A component that still loads
+/// `amd_fidelityfx_dx12.dll` is **FSR 3.1 lineage** (pure FSR 3.1, or one we upgraded
+/// — the FSR 4 loader sits under that name): it can always return to FSR 3.1, and the
+/// swap engine cleans up the FSR 4 members, so a unified candidate is offered. A split
+/// set with **no** dx12 entry point is native FSR 4 (loads its own loader): there is no
+/// FSR 3 to return to, so a unified backend is blocked — it would only strand the split
+/// members. Split → split (upgrades and FSR 4 updates) is always allowed.
 fn require_not_split_downgrade(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
     // A composed FSR package's primary file name is the upscaler (the split marker);
-    // the unified FSR 3.x backend's is the entry point — so the decision is exact on
-    // both sides even though a package's member paths are virtual.
+    // the unified FSR 3.x backend's is the entry point — so the artifact side is exact
+    // even though a package's member paths are virtual.
+    let artifact_is_unified = !crate::fsr::is_split_marker(artifact.file_name());
     if crate::fsr::is_split_set(component.files())
-        && !crate::fsr::is_split_marker(artifact.file_name())
+        && !crate::fsr::has_entry_point(component.files())
+        && artifact_is_unified
     {
         return None;
     }
@@ -1007,6 +1017,137 @@ mod tests {
             groups[0].candidates().len(),
             2,
             "a unified FSR 3.x set accepts both a unified swap and a split upgrade"
+        );
+    }
+
+    #[test]
+    fn cohesive_fsr_candidate_group_uses_entry_point_as_display_path() {
+        let component = fsr_component(&[
+            "amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_dx12.dll",
+            "amd_fidelityfx_framegeneration_dx12.dll",
+        ]);
+        let split = split_package_artifact("artifact:fsr-4.0", "4.0.3");
+
+        let groups = find_test_candidates(&[component], &[split]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].file_path().as_str(),
+            "C:/Game/amd_fidelityfx_dx12.dll"
+        );
+        assert_eq!(
+            groups[0].current_version().map(|version| version.as_str()),
+            Some("4.0.3")
+        );
+    }
+
+    #[test]
+    fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
+        let component = sample_component(
+            "component:game-a:fsr-upscaler",
+            "game:a",
+            GraphicsTechnology::AmdFsrUpscaler,
+            Swappability::Swappable,
+            Some("4.0.3"),
+            &"f".repeat(64),
+            "C:/Game/amd_fidelityfx_upscaler_dx12.dll",
+        );
+        let upscaler = sample_artifact(
+            "artifact:fsr-upscaler-4.1",
+            GraphicsTechnology::AmdFsrUpscaler,
+            Some("4.1.0"),
+            &"e".repeat(64),
+            "C:/Lib/amd_fidelityfx_upscaler_dx12.dll",
+            None,
+        );
+        let framegen = sample_artifact(
+            "artifact:fsr-framegen-4.1",
+            GraphicsTechnology::AmdFsrFrameGeneration,
+            Some("4.1.0"),
+            &"d".repeat(64),
+            "C:/Lib/amd_fidelityfx_framegeneration_dx12.dll",
+            None,
+        );
+        let package = split_package_artifact("artifact:fsr-4.1", "4.1.0");
+
+        let groups = find_test_candidates(&[component], &[upscaler.clone(), framegen, package]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 1);
+        assert_eq!(groups[0].candidates()[0].artifact_id(), upscaler.id());
+    }
+
+    /// Builds a multi-file FSR component with the given file basenames (FSR family,
+    /// the first file is the primary). Used to model dx12-lineage vs native FSR 4.
+    fn fsr_component(file_names: &[&str]) -> GraphicsComponent {
+        let mut component = GraphicsComponent::new(
+            ComponentId::new("component:game-a:fsr").expect("component id"),
+            GameId::new("game:a").expect("game id"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::AmdFsr,
+            Swappability::BundleOnly,
+        );
+        for (index, name) in file_names.iter().enumerate() {
+            let sha = char::from(b'a' + index as u8).to_string().repeat(64);
+            component = component.with_file(
+                ComponentFile::new(PathRef::new(format!("C:/Game/{name}")).expect("path"))
+                    .with_sha256(Sha256Hash::new(sha).expect("sha"))
+                    .with_version(Version::parse("4.0.3").expect("version")),
+            );
+        }
+        component
+    }
+
+    #[test]
+    fn dx12_lineage_fsr4_is_offered_a_unified_fsr3_downgrade() {
+        // A game we upgraded to FSR 4 still loads `amd_fidelityfx_dx12.dll` (the loader
+        // is installed under that name), so it can return to FSR 3.1.
+        let upgraded = fsr_component(&[
+            "amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_dx12.dll",
+            "amd_fidelityfx_framegeneration_dx12.dll",
+        ]);
+        let unified = sample_artifact(
+            "artifact:fsr-3.1.4",
+            GraphicsTechnology::AmdFsr,
+            Some("3.1.4"),
+            &"e".repeat(64),
+            "C:/Lib/amd_fidelityfx_dx12.dll",
+            None,
+        );
+
+        let groups = find_test_candidates(&[upgraded], &[unified]);
+        assert_eq!(
+            groups.len(),
+            1,
+            "a dx12-lineage FSR 4 set can pick a unified FSR 3.1 again"
+        );
+        assert_eq!(groups[0].candidates().len(), 1);
+    }
+
+    #[test]
+    fn native_fsr4_is_not_offered_a_unified_fsr3_downgrade() {
+        // A native FSR 4 game loads its own loader and has no dx12 entry point — there
+        // is no FSR 3 to return to.
+        let native = fsr_component(&[
+            "amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_loader_dx12.dll",
+            "amd_fidelityfx_framegeneration_dx12.dll",
+        ]);
+        let unified = sample_artifact(
+            "artifact:fsr-3.1.4",
+            GraphicsTechnology::AmdFsr,
+            Some("3.1.4"),
+            &"e".repeat(64),
+            "C:/Lib/amd_fidelityfx_dx12.dll",
+            None,
+        );
+
+        let groups = find_test_candidates(&[native], &[unified]);
+        assert!(
+            groups.is_empty(),
+            "a native FSR 4 set must not be offered a unified FSR 3 downgrade"
         );
     }
 }

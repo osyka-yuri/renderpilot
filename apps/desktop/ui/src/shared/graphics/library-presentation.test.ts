@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPresentedLibraries, formatCompactLibraryLabel } from './library-presentation';
+import {
+  createPresentedLibraries,
+  displayLibraryFilePath,
+  formatCompactLibraryLabel,
+} from './library-presentation';
 
 describe('library-presentation', () => {
   it('returns compact labels for canonical slug values', () => {
@@ -43,5 +47,20 @@ describe('library-presentation', () => {
         (library) => library.vendorKey,
       ),
     ).toEqual(['nvidia', 'amd', 'intel', 'other']);
+  });
+
+  it('prefers the dx12 entry point when presenting cohesive AMD FSR files', () => {
+    expect(
+      displayLibraryFilePath('amd_fsr', [
+        { path: 'C:/Game/amd_fidelityfx_upscaler_dx12.dll' },
+        { path: 'C:/Game/amd_fidelityfx_dx12.dll' },
+      ]),
+    ).toBe('C:/Game/amd_fidelityfx_dx12.dll');
+
+    expect(
+      displayLibraryFilePath('amd_fsr_upscaler', [
+        { path: 'C:/Game/amd_fidelityfx_upscaler_dx12.dll' },
+      ]),
+    ).toBe('C:/Game/amd_fidelityfx_upscaler_dx12.dll');
   });
 });

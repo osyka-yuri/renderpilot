@@ -4,6 +4,7 @@ export {
   comparePresentedLibraries,
   createPresentedLibraries,
   createPresentedLibrary,
+  displayLibraryFilePath,
   formatCanonicalLibraryLabel,
   formatCompactLibraryLabel,
   isKnownLibrary,

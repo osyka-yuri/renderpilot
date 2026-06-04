@@ -1,4 +1,9 @@
-export { formatLabel, formatLibrary, formatCompactLibraryLabel } from './model/presenters';
+export {
+  formatLabel,
+  formatLibrary,
+  formatCompactLibraryLabel,
+  displayComponentFilePath,
+} from './model/presenters';
 
 export type {
   ComponentFile,

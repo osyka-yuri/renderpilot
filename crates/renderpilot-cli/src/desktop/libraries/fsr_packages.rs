@@ -4,8 +4,8 @@
 //! the loader, the upscaler, and the frame-generation library. The loader is
 //! installed as `amd_fidelityfx_dx12.dll` (the entry point the game loads), so the
 //! upgrade replaces the game's FSR 3.1 `amd_fidelityfx_dx12.dll` and adds the other
-//! two. These DLLs are therefore offered and applied only as a version-matched
-//! package — never individually.
+//! two. RenderPilot offers the individual DLLs too for native FSR 4 games, while
+//! still composing the matched cohesive package for dx12-lineage upgrades.
 
 use renderpilot_application::fsr;
 use renderpilot_domain::{
@@ -30,12 +30,6 @@ const PACKAGE_SOURCE: &str = "manifest-download";
 pub(super) struct FsrPackage {
     pub artifact: LibraryArtifact,
     pub member_entry_ids: Vec<String>,
-}
-
-/// Returns whether a manifest `library.id` is an FSR split member that is offered
-/// only inside a package (so it must be skipped when building single artifacts).
-pub(super) fn is_packaged_fsr_library(library_id: &str) -> bool {
-    matches!(library_id, LOADER_ID | UPSCALER_ID | FRAMEGEN_ID)
 }
 
 #[derive(Default)]
@@ -361,13 +355,5 @@ mod tests {
             2,
             "two distinct build numbers compose two packages"
         );
-    }
-
-    #[test]
-    fn recognizes_packaged_fsr_library_ids() {
-        assert!(is_packaged_fsr_library(LOADER_ID));
-        assert!(is_packaged_fsr_library(UPSCALER_ID));
-        assert!(is_packaged_fsr_library(FRAMEGEN_ID));
-        assert!(!is_packaged_fsr_library("nvngx_dlss"));
     }
 }

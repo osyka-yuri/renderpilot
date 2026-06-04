@@ -8,7 +8,8 @@ use renderpilot_application::{
     build_swap_operation_plan, fsr, AppError, AppResult, ComponentRepository,
 };
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact, PathRef,
+    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology,
+    LibraryArtifact, PathRef,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
@@ -50,15 +51,29 @@ struct PreparedApplySwap {
     artifact: LibraryArtifact,
     baseline: Vec<ComponentFile>,
     planned: Vec<PlannedFile>,
+    /// FSR split members the (unified) target abandons and must delete — see
+    /// [`fsr_members_to_remove`]. Empty for every non-downgrade swap.
+    removed: Vec<ComponentFile>,
     next_components: Vec<GraphicsComponent>,
     first_swap: bool,
 }
 
 impl PreparedApplySwap {
     fn applied_path(&self) -> String {
-        self.planned
-            .first()
-            .map(|plan| plan.file.path().as_str().to_owned())
+        self.artifact
+            .files()
+            .iter()
+            .zip(&self.planned)
+            .find_map(|(artifact_file, plan)| {
+                artifact_file
+                    .install_as()
+                    .map(|_| plan.file.path().as_str().to_owned())
+            })
+            .or_else(|| {
+                self.planned
+                    .first()
+                    .map(|plan| plan.file.path().as_str().to_owned())
+            })
             .unwrap_or_default()
     }
 
@@ -100,6 +115,7 @@ pub(crate) fn apply_swap(
             &prepared.component,
             &prepared.baseline,
             &prepared.planned,
+            &prepared.removed,
             prepared.first_swap,
         )?;
 
@@ -211,8 +227,10 @@ fn prepare_apply_swap(
             "cannot apply blocked swap: {blockers}"
         )))
     }
-    // the package's installed files. Computed before any FS/DB mutation.
-    let new_files = additive_active_files(&baseline, &planned);
+    // the package's installed files, minus any FSR member a unified downgrade drops.
+    // Computed before any FS/DB mutation.
+    let removed = fsr_members_to_remove(&component, &artifact, &planned);
+    let new_files = additive_active_files(&baseline, &planned, &removed);
     let rebuilt = rebuild_component(&component, new_files);
     let next_components = full_component_set(storage, game_id, rebuilt)?;
 
@@ -223,6 +241,7 @@ fn prepare_apply_swap(
         artifact,
         baseline,
         planned,
+        removed,
         next_components,
         first_swap,
     })
@@ -300,10 +319,18 @@ fn perform_apply_fs(
     component: &GraphicsComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
+    removed: &[ComponentFile],
     first_swap: bool,
 ) -> AppResult<AppliedFsChanges> {
     let mut changes = AppliedFsChanges::default();
-    let result = apply_fs_steps(component, baseline, planned, first_swap, &mut changes);
+    let result = apply_fs_steps(
+        component,
+        baseline,
+        planned,
+        removed,
+        first_swap,
+        &mut changes,
+    );
     if let Err(error) = result {
         changes.undo();
         return Err(error);
@@ -315,6 +342,7 @@ fn apply_fs_steps(
     component: &GraphicsComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
+    removed: &[ComponentFile],
     first_swap: bool,
     changes: &mut AppliedFsChanges,
 ) -> AppResult<()> {
@@ -322,6 +350,33 @@ fn apply_fs_steps(
     // so the new package installs cleanly — no mixed versions, no stale leftovers.
     if !first_swap {
         revert_to_baseline_fs(component.files(), baseline)?;
+    }
+
+    // Downgrade cleanup: a unified FSR 3.x target drops the FSR 4 split members the
+    // game held. Back each up to its `.bak` (so rollback can restore it) and remove
+    // it, so the folder lands on a clean FSR 3.1 — never a mix. On a re-swap the
+    // revert above already deleted them, so these are no-ops then.
+    for file in removed {
+        let target = real_path(file);
+        if !target.exists() {
+            continue;
+        }
+        let bak = bak_path(file);
+        if bak.exists() {
+            fs::remove_file(&bak).map_err(|error| {
+                AppError::provider_failed(format!(
+                    "failed to clear stale backup {}: {error}",
+                    bak.display()
+                ))
+            })?;
+        }
+        fs::rename(&target, &bak).map_err(|error| {
+            AppError::provider_failed(format!(
+                "failed to back up {} before removing it: {error}",
+                target.display()
+            ))
+        })?;
+        changes.renamed_to_bak.push((target, bak));
     }
 
     // Overlay the package: back up + replace any file already at a target, add the
@@ -411,23 +466,64 @@ fn revert_to_baseline_fs(current: &[ComponentFile], baseline: &[ComponentFile]) 
 }
 
 /// New active component files after an additive overlay: baseline files that the
-/// package does not overwrite (kept), plus the package's installed files.
+/// package neither overwrites nor removes (kept), plus the package's installed files.
 fn additive_active_files(
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
+    removed: &[ComponentFile],
 ) -> Vec<ComponentFile> {
     let target_paths: HashSet<&str> = planned
         .iter()
         .map(|plan| plan.file.path().as_str())
         .collect();
+    let removed_paths: HashSet<&str> = removed.iter().map(|file| file.path().as_str()).collect();
 
     let mut files: Vec<ComponentFile> = baseline
         .iter()
-        .filter(|file| !target_paths.contains(file.path().as_str()))
+        .filter(|file| {
+            !target_paths.contains(file.path().as_str())
+                && !removed_paths.contains(file.path().as_str())
+        })
         .cloned()
         .collect();
     files.extend(planned.iter().map(|plan| plan.file.clone()));
     files
+}
+
+/// FSR split members the unified target abandons on a downgrade — to be removed so
+/// the folder ends on a clean FSR 3.1, never a mix.
+///
+/// Non-empty only when the artifact is a **unified** FSR backend (its primary is not
+/// the split-marker upscaler) replacing a **dx12-lineage** component (one that loads
+/// `amd_fidelityfx_dx12.dll`) that still holds FSR split members. The RenderPilot
+/// upgrade path already cleans up via revert-to-baseline; this also covers a folder
+/// upgraded to FSR 4 outside RenderPilot, where there is no FSR 3.1 baseline.
+fn fsr_members_to_remove(
+    component: &GraphicsComponent,
+    artifact: &LibraryArtifact,
+    planned: &[PlannedFile],
+) -> Vec<ComponentFile> {
+    let target_is_unified_fsr = artifact.technology().family() == GraphicsTechnology::AmdFsr
+        && !fsr::is_split_marker(artifact.file_name());
+    if !target_is_unified_fsr || !fsr::has_entry_point(component.files()) {
+        return Vec::new();
+    }
+
+    let planned_names: HashSet<String> = planned
+        .iter()
+        .filter_map(|plan| plan.file.path().file_name().map(str::to_ascii_lowercase))
+        .collect();
+
+    component
+        .files()
+        .iter()
+        .filter(|file| {
+            file.path().file_name().is_some_and(|name| {
+                fsr::is_split_member(name) && !planned_names.contains(&name.to_ascii_lowercase())
+            })
+        })
+        .cloned()
+        .collect()
 }
 
 fn resolve_target_dir(component: &GraphicsComponent) -> AppResult<PathBuf> {
@@ -464,28 +560,12 @@ fn planned_target_files(
     target_dir: &Path,
     component: &GraphicsComponent,
 ) -> AppResult<Vec<PlannedFile>> {
-    let component_file_names: Vec<&str> = component
-        .files()
-        .iter()
-        .filter_map(|file| file.path().file_name())
-        .collect();
-
     artifact
         .files()
         .iter()
         .map(|artifact_file| {
-            // Install under the file's `install_as` target (e.g. the FSR 4 loader
-            // becomes `amd_fidelityfx_dx12.dll`), else under its own name. The FSR
-            // loader's target then adapts to the game's real entry point — a natively
-            // split game loads the loader as `amd_fidelityfx_loader_dx12.dll`.
-            let default_name = artifact_file
-                .install_as()
-                .or_else(|| artifact_file.path().file_name())
-                .unwrap_or("");
-            let install_name = fsr::resolve_loader_install_target(
-                default_name,
-                component_file_names.iter().copied(),
-            );
+            let install_name =
+                fsr::resolve_artifact_install_target(artifact_file, component.files());
             let destination = target_dir.join(&install_name);
             let target_ref =
                 PathRef::new(destination.to_string_lossy().as_ref()).map_err(|error| {

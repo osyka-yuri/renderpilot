@@ -85,22 +85,28 @@
       "technology": "amd_fsr_ray_regeneration"
     },
     {
+      "pattern": "amd_fidelityfx_radiancecache_dx12.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "amd_fsr_radiance_cache"
+    },
+    {
       "pattern": "amd_fidelityfx_loader_dx12.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr"
+      "technology": "amd_fsr_loader"
     },
     {
       "pattern": "amd_fidelityfx_upscaler.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr"
+      "technology": "amd_fsr_upscaler"
     },
     {
       "pattern": "amd_fidelityfx_upscaler_dx12.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr"
+      "technology": "amd_fsr_upscaler"
     },
     {
       "pattern": "amd_fidelityfx_vk.dll",

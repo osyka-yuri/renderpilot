@@ -48,23 +48,12 @@ fn build_plan_files(
         .iter()
         .map(|file| (file_name_key(file.path()), file))
         .collect();
-    let component_file_names: Vec<&str> = component
-        .files()
-        .iter()
-        .filter_map(|file| file.path().file_name())
-        .collect();
 
     let mut files = Vec::with_capacity(artifact.files().len());
 
     for artifact_file in artifact.files() {
-        let default_install_name = artifact_file
-            .install_as()
-            .or_else(|| artifact_file.path().file_name())
-            .unwrap_or("");
-        let install_name = crate::fsr::resolve_loader_install_target(
-            default_install_name,
-            component_file_names.iter().copied(),
-        );
+        let install_name =
+            crate::fsr::resolve_artifact_install_target(artifact_file, component.files());
         match current_by_name.get(&install_name.to_ascii_lowercase()) {
             Some(current) => files.push(OperationPlanFile::replace(current, artifact_file)),
             None => {

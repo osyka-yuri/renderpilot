@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import { displayComponentFilePath } from '@entities/component';
   import { fileNameFromPath } from '@shared/path';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
@@ -30,7 +31,7 @@
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();
 
-  const filePath = $derived(component.files[0]?.path ?? t('common.unknown'));
+  const filePath = $derived(displayComponentFilePath(component) ?? t('common.unknown'));
   const fileName = $derived(fileNameFromPath(filePath));
   const candidates = $derived(group?.candidates ?? []);
 

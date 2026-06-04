@@ -508,11 +508,11 @@ mod tests {
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_upscaler.dll"),
-            Some(GraphicsTechnology::AmdFsr)
+            Some(GraphicsTechnology::AmdFsrUpscaler)
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_upscaler_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsr)
+            Some(GraphicsTechnology::AmdFsrUpscaler)
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_vk.dll"),
@@ -534,8 +534,13 @@ mod tests {
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsr),
-            "the FSR loader must join the AMD FSR family so it groups into the bundle"
+            Some(GraphicsTechnology::AmdFsrLoader),
+            "the FSR loader must be recognized as its own exact technology"
+        );
+        assert_eq!(
+            patterns.match_file_name("amd_fidelityfx_radiancecache_dx12.dll"),
+            Some(GraphicsTechnology::AmdFsrRadianceCache),
+            "the FSR radiance cache must be recognized as its own exact technology"
         );
     }
 

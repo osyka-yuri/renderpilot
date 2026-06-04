@@ -1,4 +1,5 @@
 import { humanizeToken } from '@shared/text';
+import { fileNameFromPath } from '@shared/path';
 
 export type LibraryVendorKey = 'nvidia' | 'amd' | 'intel' | 'other';
 
@@ -6,6 +7,10 @@ export type PresentedLibrary = {
   tag: string;
   label: string;
   vendorKey: LibraryVendorKey;
+};
+
+type LibraryFilePathLike = {
+  path: string;
 };
 
 export const libraryVendorOrder: readonly LibraryVendorKey[] = ['nvidia', 'amd', 'intel', 'other'];
@@ -32,8 +37,11 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   intel_xefg: 'Intel XeFG',
   intel_xell: 'Intel Xe Low Latency',
   amd_fsr: 'AMD FSR',
+  amd_fsr_upscaler: 'AMD FSR Upscaler',
   amd_fsr_frame_generation: 'AMD FSR Frame Generation',
   amd_fsr_ray_regeneration: 'AMD FSR Ray Regeneration',
+  amd_fsr_loader: 'AMD FSR Loader',
+  amd_fsr_radiance_cache: 'AMD FSR Radiance Cache',
 };
 
 const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
@@ -49,6 +57,9 @@ const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'AMD FSR Frame Generation': 'FSR FG',
   'AMD FSR Ray Regeneration': 'FSR RR',
 };
+
+const AMD_FSR_TECHNOLOGY = 'amd_fsr';
+const AMD_FSR_ENTRY_POINT_FILE = 'amd_fidelityfx_dx12.dll';
 
 const VENDOR_BLUEPRINTS: readonly {
   key: LibraryVendorKey;
@@ -155,6 +166,23 @@ export function createPresentedLibraries(
   }
 
   return Array.from(librariesByTag.values()).sort(comparePresentedLibraries);
+}
+
+export function displayLibraryFilePath(
+  technology: string | null | undefined,
+  files: readonly LibraryFilePathLike[],
+): string | null {
+  if (technology === AMD_FSR_TECHNOLOGY) {
+    const entryPoint = files.find(
+      (file) => fileNameFromPath(file.path).toLowerCase() === AMD_FSR_ENTRY_POINT_FILE,
+    );
+
+    if (entryPoint) {
+      return entryPoint.path;
+    }
+  }
+
+  return files[0]?.path ?? null;
 }
 
 function normalizeVendorValue(value?: string | null): string {

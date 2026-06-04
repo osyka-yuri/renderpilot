@@ -84,16 +84,7 @@ pub(crate) fn get_game_details_with_storage(
     let game = require_game(storage, &game_id)?;
     let components = storage.list_components_for_game(&game_id)?;
 
-    // FSR split members are only offered as packages; drop any stray single-file
-    // member artifact (e.g. one downloaded directly via library management).
-    let local_artifacts: Vec<_> = storage
-        .list_artifacts()?
-        .into_iter()
-        .filter(|artifact| {
-            artifact.files().len() > 1
-                || !renderpilot_application::fsr::is_split_member(artifact.file_name())
-        })
-        .collect();
+    let local_artifacts = storage.list_artifacts()?;
     let mut all_artifacts = local_artifacts.clone();
 
     let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();

@@ -3,7 +3,7 @@ mod scan;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
@@ -472,25 +472,25 @@ fn swappability_for(technology: GraphicsTechnology) -> Swappability {
 }
 
 /// Groups detected library files into one [`GraphicsComponent`] per
-/// `(directory, technology family)`.
+/// `(directory, grouping technology)`.
 ///
-/// Files that belong to the same technology *family* in the same directory are
-/// merged into a single bundle component, so AMD FSR 4's three DLLs surface as
-/// one "AMD FSR" component instead of three independent entries. Technologies
-/// that are their own family (DLSS variants, XeSS, ...) keep one component per
-/// file as before.
+/// Files normally group by technology family inside one directory. Native FSR 4
+/// directories are the exception: when a directory contains an
+/// [`GraphicsTechnology::AmdFsrLoader`] and no [`GraphicsTechnology::AmdFsr`]
+/// entry point, each FSR DLL keeps its exact technology and becomes its own
+/// single-file component.
 pub fn group_into_components(
     game: &GameInstallation,
     libraries: &[DetectedLibraryFile],
 ) -> AppResult<Vec<GraphicsComponent>> {
     group_detected_files(libraries)
         .into_iter()
-        .map(|group| build_grouped_component(game, &group))
+        .map(|group| build_grouped_component(game, group))
         .collect()
 }
 
 /// Groups detected library files into one locally-observed [`LibraryArtifact`]
-/// bundle per `(directory, technology family)`, mirroring
+/// bundle per `(directory, grouping technology)`, mirroring
 /// [`group_into_components`].
 pub fn group_into_artifacts(
     game_id: &GameId,
@@ -498,27 +498,37 @@ pub fn group_into_artifacts(
 ) -> AppResult<Vec<LibraryArtifact>> {
     group_detected_files(libraries)
         .into_iter()
-        .map(|group| build_grouped_artifact(game_id, &group))
+        .map(|group| build_grouped_artifact(game_id, group))
         .collect()
 }
 
-/// Partitions detected files into groups keyed by `(parent_dir, family)`,
-/// preserving first-seen order so component/artifact ordering is deterministic.
-fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<Vec<&DetectedLibraryFile>> {
-    let mut groups: Vec<Vec<&DetectedLibraryFile>> = Vec::new();
+#[derive(Debug)]
+struct GroupedDetectedFiles<'a> {
+    technology: GraphicsTechnology,
+    files: Vec<&'a DetectedLibraryFile>,
+}
+
+/// Partitions detected files into groups keyed by `(parent_dir, grouping
+/// technology)`, preserving first-seen order so component/artifact ordering is
+/// deterministic.
+fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<GroupedDetectedFiles<'_>> {
+    let native_fsr_directories = native_fsr_directories(libraries);
+    let mut groups: Vec<GroupedDetectedFiles<'_>> = Vec::new();
     let mut index: HashMap<(String, &'static str), usize> = HashMap::new();
 
     for library in libraries {
-        let key = (
-            parent_directory(library.file_path()),
-            library.technology().family().as_slug(),
-        );
+        let parent_dir = parent_directory(library.file_path());
+        let technology = grouping_technology(library, &parent_dir, &native_fsr_directories);
+        let key = (parent_dir, technology.as_slug());
 
         if let Some(&existing) = index.get(&key) {
-            groups[existing].push(library);
+            groups[existing].files.push(library);
         } else {
             index.insert(key, groups.len());
-            groups.push(vec![library]);
+            groups.push(GroupedDetectedFiles {
+                technology,
+                files: vec![library],
+            });
         }
     }
 
@@ -527,18 +537,17 @@ fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<Vec<&DetectedL
 
 fn build_grouped_component(
     game: &GameInstallation,
-    group: &[&DetectedLibraryFile],
+    group: GroupedDetectedFiles<'_>,
 ) -> AppResult<GraphicsComponent> {
-    let ordered = order_with_primary_first(group);
-    let family = ordered[0].technology().family();
+    let ordered = order_with_primary_first(&group.files);
     let parent_dir = parent_directory(ordered[0].file_path());
-    let component_id = grouped_component_id(game, family, &parent_dir)?;
+    let component_id = grouped_component_id(game, group.technology, &parent_dir)?;
 
     let mut component = GraphicsComponent::new(
         component_id,
         game.id().clone(),
         group_kind(&ordered),
-        family,
+        group.technology,
         group_swappability(&ordered),
     );
 
@@ -555,10 +564,9 @@ fn build_grouped_component(
 
 fn build_grouped_artifact(
     game_id: &GameId,
-    group: &[&DetectedLibraryFile],
+    group: GroupedDetectedFiles<'_>,
 ) -> AppResult<LibraryArtifact> {
-    let ordered = order_with_primary_first(group);
-    let family = ordered[0].technology().family();
+    let ordered = order_with_primary_first(&group.files);
     let artifact_id = ArtifactId::for_bundle(ordered.iter().map(|file| file.sha256()));
 
     let files: Vec<ComponentFile> = ordered
@@ -574,7 +582,7 @@ fn build_grouped_artifact(
 
     LibraryArtifact::new(
         artifact_id,
-        family,
+        group.technology,
         ordered[0].file_name(),
         files,
         ArtifactTrustLevel::LocalObserved,
@@ -649,15 +657,55 @@ fn group_swappability(ordered: &[&DetectedLibraryFile]) -> Swappability {
 
 fn grouped_component_id(
     game: &GameInstallation,
-    family: GraphicsTechnology,
+    technology: GraphicsTechnology,
     parent_dir: &str,
 ) -> AppResult<ComponentId> {
     ComponentId::new(format!(
         "component:{}:{}:{parent_dir}",
         game.id(),
-        family.as_slug()
+        technology.as_slug()
     ))
     .map_err(detection_error)
+}
+
+fn native_fsr_directories(libraries: &[DetectedLibraryFile]) -> HashSet<String> {
+    let mut directories = HashMap::<String, (bool, bool)>::new();
+
+    for library in libraries {
+        if library.technology().family() != GraphicsTechnology::AmdFsr {
+            continue;
+        }
+
+        let summary = directories
+            .entry(parent_directory(library.file_path()))
+            .or_insert((false, false));
+        match library.technology() {
+            GraphicsTechnology::AmdFsrLoader => summary.0 = true,
+            GraphicsTechnology::AmdFsr => summary.1 = true,
+            _ => {}
+        }
+    }
+
+    directories
+        .into_iter()
+        .filter_map(|(directory, (has_loader, has_anchor))| {
+            (has_loader && !has_anchor).then_some(directory)
+        })
+        .collect()
+}
+
+fn grouping_technology(
+    library: &DetectedLibraryFile,
+    parent_dir: &str,
+    native_fsr_directories: &HashSet<String>,
+) -> GraphicsTechnology {
+    if library.technology().family() == GraphicsTechnology::AmdFsr
+        && native_fsr_directories.contains(parent_dir)
+    {
+        return library.technology();
+    }
+
+    library.technology().family()
 }
 
 /// Returns the normalized parent directory of a file path (forward slashes).

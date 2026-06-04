@@ -255,6 +255,10 @@ pub enum GraphicsTechnology {
     #[serde(rename = "amd_fsr")]
     AmdFsr,
 
+    /// AMD FidelityFX Upscaler.
+    #[serde(rename = "amd_fsr_upscaler")]
+    AmdFsrUpscaler,
+
     /// AMD FidelityFX Frame Generation.
     #[serde(rename = "amd_fsr_frame_generation")]
     AmdFsrFrameGeneration,
@@ -262,6 +266,14 @@ pub enum GraphicsTechnology {
     /// AMD FSR Ray Regeneration (denoiser).
     #[serde(rename = "amd_fsr_ray_regeneration")]
     AmdFsrRayRegeneration,
+
+    /// AMD FidelityFX Loader.
+    #[serde(rename = "amd_fsr_loader")]
+    AmdFsrLoader,
+
+    /// AMD FidelityFX Radiance Cache.
+    #[serde(rename = "amd_fsr_radiance_cache")]
+    AmdFsrRadianceCache,
 
     /// Microsoft DirectStorage runtime.
     #[serde(rename = "direct_storage")]
@@ -285,8 +297,11 @@ impl GraphicsTechnology {
         Self::IntelXeFg,
         Self::IntelXeLl,
         Self::AmdFsr,
+        Self::AmdFsrUpscaler,
         Self::AmdFsrFrameGeneration,
         Self::AmdFsrRayRegeneration,
+        Self::AmdFsrLoader,
+        Self::AmdFsrRadianceCache,
         Self::DirectStorage,
         Self::Unknown,
     ];
@@ -304,8 +319,11 @@ impl GraphicsTechnology {
             Self::IntelXeFg => "intel_xefg",
             Self::IntelXeLl => "intel_xell",
             Self::AmdFsr => "amd_fsr",
+            Self::AmdFsrUpscaler => "amd_fsr_upscaler",
             Self::AmdFsrFrameGeneration => "amd_fsr_frame_generation",
             Self::AmdFsrRayRegeneration => "amd_fsr_ray_regeneration",
+            Self::AmdFsrLoader => "amd_fsr_loader",
+            Self::AmdFsrRadianceCache => "amd_fsr_radiance_cache",
             Self::DirectStorage => "direct_storage",
             Self::Unknown => "unknown",
         }
@@ -324,16 +342,18 @@ impl GraphicsTechnology {
 
     /// Returns the technology that represents this technology's swap family.
     ///
-    /// AMD FSR upscaling, frame generation, and ray regeneration ship together as
-    /// one bundle, so they collapse onto [`GraphicsTechnology::AmdFsr`]. Every other
-    /// technology is its own family (DLSS variants stay independent, Streamline is
-    /// already a single technology).
+    /// AMD FSR family members collapse onto [`GraphicsTechnology::AmdFsr`]. Every
+    /// other technology is its own family (DLSS variants stay independent,
+    /// Streamline is already a single technology).
     #[must_use]
     pub const fn family(self) -> Self {
         match self {
-            Self::AmdFsr | Self::AmdFsrFrameGeneration | Self::AmdFsrRayRegeneration => {
-                Self::AmdFsr
-            }
+            Self::AmdFsr
+            | Self::AmdFsrUpscaler
+            | Self::AmdFsrFrameGeneration
+            | Self::AmdFsrRayRegeneration
+            | Self::AmdFsrLoader
+            | Self::AmdFsrRadianceCache => Self::AmdFsr,
             other => other,
         }
     }
@@ -477,6 +497,20 @@ mod tests {
     fn graphics_technology_rejects_unknown_slug() {
         assert_eq!(GraphicsTechnology::from_slug("does_not_exist"), None);
         assert!("does_not_exist".parse::<GraphicsTechnology>().is_err());
+    }
+
+    #[test]
+    fn graphics_technology_fsr_variants_collapse_to_amd_fsr_family() {
+        for technology in [
+            GraphicsTechnology::AmdFsr,
+            GraphicsTechnology::AmdFsrUpscaler,
+            GraphicsTechnology::AmdFsrFrameGeneration,
+            GraphicsTechnology::AmdFsrRayRegeneration,
+            GraphicsTechnology::AmdFsrLoader,
+            GraphicsTechnology::AmdFsrRadianceCache,
+        ] {
+            assert_eq!(technology.family(), GraphicsTechnology::AmdFsr);
+        }
     }
 
     #[test]
