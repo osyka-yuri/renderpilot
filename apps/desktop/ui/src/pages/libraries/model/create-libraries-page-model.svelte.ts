@@ -152,7 +152,9 @@ export function createLibrariesPageModel() {
   }
 
   function handleTypeChange(value: unknown): void {
-    if (typeof value !== 'string' || !isLibraryTypeForVendor(activeVendor, value)) return;
+    if (typeof value !== 'string' || !isLibraryTypeForVendor(activeVendor, value)) {
+      return;
+    }
 
     activeType = value;
     lastTypeByVendor[activeVendor] = value;
@@ -317,6 +319,9 @@ export function createLibrariesPageModel() {
     },
     get activeType() {
       return activeType;
+    },
+    set activeType(value: string | undefined) {
+      handleTypeChange(value);
     },
 
     // Derived

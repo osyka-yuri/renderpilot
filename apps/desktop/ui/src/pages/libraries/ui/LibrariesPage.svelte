@@ -213,8 +213,7 @@
             spacing={0}
             variant="outline"
             class="shrink-0 flex-wrap"
-            value={model.activeType}
-            onValueChange={model.handleTypeChange}
+            bind:value={model.activeType}
           >
             {#each typeOptionsByVendor[vendor.value] as type (type.value)}
               <ToggleGroupItem value={type.value}>{type.label}</ToggleGroupItem>
