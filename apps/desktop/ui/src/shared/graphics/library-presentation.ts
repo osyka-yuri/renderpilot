@@ -1,7 +1,7 @@
 import { humanizeToken } from '@shared/text';
 import { fileNameFromPath } from '@shared/path';
 
-export type LibraryVendorKey = 'nvidia' | 'amd' | 'intel' | 'other';
+export type LibraryVendorKey = 'nvidia' | 'amd' | 'intel' | 'microsoft' | 'other';
 
 export type PresentedLibrary = {
   tag: string;
@@ -13,7 +13,7 @@ type LibraryFilePathLike = {
   path: string;
 };
 
-export const libraryVendorOrder: readonly LibraryVendorKey[] = ['nvidia', 'amd', 'intel', 'other'];
+export const libraryVendorOrder: readonly LibraryVendorKey[] = ['nvidia', 'amd', 'intel', 'microsoft', 'other'];
 
 const LIBRARY_UPPERCASE_WORDS = new Set([
   'AMD',
@@ -42,6 +42,7 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   amd_fsr_ray_regeneration: 'AMD FSR Ray Regeneration',
   amd_fsr_loader: 'AMD FSR Loader',
   amd_fsr_radiance_cache: 'AMD FSR Radiance Cache',
+  direct_storage: 'Microsoft DirectStorage',
 };
 
 /** Sub-tags that are internal to AMD FSR and expanded from the top-level `amd_fsr` alias. */
@@ -67,6 +68,7 @@ const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'AMD FSR': 'FSR',
   'AMD FSR Frame Generation': 'FSR FG',
   'AMD FSR Ray Regeneration': 'FSR RR',
+  'Microsoft DirectStorage': 'DirectStorage',
 };
 
 const AMD_FSR_TECHNOLOGY = 'amd_fsr';
@@ -79,7 +81,8 @@ const VENDOR_BLUEPRINTS: readonly {
   { key: libraryVendorOrder[0], label: 'NVIDIA' },
   { key: libraryVendorOrder[1], label: 'AMD' },
   { key: libraryVendorOrder[2], label: 'Intel' },
-  { key: libraryVendorOrder[3], label: 'Additional' },
+  { key: libraryVendorOrder[3], label: 'Microsoft' },
+  { key: libraryVendorOrder[4], label: 'Additional' },
 ];
 
 export function formatCanonicalLibraryLabel(value?: string | null): string {
@@ -119,6 +122,10 @@ export function libraryVendorKey(value?: string | null): LibraryVendorKey {
 
   if (normalized.startsWith('intel')) {
     return 'intel';
+  }
+
+  if (normalized.startsWith('microsoft') || normalized.startsWith('directstorage')) {
+    return 'microsoft';
   }
 
   return 'other';

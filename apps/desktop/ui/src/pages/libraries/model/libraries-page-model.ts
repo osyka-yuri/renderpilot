@@ -1,6 +1,11 @@
 import { trimToEmpty } from '@shared/text';
 import { t, getLocale } from '@shared/i18n';
 import type { LibraryManifestEntry } from '@entities/library';
+import {
+  libraryVendorOrder,
+  vendorLabelForLibraryVendorKey,
+  type LibraryVendorKey,
+} from '@shared/graphics';
 
 export type LibraryGroupKey =
   | 'dlss'
@@ -18,9 +23,10 @@ export type LibraryGroupKey =
   | 'xess_dx11'
   | 'xess_fg'
   | 'xell'
+  | 'dstorage'
   | 'other';
 
-export type Vendor = 'nvidia' | 'amd' | 'intel';
+export type Vendor = Exclude<LibraryVendorKey, 'other'>;
 
 export type VendorOption = Readonly<{
   value: Vendor;
@@ -37,11 +43,12 @@ export type LibraryTypeValue = (typeof typeOptionsByVendor)[Vendor][number]['val
 
 const DEFAULT_GROUP_KEY: LibraryGroupKey = 'other';
 
-export const vendorOptions = [
-  { value: 'nvidia', label: 'NVIDIA' },
-  { value: 'amd', label: 'AMD' },
-  { value: 'intel', label: 'Intel' },
-] as const satisfies readonly VendorOption[];
+export const vendorOptions = libraryVendorOrder
+  .filter((key): key is Vendor => key !== 'other')
+  .map((value) => ({
+    value,
+    label: vendorLabelForLibraryVendorKey(value),
+  })) satisfies readonly VendorOption[];
 
 export const typeOptionsByVendor = {
   nvidia: [
@@ -64,6 +71,9 @@ export const typeOptionsByVendor = {
     { value: 'xess_dx11', label: 'XeSS DX11', groupKey: 'xess_dx11' },
     { value: 'xefg', label: 'XeFG', groupKey: 'xess_fg' },
     { value: 'xell', label: 'XeLL', groupKey: 'xell' },
+  ],
+  microsoft: [
+    { value: 'dstorage', label: 'DirectStorage', groupKey: 'dstorage' },
   ],
 } as const satisfies Record<Vendor, readonly LibraryTypeOption[]>;
 
@@ -92,6 +102,7 @@ const libraryIdToGroupKeyMap: Readonly<Record<string, LibraryGroupKey | undefine
   libxess_dx11: 'xess_dx11',
   libxess_fg: 'xess_fg',
   libxell: 'xell',
+  dstorage: 'dstorage',
 };
 
 function isValidDate(date: Date): boolean {

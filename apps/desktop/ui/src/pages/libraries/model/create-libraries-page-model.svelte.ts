@@ -39,11 +39,11 @@ type RunExclusiveEntryActionOptions = {
 
 const DEFAULT_VENDOR = vendorOptions[0].value;
 
-const DEFAULT_TYPE_BY_VENDOR: Readonly<Record<Vendor, LibraryTypeValue>> = {
-  nvidia: getDefaultTypeForVendor('nvidia'),
-  amd: getDefaultTypeForVendor('amd'),
-  intel: getDefaultTypeForVendor('intel'),
-};
+const DEFAULT_TYPE_BY_VENDOR = Object.freeze(
+  Object.fromEntries(
+    vendorOptions.map((vendor) => [vendor.value, getDefaultTypeForVendor(vendor.value)]),
+  ),
+) as Readonly<Record<Vendor, LibraryTypeValue>>;
 
 export type LibrariesPageModel = ReturnType<typeof createLibrariesPageModel>;
 

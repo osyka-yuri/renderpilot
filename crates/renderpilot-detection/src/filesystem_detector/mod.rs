@@ -465,7 +465,6 @@ fn confidence_for(
 fn swappability_for(technology: GraphicsTechnology) -> Swappability {
     match technology {
         GraphicsTechnology::NvidiaStreamline => Swappability::BundleOnly,
-        GraphicsTechnology::DirectStorage => Swappability::ReadOnly,
         GraphicsTechnology::Unknown => Swappability::Unknown,
         _ => Swappability::Swappable,
     }

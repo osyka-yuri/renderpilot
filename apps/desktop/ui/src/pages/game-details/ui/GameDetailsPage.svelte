@@ -82,12 +82,13 @@
   const tabs = $derived.by((): VendorTab[] => {
     if (!details) return [];
 
-    const byVendor: Record<LibraryVendorKey, GameGraphicsComponent[]> = {
-      nvidia: [],
-      amd: [],
-      intel: [],
-      other: [],
-    };
+    const byVendor = libraryVendorOrder.reduce(
+      (acc, key) => {
+        acc[key] = [];
+        return acc;
+      },
+      {} as Record<LibraryVendorKey, GameGraphicsComponent[]>,
+    );
 
     for (const component of details.components) {
       const key = libraryVendorKey(component.technology);
