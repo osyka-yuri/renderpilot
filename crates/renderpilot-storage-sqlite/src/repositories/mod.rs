@@ -309,10 +309,10 @@ mod tests {
             .expect("operation entries should list");
 
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].operation(), &operation_a);
-        assert_eq!(entries[0].items(), operation_a_items.as_slice());
-        assert_eq!(entries[1].operation(), &operation_b);
-        assert_eq!(entries[1].items(), operation_b_items.as_slice());
+        assert_eq!(entries[0].operation(), &operation_b);
+        assert_eq!(entries[0].items(), operation_b_items.as_slice());
+        assert_eq!(entries[1].operation(), &operation_a);
+        assert_eq!(entries[1].items(), operation_a_items.as_slice());
     }
 
     struct StorageFixture {

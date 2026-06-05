@@ -72,9 +72,7 @@ export const typeOptionsByVendor = {
     { value: 'xefg', label: 'XeFG', groupKey: 'xess_fg' },
     { value: 'xell', label: 'XeLL', groupKey: 'xell' },
   ],
-  microsoft: [
-    { value: 'dstorage', label: 'DirectStorage', groupKey: 'dstorage' },
-  ],
+  microsoft: [{ value: 'dstorage', label: 'DirectStorage', groupKey: 'dstorage' }],
 } as const satisfies Record<Vendor, readonly LibraryTypeOption[]>;
 
 const vendorValues = new Set<Vendor>(vendorOptions.map(({ value }) => value));

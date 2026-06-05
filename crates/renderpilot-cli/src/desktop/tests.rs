@@ -361,7 +361,7 @@ fn query_game_cards_excludes_unknown_from_visible_update_count() {
         "C:/Artifacts/visible-updates/nvngx_dlss.dll",
         Some("3.0.0"),
         b"artifact-visible-updates-dlss",
-        Some(game.id().as_str()),
+        None,
     ));
     fixture.store_artifact(sample_artifact_from_bytes(
         "artifact:visible-updates:unknown",
@@ -369,7 +369,7 @@ fn query_game_cards_excludes_unknown_from_visible_update_count() {
         "C:/Artifacts/visible-updates/mystery.dll",
         Some("2.0.0"),
         b"artifact-visible-updates-unknown",
-        Some(game.id().as_str()),
+        None,
     ));
 
     let result = query_all_game_cards().expect("query should succeed");
@@ -663,7 +663,7 @@ fn get_game_details_excludes_unknown_components_and_candidate_groups() {
         "C:/Artifacts/nvngx_dlss.dll",
         Some("3.0.0"),
         b"artifact-dlss",
-        Some(game.id().as_str()),
+        None,
     ));
     fixture.store_artifact(sample_artifact_from_bytes(
         "artifact:details:unknown",
@@ -671,7 +671,7 @@ fn get_game_details_excludes_unknown_components_and_candidate_groups() {
         "C:/Artifacts/mystery.dll",
         Some("2.0.0"),
         b"artifact-unknown",
-        Some(game.id().as_str()),
+        None,
     ));
 
     let result = get_game_details(game.id().as_str()).expect("details should load");

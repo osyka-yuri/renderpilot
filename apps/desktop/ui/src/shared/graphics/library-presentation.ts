@@ -13,7 +13,13 @@ type LibraryFilePathLike = {
   path: string;
 };
 
-export const libraryVendorOrder: readonly LibraryVendorKey[] = ['nvidia', 'amd', 'intel', 'microsoft', 'other'];
+export const libraryVendorOrder: readonly LibraryVendorKey[] = [
+  'nvidia',
+  'amd',
+  'intel',
+  'microsoft',
+  'other',
+];
 
 const LIBRARY_UPPERCASE_WORDS = new Set([
   'AMD',
