@@ -19,7 +19,7 @@
   let { stats }: Props = $props();
 
   const badges = $derived.by<DashboardBadge[]>(() => {
-    const baseBadges: DashboardBadge[] = [
+    return [
       {
         id: 'games',
         label: t('game.dashboard.games', { count: stats.games }),
@@ -29,19 +29,6 @@
         id: 'updates',
         label: t('game.dashboard.updates', { count: stats.updates }),
         variant: 'outline',
-      },
-    ];
-
-    if (stats.rollbacksReady <= 0) {
-      return baseBadges;
-    }
-
-    return [
-      ...baseBadges,
-      {
-        id: 'rollbacks-ready',
-        label: t('game.dashboard.rollbacksReady', { count: stats.rollbacksReady }),
-        variant: 'secondary',
       },
     ];
   });
