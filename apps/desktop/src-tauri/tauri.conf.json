@@ -9,6 +9,24 @@
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "RenderPilot",
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  },
   "app": {
     "withGlobalTauri": true,
     "windows": [
