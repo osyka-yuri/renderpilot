@@ -44,6 +44,17 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   amd_fsr_radiance_cache: 'AMD FSR Radiance Cache',
 };
 
+/** Sub-tags that are internal to AMD FSR and expanded from the top-level `amd_fsr` alias. */
+export const AMD_FSR_ALIAS_TAGS: readonly string[] = [
+  'amd_fsr_upscaler',
+  'amd_fsr_loader',
+  'amd_fsr_radiance_cache',
+];
+
+export const ALL_KNOWN_LIBRARIES: readonly string[] = Object.keys(CANONICAL_LIBRARY_LABELS).filter(
+  (key) => !AMD_FSR_ALIAS_TAGS.includes(key),
+);
+
 const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'DLSS Super Resolution': 'DLSS SR',
   'DLSS Frame Generation': 'DLSS FG',

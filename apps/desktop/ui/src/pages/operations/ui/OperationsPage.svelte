@@ -31,7 +31,7 @@
     details?: OperationHistoryDetails | null;
   };
 
-  const EMPTY_OPERATIONS: readonly OperationViewModel[] = [];
+  const EMPTY_OPERATIONS: OperationViewModel[] = [];
 
   const { gameCard = null, details = null }: Props = $props();
 
@@ -39,7 +39,7 @@
     gameCard === null ? undefined : t('operations.subtitleGame', { title: gameCard.title }),
   );
 
-  const operations = $derived.by((): readonly OperationViewModel[] => {
+  const operations = $derived.by((): OperationViewModel[] => {
     if (details === null) {
       return EMPTY_OPERATIONS;
     }

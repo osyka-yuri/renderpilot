@@ -5,8 +5,8 @@ export { type GameCardViewModel, toGameCardViewModel } from './model/game-card-v
 export { type DashboardStats, getDashboardStats } from './model/dashboard-stats';
 
 export {
+  expandLibraryFilterAliases,
   normalizeLibraryValues,
-  extractAvailableLibrariesFromCards,
   intersectLibraries,
   hasPartialLibrarySelection,
 } from './model/library-filters';

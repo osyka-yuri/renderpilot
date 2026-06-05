@@ -1,11 +1,12 @@
 import type { GameSummary, GameCardMenuHandle } from '@entities/game';
 import {
   ALL_KNOWN_LAUNCHERS,
-  extractAvailableLibrariesFromCards,
+  expandLibraryFilterAliases,
   toGameCardViewModel,
   setGameFavorite,
   setGameHidden,
 } from '@entities/game';
+import { ALL_KNOWN_LIBRARIES } from '@shared/graphics';
 import { createGamesFiltersModel } from '@features/filter-games';
 import {
   isCoverOperationBusy as isCoverOperationBusyState,
@@ -35,9 +36,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   let hiddenCount = $state<number>(0);
   const scheduler = createGamesPageQueryScheduler();
 
-  const queryAvailableLibraries = $derived(extractAvailableLibrariesFromCards(input.getGames()));
   const filtersModel = createGamesFiltersModel({
-    getAvailableLibraries: () => queryAvailableLibraries,
+    getAvailableLibraries: () => ALL_KNOWN_LIBRARIES,
     getAvailableLaunchers: () => ALL_KNOWN_LAUNCHERS,
   });
   const gameItems = $derived(queriedGames.map((game) => toGameCardViewModel(game)));
@@ -63,7 +63,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
       filtersReady,
       filtersReady,
       filtersModel.filtersState.searchQuery,
-      filtersModel.filtersState.appliedLibraries,
+      expandLibraryFilterAliases(filtersModel.filtersState.appliedLibraries),
       filtersModel.filtersState.appliedLaunchers,
       filtersModel.filtersState.appliedShowHidden,
       filtersModel.filtersState.appliedFavoritesOnly,

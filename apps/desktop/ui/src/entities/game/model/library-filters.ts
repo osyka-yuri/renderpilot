@@ -1,18 +1,18 @@
-import type { GameSummary } from './types';
 import { normalizeUniqueTrimmedStrings } from '@shared/text';
+import { AMD_FSR_ALIAS_TAGS } from '@shared/graphics';
 
 export function normalizeLibraryValues(values: readonly string[]): string[] {
   return normalizeUniqueTrimmedStrings(values);
 }
 
-export function extractAvailableLibrariesFromCards(cards: readonly GameSummary[]): string[] {
-  const libraries: string[] = [];
+export function expandLibraryFilterAliases(libraries: readonly string[]): string[] {
+  return libraries.flatMap((library) => {
+    if (library === 'amd_fsr') {
+      return ['amd_fsr', ...AMD_FSR_ALIAS_TAGS];
+    }
 
-  for (const card of cards) {
-    libraries.push(...card.library_tags);
-  }
-
-  return normalizeLibraryValues(libraries).filter((library) => library.toLowerCase() !== 'unknown');
+    return [library];
+  });
 }
 
 /** Keep only values still present in the catalog union. */
