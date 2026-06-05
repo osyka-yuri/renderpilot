@@ -30,7 +30,11 @@
   <ScrollAreaPrimitive.Viewport
     bind:ref={viewportRef}
     data-slot="scroll-area-viewport"
-    class="size-full rounded-[inherit] ring-ring/10 outline-ring/50 transition-[color,box-shadow] focus-visible:ring-4 focus-visible:outline-1 dark:ring-ring/20 dark:outline-ring/40"
+    class={cn(
+      'size-full rounded-[inherit] ring-ring/10 outline-ring/50 transition-[color,box-shadow] focus-visible:ring-4 focus-visible:outline-1 dark:ring-ring/20 dark:outline-ring/40',
+      (orientation === 'vertical' || orientation === 'both') && 'pr-3',
+      (orientation === 'horizontal' || orientation === 'both') && 'pb-3',
+    )}
   >
     {@render children?.()}
   </ScrollAreaPrimitive.Viewport>

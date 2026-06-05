@@ -228,7 +228,9 @@
       onRollback={gameDetailsModel.handleRollback}
       onBulkSwap={gameDetailsModel.handleBulkSwap}
       onBulkRollback={gameDetailsModel.handleBulkRollback}
-      onOpenOperations={() => model.handleNavigate('operations')}
+      onOpenOperations={() => {
+        model.handleNavigate('operations');
+      }}
     />
   {:else if model.screen === 'operations'}
     <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />

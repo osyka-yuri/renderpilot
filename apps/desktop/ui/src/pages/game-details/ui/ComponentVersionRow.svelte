@@ -105,7 +105,7 @@
               ? `v${candidate.version}${isDebug ? ' (Debug)' : ''}`
               : t('common.unknown')}
             <SelectItem value={candidate.artifact_id} label={versionLabel}>
-              {#snippet children(snippetProps)}
+              {#snippet children(snippetProps: { selected: boolean })}
                 <span class="truncate pr-6">{versionLabel}</span>
                 {#if !candidate.is_downloaded && !snippetProps.selected}
                   <span
