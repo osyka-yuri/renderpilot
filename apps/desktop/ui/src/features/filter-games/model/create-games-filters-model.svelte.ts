@@ -1,25 +1,14 @@
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
-import {
-  applyDraftFilters,
-  cancelFilterDialog,
-  createGamesFilterPersistence,
-  createInitialGamesFilterState,
-  openFilterDialog,
-  setDraftLibraries,
-  setDraftLaunchers,
-  setDraftLauncherOrder,
-  type PersistedGamesFilters,
-  withSearchQuery,
-} from './index-internal';
+import { createGamesFilterPersistence, type PersistedGamesFilters } from './index-internal';
 import {
   hasFilterIndicator as checkHasFilterIndicator,
   loadPersistedGamesFilters,
-  shouldQueueAvailabilityPersist,
-  syncGamesFilterState,
 } from './games-filter-controller';
 import { buildLibraryFilterOptions, groupLibraryFilterOptions } from './library-filter-options';
 import { buildLauncherFilterOptions } from './launcher-filter-options';
-import { canonicalizeLauncherOrder } from './launcher-order';
+
+import { GamesFiltersStore } from './games-filters-store.svelte';
+import { setupGamesFiltersSync } from './games-filters-sync.svelte';
 
 export type GamesFiltersModel = ReturnType<typeof createGamesFiltersModel>;
 
@@ -29,73 +18,37 @@ export type GamesFiltersModelInput = {
 };
 
 export function createGamesFiltersModel(input: GamesFiltersModelInput) {
-  let filtersState = $state(createInitialGamesFilterState());
+  const store = new GamesFiltersStore();
+
   let filterPreferenceLoaded = $state(false);
   let persistedFilters = $state<PersistedGamesFilters | null>(null);
   let filtersAnchorRef = $state<HTMLDivElement | null>(null);
-  let availabilityPersistSnapshot = $state('');
 
   const filterPersistence = createGamesFilterPersistence({
     setCatalogSetting,
     settingKey: GAMES_FILTERS_CATALOG_SETTING_KEY,
   });
 
+  const sync = setupGamesFiltersSync(store, filterPersistence, {
+    getPreferenceLoaded: () => filterPreferenceLoaded,
+    getPersistedFilters: () => persistedFilters,
+    getAvailableLibraries: () => input.getAvailableLibraries(),
+    getAvailableLaunchers: () => input.getAvailableLaunchers(),
+  });
+
   const libraryFilterOptions = $derived(buildLibraryFilterOptions(input.getAvailableLibraries()));
-
   const groupedLibraryFilterOptions = $derived(groupLibraryFilterOptions(libraryFilterOptions));
-
   const launcherFilterOptions = $derived(buildLauncherFilterOptions(input.getAvailableLaunchers()));
 
   const hasFilterIndicator = $derived(
     checkHasFilterIndicator(
-      filtersState.searchQuery,
-      filtersState.appliedLibraries,
+      store.state.searchQuery,
+      store.state.appliedLibraries,
       input.getAvailableLibraries(),
-      filtersState.appliedLaunchers,
+      store.state.appliedLaunchers,
       input.getAvailableLaunchers(),
     ),
   );
-
-  $effect(() => {
-    const syncResult = syncGamesFilterState(
-      filtersState,
-      filterPreferenceLoaded,
-      persistedFilters,
-      input.getAvailableLibraries(),
-      input.getAvailableLaunchers(),
-    );
-
-    if (syncResult.state !== filtersState) {
-      filtersState = syncResult.state;
-    }
-
-    if (!syncResult.didAdjustApplied) {
-      return;
-    }
-
-    const persistResult = shouldQueueAvailabilityPersist(
-      syncResult.state,
-      filterPreferenceLoaded,
-      availabilityPersistSnapshot,
-    );
-
-    if (!persistResult.shouldQueue) {
-      return;
-    }
-
-    availabilityPersistSnapshot = persistResult.nextSnapshot;
-
-    void filterPersistence
-      .persistFilters(createPersistenceContext())
-      .catch((error: unknown) => {
-        console.error('Failed to persist adjusted game filters.', error);
-      })
-      .finally(() => {
-        if (availabilityPersistSnapshot === persistResult.nextSnapshot) {
-          availabilityPersistSnapshot = '';
-        }
-      });
-  });
 
   async function loadPreferences(isDisposed: () => boolean): Promise<void> {
     try {
@@ -117,95 +70,9 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     }
   }
 
-  function createPersistenceContext() {
-    return {
-      getState: () => filtersState,
-      setState: (next: typeof filtersState) => {
-        filtersState = next;
-      },
-    };
-  }
-
-  function handleDialogOpenChange(nextOpen: boolean): void {
-    if (nextOpen) {
-      filtersState = openFilterDialog(filtersState);
-      return;
-    }
-
-    filtersState = cancelFilterDialog(filtersState);
-  }
-
-  async function commitFilterSelection(): Promise<void> {
-    filtersState = applyDraftFilters(filtersState);
-
-    try {
-      await filterPersistence.persistFilters(createPersistenceContext());
-    } catch (error: unknown) {
-      console.error('Failed to persist selected game filters.', error);
-    }
-  }
-
-  function applyFilterSelection(): void {
-    void commitFilterSelection();
-  }
-
-  function cancelFilterSelection(): void {
-    filtersState = cancelFilterDialog(filtersState);
-  }
-
-  function toggleFiltersDialog(): void {
-    handleDialogOpenChange(!filtersState.isDialogOpen);
-  }
-
-  function handleDraftLibrariesChange(nextLibraries: readonly string[]): void {
-    filtersState = setDraftLibraries(filtersState, nextLibraries);
-  }
-
-  function handleDraftLaunchersChange(nextLaunchers: readonly string[]): void {
-    filtersState = setDraftLaunchers(filtersState, nextLaunchers);
-  }
-
-  function handleDraftLauncherOrderChange(nextOrder: readonly string[]): void {
-    filtersState = setDraftLauncherOrder(filtersState, nextOrder);
-  }
-
-  function resetFilters(): void {
-    filtersState = withSearchQuery(filtersState, '');
-    filtersState = setDraftLibraries(filtersState, filtersState.availableLibraries);
-    filtersState = setDraftLaunchers(filtersState, filtersState.availableLaunchers);
-    filtersState = setDraftLauncherOrder(
-      filtersState,
-      canonicalizeLauncherOrder([], filtersState.availableLaunchers),
-    );
-    filtersState = applyDraftFilters(filtersState);
-
-    void filterPersistence.persistFilters(createPersistenceContext()).catch((error: unknown) => {
-      console.error('Failed to persist reset game filters.', error);
-    });
-  }
-
-  function setSearchQuery(nextValue: string): void {
-    const nextState = withSearchQuery(filtersState, nextValue);
-
-    if (nextState === filtersState) {
-      return;
-    }
-
-    filtersState = nextState;
-    filterPersistence.queueSearchPersist(createPersistenceContext());
-  }
-
-  function flushSearchPersist(): void {
-    filterPersistence.flushQueuedSearchPersist(createPersistenceContext());
-  }
-
-  function dispose(): void {
-    filterPersistence.dispose();
-  }
-
   return {
     get filtersState() {
-      return filtersState;
+      return store.state;
     },
     get filtersAnchorRef() {
       return filtersAnchorRef;
@@ -223,16 +90,48 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
       return hasFilterIndicator;
     },
     loadPreferences,
-    handleDialogOpenChange,
-    applyFilterSelection,
-    cancelFilterSelection,
-    toggleFiltersDialog,
-    handleDraftLibrariesChange,
-    handleDraftLaunchersChange,
-    handleDraftLauncherOrderChange,
-    resetFilters,
-    setSearchQuery,
-    flushSearchPersist,
-    dispose,
+
+    // Delegated Store Actions
+    handleDialogOpenChange: (nextOpen: boolean) => {
+      store.handleDialogOpenChange(nextOpen);
+    },
+    applyFilterSelection: () => {
+      store.applyFilterSelection();
+    },
+    cancelFilterSelection: () => {
+      store.cancelFilterSelection();
+    },
+    toggleFiltersDialog: () => {
+      store.toggleFiltersDialog();
+    },
+    handleDraftLibrariesChange: (nextLibraries: readonly string[]) => {
+      store.handleDraftLibrariesChange(nextLibraries);
+    },
+    handleDraftLaunchersChange: (nextLaunchers: readonly string[]) => {
+      store.handleDraftLaunchersChange(nextLaunchers);
+    },
+    handleDraftLauncherOrderChange: (nextOrder: readonly string[]) => {
+      store.handleDraftLauncherOrderChange(nextOrder);
+    },
+    quickToggleFavoritesOnly: () => {
+      store.quickToggleFavoritesOnly();
+    },
+    quickToggleShowHidden: () => {
+      store.quickToggleShowHidden();
+    },
+    resetFilters: () => {
+      store.resetFilters();
+    },
+    setSearchQuery: (nextValue: string) => {
+      store.setSearchQuery(nextValue);
+    },
+
+    // Delegated Sync Actions
+    flushSearchPersist: () => {
+      sync.flushSearchPersist();
+    },
+    dispose: () => {
+      sync.dispose();
+    },
   };
 }

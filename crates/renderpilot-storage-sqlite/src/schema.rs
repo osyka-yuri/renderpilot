@@ -4,15 +4,15 @@ use rusqlite::{Connection, Error as SqliteError, OptionalExtension, TransactionB
 use crate::error::storage_context;
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
-const NVAPI_MIGRATION: &str = include_str!("../migrations/0002_nvapi.sql");
 
 // Bumped to 3 for the bundle-swap reshape of `library_artifacts` (files_json) and
 // the new `component_backups` table: a stale v2 catalog has the old column shape,
 // so it must be rebuilt rather than kept.
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 const REQUIRED_TABLES: &[&str] = &[
     "games",
+    "game_ui_state",
     "game_covers",
     "components",
     "component_backups",
@@ -113,10 +113,7 @@ fn reset_catalog_schema(connection: &Connection) -> AppResult<()> {
 fn apply_initial_migration(connection: &Connection) -> AppResult<()> {
     connection
         .execute_batch(INITIAL_MIGRATION)
-        .map_err(|error| storage_context("could not apply sqlite initial migration", error))?;
-    connection
-        .execute_batch(NVAPI_MIGRATION)
-        .map_err(|error| storage_context("could not apply sqlite nvapi migration", error))
+        .map_err(|error| storage_context("could not apply sqlite initial migration", error))
 }
 
 fn read_user_version(connection: &Connection) -> AppResult<i32> {

@@ -252,6 +252,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::fetch_game_cover,
         commands::clear_game_cover,
         commands::set_game_cover,
+        commands::set_game_favorite,
+        commands::set_game_hidden,
         commands::get_catalog_setting,
         commands::set_catalog_setting,
         // Operations

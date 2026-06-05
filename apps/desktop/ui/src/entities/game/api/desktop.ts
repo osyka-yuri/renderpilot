@@ -41,3 +41,23 @@ export async function getGameDetails(gameId: string): Promise<GameDetails> {
     gameId: requireNonBlankString(gameId, 'gameId'),
   });
 }
+
+export async function setGameFavorite(
+  gameId: string,
+  isFavorite: boolean,
+): Promise<{ saved: boolean }> {
+  return invokeDesktop('set_game_favorite', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+    isFavorite,
+  });
+}
+
+export async function setGameHidden(
+  gameId: string,
+  isHidden: boolean,
+): Promise<{ saved: boolean }> {
+  return invokeDesktop('set_game_hidden', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+    isHidden,
+  });
+}

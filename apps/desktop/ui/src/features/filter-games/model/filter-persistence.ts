@@ -9,6 +9,8 @@ export type PersistedGamesFilters = {
   launchers: string[];
   launcherOrder: string[];
   searchQuery: string;
+  showHidden: boolean;
+  favoritesOnly: boolean;
 };
 
 export function normalizeSearchQuery(value: string): string {
@@ -23,6 +25,8 @@ export function normalizePersistedGamesFilters(
     launchers: normalizeLauncherValues(filters.launchers),
     launcherOrder: normalizeLauncherValues(filters.launcherOrder),
     searchQuery: normalizeSearchQuery(filters.searchQuery),
+    showHidden: filters.showHidden,
+    favoritesOnly: filters.favoritesOnly,
   };
 }
 
@@ -47,6 +51,8 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
       launchers: [],
       launcherOrder: [],
       searchQuery: EMPTY_SEARCH_QUERY,
+      showHidden: false,
+      favoritesOnly: false,
     };
   }
 
@@ -59,7 +65,13 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
     launchers: readPersistedStringList(value.launchers),
     launcherOrder: readPersistedStringList(value.launcherOrder),
     searchQuery: readPersistedSearchQuery(value.searchQuery),
+    showHidden: readPersistedBoolean(value.showHidden),
+    favoritesOnly: readPersistedBoolean(value.favoritesOnly),
   };
+}
+
+function readPersistedBoolean(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : false;
 }
 
 function readPersistedStringList(value: unknown): string[] {

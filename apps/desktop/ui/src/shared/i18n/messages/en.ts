@@ -60,6 +60,14 @@ export const en = {
     one: '1 update available',
     other: '{count} updates available',
   },
+  'game.card.badge.hidden': 'Hidden',
+  'game.card.menu.ariaLabel': 'Options for {title}',
+  'game.card.menu.favorite.add': 'Add to favorites',
+  'game.card.menu.favorite.remove': 'Remove from favorites',
+  'game.card.menu.favorite.toggleHint': 'Toggle favorite status for this game.',
+  'game.card.menu.hidden.add': 'Hide game',
+  'game.card.menu.hidden.remove': 'Unhide game',
+  'game.card.menu.hidden.toggleHint': 'Toggle hidden status for this game.',
   'game.libraries.empty': 'No components found',
 
   // ── Game cover ──
@@ -250,10 +258,22 @@ export const en = {
   'notify.coverDownloaded.body': 'The game cover has been updated.',
   'notify.coverRemoved.title': 'Cover removed',
   'notify.coverRemoved.body': 'Restored the default cover.',
+  'notify.favoriteFailed': 'Failed to change favorite status.',
+  'notify.favoriteAdded': 'Added to favorites.',
+  'notify.favoriteRemoved': 'Removed from favorites.',
+  'notify.hiddenFailed': 'Failed to change hidden status.',
+  'notify.gameHidden': 'Game hidden.',
+  'notify.gameUnhidden': 'Game unhidden.',
   'notify.applyCompleted': 'Changes applied',
   'notify.rollbackCompleted': 'Rollback completed',
   'notify.statusError': 'Error',
   'notify.statusWarning': 'Warning',
+
+  // ── Games toolbar ──
+  'games.favoritesToggle': 'Favorites',
+  'games.favoritesToggleActive': 'Favorites (active)',
+  'games.showHidden': 'Hidden games',
+  'games.showHiddenActive': 'Hidden games (active)',
 
   // ── Library scan ──
   'scan.partialWarning': {

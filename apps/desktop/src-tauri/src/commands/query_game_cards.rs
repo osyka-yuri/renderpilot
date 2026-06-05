@@ -96,6 +96,12 @@ pub(crate) struct QueryGameCardsDto {
     #[serde(default)]
     selected_launchers: Vec<String>,
 
+    #[serde(default)]
+    show_hidden: bool,
+
+    #[serde(default)]
+    favorites_only: bool,
+
     sort: GameCardsSortDto,
     page: GameCardsPageDto,
 }
@@ -104,6 +110,8 @@ pub(crate) struct QueryGameCardsArgs {
     pub(super) search_query: String,
     pub(super) selected_libraries: Vec<String>,
     pub(super) selected_launchers: Vec<String>,
+    pub(super) show_hidden: bool,
+    pub(super) favorites_only: bool,
     pub(super) sort_field: String,
     pub(super) sort_direction: String,
     pub(super) limit: i64,
@@ -126,6 +134,8 @@ impl QueryGameCardsDto {
             search_query,
             selected_libraries,
             selected_launchers,
+            show_hidden: self.show_hidden,
+            favorites_only: self.favorites_only,
             sort_field,
             sort_direction,
             limit,

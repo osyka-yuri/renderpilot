@@ -36,6 +36,10 @@ describe('games-filter-state', () => {
         ready: false,
         isDialogOpen: false,
         searchQuery: '',
+        appliedShowHidden: false,
+        draftShowHidden: false,
+        appliedFavoritesOnly: false,
+        draftFavoritesOnly: false,
         appliedLibraries: [],
         draftLibraries: [],
         deferSelectAllLibraries: false,
@@ -608,6 +612,8 @@ function createPersistedFilters(
     launchers: [],
     launcherOrder: [],
     searchQuery: '',
+    showHidden: false,
+    favoritesOnly: false,
     ...overrides,
   };
 }

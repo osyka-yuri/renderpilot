@@ -60,6 +60,14 @@ export const ru: Record<MessageKey, MessageValue> = {
     many: 'Доступно {count} обновлений',
     other: 'Доступно {count} обновлений',
   },
+  'game.card.badge.hidden': 'Скрыто',
+  'game.card.menu.ariaLabel': 'Параметры для {title}',
+  'game.card.menu.favorite.add': 'Добавить в избранное',
+  'game.card.menu.favorite.remove': 'Убрать из избранного',
+  'game.card.menu.favorite.toggleHint': 'Переключить статус "избранное" для этой игры.',
+  'game.card.menu.hidden.add': 'Скрыть игру',
+  'game.card.menu.hidden.remove': 'Показать игру',
+  'game.card.menu.hidden.toggleHint': 'Переключить статус видимости для этой игры.',
   'game.libraries.empty': 'Компоненты не найдены',
 
   // ── Game cover ──
@@ -236,6 +244,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'filters.libraries.title': 'Компоненты',
   'filters.libraries.empty': 'Компоненты не найдены',
 
+  // ── Games toolbar ──
+  'games.favoritesToggle': 'Избранное',
+  'games.favoritesToggleActive': 'Избранное (активно)',
+  'games.showHidden': 'Скрытые игры',
+  'games.showHiddenActive': 'Скрытые игры (активно)',
+
   // ── Operation presenters (status / kind / risk labels) ──
   'operation.label.low': 'Низкий риск',
   'operation.label.medium': 'Средний риск',
@@ -273,6 +287,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'notify.coverDownloaded.body': 'Обложка игры обновлена.',
   'notify.coverRemoved.title': 'Обложка удалена',
   'notify.coverRemoved.body': 'Возвращена стандартная обложка.',
+  'notify.favoriteFailed': 'Не удалось изменить статус избранного.',
+  'notify.favoriteAdded': 'Добавлено в избранное.',
+  'notify.favoriteRemoved': 'Убрано из избранного.',
+  'notify.hiddenFailed': 'Не удалось изменить видимость игры.',
+  'notify.gameHidden': 'Игра скрыта.',
+  'notify.gameUnhidden': 'Игра теперь отображается.',
   'notify.applyCompleted': 'Изменения применены',
   'notify.rollbackCompleted': 'Откат выполнен',
   'notify.statusError': 'Ошибка',

@@ -34,6 +34,8 @@ export async function refreshDesktopCatalog(deps: RefreshDesktopCatalogDeps): Pr
     searchQuery: '',
     selectedLibraries: [],
     selectedLaunchers: [],
+    showHidden: false,
+    favoritesOnly: false,
     sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
     page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
   });

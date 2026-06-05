@@ -386,6 +386,77 @@ CREATE INDEX IF NOT EXISTS idx_file_hash_cache_updated_at
 
 
 -- =============================================================================
+-- NVAPI executable overrides + setting baselines
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS nvapi_executable_overrides (
+    game_id           TEXT    PRIMARY KEY NOT NULL,
+    selected_path     TEXT    NOT NULL,
+    selected_basename TEXT    NOT NULL,
+    updated_at        INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (length(trim(selected_path)) > 0),
+    CHECK (instr(selected_path, char(0)) = 0),
+    CHECK (length(trim(selected_basename)) > 0),
+    CHECK (instr(selected_basename, '/') = 0),
+    CHECK (instr(selected_basename, '\') = 0),
+    CHECK (updated_at >= 0),
+
+    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+) STRICT;
+
+
+CREATE TABLE IF NOT EXISTS nvapi_setting_baselines (
+    game_id                 TEXT    NOT NULL,
+    setting_key             TEXT    NOT NULL,
+    baseline_dword          INTEGER NOT NULL,
+    baseline_was_predefined INTEGER NOT NULL,
+    predefined_dword        INTEGER,
+    captured_exe            TEXT    NOT NULL,
+    captured_at             INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (length(trim(setting_key)) > 0),
+    CHECK (baseline_dword >= 0),
+    CHECK (baseline_was_predefined IN (0, 1)),
+    CHECK (predefined_dword IS NULL OR predefined_dword >= 0),
+    CHECK (length(trim(captured_exe)) > 0),
+    CHECK (captured_at >= 0),
+
+    PRIMARY KEY (game_id, setting_key),
+    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+) STRICT;
+
+
+-- =============================================================================
+-- Game UI state
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS game_ui_state (
+    game_id     TEXT    PRIMARY KEY NOT NULL,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
+    is_hidden   INTEGER NOT NULL DEFAULT 0,
+    updated_at  INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (is_favorite IN (0, 1)),
+    CHECK (is_hidden IN (0, 1)),
+    CHECK (updated_at >= 0),
+
+    FOREIGN KEY (game_id)
+        REFERENCES games(id)
+        ON DELETE CASCADE
+) STRICT;
+
+
+-- =============================================================================
 -- Cross-table integrity triggers
 -- =============================================================================
 
@@ -530,4 +601,30 @@ BEGIN
            OLD.updated_at + 1
        )
      WHERE path = NEW.path;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_nvapi_executable_overrides_touch_updated_at
+AFTER UPDATE ON nvapi_executable_overrides
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+    UPDATE nvapi_executable_overrides
+       SET updated_at = max(
+           CAST(unixepoch('subsec') * 1000 AS INTEGER),
+           OLD.updated_at + 1
+       )
+     WHERE game_id = NEW.game_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_game_ui_state_touch_updated_at
+AFTER UPDATE ON game_ui_state
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+    UPDATE game_ui_state
+       SET updated_at = max(
+           CAST(unixepoch('subsec') * 1000 AS INTEGER),
+           OLD.updated_at + 1
+       )
+     WHERE game_id = NEW.game_id;
 END;

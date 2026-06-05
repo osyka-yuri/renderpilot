@@ -21,6 +21,7 @@ describe('desktop-app-workflows', () => {
       Promise.resolve({
         items: [{ id: 'game-1', title: 'Test Game' } as unknown as GameSummary],
         total: 1,
+        hiddenCount: 0,
         availableLibraries: [],
         availableLaunchers: [],
         queryFingerprint: 'fp-1',

@@ -201,6 +201,8 @@ export function createGameSummaryFromDetails(
     operation_count: details.operations.length,
     last_operation_status: overrides.last_operation_status,
     cover_updated_at_ms: null,
+    is_favorite: false,
+    is_hidden: false,
   };
 }
 

@@ -14,7 +14,7 @@
   type CoverBusyPredicate = (gameId: GameId) => boolean;
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
 
-  type CoverMenuRefs = Readonly<Partial<Record<GameId, GameCardMenuHandle>>>;
+  type ActionMenuRefs = Readonly<Partial<Record<GameId, GameCardMenuHandle>>>;
 
   type Props = {
     games?: readonly GameCardViewModel[];
@@ -24,13 +24,15 @@
     pickDisabled?: boolean;
     coversAutoFetchingIds?: ReadonlySet<GameId>;
     menuOpenFor?: GameId | null;
-    coverMenuRefs?: CoverMenuRefs;
+    actionMenuRefs?: ActionMenuRefs;
 
     isCoverOperationBusy?: CoverBusyPredicate;
     onMenuOpenChange?: MenuOpenChangeHandler;
     onFetchCover?: GameActionHandler;
     onPickCover?: GameActionHandler;
     onClearCover?: GameActionHandler;
+    onToggleFavorite?: (gameId: GameId, isFavorite: boolean) => void;
+    onToggleHidden?: (gameId: GameId, isHidden: boolean) => void;
     onOpenDetails?: GameActionHandler;
     onOpenOperations?: GameActionHandler;
     onResetFilters?: () => void;
@@ -48,7 +50,7 @@
     pickDisabled: boolean;
     coversAutoFetchingIds: ReadonlySet<GameId>;
     menuOpenFor: GameId | null;
-    coverMenuRefs: CoverMenuRefs;
+    actionMenuRefs: ActionMenuRefs;
     isCoverOperationBusy: CoverBusyPredicate;
   };
 
@@ -72,10 +74,12 @@
   const EMPTY_GAMES: readonly GameCardViewModel[] = [];
   const EMPTY_LAUNCHER_ORDER: readonly Launcher[] = [];
   const EMPTY_AUTO_FETCHING_IDS: ReadonlySet<GameId> = new Set<GameId>();
-  const EMPTY_COVER_MENU_REFS: CoverMenuRefs = {};
+  const EMPTY_ACTION_MENU_REFS: ActionMenuRefs = {};
 
   const noopAction: GameActionHandler = () => undefined;
   const noopMenuOpenChange: MenuOpenChangeHandler = () => undefined;
+  const noopToggleFavorite = (_gameId: GameId, _isFavorite: boolean): void => undefined;
+  const noopToggleHidden = (_gameId: GameId, _isHidden: boolean): void => undefined;
   const isCoverOperationIdle: CoverBusyPredicate = () => false;
 
   const {
@@ -86,13 +90,15 @@
     pickDisabled = false,
     coversAutoFetchingIds = EMPTY_AUTO_FETCHING_IDS,
     menuOpenFor = null,
-    coverMenuRefs = EMPTY_COVER_MENU_REFS,
+    actionMenuRefs = EMPTY_ACTION_MENU_REFS,
 
     isCoverOperationBusy = isCoverOperationIdle,
     onMenuOpenChange = noopMenuOpenChange,
     onFetchCover = noopAction,
     onPickCover = noopAction,
     onClearCover = noopAction,
+    onToggleFavorite = noopToggleFavorite,
+    onToggleHidden = noopToggleHidden,
     onOpenDetails = noopAction,
     onOpenOperations = noopAction,
     onResetFilters = () => undefined,
@@ -106,7 +112,7 @@
     pickDisabled,
     coversAutoFetchingIds,
     menuOpenFor,
-    coverMenuRefs,
+    actionMenuRefs,
     isCoverOperationBusy,
   });
 
@@ -138,7 +144,7 @@
       isMenuDisabled: context.busy || context.hasManualCoverAction || isBackgroundCoverFetching,
       isPickDisabled: context.pickDisabled,
       isMenuOpen: context.menuOpenFor === id,
-      menuRef: context.coverMenuRefs[id],
+      menuRef: context.actionMenuRefs[id],
     };
   }
 
@@ -260,6 +266,12 @@
                 }}
                 onClearCover={(): void => {
                   onClearCover(card.id);
+                }}
+                onToggleFavorite={(): void => {
+                  onToggleFavorite(card.id, !card.game.isFavorite);
+                }}
+                onToggleHidden={(): void => {
+                  onToggleHidden(card.id, !card.game.isHidden);
                 }}
                 onOpenDetails={(): void => {
                   onOpenDetails(card.id);

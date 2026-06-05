@@ -1,4 +1,3 @@
-export { default as GamesFilterToolbar } from './ui/GamesFilterToolbar.svelte';
 export { default as GamesFilterDialog } from './ui/GamesFilterDialog.svelte';
 export {
   type GamesFiltersModel,

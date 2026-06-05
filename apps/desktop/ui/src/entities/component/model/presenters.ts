@@ -22,6 +22,8 @@ export function formatCompactLibraryLabel(value?: string | null): string {
   return formatSharedCompactLibraryLabel(value);
 }
 
-export function displayComponentFilePath(component: Pick<GraphicsComponent, 'technology' | 'files'>): string | null {
+export function displayComponentFilePath(
+  component: Pick<GraphicsComponent, 'technology' | 'files'>,
+): string | null {
   return displayLibraryFilePath(component.technology, component.files);
 }

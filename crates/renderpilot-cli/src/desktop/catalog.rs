@@ -19,15 +19,31 @@ pub fn list_games() -> JsonResult {
 }
 
 /// Queries game cards with backend-owned filtering, sorting, and paging semantics.
-pub fn query_game_cards(
-    search_query: String,
-    selected_libraries: Vec<String>,
-    selected_launchers: Vec<String>,
-    sort_field: String,
-    sort_direction: String,
-    page_limit: i64,
-    page_offset: i64,
-) -> JsonResult {
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct QueryGameCardsRequest {
+    /// The search query to filter game titles by.
+    pub search_query: String,
+    /// List of selected library tags to filter by.
+    pub selected_libraries: Vec<String>,
+    /// List of selected launcher names to filter by.
+    pub selected_launchers: Vec<String>,
+    /// Whether to show games marked as hidden.
+    pub show_hidden: bool,
+    /// Whether to only show games marked as favorite.
+    pub favorites_only: bool,
+    /// The field to sort the results by (e.g., 'title', 'risk').
+    pub sort_field: String,
+    /// The direction to sort the results ('asc' or 'desc').
+    pub sort_direction: String,
+    /// The maximum number of results to return per page.
+    pub page_limit: i64,
+    /// The offset to start returning results from.
+    pub page_offset: i64,
+}
+
+/// Queries game cards with backend-owned filtering, sorting, and paging semantics.
+pub fn query_game_cards(req: QueryGameCardsRequest) -> JsonResult {
     let storage = catalog::open_catalog_storage()?;
     let cards = load_game_cards(&storage)?;
 
@@ -42,19 +58,13 @@ pub fn query_game_cards(
             .map_err(CliError::from)?,
     );
 
-    let query = QueryGameCards::new(
-        search_query,
-        selected_libraries,
-        selected_launchers,
-        sort_field,
-        sort_direction,
-        page_limit,
-        page_offset,
-        &available_libraries,
-        &available_launchers,
-    );
+    let query = QueryGameCards::new(req, &available_libraries, &available_launchers);
 
     let query_fingerprint = query_fingerprint(&query);
+
+    // Count all hidden games in the catalog (before query filters) so the
+    // toolbar badge always reflects the total, not just the filtered subset.
+    let hidden_count = cards.iter().filter(|c| c.is_hidden).count();
 
     let mut filtered = cards
         .into_iter()
@@ -69,6 +79,7 @@ pub fn query_game_cards(
     to_json(QueryGameCardsOutput {
         items,
         total,
+        hidden_count,
         available_libraries,
         available_launchers,
         query_fingerprint,
@@ -78,6 +89,12 @@ pub fn query_game_cards(
 fn load_game_cards(storage: &SqliteStorage) -> Result<Vec<GameCardOutput>, CliError> {
     let games = storage.list_games()?;
     let covers_by_game = storage.list_all_game_covers().map_err(CliError::from)?;
+    let ui_states: std::collections::HashMap<_, _> = storage
+        .list_all_game_ui_state()
+        .map_err(CliError::from)?
+        .into_iter()
+        .map(|row| (row.game_id.clone(), row))
+        .collect();
 
     let mut cards = Vec::with_capacity(games.len());
 
@@ -88,11 +105,17 @@ fn load_game_cards(storage: &SqliteStorage) -> Result<Vec<GameCardOutput>, CliEr
             .map(|record| record.updated_at_ms);
         let rollback_available = !storage.component_backup_ids_for_game(game.id())?.is_empty();
 
+        let ui_state = ui_states.get(game.id().as_str());
+        let is_favorite = ui_state.map(|s| s.is_favorite).unwrap_or(false);
+        let is_hidden = ui_state.map(|s| s.is_hidden).unwrap_or(false);
+
         cards.push(GameCardOutput::from_details(
             game,
             &details,
             cover_updated_at_ms,
             rollback_available,
+            is_favorite,
+            is_hidden,
         ));
     }
 
@@ -137,6 +160,8 @@ struct GameCardOutput {
     operation_count: usize,
     last_operation_status: Option<String>,
     cover_updated_at_ms: Option<i64>,
+    is_favorite: bool,
+    is_hidden: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,9 +169,17 @@ struct GameCardOutput {
 struct QueryGameCardsOutput {
     items: Vec<GameCardOutput>,
     total: usize,
+    hidden_count: usize,
     available_libraries: Vec<String>,
     available_launchers: Vec<String>,
     query_fingerprint: String,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QueryGameCardsUiFilters {
+    show_hidden: bool,
+    favorites_only: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,6 +188,8 @@ struct QueryGameCards {
     search_query: String,
     selected_libraries: Vec<String>,
     selected_launchers: Vec<String>,
+    #[serde(flatten)]
+    ui_filters: QueryGameCardsUiFilters,
     sort: QueryGameCardsSort,
     page: QueryGameCardsPage,
 
@@ -219,34 +254,31 @@ enum QuerySortDirection {
 }
 
 impl QueryGameCards {
-    #[allow(clippy::too_many_arguments)]
     fn new(
-        search_query: String,
-        selected_libraries: Vec<String>,
-        selected_launchers: Vec<String>,
-        sort_field: String,
-        sort_direction: String,
-        page_limit: i64,
-        page_offset: i64,
+        req: QueryGameCardsRequest,
         available_libraries: &[String],
         available_launchers: &[String],
     ) -> Self {
-        let search_query = normalize_search_query(search_query);
-        let has_library_filter = !selected_libraries.is_empty();
-        let has_launcher_filter = !selected_launchers.is_empty();
+        let search_query = normalize_search_query(req.search_query);
+        let has_library_filter = !req.selected_libraries.is_empty();
+        let has_launcher_filter = !req.selected_launchers.is_empty();
         let selected_libraries =
-            normalize_selected_libraries(selected_libraries, available_libraries);
+            normalize_selected_libraries(req.selected_libraries, available_libraries);
         let selected_library_set = selected_libraries.iter().cloned().collect();
         let selected_launchers =
-            normalize_selected_launchers(selected_launchers, available_launchers);
+            normalize_selected_launchers(req.selected_launchers, available_launchers);
         let selected_launcher_set = selected_launchers.iter().cloned().collect();
 
         Self {
             search_query,
             selected_libraries,
             selected_launchers,
-            sort: QueryGameCardsSort::new(&sort_field, &sort_direction),
-            page: QueryGameCardsPage::new(page_limit, page_offset),
+            ui_filters: QueryGameCardsUiFilters {
+                show_hidden: req.show_hidden,
+                favorites_only: req.favorites_only,
+            },
+            sort: QueryGameCardsSort::new(&req.sort_field, &req.sort_direction),
+            page: QueryGameCardsPage::new(req.page_limit, req.page_offset),
             selected_library_set,
             selected_launcher_set,
             has_library_filter,
@@ -255,6 +287,14 @@ impl QueryGameCards {
     }
 
     fn matches(&self, card: &GameCardOutput) -> bool {
+        if card.is_hidden && !self.ui_filters.show_hidden {
+            return false;
+        }
+
+        if self.ui_filters.favorites_only && !card.is_favorite {
+            return false;
+        }
+
         self.matches_search_query(card)
             && self.matches_selected_libraries(card)
             && self.matches_selected_launchers(card)
@@ -277,19 +317,24 @@ impl QueryGameCards {
     }
 
     fn compare(&self, left: &GameCardOutput, right: &GameCardOutput) -> Ordering {
-        let ordering = match self.sort.field {
-            QuerySortField::Title => compare_game_card_identity(left, right),
-            QuerySortField::Updates => left
-                .update_count
-                .cmp(&right.update_count)
-                .then_with(|| compare_game_card_identity(left, right)),
-            QuerySortField::Risk => left
-                .risk_order
-                .cmp(&right.risk_order)
-                .then_with(|| compare_game_card_identity(left, right)),
-        };
-
-        self.sort.direction.apply(ordering)
+        // Favorites always float to the top, regardless of the selected sort field.
+        left.is_favorite
+            .cmp(&right.is_favorite)
+            .reverse()
+            .then_with(|| {
+                let ordering = match self.sort.field {
+                    QuerySortField::Title => compare_game_card_identity(left, right),
+                    QuerySortField::Updates => left
+                        .update_count
+                        .cmp(&right.update_count)
+                        .then_with(|| compare_game_card_identity(left, right)),
+                    QuerySortField::Risk => left
+                        .risk_order
+                        .cmp(&right.risk_order)
+                        .then_with(|| compare_game_card_identity(left, right)),
+                };
+                self.sort.direction.apply(ordering)
+            })
     }
 }
 
@@ -326,6 +371,8 @@ impl GameCardOutput {
         details: &catalog::GameDetailsCatalogResult,
         cover_updated_at_ms: Option<i64>,
         rollback_available: bool,
+        is_favorite: bool,
+        is_hidden: bool,
     ) -> Self {
         let identity = game.identity();
         let title = identity.title().to_owned();
@@ -350,6 +397,8 @@ impl GameCardOutput {
             operation_count: metrics.operation_count,
             last_operation_status: metrics.last_operation_status,
             cover_updated_at_ms,
+            is_favorite,
+            is_hidden,
         }
     }
 }
@@ -458,6 +507,42 @@ pub fn set_catalog_setting(key: impl Into<String>, value: impl Into<String>) -> 
         storage.set_setting(&key, &value).map_err(CliError::from)?;
     }
 
+    to_json(serde_json::json!({ "saved": true }))
+}
+
+/// Sets the favorite status of a game.
+pub fn set_game_favorite(game_id: impl Into<String>, is_favorite: bool) -> JsonResult {
+    let game_id = super::utils::parse_game_id(game_id.into())?;
+    let storage = catalog::open_catalog_storage()?;
+    update_game_ui_state(&storage, &game_id, |_, is_hidden| (is_favorite, is_hidden))
+}
+
+/// Sets the hidden status of a game.
+pub fn set_game_hidden(game_id: impl Into<String>, is_hidden: bool) -> JsonResult {
+    let game_id = super::utils::parse_game_id(game_id.into())?;
+    let storage = catalog::open_catalog_storage()?;
+    update_game_ui_state(&storage, &game_id, |is_favorite, _| {
+        (is_favorite, is_hidden)
+    })
+}
+
+/// Reads the current UI state for `game_id`, applies `f` to produce the new
+/// `(is_favorite, is_hidden)` pair, and persists it.
+fn update_game_ui_state(
+    storage: &SqliteStorage,
+    game_id: &GameId,
+    f: impl FnOnce(bool, bool) -> (bool, bool),
+) -> JsonResult {
+    let current = storage
+        .get_game_ui_state(game_id.as_str())
+        .map_err(CliError::from)?;
+    let (prev_favorite, prev_hidden) = current
+        .map(|s| (s.is_favorite, s.is_hidden))
+        .unwrap_or((false, false));
+    let (is_favorite, is_hidden) = f(prev_favorite, prev_hidden);
+    storage
+        .save_game_ui_state(game_id.as_str(), is_favorite, is_hidden)
+        .map_err(CliError::from)?;
     to_json(serde_json::json!({ "saved": true }))
 }
 
@@ -606,7 +691,7 @@ fn query_fingerprint(query: &QueryGameCards) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_library_name, GameCardOutput, QueryGameCards};
+    use super::{normalize_library_name, GameCardOutput, QueryGameCards, QueryGameCardsRequest};
     use crate::desktop::utils::DashboardRiskLevel;
 
     fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
@@ -629,6 +714,8 @@ mod tests {
             operation_count: 0,
             last_operation_status: None,
             cover_updated_at_ms: None,
+            is_favorite: false,
+            is_hidden: false,
         }
     }
 
@@ -651,13 +738,17 @@ mod tests {
     #[test]
     fn empty_selected_launchers_matches_all_cards() {
         let query = QueryGameCards::new(
-            String::new(),
-            Vec::new(),
-            Vec::new(),
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: Vec::new(),
+                selected_launchers: Vec::new(),
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[String::from("steam")],
             &[String::from("Steam")],
         );
@@ -671,13 +762,17 @@ mod tests {
     #[test]
     fn selected_launcher_matches_only_same_launcher() {
         let query = QueryGameCards::new(
-            String::new(),
-            Vec::new(),
-            vec![String::from("Steam")],
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: Vec::new(),
+                selected_launchers: vec![String::from("Steam")],
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[String::from("steam")],
             &[String::from("Steam")],
         );
@@ -691,13 +786,17 @@ mod tests {
     #[test]
     fn selected_launcher_not_in_available_excludes_all() {
         let query = QueryGameCards::new(
-            String::new(),
-            Vec::new(),
-            vec![String::from("Epic")],
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: Vec::new(),
+                selected_launchers: vec![String::from("Epic")],
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[String::from("steam")],
             &[String::from("Steam")],
         );
@@ -709,13 +808,17 @@ mod tests {
     #[test]
     fn empty_selected_libraries_matches_all_cards() {
         let query = QueryGameCards::new(
-            String::new(),
-            Vec::new(),
-            Vec::new(),
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: Vec::new(),
+                selected_launchers: Vec::new(),
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[
                 String::from("dlss_super_resolution"),
                 String::from("intel_xess"),
@@ -730,13 +833,17 @@ mod tests {
     #[test]
     fn selected_library_matches_only_same_library() {
         let query = QueryGameCards::new(
-            String::new(),
-            vec![String::from("dlss_super_resolution")],
-            Vec::new(),
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: vec![String::from("dlss_super_resolution")],
+                selected_launchers: Vec::new(),
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[
                 String::from("dlss_super_resolution"),
                 String::from("intel_xess"),
@@ -753,13 +860,17 @@ mod tests {
     #[test]
     fn selected_library_not_in_available_excludes_all() {
         let query = QueryGameCards::new(
-            String::new(),
-            vec![String::from("intel_xess")],
-            Vec::new(),
-            String::from("title"),
-            String::from("asc"),
-            100,
-            0,
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: vec![String::from("intel_xess")],
+                selected_launchers: Vec::new(),
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
             &[String::from("dlss_super_resolution")],
             &[String::from("Steam")],
         );

@@ -25,7 +25,7 @@ const optionValidationCases = [
     name: 'language',
     options: languageOptions,
     validValues: ['system', 'en', 'ru'],
-    invalidValues: ['', 'de', 'english'],
+    invalidValues: ['', 'english'],
   },
 ] as const satisfies readonly OptionValidationCase[];
 

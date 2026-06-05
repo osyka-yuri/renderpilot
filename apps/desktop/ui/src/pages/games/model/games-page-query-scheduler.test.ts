@@ -57,6 +57,9 @@ function stubCard(gameId: string): GameSummary {
     risk_level: 'unknown',
     rollback_available: false,
     operation_count: 0,
+    cover_updated_at_ms: null,
+    is_favorite: false,
+    is_hidden: false,
   };
 }
 
@@ -65,6 +68,7 @@ function makeResult(
 ): GameCardsResult {
   return {
     total: overrides.items.length,
+    hiddenCount: 0,
     availableLibraries: [],
     availableLaunchers: [],
     queryFingerprint: 'fp',
@@ -79,6 +83,7 @@ function createResultSinks() {
     setItems: vi.fn((nextItems: GameSummary[]) => {
       items = nextItems;
     }),
+    setHiddenCount: vi.fn(),
   } satisfies GamesQueryResultSinks;
 
   return {
@@ -103,6 +108,8 @@ function createReadySnapshot(
     overrides.searchQuery ?? '',
     overrides.selectedLibraries ?? [],
     overrides.selectedLaunchers ?? [],
+    false,
+    false,
   );
 
   expect(snapshot).not.toBeNull();
@@ -117,17 +124,19 @@ function createReadySnapshot(
 describe('createGamesPageQueryScheduler', () => {
   describe('buildGameCardsQueryKey', () => {
     it('builds a stable key from search query and selected libraries', () => {
-      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y'], []);
+      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y'], [], false, false);
 
       expect(JSON.parse(queryKey)).toEqual({
         searchQuery: 'abc',
         selectedLibraries: ['x', 'y'],
         selectedLaunchers: [],
+        showHidden: false,
+        favoritesOnly: false,
       });
 
-      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], []));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z'], []));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('changed', ['x', 'y'], []));
+      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], [], false, false));
+      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z'], [], false, false));
+      expect(queryKey).not.toBe(buildGameCardsQueryKey('changed', ['x', 'y'], [], false, false));
     });
   });
 
@@ -154,7 +163,16 @@ describe('createGamesPageQueryScheduler', () => {
       });
 
       expect(
-        scheduler.createGamesQuerySnapshot(1, filtersReady, preferenceLoaded, '', [], []),
+        scheduler.createGamesQuerySnapshot(
+          1,
+          filtersReady,
+          preferenceLoaded,
+          '',
+          [],
+          [],
+          false,
+          false,
+        ),
       ).toBeNull();
     });
 
@@ -220,6 +238,8 @@ describe('createGamesPageQueryScheduler', () => {
         searchQuery: 'doom',
         selectedLibraries: ['Steam'],
         selectedLaunchers: [],
+        showHidden: false,
+        favoritesOnly: false,
         sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
         page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
       });

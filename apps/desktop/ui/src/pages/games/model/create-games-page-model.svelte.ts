@@ -3,6 +3,8 @@ import {
   ALL_KNOWN_LAUNCHERS,
   extractAvailableLibrariesFromCards,
   toGameCardViewModel,
+  setGameFavorite,
+  setGameHidden,
 } from '@entities/game';
 import { createGamesFiltersModel } from '@features/filter-games';
 import {
@@ -10,6 +12,8 @@ import {
   pruneCoverMenuState,
   shouldCloseOpenMenu,
 } from '@features/cover-ops';
+import { publishNotification } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import { createGamesPageQueryScheduler } from './games-page-query-scheduler';
 import { createCoverCommandRunner } from './cover-command-runner';
 
@@ -25,9 +29,10 @@ export type GamesPageModelInput = {
 export function createGamesPageModel(input: GamesPageModelInput) {
   let manualCoverBusyFor = $state<string | null>(null);
   let menuOpenFor = $state<string | null>(null);
-  let coverMenuRefs = $state<Record<string, GameCardMenuHandle | undefined>>({});
+  let actionMenuRefs = $state<Record<string, GameCardMenuHandle | undefined>>({});
 
   let queriedGames = $state<GameSummary[]>([]);
+  let hiddenCount = $state<number>(0);
   const scheduler = createGamesPageQueryScheduler();
 
   const queryAvailableLibraries = $derived(extractAvailableLibrariesFromCards(input.getGames()));
@@ -42,7 +47,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     setManualCoverBusyFor: (value) => {
       manualCoverBusyFor = value;
     },
-    getCoverMenuRefs: () => coverMenuRefs,
+    getActionMenuRefs: () => actionMenuRefs,
     getMenuOpenFor: () => menuOpenFor,
     setMenuOpenFor: (value) => {
       menuOpenFor = value;
@@ -52,19 +57,25 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   });
 
   $effect(() => {
+    const filtersReady = filtersModel.filtersState.ready;
     const querySnapshot = scheduler.createGamesQuerySnapshot(
       input.getCatalogVersion(),
-      filtersModel.filtersState.ready,
-      filtersModel.filtersState.ready,
+      filtersReady,
+      filtersReady,
       filtersModel.filtersState.searchQuery,
       filtersModel.filtersState.appliedLibraries,
       filtersModel.filtersState.appliedLaunchers,
+      filtersModel.filtersState.appliedShowHidden,
+      filtersModel.filtersState.appliedFavoritesOnly,
     );
 
     if (querySnapshot !== null && scheduler.canRunGamesQuery(querySnapshot.requestKey)) {
       void scheduler.runGamesQuery(querySnapshot, {
         setItems(next) {
           queriedGames = next;
+        },
+        setHiddenCount(count) {
+          hiddenCount = count;
         },
       });
     }
@@ -89,9 +100,9 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   // ---------------------------------------------------------------------------
 
   function pruneCoverMenuRefs(activeGameIds: readonly string[]): void {
-    const nextState = pruneCoverMenuState(coverMenuRefs, menuOpenFor, activeGameIds);
+    const nextState = pruneCoverMenuState(actionMenuRefs, menuOpenFor, activeGameIds);
 
-    coverMenuRefs = nextState.refs;
+    actionMenuRefs = nextState.refs;
     menuOpenFor = nextState.menuOpenFor;
   }
 
@@ -115,6 +126,34 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     filtersModel.dispose();
   }
 
+  async function toggleFavorite(gameId: string, isFavorite: boolean): Promise<void> {
+    try {
+      await setGameFavorite(gameId, isFavorite);
+      publishNotification({
+        severity: 'success',
+        title: isFavorite ? t('notify.favoriteAdded') : t('notify.favoriteRemoved'),
+      });
+      await input.getOnReloadCards()();
+    } catch (error) {
+      publishNotification({ severity: 'error', title: t('notify.favoriteFailed') });
+      console.error('Failed to toggle favorite status', error);
+    }
+  }
+
+  async function toggleHidden(gameId: string, isHidden: boolean): Promise<void> {
+    try {
+      await setGameHidden(gameId, isHidden);
+      publishNotification({
+        severity: 'success',
+        title: isHidden ? t('notify.gameHidden') : t('notify.gameUnhidden'),
+      });
+      await input.getOnReloadCards()();
+    } catch (error) {
+      publishNotification({ severity: 'error', title: t('notify.hiddenFailed') });
+      console.error('Failed to toggle hidden status', error);
+    }
+  }
+
   return {
     // State
     get manualCoverBusyFor() {
@@ -123,8 +162,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     get menuOpenFor() {
       return menuOpenFor;
     },
-    get coverMenuRefs() {
-      return coverMenuRefs;
+    get actionMenuRefs() {
+      return actionMenuRefs;
     },
     get filtersState() {
       return filtersModel.filtersState;
@@ -149,6 +188,9 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     get gameItems() {
       return gameItems;
     },
+    get hiddenCount() {
+      return hiddenCount;
+    },
     get hasFilterIndicator() {
       return filtersModel.hasFilterIndicator;
     },
@@ -169,9 +211,13 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     handleDraftLaunchersChange: filtersModel.handleDraftLaunchersChange,
     handleDraftLauncherOrderChange: filtersModel.handleDraftLauncherOrderChange,
     resetFilters: filtersModel.resetFilters,
+    quickToggleFavoritesOnly: filtersModel.quickToggleFavoritesOnly,
+    quickToggleShowHidden: filtersModel.quickToggleShowHidden,
     setSearchQuery: filtersModel.setSearchQuery,
     fetchCover: coverCommandRunner.fetchCover,
     pickCover: coverCommandRunner.pickCover,
     clearCover: coverCommandRunner.clearCover,
+    toggleFavorite,
+    toggleHidden,
   };
 }

@@ -22,6 +22,7 @@ use crate::error::{storage_context, storage_error};
 
 pub use repositories::file_hash_cache::FileHashCacheRow;
 pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
+pub use repositories::game_ui_state::GameUiStateRow;
 pub use repositories::{ScanWriteReport, ScanWriteUnit, SqliteStorage};
 
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);

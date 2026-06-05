@@ -58,6 +58,8 @@ pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
         search_query,
         selected_libraries,
         selected_launchers,
+        show_hidden,
+        favorites_only,
         sort_field,
         sort_direction,
         limit,
@@ -65,15 +67,17 @@ pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
     } = query.into_desktop_args()?;
 
     run_desktop_command(move || {
-        desktop::query_game_cards(
+        desktop::query_game_cards(renderpilot_cli::desktop::QueryGameCardsRequest {
             search_query,
             selected_libraries,
             selected_launchers,
+            show_hidden,
+            favorites_only,
             sort_field,
             sort_direction,
-            limit,
-            offset,
-        )
+            page_limit: limit,
+            page_offset: offset,
+        })
     })
     .await
 }
@@ -105,6 +109,20 @@ pub async fn set_game_cover(game_id: String, source_path: String) -> JsonCommand
     let source_path = require_non_empty_string("source_path", source_path)?;
 
     run_desktop_command(move || desktop::set_game_cover(game_id, source_path)).await
+}
+
+#[tauri::command]
+pub async fn set_game_favorite(game_id: String, is_favorite: bool) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+
+    run_desktop_command(move || desktop::set_game_favorite(game_id, is_favorite)).await
+}
+
+#[tauri::command]
+pub async fn set_game_hidden(game_id: String, is_hidden: bool) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+
+    run_desktop_command(move || desktop::set_game_hidden(game_id, is_hidden)).await
 }
 
 #[tauri::command]

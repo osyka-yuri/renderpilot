@@ -7,7 +7,7 @@ import {
   publishCoverUpdatedNotification,
   withManualCoverBusy,
 } from '@features/cover-ops';
-import type { CoverMenuRefs } from './games-page-cover-ops';
+import type { ActionMenuRefs } from './games-page-cover-ops';
 import { focusMenuTrigger, selectCoverFilePath } from './games-page-cover-ops';
 
 export type CoverCommandRunner = ReturnType<typeof createCoverCommandRunner>;
@@ -15,7 +15,7 @@ export type CoverCommandRunner = ReturnType<typeof createCoverCommandRunner>;
 export type CoverCommandRunnerDeps = {
   getManualCoverBusyFor: () => string | null;
   setManualCoverBusyFor: (value: string | null) => void;
-  getCoverMenuRefs: () => CoverMenuRefs;
+  getActionMenuRefs: () => ActionMenuRefs;
   getMenuOpenFor: () => string | null;
   setMenuOpenFor: (value: string | null) => void;
   getOnClearError: () => () => void;
@@ -45,7 +45,7 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       onCoverError: publishCoverOperationErrorNotification,
       describeError: describeCommandError,
       focusMenuTrigger: (id) => {
-        focusMenuTrigger(deps.getCoverMenuRefs(), id);
+        focusMenuTrigger(deps.getActionMenuRefs(), id);
       },
     });
   }
@@ -59,7 +59,7 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
 
     const selectedPath = await selectCoverFilePath(gameId, {
       focusMenuTrigger: (id) => {
-        focusMenuTrigger(deps.getCoverMenuRefs(), id);
+        focusMenuTrigger(deps.getActionMenuRefs(), id);
       },
     });
 

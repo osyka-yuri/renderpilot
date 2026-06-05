@@ -30,6 +30,8 @@ describe('games-filter-controller', () => {
         libraries: [LIBRARY_ALPHA, UNKNOWN_LIBRARY],
         launchers: [],
         launcherOrder: [],
+        showHidden: false,
+        favoritesOnly: false,
       };
 
       const result = syncGamesFilterState(
@@ -54,16 +56,20 @@ describe('games-filter-controller', () => {
           libraries: [LIBRARY_ALPHA],
           launchers: [],
           launcherOrder: [],
+          showHidden: false,
+          favoritesOnly: false,
         },
         AVAILABLE_LIBRARIES,
         [],
       );
 
       const ignoredPersisted: PersistedGamesFilters = {
-        searchQuery: 'ignored-query',
-        libraries: [LIBRARY_BETA],
+        searchQuery: 'witcher',
+        libraries: ['LibraryAlpha'],
         launchers: [],
         launcherOrder: [],
+        showHidden: false,
+        favoritesOnly: false,
       };
 
       const result = syncGamesFilterState(

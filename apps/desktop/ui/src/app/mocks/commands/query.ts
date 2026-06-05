@@ -33,6 +33,14 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
 
     const filtered = allCards
       .filter((card) => {
+        if (card.is_hidden && !normalizedQuery.showHidden) {
+          return false;
+        }
+
+        if (normalizedQuery.favoritesOnly && !card.is_favorite) {
+          return false;
+        }
+
         const matchesSearch =
           searchQuery.length === 0 || card.title.toLowerCase().includes(searchQuery);
 
@@ -43,7 +51,14 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
 
         return matchesSearch && matchesLibraries && matchesLaunchers;
       })
-      .sort((left, right) => compareCards(left, right, normalizedQuery.sort));
+      .sort((left, right) => {
+        // Favorites always float to the top, mirroring the Rust backend behaviour.
+        const favoriteDiff = Number(right.is_favorite) - Number(left.is_favorite);
+        if (favoriteDiff !== 0) return favoriteDiff;
+        return compareCards(left, right, normalizedQuery.sort);
+      });
+
+    const hiddenCount = allCards.filter((card) => card.is_hidden).length;
 
     const offset = normalizedQuery.page.offset;
     const limit = normalizedQuery.page.limit;
@@ -51,6 +66,7 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
     return {
       items: filtered.slice(offset, offset + limit),
       total: filtered.length,
+      hiddenCount,
       availableLibraries,
       availableLaunchers,
       queryFingerprint: JSON.stringify(normalizedQuery),

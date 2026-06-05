@@ -23,6 +23,7 @@ pub fn gc_cover_orphans_on_startup() {
 
 pub use self::catalog::{
     get_catalog_setting, get_game_details, list_games, query_game_cards, set_catalog_setting,
+    set_game_favorite, set_game_hidden, QueryGameCardsRequest,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};

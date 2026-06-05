@@ -23,6 +23,8 @@ function createGameSummary(libraryTags: readonly string[]): GameSummary {
     operation_count: 0,
     last_operation_status: null,
     cover_updated_at_ms: null,
+    is_favorite: false,
+    is_hidden: false,
   };
 }
 

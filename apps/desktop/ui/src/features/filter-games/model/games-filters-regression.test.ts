@@ -22,6 +22,8 @@ const createPersistedFilters = (
   launchers: [],
   launcherOrder: [],
   searchQuery: '',
+  showHidden: false,
+  favoritesOnly: false,
   ...overrides,
 });
 

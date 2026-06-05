@@ -17,8 +17,13 @@ import {
 export type GamesFilterState = {
   ready: boolean;
   isDialogOpen: boolean;
-
   searchQuery: string;
+
+  appliedShowHidden: boolean;
+  draftShowHidden: boolean;
+
+  appliedFavoritesOnly: boolean;
+  draftFavoritesOnly: boolean;
 
   appliedLibraries: string[];
   draftLibraries: string[];
@@ -46,12 +51,20 @@ type Canonicalizer = (selected: readonly string[], available: readonly string[])
 
 type DraftFilterFields = Pick<
   GamesFilterState,
-  'draftLibraries' | 'draftLaunchers' | 'draftLauncherOrder'
+  | 'draftLibraries'
+  | 'draftLaunchers'
+  | 'draftLauncherOrder'
+  | 'draftShowHidden'
+  | 'draftFavoritesOnly'
 >;
 
 type AppliedFilterFields = Pick<
   GamesFilterState,
-  'appliedLibraries' | 'appliedLaunchers' | 'appliedLauncherOrder'
+  | 'appliedLibraries'
+  | 'appliedLaunchers'
+  | 'appliedLauncherOrder'
+  | 'appliedShowHidden'
+  | 'appliedFavoritesOnly'
 >;
 
 export function createInitialGamesFilterState(): GamesFilterState {
@@ -60,6 +73,12 @@ export function createInitialGamesFilterState(): GamesFilterState {
     isDialogOpen: false,
 
     searchQuery: EMPTY_SEARCH_QUERY,
+
+    appliedShowHidden: false,
+    draftShowHidden: false,
+
+    appliedFavoritesOnly: false,
+    draftFavoritesOnly: false,
 
     appliedLibraries: [],
     draftLibraries: [],
@@ -97,8 +116,17 @@ export function hydrateGamesFilterState(
   const hydratedState: GamesFilterState = {
     ...state,
     ready: true,
+    // Force-close any dialog that may have been open before hydration ran,
+    // so the user never sees stale draft values on first render.
+    isDialogOpen: false,
 
     searchQuery: persisted?.searchQuery ?? EMPTY_SEARCH_QUERY,
+
+    appliedShowHidden: persisted?.showHidden ?? false,
+    draftShowHidden: persisted?.showHidden ?? false,
+
+    appliedFavoritesOnly: persisted?.favoritesOnly ?? false,
+    draftFavoritesOnly: persisted?.favoritesOnly ?? false,
 
     availableLibraries: availableLibrariesSnapshot,
     ...createHydratedSliceFilters(
@@ -253,6 +281,38 @@ export function setDraftLauncherOrder(
   };
 }
 
+export function setDraftShowHidden(state: GamesFilterState, value: boolean): GamesFilterState {
+  if (state.draftShowHidden === value) {
+    return state;
+  }
+  return { ...state, draftShowHidden: value };
+}
+
+export function setDraftFavoritesOnly(state: GamesFilterState, value: boolean): GamesFilterState {
+  if (state.draftFavoritesOnly === value) {
+    return state;
+  }
+  return { ...state, draftFavoritesOnly: value };
+}
+
+/**
+ * Atomically toggles `appliedFavoritesOnly` and syncs the draft.
+ * Use this for toolbar quick-toggles that bypass the dialog draft flow.
+ */
+export function toggleAppliedFavoritesOnly(state: GamesFilterState): GamesFilterState {
+  const next = !state.appliedFavoritesOnly;
+  return { ...state, appliedFavoritesOnly: next, draftFavoritesOnly: next };
+}
+
+/**
+ * Atomically toggles `appliedShowHidden` and syncs the draft.
+ * Use this for toolbar quick-toggles that bypass the dialog draft flow.
+ */
+export function toggleAppliedShowHidden(state: GamesFilterState): GamesFilterState {
+  const next = !state.appliedShowHidden;
+  return { ...state, appliedShowHidden: next, draftShowHidden: next };
+}
+
 export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
   const appliedFilters = createAppliedFiltersFromDrafts(state);
 
@@ -262,12 +322,13 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
 
   return {
     ...state,
-
     ...appliedFilters,
 
     draftLibraries: copyStringArray(appliedFilters.appliedLibraries),
     draftLaunchers: copyStringArray(appliedFilters.appliedLaunchers),
     draftLauncherOrder: copyStringArray(appliedFilters.appliedLauncherOrder),
+    draftShowHidden: appliedFilters.appliedShowHidden,
+    draftFavoritesOnly: appliedFilters.appliedFavoritesOnly,
 
     isDialogOpen: false,
   };
@@ -279,6 +340,8 @@ export function createPersistedSnapshot(state: GamesFilterState): string {
     launchers: state.appliedLaunchers,
     launcherOrder: state.appliedLauncherOrder,
     searchQuery: state.searchQuery,
+    showHidden: state.appliedShowHidden,
+    favoritesOnly: state.appliedFavoritesOnly,
   });
 }
 
@@ -316,6 +379,8 @@ function createDraftsFromApplied(state: GamesFilterState): DraftFilterFields {
     draftLibraries: copyStringArray(state.appliedLibraries),
     draftLaunchers: copyStringArray(state.appliedLaunchers),
     draftLauncherOrder: copyStringArray(state.appliedLauncherOrder),
+    draftShowHidden: state.appliedShowHidden,
+    draftFavoritesOnly: state.appliedFavoritesOnly,
   };
 }
 
@@ -327,6 +392,8 @@ function createAppliedFiltersFromDrafts(state: GamesFilterState): AppliedFilterF
       state.draftLauncherOrder,
       state.availableLaunchers,
     ),
+    appliedShowHidden: state.draftShowHidden,
+    appliedFavoritesOnly: state.draftFavoritesOnly,
   };
 }
 
@@ -334,7 +401,9 @@ function areDraftsEqualToApplied(state: GamesFilterState): boolean {
   return (
     shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
     shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers) &&
-    shallowStringArrayEqual(state.draftLauncherOrder, state.appliedLauncherOrder)
+    shallowStringArrayEqual(state.draftLauncherOrder, state.appliedLauncherOrder) &&
+    state.draftShowHidden === state.appliedShowHidden &&
+    state.draftFavoritesOnly === state.appliedFavoritesOnly
   );
 }
 
@@ -345,7 +414,9 @@ function areAppliedFiltersEqual(
   return (
     shallowStringArrayEqual(state.appliedLibraries, appliedFilters.appliedLibraries) &&
     shallowStringArrayEqual(state.appliedLaunchers, appliedFilters.appliedLaunchers) &&
-    shallowStringArrayEqual(state.appliedLauncherOrder, appliedFilters.appliedLauncherOrder)
+    shallowStringArrayEqual(state.appliedLauncherOrder, appliedFilters.appliedLauncherOrder) &&
+    state.appliedShowHidden === appliedFilters.appliedShowHidden &&
+    state.appliedFavoritesOnly === appliedFilters.appliedFavoritesOnly
   );
 }
 

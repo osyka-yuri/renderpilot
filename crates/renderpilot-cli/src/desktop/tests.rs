@@ -705,15 +705,17 @@ impl GameCardsQueryResult {
         page_limit: i64,
         page_offset: i64,
     ) -> Result<Self, crate::CliError> {
-        let value = query_game_cards(
-            search_query.into(),
+        let value = query_game_cards(crate::desktop::QueryGameCardsRequest {
+            search_query: search_query.into(),
             selected_libraries,
             selected_launchers,
-            sort_field.into(),
-            sort_direction.into(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: sort_field.into(),
+            sort_direction: sort_direction.into(),
             page_limit,
             page_offset,
-        )?;
+        })?;
 
         Ok(Self { value })
     }

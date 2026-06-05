@@ -5,6 +5,7 @@ mod component_backups;
 mod components;
 pub mod file_hash_cache;
 pub mod game_covers;
+pub mod game_ui_state;
 mod games;
 pub mod nvapi;
 mod operations;

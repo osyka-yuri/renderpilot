@@ -62,6 +62,9 @@ export type GameSummary = {
   updates_available: boolean;
   update_count: number;
 
+  is_favorite: boolean;
+  is_hidden: boolean;
+
   risk_level: GameRiskLevel;
   rollback_available: boolean;
 
@@ -88,6 +91,8 @@ export type GameCardsQuery = {
   searchQuery: string;
   selectedLibraries: string[];
   selectedLaunchers: string[];
+  showHidden: boolean;
+  favoritesOnly: boolean;
   sort: {
     field: GameCardsSortField;
     direction: GameCardsSortDirection;
@@ -101,6 +106,7 @@ export type GameCardsQuery = {
 export type GameCardsResult = {
   items: GameSummary[];
   total: number;
+  hiddenCount: number;
   availableLibraries: string[];
   availableLaunchers: string[];
   queryFingerprint: string;

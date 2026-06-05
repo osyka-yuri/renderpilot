@@ -14,6 +14,8 @@
   import { createTitleId } from '../model/dom-helpers';
   import type { GameCardViewModel, UpdateBadge } from '../model/game-card-view-model';
 
+  import StarIcon from '@lucide/svelte/icons/star';
+  import EyeOffIcon from '@lucide/svelte/icons/eye-off';
   import GameCardActionsMenu from './GameCardActionsMenu.svelte';
   import GameCardCover from './GameCardCover.svelte';
   import GameLibraryBadges from './GameLibraryBadges.svelte';
@@ -36,6 +38,8 @@
     onFetchCover?: VoidHandler;
     onPickCover?: VoidHandler;
     onClearCover?: VoidHandler;
+    onToggleFavorite?: VoidHandler;
+    onToggleHidden?: VoidHandler;
     onOpenDetails?: VoidHandler;
     onOpenOperations?: VoidHandler;
   };
@@ -60,6 +64,8 @@
     onFetchCover = noop,
     onPickCover = noop,
     onClearCover = noop,
+    onToggleFavorite = noop,
+    onToggleHidden = noop,
     onOpenDetails = noop,
     onOpenOperations = noop,
   }: Props = $props();
@@ -94,11 +100,15 @@
         {pickDisabled}
         autoFetchInProgress={backgroundCoverFetching}
         hasCover={game.hasCover}
+        isFavorite={game.isFavorite}
+        isHidden={game.isHidden}
         open={menuOpen}
         onOpenChange={onMenuOpenChange}
         {onFetchCover}
         {onPickCover}
         {onClearCover}
+        {onToggleFavorite}
+        {onToggleHidden}
       />
     </CardAction>
 
@@ -116,8 +126,14 @@
         </Badge>
 
         <div class="grid min-w-0 gap-2">
-          <CardTitle id={titleId} role="heading" aria-level={3}>
+          <CardTitle id={titleId} role="heading" aria-level={3} class="flex items-center gap-2">
             {game.title}
+            {#if game.isFavorite}
+              <StarIcon class="size-4 text-yellow-500 fill-yellow-500" aria-label="Favorite" />
+            {/if}
+            {#if game.isHidden}
+              <EyeOffIcon class="size-4 text-muted-foreground" aria-label="Hidden" />
+            {/if}
           </CardTitle>
 
           <p class="min-w-0 text-xs/snug break-all text-muted-foreground">

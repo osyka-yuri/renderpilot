@@ -1,14 +1,14 @@
 import type { GameCardMenuHandle } from '@entities/game';
 import { selectCoverFilePath as selectCoverFilePathImpl } from '@features/cover-ops';
 
-export type CoverMenuRefs = Record<string, GameCardMenuHandle | undefined>;
+export type ActionMenuRefs = Record<string, GameCardMenuHandle | undefined>;
 
 export type CoverFilePickerDeps = {
   focusMenuTrigger: (gameId: string) => void;
 };
 
 /** Focuses the cover-menu trigger for the given game, using rAF when available. */
-export function focusMenuTrigger(refs: CoverMenuRefs, gameId: string): void {
+export function focusMenuTrigger(refs: ActionMenuRefs, gameId: string): void {
   const focus = (): void => {
     refs[gameId]?.focusTrigger();
   };

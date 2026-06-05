@@ -26,6 +26,8 @@ export type GameCardViewModel = {
   libraries: string[];
   coverSrc: string | null;
   hasCover: boolean;
+  isFavorite: boolean;
+  isHidden: boolean;
 };
 
 type CoverViewData = Pick<GameCardViewModel, 'coverSrc' | 'hasCover'>;
@@ -43,6 +45,8 @@ export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
     libraries: [...game.library_tags],
     coverSrc: cover.coverSrc,
     hasCover: cover.hasCover,
+    isFavorite: game.is_favorite,
+    isHidden: game.is_hidden,
   };
 }
 

@@ -14,11 +14,13 @@ function createGameSummary(overrides: Partial<GameSummary> = {}): GameSummary {
     component_count: 0,
     updates_available: false,
     update_count: 0,
-    risk_level: 'safe',
+    risk_level: 'unknown',
     rollback_available: false,
     operation_count: 0,
     last_operation_status: null,
     cover_updated_at_ms: null,
+    is_favorite: false,
+    is_hidden: false,
     ...overrides,
   };
 }

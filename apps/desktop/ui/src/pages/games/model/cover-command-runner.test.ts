@@ -108,7 +108,7 @@ function createDeps() {
   return {
     getManualCoverBusyFor: () => null,
     setManualCoverBusyFor: vi.fn(),
-    getCoverMenuRefs: () => ({}),
+    getActionMenuRefs: () => ({}),
     getMenuOpenFor: () => null,
     setMenuOpenFor: vi.fn(),
     getOnClearError: () => vi.fn(),

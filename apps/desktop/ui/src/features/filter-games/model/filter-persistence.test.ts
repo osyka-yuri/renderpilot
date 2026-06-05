@@ -27,6 +27,8 @@ describe('filter-persistence', () => {
         launchers: [],
         launcherOrder: [],
         searchQuery: '',
+        showHidden: false,
+        favoritesOnly: false,
       });
     });
 
@@ -38,6 +40,8 @@ describe('filter-persistence', () => {
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -47,12 +51,16 @@ describe('filter-persistence', () => {
         createPersistedPayload({
           libraries: ['LibraryAlpha'],
           searchQuery: 'alpha',
+          showHidden: false,
+          favoritesOnly: false,
         }),
         {
           libraries: ['LibraryAlpha'],
           launchers: [],
           launcherOrder: [],
           searchQuery: 'alpha',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -63,6 +71,8 @@ describe('filter-persistence', () => {
         launchers: [],
         launcherOrder: [],
         searchQuery: '',
+        showHidden: false,
+        favoritesOnly: false,
       });
     });
 
@@ -77,6 +87,8 @@ describe('filter-persistence', () => {
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -86,12 +98,16 @@ describe('filter-persistence', () => {
         createPersistedPayload({
           libraries: [' LibraryAlpha ', 'LibraryAlpha', '', 'LibraryBeta'],
           searchQuery: '',
+          showHidden: false,
+          favoritesOnly: false,
         }),
         {
           libraries: ['LibraryAlpha', 'LibraryBeta'],
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -101,12 +117,16 @@ describe('filter-persistence', () => {
         createPersistedPayload({
           libraries: 'LibraryAlpha',
           searchQuery: 'alpha',
+          showHidden: false,
+          favoritesOnly: false,
         }),
         {
           libraries: [],
           launchers: [],
           launcherOrder: [],
           searchQuery: 'alpha',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -122,6 +142,8 @@ describe('filter-persistence', () => {
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
+          showHidden: false,
+          favoritesOnly: false,
         },
       );
     });
@@ -136,6 +158,8 @@ describe('filter-persistence', () => {
             launchers: [],
             launcherOrder: [],
             searchQuery: 'alpha',
+            showHidden: false,
+            favoritesOnly: false,
           }),
         ),
       ).toEqual({
@@ -143,6 +167,8 @@ describe('filter-persistence', () => {
         launchers: [],
         launcherOrder: [],
         searchQuery: 'alpha',
+        showHidden: false,
+        favoritesOnly: false,
       } satisfies PersistedGamesFilters);
     });
 
@@ -154,6 +180,8 @@ describe('filter-persistence', () => {
             launchers: [],
             launcherOrder: [],
             searchQuery: '',
+            showHidden: false,
+            favoritesOnly: false,
           }),
         ),
       ).toEqual({
@@ -161,6 +189,8 @@ describe('filter-persistence', () => {
         launchers: [],
         launcherOrder: [],
         searchQuery: '',
+        showHidden: false,
+        favoritesOnly: false,
       } satisfies PersistedGamesFilters);
     });
   });

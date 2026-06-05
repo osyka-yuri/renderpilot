@@ -10,11 +10,15 @@ export function buildGameCardsQueryKey(
   searchQuery: string,
   selectedLibraries: readonly string[],
   selectedLaunchers: readonly string[],
+  showHidden: boolean,
+  favoritesOnly: boolean,
 ): string {
   return JSON.stringify({
     searchQuery,
     selectedLibraries,
     selectedLaunchers,
+    showHidden,
+    favoritesOnly,
   });
 }
 
@@ -23,10 +27,13 @@ export type GamesQuerySnapshot = {
   searchQuery: string;
   selectedLibraries: string[];
   selectedLaunchers: string[];
+  showHidden: boolean;
+  favoritesOnly: boolean;
 };
 
 export type GamesQueryResultSinks = {
   setItems(items: GameSummary[]): void;
+  setHiddenCount(count: number): void;
 };
 
 type SchedulerOptions = {
@@ -41,8 +48,10 @@ function createRequestKey(
   searchQuery: string,
   selectedLibraries: readonly string[],
   selectedLaunchers: readonly string[],
+  showHidden: boolean,
+  favoritesOnly: boolean,
 ) {
-  return `${version}:${buildGameCardsQueryKey(searchQuery, selectedLibraries, selectedLaunchers)}`;
+  return `${version}:${buildGameCardsQueryKey(searchQuery, selectedLibraries, selectedLaunchers, showHidden, favoritesOnly)}`;
 }
 
 export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
@@ -59,6 +68,8 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
     searchQuery: string,
     selectedLibraries: readonly string[],
     selectedLaunchers: readonly string[],
+    showHidden: boolean,
+    favoritesOnly: boolean,
   ): GamesQuerySnapshot | null {
     if (!filtersReady || !preferenceLoaded) {
       return null;
@@ -74,10 +85,14 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
         normalizedSearchQuery,
         normalizedSelectedLibraries,
         normalizedSelectedLaunchers,
+        showHidden,
+        favoritesOnly,
       ),
       searchQuery: normalizedSearchQuery,
       selectedLibraries: normalizedSelectedLibraries,
       selectedLaunchers: normalizedSelectedLaunchers,
+      showHidden,
+      favoritesOnly,
     };
   }
 
@@ -102,6 +117,8 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
         searchQuery: snapshot.searchQuery,
         selectedLibraries: snapshot.selectedLibraries,
         selectedLaunchers: snapshot.selectedLaunchers,
+        showHidden: snapshot.showHidden,
+        favoritesOnly: snapshot.favoritesOnly,
         sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
         page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
       });
@@ -111,6 +128,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
       }
 
       sinks.setItems(result.items);
+      sinks.setHiddenCount(result.hiddenCount);
     } catch (error: unknown) {
       if (requests.isActive(requestId)) {
         console.error('Failed to query game cards.', error);

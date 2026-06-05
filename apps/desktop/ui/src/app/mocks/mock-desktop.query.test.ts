@@ -17,6 +17,8 @@ describe('mockQueryGameCards parity', () => {
       searchQuery: '',
       selectedLibraries: [],
       selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 100, offset: 0 },
     });
@@ -28,6 +30,8 @@ describe('mockQueryGameCards parity', () => {
       searchQuery: '',
       selectedLibraries: [selectedLibrary],
       selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 1, offset: 0 },
     });
@@ -42,6 +46,8 @@ describe('mockQueryGameCards parity', () => {
       searchQuery: '  cyber  ',
       selectedLibraries: [' dlss_super_resolution ', 'dlss_super_resolution'],
       selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });
@@ -50,6 +56,8 @@ describe('mockQueryGameCards parity', () => {
       searchQuery: 'cyber',
       selectedLibraries: ['dlss_super_resolution'],
       selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
       sort: { field: 'title', direction: 'asc' },
       page: { limit: 50, offset: 0 },
     });

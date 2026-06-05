@@ -4,6 +4,7 @@
   import { getDashboardStats, type GameSelectionHandler, type GameSummary } from '@entities/game';
   import type { VoidHandler } from '@shared/callbacks';
   import {
+    Button,
     Empty,
     EmptyHeader,
     EmptyMedia,
@@ -12,6 +13,9 @@
     ScrollArea,
     Spinner,
   } from '@shared/ui';
+  import { cn } from '@shared/classnames';
+  import StarIcon from '@lucide/svelte/icons/star';
+  import EyeOffIcon from '@lucide/svelte/icons/eye-off';
   import { GamesEmptyState, GamesGrid } from '@widgets/games-catalog';
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
@@ -68,6 +72,16 @@
 
   const filtersButtonLabel = $derived(
     model.hasFilterIndicator ? t('games.openFiltersActive') : t('games.openFilters'),
+  );
+
+  const favoritesButtonLabel = $derived(
+    model.filtersState.appliedFavoritesOnly
+      ? t('games.favoritesToggleActive')
+      : t('games.favoritesToggle'),
+  );
+
+  const hiddenButtonLabel = $derived(
+    model.filtersState.appliedShowHidden ? t('games.showHiddenActive') : t('games.showHidden'),
   );
 
   const hasManualCoverAction = $derived(model.manualCoverBusyFor !== null);
@@ -155,22 +169,58 @@
           />
         </label>
 
-        <GamesFilterDialog
-          open={model.filtersState.isDialogOpen}
-          onOpenChange={model.handleDialogOpenChange}
-          hasFilterIndicator={model.hasFilterIndicator}
-          {filtersButtonLabel}
-          groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
-          draftLibraries={model.filtersState.draftLibraries}
-          onDraftLibrariesChange={model.handleDraftLibrariesChange}
-          launcherFilterOptions={model.launcherFilterOptions}
-          draftLaunchers={model.filtersState.draftLaunchers}
-          onDraftLaunchersChange={model.handleDraftLaunchersChange}
-          draftLauncherOrder={model.filtersState.draftLauncherOrder}
-          onDraftLauncherOrderChange={model.handleDraftLauncherOrderChange}
-          onCancel={model.cancelFilterSelection}
-          onApply={model.applyFilterSelection}
-        />
+        <div class="flex flex-none items-center gap-1">
+          <Button
+            aria-label={favoritesButtonLabel}
+            variant={model.filtersState.appliedFavoritesOnly ? 'default' : 'secondary'}
+            size="icon-sm"
+            onclick={model.quickToggleFavoritesOnly}
+          >
+            <StarIcon
+              class={cn(
+                'size-4.5',
+                model.filtersState.appliedFavoritesOnly && 'fill-current text-yellow-300',
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+
+          <div class="relative inline-flex">
+            <Button
+              aria-label={hiddenButtonLabel}
+              variant={model.filtersState.appliedShowHidden ? 'default' : 'secondary'}
+              size="icon-sm"
+              onclick={model.quickToggleShowHidden}
+            >
+              <EyeOffIcon class="size-4.5" aria-hidden="true" />
+            </Button>
+            {#if model.hiddenCount > 0}
+              <span
+                class="pointer-events-none absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground ring-2 ring-background"
+                aria-hidden="true"
+              >
+                {model.hiddenCount > 9 ? '9+' : model.hiddenCount}
+              </span>
+            {/if}
+          </div>
+
+          <GamesFilterDialog
+            open={model.filtersState.isDialogOpen}
+            onOpenChange={model.handleDialogOpenChange}
+            hasFilterIndicator={model.hasFilterIndicator}
+            {filtersButtonLabel}
+            groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
+            draftLibraries={model.filtersState.draftLibraries}
+            onDraftLibrariesChange={model.handleDraftLibrariesChange}
+            launcherFilterOptions={model.launcherFilterOptions}
+            draftLaunchers={model.filtersState.draftLaunchers}
+            onDraftLaunchersChange={model.handleDraftLaunchersChange}
+            draftLauncherOrder={model.filtersState.draftLauncherOrder}
+            onDraftLauncherOrderChange={model.handleDraftLauncherOrderChange}
+            onCancel={model.cancelFilterSelection}
+            onApply={model.applyFilterSelection}
+          />
+        </div>
       </div>
     </div>
 
@@ -183,12 +233,14 @@
         pickDisabled={pickCoverDisabled}
         {coversAutoFetchingIds}
         menuOpenFor={model.menuOpenFor}
-        coverMenuRefs={model.coverMenuRefs}
+        actionMenuRefs={model.actionMenuRefs}
         isCoverOperationBusy={model.isCoverOperationBusy}
         onMenuOpenChange={model.setMenuOpen}
         onFetchCover={model.fetchCover}
         onPickCover={model.pickCover}
         onClearCover={model.clearCover}
+        onToggleFavorite={model.toggleFavorite}
+        onToggleHidden={model.toggleHidden}
         onResetFilters={model.resetFilters}
         {onOpenDetails}
         {onOpenOperations}

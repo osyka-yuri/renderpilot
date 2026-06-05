@@ -59,6 +59,8 @@ export {
   clearGameCover,
   setGameCover,
   getGameDetails,
+  setGameFavorite,
+  setGameHidden,
 } from './api/desktop';
 export { default as GameCard } from './ui/GameCard.svelte';
 export { default as GamesDashboardSummary } from './ui/GamesDashboardSummary.svelte';
