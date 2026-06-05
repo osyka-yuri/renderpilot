@@ -25,8 +25,10 @@ function candidate(version: string, overrides: Partial<Candidate> = {}): Candida
     version,
     source_game_id: null,
     comparison: 'newer_version',
-    manifest_entry_id: `entry:${version}`,
-    is_downloaded: true,
+    manifest_entry_id: overrides.manifest_entry_id ?? null,
+    is_downloaded: overrides.is_downloaded ?? true,
+    is_debug: overrides.is_debug ?? false,
+    sha256: overrides.sha256 ?? 'fake_hash',
     ...overrides,
   };
 }

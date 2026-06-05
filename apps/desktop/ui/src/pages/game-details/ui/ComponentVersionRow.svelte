@@ -35,13 +35,21 @@
   const fileName = $derived(fileNameFromPath(filePath));
   const candidates = $derived(group?.candidates ?? []);
 
+  const currentHash = $derived(component.files[0]?.sha256);
+  const currentVersion = $derived(group?.current_version);
+
+  const currentCandidate = $derived(
+    candidates.find((c) => currentHash && c.sha256 === currentHash)
+  );
+  const currentValue = $derived(currentCandidate?.artifact_id ?? currentHash ?? currentVersion ?? 'current');
+  const isCurrentDebug = $derived(currentCandidate?.is_debug ?? false);
+
   const currentLabel = $derived(
-    group?.current_version ? `v${group.current_version}` : t('common.unknown'),
+    group?.current_version ? `v${group.current_version}${isCurrentDebug ? ' (Debug)' : ''}` : t('common.unknown'),
   );
   // The dropdown always marks the installed version as selected. Its value is the
   // installed file's content id, so after a swap/rollback the highlight follows the
   // new current version automatically — no stale pick lingers.
-  const currentValue = $derived(component.files[0]?.sha256 ?? group?.current_version ?? 'current');
 
   // Bound selection, re-pinned to the installed version whenever an operation
   // settles (`busy` → false). This keeps the highlight correct even when a swap
@@ -83,19 +91,24 @@
           <span class="truncate">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
-          <!-- Installed version: always the selected entry; selecting it is a no-op. -->
-          <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
+          <!-- Installed version: only render if it's not a known candidate to avoid duplication -->
+          {#if !currentCandidate}
+            <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
+          {/if}
           {#each candidates as candidate (candidate.artifact_id)}
+            {@const isDebug = candidate.is_debug}
             {@const versionLabel = candidate.version
-              ? `v${candidate.version}`
+              ? `v${candidate.version}${isDebug ? ' (Debug)' : ''}`
               : t('common.unknown')}
             <SelectItem value={candidate.artifact_id} label={versionLabel}>
-              <span class="flex items-center gap-2">
-                {versionLabel}
-                {#if !candidate.is_downloaded}
-                  <DownloadIcon class="size-4 text-muted-foreground" aria-hidden="true" />
+              {#snippet children(snippetProps)}
+                <span class="truncate pr-6">{versionLabel}</span>
+                {#if !candidate.is_downloaded && !snippetProps.selected}
+                  <span class="pointer-events-none absolute inset-e-2 flex size-3.5 items-center justify-center text-muted-foreground">
+                    <DownloadIcon class="size-4" aria-hidden="true" />
+                  </span>
                 {/if}
-              </span>
+              {/snippet}
             </SelectItem>
           {/each}
         </SelectContent>

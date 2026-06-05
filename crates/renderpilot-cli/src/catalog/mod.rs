@@ -89,8 +89,9 @@ pub(crate) fn get_game_details_with_storage(
 
     let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();
     let mut manifest_entry_ids = HashMap::new();
+    let mut debug_entry_ids = HashSet::new();
 
-    if let Ok((manifest_artifacts, entry_ids)) =
+    if let Ok((manifest_artifacts, entry_ids, debug_ids)) =
         crate::desktop::libraries::manifest_entries_as_artifacts()
     {
         for artifact in manifest_artifacts {
@@ -99,12 +100,13 @@ pub(crate) fn get_game_details_with_storage(
             }
         }
         manifest_entry_ids = entry_ids;
+        debug_entry_ids = debug_ids;
     }
 
     let candidate_groups = find_replacement_candidates(
         &components,
         &all_artifacts,
-        &renderpilot_application::CandidateContext::new(downloaded_ids, manifest_entry_ids),
+        &renderpilot_application::CandidateContext::new(downloaded_ids, manifest_entry_ids, debug_entry_ids),
     );
 
     let operations = list_operations_with_storage(storage, &game_id)?;

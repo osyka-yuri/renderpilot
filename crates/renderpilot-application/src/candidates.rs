@@ -10,6 +10,7 @@ use renderpilot_domain::{
 pub struct CandidateContext {
     downloaded_ids: HashSet<ArtifactId>,
     manifest_entry_ids: HashMap<ArtifactId, String>,
+    debug_entry_ids: HashSet<String>,
 }
 
 impl CandidateContext {
@@ -17,10 +18,12 @@ impl CandidateContext {
     pub fn new(
         downloaded_ids: HashSet<ArtifactId>,
         manifest_entry_ids: HashMap<ArtifactId, String>,
+        debug_entry_ids: HashSet<String>,
     ) -> Self {
         Self {
             downloaded_ids,
             manifest_entry_ids,
+            debug_entry_ids,
         }
     }
 
@@ -29,7 +32,13 @@ impl CandidateContext {
         Self {
             downloaded_ids: HashSet::new(),
             manifest_entry_ids: HashMap::new(),
+            debug_entry_ids: HashSet::new(),
         }
+    }
+
+    /// Returns true if the given manifest entry id belongs to a debug build.
+    pub fn is_debug_entry(&self, entry_id: &str) -> bool {
+        self.debug_entry_ids.contains(entry_id)
     }
 }
 
@@ -58,21 +67,26 @@ pub fn find_replacement_candidates(
             continue;
         };
 
-        // Hoisted out of the per-artifact loop: the component's content id is
-        // invariant across candidates.
-        let component_bundle_id = ArtifactId::for_component_files(component.files());
-
         let mut candidates = component_artifacts
             .iter()
             .filter_map(|artifact| {
+                // Ignore artifacts scanned from the exact same game.
+                // Such artifacts represent the game's own mutable file paths.
+                // If the game was modified (e.g. rolled back), the artifact's
+                // stored SHA-256 no longer matches its path, leading to swap errors.
+                if artifact.source_game_id() == Some(component.game_id()) {
+                    return None;
+                }
+
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
                 let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
+                let is_debug = entry_id.as_ref().map_or(false, |id| context.is_debug_entry(id));
                 ReplacementCandidate::for_component(
                     component,
-                    component_bundle_id.as_ref(),
                     artifact,
                     is_downloaded,
                     entry_id,
+                    is_debug,
                 )
             })
             .collect::<Vec<_>>();
@@ -193,17 +207,18 @@ pub struct ReplacementCandidate {
     comparison: CandidateComparison,
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
+    is_debug: bool,
 }
 
 impl ReplacementCandidate {
     fn for_component(
         component: &GraphicsComponent,
-        component_bundle_id: Option<&ArtifactId>,
         artifact: &LibraryArtifact,
         is_downloaded: bool,
         manifest_entry_id: Option<String>,
+        is_debug: bool,
     ) -> Option<Self> {
-        let comparison = candidate_comparison(component, component_bundle_id, artifact)?;
+        let comparison = candidate_comparison(component, artifact)?;
 
         Some(Self {
             artifact_id: artifact.id().clone(),
@@ -219,13 +234,23 @@ impl ReplacementCandidate {
             comparison,
             manifest_entry_id,
             is_downloaded,
+            is_debug,
         })
     }
 
-    fn ordering_key(&self) -> (u8, std::cmp::Reverse<Option<Version>>, &str, &str) {
+    fn ordering_key(
+        &self,
+    ) -> (
+        u8,
+        std::cmp::Reverse<Option<Version>>,
+        std::cmp::Reverse<bool>,
+        &str,
+        &str,
+    ) {
         (
             self.comparison.priority(),
             std::cmp::Reverse(self.version.clone()),
+            std::cmp::Reverse(self.is_downloaded),
             self.file_name.as_str(),
             self.file_path.as_ref().map(|p| p.as_str()).unwrap_or(""),
         )
@@ -246,9 +271,19 @@ impl ReplacementCandidate {
         self.file_path.as_ref()
     }
 
-    /// Returns whether this candidate is already downloaded locally.
+    /// Returns true if this artifact was downloaded.
     pub fn is_downloaded(&self) -> bool {
         self.is_downloaded
+    }
+
+    /// Returns true if this artifact is known to be a debug build.
+    pub fn is_debug(&self) -> bool {
+        self.is_debug
+    }
+
+    /// Returns the SHA256 hash of the artifact.
+    pub fn sha256(&self) -> &str {
+        &self.sha256
     }
 
     /// Returns the candidate version, when known.
@@ -321,11 +356,26 @@ fn compare_versions(
 /// merely share a primary DLL keep their separate entries, while the same content
 /// observed twice (e.g. two manifest entries) collapses to one.
 fn deduplicate_candidates(candidates: Vec<ReplacementCandidate>) -> Vec<ReplacementCandidate> {
-    let mut seen = HashSet::<ArtifactId>::new();
+    let mut seen_ids = HashSet::<ArtifactId>::new();
+    // Secondary dedup key: collapses manifest entries whose DLL is byte-identical
+    // to a scanned artifact (same file name + version + build type) so the user
+    // does not see the same logical version twice in the list.
+    let mut seen_version_keys = HashSet::<(String, Version, bool)>::new();
     let mut deduplicated = Vec::with_capacity(candidates.len());
 
     for candidate in candidates {
-        if seen.insert(candidate.artifact_id.clone()) {
+        if !seen_ids.insert(candidate.artifact_id.clone()) {
+            continue;
+        }
+        let version_is_new = match &candidate.version {
+            Some(version) => seen_version_keys.insert((
+                candidate.file_name.clone(),
+                version.clone(),
+                candidate.is_debug,
+            )),
+            None => true,
+        };
+        if version_is_new {
             deduplicated.push(candidate);
         }
     }
@@ -351,7 +401,7 @@ impl CompatibilityPolicy {
             Self::AlwaysCompatible => true,
             Self::DlssSuperResolution => match (current, candidate) {
                 (Some(current), Some(candidate)) => {
-                    !(current.major() == 1 && candidate.major() > 1)
+                    (current.major() == 1) == (candidate.major() == 1)
                 }
                 _ => true,
             },
@@ -370,10 +420,8 @@ impl From<GraphicsTechnology> for CompatibilityPolicy {
 
 fn candidate_comparison(
     component: &GraphicsComponent,
-    component_bundle_id: Option<&ArtifactId>,
     artifact: &LibraryArtifact,
 ) -> Option<CandidateComparison> {
-    require_different_bundle(component_bundle_id, artifact)?;
     require_not_split_downgrade(component, artifact)?;
     require_version_compatible(
         component.technology(),
@@ -384,22 +432,6 @@ fn candidate_comparison(
     compare_versions(primary_component_version(component), artifact.version())
 }
 
-/// Skips artifacts whose bundle content is byte-identical to what is currently
-/// installed (comparing bundle ids). Replaces the old per-file name+hash match so
-/// a 1→N upgrade with different file names is still offered. When the current
-/// content is not fully known, the artifact is offered.
-fn require_different_bundle(
-    component_bundle_id: Option<&ArtifactId>,
-    artifact: &LibraryArtifact,
-) -> Option<()> {
-    match (
-        component_bundle_id,
-        ArtifactId::for_component_files(artifact.files()),
-    ) {
-        (Some(active), Some(candidate)) if *active == candidate => None,
-        _ => Some(()),
-    }
-}
 
 /// Whether a unified single-file FSR 3.x backend may replace this component.
 ///
@@ -551,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn dlss_v2_is_compatible_with_v3_and_v1() {
+    fn dlss_v2_is_compatible_with_v3_only() {
         let component = sample_component(
             "component:game-a:dlss",
             "game:a",
@@ -581,7 +613,7 @@ mod tests {
         let groups = find_test_candidates(&[component], &[v3_artifact, v1_artifact]);
 
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].candidates().len(), 2);
+        assert_eq!(groups[0].candidates().len(), 1);
     }
 
     #[test]
@@ -735,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn identical_sha256_is_not_recommended_back_to_the_same_file() {
+    fn identical_sha256_is_returned_as_candidate() {
         let component = sample_component(
             "component:game-a:dlss",
             "game:a",
@@ -756,7 +788,8 @@ mod tests {
 
         let groups = find_test_candidates(&[component], &[artifact]);
 
-        assert!(groups.is_empty());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 1);
     }
 
     #[test]
@@ -794,12 +827,12 @@ mod tests {
     }
 
     #[test]
-    fn compatibility_policy_dlss_allows_v2_to_v1() {
+    fn compatibility_policy_dlss_blocks_v2_to_v1() {
         let policy = CompatibilityPolicy::DlssSuperResolution;
         let v1 = Version::parse("1.0.0").unwrap();
         let v2 = Version::parse("2.0.0").unwrap();
 
-        assert!(policy.is_compatible(Some(&v2), Some(&v1)));
+        assert!(!policy.is_compatible(Some(&v2), Some(&v1)));
     }
 
     #[test]

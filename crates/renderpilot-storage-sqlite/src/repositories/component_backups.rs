@@ -125,6 +125,19 @@ impl SqliteStorage {
             Ok(())
         })
     }
+
+    /// Explicitly sets the backup baseline for a component outside of a normal swap.
+    /// Used by the scan process to automatically recover orphaned `.bak` files.
+    pub fn recover_component_backup(
+        &self,
+        game_id: &GameId,
+        component_id: &ComponentId,
+        files: &[ComponentFile],
+    ) -> AppResult<()> {
+        self.with_transaction(|transaction| {
+            set_component_backup_within_transaction(transaction, game_id, component_id, files)
+        })
+    }
 }
 
 fn set_component_backup_within_transaction(

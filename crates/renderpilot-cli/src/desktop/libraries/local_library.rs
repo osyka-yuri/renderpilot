@@ -18,7 +18,7 @@ use super::{
 };
 
 pub(super) struct DownloadedLibrary {
-    pub(super) archive_path: PathBuf,
+    pub(super) dll_path: PathBuf,
     pub(super) artifact_id: String,
 }
 
@@ -26,15 +26,13 @@ pub(super) async fn ensure_downloaded_and_registered(
     entry: &LibraryManifestEntry,
 ) -> Result<DownloadedLibrary, CliError> {
     let archive_path = local_archive_path(entry)?;
+    let dll_path = local_dll_path(entry)?;
 
     ensure_local_archive(entry, &archive_path).await?;
 
     let artifact_id = materialize_local_library(entry, &archive_path)?;
 
-    Ok(DownloadedLibrary {
-        archive_path,
-        artifact_id,
-    })
+    Ok(DownloadedLibrary { dll_path, artifact_id })
 }
 
 pub(super) fn local_archive_path(entry: &LibraryManifestEntry) -> Result<PathBuf, CliError> {
@@ -113,6 +111,9 @@ fn extract_and_register_library(
     storage::write_file_atomically(dll_path, &dll_bytes)?;
     storage::write_sha256_cache(dll_path, &sha256)?;
 
+    // Free up space by deleting the downloaded ZIP now that we have the DLL
+    let _ = storage::remove_file_if_exists(archive_path);
+
     register_local_artifact(entry, dll_path, &sha256)
 }
 
@@ -139,6 +140,38 @@ fn register_local_artifact(
     storage.upsert_artifact(&artifact).map_err(CliError::from)?;
 
     Ok(artifact_id)
+}
+
+pub(super) fn delete_local_library(entry: &LibraryManifestEntry) -> Result<(), CliError> {
+    // Remove the cached ZIP archive (may already be absent after a prior extraction).
+    let archive_path = local_archive_path(entry)?;
+    storage::remove_file_if_exists(&archive_path)?;
+
+    let dll_path = local_dll_path(entry)?;
+    if dll_path.exists() {
+        // Best-effort: unregister the artifact from the catalog before deleting the file.
+        if let Ok(sha256) = read_or_compute_dll_sha256(&dll_path) {
+            if let Ok(artifact) = artifact_builder::build_manifest_artifact(entry, &dll_path, &sha256) {
+                if let Ok(storage) = catalog::open_catalog_storage() {
+                    let _ = storage.delete_artifact(artifact.id());
+                }
+            }
+        }
+        // Remove the DLL and its sidecar SHA-256 cache.
+        storage::remove_file_if_exists(&dll_path)?;
+        let _ = storage::remove_file_if_exists(&sha256_cache_path(&dll_path));
+    }
+
+    Ok(())
+}
+
+/// Returns the sidecar SHA-256 cache path for a given file, mirroring the
+/// convention used by [`storage::write_sha256_cache`].
+fn sha256_cache_path(path: &Path) -> PathBuf {
+    path.with_extension(format!(
+        "{}.sha256",
+        path.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ))
 }
 
 async fn download_archive(entry: &LibraryManifestEntry) -> Result<Vec<u8>, CliError> {
@@ -216,6 +249,9 @@ async fn ensure_member_dll(entry: &LibraryManifestEntry) -> Result<PathBuf, CliE
     let sha256 = hex::encode(Sha256::digest(&dll_bytes));
     storage::write_file_atomically(&dll_path, &dll_bytes)?;
     storage::write_sha256_cache(&dll_path, &sha256)?;
+
+    // Free up space by deleting the downloaded ZIP now that we have the DLL
+    let _ = storage::remove_file_if_exists(&archive_path);
 
     Ok(dll_path)
 }
@@ -322,9 +358,9 @@ pub(super) fn library_states(
     let mut states = Vec::with_capacity(entries.len());
 
     for entry in entries {
-        let archive_path = local_archive_path(entry)?;
-        let is_downloaded = archive_path.exists();
-        let local_path = is_downloaded.then_some(archive_path.as_path());
+        let dll_path = local_dll_path(entry)?;
+        let is_downloaded = dll_path.exists();
+        let local_path = is_downloaded.then_some(dll_path.as_path());
 
         states.push(library_state(entry, is_downloaded, local_path, None));
     }

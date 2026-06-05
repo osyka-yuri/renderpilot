@@ -264,6 +264,8 @@ struct CandidateOutput {
     comparison: String,
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
+    is_debug: bool,
+    sha256: String,
 }
 
 impl From<&ReplacementCandidate> for CandidateOutput {
@@ -281,6 +283,8 @@ impl From<&ReplacementCandidate> for CandidateOutput {
             comparison: candidate.comparison().as_str().to_owned(),
             manifest_entry_id: candidate.manifest_entry_id().map(String::from),
             is_downloaded: candidate.is_downloaded(),
+            is_debug: candidate.is_debug(),
+            sha256: candidate.sha256().to_owned(),
         }
     }
 }

@@ -18,7 +18,7 @@ use crate::CliError;
 pub use self::types::{LibraryManifest, LibraryManifestEntry, LibraryState};
 
 pub(crate) use self::artifact_builder::manifest_entries_as_artifacts;
-use self::local_library::{library_state, library_states, local_archive_path};
+use self::local_library::{library_state, library_states};
 pub(crate) use self::storage::local_preset_manifest_path;
 
 pub(super) fn library_error(message: impl Into<String>) -> CliError {
@@ -47,7 +47,7 @@ pub async fn download_library(entry_id: String) -> JsonResult {
     to_json(library_state(
         &entry,
         true,
-        Some(&downloaded_library.archive_path),
+        Some(&downloaded_library.dll_path),
         Some(downloaded_library.artifact_id),
     ))
 }
@@ -62,14 +62,14 @@ pub async fn download_artifact(artifact_id: String) -> JsonResult {
     let manifest = manifest::require_local_manifest()?;
 
     // Single-file manifest artifact.
-    let (_, entry_ids) = manifest_entries_as_artifacts()?;
+    let (_, entry_ids, _) = manifest_entries_as_artifacts()?;
     if let Some(entry_id) = entry_ids.get(&target_id) {
         let entry = manifest::require_entry(&manifest, entry_id)?.clone();
         let downloaded = local_library::ensure_downloaded_and_registered(&entry).await?;
         return to_json(library_state(
             &entry,
             true,
-            Some(&downloaded.archive_path),
+            Some(&downloaded.dll_path),
             Some(downloaded.artifact_id),
         ));
     }
@@ -105,9 +105,11 @@ fn fsr_package_state(package: &fsr_packages::FsrPackage, artifact_id: String) ->
 /// Async for API uniformity with other desktop library commands.
 pub async fn delete_library(entry_id: String) -> JsonResult {
     let entry = manifest::require_local_manifest_entry(&entry_id)?;
-    let archive_path = local_archive_path(&entry)?;
 
-    storage::remove_file_if_exists(&archive_path)?;
+    // Delete the artifact from the DB, the local DLL, its cache, and the ZIP archive.
+    if let Err(error) = local_library::delete_local_library(&entry) {
+        log::error!("Failed to delete local library for entry {}: {}", entry_id, error);
+    }
 
     to_json(library_state(&entry, false, None, None))
 }

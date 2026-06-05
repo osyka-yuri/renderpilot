@@ -107,6 +107,8 @@ describe('mockQueryGameCards parity', () => {
           source_game_id: null,
           comparison: 'newer_version',
           is_downloaded: true,
+          is_debug: false,
+          sha256: 'mock-sha256',
         },
       ],
     });

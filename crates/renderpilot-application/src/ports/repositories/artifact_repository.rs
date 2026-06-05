@@ -9,4 +9,7 @@ pub trait ArtifactRepository: Send + Sync {
 
     /// Lists all known library artifacts.
     fn list_artifacts(&self) -> AppResult<Vec<LibraryArtifact>>;
+
+    /// Deletes an artifact by its ID.
+    fn delete_artifact(&self, id: &renderpilot_domain::ArtifactId) -> AppResult<()>;
 }

@@ -53,6 +53,19 @@ impl ArtifactRepository for SqliteStorage {
     fn list_artifacts(&self) -> AppResult<Vec<LibraryArtifact>> {
         self.query_list(LIST_ARTIFACTS_SQL, [], artifact_from_row)
     }
+
+    fn delete_artifact(&self, id: &renderpilot_domain::ArtifactId) -> AppResult<()> {
+        let conn = self.connection()?;
+        let mut statement = conn
+            .prepare_cached("DELETE FROM library_artifacts WHERE id = ?")
+            .map_err(storage_error)?;
+
+        statement
+            .execute([id.as_str()])
+            .map_err(storage_error)?;
+
+        Ok(())
+    }
 }
 
 /// Upserts one artifact row within a transaction.

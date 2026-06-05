@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use renderpilot_detection::LibraryPatternSet;
@@ -38,17 +38,19 @@ pub(super) fn build_manifest_artifact(
 /// Returns a tuple containing:
 /// - The parsed list of `LibraryArtifact`s.
 /// - A mapping between the generated `ArtifactId` and the raw manifest `entry_id`.
+/// - A set of `entry_id`s whose build type is `"debug"`.
 pub(crate) fn manifest_entries_as_artifacts(
-) -> Result<(Vec<LibraryArtifact>, HashMap<ArtifactId, String>), CliError> {
+) -> Result<(Vec<LibraryArtifact>, HashMap<ArtifactId, String>, HashSet<String>), CliError> {
     let manifest = match load_local_manifest()? {
         Some(manifest) => manifest,
-        None => return Ok((Vec::new(), HashMap::new())),
+        None => return Ok((Vec::new(), HashMap::new(), HashSet::new())),
     };
 
     let patterns = load_library_patterns();
 
     let mut artifacts = Vec::new();
     let mut entry_ids = HashMap::new();
+    let mut debug_entry_ids = HashSet::new();
 
     for entry in &manifest.entries {
         let artifact = match build_manifest_index_artifact(entry, patterns) {
@@ -60,6 +62,9 @@ pub(crate) fn manifest_entries_as_artifacts(
         };
         let artifact_id = artifact.id().clone();
 
+        if entry.build.build_type == "debug" {
+            debug_entry_ids.insert(entry.entry_id.clone());
+        }
         entry_ids.insert(artifact_id, entry.entry_id.clone());
         artifacts.push(artifact);
     }
@@ -70,7 +75,7 @@ pub(crate) fn manifest_entries_as_artifacts(
         artifacts.push(package.artifact);
     }
 
-    Ok((artifacts, entry_ids))
+    Ok((artifacts, entry_ids, debug_entry_ids))
 }
 
 fn load_library_patterns() -> &'static LibraryPatternSet {

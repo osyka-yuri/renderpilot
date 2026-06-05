@@ -2,6 +2,7 @@ mod install_partitioner;
 mod paths;
 mod prune;
 mod scan_plan;
+mod recovery;
 
 #[cfg(windows)]
 mod auto;
@@ -359,6 +360,8 @@ fn persist_scan_result(
         components: &components,
         artifacts: &artifacts,
     })?;
+
+    recovery::recover_orphaned_backups(storage, game.id(), &components)?;
 
     Ok(ScanFolderCatalogResult { game, libraries })
 }

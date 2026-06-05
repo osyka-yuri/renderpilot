@@ -34,6 +34,8 @@ export type Candidate = {
   warning?: Nullable<string>;
   manifest_entry_id?: Nullable<string>;
   is_downloaded: boolean;
+  is_debug: boolean;
+  sha256: string;
 };
 
 export type CandidateGroup = {
