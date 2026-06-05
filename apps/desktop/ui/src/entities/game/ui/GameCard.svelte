@@ -41,7 +41,6 @@
     onToggleFavorite?: VoidHandler;
     onToggleHidden?: VoidHandler;
     onOpenDetails?: VoidHandler;
-    onOpenOperations?: VoidHandler;
   };
 
   const noop: VoidHandler = () => undefined;
@@ -67,15 +66,11 @@
     onToggleFavorite = noop,
     onToggleHidden = noop,
     onOpenDetails = noop,
-    onOpenOperations = noop,
   }: Props = $props();
 
   const titleId = $derived(createTitleId(game.id));
 
-  const actionAriaLabels = $derived({
-    details: t('game.card.action.detailsAria', { title: game.title }),
-    journal: t('game.card.action.journalAria', { title: game.title }),
-  });
+  const detailsAriaLabel = $derived(t('game.card.action.detailsAria', { title: game.title }));
 
   function updateBadgeLabel(badge: UpdateBadge): string {
     if (badge.kind === 'up-to-date') {
@@ -152,23 +147,15 @@
     <GameLibraryBadges libraries={game.libraries} />
   </CardContent>
 
-  <CardFooter class="gap-2 *:flex-1">
+  <CardFooter>
     <Button
+      class="w-full"
       variant="default"
       size="sm"
-      aria-label={actionAriaLabels.details}
+      aria-label={detailsAriaLabel}
       onclick={onOpenDetails}
     >
       {t('game.card.action.details')}
-    </Button>
-
-    <Button
-      variant="secondary"
-      size="sm"
-      aria-label={actionAriaLabels.journal}
-      onclick={onOpenOperations}
-    >
-      {t('game.card.action.journal')}
     </Button>
   </CardFooter>
 </Card>

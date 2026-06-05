@@ -12,7 +12,7 @@ export const en = {
   'nav.games': 'Games',
   'nav.libraries': 'Libraries',
   'nav.settings': 'Settings',
-  'nav.operations': 'Operations',
+  'nav.operations': 'Journal',
   'nav.gameFallback': 'Game',
   'nav.donate': 'Donate',
   'shell.refresh': 'Refresh',
@@ -50,9 +50,7 @@ export const en = {
 
   // ── Game card ──
   'game.card.action.details': 'Details',
-  'game.card.action.journal': 'Journal',
   'game.card.action.detailsAria': 'Open details for {title}',
-  'game.card.action.journalAria': 'Open journal for {title}',
   'game.card.detectedLibraries': 'Detected components',
   'game.card.badge.upToDate': 'Up to date',
   'game.card.badge.updatesAvailable': 'Updates available',
@@ -195,14 +193,16 @@ export const en = {
   'gameDetails.nvapi.noBaseline': 'No initial value saved',
 
   // ── Operations page ──
-  'operations.title': 'History',
-  'operations.subtitleAll': 'All activities',
+  'operations.title': 'Operations Journal',
   'operations.subtitleGame': 'Activity for {title}',
-  'operations.viewGame': 'View Game',
   'operations.loading': 'Loading...',
   'operations.empty': 'No history yet',
-  'operations.historyAria': 'Activity history',
-  'operations.items': 'Items',
+  'operations.gameName': 'Game',
+  'operations.date': 'Date',
+  'operations.status': 'Status',
+  'operations.action': 'Action',
+  'operations.libraryType': 'Library Type',
+  'operations.version': 'Version',
 
   // ── Libraries page ──
   'libraries.error': 'Error',

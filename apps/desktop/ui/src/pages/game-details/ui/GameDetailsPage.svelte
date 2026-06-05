@@ -16,7 +16,9 @@
     CardDescription,
     CardTitle,
     ScrollArea,
+    Button,
   } from '@shared/ui';
+  import HistoryIcon from '@lucide/svelte/icons/history';
   import { t } from '@shared/i18n';
   import type { SettingFamily } from '@features/nvapi-settings';
   import type {
@@ -57,6 +59,7 @@
     onRollback?: RollbackHandler;
     onBulkSwap?: BulkSwapHandler;
     onBulkRollback?: BulkRollbackHandler;
+    onOpenOperations?: () => void;
   };
 
   const {
@@ -67,6 +70,7 @@
     onRollback = () => undefined,
     onBulkSwap = () => undefined,
     onBulkRollback = () => undefined,
+    onOpenOperations,
   }: Props = $props();
 
   type VendorTab = {
@@ -198,11 +202,20 @@
       </Card>
     {:else}
       <Tabs bind:value={selectedVendor}>
-        <TabsList>
-          {#each tabs as tab (tab.key)}
-            <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
-          {/each}
-        </TabsList>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            {#each tabs as tab (tab.key)}
+              <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
+            {/each}
+          </TabsList>
+
+          {#if onOpenOperations}
+            <Button variant="secondary" size="sm" onclick={onOpenOperations}>
+              <HistoryIcon class="mr-2 size-4" />
+              {t('operations.title')}
+            </Button>
+          {/if}
+        </div>
 
         {#each tabs as tab (tab.key)}
           <TabsContent value={tab.key} class="grid gap-3">

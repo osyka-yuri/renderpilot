@@ -32,7 +32,10 @@ pub(super) async fn ensure_downloaded_and_registered(
 
     let artifact_id = materialize_local_library(entry, &archive_path)?;
 
-    Ok(DownloadedLibrary { dll_path, artifact_id })
+    Ok(DownloadedLibrary {
+        dll_path,
+        artifact_id,
+    })
 }
 
 pub(super) fn local_archive_path(entry: &LibraryManifestEntry) -> Result<PathBuf, CliError> {
@@ -151,7 +154,9 @@ pub(super) fn delete_local_library(entry: &LibraryManifestEntry) -> Result<(), C
     if dll_path.exists() {
         // Best-effort: unregister the artifact from the catalog before deleting the file.
         if let Ok(sha256) = read_or_compute_dll_sha256(&dll_path) {
-            if let Ok(artifact) = artifact_builder::build_manifest_artifact(entry, &dll_path, &sha256) {
+            if let Ok(artifact) =
+                artifact_builder::build_manifest_artifact(entry, &dll_path, &sha256)
+            {
                 if let Ok(storage) = catalog::open_catalog_storage() {
                     let _ = storage.delete_artifact(artifact.id());
                 }

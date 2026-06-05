@@ -334,10 +334,17 @@ struct OperationSummaryOutput {
     completed_at: Option<i64>,
     item_count: usize,
     component_id: String,
+    metadata: Option<Value>,
 }
 
 impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
     fn from(entry: &OperationListCatalogEntry) -> Self {
+        let metadata = entry
+            .operation
+            .metadata_json
+            .as_ref()
+            .and_then(|m| serde_json::from_str(m.as_str()).ok());
+
         Self {
             operation_id: entry.operation.id.as_str().to_owned(),
             kind: entry.operation.kind.as_str().to_owned(),
@@ -349,6 +356,7 @@ impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
                 .map(|timestamp| timestamp.as_i64()),
             item_count: entry.item_count,
             component_id: entry.component_ids.first().cloned().unwrap_or_default(),
+            metadata,
         }
     }
 }

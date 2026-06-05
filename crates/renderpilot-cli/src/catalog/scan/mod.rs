@@ -1,8 +1,8 @@
 mod install_partitioner;
 mod paths;
 mod prune;
-mod scan_plan;
 mod recovery;
+mod scan_plan;
 
 #[cfg(windows)]
 mod auto;

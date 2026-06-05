@@ -39,8 +39,13 @@ pub(super) fn build_manifest_artifact(
 /// - The parsed list of `LibraryArtifact`s.
 /// - A mapping between the generated `ArtifactId` and the raw manifest `entry_id`.
 /// - A set of `entry_id`s whose build type is `"debug"`.
-pub(crate) fn manifest_entries_as_artifacts(
-) -> Result<(Vec<LibraryArtifact>, HashMap<ArtifactId, String>, HashSet<String>), CliError> {
+pub(crate) type ManifestArtifactsResult = (
+    Vec<LibraryArtifact>,
+    HashMap<ArtifactId, String>,
+    HashSet<String>,
+);
+
+pub(crate) fn manifest_entries_as_artifacts() -> Result<ManifestArtifactsResult, CliError> {
     let manifest = match load_local_manifest()? {
         Some(manifest) => manifest,
         None => return Ok((Vec::new(), HashMap::new(), HashSet::new())),

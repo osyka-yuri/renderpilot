@@ -60,9 +60,7 @@ impl ArtifactRepository for SqliteStorage {
             .prepare_cached("DELETE FROM library_artifacts WHERE id = ?")
             .map_err(storage_error)?;
 
-        statement
-            .execute([id.as_str()])
-            .map_err(storage_error)?;
+        statement.execute([id.as_str()]).map_err(storage_error)?;
 
         Ok(())
     }

@@ -106,7 +106,11 @@ pub(crate) fn get_game_details_with_storage(
     let candidate_groups = find_replacement_candidates(
         &components,
         &all_artifacts,
-        &renderpilot_application::CandidateContext::new(downloaded_ids, manifest_entry_ids, debug_entry_ids),
+        &renderpilot_application::CandidateContext::new(
+            downloaded_ids,
+            manifest_entry_ids,
+            debug_entry_ids,
+        ),
     );
 
     let operations = list_operations_with_storage(storage, &game_id)?;

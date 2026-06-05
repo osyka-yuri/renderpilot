@@ -39,13 +39,17 @@
   const currentVersion = $derived(group?.current_version);
 
   const currentCandidate = $derived(
-    candidates.find((c) => currentHash && c.sha256 === currentHash)
+    candidates.find((c) => currentHash && c.sha256 === currentHash),
   );
-  const currentValue = $derived(currentCandidate?.artifact_id ?? currentHash ?? currentVersion ?? 'current');
+  const currentValue = $derived(
+    currentCandidate?.artifact_id ?? currentHash ?? currentVersion ?? 'current',
+  );
   const isCurrentDebug = $derived(currentCandidate?.is_debug ?? false);
 
   const currentLabel = $derived(
-    group?.current_version ? `v${group.current_version}${isCurrentDebug ? ' (Debug)' : ''}` : t('common.unknown'),
+    group?.current_version
+      ? `v${group.current_version}${isCurrentDebug ? ' (Debug)' : ''}`
+      : t('common.unknown'),
   );
   // The dropdown always marks the installed version as selected. Its value is the
   // installed file's content id, so after a swap/rollback the highlight follows the
@@ -104,7 +108,9 @@
               {#snippet children(snippetProps)}
                 <span class="truncate pr-6">{versionLabel}</span>
                 {#if !candidate.is_downloaded && !snippetProps.selected}
-                  <span class="pointer-events-none absolute inset-e-2 flex size-3.5 items-center justify-center text-muted-foreground">
+                  <span
+                    class="pointer-events-none absolute inset-e-2 flex size-3.5 items-center justify-center text-muted-foreground"
+                  >
                     <DownloadIcon class="size-4" aria-hidden="true" />
                   </span>
                 {/if}

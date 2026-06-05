@@ -108,7 +108,11 @@ pub async fn delete_library(entry_id: String) -> JsonResult {
 
     // Delete the artifact from the DB, the local DLL, its cache, and the ZIP archive.
     if let Err(error) = local_library::delete_local_library(&entry) {
-        log::error!("Failed to delete local library for entry {}: {}", entry_id, error);
+        log::error!(
+            "Failed to delete local library for entry {}: {}",
+            entry_id,
+            error
+        );
     }
 
     to_json(library_state(&entry, false, None, None))

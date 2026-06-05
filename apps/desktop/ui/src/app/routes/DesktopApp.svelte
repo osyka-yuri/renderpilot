@@ -148,13 +148,6 @@
     });
   }
 
-  async function openGameOperations(gameId: string): Promise<void> {
-    await openDesktopGame(gameId, 'operations', {
-      runExclusive: (task) => model.runExclusive(task),
-      loadGameDetails,
-    });
-  }
-
   async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
     await loadAndPresentGameDetails(gameId, nextScreen, {
       getGameDetails,
@@ -235,15 +228,10 @@
       onRollback={gameDetailsModel.handleRollback}
       onBulkSwap={gameDetailsModel.handleBulkSwap}
       onBulkRollback={gameDetailsModel.handleBulkRollback}
+      onOpenOperations={() => model.handleNavigate('operations')}
     />
   {:else if model.screen === 'operations'}
-    <OperationsScreen
-      details={model.selectedDetails}
-      gameCard={model.currentGameCard}
-      onViewGame={() => {
-        model.handleNavigate('details');
-      }}
-    />
+    <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />
   {:else if model.screen === 'settings'}
     <SettingsScreen
       themeMode={model.themeMode}
@@ -264,7 +252,6 @@
       onReloadCards={handleReloadCards}
       onClearError={model.clearError}
       onOpenDetails={openGameDetails}
-      onOpenOperations={openGameOperations}
     />
   {/if}
 </DesktopShell>

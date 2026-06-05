@@ -80,7 +80,9 @@ pub fn find_replacement_candidates(
 
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
                 let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
-                let is_debug = entry_id.as_ref().map_or(false, |id| context.is_debug_entry(id));
+                let is_debug = entry_id
+                    .as_ref()
+                    .is_some_and(|id| context.is_debug_entry(id));
                 ReplacementCandidate::for_component(
                     component,
                     artifact,
@@ -431,7 +433,6 @@ fn candidate_comparison(
 
     compare_versions(primary_component_version(component), artifact.version())
 }
-
 
 /// Whether a unified single-file FSR 3.x backend may replace this component.
 ///

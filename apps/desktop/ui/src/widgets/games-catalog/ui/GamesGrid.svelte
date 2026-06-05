@@ -34,7 +34,6 @@
     onToggleFavorite?: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden?: (gameId: GameId, isHidden: boolean) => void;
     onOpenDetails?: GameActionHandler;
-    onOpenOperations?: GameActionHandler;
     onResetFilters?: () => void;
   };
 
@@ -100,7 +99,6 @@
     onToggleFavorite = noopToggleFavorite,
     onToggleHidden = noopToggleHidden,
     onOpenDetails = noopAction,
-    onOpenOperations = noopAction,
     onResetFilters = () => undefined,
   }: Props = $props();
 
@@ -275,9 +273,6 @@
                 }}
                 onOpenDetails={(): void => {
                   onOpenDetails(card.id);
-                }}
-                onOpenOperations={(): void => {
-                  onOpenOperations(card.id);
                 }}
               />
             {/each}

@@ -1,29 +1,42 @@
 <script lang="ts">
   import type { GameSummary } from '@entities/game';
-  import { Badge, Button, Card, CardContent, CardTitle, ScrollArea } from '@shared/ui';
+  import {
+    Badge,
+    Card,
+    CardContent,
+    CardTitle,
+    ScrollArea,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+    createSvelteTable,
+    FlexRender,
+    renderSnippet,
+  } from '@shared/ui';
   import { t } from '@shared/i18n';
   import {
     createOperationViewModel,
     type OperationHistoryDetails,
     type OperationViewModel,
   } from '../model/operations-page-presenter';
-  import { cn } from '@shared/classnames';
+  import { type ColumnDef, getCoreRowModel } from '@tanstack/table-core';
+
+  const EMPTY_VALUE = '—';
 
   type Props = {
     gameCard?: GameSummary | null;
     details?: OperationHistoryDetails | null;
-    onViewGame?: () => void;
   };
 
   const EMPTY_OPERATIONS: readonly OperationViewModel[] = [];
 
-  const { gameCard = null, details = null, onViewGame }: Props = $props();
+  const { gameCard = null, details = null }: Props = $props();
 
-  const canViewGame = $derived(gameCard !== null && typeof onViewGame === 'function');
   const pageSubtitle = $derived(
-    gameCard === null
-      ? t('operations.subtitleAll')
-      : t('operations.subtitleGame', { title: gameCard.title }),
+    gameCard === null ? undefined : t('operations.subtitleGame', { title: gameCard.title }),
   );
 
   const operations = $derived.by((): readonly OperationViewModel[] => {
@@ -31,115 +44,148 @@
       return EMPTY_OPERATIONS;
     }
 
-    return details.operations.map((operation) => createOperationViewModel(operation));
+    return details.operations.map((op) => createOperationViewModel(op, gameCard));
   });
 
   const hasOperations = $derived(operations.length > 0);
 
-  function handleViewGame(): void {
-    if (typeof onViewGame !== 'function') {
-      return;
+  const columns = $derived.by((): ColumnDef<OperationViewModel>[] => {
+    const baseColumns: ColumnDef<OperationViewModel>[] = [
+      {
+        id: 'date',
+        header: () => t('operations.date'),
+        cell: ({ row }) => renderSnippet(dateCell, row.original),
+      },
+      {
+        accessorKey: 'statusLabel',
+        header: () => t('operations.status'),
+        cell: ({ row }) => renderSnippet(statusCell, row.original),
+      },
+      {
+        accessorKey: 'kindLabel',
+        header: () => t('operations.action'),
+        cell: ({ row }) => renderSnippet(actionCell, row.original),
+      },
+      {
+        accessorKey: 'libraryType',
+        header: () => t('operations.libraryType'),
+        cell: ({ row }) => renderSnippet(libraryCell, row.original),
+      },
+      {
+        id: 'version',
+        header: () => t('operations.version'),
+        cell: ({ row }) => renderSnippet(versionCell, row.original),
+      },
+    ];
+
+    if (gameCard !== null) {
+      return baseColumns;
     }
 
-    onViewGame();
-  }
+    return [
+      {
+        accessorKey: 'gameName',
+        header: () => t('operations.gameName'),
+        cell: ({ row }) => renderSnippet(gameNameCell, row.original),
+      },
+      ...baseColumns,
+    ];
+  });
+
+  const table = createSvelteTable({
+    get data() {
+      return operations;
+    },
+    get columns() {
+      return columns;
+    },
+    getCoreRowModel: getCoreRowModel(),
+  });
 </script>
 
-<section class="grid h-full min-h-0 gap-4 overflow-hidden">
+{#snippet gameNameCell(operation: OperationViewModel)}
+  <span class="font-medium">{operation.gameName}</span>
+{/snippet}
+
+{#snippet dateCell(operation: OperationViewModel)}
+  <span>{operation.createdAtText}</span>
+{/snippet}
+
+{#snippet statusCell(operation: OperationViewModel)}
+  <Badge variant={operation.badgeVariant}>{operation.statusLabel}</Badge>
+{/snippet}
+
+{#snippet actionCell(operation: OperationViewModel)}
+  <span>{operation.kindLabel}</span>
+{/snippet}
+
+{#snippet libraryCell(operation: OperationViewModel)}
+  <span class="font-medium">{operation.libraryType}</span>
+{/snippet}
+
+{#snippet versionCell(operation: OperationViewModel)}
+  <div class="flex items-center gap-1.5 whitespace-nowrap">
+    <span class="text-muted-foreground">{operation.fromVersion ?? EMPTY_VALUE}</span>
+    <span class="text-muted-foreground">→</span>
+    <span class="font-medium">{operation.toVersion ?? EMPTY_VALUE}</span>
+  </div>
+{/snippet}
+
+<section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-4 overflow-hidden">
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div class="grid gap-1">
-      <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-        {t('operations.title')}
-      </p>
       <h1 class="text-2xl/tight font-semibold text-foreground">{t('operations.title')}</h1>
-      <p class="text-sm text-muted-foreground">{pageSubtitle}</p>
+      {#if pageSubtitle}
+        <p class="text-sm text-muted-foreground">{pageSubtitle}</p>
+      {/if}
     </div>
-    {#if canViewGame}
-      <Button variant="secondary" size="sm" onclick={handleViewGame}>
-        {t('operations.viewGame')}
-      </Button>
-    {/if}
   </header>
 
   <div class="min-h-0">
-    <ScrollArea>
-      {#if canViewGame}
-        <!-- handled by PageHeader actions -->
-      {/if}
-
-      {#if details === null}
-        <Card>
-          <CardContent role="status" aria-live="polite">
-            <p>{t('operations.loading')}</p>
-          </CardContent>
-        </Card>
-      {:else if !hasOperations}
-        <Card>
-          <CardContent>
-            <CardTitle>{t('operations.empty')}</CardTitle>
-          </CardContent>
-        </Card>
-      {:else}
-        <div class="flex flex-col gap-3 pb-5" aria-label={t('operations.historyAria')}>
-          {#each operations as operation (operation.id)}
-            <article aria-label={operation.ariaLabel}>
-              <Card>
-                <CardContent>
-                  <div
-                    class={cn(
-                      'mb-3 flex items-center justify-between gap-3',
-                      'max-sm:flex-col max-sm:items-start max-sm:gap-1',
-                    )}
-                  >
-                    <div class="flex min-w-0 flex-wrap items-center gap-2">
-                      <Badge variant={operation.badgeVariant}>
-                        {operation.statusLabel}
-                      </Badge>
-
-                      <span class="font-semibold text-foreground">{operation.kindLabel}</span>
-                    </div>
-
-                    <div class="shrink-0 max-sm:shrink">
-                      <span class="text-sm text-muted-foreground">{operation.createdAtText}</span>
-                    </div>
-                  </div>
-
-                  <div
-                    class={cn(
-                      'flex items-end justify-between gap-3',
-                      'max-sm:flex-col max-sm:items-stretch',
-                    )}
-                  >
-                    <dl
-                      class={cn(
-                        'grid min-w-0 flex-1',
-                        'grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-4 gap-y-3',
-                      )}
-                    >
-                      <div class="grid min-w-0 gap-1">
-                        <p
-                          class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                          {t('operations.items')}
-                        </p>
-                        <p class="text-sm/5 font-semibold text-foreground">{operation.itemCount}</p>
-                      </div>
-                    </dl>
-                  </div>
-
-                  {#if operation.completedDurationText !== null}
-                    <div class="mt-3">
-                      <span class="text-xs text-muted-foreground"
-                        >{operation.completedDurationText}</span
-                      >
-                    </div>
-                  {/if}
-                </CardContent>
-              </Card>
-            </article>
-          {/each}
-        </div>
-      {/if}
-    </ScrollArea>
+    {#if details === null}
+      <Card>
+        <CardContent role="status" aria-live="polite">
+          <p>{t('operations.loading')}</p>
+        </CardContent>
+      </Card>
+    {:else if !hasOperations}
+      <Card>
+        <CardContent>
+          <CardTitle>{t('operations.empty')}</CardTitle>
+        </CardContent>
+      </Card>
+    {:else}
+      <ScrollArea orientation="both" class="h-full">
+        <Table>
+          <TableHeader>
+            {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+              <TableRow>
+                {#each headerGroup.headers as header (header.id)}
+                  <TableHead>
+                    {#if !header.isPlaceholder}
+                      <FlexRender
+                        content={header.column.columnDef.header}
+                        context={header.getContext()}
+                      />
+                    {/if}
+                  </TableHead>
+                {/each}
+              </TableRow>
+            {/each}
+          </TableHeader>
+          <TableBody>
+            {#each table.getRowModel().rows as row (row.id)}
+              <TableRow>
+                {#each row.getVisibleCells() as cell (cell.id)}
+                  <TableCell>
+                    <FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
+                  </TableCell>
+                {/each}
+              </TableRow>
+            {/each}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+    {/if}
   </div>
 </section>

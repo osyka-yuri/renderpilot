@@ -28,7 +28,7 @@ export type KnownOperationStatus =
   | 'rolled_back'
   | 'cancelled';
 
-export type KnownOperationKind = 'scan' | 'replace_component';
+export type KnownOperationKind = 'scan' | 'replace_component' | 'rollback_component';
 
 export type OperationStatus = KnownOperationStatus | (string & {});
 export type OperationKind = KnownOperationKind | (string & {});
@@ -41,4 +41,10 @@ export type OperationSummary = {
   completed_at?: number | null;
   item_count: number;
   component_id?: string;
+  metadata?: {
+    game_name?: string;
+    library?: string;
+    from_version?: string;
+    to_version?: string;
+  } | null;
 };

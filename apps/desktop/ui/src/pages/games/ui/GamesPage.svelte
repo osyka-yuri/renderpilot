@@ -33,7 +33,6 @@
     onReloadCards?: () => Promise<void>;
     onClearError?: VoidHandler;
     onOpenDetails?: GameSelectionHandler;
-    onOpenOperations?: GameSelectionHandler;
   };
 
   const noop: VoidHandler = () => undefined;
@@ -51,7 +50,6 @@
     onReloadCards = noopReloadCards,
     onClearError = noop,
     onOpenDetails = noopGameSelection,
-    onOpenOperations = noopGameSelection,
   }: Props = $props();
 
   const hasGames = $derived(games.length > 0);
@@ -243,7 +241,6 @@
         onToggleHidden={model.toggleHidden}
         onResetFilters={model.resetFilters}
         {onOpenDetails}
-        {onOpenOperations}
       />
     </ScrollArea>
   {/if}

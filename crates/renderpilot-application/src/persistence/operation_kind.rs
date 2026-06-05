@@ -11,6 +11,9 @@ pub enum OperationKind {
     /// Replaces one detected component with a selected artifact.
     ReplaceComponent,
 
+    /// Restores a component to its baseline state.
+    RollbackComponent,
+
     /// Forward-compatible value for operation kinds introduced by newer adapters.
     Other(String),
 }
@@ -22,6 +25,9 @@ impl OperationKind {
     /// Stable storage tag for component replacement operations.
     pub const REPLACE_COMPONENT: &'static str = "replace_component";
 
+    /// Stable storage tag for component rollback operations.
+    pub const ROLLBACK_COMPONENT: &'static str = "rollback_component";
+
     /// Parses a stable storage value into an operation kind.
     pub fn from_storage(value: impl Into<String>) -> AppResult<Self> {
         let value = super::normalize_non_empty_text(value, "operation kind")?;
@@ -29,6 +35,7 @@ impl OperationKind {
         match value.as_str() {
             Self::SCAN => Ok(Self::Scan),
             Self::REPLACE_COMPONENT => Ok(Self::ReplaceComponent),
+            Self::ROLLBACK_COMPONENT => Ok(Self::RollbackComponent),
             _ => Ok(Self::Other(value)),
         }
     }
@@ -39,6 +46,7 @@ impl OperationKind {
         match self {
             Self::Scan => Self::SCAN,
             Self::ReplaceComponent => Self::REPLACE_COMPONENT,
+            Self::RollbackComponent => Self::ROLLBACK_COMPONENT,
             Self::Other(value) => value.as_str(),
         }
     }

@@ -10,7 +10,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'nav.games': 'Игры',
   'nav.libraries': 'Библиотеки',
   'nav.settings': 'Настройки',
-  'nav.operations': 'Операции',
+  'nav.operations': 'Журнал',
   'nav.gameFallback': 'Игра',
   'nav.donate': 'Поддержать',
   'shell.refresh': 'Обновить',
@@ -48,9 +48,7 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Game card ──
   'game.card.action.details': 'Подробнее',
-  'game.card.action.journal': 'Журнал',
   'game.card.action.detailsAria': 'Открыть подробности: {title}',
-  'game.card.action.journalAria': 'Открыть журнал: {title}',
   'game.card.detectedLibraries': 'Найденные компоненты',
   'game.card.badge.upToDate': 'Актуально',
   'game.card.badge.updatesAvailable': 'Доступны обновления',
@@ -208,14 +206,16 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.noBaseline': 'Исходное значение не сохранено',
 
   // ── Operations page ──
-  'operations.title': 'История',
-  'operations.subtitleAll': 'Все действия',
-  'operations.subtitleGame': 'Действия для {title}',
-  'operations.viewGame': 'Открыть игру',
+  'operations.title': 'Журнал операций',
+  'operations.subtitleGame': 'Операции для {title}',
   'operations.loading': 'Загрузка...',
-  'operations.empty': 'История пуста',
-  'operations.historyAria': 'История действий',
-  'operations.items': 'Элементы',
+  'operations.empty': 'Операций нет',
+  'operations.gameName': 'Игра',
+  'operations.date': 'Дата',
+  'operations.status': 'Статус',
+  'operations.action': 'Действие',
+  'operations.libraryType': 'Тип библиотеки',
+  'operations.version': 'Версия',
 
   // ── Libraries page ──
   'libraries.error': 'Ошибка',

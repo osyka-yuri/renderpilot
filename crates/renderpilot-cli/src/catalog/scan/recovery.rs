@@ -47,15 +47,13 @@ pub(super) fn recover_orphaned_backups(
 
 /// Attempts to recover a `.bak` file as a `ComponentFile` referencing the original path.
 /// Returns `None` if the `.bak` file does not exist.
-fn recover_bak_file_if_exists(bak_path: &PathBuf) -> AppResult<Option<ComponentFile>> {
+fn recover_bak_file_if_exists(bak_path: &std::path::Path) -> AppResult<Option<ComponentFile>> {
     if !bak_path.exists() {
         return Ok(None);
     }
 
     let bak_str = bak_path.to_string_lossy();
-    let original_path_str = bak_str
-        .strip_suffix(".bak")
-        .unwrap_or(bak_str.as_ref());
+    let original_path_str = bak_str.strip_suffix(".bak").unwrap_or(bak_str.as_ref());
     let path_ref = PathRef::new(original_path_str)
         .map_err(|e| renderpilot_application::AppError::invalid_input(e.to_string()))?;
 
@@ -98,12 +96,14 @@ fn recover_orphaned_fsr_split_members(
         let bak_path = entry.path();
 
         // Only consider `.bak` files.
-        if !bak_path.extension().is_some_and(|ext| ext == "bak") {
+        if bak_path.extension() != Some(std::ffi::OsStr::new("bak")) {
             continue;
         }
 
         // Only consider FSR split members / markers.
-        let Some(stem) = bak_path.file_stem() else { continue };
+        let Some(stem) = bak_path.file_stem() else {
+            continue;
+        };
         let stem_str = stem.to_string_lossy();
         if !fsr::is_split_member(&stem_str) && !fsr::is_split_marker(&stem_str) {
             continue;
@@ -111,9 +111,7 @@ fn recover_orphaned_fsr_split_members(
 
         // Derive the original (non-.bak) path and skip if already recovered.
         let bak_str = bak_path.to_string_lossy();
-        let original_path = bak_str
-            .strip_suffix(".bak")
-            .unwrap_or("");
+        let original_path = bak_str.strip_suffix(".bak").unwrap_or("");
         if already_recovered.contains(&original_path.to_ascii_lowercase()) {
             continue;
         }

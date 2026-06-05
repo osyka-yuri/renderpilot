@@ -117,7 +117,7 @@ pub(super) const SELECT_OPERATIONS_FOR_GAME_SQL: &str = concat!(
     "
     FROM operations
     WHERE operations.game_id = ?1
-    ORDER BY operations.created_at, operations.id
+    ORDER BY operations.created_at DESC, operations.id DESC
     "
 );
 
@@ -142,7 +142,7 @@ pub(super) const SELECT_OPERATION_ITEMS_FOR_GAME_SQL: &str = concat!(
     FROM operation_items
     INNER JOIN operations ON operations.id = operation_items.operation_id
     WHERE operations.game_id = ?1
-    ORDER BY operations.created_at, operations.id, operation_items.id
+    ORDER BY operations.created_at DESC, operations.id DESC, operation_items.id
     "
 );
 

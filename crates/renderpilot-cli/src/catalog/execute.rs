@@ -5,7 +5,7 @@ use std::{
 };
 
 use renderpilot_application::{
-    build_swap_operation_plan, fsr, AppError, AppResult, ComponentRepository,
+    build_swap_operation_plan, fsr, AppError, AppResult, ComponentRepository, GameRepository,
 };
 use renderpilot_domain::{
     ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology,
@@ -22,6 +22,19 @@ use crate::{
     error::CliError,
 };
 
+const UNKNOWN_GAME_NAME: &str = "Unknown Game";
+const UNKNOWN_VERSION: &str = "Unknown";
+/// Label written to the journal when rolling back to the pre-swap baseline.
+const ROLLBACK_TARGET_LABEL: &str = "Original";
+
+#[derive(Debug, Serialize)]
+pub(crate) struct OperationMetadata {
+    pub(crate) game_name: String,
+    pub(crate) library: String,
+    pub(crate) from_version: Option<String>,
+    pub(crate) to_version: String,
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct SwapResult {
     pub(crate) game_id: String,
@@ -35,6 +48,28 @@ pub(crate) struct RollbackResult {
     pub(crate) game_id: String,
     pub(crate) component_id: String,
     pub(crate) restored_path: String,
+}
+
+/// A single file affected by the operation.
+struct JournalEntryItem<'a> {
+    path: &'a PathRef,
+    artifact_id: Option<ArtifactId>,
+}
+
+/// Parameters for recording a completed operation in the journal.
+///
+/// Passed as a single value to [`record_operation_journal_entry`] so that the
+/// call sites remain readable without a 7-argument call.
+struct JournalEntryParams<'a> {
+    game_id: &'a GameId,
+    component_id: &'a ComponentId,
+    kind: renderpilot_application::OperationKind,
+    component: &'a GraphicsComponent,
+    /// The version the component is being swapped to.
+    /// `None` falls back to [`UNKNOWN_VERSION`] in the stored metadata.
+    to_version: Option<&'a str>,
+    /// Files affected by the operation.
+    items: Vec<JournalEntryItem<'a>>,
 }
 
 struct LoadedApplySwap {
@@ -90,6 +125,90 @@ pub(crate) fn build_swap_plan(
     Ok(catalog::build_swap_plan(game_id, component_id, artifact_id)?.plan)
 }
 
+/// Records a journal entry for the completed operation, best-effort.
+///
+/// Failures are logged as warnings and do **not** propagate — journal
+/// persistence is informational and must never disrupt the main swap / rollback
+/// flow.
+fn record_operation_journal_entry(storage: &SqliteStorage, params: JournalEntryParams<'_>) {
+    let JournalEntryParams {
+        game_id,
+        component_id,
+        kind,
+        component,
+        to_version,
+        items,
+    } = params;
+
+    let Ok(op_id) = renderpilot_domain::OperationId::new(ulid::Ulid::new().to_string()) else {
+        log::warn!("Failed to generate operation id for journal");
+        return;
+    };
+    let timestamp = renderpilot_application::UnixTimestampMillis::now()
+        .unwrap_or_else(|_| renderpilot_application::UnixTimestampMillis::new(0).unwrap());
+
+    let game_name = storage
+        .find_game(game_id)
+        .ok()
+        .flatten()
+        .map(|g| g.identity().title().to_string())
+        .unwrap_or_else(|| UNKNOWN_GAME_NAME.to_owned());
+
+    let metadata = OperationMetadata {
+        game_name,
+        library: component.technology().as_slug().to_string(),
+        from_version: component
+            .files()
+            .first()
+            .and_then(|f| f.version())
+            .map(|v| v.to_string()),
+        to_version: to_version.unwrap_or(UNKNOWN_VERSION).to_owned(),
+    };
+    let metadata_str = serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_owned());
+    let metadata_json =
+        renderpilot_application::MetadataJson::new(metadata_str).unwrap_or_else(|_| {
+            // SAFETY: a literal empty JSON object is always a valid MetadataJson.
+            renderpilot_application::MetadataJson::new("{}")
+                .expect("empty JSON object is always valid")
+        });
+
+    let operation_record = renderpilot_application::OperationRecord::new(
+        op_id.clone(),
+        game_id.clone(),
+        kind,
+        renderpilot_application::OperationStatus::Completed,
+        timestamp,
+    )
+    .with_completed_at(timestamp)
+    .with_metadata_json(metadata_json);
+
+    let item_records: Vec<_> = items
+        .into_iter()
+        .map(|item| {
+            let mut record = renderpilot_application::OperationItemRecord::new(
+                op_id.clone(),
+                component_id.clone(),
+                item.path.clone(),
+                renderpilot_application::OperationStatus::Completed,
+            );
+            if let Some(aid) = item.artifact_id {
+                record = record.with_artifact_id(aid);
+            }
+            record
+        })
+        .collect();
+
+    if let Ok(entry) =
+        renderpilot_application::OperationJournalEntry::try_new(operation_record, item_records)
+    {
+        if let Err(e) =
+            renderpilot_application::OperationRepository::save_operation_entry(storage, &entry)
+        {
+            log::warn!("Failed to save operation journal entry: {}", e);
+        }
+    }
+}
+
 /// Installs an artifact package over a component as an **additive overlay**.
 ///
 /// Each artifact file is placed at its install target (its `install_as` name, or
@@ -134,6 +253,25 @@ pub(crate) fn apply_swap(
             return Err(error.into());
         }
 
+        record_operation_journal_entry(
+            storage,
+            JournalEntryParams {
+                game_id: &prepared.game_id,
+                component_id: &prepared.component_id,
+                kind: renderpilot_application::OperationKind::ReplaceComponent,
+                component: &prepared.component,
+                to_version: prepared.artifact.version().map(|v| v.as_str()),
+                items: prepared
+                    .planned
+                    .iter()
+                    .map(|plan| JournalEntryItem {
+                        path: plan.file.path(),
+                        artifact_id: Some(prepared.artifact.id().clone()),
+                    })
+                    .collect(),
+            },
+        );
+
         Ok(SwapResult {
             game_id: prepared.game_id.as_str().to_owned(),
             component_id: prepared.component_id.as_str().to_owned(),
@@ -174,6 +312,28 @@ pub(crate) fn rollback_component(
         revert_to_baseline_fs(component.files(), &baseline)?;
 
         storage.commit_bundle_rollback(&game_id, &next_components, &component_id)?;
+
+        record_operation_journal_entry(
+            storage,
+            JournalEntryParams {
+                game_id: &game_id,
+                component_id: &component_id,
+                kind: renderpilot_application::OperationKind::RollbackComponent,
+                component: &component,
+                to_version: baseline
+                    .first()
+                    .and_then(|f| f.version())
+                    .map(|v| v.as_str())
+                    .or(Some(ROLLBACK_TARGET_LABEL)),
+                items: baseline
+                    .iter()
+                    .map(|file| JournalEntryItem {
+                        path: file.path(),
+                        artifact_id: None,
+                    })
+                    .collect(),
+            },
+        );
 
         Ok(RollbackResult {
             game_id: game_id.as_str().to_owned(),
