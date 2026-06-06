@@ -14,8 +14,10 @@
   import {
     SettingsAppearanceSection,
     SettingsCatalogSection,
+    SettingsAboutSection,
     createSettingsPanelModel,
   } from '@widgets/settings-panel';
+  import { createAppUpdaterModel } from '@features/app-updater';
 
   type Props = {
     themeMode?: ThemeMode;
@@ -32,6 +34,7 @@
   }: Props = $props();
 
   const model = createSettingsPanelModel();
+  const appUpdaterModel = createAppUpdaterModel();
 
   const localizedThemeOptions = $derived(
     themeOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
@@ -42,6 +45,7 @@
 
   onMount(() => {
     model.init();
+    void appUpdaterModel.init();
 
     return () => {
       model.dispose();
@@ -49,23 +53,31 @@
   });
 </script>
 
-<Tabs value="appearance" class="flex h-full flex-col">
+<Tabs value="general" class="flex h-full flex-col">
   <TabsList class="grid w-full max-w-md shrink-0 grid-cols-2">
     {#each tabOptions as tab (tab.value)}
       <TabsTrigger value={tab.value}>{t(tab.labelKey)}</TabsTrigger>
     {/each}
   </TabsList>
 
-  <TabsContent value="appearance" class="min-h-0 flex-1 overflow-hidden">
+  <TabsContent value="general" class="min-h-0 flex-1 overflow-hidden">
     <ScrollArea class="h-full">
-      <SettingsAppearanceSection
-        {themeMode}
-        {languageMode}
-        themeOptions={localizedThemeOptions}
-        languageOptions={localizedLanguageOptions}
-        onThemeChange={onThemeModeChange}
-        onLanguageChange={onLanguageModeChange}
-      />
+      <div class="flex flex-col gap-6">
+        <SettingsAppearanceSection
+          {themeMode}
+          {languageMode}
+          themeOptions={localizedThemeOptions}
+          languageOptions={localizedLanguageOptions}
+          onThemeChange={onThemeModeChange}
+          onLanguageChange={onLanguageModeChange}
+        />
+        <SettingsAboutSection
+          appVersion={appUpdaterModel.appVersion}
+          isCheckingForUpdates={appUpdaterModel.isCheckingForUpdates}
+          isDownloading={appUpdaterModel.isDownloading}
+          onCheckForUpdates={appUpdaterModel.handleCheckForUpdates}
+        />
+      </div>
     </ScrollArea>
   </TabsContent>
 

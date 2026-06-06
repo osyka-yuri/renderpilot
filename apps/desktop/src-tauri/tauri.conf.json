@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "RenderPilot",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.renderpilot.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -25,6 +25,14 @@
         "installMode": "both",
         "installerIcon": "icons/icon.ico"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGMDQyNUREMDBBMkJENQpSV1RWS3dyUVhVTHdCVi9mamMvYnR4bG8vNytnVDRTRkVTWThJRGc0bTl1anowa1Zkcm9UcTZuQQo=",
+      "endpoints": [
+        "https://github.com/osyka-yuri/renderpilot/releases/latest/download/update.json"
+      ]
     }
   },
   "app": {

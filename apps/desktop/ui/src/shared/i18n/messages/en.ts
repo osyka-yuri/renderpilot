@@ -45,7 +45,7 @@ export const en = {
   'settings.language.ja': '日本語',
 
   // ── Settings: tabs ──
-  'settings.tabs.appearance': 'Appearance',
+  'settings.tabs.general': 'General',
   'settings.tabs.catalog': 'Catalog',
 
   // ── Game card ──
@@ -121,6 +121,17 @@ export const en = {
   'settings.catalog.steamKey.cleared': 'Cleared',
   'settings.catalog.steamKey.readError': 'Failed to read settings.',
   'settings.catalog.steamKey.saveError': 'Failed to save settings.',
+
+  // ── Settings: about ──
+  'settings.about.title': 'About',
+  'settings.about.description': 'Check for app updates and version info.',
+  'settings.about.version.title': 'App version',
+  'settings.about.version.loading': 'Loading...',
+  'settings.about.checkUpdates': 'Check for updates',
+  'settings.about.downloading': 'Downloading...',
+  'settings.about.updateAvailable': 'Update available: {version}. Install and restart?',
+  'settings.about.upToDate': 'You are on the latest version',
+  'settings.about.updateError': 'Failed to check for updates',
 
   // ── Common ──
   'common.unknown': 'Unknown',

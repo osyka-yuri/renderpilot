@@ -43,7 +43,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.language.ja': '日本語',
 
   // ── Settings: tabs ──
-  'settings.tabs.appearance': 'Оформление',
+  'settings.tabs.general': 'Общие',
   'settings.tabs.catalog': 'Каталог',
 
   // ── Game card ──
@@ -133,6 +133,17 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.cleared': 'Ключ удалён',
   'settings.catalog.steamKey.readError': 'Не удалось прочитать настройки.',
   'settings.catalog.steamKey.saveError': 'Не удалось сохранить настройки.',
+
+  // ── Settings: about ──
+  'settings.about.title': 'Обновления',
+  'settings.about.description': 'Проверьте наличие новых версий приложения.',
+  'settings.about.version.title': 'Версия приложения',
+  'settings.about.version.loading': 'Определение...',
+  'settings.about.checkUpdates': 'Проверить обновления',
+  'settings.about.downloading': 'Скачивание...',
+  'settings.about.updateAvailable': 'Доступно обновление: {version}. Установить и перезапустить?',
+  'settings.about.upToDate': 'У вас установлена последняя версия',
+  'settings.about.updateError': 'Не удалось проверить обновления',
 
   // ── Common ──
   'common.unknown': 'Неизвестно',

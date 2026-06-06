@@ -34,7 +34,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
 
-  'settings.tabs.appearance': '外观',
+  'settings.tabs.general': '常规',
   'settings.tabs.catalog': '目录',
 
   'game.card.action.details': '详情',
@@ -318,4 +318,14 @@ export const zh: Record<MessageKey, MessageValue> = {
   'suggested_action.rebuild_operation_plan': '请重新开始操作。',
   'suggested_action.refresh_or_scan_game_folder': '刷新列表或重新扫描文件夹。',
   'suggested_action.relaunch_as_administrator': '以管理员身份重新启动应用程序并重试。',
+
+  'settings.about.title': '更新',
+  'settings.about.description': '检查应用程序更新。',
+  'settings.about.version.title': '应用版本',
+  'settings.about.version.loading': '加载中...',
+  'settings.about.checkUpdates': '检查更新',
+  'settings.about.downloading': '下载中...',
+  'settings.about.updateAvailable': '有可用更新：{version}。是否安装并重启？',
+  'settings.about.upToDate': '已是最新版本',
+  'settings.about.updateError': '检查更新失败',
 };

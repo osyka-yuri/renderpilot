@@ -33,7 +33,7 @@ export type SettingsTabOption = {
 };
 
 export const tabOptions = [
-  { value: 'appearance', labelKey: 'settings.tabs.appearance' },
+  { value: 'general', labelKey: 'settings.tabs.general' },
   { value: 'catalog', labelKey: 'settings.tabs.catalog' },
 ] as const satisfies readonly SettingsTabOption[];
 

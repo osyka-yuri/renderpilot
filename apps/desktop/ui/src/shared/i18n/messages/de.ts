@@ -34,7 +34,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
 
-  'settings.tabs.appearance': 'Erscheinungsbild',
+  'settings.tabs.general': 'Allgemein',
   'settings.tabs.catalog': 'Katalog',
 
   'game.card.action.details': 'Details',
@@ -349,4 +349,14 @@ export const de: Record<MessageKey, MessageValue> = {
     'Aktualisieren Sie die Liste oder scannen Sie den Ordner erneut.',
   'suggested_action.relaunch_as_administrator':
     'Starten Sie die App als Administrator neu und versuchen Sie es erneut.',
+
+  'settings.about.title': 'Updates',
+  'settings.about.description': 'Nach Updates für die Anwendung suchen.',
+  'settings.about.version.title': 'App-Version',
+  'settings.about.version.loading': 'Wird geladen...',
+  'settings.about.checkUpdates': 'Nach Updates suchen',
+  'settings.about.downloading': 'Wird heruntergeladen...',
+  'settings.about.updateAvailable': 'Update verfügbar: {version}. Installieren und neu starten?',
+  'settings.about.upToDate': 'Sie haben die neueste Version',
+  'settings.about.updateError': 'Fehler bei der Suche nach Updates',
 };

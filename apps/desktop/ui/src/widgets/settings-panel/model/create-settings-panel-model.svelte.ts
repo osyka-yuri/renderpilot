@@ -129,6 +129,7 @@ export function createSettingsPanelModel() {
     get coverSourcesMessage() {
       return coverSourcesMessage;
     },
+
     coverSourceToggleRows,
     init,
     dispose,

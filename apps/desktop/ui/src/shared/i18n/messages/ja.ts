@@ -34,7 +34,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
 
-  'settings.tabs.appearance': '外観',
+  'settings.tabs.general': '一般',
   'settings.tabs.catalog': 'カタログ',
 
   'game.card.action.details': '詳細',
@@ -338,4 +338,15 @@ export const ja: Record<MessageKey, MessageValue> = {
     'リストを更新するか、フォルダを再スキャンしてください。',
   'suggested_action.relaunch_as_administrator':
     'アプリを管理者として再起動して再試行してください。',
+
+  'settings.about.title': 'アップデート',
+  'settings.about.description': 'アプリケーションのアップデートを確認します。',
+  'settings.about.version.title': 'アプリのバージョン',
+  'settings.about.version.loading': '読み込み中...',
+  'settings.about.checkUpdates': 'アップデートを確認',
+  'settings.about.downloading': 'ダウンロード中...',
+  'settings.about.updateAvailable':
+    'アップデートが利用可能です: {version}。インストールして再起動しますか？',
+  'settings.about.upToDate': '最新バージョンです',
+  'settings.about.updateError': 'アップデートの確認に失敗しました',
 };

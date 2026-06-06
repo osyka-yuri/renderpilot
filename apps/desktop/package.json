@@ -1,7 +1,7 @@
 {
   "name": "renderpilot-desktop-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,7 +20,9 @@
     "@tanstack/table-core": "^8.21.3",
     "@tauri-apps/api": "2.11.0",
     "@tauri-apps/plugin-dialog": "2.7.1",
+    "@tauri-apps/plugin-process": "~2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-updater": "~2.10.1",
     "bits-ui": "^2.18.1",
     "class-variance-authority": "^0.7.1",
     "svelte": "5.56.1",

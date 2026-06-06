@@ -34,7 +34,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
 
-  'settings.tabs.appearance': 'Apariencia',
+  'settings.tabs.general': 'General',
   'settings.tabs.catalog': 'Catálogo',
 
   'game.card.action.details': 'Detalles',
@@ -339,4 +339,14 @@ export const es: Record<MessageKey, MessageValue> = {
     'Actualiza la lista o escanea la carpeta de nuevo.',
   'suggested_action.relaunch_as_administrator':
     'Reinicia la aplicación como administrador y vuelve a intentarlo.',
+
+  'settings.about.title': 'Actualizaciones',
+  'settings.about.description': 'Buscar actualizaciones de la aplicación.',
+  'settings.about.version.title': 'Versión de la aplicación',
+  'settings.about.version.loading': 'Cargando...',
+  'settings.about.checkUpdates': 'Buscar actualizaciones',
+  'settings.about.downloading': 'Descargando...',
+  'settings.about.updateAvailable': 'Actualización disponible: {version}. ¿Instalar y reiniciar?',
+  'settings.about.upToDate': 'Tienes la última versión',
+  'settings.about.updateError': 'Error al buscar actualizaciones',
 };

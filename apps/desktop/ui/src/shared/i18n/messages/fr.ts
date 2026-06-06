@@ -34,7 +34,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',
 
-  'settings.tabs.appearance': 'Apparence',
+  'settings.tabs.general': 'Général',
   'settings.tabs.catalog': 'Catalogue',
 
   'game.card.action.details': 'Détails',
@@ -342,4 +342,14 @@ export const fr: Record<MessageKey, MessageValue> = {
     'Actualisez la liste ou analysez à nouveau le dossier.',
   'suggested_action.relaunch_as_administrator':
     'Redémarrez l’application en tant qu’administrateur et réessayez.',
+
+  'settings.about.title': 'Mises à jour',
+  'settings.about.description': 'Rechercher des mises à jour.',
+  'settings.about.version.title': "Version de l'application",
+  'settings.about.version.loading': 'Chargement...',
+  'settings.about.checkUpdates': 'Rechercher des mises à jour',
+  'settings.about.downloading': 'Téléchargement...',
+  'settings.about.updateAvailable': 'Mise à jour disponible: {version}. Installer et redémarrer?',
+  'settings.about.upToDate': 'Vous avez la dernière version',
+  'settings.about.updateError': 'Erreur lors de la recherche de mises à jour',
 };
