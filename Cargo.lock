@@ -2931,7 +2931,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "renderpilot-application"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hex",
  "rand 0.10.1",
@@ -2941,7 +2941,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hex",
  "http",
@@ -2965,7 +2965,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "log",
  "renderpilot-cli",
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-detection"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hex",
  "renderpilot-application",
@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-domain"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3005,7 +3005,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-nvapi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "libloading 0.8.9",
  "thiserror 2.0.18",
@@ -3013,7 +3013,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-platform-windows"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "pelite",
  "renderpilot-application",
@@ -3027,7 +3027,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-storage-sqlite"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "renderpilot-application",
  "renderpilot-detection",
