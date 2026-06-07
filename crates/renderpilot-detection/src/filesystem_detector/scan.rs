@@ -102,8 +102,8 @@ impl<F: FileNameFilter> FileCollector<F> {
             return Ok(());
         }
 
-        for entry in read_sorted_dir_entries(path)? {
-            self.visit_child_entry(entry, dir_depth)?;
+        for entry_result in read_dir_entries(path)? {
+            self.visit_child_entry(entry_result?, dir_depth)?;
         }
 
         Ok(())
@@ -221,7 +221,15 @@ fn is_symlink(metadata: &fs::Metadata) -> bool {
     metadata.file_type().is_symlink()
 }
 
-fn read_sorted_dir_entries(path: &Path) -> AppResult<Vec<fs::DirEntry>> {
+/// Reads a directory's entries in OS order.
+///
+/// Entries are intentionally not sorted here: the walker pushes only the
+/// filtered files into `self.files`, and `into_sorted_files` imposes the final
+/// deterministic order once — a per-directory sort would be redundant work
+/// (and `sort_unstable_by_key(|e| e.file_name())` reallocates an `OsString` on
+/// every comparison, which is expensive on large game folders).
+fn read_dir_entries(path: &Path) -> AppResult<impl Iterator<Item = AppResult<fs::DirEntry>>> {
+    let path_buf = path.to_path_buf();
     let entries = fs::read_dir(path).map_err(|error| {
         detection_context_error(
             format_args!("could not read directory {}", path.display()),
@@ -229,20 +237,14 @@ fn read_sorted_dir_entries(path: &Path) -> AppResult<Vec<fs::DirEntry>> {
         )
     })?;
 
-    let mut entries = entries
-        .map(|entry| {
-            entry.map_err(|error| {
-                detection_context_error(
-                    format_args!("could not enumerate directory {}", path.display()),
-                    error,
-                )
-            })
+    Ok(entries.map(move |entry| {
+        entry.map_err(|error| {
+            detection_context_error(
+                format_args!("could not enumerate directory {}", path_buf.display()),
+                error,
+            )
         })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    entries.sort_unstable_by_key(|entry| entry.file_name());
-
-    Ok(entries)
+    }))
 }
 
 fn is_system_directory(path: &Path) -> bool {

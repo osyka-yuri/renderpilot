@@ -16,7 +16,9 @@ use crate::{
     pe_version::read_windows_file_version,
 };
 
-const HASH_BUFFER_SIZE: usize = 64 * 1024;
+/// Read-chunk size for streaming SHA-256. 256 KB trims syscall overhead on large
+/// DLLs versus 64 KB.
+const HASH_BUFFER_SIZE: usize = 256 * 1024;
 const UNIX_MILLIS_OVERFLOW_MESSAGE: &str = "modified time is too large to cache";
 
 /// Metadata that is relatively expensive to recompute for a file.
@@ -333,7 +335,7 @@ fn open_file_for_hashing(path: &Path) -> AppResult<File> {
 
 fn sha256_reader_hex(mut reader: impl Read) -> io::Result<String> {
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; HASH_BUFFER_SIZE];
+    let mut buffer = vec![0_u8; HASH_BUFFER_SIZE];
 
     loop {
         match reader.read(&mut buffer) {

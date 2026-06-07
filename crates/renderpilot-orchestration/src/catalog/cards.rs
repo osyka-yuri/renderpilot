@@ -7,7 +7,7 @@ use renderpilot_domain::GameInstallation;
 
 use crate::ServiceError;
 
-use super::{get_game_details, GameDetailsCatalogResult};
+use super::{get_game_details_with_universe, load_replacement_universe, GameDetailsCatalogResult};
 
 /// One game's aggregated dashboard data, assembled by [`game_cards`].
 ///
@@ -43,27 +43,33 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
         .map(|row| (row.game_id.clone(), row))
         .collect();
 
-    let mut cards = Vec::with_capacity(games.len());
-    for game in games {
-        let details = get_game_details(context, game.id().clone())?;
-        let cover_updated_at_ms = covers_by_game
-            .get(game.id())
-            .map(|record| record.updated_at_ms);
-        let rollback_available = !storage.component_backup_ids_for_game(game.id())?.is_empty();
+    // Loaded once and reused for every game: the artifacts table and the
+    // libraries manifest are identical across games, so re-reading the table
+    // and re-parsing the manifest per game (as the old `get_game_details` did)
+    // was pure O(N) waste on the dashboard.
+    let universe = load_replacement_universe(context)?;
 
-        let ui_state = ui_states.get(game.id().as_str());
-        let is_favorite = ui_state.map(|state| state.is_favorite).unwrap_or(false);
-        let is_hidden = ui_state.map(|state| state.is_hidden).unwrap_or(false);
+    games
+        .into_iter()
+        .map(|game| {
+            let details = get_game_details_with_universe(context, game.id().clone(), &universe)?;
+            let cover_updated_at_ms = covers_by_game
+                .get(game.id())
+                .map(|record| record.updated_at_ms);
+            let rollback_available = !storage.component_backup_ids_for_game(game.id())?.is_empty();
 
-        cards.push(GameCardData {
-            game,
-            details,
-            cover_updated_at_ms,
-            rollback_available,
-            is_favorite,
-            is_hidden,
-        });
-    }
+            let ui_state = ui_states.get(game.id().as_str());
+            let is_favorite = ui_state.is_some_and(|state| state.is_favorite);
+            let is_hidden = ui_state.is_some_and(|state| state.is_hidden);
 
-    Ok(cards)
+            Ok(GameCardData {
+                game,
+                details,
+                cover_updated_at_ms,
+                rollback_available,
+                is_favorite,
+                is_hidden,
+            })
+        })
+        .collect()
 }

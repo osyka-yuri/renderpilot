@@ -95,42 +95,71 @@ pub fn list_games(context: &crate::Context) -> Result<Vec<GameInstallation>, Ser
     context.storage().list_games().map_err(Into::into)
 }
 
-/// Returns full game details including components, candidates, and operations.
-pub fn get_game_details(
+/// The per-query-constant inputs for replacement-candidate matching: the local +
+/// manifest artifact universe and the candidate context.
+///
+/// Loading these is independent of the game, so a multi-game caller (the
+/// dashboard's [`game_cards`]) builds this **once** and reuses it for every game
+/// instead of re-reading the artifacts table and re-parsing the libraries
+/// manifest per game.
+pub(crate) struct ReplacementUniverse {
+    artifacts: Vec<LibraryArtifact>,
+    candidate_context: renderpilot_application::CandidateContext,
+}
+
+/// Loads the artifact universe (local artifacts + manifest entries) and the
+/// candidate context once. A missing/unparseable manifest degrades to
+/// local-only artifacts — identical to the previous per-game behavior.
+pub(crate) fn load_replacement_universe(
+    context: &crate::Context,
+) -> Result<ReplacementUniverse, ServiceError> {
+    let local_artifacts = context.storage().list_artifacts()?;
+
+    let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();
+    let mut artifacts = local_artifacts;
+    let (manifest_entry_ids, debug_entry_ids) =
+        match crate::libraries::manifest_entries_as_artifacts() {
+            Ok((manifest_artifacts, entry_ids, debug_ids)) => {
+                artifacts.extend(
+                    manifest_artifacts
+                        .into_iter()
+                        .filter(|a| !downloaded_ids.contains(a.id())),
+                );
+                (entry_ids, debug_ids)
+            }
+            Err(_) => (HashMap::new(), HashSet::new()),
+        };
+
+    let candidate_context = renderpilot_application::CandidateContext::new(
+        downloaded_ids,
+        manifest_entry_ids,
+        debug_entry_ids,
+    );
+
+    Ok(ReplacementUniverse {
+        artifacts,
+        candidate_context,
+    })
+}
+
+/// Builds full game details using a pre-loaded [`ReplacementUniverse`].
+///
+/// Only the genuinely per-game work runs here (components, candidate match,
+/// operations); the constant artifact/manifest load is the caller's
+/// responsibility via [`load_replacement_universe`].
+pub(crate) fn get_game_details_with_universe(
     context: &crate::Context,
     game_id: GameId,
+    universe: &ReplacementUniverse,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let storage = context.storage();
     let game = require_game(storage, &game_id)?;
     let components = storage.list_components_for_game(&game_id)?;
 
-    let local_artifacts = storage.list_artifacts()?;
-    let mut all_artifacts = local_artifacts.clone();
-
-    let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();
-    let mut manifest_entry_ids = HashMap::new();
-    let mut debug_entry_ids = HashSet::new();
-
-    if let Ok((manifest_artifacts, entry_ids, debug_ids)) =
-        crate::libraries::manifest_entries_as_artifacts()
-    {
-        for artifact in manifest_artifacts {
-            if !downloaded_ids.contains(artifact.id()) {
-                all_artifacts.push(artifact);
-            }
-        }
-        manifest_entry_ids = entry_ids;
-        debug_entry_ids = debug_ids;
-    }
-
     let candidate_groups = find_replacement_candidates(
         &components,
-        &all_artifacts,
-        &renderpilot_application::CandidateContext::new(
-            downloaded_ids,
-            manifest_entry_ids,
-            debug_entry_ids,
-        ),
+        &universe.artifacts,
+        &universe.candidate_context,
     );
 
     let operations = list_operations(context, &game_id)?;
@@ -141,6 +170,15 @@ pub fn get_game_details(
         candidate_groups,
         operations,
     })
+}
+
+/// Returns full game details including components, candidates, and operations.
+pub fn get_game_details(
+    context: &crate::Context,
+    game_id: GameId,
+) -> Result<GameDetailsCatalogResult, ServiceError> {
+    let universe = load_replacement_universe(context)?;
+    get_game_details_with_universe(context, game_id, &universe)
 }
 
 /// Returns library artifacts stored in the catalog, optionally filtered by technology.
