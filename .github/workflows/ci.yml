@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -11,67 +12,8 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  rust:
-    name: Rust quality gates
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Show Rust toolchain
-        run: rustup show
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Run tests
-        run: cargo test --workspace
-
-  desktop-format:
-    name: Desktop UI quality gates
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: apps/desktop
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check Prettier
-        run: pnpm run format:check
-
-      - name: Lint (ESLint)
-        run: pnpm run lint
-
-      - name: Build (tsc + Vite)
-        run: pnpm run build
+  quality:
+    name: Quality gates
+    # Full matrix: ubuntu + windows (default inputs of the reusable workflow).
+    uses: ./.github/workflows/quality.yml
