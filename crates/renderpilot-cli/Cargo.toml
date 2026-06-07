@@ -10,28 +10,17 @@ description = "Command-line entry point for RenderPilot."
 workspace = true
 
 [dependencies]
-hex = "0.4"
-http = "1"
-renderpilot-application = { path = "../renderpilot-application" }
-renderpilot-detection = { path = "../renderpilot-detection" }
-renderpilot-domain = { path = "../renderpilot-domain" }
-renderpilot-nvapi = { path = "../renderpilot-nvapi" }
-renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
-renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
-reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
-log = "0.4"
+renderpilot-orchestration = { path = "../renderpilot-orchestration" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.11"
-md5 = "0.8"
-zip = { version = "7", default-features = false, features = ["deflate"] }
-ulid = "1"
-urlencoding = "2"
 
 [lib]
 path = "src/lib.rs"
 
 [dev-dependencies]
+hex = "0.4"
+renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
+sha2 = "0.11"
 tempfile = "3"
 
 [[bin]]

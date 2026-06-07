@@ -8,6 +8,8 @@ members = [
     "crates/renderpilot-platform-windows",
     "crates/renderpilot-nvapi",
     "crates/renderpilot-cli",
+    "crates/renderpilot-orchestration",
+    "crates/renderpilot-api",
 ]
 resolver = "2"
 

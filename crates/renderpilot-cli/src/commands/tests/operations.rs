@@ -4,11 +4,11 @@ use std::path::Path;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt as _;
 
-use renderpilot_application::{
+use renderpilot_orchestration::application::{
     ComponentRepository, OperationItemRecord, OperationJournalEntry, OperationKind,
     OperationRecord, OperationRepository, OperationStatus, UnixTimestampMillis,
 };
-use renderpilot_domain::{
+use renderpilot_orchestration::domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, GameInstallation,
     GraphicsTechnology, LibraryArtifact, OperationId, PathRef, Sha256Hash, Swappability, Version,
 };
@@ -82,7 +82,7 @@ fn list_operations_renders_item_counts_from_aggregate_entries() {
     )
     .expect("journal entry should be valid");
     fixture
-        .storage
+        .storage()
         .save_operation_entry(&entry)
         .expect("journal entry should be stored");
 
@@ -284,7 +284,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
     let apply_json: serde_json::Value =
         serde_json::from_str(&apply_output).expect("valid apply json");
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components should load");
 
@@ -394,7 +394,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
     .expect("apply should succeed");
 
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components should load");
 
@@ -574,7 +574,7 @@ fn apply_replaces_target_even_when_changed_after_plan_swap() {
     ]))
     .expect("apply should succeed");
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components should load");
 
@@ -607,7 +607,7 @@ fn rollback_restores_original_file_and_updates_catalog() {
         serde_json::from_str(&rollback_output).expect("valid rollback json");
     let components = scenario
         .fixture
-        .storage
+        .storage()
         .list_components_for_game(&scenario.game_id)
         .expect("components should load");
 
@@ -896,7 +896,7 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
         );
     }
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(components.len(), 1);
@@ -928,7 +928,7 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
         "directory is clean: only the original remains, no FSR 4 orphans"
     );
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(
@@ -1062,7 +1062,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
     );
 
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(components.len(), 3);
@@ -1300,7 +1300,7 @@ fn already_fsr4_upgrade_replaces_all_members_then_rollback_restores_prior_releas
         );
     }
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(
@@ -1540,7 +1540,7 @@ fn dx12_lineage_downgrade_to_unified_fsr3_cleans_up_split_members() {
         "the backup still holds the original FSR 3.1, so rollback returns there"
     );
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(
@@ -1653,7 +1653,7 @@ fn externally_upgraded_fsr4_downgrade_removes_split_members_on_first_swap() {
         );
     }
     let components = fixture
-        .storage
+        .storage()
         .list_components_for_game(game.id())
         .expect("components load");
     assert_eq!(
@@ -1773,7 +1773,7 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
 
 struct AppliedScenario {
     fixture: CatalogFixture,
-    game_id: renderpilot_domain::GameId,
+    game_id: renderpilot_orchestration::domain::GameId,
     source_path: std::path::PathBuf,
     original_sha256: String,
     _game_folder: TempGameFolder,

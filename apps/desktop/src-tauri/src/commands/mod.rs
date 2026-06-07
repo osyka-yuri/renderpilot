@@ -9,12 +9,15 @@ mod validation;
 
 pub use error::CommandError;
 
-use renderpilot_cli::{desktop, CliError};
+use std::sync::Arc;
+
+use renderpilot_api::{self as desktop, ApiError};
+use renderpilot_orchestration::{Context, ServiceError};
 use serde_json::Value;
 
 pub type JsonCommandResult = Result<Value, CommandError>;
 
-type DesktopCommandResult = Result<Value, CliError>;
+type DesktopCommandResult = Result<Value, ApiError>;
 
 use query_game_cards::{QueryGameCardsArgs, QueryGameCardsDto};
 use validation::{require_non_empty_path, require_non_empty_string};
@@ -41,19 +44,27 @@ where
 }
 
 #[tauri::command]
-pub async fn scan_manual_folder(path: String) -> JsonCommandResult {
+pub async fn scan_manual_folder(
+    path: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let path = require_non_empty_path(path)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::scan_manual_folder(path)).await
+    run_desktop_command(move || desktop::scan_manual_folder(&context, path)).await
 }
 
 #[tauri::command]
-pub async fn scan_auto_libraries() -> JsonCommandResult {
-    run_desktop_command(desktop::scan_auto_libraries).await
+pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::scan_auto_libraries(&context)).await
 }
 
 #[tauri::command]
-pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
+pub async fn query_game_cards(
+    query: QueryGameCardsDto,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let QueryGameCardsArgs {
         search_query,
         selected_libraries,
@@ -65,78 +76,118 @@ pub async fn query_game_cards(query: QueryGameCardsDto) -> JsonCommandResult {
         limit,
         offset,
     } = query.into_desktop_args()?;
+    let context = Arc::clone(&context);
 
     run_desktop_command(move || {
-        desktop::query_game_cards(renderpilot_cli::desktop::QueryGameCardsRequest {
-            search_query,
-            selected_libraries,
-            selected_launchers,
-            show_hidden,
-            favorites_only,
-            sort_field,
-            sort_direction,
-            page_limit: limit,
-            page_offset: offset,
-        })
+        desktop::query_game_cards(
+            &context,
+            desktop::QueryGameCardsRequest {
+                search_query,
+                selected_libraries,
+                selected_launchers,
+                show_hidden,
+                favorites_only,
+                sort_field,
+                sort_direction,
+                page_limit: limit,
+                page_offset: offset,
+            },
+        )
     })
     .await
 }
 
 #[tauri::command]
-pub async fn get_game_details(game_id: String) -> JsonCommandResult {
+pub async fn get_game_details(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::get_game_details(game_id)).await
+    run_desktop_command(move || desktop::get_game_details(&context, game_id)).await
 }
 
 #[tauri::command]
-pub async fn fetch_game_cover(game_id: String) -> JsonCommandResult {
+pub async fn fetch_game_cover(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::fetch_game_cover(game_id)).await
+    run_desktop_command(move || desktop::fetch_game_cover(&context, game_id)).await
 }
 
 #[tauri::command]
-pub async fn clear_game_cover(game_id: String) -> JsonCommandResult {
+pub async fn clear_game_cover(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::clear_game_cover(game_id)).await
+    run_desktop_command(move || desktop::clear_game_cover(&context, game_id)).await
 }
 
 #[tauri::command]
-pub async fn set_game_cover(game_id: String, source_path: String) -> JsonCommandResult {
+pub async fn set_game_cover(
+    game_id: String,
+    source_path: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let source_path = require_non_empty_string("source_path", source_path)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::set_game_cover(game_id, source_path)).await
+    run_desktop_command(move || desktop::set_game_cover(&context, game_id, source_path)).await
 }
 
 #[tauri::command]
-pub async fn set_game_favorite(game_id: String, is_favorite: bool) -> JsonCommandResult {
+pub async fn set_game_favorite(
+    game_id: String,
+    is_favorite: bool,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::set_game_favorite(game_id, is_favorite)).await
+    run_desktop_command(move || desktop::set_game_favorite(&context, game_id, is_favorite)).await
 }
 
 #[tauri::command]
-pub async fn set_game_hidden(game_id: String, is_hidden: bool) -> JsonCommandResult {
+pub async fn set_game_hidden(
+    game_id: String,
+    is_hidden: bool,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::set_game_hidden(game_id, is_hidden)).await
+    run_desktop_command(move || desktop::set_game_hidden(&context, game_id, is_hidden)).await
 }
 
 #[tauri::command]
-pub async fn get_catalog_setting(key: String) -> JsonCommandResult {
+pub async fn get_catalog_setting(
+    key: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let key = require_non_empty_string("key", key)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::get_catalog_setting(key)).await
+    run_desktop_command(move || desktop::get_catalog_setting(&context, key)).await
 }
 
 #[tauri::command]
-pub async fn set_catalog_setting(key: String, value: String) -> JsonCommandResult {
+pub async fn set_catalog_setting(
+    key: String,
+    value: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let key = require_non_empty_string("key", key)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::set_catalog_setting(key, value)).await
+    run_desktop_command(move || desktop::set_catalog_setting(&context, key, value)).await
 }
 
 #[tauri::command]
@@ -144,20 +195,28 @@ pub async fn apply_swap(
     game_id: String,
     component_id: String,
     artifact_id: String,
+    context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let component_id = require_non_empty_string("component_id", component_id)?;
     let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::apply_swap(game_id, component_id, artifact_id)).await
+    run_desktop_command(move || desktop::apply_swap(&context, game_id, component_id, artifact_id))
+        .await
 }
 
 #[tauri::command]
-pub async fn rollback_component(game_id: String, component_id: String) -> JsonCommandResult {
+pub async fn rollback_component(
+    game_id: String,
+    component_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let component_id = require_non_empty_string("component_id", component_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::rollback_component(game_id, component_id)).await
+    run_desktop_command(move || desktop::rollback_component(&context, game_id, component_id)).await
 }
 
 #[tauri::command]
@@ -171,24 +230,45 @@ pub async fn get_libraries_manifest() -> JsonCommandResult {
 }
 
 #[tauri::command]
-pub async fn download_library(entry_id: String) -> JsonCommandResult {
+pub async fn download_library(
+    entry_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let entry_id = require_non_empty_string("entry_id", entry_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || desktop::download_library(entry_id)).await
+    run_desktop_async_command(
+        move || async move { desktop::download_library(&context, entry_id).await },
+    )
+    .await
 }
 
 #[tauri::command]
-pub async fn download_artifact(artifact_id: String) -> JsonCommandResult {
+pub async fn download_artifact(
+    artifact_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || desktop::download_artifact(artifact_id)).await
+    run_desktop_async_command(move || async move {
+        desktop::download_artifact(&context, artifact_id).await
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn delete_library(entry_id: String) -> JsonCommandResult {
+pub async fn delete_library(
+    entry_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let entry_id = require_non_empty_string("entry_id", entry_id)?;
+    let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || desktop::delete_library(entry_id)).await
+    run_desktop_async_command(
+        move || async move { desktop::delete_library(&context, entry_id).await },
+    )
+    .await
 }
 
 #[tauri::command]
@@ -207,38 +287,61 @@ pub async fn list_nvapi_supported_settings(game_id: String) -> JsonCommandResult
 }
 
 #[tauri::command]
-pub async fn list_nvapi_setting_states(game_id: String) -> JsonCommandResult {
+pub async fn list_nvapi_setting_states(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
-    run_desktop_command(move || desktop::list_nvapi_setting_states(game_id)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::list_nvapi_setting_states(&context, game_id)).await
 }
 
 #[tauri::command]
-pub async fn list_game_executable_candidates(game_id: String) -> JsonCommandResult {
+pub async fn list_game_executable_candidates(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
-    run_desktop_command(move || desktop::list_game_executable_candidates(game_id)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::list_game_executable_candidates(&context, game_id)).await
 }
 
 #[tauri::command]
 pub async fn set_game_executable_override(
     game_id: String,
     absolute_path: String,
+    context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
-    run_desktop_command(move || desktop::set_game_executable_override(game_id, absolute_path)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || {
+        desktop::set_game_executable_override(&context, game_id, absolute_path)
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn clear_game_executable_override(game_id: String) -> JsonCommandResult {
+pub async fn clear_game_executable_override(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
-    run_desktop_command(move || desktop::clear_game_executable_override(game_id)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::clear_game_executable_override(&context, game_id)).await
 }
 
 #[tauri::command]
-pub async fn get_nvapi_setting_state(game_id: String, setting_key: String) -> JsonCommandResult {
+pub async fn get_nvapi_setting_state(
+    game_id: String,
+    setting_key: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    run_desktop_command(move || desktop::get_nvapi_setting_state(game_id, setting_key)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::get_nvapi_setting_state(&context, game_id, setting_key))
+        .await
 }
 
 #[tauri::command]
@@ -246,11 +349,16 @@ pub async fn set_nvapi_setting_value(
     game_id: String,
     setting_key: String,
     value: String,
+    context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
     let value = require_non_empty_string("value", value)?;
-    run_desktop_command(move || desktop::set_nvapi_setting_value(game_id, setting_key, value)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || {
+        desktop::set_nvapi_setting_value(&context, game_id, setting_key, value)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -258,11 +366,16 @@ pub async fn revert_nvapi_setting(
     game_id: String,
     setting_key: String,
     target: String,
+    context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
     let target = require_non_empty_string("target", target)?;
-    run_desktop_command(move || desktop::revert_nvapi_setting(game_id, setting_key, target)).await
+    let context = Arc::clone(&context);
+    run_desktop_command(move || {
+        desktop::revert_nvapi_setting(&context, game_id, setting_key, target)
+    })
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -272,13 +385,13 @@ pub async fn revert_nvapi_setting(
 /// Reads whether the global NVIDIA DLSS indicator overlay is currently enabled.
 #[tauri::command]
 pub async fn get_dlss_indicator_state() -> JsonCommandResult {
-    run_desktop_command(desktop::get_dlss_indicator_state).await
+    run_desktop_command(renderpilot_api::get_dlss_indicator_state).await
 }
 
 /// Enables or disables the global NVIDIA DLSS indicator overlay (requires admin).
 #[tauri::command]
 pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
-    run_desktop_command(move || desktop::set_dlss_indicator_enabled(enabled)).await
+    run_desktop_command(move || renderpilot_api::set_dlss_indicator_enabled(enabled)).await
 }
 
 /// Returns the `AppInitializationState` snapshot computed at startup.
@@ -303,21 +416,23 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
                 app.exit(0);
                 Ok(serde_json::json!({ "relaunched": true }))
             }
-            ElevationStartupDecision::UserCancelled => Err(CommandError::from(
-                CliError::CommandFailed("UAC consent was declined".to_owned()),
-            )),
-            ElevationStartupDecision::PolicyBlocked(code) => {
-                Err(CommandError::from(CliError::CommandFailed(format!(
+            ElevationStartupDecision::UserCancelled => Err(CommandError::from(ApiError::Service(
+                ServiceError::CommandFailed("UAC consent was declined".to_owned()),
+            ))),
+            ElevationStartupDecision::PolicyBlocked(code) => Err(CommandError::from(
+                ApiError::Service(ServiceError::CommandFailed(format!(
                     "OS denied the elevation request (ShellExecute code {code})"
-                ))))
-            }
+                ))),
+            )),
         }
     }
     #[cfg(not(windows))]
     {
         let _ = app;
-        Err(CommandError::from(CliError::CommandFailed(
-            "administrator relaunch is only supported on Windows".to_owned(),
+        Err(CommandError::from(ApiError::Service(
+            ServiceError::CommandFailed(
+                "administrator relaunch is only supported on Windows".to_owned(),
+            ),
         )))
     }
 }

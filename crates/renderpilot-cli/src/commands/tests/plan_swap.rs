@@ -1,5 +1,5 @@
-use renderpilot_domain::GraphicsTechnology;
-use renderpilot_domain::Swappability;
+use renderpilot_orchestration::domain::GraphicsTechnology;
+use renderpilot_orchestration::domain::Swappability;
 
 use crate::run;
 

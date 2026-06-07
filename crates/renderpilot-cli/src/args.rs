@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
 use crate::CliError;
 
@@ -291,7 +291,7 @@ where
 mod tests {
     use std::ffi::OsString;
 
-    use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+    use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
     use super::{parse_args, Command};
     use crate::CliError;

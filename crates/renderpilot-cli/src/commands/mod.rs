@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use renderpilot_application::AppInfo;
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::application::AppInfo;
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
 use crate::{
     args::Command,
@@ -27,27 +27,36 @@ pub(crate) fn render_command(command: Command, info: AppInfo) -> CliOutput {
         Command::Summary => render_summary_command(info),
         Command::Help => render_help_command(info),
         Command::Version => render_version_command(info),
+        other => render_stateful_command(other),
+    }
+}
 
-        Command::ScanFolder { path } => scan_folder(path),
-        Command::ListArtifacts { technology } => list_artifacts(technology),
-        Command::ListOperations { game_id } => list_operations(game_id),
-        Command::Candidates { game_id } => candidates(game_id),
+fn render_stateful_command(command: Command) -> CliOutput {
+    let context = renderpilot_orchestration::Context::open()?;
+
+    match command {
+        Command::ScanFolder { path } => scan_folder(&context, path),
+        Command::ListArtifacts { technology } => list_artifacts(&context, technology),
+        Command::ListOperations { game_id } => list_operations(&context, game_id),
+        Command::Candidates { game_id } => candidates(&context, game_id),
 
         Command::PlanSwap {
             game_id,
             component_id,
             artifact_id,
-        } => plan_swap(game_id, component_id, artifact_id),
+        } => plan_swap(&context, game_id, component_id, artifact_id),
 
         Command::ApplyOperation {
             game_id,
             component_id,
             artifact_id,
-        } => apply_swap(game_id, component_id, artifact_id),
+        } => apply_swap(&context, game_id, component_id, artifact_id),
         Command::RollbackOperation {
             game_id,
             component_id,
-        } => rollback_component(game_id, component_id),
+        } => rollback_component(&context, game_id, component_id),
+
+        _ => unreachable!("stateless commands are handled in render_command"),
     }
 }
 
@@ -63,8 +72,8 @@ fn render_version_command(info: AppInfo) -> CliOutput {
     Ok(render_version(info))
 }
 
-fn scan_folder(path: PathBuf) -> CliOutput {
-    let results = catalog::scan_folder(path)?;
+fn scan_folder(context: &renderpilot_orchestration::Context, path: PathBuf) -> CliOutput {
+    let results = catalog::scan_folder(context, path)?;
 
     render_scan_folder_results(results)
 }
@@ -105,38 +114,55 @@ fn render_scan_folder_batch_results(results: Vec<catalog::ScanFolderCatalogResul
     render_output(render_scan_folder_batch_output(scans))
 }
 
-fn list_artifacts(technology: Option<GraphicsTechnology>) -> CliOutput {
-    let artifacts = catalog::list_artifacts(technology)?;
+fn list_artifacts(
+    context: &renderpilot_orchestration::Context,
+    technology: Option<GraphicsTechnology>,
+) -> CliOutput {
+    let artifacts = catalog::list_artifacts(context, technology)?;
 
     render_output(render_list_artifacts_output(artifacts))
 }
 
-fn list_operations(game_id: GameId) -> CliOutput {
-    let result = catalog::list_operations(game_id)?;
+fn list_operations(context: &renderpilot_orchestration::Context, game_id: GameId) -> CliOutput {
+    let result = catalog::list_operations(context, &game_id)?;
 
     render_output(render_list_operations_output(&result))
 }
 
-fn candidates(game_id: GameId) -> CliOutput {
-    let result = catalog::find_candidates(game_id)?;
+fn candidates(context: &renderpilot_orchestration::Context, game_id: GameId) -> CliOutput {
+    let result = catalog::find_candidates(context, &game_id)?;
 
     render_output(render_candidates_output(&result.game_id, result.groups))
 }
 
-fn plan_swap(game_id: GameId, component_id: ComponentId, artifact_id: ArtifactId) -> CliOutput {
-    let plan = catalog::execute::build_swap_plan(game_id, component_id, artifact_id)?;
+fn plan_swap(
+    context: &renderpilot_orchestration::Context,
+    game_id: GameId,
+    component_id: ComponentId,
+    artifact_id: ArtifactId,
+) -> CliOutput {
+    let plan = catalog::build_swap_plan(context, &game_id, &component_id, &artifact_id)?;
 
-    render_output(render_plan_swap_output(&plan))
+    render_output(render_plan_swap_output(&plan.plan))
 }
 
-fn apply_swap(game_id: GameId, component_id: ComponentId, artifact_id: ArtifactId) -> CliOutput {
-    let result = catalog::execute::apply_swap(game_id, component_id, artifact_id)?;
+fn apply_swap(
+    context: &renderpilot_orchestration::Context,
+    game_id: GameId,
+    component_id: ComponentId,
+    artifact_id: ArtifactId,
+) -> CliOutput {
+    let result = catalog::apply_swap(context, game_id, component_id, artifact_id)?;
 
     render_output(serde_json::to_string_pretty(&result))
 }
 
-fn rollback_component(game_id: GameId, component_id: ComponentId) -> CliOutput {
-    let result = catalog::execute::rollback_component(game_id, component_id)?;
+fn rollback_component(
+    context: &renderpilot_orchestration::Context,
+    game_id: GameId,
+    component_id: ComponentId,
+) -> CliOutput {
+    let result = catalog::rollback_component(context, game_id, component_id)?;
 
     render_output(serde_json::to_string_pretty(&result))
 }

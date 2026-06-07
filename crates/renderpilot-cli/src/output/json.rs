@@ -1,14 +1,16 @@
 use std::collections::BTreeMap;
 
-use renderpilot_application::{
-    ComponentReplacementCandidates, OperationPlan, OperationPlanFile, ReplacementCandidate,
+use renderpilot_orchestration::application::{
+    ComponentReplacementCandidates, OperationPlan, OperationPlanFile,
 };
-use renderpilot_detection::DetectedLibraryFile;
-use renderpilot_domain::{GameId, GameInstallation, LibraryArtifact};
+use renderpilot_orchestration::detection::DetectedLibraryFile;
+use renderpilot_orchestration::domain::{GameId, GameInstallation, LibraryArtifact};
 use serde::Serialize;
-use serde_json::Value;
 
-use crate::catalog::{OperationListCatalogEntry, OperationListCatalogResult};
+use crate::catalog::OperationListCatalogResult;
+use renderpilot_orchestration::catalog::output::{
+    component_candidate_outputs, operation_summary_outputs, ComponentCandidateOutput,
+};
 
 type JsonResult<T> = Result<T, serde_json::Error>;
 
@@ -48,31 +50,6 @@ pub(crate) fn render_list_operations_output(
 
 pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String> {
     render_pretty_json(SwapPlanOutput::from(plan))
-}
-
-// -----------------------------------------------------------------------------
-// Public JSON value helpers
-// -----------------------------------------------------------------------------
-
-pub(crate) fn candidate_groups_value(
-    groups: Vec<ComponentReplacementCandidates>,
-) -> JsonResult<Value> {
-    render_json_value(component_candidate_outputs(groups))
-}
-
-pub(crate) fn operation_summaries_value(result: &OperationListCatalogResult) -> JsonResult<Value> {
-    render_json_value(operation_summary_outputs(result))
-}
-
-// -----------------------------------------------------------------------------
-// JSON serialization helpers
-// -----------------------------------------------------------------------------
-
-fn render_json_value<T>(value: T) -> JsonResult<Value>
-where
-    T: Serialize,
-{
-    serde_json::to_value(value)
 }
 
 fn render_pretty_json<T>(value: T) -> JsonResult<String>
@@ -231,81 +208,6 @@ impl CandidateListOutput {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct ComponentCandidateOutput {
-    component_id: String,
-    technology: String,
-    file_path: String,
-    current_version: Option<String>,
-    candidates: Vec<CandidateOutput>,
-}
-
-impl From<ComponentReplacementCandidates> for ComponentCandidateOutput {
-    fn from(group: ComponentReplacementCandidates) -> Self {
-        Self {
-            component_id: group.component_id().as_str().to_owned(),
-            technology: group.technology().as_slug().to_owned(),
-            file_path: group.file_path().as_str().to_owned(),
-            current_version: group
-                .current_version()
-                .map(|version| version.as_str().to_owned()),
-            candidates: candidate_outputs(&group),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct CandidateOutput {
-    artifact_id: String,
-    file_name: String,
-    file_path: Option<String>,
-    version: Option<String>,
-    source_game_id: Option<String>,
-    comparison: String,
-    manifest_entry_id: Option<String>,
-    is_downloaded: bool,
-    is_debug: bool,
-    sha256: String,
-}
-
-impl From<&ReplacementCandidate> for CandidateOutput {
-    fn from(candidate: &ReplacementCandidate) -> Self {
-        Self {
-            artifact_id: candidate.artifact_id().as_str().to_owned(),
-            file_name: candidate.file_name().to_owned(),
-            file_path: candidate.file_path().map(|path| path.as_str().to_owned()),
-            version: candidate
-                .version()
-                .map(|version| version.as_str().to_owned()),
-            source_game_id: candidate
-                .source_game_id()
-                .map(|game_id| game_id.as_str().to_owned()),
-            comparison: candidate.comparison().as_str().to_owned(),
-            manifest_entry_id: candidate.manifest_entry_id().map(String::from),
-            is_downloaded: candidate.is_downloaded(),
-            is_debug: candidate.is_debug(),
-            sha256: candidate.sha256().to_owned(),
-        }
-    }
-}
-
-fn component_candidate_outputs(
-    groups: Vec<ComponentReplacementCandidates>,
-) -> Vec<ComponentCandidateOutput> {
-    groups
-        .into_iter()
-        .map(ComponentCandidateOutput::from)
-        .collect()
-}
-
-fn candidate_outputs(group: &ComponentReplacementCandidates) -> Vec<CandidateOutput> {
-    group
-        .candidates()
-        .iter()
-        .map(CandidateOutput::from)
-        .collect()
-}
-
 // -----------------------------------------------------------------------------
 // Operation list output
 // -----------------------------------------------------------------------------
@@ -313,7 +215,7 @@ fn candidate_outputs(group: &ComponentReplacementCandidates) -> Vec<CandidateOut
 #[derive(Debug, Serialize)]
 struct OperationListOutput {
     game_id: String,
-    operations: Vec<OperationSummaryOutput>,
+    operations: Vec<renderpilot_orchestration::catalog::output::OperationSummaryOutput>,
 }
 
 impl From<&OperationListCatalogResult> for OperationListOutput {
@@ -323,50 +225,6 @@ impl From<&OperationListCatalogResult> for OperationListOutput {
             operations: operation_summary_outputs(result),
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct OperationSummaryOutput {
-    operation_id: String,
-    kind: String,
-    status: String,
-    created_at: i64,
-    completed_at: Option<i64>,
-    item_count: usize,
-    component_id: String,
-    metadata: Option<Value>,
-}
-
-impl From<&OperationListCatalogEntry> for OperationSummaryOutput {
-    fn from(entry: &OperationListCatalogEntry) -> Self {
-        let metadata = entry
-            .operation
-            .metadata_json
-            .as_ref()
-            .and_then(|m| serde_json::from_str(m.as_str()).ok());
-
-        Self {
-            operation_id: entry.operation.id.as_str().to_owned(),
-            kind: entry.operation.kind.as_str().to_owned(),
-            status: entry.operation.status.as_str().to_owned(),
-            created_at: entry.operation.created_at.as_i64(),
-            completed_at: entry
-                .operation
-                .completed_at
-                .map(|timestamp| timestamp.as_i64()),
-            item_count: entry.item_count,
-            component_id: entry.component_ids.first().cloned().unwrap_or_default(),
-            metadata,
-        }
-    }
-}
-
-fn operation_summary_outputs(result: &OperationListCatalogResult) -> Vec<OperationSummaryOutput> {
-    result
-        .operations
-        .iter()
-        .map(OperationSummaryOutput::from)
-        .collect()
 }
 
 // -----------------------------------------------------------------------------

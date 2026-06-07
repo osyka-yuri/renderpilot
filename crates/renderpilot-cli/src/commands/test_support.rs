@@ -6,8 +6,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use renderpilot_application::{ArtifactRepository, ComponentRepository, GameRepository};
-use renderpilot_domain::{
+use renderpilot_orchestration::application::{
+    ArtifactRepository, ComponentRepository, GameRepository,
+};
+use renderpilot_orchestration::domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
     GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact,
     PathRef, Platform, Sha256Hash, Swappability, Version,
@@ -33,7 +35,10 @@ pub(super) struct CatalogEnvironmentGuard {
 
 pub(super) struct CatalogFixture {
     _catalog_env: CatalogEnvironmentGuard,
-    pub(super) storage: SqliteStorage,
+    /// Direct storage handle on the same database, for test seeding and assertions.
+    /// Commands under test open their own orchestration `Context` from the catalog
+    /// env var this fixture sets; only tests reach storage directly.
+    storage: SqliteStorage,
 }
 
 impl TempGameFolder {
@@ -70,12 +75,17 @@ impl CatalogFixture {
     pub(super) fn new(name: &str) -> Self {
         let db_path = temp_db_path(name);
         let catalog_env = CatalogEnvironmentGuard::new(db_path.clone());
-        let storage = SqliteStorage::open(&db_path).expect("sqlite storage should open");
+        let storage = open_storage(&db_path);
 
         Self {
             _catalog_env: catalog_env,
             storage,
         }
+    }
+
+    /// Direct storage handle for test seeding and assertions on the same database.
+    pub(super) fn storage(&self) -> &SqliteStorage {
+        &self.storage
     }
 
     pub(super) fn store_game(&self, game: &GameInstallation) {
@@ -87,7 +97,7 @@ impl CatalogFixture {
     pub(super) fn store_components(
         &self,
         game_id: &GameId,
-        components: &[renderpilot_domain::GraphicsComponent],
+        components: &[renderpilot_orchestration::domain::GraphicsComponent],
     ) {
         self.storage
             .replace_components_for_game(game_id, components)
@@ -115,6 +125,14 @@ impl Drop for TempGameFolder {
             let _ = fs::remove_dir_all(&self.path);
         }
     }
+}
+
+/// Opens a direct storage handle on `db_path` for test seeding and assertions.
+///
+/// Production code never opens storage directly — it goes through `Context` — but
+/// tests legitimately reach the infrastructure to set up state and verify it.
+pub(super) fn open_storage(db_path: &Path) -> SqliteStorage {
+    SqliteStorage::open(db_path).expect("sqlite storage should open")
 }
 
 pub(super) fn temp_db_path(name: &str) -> PathBuf {
@@ -155,7 +173,7 @@ pub(super) fn sample_component(
     path: &str,
     version: Option<&str>,
     sha256: &str,
-) -> renderpilot_domain::GraphicsComponent {
+) -> renderpilot_orchestration::domain::GraphicsComponent {
     let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
         .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
@@ -163,7 +181,7 @@ pub(super) fn sample_component(
         file = file.with_version(Version::parse(version).expect("version should be valid"));
     }
 
-    renderpilot_domain::GraphicsComponent::new(
+    renderpilot_orchestration::domain::GraphicsComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,
@@ -182,8 +200,8 @@ pub(super) fn sample_bundle_component(
     technology: GraphicsTechnology,
     swappability: Swappability,
     files: &[(&str, Option<&str>, &str)],
-) -> renderpilot_domain::GraphicsComponent {
-    let mut component = renderpilot_domain::GraphicsComponent::new(
+) -> renderpilot_orchestration::domain::GraphicsComponent {
+    let mut component = renderpilot_orchestration::domain::GraphicsComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,

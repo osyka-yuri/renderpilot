@@ -4,6 +4,9 @@ mod commands;
 #[cfg(windows)]
 mod elevation;
 
+use std::sync::Arc;
+
+use renderpilot_orchestration::Context;
 use serde::Serialize;
 use tauri::{Builder, Manager, Wry};
 
@@ -202,13 +205,17 @@ fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder 
     configure_cover_protocol(configure_commands(configure_plugins(Builder::default()))).setup(
         move |app| {
             app.manage(init_state);
+            // Propagate (don't panic) so a catalog-open failure routes through the
+            // graceful `exit_with_startup_error` path like any other startup error.
+            let context = Arc::new(Context::open()?);
+            app.manage(context.clone());
             log::info!(
                 "Started with is_elevated={}, user_declined={}, attempted={}",
                 init_state.is_elevated,
                 init_state.elevation_user_declined,
                 init_state.elevation_attempted
             );
-            renderpilot_cli::desktop::gc_cover_orphans_on_startup();
+            renderpilot_api::gc_cover_orphans_on_startup(&context);
             refresh_libraries_manifest_in_background();
             Ok(())
         },
@@ -217,15 +224,26 @@ fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder 
 
 fn refresh_libraries_manifest_in_background() {
     tauri::async_runtime::spawn(async {
-        if let Err(error) = renderpilot_cli::desktop::fetch_libraries_manifest().await {
+        if let Err(error) = renderpilot_api::fetch_libraries_manifest().await {
             log::warn!("Failed to refresh libraries manifest on startup: {error}");
         }
     });
 }
 
 fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
-    builder.register_uri_scheme_protocol("rp-cover", |_ctx, request| {
-        renderpilot_cli::cover_asset_protocol_response(request.uri().path())
+    builder.register_uri_scheme_protocol("rp-cover", |ctx, request| {
+        // The protocol must always answer and never panic. If the shared context
+        // is somehow not managed yet, degrade to NOT_FOUND instead of unwrapping.
+        match ctx.app_handle().try_state::<Arc<Context>>() {
+            Some(context) => {
+                renderpilot_api::cover_asset_protocol_response(&context, request.uri().path())
+            }
+            None => {
+                let mut response = tauri::http::Response::new(Vec::new());
+                *response.status_mut() = tauri::http::StatusCode::NOT_FOUND;
+                response
+            }
+        }
     })
 }
 

@@ -1,4 +1,4 @@
-use renderpilot_domain::{GraphicsTechnology, Swappability};
+use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
 
 use crate::run;
 

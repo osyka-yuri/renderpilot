@@ -1,4 +1,4 @@
-//! Facilitates the transformation of [`CliError`] instances into a stable, deterministic JSON payload for the desktop shell frontend.
+//! Facilitates the transformation of `ApiError` / `ServiceError` values into a stable, deterministic JSON payload for the desktop shell frontend.
 //!
 //! JSON Contract Specification:
 //! - `details`: Contains sanitized, user-facing fallback text, guaranteed to be free of sensitive system paths or internals.
@@ -124,7 +124,8 @@ impl CommandError {
 mod tests {
     use super::*;
 
-    use renderpilot_cli::CliError;
+    use renderpilot_api::ApiError;
+    use renderpilot_orchestration::ServiceError;
     use serde_json::json;
     use std::collections::BTreeSet;
 
@@ -244,8 +245,8 @@ mod tests {
     #[test]
     fn debug_details_are_omitted_when_absent() {
         let err = CommandError::user_facing(
-            CommandErrorKind::NonUnicodeArgument,
-            strings::user_message::NON_UNICODE_INPUT,
+            CommandErrorKind::SteamGridDbApiKeyMissing,
+            strings::user_message::STEAMGRIDDB_API_KEY_MISSING,
         );
 
         let value = serde_json::to_value(&err).expect("serialize CommandError");
@@ -259,7 +260,9 @@ mod tests {
     #[test]
     fn command_failed_maps_technical_message_to_debug_not_details() {
         let technical = "catalog error: permission denied on D:\\Games\\secret";
-        let err = CommandError::from(CliError::CommandFailed(technical.into()));
+        let err = CommandError::from(ApiError::Service(ServiceError::CommandFailed(
+            technical.into(),
+        )));
         let value = serde_json::to_value(&err).expect("serialize CommandError");
 
         assert_eq!(
@@ -286,8 +289,8 @@ mod tests {
     #[test]
     fn serialization_contract_has_stable_keys_for_user_facing_error() {
         let err = CommandError::user_facing(
-            CommandErrorKind::NonUnicodeArgument,
-            strings::user_message::NON_UNICODE_INPUT,
+            CommandErrorKind::SteamGridDbApiKeyMissing,
+            strings::user_message::STEAMGRIDDB_API_KEY_MISSING,
         );
 
         let value = serde_json::to_value(&err).expect("serialize CommandError");

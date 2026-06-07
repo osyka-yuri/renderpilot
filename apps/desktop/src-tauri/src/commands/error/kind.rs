@@ -73,31 +73,7 @@ command_error_kinds! {
         severity: Warning,
         actions: suggested_action::REBUILD_PLAN_OR_RELOAD_OPERATIONS,
     },
-    MissingArgument => {
-        code: "missing_argument",
-        severity: Warning,
-        actions: suggested_action::RETRY_AFTER_REQUIRED_DATA,
-    },
-    UnexpectedArgument => {
-        code: "unexpected_argument",
-        severity: Warning,
-        actions: suggested_action::RELOAD_DESKTOP,
-    },
-    UnknownArgument => {
-        code: "unknown_argument",
-        severity: Warning,
-        actions: suggested_action::RELOAD_DESKTOP,
-    },
-    InvalidTechnology => {
-        code: "invalid_technology",
-        severity: Warning,
-        actions: suggested_action::REFRESH_CANDIDATES,
-    },
-    NonUnicodeArgument => {
-        code: "non_unicode_argument",
-        severity: Warning,
-        actions: suggested_action::NORMALIZE_TEXT,
-    },
+
     SerializationFailed => {
         code: "serialization_failed",
         severity: Error,

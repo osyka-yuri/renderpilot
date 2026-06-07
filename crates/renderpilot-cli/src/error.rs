@@ -1,7 +1,8 @@
 use std::{borrow::Cow, error::Error, fmt};
 
-use renderpilot_application::{invalid_operation_state_display_message, AppError, AppErrorKind};
-use renderpilot_detection::LibraryPatternError;
+use renderpilot_orchestration::application::AppError;
+use renderpilot_orchestration::detection::LibraryPatternError;
+use renderpilot_orchestration::ServiceError;
 
 use crate::output::HELP_HINT;
 
@@ -20,6 +21,8 @@ pub enum CliError {
     UnexpectedArgument(String),
     /// The user omitted a required argument.
     MissingArgument(&'static str),
+    /// The user passed a technology filter that RenderPilot does not recognize.
+    InvalidTechnology(String),
     /// The user passed a game identifier that RenderPilot could not parse.
     InvalidGameId(String),
     /// The user passed a component identifier that RenderPilot could not parse.
@@ -28,45 +31,10 @@ pub enum CliError {
     InvalidArtifactId(String),
     /// The user passed an operation identifier that RenderPilot could not parse.
     InvalidOperationId(String),
-    /// The user passed a technology filter that RenderPilot does not recognize.
-    InvalidTechnology(String),
-    /// The requested game was not found in the catalog.
-    GameNotFound(String),
-    /// The requested operation was not found in the catalog.
-    OperationNotFound(String),
-    /// The requested artifact was not found in the catalog.
-    ArtifactNotFound(String),
-    /// The requested component was not found for the given game.
-    ComponentNotFound(String),
-    /// A one-time confirmation token did not match.
-    ConfirmationTokenMismatch,
-    /// The operation is in an invalid state for the requested action.
-    InvalidOperationState {
-        /// The identifier of the operation in the invalid state.
-        operation_id: String,
-        /// The name of the invalid state, e.g. "Completed".
-        state: String,
-    },
-    /// A command failed while running.
-    CommandFailed(String),
     /// CLI output could not be serialized.
     OutputSerializationFailed(String),
-    /// SteamGridDB API key is required for this cover lookup but is not configured.
-    SteamGridDbApiKeyMissing,
-    /// Cover bytes are not a supported raster image type.
-    UnsupportedCoverImageType,
-    /// Cover artwork could not be fetched over the network.
-    CoverDownloadFailed(String),
-    /// No cover artwork was available from providers.
-    CoverNotFound,
-    /// Local filesystem error while reading or writing cover files.
-    CoverIo(String),
-    /// Denotes a failure scenario where an NVAPI write operation was attempted, but the
-    /// executing process lacked the requisite administrator privileges. This variant is
-    /// intentionally distinct from `CommandFailed` to enable the desktop frontend to reliably
-    /// intercept the error and present a targeted "Relaunch as administrator" remediation flow,
-    /// avoiding ambiguous generic error states.
-    NvapiRequiresElevation,
+    /// A service-layer error from orchestration.
+    Service(ServiceError),
 }
 
 impl CliError {
@@ -81,14 +49,8 @@ impl CliError {
 
     const fn category(&self) -> ErrorCategory {
         match self {
-            Self::CommandFailed(_)
-            | Self::OutputSerializationFailed(_)
-            | Self::SteamGridDbApiKeyMissing
-            | Self::UnsupportedCoverImageType
-            | Self::CoverDownloadFailed(_)
-            | Self::CoverNotFound
-            | Self::CoverIo(_)
-            | Self::NvapiRequiresElevation => ErrorCategory::Runtime,
+            Self::OutputSerializationFailed(_) => ErrorCategory::Runtime,
+            Self::Service(e) => service_error_category(e),
             _ => ErrorCategory::Usage,
         }
     }
@@ -103,36 +65,35 @@ impl CliError {
             Self::MissingArgument(arg) => {
                 Some(Cow::Owned(format!("missing required argument: {arg}")))
             }
+            Self::InvalidTechnology(tech) => {
+                Some(Cow::Owned(format!("unknown technology: {tech}")))
+            }
             Self::InvalidGameId(id) => Some(Cow::Owned(format!("invalid game id: {id}"))),
             Self::InvalidComponentId(id) => Some(Cow::Owned(format!("invalid component id: {id}"))),
             Self::InvalidArtifactId(id) => Some(Cow::Owned(format!("invalid artifact id: {id}"))),
             Self::InvalidOperationId(id) => Some(Cow::Owned(format!("invalid operation id: {id}"))),
-            Self::InvalidTechnology(tech) => {
-                Some(Cow::Owned(format!("unknown technology: {tech}")))
+            Self::Service(e) if matches!(service_error_category(e), ErrorCategory::Usage) => {
+                Some(Cow::Owned(e.to_string()))
             }
-            Self::GameNotFound(id) => Some(Cow::Owned(format!("game not found: {id}"))),
-            Self::OperationNotFound(id) => Some(Cow::Owned(format!("operation not found: {id}"))),
-            Self::ArtifactNotFound(id) => Some(Cow::Owned(format!("artifact not found: {id}"))),
-            Self::ComponentNotFound(id) => Some(Cow::Owned(format!("component not found: {id}"))),
-            Self::ConfirmationTokenMismatch => {
-                Some(Cow::Borrowed("confirmation token mismatch for operation"))
-            }
-            Self::InvalidOperationState {
-                operation_id,
-                state,
-            } => Some(Cow::Owned(invalid_operation_state_display_message(
-                operation_id,
-                state.as_str(),
-            ))),
-            Self::CommandFailed(_)
-            | Self::OutputSerializationFailed(_)
-            | Self::SteamGridDbApiKeyMissing
-            | Self::UnsupportedCoverImageType
-            | Self::CoverDownloadFailed(_)
-            | Self::CoverNotFound
-            | Self::CoverIo(_)
-            | Self::NvapiRequiresElevation => None,
+            _ => None,
         }
+    }
+}
+
+/// Classify a `ServiceError` variant into `Usage` or `Runtime`.
+///
+/// Usage errors (exit 2, show help hint): not-found, invalid state, token mismatch.
+/// Runtime errors (exit 1, no hint): everything else.
+const fn service_error_category(error: &ServiceError) -> ErrorCategory {
+    match error {
+        ServiceError::CommandFailed(_)
+        | ServiceError::SteamGridDbApiKeyMissing
+        | ServiceError::UnsupportedCoverImageType
+        | ServiceError::CoverDownloadFailed(_)
+        | ServiceError::CoverNotFound
+        | ServiceError::CoverIo(_)
+        | ServiceError::NvapiRequiresElevation => ErrorCategory::Runtime,
+        _ => ErrorCategory::Usage,
     }
 }
 
@@ -149,51 +110,30 @@ impl fmt::Display for CliError {
         }
 
         match self {
-            Self::CommandFailed(message) => formatter.write_str(message),
             Self::OutputSerializationFailed(message) => {
                 write!(formatter, "could not serialize CLI output: {message}")
             }
-            Self::SteamGridDbApiKeyMissing => {
-                formatter.write_str("steamgriddb api key is not configured")
-            }
-            Self::UnsupportedCoverImageType => formatter.write_str("unsupported cover image type"),
-            Self::CoverDownloadFailed(message) => {
-                write!(formatter, "cover download failed: {message}")
-            }
-            Self::CoverNotFound => formatter.write_str("cover artwork was not found"),
-            Self::CoverIo(message) => write!(formatter, "cover file error: {message}"),
-            Self::NvapiRequiresElevation => formatter
-                .write_str("administrator privileges are required to modify NVAPI settings"),
+            Self::Service(e) => fmt::Display::fmt(e, formatter),
             _ => unreachable!("usage errors are handled by usage_message"),
         }
     }
 }
 
+impl From<ServiceError> for CliError {
+    fn from(error: ServiceError) -> Self {
+        Self::Service(error)
+    }
+}
+
 impl From<AppError> for CliError {
     fn from(error: AppError) -> Self {
-        let (kind, message) = error.into_parts();
-
-        match kind {
-            AppErrorKind::ConfirmationTokenMismatch => Self::ConfirmationTokenMismatch,
-            AppErrorKind::GameNotFound => Self::GameNotFound(message),
-            AppErrorKind::OperationNotFound => Self::OperationNotFound(message),
-            AppErrorKind::ArtifactNotFound => Self::ArtifactNotFound(message),
-            AppErrorKind::ComponentNotFound => Self::ComponentNotFound(message),
-            AppErrorKind::InvalidOperationState {
-                operation_id,
-                state,
-            } => Self::InvalidOperationState {
-                operation_id,
-                state: state.as_str().to_owned(),
-            },
-            kind => Self::CommandFailed(format!("{kind}: {message}")),
-        }
+        Self::Service(ServiceError::from(error))
     }
 }
 
 impl From<LibraryPatternError> for CliError {
     fn from(error: LibraryPatternError) -> Self {
-        Self::CommandFailed(error.to_string())
+        Self::Service(ServiceError::from(error))
     }
 }
 
@@ -214,7 +154,8 @@ fn write_usage_error(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_application::{AppError, AppErrorKind, OperationStatus};
+    use renderpilot_orchestration::application::{AppError, AppErrorKind, OperationStatus};
+    use renderpilot_orchestration::ServiceError;
 
     use super::{CliError, GENERAL_FAILURE_EXIT_CODE, USAGE_FAILURE_EXIT_CODE};
 
@@ -240,15 +181,15 @@ mod tests {
             CliError::InvalidArtifactId("bad".to_owned()),
             CliError::InvalidOperationId("bad".to_owned()),
             CliError::InvalidTechnology("bad".to_owned()),
-            CliError::GameNotFound("bad".to_owned()),
-            CliError::OperationNotFound("bad".to_owned()),
-            CliError::ArtifactNotFound("bad".to_owned()),
-            CliError::ComponentNotFound("bad".to_owned()),
-            CliError::ConfirmationTokenMismatch,
-            CliError::InvalidOperationState {
+            CliError::Service(ServiceError::GameNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::OperationNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ArtifactNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ComponentNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ConfirmationTokenMismatch),
+            CliError::Service(ServiceError::InvalidOperationState {
                 operation_id: "op".to_owned(),
                 state: "planned".to_owned(),
-            },
+            }),
         ];
 
         for error in errors {
@@ -273,15 +214,15 @@ mod tests {
             CliError::InvalidArtifactId("bad".to_owned()),
             CliError::InvalidOperationId("bad".to_owned()),
             CliError::InvalidTechnology("bad".to_owned()),
-            CliError::GameNotFound("bad".to_owned()),
-            CliError::OperationNotFound("bad".to_owned()),
-            CliError::ArtifactNotFound("bad".to_owned()),
-            CliError::ComponentNotFound("bad".to_owned()),
-            CliError::ConfirmationTokenMismatch,
-            CliError::InvalidOperationState {
+            CliError::Service(ServiceError::GameNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::OperationNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ArtifactNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ComponentNotFound("bad".to_owned())),
+            CliError::Service(ServiceError::ConfirmationTokenMismatch),
+            CliError::Service(ServiceError::InvalidOperationState {
                 operation_id: "op".to_owned(),
                 state: "planned".to_owned(),
-            },
+            }),
         ];
 
         for error in errors {
@@ -292,14 +233,14 @@ mod tests {
     #[test]
     fn runtime_errors_use_general_failure_exit_code() {
         let errors = [
-            CliError::CommandFailed("scan failed".into()),
             CliError::OutputSerializationFailed("json failed".into()),
-            CliError::SteamGridDbApiKeyMissing,
-            CliError::UnsupportedCoverImageType,
-            CliError::CoverDownloadFailed("timeout".into()),
-            CliError::CoverNotFound,
-            CliError::CoverIo("permission denied".into()),
-            CliError::NvapiRequiresElevation,
+            CliError::Service(ServiceError::CommandFailed("scan failed".into())),
+            CliError::Service(ServiceError::SteamGridDbApiKeyMissing),
+            CliError::Service(ServiceError::UnsupportedCoverImageType),
+            CliError::Service(ServiceError::CoverDownloadFailed("timeout".into())),
+            CliError::Service(ServiceError::CoverNotFound),
+            CliError::Service(ServiceError::CoverIo("permission denied".into())),
+            CliError::Service(ServiceError::NvapiRequiresElevation),
         ];
 
         for error in errors {
@@ -310,8 +251,8 @@ mod tests {
     #[test]
     fn runtime_errors_do_not_include_help_hint() {
         let errors = [
-            CliError::CommandFailed("scan failed".to_owned()),
-            CliError::NvapiRequiresElevation,
+            CliError::Service(ServiceError::CommandFailed("scan failed".to_owned())),
+            CliError::Service(ServiceError::NvapiRequiresElevation),
         ];
 
         for error in errors {
@@ -334,10 +275,10 @@ mod tests {
 
         assert_eq!(
             CliError::from(app_error),
-            CliError::InvalidOperationState {
+            CliError::Service(ServiceError::InvalidOperationState {
                 operation_id: "op-123".to_owned(),
                 state: "completed".to_owned(),
-            }
+            })
         );
     }
 
@@ -346,10 +287,10 @@ mod tests {
         let app_error = AppError::invalid_operation_state("op:part", OperationStatus::Running);
         assert_eq!(
             CliError::from(app_error),
-            CliError::InvalidOperationState {
+            CliError::Service(ServiceError::InvalidOperationState {
                 operation_id: "op:part".to_owned(),
                 state: "running".to_owned(),
-            }
+            })
         );
     }
 }

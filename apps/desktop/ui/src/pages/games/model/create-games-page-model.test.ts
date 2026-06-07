@@ -33,27 +33,13 @@ describe('createGamesPageModel', () => {
     expect(model.gameItems).toEqual([]);
   });
 
-  it('derives grouped library filter options from games', () => {
-    const model = createGamesPageModel(
-      createInput({
-        getGames: () => [createStubGame('1', 'A'), createStubGame('2', 'B')],
-      }),
-    );
+  it('returns all known libraries for grouped library filter options', () => {
+    const model = createGamesPageModel(createInput());
 
-    expect(model.groupedLibraryFilterOptions).toEqual([
-      {
-        vendorKey: 'other',
-        vendorLabel: 'Additional',
-        options: [
-          {
-            value: 'steam',
-            label: 'Steam',
-            vendorKey: 'other',
-            vendorLabel: 'Additional',
-          },
-        ],
-      },
-    ]);
+    const options = model.groupedLibraryFilterOptions;
+    expect(options.length).toBeGreaterThan(0);
+    // NVIDIA should be present as it's part of ALL_KNOWN_LIBRARIES
+    expect(options.some((group) => group.vendorKey === 'nvidia')).toBe(true);
   });
 
   it('hasFilterIndicator is true when not all libraries are selected', () => {

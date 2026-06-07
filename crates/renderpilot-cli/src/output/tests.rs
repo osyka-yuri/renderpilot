@@ -1,4 +1,4 @@
-use renderpilot_application::app_info;
+use renderpilot_orchestration::application::app_info;
 
 use super::{render_help, render_summary, render_version, HELP_HINT};
 

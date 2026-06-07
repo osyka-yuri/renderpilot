@@ -47,12 +47,6 @@ pub(crate) enum UserMessage {
     InvalidArtifactReference,
     InvalidOperationReference,
 
-    MissingRequiredInfo,
-    UnexpectedInput,
-    UnrecognizedOption,
-    UnsupportedTechnologyFilter,
-    NonUnicodeInput,
-
     ResponseSerializationFailed,
     PlanChangedRebuild,
 
@@ -83,11 +77,6 @@ impl UserMessage {
         Self::InvalidComponentReference,
         Self::InvalidArtifactReference,
         Self::InvalidOperationReference,
-        Self::MissingRequiredInfo,
-        Self::UnexpectedInput,
-        Self::UnrecognizedOption,
-        Self::UnsupportedTechnologyFilter,
-        Self::NonUnicodeInput,
         Self::ResponseSerializationFailed,
         Self::PlanChangedRebuild,
         Self::GameNotInCatalog,
@@ -128,27 +117,6 @@ impl UserMessage {
             Self::InvalidOperationReference => LocalizedText::new(
                 "user_message.invalid_operation_reference",
                 "That operation reference is not valid.",
-            ),
-
-            Self::MissingRequiredInfo => LocalizedText::new(
-                "user_message.missing_required_info",
-                "Required information is missing for this action.",
-            ),
-            Self::UnexpectedInput => LocalizedText::new(
-                "user_message.unexpected_input",
-                "This action received an unexpected input.",
-            ),
-            Self::UnrecognizedOption => LocalizedText::new(
-                "user_message.unrecognized_option",
-                "An unrecognized option was provided.",
-            ),
-            Self::UnsupportedTechnologyFilter => LocalizedText::new(
-                "user_message.unsupported_technology_filter",
-                "That technology filter is not supported.",
-            ),
-            Self::NonUnicodeInput => LocalizedText::new(
-                "user_message.non_unicode_input",
-                "Text input must be valid Unicode.",
             ),
 
             Self::ResponseSerializationFailed => LocalizedText::new(
@@ -262,13 +230,6 @@ pub(crate) mod user_message {
     pub(crate) const INVALID_OPERATION_REFERENCE: UserMessage =
         UserMessage::InvalidOperationReference;
 
-    pub(crate) const MISSING_REQUIRED_INFO: UserMessage = UserMessage::MissingRequiredInfo;
-    pub(crate) const UNEXPECTED_INPUT: UserMessage = UserMessage::UnexpectedInput;
-    pub(crate) const UNRECOGNIZED_OPTION: UserMessage = UserMessage::UnrecognizedOption;
-    pub(crate) const UNSUPPORTED_TECHNOLOGY_FILTER: UserMessage =
-        UserMessage::UnsupportedTechnologyFilter;
-    pub(crate) const NON_UNICODE_INPUT: UserMessage = UserMessage::NonUnicodeInput;
-
     pub(crate) const RESPONSE_SERIALIZATION_FAILED: UserMessage =
         UserMessage::ResponseSerializationFailed;
     pub(crate) const PLAN_CHANGED_REBUILD: UserMessage = UserMessage::PlanChangedRebuild;
@@ -306,8 +267,7 @@ pub(crate) enum SuggestedAction {
     RefreshCandidates,
     RebuildPlanOrReloadOperations,
     RetryAfterRequiredData,
-    ReloadDesktop,
-    NormalizeText,
+
     InspectLogs,
     RetryOrRestart,
     RebuildOperationPlan,
@@ -324,8 +284,6 @@ impl SuggestedAction {
         Self::RefreshCandidates,
         Self::RebuildPlanOrReloadOperations,
         Self::RetryAfterRequiredData,
-        Self::ReloadDesktop,
-        Self::NormalizeText,
         Self::InspectLogs,
         Self::RetryOrRestart,
         Self::RebuildOperationPlan,
@@ -356,14 +314,7 @@ impl SuggestedAction {
                 "suggested_action.retry_after_required_data",
                 "Retry the action after the required data is available.",
             ),
-            Self::ReloadDesktop => LocalizedText::new(
-                "suggested_action.reload_desktop",
-                "Reload the desktop UI and retry the action.",
-            ),
-            Self::NormalizeText => LocalizedText::new(
-                "suggested_action.normalize_text",
-                "Retry the action with normalized text data.",
-            ),
+
             Self::InspectLogs => LocalizedText::new(
                 "suggested_action.inspect_logs",
                 "Retry the action. If the problem persists, inspect the desktop logs.",
@@ -436,8 +387,6 @@ pub(crate) mod suggested_action {
     pub(crate) const RETRY_AFTER_REQUIRED_DATA: SuggestedActions =
         &[SuggestedAction::RetryAfterRequiredData];
 
-    pub(crate) const RELOAD_DESKTOP: SuggestedActions = &[SuggestedAction::ReloadDesktop];
-    pub(crate) const NORMALIZE_TEXT: SuggestedActions = &[SuggestedAction::NormalizeText];
     pub(crate) const INSPECT_LOGS: SuggestedActions = &[SuggestedAction::InspectLogs];
     pub(crate) const RETRY_OR_RESTART: SuggestedActions = &[SuggestedAction::RetryOrRestart];
 

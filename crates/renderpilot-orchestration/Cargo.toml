@@ -1,0 +1,34 @@
+[package]
+name = "renderpilot-orchestration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Orchestration layer for RenderPilot — typed feature results and ServiceError."
+
+[lints]
+workspace = true
+
+[dependencies]
+renderpilot-application = { path = "../renderpilot-application" }
+renderpilot-detection = { path = "../renderpilot-detection" }
+renderpilot-domain = { path = "../renderpilot-domain" }
+renderpilot-nvapi = { path = "../renderpilot-nvapi" }
+renderpilot-platform-windows = { path = "../renderpilot-platform-windows" }
+renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
+hex = "0.4"
+http = "1"
+log = "0.4"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+ulid = "1"
+urlencoding = "2"
+zip = { version = "7", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+path = "src/lib.rs"

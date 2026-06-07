@@ -5,6 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use renderpilot_orchestration::Context;
+
 use serde_json::Value;
 
 use crate::{
@@ -39,14 +41,16 @@ fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
 
 #[test]
 fn rescan_parent_prunes_removed_manual_child_game() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-prune"));
+    let db_path = temp_db_path("scan-prune");
+    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let context = Context::open_at(&db_path).unwrap();
     let parent = TempGameFolder::new("cli-scan-prune");
 
     let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
     let game_b = create_child_game_with_dlss(parent.path(), "GameB", b"b-bytes");
 
-    scan_catalog_folder(parent.path(), "first parent scan should succeed");
-    assert_catalog_game_count(2, "first parent scan should discover two games");
+    scan_catalog_folder(&context, parent.path(), "first parent scan should succeed");
+    assert_catalog_game_count(&context, 2, "first parent scan should discover two games");
 
     fs::remove_dir_all(&game_b).unwrap_or_else(|error| {
         panic!(
@@ -55,9 +59,9 @@ fn rescan_parent_prunes_removed_manual_child_game() {
         )
     });
 
-    scan_catalog_folder(parent.path(), "parent rescan should succeed");
+    scan_catalog_folder(&context, parent.path(), "parent rescan should succeed");
 
-    let install_paths = catalog_install_paths();
+    let install_paths = catalog_install_paths(&context);
 
     assert_eq!(
         install_paths.len(),
@@ -87,18 +91,21 @@ fn rescan_parent_prunes_removed_manual_child_game() {
 
 #[test]
 fn scan_child_does_not_prune_sibling_manual_game() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-prune-sibling"));
+    let db_path = temp_db_path("scan-prune-sibling");
+    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let context = Context::open_at(&db_path).unwrap();
     let parent = TempGameFolder::new("cli-scan-prune-sib");
 
     let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
     let _game_b = create_child_game_with_dlss(parent.path(), "GameB", b"b-bytes");
 
-    scan_catalog_folder(parent.path(), "parent scan should succeed");
-    assert_catalog_game_count(2, "parent scan should discover two games");
+    scan_catalog_folder(&context, parent.path(), "parent scan should succeed");
+    assert_catalog_game_count(&context, 2, "parent scan should discover two games");
 
-    scan_catalog_folder(&game_a, "child scan should succeed");
+    scan_catalog_folder(&context, &game_a, "child scan should succeed");
 
     assert_catalog_game_count(
+        &context,
         2,
         "sibling manual game must remain when only one subdirectory is scanned",
     );
@@ -198,9 +205,9 @@ fn run_scan_folder(path: &Path) -> String {
     })
 }
 
-pub(super) fn scan_catalog_folder(path: &Path, context: &str) {
-    catalog::scan_folder(path.to_path_buf())
-        .unwrap_or_else(|error| panic!("{context} for `{}`: {error}", path.display()));
+pub(super) fn scan_catalog_folder(context: &Context, path: &Path, message: &str) {
+    catalog::scan_folder(context, path.to_path_buf())
+        .unwrap_or_else(|error| panic!("{message} for `{}`: {error}", path.display()));
 }
 
 fn scan_folder_args(path: &Path) -> Vec<OsString> {
@@ -210,14 +217,14 @@ fn scan_folder_args(path: &Path) -> Vec<OsString> {
     ]
 }
 
-fn assert_catalog_game_count(expected: usize, message: &str) {
-    let actual = catalog_install_paths().len();
+fn assert_catalog_game_count(context: &Context, expected: usize, message: &str) {
+    let actual = catalog_install_paths(context).len();
 
     assert_eq!(actual, expected, "{message}");
 }
 
-fn catalog_install_paths() -> Vec<String> {
-    catalog::list_games()
+fn catalog_install_paths(context: &Context) -> Vec<String> {
+    catalog::list_games(context)
         .expect("catalog games should be listed")
         .into_iter()
         .map(|game| game.install_path().as_str().to_owned())

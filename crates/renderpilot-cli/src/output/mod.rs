@@ -5,8 +5,7 @@ mod text;
 mod tests;
 
 pub(crate) use self::json::{
-    candidate_groups_value, operation_summaries_value, render_candidates_output,
-    render_list_artifacts_output, render_list_operations_output, render_plan_swap_output,
-    render_scan_folder_batch_output, render_scan_folder_output,
+    render_candidates_output, render_list_artifacts_output, render_list_operations_output,
+    render_plan_swap_output, render_scan_folder_batch_output, render_scan_folder_output,
 };
 pub(crate) use self::text::{render_help, render_summary, render_version, HELP_HINT};

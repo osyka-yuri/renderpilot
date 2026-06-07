@@ -18,7 +18,8 @@ unsafe_code = "allow"
 tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
-renderpilot-cli = { path = "../../../crates/renderpilot-cli" }
+renderpilot-api = { path = "../../../crates/renderpilot-api" }
+renderpilot-orchestration = { path = "../../../crates/renderpilot-orchestration" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

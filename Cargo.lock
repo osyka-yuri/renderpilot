@@ -2028,12 +2028,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "md5"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
-
-[[package]]
 name = "memchr"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2930,6 +2924,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
+name = "renderpilot-api"
+version = "1.0.0"
+dependencies = [
+ "http",
+ "renderpilot-orchestration",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "renderpilot-application"
 version = "1.0.0"
 dependencies = [
@@ -2944,23 +2948,12 @@ name = "renderpilot-cli"
 version = "1.0.0"
 dependencies = [
  "hex",
- "http",
- "log",
- "md5",
- "renderpilot-application",
- "renderpilot-detection",
- "renderpilot-domain",
- "renderpilot-nvapi",
- "renderpilot-platform-windows",
+ "renderpilot-orchestration",
  "renderpilot-storage-sqlite",
- "reqwest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
- "ulid",
- "urlencoding",
- "zip 7.2.0",
 ]
 
 [[package]]
@@ -2968,7 +2961,8 @@ name = "renderpilot-desktop"
 version = "1.0.0"
 dependencies = [
  "log",
- "renderpilot-cli",
+ "renderpilot-api",
+ "renderpilot-orchestration",
  "serde",
  "serde_json",
  "tauri",
@@ -3009,6 +3003,29 @@ version = "1.0.0"
 dependencies = [
  "libloading 0.8.9",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "renderpilot-orchestration"
+version = "1.0.0"
+dependencies = [
+ "hex",
+ "http",
+ "log",
+ "renderpilot-application",
+ "renderpilot-detection",
+ "renderpilot-domain",
+ "renderpilot-nvapi",
+ "renderpilot-platform-windows",
+ "renderpilot-storage-sqlite",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "ulid",
+ "urlencoding",
+ "zip 7.2.0",
 ]
 
 [[package]]

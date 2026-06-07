@@ -1,4 +1,4 @@
-use renderpilot_application::AppInfo;
+use renderpilot_orchestration::application::AppInfo;
 
 pub(crate) const HELP_HINT: &str = "Run `renderpilot --help` for usage.";
 

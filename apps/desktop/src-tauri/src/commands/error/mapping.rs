@@ -1,4 +1,5 @@
-use renderpilot_cli::CliError;
+use renderpilot_api::ApiError;
+use renderpilot_orchestration::ServiceError;
 
 use super::{
     kind::CommandErrorKind as Kind,
@@ -6,101 +7,79 @@ use super::{
     CommandError,
 };
 
-// `from_cli_error` must handle every `CliError` variant; add a match arm when the enum grows.
+// `from_api_error` must handle every `ApiError` variant; add a match arm when the enum grows.
 impl CommandError {
-    pub(crate) fn from_cli_error(error: CliError) -> Self {
+    pub(crate) fn from_api_error(error: ApiError) -> Self {
         match error {
-            CliError::InvalidGameId(id) => Self::invalid_id(
+            ApiError::InvalidGameId(id) => Self::invalid_id(
                 Kind::InvalidGameId,
                 Msg::INVALID_GAME_REFERENCE,
                 "Invalid game id",
                 id,
             ),
 
-            CliError::InvalidComponentId(id) => Self::invalid_id(
+            ApiError::InvalidComponentId(id) => Self::invalid_id(
                 Kind::InvalidComponentId,
                 Msg::INVALID_COMPONENT_REFERENCE,
                 "Invalid component id",
                 id,
             ),
 
-            CliError::InvalidArtifactId(id) => Self::invalid_id(
+            ApiError::InvalidArtifactId(id) => Self::invalid_id(
                 Kind::InvalidArtifactId,
                 Msg::INVALID_ARTIFACT_REFERENCE,
                 "Invalid artifact id",
                 id,
             ),
 
-            CliError::InvalidOperationId(id) => Self::invalid_id(
+            ApiError::InvalidOperationId(id) => Self::invalid_id(
                 Kind::InvalidOperationId,
                 Msg::INVALID_OPERATION_REFERENCE,
                 "Invalid operation id",
                 id,
             ),
 
-            CliError::MissingArgument(argument) => Self::debug(
-                Kind::MissingArgument,
-                Msg::MISSING_REQUIRED_INFO,
-                format!("Missing required argument: {argument}"),
-            ),
-
-            CliError::UnexpectedArgument(argument) => Self::debug(
-                Kind::UnexpectedArgument,
-                Msg::UNEXPECTED_INPUT,
-                format!("Unexpected argument: {argument}"),
-            ),
-
-            CliError::UnknownArgument(argument) => Self::debug(
-                Kind::UnknownArgument,
-                Msg::UNRECOGNIZED_OPTION,
-                format!("Unknown argument: {argument}"),
-            ),
-
-            CliError::InvalidTechnology(technology) => Self::debug(
-                Kind::InvalidTechnology,
-                Msg::UNSUPPORTED_TECHNOLOGY_FILTER,
-                format!("Invalid technology: {technology}"),
-            ),
-
-            CliError::NonUnicodeArgument => {
-                Self::user_facing(Kind::NonUnicodeArgument, Msg::NON_UNICODE_INPUT)
-            }
-
-            CliError::OutputSerializationFailed(message) => Self::debug(
+            ApiError::OutputSerializationFailed(message) => Self::debug(
                 Kind::SerializationFailed,
                 Msg::RESPONSE_SERIALIZATION_FAILED,
                 format!("Could not serialize command output: {message}"),
             ),
 
-            CliError::ConfirmationTokenMismatch => {
+            ApiError::Service(e) => Self::from_service_error(e),
+        }
+    }
+
+    pub(crate) fn from_service_error(error: ServiceError) -> Self {
+        match error {
+            ServiceError::ConfirmationTokenMismatch => {
                 Self::user_facing(Kind::ConfirmationTokenMismatch, Msg::PLAN_CHANGED_REBUILD)
             }
 
-            CliError::GameNotFound(game_id) => Self::debug(
+            ServiceError::GameNotFound(game_id) => Self::debug(
                 Kind::GameNotFound,
                 Msg::GAME_NOT_IN_CATALOG,
                 format!("Game not found: {game_id}"),
             ),
 
-            CliError::OperationNotFound(operation_id) => Self::debug(
+            ServiceError::OperationNotFound(operation_id) => Self::debug(
                 Kind::OperationNotFound,
                 Msg::OPERATION_NOT_FOUND,
                 format!("Operation not found: {operation_id}"),
             ),
 
-            CliError::ArtifactNotFound(artifact_id) => Self::debug(
+            ServiceError::ArtifactNotFound(artifact_id) => Self::debug(
                 Kind::ArtifactNotFound,
                 Msg::ARTIFACT_NOT_FOUND,
                 format!("Artifact not found: {artifact_id}"),
             ),
 
-            CliError::ComponentNotFound(component_id) => Self::debug(
+            ServiceError::ComponentNotFound(component_id) => Self::debug(
                 Kind::ComponentNotFound,
                 Msg::COMPONENT_NOT_FOUND,
                 format!("Component not found: {component_id}"),
             ),
 
-            CliError::InvalidOperationState {
+            ServiceError::InvalidOperationState {
                 operation_id,
                 state,
             } => Self::debug(
@@ -109,37 +88,37 @@ impl CommandError {
                 format!("Operation {operation_id} is in invalid state: {state}"),
             ),
 
-            CliError::CommandFailed(message) => Self::debug(
+            ServiceError::CommandFailed(message) => Self::debug(
                 Kind::CommandFailed,
                 Msg::OPERATION_COULD_NOT_COMPLETE,
                 message,
             ),
 
-            CliError::SteamGridDbApiKeyMissing => Self::user_facing(
+            ServiceError::SteamGridDbApiKeyMissing => Self::user_facing(
                 Kind::SteamGridDbApiKeyMissing,
                 Msg::STEAMGRIDDB_API_KEY_MISSING,
             ),
 
-            CliError::UnsupportedCoverImageType => Self::user_facing(
+            ServiceError::UnsupportedCoverImageType => Self::user_facing(
                 Kind::UnsupportedCoverImageType,
                 Msg::UNSUPPORTED_COVER_IMAGE_TYPE,
             ),
 
-            CliError::CoverDownloadFailed(message) => Self::debug(
+            ServiceError::CoverDownloadFailed(message) => Self::debug(
                 Kind::CoverDownloadFailed,
                 Msg::COVER_DOWNLOAD_FAILED,
                 message,
             ),
 
-            CliError::CoverNotFound => {
+            ServiceError::CoverNotFound => {
                 Self::user_facing(Kind::CoverNotFound, Msg::COVER_ARTWORK_NOT_FOUND)
             }
 
-            CliError::CoverIo(message) => {
+            ServiceError::CoverIo(message) => {
                 Self::debug(Kind::CoverIoError, Msg::COVER_FILE_SYSTEM_ERROR, message)
             }
 
-            CliError::NvapiRequiresElevation => Self::user_facing(
+            ServiceError::NvapiRequiresElevation => Self::user_facing(
                 Kind::NvapiRequiresElevation,
                 Msg::NVAPI_REQUIRES_ADMINISTRATOR,
             ),
@@ -151,8 +130,8 @@ impl CommandError {
     }
 }
 
-impl From<CliError> for CommandError {
-    fn from(error: CliError) -> Self {
-        Self::from_cli_error(error)
+impl From<ApiError> for CommandError {
+    fn from(error: ApiError) -> Self {
+        Self::from_api_error(error)
     }
 }

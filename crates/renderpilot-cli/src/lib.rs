@@ -2,12 +2,11 @@
 
 use std::ffi::OsString;
 
-use renderpilot_application::app_info;
+use renderpilot_orchestration::application::app_info;
 
 mod args;
 mod catalog;
 mod commands;
-pub mod desktop;
 mod error;
 mod hash;
 mod output;
@@ -18,16 +17,6 @@ mod test_env;
 pub use error::CliError;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Serves image bytes for cover requests.
-///
-/// Handles requests of the form:
-///
-/// `http://rp-cover.localhost/<url-encoded-game-id>`
-#[must_use]
-pub fn cover_asset_protocol_response(request_path: &str) -> http::Response<Vec<u8>> {
-    catalog::covers::cover_protocol_http_response(request_path)
-}
 
 /// Parses CLI arguments, executes the selected command, and returns stdout text.
 ///
