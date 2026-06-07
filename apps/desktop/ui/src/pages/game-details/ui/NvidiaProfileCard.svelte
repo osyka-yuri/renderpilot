@@ -80,10 +80,10 @@
             </SelectItem>
             {#each nvapi.supportedCandidates as candidate (candidate.absolute_path)}
               <SelectItem value={candidate.absolute_path} label={candidate.file_name}>
-                <span class="flex flex-col">
+                <div class="flex flex-col">
                   <span>{candidate.file_name}</span>
                   <span class="text-xs text-muted-foreground">{candidate.relative_path}</span>
-                </span>
+                </div>
               </SelectItem>
             {/each}
             {#each nvapi.filteredOutCandidates as candidate (candidate.absolute_path)}
@@ -91,14 +91,14 @@
                 value={candidate.absolute_path}
                 label={t('gameDetails.profile.filteredLabel', { fileName: candidate.file_name })}
               >
-                <span class="flex flex-col">
+                <div class="flex flex-col">
                   <span
                     >{candidate.file_name}
                     <span class="text-muted-foreground">{t('gameDetails.profile.filteredTag')}</span
                     ></span
                   >
                   <span class="text-xs text-muted-foreground">{candidate.relative_path}</span>
-                </span>
+                </div>
               </SelectItem>
             {/each}
           </SelectContent>
