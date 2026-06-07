@@ -126,9 +126,9 @@ pub fn write_setting_value(
         .create_session()
         .map_err(|e| ServiceError::CommandFailed(format!("DRS session failed: {e}")))?;
 
-    let profile = session.find_profile_by_exe(exe).map_err(|_| {
-        ServiceError::CommandFailed(format!("NVIDIA profile for {exe} not found"))
-    })?;
+    let profile = session
+        .find_profile_by_exe(exe)
+        .map_err(|_| ServiceError::CommandFailed(format!("NVIDIA profile for {exe} not found")))?;
 
     let pre = read_pre_state(setting, &profile)?;
 
@@ -204,8 +204,12 @@ pub fn read_all_setting_states(
             return Err(NvapiWarningDto::NoExecutable);
         }
         let nvapi = Nvapi::get().ok_or(NvapiWarningDto::NvapiUnavailable)?;
-        nvapi.initialize().map_err(|_| NvapiWarningDto::NvapiInitFailed)?;
-        nvapi.create_session().map_err(|_| NvapiWarningDto::DrsFailed)
+        nvapi
+            .initialize()
+            .map_err(|_| NvapiWarningDto::NvapiInitFailed)?;
+        nvapi
+            .create_session()
+            .map_err(|_| NvapiWarningDto::DrsFailed)
     })()
     .map_or_else(|w| (None, Some(w)), |s| (Some(s), None));
     let profile = match (session.as_ref(), exe) {
