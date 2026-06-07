@@ -20,8 +20,9 @@
 
 <br />
 
-<!-- 💡 Add screenshot or GIF here -->
-<!-- <div align="center"><img src="docs/screenshot.png" alt="RenderPilot Screenshot" width="80%" /></div> -->
+<div align="center">
+  <img src="docs/screenshot.webp" alt="RenderPilot Screenshot" width="90%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" />
+</div>
 
 RenderPilot automatically scans your installed games, identifies which upscaler libraries they use, and lets you upgrade, downgrade, or swap them in one click. All processing happens locally — no telemetry, no cloud accounts required.
 
