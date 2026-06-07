@@ -11,7 +11,7 @@ use renderpilot_domain::{
 };
 
 use super::{
-    group_into_artifacts, group_into_components, DetectedLibraryFile, DetectionConfidence,
+    group_into_artifacts, group_into_components, DetectedLibraryFile,
     LibraryPatternComponentDetector,
 };
 use crate::{
@@ -53,16 +53,6 @@ fn fixture_detects_known_graphics_libraries() {
         GraphicsTechnology::NvidiaStreamline,
     );
     assert_detects(&libraries, "libxess.dll", GraphicsTechnology::IntelXeSs);
-    assert_detects(
-        &libraries,
-        "amd_fidelityfx_framegeneration.dll",
-        GraphicsTechnology::AmdFsrFrameGeneration,
-    );
-    assert_detects(
-        &libraries,
-        "some_fsr_unknown.dll",
-        GraphicsTechnology::Unknown,
-    );
 }
 
 #[test]
@@ -127,26 +117,6 @@ fn streamline_is_bundle_only() {
         .expect("streamline should be detected");
 
     assert_eq!(streamline.swappability(), Swappability::BundleOnly);
-}
-
-#[test]
-fn exact_matches_have_high_confidence_and_unknown_globs_have_low_confidence() {
-    let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
-    let libraries = detector
-        .detect_library_files(&game)
-        .expect("fixture detection should succeed");
-    let dlss = libraries
-        .iter()
-        .find(|library| library.file_name() == "nvngx_dlss.dll")
-        .expect("DLSS should be detected");
-    let unknown_fsr = libraries
-        .iter()
-        .find(|library| library.file_name() == "some_fsr_unknown.dll")
-        .expect("unknown FSR should be detected");
-
-    assert_eq!(dlss.detection_confidence(), DetectionConfidence::High);
-    assert_eq!(unknown_fsr.detection_confidence(), DetectionConfidence::Low);
 }
 
 #[test]
@@ -347,8 +317,11 @@ fn fast_cached_scan_can_be_partial_when_new_dlls_are_added_after_cache_warmup() 
 
     let cache = file_hash_cache_from_libraries(&baseline);
 
-    fs::write(folder.join("amd_fidelityfx_framegeneration.dll"), b"amd")
-        .expect("amd dll should be written");
+    fs::write(
+        folder.join("amd_fidelityfx_framegeneration_dx12.dll"),
+        b"amd",
+    )
+    .expect("amd dll should be written");
     fs::write(folder.join("nvngx_dlss.dll"), b"nvidia").expect("nvidia dll should be written");
 
     let fast = detector
@@ -399,8 +372,11 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::remove_file(folder.join(TEMP_DLSS_NAME)).expect("temporary dlss file should be removed");
-    fs::write(folder.join("amd_fidelityfx_denoiser.dll"), b"amd-denoiser")
-        .expect("denoiser dll should be written");
+    fs::write(
+        folder.join("amd_fidelityfx_denoiser_dx12.dll"),
+        b"amd-denoiser",
+    )
+    .expect("denoiser dll should be written");
     fs::write(folder.join("amd_fidelityfx_loader_dx12.dll"), b"amd-loader")
         .expect("loader dll should be written");
     fs::write(
@@ -420,7 +396,7 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
 
     assert_detects(
         &libraries,
-        "amd_fidelityfx_denoiser.dll",
+        "amd_fidelityfx_denoiser_dx12.dll",
         GraphicsTechnology::AmdFsrRayRegeneration,
     );
     assert_detects(

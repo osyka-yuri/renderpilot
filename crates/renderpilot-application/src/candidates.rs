@@ -425,6 +425,7 @@ fn candidate_comparison(
     artifact: &LibraryArtifact,
 ) -> Option<CandidateComparison> {
     require_not_split_downgrade(component, artifact)?;
+    require_compatible_graphics_api(component, artifact)?;
     require_version_compatible(
         component.technology(),
         primary_component_version(component),
@@ -434,22 +435,51 @@ fn candidate_comparison(
     compare_versions(primary_component_version(component), artifact.version())
 }
 
+/// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).
+fn require_compatible_graphics_api(
+    component: &GraphicsComponent,
+    artifact: &LibraryArtifact,
+) -> Option<()> {
+    if component.technology().family() != GraphicsTechnology::AmdFsr {
+        return Some(());
+    }
+
+    let Some(artifact_api) = crate::fsr::fsr_graphics_api(artifact.file_name()) else {
+        return Some(()); // API-neutral artifact cannot produce a mismatch.
+    };
+
+    let component_has_conflicting_api = component
+        .files()
+        .iter()
+        .filter_map(|f| f.path().file_name())
+        .filter_map(crate::fsr::fsr_graphics_api)
+        .any(|api| api != artifact_api);
+
+    if component_has_conflicting_api {
+        None
+    } else {
+        Some(())
+    }
+}
+
 /// Whether a unified single-file FSR 3.x backend may replace this component.
 ///
-/// The deciding factor is the entry-point file. A component that still loads
-/// `amd_fidelityfx_dx12.dll` is **FSR 3.1 lineage** (pure FSR 3.1, or one we upgraded
-/// — the FSR 4 loader sits under that name): it can always return to FSR 3.1, and the
-/// swap engine cleans up the FSR 4 members, so a unified candidate is offered. A split
-/// set with **no** dx12 entry point is native FSR 4 (loads its own loader): there is no
-/// FSR 3 to return to, so a unified backend is blocked — it would only strand the split
-/// members. Split → split (upgrades and FSR 4 updates) is always allowed.
+/// The deciding factor is the entry-point file. A component that still loads an FSR 3.1
+/// entry point (`amd_fidelityfx_dx12.dll` or `amd_fidelityfx_vk.dll`) is **FSR 3.1
+/// lineage** (pure FSR 3.1, or one we upgraded — the FSR 4 loader sits under that name):
+/// it can always return to FSR 3.1, and the swap engine cleans up the FSR 4 members, so
+/// a unified candidate is offered. A split set with **no** entry point is native FSR 4
+/// (loads its own loader): there is no FSR 3 to return to, so a unified backend is
+/// blocked — it would only strand the split members. Split → split (upgrades and FSR 4
+/// updates) is always allowed.
 fn require_not_split_downgrade(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
     // A composed FSR package's primary file name is the upscaler (the split marker);
-    // the unified FSR 3.x backend's is the entry point — so the artifact side is exact
-    // even though a package's member paths are virtual.
+    // the unified FSR 3.x backend's is an entry point (`amd_fidelityfx_dx12.dll` or
+    // `amd_fidelityfx_vk.dll`) — so the artifact side is exact even though a package's
+    // member paths are virtual.
     let artifact_is_unified = !crate::fsr::is_split_marker(artifact.file_name());
     if crate::fsr::is_split_set(component.files())
         && !crate::fsr::has_entry_point(component.files())

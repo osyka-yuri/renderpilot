@@ -55,10 +55,16 @@
       "technology": "intel_xefg"
     },
     {
-      "pattern": "amd_fidelityfx_framegeneration.dll",
+      "pattern": "amd_fidelityfx_dx12.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr_frame_generation"
+      "technology": "amd_fsr"
+    },
+    {
+      "pattern": "amd_fidelityfx_vk.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "amd_fsr"
     },
     {
       "pattern": "amd_fidelityfx_framegeneration_dx12.dll",
@@ -67,19 +73,19 @@
       "technology": "amd_fsr_frame_generation"
     },
     {
-      "pattern": "amd_fidelityfx_dx12.dll",
+      "pattern": "amd_fidelityfx_framegeneration_vk.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr"
+      "technology": "amd_fsr_frame_generation"
     },
     {
-      "pattern": "amd_fidelityfx_denoiser.dll",
+      "pattern": "amd_fidelityfx_denoiser_dx12.dll",
       "kind": "exact",
       "platform": "windows",
       "technology": "amd_fsr_ray_regeneration"
     },
     {
-      "pattern": "amd_fidelityfx_denoiser_dx12.dll",
+      "pattern": "amd_fidelityfx_denoiser_vk.dll",
       "kind": "exact",
       "platform": "windows",
       "technology": "amd_fsr_ray_regeneration"
@@ -91,16 +97,22 @@
       "technology": "amd_fsr_radiance_cache"
     },
     {
+      "pattern": "amd_fidelityfx_radiancecache_vk.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "amd_fsr_radiance_cache"
+    },
+    {
       "pattern": "amd_fidelityfx_loader_dx12.dll",
       "kind": "exact",
       "platform": "windows",
       "technology": "amd_fsr_loader"
     },
     {
-      "pattern": "amd_fidelityfx_upscaler.dll",
+      "pattern": "amd_fidelityfx_loader_vk.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr_upscaler"
+      "technology": "amd_fsr_loader"
     },
     {
       "pattern": "amd_fidelityfx_upscaler_dx12.dll",
@@ -109,52 +121,10 @@
       "technology": "amd_fsr_upscaler"
     },
     {
-      "pattern": "amd_fidelityfx_vk.dll",
+      "pattern": "amd_fidelityfx_upscaler_vk.dll",
       "kind": "exact",
       "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "ffx_fsr3_x64.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr_frame_generation"
-    },
-    {
-      "pattern": "ffx_fsr3upscaler_x64.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "ffx_fsr2_api_dx12_x64.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "ffx_fsr2_api_vk_x64.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "ffx_fsr2_api_x64.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "fsr2-unity-plugin.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
-    },
-    {
-      "pattern": "fsr2-unity-plugind.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr"
+      "technology": "amd_fsr_upscaler"
     },
     {
       "pattern": "dstorage.dll",
@@ -167,36 +137,6 @@
       "kind": "exact",
       "platform": "windows",
       "technology": "direct_storage"
-    },
-    {
-      "pattern": "dlssg_to_fsr3_amd_is_better.dll",
-      "kind": "exact",
-      "platform": "windows",
-      "technology": "amd_fsr_frame_generation"
-    },
-    {
-      "pattern": "amd_fidelityfx*.dll",
-      "kind": "glob",
-      "platform": "windows",
-      "technology": "unknown"
-    },
-    {
-      "pattern": "fidelityfx*.dll",
-      "kind": "glob",
-      "platform": "windows",
-      "technology": "unknown"
-    },
-    {
-      "pattern": "*fsr*.dll",
-      "kind": "glob",
-      "platform": "windows",
-      "technology": "unknown"
-    },
-    {
-      "pattern": "*xess*.dll",
-      "kind": "glob",
-      "platform": "windows",
-      "technology": "unknown"
     }
   ]
 }

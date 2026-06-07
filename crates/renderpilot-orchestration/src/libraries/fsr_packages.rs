@@ -2,10 +2,11 @@
 //!
 //! FSR 3.1.4+ and FSR 4 ship as three DLLs that must run on one matched release:
 //! the loader, the upscaler, and the frame-generation library. The loader is
-//! installed as `amd_fidelityfx_dx12.dll` (the entry point the game loads), so the
-//! upgrade replaces the game's FSR 3.1 `amd_fidelityfx_dx12.dll` and adds the other
-//! two. RenderPilot offers the individual DLLs too for native FSR 4 games, while
-//! still composing the matched cohesive package for dx12-lineage upgrades.
+//! installed as the FSR entry-point name the game loads (`amd_fidelityfx_dx12.dll`
+//! for DX12 games, `amd_fidelityfx_vk.dll` for Vulkan games), so the upgrade
+//! replaces the game's FSR 3.1 entry point and adds the other two. RenderPilot
+//! offers the individual DLLs too for native FSR 4 games, while still composing
+//! the matched cohesive package for entry-point-lineage upgrades.
 
 use renderpilot_application::fsr;
 use renderpilot_domain::{
@@ -16,11 +17,13 @@ use std::collections::BTreeMap;
 
 use super::types::LibraryManifestEntry;
 
-// Manifest `library.id` keys for the FSR split members (no `.dll`). The installed
-// file names live once in `renderpilot_application::fsr`.
-const LOADER_ID: &str = "amd_fidelityfx_loader_dx12";
-const UPSCALER_ID: &str = "amd_fidelityfx_upscaler_dx12";
-const FRAMEGEN_ID: &str = "amd_fidelityfx_framegeneration_dx12";
+const LOADER_ID_DX12: &str = "amd_fidelityfx_loader_dx12";
+const UPSCALER_ID_DX12: &str = "amd_fidelityfx_upscaler_dx12";
+const FRAMEGEN_ID_DX12: &str = "amd_fidelityfx_framegeneration_dx12";
+
+const LOADER_ID_VK: &str = "amd_fidelityfx_loader_vk";
+const UPSCALER_ID_VK: &str = "amd_fidelityfx_upscaler_vk";
+const FRAMEGEN_ID_VK: &str = "amd_fidelityfx_framegeneration_vk";
 
 const PACKAGE_SOURCE: &str = "manifest-download";
 
@@ -39,30 +42,45 @@ struct ReleaseMembers<'a> {
     framegen: Option<&'a LibraryManifestEntry>,
 }
 
-/// Composes one FSR package per release. Releases are grouped by their shared
+/// Composes one FSR package per release and per API (DX12, Vulkan). Releases are grouped by their shared
 /// build number (the last segment of `version.sort_key`); a release needs a loader
 /// and an upscaler (frame generation is optional).
 pub(super) fn compose_fsr_packages(entries: &[LibraryManifestEntry]) -> Vec<FsrPackage> {
-    let mut by_release: BTreeMap<String, ReleaseMembers<'_>> = BTreeMap::new();
+    let mut by_release: BTreeMap<(String, &'static str), ReleaseMembers<'_>> = BTreeMap::new();
 
     for entry in entries {
+        let (entry_point_file, role) = match entry.library.id.as_str() {
+            LOADER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "loader"),
+            UPSCALER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "upscaler"),
+            FRAMEGEN_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "framegen"),
+            LOADER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "loader"),
+            UPSCALER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "upscaler"),
+            FRAMEGEN_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "framegen"),
+            _ => continue,
+        };
+
         let slot = by_release
-            .entry(release_key(&entry.version.sort_key))
+            .entry((release_key(&entry.version.sort_key), entry_point_file))
             .or_default();
-        match entry.library.id.as_str() {
-            LOADER_ID => slot.loader = Some(entry),
-            UPSCALER_ID => slot.upscaler = Some(entry),
-            FRAMEGEN_ID => slot.framegen = Some(entry),
-            _ => {}
+
+        match role {
+            "loader" => slot.loader = Some(entry),
+            "upscaler" => slot.upscaler = Some(entry),
+            "framegen" => slot.framegen = Some(entry),
+            _ => unreachable!(),
         }
     }
 
     by_release
-        .into_values()
-        .filter_map(|members| match (members.upscaler, members.loader) {
-            (Some(upscaler), Some(loader)) => build_package(upscaler, loader, members.framegen),
-            _ => None,
-        })
+        .into_iter()
+        .filter_map(
+            |((_, entry_point_file), members)| match (members.upscaler, members.loader) {
+                (Some(upscaler), Some(loader)) => {
+                    build_package(upscaler, loader, members.framegen, entry_point_file)
+                }
+                _ => None,
+            },
+        )
         .collect()
 }
 
@@ -76,16 +94,17 @@ fn build_package(
     upscaler: &LibraryManifestEntry,
     loader: &LibraryManifestEntry,
     framegen: Option<&LibraryManifestEntry>,
+    entry_point_file: &str,
 ) -> Option<FsrPackage> {
     // The upscaler is the representative (its version is the FSR ML version, e.g.
-    // 4.0.3), so it is files[0]. The loader installs as `amd_fidelityfx_dx12.dll`.
+    // 4.0.3), so it is files[0]. The loader installs as the FSR entry point.
     let mut files = Vec::new();
     let mut member_entry_ids = Vec::new();
 
     files.push(member_component_file(upscaler, None)?);
     member_entry_ids.push(upscaler.entry_id.clone());
 
-    files.push(member_component_file(loader, Some(fsr::ENTRY_POINT_FILE))?);
+    files.push(member_component_file(loader, Some(entry_point_file))?);
     member_entry_ids.push(loader.entry_id.clone());
 
     if let Some(framegen) = framegen {
@@ -188,7 +207,7 @@ mod tests {
         let entries = vec![
             member_entry(
                 "e-loader",
-                LOADER_ID,
+                LOADER_ID_DX12,
                 "amd_fidelityfx_loader_dx12.dll",
                 "2.1.0.604",
                 "0002.0001.0000.0604",
@@ -196,7 +215,7 @@ mod tests {
             ),
             member_entry(
                 "e-upscaler",
-                UPSCALER_ID,
+                UPSCALER_ID_DX12,
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "4.0.3",
                 "0004.0000.0003.0604",
@@ -204,7 +223,7 @@ mod tests {
             ),
             member_entry(
                 "e-framegen",
-                FRAMEGEN_ID,
+                FRAMEGEN_ID_DX12,
                 "amd_fidelityfx_framegeneration_dx12.dll",
                 "4.0.0",
                 "0004.0000.0000.0604",
@@ -237,7 +256,7 @@ mod tests {
         assert_eq!(files[0].install_as(), None);
         // Loader takes over the FSR entry point.
         assert_eq!(files[1].path().as_str(), "manifest://e-loader");
-        assert_eq!(files[1].install_as(), Some(fsr::ENTRY_POINT_FILE));
+        assert_eq!(files[1].install_as(), Some(fsr::ENTRY_POINT_FILE_DX12));
         // Frame generation is added under its own name.
         assert_eq!(files[2].path().as_str(), "manifest://e-framegen");
         assert_eq!(files[2].install_as(), None);
@@ -259,7 +278,7 @@ mod tests {
         let entries = vec![
             member_entry(
                 "e-up",
-                UPSCALER_ID,
+                UPSCALER_ID_DX12,
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "4.0.3",
                 "0004.0000.0003.0604",
@@ -267,7 +286,7 @@ mod tests {
             ),
             member_entry(
                 "e-ld",
-                LOADER_ID,
+                LOADER_ID_DX12,
                 "amd_fidelityfx_loader_dx12.dll",
                 "2.1.0.604",
                 "0002.0001.0000.0604",
@@ -291,7 +310,7 @@ mod tests {
         let entries = vec![
             member_entry(
                 "e-up",
-                UPSCALER_ID,
+                UPSCALER_ID_DX12,
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "4.0.3",
                 "0004.0000.0003.0604",
@@ -299,7 +318,7 @@ mod tests {
             ),
             member_entry(
                 "e-fg",
-                FRAMEGEN_ID,
+                FRAMEGEN_ID_DX12,
                 "amd_fidelityfx_framegeneration_dx12.dll",
                 "4.0.0",
                 "0004.0000.0000.0604",
@@ -318,7 +337,7 @@ mod tests {
         let entries = vec![
             member_entry(
                 "e-up-604",
-                UPSCALER_ID,
+                UPSCALER_ID_DX12,
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "4.0.3",
                 "0004.0000.0003.0604",
@@ -326,7 +345,7 @@ mod tests {
             ),
             member_entry(
                 "e-ld-604",
-                LOADER_ID,
+                LOADER_ID_DX12,
                 "amd_fidelityfx_loader_dx12.dll",
                 "2.1.0.604",
                 "0002.0001.0000.0604",
@@ -334,7 +353,7 @@ mod tests {
             ),
             member_entry(
                 "e-up-700",
-                UPSCALER_ID,
+                UPSCALER_ID_DX12,
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "4.1.0",
                 "0004.0001.0000.0700",
@@ -342,7 +361,7 @@ mod tests {
             ),
             member_entry(
                 "e-ld-700",
-                LOADER_ID,
+                LOADER_ID_DX12,
                 "amd_fidelityfx_loader_dx12.dll",
                 "2.2.0.700",
                 "0002.0002.0000.0700",

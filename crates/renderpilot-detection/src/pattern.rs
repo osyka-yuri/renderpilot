@@ -489,16 +489,6 @@ mod tests {
     }
 
     #[test]
-    fn detects_amd_frame_generation_before_general_fsr() {
-        let patterns = pattern_set();
-
-        assert_eq!(
-            patterns.match_file_name("amd_fidelityfx_framegeneration.dll"),
-            Some(GraphicsTechnology::AmdFsrFrameGeneration)
-        );
-    }
-
-    #[test]
     fn detects_amd_fsr_runtime_variants_before_unknown_fsr_globs() {
         let patterns = pattern_set();
 
@@ -506,14 +496,12 @@ mod tests {
             patterns.match_file_name("amd_fidelityfx_dx12.dll"),
             Some(GraphicsTechnology::AmdFsr)
         );
-        assert_eq!(
-            patterns.match_file_name("amd_fidelityfx_upscaler.dll"),
-            Some(GraphicsTechnology::AmdFsrUpscaler)
-        );
+
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_upscaler_dx12.dll"),
             Some(GraphicsTechnology::AmdFsrUpscaler)
         );
+
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_vk.dll"),
             Some(GraphicsTechnology::AmdFsr)
@@ -524,10 +512,6 @@ mod tests {
     fn detects_amd_fsr_denoiser_and_loader() {
         let patterns = pattern_set();
 
-        assert_eq!(
-            patterns.match_file_name("amd_fidelityfx_denoiser.dll"),
-            Some(GraphicsTechnology::AmdFsrRayRegeneration)
-        );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_denoiser_dx12.dll"),
             Some(GraphicsTechnology::AmdFsrRayRegeneration)
@@ -545,59 +529,11 @@ mod tests {
     }
 
     #[test]
-    fn detects_fsr3_runtime_dlls_before_broad_unknown_fsr_globs() {
-        let patterns = pattern_set();
-
-        assert_eq!(
-            patterns.match_file_name("ffx_fsr3_x64.dll"),
-            Some(GraphicsTechnology::AmdFsrFrameGeneration)
-        );
-        assert_eq!(
-            patterns.match_file_name("ffx_fsr3upscaler_x64.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("dlssg_to_fsr3_amd_is_better.dll"),
-            Some(GraphicsTechnology::AmdFsrFrameGeneration)
-        );
-    }
-
-    #[test]
-    fn detects_fsr2_runtime_dlls_before_broad_unknown_fsr_globs() {
-        let patterns = pattern_set();
-
-        assert_eq!(
-            patterns.match_file_name("ffx_fsr2_api_dx12_x64.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("ffx_fsr2_api_vk_x64.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("ffx_fsr2_api_x64.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("fsr2-unity-plugin.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-        assert_eq!(
-            patterns.match_file_name("fsr2-unity-plugind.dll"),
-            Some(GraphicsTechnology::AmdFsr)
-        );
-    }
-
-    #[test]
     fn detects_direct_storage_runtimes() {
         let patterns = pattern_set();
 
         assert_eq!(
             patterns.match_file_name("dstorage.dll"),
-            Some(GraphicsTechnology::DirectStorage)
-        );
-        assert_eq!(
-            patterns.match_file_name("dstoragecore.dll"),
             Some(GraphicsTechnology::DirectStorage)
         );
     }
@@ -617,26 +553,6 @@ mod tests {
         assert_eq!(
             patterns.match_file_name("libxell_dx11.dll"),
             Some(GraphicsTechnology::IntelXeLl)
-        );
-    }
-
-    #[test]
-    fn broad_fsr_patterns_are_unknown() {
-        let patterns = pattern_set();
-
-        assert_eq!(
-            patterns.match_file_name("some_fsr_unknown.dll"),
-            Some(GraphicsTechnology::Unknown)
-        );
-    }
-
-    #[test]
-    fn broad_xess_patterns_are_unknown() {
-        let patterns = pattern_set();
-
-        assert_eq!(
-            patterns.match_file_name("custom_xess_bridge.dll"),
-            Some(GraphicsTechnology::Unknown)
         );
     }
 
@@ -750,31 +666,5 @@ mod tests {
         let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Linux);
 
         assert!(matches!(candidates, super::CandidateFileExtensions::Any));
-    }
-
-    #[test]
-    fn specific_amd_and_fsr_patterns_are_ordered_before_broad_unknown_globs() {
-        let patterns = pattern_set();
-        let all = patterns.patterns();
-
-        let exact_dx12_idx = pattern_index(all, "amd_fidelityfx_dx12.dll", PatternKind::Exact);
-        let exact_framegen_idx = pattern_index(
-            all,
-            "amd_fidelityfx_framegeneration_dx12.dll",
-            PatternKind::Exact,
-        );
-        let exact_fsr2_idx = pattern_index(all, "ffx_fsr2_api_dx12_x64.dll", PatternKind::Exact);
-        let broad_unknown_idx = pattern_index(all, "*fsr*.dll", PatternKind::Glob);
-
-        assert!(exact_dx12_idx < broad_unknown_idx);
-        assert!(exact_framegen_idx < broad_unknown_idx);
-        assert!(exact_fsr2_idx < broad_unknown_idx);
-    }
-
-    fn pattern_index(patterns: &[LibraryPattern], value: &str, kind: PatternKind) -> usize {
-        patterns
-            .iter()
-            .position(|pattern| pattern.pattern() == value && pattern.kind() == kind)
-            .expect("pattern should exist")
     }
 }
