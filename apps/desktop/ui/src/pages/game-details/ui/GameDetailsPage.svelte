@@ -43,9 +43,25 @@
   // technology. Streamline (sl.*.dll) is unrelated and keeps its own card.
   const DLSS_FAMILY_CARDS: Record<string, { family: SettingFamily; title: string }> = {
     dlss_super_resolution: { family: 'sr', title: 'NVIDIA DLSS Super Resolution' },
-    dlss_frame_generation: { family: 'fg', title: 'NVIDIA DLSS Frame Generation' },
     dlss_ray_reconstruction: { family: 'rr', title: 'NVIDIA DLSS Ray Reconstruction' },
+    dlss_frame_generation: { family: 'fg', title: 'NVIDIA DLSS Frame Generation' },
   };
+
+  // Defines the display order of component technologies within their vendor tab.
+  // Technologies not in this list fall back to alphabetical sorting by ID.
+  const COMPONENT_TECHNOLOGY_ORDER: Record<string, number> = {
+    dlss_super_resolution: 1,
+    dlss_ray_reconstruction: 2,
+    dlss_frame_generation: 3,
+  };
+
+  function compareComponents(a: GameGraphicsComponent, b: GameGraphicsComponent): number {
+    const orderA = COMPONENT_TECHNOLOGY_ORDER[a.technology] ?? 999;
+    const orderB = COMPONENT_TECHNOLOGY_ORDER[b.technology] ?? 999;
+
+    if (orderA !== orderB) return orderA - orderB;
+    return a.id.localeCompare(b.id);
+  }
 
   type Props = {
     details?: GameDetails | null;
@@ -96,11 +112,16 @@
     }
 
     return libraryVendorOrder
-      .map((key) => ({
-        key,
-        label: vendorLabelForLibraryVendorKey(key),
-        components: byVendor[key],
-      }))
+      .map((key) => {
+        const components = byVendor[key];
+        components.sort(compareComponents);
+
+        return {
+          key,
+          label: vendorLabelForLibraryVendorKey(key),
+          components,
+        };
+      })
       .filter((tab) => tab.components.length > 0);
   });
 
