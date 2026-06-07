@@ -1,5 +1,8 @@
 [toolchain]
-channel = "stable"
+# Pinned to an exact release so rustfmt and clippy behave identically on every
+# machine and in CI. A floating `stable` drifts as new releases land, which
+# silently reformats unrelated code and can break the formatting gate.
+channel = "1.95.0"
 profile = "minimal"
 components = ["rustfmt", "clippy"]
 
