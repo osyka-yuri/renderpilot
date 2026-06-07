@@ -36,6 +36,18 @@ export const fr: Record<MessageKey, MessageValue> = {
 
   'settings.tabs.general': 'Général',
   'settings.tabs.catalog': 'Catalogue',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'Indicateur DLSS',
+  'settings.nvidia.indicator.description':
+    'Affiche une superposition avec la version et les paramètres DLSS actifs pendant le jeu.',
+  'settings.nvidia.indicator.systemWide': 'Tout le système',
+  'settings.nvidia.indicator.adminRequired':
+    'Redémarrez l’application en tant qu’administrateur pour modifier ce paramètre.',
+  'settings.nvidia.indicator.overlayTitle': 'Superposition à l’écran',
+  'settings.nvidia.indicator.overlayDescription': 'S’applique à tous les jeux de ce PC.',
+  'settings.nvidia.indicator.toggleAria': 'Basculer l’indicateur DLSS',
 
   'game.card.action.details': 'Détails',
   'game.card.action.detailsAria': 'Ouvrir les détails pour {title}',
@@ -151,16 +163,6 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredLabel': '{fileName} (filtré)',
   'gameDetails.profile.noProfile': 'Profil NVIDIA introuvable.',
 
-  'gameDetails.indicator.title': 'Indicateur DLSS',
-  'gameDetails.indicator.description':
-    'Affiche une superposition avec la version et les paramètres DLSS actifs pendant le jeu.',
-  'gameDetails.indicator.systemWide': 'Tout le système',
-  'gameDetails.indicator.adminRequired':
-    'Redémarrez l’application en tant qu’administrateur pour modifier ce paramètre.',
-  'gameDetails.indicator.overlayTitle': 'Superposition à l’écran',
-  'gameDetails.indicator.overlayDescription': 'S’applique à tous les jeux de ce PC.',
-  'gameDetails.indicator.toggleAria': 'Basculer l’indicateur DLSS',
-
   'gameDetails.nvapi.requiresDriver': 'nécessite le pilote {version}+',
   'gameDetails.nvapi.unavailable': 'indisponible',
   'gameDetails.nvapi.resetDefault': 'Réinitialiser par défaut',
@@ -170,11 +172,12 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.alreadyBaseline': 'Déjà à la valeur initiale',
   'gameDetails.nvapi.noBaseline': 'Aucune valeur initiale enregistrée',
 
-  'gameDetails.nvapi.warning.noDll': 'Aucune DLL DLSS détectée dans le répertoire d\'installation.',
-  'gameDetails.nvapi.warning.noManifest': 'Le manifeste n\'a aucune entrée pour cette version de DLL.',
+  'gameDetails.nvapi.warning.noDll': "Aucune DLL DLSS détectée dans le répertoire d'installation.",
+  'gameDetails.nvapi.warning.noManifest':
+    "Le manifeste n'a aucune entrée pour cette version de DLL.",
   'gameDetails.nvapi.warning.noExecutable': 'Aucun exécutable trouvé pour ce jeu.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI indisponible.',
-  'gameDetails.nvapi.warning.nvapiInitFailed': 'Échec de l\'initialisation de NVAPI.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': "Échec de l'initialisation de NVAPI.",
   'gameDetails.nvapi.warning.drsFailed': 'Impossible de créer la session DRS.',
 
   'operations.title': 'Historique',

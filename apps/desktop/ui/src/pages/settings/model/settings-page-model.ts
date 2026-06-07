@@ -35,6 +35,7 @@ export type SettingsTabOption = {
 export const tabOptions = [
   { value: 'general', labelKey: 'settings.tabs.general' },
   { value: 'catalog', labelKey: 'settings.tabs.catalog' },
+  { value: 'nvidia', labelKey: 'settings.tabs.nvidia' },
 ] as const satisfies readonly SettingsTabOption[];
 
 export function isOptionValue<Value extends string>(

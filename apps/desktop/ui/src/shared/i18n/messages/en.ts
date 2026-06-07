@@ -47,6 +47,18 @@ export const en = {
   // ── Settings: tabs ──
   'settings.tabs.general': 'General',
   'settings.tabs.catalog': 'Catalog',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'DLSS Indicator',
+  'settings.nvidia.indicator.description':
+    'Show an overlay with the active DLSS version and settings during gameplay.',
+  'settings.nvidia.indicator.systemWide': 'System-wide',
+  'settings.nvidia.indicator.adminRequired':
+    'Restart the app as administrator to change this setting.',
+  'settings.nvidia.indicator.overlayTitle': 'On-screen overlay',
+  'settings.nvidia.indicator.overlayDescription': 'Applies to all games on this PC.',
+  'settings.nvidia.indicator.toggleAria': 'Toggle DLSS indicator',
 
   // ── Game card ──
   'game.card.action.details': 'Details',
@@ -182,16 +194,6 @@ export const en = {
   'gameDetails.profile.filteredTag': '(filtered)',
   'gameDetails.profile.filteredLabel': '{fileName} (filtered)',
   'gameDetails.profile.noProfile': 'NVIDIA profile not found.',
-
-  // ── Game details: DLSS indicator card ──
-  'gameDetails.indicator.title': 'DLSS Indicator',
-  'gameDetails.indicator.description':
-    'Show an overlay with the active DLSS version and settings during gameplay.',
-  'gameDetails.indicator.systemWide': 'System-wide',
-  'gameDetails.indicator.adminRequired': 'Restart the app as administrator to change this setting.',
-  'gameDetails.indicator.overlayTitle': 'On-screen overlay',
-  'gameDetails.indicator.overlayDescription': 'Applies to all games on this PC.',
-  'gameDetails.indicator.toggleAria': 'Toggle DLSS indicator',
 
   // ── Game details: NVAPI setting row ──
   'gameDetails.nvapi.requiresDriver': 'requires driver {version}+',

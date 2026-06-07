@@ -36,6 +36,18 @@ export const ja: Record<MessageKey, MessageValue> = {
 
   'settings.tabs.general': '一般',
   'settings.tabs.catalog': 'カタログ',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'DLSS インジケーター',
+  'settings.nvidia.indicator.description':
+    'ゲームプレイ中に、アクティブな DLSS バージョンと設定を含むオーバーレイを表示します。',
+  'settings.nvidia.indicator.systemWide': 'システム全体',
+  'settings.nvidia.indicator.adminRequired':
+    'この設定を変更するには、アプリを管理者として再起動してください。',
+  'settings.nvidia.indicator.overlayTitle': '画面オーバーレイ',
+  'settings.nvidia.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
+  'settings.nvidia.indicator.toggleAria': 'DLSS インジケーターの切り替え',
 
   'game.card.action.details': '詳細',
   'game.card.action.detailsAria': '{title} の詳細を開く',
@@ -150,16 +162,6 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredTag': '（フィルター済み）',
   'gameDetails.profile.filteredLabel': '{fileName}（フィルター済み）',
   'gameDetails.profile.noProfile': 'NVIDIA プロファイルが見つかりません。',
-
-  'gameDetails.indicator.title': 'DLSS インジケーター',
-  'gameDetails.indicator.description':
-    'ゲームプレイ中に、アクティブな DLSS バージョンと設定を含むオーバーレイを表示します。',
-  'gameDetails.indicator.systemWide': 'システム全体',
-  'gameDetails.indicator.adminRequired':
-    'この設定を変更するには、アプリを管理者として再起動してください。',
-  'gameDetails.indicator.overlayTitle': '画面オーバーレイ',
-  'gameDetails.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
-  'gameDetails.indicator.toggleAria': 'DLSS インジケーターの切り替え',
 
   'gameDetails.nvapi.requiresDriver': 'ドライバー {version}+ が必要です',
   'gameDetails.nvapi.unavailable': '利用不可',

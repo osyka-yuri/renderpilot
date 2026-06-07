@@ -45,6 +45,17 @@ export const ru: Record<MessageKey, MessageValue> = {
   // ── Settings: tabs ──
   'settings.tabs.general': 'Общие',
   'settings.tabs.catalog': 'Каталог',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'Индикатор DLSS',
+  'settings.nvidia.indicator.description': 'Показывать версию и настройки DLSS поверх игры.',
+  'settings.nvidia.indicator.systemWide': 'Глобально',
+  'settings.nvidia.indicator.adminRequired':
+    'Перезапустите приложение от имени администратора для изменения этой настройки.',
+  'settings.nvidia.indicator.overlayTitle': 'Экранный оверлей',
+  'settings.nvidia.indicator.overlayDescription': 'Применяется ко всем играм на этом ПК.',
+  'settings.nvidia.indicator.toggleAria': 'Переключить индикатор DLSS',
 
   // ── Game card ──
   'game.card.action.details': 'Подробнее',
@@ -194,16 +205,6 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredTag': '(скрыто)',
   'gameDetails.profile.filteredLabel': '{fileName} (скрыто)',
   'gameDetails.profile.noProfile': 'Профиль NVIDIA не найден.',
-
-  // ── Game details: DLSS indicator card ──
-  'gameDetails.indicator.title': 'Индикатор DLSS',
-  'gameDetails.indicator.description': 'Показывать версию и настройки DLSS поверх игры.',
-  'gameDetails.indicator.systemWide': 'Глобально',
-  'gameDetails.indicator.adminRequired':
-    'Перезапустите приложение от имени администратора для изменения этой настройки.',
-  'gameDetails.indicator.overlayTitle': 'Экранный оверлей',
-  'gameDetails.indicator.overlayDescription': 'Применяется ко всем играм на этом ПК.',
-  'gameDetails.indicator.toggleAria': 'Переключить индикатор DLSS',
 
   // ── Game details: NVAPI setting row ──
   'gameDetails.nvapi.requiresDriver': 'требуется драйвер {version}+',

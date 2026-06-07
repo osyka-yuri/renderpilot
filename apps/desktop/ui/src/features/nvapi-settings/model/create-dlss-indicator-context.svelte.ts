@@ -1,17 +1,17 @@
 import { describeCommandErrorTechnical } from '@shared/api';
 import { publishErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
-import { getDlssIndicatorState, setDlssIndicatorEnabled } from '@features/nvapi-settings';
+import { getDlssIndicatorState, setDlssIndicatorEnabled } from '../api/desktop';
 
 /**
  * Reactive owner of the system-wide NVIDIA DLSS indicator overlay toggle.
  *
- * Unlike {@link createNvidiaDriverContext} this is **global, not per-game**: the
+ * Unlike the per-game NVIDIA driver context this is **global, not per-game**: the
  * indicator is a single machine-wide registry value the NGX runtime reads for
- * every DLSS title, so there is no `gameId` and it is loaded once when the NVIDIA
- * tab is first shown. Reading the value works unprivileged; writing it needs an
- * elevated process, so `setEnabled` is gated on `isElevated` and reverts its
- * optimistic flip if the backend rejects the write.
+ * every DLSS title, so there is no `gameId` and it is loaded once when the
+ * Settings → NVIDIA tab is first shown. Reading the value works unprivileged;
+ * writing it needs an elevated process, so `setEnabled` is gated on `isElevated`
+ * and reverts its optimistic flip if the backend rejects the write.
  */
 
 export type DlssIndicatorContext = ReturnType<typeof createDlssIndicatorContext>;

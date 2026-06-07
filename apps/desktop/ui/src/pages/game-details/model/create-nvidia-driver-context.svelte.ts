@@ -85,7 +85,9 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
 
   const profileWarnings = $derived.by((): string[] =>
-    distinctWarnings(states.flatMap((s) => s.warnings).filter(isSessionWarning)).map(translateWarning),
+    distinctWarnings(states.flatMap((s) => s.warnings).filter(isSessionWarning)).map(
+      translateWarning,
+    ),
   );
 
   // ── per-family selectors ─────────────────────────────────────────

@@ -186,10 +186,7 @@ export async function runCoverFetchBatch(
  * Hooks are fire-and-forget side effects (busy flags, cache-version bumps); a failure in one
  * must not abort the remaining downloads or corrupt failure accounting.
  */
-function notifyLifecycleHook(
-  hook: ((gameId: string) => void) | undefined,
-  gameId: string,
-): void {
+function notifyLifecycleHook(hook: ((gameId: string) => void) | undefined, gameId: string): void {
   if (hook === undefined) {
     return;
   }

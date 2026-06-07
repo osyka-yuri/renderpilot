@@ -36,6 +36,16 @@ export const zh: Record<MessageKey, MessageValue> = {
 
   'settings.tabs.general': '常规',
   'settings.tabs.catalog': '目录',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'DLSS 指示器',
+  'settings.nvidia.indicator.description': '在游戏过程中显示包含活动 DLSS 版本和设置的叠加层。',
+  'settings.nvidia.indicator.systemWide': '系统全局',
+  'settings.nvidia.indicator.adminRequired': '以管理员身份重新启动应用程序以更改此设置。',
+  'settings.nvidia.indicator.overlayTitle': '屏幕叠加层',
+  'settings.nvidia.indicator.overlayDescription': '适用于此电脑上的所有游戏。',
+  'settings.nvidia.indicator.toggleAria': '切换 DLSS 指示器',
 
   'game.card.action.details': '详情',
   'game.card.action.detailsAria': '打开 {title} 的详情',
@@ -145,14 +155,6 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredTag': '（已过滤）',
   'gameDetails.profile.filteredLabel': '{fileName}（已过滤）',
   'gameDetails.profile.noProfile': '未找到 NVIDIA 配置文件。',
-
-  'gameDetails.indicator.title': 'DLSS 指示器',
-  'gameDetails.indicator.description': '在游戏过程中显示包含活动 DLSS 版本和设置的叠加层。',
-  'gameDetails.indicator.systemWide': '系统全局',
-  'gameDetails.indicator.adminRequired': '以管理员身份重新启动应用程序以更改此设置。',
-  'gameDetails.indicator.overlayTitle': '屏幕叠加层',
-  'gameDetails.indicator.overlayDescription': '适用于此电脑上的所有游戏。',
-  'gameDetails.indicator.toggleAria': '切换 DLSS 指示器',
 
   'gameDetails.nvapi.requiresDriver': '需要驱动程序 {version}+',
   'gameDetails.nvapi.unavailable': '不可用',

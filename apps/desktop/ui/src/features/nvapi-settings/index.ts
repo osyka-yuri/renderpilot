@@ -30,3 +30,9 @@ export type {
   ValueDescriptor,
   ValueOption,
 } from './model/types';
+
+export {
+  createDlssIndicatorContext,
+  type DlssIndicatorContext,
+  type CreateDlssIndicatorContextOptions,
+} from './model/create-dlss-indicator-context.svelte';

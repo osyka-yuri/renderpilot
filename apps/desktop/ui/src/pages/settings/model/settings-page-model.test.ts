@@ -65,8 +65,8 @@ describe('settings-page-model', () => {
   });
 
   describe('tabOptions', () => {
-    it('has exactly 2 tabs with non-empty label keys and unique values', () => {
-      expect(tabOptions.length).toBe(2);
+    it('has exactly 3 tabs with non-empty label keys and unique values', () => {
+      expect(tabOptions.length).toBe(3);
       expectUniqueValues(tabOptions.map((t) => t.value));
       for (const tab of tabOptions) {
         expectNonEmptyString(tab.labelKey);

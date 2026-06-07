@@ -28,9 +28,7 @@
     BulkRollbackHandler,
   } from '../model/create-game-details-page-model';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
-  import { createDlssIndicatorContext } from '../model/create-dlss-indicator-context.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
-  import DlssIndicatorCard from './DlssIndicatorCard.svelte';
   import DlssComponentCard from './DlssComponentCard.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
@@ -165,10 +163,6 @@
   // every family card's values.
   const nvidia = createNvidiaDriverContext({ isElevated: () => isElevated });
 
-  // System-wide DLSS indicator overlay — global, not per-game. Loaded once when
-  // the NVIDIA tab is first shown (it does not depend on the selected game/exe).
-  const dlssIndicator = createDlssIndicatorContext({ isElevated: () => isElevated });
-
   $effect(() => {
     // Reactive reads inside the effect determine when it re-runs:
     //   - gameId / hasNvidiaTab: standard load/teardown
@@ -178,12 +172,6 @@
       void nvidia.reload(gameId);
     } else {
       nvidia.clear();
-    }
-  });
-
-  $effect(() => {
-    if (hasNvidiaTab && !dlssIndicator.loaded) {
-      void dlssIndicator.load();
     }
   });
 
@@ -245,8 +233,6 @@
               {#if gameId && nvidia.nvapiAvailable}
                 <NvidiaProfileCard {gameId} nvapi={nvidia} />
               {/if}
-
-              <DlssIndicatorCard indicator={dlssIndicator} />
 
               {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
               {@const streamline = tab.components.filter(isStreamline)}

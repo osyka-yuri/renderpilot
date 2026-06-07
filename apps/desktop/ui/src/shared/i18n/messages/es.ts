@@ -36,6 +36,18 @@ export const es: Record<MessageKey, MessageValue> = {
 
   'settings.tabs.general': 'General',
   'settings.tabs.catalog': 'Catálogo',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'Indicador DLSS',
+  'settings.nvidia.indicator.description':
+    'Muestra una superposición con la versión y configuración activa de DLSS durante el juego.',
+  'settings.nvidia.indicator.systemWide': 'En todo el sistema',
+  'settings.nvidia.indicator.adminRequired':
+    'Reinicia la aplicación como administrador para cambiar esta configuración.',
+  'settings.nvidia.indicator.overlayTitle': 'Superposición en pantalla',
+  'settings.nvidia.indicator.overlayDescription': 'Se aplica a todos los juegos en esta PC.',
+  'settings.nvidia.indicator.toggleAria': 'Alternar indicador DLSS',
 
   'game.card.action.details': 'Detalles',
   'game.card.action.detailsAria': 'Abrir detalles de {title}',
@@ -151,16 +163,6 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredLabel': '{fileName} (filtrado)',
   'gameDetails.profile.noProfile': 'No se encontró el perfil de NVIDIA.',
 
-  'gameDetails.indicator.title': 'Indicador DLSS',
-  'gameDetails.indicator.description':
-    'Muestra una superposición con la versión y configuración activa de DLSS durante el juego.',
-  'gameDetails.indicator.systemWide': 'En todo el sistema',
-  'gameDetails.indicator.adminRequired':
-    'Reinicia la aplicación como administrador para cambiar esta configuración.',
-  'gameDetails.indicator.overlayTitle': 'Superposición en pantalla',
-  'gameDetails.indicator.overlayDescription': 'Se aplica a todos los juegos en esta PC.',
-  'gameDetails.indicator.toggleAria': 'Alternar indicador DLSS',
-
   'gameDetails.nvapi.requiresDriver': 'requiere controlador {version}+',
   'gameDetails.nvapi.unavailable': 'no disponible',
   'gameDetails.nvapi.resetDefault': 'Restablecer por defecto',
@@ -170,9 +172,11 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.alreadyBaseline': 'Ya en el valor inicial',
   'gameDetails.nvapi.noBaseline': 'Ningún valor inicial guardado',
 
-  'gameDetails.nvapi.warning.noDll': 'No se detectó ningún archivo DLL de DLSS en el directorio de instalación.',
+  'gameDetails.nvapi.warning.noDll':
+    'No se detectó ningún archivo DLL de DLSS en el directorio de instalación.',
   'gameDetails.nvapi.warning.noManifest': 'El manifiesto no tiene datos para esta versión de DLL.',
-  'gameDetails.nvapi.warning.noExecutable': 'No se encontró ningún archivo ejecutable para este juego.',
+  'gameDetails.nvapi.warning.noExecutable':
+    'No se encontró ningún archivo ejecutable para este juego.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI no está disponible.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'Error al inicializar NVAPI.',
   'gameDetails.nvapi.warning.drsFailed': 'No se pudo crear la sesión DRS.',

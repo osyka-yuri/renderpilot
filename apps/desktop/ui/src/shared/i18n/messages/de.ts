@@ -36,6 +36,18 @@ export const de: Record<MessageKey, MessageValue> = {
 
   'settings.tabs.general': 'Allgemein',
   'settings.tabs.catalog': 'Katalog',
+  'settings.tabs.nvidia': 'NVIDIA',
+
+  // ── Settings: NVIDIA ──
+  'settings.nvidia.indicator.title': 'DLSS-Indikator',
+  'settings.nvidia.indicator.description':
+    'Zeigt ein Overlay mit der aktiven DLSS-Version und den Einstellungen während des Spiels.',
+  'settings.nvidia.indicator.systemWide': 'Systemweit',
+  'settings.nvidia.indicator.adminRequired':
+    'Starten Sie die App als Administrator neu, um diese Einstellung zu ändern.',
+  'settings.nvidia.indicator.overlayTitle': 'Bildschirm-Overlay',
+  'settings.nvidia.indicator.overlayDescription': 'Gilt für alle Spiele auf diesem PC.',
+  'settings.nvidia.indicator.toggleAria': 'DLSS-Indikator umschalten',
 
   'game.card.action.details': 'Details',
   'game.card.action.detailsAria': 'Details für {title} öffnen',
@@ -153,16 +165,6 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.filteredLabel': '{fileName} (gefiltert)',
   'gameDetails.profile.noProfile': 'NVIDIA-Profil nicht gefunden.',
 
-  'gameDetails.indicator.title': 'DLSS-Indikator',
-  'gameDetails.indicator.description':
-    'Zeigt ein Overlay mit der aktiven DLSS-Version und den Einstellungen während des Spiels.',
-  'gameDetails.indicator.systemWide': 'Systemweit',
-  'gameDetails.indicator.adminRequired':
-    'Starten Sie die App als Administrator neu, um diese Einstellung zu ändern.',
-  'gameDetails.indicator.overlayTitle': 'Bildschirm-Overlay',
-  'gameDetails.indicator.overlayDescription': 'Gilt für alle Spiele auf diesem PC.',
-  'gameDetails.indicator.toggleAria': 'DLSS-Indikator umschalten',
-
   'gameDetails.nvapi.requiresDriver': 'erfordert Treiber {version}+',
   'gameDetails.nvapi.unavailable': 'nicht verfügbar',
   'gameDetails.nvapi.resetDefault': 'Auf Standard zurücksetzen',
@@ -173,7 +175,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.noBaseline': 'Kein Anfangswert gespeichert',
 
   'gameDetails.nvapi.warning.noDll': 'Keine DLSS-DLL im Installationsverzeichnis gefunden.',
-  'gameDetails.nvapi.warning.noManifest': 'Das Manifest enthält keinen Eintrag für diese DLL-Version.',
+  'gameDetails.nvapi.warning.noManifest':
+    'Das Manifest enthält keinen Eintrag für diese DLL-Version.',
   'gameDetails.nvapi.warning.noExecutable': 'Keine ausführbare Datei für dieses Spiel gefunden.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI nicht verfügbar.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI-Initialisierung fehlgeschlagen.',

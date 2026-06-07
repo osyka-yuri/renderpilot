@@ -242,6 +242,7 @@
     <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />
   {:else if model.screen === 'settings'}
     <SettingsScreen
+      isElevated={model.isElevated}
       themeMode={model.themeMode}
       languageMode={model.languageMode}
       onThemeModeChange={model.changeThemeMode}
