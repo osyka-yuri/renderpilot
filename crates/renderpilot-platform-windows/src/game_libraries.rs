@@ -839,6 +839,16 @@ mod tests {
             .expect("clock should be valid")
             .as_nanos();
 
-        env::temp_dir().join(format!("renderpilot-game-libs-{label}-{nanos}"))
+        // Replicate the canonical (long-name) path format produced by `finalize`
+        // via `normalize_existing_dir`. On certain Windows environments (such as CI runners),
+        // `env::temp_dir()` may return an 8.3 short path (e.g., `RUNNER~1`).
+        // This short path would mismatch the long format (`runneradmin`) returned by `fs::canonicalize`.
+        // By canonicalizing only the base path, callers relying on the joined directory's non-existence
+        // will still correctly observe a missing path.
+        let base = fs::canonicalize(env::temp_dir())
+            .map(strip_verbatim_prefix)
+            .unwrap_or_else(|_| env::temp_dir());
+
+        base.join(format!("renderpilot-game-libs-{label}-{nanos}"))
     }
 }

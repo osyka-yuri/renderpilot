@@ -29,6 +29,7 @@ pub fn scan_auto_libraries(context: &renderpilot_orchestration::Context) -> Json
     to_json(output)
 }
 
+#[cfg(windows)]
 #[derive(Debug, serde::Serialize)]
 struct AutoScanOutput {
     games: Vec<GameDetailsOutput>,
@@ -37,6 +38,7 @@ struct AutoScanOutput {
     errors: Vec<ScanErrorOutput>,
 }
 
+#[cfg(windows)]
 #[derive(Debug, serde::Serialize)]
 struct ScanErrorOutput {
     root: String,
@@ -45,10 +47,10 @@ struct ScanErrorOutput {
 
 /// Discovers and catalogs all games from auto-detected library sources.
 ///
-/// On non-Windows platforms this returns an error because auto-scan
-/// relies on Windows-specific game library discovery.
+/// Returns an error on non-Windows platforms, as the auto-scan
+/// functionality relies on Windows-specific game library discovery.
 #[cfg(not(windows))]
-pub fn scan_auto_libraries(context: &renderpilot_orchestration::Context) -> JsonResult {
+pub fn scan_auto_libraries(_context: &renderpilot_orchestration::Context) -> JsonResult {
     Err(crate::ApiError::Service(
         renderpilot_orchestration::ServiceError::CommandFailed(
             "auto-scan is only supported on Windows".into(),

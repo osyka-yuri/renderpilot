@@ -5,54 +5,70 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # Ensures that an in-flight publish operation is never aborted by subsequent commits.
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
+  # Gate the release on the same quality checks utilized in the CI pipeline, targeting the deployment platform.
+  quality:
+    name: Quality gates
+    uses: ./.github/workflows/quality.yml
+    with:
+      rust-os: '["windows-latest"]'
+
   release:
+    name: Build and publish
+    needs: quality
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'windows-latest'
-            args: ''
+    runs-on: windows-latest
+    timeout-minutes: 60
 
-    runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: install node
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      # Install the Rust toolchain as specified in `rust-toolchain.toml`.
+      - name: Install Rust toolchain
+        run: rustup show
 
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
 
-      - name: install frontend dependencies
-        run: pnpm install
-
-      - name: build and create release
+      # Note: `tauri-action` executes the frontend build via its `beforeBuildCommand`.
+      - name: Build and create release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
+          projectPath: apps/desktop
           tagName: v__VERSION__
           releaseName: 'RenderPilot v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}

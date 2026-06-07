@@ -1,0 +1,108 @@
+name: Quality gates
+
+# Reusable workflow serving as the single source of truth for RenderPilot's quality gates.
+# It is invoked by both `ci.yml` (Ubuntu and Windows) and `release.yml` (Windows only)
+# to ensure the quality checks guarding the `main` branch and releases remain synchronized.
+on:
+  workflow_call:
+    inputs:
+      rust-os:
+        description: JSON array of runner OSes for the Rust matrix.
+        type: string
+        default: '["ubuntu-latest", "windows-latest"]'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.rust-os) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Tauri's Linux build requires WebKitGTK and other dependencies. On Windows, WebView2 is utilized natively.
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            pkg-config
+
+      # Installs the toolchain, rustfmt, and clippy as specified in `rust-toolchain.toml`.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+
+      # Code formatting is OS-independent. We perform this check exclusively on the Linux runner to save CI time.
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+  desktop:
+    name: Desktop UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: apps/desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting (Prettier)
+        run: pnpm run format:check
+
+      - name: Lint (ESLint)
+        run: pnpm run lint
+
+      - name: Run tests (Vitest)
+        run: pnpm test
+
+      - name: Build (svelte-check + Vite)
+        run: pnpm run build
