@@ -1,14 +1,13 @@
 use std::path::Path;
 
+use crate::dlss::installed::installed_dlls_from_components;
 use crate::ServiceError;
-use renderpilot_application::GameRepository;
+use renderpilot_application::{ComponentRepository, GameRepository};
 use renderpilot_domain::GameId;
-use renderpilot_nvapi::setting::{DllInfo, DlssDllKind, SettingContext};
+use renderpilot_nvapi::setting::SettingContext;
 
 #[cfg(windows)]
-use renderpilot_platform_windows::{
-    detect_executable_candidates, dlss as platform_dlss, ExecutableCandidate,
-};
+use renderpilot_platform_windows::{detect_executable_candidates, ExecutableCandidate};
 
 /// Loads a game from the catalog by its string id.
 pub fn load_game(game_id: &str) -> Result<renderpilot_domain::GameInstallation, ServiceError> {
@@ -107,23 +106,11 @@ pub fn build_setting_context_with_context(
 
     let effective_exe = effective_exe.or_else(|| pick_exe_with_profile_fallback(install_dir));
 
-    #[cfg(windows)]
-    let dlls = {
-        let mut dlls: std::collections::HashMap<DlssDllKind, DllInfo> =
-            std::collections::HashMap::new();
-        for hit in platform_dlss::find_dlss_dlls(install_dir) {
-            if let Ok(version) = platform_dlss::read_dll_version(&hit.path) {
-                dlls.entry(hit.kind).or_insert(DllInfo {
-                    path: hit.path,
-                    version,
-                });
-            }
-        }
-        dlls
-    };
-
-    #[cfg(not(windows))]
-    let dlls: std::collections::HashMap<DlssDllKind, DllInfo> = std::collections::HashMap::new();
+    // Reuse the global catalog's scan instead of walking the install dir again:
+    // detection already found every DLSS DLL (to depth 12) and stored its version.
+    let game = GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
+    let components = context.storage().list_components_for_game(&game)?;
+    let dlls = installed_dlls_from_components(&components);
 
     Ok(SettingContext {
         game_install_dir: install_dir.to_path_buf(),

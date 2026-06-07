@@ -10,7 +10,7 @@
 //!
 //! Detection execution is strictly bounded to a designated install directory and operates purely
 //! via filesystem metadata—deliberately eschewing deep PE parsing. Version-specific PE introspection
-//! is structurally isolated within [`crate::dlss::version`].
+//! lives in the global catalog (`renderpilot-detection`), not in this crate.
 
 use std::path::{Path, PathBuf};
 
