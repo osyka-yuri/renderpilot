@@ -52,6 +52,11 @@ export async function executeBackgroundCoverSync(
     onGameStart: (gameId: string) => void;
     onGameEnd: (gameId: string) => void;
     onError: (message: string) => void;
+    /**
+     * Fired after each cover finishes downloading successfully, so callers can refresh that
+     * card right away instead of waiting for the whole batch. Failed downloads do not fire it.
+     */
+    onCoverReady?: (gameId: string) => void;
   },
 ): Promise<void> {
   const missingCoverCards = await findGamesMissingStoredCovers(games, options.readSetting);
@@ -66,6 +71,7 @@ export async function executeBackgroundCoverSync(
     fetchCover: options.fetchGameCover,
     onGameStart: options.onGameStart,
     onGameEnd: options.onGameEnd,
+    onCoverReady: options.onCoverReady,
   });
 
   const refreshError = await refreshCardsAfterCoverSync(options.refreshGameCards);

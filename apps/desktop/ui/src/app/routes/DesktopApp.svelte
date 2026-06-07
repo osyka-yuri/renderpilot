@@ -197,6 +197,12 @@
       onGameEnd: (gameId) => {
         coverSyncQueue.setAutoFetching(gameId, false);
       },
+      onCoverReady: () => {
+        // Re-run the games-page query so each cover shows as soon as it downloads,
+        // instead of all at once after the batch. The scheduler drops superseded
+        // in-flight queries, so rapid completions coalesce to the latest result.
+        model.catalog.incrementCatalogVersion();
+      },
       onError: publishBackgroundCoverSyncIssueNotification,
     });
   }

@@ -128,6 +128,7 @@ describe('background-cover-sync', () => {
       const refreshGameCards = vi.fn(() => Promise.resolve());
       const onGameStart = vi.fn();
       const onGameEnd = vi.fn();
+      const onCoverReady = vi.fn();
       const onError = vi.fn();
 
       await executeBackgroundCoverSync([steamGame(), gogGame()], {
@@ -140,13 +141,49 @@ describe('background-cover-sync', () => {
         refreshGameCards,
         onGameStart,
         onGameEnd,
+        onCoverReady,
         onError,
       });
 
       expect(onGameStart).toHaveBeenCalledTimes(2);
       expect(onGameEnd).toHaveBeenCalledTimes(2);
       expect(refreshGameCards).toHaveBeenCalledTimes(1);
+      // Only the successful download fires onCoverReady; the failed one does not.
+      expect(onCoverReady).toHaveBeenCalledTimes(1);
+      expect(onCoverReady).toHaveBeenCalledWith('steam-game');
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('Could not download'));
+    });
+
+    it('fires onCoverReady progressively, once per successfully downloaded cover', async () => {
+      const fetchGameCover = vi.fn(() => Promise.resolve());
+      const refreshGameCards = vi.fn(() => Promise.resolve());
+      const onCoverReady = vi.fn();
+      const onError = vi.fn();
+
+      await executeBackgroundCoverSync(
+        [steamGame(), gogGame({ external_id: '789' })],
+        {
+          readSetting: vi.fn((key: string) => {
+            if (key.includes('steam_cdn') || key.includes('gog_cdn'))
+              return Promise.resolve({ value: 'true' });
+            return Promise.resolve({ value: 'false' });
+          }),
+          fetchGameCover,
+          refreshGameCards,
+          onGameStart: vi.fn(),
+          onGameEnd: vi.fn(),
+          onCoverReady,
+          onError,
+        },
+      );
+
+      // Each card refreshes as its cover arrives (progressive), and the batch still
+      // performs exactly one final reconciliation refresh.
+      expect(onCoverReady).toHaveBeenCalledTimes(2);
+      expect(onCoverReady).toHaveBeenCalledWith('steam-game');
+      expect(onCoverReady).toHaveBeenCalledWith('gog-game');
+      expect(refreshGameCards).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
     });
   });
 });

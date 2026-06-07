@@ -282,10 +282,11 @@ describe('cover-sync', () => {
       expect(result.failures[0].gameId).toBe('game-1');
     });
 
-    it('invokes lifecycle hooks', async () => {
+    it('invokes lifecycle hooks including onCoverReady', async () => {
       const games = [gameWithoutCover()];
       const onGameStart = vi.fn();
       const onGameEnd = vi.fn();
+      const onCoverReady = vi.fn();
 
       await runCoverFetchBatch({
         games,
@@ -293,10 +294,73 @@ describe('cover-sync', () => {
         fetchCover: vi.fn().mockResolvedValue(undefined),
         onGameStart,
         onGameEnd,
+        onCoverReady,
       });
 
       expect(onGameStart).toHaveBeenCalledWith('game-a');
+      expect(onCoverReady).toHaveBeenCalledWith('game-a');
       expect(onGameEnd).toHaveBeenCalledWith('game-a');
+    });
+
+    it('does not invoke onCoverReady if fetchCover fails', async () => {
+      const games = [gameWithoutCover()];
+      const onCoverReady = vi.fn();
+
+      await runCoverFetchBatch({
+        games,
+        concurrency: 1,
+        fetchCover: vi.fn().mockRejectedValue(new Error('Network error')),
+        onCoverReady,
+      });
+
+      expect(onCoverReady).not.toHaveBeenCalled();
+    });
+
+    it('does not downgrade a successful download when onCoverReady throws', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const games = [gameWithoutCover()];
+      const onCoverReady = vi.fn(() => {
+        throw new Error('refresh blew up');
+      });
+
+      const result = await runCoverFetchBatch({
+        games,
+        concurrency: 1,
+        fetchCover: vi.fn().mockResolvedValue(undefined),
+        onCoverReady,
+      });
+
+      // The cover did download, so it must not appear as a failure, and the batch must resolve.
+      expect(onCoverReady).toHaveBeenCalledWith('game-a');
+      expect(result.failures).toEqual([]);
+
+      consoleError.mockRestore();
+    });
+
+    it('keeps downloading the rest of the batch when a lifecycle hook throws', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const games = [
+        gameWithoutCover({ game_id: 'game-1' }),
+        gameWithoutCover({ game_id: 'game-2' }),
+      ];
+      const onGameStart = vi.fn((gameId: string) => {
+        if (gameId === 'game-1') {
+          throw new Error('spinner blew up');
+        }
+      });
+      const fetchCover = vi.fn().mockResolvedValue(undefined);
+
+      const result = await runCoverFetchBatch({
+        games,
+        concurrency: 1,
+        fetchCover,
+        onGameStart,
+      });
+
+      expect(fetchCover).toHaveBeenCalledTimes(2);
+      expect(result.failures).toEqual([]);
+
+      consoleError.mockRestore();
     });
 
     it('limits concurrency', async () => {

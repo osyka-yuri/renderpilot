@@ -91,17 +91,35 @@ export function filterGamesMissingStoredCoverForBackgroundSync(
   );
 }
 
-/**
- * Runs `fetchCover` for each game with a bounded pool size. Invokes lifecycle hooks on the JS thread
- * around each attempt (for UI busy indicators).
- */
-export async function runCoverFetchBatch(options: {
+export type CoverFetchBatchHooks = {
+  /** Fired before each attempt (success or failure) — typically a per-card busy spinner on. */
+  onGameStart?: (gameId: string) => void;
+  /** Fired after each attempt (success or failure) — typically a per-card busy spinner off. */
+  onGameEnd?: (gameId: string) => void;
+  /**
+   * Fired once per *successful* download, after `onGameEnd`, so a single card can refresh the
+   * moment its cover lands instead of waiting for the whole batch.
+   */
+  onCoverReady?: (gameId: string) => void;
+};
+
+export type CoverFetchBatchOptions = CoverFetchBatchHooks & {
   games: readonly GameSummary[];
   concurrency: number;
   fetchCover: (gameId: string) => Promise<unknown>;
-  onGameStart?: (gameId: string) => void;
-  onGameEnd?: (gameId: string) => void;
-}): Promise<{ failures: CoverFetchFailure[] }> {
+};
+
+/**
+ * Runs `fetchCover` for every game through a bounded worker pool, collecting per-game failures
+ * without aborting the batch.
+ *
+ * Lifecycle hooks ({@link CoverFetchBatchHooks}) report progress to the UI. They are invoked
+ * defensively: a throwing hook is logged and isolated, so a buggy callback can neither abort the
+ * remaining downloads nor be mistaken for a fetch failure.
+ */
+export async function runCoverFetchBatch(
+  options: CoverFetchBatchOptions,
+): Promise<{ failures: CoverFetchFailure[] }> {
   const items = [...options.games];
 
   if (items.length === 0) {
@@ -124,14 +142,23 @@ export async function runCoverFetchBatch(options: {
     const game = items[itemIndex];
     const gameId = game.game_id;
 
-    options.onGameStart?.(gameId);
+    notifyLifecycleHook(options.onGameStart, gameId);
+
+    let downloaded = false;
 
     try {
       await options.fetchCover(gameId);
+      downloaded = true;
     } catch (error: unknown) {
       failuresByInputIndex[itemIndex] = createCoverFetchFailure(game, error);
     } finally {
-      options.onGameEnd?.(gameId);
+      notifyLifecycleHook(options.onGameEnd, gameId);
+    }
+
+    // Notify success outside the fetch's try/catch: a throwing onCoverReady must never be
+    // recorded as a download failure, and only confirmed downloads should trigger a refresh.
+    if (downloaded) {
+      notifyLifecycleHook(options.onCoverReady, gameId);
     }
   };
 
@@ -152,6 +179,26 @@ export async function runCoverFetchBatch(options: {
   return {
     failures: failuresByInputIndex.filter(isDefined),
   };
+}
+
+/**
+ * Invokes an optional lifecycle hook, isolating the batch from a throwing UI callback.
+ * Hooks are fire-and-forget side effects (busy flags, cache-version bumps); a failure in one
+ * must not abort the remaining downloads or corrupt failure accounting.
+ */
+function notifyLifecycleHook(
+  hook: ((gameId: string) => void) | undefined,
+  gameId: string,
+): void {
+  if (hook === undefined) {
+    return;
+  }
+
+  try {
+    hook(gameId);
+  } catch (error: unknown) {
+    console.error('Cover sync lifecycle hook threw.', error);
+  }
 }
 
 function getWorkerCount(concurrency: number, itemCount: number): number {
