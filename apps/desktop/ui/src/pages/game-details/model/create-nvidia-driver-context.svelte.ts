@@ -1,7 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { describeCommandErrorTechnical } from '@shared/api';
 import { publishErrorNotification } from '@shared/notifications';
-import { t } from '@shared/i18n';
+import { t, translateKey } from '@shared/i18n';
 import {
   clearGameExecutableOverride,
   listGameExecutableCandidates,
@@ -11,6 +11,7 @@ import {
   setNvapiSettingValue,
   type DllInfoDto,
   type ExecutableCandidate,
+  type NvapiWarning,
   type SettingFamily,
   type SettingStateResponse,
 } from '@features/nvapi-settings';
@@ -37,20 +38,23 @@ export type CreateNvidiaDriverContextOptions = {
 
 // Substrings that classify a setting warning as session/profile-level (shown
 // once on the profile card) rather than family-specific (shown on each card).
-const SESSION_WARNING_MARKERS = ['executable', 'NVAPI', 'DRS session', 'NVIDIA profile'];
+const SESSION_WARNINGS: NvapiWarning[] = [
+  'noExecutable',
+  'nvapiUnavailable',
+  'nvapiInitFailed',
+  'drsFailed',
+];
 
-function isSessionWarning(warning: string): boolean {
-  return SESSION_WARNING_MARKERS.some((marker) => warning.includes(marker));
+function isSessionWarning(warning: NvapiWarning): boolean {
+  return SESSION_WARNINGS.includes(warning);
 }
 
-function distinct(values: string[]): string[] {
-  const result: string[] = [];
-  for (const value of values) {
-    if (!result.includes(value)) {
-      result.push(value);
-    }
-  }
-  return result;
+function translateWarning(warning: NvapiWarning): string {
+  return translateKey(`gameDetails.nvapi.warning.${warning}`, warning);
+}
+
+function distinctWarnings(values: NvapiWarning[]): NvapiWarning[] {
+  return Array.from(new Set(values));
 }
 
 export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverContextOptions) {
@@ -81,7 +85,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
 
   const profileWarnings = $derived.by((): string[] =>
-    distinct(states.flatMap((s) => s.warnings).filter(isSessionWarning)),
+    distinctWarnings(states.flatMap((s) => s.warnings).filter(isSessionWarning)).map(translateWarning),
   );
 
   // ── per-family selectors ─────────────────────────────────────────
@@ -91,7 +95,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
 
   function familyWarnings(family: SettingFamily): string[] {
     const all = settingsForFamily(family).flatMap((s) => s.warnings);
-    return distinct(all.filter((warning) => !isSessionWarning(warning)));
+    return distinctWarnings(all.filter((w) => !isSessionWarning(w))).map(translateWarning);
   }
 
   function dllInfoForFamily(family: SettingFamily): DllInfoDto | null {

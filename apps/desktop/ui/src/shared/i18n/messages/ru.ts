@@ -193,8 +193,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Автоопределение',
   'gameDetails.profile.filteredTag': '(скрыто)',
   'gameDetails.profile.filteredLabel': '{fileName} (скрыто)',
-  'gameDetails.profile.noProfile':
-    'Профиль NVIDIA не найден. Запустите игру хотя бы раз и попробуйте снова.',
+  'gameDetails.profile.noProfile': 'Профиль NVIDIA не найден.',
 
   // ── Game details: DLSS indicator card ──
   'gameDetails.indicator.title': 'Индикатор DLSS',
@@ -215,6 +214,13 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.restoreBaseline': 'Восстановить исходное значение',
   'gameDetails.nvapi.alreadyBaseline': 'Уже установлено исходное значение',
   'gameDetails.nvapi.noBaseline': 'Исходное значение не сохранено',
+
+  'gameDetails.nvapi.warning.noDll': 'DLL-файл DLSS не найден в папке с игрой.',
+  'gameDetails.nvapi.warning.noManifest': 'В манифесте нет данных для этой версии DLL.',
+  'gameDetails.nvapi.warning.noExecutable': 'Исполняемый файл для этой игры не найден.',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI недоступен.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'Ошибка инициализации NVAPI.',
+  'gameDetails.nvapi.warning.drsFailed': 'Не удалось создать сессию DRS.',
 
   // ── Operations page ──
   'operations.title': 'Журнал операций',

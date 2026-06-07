@@ -6,8 +6,8 @@ use renderpilot_nvapi::{
 };
 
 use super::dto::{
-    category_for_family, value_type_str, BaselineDto, DllInfoDto, SettingStateResponse,
-    ValueDescriptorDto, ValueOptionDto,
+    category_for_family, value_type_str, BaselineDto, DllInfoDto, NvapiWarningDto,
+    SettingStateResponse, ValueDescriptorDto, ValueOptionDto,
 };
 use crate::dlss::preset_manifest::{
     bundled_manifest, resolve_entry, supported_presets_for, VersionSupportEntry,
@@ -127,9 +127,7 @@ pub fn write_setting_value(
         .map_err(|e| ServiceError::CommandFailed(format!("DRS session failed: {e}")))?;
 
     let profile = session.find_profile_by_exe(exe).map_err(|_| {
-        ServiceError::CommandFailed(format!(
-            "no NVIDIA profile for {exe} - launch the game once so NVIDIA creates one"
-        ))
+        ServiceError::CommandFailed(format!("NVIDIA profile for {exe} not found"))
     })?;
 
     let pre = read_pre_state(setting, &profile)?;
@@ -201,40 +199,17 @@ pub fn read_all_setting_states(
     let effective_exe_source = resolve_effective_exe_source(storage, game_id, &effective_exe)?;
 
     let exe = ctx.effective_exe.as_deref();
-    let mut session_warning: Option<String> = None;
-    let session = match exe {
-        None => {
-            session_warning = Some("no executable resolved for this game".to_owned());
-            None
+    let (session, session_warning) = (|| -> Result<_, NvapiWarningDto> {
+        if exe.is_none() {
+            return Err(NvapiWarningDto::NoExecutable);
         }
-        Some(_) => match Nvapi::get() {
-            None => {
-                session_warning = Some("NVAPI unavailable".to_owned());
-                None
-            }
-            Some(nvapi) if nvapi.initialize().is_err() => {
-                session_warning = Some("NVAPI initialize failed".to_owned());
-                None
-            }
-            Some(nvapi) => match nvapi.create_session() {
-                Ok(session) => Some(session),
-                Err(_) => {
-                    session_warning = Some("DRS session could not be created".to_owned());
-                    None
-                }
-            },
-        },
-    };
+        let nvapi = Nvapi::get().ok_or(NvapiWarningDto::NvapiUnavailable)?;
+        nvapi.initialize().map_err(|_| NvapiWarningDto::NvapiInitFailed)?;
+        nvapi.create_session().map_err(|_| NvapiWarningDto::DrsFailed)
+    })()
+    .map_or_else(|w| (None, Some(w)), |s| (Some(s), None));
     let profile = match (session.as_ref(), exe) {
-        (Some(session), Some(exe)) => match session.find_profile_by_exe(exe) {
-            Ok(profile) => Some(profile),
-            Err(_) => {
-                session_warning = Some(format!(
-                    "no NVIDIA profile for {exe} (launch the game once)"
-                ));
-                None
-            }
-        },
+        (Some(session), Some(exe)) => session.find_profile_by_exe(exe).ok(),
         _ => None,
     };
 
@@ -266,7 +241,7 @@ struct LiveRead {
     is_current_predefined: bool,
     has_profile_for_exe: bool,
     /// Set when the live value could not be read; surfaced as a UI warning.
-    warning: Option<String>,
+    warning: Option<NvapiWarningDto>,
 }
 
 impl LiveRead {
@@ -285,7 +260,7 @@ impl LiveRead {
 
     /// The driver/profile could not be read at all: show the declared default
     /// and surface the reason.
-    fn unavailable(default: u32, warning: Option<String>) -> Self {
+    fn unavailable(default: u32, warning: Option<NvapiWarningDto>) -> Self {
         Self {
             current: default,
             predefined: None,
@@ -313,12 +288,13 @@ fn assemble_response(
     let supported_set = supported_preset_set(setting, ctx);
     let known_set = known_preset_set(setting, ctx);
 
-    let mut warnings: Vec<String> = Vec::new();
-    if dll_info.is_none() && setting.dll_kind().is_some() {
-        warnings.push("no DLSS DLL detected in the install directory".to_owned());
-    }
-    if supported_set.is_empty() && setting.dll_kind().is_some() {
-        warnings.push("manifest has no entry for this DLL version".to_owned());
+    let mut warnings: Vec<NvapiWarningDto> = Vec::new();
+    if setting.dll_kind().is_some() {
+        if dll_info.is_none() {
+            warnings.push(NvapiWarningDto::NoDll);
+        } else if supported_set.is_empty() {
+            warnings.push(NvapiWarningDto::NoManifest);
+        }
     }
     if let Some(warning) = live.warning {
         warnings.push(warning);
@@ -531,28 +507,24 @@ fn resolve_effective_exe_source(
 /// calls [`read_dword_or_default`] directly.
 fn read_live_or_default(setting: &dyn NvapiSetting, ctx: &SettingContext) -> LiveRead {
     let unavailable =
-        |warning: &str| LiveRead::unavailable(setting.default_dword(), Some(warning.to_owned()));
+        |warning: NvapiWarningDto| LiveRead::unavailable(setting.default_dword(), Some(warning));
 
     let Some(exe) = ctx.effective_exe.as_deref() else {
-        return unavailable("no executable resolved for this game");
+        return unavailable(NvapiWarningDto::NoExecutable);
     };
     let Some(nvapi) = Nvapi::get() else {
-        return unavailable("NVAPI unavailable");
+        return unavailable(NvapiWarningDto::NvapiUnavailable);
     };
     if nvapi.initialize().is_err() {
-        return unavailable("NVAPI initialize failed");
+        return unavailable(NvapiWarningDto::NvapiInitFailed);
     }
     let session = match nvapi.create_session() {
         Ok(session) => session,
-        Err(_) => return unavailable("DRS session could not be created"),
+        Err(_) => return unavailable(NvapiWarningDto::DrsFailed),
     };
     let profile = match session.find_profile_by_exe(exe) {
         Ok(profile) => profile,
-        Err(_) => {
-            return unavailable(&format!(
-                "no NVIDIA profile for {exe} (launch the game once)"
-            ))
-        }
+        Err(_) => return LiveRead::unavailable(setting.default_dword(), None),
     };
     read_dword_or_default(&profile, setting)
 }

@@ -23,6 +23,7 @@ export type {
   DllInfoDto,
   DlssIndicatorState,
   ExecutableCandidate,
+  NvapiWarning,
   SettingDescriptor,
   SettingFamily,
   SettingStateResponse,

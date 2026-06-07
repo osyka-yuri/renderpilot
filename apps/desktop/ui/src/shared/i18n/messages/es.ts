@@ -149,8 +149,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Autodetectar',
   'gameDetails.profile.filteredTag': '(filtrado)',
   'gameDetails.profile.filteredLabel': '{fileName} (filtrado)',
-  'gameDetails.profile.noProfile':
-    'No se encontró el perfil de NVIDIA. Inicia el juego una vez y vuelve a intentarlo.',
+  'gameDetails.profile.noProfile': 'No se encontró el perfil de NVIDIA.',
 
   'gameDetails.indicator.title': 'Indicador DLSS',
   'gameDetails.indicator.description':
@@ -170,6 +169,13 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.restoreBaseline': 'Restaurar valor inicial',
   'gameDetails.nvapi.alreadyBaseline': 'Ya en el valor inicial',
   'gameDetails.nvapi.noBaseline': 'Ningún valor inicial guardado',
+
+  'gameDetails.nvapi.warning.noDll': 'No se detectó ningún archivo DLL de DLSS en el directorio de instalación.',
+  'gameDetails.nvapi.warning.noManifest': 'El manifiesto no tiene datos para esta versión de DLL.',
+  'gameDetails.nvapi.warning.noExecutable': 'No se encontró ningún archivo ejecutable para este juego.',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI no está disponible.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'Error al inicializar NVAPI.',
+  'gameDetails.nvapi.warning.drsFailed': 'No se pudo crear la sesión DRS.',
 
   'operations.title': 'Historial',
   'operations.subtitleGame': 'Actividad de {title}',

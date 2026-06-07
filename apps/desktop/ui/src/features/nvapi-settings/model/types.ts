@@ -56,6 +56,14 @@ export type DllInfoDto = {
   manifest_label: string | null;
 };
 
+export type NvapiWarning =
+  | 'noDll'
+  | 'noManifest'
+  | 'noExecutable'
+  | 'nvapiUnavailable'
+  | 'nvapiInitFailed'
+  | 'drsFailed';
+
 export type SettingStateResponse = {
   setting_key: string;
   setting_label: string;
@@ -75,7 +83,7 @@ export type SettingStateResponse = {
   nvapi_available: boolean;
   available_values: ValueOption[];
   dll_info: DllInfoDto | null;
-  warnings: string[];
+  warnings: NvapiWarning[];
 };
 
 /**

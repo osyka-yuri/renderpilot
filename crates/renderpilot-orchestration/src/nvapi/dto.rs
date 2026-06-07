@@ -131,7 +131,25 @@ pub struct SettingStateResponse {
     /// Info about the DLSS DLL detected in the install directory.
     pub dll_info: Option<DllInfoDto>,
     /// Non-fatal warnings surfaced to the UI.
-    pub warnings: Vec<String>,
+    pub warnings: Vec<NvapiWarningDto>,
+}
+
+/// Strongly typed warning code for UI localization and categorization.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum NvapiWarningDto {
+    /// No DLSS DLL detected in the install directory.
+    NoDll,
+    /// Manifest has no entry for this DLL version.
+    NoManifest,
+    /// No executable resolved for this game.
+    NoExecutable,
+    /// NVAPI unavailable.
+    NvapiUnavailable,
+    /// NVAPI initialize failed.
+    NvapiInitFailed,
+    /// DRS session could not be created.
+    DrsFailed,
 }
 
 /// Builds a [`SettingDescriptorDto`] from a dynamic [`NvapiSetting`] reference.

@@ -151,8 +151,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': 'Automatisch erkennen',
   'gameDetails.profile.filteredTag': '(gefiltert)',
   'gameDetails.profile.filteredLabel': '{fileName} (gefiltert)',
-  'gameDetails.profile.noProfile':
-    'NVIDIA-Profil nicht gefunden. Starten Sie das Spiel einmal und versuchen Sie es erneut.',
+  'gameDetails.profile.noProfile': 'NVIDIA-Profil nicht gefunden.',
 
   'gameDetails.indicator.title': 'DLSS-Indikator',
   'gameDetails.indicator.description':
@@ -172,6 +171,13 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.restoreBaseline': 'Anfangswert wiederherstellen',
   'gameDetails.nvapi.alreadyBaseline': 'Bereits auf Anfangswert',
   'gameDetails.nvapi.noBaseline': 'Kein Anfangswert gespeichert',
+
+  'gameDetails.nvapi.warning.noDll': 'Keine DLSS-DLL im Installationsverzeichnis gefunden.',
+  'gameDetails.nvapi.warning.noManifest': 'Das Manifest enthält keinen Eintrag für diese DLL-Version.',
+  'gameDetails.nvapi.warning.noExecutable': 'Keine ausführbare Datei für dieses Spiel gefunden.',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI nicht verfügbar.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI-Initialisierung fehlgeschlagen.',
+  'gameDetails.nvapi.warning.drsFailed': 'DRS-Sitzung konnte nicht erstellt werden.',
 
   // ── Operations page ──
   'operations.title': 'Vorgangsjournal',

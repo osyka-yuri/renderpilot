@@ -149,8 +149,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': '自動検出',
   'gameDetails.profile.filteredTag': '（フィルター済み）',
   'gameDetails.profile.filteredLabel': '{fileName}（フィルター済み）',
-  'gameDetails.profile.noProfile':
-    'NVIDIA プロファイルが見つかりません。ゲームを一度起動して再試行してください。',
+  'gameDetails.profile.noProfile': 'NVIDIA プロファイルが見つかりません。',
 
   'gameDetails.indicator.title': 'DLSS インジケーター',
   'gameDetails.indicator.description':
@@ -170,6 +169,13 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.restoreBaseline': '初期値に戻す',
   'gameDetails.nvapi.alreadyBaseline': '既に初期値です',
   'gameDetails.nvapi.noBaseline': '初期値が保存されていません',
+
+  'gameDetails.nvapi.warning.noDll': 'インストールディレクトリに DLSS DLL が見つかりません。',
+  'gameDetails.nvapi.warning.noManifest': 'マニフェストにこの DLL バージョンのデータがありません。',
+  'gameDetails.nvapi.warning.noExecutable': 'このゲームの実行可能ファイルが見つかりません。',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI が利用できません。',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI の初期化に失敗しました。',
+  'gameDetails.nvapi.warning.drsFailed': 'DRS セッションを作成できませんでした。',
 
   'operations.title': '操作履歴',
   'operations.subtitleGame': '{title} のアクティビティ',

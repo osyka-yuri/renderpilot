@@ -181,7 +181,7 @@ export const en = {
   'gameDetails.profile.autoDetect': 'Auto-detect',
   'gameDetails.profile.filteredTag': '(filtered)',
   'gameDetails.profile.filteredLabel': '{fileName} (filtered)',
-  'gameDetails.profile.noProfile': 'NVIDIA profile not found. Launch the game once and try again.',
+  'gameDetails.profile.noProfile': 'NVIDIA profile not found.',
 
   // ── Game details: DLSS indicator card ──
   'gameDetails.indicator.title': 'DLSS Indicator',
@@ -198,10 +198,17 @@ export const en = {
   'gameDetails.nvapi.unavailable': 'unavailable',
   'gameDetails.nvapi.resetDefault': 'Reset to default',
   'gameDetails.nvapi.alreadyDefault': 'Already at default',
-  'gameDetails.nvapi.restoreBaselineAria': 'Restore initial value',
-  'gameDetails.nvapi.restoreBaseline': 'Restore initial value',
-  'gameDetails.nvapi.alreadyBaseline': 'Already at initial value',
-  'gameDetails.nvapi.noBaseline': 'No initial value saved',
+  'gameDetails.nvapi.restoreBaselineAria': 'Restore baseline',
+  'gameDetails.nvapi.restoreBaseline': 'Restore baseline',
+  'gameDetails.nvapi.alreadyBaseline': 'Already at baseline',
+  'gameDetails.nvapi.noBaseline': 'No baseline saved',
+
+  'gameDetails.nvapi.warning.noDll': 'No DLSS DLL detected in the install directory.',
+  'gameDetails.nvapi.warning.noManifest': 'Manifest has no entry for this DLL version.',
+  'gameDetails.nvapi.warning.noExecutable': 'No executable resolved for this game.',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI unavailable.',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI initialize failed.',
+  'gameDetails.nvapi.warning.drsFailed': 'DRS session could not be created.',
 
   // ── Operations page ──
   'operations.title': 'Operations Journal',

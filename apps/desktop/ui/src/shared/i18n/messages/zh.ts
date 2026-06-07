@@ -144,7 +144,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.profile.autoDetect': '自动检测',
   'gameDetails.profile.filteredTag': '（已过滤）',
   'gameDetails.profile.filteredLabel': '{fileName}（已过滤）',
-  'gameDetails.profile.noProfile': '未找到 NVIDIA 配置文件。请启动一次游戏然后重试。',
+  'gameDetails.profile.noProfile': '未找到 NVIDIA 配置文件。',
 
   'gameDetails.indicator.title': 'DLSS 指示器',
   'gameDetails.indicator.description': '在游戏过程中显示包含活动 DLSS 版本和设置的叠加层。',
@@ -160,10 +160,17 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.nvapi.alreadyDefault': '已是默认值',
   'gameDetails.nvapi.restoreBaselineAria': '恢复初始值',
   'gameDetails.nvapi.restoreBaseline': '恢复初始值',
-  'gameDetails.nvapi.alreadyBaseline': '已经是初始值',
+  'gameDetails.nvapi.alreadyBaseline': '已处于初始值',
   'gameDetails.nvapi.noBaseline': '未保存初始值',
 
-  'operations.title': '历史记录',
+  'gameDetails.nvapi.warning.noDll': '在安装目录中未检测到 DLSS DLL。',
+  'gameDetails.nvapi.warning.noManifest': '清单中没有该 DLL 版本的数据。',
+  'gameDetails.nvapi.warning.noExecutable': '未找到该游戏的可执行文件。',
+  'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI 不可用。',
+  'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI 初始化失败。',
+  'gameDetails.nvapi.warning.drsFailed': '无法创建 DRS 会话。',
+
+  'operations.title': '操作历史',
   'operations.subtitleGame': '{title} 的活动',
   'operations.loading': '正在加载...',
   'operations.empty': '暂无历史记录',

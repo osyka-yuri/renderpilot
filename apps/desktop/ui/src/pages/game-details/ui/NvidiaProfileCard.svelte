@@ -107,9 +107,12 @@
     </Item>
 
     {#if nvapi.hasStates && !nvapi.hasProfile && nvapi.effectiveExe}
-      <p class="px-4 text-xs text-muted-foreground">
-        {t('gameDetails.profile.noProfile', { exe: fileNameFromPath(nvapi.effectiveExe) })}
-      </p>
+      <Alert variant="warning" size="sm" role="note">
+        <TriangleAlertIcon aria-hidden="true" />
+        <AlertDescription>
+          {t('gameDetails.profile.noProfile')}
+        </AlertDescription>
+      </Alert>
     {/if}
 
     {#if nvapi.loadError}
