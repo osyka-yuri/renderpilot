@@ -102,29 +102,122 @@ fn read_regular_file(path: &Path) -> Result<Vec<u8>, CoverProtocolError> {
 }
 
 fn ok_response(payload: CoverPayload) -> Response<Vec<u8>> {
-    let mut response = Response::new(payload.bytes);
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, payload.content_type)
+        .header(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
 
-    *response.status_mut() = StatusCode::OK;
-
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, payload.content_type);
-
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-
-    if let Ok(content_length) = HeaderValue::from_str(&response.body().len().to_string()) {
-        response
-            .headers_mut()
-            .insert(CONTENT_LENGTH, content_length);
+    if let Ok(content_length) = HeaderValue::from_str(&payload.bytes.len().to_string()) {
+        builder = builder.header(CONTENT_LENGTH, content_length);
     }
 
-    response
+    or_unavailable(builder.body(payload.bytes))
 }
 
+/// Upholds the `rp-cover` handler's "always answer, never panic" contract by
+/// degrading a (theoretically) failed response build to a `NOT_FOUND` miss
+/// instead of unwrapping.
+fn or_unavailable(result: Result<Response<Vec<u8>>, http::Error>) -> Response<Vec<u8>> {
+    result.unwrap_or_else(|_| empty_response(StatusCode::NOT_FOUND))
+}
+
+/// Infallible primitive: a body-less response carrying only the given status.
 fn empty_response(status: StatusCode) -> Response<Vec<u8>> {
     let mut response = Response::new(Vec::new());
     *response.status_mut() = status;
     response
+}
+
+/// Response served when a cover cannot be produced (for example, when the shared
+/// context is not yet managed). Callers outside this crate use this instead of
+/// building HTTP responses themselves, keeping all response shaping in one place.
+#[must_use]
+pub fn cover_unavailable_response() -> Response<Vec<u8>> {
+    empty_response(StatusCode::NOT_FOUND)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn payload(bytes: Vec<u8>) -> CoverPayload {
+        CoverPayload {
+            bytes,
+            content_type: HeaderValue::from_static("image/png"),
+        }
+    }
+
+    #[test]
+    fn request_path_rejects_empty_paths() {
+        assert!(matches!(
+            game_id_from_request_path(""),
+            Err(CoverProtocolError::EmptyPath)
+        ));
+        assert!(matches!(
+            game_id_from_request_path("/"),
+            Err(CoverProtocolError::EmptyPath)
+        ));
+    }
+
+    #[test]
+    fn request_path_decodes_percent_encoding() {
+        let game_id = game_id_from_request_path("/abc%2D1").expect("valid id");
+        assert_eq!(game_id.as_str(), "abc-1");
+    }
+
+    #[test]
+    fn request_path_rejects_blank_decoded_id() {
+        // "%20" decodes to a single space, which `GameId` rejects after trimming.
+        assert!(matches!(
+            game_id_from_request_path("/%20"),
+            Err(CoverProtocolError::InvalidGameId)
+        ));
+    }
+
+    #[test]
+    fn ok_response_carries_payload_and_security_headers() {
+        let response = ok_response(payload(b"cover-bytes".to_vec()));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "image/png");
+        assert_eq!(response.headers()[X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(response.headers()[CONTENT_LENGTH], "11");
+        assert_eq!(response.body(), b"cover-bytes");
+    }
+
+    #[test]
+    fn unavailable_response_is_an_empty_not_found() {
+        let response = cover_unavailable_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.body().is_empty());
+    }
+
+    #[test]
+    fn or_unavailable_passes_through_ok_builds() {
+        let built = Response::builder()
+            .status(StatusCode::OK)
+            .body(b"ok".to_vec())
+            .expect("valid response");
+
+        let response = or_unavailable(Ok(built));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.body(), b"ok");
+    }
+
+    #[test]
+    fn or_unavailable_degrades_failed_builds_without_panicking() {
+        // An invalid header name makes `body()` return an error; the handler must
+        // still answer rather than panic.
+        let failed = Response::builder()
+            .header("inva\nlid", "x")
+            .body(Vec::new());
+        assert!(failed.is_err(), "expected the builder to capture an error");
+
+        let response = or_unavailable(failed);
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.body().is_empty());
+    }
 }

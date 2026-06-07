@@ -127,8 +127,13 @@ impl CommandError {
 
     fn debug(kind: Kind, user_message: UserMessage, debug_details: impl Into<String>) -> Self {
         let spec = kind.spec();
-        let message = format!("CommandError [{}] ({}): {}", spec.code, user_message.key(), debug_details.into());
-        
+        let message = format!(
+            "CommandError [{}] ({}): {}",
+            spec.code,
+            user_message.key(),
+            debug_details.into()
+        );
+
         match spec.severity {
             super::CommandErrorSeverity::Warning => log::warn!("{message}"),
             super::CommandErrorSeverity::Error => log::error!("{message}"),

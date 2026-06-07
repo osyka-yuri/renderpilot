@@ -17,6 +17,14 @@ pub fn cover_asset_protocol_response(
     renderpilot_orchestration::covers::cover_protocol_http_response(context, request_path)
 }
 
+/// Response served when a cover request cannot be handled (for example, when the
+/// shared context is unavailable). Lets callers degrade gracefully without
+/// constructing HTTP responses themselves.
+#[must_use]
+pub fn cover_unavailable_response() -> http::Response<Vec<u8>> {
+    renderpilot_orchestration::covers::cover_unavailable_response()
+}
+
 pub(crate) mod catalog;
 pub(crate) mod covers;
 pub(crate) mod dlss_indicator;

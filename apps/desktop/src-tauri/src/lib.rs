@@ -53,8 +53,6 @@ impl AppInitializationState {
         }
     }
 
-
-
     /// User cancelled or group policy blocked the UAC prompt.
     #[cfg(all(windows, not(debug_assertions)))]
     fn declined() -> Self {
@@ -227,19 +225,24 @@ fn refresh_libraries_manifest_in_background() {
 }
 
 fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
-    builder.register_uri_scheme_protocol("rp-cover", |ctx, request| {
-        // The protocol must always answer and never panic. If the shared context
-        // is somehow not managed yet, degrade to NOT_FOUND instead of unwrapping.
-        match ctx.app_handle().try_state::<Arc<Context>>() {
-            Some(context) => {
-                renderpilot_api::cover_asset_protocol_response(&context, request.uri().path())
-            }
-            None => {
-                let mut response = tauri::http::Response::new(Vec::new());
-                *response.status_mut() = tauri::http::StatusCode::NOT_FOUND;
-                response
-            }
-        }
+    builder.register_asynchronous_uri_scheme_protocol("rp-cover", |ctx, request, responder| {
+        // Resolve the shared context on the webview thread (cheap), then hand the
+        // blocking SQLite + filesystem lookup to a worker so the UI stays responsive.
+        let context = ctx
+            .app_handle()
+            .try_state::<Arc<Context>>()
+            .map(|state| state.inner().clone());
+        let path = request.uri().path().to_owned();
+
+        tauri::async_runtime::spawn_blocking(move || {
+            // Always answer, never panic: a missing context degrades to NOT_FOUND.
+            let response = match context {
+                Some(context) => renderpilot_api::cover_asset_protocol_response(&context, &path),
+                None => renderpilot_api::cover_unavailable_response(),
+            };
+
+            responder.respond(response);
+        });
     })
 }
 

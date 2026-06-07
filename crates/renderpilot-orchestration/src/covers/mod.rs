@@ -38,7 +38,7 @@ pub struct CoverMutationOutput {
 
 pub use fs_ops::{gc_orphan_cover_files, unlink_cover_file_best_effort};
 pub use paths::MAX_COVER_BYTES;
-pub use protocol::cover_protocol_http_response;
+pub use protocol::{cover_protocol_http_response, cover_unavailable_response};
 
 struct CoverCatalog<'a> {
     catalog_path: PathBuf,
