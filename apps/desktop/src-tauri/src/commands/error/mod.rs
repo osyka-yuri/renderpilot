@@ -34,19 +34,11 @@ pub struct CommandError {
     /// Sanitized user-facing fallback text, scrubbed of internal technical context. Serialized as the JSON field `details`.
     details: String,
 
-    #[cfg_attr(debug_assertions, serde(skip_serializing_if = "Option::is_none"))]
-    #[cfg_attr(not(debug_assertions), serde(skip_serializing))]
-    debug_details: Option<String>,
-
     suggested_actions: SuggestedActions,
 }
 
 impl CommandError {
-    pub(crate) fn new(
-        kind: CommandErrorKind,
-        user_message: UserMessage,
-        debug_details: Option<String>,
-    ) -> Self {
+    pub(crate) fn new(kind: CommandErrorKind, user_message: UserMessage) -> Self {
         let spec = kind.spec();
 
         Self {
@@ -54,36 +46,27 @@ impl CommandError {
             severity: spec.severity,
             message_key: user_message.key(),
             details: user_message.default_text().to_owned(),
-            debug_details,
             suggested_actions: spec.suggested_actions,
         }
     }
 
     pub(crate) fn user_facing(kind: CommandErrorKind, user_message: UserMessage) -> Self {
-        Self::new(kind, user_message, None)
-    }
-
-    pub(crate) fn with_debug_details(
-        kind: CommandErrorKind,
-        user_message: UserMessage,
-        debug_details: impl Into<String>,
-    ) -> Self {
-        Self::new(kind, user_message, Some(debug_details.into()))
+        Self::new(kind, user_message)
     }
 
     pub(crate) fn task_failed(error: impl std::fmt::Display) -> Self {
-        Self::with_debug_details(
+        log::error!("Command task failed: {error}");
+        Self::user_facing(
             CommandErrorKind::CommandTaskFailed,
             user_messages::COMMAND_TASK_FAILED,
-            format!("Command task failed: {error}"),
         )
     }
 
     pub(crate) fn invalid_argument(name: &'static str, reason: &'static str) -> Self {
-        Self::with_debug_details(
+        log::warn!("Invalid argument `{name}`: {reason}");
+        Self::user_facing(
             CommandErrorKind::InvalidArgument,
             user_messages::INVALID_ARGUMENT,
-            format!("Invalid argument `{name}`: {reason}"),
         )
     }
 
@@ -93,7 +76,8 @@ impl CommandError {
         debug_label: &'static str,
         raw: impl std::fmt::Display,
     ) -> Self {
-        Self::with_debug_details(kind, user_message, format!("{debug_label}: {raw}"))
+        log::warn!("{debug_label}: {raw}");
+        Self::user_facing(kind, user_message)
     }
 
     /// Retrieves the sanitized text explicitly intended for UI consumption, serialized as the JSON field `details`.
@@ -108,15 +92,6 @@ impl CommandError {
     #[cfg(test)]
     pub(crate) fn message_key(&self) -> &'static str {
         self.message_key
-    }
-
-    /// Retrieves granular technical details intended strictly for internal logging or debugging workflows.
-    ///
-    /// To ensure data privacy and prevent leakage of internals, this value is explicitly stripped during serialization in release builds.
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) fn debug_details(&self) -> Option<&str> {
-        self.debug_details.as_deref()
     }
 }
 
@@ -194,10 +169,9 @@ mod tests {
 
     #[test]
     fn command_error_json_includes_safe_details_and_message_key() {
-        let err = CommandError::with_debug_details(
+        let err = CommandError::user_facing(
             CommandErrorKind::InvalidGameId,
             strings::user_message::INVALID_GAME_REFERENCE,
-            "Invalid game id: secret-id-123",
         );
 
         let value = serde_json::to_value(&err).expect("serialize CommandError");
@@ -216,49 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn debug_details_serialization_matches_build_profile() {
-        let technical = "sqlite error at C:\\secret\\path";
-
-        let err = CommandError::with_debug_details(
-            CommandErrorKind::CommandFailed,
-            strings::user_message::OPERATION_COULD_NOT_COMPLETE,
-            technical,
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-        let json_str = serde_json::to_string(&err).expect("serialize CommandError");
-
-        if cfg!(debug_assertions) {
-            assert_eq!(value.get("debugDetails"), Some(&json!(technical)));
-        } else {
-            assert!(
-                value.get("debugDetails").is_none(),
-                "expected debugDetails to be stripped in release JSON: {value}"
-            );
-            assert!(
-                !json_str.contains(technical),
-                "expected technical details to be stripped in release JSON: {json_str}"
-            );
-        }
-    }
-
-    #[test]
-    fn debug_details_are_omitted_when_absent() {
-        let err = CommandError::user_facing(
-            CommandErrorKind::SteamGridDbApiKeyMissing,
-            strings::user_message::STEAMGRIDDB_API_KEY_MISSING,
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert!(
-            value.get("debugDetails").is_none(),
-            "debugDetails should be absent when no debug details exist"
-        );
-    }
-
-    #[test]
-    fn command_failed_maps_technical_message_to_debug_not_details() {
+    fn command_failed_maps_technical_message_safely() {
         let technical = "catalog error: permission denied on D:\\Games\\secret";
         let err = CommandError::from(ApiError::Service(ServiceError::CommandFailed(
             technical.into(),
@@ -278,12 +210,6 @@ mod tests {
             ))
         );
         assert_ne!(value.get("details"), Some(&json!(technical)));
-
-        if cfg!(debug_assertions) {
-            assert_eq!(value.get("debugDetails"), Some(&json!(technical)));
-        } else {
-            assert!(value.get("debugDetails").is_none());
-        }
     }
 
     #[test]
@@ -314,53 +240,10 @@ mod tests {
     }
 
     #[test]
-    fn serialization_contract_has_stable_keys_for_current_build_profile() {
-        let err = CommandError::with_debug_details(
-            CommandErrorKind::CommandFailed,
-            strings::user_message::OPERATION_COULD_NOT_COMPLETE,
-            "debug internals",
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        let object = value
-            .as_object()
-            .expect("CommandError should serialize as a JSON object");
-
-        let keys = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
-
-        if cfg!(debug_assertions) {
-            assert_eq!(
-                keys,
-                BTreeSet::from([
-                    "code",
-                    "severity",
-                    "messageKey",
-                    "details",
-                    "debugDetails",
-                    "suggestedActions",
-                ])
-            );
-        } else {
-            assert_eq!(
-                keys,
-                BTreeSet::from([
-                    "code",
-                    "severity",
-                    "messageKey",
-                    "details",
-                    "suggestedActions",
-                ])
-            );
-        }
-    }
-
-    #[test]
     fn accessors_reflect_internal_state() {
-        let err = CommandError::with_debug_details(
+        let err = CommandError::user_facing(
             CommandErrorKind::GameNotFound,
             strings::user_message::GAME_NOT_IN_CATALOG,
-            "Game not found: x",
         );
 
         assert_eq!(
@@ -371,11 +254,10 @@ mod tests {
             err.message_key(),
             strings::user_message::GAME_NOT_IN_CATALOG.key()
         );
-        assert_eq!(err.debug_details(), Some("Game not found: x"));
     }
 
     #[test]
-    fn task_failed_uses_safe_details_and_moves_error_to_debug_details() {
+    fn task_failed_uses_safe_details() {
         let err = CommandError::task_failed("worker crashed with private path");
         let value = serde_json::to_value(&err).expect("serialize CommandError");
 
@@ -389,21 +271,10 @@ mod tests {
             value.get("messageKey"),
             Some(&json!(strings::user_message::COMMAND_TASK_FAILED.key()))
         );
-
-        if cfg!(debug_assertions) {
-            assert_eq!(
-                value.get("debugDetails"),
-                Some(&json!(
-                    "Command task failed: worker crashed with private path"
-                ))
-            );
-        } else {
-            assert!(value.get("debugDetails").is_none());
-        }
     }
 
     #[test]
-    fn invalid_argument_uses_safe_details_and_moves_reason_to_debug_details() {
+    fn invalid_argument_uses_safe_details() {
         let err = CommandError::invalid_argument("game_id", "must not be empty");
 
         let value = serde_json::to_value(&err).expect("serialize CommandError");
@@ -419,19 +290,10 @@ mod tests {
             value.get("messageKey"),
             Some(&json!(strings::user_message::INVALID_ARGUMENT.key()))
         );
-
-        if cfg!(debug_assertions) {
-            assert_eq!(
-                value.get("debugDetails"),
-                Some(&json!("Invalid argument `game_id`: must not be empty"))
-            );
-        } else {
-            assert!(value.get("debugDetails").is_none());
-        }
     }
 
     #[test]
-    fn invalid_id_uses_safe_details_and_moves_raw_id_to_debug_details() {
+    fn invalid_id_uses_safe_details() {
         let err = CommandError::invalid_id(
             CommandErrorKind::InvalidGameId,
             strings::user_message::INVALID_GAME_REFERENCE,
@@ -451,15 +313,6 @@ mod tests {
             value.get("messageKey"),
             Some(&json!(strings::user_message::INVALID_GAME_REFERENCE.key()))
         );
-
-        if cfg!(debug_assertions) {
-            assert_eq!(
-                value.get("debugDetails"),
-                Some(&json!("Invalid game id: raw-secret-game-id"))
-            );
-        } else {
-            assert!(value.get("debugDetails").is_none());
-        }
     }
 
     #[test]

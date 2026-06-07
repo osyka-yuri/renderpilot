@@ -53,17 +53,7 @@ impl AppInitializationState {
         }
     }
 
-    /// Not elevated yet; release builds will attempt a UAC relaunch.
-    #[cfg(windows)]
-    fn not_elevated() -> Self {
-        Self {
-            is_elevated: false,
-            elevation_supported: true,
-            elevation_user_declined: false,
-            elevation_attempted: false,
-            relaunch_in_progress: false,
-        }
-    }
+
 
     /// User cancelled or group policy blocked the UAC prompt.
     #[cfg(all(windows, not(debug_assertions)))]
@@ -165,7 +155,13 @@ fn compute_initialization_state() -> AppInitializationState {
 #[cfg(windows)]
 #[cfg(debug_assertions)]
 fn resolve_unelevated_startup() -> AppInitializationState {
-    AppInitializationState::not_elevated()
+    AppInitializationState {
+        is_elevated: false,
+        elevation_supported: true,
+        elevation_user_declined: false,
+        elevation_attempted: false,
+        relaunch_in_progress: false,
+    }
 }
 
 /// Release builds attempt a UAC auto-relaunch on first startup.
