@@ -1,14 +1,15 @@
-use renderpilot_orchestration::application::ComponentReplacementCandidates;
+//! Game-card listing: backend-owned filtering, sorting, and paging over the
+//! dashboard's game cards, plus the card DTO the GUI renders.
+
 use renderpilot_orchestration::catalog as orch_catalog;
-use renderpilot_orchestration::catalog::output as catalog_output;
-use renderpilot_orchestration::domain::{GameId, GraphicsComponent, GraphicsTechnology};
+use renderpilot_orchestration::domain::{GraphicsComponent, GraphicsTechnology};
 use serde::Serialize;
-use serde_json::Value;
 use std::{cmp::Ordering, collections::BTreeSet};
 
-use super::utils::{
-    available_update_count, dashboard_risk_level, is_visible_graphics_technology, library_tags,
-    to_json, DashboardRiskLevel, JsonResult,
+use super::{is_component_visible, visible_component_ids};
+use crate::utils::{
+    available_update_count, dashboard_risk_level, library_tags, to_json, DashboardRiskLevel,
+    JsonResult,
 };
 use crate::ApiError;
 
@@ -100,15 +101,6 @@ fn load_game_cards(
             )
         })
         .collect())
-}
-
-/// Loads one game with detected components, candidates, and operation history.
-pub fn get_game_details(
-    context: &renderpilot_orchestration::Context,
-    game_id: impl Into<String>,
-) -> JsonResult {
-    let game_id = super::utils::parse_game_id(game_id.into())?;
-    to_json(GameDetailsOutput::load(context, game_id)?)
 }
 
 #[derive(Debug, Serialize)]
@@ -423,105 +415,6 @@ impl GameCardMetrics {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct GameComponentOutput {
-    #[serde(flatten)]
-    component: GraphicsComponent,
-    rollback_available: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct GameDetailsOutput {
-    game: renderpilot_orchestration::domain::GameInstallation,
-    components: Vec<GameComponentOutput>,
-    candidate_groups: Value,
-    operations: Value,
-}
-
-impl GameDetailsOutput {
-    pub(crate) fn load(
-        context: &renderpilot_orchestration::Context,
-        game_id: GameId,
-    ) -> Result<Self, ApiError> {
-        let backup_ids = orch_catalog::backup_component_ids(context, &game_id)?;
-        let details = orch_catalog::get_game_details(context, game_id)?;
-        let visible_components = filter_visible_components(details.components);
-        let visible_component_ids = visible_component_ids(&visible_components);
-        let visible_candidate_groups =
-            filter_visible_candidate_groups(details.candidate_groups, &visible_component_ids);
-        let candidate_groups = serde_json::to_value(catalog_output::component_candidate_outputs(
-            visible_candidate_groups,
-        ))
-        .map_err(ApiError::from)?;
-        let operations = serde_json::to_value(catalog_output::operation_summary_outputs(
-            &details.operations,
-        ))
-        .map_err(ApiError::from)?;
-
-        let components = visible_components
-            .into_iter()
-            .map(|component| {
-                let rollback_available = backup_ids.contains(component.id().as_str());
-                GameComponentOutput {
-                    component,
-                    rollback_available,
-                }
-            })
-            .collect();
-
-        Ok(Self {
-            game: details.game,
-            components,
-            candidate_groups,
-            operations,
-        })
-    }
-}
-
-/// Reads one persisted catalog settings value (typically used for integration keys).
-pub fn get_catalog_setting(
-    context: &renderpilot_orchestration::Context,
-    key: impl Into<String>,
-) -> JsonResult {
-    let key = key.into();
-    let value = orch_catalog::get_catalog_setting(context, &key)?;
-    to_json(serde_json::json!({ "value": value }))
-}
-
-/// Upserts a persisted catalog settings value, or deletes the row when `value` is blank after trim.
-pub fn set_catalog_setting(
-    context: &renderpilot_orchestration::Context,
-    key: impl Into<String>,
-    value: impl Into<String>,
-) -> JsonResult {
-    let key = key.into();
-    let value = value.into();
-    orch_catalog::set_catalog_setting(context, &key, &value)?;
-    to_json(serde_json::json!({ "saved": true }))
-}
-
-/// Sets the favorite status of a game.
-pub fn set_game_favorite(
-    context: &renderpilot_orchestration::Context,
-    game_id: impl Into<String>,
-    is_favorite: bool,
-) -> JsonResult {
-    let game_id = super::utils::parse_game_id(game_id.into())?;
-    orch_catalog::set_game_favorite(context, &game_id, is_favorite)?;
-    to_json(serde_json::json!({ "saved": true }))
-}
-
-/// Sets the hidden status of a game.
-pub fn set_game_hidden(
-    context: &renderpilot_orchestration::Context,
-    game_id: impl Into<String>,
-    is_hidden: bool,
-) -> JsonResult {
-    let game_id = super::utils::parse_game_id(game_id.into())?;
-    orch_catalog::set_game_hidden(context, &game_id, is_hidden)?;
-    to_json(serde_json::json!({ "saved": true }))
-}
-
 fn normalize_search_query(value: String) -> String {
     value.trim().to_lowercase()
 }
@@ -615,35 +508,10 @@ fn parse_graphics_technology(value: &str) -> Option<GraphicsTechnology> {
     GraphicsTechnology::from_slug(value)
 }
 
-fn filter_visible_components(components: Vec<GraphicsComponent>) -> Vec<GraphicsComponent> {
-    components
-        .into_iter()
-        .filter(|component| is_visible_graphics_technology(component.technology()))
-        .collect()
-}
-
-fn filter_visible_candidate_groups(
-    candidate_groups: Vec<ComponentReplacementCandidates>,
-    visible_component_ids: &BTreeSet<String>,
-) -> Vec<ComponentReplacementCandidates> {
-    candidate_groups
-        .into_iter()
-        .filter(|group| visible_component_ids.contains(group.component_id().as_str()))
-        .collect()
-}
-
-fn visible_component_ids(components: &[GraphicsComponent]) -> BTreeSet<String> {
-    components
-        .iter()
-        .filter(|component| is_visible_graphics_technology(component.technology()))
-        .map(|component| component.id().as_str().to_owned())
-        .collect()
-}
-
 fn visible_component_count(components: &[GraphicsComponent]) -> usize {
     components
         .iter()
-        .filter(|component| is_visible_graphics_technology(component.technology()))
+        .filter(|component| is_component_visible(component))
         .count()
 }
 
