@@ -93,6 +93,10 @@ export const fr: Record<MessageKey, MessageValue> = {
   'elevation.relaunch': 'Redémarrer en tant qu’administrateur',
   'elevation.relaunchFailed': 'Impossible de redémarrer en tant qu’administrateur',
   'elevation.dismiss': 'Ignorer',
+  'error.boundary.title': 'Une erreur est survenue',
+  'error.boundary.description':
+    'Cet écran a rencontré une erreur inattendue. Réessayez ou passez à une autre section.',
+  'error.boundary.reset': 'Réessayer',
 
   'games.scanFolder': 'Analyser le dossier',
   'games.scanning': 'Analyse en cours...',
@@ -292,6 +296,17 @@ export const fr: Record<MessageKey, MessageValue> = {
   'libraries.column.actions': 'Actions',
   'libraries.unsigned': 'Non signé',
   'libraries.invalidDate': 'Date non valide',
+  'libraries.empty.loading': 'Chargement…',
+  'libraries.empty.unavailable': 'Impossible de charger les bibliothèques',
+  'libraries.empty.none': 'Aucune bibliothèque trouvée',
+  'libraries.error.loadFailed': 'Impossible de charger les bibliothèques',
+  'libraries.error.refreshFailed': 'Impossible d’actualiser le manifeste',
+  'libraries.error.downloadFailed': 'Échec du téléchargement',
+  'libraries.error.deleteFailed': 'Échec de la suppression',
+  'libraries.error.downloadedRefreshFailed':
+    'Bibliothèque téléchargée, mais l’actualisation du statut a échoué',
+  'libraries.error.deletedRefreshFailed':
+    'Bibliothèque supprimée, mais l’actualisation du statut a échoué',
 
   'settings.catalog.source.steam.aria': 'Télécharger les jaquettes depuis Steam',
   'settings.catalog.source.steam.title': 'Steam',

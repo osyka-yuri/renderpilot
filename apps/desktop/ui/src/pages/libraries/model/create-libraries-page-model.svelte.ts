@@ -10,6 +10,7 @@ import {
   type LibraryTypeValue,
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
+import { t } from '@shared/i18n';
 import type { LibraryManifest, LibraryManifestEntry, LibraryState } from '@entities/library';
 import {
   getLibrariesManifest,
@@ -89,7 +90,7 @@ export function createLibrariesPageModel() {
     await loadLibraries({
       mode: 'initial',
       loadManifest: getLibrariesManifest,
-      failureContext: 'Failed to load libraries',
+      failureContext: t('libraries.error.loadFailed'),
     });
   }
 
@@ -99,7 +100,7 @@ export function createLibrariesPageModel() {
     await loadLibraries({
       mode: 'refresh',
       loadManifest: fetchLibrariesManifest,
-      failureContext: 'Failed to refresh manifest',
+      failureContext: t('libraries.error.refreshFailed'),
     });
   }
 
@@ -164,8 +165,8 @@ export function createLibrariesPageModel() {
     await runExclusiveEntryAction({
       entryId,
       action: 'download',
-      failureContext: 'Download failed',
-      refreshFailureContext: 'Library downloaded, but status refresh failed',
+      failureContext: t('libraries.error.downloadFailed'),
+      refreshFailureContext: t('libraries.error.downloadedRefreshFailed'),
       execute: downloadLibrary,
     });
   }
@@ -174,8 +175,8 @@ export function createLibrariesPageModel() {
     await runExclusiveEntryAction({
       entryId,
       action: 'delete',
-      failureContext: 'Delete failed',
-      refreshFailureContext: 'Library deleted, but status refresh failed',
+      failureContext: t('libraries.error.deleteFailed'),
+      refreshFailureContext: t('libraries.error.deletedRefreshFailed'),
       execute: deleteLibrary,
     });
   }
@@ -274,9 +275,9 @@ export function createLibrariesPageModel() {
     currentError: string | null,
     entryCount: number,
   ): string | null {
-    if (isLoading) return 'Loading...';
-    if (currentManifest === null && currentError !== null) return 'Unable to load libraries';
-    if (entryCount === 0) return 'No libraries found';
+    if (isLoading) return t('libraries.empty.loading');
+    if (currentManifest === null && currentError !== null) return t('libraries.empty.unavailable');
+    if (entryCount === 0) return t('libraries.empty.none');
 
     return null;
   }

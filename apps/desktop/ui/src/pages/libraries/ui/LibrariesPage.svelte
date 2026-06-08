@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { createVirtualizer } from '@tanstack/svelte-virtual';
-  import { untrack } from 'svelte';
   import {
     Alert,
     AlertDescription,
@@ -19,27 +17,19 @@
     TabsTrigger,
     ToggleGroup,
     ToggleGroupItem,
-    createSvelteTable,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import {
-    type ColumnDef,
-    type Row,
-    type SortingState,
-    getCoreRowModel,
-    getSortedRowModel,
-  } from '@tanstack/table-core';
 
-  import type { LibraryManifestEntry } from '@entities/library';
   import { typeOptionsByVendor, vendorOptions } from '../model/libraries-page-model';
   import { createLibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   import { createLibraryColumns } from './library-columns';
   import {
-    getBottomVirtualPadding,
-    getTopVirtualPadding,
-    resetVirtualizerAfterLayout,
-  } from './virtualizer-reset';
+    createLibrariesTableModel,
+    COLUMN_COUNT,
+    getColumnClass,
+  } from '../model/create-libraries-table-model.svelte';
+  import { getBottomVirtualPadding, getTopVirtualPadding } from './virtualizer-helpers';
 
   type Props = {
     refreshKey?: number;
@@ -55,27 +45,6 @@
     }
   });
 
-  const DEFAULT_SORTING: SortingState = [{ id: 'version', desc: true }];
-
-  const ROW_ESTIMATE_SIZE = 40;
-  const ROW_OVERSCAN = 12;
-
-  const COLUMN_IDS = ['version', 'hash', 'signed', 'size', 'actions'] as const;
-  const COLUMN_COUNT = COLUMN_IDS.length;
-
-  const COLUMN_CLASS_BY_ID = {
-    version: 'w-48',
-    hash: 'w-64',
-    signed: 'w-40',
-    size: 'w-24',
-    actions: 'w-24 text-end',
-  } satisfies Readonly<Record<(typeof COLUMN_IDS)[number], string>>;
-
-  let sorting = $state<SortingState>([...DEFAULT_SORTING]);
-  let scrollViewportRef = $state<HTMLElement | null>(null);
-
-  let virtualizerResetId = 0;
-
   const columns = $derived(
     createLibraryColumns(
       model.pendingEntryAction,
@@ -85,39 +54,19 @@
     ),
   );
 
-  const table = $derived(createTable(model.filteredEntries, columns));
-
-  const tableRows = $derived(table.getRowModel().rows);
-
-  const rowVirtualizer = $derived.by(() => {
-    const scrollElement = scrollViewportRef;
-    const rows = tableRows;
-
-    return createVirtualizer<HTMLElement, HTMLTableRowElement>({
-      count: rows.length,
-      getScrollElement: () => scrollElement,
-      estimateSize: () => ROW_ESTIMATE_SIZE,
-      overscan: ROW_OVERSCAN,
-      getItemKey: (index) => getRowByIndex(rows, index)?.original.entry_id ?? index,
-    });
+  const tableModel = createLibrariesTableModel({
+    getEntries: () => model.filteredEntries,
+    getColumns: () => columns,
+    getActiveVendor: () => model.activeVendor,
+    getActiveType: () => model.activeType,
   });
 
+  const rowVirtualizer = $derived(tableModel.rowVirtualizer);
   const virtualRows = $derived($rowVirtualizer.getVirtualItems());
-
   const topVirtualPadding = $derived(getTopVirtualPadding(virtualRows));
   const bottomVirtualPadding = $derived(
     getBottomVirtualPadding(virtualRows, $rowVirtualizer.getTotalSize()),
   );
-
-  $effect(() => {
-    const viewport = scrollViewportRef;
-    const rowCount = tableRows.length;
-    const resetKey = getVirtualizerResetKey();
-
-    if (viewport === null || rowCount === 0) return;
-
-    scheduleVirtualizerReset(resetKey);
-  });
 
   $effect(() => {
     model.init();
@@ -125,62 +74,9 @@
 
     return () => {
       model.dispose();
-      virtualizerResetId += 1;
+      tableModel.dispose();
     };
   });
-
-  function createTable(
-    entries: LibraryManifestEntry[],
-    tableColumns: ColumnDef<LibraryManifestEntry>[],
-  ) {
-    return createSvelteTable({
-      get data() {
-        return entries;
-      },
-      columns: tableColumns,
-      state: {
-        get sorting() {
-          return sorting;
-        },
-      },
-      onSortingChange: (updater) => {
-        sorting = typeof updater === 'function' ? updater(sorting) : updater;
-        scheduleVirtualizerReset(getVirtualizerResetKey());
-      },
-      getCoreRowModel: getCoreRowModel(),
-      getSortedRowModel: getSortedRowModel(),
-    });
-  }
-
-  function getColumnClass(columnId: string): string {
-    return COLUMN_CLASS_BY_ID[columnId as keyof typeof COLUMN_CLASS_BY_ID];
-  }
-
-  function getRowByIndex(
-    rows: Row<LibraryManifestEntry>[],
-    index: number,
-  ): Row<LibraryManifestEntry> | undefined {
-    if (index < 0 || index >= rows.length) return undefined;
-
-    return rows[index];
-  }
-
-  function getVirtualizerResetKey(): string {
-    return `${model.activeVendor}:${model.activeType}:${tableRows.length}`;
-  }
-
-  function scheduleVirtualizerReset(resetKey: string): void {
-    const resetId = ++virtualizerResetId;
-
-    void resetVirtualizerAfterLayout({
-      viewport: scrollViewportRef,
-      virtualizer: untrack(() => $rowVirtualizer),
-      resetId,
-      resetKey,
-      currentResetId: () => virtualizerResetId,
-      currentResetKey: getVirtualizerResetKey,
-    });
-  }
 </script>
 
 <section
@@ -221,13 +117,13 @@
           </ToggleGroup>
 
           <ScrollArea
-            bind:viewportRef={scrollViewportRef}
+            bind:viewportRef={tableModel.scrollViewportRef}
             orientation="both"
             class="min-h-0 flex-1"
           >
             <Table class="table-fixed">
               <TableHeader class="sticky top-0 z-10 bg-background">
-                {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+                {#each tableModel.table.getHeaderGroups() as headerGroup (headerGroup.id)}
                   <TableRow>
                     {#each headerGroup.headers as header (header.id)}
                       <TableHead class={getColumnClass(header.column.id)}>
@@ -264,7 +160,7 @@
                   {/if}
 
                   {#each virtualRows as virtualRow (virtualRow.key)}
-                    {@const row = getRowByIndex(tableRows, virtualRow.index)}
+                    {@const row = tableModel.getRowByIndex(tableModel.tableRows, virtualRow.index)}
 
                     {#if row}
                       <TableRow>

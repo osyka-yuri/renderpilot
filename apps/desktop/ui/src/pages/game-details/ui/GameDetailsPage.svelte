@@ -1,11 +1,10 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameDetails, GameGraphicsComponent } from '@entities/game';
   import {
-    libraryVendorOrder,
-    libraryVendorKey,
-    vendorLabelForLibraryVendorKey,
-    type LibraryVendorKey,
-  } from '@shared/graphics';
+    createVendorTabs,
+    NVIDIA_STREAMLINE_TECHNOLOGY,
+    DLSS_FAMILY_CARDS,
+  } from '../model/game-details-tabs';
   import {
     Tabs,
     TabsContent,
@@ -34,33 +33,6 @@
   import VendorComponentCard from './VendorComponentCard.svelte';
   import { untrack } from 'svelte';
 
-  const NVIDIA_STREAMLINE_TECHNOLOGY = 'nvidia_streamline';
-
-  // Each DLSS DLL family is its own card (physical DLL swap + NVAPI driver
-  // overrides), exactly like Super Resolution — keyed off the component's
-  // technology. Streamline (sl.*.dll) is unrelated and keeps its own card.
-  const DLSS_FAMILY_CARDS: Record<string, { family: SettingFamily; title: string }> = {
-    dlss_super_resolution: { family: 'sr', title: 'NVIDIA DLSS Super Resolution' },
-    dlss_ray_reconstruction: { family: 'rr', title: 'NVIDIA DLSS Ray Reconstruction' },
-    dlss_frame_generation: { family: 'fg', title: 'NVIDIA DLSS Frame Generation' },
-  };
-
-  // Defines the display order of component technologies within their vendor tab.
-  // Technologies not in this list fall back to alphabetical sorting by ID.
-  const COMPONENT_TECHNOLOGY_ORDER: Record<string, number> = {
-    dlss_super_resolution: 1,
-    dlss_ray_reconstruction: 2,
-    dlss_frame_generation: 3,
-  };
-
-  function compareComponents(a: GameGraphicsComponent, b: GameGraphicsComponent): number {
-    const orderA = COMPONENT_TECHNOLOGY_ORDER[a.technology] ?? 999;
-    const orderB = COMPONENT_TECHNOLOGY_ORDER[b.technology] ?? 999;
-
-    if (orderA !== orderB) return orderA - orderB;
-    return a.id.localeCompare(b.id);
-  }
-
   type Props = {
     details?: GameDetails | null;
     busy?: boolean;
@@ -87,41 +59,7 @@
     onOpenOperations,
   }: Props = $props();
 
-  type VendorTab = {
-    key: LibraryVendorKey;
-    label: string;
-    components: GameGraphicsComponent[];
-  };
-
-  const tabs = $derived.by((): VendorTab[] => {
-    if (!details) return [];
-
-    const byVendor = libraryVendorOrder.reduce(
-      (acc, key) => {
-        acc[key] = [];
-        return acc;
-      },
-      {} as Record<LibraryVendorKey, GameGraphicsComponent[]>,
-    );
-
-    for (const component of details.components) {
-      const key = libraryVendorKey(component.technology);
-      byVendor[key].push(component);
-    }
-
-    return libraryVendorOrder
-      .map((key) => {
-        const components = byVendor[key];
-        components.sort(compareComponents);
-
-        return {
-          key,
-          label: vendorLabelForLibraryVendorKey(key),
-          components,
-        };
-      })
-      .filter((tab) => tab.components.length > 0);
-  });
+  const tabs = $derived(createVendorTabs(details));
 
   const hasNvidiaTab = $derived(tabs.some((tab) => tab.key === 'nvidia'));
   const gameId = $derived(details?.game.identity.id ?? null);

@@ -118,6 +118,10 @@ export const ru: Record<MessageKey, MessageValue> = {
   'elevation.relaunch': 'Перезапустить от имени администратора',
   'elevation.relaunchFailed': 'Не удалось перезапустить от имени администратора',
   'elevation.dismiss': 'Скрыть',
+  'error.boundary.title': 'Что-то пошло не так',
+  'error.boundary.description':
+    'На этом экране произошла непредвиденная ошибка. Попробуйте ещё раз или перейдите в другой раздел.',
+  'error.boundary.reset': 'Повторить',
 
   // ── Games page / catalog ──
   'games.scanFolder': 'Сканировать папку',
@@ -352,6 +356,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'libraries.column.actions': 'Действия',
   'libraries.unsigned': 'Без подписи',
   'libraries.invalidDate': 'Неверная дата',
+  'libraries.empty.loading': 'Загрузка…',
+  'libraries.empty.unavailable': 'Не удалось загрузить библиотеки',
+  'libraries.empty.none': 'Библиотеки не найдены',
+  'libraries.error.loadFailed': 'Не удалось загрузить библиотеки',
+  'libraries.error.refreshFailed': 'Не удалось обновить манифест',
+  'libraries.error.downloadFailed': 'Не удалось скачать',
+  'libraries.error.deleteFailed': 'Не удалось удалить',
+  'libraries.error.downloadedRefreshFailed': 'Библиотека скачана, но обновить статус не удалось',
+  'libraries.error.deletedRefreshFailed': 'Библиотека удалена, но обновить статус не удалось',
 
   // ── Settings: cover source rows ──
   'settings.catalog.source.steam.aria': 'Скачивать обложки из Steam',

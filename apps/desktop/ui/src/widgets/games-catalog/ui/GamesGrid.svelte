@@ -1,20 +1,17 @@
 <script lang="ts">
-  import {
-    type GameCardViewModel,
-    type GameCardMenuHandle,
-    type Launcher,
-    GameCard,
-    getLauncherDisplayLabel,
-  } from '@entities/game';
+  import { type GameCardViewModel, type Launcher, GameCard } from '@entities/game';
   import GamesFilterEmptyState from './GamesFilterEmptyState.svelte';
-
-  type GameId = GameCardViewModel['id'];
+  import {
+    createLauncherGroups,
+    type ActionMenuRefs,
+    type CardStateContext,
+    type CoverBusyPredicate,
+    type GameId,
+    type LauncherGroup,
+  } from '../model/launcher-groups';
 
   type GameActionHandler = (gameId: GameId) => void;
-  type CoverBusyPredicate = (gameId: GameId) => boolean;
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
-
-  type ActionMenuRefs = Readonly<Partial<Record<GameId, GameCardMenuHandle>>>;
 
   type Props = {
     games?: readonly GameCardViewModel[];
@@ -35,39 +32,6 @@
     onToggleHidden?: (gameId: GameId, isHidden: boolean) => void;
     onOpenDetails?: GameActionHandler;
     onResetFilters?: () => void;
-  };
-
-  type LauncherGameGroup = {
-    launcher: Launcher;
-    label: string;
-    games: readonly GameCardViewModel[];
-  };
-
-  type CardStateContext = {
-    busy: boolean;
-    hasManualCoverAction: boolean;
-    pickDisabled: boolean;
-    coversAutoFetchingIds: ReadonlySet<GameId>;
-    menuOpenFor: GameId | null;
-    actionMenuRefs: ActionMenuRefs;
-    isCoverOperationBusy: CoverBusyPredicate;
-  };
-
-  type GameCardState = {
-    game: GameCardViewModel;
-    id: GameId;
-    isCoverBusy: boolean;
-    isBackgroundCoverFetching: boolean;
-    isMenuDisabled: boolean;
-    isPickDisabled: boolean;
-    isMenuOpen: boolean;
-    menuRef?: GameCardMenuHandle;
-  };
-
-  type LauncherGroup = {
-    launcher: Launcher;
-    label: string;
-    cards: readonly GameCardState[];
   };
 
   const EMPTY_GAMES: readonly GameCardViewModel[] = [];
@@ -114,126 +78,9 @@
     isCoverOperationBusy,
   });
 
-  const launcherGroups = $derived.by(() =>
+  const launcherGroups = $derived.by<LauncherGroup[]>(() =>
     createLauncherGroups(games, launcherOrder, cardStateContext),
   );
-
-  function createLauncherGroups(
-    games: readonly GameCardViewModel[],
-    launcherOrder: readonly Launcher[],
-    cardContext: CardStateContext,
-  ): LauncherGroup[] {
-    return groupGamesByLauncher(games, launcherOrder).map((group) => ({
-      launcher: group.launcher,
-      label: group.label,
-      cards: group.games.map((game) => createGameCardState(game, cardContext)),
-    }));
-  }
-
-  function createGameCardState(game: GameCardViewModel, context: CardStateContext): GameCardState {
-    const id = game.id;
-    const isBackgroundCoverFetching = context.coversAutoFetchingIds.has(id);
-
-    return {
-      game,
-      id,
-      isCoverBusy: context.isCoverOperationBusy(id),
-      isBackgroundCoverFetching,
-      isMenuDisabled: context.busy || context.hasManualCoverAction || isBackgroundCoverFetching,
-      isPickDisabled: context.pickDisabled,
-      isMenuOpen: context.menuOpenFor === id,
-      menuRef: context.actionMenuRefs[id],
-    };
-  }
-
-  function groupGamesByLauncher(
-    games: readonly GameCardViewModel[],
-    launcherOrder: readonly Launcher[],
-  ): LauncherGameGroup[] {
-    if (games.length === 0) {
-      return [];
-    }
-
-    const gamesByLauncher = createGamesByLauncherIndex(games);
-    const launchers = getLaunchersInDisplayOrder(gamesByLauncher, launcherOrder);
-
-    return launchers.map((launcher) =>
-      createLauncherGameGroup(launcher, gamesByLauncher.get(launcher) ?? []),
-    );
-  }
-
-  function createGamesByLauncherIndex(
-    games: readonly GameCardViewModel[],
-  ): Map<Launcher, GameCardViewModel[]> {
-    // Local Map is rebuilt inside $derived, so Svelte reactivity is not needed here.
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const gamesByLauncher = new Map<Launcher, GameCardViewModel[]>();
-
-    for (const game of games) {
-      const groupGames = gamesByLauncher.get(game.launcher);
-
-      if (groupGames) {
-        groupGames.push(game);
-      } else {
-        gamesByLauncher.set(game.launcher, [game]);
-      }
-    }
-
-    return gamesByLauncher;
-  }
-
-  function getLaunchersInDisplayOrder(
-    gamesByLauncher: ReadonlyMap<Launcher, readonly GameCardViewModel[]>,
-    launcherOrder: readonly Launcher[],
-  ): Launcher[] {
-    const orderedLaunchers = getExistingLaunchersFromOrder(gamesByLauncher, launcherOrder);
-    const remainingLaunchers = getRemainingLaunchers(gamesByLauncher, orderedLaunchers);
-
-    return [...orderedLaunchers, ...remainingLaunchers];
-  }
-
-  function getExistingLaunchersFromOrder(
-    gamesByLauncher: ReadonlyMap<Launcher, readonly GameCardViewModel[]>,
-    launcherOrder: readonly Launcher[],
-  ): Launcher[] {
-    const launchers: Launcher[] = [];
-
-    for (const launcher of launcherOrder) {
-      if (launchers.includes(launcher) || !gamesByLauncher.has(launcher)) {
-        continue;
-      }
-
-      launchers.push(launcher);
-    }
-
-    return launchers;
-  }
-
-  function getRemainingLaunchers(
-    gamesByLauncher: ReadonlyMap<Launcher, readonly GameCardViewModel[]>,
-    orderedLaunchers: readonly Launcher[],
-  ): Launcher[] {
-    return Array.from(gamesByLauncher.keys())
-      .filter((launcher) => !orderedLaunchers.includes(launcher))
-      .sort(compareLaunchersByLabel);
-  }
-
-  function createLauncherGameGroup(
-    launcher: Launcher,
-    games: readonly GameCardViewModel[],
-  ): LauncherGameGroup {
-    return {
-      launcher,
-      label: getLauncherDisplayLabel(launcher),
-      games,
-    };
-  }
-
-  function compareLaunchersByLabel(left: Launcher, right: Launcher): number {
-    return getLauncherDisplayLabel(left).localeCompare(getLauncherDisplayLabel(right), undefined, {
-      sensitivity: 'base',
-    });
-  }
 </script>
 
 <div class="flex flex-1 flex-col">

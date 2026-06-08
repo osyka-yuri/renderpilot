@@ -93,6 +93,10 @@ export const de: Record<MessageKey, MessageValue> = {
   'elevation.relaunch': 'Als Administrator neu starten',
   'elevation.relaunchFailed': 'Konnte nicht als Administrator neu gestartet werden',
   'elevation.dismiss': 'Ausblenden',
+  'error.boundary.title': 'Etwas ist schiefgelaufen',
+  'error.boundary.description':
+    'Auf diesem Bildschirm ist ein unerwarteter Fehler aufgetreten. Versuchen Sie es erneut oder wechseln Sie in einen anderen Bereich.',
+  'error.boundary.reset': 'Erneut versuchen',
 
   'games.scanFolder': 'Ordner scannen',
   'games.scanning': 'Scannen...',
@@ -294,6 +298,17 @@ export const de: Record<MessageKey, MessageValue> = {
   'libraries.column.actions': 'Aktionen',
   'libraries.unsigned': 'Nicht signiert',
   'libraries.invalidDate': 'Ungültiges Datum',
+  'libraries.empty.loading': 'Wird geladen…',
+  'libraries.empty.unavailable': 'Bibliotheken konnten nicht geladen werden',
+  'libraries.empty.none': 'Keine Bibliotheken gefunden',
+  'libraries.error.loadFailed': 'Bibliotheken konnten nicht geladen werden',
+  'libraries.error.refreshFailed': 'Manifest konnte nicht aktualisiert werden',
+  'libraries.error.downloadFailed': 'Download fehlgeschlagen',
+  'libraries.error.deleteFailed': 'Löschen fehlgeschlagen',
+  'libraries.error.downloadedRefreshFailed':
+    'Bibliothek heruntergeladen, aber Statusaktualisierung fehlgeschlagen',
+  'libraries.error.deletedRefreshFailed':
+    'Bibliothek gelöscht, aber Statusaktualisierung fehlgeschlagen',
 
   'settings.catalog.source.steam.aria': 'Cover von Steam herunterladen',
   'settings.catalog.source.steam.title': 'Steam',

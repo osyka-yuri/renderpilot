@@ -1,18 +1,20 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import {
-  intersectLibraries,
-  normalizeLibraryValues,
-  normalizeLauncherValues,
-} from '@entities/game';
+import { normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
 import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filter-persistence';
 import { canonicalizeLauncherOrder, buildInitialLauncherOrder } from './launcher-order';
 import {
-  canonicalizeSelection,
-  createAvailableSliceUpdate,
-  createHydratedSlice,
-  type FilterSlice,
-  type FilterSliceUpdate,
-} from './filter-slice';
+  applyStateUpdate,
+  canonicalizeLaunchers,
+  canonicalizeLibraries,
+  createAvailableSliceFiltersUpdate,
+  createHydratedSliceFilters,
+  LAUNCHER_ADAPTER,
+  LIBRARY_ADAPTER,
+} from './filter-slice-adapter';
+import {
+  withAvailableSnapshots,
+  reconcileLauncherOrderWithAvailability,
+} from './games-filter-availability';
 
 export type GamesFilterState = {
   ready: boolean;
@@ -45,9 +47,6 @@ export type GamesFilterState = {
 
 const EMPTY_SEARCH_QUERY = '';
 const EMPTY_PERSISTED_SNAPSHOT = '';
-
-type Normalizer = (values: readonly string[]) => string[];
-type Canonicalizer = (selected: readonly string[], available: readonly string[]) => string[];
 
 type DraftFilterFields = Pick<
   GamesFilterState,
@@ -209,7 +208,7 @@ export function withSearchQuery(state: GamesFilterState, searchQuery: string): G
 }
 
 export function openFilterDialog(state: GamesFilterState): GamesFilterState {
-  // Важно: повторный open не должен сбрасывать уже измененный draft.
+  // Important: calling open again must not reset an already modified draft.
   if (state.isDialogOpen) {
     return state;
   }
@@ -419,180 +418,6 @@ function areAppliedFiltersEqual(
     state.appliedFavoritesOnly === appliedFilters.appliedFavoritesOnly
   );
 }
-
-// ---------------------------------------------------------------------------
-// Availability helpers
-// ---------------------------------------------------------------------------
-
-function withAvailableSnapshots(
-  state: GamesFilterState,
-  availableLibraries: string[],
-  availableLaunchers: string[],
-): GamesFilterState {
-  const librariesChanged = !shallowStringArrayEqual(state.availableLibraries, availableLibraries);
-  const launchersChanged = !shallowStringArrayEqual(state.availableLaunchers, availableLaunchers);
-
-  if (!librariesChanged && !launchersChanged) {
-    return state;
-  }
-
-  return {
-    ...state,
-    availableLibraries: librariesChanged ? availableLibraries : state.availableLibraries,
-    availableLaunchers: launchersChanged ? availableLaunchers : state.availableLaunchers,
-  };
-}
-
-function reconcileLauncherOrderWithAvailability(
-  state: GamesFilterState,
-  availableLaunchers: readonly string[],
-): GamesFilterState {
-  const appliedLauncherOrder = canonicalizeLauncherOrder(
-    state.appliedLauncherOrder,
-    availableLaunchers,
-  );
-
-  const draftLauncherOrder = state.isDialogOpen
-    ? canonicalizeLauncherOrder(state.draftLauncherOrder, availableLaunchers)
-    : copyStringArray(appliedLauncherOrder);
-
-  const appliedChanged = !shallowStringArrayEqual(state.appliedLauncherOrder, appliedLauncherOrder);
-
-  const draftChanged = !shallowStringArrayEqual(state.draftLauncherOrder, draftLauncherOrder);
-
-  if (!appliedChanged && !draftChanged) {
-    return state;
-  }
-
-  return {
-    ...state,
-    appliedLauncherOrder: appliedChanged ? appliedLauncherOrder : state.appliedLauncherOrder,
-    draftLauncherOrder: draftChanged ? draftLauncherOrder : state.draftLauncherOrder,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Slice adapters
-// ---------------------------------------------------------------------------
-
-type SliceFieldMapping = {
-  applied: 'appliedLibraries' | 'appliedLaunchers';
-  draft: 'draftLibraries' | 'draftLaunchers';
-  deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllLaunchers';
-  pendingPersisted: 'pendingPersistedLibraries' | 'pendingPersistedLaunchers';
-};
-
-type SliceStateField = SliceFieldMapping[keyof SliceFieldMapping];
-
-type SliceStateUpdate = Partial<Pick<GamesFilterState, SliceStateField>>;
-
-type SliceAdapter = ReturnType<typeof createSliceAdapter>;
-
-function createSliceAdapter(fields: SliceFieldMapping) {
-  function fromState(state: GamesFilterState): FilterSlice {
-    return {
-      applied: state[fields.applied],
-      draft: state[fields.draft],
-      deferSelectAll: state[fields.deferSelectAll],
-      pendingPersisted: state[fields.pendingPersisted],
-    };
-  }
-
-  function toStateUpdate(slice: FilterSlice | FilterSliceUpdate): SliceStateUpdate {
-    const update: SliceStateUpdate = {};
-
-    if (slice.applied !== undefined) {
-      update[fields.applied] = slice.applied;
-    }
-
-    if (slice.draft !== undefined) {
-      update[fields.draft] = slice.draft;
-    }
-
-    if (slice.deferSelectAll !== undefined) {
-      update[fields.deferSelectAll] = slice.deferSelectAll;
-    }
-
-    if (slice.pendingPersisted !== undefined) {
-      update[fields.pendingPersisted] = slice.pendingPersisted;
-    }
-
-    return update;
-  }
-
-  return { fromState, toStateUpdate };
-}
-
-const LIBRARY_ADAPTER = createSliceAdapter({
-  applied: 'appliedLibraries',
-  draft: 'draftLibraries',
-  deferSelectAll: 'deferSelectAllLibraries',
-  pendingPersisted: 'pendingPersistedLibraries',
-});
-
-const LAUNCHER_ADAPTER = createSliceAdapter({
-  applied: 'appliedLaunchers',
-  draft: 'draftLaunchers',
-  deferSelectAll: 'deferSelectAllLaunchers',
-  pendingPersisted: 'pendingPersistedLaunchers',
-});
-
-// ---------------------------------------------------------------------------
-// Slice hydration / availability
-// ---------------------------------------------------------------------------
-
-function createHydratedSliceFilters(
-  persistedValues: readonly string[] | null,
-  availableValues: readonly string[],
-  normalizeFn: Normalizer,
-  canonicalizeFn: Canonicalizer,
-  adapter: SliceAdapter,
-): SliceStateUpdate {
-  const slice = createHydratedSlice(persistedValues, availableValues, normalizeFn, canonicalizeFn);
-
-  return adapter.toStateUpdate(slice);
-}
-
-function createAvailableSliceFiltersUpdate(
-  state: GamesFilterState,
-  availableValues: readonly string[],
-  canonicalizeFn: Canonicalizer,
-  adapter: SliceAdapter,
-): SliceStateUpdate | null {
-  const update = createAvailableSliceUpdate(
-    adapter.fromState(state),
-    availableValues,
-    canonicalizeFn,
-  );
-
-  return update ? adapter.toStateUpdate(update) : null;
-}
-
-function applyStateUpdate(
-  state: GamesFilterState,
-  update: SliceStateUpdate | null,
-): GamesFilterState {
-  if (!update || Object.keys(update).length === 0) {
-    return state;
-  }
-
-  return {
-    ...state,
-    ...update,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Canonicalization
-// ---------------------------------------------------------------------------
-
-function createCanonicalizeFn(normalizeFn: Normalizer): Canonicalizer {
-  return (selected, available) =>
-    canonicalizeSelection(selected, available, normalizeFn, intersectLibraries);
-}
-
-const canonicalizeLibraries = createCanonicalizeFn(normalizeLibraryValues);
-const canonicalizeLaunchers = createCanonicalizeFn(normalizeLauncherValues);
 
 // ---------------------------------------------------------------------------
 // String array helpers

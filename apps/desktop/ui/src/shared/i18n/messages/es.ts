@@ -93,6 +93,10 @@ export const es: Record<MessageKey, MessageValue> = {
   'elevation.relaunch': 'Reiniciar como administrador',
   'elevation.relaunchFailed': 'No se pudo reiniciar como administrador',
   'elevation.dismiss': 'Descartar',
+  'error.boundary.title': 'Algo salió mal',
+  'error.boundary.description':
+    'Esta pantalla encontró un error inesperado. Vuelve a intentarlo o cambia a otra sección.',
+  'error.boundary.reset': 'Reintentar',
 
   'games.scanFolder': 'Escanear carpeta',
   'games.scanning': 'Escaneando...',
@@ -292,6 +296,17 @@ export const es: Record<MessageKey, MessageValue> = {
   'libraries.column.actions': 'Acciones',
   'libraries.unsigned': 'No firmado',
   'libraries.invalidDate': 'Fecha no válida',
+  'libraries.empty.loading': 'Cargando…',
+  'libraries.empty.unavailable': 'No se pudieron cargar las bibliotecas',
+  'libraries.empty.none': 'No se encontraron bibliotecas',
+  'libraries.error.loadFailed': 'No se pudieron cargar las bibliotecas',
+  'libraries.error.refreshFailed': 'No se pudo actualizar el manifiesto',
+  'libraries.error.downloadFailed': 'Error al descargar',
+  'libraries.error.deleteFailed': 'Error al eliminar',
+  'libraries.error.downloadedRefreshFailed':
+    'Biblioteca descargada, pero no se pudo actualizar el estado',
+  'libraries.error.deletedRefreshFailed':
+    'Biblioteca eliminada, pero no se pudo actualizar el estado',
 
   'settings.catalog.source.steam.aria': 'Descargar carátulas de Steam',
   'settings.catalog.source.steam.title': 'Steam',

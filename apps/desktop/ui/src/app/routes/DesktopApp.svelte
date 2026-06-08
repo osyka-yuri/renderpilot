@@ -8,6 +8,7 @@
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
+  import { ErrorBoundary } from '@shared/ui';
   import { NotificationsToaster } from '@widgets/notifications-toaster';
   import { ElevationBanner } from '@widgets/elevation-banner';
   import {
@@ -225,42 +226,44 @@
   {#snippet banner()}
     <ElevationBanner isElevated={model.isElevated} elevationSupported={model.elevationSupported} />
   {/snippet}
-  {#if model.screen === 'details'}
-    <GameDetailsScreen
-      details={model.selectedDetails}
-      busy={model.busy}
-      isElevated={model.isElevated}
-      onSwap={gameDetailsModel.handleSwap}
-      onRollback={gameDetailsModel.handleRollback}
-      onBulkSwap={gameDetailsModel.handleBulkSwap}
-      onBulkRollback={gameDetailsModel.handleBulkRollback}
-      onOpenOperations={() => {
-        model.handleNavigate('operations');
-      }}
-    />
-  {:else if model.screen === 'operations'}
-    <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />
-  {:else if model.screen === 'settings'}
-    <SettingsScreen
-      isElevated={model.isElevated}
-      themeMode={model.themeMode}
-      languageMode={model.languageMode}
-      onThemeModeChange={model.changeThemeMode}
-      onLanguageModeChange={model.changeLanguageMode}
-    />
-  {:else if model.screen === 'libraries'}
-    <LibrariesScreen refreshKey={refreshCounter} />
-  {:else}
-    <GamesScreen
-      games={model.games}
-      catalogVersion={model.catalogVersion}
-      busy={model.busy}
-      coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
-      pickCoverDisabled={isDesktopPreviewMode()}
-      onScan={handleScan}
-      onReloadCards={handleReloadCards}
-      onClearError={model.clearError}
-      onOpenDetails={openGameDetails}
-    />
-  {/if}
+  <ErrorBoundary>
+    {#if model.screen === 'details'}
+      <GameDetailsScreen
+        details={model.selectedDetails}
+        busy={model.busy}
+        isElevated={model.isElevated}
+        onSwap={gameDetailsModel.handleSwap}
+        onRollback={gameDetailsModel.handleRollback}
+        onBulkSwap={gameDetailsModel.handleBulkSwap}
+        onBulkRollback={gameDetailsModel.handleBulkRollback}
+        onOpenOperations={() => {
+          model.handleNavigate('operations');
+        }}
+      />
+    {:else if model.screen === 'operations'}
+      <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />
+    {:else if model.screen === 'settings'}
+      <SettingsScreen
+        isElevated={model.isElevated}
+        themeMode={model.themeMode}
+        languageMode={model.languageMode}
+        onThemeModeChange={model.changeThemeMode}
+        onLanguageModeChange={model.changeLanguageMode}
+      />
+    {:else if model.screen === 'libraries'}
+      <LibrariesScreen refreshKey={refreshCounter} />
+    {:else}
+      <GamesScreen
+        games={model.games}
+        catalogVersion={model.catalogVersion}
+        busy={model.busy}
+        coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
+        pickCoverDisabled={isDesktopPreviewMode()}
+        onScan={handleScan}
+        onReloadCards={handleReloadCards}
+        onClearError={model.clearError}
+        onOpenDetails={openGameDetails}
+      />
+    {/if}
+  </ErrorBoundary>
 </DesktopShell>

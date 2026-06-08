@@ -107,6 +107,10 @@ export const en = {
   'elevation.relaunch': 'Restart as administrator',
   'elevation.relaunchFailed': 'Could not restart as administrator',
   'elevation.dismiss': 'Dismiss',
+  'error.boundary.title': 'Something went wrong',
+  'error.boundary.description':
+    'This screen ran into an unexpected error. You can try again, or switch to another section.',
+  'error.boundary.reset': 'Try again',
 
   // ── Games page / catalog ──
   'games.scanFolder': 'Scan Folder',
@@ -328,6 +332,15 @@ export const en = {
   'libraries.column.actions': 'Actions',
   'libraries.unsigned': 'Unsigned',
   'libraries.invalidDate': 'Invalid date',
+  'libraries.empty.loading': 'Loading…',
+  'libraries.empty.unavailable': 'Unable to load libraries',
+  'libraries.empty.none': 'No libraries found',
+  'libraries.error.loadFailed': 'Failed to load libraries',
+  'libraries.error.refreshFailed': 'Failed to refresh manifest',
+  'libraries.error.downloadFailed': 'Download failed',
+  'libraries.error.deleteFailed': 'Delete failed',
+  'libraries.error.downloadedRefreshFailed': 'Library downloaded, but status refresh failed',
+  'libraries.error.deletedRefreshFailed': 'Library deleted, but status refresh failed',
 
   // ── Settings: cover source rows ──
   'settings.catalog.source.steam.aria': 'Download covers from Steam',

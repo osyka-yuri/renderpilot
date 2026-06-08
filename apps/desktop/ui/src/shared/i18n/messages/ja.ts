@@ -92,6 +92,10 @@ export const ja: Record<MessageKey, MessageValue> = {
   'elevation.relaunch': '管理者として再起動',
   'elevation.relaunchFailed': '管理者として再起動できませんでした',
   'elevation.dismiss': '閉じる',
+  'error.boundary.title': '問題が発生しました',
+  'error.boundary.description':
+    'この画面で予期しないエラーが発生しました。もう一度試すか、別のセクションに切り替えてください。',
+  'error.boundary.reset': '再試行',
 
   'games.scanFolder': 'フォルダをスキャン',
   'games.scanning': 'スキャン中...',
@@ -290,6 +294,16 @@ export const ja: Record<MessageKey, MessageValue> = {
   'libraries.column.actions': 'アクション',
   'libraries.unsigned': '署名なし',
   'libraries.invalidDate': '無効な日付',
+  'libraries.empty.loading': '読み込み中…',
+  'libraries.empty.unavailable': 'ライブラリを読み込めませんでした',
+  'libraries.empty.none': 'ライブラリが見つかりません',
+  'libraries.error.loadFailed': 'ライブラリの読み込みに失敗しました',
+  'libraries.error.refreshFailed': 'マニフェストの更新に失敗しました',
+  'libraries.error.downloadFailed': 'ダウンロードに失敗しました',
+  'libraries.error.deleteFailed': '削除に失敗しました',
+  'libraries.error.downloadedRefreshFailed':
+    'ライブラリをダウンロードしましたが、状態の更新に失敗しました',
+  'libraries.error.deletedRefreshFailed': 'ライブラリを削除しましたが、状態の更新に失敗しました',
 
   'settings.catalog.source.steam.aria': 'Steam からカバー画像をダウンロード',
   'settings.catalog.source.steam.title': 'Steam',

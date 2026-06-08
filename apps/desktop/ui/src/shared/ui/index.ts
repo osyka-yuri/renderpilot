@@ -41,6 +41,7 @@ export {
   EmptyMedia,
   EmptyTitle,
 } from './empty';
+export { ErrorBoundary } from './error-boundary';
 export { Input } from './input';
 export {
   Item,
