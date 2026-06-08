@@ -28,32 +28,32 @@ fn to_wide(s: &str) -> Vec<u16> {
 /// Creates a zeroed C struct and sets its `version` field.
 ///
 /// # Safety
-/// The caller must ensure `T` has a `version: u32` field at offset 0.
+/// `T` must be a `#[repr(C)]` NVAPI struct whose first field is `version: u32`.
+/// Every type instantiated through this helper is guarded by
+/// `assert_version_at_offset_zero!` in [`crate::ffi`], so the offset-0 assumption
+/// is verified at compile time and cannot silently drift.
 unsafe fn zeroed_with_version<T>(ver: u32) -> T {
     let mut val: T = std::mem::zeroed();
-    // SAFETY: `T` is guaranteed by the caller to have `version` at offset 0.
+    // SAFETY: `version` sits at offset 0 (proven by the ffi compile-time guard),
+    // so writing a `u32` to the struct's address initializes exactly that field.
     ptr::addr_of_mut!(val).cast::<u32>().write(ver);
     val
 }
 
-/// Represents an immutable snapshot of a DWORD configuration state associated with a specific profile.
-/// This encompasses both the authoritative predefined value configured by the driver and the
-/// boolean state denoting equivalence between the current and predefined values.
+/// Full state of a DWORD DRS setting on a profile.
 ///
-/// Within the NVIDIA Driver Settings (DRS) architecture, profiles persist a dual-state schema:
-/// the **current** value (the effective override utilized during execution) alongside the
-/// **predefined** value (the factory default inherently baked into the driver for recognized applications).
-/// The `get_dword_full` procedure surfaces this complete triad to enable deterministic behaviors:
-///   - Identifying external overrides executed independently of the default driver specification.
-///   - Facilitating definitive reversion to the manufacturer's baseline via [`Profile::delete_setting`].
-///   - Establishing a forensic snapshot prior to the initial configuration write operation orchestrated by RenderPilot.
+/// A DRS profile stores two values per setting: the **current** value (the
+/// effective override) and the **predefined** value (the driver's factory default
+/// for known applications). Reading both lets RenderPilot tell a user override
+/// apart from the default, revert to the default via [`Profile::delete_setting`],
+/// and capture a baseline before its first write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DwordSettingState {
-    /// The effective configuration value actively employed by the driver during execution.
+    /// The effective value the driver currently uses.
     pub current: u32,
-    /// The authoritative factory-default value encoded within the driver, populated conditionally when `isPredefinedValid` asserts true.
+    /// The driver's factory default; present only when `isPredefinedValid` is set.
     pub predefined: Option<u32>,
-    /// Yields `true` exclusively when the NVAPI architecture asserts `isCurrentPredefined`, explicitly indicating the absence of any overriding modifications.
+    /// `true` when the current value equals the predefined default (no override).
     pub is_current_predefined: bool,
 }
 
@@ -113,6 +113,12 @@ impl Nvapi {
             }
         };
 
+        // SAFETY (resolve_fn! / resolve_fn_opt!): `resolve` returns either `None`
+        // or a non-null function pointer that `nvapi_QueryInterface` produced for
+        // the given interface id. Transmuting it to the matching `extern "C" fn`
+        // type is sound because each `$id` is paired with the `$ty` signature taken
+        // from NVIDIA's published `nvapi_interface.h`; a mismatched pair is a
+        // programmer error caught in review, not a runtime condition.
         macro_rules! resolve_fn {
             ($name:ident, $id:expr, $ty:ty) => {
                 let $name: $ty = unsafe { std::mem::transmute(resolve($id)?) };
@@ -467,12 +473,11 @@ pub struct Profile<'a> {
 }
 
 impl Profile<'_> {
-    /// Executes a comprehensive read operation to retrieve the definitive state of a DWORD setting,
-    /// encapsulating the active value, the optionally available predefined baseline, and the deterministic
-    /// equivalency status between the two.
+    /// Reads the full [`DwordSettingState`] for `setting_id`: current value,
+    /// predefined default (when valid), and whether the two are equal.
     ///
-    /// This represents the primary interrogation mechanism utilized to orchestrate precise "user override vs. driver default"
-    /// UI representations or to rigorously evaluate the prerequisite conditions for capturing an initial baseline snapshot.
+    /// Used to render "user override vs. driver default" in the UI and to decide
+    /// whether a baseline snapshot must be captured before the first write.
     pub fn get_dword_full(&self, setting_id: u32) -> Result<DwordSettingState, NvapiError> {
         self.session
             .nvapi
@@ -486,15 +491,37 @@ impl Profile<'_> {
             .set_dword_setting(self.session.handle(), self.handle, setting_id, value)
     }
 
-    /// Systematically purges a designated setting from the active profile's configuration space.
+    /// Removes `setting_id` from this profile.
     ///
-    /// Following the execution of a subsequent [`DrsSession::save`] commit, a re-interrogation of the specified setting
-    /// will deterministically yield either the authoritative predefined value (assuming the NVIDIA driver maintains one)
-    /// or `NVAPI_SETTING_NOT_FOUND`. Consequently, this operation serves as the fundamental primitive for orchestrating
-    /// reliable "revert to driver default" workflows within the user interface.
+    /// After the next [`DrsSession::save`], reading the setting returns the
+    /// driver's predefined default (if any) or `NVAPI_SETTING_NOT_FOUND`. This is
+    /// the primitive behind the UI's "revert to driver default".
     pub fn delete_setting(&self, setting_id: u32) -> Result<(), NvapiError> {
         self.session
             .nvapi
             .delete_profile_setting(self.session.handle(), self.handle, setting_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_wide;
+
+    #[test]
+    fn to_wide_appends_a_nul_terminator() {
+        assert_eq!(to_wide("ab"), vec![0x0061, 0x0062, 0x0000]);
+        assert_eq!(to_wide(""), vec![0x0000]);
+    }
+
+    #[test]
+    fn to_wide_encodes_non_ascii_as_utf16() {
+        // 'é' = U+00E9, '☃' = U+2603 — both inside the BMP, one code unit each.
+        assert_eq!(to_wide("é☃"), vec![0x00E9, 0x2603, 0x0000]);
+    }
+
+    #[test]
+    fn to_wide_encodes_astral_chars_as_surrogate_pairs() {
+        // '🎮' = U+1F3AE encodes as the surrogate pair D83C DFAE, then the NUL.
+        assert_eq!(to_wide("🎮"), vec![0xD83C, 0xDFAE, 0x0000]);
     }
 }

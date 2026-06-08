@@ -31,6 +31,18 @@ pub const fn nvapi_version(size: usize, ver: u32) -> u32 {
     (size as u32) | (ver << 16)
 }
 
+/// Compile-time proof that a versioned NVAPI struct keeps `version` at offset 0.
+///
+/// `api::zeroed_with_version` writes the version word to the front of a zeroed
+/// struct via a raw pointer; that is only sound while every such struct places
+/// its `version: u32` field first. These assertions fail the build the moment a
+/// field is reordered, so the FFI invariant can never silently drift.
+macro_rules! assert_version_at_offset_zero {
+    ($($ty:ty),+ $(,)?) => {
+        $(const _: () = assert!(std::mem::offset_of!($ty, version) == 0);)+
+    };
+}
+
 /// `NVDRS_SETTING_VER`
 pub const NVDRS_SETTING_VER: u32 = nvapi_version(std::mem::size_of::<NVDRS_SETTING>(), 1);
 /// `NVDRS_APPLICATION_VER`
@@ -117,6 +129,9 @@ pub struct NVDRS_SETTING {
     pub predefinedValue: NVDRS_SETTING_PREDEFINED,
     pub currentValue: NVDRS_SETTING_CURRENT,
 }
+
+// Guards the `zeroed_with_version` invariant for every struct it is used with.
+assert_version_at_offset_zero!(NVDRS_SETTING, NVDRS_PROFILE, NVDRS_APPLICATION);
 
 /// `nvapi_QueryInterface` – entry point used to resolve every other function.
 pub type NvAPI_QueryInterface_fn = unsafe extern "C" fn(id: u32) -> *const c_void;
@@ -261,4 +276,35 @@ pub mod interface_ids {
     pub const DRS_DELETE_PROFILE_SETTING: u32 = 0xE4A26362;
     /// Newer `NvAPI_DRS_DeleteProfileSetting` (same signature, different ID).
     pub const DRS_DELETE_PROFILE_SETTING_V2: u32 = 0xD20D29DF;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nvapi_version_packs_size_in_low_word_and_version_in_high_word() {
+        assert_eq!(nvapi_version(0x20, 3), 0x0003_0020);
+    }
+
+    #[test]
+    fn versioned_structs_encode_their_own_size_and_version() {
+        assert_eq!(
+            NVDRS_SETTING_VER & 0xFFFF,
+            std::mem::size_of::<NVDRS_SETTING>() as u32
+        );
+        assert_eq!(NVDRS_SETTING_VER >> 16, 1);
+
+        assert_eq!(
+            NVDRS_PROFILE_VER & 0xFFFF,
+            std::mem::size_of::<NVDRS_PROFILE>() as u32
+        );
+        assert_eq!(NVDRS_PROFILE_VER >> 16, 1);
+
+        assert_eq!(
+            NVDRS_APPLICATION_VER & 0xFFFF,
+            std::mem::size_of::<NVDRS_APPLICATION>() as u32
+        );
+        assert_eq!(NVDRS_APPLICATION_VER >> 16, 4);
+    }
 }
