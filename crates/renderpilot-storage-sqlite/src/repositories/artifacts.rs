@@ -41,6 +41,8 @@ const UPSERT_ARTIFACT_SQL: &str = "
         source_game_id = excluded.source_game_id,
         trust_level    = excluded.trust_level,
         updated_at     = excluded.updated_at
+    WHERE library_artifacts.trust_level != 'ManifestDownloaded'
+       OR excluded.trust_level = 'ManifestDownloaded'
 ";
 
 impl ArtifactRepository for SqliteStorage {
@@ -329,6 +331,22 @@ mod tests {
     }
 
     fn sample_artifact(id: &str, path: &str, file_name: &str, sha256: &str) -> LibraryArtifact {
+        sample_artifact_with_trust(
+            id,
+            path,
+            file_name,
+            sha256,
+            ArtifactTrustLevel::LocalObserved,
+        )
+    }
+
+    fn sample_artifact_with_trust(
+        id: &str,
+        path: &str,
+        file_name: &str,
+        sha256: &str,
+        trust_level: ArtifactTrustLevel,
+    ) -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new(id).expect("artifact id should be valid"),
             GraphicsTechnology::DlssSuperResolution,
@@ -337,10 +355,96 @@ mod tests {
                 ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
                     .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid")),
             ],
-            ArtifactTrustLevel::LocalObserved,
+            trust_level,
         )
         .expect("artifact should be valid")
-        .with_source("scan-folder")
+        .with_source(match trust_level {
+            ArtifactTrustLevel::ManifestDownloaded => "manifest-download",
+            _ => "scan-folder",
+        })
         .expect("source should be valid")
+    }
+
+    #[test]
+    fn upsert_local_observed_does_not_overwrite_manifest_downloaded() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+
+        // Manifest-download artifact pointing to cache path.
+        let cache = sample_artifact_with_trust(
+            "artifact:bundle",
+            "C:/AppData/RenderPilot/libraries/fsr_upscaler_dx12/v1/amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_upscaler_dx12.dll",
+            HASH_A,
+            ArtifactTrustLevel::ManifestDownloaded,
+        );
+
+        storage
+            .upsert_artifact(&cache)
+            .expect("manifest-download artifact should be stored");
+
+        // Scan finds the same bytes in the game folder after a swap and tries to
+        // register a local-observed artifact with the same content-based id.
+        let game_folder_scan = sample_artifact_with_trust(
+            "artifact:bundle",
+            "C:/Games/Game1/amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_upscaler_dx12.dll",
+            HASH_A,
+            ArtifactTrustLevel::LocalObserved,
+        );
+
+        storage
+            .upsert_artifact(&game_folder_scan)
+            .expect("scan upsert should not error");
+
+        let artifacts = storage.list_artifacts().expect("artifacts should load");
+        assert_eq!(artifacts.len(), 1);
+        // The manifest-download record must be preserved — its path points to the
+        // managed cache and must not be replaced with the game-folder copy.
+        assert_eq!(
+            artifacts[0].path().as_str(),
+            "C:/AppData/RenderPilot/libraries/fsr_upscaler_dx12/v1/amd_fidelityfx_upscaler_dx12.dll",
+            "local-observed scan must not overwrite a manifest-downloaded artifact's cache path"
+        );
+        assert_eq!(
+            artifacts[0].trust_level(),
+            ArtifactTrustLevel::ManifestDownloaded
+        );
+    }
+
+    #[test]
+    fn upsert_manifest_downloaded_overwrites_manifest_downloaded() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+
+        let first = sample_artifact_with_trust(
+            "artifact:bundle",
+            "C:/AppData/old/amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_upscaler_dx12.dll",
+            HASH_A,
+            ArtifactTrustLevel::ManifestDownloaded,
+        );
+
+        storage
+            .upsert_artifact(&first)
+            .expect("first artifact should be stored");
+
+        let second = sample_artifact_with_trust(
+            "artifact:bundle",
+            "C:/AppData/new/amd_fidelityfx_upscaler_dx12.dll",
+            "amd_fidelityfx_upscaler_dx12.dll",
+            HASH_A,
+            ArtifactTrustLevel::ManifestDownloaded,
+        );
+
+        storage
+            .upsert_artifact(&second)
+            .expect("second manifest-download artifact should be stored");
+
+        let artifacts = storage.list_artifacts().expect("artifacts should load");
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].path().as_str(),
+            "C:/AppData/new/amd_fidelityfx_upscaler_dx12.dll",
+            "a manifest-downloaded artifact can be updated by another manifest-downloaded one"
+        );
     }
 }
