@@ -94,6 +94,22 @@ impl CommandError {
                 message,
             ),
 
+            ServiceError::InvalidInput(message) => {
+                Self::debug(Kind::InvalidArgument, Msg::INVALID_ARGUMENT, message)
+            }
+
+            ServiceError::StorageFailed(message) => {
+                Self::debug(Kind::StorageFailed, Msg::STORAGE_FAILED, message)
+            }
+
+            ServiceError::ProviderFailed(message) => {
+                Self::debug(Kind::ProviderFailed, Msg::PROVIDER_FAILED, message)
+            }
+
+            ServiceError::DetectionFailed(message) => {
+                Self::debug(Kind::DetectionFailed, Msg::DETECTION_FAILED, message)
+            }
+
             ServiceError::SteamGridDbApiKeyMissing => Self::user_facing(
                 Kind::SteamGridDbApiKeyMissing,
                 Msg::STEAMGRIDDB_API_KEY_MISSING,

@@ -18,6 +18,14 @@ pub enum ServiceError {
     ArtifactNotFound(String),
     /// The requested component was not found for the given game.
     ComponentNotFound(String),
+    /// Caller supplied malformed, incomplete, or inconsistent input.
+    InvalidInput(String),
+    /// A storage adapter (the catalog database) failed.
+    StorageFailed(String),
+    /// A game-source or remote provider failed.
+    ProviderFailed(String),
+    /// A graphics-component detector failed.
+    DetectionFailed(String),
     /// A one-time confirmation token did not match.
     ConfirmationTokenMismatch,
     /// The operation is in an invalid state for the requested action.
@@ -50,6 +58,10 @@ impl fmt::Display for ServiceError {
             Self::OperationNotFound(id) => write!(formatter, "operation not found: {id}"),
             Self::ArtifactNotFound(id) => write!(formatter, "artifact not found: {id}"),
             Self::ComponentNotFound(id) => write!(formatter, "component not found: {id}"),
+            Self::InvalidInput(message) => write!(formatter, "invalid input: {message}"),
+            Self::StorageFailed(message) => write!(formatter, "storage failed: {message}"),
+            Self::ProviderFailed(message) => write!(formatter, "provider failed: {message}"),
+            Self::DetectionFailed(message) => write!(formatter, "detection failed: {message}"),
             Self::ConfirmationTokenMismatch => {
                 formatter.write_str("confirmation token mismatch for operation")
             }
@@ -82,7 +94,15 @@ impl From<AppError> for ServiceError {
     fn from(error: AppError) -> Self {
         let (kind, message) = error.into_parts();
 
+        // Exhaustive on purpose: every `AppErrorKind` maps to a distinct
+        // `ServiceError` so the stable error category survives all the way to the
+        // frontend instead of collapsing into a generic `CommandFailed`. Adding a
+        // new `AppErrorKind` must force a decision here.
         match kind {
+            AppErrorKind::InvalidInput => Self::InvalidInput(message),
+            AppErrorKind::StorageFailed => Self::StorageFailed(message),
+            AppErrorKind::ProviderFailed => Self::ProviderFailed(message),
+            AppErrorKind::DetectionFailed => Self::DetectionFailed(message),
             AppErrorKind::ConfirmationTokenMismatch => Self::ConfirmationTokenMismatch,
             AppErrorKind::GameNotFound => Self::GameNotFound(message),
             AppErrorKind::OperationNotFound => Self::OperationNotFound(message),
@@ -95,7 +115,6 @@ impl From<AppError> for ServiceError {
                 operation_id,
                 state: state.as_str().to_owned(),
             },
-            kind => Self::CommandFailed(format!("{kind}: {message}")),
         }
     }
 }
@@ -178,11 +197,24 @@ mod tests {
     }
 
     #[test]
-    fn app_error_storage_failed_maps_to_command_failed() {
-        let app_error = AppError::storage_failed("database locked");
+    fn app_error_categories_preserve_their_kind_through_service_error() {
+        // Each stable category must survive the conversion with its own variant,
+        // not collapse into a generic CommandFailed.
         assert_eq!(
-            ServiceError::from(app_error),
-            ServiceError::CommandFailed("storage failed: database locked".to_owned()),
+            ServiceError::from(AppError::storage_failed("database locked")),
+            ServiceError::StorageFailed("database locked".to_owned()),
+        );
+        assert_eq!(
+            ServiceError::from(AppError::invalid_input("game id is required")),
+            ServiceError::InvalidInput("game id is required".to_owned()),
+        );
+        assert_eq!(
+            ServiceError::from(AppError::provider_failed("failed to install file")),
+            ServiceError::ProviderFailed("failed to install file".to_owned()),
+        );
+        assert_eq!(
+            ServiceError::from(AppError::detection_failed("could not read PE header")),
+            ServiceError::DetectionFailed("could not read PE header".to_owned()),
         );
     }
 }

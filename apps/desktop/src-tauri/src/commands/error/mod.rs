@@ -213,6 +213,45 @@ mod tests {
     }
 
     #[test]
+    fn service_error_categories_map_to_distinct_codes() {
+        // The whole point of carrying the category through ServiceError is that
+        // the frontend sees a specific code, not a generic `command_failed`.
+        let cases = [
+            (
+                ServiceError::StorageFailed("db locked".into()),
+                "storage_failed",
+            ),
+            (
+                ServiceError::ProviderFailed("install failed".into()),
+                "provider_failed",
+            ),
+            (
+                ServiceError::DetectionFailed("pe read failed".into()),
+                "detection_failed",
+            ),
+            (
+                ServiceError::InvalidInput("bad id".into()),
+                "invalid_argument",
+            ),
+        ];
+
+        for (service_error, expected_code) in cases {
+            let err = CommandError::from(ApiError::Service(service_error));
+            let value = serde_json::to_value(&err).expect("serialize CommandError");
+            assert_eq!(
+                value.get("code"),
+                Some(&json!(expected_code)),
+                "unexpected code for mapped service error"
+            );
+            assert_ne!(
+                value.get("code"),
+                Some(&json!("command_failed")),
+                "category must not collapse into the generic command_failed code"
+            );
+        }
+    }
+
+    #[test]
     fn serialization_contract_has_stable_keys_for_user_facing_error() {
         let err = CommandError::user_facing(
             CommandErrorKind::SteamGridDbApiKeyMissing,

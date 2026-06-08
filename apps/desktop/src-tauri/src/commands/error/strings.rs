@@ -60,6 +60,10 @@ pub(crate) enum UserMessage {
     OperationCouldNotComplete,
     CommandTaskFailed,
 
+    StorageFailed,
+    ProviderFailed,
+    DetectionFailed,
+
     SteamGridDbApiKeyMissing,
     UnsupportedCoverImageType,
     CoverDownloadFailed,
@@ -86,6 +90,9 @@ impl UserMessage {
         Self::InvalidOperationState,
         Self::OperationCouldNotComplete,
         Self::CommandTaskFailed,
+        Self::StorageFailed,
+        Self::ProviderFailed,
+        Self::DetectionFailed,
         Self::SteamGridDbApiKeyMissing,
         Self::UnsupportedCoverImageType,
         Self::CoverDownloadFailed,
@@ -157,6 +164,19 @@ impl UserMessage {
             Self::CommandTaskFailed => LocalizedText::new(
                 "user_message.command_task_failed",
                 "The command could not be completed.",
+            ),
+
+            Self::StorageFailed => LocalizedText::new(
+                "user_message.storage_failed",
+                "The app could not read or write its catalog.",
+            ),
+            Self::ProviderFailed => LocalizedText::new(
+                "user_message.provider_failed",
+                "A data source could not be read.",
+            ),
+            Self::DetectionFailed => LocalizedText::new(
+                "user_message.detection_failed",
+                "The app could not analyze the game files.",
             ),
 
             Self::SteamGridDbApiKeyMissing => LocalizedText::new(
@@ -244,6 +264,10 @@ pub(crate) mod user_message {
     pub(crate) const OPERATION_COULD_NOT_COMPLETE: UserMessage =
         UserMessage::OperationCouldNotComplete;
     pub(crate) const COMMAND_TASK_FAILED: UserMessage = UserMessage::CommandTaskFailed;
+
+    pub(crate) const STORAGE_FAILED: UserMessage = UserMessage::StorageFailed;
+    pub(crate) const PROVIDER_FAILED: UserMessage = UserMessage::ProviderFailed;
+    pub(crate) const DETECTION_FAILED: UserMessage = UserMessage::DetectionFailed;
 
     pub(crate) const STEAMGRIDDB_API_KEY_MISSING: UserMessage =
         UserMessage::SteamGridDbApiKeyMissing;

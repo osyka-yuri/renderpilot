@@ -327,6 +327,9 @@ export const fr: Record<MessageKey, MessageValue> = {
   'user_message.invalid_operation_state': 'Cette action est actuellement indisponible.',
   'user_message.operation_could_not_complete': 'Échec de l’exécution de l’action.',
   'user_message.command_task_failed': 'Échec de l’exécution de la commande.',
+  'user_message.storage_failed': 'L’application n’a pas pu lire ou écrire son catalogue.',
+  'user_message.provider_failed': 'Impossible de lire une source de données.',
+  'user_message.detection_failed': 'L’application n’a pas pu analyser les fichiers du jeu.',
   'user_message.steamgriddb_api_key_missing':
     'Veuillez fournir une clé API SteamGridDB dans les paramètres.',
   'user_message.unsupported_cover_image_type': 'Format d’image non pris en charge.',

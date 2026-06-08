@@ -114,6 +114,21 @@ command_error_kinds! {
         severity: Error,
         actions: suggested_action::INSPECT_LOGS,
     },
+    StorageFailed => {
+        code: "storage_failed",
+        severity: Error,
+        actions: suggested_action::INSPECT_LOGS,
+    },
+    ProviderFailed => {
+        code: "provider_failed",
+        severity: Error,
+        actions: suggested_action::RETRY_OR_RESTART,
+    },
+    DetectionFailed => {
+        code: "detection_failed",
+        severity: Error,
+        actions: suggested_action::REFRESH_OR_SCAN_GAME_FOLDER,
+    },
     CommandTaskFailed => {
         code: "command_task_failed",
         severity: Error,

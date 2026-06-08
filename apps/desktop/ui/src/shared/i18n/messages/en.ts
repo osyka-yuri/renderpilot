@@ -363,6 +363,9 @@ export const en = {
   'user_message.invalid_operation_state': 'This action is currently unavailable.',
   'user_message.operation_could_not_complete': 'Failed to complete the action.',
   'user_message.command_task_failed': 'Failed to execute the command.',
+  'user_message.storage_failed': 'The app could not read or write its catalog.',
+  'user_message.provider_failed': 'A data source could not be read.',
+  'user_message.detection_failed': 'The app could not analyze the game files.',
   'user_message.steamgriddb_api_key_missing':
     'Please provide a SteamGridDB API key in the settings.',
   'user_message.unsupported_cover_image_type': 'Unsupported image format.',

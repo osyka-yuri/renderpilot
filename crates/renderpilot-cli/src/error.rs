@@ -87,6 +87,10 @@ impl CliError {
 const fn service_error_category(error: &ServiceError) -> ErrorCategory {
     match error {
         ServiceError::CommandFailed(_)
+        | ServiceError::InvalidInput(_)
+        | ServiceError::StorageFailed(_)
+        | ServiceError::ProviderFailed(_)
+        | ServiceError::DetectionFailed(_)
         | ServiceError::SteamGridDbApiKeyMissing
         | ServiceError::UnsupportedCoverImageType
         | ServiceError::CoverDownloadFailed(_)
@@ -235,6 +239,10 @@ mod tests {
         let errors = [
             CliError::OutputSerializationFailed("json failed".into()),
             CliError::Service(ServiceError::CommandFailed("scan failed".into())),
+            CliError::Service(ServiceError::InvalidInput("bad input".into())),
+            CliError::Service(ServiceError::StorageFailed("database locked".into())),
+            CliError::Service(ServiceError::ProviderFailed("install failed".into())),
+            CliError::Service(ServiceError::DetectionFailed("pe read failed".into())),
             CliError::Service(ServiceError::SteamGridDbApiKeyMissing),
             CliError::Service(ServiceError::UnsupportedCoverImageType),
             CliError::Service(ServiceError::CoverDownloadFailed("timeout".into())),

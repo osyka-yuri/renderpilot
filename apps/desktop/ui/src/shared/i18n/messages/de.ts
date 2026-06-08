@@ -328,6 +328,10 @@ export const de: Record<MessageKey, MessageValue> = {
   'user_message.invalid_operation_state': 'Diese Aktion ist derzeit nicht verfügbar.',
   'user_message.operation_could_not_complete': 'Aktion konnte nicht abgeschlossen werden.',
   'user_message.command_task_failed': 'Befehl konnte nicht ausgeführt werden.',
+  'user_message.storage_failed':
+    'Der Katalog der App konnte nicht gelesen oder geschrieben werden.',
+  'user_message.provider_failed': 'Eine Datenquelle konnte nicht gelesen werden.',
+  'user_message.detection_failed': 'Die Spieldateien konnten nicht analysiert werden.',
   'user_message.steamgriddb_api_key_missing':
     'Bitte geben Sie in den Einstellungen einen SteamGridDB API-Schlüssel ein.',
   'user_message.unsupported_cover_image_type': 'Nicht unterstütztes Bildformat.',
