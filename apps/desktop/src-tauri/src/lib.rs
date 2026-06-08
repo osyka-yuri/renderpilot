@@ -93,6 +93,9 @@ impl AppInitializationState {
 /// Runs the desktop shell.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(feature = "portable")]
+    apply_portable_mode();
+
     #[cfg(windows)]
     apply_webview2_elevation_workaround();
 
@@ -104,6 +107,47 @@ pub fn run() {
 
     if let Err(error) = run_desktop_shell(init_state) {
         exit_with_startup_error(error);
+    }
+}
+
+/// Redirects all persistent data to `<exe_dir>/data` by setting
+/// `RENDERPILOT_APP_DIR` and `WEBVIEW2_USER_DATA_FOLDER` before any other
+/// subsystem initialises.  Both env vars are idempotent — they are only set
+/// when not already present, so the user can still override them manually.
+#[cfg(feature = "portable")]
+fn apply_portable_mode() {
+    use renderpilot_orchestration::portable::APP_DIR_ENV;
+
+    if std::env::var_os(APP_DIR_ENV).is_some() {
+        return; // already set (e.g. by the user)
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(error) => {
+            log::warn!("Portable mode: could not resolve exe path, falling back to standard data directory: {error}");
+            return;
+        }
+    };
+    let Some(exe_dir) = exe.parent() else {
+        log::warn!(
+            "Portable mode: exe has no parent directory, falling back to standard data directory"
+        );
+        return;
+    };
+
+    let data_dir = exe_dir.join("data");
+
+    // SAFETY: single-threaded during startup, before any plugin or thread init.
+    unsafe {
+        std::env::set_var(APP_DIR_ENV, &data_dir);
+    }
+
+    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
+        // SAFETY: same as above.
+        unsafe {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", data_dir.join("WebView2"));
+        }
     }
 }
 

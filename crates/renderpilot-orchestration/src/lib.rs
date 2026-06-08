@@ -14,6 +14,7 @@ mod error;
 mod fs_sync;
 pub mod libraries;
 pub mod nvapi;
+pub mod portable;
 pub mod storage;
 
 pub use context::Context;

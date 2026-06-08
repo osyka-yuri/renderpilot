@@ -55,6 +55,12 @@ fn catalog_db_path_from_env(
         return Ok(PathBuf::from(value));
     }
 
+    if let Some(value) = get_env(crate::portable::APP_DIR_ENV) {
+        if !value.as_os_str().is_empty() {
+            return Ok(PathBuf::from(value).join(CATALOG_DB_FILE_NAME));
+        }
+    }
+
     for env_name in BASE_DIR_ENV_CANDIDATES {
         let Some(value) = get_env(env_name) else {
             continue;
@@ -149,6 +155,44 @@ mod tests {
             .as_nanos();
 
         env::temp_dir().join(format!("renderpilot-{name}-{}-{nanos}", std::process::id()))
+    }
+
+    #[test]
+    fn uses_portable_app_dir_before_local_app_data() {
+        let path = resolved_path(&[(crate::portable::APP_DIR_ENV, "D:\\portable")]);
+
+        assert_eq!(
+            path,
+            PathBuf::from("D:\\portable").join(CATALOG_DB_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn ignores_empty_portable_app_dir() {
+        let path = resolved_path(&[
+            (crate::portable::APP_DIR_ENV, ""),
+            ("LOCALAPPDATA", "C:\\local"),
+        ]);
+
+        assert_eq!(
+            path,
+            PathBuf::from("C:\\local")
+                .join(APP_DIR_NAME)
+                .join(CATALOG_DB_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn portable_app_dir_takes_precedence_over_local_app_data() {
+        let path = resolved_path(&[
+            (crate::portable::APP_DIR_ENV, "D:\\portable"),
+            ("LOCALAPPDATA", "C:\\local"),
+        ]);
+
+        assert_eq!(
+            path,
+            PathBuf::from("D:\\portable").join(CATALOG_DB_FILE_NAME)
+        );
     }
 
     #[test]

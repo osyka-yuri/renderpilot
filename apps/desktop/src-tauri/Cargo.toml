@@ -41,6 +41,10 @@ windows-sys = { version = "0.61", features = [
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 
+[features]
+# Enables portable mode: data is stored in <exe_dir>/data instead of %LOCALAPPDATA%.
+portable = []
+
 [lib]
 name = "renderpilot_desktop"
 path = "src/lib.rs"

@@ -72,3 +72,27 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+
+      # The frontend is already compiled by tauri-action above; only the Rust
+      # layer is rebuilt here with the portable feature flag.
+      - name: Build portable exe
+        run: cargo build --release --features portable -p renderpilot-desktop
+
+      - name: Read app version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path RenderPilot
+          Copy-Item target\release\renderpilot-desktop.exe RenderPilot\renderpilot-desktop.exe
+          Compress-Archive -Path RenderPilot -DestinationPath "RenderPilot-${{ steps.version.outputs.version }}-portable.zip"
+
+      - name: Upload portable zip to release
+        run: gh release upload ${{ github.ref_name }} "RenderPilot-${{ steps.version.outputs.version }}-portable.zip"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
