@@ -12,6 +12,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -32,7 +33,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGMDQyNUREMDBBMkJENQpSV1RWS3dyUVhVTHdCVi9mamMvYnR4bG8vNytnVDRTRkVTWThJRGc0bTl1anowa1Zkcm9UcTZuQQo=",
       "endpoints": [
-        "https://github.com/osyka-yuri/renderpilot/releases/latest/download/update.json"
+        "https://github.com/osyka-yuri/renderpilot/releases/latest/download/latest.json"
       ]
     }
   },
