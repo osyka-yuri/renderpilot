@@ -11,6 +11,7 @@ pub mod context;
 pub mod covers;
 pub mod dlss;
 mod error;
+mod fs_sync;
 pub mod libraries;
 pub mod nvapi;
 pub mod storage;

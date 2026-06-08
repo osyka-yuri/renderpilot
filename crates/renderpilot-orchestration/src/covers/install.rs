@@ -173,7 +173,7 @@ fn install_cover_file(bytes: &[u8], paths: &CoverInstallPaths) -> Result<(), Ser
 
     temp_cleanup.disarm();
 
-    sync_parent_directory_best_effort(&paths.final_path);
+    crate::fs_sync::sync_parent_directory_best_effort(&paths.final_path);
 
     Ok(())
 }
@@ -264,43 +264,11 @@ fn gc_orphan_cover_files_best_effort(catalog_db_path: &Path, sqlite: &SqliteStor
 
 fn remove_file_and_sync_parent_best_effort(path: &Path) {
     remove_file_best_effort(path);
-    sync_parent_directory_best_effort(path);
+    crate::fs_sync::sync_parent_directory_best_effort(path);
 }
 
 fn remove_file_best_effort(path: &Path) {
     let _ = fs::remove_file(path);
-}
-
-fn sync_parent_directory_best_effort(path: &Path) {
-    if let Some(parent) = path.parent() {
-        sync_directory_best_effort(parent);
-    }
-}
-
-#[cfg(not(windows))]
-fn sync_directory_best_effort(path: &Path) {
-    use std::fs::File;
-
-    if let Ok(dir) = File::open(path) {
-        let _ = dir.sync_all();
-    }
-}
-
-#[cfg(windows)]
-fn sync_directory_best_effort(path: &Path) {
-    use std::fs::OpenOptions;
-    use std::os::windows::fs::OpenOptionsExt;
-
-    // FILE_FLAG_BACKUP_SEMANTICS — required to open directories on Windows for `sync_all`.
-    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-
-    if let Ok(dir) = OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-        .open(path)
-    {
-        let _ = dir.sync_all();
-    }
 }
 
 fn cover_io_error(action: &str, path: &Path, error: std::io::Error) -> ServiceError {

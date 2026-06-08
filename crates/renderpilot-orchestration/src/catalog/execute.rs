@@ -16,6 +16,7 @@ use renderpilot_domain::{
 use renderpilot_storage_sqlite::SqliteStorage;
 use serde::Serialize;
 
+use crate::fs_sync;
 use crate::ServiceError;
 
 use crate::catalog::swap::{require_artifact, require_component_for_game, require_game};
@@ -453,12 +454,28 @@ impl AppliedFsChanges {
     /// A re-swap's revert-to-baseline (run before the overlay) is intentionally
     /// not tracked here — the recorded baseline `.bak` files remain intact, so a
     /// later `rollback` always recovers the original.
+    ///
+    /// Reversal is best-effort by necessity (the disk may be full, a file may be
+    /// locked by anti-virus), but every failure is logged at error level: a swap
+    /// whose rollback could not complete leaves the game folder in a mixed state,
+    /// and that must be diagnosable rather than silently swallowed.
     fn undo(&self) {
         for copied in &self.copied {
-            let _ = fs::remove_file(copied);
+            if let Err(error) = fs::remove_file(copied) {
+                log::error!(
+                    "swap rollback: failed to remove copied file {}: {error}",
+                    copied.display()
+                );
+            }
         }
         for (target, bak) in &self.renamed_to_bak {
-            let _ = fs::rename(bak, target);
+            if let Err(error) = fs::rename(bak, target) {
+                log::error!(
+                    "swap rollback: failed to restore backup {} to {}: {error}",
+                    bak.display(),
+                    target.display()
+                );
+            }
         }
     }
 }
@@ -557,10 +574,44 @@ fn apply_fs_steps(
                 target.display()
             ))
         })?;
-        changes.copied.push(target);
+        // Track the copy before flushing so a `sync_file` failure still triggers
+        // its removal during `undo()`.
+        changes.copied.push(target.clone());
+        // Flush the installed bytes to durable storage. A crash/power-loss after
+        // a bare `fs::copy` can leave a torn or zero-length DLL on disk, which
+        // the game would then load. Treat a flush failure as fatal so the swap
+        // rolls back rather than committing an undurable file.
+        fs_sync::sync_file(&target).map_err(|error| {
+            AppError::provider_failed(format!(
+                "failed to flush {} to disk: {error}",
+                target.display()
+            ))
+        })?;
     }
 
+    // Flush the directory entries (renames to `.bak`, new files) so the layout
+    // is durable, not just the file contents above. Best-effort: the data is
+    // already durable, and a directory-sync failure must not fail the swap.
+    sync_touched_directories(changes);
+
     Ok(())
+}
+
+/// Fsyncs each distinct directory touched by the overlay so renames and new
+/// files survive a crash. Best-effort; see [`fs_sync::sync_directory_best_effort`].
+fn sync_touched_directories(changes: &AppliedFsChanges) {
+    let mut synced: HashSet<PathBuf> = HashSet::new();
+    let touched = changes
+        .copied
+        .iter()
+        .chain(changes.renamed_to_bak.iter().map(|(target, _bak)| target));
+    for path in touched {
+        if let Some(parent) = path.parent() {
+            if synced.insert(parent.to_path_buf()) {
+                fs_sync::sync_directory_best_effort(parent);
+            }
+        }
+    }
 }
 
 /// Reverts the directory to `baseline`: delete files the overlay added (current
@@ -610,7 +661,30 @@ fn revert_to_baseline_fs(current: &[ComponentFile], baseline: &[ComponentFile]) 
         })?;
     }
 
+    // Flush the directory entries so the deletes/renames above survive a crash.
+    // Without this, `rollback_component` could commit the rollback to SQLite while
+    // the `.bak`→live rename never reaches disk, leaving the catalog claiming a
+    // restore the filesystem lost. The restored content is the pre-existing `.bak`
+    // (already durable), so a directory fsync is sufficient. Best-effort, mirroring
+    // the apply path; on a re-swap the later overlay fsync of the same directory is
+    // a cheap, idempotent repeat.
+    sync_component_file_dirs(current.iter().chain(baseline));
+
     Ok(())
+}
+
+/// Fsyncs the distinct parent directories of `files` (best-effort), making the
+/// deletes/renames performed against them durable.
+fn sync_component_file_dirs<'a>(files: impl IntoIterator<Item = &'a ComponentFile>) {
+    let mut synced: HashSet<PathBuf> = HashSet::new();
+    for file in files {
+        let path = real_path(file);
+        if let Some(parent) = path.parent() {
+            if synced.insert(parent.to_path_buf()) {
+                fs_sync::sync_directory_best_effort(parent);
+            }
+        }
+    }
 }
 
 /// New active component files after an additive overlay: baseline files that the
@@ -787,4 +861,254 @@ fn real_path(file: &ComponentFile) -> PathBuf {
 
 fn bak_path(file: &ComponentFile) -> PathBuf {
     PathBuf::from(format!("{}.bak", file.path().as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use renderpilot_domain::{
+        ArtifactTrustLevel, ComponentKind, PathRef, Sha256Hash, Swappability,
+    };
+    use std::fs;
+
+    const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    fn comp_file(path: &Path) -> ComponentFile {
+        ComponentFile::new(PathRef::new(path.to_string_lossy().as_ref()).expect("valid path"))
+    }
+
+    fn comp_file_str(path: &str) -> ComponentFile {
+        ComponentFile::new(PathRef::new(path).expect("valid path"))
+    }
+
+    fn bak_of(path: &Path) -> PathBuf {
+        PathBuf::from(format!("{}.bak", path.display()))
+    }
+
+    fn write(path: &Path, bytes: &[u8]) {
+        fs::write(path, bytes).expect("write fixture file");
+    }
+
+    fn planned_copy(source: &Path, target: &Path) -> PlannedFile {
+        PlannedFile {
+            source: source.to_path_buf(),
+            file: comp_file(target),
+        }
+    }
+
+    /// Minimal FSR component placeholder; `component` is only read on the
+    /// re-swap (`first_swap == false`) revert path, so these tests pass it
+    /// `first_swap = true` and never depend on its files.
+    fn placeholder_component() -> GraphicsComponent {
+        GraphicsComponent::new(
+            ComponentId::new("component:test").expect("component id"),
+            GameId::new("manual:C:/Games/Test").expect("game id"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::AmdFsr,
+            Swappability::Swappable,
+        )
+    }
+
+    #[test]
+    fn overlay_backs_up_existing_target_and_installs_durably() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("nvngx_dlss.dll");
+        let source = dir.path().join("source.dll");
+        write(&target, b"original");
+        write(&source, b"new-version");
+
+        let plans = vec![planned_copy(&source, &target)];
+        let changes = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true)
+            .expect("apply should succeed");
+
+        assert_eq!(fs::read(&target).expect("target readable"), b"new-version");
+        assert_eq!(
+            fs::read(bak_of(&target)).expect("bak readable"),
+            b"original"
+        );
+        assert_eq!(changes.copied, vec![target.clone()]);
+        assert_eq!(
+            changes.renamed_to_bak,
+            vec![(target.clone(), bak_of(&target))]
+        );
+    }
+
+    #[test]
+    fn overlay_adds_new_file_without_creating_backup() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("amd_fidelityfx_upscaler_dx12.dll");
+        let source = dir.path().join("source.dll");
+        write(&source, b"fresh");
+
+        let plans = vec![planned_copy(&source, &target)];
+        let changes = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true)
+            .expect("apply should succeed");
+
+        assert_eq!(fs::read(&target).expect("target readable"), b"fresh");
+        assert!(
+            !bak_of(&target).exists(),
+            "no backup for a newly added file"
+        );
+        assert!(changes.renamed_to_bak.is_empty());
+    }
+
+    #[test]
+    fn removed_member_is_backed_up_then_deleted() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let member = dir.path().join("amd_fidelityfx_framegeneration_dx12.dll");
+        write(&member, b"fsr4-member");
+
+        let removed = vec![comp_file(&member)];
+        let changes = perform_apply_fs(&placeholder_component(), &[], &[], &removed, true)
+            .expect("apply should succeed");
+
+        assert!(!member.exists(), "removed member should be gone");
+        assert_eq!(
+            fs::read(bak_of(&member)).expect("bak readable"),
+            b"fsr4-member",
+            "removed member must be preserved as a .bak for rollback"
+        );
+        assert_eq!(
+            changes.renamed_to_bak,
+            vec![(member.clone(), bak_of(&member))]
+        );
+    }
+
+    #[test]
+    fn apply_failure_midway_rolls_back_every_change() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("nvngx_dlss.dll");
+        let good_source = dir.path().join("good.dll");
+        let missing_source = dir.path().join("does-not-exist.dll");
+        write(&target, b"original");
+        write(&good_source, b"new-version");
+
+        let plans = vec![
+            planned_copy(&good_source, &target),
+            planned_copy(&missing_source, &dir.path().join("second.dll")),
+        ];
+        let result = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true);
+
+        assert!(result.is_err(), "missing source must fail the apply");
+        assert_eq!(
+            fs::read(&target).expect("target readable"),
+            b"original",
+            "the first file must be restored to its original bytes"
+        );
+        assert!(
+            !bak_of(&target).exists(),
+            "backup must be consumed by the restore"
+        );
+        assert!(
+            !dir.path().join("second.dll").exists(),
+            "the failed file must not be left behind"
+        );
+    }
+
+    #[test]
+    fn revert_to_baseline_restores_backup_and_deletes_added_files() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let replaced = dir.path().join("nvngx_dlss.dll");
+        let added = dir.path().join("nvngx_dlssg.dll");
+        write(&replaced, b"overlay");
+        write(&bak_of(&replaced), b"original");
+        write(&added, b"added-by-swap");
+
+        let current = vec![comp_file(&replaced), comp_file(&added)];
+        let baseline = vec![comp_file(&replaced)];
+        revert_to_baseline_fs(&current, &baseline).expect("revert should succeed");
+
+        assert_eq!(fs::read(&replaced).expect("readable"), b"original");
+        assert!(!bak_of(&replaced).exists(), "backup consumed by restore");
+        assert!(!added.exists(), "overlay-added file removed on revert");
+    }
+
+    #[test]
+    fn undo_removes_copies_and_restores_backups() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("nvngx_dlss.dll");
+        write(&target, b"overlay");
+        write(&bak_of(&target), b"original");
+
+        let changes = AppliedFsChanges {
+            renamed_to_bak: vec![(target.clone(), bak_of(&target))],
+            copied: vec![target.clone()],
+        };
+        changes.undo();
+
+        assert_eq!(fs::read(&target).expect("readable"), b"original");
+        assert!(!bak_of(&target).exists());
+    }
+
+    #[test]
+    fn fsr_downgrade_removes_unmatched_split_members() {
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:fsr").expect("component id"),
+            GameId::new("manual:C:/Games/Test").expect("game id"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::AmdFsr,
+            Swappability::Swappable,
+        )
+        .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"))
+        .with_file(comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"))
+        .with_file(comp_file_str(
+            "C:/game/amd_fidelityfx_framegeneration_dx12.dll",
+        ));
+
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:fsr31").expect("artifact id"),
+            GraphicsTechnology::AmdFsr,
+            "amd_fidelityfx_dx12.dll",
+            vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+            ArtifactTrustLevel::ManifestDownloaded,
+        )
+        .expect("artifact");
+
+        let planned = vec![planned_copy(
+            Path::new("C:/lib/amd_fidelityfx_dx12.dll"),
+            Path::new("C:/game/amd_fidelityfx_dx12.dll"),
+        )];
+
+        let removed = fsr_members_to_remove(&component, &artifact, &planned);
+        let names: Vec<&str> = removed
+            .iter()
+            .filter_map(|file| file.path().file_name())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "amd_fidelityfx_upscaler_dx12.dll",
+                "amd_fidelityfx_framegeneration_dx12.dll",
+            ],
+            "a unified FSR 3.1 downgrade drops the split members it does not install"
+        );
+    }
+
+    #[test]
+    fn fsr_members_to_remove_is_empty_for_a_split_artifact() {
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:fsr").expect("component id"),
+            GameId::new("manual:C:/Games/Test").expect("game id"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::AmdFsr,
+            Swappability::Swappable,
+        )
+        .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"))
+        .with_file(comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"));
+
+        // The artifact's primary file *is* the upscaler (split marker) → not a
+        // unified downgrade, so nothing is removed.
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:fsr4").expect("artifact id"),
+            GraphicsTechnology::AmdFsr,
+            "amd_fidelityfx_upscaler_dx12.dll",
+            vec![comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+            ArtifactTrustLevel::ManifestDownloaded,
+        )
+        .expect("artifact");
+
+        assert!(fsr_members_to_remove(&component, &artifact, &[]).is_empty());
+    }
 }

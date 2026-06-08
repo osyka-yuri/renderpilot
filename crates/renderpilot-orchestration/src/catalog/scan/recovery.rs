@@ -20,8 +20,9 @@ pub(super) fn recover_orphaned_backups(
 
         // 1. Recover `.bak` files directly corresponding to the component's current files.
         for file in component.files() {
-            let bak_path = PathBuf::from(format!("{}.bak", file.path().as_str()));
-            if let Some(recovered_file) = recover_bak_file_if_exists(&bak_path)? {
+            let original_path = file.path().as_str();
+            let bak_path = PathBuf::from(format!("{original_path}.bak"));
+            if let Some(recovered_file) = recover_bak_file(&bak_path, original_path)? {
                 recovered_baseline.push(recovered_file);
             }
         }
@@ -45,26 +46,54 @@ pub(super) fn recover_orphaned_backups(
     Ok(())
 }
 
-/// Attempts to recover a `.bak` file as a `ComponentFile` referencing the original path.
-/// Returns `None` if the `.bak` file does not exist.
-fn recover_bak_file_if_exists(bak_path: &std::path::Path) -> AppResult<Option<ComponentFile>> {
-    if !bak_path.exists() {
-        return Ok(None);
+/// Recovers a `.bak` file as a `ComponentFile` referencing `original_path` (the
+/// live path the backup would be restored to).
+///
+/// Returns `None` when the backup does not exist, is empty, or cannot be read in
+/// full. A backup we cannot verify is worse than no backup: restoring it on
+/// rollback would overwrite the live file with truncated or corrupt bytes, so we
+/// skip (and log) it rather than record an unverifiable baseline.
+fn recover_bak_file(
+    bak_path: &std::path::Path,
+    original_path: &str,
+) -> AppResult<Option<ComponentFile>> {
+    match std::fs::metadata(bak_path) {
+        Ok(meta) if meta.len() == 0 => {
+            log::warn!("recovery: skipping empty backup {}", bak_path.display());
+            return Ok(None);
+        }
+        Ok(_) => {}
+        // No `.bak` for this file is the normal case (most files were never
+        // swapped), not a corruption to warn about.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            log::warn!(
+                "recovery: skipping backup with unreadable metadata {}: {error}",
+                bak_path.display()
+            );
+            return Ok(None);
+        }
     }
 
-    let bak_str = bak_path.to_string_lossy();
-    let original_path_str = bak_str.strip_suffix(".bak").unwrap_or(bak_str.as_ref());
-    let path_ref = PathRef::new(original_path_str)
+    // Require a full content hash — this both records the integrity digest and
+    // proves the backup is readable end-to-end before we trust it as a baseline.
+    let sha256 = match sha256_file(bak_path) {
+        Ok(hash) => hash,
+        Err(error) => {
+            log::warn!(
+                "recovery: skipping unreadable backup {}: {error}",
+                bak_path.display()
+            );
+            return Ok(None);
+        }
+    };
+
+    let path_ref = PathRef::new(original_path)
         .map_err(|e| renderpilot_application::AppError::invalid_input(e.to_string()))?;
 
-    let mut component_file = ComponentFile::new(path_ref);
+    let mut component_file = ComponentFile::new(path_ref).with_sha256(sha256);
 
-    // Best-effort: compute SHA-256 from the backup bytes.
-    if let Ok(hash) = sha256_file(bak_path) {
-        component_file = component_file.with_sha256(hash);
-    }
-
-    // Best-effort: read the PE file version from the backup.
+    // Best-effort: read the PE file version from the backup (non-PE backups have none).
     if let Some(version) = read_windows_file_version(bak_path) {
         component_file = component_file.with_version(version);
     }
@@ -83,7 +112,13 @@ fn recover_orphaned_fsr_split_members(
 
     let read_dir = match std::fs::read_dir(&dir_path) {
         Ok(d) => d,
-        Err(_) => return Ok(()),
+        Err(error) => {
+            log::warn!(
+                "recovery: cannot read directory {}: {error}",
+                dir_path.display()
+            );
+            return Ok(());
+        }
     };
 
     // Build a set of already-recovered original paths (lower-case) to avoid duplicates.
@@ -109,17 +144,99 @@ fn recover_orphaned_fsr_split_members(
             continue;
         }
 
-        // Derive the original (non-.bak) path and skip if already recovered.
+        // Derive the original (non-`.bak`) path. The extension check above
+        // guarantees the suffix is present; skip defensively if it is not.
         let bak_str = bak_path.to_string_lossy();
-        let original_path = bak_str.strip_suffix(".bak").unwrap_or("");
+        let Some(original_path) = bak_str.strip_suffix(".bak") else {
+            continue;
+        };
         if already_recovered.contains(&original_path.to_ascii_lowercase()) {
             continue;
         }
 
-        if let Some(recovered_file) = recover_bak_file_if_exists(&bak_path)? {
+        if let Some(recovered_file) = recover_bak_file(&bak_path, original_path)? {
             recovered_baseline.push(recovered_file);
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn write(path: &std::path::Path, bytes: &[u8]) {
+        fs::write(path, bytes).expect("write fixture file");
+    }
+
+    #[test]
+    fn missing_backup_is_not_recovered() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bak = dir.path().join("nvngx_dlss.dll.bak");
+        let original = dir.path().join("nvngx_dlss.dll");
+        let recovered =
+            recover_bak_file(&bak, original.to_string_lossy().as_ref()).expect("no error");
+        assert!(recovered.is_none());
+    }
+
+    #[test]
+    fn empty_backup_is_rejected() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bak = dir.path().join("nvngx_dlss.dll.bak");
+        write(&bak, b"");
+        let original = dir.path().join("nvngx_dlss.dll");
+        let recovered =
+            recover_bak_file(&bak, original.to_string_lossy().as_ref()).expect("no error");
+        assert!(
+            recovered.is_none(),
+            "a zero-byte backup must never be recovered as a baseline"
+        );
+    }
+
+    #[test]
+    fn readable_backup_is_recovered_with_content_hash() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bak = dir.path().join("nvngx_dlss.dll.bak");
+        write(&bak, b"original-bytes");
+        let original = dir.path().join("nvngx_dlss.dll");
+        let recovered = recover_bak_file(&bak, original.to_string_lossy().as_ref())
+            .expect("no error")
+            .expect("a readable backup should be recovered");
+        assert!(
+            recovered.path().as_str().ends_with("nvngx_dlss.dll"),
+            "recovered file points at the live path, not the .bak"
+        );
+        assert!(
+            recovered.sha256().is_some(),
+            "a verified backup carries its content hash"
+        );
+    }
+
+    #[test]
+    fn orphaned_split_member_baks_are_recovered_and_others_ignored() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write(
+            &dir.path().join("amd_fidelityfx_upscaler_dx12.dll.bak"),
+            b"upscaler",
+        );
+        // A non-split component backup must not be swept up by FSR recovery.
+        write(&dir.path().join("nvngx_dlss.dll.bak"), b"dlss");
+        // A live (non-.bak) file must be ignored.
+        write(
+            &dir.path().join("amd_fidelityfx_upscaler_dx12.dll"),
+            b"live",
+        );
+
+        let mut baseline = Vec::new();
+        recover_orphaned_fsr_split_members(dir.path().to_string_lossy().as_ref(), &mut baseline)
+            .expect("recovery should succeed");
+
+        let names: Vec<String> = baseline
+            .iter()
+            .filter_map(|file| file.path().file_name().map(str::to_owned))
+            .collect();
+        assert_eq!(names, vec!["amd_fidelityfx_upscaler_dx12.dll"]);
+    }
 }
