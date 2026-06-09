@@ -79,6 +79,18 @@ impl LibraryPatternSet {
         Ok(set)
     }
 
+    /// Creates an empty pattern set.
+    ///
+    /// An empty set never matches any file names, so no library artifacts
+    /// will have a resolved technology. This is a safe fallback when the
+    /// bundled pattern catalog cannot be loaded.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            patterns: Vec::new(),
+        }
+    }
+
     /// Parses a pattern set from JSON text.
     pub fn from_json_str(json: &str) -> Result<Self, LibraryPatternError> {
         serde_json::from_str(json).map_err(LibraryPatternError::Json)

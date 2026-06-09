@@ -29,12 +29,32 @@ static MANIFEST_FG: LazyLock<DlssPresetManifest> =
 static MANIFEST_RR: LazyLock<DlssPresetManifest> =
     LazyLock::new(|| load_manifest_from_disk_or_fallback("dlss_d_presets.json", BUNDLED_RR));
 
+fn empty_manifest() -> DlssPresetManifest {
+    DlssPresetManifest {
+        schema_version: 1,
+        library_family: String::new(),
+        dll_kind: String::new(),
+        generated_at: None,
+        presets: BTreeMap::new(),
+        version_support: Vec::new(),
+    }
+}
+
 fn load_manifest_from_disk_or_fallback(file_name: &str, bundled_json: &str) -> DlssPresetManifest {
-    crate::libraries::local_preset_manifest_path(file_name)
+    let from_disk = crate::libraries::local_preset_manifest_path(file_name)
         .ok()
         .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|json| parse_manifest_json(&json).ok())
-        .unwrap_or_else(|| parse_manifest_json(bundled_json).expect("bundled manifest valid"))
+        .and_then(|json| parse_manifest_json(&json).ok());
+
+    if let Some(manifest) = from_disk {
+        return manifest;
+    }
+
+    crate::util::load_bundled_asset_or_default(
+        || parse_manifest_json(bundled_json),
+        empty_manifest,
+        "DLSS preset manifest",
+    )
 }
 
 // -----------------------------------------------------------------------------

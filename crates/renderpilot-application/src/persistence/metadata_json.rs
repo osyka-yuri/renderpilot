@@ -38,6 +38,12 @@ impl Deref for MetadataJson {
     }
 }
 
+impl Default for MetadataJson {
+    fn default() -> Self {
+        Self("{}".to_owned())
+    }
+}
+
 impl fmt::Display for MetadataJson {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())

@@ -16,6 +16,7 @@ pub mod libraries;
 pub mod nvapi;
 pub mod portable;
 pub mod storage;
+mod util;
 
 pub use context::Context;
 

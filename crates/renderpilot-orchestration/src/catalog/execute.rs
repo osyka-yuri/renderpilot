@@ -171,11 +171,7 @@ fn record_operation_journal_entry(storage: &SqliteStorage, params: JournalEntryP
     };
     let metadata_str = serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_owned());
     let metadata_json =
-        renderpilot_application::MetadataJson::new(metadata_str).unwrap_or_else(|_| {
-            // SAFETY: a literal empty JSON object is always a valid MetadataJson.
-            renderpilot_application::MetadataJson::new("{}")
-                .expect("empty JSON object is always valid")
-        });
+        renderpilot_application::MetadataJson::new(metadata_str).unwrap_or_default();
 
     let operation_record = renderpilot_application::OperationRecord::new(
         op_id.clone(),
@@ -837,24 +833,16 @@ fn full_component_set(
     game_id: &GameId,
     rebuilt: GraphicsComponent,
 ) -> AppResult<Vec<GraphicsComponent>> {
-    let existing = storage.list_components_for_game(game_id)?;
+    let mut components = storage.list_components_for_game(game_id)?;
 
-    let mut next: Vec<GraphicsComponent> = Vec::with_capacity(existing.len().max(1));
-    let mut replaced = false;
-    for current in existing {
-        if current.id() == rebuilt.id() {
-            next.push(rebuilt.clone());
-            replaced = true;
-        } else {
-            next.push(current);
-        }
+    if let Some(component) = components.iter_mut().find(|c| c.id() == rebuilt.id()) {
+        *component = rebuilt;
+    } else {
+        components.push(rebuilt);
     }
-    if !replaced {
-        next.push(rebuilt);
-    }
-    Ok(next)
+
+    Ok(components)
 }
-
 fn real_path(file: &ComponentFile) -> PathBuf {
     PathBuf::from(file.path().as_str())
 }

@@ -14,7 +14,11 @@ use super::{library_error, manifest::load_local_manifest, types::LibraryManifest
 const MANIFEST_DOWNLOAD_SOURCE: &str = "manifest-download";
 
 static BUNDLED_PATTERNS: LazyLock<LibraryPatternSet> = LazyLock::new(|| {
-    LibraryPatternSet::bundled_defaults().expect("bundled library patterns are always valid")
+    crate::util::load_bundled_asset_or_default(
+        LibraryPatternSet::bundled_defaults,
+        LibraryPatternSet::empty,
+        "library pattern set",
+    )
 });
 
 /// Builds a `LibraryArtifact` instance representing a locally cached library file

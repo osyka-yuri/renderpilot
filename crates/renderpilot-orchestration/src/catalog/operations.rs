@@ -16,14 +16,16 @@ pub fn list_operations(
     let entries = storage
         .list_operation_entries_for_game(game_id)?
         .into_iter()
-        .map(|entry| OperationListCatalogEntry {
-            item_count: entry.len(),
-            component_ids: entry
-                .items()
-                .iter()
-                .map(|item| item.component_id.as_str().to_owned())
-                .collect(),
-            operation: entry.operation().clone(),
+        .map(|entry| {
+            let (operation, items) = entry.into_parts();
+            OperationListCatalogEntry {
+                item_count: items.len(),
+                component_ids: items
+                    .iter()
+                    .map(|item| item.component_id.as_str().to_owned())
+                    .collect(),
+                operation,
+            }
         })
         .collect();
 

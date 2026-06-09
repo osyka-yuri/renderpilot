@@ -40,7 +40,10 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
     let ui_states: HashMap<String, _> = storage
         .list_all_game_ui_state()?
         .into_iter()
-        .map(|row| (row.game_id.clone(), row))
+        .map(|mut row| {
+            let game_id = std::mem::take(&mut row.game_id);
+            (game_id, row)
+        })
         .collect();
 
     // Loaded once and reused for every game: the artifacts table and the

@@ -33,13 +33,20 @@ static CATALOG: LazyLock<Vec<DlssSettingDef>> =
 /// Prefers a valid `dlss_settings.json` in the local libraries directory; falls
 /// back to the compile-time bundled copy when it is absent or malformed.
 fn load_catalog_from_disk_or_fallback(file_name: &str, bundled_json: &str) -> Vec<DlssSettingDef> {
-    crate::libraries::local_preset_manifest_path(file_name)
+    let from_disk = crate::libraries::local_preset_manifest_path(file_name)
         .ok()
         .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|json| parse_catalog(&json).ok())
-        .unwrap_or_else(|| {
-            parse_catalog(bundled_json).expect("bundled dlss settings catalog valid")
-        })
+        .and_then(|json| parse_catalog(&json).ok());
+
+    if let Some(catalog) = from_disk {
+        return catalog;
+    }
+
+    crate::util::load_bundled_asset_or_default(
+        || parse_catalog(bundled_json),
+        Vec::new,
+        "DLSS settings catalog",
+    )
 }
 
 // -----------------------------------------------------------------------------
