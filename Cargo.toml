@@ -26,3 +26,6 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+needless_pass_by_value = "warn"
+redundant_clone = "warn"
+unnecessary_to_owned = "warn"

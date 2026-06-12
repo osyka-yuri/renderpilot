@@ -14,6 +14,13 @@ build = "build.rs"
 # All FFI is isolated in src/elevation.rs and cfg-gated to Windows.
 unsafe_code = "allow"
 
+# Local lints opt this crate out of workspace inheritance, so the ownership
+# lints from the workspace table are mirrored here.
+[lints.clippy]
+needless_pass_by_value = "warn"
+redundant_clone = "warn"
+unnecessary_to_owned = "warn"
+
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
 
