@@ -1,6 +1,7 @@
 import Root from './empty.svelte';
 import Header from './empty-header.svelte';
-import Media, { emptyMediaVariants, type EmptyMediaVariant } from './empty-media.svelte';
+import Media from './empty-media.svelte';
+import { emptyMediaVariants, type EmptyMediaVariant } from './empty-media-variants';
 import Title from './empty-title.svelte';
 import Description from './empty-description.svelte';
 import Content from './empty-content.svelte';
