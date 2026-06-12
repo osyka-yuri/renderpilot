@@ -31,7 +31,7 @@ use super::paths;
 /// Rows that lie deeper than a direct child of a library root (e.g.
 /// `.../common/RealGame/Plugins/MyMod`) are preserved on purpose: those
 /// belong to a scanned game and will be handled by the per-scan
-/// [`prune_stale_manual_games_under_scope`] step.
+/// `prune_stale_manual_games_under_scope` step.
 ///
 /// All inputs are expected as PathRef-style normalized strings (forward
 /// slashes). Comparison is case-insensitive (ASCII) and ignores trailing

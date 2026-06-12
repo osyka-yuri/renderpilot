@@ -174,7 +174,7 @@ pub fn category_for_family(family: &str) -> Option<String> {
     Some(label.to_owned())
 }
 
-/// Converts a platform-windows [`ExecutableCandidate`] into a serializable DTO.
+/// Converts a platform-windows [`ExecutableCandidate`](renderpilot_platform_windows::ExecutableCandidate) into a serializable DTO.
 #[cfg(windows)]
 pub fn executable_candidate_dto(
     candidate: renderpilot_platform_windows::ExecutableCandidate,

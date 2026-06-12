@@ -3,7 +3,7 @@
 //! The DLSS indicator is a single machine-wide registry value (read by NGX for
 //! every DLSS title), so unlike the per-game NVAPI handlers these functions take
 //! no game id. Reads work unprivileged; writes need an elevated process and map
-//! `ERROR_ACCESS_DENIED` to [`ApiError::Service`] so the frontend
+//! `ERROR_ACCESS_DENIED` to [`ServiceError`] so the frontend
 //! can surface its existing "Relaunch as administrator" flow.
 
 use crate::ServiceError;

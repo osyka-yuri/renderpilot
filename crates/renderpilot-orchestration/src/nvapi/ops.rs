@@ -187,7 +187,7 @@ pub fn read_setting_state(
 /// session + profile lookup, instead of one session per setting. The session
 /// and profile are resolved once up front; if any step fails, each setting
 /// reports the same diagnostic warning and falls back to default values —
-/// mirroring [`read_live_or_default`] but without re-opening the driver.
+/// mirroring `read_live_or_default` but without re-opening the driver.
 pub fn read_all_setting_states(
     context: &crate::Context,
     game_id: &str,

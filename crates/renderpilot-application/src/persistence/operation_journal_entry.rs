@@ -7,7 +7,7 @@ use crate::{AppError, AppResult};
 /// child item row belonging to that operation.
 ///
 /// Application code should treat this as the unit of persistence: the
-/// [`OperationRepository`](crate::ports::repositories::OperationRepository) port saves
+/// [`OperationRepository`](crate::ports::OperationRepository) port saves
 /// and loads headers and items together so the journal cannot be left with a new header
 /// and stale items, or vice versa.
 ///

@@ -93,11 +93,11 @@ const NON_GAME_EXE_SUBSTRINGS: &[&str] = &[
 /// override workflows should the heuristic prove overly aggressive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RejectionReason {
-    /// Filename matched an entry in [`NON_GAME_EXE_NAMES`].
+    /// Filename matched an entry in `NON_GAME_EXE_NAMES`.
     NonGameName(String),
-    /// Filename ended with an entry in [`NON_GAME_EXE_SUFFIXES`].
+    /// Filename ended with an entry in `NON_GAME_EXE_SUFFIXES`.
     NonGameSuffix(String),
-    /// Filename contained an entry in [`NON_GAME_EXE_SUBSTRINGS`].
+    /// Filename contained an entry in `NON_GAME_EXE_SUBSTRINGS`.
     NonGameSubstring(String),
 }
 

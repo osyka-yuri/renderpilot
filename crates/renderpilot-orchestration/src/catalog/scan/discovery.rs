@@ -12,7 +12,7 @@ use renderpilot_domain::GameId;
 
 use crate::catalog::auto_scan::{open_auto_scan_batch, scan_auto_in_batch, AutoScanBatch};
 
-/// Synthetic `root` label used in [`AutoScanOutput::errors`] for failures
+/// Synthetic `root` label used in [`AutoScanDiscoveryResult::errors`] for failures
 /// that are not attached to a single install path (catalog-wide pruning
 /// failure, batch open failure). Surfacing a stable, human-readable label
 /// keeps the JSON payload self-explanatory and avoids a confusing empty

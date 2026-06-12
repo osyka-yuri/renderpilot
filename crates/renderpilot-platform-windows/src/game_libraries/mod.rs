@@ -14,9 +14,9 @@
 //! This separation prevents launcher container folders themselves from being
 //! treated as a single "game" by the catalog scan.
 //!
-//! Code is split by concern: [`launchers`] holds the per-launcher knowledge of
-//! where each store records its games, [`registry`] the Windows registry access,
-//! and [`paths`] the path normalization / dedup / Steam-VDF parsing helpers. This
+//! Code is split by concern: `launchers` holds the per-launcher knowledge of
+//! where each store records its games, `registry` the Windows registry access,
+//! and `paths` the path normalization / dedup / Steam-VDF parsing helpers. This
 //! module owns the public API and the cross-launcher aggregation.
 
 mod launchers;

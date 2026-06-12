@@ -252,7 +252,7 @@ pub mod setting_ids {
 /// Interface IDs used with `nvapi_QueryInterface`.
 ///
 /// Sourced from the official NVIDIA nvapi repository:
-/// https://github.com/NVIDIA/nvapi/blob/main/nvapi_interface.h
+/// <https://github.com/NVIDIA/nvapi/blob/main/nvapi_interface.h>
 pub mod interface_ids {
     pub const INITIALIZE: u32 = 0x0150E828;
     pub const DRS_CREATE_SESSION: u32 = 0x0694D52E;
