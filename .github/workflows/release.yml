@@ -12,9 +12,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   # Gate the release on the same quality checks utilized in the CI pipeline, targeting the deployment platform.
   quality:
@@ -33,17 +30,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
@@ -120,6 +117,6 @@ jobs:
           Compress-Archive -Path RenderPilot -DestinationPath "RenderPilot-${{ steps.version.outputs.version }}-portable.zip"
 
       - name: Upload portable zip to release
-        run: gh release upload ${{ github.ref_name }} "RenderPilot-${{ steps.version.outputs.version }}-portable.zip"
+        run: gh release upload ${{ github.ref_name }} "RenderPilot-${{ steps.version.outputs.version }}-portable.zip" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
