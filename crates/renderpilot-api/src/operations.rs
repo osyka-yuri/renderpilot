@@ -11,9 +11,9 @@ pub fn apply_swap(
 ) -> JsonResult {
     let result = catalog::apply_swap(
         context,
-        parse_game_id(game_id.into())?,
-        parse_component_id(component_id.into())?,
-        parse_artifact_id(artifact_id.into())?,
+        &parse_game_id(game_id.into())?,
+        &parse_component_id(component_id.into())?,
+        &parse_artifact_id(artifact_id.into())?,
     )?;
 
     serde_json::to_value(result).map_err(Into::into)
@@ -27,8 +27,8 @@ pub fn rollback_component(
 ) -> JsonResult {
     let result = catalog::rollback_component(
         context,
-        parse_game_id(game_id.into())?,
-        parse_component_id(component_id.into())?,
+        &parse_game_id(game_id.into())?,
+        &parse_component_id(component_id.into())?,
     )?;
 
     serde_json::to_value(result).map_err(Into::into)

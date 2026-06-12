@@ -116,7 +116,7 @@ fn download_unvalidated_cover_once(client: &Client, url: &str) -> Result<Vec<u8>
     let response = client
         .get(url)
         .send()
-        .map_err(|error| AttemptError::Transient(cover_download_failed(error)))?;
+        .map_err(|error| AttemptError::Transient(cover_download_failed(&error)))?;
 
     classify_status(response.status())?;
     classify_declared_size(&response)?;
@@ -174,7 +174,7 @@ fn read_body_with_size_limit(response: Response) -> Result<Vec<u8>, AttemptError
     limited_response
         .read_to_end(&mut bytes)
         // Mid-body read failures usually mean a dropped connection; retry.
-        .map_err(|error| AttemptError::Transient(cover_download_failed(error)))?;
+        .map_err(|error| AttemptError::Transient(cover_download_failed(&error)))?;
 
     if bytes.len() > COVER_MAX_LEN {
         return Err(AttemptError::Permanent(cover_too_large()));
@@ -183,7 +183,7 @@ fn read_body_with_size_limit(response: Response) -> Result<Vec<u8>, AttemptError
     Ok(bytes)
 }
 
-fn cover_download_failed(error: impl ToString) -> ServiceError {
+fn cover_download_failed(error: &impl ToString) -> ServiceError {
     ServiceError::CoverDownloadFailed(error.to_string())
 }
 

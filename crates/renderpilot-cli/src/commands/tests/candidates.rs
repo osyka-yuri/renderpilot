@@ -24,7 +24,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -32,7 +32,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         Some(game_b.id().as_str()),
     ));
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
         GraphicsTechnology::DlssFrameGeneration,
         "C:/Games/GameB/nvngx_dlssg.dll",
@@ -85,7 +85,7 @@ fn candidates_offer_streamline_bundle_swap() {
             "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
         GraphicsTechnology::NvidiaStreamline,
         "C:/Games/GameB/sl.interposer.dll",

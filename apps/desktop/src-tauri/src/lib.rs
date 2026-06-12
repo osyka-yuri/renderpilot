@@ -354,6 +354,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
 }
 
 /// Reports a startup failure and terminates the process.
+// Diverging sink: consuming the error by value is the point.
+#[allow(clippy::needless_pass_by_value)]
 fn exit_with_startup_error(error: tauri::Error) -> ! {
     eprintln!("{APP_NAME}: failed to run desktop shell: {error}");
     std::process::exit(STARTUP_FAILURE_EXIT_CODE);

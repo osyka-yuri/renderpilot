@@ -93,7 +93,10 @@ fn delete_games(storage: &SqliteStorage, game_ids: Vec<GameId>) -> Result<(), Se
 
     for game_id in game_ids {
         let deleted = storage.delete_game(&game_id)?;
-        crate::covers::unlink_cover_file_best_effort(&catalog_path, deleted.old_cover_file_name);
+        crate::covers::unlink_cover_file_best_effort(
+            &catalog_path,
+            deleted.old_cover_file_name.as_deref(),
+        );
     }
 
     Ok(())

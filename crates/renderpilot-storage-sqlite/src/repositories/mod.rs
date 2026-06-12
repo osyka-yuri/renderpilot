@@ -26,7 +26,7 @@ pub struct SqliteStorage {
 }
 
 /// Atomic scan write payload stored as one transaction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ScanWriteUnit<'a> {
     /// Game installation row that anchors the write.
     pub game: &'a GameInstallation,
@@ -229,7 +229,7 @@ mod tests {
             .expect_err("invalid replacement should fail");
 
         assert_storage_failed(&error);
-        fixture.assert_components(game.id(), vec![existing_component]);
+        fixture.assert_components(game.id(), &[existing_component]);
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod tests {
             .expect_err("foreign-key violation should fail");
 
         assert_storage_failed(&error);
-        fixture.assert_operation_items(&operation.id, vec![existing_item]);
+        fixture.assert_operation_items(&operation.id, &[existing_item]);
     }
 
     #[test]
@@ -388,7 +388,7 @@ mod tests {
         }
 
         #[track_caller]
-        fn assert_components(&self, game_id: &GameId, expected: Vec<GraphicsComponent>) {
+        fn assert_components(&self, game_id: &GameId, expected: &[GraphicsComponent]) {
             assert_eq!(
                 self.storage
                     .list_components_for_game(game_id)
@@ -401,14 +401,14 @@ mod tests {
         fn assert_operation_items(
             &self,
             operation_id: &OperationId,
-            expected: Vec<OperationItemRecord>,
+            expected: &[OperationItemRecord],
         ) {
             let entry = self
                 .storage
                 .find_operation_entry(operation_id)
                 .expect("find_operation_entry should succeed")
                 .expect("operation should exist");
-            assert_eq!(entry.items(), expected.as_slice());
+            assert_eq!(entry.items(), expected);
         }
     }
 

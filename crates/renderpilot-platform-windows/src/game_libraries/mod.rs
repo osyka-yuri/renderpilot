@@ -369,7 +369,7 @@ mod tests {
 
         let sources = DiscoveredSources {
             game_installs: vec![game.clone()],
-            library_roots: vec![library_root.clone()],
+            library_roots: vec![library_root],
             ..DiscoveredSources::default()
         };
 

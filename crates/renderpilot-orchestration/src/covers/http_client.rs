@@ -43,9 +43,9 @@ pub(crate) fn http_client_with_config(config: HttpClientConfig) -> Result<Client
         .timeout(config.timeout)
         .user_agent(config.user_agent)
         .build()
-        .map_err(client_build_error)
+        .map_err(|error| client_build_error(&error))
 }
 
-fn client_build_error(error: reqwest::Error) -> ServiceError {
+fn client_build_error(error: &reqwest::Error) -> ServiceError {
     ServiceError::CoverDownloadFailed(format!("failed to build HTTP client: {error}"))
 }

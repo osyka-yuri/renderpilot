@@ -217,7 +217,7 @@ impl DomainRow for ComponentRow {
             mapping::graphics_technology(technology)?,
             mapping::swappability(swappability)?,
         );
-        let files = mapping::component_files(files_json)?;
+        let files = mapping::component_files(&files_json)?;
 
         Ok(files
             .into_iter()
@@ -264,7 +264,7 @@ impl DomainRow for ArtifactRow {
             trust_level,
         } = self;
 
-        let files = mapping::component_files(files_json)?;
+        let files = mapping::component_files(&files_json)?;
         let artifact = LibraryArtifact::new(
             mapping::artifact_id(id)?,
             mapping::graphics_technology(technology)?,

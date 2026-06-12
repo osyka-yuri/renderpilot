@@ -316,7 +316,7 @@ pub async fn set_game_executable_override(
     let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
     let context = Arc::clone(&context);
     run_desktop_command(move || {
-        desktop::set_game_executable_override(&context, game_id, absolute_path)
+        desktop::set_game_executable_override(&context, game_id, &absolute_path)
     })
     .await
 }
@@ -340,7 +340,7 @@ pub async fn get_nvapi_setting_state(
     let game_id = require_non_empty_string("game_id", game_id)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
     let context = Arc::clone(&context);
-    run_desktop_command(move || desktop::get_nvapi_setting_state(&context, game_id, setting_key))
+    run_desktop_command(move || desktop::get_nvapi_setting_state(&context, game_id, &setting_key))
         .await
 }
 
@@ -356,7 +356,7 @@ pub async fn set_nvapi_setting_value(
     let value = require_non_empty_string("value", value)?;
     let context = Arc::clone(&context);
     run_desktop_command(move || {
-        desktop::set_nvapi_setting_value(&context, game_id, setting_key, value)
+        desktop::set_nvapi_setting_value(&context, game_id, &setting_key, &value)
     })
     .await
 }
@@ -373,7 +373,7 @@ pub async fn revert_nvapi_setting(
     let target = require_non_empty_string("target", target)?;
     let context = Arc::clone(&context);
     run_desktop_command(move || {
-        desktop::revert_nvapi_setting(&context, game_id, setting_key, target)
+        desktop::revert_nvapi_setting(&context, game_id, &setting_key, &target)
     })
     .await
 }
@@ -396,6 +396,8 @@ pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
 
 /// Returns the `AppInitializationState` snapshot computed at startup.
 /// Synchronous: the state is already in managed memory, no I/O.
+// `tauri::command` requires `State` parameters by value.
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub fn get_app_initialization_state(
     state: tauri::State<'_, crate::AppInitializationState>,

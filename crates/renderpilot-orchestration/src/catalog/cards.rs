@@ -55,7 +55,7 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
     games
         .into_iter()
         .map(|game| {
-            let details = get_game_details_with_universe(context, game.id().clone(), &universe)?;
+            let details = get_game_details_with_universe(context, game.id(), &universe)?;
             let cover_updated_at_ms = covers_by_game
                 .get(game.id())
                 .map(|record| record.updated_at_ms);

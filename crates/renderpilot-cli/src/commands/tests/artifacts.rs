@@ -6,7 +6,7 @@ use super::{args, temp_db_path, CatalogEnvironmentGuard, TempGameFolder};
 
 #[test]
 fn list_artifacts_groups_artifacts_from_multiple_scans() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("list-artifacts-multi"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("list-artifacts-multi"));
     let dlss_folder = TempGameFolder::new("cli-artifacts-dlss");
     let xess_folder = TempGameFolder::new("cli-artifacts-xess");
 
@@ -41,7 +41,7 @@ fn list_artifacts_groups_artifacts_from_multiple_scans() {
 
 #[test]
 fn list_artifacts_filters_by_technology() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("list-artifacts-filter"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("list-artifacts-filter"));
     let dlss_folder = TempGameFolder::new("cli-filter-dlss");
     let fg_folder = TempGameFolder::new("cli-filter-fg");
 
@@ -86,7 +86,7 @@ fn list_artifacts_filters_by_technology() {
 
 #[test]
 fn scan_folder_deduplicates_identical_sha256_across_games() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-dedup"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-dedup"));
     let first_folder = TempGameFolder::new("cli-dedup-first");
     let second_folder = TempGameFolder::new("cli-dedup-second");
 

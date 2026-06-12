@@ -76,10 +76,10 @@ pub fn list_game_executable_candidates(
 pub fn set_game_executable_override(
     context: &renderpilot_orchestration::Context,
     game_id: String,
-    absolute_path: String,
+    absolute_path: &str,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
-    set_executable_override(context, game_id.as_str(), &absolute_path)?;
+    set_executable_override(context, game_id.as_str(), absolute_path)?;
     to_json(serde_json::json!({"ok": true}))
 }
 
@@ -97,9 +97,9 @@ pub fn clear_game_executable_override(
 pub fn get_nvapi_setting_state(
     context: &renderpilot_orchestration::Context,
     game_id: String,
-    setting_key: String,
+    setting_key: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(&setting_key).ok_or_else(|| {
+    let setting = lookup_setting(setting_key).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
             "unknown nvapi setting: {setting_key}"
         )))
@@ -116,10 +116,10 @@ pub fn get_nvapi_setting_state(
 pub fn set_nvapi_setting_value(
     context: &renderpilot_orchestration::Context,
     game_id: String,
-    setting_key: String,
-    value: String,
+    setting_key: &str,
+    value: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(&setting_key).ok_or_else(|| {
+    let setting = lookup_setting(setting_key).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
             "unknown nvapi setting: {setting_key}"
         )))
@@ -129,7 +129,7 @@ pub fn set_nvapi_setting_value(
     let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
     let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
 
-    let dword = setting.parse_wire(&value).ok_or_else(|| {
+    let dword = setting.parse_wire(value).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
             "invalid value `{value}` for {}",
             setting.key()
@@ -152,10 +152,10 @@ pub fn set_nvapi_setting_value(
 pub fn revert_nvapi_setting(
     context: &renderpilot_orchestration::Context,
     game_id: String,
-    setting_key: String,
-    target: String,
+    setting_key: &str,
+    target: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(&setting_key).ok_or_else(|| {
+    let setting = lookup_setting(setting_key).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
             "unknown nvapi setting: {setting_key}"
         )))
@@ -165,7 +165,7 @@ pub fn revert_nvapi_setting(
     let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
     let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
 
-    let op = resolve_revert_op(context, game_id.as_str(), setting.as_ref(), &target)?;
+    let op = resolve_revert_op(context, game_id.as_str(), setting.as_ref(), target)?;
 
     write_setting_value(context, game_id.as_str(), setting.as_ref(), &ctx, op)?;
     let response = read_setting_state(context, game_id.as_str(), setting.as_ref(), &ctx)?;

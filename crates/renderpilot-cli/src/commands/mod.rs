@@ -37,24 +37,24 @@ fn render_stateful_command(command: Command) -> CliOutput {
     match command {
         Command::ScanFolder { path } => scan_folder(&context, path),
         Command::ListArtifacts { technology } => list_artifacts(&context, technology),
-        Command::ListOperations { game_id } => list_operations(&context, game_id),
-        Command::Candidates { game_id } => candidates(&context, game_id),
+        Command::ListOperations { game_id } => list_operations(&context, &game_id),
+        Command::Candidates { game_id } => candidates(&context, &game_id),
 
         Command::PlanSwap {
             game_id,
             component_id,
             artifact_id,
-        } => plan_swap(&context, game_id, component_id, artifact_id),
+        } => plan_swap(&context, &game_id, &component_id, &artifact_id),
 
         Command::ApplyOperation {
             game_id,
             component_id,
             artifact_id,
-        } => apply_swap(&context, game_id, component_id, artifact_id),
+        } => apply_swap(&context, &game_id, &component_id, &artifact_id),
         Command::RollbackOperation {
             game_id,
             component_id,
-        } => rollback_component(&context, game_id, component_id),
+        } => rollback_component(&context, &game_id, &component_id),
 
         _ => unreachable!("stateless commands are handled in render_command"),
     }
@@ -123,34 +123,34 @@ fn list_artifacts(
     render_output(render_list_artifacts_output(artifacts))
 }
 
-fn list_operations(context: &renderpilot_orchestration::Context, game_id: GameId) -> CliOutput {
-    let result = catalog::list_operations(context, &game_id)?;
+fn list_operations(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    let result = catalog::list_operations(context, game_id)?;
 
     render_output(render_list_operations_output(&result))
 }
 
-fn candidates(context: &renderpilot_orchestration::Context, game_id: GameId) -> CliOutput {
-    let result = catalog::find_candidates(context, &game_id)?;
+fn candidates(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    let result = catalog::find_candidates(context, game_id)?;
 
     render_output(render_candidates_output(&result.game_id, result.groups))
 }
 
 fn plan_swap(
     context: &renderpilot_orchestration::Context,
-    game_id: GameId,
-    component_id: ComponentId,
-    artifact_id: ArtifactId,
+    game_id: &GameId,
+    component_id: &ComponentId,
+    artifact_id: &ArtifactId,
 ) -> CliOutput {
-    let plan = catalog::build_swap_plan(context, &game_id, &component_id, &artifact_id)?;
+    let plan = catalog::build_swap_plan(context, game_id, component_id, artifact_id)?;
 
     render_output(render_plan_swap_output(&plan.plan))
 }
 
 fn apply_swap(
     context: &renderpilot_orchestration::Context,
-    game_id: GameId,
-    component_id: ComponentId,
-    artifact_id: ArtifactId,
+    game_id: &GameId,
+    component_id: &ComponentId,
+    artifact_id: &ArtifactId,
 ) -> CliOutput {
     let result = catalog::apply_swap(context, game_id, component_id, artifact_id)?;
 
@@ -159,8 +159,8 @@ fn apply_swap(
 
 fn rollback_component(
     context: &renderpilot_orchestration::Context,
-    game_id: GameId,
-    component_id: ComponentId,
+    game_id: &GameId,
+    component_id: &ComponentId,
 ) -> CliOutput {
     let result = catalog::rollback_component(context, game_id, component_id)?;
 

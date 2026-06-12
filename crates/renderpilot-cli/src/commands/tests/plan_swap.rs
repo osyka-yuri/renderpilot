@@ -23,7 +23,7 @@ fn plan_swap_renders_operation_plan_json() {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         "D:/Library/nvngx_dlss.dll",
@@ -85,7 +85,7 @@ fn plan_swap_blocks_invalid_artifact() {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
         GraphicsTechnology::DlssFrameGeneration,
         "D:/Library/nvngx_dlssg.dll",
@@ -128,7 +128,7 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
         GraphicsTechnology::NvidiaStreamline,
         "D:/Library/sl.interposer.dll",

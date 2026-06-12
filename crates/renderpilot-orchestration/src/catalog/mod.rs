@@ -149,12 +149,12 @@ pub(crate) fn load_replacement_universe(
 /// responsibility via [`load_replacement_universe`].
 pub(crate) fn get_game_details_with_universe(
     context: &crate::Context,
-    game_id: GameId,
+    game_id: &GameId,
     universe: &ReplacementUniverse,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let storage = context.storage();
-    let game = require_game(storage, &game_id)?;
-    let components = storage.list_components_for_game(&game_id)?;
+    let game = require_game(storage, game_id)?;
+    let components = storage.list_components_for_game(game_id)?;
 
     let candidate_groups = find_replacement_candidates(
         &components,
@@ -162,7 +162,7 @@ pub(crate) fn get_game_details_with_universe(
         &universe.candidate_context,
     );
 
-    let operations = list_operations(context, &game_id)?;
+    let operations = list_operations(context, game_id)?;
 
     Ok(GameDetailsCatalogResult {
         game,
@@ -175,7 +175,7 @@ pub(crate) fn get_game_details_with_universe(
 /// Returns full game details including components, candidates, and operations.
 pub fn get_game_details(
     context: &crate::Context,
-    game_id: GameId,
+    game_id: &GameId,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let universe = load_replacement_universe(context)?;
     get_game_details_with_universe(context, game_id, &universe)

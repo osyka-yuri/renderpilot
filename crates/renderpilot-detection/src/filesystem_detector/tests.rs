@@ -27,7 +27,7 @@ const FIXTURE_NEWLINE_FILE_SHA256: &str =
 #[test]
 fn fixture_detects_known_graphics_libraries() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -58,7 +58,7 @@ fn fixture_detects_known_graphics_libraries() {
 #[test]
 fn fixture_does_not_detect_garbage_dlls() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -74,7 +74,7 @@ fn fixture_does_not_detect_garbage_dlls() {
 #[test]
 fn fixture_does_not_scan_system_directories() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -89,7 +89,7 @@ fn detector_respects_max_recursion_depth() {
     let detector = LibraryPatternComponentDetector::windows_default()
         .expect("valid patterns")
         .with_max_depth(1);
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -107,7 +107,7 @@ fn detector_respects_max_recursion_depth() {
 #[test]
 fn streamline_is_bundle_only() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -122,7 +122,7 @@ fn streamline_is_bundle_only() {
 #[test]
 fn detected_files_include_hash_unknown_version_status_and_cache_key() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let libraries = detector
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
@@ -145,7 +145,7 @@ fn detected_files_include_hash_unknown_version_status_and_cache_key() {
 #[test]
 fn component_detector_trait_maps_detected_files_to_domain_components() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let components = detector
         .detect_components(&game)
         .expect("component detection should succeed");
@@ -171,7 +171,7 @@ fn assert_detects(
     );
 }
 
-fn game_installation(folder: PathBuf) -> GameInstallation {
+fn game_installation(folder: &Path) -> GameInstallation {
     let install_path = PathRef::new(folder.to_string_lossy().as_ref()).expect("valid path");
     let identity = GameIdentity::new(
         GameId::new(format!("manual:{}", install_path.as_str())).expect("valid id"),
@@ -218,7 +218,7 @@ fn file_hash_cache_from_libraries(libraries: &[DetectedLibraryFile]) -> FileHash
 #[test]
 fn cache_hit_avoids_sha256_when_size_and_mtime_match() {
     let folder = temp_dlss_folder(b"hello");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     reset_sha256_file_call_count_for_tests();
@@ -252,7 +252,7 @@ fn cache_hit_avoids_sha256_when_size_and_mtime_match() {
 #[test]
 fn fast_cached_detection_report_contains_detectable_count() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
-    let game = game_installation(fixture_path());
+    let game = game_installation(&fixture_path());
     let full_libraries = detector
         .detect_library_files(&game)
         .expect("full detection should succeed");
@@ -274,7 +274,7 @@ fn fast_cached_detection_report_contains_detectable_count() {
 #[test]
 fn stale_cache_entry_triggers_fresh_sha256_after_file_change() {
     let folder = temp_dlss_folder(b"a");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     let libraries = detector
@@ -304,7 +304,7 @@ fn stale_cache_entry_triggers_fresh_sha256_after_file_change() {
 #[test]
 fn fast_cached_scan_can_be_partial_when_new_dlls_are_added_after_cache_warmup() {
     let folder = temp_dlss_folder(b"intel");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::rename(folder.join(TEMP_DLSS_NAME), folder.join("libxess.dll"))
@@ -345,7 +345,7 @@ fn fast_cached_scan_can_be_partial_when_new_dlls_are_added_after_cache_warmup() 
 #[test]
 fn detector_scans_intel_xell_runtime_files_from_disk() {
     let folder = temp_dlss_folder(b"intel-xell");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::rename(folder.join(TEMP_DLSS_NAME), folder.join("libxell.dll"))
@@ -368,7 +368,7 @@ fn detector_scans_intel_xell_runtime_files_from_disk() {
 #[test]
 fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
     let folder = temp_dlss_folder(b"amd-native-fsr4");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::remove_file(folder.join(TEMP_DLSS_NAME)).expect("temporary dlss file should be removed");
@@ -455,7 +455,7 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
 #[test]
 fn detector_keeps_dx12_lineage_fsr_cohesive() {
     let folder = temp_dlss_folder(b"amd-dx12-lineage");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::remove_file(folder.join(TEMP_DLSS_NAME)).expect("temporary dlss file should be removed");
@@ -505,7 +505,7 @@ fn detector_keeps_dx12_lineage_fsr_cohesive() {
 #[test]
 fn detector_keeps_unified_fsr31_as_one_component() {
     let folder = temp_dlss_folder(b"amd-fsr31");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::rename(
@@ -538,7 +538,7 @@ fn detector_keeps_unified_fsr31_as_one_component() {
 #[test]
 fn detector_scans_amd_radiance_cache_runtime_file_from_disk() {
     let folder = temp_dlss_folder(b"amd-radiance-cache");
-    let game = game_installation(folder.clone());
+    let game = game_installation(&folder);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
 
     fs::rename(
@@ -573,7 +573,7 @@ fn default_detector_depth_finds_deeply_nested_nvidia_runtime_dlls() {
     fs::create_dir_all(&nested).expect("nested runtime path should be created");
     fs::write(nested.join("nvngx_dlss.dll"), b"deep-nvidia").expect("deep nvidia dll");
 
-    let game = game_installation(root);
+    let game = game_installation(&root);
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
     let libraries = detector
         .detect_library_files(&game)

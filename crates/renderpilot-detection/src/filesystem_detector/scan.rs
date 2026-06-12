@@ -103,18 +103,22 @@ impl<F: FileNameFilter> FileCollector<F> {
         }
 
         for entry_result in read_dir_entries(path)? {
-            self.visit_child_entry(entry_result?, dir_depth)?;
+            self.visit_child_entry(&entry_result?, dir_depth)?;
         }
 
         Ok(())
     }
 
     /// `parent_dir_depth` is the depth of the directory whose children we are visiting.
-    fn visit_child_entry(&mut self, entry: fs::DirEntry, parent_dir_depth: usize) -> AppResult<()> {
+    fn visit_child_entry(
+        &mut self,
+        entry: &fs::DirEntry,
+        parent_dir_depth: usize,
+    ) -> AppResult<()> {
         let path = entry.path();
         let child_depth = parent_dir_depth + 1;
 
-        let Some(file_type) = read_entry_file_type_tolerant(&entry, &path)? else {
+        let Some(file_type) = read_entry_file_type_tolerant(entry, &path)? else {
             return Ok(());
         };
 

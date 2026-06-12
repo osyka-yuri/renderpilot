@@ -83,8 +83,8 @@ enum_parser!(graphics_technology, GraphicsTechnology);
 enum_parser!(artifact_trust_level, ArtifactTrustLevel);
 enum_parser!(swappability, Swappability);
 
-pub(crate) fn component_files(value: String) -> AppResult<Vec<ComponentFile>> {
-    deserialize_json(&value)
+pub(crate) fn component_files(value: &str) -> AppResult<Vec<ComponentFile>> {
+    deserialize_json(value)
 }
 
 #[cfg(test)]

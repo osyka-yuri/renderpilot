@@ -14,7 +14,8 @@ pub fn fetch_game_cover(
     game_id: String,
 ) -> JsonResult {
     let parsed_game_id = utils::parse_game_id(game_id)?;
-    let output = renderpilot_orchestration::covers::fetch_game_cover_auto(context, parsed_game_id)?;
+    let output =
+        renderpilot_orchestration::covers::fetch_game_cover_auto(context, &parsed_game_id)?;
 
     to_json(output)
 }
@@ -26,7 +27,7 @@ pub fn clear_game_cover(
 ) -> JsonResult {
     let parsed_game_id = utils::parse_game_id(game_id)?;
 
-    renderpilot_orchestration::covers::clear_game_cover(context, parsed_game_id)?;
+    renderpilot_orchestration::covers::clear_game_cover(context, &parsed_game_id)?;
 
     to_json(json!({ "cleared": true }))
 }
@@ -42,8 +43,8 @@ pub fn set_game_cover(
 
     let output = renderpilot_orchestration::covers::set_game_cover_from_file(
         context,
-        parsed_game_id,
-        source_path,
+        &parsed_game_id,
+        &source_path,
     )?;
 
     to_json(output)

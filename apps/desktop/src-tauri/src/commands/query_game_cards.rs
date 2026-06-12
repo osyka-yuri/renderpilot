@@ -120,7 +120,7 @@ pub(crate) struct QueryGameCardsArgs {
 
 impl QueryGameCardsDto {
     pub(super) fn into_desktop_args(self) -> Result<QueryGameCardsArgs, CommandError> {
-        let search_query = trim_string(self.search_query);
+        let search_query = trim_string(&self.search_query);
         let selected_libraries = trim_string_vec(self.selected_libraries);
         let selected_launchers = trim_string_vec(self.selected_launchers);
 

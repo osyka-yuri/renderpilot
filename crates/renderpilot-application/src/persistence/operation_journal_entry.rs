@@ -42,7 +42,7 @@ impl OperationJournalEntry {
     /// Returns a new entry with the same header/items moved to one shared state.
     pub fn with_state(
         &self,
-        status: OperationStatus,
+        status: &OperationStatus,
         completed_at: Option<UnixTimestampMillis>,
     ) -> AppResult<Self> {
         let operation = self
@@ -274,7 +274,7 @@ mod tests {
 
         let completed_at = UnixTimestampMillis::new(42).expect("timestamp");
         let updated = entry
-            .with_state(OperationStatus::Completed, Some(completed_at))
+            .with_state(&OperationStatus::Completed, Some(completed_at))
             .expect("updated entry");
 
         assert_eq!(updated.operation().status, OperationStatus::Completed);

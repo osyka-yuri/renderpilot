@@ -87,10 +87,10 @@ pub fn gc_orphan_cover_files_startup(context: &crate::Context) {
 /// Downloads cover artwork using the configured provider chain, then stores it for the game.
 pub fn fetch_game_cover_auto(
     context: &crate::Context,
-    game_id: GameId,
+    game_id: &GameId,
 ) -> Result<CoverMutationOutput, ServiceError> {
     let catalog = CoverCatalog::new(context)?;
-    let game = catalog.require_game(&game_id)?;
+    let game = catalog.require_game(game_id)?;
 
     let client = http_client()?;
 
@@ -109,28 +109,28 @@ pub fn fetch_game_cover_auto(
 /// Copies a user-selected image into the catalog cover store after validation.
 pub fn set_game_cover_from_file(
     context: &crate::Context,
-    game_id: GameId,
-    source: PathBuf,
+    game_id: &GameId,
+    source: &Path,
 ) -> Result<CoverMutationOutput, ServiceError> {
     let catalog = CoverCatalog::new(context)?;
-    let game = catalog.require_game(&game_id)?;
+    let game = catalog.require_game(game_id)?;
 
-    let bytes = read_cover_source_file(&source)?;
+    let bytes = read_cover_source_file(source)?;
 
     catalog.install_cover(&game, &bytes)
 }
 
 /// Removes stored cover metadata and deletes the associated cover file from disk.
-pub fn clear_game_cover(context: &crate::Context, game_id: GameId) -> Result<(), ServiceError> {
+pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<(), ServiceError> {
     let catalog = CoverCatalog::new(context)?;
-    catalog.require_game(&game_id)?;
+    catalog.require_game(game_id)?;
 
-    let existing = catalog.sqlite.find_game_cover(&game_id)?;
+    let existing = catalog.sqlite.find_game_cover(game_id)?;
 
-    catalog.sqlite.clear_game_cover_row(&game_id)?;
+    catalog.sqlite.clear_game_cover_row(game_id)?;
 
     if let Some(record) = existing {
-        unlink_cover_file_best_effort(&catalog.catalog_path, Some(record.file_name));
+        unlink_cover_file_best_effort(&catalog.catalog_path, Some(record.file_name.as_str()));
     }
 
     catalog.gc_orphans()?;

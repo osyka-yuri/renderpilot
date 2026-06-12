@@ -11,7 +11,7 @@ pub fn scan_auto_libraries(context: &renderpilot_orchestration::Context) -> Json
     let games = result
         .games
         .into_iter()
-        .map(|game_id| GameDetailsOutput::load(context, game_id))
+        .map(|game_id| GameDetailsOutput::load(context, &game_id))
         .collect::<Result<Vec<_>, _>>()?;
 
     let output = AutoScanOutput {
@@ -65,7 +65,7 @@ pub fn scan_manual_folder(
 ) -> JsonResult {
     let games = catalog::scan_folder(context, path)?
         .into_iter()
-        .map(|result| GameDetailsOutput::load(context, result.game.id().clone()))
+        .map(|result| GameDetailsOutput::load(context, result.game.id()))
         .collect::<Result<Vec<_>, _>>()?;
 
     to_json(GamesOutput { games })

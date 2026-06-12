@@ -87,6 +87,7 @@ pub(super) fn scan_folder_impl(
 }
 
 /// Borrowed storage + detector for one [`scan_impl`] invocation.
+#[derive(Clone, Copy)]
 pub(super) struct ScanInputs<'a> {
     pub(super) storage: &'a SqliteStorage,
     pub(super) detector: &'a LibraryPatternComponentDetector,
@@ -293,7 +294,10 @@ fn delete_stale_parent_game_if_needed(
     if !selected_game_is_current {
         let catalog_path = crate::storage::catalog_database_path()?;
         let deleted = storage.delete_game(selected_game.id())?;
-        crate::covers::unlink_cover_file_best_effort(&catalog_path, deleted.old_cover_file_name);
+        crate::covers::unlink_cover_file_best_effort(
+            &catalog_path,
+            deleted.old_cover_file_name.as_deref(),
+        );
     }
 
     Ok(())

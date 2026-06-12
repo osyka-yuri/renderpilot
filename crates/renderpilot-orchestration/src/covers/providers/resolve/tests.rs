@@ -212,7 +212,7 @@ fn resolve_with_backend(
     resolve_cover_bytes_with_backend(&client, api_key, policy, request, backend)
 }
 
-fn assert_cover_not_found(result: Result<Vec<u8>, ServiceError>) {
+fn assert_cover_not_found(result: &Result<Vec<u8>, ServiceError>) {
     assert!(
         matches!(result, Err(ServiceError::CoverNotFound)),
         "expected CoverNotFound"
@@ -242,7 +242,7 @@ fn steam_without_external_id_returns_cover_not_found_before_any_remote_call() {
         request(RemoteCoverLauncher::Steam, None, "Portal"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(backend.calls(), vec![]);
 }
 
@@ -300,7 +300,7 @@ fn steam_returns_cover_not_found_after_cdn_miss_when_grid_disabled() {
         request(RemoteCoverLauncher::Steam, Some("480"), "Portal"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::SteamCdn {
@@ -322,7 +322,7 @@ fn steam_returns_cover_not_found_after_cdn_miss_when_grid_enabled_but_key_absent
 
     // Missing key === grid effectively disabled: no `Call::GridSlug`,
     // no `SteamGridDbApiKeyMissing` warning surfaced to the UI.
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::SteamCdn {
@@ -342,7 +342,7 @@ fn steam_treats_blank_grid_key_as_cover_not_found_after_cdn_miss() {
         request(RemoteCoverLauncher::Steam, Some("480"), "Portal"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::SteamCdn {
@@ -392,7 +392,7 @@ fn steam_propagates_grid_cover_not_found_after_cdn_miss() {
         request(RemoteCoverLauncher::Steam, Some("480"), "Portal"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![
@@ -418,7 +418,7 @@ fn gog_without_external_id_returns_cover_not_found_before_any_remote_call() {
         request(RemoteCoverLauncher::Gog, None, "Cyberpunk 2077"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(backend.calls(), vec![]);
 }
 
@@ -489,7 +489,7 @@ fn gog_returns_cover_not_found_after_cdn_miss_when_grid_disabled() {
         ),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::GogCdn {
@@ -515,7 +515,7 @@ fn gog_returns_cover_not_found_after_cdn_miss_when_grid_enabled_but_key_absent()
 
     // Missing key === grid effectively disabled. See the matching Steam
     // test above for rationale.
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::GogCdn {
@@ -574,7 +574,7 @@ fn gog_propagates_grid_cover_not_found_after_cdn_miss() {
         ),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![
@@ -601,7 +601,7 @@ fn other_returns_cover_not_found_when_grid_disabled_and_does_not_require_key() {
         request(RemoteCoverLauncher::Other, None, "Unknown Game"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(backend.calls(), vec![]);
 }
 
@@ -618,7 +618,7 @@ fn other_returns_cover_not_found_when_grid_enabled_but_key_absent() {
 
     // No CDN fallback exists for `Other` launchers, so a missing grid key
     // resolves to `CoverNotFound` immediately, with zero backend calls.
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(backend.calls(), vec![]);
 }
 
@@ -677,7 +677,7 @@ fn other_propagates_grid_cover_not_found() {
         request(RemoteCoverLauncher::Other, None, "Unknown Game"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::GridAutocomplete {
@@ -749,7 +749,7 @@ fn grid_disabled_means_no_grid_call_even_when_key_is_present() {
         request(RemoteCoverLauncher::Steam, Some("480"), "Portal"),
     );
 
-    assert_cover_not_found(result);
+    assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
         vec![Call::SteamCdn {

@@ -41,7 +41,7 @@ pub fn build_swap_plan(
     let storage = context.storage();
     let (component, artifact) = require_swap_inputs(storage, game_id, component_id, artifact_id)?;
 
-    let component_for_plan = component_with_backup_original(&component);
+    let component_for_plan = component_with_backup_original(component);
 
     let plan = build_swap_operation_plan(&component_for_plan, &artifact)?;
 
@@ -115,19 +115,19 @@ pub(super) fn find_required<T>(
 /// If a `.bak` sidecar exists for the component's target file, treat the
 /// backup as the true original and use its version / SHA-256 for the swap
 /// plan.  This keeps the original metadata stable across multiple swaps.
-fn component_with_backup_original(component: &GraphicsComponent) -> GraphicsComponent {
+fn component_with_backup_original(component: GraphicsComponent) -> GraphicsComponent {
     let Some(target_file) = component.files().first() else {
-        return component.clone();
+        return component;
     };
 
     let backup_path = std::path::PathBuf::from(target_file.path().as_str().to_owned() + ".bak");
     if !backup_path.exists() {
-        return component.clone();
+        return component;
     }
 
     let sha256 = match renderpilot_detection::sha256_file(&backup_path) {
         Ok(hash) => hash,
-        Err(_) => return component.clone(),
+        Err(_) => return component,
     };
     let version = renderpilot_detection::read_windows_file_version(&backup_path);
 

@@ -135,7 +135,7 @@ pub struct SettingStateResponse {
 }
 
 /// Strongly typed warning code for UI localization and categorization.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum NvapiWarningDto {
     /// No DLSS DLL detected in the install directory.

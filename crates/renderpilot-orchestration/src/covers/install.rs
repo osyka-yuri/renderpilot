@@ -144,7 +144,7 @@ impl CoverInstallPaths {
         let covers_dir = covers_directory(catalog_db_path);
 
         fs::create_dir_all(&covers_dir).map_err(|error| {
-            cover_io_error("could not create covers directory", &covers_dir, error)
+            cover_io_error("could not create covers directory", &covers_dir, &error)
         })?;
 
         let title_fragment = safe_title_fragment(display_title);
@@ -168,7 +168,7 @@ fn install_cover_file(bytes: &[u8], paths: &CoverInstallPaths) -> Result<(), Ser
     write_temp_file_durably(&paths.temp_path, bytes)?;
 
     fs::rename(&paths.temp_path, &paths.final_path).map_err(|error| {
-        cover_io_error("could not finalize cover file", &paths.final_path, error)
+        cover_io_error("could not finalize cover file", &paths.final_path, &error)
     })?;
 
     temp_cleanup.disarm();
@@ -183,13 +183,13 @@ fn write_temp_file_durably(path: &Path, bytes: &[u8]) -> Result<(), ServiceError
         .write(true)
         .create_new(true)
         .open(path)
-        .map_err(|error| cover_io_error("could not create temporary cover file", path, error))?;
+        .map_err(|error| cover_io_error("could not create temporary cover file", path, &error))?;
 
     file.write_all(bytes)
-        .map_err(|error| cover_io_error("could not write temporary cover file", path, error))?;
+        .map_err(|error| cover_io_error("could not write temporary cover file", path, &error))?;
 
     file.sync_all()
-        .map_err(|error| cover_io_error("could not sync temporary cover file", path, error))?;
+        .map_err(|error| cover_io_error("could not sync temporary cover file", path, &error))?;
 
     Ok(())
 }
@@ -271,7 +271,7 @@ fn remove_file_best_effort(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
-fn cover_io_error(action: &str, path: &Path, error: std::io::Error) -> ServiceError {
+fn cover_io_error(action: &str, path: &Path, error: &std::io::Error) -> ServiceError {
     ServiceError::CoverIo(format!("{action} '{}': {error}", path.display()))
 }
 

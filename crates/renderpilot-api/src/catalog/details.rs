@@ -19,7 +19,7 @@ pub fn get_game_details(
     game_id: impl Into<String>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id.into())?;
-    to_json(GameDetailsOutput::load(context, game_id)?)
+    to_json(GameDetailsOutput::load(context, &game_id)?)
 }
 
 #[derive(Debug, Serialize)]
@@ -40,9 +40,9 @@ pub(crate) struct GameDetailsOutput {
 impl GameDetailsOutput {
     pub(crate) fn load(
         context: &renderpilot_orchestration::Context,
-        game_id: GameId,
+        game_id: &GameId,
     ) -> Result<Self, ApiError> {
-        let backup_ids = orch_catalog::backup_component_ids(context, &game_id)?;
+        let backup_ids = orch_catalog::backup_component_ids(context, game_id)?;
         let details = orch_catalog::get_game_details(context, game_id)?;
         let visible_components = filter_visible_components(details.components);
         let visible_component_ids = visible_component_ids(&visible_components);

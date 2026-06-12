@@ -232,13 +232,13 @@ pub(crate) struct DetectedFileMetadata {
 
 impl DetectedFileMetadata {
     fn from_parts(
-        path_ref: PathRef,
+        path_ref: &PathRef,
         stat: FileStat,
         sha256: Sha256Hash,
         version: Option<Version>,
     ) -> Self {
         let status = VersionDetectionStatus::from_version(version.as_ref());
-        let cache_key = stat.into_cache_key(path_ref, sha256.clone());
+        let cache_key = stat.into_cache_key(path_ref.clone(), sha256.clone());
 
         Self {
             version,
@@ -248,7 +248,7 @@ impl DetectedFileMetadata {
         }
     }
 
-    fn from_cached(path_ref: PathRef, stat: FileStat, cached: &CachedFileData) -> Self {
+    fn from_cached(path_ref: &PathRef, stat: FileStat, cached: &CachedFileData) -> Self {
         Self::from_parts(
             path_ref,
             stat,
@@ -264,14 +264,14 @@ impl DetectedFileMetadata {
 /// and this read, or a stale hash-cache entry). Other I/O errors propagate.
 pub(crate) fn try_read_detected_file_metadata(
     path: &Path,
-    path_ref: PathRef,
+    path_ref: &PathRef,
     hash_cache: Option<&FileHashCache>,
 ) -> AppResult<Option<DetectedFileMetadata>> {
     let Some(stat) = FileStat::try_read(path)? else {
         return Ok(None);
     };
 
-    if let Some(metadata) = try_read_cached_metadata(path_ref.clone(), stat, hash_cache) {
+    if let Some(metadata) = try_read_cached_metadata(path_ref, stat, hash_cache) {
         return Ok(Some(metadata));
     }
 
@@ -279,7 +279,7 @@ pub(crate) fn try_read_detected_file_metadata(
 }
 
 fn try_read_cached_metadata(
-    path_ref: PathRef,
+    path_ref: &PathRef,
     stat: FileStat,
     hash_cache: Option<&FileHashCache>,
 ) -> Option<DetectedFileMetadata> {
@@ -290,7 +290,7 @@ fn try_read_cached_metadata(
 
 fn read_uncached_metadata(
     path: &Path,
-    path_ref: PathRef,
+    path_ref: &PathRef,
     stat: FileStat,
 ) -> AppResult<DetectedFileMetadata> {
     let sha256 = sha256_file(path)?;

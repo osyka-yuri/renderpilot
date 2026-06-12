@@ -211,12 +211,12 @@ fn record_operation_journal_entry(storage: &SqliteStorage, params: JournalEntryP
 /// Installs an artifact package over a component as an **additive overlay**.
 pub fn apply_swap(
     context: &crate::Context,
-    game_id: GameId,
-    component_id: ComponentId,
-    artifact_id: ArtifactId,
+    game_id: &GameId,
+    component_id: &ComponentId,
+    artifact_id: &ArtifactId,
 ) -> Result<SwapResult, ServiceError> {
     let storage = context.storage();
-    let prepared = prepare_apply_swap(storage, &game_id, &component_id, &artifact_id)?;
+    let prepared = prepare_apply_swap(storage, game_id, component_id, artifact_id)?;
 
     let changes = perform_apply_fs(
         &prepared.component,
@@ -270,14 +270,14 @@ pub fn apply_swap(
 /// Rolls a component back to its recorded baseline.
 pub fn rollback_component(
     context: &crate::Context,
-    game_id: GameId,
-    component_id: ComponentId,
+    game_id: &GameId,
+    component_id: &ComponentId,
 ) -> Result<RollbackResult, ServiceError> {
     let storage = context.storage();
-    require_game(storage, &game_id)?;
-    let component = require_component_for_game(storage, &game_id, &component_id)?;
+    require_game(storage, game_id)?;
+    let component = require_component_for_game(storage, game_id, component_id)?;
 
-    let Some(baseline) = storage.get_component_backup(&component_id)? else {
+    let Some(baseline) = storage.get_component_backup(component_id)? else {
         return Err(AppError::invalid_input(format!(
             "no swap to roll back for component {}",
             component_id.as_str()
@@ -293,17 +293,17 @@ pub fn rollback_component(
     let mut restored_files = baseline.clone();
     fsr::sort_representative_first(&mut restored_files);
     let rebuilt = rebuild_component(&component, restored_files);
-    let next_components = full_component_set(storage, &game_id, rebuilt)?;
+    let next_components = full_component_set(storage, game_id, rebuilt)?;
 
     revert_to_baseline_fs(component.files(), &baseline)?;
 
-    storage.commit_bundle_rollback(&game_id, &next_components, &component_id)?;
+    storage.commit_bundle_rollback(game_id, &next_components, component_id)?;
 
     record_operation_journal_entry(
         storage,
         JournalEntryParams {
-            game_id: &game_id,
-            component_id: &component_id,
+            game_id,
+            component_id,
             kind: renderpilot_application::OperationKind::RollbackComponent,
             component: &component,
             to_version: fsr::version_representative(&baseline)

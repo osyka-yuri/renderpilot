@@ -71,18 +71,18 @@ pub fn scan_auto_libraries(context: &crate::Context) -> AutoScanDiscoveryResult 
         &library_root_keys,
         &install_path_keys,
     ) {
-        scan.push_global_error(GlobalErrorLabel::Prune, error);
+        scan.push_global_error(GlobalErrorLabel::Prune, &error);
     }
 
     let batch = match open_auto_scan_batch() {
         Ok(batch) => batch,
         Err(error) => {
-            scan.push_global_error(GlobalErrorLabel::OpenBatch, error);
+            scan.push_global_error(GlobalErrorLabel::OpenBatch, &error);
             return scan.into_output();
         }
     };
 
-    let outcome = scan_install_paths_in_parallel(&batch, install_paths);
+    let outcome = scan_install_paths_in_parallel(&batch, &install_paths);
     scan.merge(outcome);
 
     scan.into_output()
@@ -119,7 +119,7 @@ fn discover_normalized_auto_scan_inputs() -> (Vec<String>, Vec<String>, Vec<Path
 /// per scan.
 fn scan_install_paths_in_parallel(
     batch: &AutoScanBatch,
-    install_paths: Vec<PathBuf>,
+    install_paths: &[PathBuf],
 ) -> AutoScanAccumulator {
     if install_paths.is_empty() {
         return AutoScanAccumulator::default();
@@ -128,7 +128,7 @@ fn scan_install_paths_in_parallel(
     let worker_count = effective_worker_count(install_paths.len());
     let next_index = AtomicUsize::new(0);
     let accumulator = Mutex::new(AutoScanAccumulator::default());
-    let paths: &[PathBuf] = install_paths.as_slice();
+    let paths: &[PathBuf] = install_paths;
 
     thread::scope(|scope| {
         for _ in 0..worker_count {
@@ -199,7 +199,7 @@ impl AutoScanAccumulator {
                     self.games.push(result.game.id().clone());
                 }
             }
-            Err(error) => self.push_error(root, error),
+            Err(error) => self.push_error(root, &error),
         }
     }
 
@@ -208,7 +208,7 @@ impl AutoScanAccumulator {
         self.errors.extend(other.errors);
     }
 
-    fn push_error(&mut self, root: &Path, error: ServiceError) {
+    fn push_error(&mut self, root: &Path, error: &ServiceError) {
         self.errors.push(ScanErrorOutput::new(root, error));
     }
 
@@ -216,7 +216,7 @@ impl AutoScanAccumulator {
     /// etc.) under an explicit synthetic label. Used for errors that are
     /// not tied to a specific install root, so the JSON payload always
     /// carries a meaningful `root` value instead of an empty string.
-    fn push_global_error(&mut self, label: GlobalErrorLabel, error: ServiceError) {
+    fn push_global_error(&mut self, label: GlobalErrorLabel, error: &ServiceError) {
         self.errors.push(ScanErrorOutput::with_label(label, error));
     }
 
@@ -246,14 +246,14 @@ pub struct ScanErrorOutput {
 }
 
 impl ScanErrorOutput {
-    fn new(root: &Path, error: ServiceError) -> Self {
+    fn new(root: &Path, error: &ServiceError) -> Self {
         Self {
             root: normalized_path_string(root),
             message: error.to_string(),
         }
     }
 
-    fn with_label(label: GlobalErrorLabel, error: ServiceError) -> Self {
+    fn with_label(label: GlobalErrorLabel, error: &ServiceError) -> Self {
         Self {
             root: label.to_string(),
             message: error.to_string(),

@@ -20,12 +20,15 @@ pub(super) fn require_non_empty_path(path: String) -> Result<PathBuf, CommandErr
     Ok(PathBuf::from(path))
 }
 
-pub(super) fn trim_string(value: String) -> String {
+pub(super) fn trim_string(value: &str) -> String {
     value.trim().to_owned()
 }
 
 pub(super) fn trim_string_vec(values: Vec<String>) -> Vec<String> {
-    values.into_iter().map(trim_string).collect()
+    values
+        .into_iter()
+        .map(|value| trim_string(&value))
+        .collect()
 }
 
 pub(super) fn reject_empty_items(

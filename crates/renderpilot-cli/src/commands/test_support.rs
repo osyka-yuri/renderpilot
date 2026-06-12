@@ -59,10 +59,10 @@ impl TempGameFolder {
 }
 
 impl CatalogEnvironmentGuard {
-    pub(super) fn new(path: PathBuf) -> Self {
+    pub(super) fn new(path: &Path) -> Self {
         let lock = lock_process_env();
         let previous = std::env::var_os(CATALOG_DB_PATH_ENV);
-        std::env::set_var(CATALOG_DB_PATH_ENV, &path);
+        std::env::set_var(CATALOG_DB_PATH_ENV, path);
 
         Self {
             previous,
@@ -74,7 +74,7 @@ impl CatalogEnvironmentGuard {
 impl CatalogFixture {
     pub(super) fn new(name: &str) -> Self {
         let db_path = temp_db_path(name);
-        let catalog_env = CatalogEnvironmentGuard::new(db_path.clone());
+        let catalog_env = CatalogEnvironmentGuard::new(&db_path);
         let storage = open_storage(&db_path);
 
         Self {
@@ -104,9 +104,9 @@ impl CatalogFixture {
             .expect("components should be stored");
     }
 
-    pub(super) fn store_artifact(&self, artifact: LibraryArtifact) {
+    pub(super) fn store_artifact(&self, artifact: &LibraryArtifact) {
         self.storage
-            .upsert_artifact(&artifact)
+            .upsert_artifact(artifact)
             .expect("artifact should be stored");
     }
 }

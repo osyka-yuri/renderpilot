@@ -63,21 +63,21 @@ fn fetch_gog_product(client: &Client, product_id: &str) -> Result<GogProduct, Se
     let response = client
         .get(gog_product_meta_url(product_id))
         .send()
-        .map_err(download_failed)?;
+        .map_err(|error| download_failed(&error))?;
 
     let status = response.status();
     if !status.is_success() {
         return Err(map_gog_product_status(status));
     }
 
-    response.json().map_err(download_failed)
+    response.json().map_err(|error| download_failed(&error))
 }
 
 fn gog_product_meta_url(product_id: &str) -> String {
     format!("https://api.gog.com/products/{product_id}?expand=images&locale={GOG_API_LOCALE}")
 }
 
-fn download_failed(error: reqwest::Error) -> ServiceError {
+fn download_failed(error: &reqwest::Error) -> ServiceError {
     ServiceError::CoverDownloadFailed(error.to_string())
 }
 

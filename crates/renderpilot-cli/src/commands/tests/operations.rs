@@ -134,7 +134,7 @@ fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
             &sha256_hex(b"original-bytes"),
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
         GraphicsTechnology::DlssFrameGeneration,
         &path_string(&artifact_path),
@@ -197,7 +197,7 @@ fn apply_rejects_artifact_that_already_matches_current_component() {
             &source_sha256,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
@@ -262,7 +262,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
             &source_sha256,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
@@ -373,7 +373,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
             ),
         ],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
@@ -467,7 +467,7 @@ fn apply_succeeds_without_prior_sidecar_and_creates_sidecar_bak() {
             &source_sha256,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
@@ -541,7 +541,7 @@ fn apply_replaces_target_even_when_changed_after_plan_swap() {
             &source_sha256,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
@@ -850,7 +850,7 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
 
     let game = store_manual_game(&fixture, &game_folder, "FSR Game");
     store_single_file_fsr_component(&fixture, &game, &original_path, "3.1.0", b"fsr3-original");
-    fixture.store_artifact(artifact);
+    fixture.store_artifact(&artifact);
 
     // --- apply (1 -> 3) ---
     run(args(&[
@@ -1009,7 +1009,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
             ),
         ],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:fsr-upscaler-4.1",
         GraphicsTechnology::AmdFsrUpscaler,
         &path_string(&replacement_path),
@@ -1155,8 +1155,8 @@ fn reswap_preserves_original_baseline_then_rollback_restores_it() {
 
     let game = store_manual_game(&fixture, &game_folder, "Reswap Game");
     store_single_file_fsr_component(&fixture, &game, &original_path, "3.1.0", b"original-A");
-    fixture.store_artifact(artifact_b);
-    fixture.store_artifact(artifact_c);
+    fixture.store_artifact(&artifact_b);
+    fixture.store_artifact(&artifact_c);
 
     let apply = |artifact_id: &str| {
         run(args(&[
@@ -1261,7 +1261,7 @@ fn already_fsr4_upgrade_replaces_all_members_then_rollback_restores_prior_releas
         ),
     ];
     let (artifact, artifact_id) = write_fsr_bundle_artifact(artifact_folder.path(), &bundle);
-    fixture.store_artifact(artifact);
+    fixture.store_artifact(&artifact);
 
     // --- apply X -> Y: every member is replaced, each backed up once ---
     run(args(&[
@@ -1386,7 +1386,7 @@ fn native_split_fsr4_update_targets_the_loader_in_place_without_orphan_entrypoin
         ),
     ];
     let (artifact, artifact_id) = write_fsr_bundle_artifact(artifact_folder.path(), &bundle);
-    fixture.store_artifact(artifact);
+    fixture.store_artifact(&artifact);
 
     run(args(&[
         "apply",
@@ -1501,8 +1501,8 @@ fn dx12_lineage_downgrade_to_unified_fsr3_cleans_up_split_members() {
 
     let game = store_manual_game(&fixture, &game_folder, "FSR Game");
     store_single_file_fsr_component(&fixture, &game, &original_path, "3.1.0", b"fsr3-original");
-    fixture.store_artifact(fsr4_artifact);
-    fixture.store_artifact(fsr314);
+    fixture.store_artifact(&fsr4_artifact);
+    fixture.store_artifact(&fsr314);
 
     let apply = |artifact_id: &str| {
         run(args(&[
@@ -1608,7 +1608,7 @@ fn externally_upgraded_fsr4_downgrade_removes_split_members_on_first_swap() {
 
     let game = store_manual_game(&fixture, &game_folder, "External FSR4 Game");
     store_written_fsr_bundle_component(&fixture, &game, &written);
-    fixture.store_artifact(fsr314);
+    fixture.store_artifact(&fsr314);
 
     run(args(&[
         "apply",
@@ -1732,8 +1732,8 @@ fn mixed_lineage_unified_update_replaces_only_the_entry_point() {
 
     let game = store_manual_game(&fixture, &game_folder, "Mixed Lineage Game");
     store_written_fsr_bundle_component(&fixture, &game, &written);
-    fixture.store_artifact(fsr313);
-    fixture.store_artifact(fsr314);
+    fixture.store_artifact(&fsr313);
+    fixture.store_artifact(&fsr314);
 
     let apply = |artifact_id: &str| {
         run(args(&[
@@ -1869,7 +1869,7 @@ fn mixed_lineage_fsr4_package_targets_entry_point_not_the_rr_loader() {
 
     let game = store_manual_game(&fixture, &game_folder, "Mixed Lineage Game");
     store_written_fsr_bundle_component(&fixture, &game, &written);
-    fixture.store_artifact(artifact);
+    fixture.store_artifact(&artifact);
 
     run(args(&[
         "apply",
@@ -1985,7 +1985,7 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
             &original_sha,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
@@ -2073,7 +2073,7 @@ fn setup_applied_scenario(name: &str) -> AppliedScenario {
             &original_sha256,
         )],
     );
-    fixture.store_artifact(sample_artifact(
+    fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,

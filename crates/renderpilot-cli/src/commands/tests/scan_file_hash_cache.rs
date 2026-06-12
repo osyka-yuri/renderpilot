@@ -22,7 +22,7 @@ const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e7304
 #[test]
 fn first_scan_populates_sqlite_file_hash_cache() {
     let db_path = temp_db_path("scan-cache-first");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let context = Context::open_at(&db_path).expect("catalog sqlite should open");
     let storage = open_storage(&db_path);
     let folder = TempGameFolder::new("scan-cache-first");
@@ -52,7 +52,7 @@ fn first_scan_populates_sqlite_file_hash_cache() {
 #[test]
 fn rescan_unchanged_file_keeps_consistent_file_hash_cache_entry() {
     let db_path = temp_db_path("scan-cache-rescan");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let context = Context::open_at(&db_path).expect("catalog sqlite should open");
     let storage = open_storage(&db_path);
     let folder = TempGameFolder::new("scan-cache-rescan");
@@ -71,7 +71,7 @@ fn rescan_unchanged_file_keeps_consistent_file_hash_cache_entry() {
 #[test]
 fn scan_updates_sqlite_file_hash_cache_after_file_change() {
     let db_path = temp_db_path("scan-cache-stale");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let context = Context::open_at(&db_path).expect("catalog sqlite should open");
     let storage = open_storage(&db_path);
     let folder = TempGameFolder::new("scan-cache-stale");
@@ -92,7 +92,7 @@ fn scan_updates_sqlite_file_hash_cache_after_file_change() {
 #[test]
 fn failed_scan_does_not_overwrite_existing_file_hash_cache_rows() {
     let db_path = temp_db_path("scan-cache-fail");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let folder = TempGameFolder::new("scan-cache-fail");
 
     create_dlss_file(folder.path(), b"keep");
@@ -110,8 +110,7 @@ fn failed_scan_does_not_overwrite_existing_file_hash_cache_rows() {
         .into_iter()
         .find(|row| row.path == dll_norm)
         .expect("cache row")
-        .sha256
-        .clone();
+        .sha256;
 
     fs::remove_dir_all(folder.path()).expect("remove scanned folder");
 

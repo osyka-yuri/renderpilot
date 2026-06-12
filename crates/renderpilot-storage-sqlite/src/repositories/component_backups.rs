@@ -59,7 +59,7 @@ impl SqliteStorage {
             .map_err(storage_error)?;
 
         match files_json {
-            Some(files_json) => Ok(Some(mapping::component_files(files_json)?)),
+            Some(files_json) => Ok(Some(mapping::component_files(&files_json)?)),
             None => Ok(None),
         }
     }

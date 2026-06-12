@@ -23,7 +23,7 @@ const EMPTY_FILE_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934
 
 #[test]
 fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-output"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-output"));
     let folder = TempGameFolder::new("cli-scan-folder");
 
     create_dlss_file(folder.path(), b"");
@@ -42,7 +42,7 @@ fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
 #[test]
 fn rescan_parent_prunes_removed_manual_child_game() {
     let db_path = temp_db_path("scan-prune");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let context = Context::open_at(&db_path).unwrap();
     let parent = TempGameFolder::new("cli-scan-prune");
 
@@ -92,7 +92,7 @@ fn rescan_parent_prunes_removed_manual_child_game() {
 #[test]
 fn scan_child_does_not_prune_sibling_manual_game() {
     let db_path = temp_db_path("scan-prune-sibling");
-    let _catalog = CatalogEnvironmentGuard::new(db_path.clone());
+    let _catalog = CatalogEnvironmentGuard::new(&db_path);
     let context = Context::open_at(&db_path).unwrap();
     let parent = TempGameFolder::new("cli-scan-prune-sib");
 
@@ -113,7 +113,7 @@ fn scan_child_does_not_prune_sibling_manual_game() {
 
 #[test]
 fn scan_parent_outputs_games_array_for_multiple_child_installs() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-multi"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-multi"));
     let parent = TempGameFolder::new("cli-scan-parent");
 
     create_child_game_with_dlss(parent.path(), "GameAlpha", b"alpha-bytes");
@@ -133,7 +133,7 @@ fn scan_parent_outputs_games_array_for_multiple_child_installs() {
 
 #[test]
 fn scan_folder_reports_missing_folder() {
-    let _catalog = CatalogEnvironmentGuard::new(temp_db_path("scan-missing-folder"));
+    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-missing-folder"));
     let folder = TempGameFolder::new("missing-cli-scan-folder");
     let missing_path = folder.path().to_path_buf();
 

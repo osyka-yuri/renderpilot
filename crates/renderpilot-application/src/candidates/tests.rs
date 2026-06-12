@@ -46,11 +46,7 @@ fn selects_only_same_technology_candidates() {
 
     let groups = find_test_candidates(
         &[component],
-        &[
-            sr_candidate.clone(),
-            fg_candidate.clone(),
-            rr_candidate.clone(),
-        ],
+        &[sr_candidate.clone(), fg_candidate, rr_candidate],
     );
 
     assert_eq!(groups.len(), 1);

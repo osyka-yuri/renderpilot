@@ -312,8 +312,7 @@ impl LibraryPatternComponentDetector {
         };
 
         let file_path = path_ref_from_path(file)?;
-        let Some(metadata) = try_read_detected_file_metadata(file, file_path.clone(), cache)?
-        else {
+        let Some(metadata) = try_read_detected_file_metadata(file, &file_path, cache)? else {
             return Ok(None);
         };
 
@@ -484,7 +483,7 @@ pub fn group_into_components(
 ) -> AppResult<Vec<GraphicsComponent>> {
     group_detected_files(libraries)
         .into_iter()
-        .map(|group| build_grouped_component(game, group))
+        .map(|group| build_grouped_component(game, &group))
         .collect()
 }
 
@@ -497,7 +496,7 @@ pub fn group_into_artifacts(
 ) -> AppResult<Vec<LibraryArtifact>> {
     group_detected_files(libraries)
         .into_iter()
-        .map(|group| build_grouped_artifact(game_id, group))
+        .map(|group| build_grouped_artifact(game_id, &group))
         .collect()
 }
 
@@ -536,7 +535,7 @@ fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<GroupedDetecte
 
 fn build_grouped_component(
     game: &GameInstallation,
-    group: GroupedDetectedFiles<'_>,
+    group: &GroupedDetectedFiles<'_>,
 ) -> AppResult<GraphicsComponent> {
     let ordered = order_with_primary_first(&group.files);
     let parent_dir = parent_directory(ordered[0].file_path());
@@ -563,7 +562,7 @@ fn build_grouped_component(
 
 fn build_grouped_artifact(
     game_id: &GameId,
-    group: GroupedDetectedFiles<'_>,
+    group: &GroupedDetectedFiles<'_>,
 ) -> AppResult<LibraryArtifact> {
     let ordered = order_with_primary_first(&group.files);
     let artifact_id = ArtifactId::for_bundle(ordered.iter().map(|file| file.sha256()));

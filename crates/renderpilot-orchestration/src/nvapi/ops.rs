@@ -22,6 +22,7 @@ fn map_nvapi_write_error(error: NvapiError, label: &'static str) -> ServiceError
 }
 
 /// Operation to perform when writing an NVAPI setting value.
+#[derive(Debug, Clone, Copy)]
 pub enum WriteOp {
     /// Set the setting to the given DWORD value.
     Set(u32),
@@ -222,7 +223,7 @@ pub fn read_all_setting_states(
         let setting = setting.as_ref();
         let live = match &profile {
             Some(profile) => read_dword_or_default(profile, setting),
-            None => LiveRead::unavailable(setting.default_dword(), session_warning.clone()),
+            None => LiveRead::unavailable(setting.default_dword(), session_warning),
         };
         responses.push(assemble_response(
             setting,
@@ -239,6 +240,7 @@ pub fn read_all_setting_states(
 
 /// Outcome of a single live NVAPI read, decoupled from how the DRS session was
 /// obtained so the single-setting and batch paths can share response assembly.
+#[derive(Clone, Copy)]
 struct LiveRead {
     current: u32,
     predefined: Option<u32>,

@@ -13,8 +13,8 @@ use crate::ServiceError;
 const PARTIAL_COVER_SUFFIX: &str = ".part";
 
 /// Removes a cover file from disk by name, best-effort (ignores errors).
-pub fn unlink_cover_file_best_effort(catalog_db_path: &Path, file_name: Option<String>) {
-    let Some(file_name) = file_name.as_deref() else {
+pub fn unlink_cover_file_best_effort(catalog_db_path: &Path, file_name: Option<&str>) {
+    let Some(file_name) = file_name else {
         return;
     };
 

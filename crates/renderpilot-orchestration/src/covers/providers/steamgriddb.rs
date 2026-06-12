@@ -109,7 +109,7 @@ fn string_as_non_negative_integer_string(value: &str) -> Option<String> {
 }
 
 fn steamgriddb_url(path_segments: &[&str]) -> Result<Url, ServiceError> {
-    let mut url = Url::parse(STEAMGRIDDB_API_BASE).map_err(download_failed)?;
+    let mut url = Url::parse(STEAMGRIDDB_API_BASE).map_err(|error| download_failed(&error))?;
 
     {
         let mut segments = url.path_segments_mut().map_err(|_| {
@@ -130,7 +130,7 @@ where
         .get(url)
         .bearer_auth(api_key)
         .send()
-        .map_err(download_failed)?;
+        .map_err(|error| download_failed(&error))?;
 
     parse_success_json(response)
 }
@@ -141,7 +141,7 @@ where
 {
     let response = require_success_status(response)?;
 
-    response.json().map_err(download_failed)
+    response.json().map_err(|error| download_failed(&error))
 }
 
 fn require_success_status(response: Response) -> Result<Response, ServiceError> {
@@ -160,7 +160,7 @@ fn require_success_status(response: Response) -> Result<Response, ServiceError> 
     )))
 }
 
-fn download_failed(error: impl ToString) -> ServiceError {
+fn download_failed(error: &impl ToString) -> ServiceError {
     ServiceError::CoverDownloadFailed(error.to_string())
 }
 
@@ -192,12 +192,12 @@ fn steamgriddb_download_first_grid(
         return Err(ServiceError::CoverNotFound);
     }
 
-    download_first_valid_grid(client, parsed.data)
+    download_first_valid_grid(client, &parsed.data)
 }
 
 fn download_first_valid_grid(
     client: &Client,
-    entries: Vec<SteamGridDbGridEntry>,
+    entries: &[SteamGridDbGridEntry],
 ) -> Result<Vec<u8>, ServiceError> {
     let mut last_download_error = None;
 

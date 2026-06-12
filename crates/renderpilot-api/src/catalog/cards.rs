@@ -233,7 +233,7 @@ impl QueryGameCards {
         available_libraries: &[String],
         available_launchers: &[String],
     ) -> Self {
-        let search_query = normalize_search_query(req.search_query);
+        let search_query = normalize_search_query(&req.search_query);
         let has_library_filter = !req.selected_libraries.is_empty();
         let has_launcher_filter = !req.selected_launchers.is_empty();
         let selected_libraries =
@@ -415,7 +415,7 @@ impl GameCardMetrics {
     }
 }
 
-fn normalize_search_query(value: String) -> String {
+fn normalize_search_query(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
@@ -430,7 +430,7 @@ fn normalize_page_offset(value: i64) -> usize {
 fn normalize_library_names(values: Vec<String>) -> Vec<String> {
     let mut normalized = values
         .into_iter()
-        .filter_map(normalize_library_name)
+        .filter_map(|value| normalize_library_name(&value))
         .collect::<Vec<_>>();
 
     normalized.sort();
@@ -438,7 +438,7 @@ fn normalize_library_names(values: Vec<String>) -> Vec<String> {
     normalized
 }
 
-fn normalize_library_name(value: String) -> Option<String> {
+fn normalize_library_name(value: &str) -> Option<String> {
     let trimmed = value.trim();
 
     if trimmed.is_empty() {
@@ -566,17 +566,17 @@ mod tests {
     #[test]
     fn normalize_library_name_keeps_current_slugs_and_drops_unknown() {
         assert_eq!(
-            normalize_library_name(String::from(" dlss_super_resolution ")),
+            normalize_library_name(" dlss_super_resolution "),
             Some(String::from("dlss_super_resolution")),
         );
-        assert_eq!(normalize_library_name(String::from("unknown")), None);
-        assert_eq!(normalize_library_name(String::from("   ")), None);
+        assert_eq!(normalize_library_name("unknown"), None);
+        assert_eq!(normalize_library_name("   "), None);
     }
 
     #[test]
     fn normalize_library_name_rejects_legacy_and_non_slug_values() {
-        assert_eq!(normalize_library_name(String::from("IntelXeLl")), None);
-        assert_eq!(normalize_library_name(String::from("steam")), None);
+        assert_eq!(normalize_library_name("IntelXeLl"), None);
+        assert_eq!(normalize_library_name("steam"), None);
     }
 
     #[test]
