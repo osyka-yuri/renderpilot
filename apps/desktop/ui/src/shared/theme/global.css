@@ -146,4 +146,16 @@
   html {
     @apply font-sans;
   }
+  /* The desktop window itself must never scroll: all scrolling lives in
+     explicit ScrollArea containers. Any overflow at the document level (e.g.
+     a floating element measured before positioning) would otherwise surface
+     native scrollbars. `clip` also forbids programmatic scrolling — with
+     `hidden` the document stays a scroll container that scrollIntoView/focus
+     can still silently shift. `hidden` remains as the fallback for engines
+     without `clip` support. */
+  html,
+  body {
+    overflow: hidden;
+    overflow: clip;
+  }
 }
