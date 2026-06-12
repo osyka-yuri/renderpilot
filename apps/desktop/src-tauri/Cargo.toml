@@ -20,6 +20,7 @@ tauri-build = { version = "2.6.2", features = [] }
 [dependencies]
 renderpilot-api = { path = "../../../crates/renderpilot-api" }
 renderpilot-orchestration = { path = "../../../crates/renderpilot-orchestration" }
+env_logger = "0.11"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
