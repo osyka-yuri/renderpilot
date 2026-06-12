@@ -9,6 +9,11 @@ use super::types::LibraryManifestEntry;
 /// Prevents runaway allocation from a crafted or corrupted manifest.
 pub(crate) const MAX_DLL_SIZE: u64 = 500 * 1024 * 1024;
 
+/// Hard upper bound for a compressed archive (.zst).
+/// A zstd archive cannot be meaningfully larger than the decompressed output it
+/// contains, so we reuse the same 500 MiB ceiling for `files.zst.size_bytes`.
+pub(crate) const MAX_ARCHIVE_SIZE: u64 = MAX_DLL_SIZE;
+
 pub(super) fn decompress_library(
     entry: &LibraryManifestEntry,
     payload: &[u8],

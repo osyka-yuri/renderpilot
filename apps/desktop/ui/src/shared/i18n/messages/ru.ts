@@ -162,6 +162,7 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Common ──
   'common.unknown': 'Неизвестно',
+  'common.downloadProgress': 'Прогресс скачивания',
 
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'Игра не выбрана',

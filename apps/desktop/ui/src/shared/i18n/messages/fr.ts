@@ -124,6 +124,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.saveError': 'Échec de l’enregistrement des paramètres.',
 
   'common.unknown': 'Inconnu',
+  'common.downloadProgress': 'Progression du téléchargement',
 
   'gameDetails.noGameSelected.title': 'Aucun jeu sélectionné',
   'gameDetails.noGameSelected.description':

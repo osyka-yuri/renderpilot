@@ -51,11 +51,12 @@ pub(super) struct DownloadedLibrary {
 pub(super) async fn ensure_downloaded_and_registered(
     context: &crate::Context,
     entry: &LibraryManifestEntry,
+    progress: Option<&super::ProgressObserver<'_>>,
 ) -> Result<DownloadedLibrary, ServiceError> {
     let archive_path = local_archive_path(entry)?;
     let dll_path = local_dll_path(entry)?;
 
-    let maybe_artifact = ensure_local_archive(entry, &archive_path).await?;
+    let maybe_artifact = ensure_local_archive(entry, &archive_path, progress).await?;
 
     let artifact_id = materialize_local_library(context, entry, &archive_path, maybe_artifact)?;
 
@@ -89,14 +90,22 @@ fn local_dll_path(entry: &LibraryManifestEntry) -> Result<PathBuf, ServiceError>
 async fn ensure_local_archive(
     entry: &LibraryManifestEntry,
     archive_path: &Path,
+    progress: Option<&super::ProgressObserver<'_>>,
 ) -> Result<Option<DecompressedArtifact>, ServiceError> {
     if archive_is_valid(archive_path, entry)? {
+        if let Some(cb) = progress {
+            let size = entry.files.zst.size_bytes;
+            cb(super::DownloadProgress {
+                downloaded_bytes: size,
+                total_bytes: size,
+            });
+        }
         return Ok(None);
     }
 
     storage::remove_file_if_exists(archive_path)?;
 
-    let payload = download_archive(entry).await?;
+    let payload = download_archive(entry, progress).await?;
 
     // Validate before writing to disk so we never persist a corrupted archive.
     validate::validate_compressed_size(entry, &payload)?;
@@ -250,13 +259,17 @@ fn sha256_cache_path(path: &Path) -> PathBuf {
     ))
 }
 
-async fn download_archive(entry: &LibraryManifestEntry) -> Result<Vec<u8>, ServiceError> {
+async fn download_archive(
+    entry: &LibraryManifestEntry,
+    progress: Option<&super::ProgressObserver<'_>>,
+) -> Result<Vec<u8>, ServiceError> {
     let client = http::http_client();
     http::download_exact_bytes(
         client,
         &entry.files.zst.download_url,
         entry.files.zst.size_bytes,
         "library download",
+        progress,
     )
     .await
 }
@@ -283,9 +296,12 @@ fn archive_is_valid(path: &Path, entry: &LibraryManifestEntry) -> Result<bool, S
 
 /// Downloads and extracts a single member DLL to local storage **without**
 /// registering a single-file artifact (FSR members are only offered as packages).
-async fn ensure_member_dll(entry: &LibraryManifestEntry) -> Result<PathBuf, ServiceError> {
+async fn ensure_member_dll(
+    entry: &LibraryManifestEntry,
+    progress: Option<&super::ProgressObserver<'_>>,
+) -> Result<PathBuf, ServiceError> {
     let archive_path = local_archive_path(entry)?;
-    let maybe_artifact = ensure_local_archive(entry, &archive_path).await?;
+    let maybe_artifact = ensure_local_archive(entry, &archive_path, progress).await?;
 
     let dll_path = local_dll_path(entry)?;
     if dll_path.exists() {
@@ -310,12 +326,40 @@ pub(super) async fn ensure_package_downloaded(
     context: &crate::Context,
     manifest: &LibraryManifest,
     package: &FsrPackage,
+    progress: Option<&super::ProgressObserver<'_>>,
 ) -> Result<String, ServiceError> {
-    let mut local_files = Vec::with_capacity(package.member_entry_ids.len());
+    // Collect members and total byte count in a single pass — no duplicate
+    // `require_entry` calls, no extra allocations.
+    let members: Vec<&LibraryManifestEntry> = package
+        .member_entry_ids
+        .iter()
+        .map(|id| super::manifest::require_entry(manifest, id))
+        .collect::<Result<_, _>>()?;
 
-    for (index, entry_id) in package.member_entry_ids.iter().enumerate() {
-        let entry = super::manifest::require_entry(manifest, entry_id)?;
-        let dll_path = ensure_member_dll(entry).await?;
+    let total_bytes: u64 = members.iter().map(|e| e.files.zst.size_bytes).sum();
+
+    let mut local_files = Vec::with_capacity(members.len());
+    let mut cumulative_downloaded: u64 = 0;
+
+    for (index, entry) in members.iter().enumerate() {
+        let offset = cumulative_downloaded;
+
+        // Build a per-member closure that translates member-local bytes into
+        // cumulative package bytes — no `Box` allocation needed.
+        let member_progress_fn = progress.map(|cb| {
+            move |p: super::DownloadProgress| {
+                cb(super::DownloadProgress {
+                    downloaded_bytes: offset + p.downloaded_bytes,
+                    total_bytes,
+                });
+            }
+        });
+        let member_progress: Option<&super::ProgressObserver<'_>> = member_progress_fn
+            .as_ref()
+            .map(|f| f as &super::ProgressObserver<'_>);
+
+        let dll_path = ensure_member_dll(entry, member_progress).await?;
+        cumulative_downloaded += entry.files.zst.size_bytes;
 
         // Mirror the virtual package file (sha / version / install_as) but point
         // it at the local DLL.

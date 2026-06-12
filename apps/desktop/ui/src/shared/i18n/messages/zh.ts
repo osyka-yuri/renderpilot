@@ -119,6 +119,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.saveError': '保存设置失败。',
 
   'common.unknown': '未知',
+  'common.downloadProgress': '下载进度',
 
   'gameDetails.noGameSelected.title': '未选择游戏',
   'gameDetails.noGameSelected.description': '从仪表板中选择一个游戏以查看其详情。',

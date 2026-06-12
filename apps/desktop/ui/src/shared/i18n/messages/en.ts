@@ -151,6 +151,7 @@ export const en = {
 
   // ── Common ──
   'common.unknown': 'Unknown',
+  'common.downloadProgress': 'Download progress',
 
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'No game selected',

@@ -26,6 +26,7 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { DownloadProgressBar } from '@entities/library';
   import { buildStreamlineVersionModel, type BulkSwapItem } from '../model/streamline-versions';
 
   type Props = {
@@ -41,6 +42,10 @@
   // Streamline plugins are a matched set: one chosen version is applied to every
   // plugin at once. The model lists the versions that change at least one plugin.
   const versionModel = $derived(buildStreamlineVersionModel(components, groupsById));
+
+  // Track which artifact ids the user clicked for bulk swap so the progress bar
+  // appears only on the initiating control.
+  let pendingArtifactIds = $state<string[]>([]);
 
   const currentLabel = $derived(
     versionModel.currentVersion ? `v${versionModel.currentVersion}` : '',
@@ -61,10 +66,12 @@
 
   // Bound selection, re-pinned to the current version whenever an operation settles
   // (`busy` → false) so a FAILED bulk swap cannot leave a stale highlight.
+  // Also resets pendingArtifactIds.
   let selected = $state<string | undefined>(undefined);
   $effect(() => {
     if (!busy) {
       selected = currentValue;
+      pendingArtifactIds = [];
     }
   });
 
@@ -72,6 +79,7 @@
     if (!value || value === versionModel.currentVersion || busy) return;
     const option = versionModel.options.find((candidate) => candidate.version === value);
     if (option) {
+      pendingArtifactIds = option.items.map((item) => item.artifactId);
       onBulkSwap(option.items);
     }
   }
@@ -108,6 +116,7 @@
             >{t('gameDetails.streamline.noOtherVersions')}</span
           >
         {:else}
+          <DownloadProgressBar ids={pendingArtifactIds} active={busy} class="mr-2" />
           <Select
             type="single"
             bind:value={selected}

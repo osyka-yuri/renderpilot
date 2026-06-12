@@ -124,6 +124,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.saveError': 'Einstellungen konnten nicht gespeichert werden.',
 
   'common.unknown': 'Unbekannt',
+  'common.downloadProgress': 'Download-Fortschritt',
 
   'gameDetails.noGameSelected.title': 'Kein Spiel ausgewählt',
   'gameDetails.noGameSelected.description':

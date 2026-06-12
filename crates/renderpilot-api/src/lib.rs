@@ -47,8 +47,8 @@ pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
 pub use self::libraries::{
     delete_library, download_artifact, download_library, fetch_libraries_manifest,
-    get_libraries_manifest, get_library_states, LibraryManifest, LibraryManifestEntry,
-    LibraryState,
+    get_libraries_manifest, get_library_states, DownloadProgress, LibraryManifest,
+    LibraryManifestEntry, LibraryState, ProgressObserver,
 };
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,

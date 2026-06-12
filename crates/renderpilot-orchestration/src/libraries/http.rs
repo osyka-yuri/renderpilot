@@ -7,7 +7,7 @@ use reqwest::{Client, Response, Url};
 
 use crate::ServiceError;
 
-use super::library_error;
+use super::{library_error, DownloadProgress, ProgressObserver};
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -76,14 +76,43 @@ pub(super) async fn download_exact_bytes(
     url: &str,
     expected_size_bytes: u64,
     operation: &str,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<Vec<u8>, ServiceError> {
-    let response = get_successful_response(client, url, operation).await?;
+    let mut response = get_successful_response(client, url, operation).await?;
     ensure_exact_content_length(operation, response.content_length(), expected_size_bytes)?;
 
-    let bytes = response
-        .bytes()
+    let capacity = usize::try_from(expected_size_bytes).unwrap_or(0);
+    let mut bytes = Vec::with_capacity(capacity);
+    let mut downloaded: u64 = 0;
+
+    let report = |dl: u64| {
+        if let Some(cb) = progress {
+            cb(DownloadProgress {
+                downloaded_bytes: dl,
+                total_bytes: expected_size_bytes,
+            });
+        }
+    };
+
+    report(0);
+
+    while let Some(chunk) = response
+        .chunk()
         .await
-        .map_err(|error| library_error(format!("failed to read {operation} response: {error}")))?;
+        .map_err(|error| library_error(format!("failed to read {operation} chunk: {error}")))?
+    {
+        bytes.extend_from_slice(&chunk);
+        downloaded += chunk.len() as u64;
+
+        // Guard against a server that sends more data than declared.
+        // `downloaded > expected` means we already have too many bytes;
+        // the final length check below will catch the exact mismatch.
+        if downloaded > expected_size_bytes {
+            break;
+        }
+
+        report(downloaded);
+    }
 
     if bytes.len() as u64 != expected_size_bytes {
         return Err(library_error(format!(
@@ -92,7 +121,7 @@ pub(super) async fn download_exact_bytes(
         )));
     }
 
-    Ok(bytes.to_vec())
+    Ok(bytes)
 }
 
 pub(super) fn parse_https_url(url: &str, operation: &str) -> Result<Url, ServiceError> {

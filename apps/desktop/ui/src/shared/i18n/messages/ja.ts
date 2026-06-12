@@ -123,6 +123,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.saveError': '設定の保存に失敗しました。',
 
   'common.unknown': '不明',
+  'common.downloadProgress': 'ダウンロードの進行状況',
 
   'gameDetails.noGameSelected.title': 'ゲームが選択されていません',
   'gameDetails.noGameSelected.description':

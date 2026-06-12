@@ -9,11 +9,14 @@ mod validation;
 
 pub use error::CommandError;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use renderpilot_api::{self as desktop, ApiError};
 use renderpilot_orchestration::{Context, ServiceError};
 use serde_json::Value;
+use tauri::Emitter;
 
 pub type JsonCommandResult = Result<Value, CommandError>;
 
@@ -21,6 +24,61 @@ type DesktopCommandResult = Result<Value, ApiError>;
 
 use query_game_cards::{QueryGameCardsArgs, QueryGameCardsDto};
 use validation::{require_non_empty_path, require_non_empty_string};
+
+// ---------------------------------------------------------------------------
+// Download-progress event contract
+// ---------------------------------------------------------------------------
+
+const DOWNLOAD_PROGRESS_EVENT: &str = "download-progress";
+const DOWNLOAD_PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(100);
+
+#[derive(serde::Serialize, Clone)]
+struct DownloadProgressEvent<'a> {
+    id: &'a str,
+    downloaded: u64,
+    total: u64,
+}
+
+/// Creates a `ProgressObserver` closure that emits `download-progress` Tauri
+/// events with source-side throttling.
+///
+/// * The **first** emit (downloaded == 0) and the **final** emit
+///   (downloaded >= total) always pass through regardless of the interval.
+/// * Intermediate emits are skipped when less than
+///   `DOWNLOAD_PROGRESS_MIN_INTERVAL` has elapsed since the last one.
+/// * A race on `last_ms` can only cause an extra emit — never a missed final.
+fn download_progress_emitter(
+    app: tauri::AppHandle,
+    id: String,
+) -> impl Fn(desktop::DownloadProgress) + Send + Sync {
+    let epoch = Instant::now();
+    let last_ms = AtomicU64::new(u64::MAX); // sentinel: "never emitted"
+
+    move |progress: desktop::DownloadProgress| {
+        let is_final = progress.downloaded_bytes >= progress.total_bytes;
+        let is_first = last_ms.load(Ordering::Relaxed) == u64::MAX;
+
+        if !is_first && !is_final {
+            let now_ms = epoch.elapsed().as_millis() as u64;
+            let prev_ms = last_ms.load(Ordering::Relaxed);
+            if now_ms.saturating_sub(prev_ms) < DOWNLOAD_PROGRESS_MIN_INTERVAL.as_millis() as u64 {
+                return;
+            }
+        }
+
+        let now_ms = epoch.elapsed().as_millis() as u64;
+        last_ms.store(now_ms, Ordering::Relaxed);
+
+        let _ = app.emit(
+            DOWNLOAD_PROGRESS_EVENT,
+            DownloadProgressEvent {
+                id: &id,
+                downloaded: progress.downloaded_bytes,
+                total: progress.total_bytes,
+            },
+        );
+    }
+}
 
 async fn run_desktop_command<F>(command: F) -> JsonCommandResult
 where
@@ -231,20 +289,28 @@ pub async fn get_libraries_manifest() -> JsonCommandResult {
 
 #[tauri::command]
 pub async fn download_library(
+    app: tauri::AppHandle,
     entry_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let entry_id = require_non_empty_string("entry_id", entry_id)?;
     let context = Arc::clone(&context);
 
-    run_desktop_async_command(
-        move || async move { desktop::download_library(&context, entry_id).await },
-    )
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, entry_id.clone());
+        desktop::download_library(
+            &context,
+            entry_id,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
     .await
 }
 
 #[tauri::command]
 pub async fn download_artifact(
+    app: tauri::AppHandle,
     artifact_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
@@ -252,7 +318,13 @@ pub async fn download_artifact(
     let context = Arc::clone(&context);
 
     run_desktop_async_command(move || async move {
-        desktop::download_artifact(&context, artifact_id).await
+        let emit = download_progress_emitter(app, artifact_id.clone());
+        desktop::download_artifact(
+            &context,
+            artifact_id,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
     })
     .await
 }

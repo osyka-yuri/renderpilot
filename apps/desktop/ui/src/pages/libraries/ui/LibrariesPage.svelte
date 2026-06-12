@@ -45,13 +45,12 @@
     }
   });
 
-  const columns = $derived(
-    createLibraryColumns(
-      model.pendingEntryAction,
-      model.downloadedEntryIds,
-      model.handleDownload,
-      model.handleDelete,
-    ),
+  // Static column defs over stable reactive containers — see createLibraryColumns.
+  const columns = createLibraryColumns(
+    model.pendingActions,
+    model.downloadedEntryIds,
+    model.handleDownload,
+    model.handleDelete,
   );
 
   const tableModel = createLibrariesTableModel({

@@ -18,11 +18,17 @@ function renderTableCell<TComponent extends Component<any, any, any>>(
   return renderComponent(component, props);
 }
 
+/**
+ * Builds the column defs once per page. Every input is a stable reference
+ * (reactive containers + model callbacks); per-row state is derived inside the
+ * cell components, so the columns never change identity — recreating them
+ * would rebuild the table rows and reset the scroll position.
+ */
 export function createLibraryColumns(
-  pendingEntryAction: LibrariesPageModel['pendingEntryAction'],
-  currentDownloadedEntryIds: ReadonlySet<string>,
-  onDownload: (entryId: string) => Promise<void>,
-  onDelete: (entryId: string) => Promise<void>,
+  pendingActions: LibrariesPageModel['pendingActions'],
+  downloadedEntryIds: LibrariesPageModel['downloadedEntryIds'],
+  onDownload: (entryId: string) => Promise<boolean>,
+  onDelete: (entryId: string) => Promise<boolean>,
 ): ColumnDef<LibraryManifestEntry>[] {
   return [
     {
@@ -59,8 +65,8 @@ export function createLibraryColumns(
       cell: ({ row }) =>
         renderTableCell(LibraryActionsCell, {
           entry: row.original,
-          pendingEntryAction,
-          isDownloaded: currentDownloadedEntryIds.has(row.original.entry_id),
+          pendingActions,
+          downloadedEntryIds,
           onDownload,
           onDelete,
         }),

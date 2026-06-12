@@ -123,6 +123,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.saveError': 'Error al guardar la configuración.',
 
   'common.unknown': 'Desconocido',
+  'common.downloadProgress': 'Progreso de descarga',
 
   'gameDetails.noGameSelected.title': 'Ningún juego seleccionado',
   'gameDetails.noGameSelected.description': 'Selecciona un juego del panel para ver sus detalles.',

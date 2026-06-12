@@ -1,4 +1,4 @@
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import {
   vendorOptions,
   typeOptionsByVendor,
@@ -11,17 +11,19 @@ import {
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
 import { t } from '@shared/i18n';
-import type { LibraryManifest, LibraryManifestEntry, LibraryState } from '@entities/library';
 import {
+  type LibraryManifest,
+  type LibraryManifestEntry,
+  type LibraryState,
   getLibrariesManifest,
   fetchLibrariesManifest,
   getLibraryStates,
   downloadLibrary,
   deleteLibrary,
+  clearDownloadProgress,
 } from '@entities/library';
 
 type EntryAction = 'download' | 'delete';
-type PendingEntryAction = { entryId: string; action: EntryAction } | null;
 type ManifestLoader = () => Promise<LibraryManifest>;
 
 type LoadLibrariesOptions = {
@@ -30,7 +32,7 @@ type LoadLibrariesOptions = {
   failureContext: string;
 };
 
-type RunExclusiveEntryActionOptions = {
+type RunEntryActionOptions = {
   entryId: string;
   action: EntryAction;
   failureContext: string;
@@ -58,7 +60,11 @@ export function createLibrariesPageModel() {
   let loading = $state(true);
   let refreshing = $state(false);
   let errorMessage = $state<string | null>(null);
-  let pendingEntryAction = $state<PendingEntryAction>(null);
+  // One in-flight action per entry; actions on different entries run concurrently.
+  const pendingActions = new SvelteMap<string, EntryAction>();
+  // Stable reactive set (synced from `states`) so the static table columns can
+  // read per-row membership without ever being recreated.
+  const downloadedEntryIds = new SvelteSet<string>();
   let activeVendor = $state<Vendor>(DEFAULT_VENDOR);
   let activeType = $state<LibraryTypeValue>(DEFAULT_TYPE_BY_VENDOR[DEFAULT_VENDOR]);
   const lastTypeByVendor = $state<Record<Vendor, LibraryTypeValue>>({ ...DEFAULT_TYPE_BY_VENDOR });
@@ -69,13 +75,13 @@ export function createLibrariesPageModel() {
 
   let mounted = false;
   let loadRequestId = 0;
+  let statesRequestId = 0;
 
   // ---------------------------------------------------------------------------
   // Derived
   // ---------------------------------------------------------------------------
 
-  const isBusy = $derived(loading || refreshing || pendingEntryAction !== null);
-  const downloadedEntryIds = $derived(createDownloadedEntryIdSet(states));
+  const isBusy = $derived(loading || refreshing || pendingActions.size > 0);
   const activeGroupKey = $derived(groupKeyForType(activeType));
   const filteredEntries = $derived(filterEntriesByGroup(manifest, activeGroupKey));
   const emptyMessage = $derived(
@@ -125,13 +131,13 @@ export function createLibrariesPageModel() {
       if (!isCurrentLoadRequest(requestId)) return;
 
       manifest = nextManifest;
-      states = nextStates;
+      setStates(nextStates);
     } catch (error) {
       if (!isCurrentLoadRequest(requestId)) return;
 
       if (isInitialLoad) {
         manifest = null;
-        states = [];
+        setStates([]);
       }
 
       setError(options.failureContext, error);
@@ -161,8 +167,8 @@ export function createLibrariesPageModel() {
     lastTypeByVendor[activeVendor] = value;
   }
 
-  async function handleDownload(entryId: string): Promise<void> {
-    await runExclusiveEntryAction({
+  async function handleDownload(entryId: string): Promise<boolean> {
+    return runEntryAction({
       entryId,
       action: 'download',
       failureContext: t('libraries.error.downloadFailed'),
@@ -171,8 +177,8 @@ export function createLibrariesPageModel() {
     });
   }
 
-  async function handleDelete(entryId: string): Promise<void> {
-    await runExclusiveEntryAction({
+  async function handleDelete(entryId: string): Promise<boolean> {
+    return runEntryAction({
       entryId,
       action: 'delete',
       failureContext: t('libraries.error.deleteFailed'),
@@ -181,36 +187,50 @@ export function createLibrariesPageModel() {
     });
   }
 
-  async function runExclusiveEntryAction(options: RunExclusiveEntryActionOptions): Promise<void> {
-    if (isBusy) return;
+  /**
+   * Runs a download/delete for one entry. Entries are independent: actions on
+   * different entries run concurrently, while a second action on the same
+   * entry (or any action during a manifest load/refresh) is ignored.
+   *
+   * Returns `true` only when the action actually ran — callers must not
+   * report success otherwise.
+   */
+  async function runEntryAction(options: RunEntryActionOptions): Promise<boolean> {
+    if (loading || refreshing || pendingActions.has(options.entryId)) return false;
 
-    pendingEntryAction = { entryId: options.entryId, action: options.action };
+    pendingActions.set(options.entryId, options.action);
+    if (options.action === 'download') {
+      clearDownloadProgress([options.entryId]);
+    }
     errorMessage = null;
 
     try {
       await options.execute(options.entryId);
 
-      if (!mounted) return;
-
-      await refreshLibraryStates(options.refreshFailureContext);
+      if (mounted) {
+        await refreshLibraryStates(options.refreshFailureContext);
+      }
+      return true;
     } catch (error) {
       if (mounted) {
         setError(options.failureContext, error);
       }
       throw error;
     } finally {
-      if (mounted) {
-        pendingEntryAction = null;
-      }
+      pendingActions.delete(options.entryId);
     }
   }
 
   async function refreshLibraryStates(errorContext: string): Promise<void> {
+    // Concurrent downloads finish independently; the counter makes sure a
+    // slower, older snapshot can never overwrite a fresher one.
+    const requestId = ++statesRequestId;
+
     try {
       const nextStates = await getLibraryStates();
 
-      if (mounted) {
-        states = nextStates;
+      if (mounted && requestId === statesRequestId) {
+        setStates(nextStates);
       }
     } catch (error) {
       if (mounted) {
@@ -247,10 +267,27 @@ export function createLibrariesPageModel() {
     );
   }
 
-  function createDownloadedEntryIdSet(currentStates: LibraryState[]): ReadonlySet<string> {
-    return new SvelteSet(
-      currentStates.filter((state) => state.is_downloaded).map((state) => state.id),
-    );
+  function setStates(nextStates: LibraryState[]): void {
+    states = nextStates;
+    syncDownloadedEntryIds(nextStates);
+  }
+
+  /**
+   * Mirrors `states` into the stable `downloadedEntryIds` set with a minimal
+   * diff, so only rows whose download status actually changed re-render.
+   */
+  function syncDownloadedEntryIds(currentStates: LibraryState[]): void {
+    const nextIds = currentStates.filter((state) => state.is_downloaded).map((state) => state.id);
+
+    for (const id of downloadedEntryIds) {
+      if (!nextIds.includes(id)) {
+        downloadedEntryIds.delete(id);
+      }
+    }
+
+    for (const id of nextIds) {
+      downloadedEntryIds.add(id);
+    }
   }
 
   function getLastValidTypeForVendor(vendor: Vendor): LibraryTypeValue {
@@ -312,8 +349,11 @@ export function createLibrariesPageModel() {
     get errorMessage() {
       return errorMessage;
     },
-    get pendingEntryAction() {
-      return pendingEntryAction;
+    get pendingActions() {
+      return pendingActions as ReadonlyMap<string, EntryAction>;
+    },
+    get downloadedEntryIds() {
+      return downloadedEntryIds as ReadonlySet<string>;
     },
     get activeVendor() {
       return activeVendor;
@@ -328,9 +368,6 @@ export function createLibrariesPageModel() {
     // Derived
     get isBusy() {
       return isBusy;
-    },
-    get downloadedEntryIds() {
-      return downloadedEntryIds;
     },
     get activeGroupKey() {
       return activeGroupKey;

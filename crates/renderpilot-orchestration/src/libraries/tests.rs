@@ -370,6 +370,18 @@ fn test_validate_entry_rejects_oversized_dll() {
         .contains("exceeds maximum allowed"));
 }
 
+#[test]
+fn test_validate_entry_rejects_oversized_zst() {
+    let mut entry = sample_entry("big_zst", "1.0", "1.0", "stable");
+    entry.files.zst.size_bytes = super::compression::MAX_ARCHIVE_SIZE + 1;
+    let result = super::validate::validate_entry(&entry);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("exceeds maximum allowed"));
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

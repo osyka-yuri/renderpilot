@@ -5,6 +5,7 @@ import {
 } from '@entities/operation';
 import { publishErrorNotification } from '@shared/notifications';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
+import { clearDownloadProgress } from '@entities/library';
 
 import type { BulkSwapItem } from './streamline-versions';
 
@@ -56,6 +57,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     artifactId: string,
     isDownloaded: boolean,
   ): Promise<void> {
+    clearDownloadProgress([artifactId]);
     const result = await runForSelectedGameWithSignal(async (gameId, signal) => {
       const appliedOperation = await executeGraphicsSwap({
         gameId,
@@ -123,6 +125,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
    * (download-then-apply).
    */
   async function handleBulkSwap(items: BulkSwapItem[]): Promise<void> {
+    clearDownloadProgress(items.map((item) => item.artifactId));
     const outcome = await runBatch(items, async (gameId, item, signal) => {
       const appliedOperation = await executeGraphicsSwap({
         gameId,

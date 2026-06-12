@@ -53,6 +53,14 @@ pub(super) fn validate_entry(entry: &LibraryManifestEntry) -> Result<(), Service
         )));
     }
 
+    if entry.files.zst.size_bytes > super::compression::MAX_ARCHIVE_SIZE {
+        return Err(library_error(format!(
+            "ZST size for `{}` exceeds maximum allowed ({})",
+            entry.entry_id,
+            super::compression::MAX_ARCHIVE_SIZE
+        )));
+    }
+
     super::compression::validate_size_constraints(&entry.entry_id, entry.files.dll.size_bytes)?;
 
     if !is_sha256_hex(&entry.files.dll.hashes.sha256) {

@@ -7,7 +7,7 @@
 use crate::utils::{to_json, JsonResult};
 
 pub use renderpilot_orchestration::libraries::{
-    LibraryManifest, LibraryManifestEntry, LibraryState,
+    DownloadProgress, LibraryManifest, LibraryManifestEntry, LibraryState, ProgressObserver,
 };
 
 // ---------------------------------------------------------------------------
@@ -28,16 +28,23 @@ pub async fn get_libraries_manifest() -> JsonResult {
 pub async fn download_library(
     context: &renderpilot_orchestration::Context,
     entry_id: String,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::download_library(context, entry_id).await?)
+    to_json(
+        renderpilot_orchestration::libraries::download_library(context, entry_id, progress).await?,
+    )
 }
 
 /// Materializes a swap artifact by its **artifact id**.
 pub async fn download_artifact(
     context: &renderpilot_orchestration::Context,
     artifact_id: String,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::download_artifact(context, artifact_id).await?)
+    to_json(
+        renderpilot_orchestration::libraries::download_artifact(context, artifact_id, progress)
+            .await?,
+    )
 }
 
 /// Deletes a locally downloaded library by its ID.

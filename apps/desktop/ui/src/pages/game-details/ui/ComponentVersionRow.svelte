@@ -20,6 +20,7 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { DownloadProgressBar } from '@entities/library';
 
   type Props = {
     component: GameGraphicsComponent;
@@ -51,17 +52,24 @@
       ? `v${group.current_version}${isCurrentDebug ? ' (Debug)' : ''}`
       : t('common.unknown'),
   );
+
+  // Track which artifact id the user actually clicked to download so the
+  // progress bar appears only on the initiating control.
+  let pendingArtifactId = $state<string | null>(null);
+
   // The dropdown always marks the installed version as selected. Its value is the
   // installed file's content id, so after a swap/rollback the highlight follows the
   // new current version automatically — no stale pick lingers.
 
   // Bound selection, re-pinned to the installed version whenever an operation
   // settles (`busy` → false). This keeps the highlight correct even when a swap
-  // FAILS — a clicked-but-never-installed version cannot stay selected.
+  // FAILS — a clicked-but-never-installed version cannot stay selected. Also
+  // resets pendingArtifactId.
   let selected = $state<string | undefined>(undefined);
   $effect(() => {
     if (!busy) {
       selected = currentValue;
+      pendingArtifactId = null;
     }
   });
 
@@ -69,6 +77,7 @@
     if (!value || value === currentValue || busy) return;
     const candidate = candidates.find((c) => c.artifact_id === value);
     if (candidate) {
+      pendingArtifactId = value;
       onSwap(component.id, value, candidate.is_downloaded);
     }
   }
@@ -77,6 +86,8 @@
     if (busy) return;
     onRollback(component.id);
   }
+
+  const progressIds = $derived(pendingArtifactId ? [pendingArtifactId] : []);
 </script>
 
 <Item size="sm">
@@ -90,6 +101,7 @@
     {#if candidates.length === 0}
       <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
+      <DownloadProgressBar ids={progressIds} active={busy} class="mr-2" />
       <Select type="single" bind:value={selected} disabled={busy} onValueChange={handleSwapChange}>
         <SelectTrigger size="sm" class="w-60">
           <span class="truncate">{currentLabel}</span>
