@@ -16,14 +16,14 @@ fn no_args_prints_summary() {
 fn version_flag_prints_version_line() {
     let output = run(args(&["--version"])).expect("version should render");
 
-    assert_eq!(output, "RenderPilot 1.0.0\n");
+    assert_eq!(output, "RenderPilot 1.1.0\n");
 }
 
 #[test]
 fn short_version_flag_prints_version_line() {
     let output = run(args(&["-V"])).expect("version should render");
 
-    assert_eq!(output, "RenderPilot 1.0.0\n");
+    assert_eq!(output, "RenderPilot 1.1.0\n");
 }
 
 #[test]

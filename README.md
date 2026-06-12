@@ -35,7 +35,7 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 - **💾 Local-First:** Everything stored in a local SQLite database. Fast, private, and fully offline-capable.
 - **⚡ Native Performance:** Built on Tauri and Rust — tiny binary, instant startup, minimal memory footprint.
 - **🎮 Game Covers & Artwork:** Automatically fetch game covers from SteamGridDB or set custom artwork from your files.
-- **🔧 NVIDIA Driver-Level Settings:** Manage DLSS presets, Super Resolution, Frame Generation, and Ray Reconstruction directly from the app — no need to open the NVIDIA Control Panel.
+- **🔧 NVIDIA Driver-Level Settings:** Manage the full range of DLSS Super Resolution, Frame Generation, and Ray Reconstruction driver settings (including presets) per game via NVAPI.
 - **📟 DLSS Indicator Overlay:** Toggle the built-in NVIDIA DLSS indicator to see which upscaler version is active in real-time.
 - **🏷️ Advanced Game Filtering:** Filter by library or launcher, search by name, mark favorites, hide games — organize your catalog your way.
 - **📋 Operation Journal:** Review every library swap and rollback in a detailed history log.
