@@ -1,6 +1,6 @@
 //! Manifest and archive validation helpers.
 
-use std::{collections::HashSet, io::Read};
+use std::collections::HashSet;
 
 use sha2::{Digest, Sha256};
 
@@ -46,19 +46,14 @@ pub(super) fn validate_entry(entry: &LibraryManifestEntry) -> Result<(), Service
     ensure_not_blank("build type", &entry.build.build_type)?;
     ensure_valid_build_type(&entry.build.build_type)?;
 
-    if entry.files.zip.size_bytes == 0 {
+    if entry.files.zst.size_bytes == 0 {
         return Err(library_error(format!(
-            "ZIP size for `{}` must be greater than zero",
+            "ZST size for `{}` must be greater than zero",
             entry.entry_id
         )));
     }
 
-    if entry.files.dll.size_bytes == 0 {
-        return Err(library_error(format!(
-            "DLL size for `{}` must be greater than zero",
-            entry.entry_id
-        )));
-    }
+    super::compression::validate_size_constraints(&entry.entry_id, entry.files.dll.size_bytes)?;
 
     if !is_sha256_hex(&entry.files.dll.hashes.sha256) {
         return Err(library_error(format!(
@@ -67,16 +62,30 @@ pub(super) fn validate_entry(entry: &LibraryManifestEntry) -> Result<(), Service
         )));
     }
 
-    super::http::parse_https_url(&entry.files.zip.download_url, "manifest validation")?;
+    let parsed_url =
+        super::http::parse_https_url(&entry.files.zst.download_url, "manifest validation")?;
+    if parsed_url.host_str() != Some(super::manifest::LIBS_HOST) {
+        return Err(library_error(format!(
+            "invalid download URL for `{}`: host must be {}",
+            entry.entry_id,
+            super::manifest::LIBS_HOST
+        )));
+    }
 
     Ok(())
 }
 
-pub(super) fn validate_archive_payload(
+/// Validates that the downloaded archive payload has the exact size declared
+/// in the manifest.
+///
+/// `download_exact_bytes` already enforces this for fresh downloads; keeping
+/// the check here as well guards any future caller that obtains the payload
+/// some other way.
+pub(super) fn validate_compressed_size(
     entry: &LibraryManifestEntry,
     payload: &[u8],
 ) -> Result<(), ServiceError> {
-    let expected_size = usize::try_from(entry.files.zip.size_bytes).map_err(|_| {
+    let expected_size = usize::try_from(entry.files.zst.size_bytes).map_err(|_| {
         library_error(format!(
             "archive size for `{}` is too large for this platform",
             entry.entry_id
@@ -91,59 +100,21 @@ pub(super) fn validate_archive_payload(
         )));
     }
 
-    validate_dll_in_archive(entry, payload)
+    Ok(())
 }
 
-fn validate_dll_in_archive(
-    entry: &LibraryManifestEntry,
-    payload: &[u8],
+pub(super) fn validate_dll_hash(
+    entry_id: &str,
+    expected_sha256: &str,
+    dll_bytes: &[u8],
 ) -> Result<(), ServiceError> {
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(payload)).map_err(|error| {
-        library_error(format!(
-            "invalid ZIP archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
+    let actual_sha256 = hex::encode(Sha256::digest(dll_bytes));
 
-    let dll_file_name = &entry.library.file_name;
-    let mut dll_file = archive.by_name(dll_file_name).map_err(|error| {
-        library_error(format!(
-            "DLL `{dll_file_name}` not found in archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
-
-    let expected_dll_size = entry.files.dll.size_bytes;
-    if dll_file.size() != expected_dll_size {
+    // Both sides are lowercase: the manifest hash is lowercased during serde
+    // deserialization and hex::encode produces lowercase output.
+    if actual_sha256 != expected_sha256 {
         return Err(library_error(format!(
-            "DLL size mismatch for `{}`: expected {expected_dll_size} bytes, got {} bytes",
-            entry.entry_id,
-            dll_file.size()
-        )));
-    }
-
-    let dll_capacity = usize::try_from(expected_dll_size).map_err(|_| {
-        library_error(format!(
-            "DLL size for `{}` is too large for this platform",
-            entry.entry_id
-        ))
-    })?;
-
-    let mut dll_bytes = Vec::with_capacity(dll_capacity);
-    dll_file.read_to_end(&mut dll_bytes).map_err(|error| {
-        library_error(format!(
-            "failed to read DLL `{dll_file_name}` from archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
-
-    let actual_sha256 = hex::encode(Sha256::digest(&dll_bytes));
-    let expected_sha256 = &entry.files.dll.hashes.sha256;
-
-    if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
-        return Err(library_error(format!(
-            "DLL hash mismatch for `{}`: expected {expected_sha256}, got {actual_sha256}",
-            entry.entry_id
+            "DLL hash mismatch for `{entry_id}`: expected {expected_sha256}, got {actual_sha256}"
         )));
     }
 

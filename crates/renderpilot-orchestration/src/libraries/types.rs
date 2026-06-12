@@ -31,11 +31,16 @@ pub struct LibraryManifestEntry {
 }
 
 impl LibraryManifestEntry {
+    /// Local cache filename for the compressed archive.
+    ///
+    /// Version is omitted from the name because each `entry_id` in the
+    /// manifest maps to exactly one version.  If the manifest is updated
+    /// with a new size for the same entry the old cached file is detected
+    /// as stale and replaced.
     pub(crate) fn archive_file_name(&self) -> String {
         format!(
-            "{}_{}.zip",
-            super::storage::sanitize_path_component(&self.entry_id),
-            super::storage::sanitize_path_component(&self.version.value)
+            "{}.dll.zst",
+            super::storage::sanitize_path_component(&self.entry_id)
         )
     }
 }
@@ -73,8 +78,8 @@ pub struct BuildInfo {
 pub struct FilesInfo {
     /// Metadata for the DLL file inside the downloaded archive.
     pub dll: DllFileInfo,
-    /// Metadata for the downloadable ZIP archive.
-    pub zip: ZipFileInfo,
+    /// Metadata for the downloadable zstd-compressed archive.
+    pub zst: ZstFileInfo,
 }
 
 /// Metadata for a DLL file contained in a library archive.
@@ -90,15 +95,23 @@ pub struct DllFileInfo {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HashesInfo {
     /// SHA-256 checksum published by the manifest.
+    ///
+    /// Normalized to lowercase at parse time so it can be compared with
+    /// the lowercase output of `hex::encode` using plain `==`.
+    #[serde(deserialize_with = "deserialize_lowercase")]
     pub sha256: String,
 }
 
-/// Metadata for a downloadable ZIP archive.
+fn deserialize_lowercase<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    String::deserialize(d).map(|s| s.to_ascii_lowercase())
+}
+
+/// Metadata for a downloadable zstd-compressed DLL archive.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ZipFileInfo {
-    /// Expected ZIP archive size in bytes.
+pub struct ZstFileInfo {
+    /// Expected compressed archive size in bytes.
     pub size_bytes: u64,
-    /// URL used to download the ZIP archive.
+    /// URL used to download the compressed archive.
     pub download_url: String,
 }
 

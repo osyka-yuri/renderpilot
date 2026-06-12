@@ -4,6 +4,7 @@
 mod tests;
 
 mod artifact_builder;
+mod compression;
 mod fsr_packages;
 mod http;
 mod local_library;

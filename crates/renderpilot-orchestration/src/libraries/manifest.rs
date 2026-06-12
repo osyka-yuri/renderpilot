@@ -6,12 +6,30 @@ use super::{
     validate,
 };
 
-const DEFAULT_MANIFEST_URL: &str =
-    "https://osyka-yuri.github.io/renderpilot-libraries/manifest.json";
+/// Single source of truth for the public library CDN host: the host constant
+/// and every URL built by `lib_url!` are derived from this one literal, so
+/// changing the host cannot desync URL construction from host pinning in
+/// `validate::validate_entry`.
+macro_rules! libs_host {
+    () => {
+        "pub-48612a35034d40f88f42b4181547925a.r2.dev"
+    };
+}
+
+/// Host that all manifest, preset, and archive downloads are pinned to.
+pub(crate) const LIBS_HOST: &str = libs_host!();
+
+macro_rules! lib_url {
+    ($path:literal) => {
+        concat!("https://", libs_host!(), "/", $path)
+    };
+}
+
+const DEFAULT_MANIFEST_URL: &str = lib_url!("manifest.json");
 const PRESET_URLS: &[&str] = &[
-    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_presets.json",
-    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_g_presets.json",
-    "https://osyka-yuri.github.io/renderpilot-libraries/dlss_d_presets.json",
+    lib_url!("dlss_presets.json"),
+    lib_url!("dlss_g_presets.json"),
+    lib_url!("dlss_d_presets.json"),
 ];
 const MAX_MANIFEST_SIZE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -35,9 +53,19 @@ async fn download_and_save_preset(url: &str) -> Result<(), ServiceError> {
         http::download_limited_bytes(client, url, MAX_MANIFEST_SIZE_BYTES, "preset fetch").await?;
     if let Some(file_name) = url.split('/').next_back() {
         let path = storage::local_preset_manifest_path(file_name)?;
-        storage::write_file_atomically(&path, &bytes)?;
+        storage::write_file_atomically(&path, strip_utf8_bom(&bytes))?;
     }
     Ok(())
+}
+
+/// Returns `bytes` without a leading UTF-8 byte-order mark.
+///
+/// The published JSON documents are produced by PowerShell tooling, which
+/// historically prepends a BOM that `serde_json` rejects. Stripping it at the
+/// download/read boundary keeps parsing independent of how the publisher
+/// encoded the file.
+pub(super) fn strip_utf8_bom(bytes: &[u8]) -> &[u8] {
+    bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes)
 }
 
 /// Returns the local manifest if available, otherwise fetches and saves it.
@@ -60,7 +88,7 @@ async fn download_manifest(url: &str) -> Result<LibraryManifest, ServiceError> {
         http::download_limited_bytes(client, url, MAX_MANIFEST_SIZE_BYTES, "manifest fetch")
             .await?;
 
-    let manifest = serde_json::from_slice::<LibraryManifest>(&bytes)
+    let manifest = serde_json::from_slice::<LibraryManifest>(strip_utf8_bom(&bytes))
         .map_err(|error| library_error(format!("failed to parse manifest: {error}")))?;
 
     validate::validate_manifest(&manifest)?;
@@ -87,7 +115,7 @@ pub(super) fn load_local_manifest() -> Result<Option<LibraryManifest>, ServiceEr
     let json = std::fs::read(&path)
         .map_err(|error| library_error(format!("failed to read manifest: {error}")))?;
 
-    let manifest = serde_json::from_slice::<LibraryManifest>(&json)
+    let manifest = serde_json::from_slice::<LibraryManifest>(strip_utf8_bom(&json))
         .map_err(|error| library_error(format!("failed to parse local manifest: {error}")))?;
 
     validate::validate_manifest(&manifest)?;

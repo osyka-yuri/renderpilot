@@ -155,7 +155,7 @@ fn member_component_file(
 mod tests {
     use super::super::types::{
         BuildInfo, DllFileInfo, FilesInfo, HashesInfo, LibraryInfo, SignatureInfo, VersionInfo,
-        ZipFileInfo,
+        ZstFileInfo,
     };
     use super::*;
 
@@ -189,9 +189,9 @@ mod tests {
                         sha256: sha256.to_owned(),
                     },
                 },
-                zip: ZipFileInfo {
+                zst: ZstFileInfo {
                     size_bytes: 1,
-                    download_url: "https://example.test/fsr.zip".to_owned(),
+                    download_url: "https://example.test/fsr.dll.zst".to_owned(),
                 },
             },
             signature: SignatureInfo::Unsigned,

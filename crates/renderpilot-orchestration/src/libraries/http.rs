@@ -30,6 +30,7 @@ pub(super) async fn get_successful_response(
     operation: &str,
 ) -> Result<Response, ServiceError> {
     let url = parse_https_url(url, operation)?;
+
     let response = client
         .get(url)
         .send()

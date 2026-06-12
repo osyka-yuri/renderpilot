@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -10,12 +9,39 @@ use renderpilot_domain::{
 };
 
 use super::{
-    artifact_builder,
+    artifact_builder, compression,
     fsr_packages::FsrPackage,
     http, library_error, storage,
     types::{LibraryManifest, LibraryManifestEntry, LibraryState},
     validate,
 };
+
+pub(super) struct DecompressedArtifact {
+    pub(super) bytes: Vec<u8>,
+    pub(super) sha256: String,
+}
+
+impl DecompressedArtifact {
+    /// Decompresses the archive payload and verifies the DLL bytes against
+    /// the SHA-256 declared in the manifest.
+    ///
+    /// This is the only way to obtain a [`DecompressedArtifact`], so every
+    /// DLL — freshly downloaded or read back from the archive cache — is
+    /// hash-verified before it is written anywhere. `sha256` is the verified
+    /// manifest hash (already lowercase), so no extra hashing pass is needed.
+    pub(super) fn decompress_and_verify(
+        entry: &LibraryManifestEntry,
+        payload: &[u8],
+    ) -> Result<Self, ServiceError> {
+        let bytes = compression::decompress_library(entry, payload)?;
+        validate::validate_dll_hash(&entry.entry_id, &entry.files.dll.hashes.sha256, &bytes)?;
+
+        Ok(Self {
+            bytes,
+            sha256: entry.files.dll.hashes.sha256.clone(),
+        })
+    }
+}
 
 pub(super) struct DownloadedLibrary {
     pub(super) dll_path: PathBuf,
@@ -29,9 +55,9 @@ pub(super) async fn ensure_downloaded_and_registered(
     let archive_path = local_archive_path(entry)?;
     let dll_path = local_dll_path(entry)?;
 
-    ensure_local_archive(entry, &archive_path).await?;
+    let maybe_artifact = ensure_local_archive(entry, &archive_path).await?;
 
-    let artifact_id = materialize_local_library(context, entry, &archive_path)?;
+    let artifact_id = materialize_local_library(context, entry, &archive_path, maybe_artifact)?;
 
     Ok(DownloadedLibrary {
         dll_path,
@@ -54,27 +80,38 @@ fn local_dll_path(entry: &LibraryManifestEntry) -> Result<PathBuf, ServiceError>
     )
 }
 
+/// Ensures the compressed archive exists on disk and is valid.
+///
+/// Returns `None` if the cached archive is already present and valid (no
+/// download needed).  Returns `Some(artifact)` when a fresh download was
+/// required — the caller can use these pre-decompressed bytes directly,
+/// avoiding a second decompression pass.
 async fn ensure_local_archive(
     entry: &LibraryManifestEntry,
     archive_path: &Path,
-) -> Result<(), ServiceError> {
-    if archive_path.exists() && archive_is_valid(archive_path, entry)? {
-        return Ok(());
+) -> Result<Option<DecompressedArtifact>, ServiceError> {
+    if archive_is_valid(archive_path, entry)? {
+        return Ok(None);
     }
 
-    if archive_path.exists() {
-        storage::remove_file_if_exists(archive_path)?;
-    }
+    storage::remove_file_if_exists(archive_path)?;
 
     let payload = download_archive(entry).await?;
-    validate::validate_archive_payload(entry, &payload)?;
-    storage::write_file_atomically(archive_path, &payload)
+
+    // Validate before writing to disk so we never persist a corrupted archive.
+    validate::validate_compressed_size(entry, &payload)?;
+    let artifact = DecompressedArtifact::decompress_and_verify(entry, &payload)?;
+
+    storage::write_file_atomically(archive_path, &payload)?;
+
+    Ok(Some(artifact))
 }
 
 fn materialize_local_library(
     context: &crate::Context,
     entry: &LibraryManifestEntry,
     archive_path: &Path,
+    maybe_artifact: Option<DecompressedArtifact>,
 ) -> Result<String, ServiceError> {
     let dll_path = local_dll_path(entry)?;
 
@@ -82,7 +119,7 @@ fn materialize_local_library(
         return Ok(artifact_id);
     }
 
-    extract_and_register_library(context, entry, archive_path, &dll_path)
+    extract_and_register_library(context, entry, archive_path, &dll_path, maybe_artifact)
 }
 
 fn reuse_local_library(
@@ -105,23 +142,49 @@ fn reuse_local_library(
     register_local_artifact(context, entry, dll_path, &dll_sha256).map(Some)
 }
 
+/// Returns the artifact from pre-decompressed bytes (fresh download) or reads
+/// and decompresses the cached archive from disk. Either way the DLL bytes
+/// are hash-verified against the manifest.
+fn decompress_or_reuse(
+    entry: &LibraryManifestEntry,
+    archive_path: &Path,
+    maybe_artifact: Option<DecompressedArtifact>,
+) -> Result<DecompressedArtifact, ServiceError> {
+    match maybe_artifact {
+        Some(artifact) => Ok(artifact),
+        None => {
+            let payload = storage::read_file(archive_path)?;
+            DecompressedArtifact::decompress_and_verify(entry, &payload)
+        }
+    }
+}
+
+/// Writes the DLL and its SHA-256 sidecar cache, then frees up space by
+/// deleting the cached archive (best-effort) now that we have the DLL.
+fn persist_dll(
+    artifact: &DecompressedArtifact,
+    dll_path: &Path,
+    archive_path: &Path,
+) -> Result<(), ServiceError> {
+    storage::write_file_atomically(dll_path, &artifact.bytes)?;
+    storage::write_sha256_cache(dll_path, &artifact.sha256)?;
+
+    let _ = storage::remove_file_if_exists(archive_path);
+
+    Ok(())
+}
+
 fn extract_and_register_library(
     context: &crate::Context,
     entry: &LibraryManifestEntry,
     archive_path: &Path,
     dll_path: &Path,
+    maybe_artifact: Option<DecompressedArtifact>,
 ) -> Result<String, ServiceError> {
-    let payload = storage::read_file(archive_path)?;
-    let dll_bytes = extract_dll_from_archive(entry, &payload)?;
-    let sha256 = hex::encode(Sha256::digest(&dll_bytes));
+    let artifact = decompress_or_reuse(entry, archive_path, maybe_artifact)?;
+    persist_dll(&artifact, dll_path, archive_path)?;
 
-    storage::write_file_atomically(dll_path, &dll_bytes)?;
-    storage::write_sha256_cache(dll_path, &sha256)?;
-
-    // Free up space by deleting the downloaded ZIP now that we have the DLL
-    let _ = storage::remove_file_if_exists(archive_path);
-
-    register_local_artifact(context, entry, dll_path, &sha256)
+    register_local_artifact(context, entry, dll_path, &artifact.sha256)
 }
 
 fn read_or_compute_dll_sha256(dll_path: &Path) -> Result<String, ServiceError> {
@@ -156,7 +219,7 @@ pub(super) fn delete_local_library(
     context: &crate::Context,
     entry: &LibraryManifestEntry,
 ) -> Result<(), ServiceError> {
-    // Remove the cached ZIP archive (may already be absent after a prior extraction).
+    // Remove the cached archive (may already be absent after a prior extraction).
     let archive_path = local_archive_path(entry)?;
     storage::remove_file_if_exists(&archive_path)?;
 
@@ -191,13 +254,19 @@ async fn download_archive(entry: &LibraryManifestEntry) -> Result<Vec<u8>, Servi
     let client = http::http_client();
     http::download_exact_bytes(
         client,
-        &entry.files.zip.download_url,
-        entry.files.zip.size_bytes,
+        &entry.files.zst.download_url,
+        entry.files.zst.size_bytes,
         "library download",
     )
     .await
 }
 
+/// Returns `true` when the cached archive has the expected file size.
+///
+/// We check only the file size, not the content hash.  This relies on the
+/// invariant that a content change is always accompanied by a size change
+/// in the manifest.  If that invariant is ever violated, remove the cached
+/// archive manually.
 fn archive_is_valid(path: &Path, entry: &LibraryManifestEntry) -> Result<bool, ServiceError> {
     if !path.exists() {
         return Ok(false);
@@ -205,37 +274,7 @@ fn archive_is_valid(path: &Path, entry: &LibraryManifestEntry) -> Result<bool, S
 
     let metadata = std::fs::metadata(path)
         .map_err(|error| library_error(format!("failed to read archive metadata: {error}")))?;
-    Ok(metadata.len() == entry.files.zip.size_bytes)
-}
-
-fn extract_dll_from_archive(
-    entry: &LibraryManifestEntry,
-    payload: &[u8],
-) -> Result<Vec<u8>, ServiceError> {
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(payload)).map_err(|error| {
-        library_error(format!(
-            "invalid ZIP archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
-
-    let dll_file_name = &entry.library.file_name;
-    let mut dll_file = archive.by_name(dll_file_name).map_err(|error| {
-        library_error(format!(
-            "DLL `{dll_file_name}` not found in archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
-
-    let mut dll_bytes = Vec::with_capacity(dll_file.size() as usize);
-    dll_file.read_to_end(&mut dll_bytes).map_err(|error| {
-        library_error(format!(
-            "failed to read DLL `{dll_file_name}` from archive for `{}`: {error}",
-            entry.entry_id
-        ))
-    })?;
-
-    Ok(dll_bytes)
+    Ok(metadata.len() == entry.files.zst.size_bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +285,7 @@ fn extract_dll_from_archive(
 /// registering a single-file artifact (FSR members are only offered as packages).
 async fn ensure_member_dll(entry: &LibraryManifestEntry) -> Result<PathBuf, ServiceError> {
     let archive_path = local_archive_path(entry)?;
-    ensure_local_archive(entry, &archive_path).await?;
+    let maybe_artifact = ensure_local_archive(entry, &archive_path).await?;
 
     let dll_path = local_dll_path(entry)?;
     if dll_path.exists() {
@@ -257,14 +296,8 @@ async fn ensure_member_dll(entry: &LibraryManifestEntry) -> Result<PathBuf, Serv
         }
     }
 
-    let payload = storage::read_file(&archive_path)?;
-    let dll_bytes = extract_dll_from_archive(entry, &payload)?;
-    let sha256 = hex::encode(Sha256::digest(&dll_bytes));
-    storage::write_file_atomically(&dll_path, &dll_bytes)?;
-    storage::write_sha256_cache(&dll_path, &sha256)?;
-
-    // Free up space by deleting the downloaded ZIP now that we have the DLL
-    let _ = storage::remove_file_if_exists(&archive_path);
+    let artifact = decompress_or_reuse(entry, &archive_path, maybe_artifact)?;
+    persist_dll(&artifact, &dll_path, &archive_path)?;
 
     Ok(dll_path)
 }
