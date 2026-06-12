@@ -78,7 +78,9 @@ impl ComponentReplacementCandidates {
         self.current_version.as_ref()
     }
 
-    /// Returns replacement candidates sorted by best automatic match first.
+    /// Returns replacement candidates in stable presentation order: newest
+    /// version first with unknown versions last, ties broken by file name and
+    /// build type.
     pub fn candidates(&self) -> &[ReplacementCandidate] {
         &self.candidates
     }
@@ -97,6 +99,25 @@ pub struct ReplacementCandidate {
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
     is_debug: bool,
+}
+
+/// Named sort key for [`ReplacementCandidate`] ordering — every field is named
+/// so the sort semantics are obvious at the call site instead of requiring the
+/// reader to decode a positional tuple. Field order IS the sort order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct CandidateSortKey<'a> {
+    /// Version descending: `Reverse` makes `Some(3.0)` sort before `Some(2.0)`,
+    /// and `Reverse(None)` sorts after every `Some(..)` — unknown versions last.
+    version: std::cmp::Reverse<Option<&'a Version>>,
+    /// Secondary key: file name in lexical order.
+    file_name: &'a str,
+    /// Release builds before debug builds at the same version.
+    is_debug: bool,
+    /// Downloaded twins sort before their non-downloaded counterpart so the
+    /// downloaded copy survives deduplication.
+    downloaded: std::cmp::Reverse<bool>,
+    /// Content-identity tie-break that never changes.
+    sha256: &'a str,
 }
 
 impl ReplacementCandidate {
@@ -128,22 +149,24 @@ impl ReplacementCandidate {
         }
     }
 
-    pub(super) fn ordering_key(
-        &self,
-    ) -> (
-        u8,
-        std::cmp::Reverse<Option<Version>>,
-        std::cmp::Reverse<bool>,
-        &str,
-        &str,
-    ) {
-        (
-            self.comparison.priority(),
-            std::cmp::Reverse(self.version.clone()),
-            std::cmp::Reverse(self.is_downloaded),
-            self.file_name.as_str(),
-            self.file_path.as_ref().map(|p| p.as_str()).unwrap_or(""),
-        )
+    /// Stable presentation order: always version-descending, independent of the
+    /// installed version and of any mutable state.
+    ///
+    /// Deliberately excluded from the key: the comparison verdict (it shifts
+    /// every candidate's position whenever the installed version changes) and
+    /// the local file path (it appears when a download completes). The one
+    /// mutable field kept, `is_downloaded`, sits *after* every field that
+    /// distinguishes two post-dedup rows — it only orders identical
+    /// `(version, file_name, is_debug)` twins so the downloaded one survives
+    /// deduplication, and such twins collapse to a single visible row.
+    pub(super) fn ordering_key(&self) -> CandidateSortKey<'_> {
+        CandidateSortKey {
+            version: std::cmp::Reverse(self.version.as_ref()),
+            file_name: self.file_name.as_str(),
+            is_debug: self.is_debug,
+            downloaded: std::cmp::Reverse(self.is_downloaded),
+            sha256: self.sha256.as_str(),
+        }
     }
 
     /// Returns the candidate artifact identifier.
@@ -215,14 +238,6 @@ impl CandidateComparison {
             Self::NewerVersion => "newer_version",
             Self::UnknownVersion => "unknown_version",
             Self::OlderVersion => "older_version",
-        }
-    }
-
-    const fn priority(self) -> u8 {
-        match self {
-            Self::NewerVersion => 0,
-            Self::UnknownVersion => 1,
-            Self::OlderVersion => 2,
         }
     }
 }

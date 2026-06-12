@@ -174,6 +174,16 @@ fn includes_all_known_versions_for_replacement() {
 
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0].candidates().len(), 3);
+    // Version-descending order; the comparison verdict rides along per row.
+    let ids: Vec<&str> = groups[0]
+        .candidates()
+        .iter()
+        .map(|candidate| candidate.artifact_id().as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        vec!["artifact:newer", "artifact:same", "artifact:older"]
+    );
     assert_eq!(
         groups[0].candidates()[0].comparison(),
         CandidateComparison::NewerVersion
@@ -186,6 +196,178 @@ fn includes_all_known_versions_for_replacement() {
         groups[0].candidates()[2].comparison(),
         CandidateComparison::OlderVersion
     );
+}
+
+#[test]
+fn order_is_version_descending_even_when_every_candidate_is_older() {
+    // The installed version is newer than every candidate: the order must not
+    // depend on comparison partitions — plain version-descending, always.
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("9.9.9"),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let make = |id: &str, version: &str, sha: char| {
+        sample_artifact(
+            id,
+            GraphicsTechnology::DlssSuperResolution,
+            Some(version),
+            &sha.to_string().repeat(64),
+            "C:/Games/GameB/nvngx_dlss.dll",
+            Some("game:b"),
+        )
+    };
+
+    let groups = find_test_candidates(
+        &[component],
+        &[
+            make("artifact:v35", "3.5.0", 'b'),
+            make("artifact:v38", "3.8.0", 'c'),
+            make("artifact:v37", "3.7.0", 'd'),
+        ],
+    );
+
+    let ids: Vec<&str> = groups[0]
+        .candidates()
+        .iter()
+        .map(|candidate| candidate.artifact_id().as_str())
+        .collect();
+    assert_eq!(ids, vec!["artifact:v38", "artifact:v37", "artifact:v35"]);
+}
+
+#[test]
+fn unknown_version_candidates_sort_last() {
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.7.0"),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let unknown = sample_artifact(
+        "artifact:unknown",
+        GraphicsTechnology::DlssSuperResolution,
+        None,
+        &"b".repeat(64),
+        "C:/Games/GameB/nvngx_dlss.dll",
+        Some("game:b"),
+    );
+    let versioned = sample_artifact(
+        "artifact:v35",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.5.0"),
+        &"c".repeat(64),
+        "C:/Games/GameC/nvngx_dlss.dll",
+        Some("game:c"),
+    );
+
+    let groups = find_test_candidates(&[component], &[unknown, versioned]);
+
+    let ids: Vec<&str> = groups[0]
+        .candidates()
+        .iter()
+        .map(|candidate| candidate.artifact_id().as_str())
+        .collect();
+    assert_eq!(ids, vec!["artifact:v35", "artifact:unknown"]);
+}
+
+#[test]
+fn download_state_does_not_reorder_distinct_versions() {
+    // A completed download must not move a candidate: a downloaded older
+    // version still sits below a non-downloaded newer one.
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let newer = sample_artifact(
+        "artifact:v38",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.8.0"),
+        &"b".repeat(64),
+        "C:/Games/GameB/nvngx_dlss.dll",
+        Some("game:b"),
+    );
+    let older_downloaded = sample_artifact(
+        "artifact:v37",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"c".repeat(64),
+        "C:/Library/nvngx_dlss.dll",
+        None,
+    );
+
+    let context = CandidateContext::new(
+        [older_downloaded.id().clone()].into_iter().collect(),
+        std::collections::HashMap::new(),
+        std::collections::HashSet::new(),
+    );
+    let groups = find_replacement_candidates(&[component], &[newer, older_downloaded], &context);
+
+    let rows: Vec<(&str, bool)> = groups[0]
+        .candidates()
+        .iter()
+        .map(|candidate| (candidate.artifact_id().as_str(), candidate.is_downloaded()))
+        .collect();
+    assert_eq!(rows, vec![("artifact:v38", false), ("artifact:v37", true)]);
+}
+
+#[test]
+fn downloaded_twin_survives_deduplication() {
+    // Two distinct artifacts share (file_name, version, build type) — e.g. a
+    // downloaded library copy and its manifest twin. Exactly one row survives,
+    // and it must be the downloaded one even when the sha tie-break alone
+    // would have put the other first.
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let downloaded = sample_artifact(
+        "artifact:downloaded",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"f".repeat(64), // sorts AFTER the twin's sha — only is_downloaded puts it first
+        "C:/Library/nvngx_dlss.dll",
+        None,
+    );
+    let manifest_twin = sample_artifact(
+        "artifact:manifest",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"b".repeat(64),
+        "C:/Games/GameB/nvngx_dlss.dll",
+        Some("game:b"),
+    );
+
+    let context = CandidateContext::new(
+        [downloaded.id().clone()].into_iter().collect(),
+        std::collections::HashMap::new(),
+        std::collections::HashSet::new(),
+    );
+    let groups = find_replacement_candidates(&[component], &[manifest_twin, downloaded], &context);
+
+    assert_eq!(groups[0].candidates().len(), 1, "twins collapse to one row");
+    assert_eq!(
+        groups[0].candidates()[0].artifact_id().as_str(),
+        "artifact:downloaded",
+        "the downloaded twin survives deduplication"
+    );
+    assert!(groups[0].candidates()[0].is_downloaded());
 }
 
 #[test]

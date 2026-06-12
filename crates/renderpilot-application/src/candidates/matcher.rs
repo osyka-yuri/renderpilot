@@ -76,7 +76,7 @@ pub fn find_replacement_candidates(
         };
 
         let current_version = primary_component_version(component);
-        let mut candidates = component_artifacts
+        let candidates = component_artifacts
             .iter()
             .filter_map(|artifact| {
                 // Ignore artifacts scanned from the exact same game.
@@ -107,8 +107,7 @@ pub fn find_replacement_candidates(
             continue;
         }
 
-        candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
-        let candidates = deduplicate_candidates(candidates);
+        let candidates = sort_and_deduplicate_candidates(candidates);
         groups.push(ComponentReplacementCandidates::new(component, candidates));
     }
 
@@ -146,15 +145,22 @@ fn compare_versions(
     }
 }
 
-/// Collapses candidates that are the same artifact. The artifact id is the
-/// bundle's content identity (`ArtifactId::for_bundle`), so distinct bundles that
-/// merely share a primary DLL keep their separate entries, while the same content
-/// observed twice (e.g. two manifest entries) collapses to one.
-fn deduplicate_candidates(candidates: Vec<ReplacementCandidate>) -> Vec<ReplacementCandidate> {
+/// Sorts candidates into their stable presentation order (the
+/// `ordering_key`), then collapses duplicates — first occurrence wins.
+///
+/// Two candidates are duplicates when they are the same artifact (the artifact
+/// id is the bundle's content identity, `ArtifactId::for_bundle` — distinct
+/// bundles that merely share a primary DLL keep their separate entries), or
+/// when a manifest entry's DLL is byte-identical to a scanned artifact (same
+/// file name + version + build type). Sorting first places the downloaded twin
+/// of such a pair ahead of its non-downloaded counterpart, so the downloaded
+/// copy is the one that survives. That contract is pinned by a test.
+fn sort_and_deduplicate_candidates(
+    mut candidates: Vec<ReplacementCandidate>,
+) -> Vec<ReplacementCandidate> {
+    candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
+
     let mut seen_ids = HashSet::<ArtifactId>::new();
-    // Secondary dedup key: collapses manifest entries whose DLL is byte-identical
-    // to a scanned artifact (same file name + version + build type) so the user
-    // does not see the same logical version twice in the list.
     let mut seen_version_keys = HashSet::<(String, Version, bool)>::new();
     let mut deduplicated = Vec::with_capacity(candidates.len());
 
