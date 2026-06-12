@@ -9,6 +9,9 @@ use crate::{AppError, AppResult};
 pub struct UnixTimestampMillis(i64);
 
 impl UnixTimestampMillis {
+    /// The Unix epoch (timestamp `0`), useful as an infallible fallback.
+    pub const EPOCH: Self = Self(0);
+
     /// Creates a non-negative Unix timestamp in milliseconds.
     pub fn new(value: i64) -> AppResult<Self> {
         if value < 0 {

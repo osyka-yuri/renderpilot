@@ -150,7 +150,7 @@ fn record_operation_journal_entry(storage: &SqliteStorage, params: JournalEntryP
         return;
     };
     let timestamp = renderpilot_application::UnixTimestampMillis::now()
-        .unwrap_or_else(|_| renderpilot_application::UnixTimestampMillis::new(0).unwrap());
+        .unwrap_or(renderpilot_application::UnixTimestampMillis::EPOCH);
 
     let game_name = storage
         .find_game(game_id)
