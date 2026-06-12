@@ -6,7 +6,7 @@
 //! (that lives in [`super::matcher`]).
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    fsr, ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
     PathRef, Version,
 };
 
@@ -24,16 +24,15 @@ pub struct ComponentReplacementCandidates {
 impl ComponentReplacementCandidates {
     /// Creates a per-component candidate group.
     ///
-    /// `current_version` describes the component's version representative, while
-    /// `file_path` is the user-facing display path. For cohesive FSR these may be
-    /// different files: the upscaler carries the FSR 4.x version, but the dx12
+    /// `current_version` describes the component's version representative
+    /// ([`fsr::version_representative`]: for cohesive FSR the upscaler
+    /// carries the FSR 4.x version; next to a real unified FSR 3.1 the entry
+    /// point does), while `file_path` is the user-facing display path — the dx12
     /// entry point is still the path the user expects to see.
     pub fn new(component: &GraphicsComponent, candidates: Vec<ReplacementCandidate>) -> Self {
-        let representative = component
-            .files()
-            .first()
+        let representative = fsr::version_representative(component.files())
             .expect("component candidate group requires at least one file");
-        let display = crate::fsr::display_component_file(component.files())
+        let display = fsr::display_component_file(component.files())
             .expect("component candidate group requires at least one display file");
 
         Self {

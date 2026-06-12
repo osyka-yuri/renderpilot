@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+    fsr, ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
     GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash,
     Swappability, Version,
 };
@@ -600,26 +600,33 @@ fn order_with_primary_first<'a>(group: &[&'a DetectedLibraryFile]) -> Vec<&'a De
         .map(|file| file.technology().family())
         .unwrap_or_default();
 
+    // FSR sets arbitrate the representative by release-build cohesion: a leftover
+    // upscaler next to a real unified FSR 3.1 must not hijack the version display.
+    let fsr_upscaler_represents = family == GraphicsTechnology::AmdFsr
+        && fsr::upscaler_represents_set(
+            group.iter().map(|file| (file.file_name(), file.version())),
+        );
+
     let mut ordered = group.to_vec();
     ordered.sort_by(|left, right| {
-        primary_rank(left, family)
-            .cmp(&primary_rank(right, family))
+        primary_rank(left, family, fsr_upscaler_represents)
+            .cmp(&primary_rank(right, family, fsr_upscaler_represents))
             .then_with(|| left.file_name().cmp(right.file_name()))
     });
 
     ordered
 }
 
-/// Lower rank = more representative. For AMD FSR the upscaler DLL carries the FSR
-/// version (e.g. `4.0.x`) — not the loader's own `2.x` — so it is the
-/// representative; otherwise the file whose technology equals the family is.
-fn primary_rank(file: &DetectedLibraryFile, family: GraphicsTechnology) -> u8 {
+/// Lower rank = more representative. AMD FSR delegates to the shared
+/// [`fsr::primary_rank`] (the upscaler carries the FSR version only in a
+/// cohesive set); otherwise the file whose technology equals the family is.
+fn primary_rank(
+    file: &DetectedLibraryFile,
+    family: GraphicsTechnology,
+    fsr_upscaler_represents: bool,
+) -> u8 {
     if family == GraphicsTechnology::AmdFsr {
-        return match file.file_name().to_ascii_lowercase().as_str() {
-            "amd_fidelityfx_upscaler_dx12.dll" => 0,
-            "amd_fidelityfx_dx12.dll" => 1,
-            _ => 2,
-        };
+        return fsr::primary_rank(file.file_name(), fsr_upscaler_represents);
     }
 
     if file.technology() == family {

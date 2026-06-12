@@ -4,6 +4,7 @@
 //! operating-system APIs, and detection implementation details.
 
 mod component;
+pub mod fsr;
 mod game;
 mod ids;
 mod model;

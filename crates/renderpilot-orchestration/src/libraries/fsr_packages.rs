@@ -8,10 +8,9 @@
 //! offers the individual DLLs too for native FSR 4 games, while still composing
 //! the matched cohesive package for entry-point-lineage upgrades.
 
-use renderpilot_application::fsr;
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
-    Sha256Hash, Version,
+    fsr, ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact,
+    PathRef, Sha256Hash, Version,
 };
 use std::collections::BTreeMap;
 

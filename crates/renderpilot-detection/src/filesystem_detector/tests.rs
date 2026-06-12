@@ -491,6 +491,15 @@ fn detector_keeps_dx12_lineage_fsr_cohesive() {
     assert_eq!(components.len(), 1, "dx12-lineage FSR stays cohesive");
     assert_eq!(fsr.files().len(), 2);
     assert_eq!(fsr.swappability(), Swappability::BundleOnly);
+
+    // Neither file carries a PE version (garbage bytes), so release cohesion
+    // cannot be proven — the entry point the game loads is the representative,
+    // not the possibly-leftover upscaler.
+    assert_eq!(
+        fsr.files()[0].path().file_name(),
+        Some("amd_fidelityfx_dx12.dll"),
+        "without proven cohesion the entry point is files()[0]"
+    );
 }
 
 #[test]

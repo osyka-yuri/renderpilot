@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
-use renderpilot_application::{fsr, AppResult};
+use renderpilot_application::AppResult;
 use renderpilot_detection::{read_windows_file_version, sha256_file};
-use renderpilot_domain::{ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef};
+use renderpilot_domain::{
+    fsr, ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef,
+};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 pub(super) fn recover_orphaned_backups(
@@ -135,12 +137,12 @@ fn recover_orphaned_fsr_split_members(
             continue;
         }
 
-        // Only consider FSR split members / markers.
+        // Only consider FSR split members (the upscaler marker is one of them).
         let Some(stem) = bak_path.file_stem() else {
             continue;
         };
         let stem_str = stem.to_string_lossy();
-        if !fsr::is_split_member(&stem_str) && !fsr::is_split_marker(&stem_str) {
+        if !fsr::is_split_member(&stem_str) {
             continue;
         }
 

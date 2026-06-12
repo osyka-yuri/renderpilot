@@ -7,10 +7,10 @@ use std::{
 };
 
 use renderpilot_application::{
-    build_swap_operation_plan, fsr, AppError, AppResult, ComponentRepository, GameRepository,
+    build_swap_operation_plan, AppError, AppResult, ComponentRepository, GameRepository,
 };
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology,
+    fsr, ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology,
     LibraryArtifact, PathRef,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
@@ -162,9 +162,7 @@ fn record_operation_journal_entry(storage: &SqliteStorage, params: JournalEntryP
     let metadata = OperationMetadata {
         game_name,
         library: component.technology().as_slug().to_string(),
-        from_version: component
-            .files()
-            .first()
+        from_version: fsr::version_representative(component.files())
             .and_then(|f| f.version())
             .map(|v| v.to_string()),
         to_version: to_version.unwrap_or(UNKNOWN_VERSION).to_owned(),
@@ -292,7 +290,9 @@ pub fn rollback_component(
         .map(|file| file.path().as_str().to_owned())
         .unwrap_or_default();
 
-    let rebuilt = rebuild_component(&component, baseline.clone());
+    let mut restored_files = baseline.clone();
+    fsr::sort_representative_first(&mut restored_files);
+    let rebuilt = rebuild_component(&component, restored_files);
     let next_components = full_component_set(storage, &game_id, rebuilt)?;
 
     revert_to_baseline_fs(component.files(), &baseline)?;
@@ -306,8 +306,7 @@ pub fn rollback_component(
             component_id: &component_id,
             kind: renderpilot_application::OperationKind::RollbackComponent,
             component: &component,
-            to_version: baseline
-                .first()
+            to_version: fsr::version_representative(&baseline)
                 .and_then(|f| f.version())
                 .map(|v| v.as_str())
                 .or(Some(ROLLBACK_TARGET_LABEL)),
@@ -373,9 +372,15 @@ fn prepare_apply_swap(
         )))
     }
     // the package's installed files, minus any FSR member a unified downgrade drops.
-    // Computed before any FS/DB mutation.
-    let removed = fsr_members_to_remove(&component, &artifact, &planned);
-    let new_files = additive_active_files(&baseline, &planned, &removed);
+    // Computed before any FS/DB mutation, against the baseline — the file set the
+    // directory holds once a re-swap's revert has run.
+    let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
+    // additive_active_files appends kept baseline files first, which would leave
+    // e.g. a denoiser in front of the entry point — store representative-first
+    // (mirroring detection) so files()[0] carries the right version until the
+    // next rescan.
+    let mut new_files = additive_active_files(&baseline, &planned, &removed);
+    fsr::sort_representative_first(&mut new_files);
     let rebuilt = rebuild_component(&component, new_files);
     let next_components = full_component_set(storage, game_id, rebuilt)?;
 
@@ -513,10 +518,11 @@ fn apply_fs_steps(
         revert_to_baseline_fs(component.files(), baseline)?;
     }
 
-    // Downgrade cleanup: a unified FSR 3.x target drops the FSR 4 split members the
-    // game held. Back each up to its `.bak` (so rollback can restore it) and remove
-    // it, so the folder lands on a clean FSR 3.1 — never a mix. On a re-swap the
-    // revert above already deleted them, so these are no-ops then.
+    // Downgrade cleanup: a unified FSR 3.x target drops the upscaling-stack
+    // members the baseline holds. Back each up to its `.bak` (so rollback can
+    // restore it) and remove it, so the folder lands on a clean FSR 3.1 — never
+    // a mix. On a re-swap the revert above restores baseline-owned members from
+    // their `.bak`s first, and this pass removes them again.
     for file in removed {
         let target = real_path(file);
         if !target.exists() {
@@ -708,22 +714,34 @@ fn additive_active_files(
     files
 }
 
-/// FSR split members the unified target abandons on a downgrade — to be removed so
-/// the folder ends on a clean FSR 3.1, never a mix.
+/// FSR **upscaling-stack** members (upscaler, frame generation) the unified
+/// target supersedes on a downgrade — to be removed so the folder ends on a
+/// clean FSR 3.1, never a mix of upscaling releases.
 ///
 /// Non-empty only when the artifact is a **unified** FSR backend (its primary is not
-/// the split-marker upscaler) replacing a **dx12-lineage** component (one that loads
-/// `amd_fidelityfx_dx12.dll`) that still holds FSR split members. The RenderPilot
+/// the split-marker upscaler) replacing a **dx12/vk-lineage** component (one that loads
+/// `amd_fidelityfx_dx12.dll` or `amd_fidelityfx_vk.dll`) that still holds upscaling members. The RenderPilot
 /// upgrade path already cleans up via revert-to-baseline; this also covers a folder
 /// upgraded to FSR 4 outside RenderPilot, where there is no FSR 3.1 baseline.
+///
+/// Two deliberate boundaries:
+/// * Only [`fsr::is_upscaling_member`] files are removed. A loader under its
+///   own name and the optional effects (denoiser, radiance cache) form the
+///   game's own effect stack (e.g. a loader+denoiser Ray Regeneration
+///   pair) — an upscaling swap must leave them in place.
+/// * Removals are computed from the **baseline**, not the live component: a
+///   re-swap first reverts to the baseline, which restores baseline-owned
+///   split members from their `.bak`s — computing from the already-cleaned
+///   component would resurrect them. On a first swap the baseline IS the
+///   component's current file set, so both views agree.
 fn fsr_members_to_remove(
-    component: &GraphicsComponent,
+    baseline: &[ComponentFile],
     artifact: &LibraryArtifact,
     planned: &[PlannedFile],
 ) -> Vec<ComponentFile> {
     let target_is_unified_fsr = artifact.technology().family() == GraphicsTechnology::AmdFsr
         && !fsr::is_split_marker(artifact.file_name());
-    if !target_is_unified_fsr || !fsr::has_entry_point(component.files()) {
+    if !target_is_unified_fsr || !fsr::has_entry_point(baseline) {
         return Vec::new();
     }
 
@@ -732,12 +750,12 @@ fn fsr_members_to_remove(
         .filter_map(|plan| plan.file.path().file_name().map(str::to_ascii_lowercase))
         .collect();
 
-    component
-        .files()
+    baseline
         .iter()
         .filter(|file| {
             file.path().file_name().is_some_and(|name| {
-                fsr::is_split_member(name) && !planned_names.contains(&name.to_ascii_lowercase())
+                fsr::is_upscaling_member(name)
+                    && !planned_names.contains(&name.to_ascii_lowercase())
             })
         })
         .cloned()
@@ -1029,19 +1047,12 @@ mod tests {
     }
 
     #[test]
-    fn fsr_downgrade_removes_unmatched_split_members() {
-        let component = GraphicsComponent::new(
-            ComponentId::new("component:fsr").expect("component id"),
-            GameId::new("manual:C:/Games/Test").expect("game id"),
-            ComponentKind::NativeLibrary,
-            GraphicsTechnology::AmdFsr,
-            Swappability::Swappable,
-        )
-        .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"))
-        .with_file(comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"))
-        .with_file(comp_file_str(
-            "C:/game/amd_fidelityfx_framegeneration_dx12.dll",
-        ));
+    fn fsr_downgrade_removes_unmatched_upscaling_members() {
+        let baseline = vec![
+            comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_framegeneration_dx12.dll"),
+        ];
 
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:fsr31").expect("artifact id"),
@@ -1058,7 +1069,7 @@ mod tests {
             Path::new("C:/game/amd_fidelityfx_dx12.dll"),
         )];
 
-        let removed = fsr_members_to_remove(&component, &artifact, &planned);
+        let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
         let names: Vec<&str> = removed
             .iter()
             .filter_map(|file| file.path().file_name())
@@ -1069,21 +1080,83 @@ mod tests {
                 "amd_fidelityfx_upscaler_dx12.dll",
                 "amd_fidelityfx_framegeneration_dx12.dll",
             ],
-            "a unified FSR 3.1 downgrade drops the split members it does not install"
+            "a unified FSR 3.1 downgrade drops the upscaling members it does not install"
+        );
+    }
+
+    #[test]
+    fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
+        // Mixed lineage — the loader+denoiser Ray Regeneration stack is
+        // independent of the upscaling backend and must survive a unified
+        // FSR 3.1 update untouched.
+        let baseline = vec![
+            comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_loader_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_denoiser_dx12.dll"),
+        ];
+
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:fsr31").expect("artifact id"),
+            GraphicsTechnology::AmdFsr,
+            "amd_fidelityfx_dx12.dll",
+            vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+            ArtifactTrustLevel::ManifestDownloaded,
+        )
+        .expect("artifact");
+
+        let planned = vec![planned_copy(
+            Path::new("C:/lib/amd_fidelityfx_dx12.dll"),
+            Path::new("C:/game/amd_fidelityfx_dx12.dll"),
+        )];
+
+        assert!(
+            fsr_members_to_remove(&baseline, &artifact, &planned).is_empty(),
+            "the loader+denoiser stack is not part of the upscaling lineage"
+        );
+    }
+
+    #[test]
+    fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
+        // Re-swap scenario: the live component was already cleaned by an earlier
+        // unified swap, but the revert-to-baseline that precedes the overlay
+        // restores the baseline's upscaling members — they must be removed again.
+        let baseline = vec![
+            comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
+        ];
+
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:fsr31").expect("artifact id"),
+            GraphicsTechnology::AmdFsr,
+            "amd_fidelityfx_dx12.dll",
+            vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+            ArtifactTrustLevel::ManifestDownloaded,
+        )
+        .expect("artifact");
+
+        let planned = vec![planned_copy(
+            Path::new("C:/lib/amd_fidelityfx_dx12.dll"),
+            Path::new("C:/game/amd_fidelityfx_dx12.dll"),
+        )];
+
+        let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
+        assert_eq!(
+            removed
+                .iter()
+                .filter_map(|file| file.path().file_name())
+                .collect::<Vec<_>>(),
+            vec!["amd_fidelityfx_upscaler_dx12.dll"],
         );
     }
 
     #[test]
     fn fsr_members_to_remove_is_empty_for_a_split_artifact() {
-        let component = GraphicsComponent::new(
-            ComponentId::new("component:fsr").expect("component id"),
-            GameId::new("manual:C:/Games/Test").expect("game id"),
-            ComponentKind::NativeLibrary,
-            GraphicsTechnology::AmdFsr,
-            Swappability::Swappable,
-        )
-        .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"))
-        .with_file(comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"));
+        let baseline = vec![
+            comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
+            comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
+        ];
 
         // The artifact's primary file *is* the upscaler (split marker) → not a
         // unified downgrade, so nothing is removed.
@@ -1097,6 +1170,6 @@ mod tests {
         )
         .expect("artifact");
 
-        assert!(fsr_members_to_remove(&component, &artifact, &[]).is_empty());
+        assert!(fsr_members_to_remove(&baseline, &artifact, &[]).is_empty());
     }
 }

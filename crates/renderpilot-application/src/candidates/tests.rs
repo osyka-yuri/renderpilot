@@ -500,6 +500,53 @@ fn cohesive_fsr_candidate_group_uses_entry_point_as_display_path() {
 }
 
 #[test]
+fn mixed_fsr_component_reports_the_entry_points_version() {
+    // A real unified FSR 3.1 entry point next to developer-left split files:
+    // the builds do not match (no release cohesion), so the version the game
+    // actually runs must win — regardless of the stored file order.
+    let mut component = GraphicsComponent::new(
+        ComponentId::new("component:game-a:fsr").expect("component id"),
+        GameId::new("game:a").expect("game id"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::AmdFsr,
+        Swappability::BundleOnly,
+    );
+    for (name, version, sha) in [
+        (
+            "amd_fidelityfx_upscaler_dx12.dll",
+            "4.0.3.604",
+            "a".repeat(64),
+        ),
+        ("amd_fidelityfx_dx12.dll", "1.0.1.41314", "b".repeat(64)),
+        (
+            "amd_fidelityfx_loader_dx12.dll",
+            "2.1.0.604",
+            "c".repeat(64),
+        ),
+    ] {
+        component = component.with_file(
+            ComponentFile::new(PathRef::new(format!("C:/Game/{name}")).expect("path"))
+                .with_sha256(Sha256Hash::new(sha).expect("sha"))
+                .with_version(Version::parse(version).expect("version")),
+        );
+    }
+    let split = split_package_artifact("artifact:fsr-4.1", "4.1.0");
+
+    let groups = find_test_candidates(&[component], &[split]);
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0].file_path().as_str(),
+        "C:/Game/amd_fidelityfx_dx12.dll"
+    );
+    assert_eq!(
+        groups[0].current_version().map(|version| version.as_str()),
+        Some("1.0.1.41314"),
+        "the leftover upscaler must not hijack the current version"
+    );
+}
+
+#[test]
 fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
     let component = sample_component(
         "component:game-a:fsr-upscaler",

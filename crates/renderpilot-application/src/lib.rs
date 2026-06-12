@@ -9,7 +9,6 @@
 
 mod candidates;
 mod error;
-pub mod fsr;
 mod info;
 mod operation_plan;
 mod persistence;

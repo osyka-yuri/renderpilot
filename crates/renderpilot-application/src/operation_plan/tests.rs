@@ -356,6 +356,97 @@ fn native_split_fsr_loader_targets_existing_loader_file_in_plan() {
 }
 
 #[test]
+fn entry_point_component_with_separate_loader_stack_targets_entry_point_in_plan() {
+    // Mixed lineage — a real unified FSR 3.1 entry point next to a
+    // loader+denoiser Ray Regeneration stack. The package's loader must replace
+    // the entry point the game loads for upscaling; the RR stack's loader and
+    // denoiser must not appear in the plan at all.
+    let component = sample_bundle_component(
+        "component:game-a:fsr",
+        "game:a",
+        GraphicsTechnology::AmdFsr,
+        Swappability::BundleOnly,
+        &[
+            (
+                "C:/Games/GameA/amd_fidelityfx_dx12.dll",
+                Some("1.0.1.41314"),
+                Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                None,
+            ),
+            (
+                "C:/Games/GameA/amd_fidelityfx_loader_dx12.dll",
+                Some("2.1.0.604"),
+                Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                None,
+            ),
+            (
+                "C:/Games/GameA/amd_fidelityfx_denoiser_dx12.dll",
+                Some("1.0.0.604"),
+                Some("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                None,
+            ),
+        ],
+    );
+    let artifact = sample_bundle_artifact(
+        "artifact:fsr-4.1",
+        GraphicsTechnology::AmdFsr,
+        &[
+            (
+                "D:/Library/amd_fidelityfx_upscaler_dx12.dll",
+                Some("4.1.0"),
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                None,
+            ),
+            (
+                "D:/Library/amd_fidelityfx_loader_dx12.dll",
+                Some("2.2.0"),
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                Some("amd_fidelityfx_dx12.dll"),
+            ),
+            (
+                "D:/Library/amd_fidelityfx_framegeneration_dx12.dll",
+                Some("4.1.0"),
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                None,
+            ),
+        ],
+    );
+
+    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
+
+    let loader_file = plan
+        .files()
+        .iter()
+        .find(|file| {
+            file.replacement_path().map(|path| path.as_str())
+                == Some("D:/Library/amd_fidelityfx_loader_dx12.dll")
+        })
+        .expect("loader file should be present in plan");
+
+    assert_eq!(loader_file.action(), OperationPlanFileAction::Replace);
+    assert_eq!(
+        loader_file.target_path().as_str(),
+        "C:/Games/GameA/amd_fidelityfx_dx12.dll",
+        "the package loader must replace the entry point, not the RR stack's loader"
+    );
+    assert!(
+        plan.files().iter().all(|file| {
+            let target = file.target_path().as_str();
+            target != "C:/Games/GameA/amd_fidelityfx_loader_dx12.dll"
+                && target != "C:/Games/GameA/amd_fidelityfx_denoiser_dx12.dll"
+        }),
+        "the game's own loader+denoiser stack must stay untouched"
+    );
+    assert!(
+        plan.files().iter().any(|file| {
+            file.action() == OperationPlanFileAction::Add
+                && file.target_path().as_str() == "C:/Games/GameA/amd_fidelityfx_upscaler_dx12.dll"
+        }),
+        "the upscaler is added under its own name"
+    );
+}
+
+#[test]
 fn protected_windows_paths_require_elevation() {
     let component = sample_component(
         "component:game-a:dlss",

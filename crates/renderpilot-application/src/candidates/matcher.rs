@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version,
+    fsr, ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version,
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
@@ -75,6 +75,7 @@ pub fn find_replacement_candidates(
             continue;
         };
 
+        let current_version = primary_component_version(component);
         let mut candidates = component_artifacts
             .iter()
             .filter_map(|artifact| {
@@ -86,7 +87,7 @@ pub fn find_replacement_candidates(
                     return None;
                 }
 
-                let comparison = candidate_comparison(component, artifact)?;
+                let comparison = candidate_comparison(component, artifact, current_version)?;
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
                 let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
                 let is_debug = entry_id
@@ -215,16 +216,13 @@ impl From<GraphicsTechnology> for CompatibilityPolicy {
 fn candidate_comparison(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
+    current_version: Option<&Version>,
 ) -> Option<CandidateComparison> {
     require_not_split_downgrade(component, artifact)?;
     require_compatible_graphics_api(component, artifact)?;
-    require_version_compatible(
-        component.technology(),
-        primary_component_version(component),
-        artifact.version(),
-    )?;
+    require_version_compatible(component.technology(), current_version, artifact.version())?;
 
-    compare_versions(primary_component_version(component), artifact.version())
+    compare_versions(current_version, artifact.version())
 }
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).
@@ -236,7 +234,7 @@ fn require_compatible_graphics_api(
         return Some(());
     }
 
-    let Some(artifact_api) = crate::fsr::fsr_graphics_api(artifact.file_name()) else {
+    let Some(artifact_api) = fsr::fsr_graphics_api(artifact.file_name()) else {
         return Some(()); // API-neutral artifact cannot produce a mismatch.
     };
 
@@ -244,7 +242,7 @@ fn require_compatible_graphics_api(
         .files()
         .iter()
         .filter_map(|f| f.path().file_name())
-        .filter_map(crate::fsr::fsr_graphics_api)
+        .filter_map(fsr::fsr_graphics_api)
         .any(|api| api != artifact_api);
 
     if component_has_conflicting_api {
@@ -272,9 +270,9 @@ fn require_not_split_downgrade(
     // the unified FSR 3.x backend's is an entry point (`amd_fidelityfx_dx12.dll` or
     // `amd_fidelityfx_vk.dll`) — so the artifact side is exact even though a package's
     // member paths are virtual.
-    let artifact_is_unified = !crate::fsr::is_split_marker(artifact.file_name());
-    if crate::fsr::is_split_set(component.files())
-        && !crate::fsr::has_entry_point(component.files())
+    let artifact_is_unified = !fsr::is_split_marker(artifact.file_name());
+    if fsr::is_split_set(component.files())
+        && !fsr::has_entry_point(component.files())
         && artifact_is_unified
     {
         return None;
@@ -282,8 +280,12 @@ fn require_not_split_downgrade(
     Some(())
 }
 
+/// The version the component is compared by: the FSR-aware representative
+/// (entry point vs upscaler per release cohesion), not blindly `files()[0]` —
+/// components persisted before the representative-ranking fix may still carry
+/// an arbitrary stored order.
 fn primary_component_version(component: &GraphicsComponent) -> Option<&Version> {
-    component.files().first().and_then(ComponentFile::version)
+    fsr::version_representative(component.files()).and_then(ComponentFile::version)
 }
 
 fn require_version_compatible(
