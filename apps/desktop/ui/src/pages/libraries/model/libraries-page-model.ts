@@ -118,6 +118,14 @@ export function libraryIdToGroupKey(libraryId: string): LibraryGroupKey {
   return libraryIdToGroupKeyMap[libraryId] ?? DEFAULT_GROUP_KEY;
 }
 
+/**
+ * Groups that bundle several distinct DLLs (e.g. Streamline's sl_* set), where
+ * the version alone can't tell entries apart, so the file name is shown too.
+ */
+export function isMultiLibraryGroup(groupKey: LibraryGroupKey): boolean {
+  return groupKey === 'streamline';
+}
+
 export function getDefaultTypeForVendor(vendor: Vendor): LibraryTypeValue {
   return typeOptionsByVendor[vendor][0].value;
 }

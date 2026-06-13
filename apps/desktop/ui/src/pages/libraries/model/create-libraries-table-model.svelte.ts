@@ -13,14 +13,15 @@ import type { LibraryManifestEntry } from '@entities/library';
 import { resetVirtualizerAfterLayout } from '../ui/virtualizer-helpers';
 
 const DEFAULT_SORTING: SortingState = [{ id: 'version', desc: true }];
-const ROW_ESTIMATE_SIZE = 40;
+const ROW_ESTIMATE_SIZE_SINGLE = 40;
+const ROW_ESTIMATE_SIZE_MULTI = 52;
 const ROW_OVERSCAN = 12;
 
 const COLUMN_IDS = ['version', 'hash', 'signed', 'size', 'actions'] as const;
 export const COLUMN_COUNT = COLUMN_IDS.length;
 
 const COLUMN_CLASS_BY_ID = {
-  version: 'w-48',
+  version: 'w-56',
   hash: 'w-64',
   signed: 'w-40',
   size: 'w-24',
@@ -36,6 +37,7 @@ type LibrariesTableModelProps = {
   getColumns: () => ColumnDef<LibraryManifestEntry>[];
   getActiveVendor: () => string | undefined;
   getActiveType: () => string | undefined;
+  getShowFileName: () => boolean;
 };
 
 /**
@@ -94,7 +96,8 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
     return createVirtualizer<HTMLElement, HTMLTableRowElement>({
       count: rows.length,
       getScrollElement: () => scrollElement,
-      estimateSize: () => ROW_ESTIMATE_SIZE,
+      estimateSize: () =>
+        props.getShowFileName() ? ROW_ESTIMATE_SIZE_MULTI : ROW_ESTIMATE_SIZE_SINGLE,
       overscan: ROW_OVERSCAN,
       getItemKey: (index) => getRowByIndex(rows, index)?.original.entry_id ?? index,
     });

@@ -20,7 +20,11 @@
   } from '@shared/ui';
   import { t } from '@shared/i18n';
 
-  import { typeOptionsByVendor, vendorOptions } from '../model/libraries-page-model';
+  import {
+    isMultiLibraryGroup,
+    typeOptionsByVendor,
+    vendorOptions,
+  } from '../model/libraries-page-model';
   import { createLibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   import { createLibraryColumns } from './library-columns';
@@ -45,12 +49,18 @@
     }
   });
 
+  // Streamline bundles several sl_* DLLs that share a version, so the file name
+  // disambiguates them. Other groups map to a single DLL — version alone suffices.
+  const showFileName = $derived(isMultiLibraryGroup(model.activeGroupKey));
+  const getShowFileName = () => showFileName;
+
   // Static column defs over stable reactive containers — see createLibraryColumns.
   const columns = createLibraryColumns(
     model.pendingActions,
     model.downloadedEntryIds,
     model.handleDownload,
     model.handleDelete,
+    getShowFileName,
   );
 
   const tableModel = createLibrariesTableModel({
@@ -58,6 +68,7 @@
     getColumns: () => columns,
     getActiveVendor: () => model.activeVendor,
     getActiveType: () => model.activeType,
+    getShowFileName,
   });
 
   const rowVirtualizer = $derived(tableModel.rowVirtualizer);

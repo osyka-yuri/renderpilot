@@ -7,6 +7,7 @@ import {
   formatVersionLabel,
   getDefaultTypeForVendor,
   groupKeyForType,
+  isMultiLibraryGroup,
   isVendor,
   libraryIdToGroupKey,
 } from './libraries-page-model';
@@ -85,6 +86,20 @@ describe('libraries-page-model', () => {
 
     it('maps unknown ids to "other"', () => {
       expect(libraryIdToGroupKey('unknown.dll')).toBe('other');
+    });
+  });
+
+  describe('isMultiLibraryGroup', () => {
+    it('returns true for the streamline group', () => {
+      expect(isMultiLibraryGroup('streamline')).toBe(true);
+    });
+
+    it('returns false for single-library groups', () => {
+      expect(isMultiLibraryGroup('dlss')).toBe(false);
+      expect(isMultiLibraryGroup('fsr_31_dx12')).toBe(false);
+      expect(isMultiLibraryGroup('xess')).toBe(false);
+      expect(isMultiLibraryGroup('dstorage')).toBe(false);
+      expect(isMultiLibraryGroup('other')).toBe(false);
     });
   });
 
