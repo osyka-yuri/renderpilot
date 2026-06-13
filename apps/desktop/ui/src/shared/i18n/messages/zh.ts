@@ -200,6 +200,15 @@ export const zh: Record<MessageKey, MessageValue> = {
   'libraries.actions.deletedToast': '已删除 {version}',
   'libraries.actions.downloadedToast': '已下载 {version}',
   'libraries.actions.failedToast': '无法执行 {action}',
+  'libraries.actions.downloadAll': '下载全部最新',
+  'libraries.actions.downloadAllCount': '下载全部最新（{count}）',
+  'libraries.actions.downloadAllInProgress': '正在下载… {done}/{total}',
+  'libraries.actions.downloadAllDoneToast': {
+    one: '已下载 {count} 个库',
+    other: '已下载 {count} 个库',
+  },
+  'libraries.actions.downloadAllPartialToast': '已下载 {succeeded} 个，{failed} 个失败',
+  'libraries.actions.downloadAllNoneToast': '所有最新版本均已下载',
 
   'common.cancel': '取消',
   'common.apply': '应用',

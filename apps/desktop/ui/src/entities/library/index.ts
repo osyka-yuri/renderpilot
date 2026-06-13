@@ -15,6 +15,6 @@ export {
   getLibraryStates,
 } from './api/desktop';
 
-export { clearDownloadProgress } from './model/download-progress.svelte';
+export { clearDownloadProgress, sumDownloadFractions } from './model/download-progress.svelte';
 export type { DownloadProgress } from './model/download-progress.svelte';
 export { default as DownloadProgressBar } from './ui/DownloadProgressBar.svelte';

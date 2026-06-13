@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { t } from '@shared/i18n';
-import type { LibraryManifestEntry } from '@entities/library';
+import type { BuildType, LibraryManifest, LibraryManifestEntry } from '@entities/library';
 import {
   formatSignedDate,
   formatVersionLabel,
@@ -10,6 +10,7 @@ import {
   isMultiLibraryGroup,
   isVendor,
   libraryIdToGroupKey,
+  selectLatestStableEntries,
 } from './libraries-page-model';
 
 describe('libraries-page-model', () => {
@@ -110,7 +111,77 @@ describe('libraries-page-model', () => {
       expect(getDefaultTypeForVendor('intel')).toBe('xess');
     });
   });
+
+  describe('selectLatestStableEntries', () => {
+    it('returns an empty list for a null manifest', () => {
+      expect(selectLatestStableEntries(null)).toEqual([]);
+    });
+
+    it('keeps only the newest stable build per library id', () => {
+      const manifest = manifestOf([
+        libraryEntry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' }),
+        libraryEntry({ id: 'dlss-3', lib: 'nvngx_dlss', sort: '003' }),
+        libraryEntry({ id: 'xess-1', lib: 'libxess', sort: '005' }),
+      ]);
+
+      const result = selectLatestStableEntries(manifest);
+
+      expect(result).toHaveLength(2);
+      expect(result.map((entry) => entry.entry_id).sort()).toEqual(['dlss-3', 'xess-1']);
+    });
+
+    it('ignores beta and debug builds when picking the latest version', () => {
+      const manifest = manifestOf([
+        libraryEntry({ id: 'xess-beta', lib: 'libxess', sort: '009', build: 'beta' }),
+        libraryEntry({ id: 'xess-debug', lib: 'libxess', sort: '008', build: 'debug' }),
+        libraryEntry({ id: 'xess-stable', lib: 'libxess', sort: '005', build: 'stable' }),
+      ]);
+
+      expect(selectLatestStableEntries(manifest).map((entry) => entry.entry_id)).toEqual([
+        'xess-stable',
+      ]);
+    });
+
+    it('treats Streamline as a bundle: all plugins of the newest release, not the max per plugin', () => {
+      const manifest = manifestOf([
+        // Newest release (002) — should be taken in full.
+        libraryEntry({ id: 'sl-a-2', lib: 'sl_dlss', sort: '002' }),
+        libraryEntry({ id: 'sl-b-2', lib: 'sl_common', sort: '002' }),
+        // Older release (001) — dropped even though sl_extra only exists here.
+        libraryEntry({ id: 'sl-a-1', lib: 'sl_dlss', sort: '001' }),
+        libraryEntry({ id: 'sl-b-1', lib: 'sl_common', sort: '001' }),
+        libraryEntry({ id: 'sl-extra-1', lib: 'sl_extra', sort: '001' }),
+      ]);
+
+      const result = selectLatestStableEntries(manifest);
+
+      expect(result.map((entry) => entry.entry_id).sort()).toEqual(['sl-a-2', 'sl-b-2']);
+    });
+  });
 });
+
+function libraryEntry(options: {
+  id: string;
+  lib: string;
+  sort: string;
+  build?: BuildType;
+}): LibraryManifestEntry {
+  return {
+    entry_id: options.id,
+    library: { id: options.lib, file_name: `${options.lib}.dll` },
+    version: { value: options.sort, sort_key: options.sort },
+    build: { type: options.build ?? 'stable', label: null },
+    files: {
+      dll: { size_bytes: 1, hashes: { sha256: '0'.repeat(64) } },
+      zip: { size_bytes: 1, download_url: 'https://example.com/file.zip' },
+    },
+    signature: { status: 'unsigned' },
+  };
+}
+
+function manifestOf(entries: LibraryManifestEntry[]): LibraryManifest {
+  return { schema_version: 1, generated_at: '2024-01-01T00:00:00Z', entries };
+}
 
 function sampleEntry(options: {
   versionValue?: string;

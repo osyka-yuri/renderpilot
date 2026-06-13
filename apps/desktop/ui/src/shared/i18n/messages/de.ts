@@ -212,6 +212,16 @@ export const de: Record<MessageKey, MessageValue> = {
   'libraries.actions.deletedToast': '{version} gelöscht',
   'libraries.actions.downloadedToast': '{version} heruntergeladen',
   'libraries.actions.failedToast': 'Fehler bei: {action}',
+  'libraries.actions.downloadAll': 'Alle neuesten herunterladen',
+  'libraries.actions.downloadAllCount': 'Alle neuesten herunterladen ({count})',
+  'libraries.actions.downloadAllInProgress': 'Wird heruntergeladen… {done}/{total}',
+  'libraries.actions.downloadAllDoneToast': {
+    one: '{count} Bibliothek heruntergeladen',
+    other: '{count} Bibliotheken heruntergeladen',
+  },
+  'libraries.actions.downloadAllPartialToast':
+    '{succeeded} heruntergeladen, {failed} fehlgeschlagen',
+  'libraries.actions.downloadAllNoneToast': 'Alle neuesten Versionen sind bereits heruntergeladen',
 
   'common.cancel': 'Abbrechen',
   'common.apply': 'Anwenden',

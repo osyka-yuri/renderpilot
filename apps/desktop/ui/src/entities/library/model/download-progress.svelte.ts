@@ -71,3 +71,25 @@ export function clearDownloadProgress(ids: readonly string[]): void {
     progressMap.delete(id);
   }
 }
+
+/**
+ * Sums each id's completion fraction (downloaded/total, clamped to [0,1]) across
+ * the given ids. Ids with no progress event yet (or a non-positive total)
+ * contribute 0. Drives an aggregate progress bar across a batch of concurrent
+ * downloads, where a known entry count is the denominator and each in-flight
+ * download contributes its own byte progress.
+ */
+export function sumDownloadFractions(ids: readonly string[]): number {
+  ensureListener();
+
+  let sum = 0;
+
+  for (const id of ids) {
+    const entry = progressMap.get(id);
+    if (entry && entry.total > 0) {
+      sum += Math.min(1, entry.downloaded / entry.total);
+    }
+  }
+
+  return sum;
+}
