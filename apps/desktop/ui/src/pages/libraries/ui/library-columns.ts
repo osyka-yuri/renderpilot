@@ -4,10 +4,11 @@ import { renderComponent } from '@shared/ui';
 import { formatBytes } from '@shared/format';
 import { t } from '@shared/i18n';
 import type { LibraryManifestEntry } from '@entities/library';
-import { formatSignedDate, formatVersionLabel } from '../model/libraries-page-model';
+import { formatSignedDate } from '../model/libraries-page-model';
 import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 import LibraryActionsCell from './LibraryActionsCell.svelte';
 import LibraryHashCell from './LibraryHashCell.svelte';
+import LibraryVersionCell from './LibraryVersionCell.svelte';
 import SortHeader from './SortHeader.svelte';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +30,7 @@ export function createLibraryColumns(
   downloadedEntryIds: LibrariesPageModel['downloadedEntryIds'],
   onDownload: (entryId: string) => Promise<boolean>,
   onDelete: (entryId: string) => Promise<boolean>,
+  getShowFileName: () => boolean,
 ): ColumnDef<LibraryManifestEntry>[] {
   return [
     {
@@ -36,7 +38,11 @@ export function createLibraryColumns(
       accessorFn: (row) => row.version.sort_key,
       header: ({ column }) =>
         renderTableCell(SortHeader, { label: t('libraries.column.version'), column }),
-      cell: ({ row }) => formatVersionLabel(row.original),
+      cell: ({ row }) =>
+        renderTableCell(LibraryVersionCell, {
+          entry: row.original,
+          showFileName: getShowFileName(),
+        }),
     },
     {
       id: 'hash',
