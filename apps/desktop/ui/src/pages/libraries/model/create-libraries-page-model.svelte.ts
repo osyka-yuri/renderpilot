@@ -4,12 +4,14 @@ import {
   typeOptionsByVendor,
   groupKeyForType,
   libraryIdToGroupKey,
+  selectLatestStableEntries,
   getDefaultTypeForVendor,
   isVendor,
   type Vendor,
   type LibraryTypeValue,
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
+import { runWithConcurrency } from '@shared/concurrency';
 import { t } from '@shared/i18n';
 import {
   type LibraryManifest,
@@ -21,6 +23,7 @@ import {
   downloadLibrary,
   deleteLibrary,
   clearDownloadProgress,
+  sumDownloadFractions,
 } from '@entities/library';
 
 type EntryAction = 'download' | 'delete';
@@ -38,6 +41,9 @@ type RunEntryActionOptions = {
   failureContext: string;
   refreshFailureContext: string;
   execute: (entryId: string) => Promise<unknown>;
+  // When true, a failure is logged but not surfaced in the page-level error
+  // banner. Bulk runs report a single summary toast instead of N banner errors.
+  suppressErrorBanner?: boolean;
 };
 
 const DEFAULT_VENDOR = vendorOptions[0].value;
@@ -47,6 +53,19 @@ const DEFAULT_TYPE_BY_VENDOR = Object.freeze(
     vendorOptions.map((vendor) => [vendor.value, getDefaultTypeForVendor(vendor.value)]),
   ),
 ) as Readonly<Record<Vendor, LibraryTypeValue>>;
+
+/** Outcome of a "download all latest" run, aggregated across every target. */
+export type BulkDownloadResult = Readonly<{
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}>;
+
+const EMPTY_BULK_RESULT: BulkDownloadResult = { succeeded: 0, failed: 0, skipped: 0 };
+
+// Download a few entries at once: faster than serial without saturating the
+// connection. Each entry still streams its own per-row progress.
+const BULK_DOWNLOAD_CONCURRENCY = 3;
 
 export type LibrariesPageModel = ReturnType<typeof createLibrariesPageModel>;
 
@@ -68,6 +87,13 @@ export function createLibrariesPageModel() {
   let activeVendor = $state<Vendor>(DEFAULT_VENDOR);
   let activeType = $state<LibraryTypeValue>(DEFAULT_TYPE_BY_VENDOR[DEFAULT_VENDOR]);
   const lastTypeByVendor = $state<Record<Vendor, LibraryTypeValue>>({ ...DEFAULT_TYPE_BY_VENDOR });
+  // "Download all latest" progress; meaningful only while `bulkDownloading`.
+  let bulkDownloading = $state(false);
+  let bulkTotal = $state(0);
+  let bulkCompleted = $state(0);
+  // Snapshot of the batch's entry ids, taken at start: `targets` would otherwise
+  // shrink mid-run as `downloadedEntryIds` updates. Used to aggregate progress.
+  let bulkTargetIds = $state<readonly string[]>([]);
 
   // ---------------------------------------------------------------------------
   // Internal
@@ -81,12 +107,29 @@ export function createLibrariesPageModel() {
   // Derived
   // ---------------------------------------------------------------------------
 
-  const isBusy = $derived(loading || refreshing || pendingActions.size > 0);
+  const isBusy = $derived(loading || refreshing || pendingActions.size > 0 || bulkDownloading);
   const activeGroupKey = $derived(groupKeyForType(activeType));
   const filteredEntries = $derived(filterEntriesByGroup(manifest, activeGroupKey));
   const emptyMessage = $derived(
     getEmptyMessage(loading, manifest, errorMessage, filteredEntries.length),
   );
+  // Newest stable build of every library (Streamline bundle handled as a set),
+  // and how many of those still need downloading.
+  const latestStableEntries = $derived(selectLatestStableEntries(manifest));
+  const latestStablePendingCount = $derived(
+    latestStableEntries.filter((entry) => !downloadedEntryIds.has(entry.entry_id)).length,
+  );
+  // Smooth aggregate for the bulk bar: finished entries count as 1, in-flight
+  // ones add their own byte fraction, so the bar advances even within a single
+  // large download. In-flight entries are identified via `pendingActions`,
+  // intersected with the batch snapshot so a stray single-row download can't
+  // leak into the sum; finished entries are already covered by `bulkCompleted`,
+  // so there is no double counting.
+  const bulkProgressValue = $derived.by(() => {
+    if (!bulkDownloading) return 0;
+    const inFlight = bulkTargetIds.filter((id) => pendingActions.get(id) === 'download');
+    return bulkCompleted + sumDownloadFractions(inFlight);
+  });
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -188,6 +231,66 @@ export function createLibrariesPageModel() {
   }
 
   /**
+   * Downloads the newest stable build of every library that isn't downloaded
+   * yet (see {@link selectLatestStableEntries}). Reuses the per-entry pipeline,
+   * so each affected row lights up its own spinner/progress; this returns an
+   * aggregate the caller turns into a single summary toast.
+   *
+   * A failing entry never aborts the rest — failures are counted, not thrown.
+   */
+  async function downloadAllLatest(): Promise<BulkDownloadResult> {
+    if (isBusy) return EMPTY_BULK_RESULT;
+
+    const targets = latestStableEntries.filter((entry) => !downloadedEntryIds.has(entry.entry_id));
+    if (targets.length === 0) return EMPTY_BULK_RESULT;
+
+    bulkDownloading = true;
+    bulkTotal = targets.length;
+    bulkCompleted = 0;
+    bulkTargetIds = targets.map((entry) => entry.entry_id);
+    errorMessage = null;
+
+    let succeeded = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    try {
+      await runWithConcurrency(targets, BULK_DOWNLOAD_CONCURRENCY, async (entry) => {
+        try {
+          const ran = await runEntryAction({
+            entryId: entry.entry_id,
+            action: 'download',
+            failureContext: t('libraries.error.downloadFailed'),
+            refreshFailureContext: t('libraries.error.downloadedRefreshFailed'),
+            execute: downloadLibrary,
+            // The batch reports a single summary toast; per-entry failures must
+            // not also pile up in (and flicker) the page-level error banner.
+            suppressErrorBanner: true,
+          });
+          if (ran) {
+            succeeded += 1;
+          } else {
+            skipped += 1;
+          }
+        } catch {
+          // Already logged by `runEntryAction`; keep going so one bad entry
+          // can't strand the rest of the batch.
+          failed += 1;
+        } finally {
+          bulkCompleted += 1;
+        }
+      });
+    } finally {
+      bulkDownloading = false;
+      bulkTotal = 0;
+      bulkCompleted = 0;
+      bulkTargetIds = [];
+    }
+
+    return { succeeded, failed, skipped };
+  }
+
+  /**
    * Runs a download/delete for one entry. Entries are independent: actions on
    * different entries run concurrently, while a second action on the same
    * entry (or any action during a manifest load/refresh) is ignored.
@@ -213,7 +316,11 @@ export function createLibrariesPageModel() {
       return true;
     } catch (error) {
       if (mounted) {
-        setError(options.failureContext, error);
+        if (options.suppressErrorBanner) {
+          console.error(`${options.failureContext}:`, error);
+        } else {
+          setError(options.failureContext, error);
+        }
       }
       throw error;
     } finally {
@@ -364,6 +471,18 @@ export function createLibrariesPageModel() {
     set activeType(value: string | undefined) {
       handleTypeChange(value);
     },
+    get bulkDownloading() {
+      return bulkDownloading;
+    },
+    get bulkTotal() {
+      return bulkTotal;
+    },
+    get bulkCompleted() {
+      return bulkCompleted;
+    },
+    get bulkProgressValue() {
+      return bulkProgressValue;
+    },
 
     // Derived
     get isBusy() {
@@ -378,6 +497,9 @@ export function createLibrariesPageModel() {
     get emptyMessage() {
       return emptyMessage;
     },
+    get latestStablePendingCount() {
+      return latestStablePendingCount;
+    },
 
     // Actions
     loadInitialLibraries,
@@ -386,6 +508,7 @@ export function createLibrariesPageModel() {
     handleTypeChange,
     handleDownload,
     handleDelete,
+    downloadAllLatest,
 
     // Lifecycle
     init,

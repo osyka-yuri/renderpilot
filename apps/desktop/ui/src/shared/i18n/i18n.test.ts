@@ -55,6 +55,19 @@ describe('i18n', () => {
       expect(t('game.dashboard.games', { count: 21 })).toBe('21 игра');
       expect(t('game.dashboard.games', { count: 11 })).toBe('11 игр');
     });
+
+    it('pluralizes the bulk download summary toast', () => {
+      setLanguageMode('en');
+      expect(t('libraries.actions.downloadAllDoneToast', { count: 1 })).toBe(
+        'Downloaded 1 library',
+      );
+      expect(t('libraries.actions.downloadAllDoneToast', { count: 3 })).toBe(
+        'Downloaded 3 libraries',
+      );
+
+      setLanguageMode('ru');
+      expect(t('libraries.actions.downloadAllDoneToast', { count: 5 })).toBe('Скачано 5 библиотек');
+    });
   });
 
   describe('translateKey', () => {

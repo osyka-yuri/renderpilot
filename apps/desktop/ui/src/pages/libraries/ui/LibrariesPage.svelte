@@ -34,6 +34,7 @@
     getColumnClass,
   } from '../model/create-libraries-table-model.svelte';
   import { getBottomVirtualPadding, getTopVirtualPadding } from './virtualizer-helpers';
+  import LibrariesBulkDownloadButton from './LibrariesBulkDownloadButton.svelte';
 
   type Props = {
     refreshKey?: number;
@@ -99,6 +100,10 @@
       <AlertDescription>{model.errorMessage}</AlertDescription>
     </Alert>
   {/if}
+
+  <div class="flex shrink-0 items-center justify-end">
+    <LibrariesBulkDownloadButton {model} />
+  </div>
 
   <Tabs
     class="flex min-h-0 flex-1 flex-col overflow-hidden"

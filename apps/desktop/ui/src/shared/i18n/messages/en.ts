@@ -243,6 +243,15 @@ export const en = {
   'libraries.actions.deletedToast': 'Deleted {version}',
   'libraries.actions.downloadedToast': 'Downloaded {version}',
   'libraries.actions.failedToast': 'Failed to {action}',
+  'libraries.actions.downloadAll': 'Download all latest',
+  'libraries.actions.downloadAllCount': 'Download all latest ({count})',
+  'libraries.actions.downloadAllInProgress': 'Downloading… {done}/{total}',
+  'libraries.actions.downloadAllDoneToast': {
+    one: 'Downloaded {count} library',
+    other: 'Downloaded {count} libraries',
+  },
+  'libraries.actions.downloadAllPartialToast': 'Downloaded {succeeded}, {failed} failed',
+  'libraries.actions.downloadAllNoneToast': 'All latest versions already downloaded',
 
   // ── Common actions ──
   'common.cancel': 'Cancel',

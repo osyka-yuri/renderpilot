@@ -210,6 +210,15 @@ export const es: Record<MessageKey, MessageValue> = {
   'libraries.actions.deletedToast': 'Eliminado {version}',
   'libraries.actions.downloadedToast': 'Descargado {version}',
   'libraries.actions.failedToast': 'No se pudo {action}',
+  'libraries.actions.downloadAll': 'Descargar las últimas',
+  'libraries.actions.downloadAllCount': 'Descargar las últimas ({count})',
+  'libraries.actions.downloadAllInProgress': 'Descargando… {done}/{total}',
+  'libraries.actions.downloadAllDoneToast': {
+    one: '{count} biblioteca descargada',
+    other: '{count} bibliotecas descargadas',
+  },
+  'libraries.actions.downloadAllPartialToast': '{succeeded} descargadas, {failed} con error',
+  'libraries.actions.downloadAllNoneToast': 'Todas las últimas versiones ya están descargadas',
 
   'common.cancel': 'Cancelar',
   'common.apply': 'Aplicar',

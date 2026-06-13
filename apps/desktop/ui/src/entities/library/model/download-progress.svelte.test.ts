@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import {
   latestDownloadProgress,
   clearDownloadProgress,
+  sumDownloadFractions,
   DOWNLOAD_PROGRESS_EVENT,
 } from './download-progress.svelte';
 
@@ -70,5 +71,32 @@ describe('download-progress.svelte', () => {
 
     expect(latestDownloadProgress(['a'])).toBeNull();
     expect(latestDownloadProgress(['b'])).toEqual(expect.objectContaining({ id: 'b' }));
+  });
+
+  describe('sumDownloadFractions', () => {
+    it('sums per-id completion fractions for the requested ids', () => {
+      sumDownloadFractions(['a']); // init listener
+      emitProgress({ id: 'a', downloaded: 25, total: 100 });
+      emitProgress({ id: 'b', downloaded: 50, total: 100 });
+      emitProgress({ id: 'c', downloaded: 10, total: 100 });
+
+      // Only 'a' and 'b' are requested: 0.25 + 0.5.
+      expect(sumDownloadFractions(['a', 'b'])).toBeCloseTo(0.75);
+    });
+
+    it('ignores unknown ids and clamps each fraction to 1', () => {
+      sumDownloadFractions(['a']); // init listener
+      // Over-reported bytes must not push a single entry past 1.
+      emitProgress({ id: 'a', downloaded: 150, total: 100 });
+
+      expect(sumDownloadFractions(['a', 'missing'])).toBe(1);
+    });
+
+    it('treats a non-positive total as zero contribution', () => {
+      sumDownloadFractions(['a']); // init listener
+      emitProgress({ id: 'a', downloaded: 0, total: 0 });
+
+      expect(sumDownloadFractions(['a'])).toBe(0);
+    });
   });
 });

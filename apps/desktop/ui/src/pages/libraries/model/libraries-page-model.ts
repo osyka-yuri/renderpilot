@@ -1,6 +1,6 @@
 import { trimToEmpty } from '@shared/text';
 import { t, getLocale } from '@shared/i18n';
-import type { LibraryManifestEntry } from '@entities/library';
+import type { LibraryManifest, LibraryManifestEntry } from '@entities/library';
 import {
   libraryVendorOrder,
   vendorLabelForLibraryVendorKey,
@@ -124,6 +124,52 @@ export function libraryIdToGroupKey(libraryId: string): LibraryGroupKey {
  */
 export function isMultiLibraryGroup(groupKey: LibraryGroupKey): boolean {
   return groupKey === 'streamline';
+}
+
+/**
+ * Picks the entries a "download all latest" action should fetch: the newest
+ * stable build of every library.
+ *
+ * Most libraries contribute the newest stable version of each `library.id`.
+ * Multi-DLL bundle groups ({@link isMultiLibraryGroup} — currently Streamline,
+ * whose `sl_*` plugins are BundleOnly and must run on one shared release) are
+ * the exception: the whole newest release is taken as a set rather than the max
+ * of each plugin independently, which could otherwise mix versions across the
+ * bundle.
+ */
+export function selectLatestStableEntries(
+  manifest: LibraryManifest | null,
+): LibraryManifestEntry[] {
+  const stable = (manifest?.entries ?? []).filter((entry) => entry.build.type === 'stable');
+
+  const bundled: LibraryManifestEntry[] = [];
+  // Newest stable entry per `library.id` for everything outside a multi-DLL
+  // bundle group.
+  const latestByLibrary = new Map<string, LibraryManifestEntry>();
+
+  for (const entry of stable) {
+    if (isMultiLibraryGroup(libraryIdToGroupKey(entry.library.id))) {
+      bundled.push(entry);
+      continue;
+    }
+
+    const current = latestByLibrary.get(entry.library.id);
+    if (!current || entry.version.sort_key > current.version.sort_key) {
+      latestByLibrary.set(entry.library.id, entry);
+    }
+  }
+
+  const result = [...latestByLibrary.values()];
+
+  if (bundled.length > 0) {
+    const latestReleaseKey = bundled.reduce(
+      (max, entry) => (entry.version.sort_key > max ? entry.version.sort_key : max),
+      bundled[0].version.sort_key,
+    );
+    result.push(...bundled.filter((entry) => entry.version.sort_key === latestReleaseKey));
+  }
+
+  return result;
 }
 
 export function getDefaultTypeForVendor(vendor: Vendor): LibraryTypeValue {

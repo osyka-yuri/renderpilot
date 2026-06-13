@@ -7,6 +7,7 @@
  */
 
 import { describeCommandErrorBrief } from '@shared/api';
+import { runWithConcurrency } from '@shared/concurrency';
 import { isDefined } from '@shared/validation';
 import { type CoverRemotePolicy } from '@entities/settings';
 import {
@@ -126,20 +127,9 @@ export async function runCoverFetchBatch(
     return { failures: [] };
   }
 
-  const workerCount = getWorkerCount(options.concurrency, items.length);
   const failuresByInputIndex = new Array<CoverFetchFailure | undefined>(items.length);
 
-  let nextIndex = 0;
-
-  const claimNextIndex = (): number | null => {
-    const current = nextIndex;
-    nextIndex += 1;
-
-    return current < items.length ? current : null;
-  };
-
-  const fetchOne = async (itemIndex: number): Promise<void> => {
-    const game = items[itemIndex];
+  const fetchOne = async (game: GameSummary, index: number): Promise<void> => {
     const gameId = game.game_id;
 
     notifyLifecycleHook(options.onGameStart, gameId);
@@ -150,7 +140,7 @@ export async function runCoverFetchBatch(
       await options.fetchCover(gameId);
       downloaded = true;
     } catch (error: unknown) {
-      failuresByInputIndex[itemIndex] = createCoverFetchFailure(game, error);
+      failuresByInputIndex[index] = createCoverFetchFailure(game, error);
     } finally {
       notifyLifecycleHook(options.onGameEnd, gameId);
     }
@@ -162,19 +152,7 @@ export async function runCoverFetchBatch(
     }
   };
 
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      const itemIndex = claimNextIndex();
-
-      if (itemIndex === null) {
-        return;
-      }
-
-      await fetchOne(itemIndex);
-    }
-  };
-
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  await runWithConcurrency(items, options.concurrency, fetchOne);
 
   return {
     failures: failuresByInputIndex.filter(isDefined),
@@ -196,16 +174,6 @@ function notifyLifecycleHook(hook: ((gameId: string) => void) | undefined, gameI
   } catch (error: unknown) {
     console.error('Cover sync lifecycle hook threw.', error);
   }
-}
-
-function getWorkerCount(concurrency: number, itemCount: number): number {
-  const normalized = Math.floor(concurrency);
-
-  if (!Number.isFinite(concurrency) || normalized < 1) {
-    throw new RangeError('runCoverFetchBatch concurrency must be a positive finite number.');
-  }
-
-  return Math.min(normalized, itemCount);
 }
 
 function createCoverFetchFailure(game: GameSummary, error: unknown): CoverFetchFailure {
