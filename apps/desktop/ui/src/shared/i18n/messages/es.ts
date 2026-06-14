@@ -151,6 +151,13 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} actualizaciones · {missing} faltantes',
   'gameDetails.streamline.restoreAllAria': 'Restaurar todos los complementos a su estado original',
   'gameDetails.streamline.restoreAllTooltip': 'Restaurar todo a su estado original',
+  'gameDetails.updateAll.action': 'Actualizar todo',
+  'gameDetails.updateAll.actionCount': 'Actualizar todo ({count})',
+  'gameDetails.updateAll.upToDate': 'Todo está actualizado',
+  'gameDetails.updateAll.tooltip': {
+    one: 'Actualizar 1 componente a su última versión',
+    other: 'Actualizar {count} componentes a sus últimas versiones',
+  },
   'gameDetails.streamline.mixedWarning':
     'Los complementos utilizan versiones diferentes. Selecciona una versión de arriba para sincronizarlos.',
 
@@ -275,6 +282,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': 'Juego mostrado.',
   'notify.applyCompleted': 'Cambios aplicados',
   'notify.rollbackCompleted': 'Reversión completada',
+  'notify.swapBatchFailed.title': 'Algunas actualizaciones fallaron',
+  'notify.swapBatchFailed.description':
+    'No se pudieron actualizar {failed} de {total} componentes.',
+  'notify.rollbackBatchFailed.title': 'Algunas restauraciones fallaron',
+  'notify.rollbackBatchFailed.description':
+    'No se pudieron restaurar {failed} de {total} componentes.',
   'notify.statusError': 'Error',
   'notify.statusWarning': 'Advertencia',
 

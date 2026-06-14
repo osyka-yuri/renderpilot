@@ -4,6 +4,7 @@ import {
   rollbackComponent,
 } from '@entities/operation';
 import { publishErrorNotification } from '@shared/notifications';
+import { t } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { clearDownloadProgress } from '@entities/library';
 
@@ -120,9 +121,10 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
   }
 
   /**
-   * Applies one version across several components in a single run — the safe
-   * Streamline "bundle swap". Each plugin reuses the per-component swap path
-   * (download-then-apply).
+   * Applies a set of component swaps in one exclusive run, reusing the
+   * per-component download-then-apply path. Serves both the Streamline "bundle
+   * swap" and the page-level "update all" button — failures are isolated and the
+   * applied count is reported, with any failures surfaced in aggregate.
    */
   async function handleBulkSwap(items: BulkSwapItem[]): Promise<void> {
     clearDownloadProgress(items.map((item) => item.artifactId));
@@ -147,8 +149,8 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
 
     if (outcome.failed > 0) {
       publishErrorNotification(
-        'Some plugins could not be updated',
-        `${outcome.failed} of ${items.length} Streamline plugin(s) failed to update.`,
+        t('notify.swapBatchFailed.title'),
+        t('notify.swapBatchFailed.description', { failed: outcome.failed, total: items.length }),
       );
     }
   }
@@ -185,11 +187,19 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
 
     if (outcome.failed > 0) {
       publishErrorNotification(
-        'Some plugins could not be restored',
-        `${outcome.failed} of ${componentIds.length} Streamline plugin(s) failed to restore.`,
+        t('notify.rollbackBatchFailed.title'),
+        t('notify.rollbackBatchFailed.description', {
+          failed: outcome.failed,
+          total: componentIds.length,
+        }),
       );
     }
   }
 
-  return { handleSwap, handleRollback, handleBulkSwap, handleBulkRollback };
+  return {
+    handleSwap,
+    handleRollback,
+    handleBulkSwap,
+    handleBulkRollback,
+  };
 }

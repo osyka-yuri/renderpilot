@@ -1,50 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
 
 import { buildStreamlineVersionModel } from './streamline-versions';
+import { candidate, component, group as makeGroup } from './candidate-group-fixtures';
 
-type Candidate = GameCandidateGroup['candidates'][number];
-
-function component(id: string): GameGraphicsComponent {
-  return {
-    id,
-    game_id: 'game-1',
-    kind: 'native_library',
-    technology: 'nvidia_streamline',
-    swappability: 'bundle_only',
-    files: [{ path: `C:/Game/${id}.dll` }],
-    rollback_available: false,
-  };
-}
-
-function candidate(version: string, overrides: Partial<Candidate> = {}): Candidate {
-  return {
-    artifact_id: `artifact:${version}`,
-    file_name: 'sl.plugin.dll',
-    file_path: null,
-    version,
-    source_game_id: null,
-    comparison: 'newer_version',
-    manifest_entry_id: overrides.manifest_entry_id ?? null,
-    is_downloaded: overrides.is_downloaded ?? true,
-    is_debug: overrides.is_debug ?? false,
-    sha256: overrides.sha256 ?? 'fake_hash',
-    ...overrides,
-  };
-}
+const STREAMLINE = 'nvidia_streamline';
 
 function group(
   componentId: string,
   current: string | null,
-  candidates: Candidate[],
-): GameCandidateGroup {
-  return {
-    component_id: componentId,
-    technology: 'nvidia_streamline',
-    file_path: `C:/Game/${componentId}.dll`,
-    current_version: current,
-    candidates,
-  };
+  candidates: Parameters<typeof makeGroup>[3],
+) {
+  return makeGroup(componentId, STREAMLINE, current, candidates);
 }
 
 describe('buildStreamlineVersionModel', () => {

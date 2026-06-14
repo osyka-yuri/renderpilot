@@ -145,6 +145,13 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} 个更新 · 缺失 {missing} 个',
   'gameDetails.streamline.restoreAllAria': '将所有插件恢复为原始版本',
   'gameDetails.streamline.restoreAllTooltip': '全部恢复为原始状态',
+  'gameDetails.updateAll.action': '全部更新',
+  'gameDetails.updateAll.actionCount': '全部更新 ({count})',
+  'gameDetails.updateAll.upToDate': '一切均为最新',
+  'gameDetails.updateAll.tooltip': {
+    one: '将 {count} 个组件更新到最新版本',
+    other: '将 {count} 个组件更新到最新版本',
+  },
   'gameDetails.streamline.mixedWarning': '插件使用的是不同的版本。请在上方选择一个版本以同步它们。',
 
   'gameDetails.profile.title': 'NVIDIA 配置文件',
@@ -258,6 +265,10 @@ export const zh: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': '游戏已显示。',
   'notify.applyCompleted': '更改已应用',
   'notify.rollbackCompleted': '回滚已完成',
+  'notify.swapBatchFailed.title': '部分更新失败',
+  'notify.swapBatchFailed.description': '{total} 个组件中有 {failed} 个更新失败。',
+  'notify.rollbackBatchFailed.title': '部分恢复失败',
+  'notify.rollbackBatchFailed.description': '{total} 个组件中有 {failed} 个恢复失败。',
   'notify.statusError': '错误',
   'notify.statusWarning': '警告',
 

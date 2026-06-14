@@ -194,6 +194,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': 'обновлений: {updates} · отсутствует: {missing}',
   'gameDetails.streamline.restoreAllAria': 'Восстановить исходные версии',
   'gameDetails.streamline.restoreAllTooltip': 'Восстановить исходные',
+  'gameDetails.updateAll.action': 'Обновить всё',
+  'gameDetails.updateAll.actionCount': 'Обновить всё ({count})',
+  'gameDetails.updateAll.upToDate': 'Всё актуально',
+  'gameDetails.updateAll.tooltip': {
+    one: 'Обновить {count} компонент до последней версии',
+    few: 'Обновить {count} компонента до последней версии',
+    many: 'Обновить {count} компонентов до последней версии',
+    other: 'Обновить {count} компонентов до последней версии',
+  },
   'gameDetails.streamline.mixedWarning':
     'Плагины используют разные версии. Выберите версию выше для синхронизации.',
 
@@ -329,6 +338,11 @@ export const ru: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': 'Игра теперь отображается.',
   'notify.applyCompleted': 'Изменения применены',
   'notify.rollbackCompleted': 'Откат выполнен',
+  'notify.swapBatchFailed.title': 'Некоторые обновления не удались',
+  'notify.swapBatchFailed.description': 'Не удалось обновить {failed} из {total} компонентов.',
+  'notify.rollbackBatchFailed.title': 'Некоторые откаты не удались',
+  'notify.rollbackBatchFailed.description':
+    'Не удалось восстановить {failed} из {total} компонентов.',
   'notify.statusError': 'Ошибка',
   'notify.statusWarning': 'Предупреждение',
 

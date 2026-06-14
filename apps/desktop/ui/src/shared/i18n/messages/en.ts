@@ -183,6 +183,13 @@ export const en = {
   'gameDetails.streamline.updatesSummary': '{updates} updates · {missing} missing',
   'gameDetails.streamline.restoreAllAria': 'Restore all plugins to original',
   'gameDetails.streamline.restoreAllTooltip': 'Restore all to original',
+  'gameDetails.updateAll.action': 'Update all to latest',
+  'gameDetails.updateAll.actionCount': 'Update all to latest ({count})',
+  'gameDetails.updateAll.upToDate': 'Everything is up to date',
+  'gameDetails.updateAll.tooltip': {
+    one: 'Update 1 component to its latest version',
+    other: 'Update {count} components to their latest versions',
+  },
   'gameDetails.streamline.mixedWarning':
     'Plugins are using different versions. Select a version above to sync them.',
 
@@ -300,6 +307,10 @@ export const en = {
   'notify.gameUnhidden': 'Game unhidden.',
   'notify.applyCompleted': 'Changes applied',
   'notify.rollbackCompleted': 'Rollback completed',
+  'notify.swapBatchFailed.title': 'Some updates failed',
+  'notify.swapBatchFailed.description': 'Failed to update {failed} of {total} components.',
+  'notify.rollbackBatchFailed.title': 'Some restores failed',
+  'notify.rollbackBatchFailed.description': 'Failed to restore {failed} of {total} components.',
   'notify.statusError': 'Error',
   'notify.statusWarning': 'Warning',
 
