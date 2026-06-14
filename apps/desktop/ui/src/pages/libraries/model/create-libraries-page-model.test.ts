@@ -129,6 +129,28 @@ describe('createLibrariesPageModel.downloadAllLatest', () => {
     expect(mocks.downloadLibrary).not.toHaveBeenCalled();
   });
 
+  it('drops a manifest load that resolves after the model is disposed', async () => {
+    let resolveManifest!: (manifest: LibraryManifest) => void;
+    mocks.getLibrariesManifest.mockReturnValue(
+      new Promise<LibraryManifest>((resolve) => {
+        resolveManifest = resolve;
+      }),
+    );
+    mocks.getLibraryStates.mockResolvedValue([]);
+
+    const model = createLibrariesPageModel();
+    model.init();
+    const loading = model.loadInitialLibraries();
+
+    // Tear the page down while the load is still in flight, then let it resolve.
+    model.dispose();
+    resolveManifest(manifestOf([entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' })]));
+    await loading;
+
+    // The stale result must not be applied to a disposed model.
+    expect(model.manifest).toBeNull();
+  });
+
   it('aggregates progress as finished count plus in-flight byte fractions', async () => {
     const model = await loadedModel(
       [entry({ id: 'a', lib: 'a', sort: '001' }), entry({ id: 'b', lib: 'b', sort: '001' })],

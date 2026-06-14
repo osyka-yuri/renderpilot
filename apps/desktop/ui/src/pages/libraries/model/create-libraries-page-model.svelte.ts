@@ -12,6 +12,7 @@ import {
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
 import { runWithConcurrency } from '@shared/concurrency';
+import { createDisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import {
   type LibraryManifest,
@@ -100,8 +101,10 @@ export function createLibrariesPageModel() {
   // ---------------------------------------------------------------------------
 
   let mounted = false;
-  let loadRequestId = 0;
-  let statesRequestId = 0;
+  // Stale-result guards: a slower, older manifest load or states snapshot can
+  // never overwrite a fresher one, and nothing applies once disposed.
+  const loadRequests = createDisposableRequestChannel(() => !mounted);
+  const stateRequests = createDisposableRequestChannel(() => !mounted);
 
   // ---------------------------------------------------------------------------
   // Derived
@@ -154,7 +157,7 @@ export function createLibrariesPageModel() {
   }
 
   async function loadLibraries(options: LoadLibrariesOptions): Promise<void> {
-    const requestId = ++loadRequestId;
+    const requestId = loadRequests.begin();
     const isInitialLoad = options.mode === 'initial';
 
     if (isInitialLoad) {
@@ -295,8 +298,12 @@ export function createLibrariesPageModel() {
    * different entries run concurrently, while a second action on the same
    * entry (or any action during a manifest load/refresh) is ignored.
    *
-   * Returns `true` only when the action actually ran — callers must not
-   * report success otherwise.
+   * Signals its outcome two ways, by design:
+   * - Returns `true` when the action ran, `false` when it was ignored — callers
+   *   must not report success on `false`.
+   * - On failure it re-throws (after logging/surfacing) so the caller receives
+   *   the original error and can render it (e.g. the row's failure toast uses
+   *   `describeCommandError`); the bulk runner instead counts it as failed.
    */
   async function runEntryAction(options: RunEntryActionOptions): Promise<boolean> {
     if (loading || refreshing || pendingActions.has(options.entryId)) return false;
@@ -329,14 +336,14 @@ export function createLibrariesPageModel() {
   }
 
   async function refreshLibraryStates(errorContext: string): Promise<void> {
-    // Concurrent downloads finish independently; the counter makes sure a
-    // slower, older snapshot can never overwrite a fresher one.
-    const requestId = ++statesRequestId;
+    // Concurrent downloads finish independently; the request channel makes sure
+    // a slower, older snapshot can never overwrite a fresher one.
+    const requestId = stateRequests.begin();
 
     try {
       const nextStates = await getLibraryStates();
 
-      if (mounted && requestId === statesRequestId) {
+      if (stateRequests.isActive(requestId) && !stateRequests.isDisposed()) {
         setStates(nextStates);
       }
     } catch (error) {
@@ -356,7 +363,9 @@ export function createLibrariesPageModel() {
 
   function dispose(): void {
     mounted = false;
-    loadRequestId += 1;
+    // Invalidate any in-flight loads/refreshes so their results are dropped.
+    loadRequests.invalidate();
+    stateRequests.invalidate();
   }
 
   // ---------------------------------------------------------------------------
@@ -400,13 +409,12 @@ export function createLibrariesPageModel() {
   function getLastValidTypeForVendor(vendor: Vendor): LibraryTypeValue {
     const storedType = lastTypeByVendor[vendor];
 
-    if (isLibraryTypeForVendor(vendor, storedType)) {
-      return storedType;
-    }
-
-    const fallbackType = getDefaultTypeForVendor(vendor);
-    lastTypeByVendor[vendor] = fallbackType;
-    return fallbackType;
+    // `lastTypeByVendor` only ever holds validated values (seeded from the
+    // defaults, written by `handleTypeChange`), so this is a pure lookup; the
+    // default is a defensive fallback rather than a repair path.
+    return isLibraryTypeForVendor(vendor, storedType)
+      ? storedType
+      : getDefaultTypeForVendor(vendor);
   }
 
   function isLibraryTypeForVendor(vendor: Vendor, value: string): value is LibraryTypeValue {
@@ -427,7 +435,7 @@ export function createLibrariesPageModel() {
   }
 
   function isCurrentLoadRequest(requestId: number): boolean {
-    return mounted && requestId === loadRequestId;
+    return loadRequests.isActive(requestId) && !loadRequests.isDisposed();
   }
 
   function setError(context: string, error: unknown): void {
