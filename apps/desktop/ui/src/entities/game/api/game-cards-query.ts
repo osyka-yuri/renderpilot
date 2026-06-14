@@ -55,24 +55,32 @@ function requireStringList(value: unknown, fieldName: string): string[] {
   return value.map((item, index) => requireString(item, `${fieldName}[${index}]`));
 }
 
+function isSortField(value: string): value is GameCardsSortField {
+  return SORT_FIELD_SET.has(value);
+}
+
+function isSortDirection(value: string): value is GameCardsSortDirection {
+  return SORT_DIRECTION_SET.has(value);
+}
+
 function requireSortField(value: unknown): GameCardsSortField {
   const sortField = requireString(value, 'query.sort.field');
 
-  if (!SORT_FIELD_SET.has(sortField)) {
+  if (!isSortField(sortField)) {
     throw new TypeError(`query.sort.field must be one of: ${SORT_FIELDS.join(', ')}.`);
   }
 
-  return sortField as GameCardsSortField;
+  return sortField;
 }
 
 function requireSortDirection(value: unknown): GameCardsSortDirection {
   const sortDirection = requireString(value, 'query.sort.direction');
 
-  if (!SORT_DIRECTION_SET.has(sortDirection)) {
+  if (!isSortDirection(sortDirection)) {
     throw new TypeError(`query.sort.direction must be one of: ${SORT_DIRECTIONS.join(', ')}.`);
   }
 
-  return sortDirection as GameCardsSortDirection;
+  return sortDirection;
 }
 
 function normalizeStringList(value: unknown, fieldName: string): string[] {
