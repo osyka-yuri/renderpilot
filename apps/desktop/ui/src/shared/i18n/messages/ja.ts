@@ -152,6 +152,13 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} 件のアップデート · {missing} 個の不足',
   'gameDetails.streamline.restoreAllAria': 'すべてのプラグインを元の状態に復元',
   'gameDetails.streamline.restoreAllTooltip': 'すべて元の状態に復元',
+  'gameDetails.updateAll.action': 'すべて更新',
+  'gameDetails.updateAll.actionCount': 'すべて更新 ({count})',
+  'gameDetails.updateAll.upToDate': 'すべて最新です',
+  'gameDetails.updateAll.tooltip': {
+    one: '{count} 個のコンポーネントを最新バージョンに更新します',
+    other: '{count} 個のコンポーネントを最新バージョンに更新します',
+  },
   'gameDetails.streamline.mixedWarning':
     'プラグインのバージョンが異なります。同期するには、上記からバージョンを選択してください。',
 
@@ -272,6 +279,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': 'ゲームを表示にしました。',
   'notify.applyCompleted': '変更を適用しました',
   'notify.rollbackCompleted': 'ロールバックが完了しました',
+  'notify.swapBatchFailed.title': '一部の更新に失敗しました',
+  'notify.swapBatchFailed.description':
+    '{total} 個中 {failed} 個のコンポーネントの更新に失敗しました。',
+  'notify.rollbackBatchFailed.title': '一部の復元に失敗しました',
+  'notify.rollbackBatchFailed.description':
+    '{total} 個中 {failed} 個のコンポーネントの復元に失敗しました。',
   'notify.statusError': 'エラー',
   'notify.statusWarning': '警告',
 

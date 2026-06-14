@@ -153,6 +153,13 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} Updates · {missing} fehlen',
   'gameDetails.streamline.restoreAllAria': 'Alle Plugins auf Original wiederherstellen',
   'gameDetails.streamline.restoreAllTooltip': 'Alle auf Original wiederherstellen',
+  'gameDetails.updateAll.action': 'Alle aktualisieren',
+  'gameDetails.updateAll.actionCount': 'Alle aktualisieren ({count})',
+  'gameDetails.updateAll.upToDate': 'Alles ist auf dem neuesten Stand',
+  'gameDetails.updateAll.tooltip': {
+    one: '1 Komponente auf die neueste Version aktualisieren',
+    other: '{count} Komponenten auf die neueste Version aktualisieren',
+  },
   'gameDetails.streamline.mixedWarning':
     'Plugins verwenden unterschiedliche Versionen. Wählen Sie oben eine Version aus, um sie zu synchronisieren.',
 
@@ -277,6 +284,12 @@ export const de: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': 'Spiel eingeblendet.',
   'notify.applyCompleted': 'Änderungen angewendet',
   'notify.rollbackCompleted': 'Rollback abgeschlossen',
+  'notify.swapBatchFailed.title': 'Einige Aktualisierungen fehlgeschlagen',
+  'notify.swapBatchFailed.description':
+    '{failed} von {total} Komponenten konnten nicht aktualisiert werden.',
+  'notify.rollbackBatchFailed.title': 'Einige Wiederherstellungen fehlgeschlagen',
+  'notify.rollbackBatchFailed.description':
+    '{failed} von {total} Komponenten konnten nicht wiederhergestellt werden.',
   'notify.statusError': 'Fehler',
   'notify.statusWarning': 'Warnung',
 

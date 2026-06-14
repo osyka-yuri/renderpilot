@@ -152,6 +152,13 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.updatesSummary': '{updates} mises à jour · {missing} manquants',
   'gameDetails.streamline.restoreAllAria': 'Restaurer tous les plugins à l’original',
   'gameDetails.streamline.restoreAllTooltip': 'Tout restaurer à l’original',
+  'gameDetails.updateAll.action': 'Tout mettre à jour',
+  'gameDetails.updateAll.actionCount': 'Tout mettre à jour ({count})',
+  'gameDetails.updateAll.upToDate': 'Tout est à jour',
+  'gameDetails.updateAll.tooltip': {
+    one: 'Mettre à jour 1 composant vers sa dernière version',
+    other: 'Mettre à jour {count} composants vers leur dernière version',
+  },
   'gameDetails.streamline.mixedWarning':
     'Les plugins utilisent des versions différentes. Sélectionnez une version ci-dessus pour les synchroniser.',
 
@@ -274,6 +281,12 @@ export const fr: Record<MessageKey, MessageValue> = {
   'notify.gameUnhidden': 'Jeu affiché.',
   'notify.applyCompleted': 'Modifications appliquées',
   'notify.rollbackCompleted': 'Restauration terminée',
+  'notify.swapBatchFailed.title': 'Certaines mises à jour ont échoué',
+  'notify.swapBatchFailed.description':
+    'Échec de la mise à jour de {failed} composants sur {total}.',
+  'notify.rollbackBatchFailed.title': 'Certaines restaurations ont échoué',
+  'notify.rollbackBatchFailed.description':
+    'Échec de la restauration de {failed} composants sur {total}.',
   'notify.statusError': 'Erreur',
   'notify.statusWarning': 'Avertissement',
 

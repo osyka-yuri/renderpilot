@@ -1,7 +1,8 @@
 <script lang="ts">
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
-  import { Button, Progress } from '@shared/ui';
+  import { Button } from '@shared/ui';
+  import { BatchDownloadProgressBar } from '@entities/library';
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
@@ -61,14 +62,12 @@
 </script>
 
 <div class="flex items-center justify-end gap-2">
-  {#if model.bulkDownloading}
-    <Progress
-      value={model.bulkProgressValue}
-      max={model.bulkTotal}
-      class="w-16"
-      aria-label={label}
-    />
-  {/if}
+  <BatchDownloadProgressBar
+    value={model.bulkProgressValue}
+    max={model.bulkTotal}
+    active={model.bulkDownloading}
+    ariaLabel={label}
+  />
   <Button variant="outline" {disabled} aria-busy={model.bulkDownloading} onclick={handleClick}>
     {#if model.bulkDownloading}
       <Loader2Icon class="animate-spin" aria-hidden="true" />

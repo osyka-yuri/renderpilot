@@ -16,9 +16,15 @@
     CardTitle,
     ScrollArea,
     Button,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
   } from '@shared/ui';
   import HistoryIcon from '@lucide/svelte/icons/history';
+  import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
+  import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { t } from '@shared/i18n';
+  import { sumDownloadFractions, BatchDownloadProgressBar } from '@entities/library';
   import type { SettingFamily } from '@features/nvapi-settings';
   import type {
     SwapHandler,
@@ -26,6 +32,7 @@
     BulkSwapHandler,
     BulkRollbackHandler,
   } from '../model/create-game-details-page-model';
+  import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
   import DlssComponentCard from './DlssComponentCard.svelte';
@@ -60,6 +67,39 @@
   }: Props = $props();
 
   const tabs = $derived(createVendorTabs(details));
+
+  // The single "update everything to its latest version" action. Spans every
+  // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle, not just the active
+  // tab, and reuses the existing bulk-swap path.
+  const updatePlan = $derived(buildUpdateAllToLatestPlan(details));
+  const nothingToUpdate = $derived(updatePlan.updateCount === 0);
+
+  // "Update all" progress, shown only while a run initiated by THIS button is in
+  // flight. `busy` is global (any exclusive op), so gate on `updatingAll` too.
+  // Both reset once `busy` settles. The aggregate bar tracks only the artifacts
+  // that actually download (uncached), advancing monotonically 0→100% across the
+  // whole batch — like the libraries "Download all" button.
+  let updatingAll = $state(false);
+  let pendingDownloadIds = $state<string[]>([]);
+  $effect(() => {
+    if (!busy) {
+      updatingAll = false;
+      pendingDownloadIds = [];
+    }
+  });
+
+  const showProgress = $derived(updatingAll && busy);
+  const downloadCount = $derived(pendingDownloadIds.length);
+  const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
+
+  function handleUpdateAll() {
+    if (busy || nothingToUpdate) return;
+    updatingAll = true;
+    pendingDownloadIds = updatePlan.items
+      .filter((item) => !item.isDownloaded)
+      .map((item) => item.artifactId);
+    void onBulkSwap(updatePlan.items);
+  }
 
   const hasNvidiaTab = $derived(tabs.some((tab) => tab.key === 'nvidia'));
   const gameId = $derived(details?.game.identity.id ?? null);
@@ -157,12 +197,45 @@
             {/each}
           </TabsList>
 
-          {#if onOpenOperations}
-            <Button variant="secondary" size="sm" onclick={onOpenOperations}>
-              <HistoryIcon class="mr-2 size-4" />
-              {t('operations.title')}
-            </Button>
-          {/if}
+          <div class="flex flex-wrap items-center gap-2">
+            <BatchDownloadProgressBar
+              value={downloadValue}
+              max={downloadCount}
+              active={showProgress}
+            />
+            <Tooltip>
+              <TooltipTrigger>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={busy || nothingToUpdate}
+                  aria-busy={showProgress}
+                  onclick={handleUpdateAll}
+                >
+                  {#if showProgress}
+                    <Loader2Icon class="mr-2 size-4 animate-spin" aria-hidden="true" />
+                  {:else}
+                    <ArrowUpToLineIcon class="mr-2 size-4" />
+                  {/if}
+                  {nothingToUpdate
+                    ? t('gameDetails.updateAll.action')
+                    : t('gameDetails.updateAll.actionCount', { count: updatePlan.updateCount })}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {nothingToUpdate
+                  ? t('gameDetails.updateAll.upToDate')
+                  : t('gameDetails.updateAll.tooltip', { count: updatePlan.updateCount })}
+              </TooltipContent>
+            </Tooltip>
+
+            {#if onOpenOperations}
+              <Button variant="secondary" size="sm" onclick={onOpenOperations}>
+                <HistoryIcon class="mr-2 size-4" />
+                {t('operations.title')}
+              </Button>
+            {/if}
+          </div>
         </div>
 
         {#each tabs as tab (tab.key)}

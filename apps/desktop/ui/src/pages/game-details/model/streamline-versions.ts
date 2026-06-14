@@ -130,7 +130,7 @@ function buildOption(
 }
 
 /** Orders dotted version strings newest-first, with a string fallback per segment. */
-function compareVersionDesc(left: string, right: string): number {
+export function compareVersionDesc(left: string, right: string): number {
   const leftParts = left.split('.');
   const rightParts = right.split('.');
   const length = Math.max(leftParts.length, rightParts.length);
