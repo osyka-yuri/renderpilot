@@ -46,6 +46,14 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.nvidia.indicator.overlayTitle': '屏幕叠加层',
   'settings.nvidia.indicator.overlayDescription': '适用于此电脑上的所有游戏。',
   'settings.nvidia.indicator.toggleAria': '切换 DLSS 指示器',
+  'settings.nvidia.global.title': '全局 DLSS 设置',
+  'settings.nvidia.global.description':
+    '通过 NVIDIA 基础配置文件，应用于所有没有单独覆盖设置的游戏的默认值。',
+  'settings.nvidia.global.systemWide': '全局生效',
+  'settings.nvidia.global.adminRequired': '以管理员身份重新启动应用以更改这些设置。',
+  'settings.nvidia.global.familySr': 'DLSS 超分辨率',
+  'settings.nvidia.global.familyFg': 'DLSS 帧生成',
+  'settings.nvidia.global.familyRr': 'DLSS 光线重建',
 
   'game.card.action.details': '详情',
   'game.card.action.detailsAria': '打开 {title} 的详情',

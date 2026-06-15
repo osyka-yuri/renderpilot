@@ -4,7 +4,10 @@
   import type { LanguageMode } from '@shared/i18n';
   import { t } from '@shared/i18n';
   import { Tabs, TabsList, TabsTrigger } from '@shared/ui';
-  import { createDlssIndicatorContext } from '@features/nvapi-settings';
+  import {
+    createDlssIndicatorContext,
+    createGlobalNvidiaPresetsContext,
+  } from '@features/nvapi-settings';
   import {
     type LanguageModeHandler,
     type ThemeModeHandler,
@@ -41,6 +44,7 @@
   const model = createSettingsPanelModel();
   const appUpdaterModel = createAppUpdaterModel();
   const dlssIndicator = createDlssIndicatorContext({ isElevated: () => isElevated });
+  const globalPresets = createGlobalNvidiaPresetsContext({ isElevated: () => isElevated });
 
   const localizedThemeOptions = $derived(
     themeOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
@@ -99,6 +103,6 @@
   </SettingsTabPanel>
 
   <SettingsTabPanel value="nvidia">
-    <SettingsNvidiaSection {dlssIndicator} />
+    <SettingsNvidiaSection {dlssIndicator} {globalPresets} />
   </SettingsTabPanel>
 </Tabs>

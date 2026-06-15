@@ -82,6 +82,35 @@ export async function revertNvapiSetting(
 }
 
 /**
+ * Reads the live state of every supported NVAPI setting from NVIDIA's
+ * global/base driver profile in one backend call. Like the indicator, this is
+ * machine-wide rather than per-game, so it takes no `gameId`.
+ */
+export async function listGlobalNvapiSettingStates(): Promise<SettingStateResponse[]> {
+  return invokeDesktop<SettingStateResponse[]>('list_global_nvapi_setting_states');
+}
+
+export async function setGlobalNvapiSettingValue(
+  settingKey: string,
+  value: string,
+): Promise<SettingStateResponse> {
+  return invokeDesktop<SettingStateResponse>('set_global_nvapi_setting_value', {
+    settingKey: requireNonBlankString(settingKey, 'settingKey'),
+    value: requireNonBlankString(value, 'value'),
+  });
+}
+
+export async function revertGlobalNvapiSetting(
+  settingKey: string,
+  target: 'predefined' | 'baseline',
+): Promise<SettingStateResponse> {
+  return invokeDesktop<SettingStateResponse>('revert_global_nvapi_setting', {
+    settingKey: requireNonBlankString(settingKey, 'settingKey'),
+    target,
+  });
+}
+
+/**
  * Reads the system-wide DLSS indicator overlay state. The indicator is a single
  * machine-wide registry value (not per-game), so this takes no arguments.
  */

@@ -1,24 +1,16 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
   import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
-  import type { SettingFamily, SettingStateResponse } from '@features/nvapi-settings';
+  import {
+    NvapiSettingGroup,
+    type SettingFamily,
+    type SettingStateResponse,
+  } from '@features/nvapi-settings';
   import CpuIcon from '@lucide/svelte/icons/cpu';
   import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
-  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-  import {
-    Alert,
-    AlertDescription,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-    ItemGroup,
-    ItemSeparator,
-  } from '@shared/ui';
+  import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
   import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
-  import NvapiSettingRow from './NvapiSettingRow.svelte';
 
   type Props = {
     gameId: string;
@@ -103,36 +95,22 @@
           <span>{t('gameDetails.dlss.driverOverridesLabel')}</span>
         </div>
 
-        {#if !nvidia.canWrite}
-          <Alert variant="warning" size="sm" role="note">
-            <TriangleAlertIcon aria-hidden="true" />
-            <AlertDescription>
-              {t('gameDetails.dlss.adminRequired')}
-            </AlertDescription>
-          </Alert>
-        {/if}
-
-        {#each warnings as warning (warning)}
-          <Alert variant="warning" size="sm" role="note">
-            <TriangleAlertIcon aria-hidden="true" />
-            <AlertDescription>{warning}</AlertDescription>
-          </Alert>
-        {/each}
-
-        <ItemGroup class="rounded-md border bg-muted/30">
-          {#each settings as state, index (state.setting_key)}
-            {#if index > 0}
-              <ItemSeparator />
-            {/if}
-            <NvapiSettingRow
-              {state}
-              disabled={rowDisabled(state)}
-              onChange={(wire: string) => nvidia.setValue(gameId, state.setting_key, wire)}
-              onRevertPredefined={() => nvidia.revert(gameId, state.setting_key, 'predefined')}
-              onRevertBaseline={() => nvidia.revert(gameId, state.setting_key, 'baseline')}
-            />
-          {/each}
-        </ItemGroup>
+        <NvapiSettingGroup
+          {settings}
+          {warnings}
+          canWrite={nvidia.canWrite}
+          adminMessage={t('gameDetails.dlss.adminRequired')}
+          {rowDisabled}
+          onChange={(key: string, wire: string) => {
+            void nvidia.setValue(gameId, key, wire);
+          }}
+          onRevertPredefined={(key: string) => {
+            void nvidia.revert(gameId, key, 'predefined');
+          }}
+          onRevertBaseline={(key: string) => {
+            void nvidia.revert(gameId, key, 'baseline');
+          }}
+        />
       </div>
     {/if}
   </CardContent>

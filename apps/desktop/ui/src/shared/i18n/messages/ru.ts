@@ -56,6 +56,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.nvidia.indicator.overlayTitle': 'Экранный оверлей',
   'settings.nvidia.indicator.overlayDescription': 'Применяется ко всем играм на этом ПК.',
   'settings.nvidia.indicator.toggleAria': 'Переключить индикатор DLSS',
+  'settings.nvidia.global.title': 'Глобальные настройки DLSS',
+  'settings.nvidia.global.description':
+    'Значения по умолчанию для всех игр без индивидуальных настроек — через базовый профиль NVIDIA.',
+  'settings.nvidia.global.systemWide': 'Для всей системы',
+  'settings.nvidia.global.adminRequired':
+    'Перезапустите приложение от имени администратора, чтобы изменить эти настройки.',
+  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
+  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
+  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
 
   // ── Game card ──
   'game.card.action.details': 'Подробнее',

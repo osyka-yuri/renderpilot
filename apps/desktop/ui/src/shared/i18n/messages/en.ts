@@ -59,6 +59,15 @@ export const en = {
   'settings.nvidia.indicator.overlayTitle': 'On-screen overlay',
   'settings.nvidia.indicator.overlayDescription': 'Applies to all games on this PC.',
   'settings.nvidia.indicator.toggleAria': 'Toggle DLSS indicator',
+  'settings.nvidia.global.title': 'Global DLSS settings',
+  'settings.nvidia.global.description':
+    'Defaults applied to every game that has no game-specific override, via the NVIDIA base profile.',
+  'settings.nvidia.global.systemWide': 'System-wide',
+  'settings.nvidia.global.adminRequired':
+    'Restart the app as administrator to change these settings.',
+  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
+  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
+  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
 
   // ── Game card ──
   'game.card.action.details': 'Details',

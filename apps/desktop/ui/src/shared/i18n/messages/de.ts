@@ -48,6 +48,15 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.nvidia.indicator.overlayTitle': 'Bildschirm-Overlay',
   'settings.nvidia.indicator.overlayDescription': 'Gilt für alle Spiele auf diesem PC.',
   'settings.nvidia.indicator.toggleAria': 'DLSS-Indikator umschalten',
+  'settings.nvidia.global.title': 'Globale DLSS-Einstellungen',
+  'settings.nvidia.global.description':
+    'Standardwerte für jedes Spiel ohne spielspezifische Überschreibung, über das NVIDIA-Basisprofil.',
+  'settings.nvidia.global.systemWide': 'Systemweit',
+  'settings.nvidia.global.adminRequired':
+    'Starte die App als Administrator neu, um diese Einstellungen zu ändern.',
+  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
+  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
+  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
 
   'game.card.action.details': 'Details',
   'game.card.action.detailsAria': 'Details für {title} öffnen',

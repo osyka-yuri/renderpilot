@@ -170,6 +170,14 @@ pub type NvAPI_DRS_GetProfileInfo_fn = unsafe extern "C" fn(
     pProfileInfo: *mut NVDRS_PROFILE,
 ) -> NvAPI_Status;
 
+/// `NvAPI_DRS_GetBaseProfile` — returns the handle of the global/base driver
+/// profile (`_GLOBAL_DRIVER_PROFILE_`), whose settings apply to every
+/// application that has no profile of its own.
+pub type NvAPI_DRS_GetBaseProfile_fn = unsafe extern "C" fn(
+    hSession: NvDRSSessionHandle,
+    phProfile: *mut NvDRSProfileHandle,
+) -> NvAPI_Status;
+
 /// `NvAPI_DRS_FindApplicationByName`
 /// `appName` must be a null-terminated UTF-16LE (wide) string.
 pub type NvAPI_DRS_FindApplicationByName_fn = unsafe extern "C" fn(
@@ -262,6 +270,8 @@ pub mod interface_ids {
     pub const DRS_FIND_APPLICATION_BY_NAME: u32 = 0xEEE566B2;
     pub const DRS_FIND_PROFILE_BY_NAME: u32 = 0x7E4A9A0B;
     pub const DRS_GET_PROFILE_INFO: u32 = 0x61CD6FD6;
+    /// `NvAPI_DRS_GetBaseProfile` — resolves the global/base driver profile.
+    pub const DRS_GET_BASE_PROFILE: u32 = 0xDA8466A0;
     /// Legacy `NvAPI_DRS_GetSetting` (used as fallback when v2 is unavailable).
     pub const DRS_GET_SETTING: u32 = 0x73BF8338;
     /// Newer `NvAPI_DRS_GetSetting` used by NVIDIA Inspector as the primary ID.

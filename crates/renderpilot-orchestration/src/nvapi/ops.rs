@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use renderpilot_nvapi::{
     setting::{NvapiSetting, NvapiValueOption, SettingContext},
-    DwordSettingState, Nvapi, NvapiError, NVAPI_SETTING_NOT_FOUND,
+    DrsSession, DwordSettingState, Nvapi, NvapiError, Profile, NVAPI_SETTING_NOT_FOUND,
 };
 
 use super::dto::{
@@ -18,6 +18,115 @@ fn map_nvapi_write_error(error: NvapiError, label: &'static str) -> ServiceError
     match error {
         NvapiError::InvalidUserPrivilege => ServiceError::NvapiRequiresElevation,
         other => ServiceError::CommandFailed(format!("{label}: {other}")),
+    }
+}
+
+/// Opens an NVAPI DRS session, classifying each failure step as the
+/// [`NvapiWarningDto`] the UI surfaces. `Nvapi::get()` returns a `&'static`
+/// handle, so the borrowed session is itself `'static`.
+///
+/// Read paths match on the warning directly; the write path maps it to a
+/// [`ServiceError`] via [`warning_to_service_error`]. This is the single place
+/// the `get → initialize → create_session` sequence lives.
+fn open_drs_session() -> Result<DrsSession<'static>, NvapiWarningDto> {
+    let nvapi = Nvapi::get().ok_or(NvapiWarningDto::NvapiUnavailable)?;
+    nvapi
+        .initialize()
+        .map_err(|_| NvapiWarningDto::NvapiInitFailed)?;
+    nvapi
+        .create_session()
+        .map_err(|_| NvapiWarningDto::DrsFailed)
+}
+
+/// Maps a session-open warning to the user-facing [`ServiceError`] used on the
+/// write path, where an unopenable session is a hard failure.
+fn warning_to_service_error(warning: NvapiWarningDto) -> ServiceError {
+    let message = match warning {
+        NvapiWarningDto::NvapiUnavailable => "NVAPI unavailable (non-NVIDIA driver or missing dll)",
+        NvapiWarningDto::NvapiInitFailed => "NVAPI initialize failed",
+        NvapiWarningDto::DrsFailed => "DRS session failed",
+        // Not produced by `open_drs_session`, but keep the mapping total.
+        other => return ServiceError::CommandFailed(format!("DRS session failed: {other:?}")),
+    };
+    ServiceError::CommandFailed(message.to_owned())
+}
+
+/// Which NVIDIA DRS profile an NVAPI setting operation targets.
+///
+/// The read/write/assembly logic is identical for both variants; this enum
+/// captures the only three differences between them: which profile is
+/// resolved, whether a local baseline is tracked, and whether an effective
+/// executable exists.
+#[derive(Debug, Clone, Copy)]
+pub enum SettingTarget<'a> {
+    /// A specific game's profile, resolved by executable. Baselines are
+    /// persisted keyed by `game_id`.
+    Game {
+        /// Catalog id of the game whose profile (and baselines) this targets.
+        game_id: &'a str,
+    },
+    /// The global/base driver profile (`_GLOBAL_DRIVER_PROFILE_`), which
+    /// applies to every game without its own override. No baseline tracking
+    /// (the baseline table is keyed by a real `game_id`).
+    Global,
+}
+
+impl SettingTarget<'_> {
+    /// The game this target tracks state for, or `None` for the global profile.
+    fn game_id(&self) -> Option<&str> {
+        match self {
+            Self::Game { game_id } => Some(game_id),
+            Self::Global => None,
+        }
+    }
+
+    /// Whether reads/writes are scoped to an executable's profile (`true`) or
+    /// the global base profile (`false`, which needs no executable).
+    fn requires_exe(&self) -> bool {
+        matches!(self, Self::Game { .. })
+    }
+
+    /// Resolves the DRS profile within an open session for a *read*. Returns
+    /// the profile when resolved, plus an optional warning to surface. A
+    /// missing per-game profile is benign (no warning); a missing global base
+    /// profile is reported.
+    fn resolve_profile_for_read<'s>(
+        &self,
+        session: &'s DrsSession<'s>,
+        exe: Option<&str>,
+    ) -> (Option<Profile<'s>>, Option<NvapiWarningDto>) {
+        match self {
+            Self::Game { .. } => match exe {
+                Some(exe) => (session.find_profile_by_exe(exe).ok(), None),
+                None => (None, None),
+            },
+            Self::Global => match session.base_profile() {
+                Ok(profile) => (Some(profile), None),
+                Err(_) => (None, Some(NvapiWarningDto::DrsFailed)),
+            },
+        }
+    }
+
+    /// Resolves the DRS profile for a *write*, where a missing profile is a
+    /// hard error.
+    fn resolve_profile_for_write<'s>(
+        &self,
+        session: &'s DrsSession<'s>,
+        ctx: &SettingContext,
+    ) -> Result<Profile<'s>, ServiceError> {
+        match self {
+            Self::Game { .. } => {
+                let exe = ctx.effective_exe.as_deref().ok_or_else(|| {
+                    ServiceError::CommandFailed("no executable detected for game".to_owned())
+                })?;
+                session.find_profile_by_exe(exe).map_err(|_| {
+                    ServiceError::CommandFailed(format!("NVIDIA profile for {exe} not found"))
+                })
+            }
+            Self::Global => session.base_profile().map_err(|e| {
+                ServiceError::CommandFailed(format!("global driver profile unavailable: {e}"))
+            }),
+        }
     }
 }
 
@@ -37,13 +146,18 @@ pub enum WriteOp {
 /// which may itself have been the predefined default).
 pub fn resolve_revert_op(
     context: &crate::Context,
-    game_id: &str,
+    target: &SettingTarget<'_>,
     setting: &dyn NvapiSetting,
-    target: &str,
+    revert_target: &str,
 ) -> Result<WriteOp, ServiceError> {
-    match target {
+    match revert_target {
         "predefined" => Ok(WriteOp::Delete),
         "baseline" => {
+            let game_id = target.game_id().ok_or_else(|| {
+                ServiceError::CommandFailed(
+                    "baseline revert is not available for global settings".to_owned(),
+                )
+            })?;
             let baseline = context
                 .storage()
                 .get_nvapi_baseline(game_id, setting.key())?
@@ -105,33 +219,22 @@ pub fn validate_value_supported(
 /// Also captures a baseline snapshot the first time this setting is modified.
 pub fn write_setting_value(
     context: &crate::Context,
-    game_id: &str,
+    target: &SettingTarget<'_>,
     setting: &dyn NvapiSetting,
     ctx: &SettingContext,
     op: WriteOp,
 ) -> Result<(), ServiceError> {
-    let exe = ctx
-        .effective_exe
-        .as_deref()
-        .ok_or_else(|| ServiceError::CommandFailed("no executable detected for game".to_owned()))?;
+    let session = open_drs_session().map_err(warning_to_service_error)?;
 
-    let nvapi = Nvapi::get().ok_or_else(|| {
-        ServiceError::CommandFailed(
-            "NVAPI unavailable (non-NVIDIA driver or missing dll)".to_owned(),
-        )
-    })?;
-    nvapi
-        .initialize()
-        .map_err(|e| ServiceError::CommandFailed(format!("NVAPI initialize failed: {e}")))?;
-    let session = nvapi
-        .create_session()
-        .map_err(|e| ServiceError::CommandFailed(format!("DRS session failed: {e}")))?;
+    let profile = target.resolve_profile_for_write(&session, ctx)?;
 
-    let profile = session
-        .find_profile_by_exe(exe)
-        .map_err(|_| ServiceError::CommandFailed(format!("NVIDIA profile for {exe} not found")))?;
-
-    let pre = read_pre_state(setting, &profile)?;
+    // The pre-write snapshot only feeds the per-game baseline; the global base
+    // profile has none, so skip the read entirely there (a transient read
+    // failure must not block a valid global write).
+    let pre = match target.game_id() {
+        Some(_) => Some(read_pre_state(setting, &profile)?),
+        None => None,
+    };
 
     match op {
         WriteOp::Set(dword) => {
@@ -149,39 +252,32 @@ pub fn write_setting_value(
         .save()
         .map_err(|e| map_nvapi_write_error(e, "save failed"))?;
 
-    let storage = context.storage();
-    storage.capture_nvapi_baseline_if_missing(
-        game_id,
-        setting.key(),
-        pre.current,
-        pre.is_current_predefined,
-        pre.predefined,
-        exe,
-    )?;
+    // Baseline snapshots are only meaningful for a real game; the global base
+    // profile has no row in the baseline table to key against (and `pre` is
+    // `None` there).
+    if let (Some(game_id), Some(pre)) = (target.game_id(), pre) {
+        let exe = ctx.effective_exe.as_deref().unwrap_or_default();
+        context.storage().capture_nvapi_baseline_if_missing(
+            game_id,
+            setting.key(),
+            pre.current,
+            pre.is_current_predefined,
+            pre.predefined,
+            exe,
+        )?;
+    }
     Ok(())
 }
 
 /// Reads the live state of a single NVAPI `setting` for `game_id`.
 pub fn read_setting_state(
     context: &crate::Context,
-    game_id: &str,
+    target: &SettingTarget<'_>,
     setting: &dyn NvapiSetting,
     ctx: &SettingContext,
 ) -> Result<SettingStateResponse, ServiceError> {
-    let storage = context.storage();
-    let effective_exe = ctx.effective_exe.clone();
-    let effective_exe_source = resolve_effective_exe_source(storage, game_id, &effective_exe)?;
-
-    let live = read_live_or_default(setting, ctx);
-    assemble_response(
-        setting,
-        ctx,
-        storage,
-        game_id,
-        live,
-        effective_exe,
-        effective_exe_source,
-    )
+    let live = read_live_or_default(target, setting, ctx);
+    assemble_response(setting, ctx, context.storage(), target, live)
 }
 
 /// Reads the live state of **every** supplied setting through a single DRS
@@ -191,49 +287,35 @@ pub fn read_setting_state(
 /// mirroring `read_live_or_default` but without re-opening the driver.
 pub fn read_all_setting_states(
     context: &crate::Context,
-    game_id: &str,
+    target: &SettingTarget<'_>,
     settings: &[Box<dyn NvapiSetting>],
     ctx: &SettingContext,
 ) -> Result<Vec<SettingStateResponse>, ServiceError> {
     let storage = context.storage();
-    let effective_exe = ctx.effective_exe.clone();
-    let effective_exe_source = resolve_effective_exe_source(storage, game_id, &effective_exe)?;
-
     let exe = ctx.effective_exe.as_deref();
-    let (session, session_warning) = (|| -> Result<_, NvapiWarningDto> {
-        if exe.is_none() {
-            return Err(NvapiWarningDto::NoExecutable);
-        }
-        let nvapi = Nvapi::get().ok_or(NvapiWarningDto::NvapiUnavailable)?;
-        nvapi
-            .initialize()
-            .map_err(|_| NvapiWarningDto::NvapiInitFailed)?;
-        nvapi
-            .create_session()
-            .map_err(|_| NvapiWarningDto::DrsFailed)
-    })()
-    .map_or_else(|w| (None, Some(w)), |s| (Some(s), None));
-    let profile = match (session.as_ref(), exe) {
-        (Some(session), Some(exe)) => session.find_profile_by_exe(exe).ok(),
-        _ => None,
+
+    let session_result = if target.requires_exe() && exe.is_none() {
+        Err(NvapiWarningDto::NoExecutable)
+    } else {
+        open_drs_session()
     };
+    let (session, session_warning) =
+        session_result.map_or_else(|w| (None, Some(w)), |s| (Some(s), None));
+
+    let (profile, profile_warning) = match session.as_ref() {
+        Some(session) => target.resolve_profile_for_read(session, exe),
+        None => (None, None),
+    };
+    let unavailable_warning = session_warning.or(profile_warning);
 
     let mut responses = Vec::with_capacity(settings.len());
     for setting in settings {
         let setting = setting.as_ref();
         let live = match &profile {
             Some(profile) => read_dword_or_default(profile, setting),
-            None => LiveRead::unavailable(setting.default_dword(), session_warning),
+            None => LiveRead::unavailable(setting.default_dword(), unavailable_warning),
         };
-        responses.push(assemble_response(
-            setting,
-            ctx,
-            storage,
-            game_id,
-            live,
-            effective_exe.clone(),
-            effective_exe_source.clone(),
-        )?);
+        responses.push(assemble_response(setting, ctx, storage, target, live)?);
     }
     Ok(responses)
 }
@@ -283,19 +365,30 @@ fn assemble_response(
     setting: &dyn NvapiSetting,
     ctx: &SettingContext,
     storage: &renderpilot_storage_sqlite::SqliteStorage,
-    game_id: &str,
+    target: &SettingTarget<'_>,
     live: LiveRead,
-    effective_exe: Option<String>,
-    effective_exe_source: Option<String>,
 ) -> Result<SettingStateResponse, ServiceError> {
-    let baseline_row = storage.get_nvapi_baseline(game_id, setting.key())?;
+    // Baseline tracking and executable resolution only apply to a real game;
+    // the global base profile has neither.
+    let (baseline_row, effective_exe, effective_exe_source) = match target.game_id() {
+        Some(game_id) => {
+            let baseline_row = storage.get_nvapi_baseline(game_id, setting.key())?;
+            let effective_exe = ctx.effective_exe.clone();
+            let effective_exe_source =
+                resolve_effective_exe_source(storage, game_id, &effective_exe)?;
+            (baseline_row, effective_exe, effective_exe_source)
+        }
+        None => (None, None, None),
+    };
 
     let dll_info = build_dll_info(setting, ctx);
     let supported_set = supported_preset_set(setting, ctx);
     let known_set = known_preset_set(setting, ctx);
 
     let mut warnings: Vec<NvapiWarningDto> = Vec::new();
-    if setting.dll_kind().is_some() {
+    // DLL-version warnings only make sense for a specific game's install. The
+    // global base profile is intentionally DLL-independent, so suppress them.
+    if target.game_id().is_some() && setting.dll_kind().is_some() {
         if dll_info.is_none() {
             warnings.push(NvapiWarningDto::NoDll);
         } else if supported_set.is_empty() {
@@ -511,28 +604,26 @@ fn resolve_effective_exe_source(
 /// Reads the live state of a single setting, opening its own DRS session.
 /// Used by the single-setting read path; the batch path opens one session and
 /// calls [`read_dword_or_default`] directly.
-fn read_live_or_default(setting: &dyn NvapiSetting, ctx: &SettingContext) -> LiveRead {
+fn read_live_or_default(
+    target: &SettingTarget<'_>,
+    setting: &dyn NvapiSetting,
+    ctx: &SettingContext,
+) -> LiveRead {
     let unavailable =
         |warning: NvapiWarningDto| LiveRead::unavailable(setting.default_dword(), Some(warning));
 
-    let Some(exe) = ctx.effective_exe.as_deref() else {
+    let exe = ctx.effective_exe.as_deref();
+    if target.requires_exe() && exe.is_none() {
         return unavailable(NvapiWarningDto::NoExecutable);
-    };
-    let Some(nvapi) = Nvapi::get() else {
-        return unavailable(NvapiWarningDto::NvapiUnavailable);
-    };
-    if nvapi.initialize().is_err() {
-        return unavailable(NvapiWarningDto::NvapiInitFailed);
     }
-    let session = match nvapi.create_session() {
+    let session = match open_drs_session() {
         Ok(session) => session,
-        Err(_) => return unavailable(NvapiWarningDto::DrsFailed),
+        Err(warning) => return unavailable(warning),
     };
-    let profile = match session.find_profile_by_exe(exe) {
-        Ok(profile) => profile,
-        Err(_) => return LiveRead::unavailable(setting.default_dword(), None),
-    };
-    read_dword_or_default(&profile, setting)
+    match target.resolve_profile_for_read(&session, exe) {
+        (Some(profile), _) => read_dword_or_default(&profile, setting),
+        (None, warning) => LiveRead::unavailable(setting.default_dword(), warning),
+    }
 }
 
 /// Reads a DWORD from an already-resolved profile. A missing setting (or any
@@ -625,5 +716,49 @@ mod tests {
         // Writing a managed-but-unsupported preset must be rejected.
         let preset_a = def.values.iter().find(|v| v.wire == "a").unwrap().dword;
         assert!(validate_value_supported(&setting, preset_a, &ctx).is_err());
+    }
+
+    #[test]
+    fn target_exe_requirement_distinguishes_scope() {
+        assert!(SettingTarget::Game { game_id: "g1" }.requires_exe());
+        assert!(!SettingTarget::Global.requires_exe());
+        assert_eq!(SettingTarget::Game { game_id: "g1" }.game_id(), Some("g1"));
+        assert_eq!(SettingTarget::Global.game_id(), None);
+    }
+
+    #[test]
+    fn global_revert_to_default_is_delete() {
+        let context = crate::Context::from_storage(
+            renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite should open"),
+        );
+        let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+        let setting = CatalogSetting::new(def);
+        let op = resolve_revert_op(&context, &SettingTarget::Global, &setting, "predefined")
+            .expect("predefined revert is always valid");
+        assert!(matches!(op, WriteOp::Delete));
+    }
+
+    #[test]
+    fn global_revert_to_baseline_is_rejected() {
+        let context = crate::Context::from_storage(
+            renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite should open"),
+        );
+        let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+        let setting = CatalogSetting::new(def);
+        // There is no per-game baseline table for the global profile, so a
+        // baseline revert must be refused rather than silently no-op.
+        assert!(resolve_revert_op(&context, &SettingTarget::Global, &setting, "baseline").is_err());
+    }
+
+    #[test]
+    fn global_context_imposes_no_dll_version_constraints() {
+        // With no detected DLL, every catalog value (including manifest-managed
+        // presets like "a") is allowed — a global setting is not tied to one
+        // game's DLL version.
+        let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+        let setting = CatalogSetting::new(def);
+        let ctx = crate::nvapi::resolve::global_setting_context();
+        let preset_a = def.values.iter().find(|v| v.wire == "a").unwrap().dword;
+        assert!(validate_value_supported(&setting, preset_a, &ctx).is_ok());
     }
 }

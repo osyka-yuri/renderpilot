@@ -451,6 +451,52 @@ pub async fn revert_nvapi_setting(
 }
 
 // ---------------------------------------------------------------------------
+// Global (base profile) NVAPI settings
+// ---------------------------------------------------------------------------
+
+/// Reads the live state of every supported NVAPI setting from NVIDIA's
+/// global/base driver profile.
+#[tauri::command]
+pub async fn list_global_nvapi_setting_states(
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::list_global_nvapi_setting_states(&context)).await
+}
+
+/// Commits a new value for an NVAPI setting on the global/base driver profile.
+#[tauri::command]
+pub async fn set_global_nvapi_setting_value(
+    setting_key: String,
+    value: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let setting_key = require_non_empty_string("setting_key", setting_key)?;
+    let value = require_non_empty_string("value", value)?;
+    let context = Arc::clone(&context);
+    run_desktop_command(move || {
+        desktop::set_global_nvapi_setting_value(&context, &setting_key, &value)
+    })
+    .await
+}
+
+/// Reverts an NVAPI setting on the global/base driver profile to the driver default.
+#[tauri::command]
+pub async fn revert_global_nvapi_setting(
+    setting_key: String,
+    target: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let setting_key = require_non_empty_string("setting_key", setting_key)?;
+    let target = require_non_empty_string("target", target)?;
+    let context = Arc::clone(&context);
+    run_desktop_command(move || {
+        desktop::revert_global_nvapi_setting(&context, &setting_key, &target)
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
 // DLSS indicator (system-wide overlay)
 // ---------------------------------------------------------------------------
 

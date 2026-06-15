@@ -1,19 +1,17 @@
-// This feature is now headless: API + types only. The page-side composition
-// (NvidiaProfileCard + the per-family DlssComponentCard) lives in
-// `pages/game-details/ui` and owns the layout, since it is tightly bound to
-// that page's tab structure.
-
 // API
 export {
   clearGameExecutableOverride,
   getDlssIndicatorState,
   getNvapiSettingState,
   listGameExecutableCandidates,
+  listGlobalNvapiSettingStates,
   listNvapiSettingStates,
   listNvapiSupportedSettings,
+  revertGlobalNvapiSetting,
   revertNvapiSetting,
   setDlssIndicatorEnabled,
   setGameExecutableOverride,
+  setGlobalNvapiSettingValue,
   setNvapiSettingValue,
 } from './api/desktop';
 
@@ -36,3 +34,19 @@ export {
   type DlssIndicatorContext,
   type CreateDlssIndicatorContextOptions,
 } from './model/create-dlss-indicator-context.svelte';
+
+export {
+  createNvapiSettingsStore,
+  type NvapiSettingsStore,
+  type CreateNvapiSettingsStoreOptions,
+} from './model/create-nvapi-settings-store.svelte';
+
+export {
+  createGlobalNvidiaPresetsContext,
+  type GlobalNvidiaPresetsContext,
+  type CreateGlobalNvidiaPresetsContextOptions,
+} from './model/create-global-nvidia-presets-context.svelte';
+
+// UI
+export { default as NvapiSettingRow } from './ui/NvapiSettingRow.svelte';
+export { default as NvapiSettingGroup } from './ui/NvapiSettingGroup.svelte';

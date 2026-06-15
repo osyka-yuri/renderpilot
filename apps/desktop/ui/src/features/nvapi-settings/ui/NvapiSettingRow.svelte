@@ -17,7 +17,7 @@
     TooltipTrigger,
   } from '@shared/ui';
   import { t, translateKey } from '@shared/i18n';
-  import type { SettingStateResponse } from '@features/nvapi-settings';
+  import type { SettingStateResponse } from '../model/types';
 
   type Props = {
     state: SettingStateResponse;

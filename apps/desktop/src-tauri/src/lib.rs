@@ -344,6 +344,10 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::get_nvapi_setting_state,
         commands::set_nvapi_setting_value,
         commands::revert_nvapi_setting,
+        // Global (base profile) NVAPI settings
+        commands::list_global_nvapi_setting_states,
+        commands::set_global_nvapi_setting_value,
+        commands::revert_global_nvapi_setting,
         // DLSS indicator (system-wide)
         commands::get_dlss_indicator_state,
         commands::set_dlss_indicator_enabled,

@@ -48,6 +48,15 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.nvidia.indicator.overlayTitle': '画面オーバーレイ',
   'settings.nvidia.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
   'settings.nvidia.indicator.toggleAria': 'DLSS インジケーターの切り替え',
+  'settings.nvidia.global.title': 'グローバル DLSS 設定',
+  'settings.nvidia.global.description':
+    'NVIDIA ベースプロファイルを介して、ゲーム固有の上書きがないすべてのゲームに適用される既定値です。',
+  'settings.nvidia.global.systemWide': 'システム全体',
+  'settings.nvidia.global.adminRequired':
+    'これらの設定を変更するには、管理者としてアプリを再起動してください。',
+  'settings.nvidia.global.familySr': 'DLSS スーパーレゾリューション',
+  'settings.nvidia.global.familyFg': 'DLSS フレーム生成',
+  'settings.nvidia.global.familyRr': 'DLSS レイ再構築',
 
   'game.card.action.details': '詳細',
   'game.card.action.detailsAria': '{title} の詳細を開く',

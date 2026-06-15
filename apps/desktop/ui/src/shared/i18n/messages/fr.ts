@@ -48,6 +48,15 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.nvidia.indicator.overlayTitle': 'Superposition à l’écran',
   'settings.nvidia.indicator.overlayDescription': 'S’applique à tous les jeux de ce PC.',
   'settings.nvidia.indicator.toggleAria': 'Basculer l’indicateur DLSS',
+  'settings.nvidia.global.title': 'Paramètres DLSS globaux',
+  'settings.nvidia.global.description':
+    'Valeurs par défaut appliquées à chaque jeu sans réglage spécifique, via le profil de base NVIDIA.',
+  'settings.nvidia.global.systemWide': 'À l’échelle du système',
+  'settings.nvidia.global.adminRequired':
+    'Redémarrez l’application en tant qu’administrateur pour modifier ces paramètres.',
+  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
+  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
+  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
 
   'game.card.action.details': 'Détails',
   'game.card.action.detailsAria': 'Ouvrir les détails pour {title}',

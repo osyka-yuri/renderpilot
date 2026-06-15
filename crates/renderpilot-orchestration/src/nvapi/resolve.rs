@@ -119,6 +119,19 @@ pub fn build_setting_context_with_context(
     })
 }
 
+/// Builds the [`SettingContext`] for the global/base driver profile.
+///
+/// There is no game, executable, or install directory, so DLL detection is
+/// empty — which means per-version preset constraints are skipped and every
+/// catalog value is offered (a global setting cannot be tied to one game's DLL).
+pub fn global_setting_context() -> SettingContext {
+    SettingContext {
+        game_install_dir: std::path::PathBuf::new(),
+        dlls: std::collections::HashMap::new(),
+        effective_exe: None,
+    }
+}
+
 /// Collects executable candidates from the game installation directory.
 #[cfg(windows)]
 pub fn collect_executable_candidates(install_dir: &Path) -> Vec<ExecutableCandidate> {
@@ -165,4 +178,19 @@ fn pick_exe_with_profile_fallback(install_dir: &Path) -> Option<String> {
 #[cfg(not(windows))]
 fn pick_exe_with_profile_fallback(_install_dir: &Path) -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::global_setting_context;
+
+    #[test]
+    fn global_context_has_no_game_dll_or_exe() {
+        // These invariants are what make version-gating a no-op and offer every
+        // catalog value on the global profile; assert them at the source.
+        let ctx = global_setting_context();
+        assert!(ctx.dlls.is_empty());
+        assert!(ctx.effective_exe.is_none());
+        assert_eq!(ctx.game_install_dir.as_os_str().len(), 0);
+    }
 }

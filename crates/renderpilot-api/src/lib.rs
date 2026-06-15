@@ -52,8 +52,9 @@ pub use self::libraries::{
 };
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
-    list_nvapi_setting_states, list_nvapi_supported_settings, revert_nvapi_setting,
-    set_game_executable_override, set_nvapi_setting_value,
+    list_global_nvapi_setting_states, list_nvapi_setting_states, list_nvapi_supported_settings,
+    revert_global_nvapi_setting, revert_nvapi_setting, set_game_executable_override,
+    set_global_nvapi_setting_value, set_nvapi_setting_value,
 };
 pub use self::operations::{apply_swap, rollback_component};
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};

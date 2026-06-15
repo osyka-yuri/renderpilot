@@ -14,18 +14,44 @@ use crate::{
     ApiError,
 };
 
+use renderpilot_orchestration::domain::GameId;
 use renderpilot_orchestration::nvapi::dto::{
     executable_candidate_dto, setting_descriptor_dto, ExecutableCandidateDto, SettingDescriptorDto,
 };
 use renderpilot_orchestration::nvapi::ops::{
     read_all_setting_states, read_setting_state, resolve_revert_op, validate_value_supported,
-    write_setting_value, WriteOp,
+    write_setting_value, SettingTarget, WriteOp,
 };
 use renderpilot_orchestration::nvapi::registry::{lookup_setting, supported_settings};
 use renderpilot_orchestration::nvapi::resolve::{
     build_setting_context_with_context, clear_executable_override, collect_executable_candidates,
-    load_game_with_context, set_executable_override,
+    global_setting_context, load_game_with_context, set_executable_override,
 };
+use renderpilot_orchestration::nvapi::{NvapiSetting, SettingContext};
+
+/// Looks up an NVAPI setting by key, or returns the standard "unknown setting"
+/// error. Shared by every handler so the message stays identical.
+fn lookup_setting_or_err(setting_key: &str) -> Result<Box<dyn NvapiSetting>, ApiError> {
+    lookup_setting(setting_key).ok_or_else(|| {
+        ApiError::Service(ServiceError::CommandFailed(format!(
+            "unknown nvapi setting: {setting_key}"
+        )))
+    })
+}
+
+/// Parses `game_id`, loads the game, and builds its per-game [`SettingContext`]
+/// (DLL detection + executable resolution) in one step. Returns the parsed id
+/// alongside the context so the caller can build a [`SettingTarget::Game`].
+fn build_game_context(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+) -> Result<(GameId, SettingContext), ApiError> {
+    let game_id = parse_game_id(game_id)?;
+    let game = load_game_with_context(context, game_id.as_str())?;
+    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
+    let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
+    Ok((game_id, ctx))
+}
 
 // ---------------------------------------------------------------------------
 // Public Tauri-facing entry points
@@ -47,12 +73,12 @@ pub fn list_nvapi_setting_states(
     context: &renderpilot_orchestration::Context,
     game_id: String,
 ) -> JsonResult {
-    let game_id = parse_game_id(game_id)?;
-    let game = load_game_with_context(context, game_id.as_str())?;
-    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
-    let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
+    let (game_id, ctx) = build_game_context(context, game_id)?;
     let settings = supported_settings();
-    let responses = read_all_setting_states(context, game_id.as_str(), &settings, &ctx)?;
+    let target = SettingTarget::Game {
+        game_id: game_id.as_str(),
+    };
+    let responses = read_all_setting_states(context, &target, &settings, &ctx)?;
     to_json(responses)
 }
 
@@ -99,16 +125,12 @@ pub fn get_nvapi_setting_state(
     game_id: String,
     setting_key: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(setting_key).ok_or_else(|| {
-        ApiError::Service(ServiceError::CommandFailed(format!(
-            "unknown nvapi setting: {setting_key}"
-        )))
-    })?;
-    let game_id = parse_game_id(game_id)?;
-    let game = load_game_with_context(context, game_id.as_str())?;
-    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
-    let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
-    let response = read_setting_state(context, game_id.as_str(), setting.as_ref(), &ctx)?;
+    let setting = lookup_setting_or_err(setting_key)?;
+    let (game_id, ctx) = build_game_context(context, game_id)?;
+    let target = SettingTarget::Game {
+        game_id: game_id.as_str(),
+    };
+    let response = read_setting_state(context, &target, setting.as_ref(), &ctx)?;
     to_json(response)
 }
 
@@ -119,15 +141,8 @@ pub fn set_nvapi_setting_value(
     setting_key: &str,
     value: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(setting_key).ok_or_else(|| {
-        ApiError::Service(ServiceError::CommandFailed(format!(
-            "unknown nvapi setting: {setting_key}"
-        )))
-    })?;
-    let game_id = parse_game_id(game_id)?;
-    let game = load_game_with_context(context, game_id.as_str())?;
-    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
-    let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
+    let setting = lookup_setting_or_err(setting_key)?;
+    let (game_id, ctx) = build_game_context(context, game_id)?;
 
     let dword = setting.parse_wire(value).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
@@ -137,14 +152,17 @@ pub fn set_nvapi_setting_value(
     })?;
     validate_value_supported(setting.as_ref(), dword, &ctx)?;
 
+    let target = SettingTarget::Game {
+        game_id: game_id.as_str(),
+    };
     write_setting_value(
         context,
-        game_id.as_str(),
+        &target,
         setting.as_ref(),
         &ctx,
         WriteOp::Set(dword),
     )?;
-    let response = read_setting_state(context, game_id.as_str(), setting.as_ref(), &ctx)?;
+    let response = read_setting_state(context, &target, setting.as_ref(), &ctx)?;
     to_json(response)
 }
 
@@ -155,20 +173,78 @@ pub fn revert_nvapi_setting(
     setting_key: &str,
     target: &str,
 ) -> JsonResult {
-    let setting = lookup_setting(setting_key).ok_or_else(|| {
+    let setting = lookup_setting_or_err(setting_key)?;
+    let (game_id, ctx) = build_game_context(context, game_id)?;
+
+    let setting_target = SettingTarget::Game {
+        game_id: game_id.as_str(),
+    };
+    let op = resolve_revert_op(context, &setting_target, setting.as_ref(), target)?;
+
+    write_setting_value(context, &setting_target, setting.as_ref(), &ctx, op)?;
+    let response = read_setting_state(context, &setting_target, setting.as_ref(), &ctx)?;
+    to_json(response)
+}
+
+// ---------------------------------------------------------------------------
+// Global (base profile) entry points
+// ---------------------------------------------------------------------------
+//
+// These mirror the per-game handlers above but target NVIDIA's global/base
+// driver profile (`SettingTarget::Global`) and take no `game_id`. All of the
+// real work lives in the shared orchestration functions; only the target and
+// the empty global context differ.
+
+/// Reads the live state of every supported NVAPI setting from the global/base
+/// driver profile in one DRS session.
+pub fn list_global_nvapi_setting_states(
+    context: &renderpilot_orchestration::Context,
+) -> JsonResult {
+    let ctx = global_setting_context();
+    let settings = supported_settings();
+    let responses = read_all_setting_states(context, &SettingTarget::Global, &settings, &ctx)?;
+    to_json(responses)
+}
+
+/// Commits a new value for an NVAPI setting on the global/base driver profile.
+pub fn set_global_nvapi_setting_value(
+    context: &renderpilot_orchestration::Context,
+    setting_key: &str,
+    value: &str,
+) -> JsonResult {
+    let setting = lookup_setting_or_err(setting_key)?;
+    let ctx = global_setting_context();
+    let dword = setting.parse_wire(value).ok_or_else(|| {
         ApiError::Service(ServiceError::CommandFailed(format!(
-            "unknown nvapi setting: {setting_key}"
+            "invalid value `{value}` for {}",
+            setting.key()
         )))
     })?;
-    let game_id = parse_game_id(game_id)?;
-    let game = load_game_with_context(context, game_id.as_str())?;
-    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
-    let ctx = build_setting_context_with_context(context, &install_dir, game_id.as_str())?;
+    validate_value_supported(setting.as_ref(), dword, &ctx)?;
 
-    let op = resolve_revert_op(context, game_id.as_str(), setting.as_ref(), target)?;
+    write_setting_value(
+        context,
+        &SettingTarget::Global,
+        setting.as_ref(),
+        &ctx,
+        WriteOp::Set(dword),
+    )?;
+    let response = read_setting_state(context, &SettingTarget::Global, setting.as_ref(), &ctx)?;
+    to_json(response)
+}
 
-    write_setting_value(context, game_id.as_str(), setting.as_ref(), &ctx, op)?;
-    let response = read_setting_state(context, game_id.as_str(), setting.as_ref(), &ctx)?;
+/// Reverts an NVAPI setting on the global/base driver profile. Only the
+/// `"predefined"` target is valid globally (there is no per-game baseline).
+pub fn revert_global_nvapi_setting(
+    context: &renderpilot_orchestration::Context,
+    setting_key: &str,
+    target: &str,
+) -> JsonResult {
+    let setting = lookup_setting_or_err(setting_key)?;
+    let ctx = global_setting_context();
+    let op = resolve_revert_op(context, &SettingTarget::Global, setting.as_ref(), target)?;
+    write_setting_value(context, &SettingTarget::Global, setting.as_ref(), &ctx, op)?;
+    let response = read_setting_state(context, &SettingTarget::Global, setting.as_ref(), &ctx)?;
     to_json(response)
 }
 
@@ -196,6 +272,16 @@ mod tests {
         let settings = supported_settings();
         assert!(!settings.is_empty());
         assert_eq!(settings[0].key(), "dlss_sr_render_preset");
+    }
+
+    #[test]
+    fn lookup_setting_or_err_rejects_unknown_key() {
+        // Backs the global set/revert handlers' key validation without needing a
+        // GPU: an unknown key must surface the standard unknown-setting error.
+        match lookup_setting_or_err("does.not.exist") {
+            Ok(_) => panic!("unknown key must error"),
+            Err(err) => assert!(matches!(err, ApiError::Service(_))),
+        }
     }
 
     #[test]

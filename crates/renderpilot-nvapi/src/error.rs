@@ -26,6 +26,10 @@ pub enum NvapiError {
     LoadSettingsFailed(i32),
     /// The requested profile was not found.
     ProfileNotFound,
+    /// The global/base driver profile could not be resolved (the
+    /// `NvAPI_DRS_GetBaseProfile` entry point is unavailable on this driver,
+    /// or the call failed).
+    BaseProfileUnavailable,
     /// The requested application was not found in any profile.
     ApplicationNotFound,
     /// Failed to read a setting value.
@@ -60,6 +64,9 @@ impl fmt::Display for NvapiError {
                 write!(formatter, "DRS load settings failed (status={status})")
             }
             Self::ProfileNotFound => write!(formatter, "DRS profile not found"),
+            Self::BaseProfileUnavailable => {
+                write!(formatter, "DRS global/base profile unavailable")
+            }
             Self::ApplicationNotFound => {
                 write!(formatter, "DRS application not found in any profile")
             }

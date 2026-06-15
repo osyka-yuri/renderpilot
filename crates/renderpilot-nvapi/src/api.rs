@@ -9,12 +9,12 @@ use crate::{
     ffi::{
         interface_ids, NvAPI_DRS_CreateSession_fn, NvAPI_DRS_DeleteProfileSetting_fn,
         NvAPI_DRS_DestroySession_fn, NvAPI_DRS_FindApplicationByName_fn,
-        NvAPI_DRS_FindProfileByName_fn, NvAPI_DRS_GetProfileInfo_fn, NvAPI_DRS_GetSetting_fn,
-        NvAPI_DRS_GetSetting_v2_fn, NvAPI_DRS_LoadSettings_fn, NvAPI_DRS_SaveSettings_fn,
-        NvAPI_DRS_SetSetting_fn, NvAPI_DRS_SetSetting_v2_fn, NvAPI_Initialize_fn,
-        NvAPI_QueryInterface_fn, NvDRSProfileHandle, NvDRSSessionHandle, NVAPI_UNICODE_STRING_MAX,
-        NVDRS_APPLICATION, NVDRS_APPLICATION_VER, NVDRS_DWORD_TYPE, NVDRS_PROFILE,
-        NVDRS_PROFILE_VER, NVDRS_SETTING, NVDRS_SETTING_VER,
+        NvAPI_DRS_FindProfileByName_fn, NvAPI_DRS_GetBaseProfile_fn, NvAPI_DRS_GetProfileInfo_fn,
+        NvAPI_DRS_GetSetting_fn, NvAPI_DRS_GetSetting_v2_fn, NvAPI_DRS_LoadSettings_fn,
+        NvAPI_DRS_SaveSettings_fn, NvAPI_DRS_SetSetting_fn, NvAPI_DRS_SetSetting_v2_fn,
+        NvAPI_Initialize_fn, NvAPI_QueryInterface_fn, NvDRSProfileHandle, NvDRSSessionHandle,
+        NVAPI_UNICODE_STRING_MAX, NVDRS_APPLICATION, NVDRS_APPLICATION_VER, NVDRS_DWORD_TYPE,
+        NVDRS_PROFILE, NVDRS_PROFILE_VER, NVDRS_SETTING, NVDRS_SETTING_VER,
     },
 };
 
@@ -84,6 +84,10 @@ pub struct Nvapi {
     // re-resolve an exe's profile by display name, matching Inspector.
     find_profile_by_name: Option<NvAPI_DRS_FindProfileByName_fn>,
     get_profile_info: Option<NvAPI_DRS_GetProfileInfo_fn>,
+    // Global/base profile lookup (optional — present on any modern NVIDIA
+    // driver, treated as optional so old systems degrade gracefully without
+    // disabling per-game NVAPI). Backs the application-wide DLSS settings.
+    get_base_profile: Option<NvAPI_DRS_GetBaseProfile_fn>,
 }
 
 impl Nvapi {
@@ -200,6 +204,11 @@ impl Nvapi {
             interface_ids::DRS_GET_PROFILE_INFO,
             NvAPI_DRS_GetProfileInfo_fn
         );
+        resolve_fn_opt!(
+            get_base_profile,
+            interface_ids::DRS_GET_BASE_PROFILE,
+            NvAPI_DRS_GetBaseProfile_fn
+        );
 
         Some(Self {
             _library: library,
@@ -217,6 +226,7 @@ impl Nvapi {
             delete_profile_setting_v2,
             find_profile_by_name,
             get_profile_info,
+            get_base_profile,
         })
     }
 
@@ -285,6 +295,22 @@ impl Nvapi {
         // Fallback: the profile-name re-lookup failed (very old driver, or
         // optional functions unavailable).  Return the exe-based handle so the
         // operation still proceeds with the best available information.
+        Ok(profile)
+    }
+
+    /// Resolves the handle of the global/base driver profile.
+    fn get_base_profile(
+        &self,
+        session: NvDRSSessionHandle,
+    ) -> Result<NvDRSProfileHandle, NvapiError> {
+        let func = self
+            .get_base_profile
+            .ok_or(NvapiError::BaseProfileUnavailable)?;
+        let mut profile: NvDRSProfileHandle = ptr::null_mut();
+        let status = unsafe { (func)(session, &mut profile) };
+        if status != 0 || profile.is_null() {
+            return Err(NvapiError::BaseProfileUnavailable);
+        }
         Ok(profile)
     }
 
@@ -442,6 +468,16 @@ impl<'a> DrsSession<'a> {
     /// Looks up the profile that owns `exe_name`.
     pub fn find_profile_by_exe(&self, exe_name: &str) -> Result<Profile<'_>, NvapiError> {
         let handle = self.nvapi.find_profile_by_exe(self.handle, exe_name)?;
+        Ok(Profile {
+            session: self,
+            handle,
+        })
+    }
+
+    /// Resolves the global/base driver profile (`_GLOBAL_DRIVER_PROFILE_`),
+    /// whose settings apply to every application without its own profile.
+    pub fn base_profile(&self) -> Result<Profile<'_>, NvapiError> {
+        let handle = self.nvapi.get_base_profile(self.handle)?;
         Ok(Profile {
             session: self,
             handle,
