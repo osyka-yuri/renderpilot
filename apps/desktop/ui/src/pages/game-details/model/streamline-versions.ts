@@ -25,7 +25,13 @@ export type StreamlineVersionOption = {
   version: string;
   /** Display label, e.g. `"v2.4.0"`. */
   label: string;
-  /** Plugins that will be swapped to reach this version (excludes already-current). */
+  /**
+   * True when every plugin is already on this version. The option is always
+   * present in the list so the `SelectItem` has a stable DOM position and
+   * bits-ui never loses the active selection after a reload.
+   */
+  isCurrent: boolean;
+  /** Plugins that will be swapped to reach this version (empty when `isCurrent`). */
   items: BulkSwapItem[];
   /** How many plugins this swap updates (`items.length`). */
   updateCount: number;
@@ -38,7 +44,11 @@ export type StreamlineVersionOption = {
 };
 
 export type StreamlineVersionModel = {
-  /** Applicable versions, newest first; only versions that change something. */
+  /**
+   * All selectable versions, newest first. Always includes the current version
+   * (when known and uniform) so the corresponding `SelectItem` is never
+   * remounted between `{#if}` and `{#each}` blocks after a swap completes.
+   */
   options: StreamlineVersionOption[];
   /** Common current version across all plugins, or `null` when mixed/unknown. */
   currentVersion: string | null;
@@ -69,6 +79,9 @@ export function buildStreamlineVersionModel(
   const isMixed = distinctCurrent.length > 1;
 
   const versions = new Set<string>();
+  if (currentVersion) {
+    versions.add(currentVersion);
+  }
   for (const component of components) {
     for (const candidate of groupsById[component.id]?.candidates ?? []) {
       if (candidate.version) {
@@ -79,8 +92,7 @@ export function buildStreamlineVersionModel(
 
   const options = [...versions]
     .sort(compareVersionDesc)
-    .map((version) => buildOption(version, components, groupsById))
-    .filter((option) => option.updateCount > 0);
+    .map((version) => buildOption(version, components, groupsById, currentVersion));
 
   return { options, currentVersion, isMixed, totalCount };
 }
@@ -89,6 +101,7 @@ function buildOption(
   version: string,
   components: GameGraphicsComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
+  currentVersion: string | null,
 ): StreamlineVersionOption {
   const items: BulkSwapItem[] = [];
   let missingCount = 0;
@@ -121,11 +134,13 @@ function buildOption(
   return {
     version,
     label: `v${version}`,
+    isCurrent: version === currentVersion,
     items,
     updateCount: items.length,
     missingCount,
     isComplete: missingCount === 0,
-    allDownloaded,
+    // When isCurrent there are no items to download; treat as fully local.
+    allDownloaded: items.length === 0 || allDownloaded,
   };
 }
 

@@ -506,7 +506,7 @@ fn sort_representative_first_puts_the_entry_point_before_an_rr_stack() {
 }
 
 #[test]
-fn sort_representative_first_leaves_non_fsr_sets_untouched() {
+fn sort_representative_first_orders_non_fsr_sets_by_name() {
     let mut files = vec![
         versioned_file("C:/game/nvngx_dlssg.dll", "3.7.0"),
         versioned_file("C:/game/nvngx_dlss.dll", "3.7.0"),
@@ -516,8 +516,44 @@ fn sort_representative_first_leaves_non_fsr_sets_untouched() {
 
     assert_eq!(
         file_names(&files),
-        vec!["nvngx_dlssg.dll", "nvngx_dlss.dll"],
-        "non-FSR sets keep their given order",
+        vec!["nvngx_dlss.dll", "nvngx_dlssg.dll"],
+        "non-FSR sets are ordered by file name, mirroring detection",
+    );
+}
+
+#[test]
+fn sort_representative_first_orders_a_streamline_bundle_by_name() {
+    // A Streamline bundle the swap rebuilt with a kept plugin in front: the
+    // storage sort must match detection's file-name ordering so the stored
+    // representative (files()[0]) is the same one a rescan would pick.
+    let mut files = vec![
+        versioned_file("C:/game/sl.interposer.dll", "2.4.0"),
+        versioned_file("C:/game/sl.common.dll", "2.4.0"),
+        versioned_file("C:/game/sl.dlss.dll", "2.4.0"),
+    ];
+
+    representative::sort_representative_first(&mut files);
+
+    assert_eq!(
+        file_names(&files),
+        vec!["sl.common.dll", "sl.dlss.dll", "sl.interposer.dll"],
+    );
+}
+
+#[test]
+fn version_representative_picks_file_name_min_for_non_fsr_bundle() {
+    // Order-independent: even when the stored list is unsorted, the representative
+    // is the file-name-minimum member, so `current_version` never depends on how
+    // a caller happened to store the files.
+    let files = vec![
+        versioned_file("C:/game/sl.interposer.dll", "2.4.0"),
+        versioned_file("C:/game/sl.common.dll", "2.4.0"),
+        versioned_file("C:/game/sl.dlss.dll", "2.4.0"),
+    ];
+
+    assert_eq!(
+        representative::version_representative(&files).and_then(|f| f.path().file_name()),
+        Some("sl.common.dll"),
     );
 }
 

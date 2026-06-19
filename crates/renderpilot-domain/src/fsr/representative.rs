@@ -1,10 +1,16 @@
-//! Representative file selection for FSR components.
+//! Representative file selection for graphics components.
 //!
 //! Provides the user-facing display file (the entry point when present), the
 //! version-representative file (the upscaler when the set is cohesive, the
 //! entry point otherwise), and the canonical representative-first ordering of
 //! a component's stored files. Selection and ordering share one sort key, so
 //! they cannot disagree.
+//!
+//! FSR-named sets use a cohesion-aware key; every other technology (e.g. an
+//! NVIDIA Streamline bundle of `sl.*.dll`) is a single-technology set in
+//! practice, so it falls back to file-name order — exactly detection's non-FSR
+//! tiebreak (`order_with_primary_first`). Mirroring detection keeps a swapped
+//! component's stored `files()[0]` identical to what the next rescan produces.
 
 use crate::ComponentFile;
 
@@ -45,12 +51,16 @@ pub fn primary_rank(file_name: &str, upscaler_represents: bool) -> u8 {
 /// Returns the file whose version represents the component.
 ///
 /// For FSR sets this is the entry point or the upscaler per
-/// [`lineage::upscaler_represents_set`]; sets without any FSR name (other technologies)
-/// fall through to the first file.
+/// [`lineage::upscaler_represents_set`]; every other technology (e.g. a
+/// Streamline bundle) selects the file-name-minimum member, mirroring detection.
+/// The choice is order-independent, so `current_version` is correct regardless
+/// of how a caller happened to store the file list.
 #[must_use]
 pub fn version_representative(files: &[ComponentFile]) -> Option<&ComponentFile> {
     if !is_fsr_named_set(files) {
-        return files.first();
+        return files
+            .iter()
+            .min_by(|left, right| file_name(left).cmp(file_name(right)));
     }
 
     let upscaler_represents = upscaler_represents(files);
@@ -59,16 +69,22 @@ pub fn version_representative(files: &[ComponentFile]) -> Option<&ComponentFile>
         .min_by_key(|file| representative_key(file, upscaler_represents))
 }
 
-/// Sorts an FSR component's files representative-first, ties broken by
-/// case-insensitive file name for determinism. Sets without any FSR name
-/// (other technologies) keep their given order, mirroring
-/// [`version_representative`]'s fallback to the first file.
+/// Sorts a component's files representative-first so the stored `files()[0]`
+/// matches what detection's `order_with_primary_first` would produce.
 ///
-/// Detection orders scanned groups this way; callers that rebuild a stored
-/// component's file list (e.g. the swap executor) apply the same ordering so
-/// the stored `files()[0]` stays the right version source until the next rescan.
+/// FSR-named sets use the cohesion-aware key (entry point vs upscaler per
+/// [`lineage::upscaler_represents_set`]), ties broken by case-insensitive file
+/// name. Every other technology falls back to file-name order — detection's
+/// non-FSR tiebreak.
+///
+/// Callers that rebuild a stored component's file list (the swap executor) apply
+/// this so `files()[0]` stays the right version source until the next rescan: a
+/// swap's `additive_active_files` appends kept baseline files first, which would
+/// otherwise leave a stale file (an FSR denoiser, or a Streamline plugin) in
+/// front of the freshly installed representative.
 pub fn sort_representative_first(files: &mut [ComponentFile]) {
     if !is_fsr_named_set(files) {
+        files.sort_by(|left, right| file_name(left).cmp(file_name(right)));
         return;
     }
 
@@ -97,12 +113,18 @@ fn upscaler_represents(files: &[ComponentFile]) -> bool {
 }
 
 /// The shared sort key behind [`version_representative`] (min) and
-/// [`sort_representative_first`] (ascending sort): [`primary_rank`], then the
-/// case-insensitive file name.
+/// [`sort_representative_first`] (ascending sort) for FSR sets: [`primary_rank`],
+/// then the case-insensitive file name.
 fn representative_key(file: &ComponentFile, upscaler_represents: bool) -> (u8, String) {
-    let name = file.path().file_name().unwrap_or("");
+    let name = file_name(file);
     (
         primary_rank(name, upscaler_represents),
         name.to_ascii_lowercase(),
     )
+}
+
+/// A file's base name, or `""` when the path has none — the shared key for
+/// non-FSR selection and ordering.
+fn file_name(file: &ComponentFile) -> &str {
+    file.path().file_name().unwrap_or("")
 }

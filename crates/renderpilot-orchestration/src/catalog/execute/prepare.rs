@@ -39,7 +39,8 @@ pub(super) fn prepare_apply_swap(
     // directory holds once a re-swap's revert has run.
     let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
     // additive_active_files appends kept baseline files first, which would leave
-    // e.g. a denoiser in front of the entry point — store representative-first
+    // e.g. a denoiser in front of the entry point (FSR) or a stale plugin in
+    // front of a Streamline bundle's representative — store representative-first
     // (mirroring detection) so files()[0] carries the right version until the
     // next rescan.
     let mut new_files = additive_active_files(&baseline, &planned, &removed);

@@ -14,7 +14,7 @@ function group(
 }
 
 describe('buildStreamlineVersionModel', () => {
-  it('lists versions newest-first and targets every plugin when aligned', () => {
+  it('lists versions newest-first and includes the current version', () => {
     const components = [component('a'), component('b')];
     const groupsById = {
       a: group('a', '2.3.0', [
@@ -32,9 +32,17 @@ describe('buildStreamlineVersionModel', () => {
     expect(model.currentVersion).toBe('2.3.0');
     expect(model.isMixed).toBe(false);
     expect(model.totalCount).toBe(2);
-    expect(model.options.map((option) => option.version)).toEqual(['2.4.0', '2.2.0']);
 
-    const [v240] = model.options;
+    // Current version is always present so its SelectItem is never remounted.
+    expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0', '2.2.0']);
+
+    const current = model.options.find((o) => o.version === '2.3.0')!;
+    expect(current.isCurrent).toBe(true);
+    expect(current.updateCount).toBe(0);
+    expect(current.items).toEqual([]);
+
+    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    expect(v240.isCurrent).toBe(false);
     expect(v240.label).toBe('v2.4.0');
     expect(v240.updateCount).toBe(2);
     expect(v240.isComplete).toBe(true);
@@ -57,10 +65,13 @@ describe('buildStreamlineVersionModel', () => {
     expect(model.currentVersion).toBeNull();
     expect(model.isMixed).toBe(true);
 
-    const v240 = model.options.find((option) => option.version === '2.4.0');
-    expect(v240?.updateCount).toBe(1);
-    expect(v240?.items[0]?.componentId).toBe('b');
-    expect(v240?.isComplete).toBe(true);
+    // When mixed, no single current version is known — nothing is pre-inserted.
+    expect(model.options.every((o) => !o.isCurrent)).toBe(true);
+
+    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    expect(v240.updateCount).toBe(1);
+    expect(v240.items[0]?.componentId).toBe('b');
+    expect(v240.isComplete).toBe(true);
   });
 
   it('marks a version incomplete when a plugin cannot reach it', () => {
@@ -72,33 +83,29 @@ describe('buildStreamlineVersionModel', () => {
 
     const model = buildStreamlineVersionModel(components, groupsById);
 
-    const v250 = model.options.find((option) => option.version === '2.5.0');
-    expect(v250?.updateCount).toBe(1);
-    expect(v250?.missingCount).toBe(1);
-    expect(v250?.isComplete).toBe(false);
+    const v250 = model.options.find((o) => o.version === '2.5.0')!;
+    expect(v250.isCurrent).toBe(false);
+    expect(v250.updateCount).toBe(1);
+    expect(v250.missingCount).toBe(1);
+    expect(v250.isComplete).toBe(false);
   });
 
   it('flags allDownloaded=false and carries each item download state', () => {
     const components = [component('a'), component('b')];
     const groupsById = {
-      a: group('a', '2.3.0', [
-        candidate('2.4.0', {
-          artifact_id: 'a-240',
-          is_downloaded: false,
-        }),
-      ]),
+      a: group('a', '2.3.0', [candidate('2.4.0', { artifact_id: 'a-240', is_downloaded: false })]),
       b: group('b', '2.3.0', [candidate('2.4.0', { artifact_id: 'b-240', is_downloaded: true })]),
     };
 
     const model = buildStreamlineVersionModel(components, groupsById);
 
-    const v240 = model.options.find((option) => option.version === '2.4.0');
-    expect(v240?.allDownloaded).toBe(false);
-    expect(v240?.items.find((item) => item.componentId === 'a')?.isDownloaded).toBe(false);
-    expect(v240?.items.find((item) => item.componentId === 'b')?.isDownloaded).toBe(true);
+    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    expect(v240.allDownloaded).toBe(false);
+    expect(v240.items.find((item) => item.componentId === 'a')?.isDownloaded).toBe(false);
+    expect(v240.items.find((item) => item.componentId === 'b')?.isDownloaded).toBe(true);
   });
 
-  it('never offers the version a plugin is already on as a target', () => {
+  it('includes the current version alongside older candidates', () => {
     const components = [component('a'), component('b')];
     const groupsById = {
       a: group('a', '2.4.0', [candidate('2.3.0', { artifact_id: 'a-230' })]),
@@ -108,6 +115,16 @@ describe('buildStreamlineVersionModel', () => {
     const model = buildStreamlineVersionModel(components, groupsById);
 
     expect(model.currentVersion).toBe('2.4.0');
-    expect(model.options.map((option) => option.version)).toEqual(['2.3.0']);
+
+    // Current version is in the list so the Select always has a stable item for it.
+    expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0']);
+
+    const current = model.options.find((o) => o.version === '2.4.0')!;
+    expect(current.isCurrent).toBe(true);
+    expect(current.updateCount).toBe(0);
+    expect(current.allDownloaded).toBe(true);
+
+    const v230 = model.options.find((o) => o.version === '2.3.0')!;
+    expect(v230.isCurrent).toBe(false);
   });
 });

@@ -40,33 +40,30 @@
   const { components, groupsById, busy, onBulkSwap, onBulkRollback }: Props = $props();
 
   // Streamline plugins are a matched set: one chosen version is applied to every
-  // plugin at once. The model lists the versions that change at least one plugin.
+  // plugin at once. The model always includes the current version so the Select
+  // has a stable SelectItem for it and never loses its selection after a swap.
   const versionModel = $derived(buildStreamlineVersionModel(components, groupsById));
 
   // Track which artifact ids the user clicked for bulk swap so the progress bar
   // appears only on the initiating control.
   let pendingArtifactIds = $state<string[]>([]);
 
-  const currentLabel = $derived(
-    versionModel.currentVersion ? `v${versionModel.currentVersion}` : '',
-  );
-
   const triggerLabel = $derived(
     versionModel.currentVersion
-      ? currentLabel
+      ? `v${versionModel.currentVersion}`
       : versionModel.isMixed
         ? t('gameDetails.streamline.mixed')
         : t('common.unknown'),
   );
 
   // The dropdown marks the common current version as selected; after a swap it
-  // follows the new version automatically. When plugins are on mixed versions there
-  // is no single current, so nothing is marked.
+  // follows the new version automatically. When plugins are on mixed versions
+  // there is no single current, so nothing is marked.
   const currentValue = $derived(versionModel.currentVersion ?? undefined);
 
-  // Bound selection, re-pinned to the current version whenever an operation settles
-  // (`busy` → false) so a FAILED bulk swap cannot leave a stale highlight.
-  // Also resets pendingArtifactIds.
+  // Bound selection, re-pinned to the current version whenever an operation
+  // settles (`busy` → false) so a FAILED bulk swap cannot leave a stale
+  // highlight. Also resets pendingArtifactIds.
   let selected = $state<string | undefined>(undefined);
   $effect(() => {
     if (!busy) {
@@ -76,13 +73,17 @@
   });
 
   function handleBulkChange(value: string | undefined) {
-    if (!value || value === versionModel.currentVersion || busy) return;
-    const option = versionModel.options.find((candidate) => candidate.version === value);
-    if (option) {
+    if (!value || busy) return;
+    const option = versionModel.options.find((o) => o.version === value);
+    if (option && !option.isCurrent) {
       pendingArtifactIds = option.items.map((item) => item.artifactId);
       onBulkSwap(option.items);
     }
   }
+
+  // True when there are no alternative versions to switch to: the only option
+  // is the current version itself (or there are no options at all).
+  const hasAlternatives = $derived(versionModel.options.some((o) => !o.isCurrent));
 
   // Plugins RenderPilot has swapped at least once keep a restorable `.bak` original.
   const rollbackIds = $derived(
@@ -111,7 +112,7 @@
         <ItemDescription>{t('gameDetails.streamline.versionDescription')}</ItemDescription>
       </ItemContent>
       <ItemActions>
-        {#if versionModel.options.length === 0}
+        {#if !hasAlternatives}
           <span class="text-xs text-muted-foreground"
             >{t('gameDetails.streamline.noOtherVersions')}</span
           >
@@ -127,30 +128,32 @@
               <span class="truncate">{triggerLabel}</span>
             </SelectTrigger>
             <SelectContent>
-              {#if versionModel.currentVersion}
-                <!-- Common current version: the selected entry; selecting it is a no-op. -->
-                <SelectItem value={versionModel.currentVersion} label={currentLabel}>
-                  {currentLabel}
-                </SelectItem>
-              {/if}
+              <!--
+                All options come from a single loop so SelectItems are never
+                remounted between rendering paths when the current version changes.
+              -->
               {#each versionModel.options as option (option.version)}
                 <SelectItem value={option.version} label={option.label}>
-                  <span class="flex w-full items-center justify-between gap-2">
-                    <span class="flex items-center gap-2">
-                      {option.label}
-                      {#if !option.allDownloaded}
-                        <DownloadIcon class="size-4 text-muted-foreground" aria-hidden="true" />
+                  {#if option.isCurrent}
+                    {option.label}
+                  {:else}
+                    <span class="flex w-full items-center justify-between gap-2">
+                      <span class="flex items-center gap-2">
+                        {option.label}
+                        {#if !option.allDownloaded}
+                          <DownloadIcon class="size-4 text-muted-foreground" aria-hidden="true" />
+                        {/if}
+                      </span>
+                      {#if !option.isComplete}
+                        <span class="text-xs text-muted-foreground">
+                          {t('gameDetails.streamline.updatesSummary', {
+                            updates: option.updateCount,
+                            missing: option.missingCount,
+                          })}</span
+                        >
                       {/if}
                     </span>
-                    {#if !option.isComplete}
-                      <span class="text-xs text-muted-foreground">
-                        {t('gameDetails.streamline.updatesSummary', {
-                          updates: option.updateCount,
-                          missing: option.missingCount,
-                        })}</span
-                      >
-                    {/if}
-                  </span>
+                  {/if}
                 </SelectItem>
               {/each}
             </SelectContent>
