@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CatalogSettingPayload } from '@entities/settings';
+import type { CatalogSettingPayload, SettingsMessageKind } from '@entities/settings';
 import {
   loadSteamGridDbKey,
   saveSteamGridDbKey,
@@ -57,6 +57,7 @@ describe('steam-key-controller', () => {
       expect(harness.input).toBe('');
       expect(harness.loaded).toBe(true);
       expect(harness.message).toBe(t('settings.catalog.steamKey.readError'));
+      expect(harness.messageKind).toBe('error');
       expect(harness.busy).toBe(false);
     });
 
@@ -112,6 +113,7 @@ describe('steam-key-controller', () => {
       expect(setCatalogSetting).toHaveBeenCalledWith(steamGridDbSettingKey, 'abc123');
       expect(harness.input).toBe('abc123');
       expect(harness.message).toBe(t('settings.catalog.steamKey.saved'));
+      expect(harness.messageKind).toBe('success');
       expect(harness.busy).toBe(false);
     });
 
@@ -130,6 +132,7 @@ describe('steam-key-controller', () => {
       expect(setCatalogSetting).toHaveBeenCalledWith(steamGridDbSettingKey, '');
       expect(harness.input).toBe('');
       expect(harness.message).toBe(t('settings.catalog.steamKey.cleared'));
+      expect(harness.messageKind).toBe('success');
       expect(harness.busy).toBe(false);
     });
 
@@ -143,6 +146,7 @@ describe('steam-key-controller', () => {
 
       expect(harness.input).toBe('abc123');
       expect(harness.message).toBe(t('settings.catalog.steamKey.saveError'));
+      expect(harness.messageKind).toBe('error');
       expect(harness.busy).toBe(false);
     });
 
@@ -203,6 +207,7 @@ function createSteamHarness(options?: {
     loaded: false,
     input: options?.input ?? '',
     message: '',
+    messageKind: null as SettingsMessageKind | null,
   };
 
   const context: SteamKeyControllerContext = {
@@ -226,8 +231,9 @@ function createSteamHarness(options?: {
       setLoaded: (value) => {
         state.loaded = value;
       },
-      setMessage: (value) => {
+      setMessage: (value, kind) => {
         state.message = value;
+        state.messageKind = kind ?? null;
       },
     },
   };
@@ -250,6 +256,10 @@ function createSteamHarness(options?: {
 
     get message() {
       return state.message;
+    },
+
+    get messageKind() {
+      return state.messageKind;
     },
   };
 }

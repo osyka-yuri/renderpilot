@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { coverSourceToggleRows, type CoverSourceToggleRow } from './artwork-model';
 import { t } from '@shared/i18n';
-import type { CatalogSettingPayload, CoverRemotePolicy } from '@entities/settings';
+import type {
+  CatalogSettingPayload,
+  CoverRemotePolicy,
+  SettingsMessageKind,
+} from '@entities/settings';
 import {
   loadCoverRemoteSources,
   persistCoverSourceToggle,
@@ -139,6 +143,7 @@ describe('artwork-controller', () => {
       expect(harness.state.coverSourcesState[row.policyKey]).toBe(previousEnabled);
       expect(harness.state.savingCoverSourceKeys.has(row.settingKey)).toBe(false);
       expect(harness.message).toBe(t('settings.catalog.artworkSaveError'));
+      expect(harness.messageKind).toBe('error');
     });
 
     it('ignores stale toggle error when a newer mutation exists', async () => {
@@ -211,6 +216,7 @@ function createArtworkHarness(options?: {
   const state = {
     artwork: createInitialSettingsArtworkState(),
     message: '',
+    messageKind: null as SettingsMessageKind | null,
   };
 
   const context: ArtworkControllerContext = {
@@ -227,8 +233,9 @@ function createArtworkHarness(options?: {
       writeState: (nextState) => {
         state.artwork = nextState;
       },
-      setMessage: (value) => {
+      setMessage: (value, kind) => {
         state.message = value;
+        state.messageKind = kind ?? null;
       },
     },
   };
@@ -243,6 +250,10 @@ function createArtworkHarness(options?: {
 
     get message() {
       return state.message;
+    },
+
+    get messageKind() {
+      return state.messageKind;
     },
 
     writeState(nextState: typeof state.artwork) {

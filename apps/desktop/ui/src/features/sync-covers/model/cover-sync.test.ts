@@ -12,11 +12,13 @@ import {
 import {
   catalogSettingHasSteamGridDbKey,
   parseCatalogBoolDefaultTrue,
+  parseCatalogBoolWithDefault,
   fetchCoverRemotePolicy,
   fetchSteamGridDbKeyConfigured,
   COVERS_GOG_CDN_SETTING_KEY,
   COVERS_STEAM_CDN_SETTING_KEY,
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
+  STEAMGRIDDB_SETTING_KEY,
 } from '@entities/settings';
 import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary } from '@entities/game';
 
@@ -77,6 +79,37 @@ describe('cover-sync', () => {
     });
   });
 
+  describe('parseCatalogBoolWithDefault', () => {
+    it('returns the provided default for null', () => {
+      expect(parseCatalogBoolWithDefault(null, false)).toBe(false);
+      expect(parseCatalogBoolWithDefault(null, true)).toBe(true);
+    });
+
+    it('returns the provided default for an empty string', () => {
+      expect(parseCatalogBoolWithDefault('', false)).toBe(false);
+      expect(parseCatalogBoolWithDefault('', true)).toBe(true);
+    });
+
+    it('returns the provided default for a whitespace-only string', () => {
+      expect(parseCatalogBoolWithDefault('   ', false)).toBe(false);
+      expect(parseCatalogBoolWithDefault('   ', true)).toBe(true);
+    });
+
+    it('still honors disabling values regardless of the default', () => {
+      expect(parseCatalogBoolWithDefault('false', true)).toBe(false);
+      expect(parseCatalogBoolWithDefault('no', true)).toBe(false);
+      expect(parseCatalogBoolWithDefault('0', true)).toBe(false);
+      expect(parseCatalogBoolWithDefault('NO', true)).toBe(false);
+    });
+
+    it('enables for any value other than the disabling ones', () => {
+      expect(parseCatalogBoolWithDefault('true', false)).toBe(true);
+      expect(parseCatalogBoolWithDefault('yes', false)).toBe(true);
+      expect(parseCatalogBoolWithDefault('1', false)).toBe(true);
+      expect(parseCatalogBoolWithDefault('anything', false)).toBe(true);
+    });
+  });
+
   describe('fetchCoverRemotePolicy', () => {
     it('fetches all three settings and returns parsed booleans', async () => {
       const reader = vi.fn().mockImplementation((key: string) =>
@@ -93,12 +126,37 @@ describe('cover-sync', () => {
       expect(reader).toHaveBeenCalledWith(COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY);
     });
 
-    it('uses default true when settings are empty', async () => {
+    it('defaults launcher CDNs to true but SteamGridDB to false when no key is set', async () => {
       const reader = vi.fn().mockResolvedValue({ value: null });
 
       const policy = await fetchCoverRemotePolicy(reader);
 
+      // SteamGridDB cannot run without a key, so an unset toggle defaults to off.
+      expect(policy).toEqual({ steamCdn: true, gogCdn: true, steamgriddb: false });
+    });
+
+    it('defaults SteamGridDB to true when a key is configured but the toggle is unset', async () => {
+      const reader = vi.fn().mockImplementation((key: string) =>
+        Promise.resolve({
+          value: key === STEAMGRIDDB_SETTING_KEY ? 'my-key' : null,
+        }),
+      );
+
+      const policy = await fetchCoverRemotePolicy(reader);
+
       expect(policy).toEqual({ steamCdn: true, gogCdn: true, steamgriddb: true });
+    });
+
+    it('honors an explicit SteamGridDB toggle regardless of key presence', async () => {
+      const reader = vi.fn().mockImplementation((key: string) =>
+        Promise.resolve({
+          value: key === COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY ? 'false' : 'my-key',
+        }),
+      );
+
+      const policy = await fetchCoverRemotePolicy(reader);
+
+      expect(policy.steamgriddb).toBe(false);
     });
   });
 

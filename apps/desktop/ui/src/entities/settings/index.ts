@@ -6,13 +6,18 @@ export {
   GAMES_FILTERS_CATALOG_SETTING_KEY,
 } from './model/catalog-setting-keys';
 
-export { type CoverRemotePolicy, type CatalogSettingPayload } from './model/view-model';
+export {
+  type CoverRemotePolicy,
+  type CatalogSettingPayload,
+  type SettingsMessageKind,
+} from './model/view-model';
 
 export { getCatalogSetting, setCatalogSetting } from './api/desktop';
 
 export {
   catalogSettingHasSteamGridDbKey,
   parseCatalogBoolDefaultTrue,
+  parseCatalogBoolWithDefault,
   fetchCoverRemotePolicy,
   fetchSteamGridDbKeyConfigured,
 } from './api/cover-policy';

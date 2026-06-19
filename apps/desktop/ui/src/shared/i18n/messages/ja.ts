@@ -57,6 +57,9 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.nvidia.global.familySr': 'DLSS スーパーレゾリューション',
   'settings.nvidia.global.familyFg': 'DLSS フレーム生成',
   'settings.nvidia.global.familyRr': 'DLSS レイ再構築',
+  'settings.nvidia.unsupported.title': 'NVIDIA GPU が検出されませんでした',
+  'settings.nvidia.unsupported.description':
+    'これらの設定には対応する NVIDIA グラフィックスカードが必要です。',
 
   'game.card.action.details': '詳細',
   'game.card.action.detailsAria': '{title} の詳細を開く',
@@ -130,6 +133,9 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.cleared': 'クリアしました',
   'settings.catalog.steamKey.readError': '設定の読み込みに失敗しました。',
   'settings.catalog.steamKey.saveError': '設定の保存に失敗しました。',
+  'settings.catalog.steamKey.show': 'API キーを表示',
+  'settings.catalog.steamKey.hide': 'API キーを非表示',
+  'settings.catalog.steamKey.getKey': 'API キーを取得',
 
   'common.unknown': '不明',
   'common.downloadProgress': 'ダウンロードの進行状況',

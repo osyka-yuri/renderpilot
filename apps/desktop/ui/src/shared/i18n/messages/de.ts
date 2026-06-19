@@ -57,6 +57,9 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.nvidia.global.familySr': 'DLSS Super Resolution',
   'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
   'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.unsupported.title': 'Keine NVIDIA-GPU erkannt',
+  'settings.nvidia.unsupported.description':
+    'Diese Einstellungen erfordern eine unterstützte NVIDIA-Grafikkarte.',
 
   'game.card.action.details': 'Details',
   'game.card.action.detailsAria': 'Details für {title} öffnen',
@@ -131,6 +134,9 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.cleared': 'Gelöscht',
   'settings.catalog.steamKey.readError': 'Einstellungen konnten nicht gelesen werden.',
   'settings.catalog.steamKey.saveError': 'Einstellungen konnten nicht gespeichert werden.',
+  'settings.catalog.steamKey.show': 'API-Schlüssel anzeigen',
+  'settings.catalog.steamKey.hide': 'API-Schlüssel ausblenden',
+  'settings.catalog.steamKey.getKey': 'API-Schlüssel erhalten',
 
   'common.unknown': 'Unbekannt',
   'common.downloadProgress': 'Download-Fortschritt',

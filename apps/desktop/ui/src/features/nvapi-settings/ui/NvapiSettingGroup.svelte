@@ -13,6 +13,12 @@
     canWrite: boolean;
     /** Message shown when `canWrite` is false. */
     adminMessage: string;
+    /**
+     * Whether this group renders its own admin-required alert when `!canWrite`.
+     * Defaults to `true`. Set to `false` when several groups share one card and
+     * the caller surfaces a single card-level alert instead (avoids duplicates).
+     */
+    showAdminWarning?: boolean;
     /** Whether a given setting's row should be disabled. */
     rowDisabled: (state: SettingStateResponse) => boolean;
     onChange: (key: string, wire: string) => void;
@@ -30,6 +36,7 @@
     warnings,
     canWrite,
     adminMessage,
+    showAdminWarning = true,
     rowDisabled,
     onChange,
     onRevertPredefined,
@@ -37,7 +44,7 @@
   }: Props = $props();
 </script>
 
-{#if !canWrite}
+{#if showAdminWarning && !canWrite}
   <Alert variant="warning" size="sm" role="note">
     <TriangleAlertIcon aria-hidden="true" />
     <AlertDescription>{adminMessage}</AlertDescription>

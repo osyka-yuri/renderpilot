@@ -1,4 +1,4 @@
-import type { CatalogSettingPayload } from '@entities/settings';
+import type { CatalogSettingPayload, SettingsMessageKind } from '@entities/settings';
 import type { DisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import { steamGridDbSettingKey } from './steam-key-model';
@@ -11,7 +11,7 @@ type SteamKeyStateChannel = {
   writeInput: (value: string) => void;
   setBusy: (busy: boolean) => void;
   setLoaded: (loaded: boolean) => void;
-  setMessage: (message: string) => void;
+  setMessage: (message: string, kind?: SettingsMessageKind) => void;
 };
 
 export type SteamKeyControllerContext = {
@@ -40,7 +40,7 @@ export async function loadSteamGridDbKey(context: SteamKeyControllerContext): Pr
     }
   } catch {
     if (canWriteLatestRequest(context.request, requestId)) {
-      context.state.setMessage(t('settings.catalog.steamKey.readError'));
+      context.state.setMessage(t('settings.catalog.steamKey.readError'), 'error');
       context.state.setLoaded(true);
     }
   } finally {
@@ -71,11 +71,12 @@ export async function saveSteamGridDbKey(context: SteamKeyControllerContext): Pr
         normalizedKey
           ? t('settings.catalog.steamKey.saved')
           : t('settings.catalog.steamKey.cleared'),
+        'success',
       );
     }
   } catch {
     if (canWriteLatestRequest(context.request, requestId)) {
-      context.state.setMessage(t('settings.catalog.steamKey.saveError'));
+      context.state.setMessage(t('settings.catalog.steamKey.saveError'), 'error');
     }
   } finally {
     if (canWriteLatestRequest(context.request, requestId)) {

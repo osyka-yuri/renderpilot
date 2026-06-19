@@ -1,6 +1,7 @@
 import {
   type CatalogSettingPayload,
   type CoverRemotePolicy,
+  type SettingsMessageKind,
   fetchCoverRemotePolicy,
 } from '@entities/settings';
 import type { DisposableRequestChannel } from '@shared/requests';
@@ -26,7 +27,7 @@ type FetchCoverRemotePolicy = (getCatalogSetting: GetCatalogSetting) => Promise<
 type ArtworkStateChannel = {
   readState: () => SettingsArtworkState;
   writeState: (nextState: SettingsArtworkState) => void;
-  setMessage: (message: string) => void;
+  setMessage: (message: string, kind?: SettingsMessageKind) => void;
 };
 
 export type ArtworkControllerContext = {
@@ -57,7 +58,7 @@ export async function loadCoverRemoteSources(context: ArtworkControllerContext):
     }
   } catch {
     if (canWriteLatestRequest(context.request, requestId)) {
-      context.state.setMessage(t('settings.catalog.artworkReadError'));
+      context.state.setMessage(t('settings.catalog.artworkReadError'), 'error');
     }
   } finally {
     if (canWriteLatestRequest(context.request, requestId)) {
@@ -96,7 +97,7 @@ export async function persistCoverSourceToggle(
         withCoverSourceValue(state, row.policyKey, previousEnabled),
       );
 
-      context.state.setMessage(t('settings.catalog.artworkSaveError'));
+      context.state.setMessage(t('settings.catalog.artworkSaveError'), 'error');
     }
   } finally {
     if (isCurrentArtworkMutation(context, row.settingKey, mutation.version)) {

@@ -13,7 +13,7 @@ import {
   type CoverSourceToggleRow,
   type SettingsArtworkState,
 } from '@features/settings-artwork';
-import { getCatalogSetting, setCatalogSetting } from '@entities/settings';
+import { getCatalogSetting, setCatalogSetting, type SettingsMessageKind } from '@entities/settings';
 import { createDisposableRequestChannel } from '@shared/requests';
 
 export type SettingsPanelModel = ReturnType<typeof createSettingsPanelModel>;
@@ -25,9 +25,11 @@ export function createSettingsPanelModel() {
   let steamKeyLoaded = $state(false);
   let steamKeyBusy = $state(false);
   let steamKeyMessage = $state('');
+  let steamKeyMessageKind = $state<SettingsMessageKind | null>(null);
 
   let artworkState = $state<SettingsArtworkState>(createInitialSettingsArtworkState());
   let coverSourcesMessage = $state('');
+  let coverSourcesMessageKind = $state<SettingsMessageKind | null>(null);
 
   const steamKeyRequest = createDisposableRequestChannel(() => disposed);
   const artworkRequest = createDisposableRequestChannel(() => disposed);
@@ -47,8 +49,9 @@ export function createSettingsPanelModel() {
       setLoaded: (value: boolean) => {
         steamKeyLoaded = value;
       },
-      setMessage: (value: string) => {
+      setMessage: (value: string, kind?: SettingsMessageKind) => {
         steamKeyMessage = value;
+        steamKeyMessageKind = kind ?? null;
       },
     },
   };
@@ -62,8 +65,9 @@ export function createSettingsPanelModel() {
       writeState: (nextState: SettingsArtworkState) => {
         artworkState = nextState;
       },
-      setMessage: (value: string) => {
+      setMessage: (value: string, kind?: SettingsMessageKind) => {
         coverSourcesMessage = value;
+        coverSourcesMessageKind = kind ?? null;
       },
     },
   };
@@ -123,11 +127,17 @@ export function createSettingsPanelModel() {
     get steamKeyMessage() {
       return steamKeyMessage;
     },
+    get steamKeyMessageKind() {
+      return steamKeyMessageKind;
+    },
     get coverSourcesState() {
       return artworkState.coverSourcesState;
     },
     get coverSourcesMessage() {
       return coverSourcesMessage;
+    },
+    get coverSourcesMessageKind() {
+      return coverSourcesMessageKind;
     },
 
     coverSourceToggleRows,

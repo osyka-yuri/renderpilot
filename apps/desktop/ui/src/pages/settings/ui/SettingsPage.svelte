@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { Component } from 'svelte';
+  import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
+  import ImageIcon from '@lucide/svelte/icons/image';
+  import CpuIcon from '@lucide/svelte/icons/cpu';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@shared/i18n';
   import { t } from '@shared/i18n';
@@ -11,9 +15,11 @@
   import {
     type LanguageModeHandler,
     type ThemeModeHandler,
+    type SettingsTabValue,
     languageOptions,
     themeOptions,
     tabOptions,
+    settingsTabMemory,
   } from '../model/settings-page-model';
   import SettingsTabPanel from './SettingsTabPanel.svelte';
   import {
@@ -53,6 +59,17 @@
     languageOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),
   );
 
+  const tabIcons: Record<SettingsTabValue, Component> = {
+    general: SlidersHorizontalIcon,
+    catalog: ImageIcon,
+    nvidia: CpuIcon,
+  };
+
+  let activeTab = $state<SettingsTabValue>(settingsTabMemory.getInitialTab());
+  $effect(() => {
+    settingsTabMemory.rememberTab(activeTab);
+  });
+
   onMount(() => {
     model.init();
     void appUpdaterModel.init();
@@ -63,10 +80,14 @@
   });
 </script>
 
-<Tabs value="general" class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-  <TabsList class="grid w-full max-w-md shrink-0 grid-cols-3">
+<Tabs bind:value={activeTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+  <TabsList class="shrink-0">
     {#each tabOptions as tab (tab.value)}
-      <TabsTrigger value={tab.value}>{t(tab.labelKey)}</TabsTrigger>
+      {@const Icon = tabIcons[tab.value]}
+      <TabsTrigger value={tab.value}>
+        <Icon aria-hidden="true" />
+        {t(tab.labelKey)}
+      </TabsTrigger>
     {/each}
   </TabsList>
 
@@ -94,10 +115,12 @@
       isCoverSourceDisabled={model.isCoverSourceDisabled}
       onCoverSourceToggle={model.handleCoverSourceToggle}
       coverSourcesMessage={model.coverSourcesMessage}
+      coverSourcesMessageKind={model.coverSourcesMessageKind}
       bind:steamGridDbKeyInput={model.steamGridDbKeyInput}
       steamKeyLoaded={model.steamKeyLoaded}
       steamKeyBusy={model.steamKeyBusy}
       steamKeyMessage={model.steamKeyMessage}
+      steamKeyMessageKind={model.steamKeyMessageKind}
       onSteamGridDbKeySave={model.handleSteamGridDbKeySave}
     />
   </SettingsTabPanel>

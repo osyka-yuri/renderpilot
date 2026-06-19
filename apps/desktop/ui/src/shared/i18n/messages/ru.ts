@@ -65,6 +65,9 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.nvidia.global.familySr': 'DLSS Super Resolution',
   'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
   'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.unsupported.title': 'Видеокарта NVIDIA не обнаружена',
+  'settings.nvidia.unsupported.description':
+    'Эти настройки доступны только при наличии поддерживаемой видеокарты NVIDIA.',
 
   // ── Game card ──
   'game.card.action.details': 'Подробнее',
@@ -157,6 +160,9 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.cleared': 'Ключ удалён',
   'settings.catalog.steamKey.readError': 'Не удалось прочитать настройки.',
   'settings.catalog.steamKey.saveError': 'Не удалось сохранить настройки.',
+  'settings.catalog.steamKey.show': 'Показать API-ключ',
+  'settings.catalog.steamKey.hide': 'Скрыть API-ключ',
+  'settings.catalog.steamKey.getKey': 'Получить API-ключ',
 
   // ── Settings: about ──
   'settings.about.title': 'Обновления',

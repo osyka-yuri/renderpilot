@@ -1,4 +1,8 @@
 <script lang="ts">
+  import type { Component } from 'svelte';
+  import MonitorIcon from '@lucide/svelte/icons/monitor';
+  import SunIcon from '@lucide/svelte/icons/sun';
+  import MoonIcon from '@lucide/svelte/icons/moon';
   import {
     Card,
     CardContent,
@@ -16,6 +20,8 @@
     SelectContent,
     SelectItem,
     SelectTrigger,
+    ToggleGroup,
+    ToggleGroupItem,
   } from '@shared/ui';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@shared/i18n';
@@ -47,6 +53,12 @@
     onLanguageChange = () => undefined,
   }: Props = $props();
 
+  const themeIcons: Record<ThemeMode, Component> = {
+    system: MonitorIcon,
+    light: SunIcon,
+    dark: MoonIcon,
+  };
+
   function isSelectOptionValue<TValue extends string>(
     options: readonly SelectOption<TValue>[],
     value: string,
@@ -67,11 +79,6 @@
     }
     onLanguageChange(value);
   }
-
-  const themeTriggerLabel = $derived(
-    themeOptions.find((option) => option.value === themeMode)?.label ??
-      t('settings.appearance.theme.placeholder'),
-  );
 
   const languageTriggerLabel = $derived(
     languageOptions.find((option) => option.value === languageMode)?.label ??
@@ -94,23 +101,25 @@
           </ItemDescription>
         </ItemContent>
         <ItemActions>
-          <Select
+          <ToggleGroup
             type="single"
-            items={themeOptions as SelectOption[]}
+            variant="outline"
             value={themeMode}
             onValueChange={handleThemeChange}
+            aria-label={t('settings.appearance.theme.triggerLabel')}
           >
-            <SelectTrigger class="w-60" aria-label={t('settings.appearance.theme.triggerLabel')}>
-              {themeTriggerLabel}
-            </SelectTrigger>
-            <SelectContent>
-              {#each themeOptions as option (option.value)}
-                <SelectItem value={option.value} label={option.label} disabled={option.disabled}>
-                  {option.label}
-                </SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
+            {#each themeOptions as option (option.value)}
+              {@const Icon = themeIcons[option.value]}
+              <ToggleGroupItem
+                value={option.value}
+                disabled={option.disabled}
+                aria-label={option.label}
+              >
+                <Icon aria-hidden="true" />
+                {option.label}
+              </ToggleGroupItem>
+            {/each}
+          </ToggleGroup>
         </ItemActions>
       </Item>
 

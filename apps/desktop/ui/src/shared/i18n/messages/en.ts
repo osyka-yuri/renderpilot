@@ -68,6 +68,9 @@ export const en = {
   'settings.nvidia.global.familySr': 'DLSS Super Resolution',
   'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
   'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.unsupported.title': 'No NVIDIA GPU detected',
+  'settings.nvidia.unsupported.description':
+    'These settings require a supported NVIDIA graphics card.',
 
   // ── Game card ──
   'game.card.action.details': 'Details',
@@ -146,6 +149,9 @@ export const en = {
   'settings.catalog.steamKey.cleared': 'Cleared',
   'settings.catalog.steamKey.readError': 'Failed to read settings.',
   'settings.catalog.steamKey.saveError': 'Failed to save settings.',
+  'settings.catalog.steamKey.show': 'Show API key',
+  'settings.catalog.steamKey.hide': 'Hide API key',
+  'settings.catalog.steamKey.getKey': 'Get an API key',
 
   // ── Settings: about ──
   'settings.about.title': 'About',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSettingsTabMemory,
   isOptionValue,
   languageOptions,
   type SettingsSelectOption,
@@ -71,6 +72,33 @@ describe('settings-page-model', () => {
       for (const tab of tabOptions) {
         expectNonEmptyString(tab.labelKey);
       }
+    });
+  });
+
+  describe('settings tab memory', () => {
+    it('defaults to the general tab', () => {
+      const memory = createSettingsTabMemory();
+
+      expect(memory.getInitialTab()).toBe('general');
+    });
+
+    it('remembers a known tab value', () => {
+      const memory = createSettingsTabMemory();
+
+      memory.rememberTab('nvidia');
+      expect(memory.getInitialTab()).toBe('nvidia');
+
+      memory.rememberTab('catalog');
+      expect(memory.getInitialTab()).toBe('catalog');
+    });
+
+    it('ignores unknown tab values', () => {
+      const memory = createSettingsTabMemory();
+
+      memory.rememberTab('catalog');
+      memory.rememberTab('does-not-exist');
+
+      expect(memory.getInitialTab()).toBe('catalog');
     });
   });
 });

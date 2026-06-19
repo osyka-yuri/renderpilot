@@ -54,6 +54,8 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.nvidia.global.familySr': 'DLSS 超分辨率',
   'settings.nvidia.global.familyFg': 'DLSS 帧生成',
   'settings.nvidia.global.familyRr': 'DLSS 光线重建',
+  'settings.nvidia.unsupported.title': '未检测到 NVIDIA 显卡',
+  'settings.nvidia.unsupported.description': '这些设置需要受支持的 NVIDIA 显卡。',
 
   'game.card.action.details': '详情',
   'game.card.action.detailsAria': '打开 {title} 的详情',
@@ -125,6 +127,9 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.cleared': '已清除',
   'settings.catalog.steamKey.readError': '读取设置失败。',
   'settings.catalog.steamKey.saveError': '保存设置失败。',
+  'settings.catalog.steamKey.show': '显示 API 密钥',
+  'settings.catalog.steamKey.hide': '隐藏 API 密钥',
+  'settings.catalog.steamKey.getKey': '获取 API 密钥',
 
   'common.unknown': '未知',
   'common.downloadProgress': '下载进度',
