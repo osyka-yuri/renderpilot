@@ -63,7 +63,7 @@
   });
 </script>
 
-<Tabs value="general" class="flex h-full flex-col">
+<Tabs value="general" class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
   <TabsList class="grid w-full max-w-md shrink-0 grid-cols-3">
     {#each tabOptions as tab (tab.value)}
       <TabsTrigger value={tab.value}>{t(tab.labelKey)}</TabsTrigger>

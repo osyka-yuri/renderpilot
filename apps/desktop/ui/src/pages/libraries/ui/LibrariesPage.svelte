@@ -101,20 +101,22 @@
     </Alert>
   {/if}
 
-  <div class="flex shrink-0 items-center justify-end">
-    <LibrariesBulkDownloadButton {model} />
-  </div>
-
   <Tabs
     class="flex min-h-0 flex-1 flex-col overflow-hidden"
     value={model.activeVendor}
     onValueChange={model.handleVendorChange}
   >
-    <TabsList class="flex shrink-0 flex-wrap">
-      {#each vendorOptions as vendor (vendor.value)}
-        <TabsTrigger value={vendor.value}>{vendor.label}</TabsTrigger>
-      {/each}
-    </TabsList>
+    <div class="flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <TabsList class="flex flex-wrap">
+        {#each vendorOptions as vendor (vendor.value)}
+          <TabsTrigger value={vendor.value}>{vendor.label}</TabsTrigger>
+        {/each}
+      </TabsList>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <LibrariesBulkDownloadButton {model} />
+      </div>
+    </div>
 
     {#each vendorOptions as vendor (vendor.value)}
       <TabsContent value={vendor.value} class="flex min-h-0 flex-1 flex-col gap-4">
