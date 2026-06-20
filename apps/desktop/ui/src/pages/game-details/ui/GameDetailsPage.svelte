@@ -213,9 +213,9 @@
                   onclick={handleUpdateAll}
                 >
                   {#if showProgress}
-                    <Loader2Icon class="mr-2 size-4 animate-spin" aria-hidden="true" />
+                    <Loader2Icon class="animate-spin" aria-hidden="true" />
                   {:else}
-                    <ArrowUpToLineIcon class="mr-2 size-4" />
+                    <ArrowUpToLineIcon aria-hidden="true" />
                   {/if}
                   {nothingToUpdate
                     ? t('gameDetails.updateAll.action')
@@ -231,7 +231,7 @@
 
             {#if onOpenOperations}
               <Button variant="secondary" size="sm" onclick={onOpenOperations}>
-                <HistoryIcon class="mr-2 size-4" />
+                <HistoryIcon aria-hidden="true" />
                 {t('operations.title')}
               </Button>
             {/if}

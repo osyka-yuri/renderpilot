@@ -234,7 +234,11 @@ export const es: Record<MessageKey, MessageValue> = {
   'libraries.actions.failedToast': 'No se pudo {action}',
   'libraries.actions.downloadAll': 'Descargar las últimas',
   'libraries.actions.downloadAllCount': 'Descargar las últimas ({count})',
-  'libraries.actions.downloadAllInProgress': 'Descargando… {done}/{total}',
+  'libraries.actions.downloadAllUpToDate': 'Todas las últimas versiones ya están descargadas',
+  'libraries.actions.downloadAllTooltip': {
+    one: 'Descargar 1 versión más reciente',
+    other: 'Descargar {count} versiones más recientes',
+  },
   'libraries.actions.downloadAllDoneToast': {
     one: '{count} biblioteca descargada',
     other: '{count} bibliotecas descargadas',

@@ -278,9 +278,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'libraries.actions.deletedToast': 'Удалено {version}',
   'libraries.actions.downloadedToast': 'Скачано {version}',
   'libraries.actions.failedToast': 'Не удалось выполнить: {action}',
-  'libraries.actions.downloadAll': 'Скачать все последние',
-  'libraries.actions.downloadAllCount': 'Скачать все последние ({count})',
-  'libraries.actions.downloadAllInProgress': 'Скачивание… {done}/{total}',
+  'libraries.actions.downloadAll': 'Скачать последние',
+  'libraries.actions.downloadAllCount': 'Скачать последние ({count})',
+  'libraries.actions.downloadAllUpToDate': 'Все последние версии уже скачаны',
+  'libraries.actions.downloadAllTooltip': {
+    one: 'Скачать {count} последнюю версию',
+    few: 'Скачать {count} последние версии',
+    many: 'Скачать {count} последних версий',
+    other: 'Скачать {count} последних версий',
+  },
   'libraries.actions.downloadAllDoneToast': {
     one: 'Скачана {count} библиотека',
     few: 'Скачано {count} библиотеки',

@@ -265,9 +265,13 @@ export const en = {
   'libraries.actions.deletedToast': 'Deleted {version}',
   'libraries.actions.downloadedToast': 'Downloaded {version}',
   'libraries.actions.failedToast': 'Failed to {action}',
-  'libraries.actions.downloadAll': 'Download all latest',
-  'libraries.actions.downloadAllCount': 'Download all latest ({count})',
-  'libraries.actions.downloadAllInProgress': 'Downloading… {done}/{total}',
+  'libraries.actions.downloadAll': 'Download latest',
+  'libraries.actions.downloadAllCount': 'Download latest ({count})',
+  'libraries.actions.downloadAllUpToDate': 'All latest versions already downloaded',
+  'libraries.actions.downloadAllTooltip': {
+    one: 'Download 1 latest version',
+    other: 'Download {count} latest versions',
+  },
   'libraries.actions.downloadAllDoneToast': {
     one: 'Downloaded {count} library',
     other: 'Downloaded {count} libraries',

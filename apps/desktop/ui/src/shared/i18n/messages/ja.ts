@@ -230,9 +230,13 @@ export const ja: Record<MessageKey, MessageValue> = {
   'libraries.actions.deletedToast': '{version} を削除しました',
   'libraries.actions.downloadedToast': '{version} をダウンロードしました',
   'libraries.actions.failedToast': '{action} に失敗しました',
-  'libraries.actions.downloadAll': '最新をすべてダウンロード',
-  'libraries.actions.downloadAllCount': '最新をすべてダウンロード（{count}）',
-  'libraries.actions.downloadAllInProgress': 'ダウンロード中… {done}/{total}',
+  'libraries.actions.downloadAll': '最新をダウンロード',
+  'libraries.actions.downloadAllCount': '最新をダウンロード（{count}）',
+  'libraries.actions.downloadAllUpToDate': 'すべての最新バージョンはダウンロード済みです',
+  'libraries.actions.downloadAllTooltip': {
+    one: '{count} 個の最新バージョンをダウンロード',
+    other: '{count} 個の最新バージョンをダウンロード',
+  },
   'libraries.actions.downloadAllDoneToast': {
     one: '{count} 個のライブラリをダウンロードしました',
     other: '{count} 個のライブラリをダウンロードしました',

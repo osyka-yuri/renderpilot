@@ -1,7 +1,7 @@
 <script lang="ts">
-  import DownloadIcon from '@lucide/svelte/icons/download';
+  import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
-  import { Button } from '@shared/ui';
+  import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { BatchDownloadProgressBar } from '@entities/library';
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
@@ -15,23 +15,18 @@
   let { model }: Props = $props();
 
   const pendingCount = $derived(model.latestStablePendingCount);
-  const disabled = $derived(model.isBusy || pendingCount === 0);
-  const label = $derived(computeLabel());
-
-  function computeLabel(): string {
-    if (model.bulkDownloading) {
-      return t('libraries.actions.downloadAllInProgress', {
-        done: model.bulkCompleted,
-        total: model.bulkTotal,
-      });
-    }
-
-    if (pendingCount > 0) {
-      return t('libraries.actions.downloadAllCount', { count: pendingCount });
-    }
-
-    return t('libraries.actions.downloadAll');
-  }
+  const hasPending = $derived(pendingCount > 0);
+  const disabled = $derived(model.isBusy || !hasPending);
+  const label = $derived(
+    hasPending
+      ? t('libraries.actions.downloadAllCount', { count: pendingCount })
+      : t('libraries.actions.downloadAll'),
+  );
+  const tooltip = $derived(
+    hasPending
+      ? t('libraries.actions.downloadAllTooltip', { count: pendingCount })
+      : t('libraries.actions.downloadAllUpToDate'),
+  );
 
   async function handleClick() {
     if (model.isBusy) return;
@@ -68,12 +63,23 @@
     active={model.bulkDownloading}
     ariaLabel={label}
   />
-  <Button variant="outline" {disabled} aria-busy={model.bulkDownloading} onclick={handleClick}>
-    {#if model.bulkDownloading}
-      <Loader2Icon class="animate-spin" aria-hidden="true" />
-    {:else}
-      <DownloadIcon aria-hidden="true" />
-    {/if}
-    {label}
-  </Button>
+  <Tooltip>
+    <TooltipTrigger>
+      <Button
+        variant="default"
+        size="sm"
+        {disabled}
+        aria-busy={model.bulkDownloading}
+        onclick={handleClick}
+      >
+        {#if model.bulkDownloading}
+          <Loader2Icon class="animate-spin" aria-hidden="true" />
+        {:else}
+          <ArrowUpToLineIcon aria-hidden="true" />
+        {/if}
+        {label}
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>{tooltip}</TooltipContent>
+  </Tooltip>
 </div>

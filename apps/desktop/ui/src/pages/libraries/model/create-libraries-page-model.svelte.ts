@@ -485,9 +485,6 @@ export function createLibrariesPageModel() {
     get bulkTotal() {
       return bulkTotal;
     },
-    get bulkCompleted() {
-      return bulkCompleted;
-    },
     get bulkProgressValue() {
       return bulkProgressValue;
     },
