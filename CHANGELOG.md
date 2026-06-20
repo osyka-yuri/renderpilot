@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-06-20
+
+### Added
+- **Settings → NVIDIA**: Global DLSS driver settings (Super Resolution, Frame Generation, Ray Reconstruction) written to NVIDIA's base driver profile, so they apply to every game without a per-game override. Reverting a global setting clears it back to the driver default.
+- **Game Details**: "Update all to latest" toolbar action that upgrades every graphics component — NVIDIA, AMD, Intel, and the NVIDIA Streamline bundle — to its newest version in a single pass, with one aggregate progress bar and per-component failure isolation. Streamline plugins upgrade together so the bundle never lands on mixed versions. Shows an "up to date" hint when there is nothing to update.
+- **Libraries**: "Download latest" toolbar action that fetches the newest stable build of every not-yet-downloaded library, with an aggregate progress bar and a single summary toast (done / partial / nothing to do).
+- **Libraries**: The Streamline tab shows the DLL file name beneath the version for multi-DLL groups, so otherwise-identical `sl_*.dll` rows are distinguishable.
+
+### Fixed
+- **Streamline**: The version selector keeps the correct version after a bulk swap, instead of going blank or showing the previous version until the app was restarted.
+
+### Changed
+- **Settings**: Reworked the settings page UX — tabs gain icons and remember the active tab, the theme picker becomes a System/Light/Dark segmented control, the SteamGridDB API-key field appears only when its source is enabled (with show/hide, save-on-Enter, and a "get a key" link), and NVIDIA cards gain loading skeletons, an empty state, and error alerts.
+- **Bulk actions**: Unified the Libraries and Game Details bulk-action buttons (consistent style, icon, and labels) and moved notification toasts to bottom-center so they no longer cover the selects and buttons beneath them.
+- **UI**: Consistent layout spacing and scrolling across the Libraries and Settings pages.
+
+### Changed (Refactoring & Maintenance)
+- **Internal structure**: Split several large modules into focused submodules — SQLite schema, the filesystem detector, catalog cards, and catalog execute.
+- **Libraries**: Converged the UI on shared primitives (bulk-download button, batch progress bar, concurrency pool).
+- **Dependencies**: Updated Rust and frontend dependencies and CI actions to their latest versions.
+
 ## [1.1.0] - 2026-06-12
 
 ### Added
