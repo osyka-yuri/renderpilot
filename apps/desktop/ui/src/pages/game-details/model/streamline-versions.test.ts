@@ -13,6 +13,14 @@ function group(
   return makeGroup(componentId, STREAMLINE, current, candidates);
 }
 
+function findOption(model: ReturnType<typeof buildStreamlineVersionModel>, version: string) {
+  const option = model.options.find((o) => o.version === version);
+  if (!option) {
+    throw new Error(`expected an option for version ${version}`);
+  }
+  return option;
+}
+
 describe('buildStreamlineVersionModel', () => {
   it('lists versions newest-first and includes the current version', () => {
     const components = [component('a'), component('b')];
@@ -36,12 +44,12 @@ describe('buildStreamlineVersionModel', () => {
     // Current version is always present so its SelectItem is never remounted.
     expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0', '2.2.0']);
 
-    const current = model.options.find((o) => o.version === '2.3.0')!;
+    const current = findOption(model, '2.3.0');
     expect(current.isCurrent).toBe(true);
     expect(current.updateCount).toBe(0);
     expect(current.items).toEqual([]);
 
-    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    const v240 = findOption(model, '2.4.0');
     expect(v240.isCurrent).toBe(false);
     expect(v240.label).toBe('v2.4.0');
     expect(v240.updateCount).toBe(2);
@@ -68,7 +76,7 @@ describe('buildStreamlineVersionModel', () => {
     // When mixed, no single current version is known — nothing is pre-inserted.
     expect(model.options.every((o) => !o.isCurrent)).toBe(true);
 
-    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    const v240 = findOption(model, '2.4.0');
     expect(v240.updateCount).toBe(1);
     expect(v240.items[0]?.componentId).toBe('b');
     expect(v240.isComplete).toBe(true);
@@ -83,7 +91,7 @@ describe('buildStreamlineVersionModel', () => {
 
     const model = buildStreamlineVersionModel(components, groupsById);
 
-    const v250 = model.options.find((o) => o.version === '2.5.0')!;
+    const v250 = findOption(model, '2.5.0');
     expect(v250.isCurrent).toBe(false);
     expect(v250.updateCount).toBe(1);
     expect(v250.missingCount).toBe(1);
@@ -99,7 +107,7 @@ describe('buildStreamlineVersionModel', () => {
 
     const model = buildStreamlineVersionModel(components, groupsById);
 
-    const v240 = model.options.find((o) => o.version === '2.4.0')!;
+    const v240 = findOption(model, '2.4.0');
     expect(v240.allDownloaded).toBe(false);
     expect(v240.items.find((item) => item.componentId === 'a')?.isDownloaded).toBe(false);
     expect(v240.items.find((item) => item.componentId === 'b')?.isDownloaded).toBe(true);
@@ -119,12 +127,12 @@ describe('buildStreamlineVersionModel', () => {
     // Current version is in the list so the Select always has a stable item for it.
     expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0']);
 
-    const current = model.options.find((o) => o.version === '2.4.0')!;
+    const current = findOption(model, '2.4.0');
     expect(current.isCurrent).toBe(true);
     expect(current.updateCount).toBe(0);
     expect(current.allDownloaded).toBe(true);
 
-    const v230 = model.options.find((o) => o.version === '2.3.0')!;
+    const v230 = findOption(model, '2.3.0');
     expect(v230.isCurrent).toBe(false);
   });
 });

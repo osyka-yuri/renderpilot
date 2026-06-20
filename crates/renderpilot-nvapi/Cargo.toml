@@ -17,7 +17,7 @@ redundant_clone = "warn"
 unnecessary_to_owned = "warn"
 
 [dependencies]
-libloading = "0.8"
+libloading = "0.9"
 thiserror = "2"
 
 [lib]

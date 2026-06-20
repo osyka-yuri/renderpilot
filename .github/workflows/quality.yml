@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Tauri's Linux build requires WebKitGTK and other dependencies. On Windows, WebView2 is utilized natively.
       - name: Install system dependencies (Linux)
@@ -77,12 +77,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 11
 
       - name: Setup Node
         uses: actions/setup-node@v6
