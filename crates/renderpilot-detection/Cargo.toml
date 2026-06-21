@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 hex = "0.4"
+log = "0.4"
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-domain = { path = "../renderpilot-domain" }
 serde = { version = "1", features = ["derive"] }

@@ -6,7 +6,15 @@ use super::binary::{
 
 const VS_FIXEDFILEINFO_SIGNATURE: u32 = 0xfeef_04bd;
 const STRING_VERSION_KEYS: [&str; 2] = ["FileVersion", "ProductVersion"];
-const FIXED_VERSION_OFFSETS: [usize; 2] = [8, 16];
+
+// Offsets within `VS_FIXEDFILEINFO` for the high and low 32-bit halves of the
+// file and product version fields.
+const FIXED_FILE_VERSION_OFFSET: usize = 8;
+const FIXED_PRODUCT_VERSION_OFFSET: usize = 16;
+
+/// Maximum recursion depth when searching the version-resource tree. Deeply
+/// nested or self-referential resources are rejected to avoid stack exhaustion.
+const MAX_VERSION_DEPTH: usize = 16;
 
 #[derive(Debug, Clone)]
 pub(super) struct VersionInfo<'a> {
@@ -15,11 +23,9 @@ pub(super) struct VersionInfo<'a> {
 }
 
 impl<'a> VersionInfo<'a> {
-    pub(super) fn parse(bytes: &'a [u8]) -> Self {
-        Self {
-            bytes,
-            root: VersionBlock::parse(bytes, 0, bytes.len()),
-        }
+    pub(super) fn parse(bytes: &'a [u8]) -> Option<Self> {
+        let root = VersionBlock::parse(bytes, 0, bytes.len())?;
+        Some(Self { bytes, root })
     }
 
     pub(super) fn version(&self) -> Option<Version> {
@@ -38,13 +44,19 @@ impl<'a> VersionInfo<'a> {
     }
 
     fn fixed_version(&self) -> Option<Version> {
-        FIXED_VERSION_OFFSETS
+        [FIXED_FILE_VERSION_OFFSET, FIXED_PRODUCT_VERSION_OFFSET]
             .into_iter()
             .find_map(|offset| self.fixed_version_at(offset))
     }
 
     fn string_value(&self, key: &str) -> Option<String> {
-        find_string_value(self.bytes, self.root.children_offset, self.root.end, key)
+        find_string_value(
+            self.bytes,
+            self.root.children_offset,
+            self.root.end,
+            key,
+            MAX_VERSION_DEPTH,
+        )
     }
 
     fn fixed_version_at(&self, offset: usize) -> Option<Version> {
@@ -83,11 +95,7 @@ struct VersionBlock {
 }
 
 impl VersionBlock {
-    fn parse(bytes: &[u8], offset: usize, limit: usize) -> Self {
-        Self::try_parse(bytes, offset, limit).unwrap_or_else(Self::empty)
-    }
-
-    fn try_parse(bytes: &[u8], offset: usize, limit: usize) -> Option<Self> {
+    fn parse(bytes: &[u8], offset: usize, limit: usize) -> Option<Self> {
         let offset = align4(offset)?;
         checked_range(bytes, offset, 6)?;
 
@@ -130,21 +138,19 @@ impl VersionBlock {
             end,
         })
     }
-
-    fn empty() -> Self {
-        Self {
-            length: 0,
-            value_length: 0,
-            value_type: 0,
-            key: String::new(),
-            value_offset: 0,
-            children_offset: 0,
-            end: 0,
-        }
-    }
 }
 
-fn find_string_value(bytes: &[u8], offset: usize, limit: usize, key: &str) -> Option<String> {
+fn find_string_value(
+    bytes: &[u8],
+    offset: usize,
+    limit: usize,
+    key: &str,
+    depth: usize,
+) -> Option<String> {
+    if depth == 0 {
+        return None;
+    }
+
     let mut cursor = offset;
 
     while cursor < limit {
@@ -154,7 +160,7 @@ fn find_string_value(bytes: &[u8], offset: usize, limit: usize, key: &str) -> Op
             break;
         }
 
-        let block = VersionBlock::try_parse(bytes, cursor, limit)?;
+        let block = VersionBlock::parse(bytes, cursor, limit)?;
 
         if block.key.eq_ignore_ascii_case(key) && block.value_type == 1 && block.value_length > 0 {
             let value = read_utf16_value(bytes, block.value_offset, block.value_length / 2)?;
@@ -165,7 +171,13 @@ fn find_string_value(bytes: &[u8], offset: usize, limit: usize, key: &str) -> Op
             }
         }
 
-        if let Some(value) = find_string_value(bytes, block.children_offset, block.end, key) {
+        if let Some(value) = find_string_value(
+            bytes,
+            block.children_offset,
+            block.end,
+            key,
+            depth.saturating_sub(1),
+        ) {
             return Some(value);
         }
 

@@ -3101,6 +3101,7 @@ name = "renderpilot-detection"
 version = "1.2.0"
 dependencies = [
  "hex",
+ "log",
  "renderpilot-application",
  "renderpilot-domain",
  "serde",

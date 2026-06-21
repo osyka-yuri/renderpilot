@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     error::{detection_context_error, detection_error},
-    pe_version::read_windows_file_version,
+    pe::read_windows_file_version,
 };
 
 /// Read-chunk size for streaming SHA-256. 256 KB trims syscall overhead on large

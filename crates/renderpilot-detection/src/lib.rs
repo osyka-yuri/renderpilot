@@ -9,7 +9,7 @@ mod filesystem_detector;
 mod glob;
 mod normalize;
 mod pattern;
-mod pe_version;
+mod pe;
 
 pub use error::LibraryPatternError;
 pub use file_metadata::{sha256_file, FileCacheKey, FileHashCache, VersionDetectionStatus};
@@ -21,4 +21,4 @@ pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,
     PatternPlatform,
 };
-pub use pe_version::read_windows_file_version;
+pub use pe::{analyze_executable, analyze_executable_bytes, read_windows_file_version};
