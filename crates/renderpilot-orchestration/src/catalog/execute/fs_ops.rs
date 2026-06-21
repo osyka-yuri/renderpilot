@@ -8,8 +8,6 @@ use std::path::PathBuf;
 use renderpilot_application::{AppError, AppResult};
 use renderpilot_domain::{ComponentFile, GraphicsComponent};
 
-use crate::fs_sync;
-
 use super::types::{AppliedFsChanges, PlannedFile};
 
 pub(super) fn perform_apply_fs(
@@ -119,31 +117,25 @@ fn overlay_planned_files(planned: &[PlannedFile], changes: &mut AppliedFsChanges
             changes.renamed_to_bak.push((target.clone(), bak));
         }
 
-        fs::copy(&plan.source, &target).map_err(|error| {
+        // Install the file crash-atomically. A bare `fs::copy` to the live path can
+        // leave a torn or zero-length DLL on a crash/power-loss mid-copy, which the
+        // game would then load. `copy_file_atomically` stages into a synced temp in
+        // the destination directory and atomically replaces the target, so it is
+        // always either the prior file or the complete new one — never torn. On
+        // failure the target is left untouched (the `.bak` above is the rollback).
+        crate::fs::copy_file_atomically(&plan.source, &target).map_err(|error| {
             AppError::provider_failed(format!(
                 "failed to install file to {}: {error}",
                 target.display()
             ))
         })?;
-        // Track the copy before flushing so a `sync_file` failure still triggers
-        // its removal during `undo()`.
         changes.copied.push(target.clone());
-        // Flush the installed bytes to durable storage. A crash/power-loss after
-        // a bare `fs::copy` can leave a torn or zero-length DLL on disk, which
-        // the game would then load. Treat a flush failure as fatal so the swap
-        // rolls back rather than committing an undurable file.
-        fs_sync::sync_file(&target).map_err(|error| {
-            AppError::provider_failed(format!(
-                "failed to flush {} to disk: {error}",
-                target.display()
-            ))
-        })?;
     }
     Ok(())
 }
 
 /// Fsyncs each distinct directory touched by the overlay so renames and new
-/// files survive a crash. Best-effort; see [`fs_sync::sync_directory_best_effort`].
+/// files survive a crash. Best-effort; see [`crate::fs::sync_directory_best_effort`].
 fn sync_touched_directories(changes: &AppliedFsChanges) {
     let mut synced: HashSet<PathBuf> = HashSet::new();
     let touched = changes
@@ -153,7 +145,7 @@ fn sync_touched_directories(changes: &AppliedFsChanges) {
     for path in touched {
         if let Some(parent) = path.parent() {
             if synced.insert(parent.to_path_buf()) {
-                fs_sync::sync_directory_best_effort(parent);
+                crate::fs::sync_directory_best_effort(parent);
             }
         }
     }
@@ -229,7 +221,7 @@ fn sync_component_file_dirs<'a>(files: impl IntoIterator<Item = &'a ComponentFil
         let path = real_path(file);
         if let Some(parent) = path.parent() {
             if synced.insert(parent.to_path_buf()) {
-                fs_sync::sync_directory_best_effort(parent);
+                crate::fs::sync_directory_best_effort(parent);
             }
         }
     }

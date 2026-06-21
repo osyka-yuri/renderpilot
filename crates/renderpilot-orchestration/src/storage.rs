@@ -14,9 +14,7 @@ use crate::ServiceError;
 /// Environment variable that overrides the SQLite catalog database path.
 pub const CATALOG_DB_PATH_ENV: &str = "RENDERPILOT_DB_PATH";
 
-const APP_DIR_NAME: &str = "RenderPilot";
 const CATALOG_DB_FILE_NAME: &str = "catalog.db";
-const BASE_DIR_ENV_CANDIDATES: [&str; 2] = ["LOCALAPPDATA", "APPDATA"];
 
 /// Opens the SQLite catalog database, creating the directory if needed.
 pub fn open_catalog_storage() -> Result<SqliteStorage, ServiceError> {
@@ -45,6 +43,10 @@ fn catalog_db_path() -> Result<PathBuf, ServiceError> {
 fn catalog_db_path_from_env(
     mut get_env: impl FnMut(&str) -> Option<OsString>,
 ) -> Result<PathBuf, ServiceError> {
+    // The catalog file has one resolver-specific knob: an explicit absolute path
+    // override. Everything else is the shared app data dir, with one catalog-only
+    // twist — a missing base directory degrades to a relative file rather than the
+    // hard error `resolve_app_dir` returns.
     if let Some(value) = get_env(CATALOG_DB_PATH_ENV) {
         if value.as_os_str().is_empty() {
             return Err(ServiceError::CommandFailed(format!(
@@ -55,27 +57,10 @@ fn catalog_db_path_from_env(
         return Ok(PathBuf::from(value));
     }
 
-    if let Some(value) = get_env(crate::portable::APP_DIR_ENV) {
-        if !value.as_os_str().is_empty() {
-            return Ok(PathBuf::from(value).join(CATALOG_DB_FILE_NAME));
-        }
+    match crate::app_dir::resolve_app_dir(get_env) {
+        Ok(dir) => Ok(dir.join(CATALOG_DB_FILE_NAME)),
+        Err(_) => Ok(PathBuf::from(CATALOG_DB_FILE_NAME)),
     }
-
-    for env_name in BASE_DIR_ENV_CANDIDATES {
-        let Some(value) = get_env(env_name) else {
-            continue;
-        };
-
-        if value.as_os_str().is_empty() {
-            continue;
-        }
-
-        return Ok(PathBuf::from(value)
-            .join(APP_DIR_NAME)
-            .join(CATALOG_DB_FILE_NAME));
-    }
-
-    Ok(PathBuf::from(CATALOG_DB_FILE_NAME))
 }
 
 fn validate_catalog_db_path(path: &Path) -> Result<(), ServiceError> {
@@ -158,44 +143,6 @@ mod tests {
     }
 
     #[test]
-    fn uses_portable_app_dir_before_local_app_data() {
-        let path = resolved_path(&[(crate::portable::APP_DIR_ENV, "D:\\portable")]);
-
-        assert_eq!(
-            path,
-            PathBuf::from("D:\\portable").join(CATALOG_DB_FILE_NAME)
-        );
-    }
-
-    #[test]
-    fn ignores_empty_portable_app_dir() {
-        let path = resolved_path(&[
-            (crate::portable::APP_DIR_ENV, ""),
-            ("LOCALAPPDATA", "C:\\local"),
-        ]);
-
-        assert_eq!(
-            path,
-            PathBuf::from("C:\\local")
-                .join(APP_DIR_NAME)
-                .join(CATALOG_DB_FILE_NAME)
-        );
-    }
-
-    #[test]
-    fn portable_app_dir_takes_precedence_over_local_app_data() {
-        let path = resolved_path(&[
-            (crate::portable::APP_DIR_ENV, "D:\\portable"),
-            ("LOCALAPPDATA", "C:\\local"),
-        ]);
-
-        assert_eq!(
-            path,
-            PathBuf::from("D:\\portable").join(CATALOG_DB_FILE_NAME)
-        );
-    }
-
-    #[test]
     fn uses_explicit_catalog_path_override() {
         let path = resolved_path(&[(CATALOG_DB_PATH_ENV, "custom.db")]);
 
@@ -209,42 +156,33 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Without an explicit override the catalog file is the shared app data dir
+    /// (whose precedence is owned and tested by [`crate::app_dir`]) joined with the
+    /// catalog file name. Deriving the expected path from `resolve_app_dir` ties the
+    /// two together by construction instead of re-asserting the precedence here.
     #[test]
-    fn uses_local_app_data_before_app_data() {
-        let path = resolved_path(&[("LOCALAPPDATA", "local-data"), ("APPDATA", "roaming-data")]);
+    fn places_the_catalog_file_under_the_resolved_app_dir() {
+        for entries in [
+            [(crate::portable::APP_DIR_ENV, "D:\\portable")].as_slice(),
+            [("LOCALAPPDATA", "C:\\local"), ("APPDATA", "C:\\roaming")].as_slice(),
+        ] {
+            let expected = crate::app_dir::resolve_app_dir(env_map(entries))
+                .expect("app dir resolves")
+                .join(CATALOG_DB_FILE_NAME);
 
+            assert_eq!(resolved_path(entries), expected);
+        }
+    }
+
+    #[test]
+    fn falls_back_to_relative_catalog_db_when_no_base_dir_is_available() {
+        // The catalog-specific degradation: where `resolve_app_dir` hard-errors, the
+        // catalog drops to a relative file so the app can still open a database.
+        assert_eq!(resolved_path(&[]), PathBuf::from(CATALOG_DB_FILE_NAME));
         assert_eq!(
-            path,
-            PathBuf::from("local-data")
-                .join(APP_DIR_NAME)
-                .join(CATALOG_DB_FILE_NAME)
+            resolved_path(&[("LOCALAPPDATA", ""), ("APPDATA", "")]),
+            PathBuf::from(CATALOG_DB_FILE_NAME)
         );
-    }
-
-    #[test]
-    fn falls_back_to_app_data_when_local_app_data_is_missing() {
-        let path = resolved_path(&[("APPDATA", "roaming-data")]);
-
-        assert_eq!(
-            path,
-            PathBuf::from("roaming-data")
-                .join(APP_DIR_NAME)
-                .join(CATALOG_DB_FILE_NAME)
-        );
-    }
-
-    #[test]
-    fn ignores_empty_base_dir_env_values() {
-        let path = resolved_path(&[("LOCALAPPDATA", ""), ("APPDATA", "")]);
-
-        assert_eq!(path, PathBuf::from(CATALOG_DB_FILE_NAME));
-    }
-
-    #[test]
-    fn falls_back_to_relative_catalog_db() {
-        let path = resolved_path(&[]);
-
-        assert_eq!(path, PathBuf::from(CATALOG_DB_FILE_NAME));
     }
 
     #[test]

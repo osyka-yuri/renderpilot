@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+use crate::net::{DownloadProgress, ProgressObserver};
 use crate::ServiceError;
 use renderpilot_application::ArtifactRepository;
 use renderpilot_domain::{
@@ -11,7 +12,7 @@ use renderpilot_domain::{
 use super::{
     artifact_builder, compression,
     fsr_packages::FsrPackage,
-    http, library_error, storage,
+    library_error, storage,
     types::{LibraryManifest, LibraryManifestEntry, LibraryState},
     validate,
 };
@@ -51,7 +52,7 @@ pub(super) struct DownloadedLibrary {
 pub(super) async fn ensure_downloaded_and_registered(
     context: &crate::Context,
     entry: &LibraryManifestEntry,
-    progress: Option<&super::ProgressObserver<'_>>,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<DownloadedLibrary, ServiceError> {
     let archive_path = local_archive_path(entry)?;
     let dll_path = local_dll_path(entry)?;
@@ -90,20 +91,21 @@ fn local_dll_path(entry: &LibraryManifestEntry) -> Result<PathBuf, ServiceError>
 async fn ensure_local_archive(
     entry: &LibraryManifestEntry,
     archive_path: &Path,
-    progress: Option<&super::ProgressObserver<'_>>,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<Option<DecompressedArtifact>, ServiceError> {
     if archive_is_valid(archive_path, entry)? {
         if let Some(cb) = progress {
             let size = entry.files.zst.size_bytes;
-            cb(super::DownloadProgress {
+            cb(DownloadProgress {
                 downloaded_bytes: size,
                 total_bytes: size,
+                phase: None,
             });
         }
         return Ok(None);
     }
 
-    storage::remove_file_if_exists(archive_path)?;
+    crate::fs::remove_file_if_exists(archive_path)?;
 
     let payload = download_archive(entry, progress).await?;
 
@@ -111,7 +113,7 @@ async fn ensure_local_archive(
     validate::validate_compressed_size(entry, &payload)?;
     let artifact = DecompressedArtifact::decompress_and_verify(entry, &payload)?;
 
-    storage::write_file_atomically(archive_path, &payload)?;
+    crate::fs::write_file_atomically(archive_path, &payload)?;
 
     Ok(Some(artifact))
 }
@@ -162,7 +164,7 @@ fn decompress_or_reuse(
     match maybe_artifact {
         Some(artifact) => Ok(artifact),
         None => {
-            let payload = storage::read_file(archive_path)?;
+            let payload = crate::fs::read_file(archive_path)?;
             DecompressedArtifact::decompress_and_verify(entry, &payload)
         }
     }
@@ -175,10 +177,10 @@ fn persist_dll(
     dll_path: &Path,
     archive_path: &Path,
 ) -> Result<(), ServiceError> {
-    storage::write_file_atomically(dll_path, &artifact.bytes)?;
+    crate::fs::write_file_atomically(dll_path, &artifact.bytes)?;
     storage::write_sha256_cache(dll_path, &artifact.sha256)?;
 
-    let _ = storage::remove_file_if_exists(archive_path);
+    let _ = crate::fs::remove_file_if_exists(archive_path);
 
     Ok(())
 }
@@ -200,7 +202,7 @@ fn read_or_compute_dll_sha256(dll_path: &Path) -> Result<String, ServiceError> {
     match storage::read_sha256_cache(dll_path)? {
         Some(cached) => Ok(cached),
         None => {
-            let computed = hex::encode(Sha256::digest(&storage::read_file(dll_path)?));
+            let computed = hex::encode(Sha256::digest(&crate::fs::read_file(dll_path)?));
             storage::write_sha256_cache(dll_path, &computed)?;
             Ok(computed)
         }
@@ -230,7 +232,7 @@ pub(super) fn delete_local_library(
 ) -> Result<(), ServiceError> {
     // Remove the cached archive (may already be absent after a prior extraction).
     let archive_path = local_archive_path(entry)?;
-    storage::remove_file_if_exists(&archive_path)?;
+    crate::fs::remove_file_if_exists(&archive_path)?;
 
     let dll_path = local_dll_path(entry)?;
     if dll_path.exists() {
@@ -243,29 +245,18 @@ pub(super) fn delete_local_library(
             }
         }
         // Remove the DLL and its sidecar SHA-256 cache.
-        storage::remove_file_if_exists(&dll_path)?;
-        let _ = storage::remove_file_if_exists(&sha256_cache_path(&dll_path));
+        crate::fs::remove_file_if_exists(&dll_path)?;
+        let _ = crate::fs::remove_file_if_exists(&storage::sha256_cache_path(&dll_path));
     }
 
     Ok(())
 }
 
-/// Returns the sidecar SHA-256 cache path for a given file, mirroring the
-/// convention used by [`storage::write_sha256_cache`].
-fn sha256_cache_path(path: &Path) -> PathBuf {
-    path.with_extension(format!(
-        "{}.sha256",
-        path.extension().and_then(|e| e.to_str()).unwrap_or("")
-    ))
-}
-
 async fn download_archive(
     entry: &LibraryManifestEntry,
-    progress: Option<&super::ProgressObserver<'_>>,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<Vec<u8>, ServiceError> {
-    let client = http::http_client();
-    http::download_exact_bytes(
-        client,
+    crate::net::download_exact_bytes(
         &entry.files.zst.download_url,
         entry.files.zst.size_bytes,
         "library download",
@@ -298,7 +289,7 @@ fn archive_is_valid(path: &Path, entry: &LibraryManifestEntry) -> Result<bool, S
 /// registering a single-file artifact (FSR members are only offered as packages).
 async fn ensure_member_dll(
     entry: &LibraryManifestEntry,
-    progress: Option<&super::ProgressObserver<'_>>,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<PathBuf, ServiceError> {
     let archive_path = local_archive_path(entry)?;
     let maybe_artifact = ensure_local_archive(entry, &archive_path, progress).await?;
@@ -326,7 +317,7 @@ pub(super) async fn ensure_package_downloaded(
     context: &crate::Context,
     manifest: &LibraryManifest,
     package: &FsrPackage,
-    progress: Option<&super::ProgressObserver<'_>>,
+    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<String, ServiceError> {
     // Collect members and total byte count in a single pass — no duplicate
     // `require_entry` calls, no extra allocations.
@@ -347,16 +338,17 @@ pub(super) async fn ensure_package_downloaded(
         // Build a per-member closure that translates member-local bytes into
         // cumulative package bytes — no `Box` allocation needed.
         let member_progress_fn = progress.map(|cb| {
-            move |p: super::DownloadProgress| {
-                cb(super::DownloadProgress {
+            move |p: DownloadProgress<'_>| {
+                cb(DownloadProgress {
                     downloaded_bytes: offset + p.downloaded_bytes,
                     total_bytes,
+                    phase: p.phase,
                 });
             }
         });
-        let member_progress: Option<&super::ProgressObserver<'_>> = member_progress_fn
+        let member_progress: Option<&ProgressObserver<'_>> = member_progress_fn
             .as_ref()
-            .map(|f| f as &super::ProgressObserver<'_>);
+            .map(|f| f as &ProgressObserver<'_>);
 
         let dll_path = ensure_member_dll(entry, member_progress).await?;
         cumulative_downloaded += entry.files.zst.size_bytes;

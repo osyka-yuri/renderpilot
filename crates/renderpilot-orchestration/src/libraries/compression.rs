@@ -18,17 +18,25 @@ pub(super) fn decompress_library(
     entry: &LibraryManifestEntry,
     payload: &[u8],
 ) -> Result<Vec<u8>, ServiceError> {
-    let entry_id = &entry.entry_id;
-    let expected_size = entry.files.dll.size_bytes;
+    decompress_zstd(payload, entry.files.dll.size_bytes, &entry.entry_id)
+}
 
-    validate_size_constraints(entry_id, expected_size)?;
+/// Decompresses a zstd `payload` to exactly `expected_size` bytes, guarding
+/// against decompression bombs and size mismatches. `label` identifies the
+/// payload in error messages. Shared by library swaps and the RenoDX installer.
+pub(crate) fn decompress_zstd(
+    payload: &[u8],
+    expected_size: u64,
+    label: &str,
+) -> Result<Vec<u8>, ServiceError> {
+    validate_size_constraints(label, expected_size)?;
 
     // MAX_DLL_SIZE (500 MiB) fits in usize on any supported platform
     // (32-bit usize max ≈ 4 GiB).
     let capacity = expected_size as usize;
 
     let decoder =
-        zstd::stream::Decoder::new(Cursor::new(payload)).map_err(|e| decode_error(entry_id, e))?;
+        zstd::stream::Decoder::new(Cursor::new(payload)).map_err(|e| decode_error(label, e))?;
 
     let mut output = Vec::with_capacity(capacity);
 
@@ -37,9 +45,9 @@ pub(super) fn decompress_library(
     decoder
         .take(expected_size + 1)
         .read_to_end(&mut output)
-        .map_err(|e| decode_error(entry_id, e))?;
+        .map_err(|e| decode_error(label, e))?;
 
-    ensure_exact_size(entry_id, expected_size, output.len())?;
+    ensure_exact_size(label, expected_size, output.len())?;
 
     Ok(output)
 }

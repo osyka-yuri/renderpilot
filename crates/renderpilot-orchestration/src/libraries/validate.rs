@@ -71,12 +71,12 @@ pub(super) fn validate_entry(entry: &LibraryManifestEntry) -> Result<(), Service
     }
 
     let parsed_url =
-        super::http::parse_https_url(&entry.files.zst.download_url, "manifest validation")?;
-    if parsed_url.host_str() != Some(super::manifest::LIBS_HOST) {
+        crate::net::parse_https_url(&entry.files.zst.download_url, "manifest validation")?;
+    if parsed_url.host_str() != Some(crate::cdn::CDN_HOST) {
         return Err(library_error(format!(
             "invalid download URL for `{}`: host must be {}",
             entry.entry_id,
-            super::manifest::LIBS_HOST
+            crate::cdn::CDN_HOST
         )));
     }
 
@@ -111,7 +111,7 @@ pub(super) fn validate_compressed_size(
     Ok(())
 }
 
-pub(super) fn validate_dll_hash(
+pub(crate) fn validate_dll_hash(
     entry_id: &str,
     expected_sha256: &str,
     dll_bytes: &[u8],
@@ -151,6 +151,8 @@ fn ensure_valid_build_type(build_type: &str) -> Result<(), ServiceError> {
     )))
 }
 
+/// True if `value` is exactly 64 hexadecimal digits (either case): the shape of
+/// a SHA-256 digest.
 fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
 }

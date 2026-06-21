@@ -1,12 +1,12 @@
 use sha2::{Digest, Sha256};
 
 use super::local_library::library_id_to_group_key;
-use super::storage::sanitize_path_component;
 use super::types::{
     BuildInfo, DllFileInfo, FilesInfo, HashesInfo, LibraryInfo, LibraryManifest,
     LibraryManifestEntry, SignatureInfo, VersionInfo, ZstFileInfo,
 };
 use super::validate::validate_manifest;
+use crate::fs::sanitize_path_component;
 
 // ---------------------------------------------------------------------------
 // compression::decompress_library tests
@@ -177,18 +177,6 @@ fn test_validate_dll_hash_uppercase_rejected() {
 }
 
 #[test]
-fn test_strip_utf8_bom_removes_leading_bom_only() {
-    use super::manifest::strip_utf8_bom;
-
-    assert_eq!(strip_utf8_bom(b"\xEF\xBB\xBF{}"), b"{}");
-    assert_eq!(strip_utf8_bom(b"{}"), b"{}");
-    // Partial BOM prefixes and interior BOM bytes must stay untouched.
-    assert_eq!(strip_utf8_bom(b"\xEF\xBB{}"), b"\xEF\xBB{}");
-    assert_eq!(strip_utf8_bom(b"{\xEF\xBB\xBF}"), b"{\xEF\xBB\xBF}");
-    assert_eq!(strip_utf8_bom(b""), b"");
-}
-
-#[test]
 fn test_bom_prefixed_manifest_json_parses_after_strip() {
     let json = br#"{"sha256":"ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"}"#;
     let mut bom_prefixed = b"\xEF\xBB\xBF".to_vec();
@@ -197,7 +185,7 @@ fn test_bom_prefixed_manifest_json_parses_after_strip() {
     serde_json::from_slice::<HashesInfo>(&bom_prefixed)
         .expect_err("serde_json rejects a BOM, so the strip at the boundary is load-bearing");
 
-    let parsed: HashesInfo = serde_json::from_slice(super::manifest::strip_utf8_bom(&bom_prefixed))
+    let parsed: HashesInfo = serde_json::from_slice(crate::fs::strip_utf8_bom(&bom_prefixed))
         .expect("BOM-prefixed JSON should parse once the BOM is stripped");
     assert_eq!(
         parsed.sha256,
@@ -240,7 +228,7 @@ fn test_validate_entry_external_host_rejected() {
 #[test]
 fn test_validate_entry_http_rejected() {
     let mut entry = sample_entry("test", "1.0", "1.0", "stable");
-    entry.files.zst.download_url = format!("http://{}/file.dll.zst", super::manifest::LIBS_HOST);
+    entry.files.zst.download_url = format!("http://{}/file.dll.zst", crate::cdn::CDN_HOST);
     let result = super::validate::validate_entry(&entry);
     assert!(result.is_err());
     assert!(result
@@ -411,7 +399,7 @@ fn sample_entry(id: &str, version: &str, sort_key: &str, build_type: &str) -> Li
             },
             zst: ZstFileInfo {
                 size_bytes: 2048,
-                download_url: format!("https://{}/file.dll.zst", super::manifest::LIBS_HOST),
+                download_url: format!("https://{}/file.dll.zst", crate::cdn::CDN_HOST),
             },
         },
         signature: SignatureInfo::Unsigned,

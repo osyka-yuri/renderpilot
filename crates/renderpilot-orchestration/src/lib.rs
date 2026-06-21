@@ -5,14 +5,17 @@
 //! (network, filesystem, compression) and exposes purely typed Rust results —
 //! no `serde_json::Value` responses are produced here.
 
+mod app_dir;
 pub mod catalog;
+mod cdn;
 /// Application-wide orchestration context and state management.
 pub mod context;
 pub mod covers;
 pub mod dlss;
 mod error;
-mod fs_sync;
+mod fs;
 pub mod libraries;
+pub mod net;
 pub mod nvapi;
 pub mod portable;
 pub mod storage;

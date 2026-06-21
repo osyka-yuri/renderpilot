@@ -173,7 +173,7 @@ fn install_cover_file(bytes: &[u8], paths: &CoverInstallPaths) -> Result<(), Ser
 
     temp_cleanup.disarm();
 
-    crate::fs_sync::sync_parent_directory_best_effort(&paths.final_path);
+    crate::fs::sync_parent_directory_best_effort(&paths.final_path);
 
     Ok(())
 }
@@ -264,7 +264,7 @@ fn gc_orphan_cover_files_best_effort(catalog_db_path: &Path, sqlite: &SqliteStor
 
 fn remove_file_and_sync_parent_best_effort(path: &Path) {
     remove_file_best_effort(path);
-    crate::fs_sync::sync_parent_directory_best_effort(path);
+    crate::fs::sync_parent_directory_best_effort(path);
 }
 
 fn remove_file_best_effort(path: &Path) {

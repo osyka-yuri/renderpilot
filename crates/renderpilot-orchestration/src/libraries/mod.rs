@@ -6,38 +6,19 @@ mod tests;
 mod artifact_builder;
 mod compression;
 mod fsr_packages;
-mod http;
 mod local_library;
 mod manifest;
 mod storage;
 mod types;
 mod validate;
 
+use crate::net::ProgressObserver;
 use crate::ServiceError;
 
 pub use self::types::{LibraryManifest, LibraryManifestEntry, LibraryState};
 
 pub use self::artifact_builder::manifest_entries_as_artifacts;
 pub use self::storage::local_preset_manifest_path;
-
-// ---------------------------------------------------------------------------
-// Download progress contract
-// ---------------------------------------------------------------------------
-
-/// Cumulative progress of a library download, in bytes.
-#[derive(Clone, Copy, Debug)]
-pub struct DownloadProgress {
-    /// Number of bytes received so far.
-    pub downloaded_bytes: u64,
-    /// Total expected size in bytes.
-    pub total_bytes: u64,
-}
-
-/// Observer invoked as bytes arrive; must be cheap and non-blocking.
-///
-/// The lifetime parameter keeps the alias usable for non-`'static` observers,
-/// e.g. per-member wrappers that borrow an outer observer.
-pub type ProgressObserver<'a> = dyn Fn(DownloadProgress) + Send + Sync + 'a;
 
 fn library_error(message: impl Into<String>) -> ServiceError {
     ServiceError::CommandFailed(message.into())

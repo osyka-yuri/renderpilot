@@ -40,7 +40,7 @@ impl LibraryManifestEntry {
     pub(crate) fn archive_file_name(&self) -> String {
         format!(
             "{}.dll.zst",
-            super::storage::sanitize_path_component(&self.entry_id)
+            crate::fs::sanitize_path_component(&self.entry_id)
         )
     }
 }
