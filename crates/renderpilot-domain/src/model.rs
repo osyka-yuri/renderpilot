@@ -417,6 +417,79 @@ stable_enum! {
     }
 }
 
+stable_enum! {
+    default,
+    /// Graphics rendering API used by a game executable.
+    ///
+    /// Inferred from the executable's PE import table by the detection layer and
+    /// consumed by the RenoDX installer to choose the ReShade proxy DLL name.
+    pub enum GraphicsApi {
+        /// Direct3D 9.
+        D3D9 = "D3D9",
+        /// Direct3D 10.
+        D3D10 = "D3D10",
+        /// Direct3D 11.
+        D3D11 = "D3D11",
+        /// Direct3D 12.
+        D3D12 = "D3D12",
+        /// OpenGL.
+        OpenGl = "OpenGl",
+        /// Vulkan.
+        Vulkan = "Vulkan",
+        /// The API could not be determined.
+        #[default]
+        Unknown = "Unknown",
+    }
+}
+
+impl GraphicsApi {
+    /// Returns the ReShade proxy DLL file name used to inject into a game that
+    /// renders with this API.
+    ///
+    /// Returns `None` when ReShade cannot be injected through a proxy DLL:
+    /// Vulkan is hooked through a layer rather than a DLL, and an unknown API is
+    /// unsupported.
+    #[must_use]
+    pub const fn proxy_dll_name(self) -> Option<&'static str> {
+        match self {
+            Self::D3D9 => Some("d3d9.dll"),
+            Self::D3D10 | Self::D3D11 | Self::D3D12 => Some("dxgi.dll"),
+            Self::OpenGl => Some("opengl32.dll"),
+            Self::Vulkan | Self::Unknown => None,
+        }
+    }
+}
+
+stable_enum! {
+    /// CPU architecture of a game executable.
+    pub enum Architecture {
+        /// 32-bit x86.
+        X86 = "X86",
+        /// 64-bit x86-64.
+        X64 = "X64",
+    }
+}
+
+impl Architecture {
+    /// Returns the RenoDX add-on file extension for this architecture:
+    /// `addon64` for 64-bit games and `addon32` for 32-bit games.
+    #[must_use]
+    pub const fn addon_extension(self) -> &'static str {
+        match self {
+            Self::X86 => "addon32",
+            Self::X64 => "addon64",
+        }
+    }
+}
+
+stable_enum! {
+    /// Kind of injected add-on RenderPilot can install into a game.
+    pub enum AddonKind {
+        /// RenoDX (Renovation Engine for DirectX): HDR and tone-mapping add-on.
+        RenoDx = "renodx",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -560,5 +633,54 @@ mod tests {
         let legacy_name = serde_json::from_str::<GraphicsTechnology>("\"DlssSuperResolution\"");
 
         assert!(legacy_name.is_err());
+    }
+
+    #[test]
+    fn graphics_api_stable_strings_round_trip() {
+        for api in GraphicsApi::ALL {
+            assert_eq!(api.as_str().parse::<GraphicsApi>().unwrap(), *api);
+            assert_eq!(api.to_string(), api.as_str());
+            assert_eq!(api.as_ref(), api.as_str());
+        }
+    }
+
+    #[test]
+    fn architecture_stable_strings_round_trip() {
+        for arch in Architecture::ALL {
+            assert_eq!(arch.as_str().parse::<Architecture>().unwrap(), *arch);
+            assert_eq!(arch.to_string(), arch.as_str());
+            assert_eq!(arch.as_ref(), arch.as_str());
+        }
+    }
+
+    #[test]
+    fn addon_kind_stable_strings_round_trip() {
+        for kind in AddonKind::ALL {
+            assert_eq!(kind.as_str().parse::<AddonKind>().unwrap(), *kind);
+            assert_eq!(kind.to_string(), kind.as_str());
+            assert_eq!(kind.as_ref(), kind.as_str());
+        }
+    }
+
+    #[test]
+    fn graphics_api_defaults_to_unknown() {
+        assert_eq!(GraphicsApi::default(), GraphicsApi::Unknown);
+    }
+
+    #[test]
+    fn graphics_api_maps_to_reshade_proxy_dll() {
+        assert_eq!(GraphicsApi::D3D9.proxy_dll_name(), Some("d3d9.dll"));
+        assert_eq!(GraphicsApi::D3D10.proxy_dll_name(), Some("dxgi.dll"));
+        assert_eq!(GraphicsApi::D3D11.proxy_dll_name(), Some("dxgi.dll"));
+        assert_eq!(GraphicsApi::D3D12.proxy_dll_name(), Some("dxgi.dll"));
+        assert_eq!(GraphicsApi::OpenGl.proxy_dll_name(), Some("opengl32.dll"));
+        assert_eq!(GraphicsApi::Vulkan.proxy_dll_name(), None);
+        assert_eq!(GraphicsApi::Unknown.proxy_dll_name(), None);
+    }
+
+    #[test]
+    fn architecture_maps_to_addon_extension() {
+        assert_eq!(Architecture::X86.addon_extension(), "addon32");
+        assert_eq!(Architecture::X64.addon_extension(), "addon64");
     }
 }
