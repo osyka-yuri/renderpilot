@@ -1,7 +1,7 @@
 //! NVAPI overrides and baselines tables.
 //!
-//! See `migrations/0002_nvapi.sql` for the schema. Both tables CASCADE
-//! on `games.id`, so deleting a game also tears down its NVAPI state.
+//! Both tables live in `migrations/0001_initial.sql` and CASCADE on `games.id`,
+//! so deleting a game also tears down its NVAPI state.
 
 use renderpilot_application::AppResult;
 use rusqlite::{params, OptionalExtension};

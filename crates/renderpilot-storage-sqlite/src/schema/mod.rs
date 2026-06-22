@@ -23,10 +23,11 @@ use self::validation::validate_catalog_schema;
 
 const INITIAL_MIGRATION: &str = include_str!("../../migrations/0001_initial.sql");
 
-// Bumped to 3 for the bundle-swap reshape of `library_artifacts` (files_json) and
-// the new `component_backups` table: a stale v2 catalog has the old column shape,
-// so it must be rebuilt rather than kept.
-const CURRENT_SCHEMA_VERSION: i32 = 4;
+// Schema version history:
+//   2 → 3: bundle-swap reshape of `library_artifacts` (files_json) + `component_backups` table.
+//   4 → 8: `installed_addons` table for RenoDX install tracking, with `tracked_sources_json`
+//          array (intermediate 5/6/7 iterations were never released and squashed into 8).
+const CURRENT_SCHEMA_VERSION: i32 = 8;
 
 const REQUIRED_TABLES: &[&str] = &[
     "games",
@@ -34,6 +35,7 @@ const REQUIRED_TABLES: &[&str] = &[
     "game_covers",
     "components",
     "component_backups",
+    "installed_addons",
     "library_artifacts",
     "operations",
     "operation_items",

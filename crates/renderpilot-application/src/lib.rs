@@ -32,5 +32,5 @@ pub use persistence::{
 
 pub use ports::{
     ArtifactRepository, ComponentDetector, ComponentRepository, GameRepository, GameSourceProvider,
-    OperationRepository,
+    InstalledAddonRepository, OperationRepository,
 };
