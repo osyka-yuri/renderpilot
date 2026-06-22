@@ -5,6 +5,7 @@
 //! (network, filesystem, compression) and exposes purely typed Rust results —
 //! no `serde_json::Value` responses are produced here.
 
+pub mod addons;
 mod app_dir;
 pub mod catalog;
 mod cdn;
