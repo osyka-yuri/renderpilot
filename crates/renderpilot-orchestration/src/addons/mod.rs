@@ -20,4 +20,5 @@
 pub mod engine;
 mod ini;
 pub mod record;
+pub mod renodx;
 pub mod update;
