@@ -7,8 +7,9 @@
 use crate::utils::{to_json, JsonResult};
 
 pub use renderpilot_orchestration::libraries::{
-    DownloadProgress, LibraryManifest, LibraryManifestEntry, LibraryState, ProgressObserver,
+    LibraryManifest, LibraryManifestEntry, LibraryState,
 };
+pub use renderpilot_orchestration::net::{DownloadProgress, ProgressObserver};
 
 // ---------------------------------------------------------------------------
 // Public JSON facade

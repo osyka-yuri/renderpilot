@@ -10,6 +10,7 @@ mod commands;
 mod error;
 mod hash;
 mod output;
+mod renodx;
 
 #[cfg(test)]
 mod test_env;

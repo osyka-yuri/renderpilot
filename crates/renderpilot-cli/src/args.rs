@@ -35,6 +35,12 @@ pub(crate) enum Command {
         game_id: GameId,
         component_id: ComponentId,
     },
+    RenodxStatus {
+        game_id: GameId,
+    },
+    RenodxUninstall {
+        game_id: GameId,
+    },
 }
 
 pub(crate) fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Command, CliError> {
@@ -53,6 +59,7 @@ pub(crate) fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Com
         "plan-swap" => parse_plan_swap_command(&mut args),
         "apply" | "apply-operation" => parse_apply_command(&mut args),
         "rollback" => parse_rollback_command(&mut args),
+        "renodx" => parse_renodx_command(&mut args),
         _ => Err(CliError::UnknownArgument(first)),
     }
 }
@@ -204,6 +211,23 @@ fn parse_rollback_command(args: &mut ArgCursor) -> Result<Command, CliError> {
         game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
         component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
     })
+}
+
+fn parse_renodx_command(args: &mut ArgCursor) -> Result<Command, CliError> {
+    let Some(subcommand) = args.next_keyword()? else {
+        return Err(CliError::MissingArgument("<status|uninstall>"));
+    };
+
+    // Resolve the subcommand to its constructor first, so an unknown subcommand
+    // is reported as such rather than masked by a missing `--game` error.
+    let build: fn(GameId) -> Command = match subcommand.as_str() {
+        "status" => |game_id| Command::RenodxStatus { game_id },
+        "uninstall" => |game_id| Command::RenodxUninstall { game_id },
+        _ => return Err(CliError::UnknownArgument(subcommand)),
+    };
+
+    let game_id = parse_named_identifier(args, "--game", "<game_id>", CliError::InvalidGameId)?;
+    Ok(build(game_id))
 }
 
 #[derive(Debug)]
@@ -528,5 +552,74 @@ mod tests {
                     .expect("component id should parse"),
             }
         );
+    }
+
+    #[test]
+    fn renodx_requires_subcommand() {
+        let error = parse_args(args(&["renodx"])).expect_err("subcommand should be required");
+
+        assert_eq!(error, CliError::MissingArgument("<status|uninstall>"));
+    }
+
+    #[test]
+    fn renodx_rejects_unknown_subcommand() {
+        let error =
+            parse_args(args(&["renodx", "install"])).expect_err("unknown subcommand should fail");
+
+        assert_eq!(error, CliError::UnknownArgument("install".to_owned()));
+    }
+
+    #[test]
+    fn renodx_requires_game_argument() {
+        let error =
+            parse_args(args(&["renodx", "status"])).expect_err("game id should be required");
+
+        assert_eq!(error, CliError::MissingArgument("<game_id>"));
+    }
+
+    #[test]
+    fn renodx_status_parses_game_argument() {
+        assert_eq!(
+            parse_args(args(&[
+                "renodx",
+                "status",
+                "--game",
+                "manual:C:/Games/RenoGame"
+            ]))
+            .expect("valid args"),
+            Command::RenodxStatus {
+                game_id: GameId::new("manual:C:/Games/RenoGame").expect("game id should parse")
+            }
+        );
+    }
+
+    #[test]
+    fn renodx_uninstall_parses_game_argument() {
+        assert_eq!(
+            parse_args(args(&[
+                "renodx",
+                "uninstall",
+                "--game",
+                "manual:C:/Games/RenoGame"
+            ]))
+            .expect("valid args"),
+            Command::RenodxUninstall {
+                game_id: GameId::new("manual:C:/Games/RenoGame").expect("game id should parse")
+            }
+        );
+    }
+
+    #[test]
+    fn renodx_rejects_extra_arg() {
+        let error = parse_args(args(&[
+            "renodx",
+            "status",
+            "--game",
+            "manual:C:/Games/X",
+            "--bad",
+        ]))
+        .expect_err("extra arg should fail");
+
+        assert_eq!(error, CliError::UnexpectedArgument("--bad".to_owned()));
     }
 }

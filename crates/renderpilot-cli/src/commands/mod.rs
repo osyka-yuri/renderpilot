@@ -12,6 +12,7 @@ use crate::{
         render_list_operations_output, render_plan_swap_output, render_scan_folder_batch_output,
         render_scan_folder_output, render_summary, render_version,
     },
+    renodx,
 };
 
 #[cfg(test)]
@@ -55,6 +56,9 @@ fn render_stateful_command(command: Command) -> CliOutput {
             game_id,
             component_id,
         } => rollback_component(&context, &game_id, &component_id),
+
+        Command::RenodxStatus { game_id } => renodx_status(&context, &game_id),
+        Command::RenodxUninstall { game_id } => renodx_uninstall(&context, &game_id),
 
         _ => unreachable!("stateless commands are handled in render_command"),
     }
@@ -154,7 +158,7 @@ fn apply_swap(
 ) -> CliOutput {
     let result = catalog::apply_swap(context, game_id, component_id, artifact_id)?;
 
-    render_output(serde_json::to_string_pretty(&result))
+    render_json(&result)
 }
 
 fn rollback_component(
@@ -164,7 +168,21 @@ fn rollback_component(
 ) -> CliOutput {
     let result = catalog::rollback_component(context, game_id, component_id)?;
 
-    render_output(serde_json::to_string_pretty(&result))
+    render_json(&result)
+}
+
+fn renodx_status(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    let state = renodx::status(context, game_id)?;
+
+    render_json(&state)
+}
+
+fn renodx_uninstall(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    renodx::uninstall(context, game_id)?;
+    // Report the resulting (not-installed) state, mirroring the desktop facade.
+    let state = renodx::status(context, game_id)?;
+
+    render_json(&state)
 }
 
 fn render_output<E>(output: Result<String, E>) -> CliOutput
@@ -172,4 +190,10 @@ where
     E: Into<CliError>,
 {
     output.map_err(Into::into)
+}
+
+/// Renders a serializable value as pretty JSON, mapping a serialization failure
+/// into a [`CliError`].
+fn render_json<T: serde::Serialize>(value: &T) -> CliOutput {
+    render_output(serde_json::to_string_pretty(value))
 }

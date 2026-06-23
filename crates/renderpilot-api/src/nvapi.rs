@@ -25,7 +25,8 @@ use renderpilot_orchestration::nvapi::ops::{
 use renderpilot_orchestration::nvapi::registry::{lookup_setting, supported_settings};
 use renderpilot_orchestration::nvapi::resolve::{
     build_setting_context_with_context, clear_executable_override, collect_executable_candidates,
-    global_setting_context, load_game_with_context, set_executable_override,
+    global_setting_context, load_game_with_context, resolve_effective_executable,
+    set_executable_override,
 };
 use renderpilot_orchestration::nvapi::{NvapiSetting, SettingContext};
 
@@ -96,6 +97,21 @@ pub fn list_game_executable_candidates(
         .map(executable_candidate_dto)
         .collect();
     to_json(dtos)
+}
+
+/// Resolves the game's effective primary executable (a pinned override or the
+/// auto-detected renderer), independent of NVAPI. Backs the shared game-level
+/// executable selector used by both the NVIDIA and RenoDX panels. Serializes to
+/// `null` when the install directory holds no game binary.
+pub fn resolve_game_executable(
+    context: &renderpilot_orchestration::Context,
+    game_id: String,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let game = load_game_with_context(context, game_id.as_str())?;
+    let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
+    let effective = resolve_effective_executable(context, &install_dir, game_id.as_str())?;
+    to_json(effective)
 }
 
 /// Enforces a persistent, explicit executable override for the specified `game_id`.

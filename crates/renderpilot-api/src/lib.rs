@@ -31,6 +31,7 @@ pub(crate) mod dlss_indicator;
 pub(crate) mod libraries;
 pub(crate) mod nvapi;
 pub(crate) mod operations;
+pub(crate) mod renodx;
 pub(crate) mod scan;
 pub(crate) mod utils;
 
@@ -53,8 +54,13 @@ pub use self::libraries::{
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
     list_global_nvapi_setting_states, list_nvapi_setting_states, list_nvapi_supported_settings,
-    revert_global_nvapi_setting, revert_nvapi_setting, set_game_executable_override,
-    set_global_nvapi_setting_value, set_nvapi_setting_value,
+    resolve_game_executable, revert_global_nvapi_setting, revert_nvapi_setting,
+    set_game_executable_override, set_global_nvapi_setting_value, set_nvapi_setting_value,
 };
 pub use self::operations::{apply_swap, rollback_component};
+pub use self::renodx::{
+    renodx_availability, renodx_check_update, renodx_check_updates, renodx_dlss_fix_availability,
+    renodx_install, renodx_install_dlss_fix, renodx_install_from_file, renodx_status,
+    renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
+};
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};
