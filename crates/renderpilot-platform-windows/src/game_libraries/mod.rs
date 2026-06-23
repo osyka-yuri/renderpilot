@@ -19,9 +19,12 @@
 //! and `paths` the path normalization / dedup / Steam-VDF parsing helpers. This
 //! module owns the public API and the cross-launcher aggregation.
 
+mod launch_exe;
 mod launchers;
 mod paths;
 mod registry;
+
+pub use launch_exe::launcher_launch_executable;
 
 use std::{fs, path::PathBuf};
 

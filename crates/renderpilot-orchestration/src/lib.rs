@@ -15,6 +15,7 @@ pub mod covers;
 pub mod dlss;
 mod error;
 mod fs;
+pub mod game_executable;
 pub mod libraries;
 pub mod net;
 pub mod nvapi;

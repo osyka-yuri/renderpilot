@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::dlss::installed::installed_dlls_from_components;
 use crate::ServiceError;
@@ -85,6 +85,19 @@ pub fn clear_executable_override(
     Ok(())
 }
 
+/// The user's pinned executable override for `game_id` as an absolute path, or
+/// `None` when none is set. The shared game-level override read by NVAPI (profile
+/// target) and RenoDX (install renderer); the resolver checks the path still exists.
+pub fn stored_override_path(
+    context: &crate::Context,
+    game_id: &str,
+) -> Result<Option<PathBuf>, ServiceError> {
+    Ok(context
+        .storage()
+        .get_nvapi_executable_override(game_id)?
+        .map(|row| PathBuf::from(row.selected_path)))
+}
+
 /// Builds the NVAPI [`SettingContext`] for a game: detected DLSS DLLs and
 /// effective executable, using an already-open storage connection.
 pub fn build_setting_context_with_context(
@@ -92,19 +105,10 @@ pub fn build_setting_context_with_context(
     install_dir: &Path,
     game_id: &str,
 ) -> Result<SettingContext, ServiceError> {
-    let override_row = context.storage().get_nvapi_executable_override(game_id)?;
-
-    let effective_exe = if let Some(row) = override_row {
-        if Path::new(&row.selected_path).exists() {
-            Some(row.selected_basename)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let effective_exe = effective_exe.or_else(|| pick_exe_with_profile_fallback(install_dir));
+    // The shared game-level override; the resolver checks it still exists and falls
+    // back to auto-detection when it does not.
+    let override_path = stored_override_path(context, game_id)?;
+    let effective_exe = pick_effective_exe(install_dir, override_path.as_deref());
 
     // Reuse the global catalog's scan instead of walking the install dir again:
     // detection already found every DLSS DLL (to depth 12) and stored its version.
@@ -144,19 +148,22 @@ pub fn collect_executable_candidates(_install_dir: &Path) -> Vec<()> {
     Vec::new()
 }
 
+/// Resolves the effective profile executable: the user override (if any), else the
+/// shared resolver's pick — but biased toward a candidate that already has an
+/// NVIDIA driver profile, so we read/write the profile the driver actually applies.
 #[cfg(windows)]
-fn pick_exe_with_profile_fallback(install_dir: &Path) -> Option<String> {
+fn pick_effective_exe(install_dir: &Path, override_path: Option<&Path>) -> Option<String> {
+    use crate::game_executable::{self, ExeSource};
     use renderpilot_nvapi::Nvapi;
 
-    let supported: Vec<ExecutableCandidate> = detect_executable_candidates(install_dir)
-        .into_iter()
-        .filter(|c| c.rejection.is_none())
-        .collect();
-    if supported.is_empty() {
-        return None;
+    // The shared resolver: override wins; NVAPI does not prefer DirectX (a Vulkan
+    // game is still the profile target), so `prefer_directx` is false.
+    let resolved = game_executable::resolve_primary_executable(install_dir, override_path, false)?;
+    // An explicit override is authoritative — never second-guess it.
+    if resolved.source == ExeSource::Override {
+        return Some(resolved.file_name);
     }
-
-    let default_pick = supported[0].file_name.clone();
+    let default_pick = resolved.file_name;
 
     let Some(nvapi) = Nvapi::get() else {
         return Some(default_pick);
@@ -167,17 +174,57 @@ fn pick_exe_with_profile_fallback(install_dir: &Path) -> Option<String> {
     let Ok(session) = nvapi.create_session() else {
         return Some(default_pick);
     };
-    for candidate in &supported {
+    for candidate in detect_executable_candidates(install_dir)
+        .into_iter()
+        .filter(|c| c.rejection.is_none())
+    {
         if session.find_profile_by_exe(&candidate.file_name).is_ok() {
-            return Some(candidate.file_name.clone());
+            return Some(candidate.file_name);
         }
     }
     Some(default_pick)
 }
 
 #[cfg(not(windows))]
-fn pick_exe_with_profile_fallback(_install_dir: &Path) -> Option<String> {
+fn pick_effective_exe(_install_dir: &Path, _override_path: Option<&Path>) -> Option<String> {
     None
+}
+
+/// The game's effective primary executable for the shared game-level UI: the
+/// resolver's pick (a pinned override or the auto-detected renderer), independent
+/// of NVAPI hardware so it works for any GPU.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EffectiveExecutable {
+    /// Basename, e.g. `Game.exe`.
+    pub file_name: String,
+    /// Absolute path on disk (forward slashes).
+    pub absolute_path: String,
+    /// `"override"` when pinned by the user, `"auto"` when auto-detected.
+    pub source: &'static str,
+}
+
+/// Resolves the effective executable for `game_id`'s install directory, honoring a
+/// pinned override. Shared by the game-level executable UI; both NVAPI and RenoDX
+/// read this same selection. `None` when the directory holds no game binary.
+pub fn resolve_effective_executable(
+    context: &crate::Context,
+    install_dir: &Path,
+    game_id: &str,
+) -> Result<Option<EffectiveExecutable>, ServiceError> {
+    let override_path = stored_override_path(context, game_id)?;
+    Ok(crate::game_executable::resolve_primary_executable(
+        install_dir,
+        override_path.as_deref(),
+        false,
+    )
+    .map(|resolved| EffectiveExecutable {
+        file_name: resolved.file_name,
+        absolute_path: resolved.path.as_str().to_owned(),
+        source: match resolved.source {
+            crate::game_executable::ExeSource::Override => "override",
+            crate::game_executable::ExeSource::Auto => "auto",
+        },
+    }))
 }
 
 #[cfg(test)]

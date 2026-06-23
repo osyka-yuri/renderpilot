@@ -25,14 +25,33 @@ pub struct ExeGraphicsInfo {
     /// ranking. Empty when no known graphics import was found.
     apis: Vec<GraphicsApi>,
     architecture: Option<Architecture>,
+    /// The actual graphics DLL basenames the executable imports (lowercased, e.g.
+    /// `dxgi.dll`, `d3d12.dll`, `d3d9.dll`), in first-seen order. Unlike `apis`
+    /// (which collapses `dxgi.dll` into `D3D11`), this preserves the exact DLL so
+    /// the orchestration layer can pick the precise ReShade proxy the game loads
+    /// instead of guessing. Empty when no known graphics import was found.
+    #[serde(default)]
+    graphics_dlls: Vec<String>,
 }
 
 impl ExeGraphicsInfo {
     /// Creates a new graphics-info record from the imported API set and
-    /// architecture.
+    /// architecture. The imported-DLL list is empty; use
+    /// [`Self::with_graphics_dlls`] to attach it.
     #[must_use]
     pub fn new(apis: Vec<GraphicsApi>, architecture: Option<Architecture>) -> Self {
-        Self { apis, architecture }
+        Self {
+            apis,
+            architecture,
+            graphics_dlls: Vec::new(),
+        }
+    }
+
+    /// Attaches the exact imported graphics DLL basenames (lowercased).
+    #[must_use]
+    pub fn with_graphics_dlls(mut self, graphics_dlls: Vec<String>) -> Self {
+        self.graphics_dlls = graphics_dlls;
+        self
     }
 
     /// Returns the detected graphics API set, without ranking.
@@ -45,6 +64,13 @@ impl ExeGraphicsInfo {
     #[must_use]
     pub const fn architecture(&self) -> Option<Architecture> {
         self.architecture
+    }
+
+    /// Returns the exact imported graphics DLL basenames (lowercased), in
+    /// first-seen order. Empty when none were found or detection was inconclusive.
+    #[must_use]
+    pub fn graphics_dlls(&self) -> &[String] {
+        &self.graphics_dlls
     }
 }
 

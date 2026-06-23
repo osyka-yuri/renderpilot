@@ -38,6 +38,14 @@ const NON_GAME_EXE_NAMES: &[&str] = &[
     "setup",
     "unins000",
     "unins001",
+    "eosbootstrapper",
+    "easyanticheat",
+    "easyanticheat_setup",
+    "battleye",
+    "anticheatexpert",
+    "activationui",
+    "touchup",
+    "oalinst",
 ];
 
 /// Filename suffixes (case-insensitive) that strongly imply a non-game
@@ -63,6 +71,11 @@ const NON_GAME_EXE_SUFFIXES: &[&str] = &[
     "helper",
     "support",
     "tool",
+    "anticheat",
+    "bootstrapper",
+    "prereqsetup",
+    "diag",
+    "reporter",
 ];
 
 /// Substrings (case-insensitive) anywhere in the filename that imply
@@ -81,6 +94,32 @@ const NON_GAME_EXE_SUBSTRINGS: &[&str] = &[
     "updater",
     "dxsetup",
     "vcredist",
+    "anticheat",
+    "battleye",
+    "bootstrapper",
+    "prereq",
+    "cleanup",
+];
+
+/// Directory names (case-insensitive, exact segment match) that hold installer,
+/// redistributable, or prerequisite binaries rather than the game itself. Any
+/// executable located under one of these — at any depth — is not the game, no
+/// matter what it is named (e.g. `__Installer/Cleanup.exe`, `_CommonRedist/.../
+/// vc_redist.exe`). Matching the parent folder catches generically-named helpers
+/// the filename filters miss.
+const NON_GAME_DIR_SEGMENTS: &[&str] = &[
+    "__installer",
+    "_commonredist",
+    "commonredist",
+    "redist",
+    "_redist",
+    "redistributable",
+    "redistributables",
+    "directx",
+    "vcredist",
+    "dotnet",
+    "prerequisites",
+    "installers",
 ];
 
 // -----------------------------------------------------------------------------
@@ -93,6 +132,8 @@ const NON_GAME_EXE_SUBSTRINGS: &[&str] = &[
 /// override workflows should the heuristic prove overly aggressive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RejectionReason {
+    /// Located under an entry in `NON_GAME_DIR_SEGMENTS` (installer/redist folder).
+    NonGameLocation(String),
     /// Filename matched an entry in `NON_GAME_EXE_NAMES`.
     NonGameName(String),
     /// Filename ended with an entry in `NON_GAME_EXE_SUFFIXES`.
@@ -105,6 +146,7 @@ impl RejectionReason {
     /// Stable wire string for serialization to the UI.
     pub fn kind(&self) -> &'static str {
         match self {
+            Self::NonGameLocation(_) => "non_game_location",
             Self::NonGameName(_) => "non_game_name",
             Self::NonGameSuffix(_) => "non_game_suffix",
             Self::NonGameSubstring(_) => "non_game_substring",
@@ -114,7 +156,10 @@ impl RejectionReason {
     /// The exact filter token that matched.
     pub fn token(&self) -> &str {
         match self {
-            Self::NonGameName(s) | Self::NonGameSuffix(s) | Self::NonGameSubstring(s) => s,
+            Self::NonGameLocation(s)
+            | Self::NonGameName(s)
+            | Self::NonGameSuffix(s)
+            | Self::NonGameSubstring(s) => s,
         }
     }
 }
@@ -168,7 +213,7 @@ pub fn detect_executable_candidates(install_dir: &Path) -> Vec<ExecutableCandida
     let mut candidates: Vec<ExecutableCandidate> = raw_candidates
         .into_iter()
         .map(|raw| {
-            let rejection = classify_filename(&raw.file_name_no_ext, &raw.file_name);
+            let rejection = classify(&raw.relative_path, &raw.file_name_no_ext, &raw.file_name);
             let rank_score = compute_rank_score(&raw, &install_dir_name);
             ExecutableCandidate {
                 absolute_path: raw.absolute_path,
@@ -208,9 +253,16 @@ const ROOT_DEPTH_BONUS: i32 = 20;
 /// Paths like `bin/Game.exe` are still plausible primary targets.
 const NEAR_ROOT_DEPTH_BONUS: i32 = 5;
 
-/// Bonus when the executable stem matches the install directory name.
-/// E.g. `Cyberpunk2077.exe` inside `Cyberpunk2077/`.
+/// Bonus when the executable stem matches the install directory name after
+/// normalization (non-alphanumerics stripped, lowercased). E.g. `Cyberpunk2077.exe`
+/// inside `Cyberpunk 2077/`. Tolerant of spacing/punctuation differences the way a
+/// launcher names a folder vs the game binary.
 const FOLDER_NAME_MATCH_BONUS: i32 = 30;
+
+/// Weaker bonus when one normalized name merely *contains* the other (e.g. an
+/// `re2.exe` inside `Resident Evil 2/`, or a `WitcherLauncher` folder). Lower than
+/// an exact match so the precise binary still wins.
+const FOLDER_NAME_PARTIAL_BONUS: i32 = 12;
 
 /// Bonus for binaries larger than [`LARGE_BINARY_BYTES`].
 /// Capped to avoid letting size dominate games with small engines.
@@ -284,7 +336,28 @@ fn relative_path_from(root: &Path, full: &Path) -> String {
         })
 }
 
-fn classify_filename(name_no_ext: &str, full_name: &str) -> Option<RejectionReason> {
+/// Returns the parent-directory segment of `relative_path` (forward-slash,
+/// relative to the install root) that matches a known installer/redist folder,
+/// case-insensitively. The final segment (the file name) is never considered.
+fn non_game_dir_segment(relative_path: &str) -> Option<String> {
+    let mut segments: Vec<&str> = relative_path.split('/').collect();
+    segments.pop(); // drop the file name; only parent folders count
+    segments.into_iter().find_map(|segment| {
+        let lower = segment.to_ascii_lowercase();
+        NON_GAME_DIR_SEGMENTS
+            .iter()
+            .find(|&&dir| dir == lower)
+            .map(|&dir| dir.to_owned())
+    })
+}
+
+fn classify(relative_path: &str, name_no_ext: &str, full_name: &str) -> Option<RejectionReason> {
+    // A parent installer/redist folder rejects the binary regardless of its name —
+    // the strongest signal that an executable is not the game.
+    if let Some(segment) = non_game_dir_segment(relative_path) {
+        return Some(RejectionReason::NonGameLocation(segment));
+    }
+
     let lower = name_no_ext.to_ascii_lowercase();
 
     for banned in NON_GAME_EXE_NAMES {
@@ -311,6 +384,27 @@ fn classify_filename(name_no_ext: &str, full_name: &str) -> Option<RejectionReas
     None
 }
 
+/// Normalizes a name for tolerant comparison: keeps only ASCII alphanumerics,
+/// lowercased. So `"Cyberpunk 2077"` and `"Cyberpunk2077"` compare equal — matching
+/// how a launcher names an install folder versus the game's binary. Mirrors NVIDIA
+/// Profile Inspector's `NormalizeName`.
+fn normalize_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// True when one normalized name contains the other and the contained name is
+/// substantial enough to be a meaningful signal (avoids matching on a 2–3 char
+/// fragment). Backs the partial folder-name bonus.
+fn folder_name_overlaps(stem: &str, dir: &str) -> bool {
+    const MIN_OVERLAP: usize = 4;
+    (dir.len() >= MIN_OVERLAP && stem.contains(dir))
+        || (stem.len() >= MIN_OVERLAP && dir.contains(stem))
+}
+
 fn compute_rank_score(raw: &RawCandidate, install_dir_name: &str) -> i32 {
     let mut score: i32 = 0;
 
@@ -320,8 +414,14 @@ fn compute_rank_score(raw: &RawCandidate, install_dir_name: &str) -> i32 {
         score += NEAR_ROOT_DEPTH_BONUS;
     }
 
-    if !install_dir_name.is_empty() && raw.file_name_no_ext.eq_ignore_ascii_case(install_dir_name) {
-        score += FOLDER_NAME_MATCH_BONUS;
+    let normalized_dir = normalize_name(install_dir_name);
+    let normalized_stem = normalize_name(&raw.file_name_no_ext);
+    if !normalized_dir.is_empty() && !normalized_stem.is_empty() {
+        if normalized_stem == normalized_dir {
+            score += FOLDER_NAME_MATCH_BONUS;
+        } else if folder_name_overlaps(&normalized_stem, &normalized_dir) {
+            score += FOLDER_NAME_PARTIAL_BONUS;
+        }
     }
 
     if raw.size_bytes > LARGE_BINARY_BYTES {
@@ -429,6 +529,59 @@ mod tests {
             results.iter().filter(|c| c.rejection.is_none()).collect();
         assert_eq!(kept.len(), 2);
         assert_eq!(kept[0].file_name, "Cyberpunk2077.exe");
+    }
+
+    #[test]
+    fn normalized_folder_name_match_tolerates_spacing_and_punctuation() {
+        let tmp = TempDir::new().unwrap();
+        // Folder carries a space the binary omits; the exact (pre-normalization)
+        // comparison would miss this, the normalized one must not.
+        let game_dir = tmp.path().join("Cyberpunk 2077");
+        fs::create_dir_all(&game_dir).unwrap();
+        write_file(&game_dir.join("Cyberpunk2077.exe"), &[0u8; 1024]);
+        write_file(&game_dir.join("RandomOther.exe"), &[0u8; 1024]);
+
+        let results = detect_executable_candidates(&game_dir);
+        let kept: Vec<&ExecutableCandidate> =
+            results.iter().filter(|c| c.rejection.is_none()).collect();
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].file_name, "Cyberpunk2077.exe");
+    }
+
+    #[test]
+    fn rejects_executables_inside_installer_and_redist_folders() {
+        let tmp = TempDir::new().unwrap();
+        // The real game binary sits deep under the engine tree; installer/redist
+        // helpers sit in well-known folders and must be filtered by location even
+        // when their name (e.g. `Cleanup.exe`, `vc_redist.x64.exe`) passes the
+        // filename filters.
+        write_file(
+            &tmp.path().join("SwGame/Binaries/Win64/JediSurvivor.exe"),
+            &[0u8; 1024],
+        );
+        write_file(&tmp.path().join("__Installer/Cleanup.exe"), &[0u8; 1024]);
+        write_file(
+            &tmp.path()
+                .join("Engine/Extras/Redist/en-us/UEPrereqSetup_x64.exe"),
+            &[0u8; 1024],
+        );
+
+        let results = detect_executable_candidates(tmp.path());
+        let kept: Vec<&str> = results
+            .iter()
+            .filter(|c| c.rejection.is_none())
+            .map(|c| c.file_name.as_str())
+            .collect();
+        assert_eq!(kept, ["JediSurvivor.exe"]);
+
+        let cleanup = results
+            .iter()
+            .find(|c| c.file_name == "Cleanup.exe")
+            .expect("cleanup present");
+        assert_eq!(
+            cleanup.rejection.as_ref().map(RejectionReason::kind),
+            Some("non_game_location")
+        );
     }
 
     #[test]

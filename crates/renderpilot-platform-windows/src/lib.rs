@@ -18,6 +18,8 @@ mod steam_appmanifest;
 pub use executable_detection::{
     detect_executable_candidates, ExecutableCandidate, RejectionReason,
 };
+#[cfg(windows)]
+pub use game_libraries::launcher_launch_executable;
 pub use manual_folder::ManualFolderGameSource;
 pub use steam_appmanifest::{
     steam_install_details, steam_install_dirs_in_steamapps, SteamInstallDetails,

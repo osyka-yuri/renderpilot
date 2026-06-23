@@ -86,8 +86,8 @@ pub fn analyze_executable(path: &Path) -> ExeGraphicsInfo {
     };
 
     let arch = architecture_from_machine(headers.machine());
-    let apis = collect_graphics_apis(&headers, &mut file);
-    ExeGraphicsInfo::new(apis, arch)
+    let (apis, dlls) = collect_graphics_apis(&headers, &mut file);
+    ExeGraphicsInfo::new(apis, arch).with_graphics_dlls(dlls)
 }
 
 /// Walks both the static and delay-load import directories of `headers` against
@@ -99,12 +99,18 @@ pub fn analyze_executable(path: &Path) -> ExeGraphicsInfo {
 fn collect_graphics_apis<S: ByteSource>(
     headers: &PeHeaders<'_>,
     source: &mut S,
-) -> Vec<GraphicsApi> {
+) -> (Vec<GraphicsApi>, Vec<String>) {
     let mut apis: Vec<GraphicsApi> = Vec::new();
+    let mut dlls: Vec<String> = Vec::new();
     let mut classify = |name: &str| {
         if let Some(api) = classify_dll(name) {
             if !apis.contains(&api) {
                 apis.push(api);
+            }
+            // `name` is already lowercased by `read_ascii_dll_name`; keep the
+            // exact DLL so the proxy can be the one the game actually loads.
+            if !dlls.iter().any(|existing| existing == name) {
+                dlls.push(name.to_owned());
             }
         }
     };
@@ -124,7 +130,7 @@ fn collect_graphics_apis<S: ByteSource>(
         DELAY_DESCRIPTOR_NAME_OFFSET,
         &mut classify,
     );
-    apis
+    (apis, dlls)
 }
 
 /// Reads just the PE header region (DOS stub + PE/COFF + optional header +
@@ -309,8 +315,8 @@ pub fn analyze_executable_bytes(bytes: &[u8]) -> ExeGraphicsInfo {
     // The slice is both the header buffer and the byte source; the same walk
     // serves the file path in `analyze_executable`.
     let mut source = bytes;
-    let apis = collect_graphics_apis(&headers, &mut source);
-    ExeGraphicsInfo::new(apis, arch)
+    let (apis, dlls) = collect_graphics_apis(&headers, &mut source);
+    ExeGraphicsInfo::new(apis, arch).with_graphics_dlls(dlls)
 }
 
 fn read_ascii_dll_name(bytes: &[u8], offset: usize) -> Option<String> {
