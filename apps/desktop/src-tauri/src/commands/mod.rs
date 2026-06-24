@@ -37,6 +37,8 @@ struct DownloadProgressEvent<'a> {
     id: &'a str,
     downloaded: u64,
     total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    phase: Option<&'a str>,
 }
 
 /// Creates a `ProgressObserver` closure that emits `download-progress` Tauri
@@ -50,11 +52,11 @@ struct DownloadProgressEvent<'a> {
 fn download_progress_emitter(
     app: tauri::AppHandle,
     id: String,
-) -> impl Fn(desktop::DownloadProgress) + Send + Sync {
+) -> impl Fn(desktop::DownloadProgress<'_>) + Send + Sync {
     let epoch = Instant::now();
     let last_ms = AtomicU64::new(u64::MAX); // sentinel: "never emitted"
 
-    move |progress: desktop::DownloadProgress| {
+    move |progress: desktop::DownloadProgress<'_>| {
         let is_final = progress.downloaded_bytes >= progress.total_bytes;
         let is_first = last_ms.load(Ordering::Relaxed) == u64::MAX;
 
@@ -75,6 +77,7 @@ fn download_progress_emitter(
                 id: &id,
                 downloaded: progress.downloaded_bytes,
                 total: progress.total_bytes,
+                phase: progress.phase,
             },
         );
     }
@@ -379,6 +382,16 @@ pub async fn list_game_executable_candidates(
 }
 
 #[tauri::command]
+pub async fn resolve_game_executable(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::resolve_game_executable(&context, game_id)).await
+}
+
+#[tauri::command]
 pub async fn set_game_executable_override(
     game_id: String,
     absolute_path: String,
@@ -555,4 +568,174 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
             ),
         )))
     }
+}
+
+// ---------------------------------------------------------------------------
+// RenoDX HDR add-on
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn renodx_status(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || desktop::renodx_status(&context, game_id)).await
+}
+
+#[tauri::command]
+pub async fn renodx_availability(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        desktop::renodx_availability(&context, game_id).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_install(
+    app: tauri::AppHandle,
+    game_id: String,
+    confirm_anticheat: bool,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, game_id.clone());
+        desktop::renodx_install(
+            &context,
+            game_id,
+            confirm_anticheat,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_install_from_file(
+    app: tauri::AppHandle,
+    game_id: String,
+    file_path: String,
+    confirm_anticheat: bool,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let file_path = require_non_empty_string("file_path", file_path)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, game_id.clone());
+        desktop::renodx_install_from_file(
+            &context,
+            game_id,
+            file_path,
+            confirm_anticheat,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_uninstall(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || desktop::renodx_uninstall(&context, game_id)).await
+}
+
+#[tauri::command]
+pub async fn renodx_check_update(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        desktop::renodx_check_update(&context, game_id).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_update(
+    app: tauri::AppHandle,
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, game_id.clone());
+        desktop::renodx_update(
+            &context,
+            game_id,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_check_updates(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move { desktop::renodx_check_updates(&context).await })
+        .await
+}
+
+#[tauri::command]
+pub async fn renodx_install_dlss_fix(
+    context: tauri::State<'_, Arc<Context>>,
+    app: tauri::AppHandle,
+    game_id: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+    let progress = download_progress_emitter(app, game_id.clone());
+
+    run_desktop_async_command(move || async move {
+        desktop::renodx_install_dlss_fix(&context, game_id, Some(&progress)).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_uninstall_dlss_fix(
+    context: tauri::State<'_, Arc<Context>>,
+    game_id: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || desktop::renodx_uninstall_dlss_fix(&context, game_id)).await
+}
+
+#[tauri::command]
+pub async fn renodx_dlss_fix_availability(
+    context: tauri::State<'_, Arc<Context>>,
+    game_id: String,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || desktop::renodx_dlss_fix_availability(&context, game_id)).await
 }

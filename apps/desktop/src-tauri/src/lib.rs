@@ -339,6 +339,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::list_nvapi_supported_settings,
         commands::list_nvapi_setting_states,
         commands::list_game_executable_candidates,
+        commands::resolve_game_executable,
         commands::set_game_executable_override,
         commands::clear_game_executable_override,
         commands::get_nvapi_setting_state,
@@ -351,6 +352,18 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // DLSS indicator (system-wide)
         commands::get_dlss_indicator_state,
         commands::set_dlss_indicator_enabled,
+        // RenoDX HDR add-on
+        commands::renodx_status,
+        commands::renodx_availability,
+        commands::renodx_install,
+        commands::renodx_install_from_file,
+        commands::renodx_uninstall,
+        commands::renodx_check_update,
+        commands::renodx_update,
+        commands::renodx_check_updates,
+        commands::renodx_install_dlss_fix,
+        commands::renodx_uninstall_dlss_fix,
+        commands::renodx_dlss_fix_availability,
         // App initialization / elevation
         commands::get_app_initialization_state,
         commands::request_admin_relaunch,
