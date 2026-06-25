@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { open } from '@tauri-apps/plugin-shell';
   import EyeIcon from '@lucide/svelte/icons/eye';
   import EyeOffIcon from '@lucide/svelte/icons/eye-off';
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+  import { openExternal } from '@shared/api';
   import { Button, Input, Label, Spinner } from '@shared/ui';
   import type { SettingsMessageKind } from '@entities/settings';
   import { t } from '@shared/i18n';
@@ -55,7 +55,7 @@
 
   async function openKeyPage(): Promise<void> {
     try {
-      await open(STEAM_GRID_DB_KEY_PAGE_URL);
+      await openExternal(STEAM_GRID_DB_KEY_PAGE_URL);
     } catch (error) {
       console.error(error);
     }

@@ -14,3 +14,4 @@ export {
   type FilePickerOptions,
   type FolderPickerOptions,
 } from './desktop-dialog';
+export { openExternal } from './desktop-open-external';

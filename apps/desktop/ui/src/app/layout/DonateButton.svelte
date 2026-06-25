@@ -1,6 +1,6 @@
 <script lang="ts">
   import HeartIcon from '@lucide/svelte/icons/heart';
-  import { open } from '@tauri-apps/plugin-shell';
+  import { openExternal } from '@shared/api';
   import { t } from '@shared/i18n';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
 
@@ -13,7 +13,7 @@
 
   async function openDonatePage(): Promise<void> {
     try {
-      await open(DONATE_URL);
+      await openExternal(DONATE_URL);
     } catch (error) {
       console.error(error);
     }
