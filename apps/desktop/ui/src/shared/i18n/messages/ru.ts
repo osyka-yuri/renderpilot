@@ -221,18 +221,26 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.mixedWarning':
     'Плагины используют разные версии. Выберите версию выше для синхронизации.',
 
+  // ── Game details: executable selector (shared) ──
+  'gameDetails.executable.title': 'Исполняемый файл игры',
+  'gameDetails.executable.description':
+    'Исполняемый файл игры — к нему применяется профиль NVIDIA, а RenoDX устанавливается в его папку.',
+  'gameDetails.executable.detectedGroup': 'Найденные игровые файлы',
+  'gameDetails.executable.otherGroup': 'Прочее (лаунчеры, установщики, утилиты)',
+  'gameDetails.executable.customBadge': 'Вручную',
+  'gameDetails.executable.reset': 'Сбросить на автоопределение',
+  'gameDetails.executable.resetConfirm': 'Отменить ручной выбор и использовать автоопределение?',
+  'gameDetails.executable.tooltipAuto':
+    'Исполняемый файл игры: определён автоматически. Используется профилем NVIDIA и RenoDX.',
+  'gameDetails.executable.tooltipCustom':
+    'Исполняемый файл игры: выбран вручную. Используется профилем NVIDIA и RenoDX.',
   // ── Game details: NVIDIA profile card ──
   'gameDetails.profile.title': 'Профиль NVIDIA',
   'gameDetails.profile.description': 'Настройте параметры драйвера NVIDIA для этой игры.',
-  'gameDetails.profile.target': 'Исполняемый файл',
-  'gameDetails.profile.loading': 'Загрузка...',
   'gameDetails.profile.pinnedManual': 'Выбрано вручную.',
   'gameDetails.profile.autoDetected': 'Определено автоматически.',
   'gameDetails.profile.noExeDetected': 'Исполняемый файл не найден.',
   'gameDetails.profile.noExe': 'Нет файла',
-  'gameDetails.profile.autoDetect': 'Автоопределение',
-  'gameDetails.profile.filteredTag': '(скрыто)',
-  'gameDetails.profile.filteredLabel': '{fileName} (скрыто)',
   'gameDetails.profile.noProfile': 'Профиль NVIDIA не найден.',
 
   // ── Game details: NVAPI setting row ──
@@ -474,4 +482,97 @@ export const ru: Record<MessageKey, MessageValue> = {
   'suggested_action.refresh_or_scan_game_folder': 'Обновите список или отсканируйте папку заново.',
   'suggested_action.relaunch_as_administrator':
     'Перезапустите приложение от имени администратора и попробуйте снова.',
+  // ── Game details: RenoDX ──
+  'gameDetails.renodx.title': 'RenoDX HDR',
+  'gameDetails.renodx.description': 'Добавьте HDR и тон-маппинг в игру через ReShade-аддон RenoDX.',
+  'gameDetails.renodx.loading': 'Проверка доступности…',
+  'gameDetails.renodx.loadFailed': 'Не удалось проверить доступность RenoDX',
+  'gameDetails.renodx.installError': 'Не удалось установить RenoDX',
+  'gameDetails.renodx.uninstallError': 'Не удалось удалить RenoDX',
+  'gameDetails.renodx.unsupported': 'Для этой игры нет профиля RenoDX.',
+  'gameDetails.renodx.incompatible': 'RenoDX нельзя установить: {reason}.',
+  'gameDetails.renodx.statusInstalled': 'Установлено',
+  'gameDetails.renodx.actionInstall': 'Установить',
+  'gameDetails.renodx.actionUninstall': 'Удалить RenoDX',
+  'gameDetails.renodx.installing': 'Установка…',
+  'gameDetails.renodx.riskSafe': 'Одиночная игра — установка безопасна.',
+  'gameDetails.renodx.riskWarn': 'Обнаружен античит — установка может привести к бану.',
+  'gameDetails.renodx.riskBlocked': 'Установка для этой игры заблокирована.',
+  'gameDetails.renodx.confirmAccept': 'Всё равно установить',
+  'gameDetails.renodx.confirmBody':
+    'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
+  'gameDetails.renodx.cancel': 'Отмена',
+  // ── Game details: RenoDX incompatibility reasons ──
+  'gameDetails.renodx.reason.api_unsupported': 'неподдерживаемый графический API',
+  'gameDetails.renodx.reason.api_not_allowed': 'графический API не разрешён для этой игры',
+  'gameDetails.renodx.reason.arch_unknown': 'неизвестная разрядность исполняемого файла',
+  'gameDetails.otherTab': 'Другое',
+  'gameDetails.renodx.retry': 'Повторить',
+  'gameDetails.renodx.unavailable': 'RenoDX сейчас недоступен.',
+  'renodx.generic.universal': 'Универсальный RenoDX',
+  'renodx.generic.unreal': 'Универсальный RenoDX (Unreal)',
+  'renodx.generic.unreal_extended': 'Универсальный RenoDX (Unreal Extended)',
+  'renodx.generic.unity': 'Универсальный RenoDX (Unity)',
+  'renodx.phase.finalizing': 'Завершение…',
+  'gameDetails.renodx.confidenceVerified': 'Проверено',
+  'gameDetails.renodx.confidenceExperimental': 'Экспериментально',
+  'gameDetails.renodx.confidenceUntested': 'Не протестировано',
+  'gameDetails.renodx.external':
+    'Это дополнение RenoDX распространяется отдельно и должно быть загружено вручную.',
+  'gameDetails.renodx.actionOpenExternal': 'Открыть страницу загрузки',
+  'gameDetails.renodx.external.installFromFile': 'Установить из файла',
+  'gameDetails.renodx.external.dropHint':
+    'Скачайте дополнение, затем перетащите его сюда или выберите файл.',
+  'gameDetails.renodx.external.invalidFile':
+    'Этот файл не является дополнением RenoDX (.addon64 / .addon32).',
+  'gameDetails.renodx.fileInstall.title': 'Ручная установка',
+  'gameDetails.renodx.fileInstall.description':
+    'Для этой игры нет автоматического аддона. Установите хост ReShade и добавьте аддон RenoDX, скачанный вручную.',
+  'gameDetails.renodx.fileInstall.chooseFile': 'Выбрать файл аддона…',
+  'gameDetails.renodx.fileInstall.chooseAnother': 'Выбрать другой файл',
+  'gameDetails.renodx.fileInstall.expected': 'Ожидаемый аддон: {name}',
+  'gameDetails.renodx.fileInstall.confirm': 'Установить {fileName}?',
+  'gameDetails.renodx.fileInstall.errorExtension':
+    'Это не файл аддона RenoDX (.addon64 / .addon32).',
+  'gameDetails.renodx.fileInstall.errorArch':
+    'Этот аддон {addon}, а игра {game}. Скачайте подходящий аддон.',
+  'gameDetails.renodx.fileInstall.warnName':
+    'Это не похоже на ожидаемый аддон ({expected}). Устанавливайте, только если уверены.',
+  'gameDetails.renodx.nativeHdr': 'Эта игра уже поддерживает нативный HDR — RenoDX не требуется.',
+  'gameDetails.renodx.blacklisted': 'RenoDX не рекомендуется для этой игры.',
+  'gameDetails.renodx.updateAvailableAddon': 'Обновление аддона',
+  'gameDetails.renodx.updateAvailableHost': 'Обновление ReShade',
+  'gameDetails.renodx.updateAvailableBoth': 'Обновление аддона и ReShade',
+  'gameDetails.renodx.updatesNotTracked': 'Обновления не отслеживаются',
+  'gameDetails.renodx.hostManaged': 'Управляется RenderPilot — обновляется автоматически',
+  'gameDetails.renodx.hostForeign': 'Ваша установка — RenderPilot её не трогает',
+  'gameDetails.renodx.actionUpdate': 'Обновить',
+  'gameDetails.renodx.updating': 'Обновление…',
+  'gameDetails.renodx.updateError': 'Не удалось обновить RenoDX',
+  'gameDetails.renodx.actionInstallDlssFix': 'Установить',
+  'gameDetails.renodx.actionRemoveDlssFix': 'Удалить',
+  'gameDetails.renodx.dlssFixInstalled': 'DLSS-Fix установлен',
+  'gameDetails.renodx.dlssFixInstallError': 'Ошибка установки DLSS-Fix',
+  'gameDetails.renodx.dlssFixRemoveError': 'Ошибка удаления DLSS-Fix',
+  'gameDetails.renodx.updateAvailableDlssFix': 'Доступно обновление DLSS-Fix',
+  'gameDetails.renodx.fresh.current': 'Актуально',
+  'gameDetails.renodx.fresh.available': 'Доступно обновление',
+  'gameDetails.renodx.fresh.unknown': 'Не удалось проверить',
+  'gameDetails.renodx.fresh.checking': 'Проверка…',
+  'gameDetails.renodx.addonDated': 'Аддон от {date}',
+  'gameDetails.renodx.installedOn': 'Установлено {date}',
+  'gameDetails.renodx.lastChecked': 'Проверено {time}',
+  'gameDetails.renodx.lastCheckedNever': 'Ещё не проверялось',
+  'gameDetails.renodx.actionCheckUpdates': 'Проверить обновления',
+  'gameDetails.renodx.component.reshade': 'Хост ReShade',
+  'gameDetails.renodx.component.addon': 'Аддон RenoDX',
+  'gameDetails.renodx.component.addonDesc': 'HDR-аддон для этой игры',
+  'gameDetails.renodx.component.addonFileInstall':
+    'Установлено из файла — обновления не отслеживаются',
+  'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
+  'gameDetails.renodx.component.dlssFixDesc': 'Убирает мерцание при DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixOffer':
+    'Доступно — убирает мерцание при DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixHint':
+    'Это общее исправление для ReShade, не специфичное для RenoDX. Оно заставляет ReShade рисовать по нативным кадрам игры, а не по кадрам Frame Generation, и скрывает DLSS-апскейлинг от ReShade, если игра корректно реализует Streamline.',
 };
