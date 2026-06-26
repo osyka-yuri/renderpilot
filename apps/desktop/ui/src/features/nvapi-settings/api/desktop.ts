@@ -3,6 +3,7 @@ import { requireNonBlankString } from '@shared/validation';
 
 import type {
   DlssIndicatorState,
+  EffectiveExecutable,
   ExecutableCandidate,
   SettingDescriptor,
   SettingStateResponse,
@@ -16,6 +17,12 @@ export async function listNvapiSupportedSettings(gameId: string): Promise<Settin
 
 export async function listGameExecutableCandidates(gameId: string): Promise<ExecutableCandidate[]> {
   return invokeDesktop<ExecutableCandidate[]>('list_game_executable_candidates', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+export async function resolveGameExecutable(gameId: string): Promise<EffectiveExecutable | null> {
+  return invokeDesktop<EffectiveExecutable | null>('resolve_game_executable', {
     gameId: requireNonBlankString(gameId, 'gameId'),
   });
 }

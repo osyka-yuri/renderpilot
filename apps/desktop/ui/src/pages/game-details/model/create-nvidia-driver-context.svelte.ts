@@ -1,29 +1,24 @@
 import { describeCommandErrorTechnical } from '@shared/api';
 import { t } from '@shared/i18n';
 import {
-  clearGameExecutableOverride,
   createNvapiSettingsStore,
-  listGameExecutableCandidates,
   listNvapiSettingStates,
   revertNvapiSetting,
-  setGameExecutableOverride,
   setNvapiSettingValue,
-  type ExecutableCandidate,
   type SettingStateResponse,
 } from '@features/nvapi-settings';
 
 /**
- * Single reactive context for the whole NVIDIA tab.
+ * Reactive context for the NVIDIA tab's driver settings.
  *
  * Owns the live state of every DLSS catalog setting (read in one batched DRS
- * session) **and** the driver-profile executable selection. Keeping both in one
- * context matters: changing the profile executable changes which driver profile
- * every setting reads from, so an override must refresh all of them — which a
- * single `reload()` here does for free.
+ * session) and the profile status (whether the effective exe has a driver
+ * profile). The **executable selection** itself lives in the shared game-level
+ * {@link createGameExecutableContext}; when the user changes it there, the page
+ * calls {@link reload} so every setting re-reads from the new profile's exe.
  *
  * The settings half is delegated to the shared {@link createNvapiSettingsStore}
- * (family grouping, warnings, optimistic writes, elevation gating); this context
- * only layers on the per-game executable resolution.
+ * (family grouping, warnings, optimistic writes, elevation gating).
  */
 
 export type NvidiaDriverContext = ReturnType<typeof createNvidiaDriverContext>;
@@ -36,8 +31,6 @@ export type CreateNvidiaDriverContextOptions = {
 export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverContextOptions) {
   const store = createNvapiSettingsStore({ isElevated });
 
-  // ── reactive state specific to per-game profile resolution ───────
-  let candidates: ExecutableCandidate[] = $state([]);
   // Guards a stale in-flight reload from overwriting a newer game's state.
   let activeGameId: string | null = $state(null);
 
@@ -49,40 +42,39 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   const effectiveExeSource = $derived(representative?.effective_exe_source ?? null);
   const hasProfile = $derived(representative?.has_profile_for_exe ?? false);
 
-  const supportedCandidates = $derived(candidates.filter((c) => c.rejection === null));
-  const filteredOutCandidates = $derived(candidates.filter((c) => c.rejection !== null));
-
   // ── actions ──────────────────────────────────────────────────────
   async function reload(gameId: string): Promise<void> {
     activeGameId = gameId;
     store.setBusy(true);
     store.setLoadError(null);
     try {
-      const [stateResponse, candidatesResponse] = await Promise.all([
-        listNvapiSettingStates(gameId),
-        listGameExecutableCandidates(gameId),
-      ]);
-      if (activeGameId !== gameId) return;
+      const stateResponse = await listNvapiSettingStates(gameId);
+      if (activeGameId !== gameId) {
+        return;
+      }
       store.setStates(stateResponse);
-      candidates = candidatesResponse;
     } catch (e) {
-      if (activeGameId !== gameId) return;
+      if (activeGameId !== gameId) {
+        return;
+      }
       store.setLoadError(describeCommandErrorTechnical(e));
       store.setStates([]);
-      candidates = [];
     } finally {
-      if (activeGameId === gameId) store.setBusy(false);
+      if (activeGameId === gameId) {
+        store.setBusy(false);
+      }
     }
   }
 
   function clear(): void {
     activeGameId = null;
-    candidates = [];
     store.clearAll();
   }
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
-    if (!gameId || !store.ensureElevated(t('nvidia.action.changeSetting'))) return;
+    if (!gameId || !store.ensureElevated(t('nvidia.action.changeSetting'))) {
+      return;
+    }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
       setNvapiSettingValue(gameId, key, wire),
     );
@@ -93,36 +85,12 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     key: string,
     target: 'predefined' | 'baseline',
   ): Promise<void> {
-    if (!gameId || !store.ensureElevated(t('nvidia.action.revertSetting'))) return;
+    if (!gameId || !store.ensureElevated(t('nvidia.action.revertSetting'))) {
+      return;
+    }
     const label =
       target === 'predefined' ? t('nvidia.revertDefaultFailed') : t('nvidia.revertBaselineFailed');
     await store.runWrite(key, label, () => revertNvapiSetting(gameId, key, target));
-  }
-
-  async function setExecutableOverride(gameId: string, absolutePath: string): Promise<void> {
-    if (!gameId) return;
-    store.setBusy(true);
-    try {
-      await setGameExecutableOverride(gameId, absolutePath);
-      await reload(gameId);
-    } catch (e) {
-      store.reportActionError(t('nvidia.setExeFailed'), e);
-    } finally {
-      store.setBusy(false);
-    }
-  }
-
-  async function clearExecutableOverride(gameId: string): Promise<void> {
-    if (!gameId) return;
-    store.setBusy(true);
-    try {
-      await clearGameExecutableOverride(gameId);
-      await reload(gameId);
-    } catch (e) {
-      store.reportActionError(t('nvidia.clearExeFailed'), e);
-    } finally {
-      store.setBusy(false);
-    }
   }
 
   return {
@@ -148,12 +116,6 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     get nvapiAvailable() {
       return store.nvapiAvailable;
     },
-    get supportedCandidates() {
-      return supportedCandidates;
-    },
-    get filteredOutCandidates() {
-      return filteredOutCandidates;
-    },
     get profileWarnings() {
       return store.profileWarnings;
     },
@@ -169,7 +131,5 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     clear,
     setValue,
     revert,
-    setExecutableOverride,
-    clearExecutableOverride,
   };
 }

@@ -15,3 +15,4 @@ export {
   type FolderPickerOptions,
 } from './desktop-dialog';
 export { openExternal } from './desktop-open-external';
+export { createFileDropTarget, type FileDropTargetCallbacks } from './desktop-drag-drop';

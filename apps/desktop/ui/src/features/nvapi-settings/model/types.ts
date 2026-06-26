@@ -28,6 +28,16 @@ export type ExecutableCandidate = {
   rejection_token: string | null;
 };
 
+/**
+ * The game's resolved primary executable, shared by the NVIDIA profile target and
+ * the RenoDX install location. Independent of NVAPI, so it resolves for any GPU.
+ */
+export type EffectiveExecutable = {
+  file_name: string;
+  absolute_path: string;
+  source: 'auto' | 'override';
+};
+
 export type ValueOption = {
   wire: string;
   label: string;

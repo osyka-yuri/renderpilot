@@ -5,6 +5,7 @@ export type DownloadProgress = {
   id: string;
   downloaded: number;
   total: number;
+  phase?: string;
 };
 
 type ProgressEntry = DownloadProgress & { seq: number };
