@@ -20,8 +20,8 @@ use std::thread;
 use std::time::Duration;
 
 use reqwest::{
-    blocking::{Client, Response},
     StatusCode,
+    blocking::{Client, Response},
 };
 
 use super::super::paths::MAX_COVER_BYTES;

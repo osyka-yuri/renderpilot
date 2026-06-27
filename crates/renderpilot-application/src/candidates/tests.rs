@@ -5,7 +5,7 @@ use renderpilot_domain::{
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates};
-use super::matcher::{find_replacement_candidates, CandidateContext};
+use super::matcher::{CandidateContext, find_replacement_candidates};
 
 #[test]
 fn selects_only_same_technology_candidates() {

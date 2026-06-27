@@ -1,17 +1,17 @@
 use renderpilot_application::{AppResult, GameRepository};
 use renderpilot_domain::{GameId, GameInstallation};
-use rusqlite::{named_params, Connection, OptionalExtension, Statement, Transaction};
+use rusqlite::{Connection, OptionalExtension, Statement, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
 
 use super::{
+    SqliteStorage,
     catalog_select_sql::{
         FIND_GAME_SQL, LIST_DISTINCT_GAME_LAUNCHERS_SQL, LIST_DISTINCT_GAME_LIBRARIES_SQL,
         LIST_GAMES_SQL,
     },
-    game_covers::{find_cover_in_connection, DeletedGameInfo},
+    game_covers::{DeletedGameInfo, find_cover_in_connection},
     row_mapping::game_from_row,
-    SqliteStorage,
 };
 
 const UPSERT_GAME_SQL: &str = "

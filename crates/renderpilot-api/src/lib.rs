@@ -41,15 +41,15 @@ pub fn gc_cover_orphans_on_startup(context: &renderpilot_orchestration::Context)
 }
 
 pub use self::catalog::{
-    get_catalog_setting, get_game_details, list_games, query_game_cards, set_catalog_setting,
-    set_game_favorite, set_game_hidden, QueryGameCardsRequest,
+    QueryGameCardsRequest, get_catalog_setting, get_game_details, list_games, query_game_cards,
+    set_catalog_setting, set_game_favorite, set_game_hidden,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
 pub use self::libraries::{
+    DownloadProgress, LibraryManifest, LibraryManifestEntry, LibraryState, ProgressObserver,
     delete_library, download_artifact, download_library, fetch_libraries_manifest,
-    get_libraries_manifest, get_library_states, DownloadProgress, LibraryManifest,
-    LibraryManifestEntry, LibraryState, ProgressObserver,
+    get_libraries_manifest, get_library_states,
 };
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,

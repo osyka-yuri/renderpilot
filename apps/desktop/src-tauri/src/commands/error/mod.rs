@@ -13,7 +13,7 @@ use serde::Serialize;
 
 pub(crate) use kind::CommandErrorKind;
 
-use strings::{user_message as user_messages, SuggestedActions, UserMessage};
+use strings::{SuggestedActions, UserMessage, user_message as user_messages};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

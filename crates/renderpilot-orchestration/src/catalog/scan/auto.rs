@@ -1,8 +1,8 @@
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use crate::catalog::ScanFolderCatalogResult;
 use crate::ServiceError;
+use crate::catalog::ScanFolderCatalogResult;
 
 use super::scan_impl;
 use super::scan_plan::{DetectionMode, InstallRootStrategy};

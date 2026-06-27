@@ -10,17 +10,17 @@ use std::path::Path;
 use renderpilot_orchestration::ServiceError;
 
 use crate::{
-    utils::{parse_game_id, to_json, JsonResult},
     ApiError,
+    utils::{JsonResult, parse_game_id, to_json},
 };
 
 use renderpilot_orchestration::domain::GameId;
 use renderpilot_orchestration::nvapi::dto::{
-    executable_candidate_dto, setting_descriptor_dto, ExecutableCandidateDto, SettingDescriptorDto,
+    ExecutableCandidateDto, SettingDescriptorDto, executable_candidate_dto, setting_descriptor_dto,
 };
 use renderpilot_orchestration::nvapi::ops::{
-    read_all_setting_states, read_setting_state, resolve_revert_op, validate_value_supported,
-    write_setting_value, SettingTarget, WriteOp,
+    SettingTarget, WriteOp, read_all_setting_states, read_setting_state, resolve_revert_op,
+    validate_value_supported, write_setting_value,
 };
 use renderpilot_orchestration::nvapi::registry::{lookup_setting, supported_settings};
 use renderpilot_orchestration::nvapi::resolve::{

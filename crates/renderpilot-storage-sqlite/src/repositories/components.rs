@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use renderpilot_application::{AppResult, ComponentRepository};
 use renderpilot_domain::{GameId, GraphicsComponent};
-use rusqlite::{named_params, CachedStatement, Connection, OptionalExtension, Transaction};
+use rusqlite::{CachedStatement, Connection, OptionalExtension, Transaction, named_params};
 use serde_json::json;
 
 use crate::{
@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    catalog_select_sql::LIST_COMPONENTS_FOR_GAME_SQL, row_mapping::component_from_row,
-    SqliteStorage,
+    SqliteStorage, catalog_select_sql::LIST_COMPONENTS_FOR_GAME_SQL,
+    row_mapping::component_from_row,
 };
 
 const DELETE_STALE_COMPONENTS_SQL: &str = "

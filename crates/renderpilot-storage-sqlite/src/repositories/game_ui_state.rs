@@ -4,9 +4,9 @@
 //! The row is optional: absence means the default state (`false` / `false`).
 
 use renderpilot_application::AppResult;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
-use crate::{error::storage_context, SqliteStorage};
+use crate::{SqliteStorage, error::storage_context};
 
 /// One row from `game_ui_state`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,10 +176,12 @@ mod tests {
                 .expect("ui state query should succeed after clear"),
             None
         );
-        assert!(storage
-            .list_all_game_ui_state()
-            .expect("ui state rows should list after clear")
-            .is_empty());
+        assert!(
+            storage
+                .list_all_game_ui_state()
+                .expect("ui state rows should list after clear")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -200,9 +202,11 @@ mod tests {
                 .expect("ui state query should succeed after game delete"),
             None
         );
-        assert!(storage
-            .list_all_game_ui_state()
-            .expect("ui state rows should list after game delete")
-            .is_empty());
+        assert!(
+            storage
+                .list_all_game_ui_state()
+                .expect("ui state rows should list after game delete")
+                .is_empty()
+        );
     }
 }

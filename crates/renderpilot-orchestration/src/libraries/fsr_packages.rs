@@ -9,8 +9,8 @@
 //! the matched cohesive package for entry-point-lineage upgrades.
 
 use renderpilot_domain::{
-    fsr, ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact,
-    PathRef, Sha256Hash, Version,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
+    Sha256Hash, Version, fsr,
 };
 use std::collections::BTreeMap;
 

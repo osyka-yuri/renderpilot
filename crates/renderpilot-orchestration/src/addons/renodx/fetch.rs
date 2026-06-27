@@ -13,13 +13,13 @@ use std::path::Path;
 use renderpilot_domain::{Architecture, GameId};
 use sha2::{Digest, Sha256};
 
-use crate::net::{download_with_referer, download_with_validators, ProgressObserver};
 use crate::ServiceError;
+use crate::net::{ProgressObserver, download_with_referer, download_with_validators};
 
 use super::errors;
 use super::install::PreparedInstall;
 use super::matcher::ResolvedInstall;
-use super::reshade::{detect_reshade, ReshadeState};
+use super::reshade::{ReshadeState, detect_reshade};
 use super::source;
 use super::types::{ReshadeConfig, ReshadeIniTweaks};
 

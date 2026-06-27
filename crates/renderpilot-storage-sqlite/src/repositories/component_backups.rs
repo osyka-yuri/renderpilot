@@ -8,11 +8,11 @@ use std::collections::HashSet;
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{ComponentFile, ComponentId, GameId, GraphicsComponent};
-use rusqlite::{named_params, OptionalExtension, Transaction};
+use rusqlite::{OptionalExtension, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
 
-use super::{components, SqliteStorage};
+use super::{SqliteStorage, components};
 
 const SELECT_BACKUP_SQL: &str = "
     SELECT files_json

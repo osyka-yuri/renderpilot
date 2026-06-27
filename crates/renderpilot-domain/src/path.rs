@@ -3,7 +3,7 @@ use std::{error::Error, fmt};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::text::{normalize_required_text, RequiredTextError};
+use crate::text::{RequiredTextError, normalize_required_text};
 
 const PATH_SEPARATOR: char = '/';
 const WINDOWS_SEPARATOR: char = '\\';

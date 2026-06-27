@@ -291,10 +291,12 @@ mod tests {
         // Two sections: [ADDON] with LoadFromDllMain, [RENODX-DLSSFIX] with paths.
         assert_eq!(sections.len(), 2);
         assert_eq!(sections[0].name, "ADDON");
-        assert!(sections[0]
-            .keys
-            .iter()
-            .any(|(k, v)| k == "LoadFromDllMain" && v == "renodx-dlssfix.addon64"));
+        assert!(
+            sections[0]
+                .keys
+                .iter()
+                .any(|(k, v)| k == "LoadFromDllMain" && v == "renodx-dlssfix.addon64")
+        );
         assert_eq!(sections[1].name, "RENODX-DLSSFIX");
         assert_eq!(
             sections[1].keys,

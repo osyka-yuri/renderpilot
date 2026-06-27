@@ -14,8 +14,8 @@ mod validation;
 mod tests;
 
 use self::migration::{
-    apply_initial_migration, determine_migration_action, reset_catalog_schema, set_user_version,
-    MigrationAction,
+    MigrationAction, apply_initial_migration, determine_migration_action, reset_catalog_schema,
+    set_user_version,
 };
 use self::objects::SchemaObjectKind;
 use self::pragmas::ForeignKeysState;

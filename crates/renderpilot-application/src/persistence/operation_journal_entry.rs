@@ -279,10 +279,12 @@ mod tests {
 
         assert_eq!(updated.operation().status, OperationStatus::Completed);
         assert_eq!(updated.operation().completed_at, Some(completed_at));
-        assert!(updated
-            .items()
-            .iter()
-            .all(|item| item.status == OperationStatus::Completed));
+        assert!(
+            updated
+                .items()
+                .iter()
+                .all(|item| item.status == OperationStatus::Completed)
+        );
     }
 
     #[test]

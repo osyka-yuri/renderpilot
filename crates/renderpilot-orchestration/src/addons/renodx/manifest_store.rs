@@ -8,8 +8,8 @@
 
 use std::time::Duration;
 
-use crate::cdn::{self, CdnManifestSpec};
 use crate::ServiceError;
+use crate::cdn::{self, CdnManifestSpec};
 
 use super::parse_manifest;
 use super::types::RenoDxManifest;

@@ -11,4 +11,4 @@ mod matcher;
 mod tests;
 
 pub use dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
-pub use matcher::{find_replacement_candidates, CandidateContext};
+pub use matcher::{CandidateContext, find_replacement_candidates};

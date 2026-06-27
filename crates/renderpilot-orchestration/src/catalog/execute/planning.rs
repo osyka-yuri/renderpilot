@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_domain::{
-    fsr, ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
+    ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 

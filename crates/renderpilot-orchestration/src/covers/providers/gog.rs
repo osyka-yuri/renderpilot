@@ -1,6 +1,6 @@
 //! GOG Galaxy artwork via the public product API and `*.gog-statics.com` vertical grid assets.
 
-use reqwest::{blocking::Client, StatusCode, Url};
+use reqwest::{StatusCode, Url, blocking::Client};
 use serde::Deserialize;
 
 use super::super::validation::validate_cover_bytes;

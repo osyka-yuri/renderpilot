@@ -7,8 +7,8 @@
 //! (`renderpilot-detection`) already discovered every `nvngx_dlss*.dll`, read its
 //! PE version, and persisted it, so we read that instead of duplicating the scan.
 
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 
 use renderpilot_domain::{GraphicsComponent, GraphicsTechnology, Version};

@@ -15,8 +15,8 @@ use std::fmt;
 use std::sync::LazyLock;
 
 use renderpilot_nvapi::{
-    setting::{NvapiValueOption, SettingContext},
     DlssDllKind, NvapiSetting, NvapiValueType,
+    setting::{NvapiValueOption, SettingContext},
 };
 use serde::Deserialize;
 

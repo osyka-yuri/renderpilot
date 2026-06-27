@@ -14,4 +14,4 @@ pub use findings::{OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWa
 pub use plan::{OperationPlan, OperationPlanFile, OperationPlanFileAction};
 
 pub(crate) use assessment::OperationPlanAssessment;
-pub(crate) use identity::{generate_operation_plan_identity, OperationPlanIdentity};
+pub(crate) use identity::{OperationPlanIdentity, generate_operation_plan_identity};

@@ -3,9 +3,7 @@ use renderpilot_orchestration::domain::{
     AddonKind, GameId, InstalledAddon, PathRef, TrackedSource, TrackedSourceRole,
 };
 
-use crate::run;
-
-use super::{args, CatalogFixture};
+use super::{CatalogFixture, args};
 
 const GAME_ID: &str = "manual:C:/Games/RenoGame";
 
@@ -31,9 +29,11 @@ fn installed_record() -> InstalledAddon {
 
 #[test]
 fn renodx_status_reports_not_installed_for_a_game_without_an_addon() {
-    let _fixture = CatalogFixture::new("renodx-status-empty");
+    let fixture = CatalogFixture::new("renodx-status-empty");
 
-    let output = run(args(&["renodx", "status", "--game", GAME_ID])).expect("status should render");
+    let output = fixture
+        .run(args(&["renodx", "status", "--game", GAME_ID]))
+        .expect("status should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["status"], "not_installed");
@@ -47,7 +47,9 @@ fn renodx_status_reports_installed_after_a_record_is_stored() {
         .upsert_installed_addon(&installed_record())
         .expect("seed record");
 
-    let output = run(args(&["renodx", "status", "--game", GAME_ID])).expect("status should render");
+    let output = fixture
+        .run(args(&["renodx", "status", "--game", GAME_ID]))
+        .expect("status should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["status"], "installed");
@@ -63,8 +65,9 @@ fn renodx_uninstall_clears_the_record() {
         .upsert_installed_addon(&installed_record())
         .expect("seed record");
 
-    let output =
-        run(args(&["renodx", "uninstall", "--game", GAME_ID])).expect("uninstall should render");
+    let output = fixture
+        .run(args(&["renodx", "uninstall", "--game", GAME_ID]))
+        .expect("uninstall should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["status"], "not_installed");
@@ -80,10 +83,11 @@ fn renodx_uninstall_clears_the_record() {
 
 #[test]
 fn renodx_uninstall_on_a_game_without_an_addon_is_an_error() {
-    let _fixture = CatalogFixture::new("renodx-uninstall-empty");
+    let fixture = CatalogFixture::new("renodx-uninstall-empty");
 
-    let error =
-        run(args(&["renodx", "uninstall", "--game", GAME_ID])).expect_err("uninstall should fail");
+    let error = fixture
+        .run(args(&["renodx", "uninstall", "--game", GAME_ID]))
+        .expect_err("uninstall should fail");
 
     let message = error.to_string();
     assert!(
@@ -108,7 +112,9 @@ fn renodx_status_reports_foreign_host_when_no_host_source_is_recorded() {
         .upsert_installed_addon(&foreign)
         .expect("seed foreign record");
 
-    let output = run(args(&["renodx", "status", "--game", GAME_ID])).expect("status should render");
+    let output = fixture
+        .run(args(&["renodx", "status", "--game", GAME_ID]))
+        .expect("status should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["status"], "installed");

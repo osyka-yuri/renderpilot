@@ -1,8 +1,8 @@
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
 };
@@ -10,7 +10,7 @@ use std::{
 use crate::ServiceError;
 use renderpilot_domain::GameId;
 
-use crate::catalog::auto_scan::{open_auto_scan_batch, scan_auto_in_batch, AutoScanBatch};
+use crate::catalog::auto_scan::{AutoScanBatch, open_auto_scan_batch, scan_auto_in_batch};
 
 /// Synthetic `root` label used in [`AutoScanDiscoveryResult::errors`] for failures
 /// that are not attached to a single install path (catalog-wide pruning
@@ -267,7 +267,7 @@ fn normalized_path_string(path: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_worker_count_with_cpu, AUTO_SCAN_MAX_WORKERS};
+    use super::{AUTO_SCAN_MAX_WORKERS, effective_worker_count_with_cpu};
 
     #[test]
     fn worker_count_is_bounded_by_install_count_cpu_and_cap() {

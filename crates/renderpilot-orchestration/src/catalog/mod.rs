@@ -4,8 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use renderpilot_application::{
-    find_replacement_candidates, AppError, ArtifactRepository, ComponentReplacementCandidates,
-    ComponentRepository, GameRepository, OperationPlan, OperationRecord,
+    AppError, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
+    GameRepository, OperationPlan, OperationRecord, find_replacement_candidates,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
@@ -191,7 +191,7 @@ pub fn list_artifacts(
 }
 
 // Re-export core operations from sub-modules directly.
-pub use cards::{game_cards, GameCardData};
+pub use cards::{GameCardData, game_cards};
 pub use execute::{apply_swap, rollback_component};
 pub use operations::list_operations;
 pub use swap::{build_swap_plan, find_candidates};

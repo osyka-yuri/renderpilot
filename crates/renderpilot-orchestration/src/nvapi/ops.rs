@@ -1,18 +1,18 @@
 use std::collections::HashSet;
 
 use renderpilot_nvapi::{
+    DrsSession, DwordSettingState, NVAPI_SETTING_NOT_FOUND, Nvapi, NvapiError, Profile,
     setting::{NvapiSetting, NvapiValueOption, SettingContext},
-    DrsSession, DwordSettingState, Nvapi, NvapiError, Profile, NVAPI_SETTING_NOT_FOUND,
 };
 
 use super::dto::{
-    category_for_family, value_type_str, BaselineDto, DllInfoDto, NvapiWarningDto,
-    SettingStateResponse, ValueDescriptorDto, ValueOptionDto,
-};
-use crate::dlss::preset_manifest::{
-    bundled_manifest, resolve_entry, supported_presets_for, VersionSupportEntry,
+    BaselineDto, DllInfoDto, NvapiWarningDto, SettingStateResponse, ValueDescriptorDto,
+    ValueOptionDto, category_for_family, value_type_str,
 };
 use crate::ServiceError;
+use crate::dlss::preset_manifest::{
+    VersionSupportEntry, bundled_manifest, resolve_entry, supported_presets_for,
+};
 
 fn map_nvapi_write_error(error: NvapiError, label: &'static str) -> ServiceError {
     match error {
@@ -649,7 +649,7 @@ fn read_dword_or_default(
 mod tests {
     use super::*;
     use crate::dlss::settings_catalog::{self, CatalogSetting};
-    use renderpilot_nvapi::{setting::DllInfo, DlssDllKind, DlssVersion, SettingContext};
+    use renderpilot_nvapi::{DlssDllKind, DlssVersion, SettingContext, setting::DllInfo};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -698,9 +698,9 @@ mod tests {
         // Manifest-managed and supported on DLSS 4.
         assert!(supported("default")); // 0
         assert!(supported("f")); // preset F = 6
-                                 // Manifest-managed but not supported on DLSS 4 → greyed.
+        // Manifest-managed but not supported on DLSS 4 → greyed.
         assert!(!supported("a")); // preset A = 1
-                                  // Not managed by the manifest → always selectable.
+        // Not managed by the manifest → always selectable.
         assert!(supported("recommended")); // 0x00FFFFFF sentinel
         assert!(supported("o")); // preset O = 15, beyond the manifest table
 

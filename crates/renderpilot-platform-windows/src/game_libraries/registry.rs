@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 
 use winreg::{
+    HKEY, RegKey,
     enums::{KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY},
-    RegKey, HKEY,
 };
 
 use super::paths::path_from_string;

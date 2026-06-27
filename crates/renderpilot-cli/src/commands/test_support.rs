@@ -1,8 +1,7 @@
 use std::{
-    ffi::{OsString, OsString as PlatformString},
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    sync::MutexGuard,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -16,9 +15,6 @@ use renderpilot_orchestration::domain::{
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use crate::catalog::CATALOG_DB_PATH_ENV;
-use crate::test_env::lock_process_env;
-
 pub(super) fn args(values: &[&str]) -> Vec<OsString> {
     values.iter().map(OsString::from).collect()
 }
@@ -28,16 +24,11 @@ pub(super) struct TempGameFolder {
     path: PathBuf,
 }
 
-pub(super) struct CatalogEnvironmentGuard {
-    previous: Option<PlatformString>,
-    _lock: MutexGuard<'static, ()>,
-}
-
 pub(super) struct CatalogFixture {
-    _catalog_env: CatalogEnvironmentGuard,
+    db_path: PathBuf,
     /// Direct storage handle on the same database, for test seeding and assertions.
-    /// Commands under test open their own orchestration `Context` from the catalog
-    /// env var this fixture sets; only tests reach storage directly.
+    /// Commands under test open their own orchestration `Context` against `db_path`;
+    /// only tests reach storage directly.
     storage: SqliteStorage,
 }
 
@@ -58,29 +49,31 @@ impl TempGameFolder {
     }
 }
 
-impl CatalogEnvironmentGuard {
-    pub(super) fn new(path: &Path) -> Self {
-        let lock = lock_process_env();
-        let previous = std::env::var_os(CATALOG_DB_PATH_ENV);
-        std::env::set_var(CATALOG_DB_PATH_ENV, path);
-
-        Self {
-            previous,
-            _lock: lock,
-        }
-    }
-}
-
 impl CatalogFixture {
     pub(super) fn new(name: &str) -> Self {
         let db_path = temp_db_path(name);
-        let catalog_env = CatalogEnvironmentGuard::new(&db_path);
         let storage = open_storage(&db_path);
 
-        Self {
-            _catalog_env: catalog_env,
-            storage,
-        }
+        Self { db_path, storage }
+    }
+
+    /// Opens a fresh orchestration `Context` on this fixture's database — the same
+    /// seam the commands under test use, pointed at the fixture's `db_path`.
+    fn open_context(
+        &self,
+    ) -> Result<renderpilot_orchestration::Context, renderpilot_orchestration::ServiceError> {
+        renderpilot_orchestration::Context::open_at(&self.db_path)
+    }
+
+    pub(super) fn context(&self) -> renderpilot_orchestration::Context {
+        self.open_context().expect("catalog sqlite should open")
+    }
+
+    pub(super) fn run<I>(&self, args: I) -> Result<String, crate::CliError>
+    where
+        I: IntoIterator<Item = OsString>,
+    {
+        crate::run_with_context(args, || self.open_context())
     }
 
     /// Direct storage handle for test seeding and assertions on the same database.
@@ -111,14 +104,6 @@ impl CatalogFixture {
     }
 }
 
-impl Drop for CatalogEnvironmentGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = &self.previous {
-            std::env::set_var(CATALOG_DB_PATH_ENV, previous);
-        }
-    }
-}
-
 impl Drop for TempGameFolder {
     fn drop(&mut self) {
         if self.path.exists() {
@@ -131,11 +116,11 @@ impl Drop for TempGameFolder {
 ///
 /// Production code never opens storage directly — it goes through `Context` — but
 /// tests legitimately reach the infrastructure to set up state and verify it.
-pub(super) fn open_storage(db_path: &Path) -> SqliteStorage {
+fn open_storage(db_path: &Path) -> SqliteStorage {
     SqliteStorage::open(db_path).expect("sqlite storage should open")
 }
 
-pub(super) fn temp_db_path(name: &str) -> PathBuf {
+fn temp_db_path(name: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock should be valid")

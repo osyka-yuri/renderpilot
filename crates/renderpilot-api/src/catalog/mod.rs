@@ -15,7 +15,7 @@ use renderpilot_orchestration::domain::GraphicsComponent;
 
 use crate::utils::is_visible_graphics_technology;
 
-pub use cards::{list_games, query_game_cards, QueryGameCardsRequest};
+pub use cards::{QueryGameCardsRequest, list_games, query_game_cards};
 pub use details::get_game_details;
 pub use settings::{get_catalog_setting, set_catalog_setting, set_game_favorite, set_game_hidden};
 

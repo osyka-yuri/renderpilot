@@ -69,7 +69,7 @@ fn is_disabled_setting_value(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_setting_bool_default_true, CoverRemotePolicy, DISABLED_SETTING_VALUES};
+    use super::{CoverRemotePolicy, DISABLED_SETTING_VALUES, parse_setting_bool_default_true};
 
     #[test]
     fn policy_default_enables_all_sources() {

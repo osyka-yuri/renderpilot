@@ -1,6 +1,6 @@
 use renderpilot_orchestration::application::app_info;
 
-use super::{render_help, render_summary, render_version, HELP_HINT};
+use super::{HELP_HINT, render_help, render_summary, render_version};
 
 #[test]
 fn summary_reuses_shared_help_hint() {

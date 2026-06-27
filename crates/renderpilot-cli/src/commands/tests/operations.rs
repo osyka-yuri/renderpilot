@@ -14,11 +14,10 @@ use renderpilot_orchestration::domain::{
 };
 
 use crate::hash::sha256_hex;
-use crate::run;
 
 use super::{
-    args, path_string, sample_artifact, sample_bundle_component, sample_component, sample_game,
-    CatalogFixture, TempGameFolder,
+    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_bundle_component,
+    sample_component, sample_game,
 };
 
 const REPLACEMENT_SHA256: &str = "70bf69c13743b7193ffd7a3718caab18522b61d4643fe13ac80caa5301e2345a";
@@ -86,7 +85,8 @@ fn list_operations_renders_item_counts_from_aggregate_entries() {
         .save_operation_entry(&entry)
         .expect("journal entry should be stored");
 
-    let output = run(args(&["list-operations", "--game", game.id().as_str()]))
+    let output = fixture
+        .run(args(&["list-operations", "--game", game.id().as_str()]))
         .expect("list operations should succeed");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let operations = json["operations"]
@@ -143,16 +143,17 @@ fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
         None,
     ));
 
-    let error = run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:fg-3.7",
-    ]))
-    .expect_err("apply should reject blocked mismatch");
+    let error = fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:fg-3.7",
+        ]))
+        .expect_err("apply should reject blocked mismatch");
 
     assert!(error.to_string().contains("technology_mismatch"));
     assert_eq!(
@@ -206,16 +207,17 @@ fn apply_rejects_artifact_that_already_matches_current_component() {
         None,
     ));
 
-    let error = run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect_err("apply should reject a no-op artifact");
+    let error = fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect_err("apply should reject a no-op artifact");
 
     assert!(error.to_string().contains("artifact_matches_current_file"));
     assert_eq!(
@@ -271,16 +273,17 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
         None,
     ));
 
-    let apply_output = run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed");
+    let apply_output = fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed");
     let apply_json: serde_json::Value =
         serde_json::from_str(&apply_output).expect("valid apply json");
     let components = fixture
@@ -382,16 +385,17 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
         None,
     ));
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed");
 
     let components = fixture
         .storage()
@@ -476,16 +480,17 @@ fn apply_succeeds_without_prior_sidecar_and_creates_sidecar_bak() {
         None,
     ));
 
-    let output = run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed without sidecar");
+    let output = fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed without sidecar");
     let output_json: serde_json::Value =
         serde_json::from_str(&output).expect("apply output should be valid json");
 
@@ -550,29 +555,31 @@ fn apply_replaces_target_even_when_changed_after_plan_swap() {
         None,
     ));
 
-    run(args(&[
-        "plan-swap",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("plan swap should render");
+    fixture
+        .run(args(&[
+            "plan-swap",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("plan swap should render");
 
     fs::write(&source_path, b"mutated-target-bytes").expect("source file should be mutated");
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed");
     let components = fixture
         .storage()
         .list_components_for_game(game.id())
@@ -595,14 +602,16 @@ fn apply_replaces_target_even_when_changed_after_plan_swap() {
 fn rollback_restores_original_file_and_updates_catalog() {
     let scenario = setup_applied_scenario("rollback-success");
 
-    let rollback_output = run(args(&[
-        "rollback",
-        "--game",
-        scenario.game_id.as_str(),
-        "--component",
-        "component:game-a:dlss",
-    ]))
-    .expect("rollback should succeed");
+    let rollback_output = scenario
+        .fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            scenario.game_id.as_str(),
+            "--component",
+            "component:game-a:dlss",
+        ]))
+        .expect("rollback should succeed");
     let rollback_json: serde_json::Value =
         serde_json::from_str(&rollback_output).expect("valid rollback json");
     let components = scenario
@@ -632,23 +641,27 @@ fn rollback_restores_original_file_and_updates_catalog() {
 fn rollback_consumes_bak_on_first_restore_and_second_fails() {
     let scenario = setup_applied_scenario("rollback-consumed");
 
-    run(args(&[
-        "rollback",
-        "--game",
-        scenario.game_id.as_str(),
-        "--component",
-        "component:game-a:dlss",
-    ]))
-    .expect("first rollback should succeed");
+    scenario
+        .fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            scenario.game_id.as_str(),
+            "--component",
+            "component:game-a:dlss",
+        ]))
+        .expect("first rollback should succeed");
 
-    let second_error = run(args(&[
-        "rollback",
-        "--game",
-        scenario.game_id.as_str(),
-        "--component",
-        "component:game-a:dlss",
-    ]))
-    .expect_err("second rollback should fail because the baseline is cleared");
+    let second_error = scenario
+        .fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            scenario.game_id.as_str(),
+            "--component",
+            "component:game-a:dlss",
+        ]))
+        .expect_err("second rollback should fail because the baseline is cleared");
 
     assert!(
         second_error.to_string().contains("no swap to roll back"),
@@ -663,14 +676,16 @@ fn rollback_fails_when_target_file_is_locked() {
     let scenario = setup_applied_scenario("rollback-locked");
     let lock = open_exclusive_file_lock(&scenario.source_path);
 
-    let error = run(args(&[
-        "rollback",
-        "--game",
-        scenario.game_id.as_str(),
-        "--component",
-        "component:game-a:dlss",
-    ]))
-    .expect_err("rollback should fail while target is locked");
+    let error = scenario
+        .fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            scenario.game_id.as_str(),
+            "--component",
+            "component:game-a:dlss",
+        ]))
+        .expect_err("rollback should fail while target is locked");
     drop(lock);
 
     assert!(
@@ -853,21 +868,22 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
     fixture.store_artifact(&artifact);
 
     // --- apply (1 -> 3) ---
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-        "--artifact",
-        &artifact_id,
-    ]))
-    .map(|output| serde_json::from_str::<serde_json::Value>(&output).expect("valid apply json"))
-    .map(|json| {
-        assert_eq!(json["component_id"], "component:fsr");
-        assert_eq!(json["applied_path"], path_string(&original_path));
-    })
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            &artifact_id,
+        ]))
+        .map(|output| serde_json::from_str::<serde_json::Value>(&output).expect("valid apply json"))
+        .map(|json| {
+            assert_eq!(json["component_id"], "component:fsr");
+            assert_eq!(json["applied_path"], path_string(&original_path));
+        })
+        .expect("apply should succeed");
 
     // The loader took over the entry-point name; the original is backed up once.
     let original_bak = game_folder.path().join(format!("{original_name}.bak"));
@@ -907,14 +923,15 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
     );
 
     // --- rollback (3 -> 1) ---
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         fs::read(&original_path).expect("original restored"),
@@ -937,14 +954,15 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
         "catalog rolled back to the single original file"
     );
 
-    let second = run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect_err("second rollback should fail because the baseline is cleared");
+    let second = fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect_err("second rollback should fail because the baseline is cleared");
     assert!(second.to_string().contains("no swap to roll back"));
 }
 
@@ -1018,16 +1036,17 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
         None,
     ));
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr-upscaler",
-        "--artifact",
-        "artifact:fsr-upscaler-4.1",
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr-upscaler",
+            "--artifact",
+            "artifact:fsr-upscaler-4.1",
+        ]))
+        .expect("apply should succeed");
 
     assert_eq!(
         fs::read(&upscaler_path).expect("upscaler present"),
@@ -1078,14 +1097,15 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
         "the catalog should track the replaced upscaler only"
     );
 
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr-upscaler",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr-upscaler",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         fs::read(&upscaler_path).expect("upscaler restored"),
@@ -1159,16 +1179,17 @@ fn reswap_preserves_original_baseline_then_rollback_restores_it() {
     fixture.store_artifact(&artifact_c);
 
     let apply = |artifact_id: &str| {
-        run(args(&[
-            "apply",
-            "--game",
-            game.id().as_str(),
-            "--component",
-            "component:fsr",
-            "--artifact",
-            artifact_id,
-        ]))
-        .expect("apply should succeed");
+        fixture
+            .run(args(&[
+                "apply",
+                "--game",
+                game.id().as_str(),
+                "--component",
+                "component:fsr",
+                "--artifact",
+                artifact_id,
+            ]))
+            .expect("apply should succeed");
     };
 
     apply(&id_b);
@@ -1196,14 +1217,15 @@ fn reswap_preserves_original_baseline_then_rollback_restores_it() {
         "the backup still holds the original A, not the intermediate release B"
     );
 
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         fs::read(&original_path).expect("original A restored"),
@@ -1264,16 +1286,17 @@ fn already_fsr4_upgrade_replaces_all_members_then_rollback_restores_prior_releas
     fixture.store_artifact(&artifact);
 
     // --- apply X -> Y: every member is replaced, each backed up once ---
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-        "--artifact",
-        &artifact_id,
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            &artifact_id,
+        ]))
+        .expect("apply should succeed");
 
     let expectations: [(&str, &[u8], &[u8]); 3] = [
         ("amd_fidelityfx_dx12.dll", b"Y-loader", b"X-loader"),
@@ -1310,14 +1333,15 @@ fn already_fsr4_upgrade_replaces_all_members_then_rollback_restores_prior_releas
     );
 
     // --- rollback Y -> X: restores the prior FSR 4 release, not FSR 3 ---
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     let originals: [(&str, &[u8]); 3] = [
         ("amd_fidelityfx_dx12.dll", b"X-loader"),
@@ -1388,16 +1412,17 @@ fn native_split_fsr4_update_targets_the_loader_in_place_without_orphan_entrypoin
     let (artifact, artifact_id) = write_fsr_bundle_artifact(artifact_folder.path(), &bundle);
     fixture.store_artifact(&artifact);
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-        "--artifact",
-        &artifact_id,
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            &artifact_id,
+        ]))
+        .expect("apply should succeed");
 
     // The loader was updated IN PLACE under its own name; no orphan dx12 entry point.
     assert!(
@@ -1430,14 +1455,15 @@ fn native_split_fsr4_update_targets_the_loader_in_place_without_orphan_entrypoin
     }
 
     // Rollback restores release X exactly, still no orphan dx12.
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     assert!(!game_folder.path().join("amd_fidelityfx_dx12.dll").exists());
     assert_eq!(
@@ -1505,16 +1531,17 @@ fn dx12_lineage_downgrade_to_unified_fsr3_cleans_up_split_members() {
     fixture.store_artifact(&fsr314);
 
     let apply = |artifact_id: &str| {
-        run(args(&[
-            "apply",
-            "--game",
-            game.id().as_str(),
-            "--component",
-            "component:fsr",
-            "--artifact",
-            artifact_id,
-        ]))
-        .expect("apply should succeed");
+        fixture
+            .run(args(&[
+                "apply",
+                "--game",
+                game.id().as_str(),
+                "--component",
+                "component:fsr",
+                "--artifact",
+                artifact_id,
+            ]))
+            .expect("apply should succeed");
     };
 
     // 3.1 -> 4, then 4 -> unified 3.1.4 (the downgrade via the selector).
@@ -1549,14 +1576,15 @@ fn dx12_lineage_downgrade_to_unified_fsr3_cleans_up_split_members() {
         "the active set is a single unified FSR 3.1 file again"
     );
 
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
     assert_eq!(
         fs::read(&original_path).expect("restored"),
         b"fsr3-original",
@@ -1610,16 +1638,17 @@ fn externally_upgraded_fsr4_downgrade_removes_split_members_on_first_swap() {
     store_written_fsr_bundle_component(&fixture, &game, &written);
     fixture.store_artifact(&fsr314);
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-        "--artifact",
-        &fsr314_id,
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            &fsr314_id,
+        ]))
+        .expect("apply should succeed");
 
     // The split members are removed (backed up), and the entry point is FSR 3.1.4.
     assert!(
@@ -1663,14 +1692,15 @@ fn externally_upgraded_fsr4_downgrade_removes_split_members_on_first_swap() {
     );
 
     // Rollback restores the external FSR 4 state exactly.
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
     assert_eq!(
         dir_file_names(game_folder.path()),
         vec![
@@ -1736,16 +1766,17 @@ fn mixed_lineage_unified_update_replaces_only_the_entry_point() {
     fixture.store_artifact(&fsr314);
 
     let apply = |artifact_id: &str| {
-        run(args(&[
-            "apply",
-            "--game",
-            game.id().as_str(),
-            "--component",
-            "component:fsr",
-            "--artifact",
-            artifact_id,
-        ]))
-        .expect("apply should succeed");
+        fixture
+            .run(args(&[
+                "apply",
+                "--game",
+                game.id().as_str(),
+                "--component",
+                "component:fsr",
+                "--artifact",
+                artifact_id,
+            ]))
+            .expect("apply should succeed");
     };
 
     // --- unified update: only the entry point changes ---
@@ -1802,14 +1833,15 @@ fn mixed_lineage_unified_update_replaces_only_the_entry_point() {
     );
 
     // --- rollback: the original entry point returns, the RR stack persists ---
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         dir_file_names(game_folder.path()),
@@ -1871,16 +1903,17 @@ fn mixed_lineage_fsr4_package_targets_entry_point_not_the_rr_loader() {
     store_written_fsr_bundle_component(&fixture, &game, &written);
     fixture.store_artifact(&artifact);
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-        "--artifact",
-        &artifact_id,
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+            "--artifact",
+            &artifact_id,
+        ]))
+        .expect("apply should succeed");
 
     assert_eq!(
         fs::read(game_folder.path().join("amd_fidelityfx_dx12.dll")).expect("entry point"),
@@ -1918,14 +1951,15 @@ fn mixed_lineage_fsr4_package_targets_entry_point_not_the_rr_loader() {
         b"fsr4-framegen",
     );
 
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:fsr",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:fsr",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         dir_file_names(game_folder.path()),
@@ -1994,16 +2028,17 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
         None,
     ));
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed");
 
     assert_eq!(
         fs::read(&bak_path).expect("backup readable"),
@@ -2015,14 +2050,15 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
         b"replacement-bytes"
     );
 
-    run(args(&[
-        "rollback",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:dlss",
-    ]))
-    .expect("rollback should succeed");
+    fixture
+        .run(args(&[
+            "rollback",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:dlss",
+        ]))
+        .expect("rollback should succeed");
 
     assert_eq!(
         fs::read(&original_path).expect("restored readable"),
@@ -2082,16 +2118,17 @@ fn setup_applied_scenario(name: &str) -> AppliedScenario {
         None,
     ));
 
-    run(args(&[
-        "apply",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("apply should succeed");
+    fixture
+        .run(args(&[
+            "apply",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("apply should succeed");
 
     AppliedScenario {
         fixture,

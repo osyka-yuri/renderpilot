@@ -19,19 +19,19 @@ use crate::addons::engine::{self, FileOp, InstallPlan};
 use crate::net::{DownloadProgress, ProgressObserver};
 use crate::{Context, ServiceError};
 
-use super::anticheat::{assess_risk, RiskAssessment};
+use super::anticheat::{RiskAssessment, assess_risk};
 use super::arch_from_addon_file;
 use super::dlss_fix::resolve_dlss_fix;
 use super::errors;
-use super::facts::{analyze_game, GameAnalysis};
+use super::facts::{GameAnalysis, analyze_game};
 use super::fetch::{prepare_install, prepare_install_from_file};
 use super::install::{
     dlss_fix_file_name, dlss_fix_file_path, install as install_files, uninstall as uninstall_files,
 };
 use super::matcher::{
+    IncompatibilityReason, MatchConfidence, MatchFacts, RenoDxResolution, ResolvedInstall,
     file_installable, generic_file_install_plan, generic_risk, matched_slug, resolve,
-    resolve_external_install, IncompatibilityReason, MatchConfidence, MatchFacts, RenoDxResolution,
-    ResolvedInstall,
+    resolve_external_install,
 };
 use super::reshade;
 use super::types::{DlssFixIniTweaks, RenoDxManifest, ReshadeIniTweaks};
@@ -267,27 +267,27 @@ pub async fn install(
         RenoDxResolution::External { .. } => {
             return Err(errors::invalid(
                 "RenoDX for this game is distributed externally; install it manually".to_owned(),
-            ))
+            ));
         }
         RenoDxResolution::NativeHdr => {
             return Err(errors::invalid(
                 "this game has native HDR; RenoDX is not needed".to_owned(),
-            ))
+            ));
         }
         RenoDxResolution::Incompatible { reason } => {
             return Err(errors::invalid(format!(
                 "RenoDX is not compatible with this game: {reason:?}"
-            )))
+            )));
         }
         RenoDxResolution::Unsupported { .. } => {
             return Err(errors::invalid(
                 "RenoDX is not supported for this game".to_owned(),
-            ))
+            ));
         }
         RenoDxResolution::NoMatch => {
             return Err(errors::invalid(
                 "RenoDX has no profile for this game".to_owned(),
-            ))
+            ));
         }
     };
 

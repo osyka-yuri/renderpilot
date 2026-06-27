@@ -1,5 +1,5 @@
 use super::catalog::GameDetailsOutput;
-use super::utils::{to_json, JsonResult};
+use super::utils::{JsonResult, to_json};
 use renderpilot_orchestration::catalog;
 use std::path::PathBuf;
 

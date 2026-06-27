@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use renderpilot_application::AppResult;
 use renderpilot_detection::{read_windows_file_version, sha256_file};
 use renderpilot_domain::{
-    fsr, ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef,
+    ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 

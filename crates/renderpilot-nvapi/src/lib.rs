@@ -10,7 +10,7 @@ mod ffi;
 pub mod setting;
 
 pub use api::{DrsSession, DwordSettingState, Nvapi, Profile};
-pub use error::{NvapiError, NVAPI_SETTING_NOT_FOUND};
+pub use error::{NVAPI_SETTING_NOT_FOUND, NvapiError};
 pub use setting::{
     BaselineSnapshot, DllInfo, DlssDllKind, DlssVersion, NvapiSetting, NvapiValueOption,
     NvapiValueType, SettingContext, SettingState,

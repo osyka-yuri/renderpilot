@@ -1,11 +1,11 @@
 use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_domain::LibraryArtifact;
-use rusqlite::{named_params, Statement, Transaction};
+use rusqlite::{Statement, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
 
 use super::{
-    catalog_select_sql::LIST_ARTIFACTS_SQL, row_mapping::artifact_from_row, SqliteStorage,
+    SqliteStorage, catalog_select_sql::LIST_ARTIFACTS_SQL, row_mapping::artifact_from_row,
 };
 
 const UPSERT_ARTIFACT_SQL: &str = "

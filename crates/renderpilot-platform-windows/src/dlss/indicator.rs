@@ -16,8 +16,8 @@
 use std::io;
 
 use winreg::{
-    enums::{HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY, KEY_WRITE},
     RegKey,
+    enums::{HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY, KEY_WRITE},
 };
 
 /// NGX core key holding the DLSS indicator toggle, relative to `HKLM`.
@@ -32,13 +32,14 @@ const INDICATOR_ON: u32 = 0x400;
 /// A missing key or missing value is reported as "off" — the pristine default.
 pub fn read_dlss_indicator_enabled() -> io::Result<bool> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = match hklm.open_subkey_with_flags(NGX_CORE_KEY, KEY_READ | KEY_WOW64_64KEY) {
+        Ok(key) => key,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
 
-    match hklm.open_subkey_with_flags(NGX_CORE_KEY, KEY_READ | KEY_WOW64_64KEY) {
-        Ok(key) => match key.get_value::<u32, _>(SHOW_DLSS_INDICATOR_VALUE) {
-            Ok(value) => Ok(value != 0),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-            Err(error) => Err(error),
-        },
+    match key.get_value::<u32, _>(SHOW_DLSS_INDICATOR_VALUE) {
+        Ok(value) => Ok(value != 0),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
     }

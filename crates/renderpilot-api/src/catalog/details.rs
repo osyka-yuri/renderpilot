@@ -10,8 +10,8 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 
 use super::{is_component_visible, visible_component_ids};
-use crate::utils::{parse_game_id, to_json, JsonResult};
 use crate::ApiError;
+use crate::utils::{JsonResult, parse_game_id, to_json};
 
 /// Loads one game with detected components, candidates, and operation history.
 pub fn get_game_details(

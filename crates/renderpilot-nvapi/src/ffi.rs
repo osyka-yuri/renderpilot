@@ -33,7 +33,7 @@ pub const fn nvapi_version(size: usize, ver: u32) -> u32 {
 
 /// Compile-time proof that a versioned NVAPI struct keeps `version` at offset 0.
 ///
-/// `api::zeroed_with_version` writes the version word to the front of a zeroed
+/// `api::zeroed_versioned` writes the version word to the front of a zeroed
 /// struct via a raw pointer; that is only sound while every such struct places
 /// its `version: u32` field first. These assertions fail the build the moment a
 /// field is reordered, so the FFI invariant can never silently drift.
@@ -130,7 +130,7 @@ pub struct NVDRS_SETTING {
     pub currentValue: NVDRS_SETTING_CURRENT,
 }
 
-// Guards the `zeroed_with_version` invariant for every struct it is used with.
+// Guards the `zeroed_versioned` invariant for every struct it is used with.
 assert_version_at_offset_zero!(NVDRS_SETTING, NVDRS_PROFILE, NVDRS_APPLICATION);
 
 /// `nvapi_QueryInterface` – entry point used to resolve every other function.

@@ -1,6 +1,6 @@
 use std::{error::Error, fmt};
 
-use renderpilot_application::{invalid_operation_state_display_message, AppError, AppErrorKind};
+use renderpilot_application::{AppError, AppErrorKind, invalid_operation_state_display_message};
 use renderpilot_detection::LibraryPatternError;
 
 /// Service-layer errors produced by orchestration feature modules.

@@ -1,7 +1,7 @@
 //! Error type for the GUI API facade.
 
-use renderpilot_orchestration::application::AppError;
 use renderpilot_orchestration::ServiceError;
+use renderpilot_orchestration::application::AppError;
 
 /// Errors produced by the GUI API facade functions.
 #[derive(Debug, Clone, PartialEq, Eq)]

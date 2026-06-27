@@ -2,9 +2,9 @@ use renderpilot_api::ApiError;
 use renderpilot_orchestration::ServiceError;
 
 use super::{
-    kind::CommandErrorKind as Kind,
-    strings::{user_message as Msg, UserMessage},
     CommandError,
+    kind::CommandErrorKind as Kind,
+    strings::{UserMessage, user_message as Msg},
 };
 
 // `from_api_error` must handle every `ApiError` variant; add a match arm when the enum grows.

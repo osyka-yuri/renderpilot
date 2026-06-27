@@ -1,6 +1,6 @@
 use renderpilot_application::{
-    build_swap_operation_plan, find_replacement_candidates, AppError, AppResult,
-    ArtifactRepository, ComponentRepository, GameRepository,
+    AppError, AppResult, ArtifactRepository, ComponentRepository, GameRepository,
+    build_swap_operation_plan, find_replacement_candidates,
 };
 use renderpilot_domain::{
     ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact,

@@ -1,9 +1,7 @@
 use renderpilot_orchestration::domain::GraphicsTechnology;
 use renderpilot_orchestration::domain::Swappability;
 
-use crate::run;
-
-use super::{args, sample_artifact, sample_component, sample_game, CatalogFixture};
+use super::{CatalogFixture, args, sample_artifact, sample_component, sample_game};
 
 #[test]
 fn plan_swap_renders_operation_plan_json() {
@@ -32,16 +30,17 @@ fn plan_swap_renders_operation_plan_json() {
         None,
     ));
 
-    let output = run(args(&[
-        "plan-swap",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:dlss-3.7",
-    ]))
-    .expect("plan swap should render");
+    let output = fixture
+        .run(args(&[
+            "plan-swap",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:dlss-3.7",
+        ]))
+        .expect("plan swap should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["game_id"], game.id().as_str());
@@ -53,18 +52,24 @@ fn plan_swap_renders_operation_plan_json() {
     assert_eq!(json["risk_level"], "low");
     assert_eq!(json["requires_elevation"], false);
     assert_eq!(json["artifact_id"], "artifact:dlss-3.7");
-    assert!(json["operation_id"]
-        .as_str()
-        .expect("operation id string")
-        .starts_with("operation:replace_component:"));
-    assert!(json["blockers"]
-        .as_array()
-        .expect("blockers array")
-        .is_empty());
-    assert!(json["warnings"]
-        .as_array()
-        .expect("warnings array")
-        .is_empty());
+    assert!(
+        json["operation_id"]
+            .as_str()
+            .expect("operation id string")
+            .starts_with("operation:replace_component:")
+    );
+    assert!(
+        json["blockers"]
+            .as_array()
+            .expect("blockers array")
+            .is_empty()
+    );
+    assert!(
+        json["warnings"]
+            .as_array()
+            .expect("warnings array")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -94,16 +99,17 @@ fn plan_swap_blocks_invalid_artifact() {
         None,
     ));
 
-    let output = run(args(&[
-        "plan-swap",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:dlss",
-        "--artifact",
-        "artifact:fg-3.7",
-    ]))
-    .expect("plan swap should render");
+    let output = fixture
+        .run(args(&[
+            "plan-swap",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:dlss",
+            "--artifact",
+            "artifact:fg-3.7",
+        ]))
+        .expect("plan swap should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["risk_level"], "blocked");
@@ -137,25 +143,28 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
         None,
     ));
 
-    let output = run(args(&[
-        "plan-swap",
-        "--game",
-        game.id().as_str(),
-        "--component",
-        "component:game-a:streamline",
-        "--artifact",
-        "artifact:streamline-2.5",
-    ]))
-    .expect("plan swap should render");
+    let output = fixture
+        .run(args(&[
+            "plan-swap",
+            "--game",
+            game.id().as_str(),
+            "--component",
+            "component:game-a:streamline",
+            "--artifact",
+            "artifact:streamline-2.5",
+        ]))
+        .expect("plan swap should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let warnings = json["warnings"].as_array().expect("warnings array");
 
     // Streamline stays HIGH risk via the bundle-only confirmation warning now
     // that the dedicated streamline_partial_swap warning is gone.
     assert_eq!(json["risk_level"], "high");
-    assert!(warnings
-        .iter()
-        .any(|warning| warning == "confirmation_required_for_swappability"));
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning == "confirmation_required_for_swappability")
+    );
     assert!(
         !warnings
             .iter()

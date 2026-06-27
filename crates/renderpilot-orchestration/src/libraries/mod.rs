@@ -12,8 +12,8 @@ mod storage;
 mod types;
 mod validate;
 
-use crate::net::ProgressObserver;
 use crate::ServiceError;
+use crate::net::ProgressObserver;
 
 pub use self::types::{LibraryManifest, LibraryManifestEntry, LibraryState};
 

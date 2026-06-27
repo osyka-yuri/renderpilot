@@ -3,8 +3,8 @@ use std::{error::Error, fmt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    text::{normalize_required_text, RequiredTextError},
     GameId, GameRuntime, Launcher, PathRef, PathRefError, Platform,
+    text::{RequiredTextError, normalize_required_text},
 };
 
 /// Stable identity and user-facing title for a game.

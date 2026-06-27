@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::catalog::{is_component_visible, visible_component_ids};
 use crate::utils::{
-    available_update_count, dashboard_risk_level, library_tags, DashboardRiskLevel,
+    DashboardRiskLevel, available_update_count, dashboard_risk_level, library_tags,
 };
 
 #[derive(Debug, Serialize)]

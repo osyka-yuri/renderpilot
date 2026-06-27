@@ -119,7 +119,7 @@ fn trim_ascii_start(mut bytes: &[u8]) -> &[u8] {
 
 #[cfg(test)]
 mod tests {
-    use super::{mime_for_bytes, validate_cover_bytes, CoverFormat};
+    use super::{CoverFormat, mime_for_bytes, validate_cover_bytes};
 
     #[test]
     fn validate_accepts_png_magic() {

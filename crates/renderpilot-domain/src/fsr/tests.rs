@@ -70,7 +70,7 @@ fn optional_effects_are_the_denoiser_and_radiance_cache_only() {
     assert!(naming::is_optional_effect(
         "AMD_FIDELITYFX_RADIANCECACHE_DX12.DLL"
     )); // case-insensitive
-        // Core members and the entry point are never optional.
+    // Core members and the entry point are never optional.
     assert!(!naming::is_optional_effect(
         "amd_fidelityfx_loader_dx12.dll"
     ));

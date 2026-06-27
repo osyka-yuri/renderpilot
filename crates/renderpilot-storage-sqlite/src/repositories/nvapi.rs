@@ -4,9 +4,9 @@
 //! so deleting a game also tears down its NVAPI state.
 
 use renderpilot_application::AppResult;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
-use crate::{error::storage_context, SqliteStorage};
+use crate::{SqliteStorage, error::storage_context};
 
 // -----------------------------------------------------------------------------
 // Executable override
@@ -258,10 +258,12 @@ mod tests {
     fn executable_override_roundtrip() {
         let (storage, _path, game_id) = fresh_storage();
 
-        assert!(storage
-            .get_nvapi_executable_override(game_id.as_str())
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_nvapi_executable_override(game_id.as_str())
+                .unwrap()
+                .is_none()
+        );
 
         storage
             .upsert_nvapi_executable_override(
@@ -313,10 +315,12 @@ mod tests {
             .delete_nvapi_executable_override(game_id.as_str())
             .unwrap();
 
-        assert!(storage
-            .get_nvapi_executable_override(game_id.as_str())
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_nvapi_executable_override(game_id.as_str())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -347,10 +351,12 @@ mod tests {
     #[test]
     fn get_baseline_returns_none_when_absent() {
         let (storage, _path, game_id) = fresh_storage();
-        assert!(storage
-            .get_nvapi_baseline(game_id.as_str(), "missing.setting")
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_nvapi_baseline(game_id.as_str(), "missing.setting")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -364,10 +370,12 @@ mod tests {
         storage
             .delete_nvapi_baseline(game_id.as_str(), key)
             .unwrap();
-        assert!(storage
-            .get_nvapi_baseline(game_id.as_str(), key)
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_nvapi_baseline(game_id.as_str(), key)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -404,13 +412,17 @@ mod tests {
 
         storage.delete_game(&game_id).expect("delete game");
 
-        assert!(storage
-            .get_nvapi_executable_override(game_id.as_str())
-            .unwrap()
-            .is_none());
-        assert!(storage
-            .get_nvapi_baseline(game_id.as_str(), key)
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_nvapi_executable_override(game_id.as_str())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            storage
+                .get_nvapi_baseline(game_id.as_str(), key)
+                .unwrap()
+                .is_none()
+        );
     }
 }

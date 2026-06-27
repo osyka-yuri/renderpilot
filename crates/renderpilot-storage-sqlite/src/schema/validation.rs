@@ -5,8 +5,8 @@ use rusqlite::{Connection, Error as SqliteError};
 
 use crate::error::storage_context;
 
-use super::objects::{object_exists, SchemaObjectKind};
 use super::REQUIRED_SCHEMA_OBJECT_GROUPS;
+use super::objects::{SchemaObjectKind, object_exists};
 
 pub(super) fn catalog_schema_is_valid(connection: &Connection) -> AppResult<bool> {
     for &(object_kind, object_names) in REQUIRED_SCHEMA_OBJECT_GROUPS {

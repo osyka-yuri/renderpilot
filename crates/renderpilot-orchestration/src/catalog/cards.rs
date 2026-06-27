@@ -7,7 +7,7 @@ use renderpilot_domain::GameInstallation;
 
 use crate::ServiceError;
 
-use super::{get_game_details_with_universe, load_replacement_universe, GameDetailsCatalogResult};
+use super::{GameDetailsCatalogResult, get_game_details_with_universe, load_replacement_universe};
 
 /// One game's aggregated dashboard data, assembled by [`game_cards`].
 ///

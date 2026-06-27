@@ -1,10 +1,10 @@
 //! Swap execution: apply an artifact overlay and roll it back.
 
 use renderpilot_application::{AppError, OperationKind};
-use renderpilot_domain::{fsr, ArtifactId, ComponentId, GameId};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, fsr};
 
-use crate::catalog::swap::{require_component_for_game, require_game};
 use crate::ServiceError;
+use crate::catalog::swap::{require_component_for_game, require_game};
 
 mod fs_ops;
 mod journal;
@@ -18,7 +18,7 @@ mod tests;
 pub use self::types::{OperationMetadata, RollbackResult, SwapResult};
 
 use self::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
-use self::journal::{record_operation_journal_entry, JournalEntryItem, JournalEntryParams};
+use self::journal::{JournalEntryItem, JournalEntryParams, record_operation_journal_entry};
 use self::planning::{full_component_set, rebuild_component};
 use self::prepare::prepare_apply_swap;
 

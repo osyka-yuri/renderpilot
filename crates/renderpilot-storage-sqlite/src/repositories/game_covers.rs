@@ -7,7 +7,7 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::GameId;
-use rusqlite::{named_params, Connection, OptionalExtension, Row, Transaction};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, named_params};
 
 use crate::{error::invalid_row, error::storage_error, sqlite_clock};
 
@@ -249,10 +249,12 @@ mod tests {
             .clear_game_cover_row(game.id())
             .expect("clear should succeed");
 
-        assert!(storage
-            .find_game_cover(game.id())
-            .expect("find should succeed")
-            .is_none());
+        assert!(
+            storage
+                .find_game_cover(game.id())
+                .expect("find should succeed")
+                .is_none()
+        );
     }
 
     #[test]
@@ -302,10 +304,12 @@ mod tests {
             );
         }
 
-        assert!(storage
-            .find_game_cover(game.id())
-            .expect("find should succeed")
-            .is_none());
+        assert!(
+            storage
+                .find_game_cover(game.id())
+                .expect("find should succeed")
+                .is_none()
+        );
     }
 
     #[test]

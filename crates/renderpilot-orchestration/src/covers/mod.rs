@@ -21,8 +21,8 @@ use serde::Serialize;
 
 use self::http_client::http_client;
 use self::policy::CoverRemotePolicy;
-use crate::storage;
 use crate::ServiceError;
+use crate::storage;
 
 /// Settings row key for the SteamGridDB API bearer token.
 pub const STEAMGRIDDB_API_KEY_SETTING: &str = "steamgriddb_api_key";

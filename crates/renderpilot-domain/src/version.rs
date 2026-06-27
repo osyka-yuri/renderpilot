@@ -196,8 +196,10 @@ mod tests {
         let error =
             serde_json::from_str::<Version>(r#""1.beta.2""#).expect_err("version should fail");
 
-        assert!(error
-            .to_string()
-            .contains("version segments must be numeric"));
+        assert!(
+            error
+                .to_string()
+                .contains("version segments must be numeric")
+        );
     }
 }

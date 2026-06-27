@@ -1,20 +1,20 @@
 //! Safe Rust wrappers over the raw NVAPI FFI.
 
-use std::{iter, os::raw::c_void, ptr, sync::OnceLock};
+use std::{iter, mem::MaybeUninit, os::raw::c_void, ptr, sync::OnceLock};
 
 use libloading::Library;
 
 use crate::{
-    error::{NvapiError, NVAPI_INVALID_USER_PRIVILEGE, NVAPI_SETTING_NOT_FOUND},
+    error::{NVAPI_INVALID_USER_PRIVILEGE, NVAPI_SETTING_NOT_FOUND, NvapiError},
     ffi::{
-        interface_ids, NvAPI_DRS_CreateSession_fn, NvAPI_DRS_DeleteProfileSetting_fn,
-        NvAPI_DRS_DestroySession_fn, NvAPI_DRS_FindApplicationByName_fn,
-        NvAPI_DRS_FindProfileByName_fn, NvAPI_DRS_GetBaseProfile_fn, NvAPI_DRS_GetProfileInfo_fn,
-        NvAPI_DRS_GetSetting_fn, NvAPI_DRS_GetSetting_v2_fn, NvAPI_DRS_LoadSettings_fn,
-        NvAPI_DRS_SaveSettings_fn, NvAPI_DRS_SetSetting_fn, NvAPI_DRS_SetSetting_v2_fn,
-        NvAPI_Initialize_fn, NvAPI_QueryInterface_fn, NvDRSProfileHandle, NvDRSSessionHandle,
         NVAPI_UNICODE_STRING_MAX, NVDRS_APPLICATION, NVDRS_APPLICATION_VER, NVDRS_DWORD_TYPE,
         NVDRS_PROFILE, NVDRS_PROFILE_VER, NVDRS_SETTING, NVDRS_SETTING_VER,
+        NvAPI_DRS_CreateSession_fn, NvAPI_DRS_DeleteProfileSetting_fn, NvAPI_DRS_DestroySession_fn,
+        NvAPI_DRS_FindApplicationByName_fn, NvAPI_DRS_FindProfileByName_fn,
+        NvAPI_DRS_GetBaseProfile_fn, NvAPI_DRS_GetProfileInfo_fn, NvAPI_DRS_GetSetting_fn,
+        NvAPI_DRS_GetSetting_v2_fn, NvAPI_DRS_LoadSettings_fn, NvAPI_DRS_SaveSettings_fn,
+        NvAPI_DRS_SetSetting_fn, NvAPI_DRS_SetSetting_v2_fn, NvAPI_Initialize_fn,
+        NvAPI_QueryInterface_fn, NvDRSProfileHandle, NvDRSSessionHandle, interface_ids,
     },
 };
 
@@ -25,19 +25,43 @@ fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(iter::once(0)).collect()
 }
 
-/// Creates a zeroed C struct and sets its `version` field.
+/// Marks an NVAPI struct that [`zeroed_versioned`] can initialize from zeroed memory.
 ///
 /// # Safety
-/// `T` must be a `#[repr(C)]` NVAPI struct whose first field is `version: u32`.
-/// Every type instantiated through this helper is guarded by
-/// `assert_version_at_offset_zero!` in [`crate::ffi`], so the offset-0 assumption
-/// is verified at compile time and cannot silently drift.
-unsafe fn zeroed_with_version<T>(ver: u32) -> T {
-    let mut val: T = std::mem::zeroed();
-    // SAFETY: `version` sits at offset 0 (proven by the ffi compile-time guard),
-    // so writing a `u32` to the struct's address initializes exactly that field.
-    ptr::addr_of_mut!(val).cast::<u32>().write(ver);
-    val
+/// `T` must be a `#[repr(C)]` NVAPI POD whose first field is `version: u32`, so
+/// that the all-zero bit pattern is a valid pre-initialization state and writing
+/// `VERSION` as a `u32` at offset 0 sets exactly that field. Every implementor is
+/// guarded by `assert_version_at_offset_zero!` in [`crate::ffi`], which fails the
+/// build if the field is ever reordered.
+unsafe trait VersionedNvapiStruct: Sized {
+    const VERSION: u32;
+}
+
+macro_rules! versioned_nvapi_struct {
+    ($ty:ty, $version:expr) => {
+        // SAFETY: `$ty` keeps `version: u32` at offset 0, proven at compile time by
+        // the `assert_version_at_offset_zero!($ty, ...)` guard in `ffi`.
+        unsafe impl VersionedNvapiStruct for $ty {
+            const VERSION: u32 = $version;
+        }
+    };
+}
+
+versioned_nvapi_struct!(NVDRS_APPLICATION, NVDRS_APPLICATION_VER);
+versioned_nvapi_struct!(NVDRS_PROFILE, NVDRS_PROFILE_VER);
+versioned_nvapi_struct!(NVDRS_SETTING, NVDRS_SETTING_VER);
+
+/// Creates a zeroed NVAPI struct and initializes its leading `version` word.
+fn zeroed_versioned<T: VersionedNvapiStruct>() -> T {
+    let mut val = MaybeUninit::<T>::zeroed();
+    // SAFETY: implementing `VersionedNvapiStruct` is an unsafe promise that `T` is
+    // a `#[repr(C)]` NVAPI POD with `version: u32` at offset 0. The all-zero bytes
+    // are therefore a valid initial state, and writing `VERSION` as a `u32` at the
+    // front initializes exactly that version word, leaving a fully valid `T`.
+    unsafe {
+        val.as_mut_ptr().cast::<u32>().write(T::VERSION);
+        val.assume_init()
+    }
 }
 
 /// Full state of a DWORD DRS setting on a profile.
@@ -110,11 +134,7 @@ impl Nvapi {
 
         let resolve = |id: u32| -> Option<*const c_void> {
             let ptr = unsafe { (query)(id) };
-            if ptr.is_null() {
-                None
-            } else {
-                Some(ptr)
-            }
+            if ptr.is_null() { None } else { Some(ptr) }
         };
 
         // SAFETY (resolve_fn! / resolve_fn_opt!): `resolve` returns either `None`
@@ -124,14 +144,14 @@ impl Nvapi {
         // from NVIDIA's published `nvapi_interface.h`; a mismatched pair is a
         // programmer error caught in review, not a runtime condition.
         macro_rules! resolve_fn {
-            ($name:ident, $id:expr, $ty:ty) => {
+            ($name:ident, $id:path, $ty:ty) => {
                 let $name: $ty = unsafe { std::mem::transmute(resolve($id)?) };
             };
         }
 
         // Optional functions: resolved with transmute if available, else None.
         macro_rules! resolve_fn_opt {
-            ($name:ident, $id:expr, $ty:ty) => {
+            ($name:ident, $id:path, $ty:ty) => {
                 let $name: Option<$ty> =
                     resolve($id).map(|ptr| unsafe { std::mem::transmute(ptr) });
             };
@@ -268,7 +288,7 @@ impl Nvapi {
         let wide_name = to_wide(exe_name);
 
         let mut profile: NvDRSProfileHandle = ptr::null_mut();
-        let mut app: NVDRS_APPLICATION = unsafe { zeroed_with_version(NVDRS_APPLICATION_VER) };
+        let mut app: NVDRS_APPLICATION = zeroed_versioned();
 
         let status =
             unsafe { (self.find_application)(session, wide_name.as_ptr(), &mut profile, &mut app) };
@@ -320,7 +340,7 @@ impl Nvapi {
         profile: NvDRSProfileHandle,
         setting_id: u32,
     ) -> Result<DwordSettingState, NvapiError> {
-        let mut setting: NVDRS_SETTING = unsafe { zeroed_with_version(NVDRS_SETTING_VER) };
+        let mut setting: NVDRS_SETTING = zeroed_versioned();
 
         // Prefer the v2 function ID (0xEA99498D) — the same one NVIDIA
         // Inspector uses. Both IDs expose the same NVAPI function but may
@@ -393,13 +413,9 @@ impl Nvapi {
         profile: NvDRSProfileHandle,
     ) -> Option<NVDRS_PROFILE> {
         let func = self.get_profile_info?;
-        let mut info: NVDRS_PROFILE = unsafe { zeroed_with_version(NVDRS_PROFILE_VER) };
+        let mut info: NVDRS_PROFILE = zeroed_versioned();
         let status = unsafe { (func)(session, profile, &mut info) };
-        if status == 0 {
-            Some(info)
-        } else {
-            None
-        }
+        if status == 0 { Some(info) } else { None }
     }
 
     /// Finds a profile by name. Returns `None` if the function is unavailable
@@ -412,11 +428,7 @@ impl Nvapi {
         let func = self.find_profile_by_name?;
         let mut handle: NvDRSProfileHandle = ptr::null_mut();
         let status = unsafe { (func)(session, profile_name.as_ptr(), &mut handle) };
-        if status == 0 {
-            Some(handle)
-        } else {
-            None
-        }
+        if status == 0 { Some(handle) } else { None }
     }
 
     fn set_dword_setting(
@@ -426,7 +438,7 @@ impl Nvapi {
         setting_id: u32,
         value: u32,
     ) -> Result<(), NvapiError> {
-        let mut setting: NVDRS_SETTING = unsafe { zeroed_with_version(NVDRS_SETTING_VER) };
+        let mut setting: NVDRS_SETTING = zeroed_versioned();
         setting.settingId = setting_id;
         setting.settingType = NVDRS_DWORD_TYPE;
         setting.isCurrentPredefined = 0;

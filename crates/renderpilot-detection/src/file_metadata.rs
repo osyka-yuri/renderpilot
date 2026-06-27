@@ -414,7 +414,7 @@ mod tests {
 
     use renderpilot_domain::{Sha256Hash, Version};
 
-    use super::{sha256_file, sha256_reader_hex, FileHashCache, FileStat, VersionDetectionStatus};
+    use super::{FileHashCache, FileStat, VersionDetectionStatus, sha256_file, sha256_reader_hex};
 
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 

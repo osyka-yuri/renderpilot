@@ -225,6 +225,28 @@ fn is_symlink(metadata: &fs::Metadata) -> bool {
     metadata.file_type().is_symlink()
 }
 
+/// Iterator over a directory's entries that maps IO errors to detection context
+/// errors, tagging each with the directory `path` for diagnostics.
+struct ReadDirEntries {
+    path: PathBuf,
+    entries: fs::ReadDir,
+}
+
+impl Iterator for ReadDirEntries {
+    type Item = AppResult<fs::DirEntry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.entries.next().map(|entry| {
+            entry.map_err(|error| {
+                detection_context_error(
+                    format_args!("could not enumerate directory {}", self.path.display()),
+                    error,
+                )
+            })
+        })
+    }
+}
+
 /// Reads a directory's entries in OS order.
 ///
 /// Entries are intentionally not sorted here: the walker pushes only the
@@ -232,7 +254,7 @@ fn is_symlink(metadata: &fs::Metadata) -> bool {
 /// deterministic order once — a per-directory sort would be redundant work
 /// (and `sort_unstable_by_key(|e| e.file_name())` reallocates an `OsString` on
 /// every comparison, which is expensive on large game folders).
-fn read_dir_entries(path: &Path) -> AppResult<impl Iterator<Item = AppResult<fs::DirEntry>>> {
+fn read_dir_entries(path: &Path) -> AppResult<ReadDirEntries> {
     let path_buf = path.to_path_buf();
     let entries = fs::read_dir(path).map_err(|error| {
         detection_context_error(
@@ -241,14 +263,10 @@ fn read_dir_entries(path: &Path) -> AppResult<impl Iterator<Item = AppResult<fs:
         )
     })?;
 
-    Ok(entries.map(move |entry| {
-        entry.map_err(|error| {
-            detection_context_error(
-                format_args!("could not enumerate directory {}", path_buf.display()),
-                error,
-            )
-        })
-    }))
+    Ok(ReadDirEntries {
+        path: path_buf,
+        entries,
+    })
 }
 
 fn is_system_directory(path: &Path) -> bool {

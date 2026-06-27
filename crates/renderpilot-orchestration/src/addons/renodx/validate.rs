@@ -8,13 +8,13 @@
 
 use std::collections::HashSet;
 
-use crate::fs::is_safe_file_name;
 use crate::ServiceError;
+use crate::fs::is_safe_file_name;
 
 use super::errors;
 use super::types::{
-    manifest_defaults, Category, Generic, MatchKind, MatchRule, RenoDxManifest, ReshadeConfig,
-    Title,
+    Category, Generic, MatchKind, MatchRule, RenoDxManifest, ReshadeConfig, Title,
+    manifest_defaults,
 };
 
 /// Schema version this build understands.
@@ -107,7 +107,7 @@ fn validate_generic(generic: &Generic) -> Result<(), ServiceError> {
         (None, None) => {
             return Err(errors::failed(
                 "generic must define either a slug or url64".to_owned(),
-            ))
+            ));
         }
     }
     Ok(())

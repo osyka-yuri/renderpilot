@@ -3,9 +3,9 @@
 use renderpilot_domain::Architecture;
 
 use super::types::{
-    manifest_defaults, AnticheatEngine, AssessmentConfidence, Category, Channel, Compatibility,
-    MatchKind, MatchRule, OnlineKind, RenoDxManifest, ReshadeConfig, ReshadeNightly, Risk,
-    RiskSeverity, Status, Title,
+    AnticheatEngine, AssessmentConfidence, Category, Channel, Compatibility, MatchKind, MatchRule,
+    OnlineKind, RenoDxManifest, ReshadeConfig, ReshadeNightly, Risk, RiskSeverity, Status, Title,
+    manifest_defaults,
 };
 
 /// Builds a single match rule.

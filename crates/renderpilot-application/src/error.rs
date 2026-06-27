@@ -273,7 +273,7 @@ impl Error for AppError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{invalid_operation_state_display_message, AppError, AppErrorKind};
+    use super::{AppError, AppErrorKind, invalid_operation_state_display_message};
     use crate::persistence::OperationStatus;
 
     #[test]

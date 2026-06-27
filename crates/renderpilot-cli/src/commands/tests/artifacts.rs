@@ -1,12 +1,10 @@
 use std::{ffi::OsString, fs};
 
-use crate::run;
-
-use super::{args, temp_db_path, CatalogEnvironmentGuard, TempGameFolder};
+use super::{CatalogFixture, TempGameFolder, args};
 
 #[test]
 fn list_artifacts_groups_artifacts_from_multiple_scans() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("list-artifacts-multi"));
+    let fixture = CatalogFixture::new("list-artifacts-multi");
     let dlss_folder = TempGameFolder::new("cli-artifacts-dlss");
     let xess_folder = TempGameFolder::new("cli-artifacts-xess");
 
@@ -17,18 +15,22 @@ fn list_artifacts_groups_artifacts_from_multiple_scans() {
     fs::write(xess_folder.path().join("libxess.dll"), b"xess-b")
         .expect("xess file should be written");
 
-    run(vec![
-        OsString::from("scan-folder"),
-        dlss_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("first scan should succeed");
-    run(vec![
-        OsString::from("scan-folder"),
-        xess_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("second scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            dlss_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("first scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            xess_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("second scan should succeed");
 
-    let output = run(args(&["list-artifacts"])).expect("artifact list should render");
+    let output = fixture
+        .run(args(&["list-artifacts"]))
+        .expect("artifact list should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let groups = json["groups"].as_array().expect("groups array");
 
@@ -41,7 +43,7 @@ fn list_artifacts_groups_artifacts_from_multiple_scans() {
 
 #[test]
 fn list_artifacts_filters_by_technology() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("list-artifacts-filter"));
+    let fixture = CatalogFixture::new("list-artifacts-filter");
     let dlss_folder = TempGameFolder::new("cli-filter-dlss");
     let fg_folder = TempGameFolder::new("cli-filter-fg");
 
@@ -52,23 +54,26 @@ fn list_artifacts_filters_by_technology() {
     fs::write(fg_folder.path().join("nvngx_dlssg.dll"), b"fg-a")
         .expect("fg file should be written");
 
-    run(vec![
-        OsString::from("scan-folder"),
-        dlss_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("first scan should succeed");
-    run(vec![
-        OsString::from("scan-folder"),
-        fg_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("second scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            dlss_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("first scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            fg_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("second scan should succeed");
 
-    let output = run(args(&[
-        "list-artifacts",
-        "--technology",
-        "dlss_super_resolution",
-    ]))
-    .expect("filtered artifact list should render");
+    let output = fixture
+        .run(args(&[
+            "list-artifacts",
+            "--technology",
+            "dlss_super_resolution",
+        ]))
+        .expect("filtered artifact list should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let groups = json["groups"].as_array().expect("groups array");
 
@@ -86,7 +91,7 @@ fn list_artifacts_filters_by_technology() {
 
 #[test]
 fn scan_folder_deduplicates_identical_sha256_across_games() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-dedup"));
+    let fixture = CatalogFixture::new("scan-dedup");
     let first_folder = TempGameFolder::new("cli-dedup-first");
     let second_folder = TempGameFolder::new("cli-dedup-second");
 
@@ -97,23 +102,26 @@ fn scan_folder_deduplicates_identical_sha256_across_games() {
     fs::write(second_folder.path().join("nvngx_dlss.dll"), b"same-bytes")
         .expect("second file should be written");
 
-    run(vec![
-        OsString::from("scan-folder"),
-        first_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("first scan should succeed");
-    run(vec![
-        OsString::from("scan-folder"),
-        second_folder.path().as_os_str().to_owned(),
-    ])
-    .expect("second scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            first_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("first scan should succeed");
+    fixture
+        .run(vec![
+            OsString::from("scan-folder"),
+            second_folder.path().as_os_str().to_owned(),
+        ])
+        .expect("second scan should succeed");
 
-    let output = run(args(&[
-        "list-artifacts",
-        "--technology",
-        "dlss_super_resolution",
-    ]))
-    .expect("artifact list should render");
+    let output = fixture
+        .run(args(&[
+            "list-artifacts",
+            "--technology",
+            "dlss_super_resolution",
+        ]))
+        .expect("artifact list should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let artifacts = json["groups"][0]["artifacts"]
         .as_array()

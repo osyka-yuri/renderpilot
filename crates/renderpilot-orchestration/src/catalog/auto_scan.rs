@@ -6,8 +6,8 @@ use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::ServiceError;
 
-use super::scan::scan_auto_in_shared_batch;
 use super::ScanFolderCatalogResult;
+use super::scan::scan_auto_in_shared_batch;
 
 /// Reusable per-batch state produced by [`open_auto_scan_batch`] and consumed
 /// by every call to [`scan_auto_in_batch`] in an auto-scan loop.

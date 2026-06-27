@@ -120,7 +120,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    fn env_map(entries: &[(&str, &str)]) -> impl FnMut(&str) -> Option<OsString> {
+    fn env_map(entries: &[(&str, &str)]) -> impl FnMut(&str) -> Option<OsString> + use<> {
         let entries: HashMap<String, OsString> = entries
             .iter()
             .map(|(key, value)| ((*key).to_owned(), OsString::from(value)))
@@ -251,10 +251,12 @@ mod tests {
 
         ensure_catalog_directory(&db_path).expect("catalog directory should be created");
 
-        assert!(db_path
-            .parent()
-            .expect("db path should have parent")
-            .is_dir());
+        assert!(
+            db_path
+                .parent()
+                .expect("db path should have parent")
+                .is_dir()
+        );
 
         fs::remove_dir_all(&dir).expect("test directory should be removed");
     }

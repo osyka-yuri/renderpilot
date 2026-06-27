@@ -4,14 +4,14 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use super::QueryGameCardsRequest;
 use super::normalize::{
     normalize_search_query, normalize_selected_launchers, normalize_selected_libraries,
 };
 use super::output::GameCardOutput;
 use super::sort::{
-    compare_game_card_identity, QueryGameCardsPage, QueryGameCardsSort, QuerySortField,
+    QueryGameCardsPage, QueryGameCardsSort, QuerySortField, compare_game_card_identity,
 };
-use super::QueryGameCardsRequest;
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]

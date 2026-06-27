@@ -1,8 +1,8 @@
 use std::{borrow::Cow, error::Error, fmt};
 
+use renderpilot_orchestration::ServiceError;
 use renderpilot_orchestration::application::AppError;
 use renderpilot_orchestration::detection::LibraryPatternError;
-use renderpilot_orchestration::ServiceError;
 
 use crate::output::HELP_HINT;
 
@@ -158,8 +158,8 @@ fn write_usage_error(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_orchestration::application::{AppError, AppErrorKind, OperationStatus};
     use renderpilot_orchestration::ServiceError;
+    use renderpilot_orchestration::application::{AppError, AppErrorKind, OperationStatus};
 
     use super::{CliError, GENERAL_FAILURE_EXIT_CODE, USAGE_FAILURE_EXIT_CODE};
 

@@ -1,6 +1,6 @@
 use crate::{
-    utils::{to_json, JsonResult},
     ApiError,
+    utils::{JsonResult, to_json},
 };
 
 /// Reads whether the global NVIDIA DLSS indicator overlay is currently enabled.

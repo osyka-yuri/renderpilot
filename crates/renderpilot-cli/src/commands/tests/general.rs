@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use crate::{run, CliError};
+use crate::{CliError, run};
 
 use super::args;
 

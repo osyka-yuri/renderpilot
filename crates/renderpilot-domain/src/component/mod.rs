@@ -8,9 +8,9 @@ use std::{error::Error, fmt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    text::{normalize_required_text, RequiredTextError},
     ArtifactId, ComponentId, ComponentKind, GameId, GraphicsTechnology, PathRef, Swappability,
     Version,
+    text::{RequiredTextError, normalize_required_text},
 };
 
 pub use self::hash::{Sha256Digest, Sha256Hash};

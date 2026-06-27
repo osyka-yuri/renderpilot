@@ -42,10 +42,10 @@ use std::sync::{Mutex, MutexGuard};
 use renderpilot_domain::GameId;
 use renderpilot_storage_sqlite::SqliteStorage;
 
+use super::CoverMutationOutput;
 use super::fs_ops::gc_orphan_cover_files;
 use super::paths::covers_directory;
 use super::validation::validate_cover_bytes;
-use super::CoverMutationOutput;
 use crate::ServiceError;
 
 /// Upper bound on the human-readable portion of cover file names.

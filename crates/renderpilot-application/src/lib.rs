@@ -15,14 +15,14 @@ mod persistence;
 mod ports;
 
 pub use candidates::{
-    find_replacement_candidates, CandidateComparison, CandidateContext,
-    ComponentReplacementCandidates, ReplacementCandidate,
+    CandidateComparison, CandidateContext, ComponentReplacementCandidates, ReplacementCandidate,
+    find_replacement_candidates,
 };
-pub use error::{invalid_operation_state_display_message, AppError, AppErrorKind, AppResult};
-pub use info::{app_info, AppInfo};
+pub use error::{AppError, AppErrorKind, AppResult, invalid_operation_state_display_message};
+pub use info::{AppInfo, app_info};
 pub use operation_plan::{
-    build_swap_operation_plan, OperationPlan, OperationPlanBlocker, OperationPlanFile,
-    OperationPlanFileAction, OperationPlanRiskLevel, OperationPlanWarning,
+    OperationPlan, OperationPlanBlocker, OperationPlanFile, OperationPlanFileAction,
+    OperationPlanRiskLevel, OperationPlanWarning, build_swap_operation_plan,
 };
 
 pub use persistence::{

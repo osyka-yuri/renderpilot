@@ -27,7 +27,7 @@ use renderpilot_detection::{DetectedLibraryFile, FileHashCache, LibraryPatternCo
 use renderpilot_domain::{GameId, GameInstallation, GraphicsComponent, LibraryArtifact};
 use renderpilot_platform_windows::ManualFolderGameSource;
 use renderpilot_storage_sqlite::{FileHashCacheRow, ScanWriteUnit, SqliteStorage};
-use scan_plan::{decide_fast_scan_fallback, DetectionMode, InstallRootStrategy};
+use scan_plan::{DetectionMode, InstallRootStrategy, decide_fast_scan_fallback};
 
 use crate::ServiceError;
 

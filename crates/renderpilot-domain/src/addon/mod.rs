@@ -544,27 +544,31 @@ mod tests {
     fn from_parts_rejects_rows_that_omit_addon_file() {
         let addon = addon_path();
         let other = PathRef::new(r"C:\Games\CP2077\dxgi.dll").expect("valid path");
-        assert!(InstalledAddon::from_parts(
-            game_id(),
-            AddonKind::RenoDx,
-            addon.clone(),
-            None,
-            vec![other],
-            Vec::new(),
-            Vec::new(),
-        )
-        .is_none());
+        assert!(
+            InstalledAddon::from_parts(
+                game_id(),
+                AddonKind::RenoDx,
+                addon.clone(),
+                None,
+                vec![other],
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_none()
+        );
 
-        assert!(InstalledAddon::from_parts(
-            game_id(),
-            AddonKind::RenoDx,
-            addon.clone(),
-            None,
-            vec![addon],
-            Vec::new(),
-            Vec::new(),
-        )
-        .is_some());
+        assert!(
+            InstalledAddon::from_parts(
+                game_id(),
+                AddonKind::RenoDx,
+                addon.clone(),
+                None,
+                vec![addon],
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_some()
+        );
     }
 
     #[test]

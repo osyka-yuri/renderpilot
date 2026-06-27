@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use renderpilot_domain::{GameId, Launcher};
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use crate::catalog::ScanFolderCatalogResult;
 use crate::ServiceError;
+use crate::catalog::ScanFolderCatalogResult;
 
 use super::paths;
 

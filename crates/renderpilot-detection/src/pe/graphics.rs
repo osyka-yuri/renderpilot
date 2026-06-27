@@ -22,8 +22,8 @@ use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi};
 
 use super::binary::{read_u16, read_u32};
 use super::header::{
-    rva_to_offset, PeHeaders, COFF_HEADER_LEN, DOS_PE_POINTER_OFFSET, MAX_SECTIONS,
-    SECTION_HEADER_LEN,
+    COFF_HEADER_LEN, DOS_PE_POINTER_OFFSET, MAX_SECTIONS, PeHeaders, SECTION_HEADER_LEN,
+    rva_to_offset,
 };
 
 const IMPORT_DESCRIPTOR_LEN: usize = 20;

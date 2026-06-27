@@ -5,8 +5,8 @@ use renderpilot_domain::{
 };
 
 use super::{
-    build_swap_operation_plan, OperationPlanBlocker, OperationPlanFileAction,
-    OperationPlanRiskLevel, OperationPlanWarning,
+    OperationPlanBlocker, OperationPlanFileAction, OperationPlanRiskLevel, OperationPlanWarning,
+    build_swap_operation_plan,
 };
 
 #[test]
@@ -140,9 +140,10 @@ fn blocks_technology_mismatch() {
     let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
 
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Blocked);
-    assert!(plan
-        .blockers()
-        .contains(&OperationPlanBlocker::TechnologyMismatch));
+    assert!(
+        plan.blockers()
+            .contains(&OperationPlanBlocker::TechnologyMismatch)
+    );
 }
 
 #[test]
@@ -167,9 +168,10 @@ fn blocks_invalid_artifact_with_same_hash() {
     let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
 
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Blocked);
-    assert!(plan
-        .blockers()
-        .contains(&OperationPlanBlocker::ArtifactMatchesCurrentFile));
+    assert!(
+        plan.blockers()
+            .contains(&OperationPlanBlocker::ArtifactMatchesCurrentFile)
+    );
 }
 
 #[test]
@@ -213,13 +215,17 @@ fn non_swappable_component_requires_confirmation_or_blocks() {
         build_swap_operation_plan(&unsafe_component, &dlss_artifact).expect("plan should build");
 
     assert_eq!(bundle_only_plan.risk_level(), OperationPlanRiskLevel::High);
-    assert!(bundle_only_plan
-        .warnings()
-        .contains(&OperationPlanWarning::ConfirmationRequiredForSwappability));
+    assert!(
+        bundle_only_plan
+            .warnings()
+            .contains(&OperationPlanWarning::ConfirmationRequiredForSwappability)
+    );
     assert_eq!(unsafe_plan.risk_level(), OperationPlanRiskLevel::Blocked);
-    assert!(unsafe_plan
-        .blockers()
-        .contains(&OperationPlanBlocker::ComponentUnsafe));
+    assert!(
+        unsafe_plan
+            .blockers()
+            .contains(&OperationPlanBlocker::ComponentUnsafe)
+    );
 }
 
 #[test]
@@ -245,9 +251,10 @@ fn streamline_bundle_requires_confirmation_warning() {
 
     let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
 
-    assert!(plan
-        .warnings()
-        .contains(&OperationPlanWarning::ConfirmationRequiredForSwappability));
+    assert!(
+        plan.warnings()
+            .contains(&OperationPlanWarning::ConfirmationRequiredForSwappability)
+    );
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::High);
 }
 
@@ -273,9 +280,10 @@ fn missing_versions_require_manual_review_and_medium_risk() {
     let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
 
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Medium);
-    assert!(plan
-        .warnings()
-        .contains(&OperationPlanWarning::ManualVersionComparisonRequired));
+    assert!(
+        plan.warnings()
+            .contains(&OperationPlanWarning::ManualVersionComparisonRequired)
+    );
 }
 
 #[test]

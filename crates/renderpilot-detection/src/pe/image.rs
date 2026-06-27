@@ -5,7 +5,7 @@
 //! (index 2) and traverses its directory tree to the `VS_VERSION_INFO` blob.
 
 use super::binary::{checked_range, read_u16, read_u32};
-use super::header::{rva_to_offset, PeHeaders};
+use super::header::{PeHeaders, rva_to_offset};
 
 const RESOURCE_DIRECTORY_HEADER_LEN: usize = 16;
 const RESOURCE_DIRECTORY_NAMED_ENTRIES_OFFSET: usize = 12;

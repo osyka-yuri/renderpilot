@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
-    fsr, ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version,
+    ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version, fsr,
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
@@ -369,12 +369,14 @@ mod tests {
         let v1 = Version::parse("1.0.0").unwrap();
         let v2 = Version::parse("2.0.0").unwrap();
 
-        assert!(require_version_compatible(
-            GraphicsTechnology::DlssSuperResolution,
-            Some(&v1),
-            Some(&v2),
-        )
-        .is_none());
+        assert!(
+            require_version_compatible(
+                GraphicsTechnology::DlssSuperResolution,
+                Some(&v1),
+                Some(&v2),
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -382,12 +384,14 @@ mod tests {
         let v2 = Version::parse("2.0.0").unwrap();
         let v3 = Version::parse("3.7.0").unwrap();
 
-        assert!(require_version_compatible(
-            GraphicsTechnology::DlssSuperResolution,
-            Some(&v2),
-            Some(&v3),
-        )
-        .is_some());
+        assert!(
+            require_version_compatible(
+                GraphicsTechnology::DlssSuperResolution,
+                Some(&v2),
+                Some(&v3),
+            )
+            .is_some()
+        );
     }
 
     #[test]
@@ -395,11 +399,13 @@ mod tests {
         let v1 = Version::parse("1.0.0").unwrap();
         let v2 = Version::parse("2.0.0").unwrap();
 
-        assert!(require_version_compatible(
-            GraphicsTechnology::DlssFrameGeneration,
-            Some(&v1),
-            Some(&v2),
-        )
-        .is_some());
+        assert!(
+            require_version_compatible(
+                GraphicsTechnology::DlssFrameGeneration,
+                Some(&v1),
+                Some(&v2),
+            )
+            .is_some()
+        );
     }
 }

@@ -1,5 +1,5 @@
-use crate::cdn::{self, CdnManifestSpec};
 use crate::ServiceError;
+use crate::cdn::{self, CdnManifestSpec};
 
 use super::{
     library_error, storage,
@@ -80,8 +80,8 @@ pub(super) fn load_local_manifest() -> Result<Option<LibraryManifest>, ServiceEr
     Ok(cdn::cached(&manifest_spec(), parse_manifest))
 }
 
-pub(super) fn load_local_manifest_entries(
-) -> Result<Option<Vec<LibraryManifestEntry>>, ServiceError> {
+pub(super) fn load_local_manifest_entries()
+-> Result<Option<Vec<LibraryManifestEntry>>, ServiceError> {
     Ok(load_local_manifest()?.map(|manifest| manifest.entries))
 }
 

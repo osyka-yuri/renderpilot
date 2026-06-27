@@ -4,7 +4,7 @@ use renderpilot_application::{
     AppResult, OperationItemRecord, OperationJournalEntry, OperationRecord, OperationRepository,
 };
 use renderpilot_domain::{GameId, OperationId};
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
     error::{storage_context, storage_error},
@@ -12,12 +12,12 @@ use crate::{
 };
 
 use super::{
+    SqliteStorage,
     catalog_select_sql::{
-        SELECT_OPERATIONS_FOR_GAME_SQL, SELECT_OPERATION_ITEMS_FOR_GAME_SQL,
-        SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL,
+        SELECT_OPERATION_ITEMS_FOR_GAME_SQL, SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL,
+        SELECT_OPERATIONS_FOR_GAME_SQL,
     },
     row_mapping::{collect_rows, operation_from_row, operation_item_from_row},
-    SqliteStorage,
 };
 
 const UPSERT_OPERATION_SQL: &str = "

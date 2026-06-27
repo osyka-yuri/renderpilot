@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use renderpilot_domain::{fsr, ComponentFile, GraphicsComponent, LibraryArtifact, PathRef};
+use renderpilot_domain::{ComponentFile, GraphicsComponent, LibraryArtifact, PathRef, fsr};
 
 use crate::{AppError, AppResult};
 
-use super::assessment::{primary_component_file, OperationPlanAssessment};
+use super::assessment::{OperationPlanAssessment, primary_component_file};
 use super::plan::OperationPlanFile;
-use super::{generate_operation_plan_identity, OperationPlan};
+use super::{OperationPlan, generate_operation_plan_identity};
 
 /// Builds a swap operation plan without applying any filesystem changes.
 pub fn build_swap_operation_plan(

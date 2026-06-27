@@ -57,7 +57,7 @@ pub const fn app_info(version: &'static str) -> AppInfo {
 mod tests {
     use renderpilot_domain::APP_NAME;
 
-    use super::{app_info, AppInfo};
+    use super::{AppInfo, app_info};
 
     #[test]
     fn app_info_uses_renderpilot_name() {

@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-use super::{apply, CURRENT_SCHEMA_VERSION};
+use super::{CURRENT_SCHEMA_VERSION, apply};
 
 #[test]
 fn apply_creates_catalog_schema() {

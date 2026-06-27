@@ -1,8 +1,8 @@
 //! Loads prerequisites and validates an apply before any mutation runs.
 
-use renderpilot_application::{build_swap_operation_plan, AppError, AppResult};
+use renderpilot_application::{AppError, AppResult, build_swap_operation_plan};
 use renderpilot_domain::{
-    fsr, ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact,
+    ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 

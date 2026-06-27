@@ -317,7 +317,7 @@ mod tests {
 
     use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
-    use super::{parse_args, Command};
+    use super::{Command, parse_args};
     use crate::CliError;
 
     fn args(values: &[&str]) -> Vec<OsString> {

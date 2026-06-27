@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::catalog::OperationListCatalogResult;
 use renderpilot_orchestration::catalog::output::{
-    component_candidate_outputs, operation_summary_outputs, ComponentCandidateOutput,
+    ComponentCandidateOutput, component_candidate_outputs, operation_summary_outputs,
 };
 
 type JsonResult<T> = Result<T, serde_json::Error>;

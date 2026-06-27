@@ -1,6 +1,6 @@
 //! Best-effort recording of completed swap / rollback operations in the journal.
 
-use renderpilot_domain::{fsr, ArtifactId, ComponentId, GameId, GraphicsComponent, PathRef};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, PathRef, fsr};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use renderpilot_application::{

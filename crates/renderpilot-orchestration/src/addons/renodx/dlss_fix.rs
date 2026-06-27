@@ -167,9 +167,11 @@ mod tests {
                 component(GraphicsTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
             ],
         };
-        assert!(resolve_dlss_fix(&repo, &game_id())
-            .expect("resolve")
-            .is_none());
+        assert!(
+            resolve_dlss_fix(&repo, &game_id())
+                .expect("resolve")
+                .is_none()
+        );
     }
 
     #[test]
@@ -183,9 +185,11 @@ mod tests {
                 component(GraphicsTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
             ],
         };
-        assert!(resolve_dlss_fix(&repo, &game_id())
-            .expect("resolve")
-            .is_none());
+        assert!(
+            resolve_dlss_fix(&repo, &game_id())
+                .expect("resolve")
+                .is_none()
+        );
     }
 
     #[test]
@@ -201,16 +205,20 @@ mod tests {
                 component(GraphicsTechnology::NvidiaStreamline, &["sl.common.dll"]),
             ],
         };
-        assert!(resolve_dlss_fix(&repo, &game_id())
-            .expect("resolve")
-            .is_none());
+        assert!(
+            resolve_dlss_fix(&repo, &game_id())
+                .expect("resolve")
+                .is_none()
+        );
     }
 
     #[test]
     fn returns_none_when_no_components() {
         let repo = FakeRepo { components: vec![] };
-        assert!(resolve_dlss_fix(&repo, &game_id())
-            .expect("resolve")
-            .is_none());
+        assert!(
+            resolve_dlss_fix(&repo, &game_id())
+                .expect("resolve")
+                .is_none()
+        );
     }
 }

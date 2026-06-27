@@ -1,4 +1,4 @@
-use crate::{storage::open_catalog_storage, ServiceError};
+use crate::{ServiceError, storage::open_catalog_storage};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 /// Shared application context holding the catalog storage and configuration.

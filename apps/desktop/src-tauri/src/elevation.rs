@@ -19,7 +19,7 @@ use std::os::windows::ffi::OsStrExt;
 
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::Security::{
-    GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows_sys::Win32::UI::Shell::ShellExecuteW;

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use renderpilot_orchestration::application::AppInfo;
 use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::{Context, ServiceError};
 
 use crate::{
     args::Command,
@@ -24,41 +25,53 @@ mod tests;
 type CliOutput = Result<String, CliError>;
 
 pub(crate) fn render_command(command: Command, info: AppInfo) -> CliOutput {
+    render_command_with_context(command, info, Context::open)
+}
+
+pub(crate) fn render_command_with_context<F>(
+    command: Command,
+    info: AppInfo,
+    open_context: F,
+) -> CliOutput
+where
+    F: FnOnce() -> Result<Context, ServiceError>,
+{
     match command {
         Command::Summary => render_summary_command(info),
         Command::Help => render_help_command(info),
         Command::Version => render_version_command(info),
-        other => render_stateful_command(other),
+        other => {
+            let context = open_context()?;
+            render_stateful_command(other, &context)
+        }
     }
 }
 
-fn render_stateful_command(command: Command) -> CliOutput {
-    let context = renderpilot_orchestration::Context::open()?;
-
+fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
     match command {
-        Command::ScanFolder { path } => scan_folder(&context, path),
-        Command::ListArtifacts { technology } => list_artifacts(&context, technology),
-        Command::ListOperations { game_id } => list_operations(&context, &game_id),
-        Command::Candidates { game_id } => candidates(&context, &game_id),
+        Command::ScanFolder { path } => scan_folder(context, path),
+        Command::ListArtifacts { technology } => list_artifacts(context, technology),
+        Command::ListOperations { game_id } => list_operations(context, &game_id),
+        Command::Candidates { game_id } => candidates(context, &game_id),
 
         Command::PlanSwap {
             game_id,
             component_id,
             artifact_id,
-        } => plan_swap(&context, &game_id, &component_id, &artifact_id),
+        } => plan_swap(context, &game_id, &component_id, &artifact_id),
 
         Command::ApplyOperation {
             game_id,
             component_id,
             artifact_id,
-        } => apply_swap(&context, &game_id, &component_id, &artifact_id),
+        } => apply_swap(context, &game_id, &component_id, &artifact_id),
         Command::RollbackOperation {
             game_id,
             component_id,
-        } => rollback_component(&context, &game_id, &component_id),
+        } => rollback_component(context, &game_id, &component_id),
 
-        Command::RenodxStatus { game_id } => renodx_status(&context, &game_id),
-        Command::RenodxUninstall { game_id } => renodx_uninstall(&context, &game_id),
+        Command::RenodxStatus { game_id } => renodx_status(context, &game_id),
+        Command::RenodxUninstall { game_id } => renodx_uninstall(context, &game_id),
 
         _ => unreachable!("stateless commands are handled in render_command"),
     }

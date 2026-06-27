@@ -278,7 +278,7 @@ mod tests {
     use renderpilot_application::AppErrorKind;
     use renderpilot_domain::{Sha256Hash, Version};
 
-    use super::{escape_like, sqlite_integer, CachePathScope, FileHashCacheRow};
+    use super::{CachePathScope, FileHashCacheRow, escape_like, sqlite_integer};
     use crate::SqliteStorage;
 
     const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

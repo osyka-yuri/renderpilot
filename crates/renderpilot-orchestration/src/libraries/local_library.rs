@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::net::{DownloadProgress, ProgressObserver};
 use crate::ServiceError;
+use crate::net::{DownloadProgress, ProgressObserver};
 use renderpilot_application::ArtifactRepository;
 use renderpilot_domain::{
     ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,

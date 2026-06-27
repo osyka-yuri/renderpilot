@@ -1,5 +1,5 @@
-use super::strings::{suggested_action, SuggestedActions};
 use super::CommandErrorSeverity;
+use super::strings::{SuggestedActions, suggested_action};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ErrorSpec {
@@ -15,7 +15,7 @@ macro_rules! command_error_kinds {
             $kind:ident => {
                 code: $code:literal,
                 severity: $severity:ident,
-                actions: $actions:expr $(,)?
+                actions: $actions:path $(,)?
             }
         ),+ $(,)?
     ) => {

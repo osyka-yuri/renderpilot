@@ -18,12 +18,12 @@ use renderpilot_domain::{
     AddonKind, Architecture, GameId, InstalledAddon, PathRef, TrackedSource, TrackedSourceRole,
 };
 
+use crate::ServiceError;
 use crate::addons::engine::{self, FileOp, InstallPlan};
 use crate::addons::record;
-use crate::ServiceError;
 
 use super::errors;
-use super::reshade::{self, detect_reshade, ini_merge_strategy, ReshadeMarker, ReshadeState};
+use super::reshade::{self, ReshadeMarker, ReshadeState, detect_reshade, ini_merge_strategy};
 use super::types::ReshadeIniTweaks;
 
 /// The DLSS-Fix companion add-on file name prefix (`renodx-dlssfix.`).
@@ -364,10 +364,12 @@ mod tests {
 
         assert!(!record.reshade_managed_by_us());
         // No Host source is tracked for a reused foreign host.
-        assert!(record
-            .tracked_sources()
-            .iter()
-            .all(|s| s.role() != TrackedSourceRole::Host));
+        assert!(
+            record
+                .tracked_sources()
+                .iter()
+                .all(|s| s.role() != TrackedSourceRole::Host)
+        );
         // Foreign DLL untouched (we did not rewrite it or back it up).
         assert_eq!(read(&dir.path().join("dxgi.dll")), b"foreign-reshade");
         assert!(!marker_path(dir.path()).exists());
@@ -394,10 +396,12 @@ mod tests {
         // add-on is placed, and the foreign DLL is left alone.
         assert!(!dir.path().join("ReShade.ini").exists());
         assert!(!marker_path(dir.path()).exists());
-        assert!(record
-            .created_files()
-            .iter()
-            .all(|p| !p.as_str().ends_with("ReShade.ini")));
+        assert!(
+            record
+                .created_files()
+                .iter()
+                .all(|p| !p.as_str().ends_with("ReShade.ini"))
+        );
         assert!(record.backed_up_files().is_empty());
 
         uninstall(&record).expect("uninstall");

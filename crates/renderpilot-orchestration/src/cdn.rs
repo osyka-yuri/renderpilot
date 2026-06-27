@@ -13,8 +13,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use crate::fs::strip_utf8_bom;
 use crate::ServiceError;
+use crate::fs::strip_utf8_bom;
 
 /// The host every manifest, preset, and archive download is pinned to. The one
 /// literal: [`cdn_url`] builds from it and `libraries::validate` pins against it.
@@ -137,7 +137,7 @@ where
             return Err(err(format!(
                 "failed to stat manifest cache `{}`: {error}",
                 path.display()
-            )))
+            )));
         }
     };
 

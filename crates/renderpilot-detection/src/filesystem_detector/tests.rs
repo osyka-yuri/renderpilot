@@ -11,14 +11,14 @@ use renderpilot_domain::{
 };
 
 use super::{
-    group_into_artifacts, group_into_components, DetectedLibraryFile,
-    LibraryPatternComponentDetector,
+    DetectedLibraryFile, LibraryPatternComponentDetector, group_into_artifacts,
+    group_into_components,
 };
 use crate::{
-    file_metadata::{
-        reset_sha256_file_call_count_for_tests, sha256_file_call_count_for_tests, FileHashCache,
-    },
     VersionDetectionStatus,
+    file_metadata::{
+        FileHashCache, reset_sha256_file_call_count_for_tests, sha256_file_call_count_for_tests,
+    },
 };
 
 const FIXTURE_NEWLINE_FILE_SHA256: &str =
@@ -63,12 +63,16 @@ fn fixture_does_not_detect_garbage_dlls() {
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
 
-    assert!(!libraries
-        .iter()
-        .any(|library| library.file_name() == "random.dll"));
-    assert!(!libraries
-        .iter()
-        .any(|library| library.file_name() == "not_a_graphics.dll"));
+    assert!(
+        !libraries
+            .iter()
+            .any(|library| library.file_name() == "random.dll")
+    );
+    assert!(
+        !libraries
+            .iter()
+            .any(|library| library.file_name() == "not_a_graphics.dll")
+    );
 }
 
 #[test]
@@ -79,9 +83,11 @@ fn fixture_does_not_scan_system_directories() {
         .detect_library_files(&game)
         .expect("fixture detection should succeed");
 
-    assert!(!libraries
-        .iter()
-        .any(|library| library.file_path().as_str().contains("/Windows/")));
+    assert!(
+        !libraries
+            .iter()
+            .any(|library| library.file_path().as_str().contains("/Windows/"))
+    );
 }
 
 #[test]
@@ -99,9 +105,11 @@ fn detector_respects_max_recursion_depth() {
         "nvngx_dlss.dll",
         GraphicsTechnology::DlssSuperResolution,
     );
-    assert!(!libraries
-        .iter()
-        .any(|library| library.file_name() == "nvngx_dlssg.dll"));
+    assert!(
+        !libraries
+            .iter()
+            .any(|library| library.file_name() == "nvngx_dlssg.dll")
+    );
 }
 
 #[test]
@@ -150,12 +158,16 @@ fn component_detector_trait_maps_detected_files_to_domain_components() {
         .detect_components(&game)
         .expect("component detection should succeed");
 
-    assert!(components
-        .iter()
-        .any(|component| component.technology() == GraphicsTechnology::DlssSuperResolution));
-    assert!(components
-        .iter()
-        .any(|component| component.files().iter().any(|file| file.sha256().is_some())));
+    assert!(
+        components
+            .iter()
+            .any(|component| component.technology() == GraphicsTechnology::DlssSuperResolution)
+    );
+    assert!(
+        components
+            .iter()
+            .any(|component| component.files().iter().any(|file| file.sha256().is_some()))
+    );
 }
 
 fn assert_detects(

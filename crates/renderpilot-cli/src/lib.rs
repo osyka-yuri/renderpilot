@@ -12,9 +12,6 @@ mod hash;
 mod output;
 mod renodx;
 
-#[cfg(test)]
-mod test_env;
-
 pub use error::CliError;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -31,4 +28,19 @@ where
     let app_info = app_info(APP_VERSION);
 
     commands::render_command(command, app_info)
+}
+
+#[cfg(test)]
+pub(crate) fn run_with_context<I, F>(args: I, open_context: F) -> Result<String, CliError>
+where
+    I: IntoIterator<Item = OsString>,
+    F: FnOnce() -> Result<
+        renderpilot_orchestration::Context,
+        renderpilot_orchestration::ServiceError,
+    >,
+{
+    let command = args::parse_args(args)?;
+    let app_info = app_info(APP_VERSION);
+
+    commands::render_command_with_context(command, app_info, open_context)
 }

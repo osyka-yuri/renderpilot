@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use crate::dlss::installed::installed_dlls_from_components;
 use crate::ServiceError;
+use crate::dlss::installed::installed_dlls_from_components;
 use renderpilot_application::{ComponentRepository, GameRepository};
 use renderpilot_domain::GameId;
 use renderpilot_nvapi::setting::SettingContext;
 
 #[cfg(windows)]
-use renderpilot_platform_windows::{detect_executable_candidates, ExecutableCandidate};
+use renderpilot_platform_windows::{ExecutableCandidate, detect_executable_candidates};
 
 /// Loads a game from the catalog by its string id.
 pub fn load_game(game_id: &str) -> Result<renderpilot_domain::GameInstallation, ServiceError> {

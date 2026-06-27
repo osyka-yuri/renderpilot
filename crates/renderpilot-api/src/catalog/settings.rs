@@ -2,7 +2,7 @@
 
 use renderpilot_orchestration::catalog as orch_catalog;
 
-use crate::utils::{parse_game_id, to_json, JsonResult};
+use crate::utils::{JsonResult, parse_game_id, to_json};
 
 /// Reads one persisted catalog settings value (typically used for integration keys).
 pub fn get_catalog_setting(

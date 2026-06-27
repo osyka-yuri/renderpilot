@@ -11,8 +11,7 @@ use serde_json::Value;
 
 use crate::{
     catalog,
-    commands::test_support::{path_string, temp_db_path, CatalogEnvironmentGuard, TempGameFolder},
-    run,
+    commands::test_support::{CatalogFixture, TempGameFolder, path_string},
 };
 
 const SCAN_FOLDER_COMMAND: &str = "scan-folder";
@@ -23,12 +22,12 @@ const EMPTY_FILE_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934
 
 #[test]
 fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-output"));
+    let fixture = CatalogFixture::new("scan-output");
     let folder = TempGameFolder::new("cli-scan-folder");
 
     create_dlss_file(folder.path(), b"");
 
-    let output = run_scan_folder_json(folder.path());
+    let output = run_scan_folder_json(&fixture, folder.path());
 
     assert!(
         required_field(&output, "game").is_object(),
@@ -41,9 +40,8 @@ fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
 
 #[test]
 fn rescan_parent_prunes_removed_manual_child_game() {
-    let db_path = temp_db_path("scan-prune");
-    let _catalog = CatalogEnvironmentGuard::new(&db_path);
-    let context = Context::open_at(&db_path).unwrap();
+    let fixture = CatalogFixture::new("scan-prune");
+    let context = fixture.context();
     let parent = TempGameFolder::new("cli-scan-prune");
 
     let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
@@ -91,9 +89,8 @@ fn rescan_parent_prunes_removed_manual_child_game() {
 
 #[test]
 fn scan_child_does_not_prune_sibling_manual_game() {
-    let db_path = temp_db_path("scan-prune-sibling");
-    let _catalog = CatalogEnvironmentGuard::new(&db_path);
-    let context = Context::open_at(&db_path).unwrap();
+    let fixture = CatalogFixture::new("scan-prune-sibling");
+    let context = fixture.context();
     let parent = TempGameFolder::new("cli-scan-prune-sib");
 
     let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
@@ -113,13 +110,13 @@ fn scan_child_does_not_prune_sibling_manual_game() {
 
 #[test]
 fn scan_parent_outputs_games_array_for_multiple_child_installs() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-multi"));
+    let fixture = CatalogFixture::new("scan-multi");
     let parent = TempGameFolder::new("cli-scan-parent");
 
     create_child_game_with_dlss(parent.path(), "GameAlpha", b"alpha-bytes");
     create_child_game_with_dlss(parent.path(), "GameBeta", b"beta-bytes");
 
-    let output = run_scan_folder_json(parent.path());
+    let output = run_scan_folder_json(&fixture, parent.path());
     let games = required_array(&output, "games");
 
     assert_eq!(
@@ -133,13 +130,13 @@ fn scan_parent_outputs_games_array_for_multiple_child_installs() {
 
 #[test]
 fn scan_folder_reports_missing_folder() {
-    let _catalog = CatalogEnvironmentGuard::new(&temp_db_path("scan-missing-folder"));
+    let fixture = CatalogFixture::new("scan-missing-folder");
     let folder = TempGameFolder::new("missing-cli-scan-folder");
     let missing_path = folder.path().to_path_buf();
 
     ensure_path_does_not_exist(&missing_path);
 
-    let error = run(scan_folder_args(&missing_path)).unwrap_err();
+    let error = fixture.run(scan_folder_args(&missing_path)).unwrap_err();
     let message = error.to_string();
 
     assert!(
@@ -185,8 +182,8 @@ fn ensure_path_does_not_exist(path: &Path) {
     });
 }
 
-fn run_scan_folder_json(path: &Path) -> Value {
-    let output = run_scan_folder(path);
+fn run_scan_folder_json(fixture: &CatalogFixture, path: &Path) -> Value {
+    let output = run_scan_folder(fixture, path);
 
     serde_json::from_str(&output).unwrap_or_else(|error| {
         panic!(
@@ -196,8 +193,8 @@ fn run_scan_folder_json(path: &Path) -> Value {
     })
 }
 
-fn run_scan_folder(path: &Path) -> String {
-    run(scan_folder_args(path)).unwrap_or_else(|error| {
+fn run_scan_folder(fixture: &CatalogFixture, path: &Path) -> String {
+    fixture.run(scan_folder_args(path)).unwrap_or_else(|error| {
         panic!(
             "scan-folder command should succeed for `{}`: {error}",
             path.display()

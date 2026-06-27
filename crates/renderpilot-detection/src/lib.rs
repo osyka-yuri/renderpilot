@@ -12,10 +12,10 @@ mod pattern;
 mod pe;
 
 pub use error::LibraryPatternError;
-pub use file_metadata::{sha256_file, FileCacheKey, FileHashCache, VersionDetectionStatus};
+pub use file_metadata::{FileCacheKey, FileHashCache, VersionDetectionStatus, sha256_file};
 pub use filesystem_detector::{
-    group_into_artifacts, group_into_components, DetectedLibraryFile, DetectionConfidence,
-    LibraryPatternComponentDetector,
+    DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector,
+    group_into_artifacts, group_into_components,
 };
 pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,

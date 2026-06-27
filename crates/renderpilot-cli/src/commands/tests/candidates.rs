@@ -1,8 +1,6 @@
 use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
 
-use crate::run;
-
-use super::{args, sample_artifact, sample_component, sample_game, CatalogFixture};
+use super::{CatalogFixture, args, sample_artifact, sample_component, sample_game};
 
 #[test]
 fn candidates_show_newer_update_for_same_technology_only() {
@@ -41,7 +39,8 @@ fn candidates_show_newer_update_for_same_technology_only() {
         Some(game_b.id().as_str()),
     ));
 
-    let output = run(args(&["candidates", "--game", game_a.id().as_str()]))
+    let output = fixture
+        .run(args(&["candidates", "--game", game_a.id().as_str()]))
         .expect("candidates should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
     let groups = json["groups"].as_array().expect("groups array");
@@ -94,7 +93,8 @@ fn candidates_offer_streamline_bundle_swap() {
         Some(game_b.id().as_str()),
     ));
 
-    let output = run(args(&["candidates", "--game", game_a.id().as_str()]))
+    let output = fixture
+        .run(args(&["candidates", "--game", game_a.id().as_str()]))
         .expect("candidates should render");
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 

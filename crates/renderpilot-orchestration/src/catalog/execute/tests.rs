@@ -191,8 +191,10 @@ fn fsr_downgrade_removes_unmatched_upscaling_members() {
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
         GraphicsTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
-        vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
-            .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha")),
+        ],
         ArtifactTrustLevel::ManifestDownloaded,
     )
     .expect("artifact");
@@ -232,8 +234,10 @@ fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
         GraphicsTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
-        vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
-            .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha")),
+        ],
         ArtifactTrustLevel::ManifestDownloaded,
     )
     .expect("artifact");
@@ -263,8 +267,10 @@ fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
         GraphicsTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
-        vec![comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
-            .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha")),
+        ],
         ArtifactTrustLevel::ManifestDownloaded,
     )
     .expect("artifact");
@@ -297,8 +303,10 @@ fn fsr_members_to_remove_is_empty_for_a_split_artifact() {
         ArtifactId::new("artifact:fsr4").expect("artifact id"),
         GraphicsTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
-        vec![comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
-            .with_sha256(Sha256Hash::new(HEX64).expect("sha"))],
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
+                .with_sha256(Sha256Hash::new(HEX64).expect("sha")),
+        ],
         ArtifactTrustLevel::ManifestDownloaded,
     )
     .expect("artifact");

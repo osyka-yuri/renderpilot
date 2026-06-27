@@ -127,7 +127,9 @@ fn apply_portable_mode() {
     let exe = match std::env::current_exe() {
         Ok(path) => path,
         Err(error) => {
-            log::warn!("Portable mode: could not resolve exe path, falling back to standard data directory: {error}");
+            log::warn!(
+                "Portable mode: could not resolve exe path, falling back to standard data directory: {error}"
+            );
             return;
         }
     };
@@ -174,7 +176,7 @@ fn apply_webview2_elevation_workaround() {
 
 #[cfg(windows)]
 fn compute_initialization_state() -> AppInitializationState {
-    use elevation::{current_elevation, ElevationState};
+    use elevation::{ElevationState, current_elevation};
 
     // Already running elevated — nothing more to do.
     if matches!(current_elevation(), ElevationState::Elevated) {
@@ -213,7 +215,7 @@ fn resolve_unelevated_startup() -> AppInitializationState {
 #[cfg(not(debug_assertions))]
 fn resolve_unelevated_startup() -> AppInitializationState {
     use elevation::{
-        attempt_self_relaunch_elevated, has_elevation_attempted_marker, ElevationStartupDecision,
+        ElevationStartupDecision, attempt_self_relaunch_elevated, has_elevation_attempted_marker,
     };
 
     // This session already tried — don't loop on the relaunch.

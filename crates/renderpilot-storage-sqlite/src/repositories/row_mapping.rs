@@ -407,8 +407,8 @@ mod tests {
     use rusqlite::Connection;
 
     use super::{
-        columns::projection, component_from_row, game_from_row, operation_item_from_row, DomainRow,
-        OperationRow,
+        DomainRow, OperationRow, columns::projection, component_from_row, game_from_row,
+        operation_item_from_row,
     };
 
     #[test]

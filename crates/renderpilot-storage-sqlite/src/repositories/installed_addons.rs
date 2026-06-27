@@ -10,7 +10,7 @@ use renderpilot_application::InstalledAddonRepository;
 #[cfg(test)]
 use renderpilot_domain::TrackedSourceRole;
 use renderpilot_domain::{AddonKind, GameId, InstalledAddon, PathRef, TrackedSource};
-use rusqlite::{named_params, OptionalExtension, Row};
+use rusqlite::{OptionalExtension, Row, named_params};
 
 use crate::error::{invalid_row, storage_error};
 use crate::{mapping, sqlite_clock};
@@ -234,10 +234,12 @@ mod tests {
     #[test]
     fn get_returns_none_when_absent() {
         let storage = SqliteStorage::in_memory().expect("storage");
-        assert!(storage
-            .get_installed_addon(&game_id())
-            .expect("get")
-            .is_none());
+        assert!(
+            storage
+                .get_installed_addon(&game_id())
+                .expect("get")
+                .is_none()
+        );
     }
 
     #[test]
@@ -247,10 +249,12 @@ mod tests {
             .upsert_installed_addon(&managed_addon())
             .expect("upsert");
         storage.delete_installed_addon(&game_id()).expect("delete");
-        assert!(storage
-            .get_installed_addon(&game_id())
-            .expect("get")
-            .is_none());
+        assert!(
+            storage
+                .get_installed_addon(&game_id())
+                .expect("get")
+                .is_none()
+        );
     }
 
     #[test]

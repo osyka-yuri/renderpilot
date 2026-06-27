@@ -1,5 +1,5 @@
-use renderpilot_nvapi::setting::NvapiValueType;
 use renderpilot_nvapi::NvapiSetting;
+use renderpilot_nvapi::setting::NvapiValueType;
 use serde::Serialize;
 
 /// Serializable descriptor for a single NVAPI setting (key, label, value type, DLL family).

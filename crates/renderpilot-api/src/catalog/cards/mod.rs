@@ -3,8 +3,8 @@
 
 use renderpilot_orchestration::catalog as orch_catalog;
 
-use crate::utils::{to_json, JsonResult};
 use crate::ApiError;
+use crate::utils::{JsonResult, to_json};
 
 mod normalize;
 mod output;

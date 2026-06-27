@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
-use super::utils::{self, to_json, JsonResult};
+use super::utils::{self, JsonResult, to_json};
 
 /// Downloads cover artwork using the configured provider chain, then stores it for the game.
 ///

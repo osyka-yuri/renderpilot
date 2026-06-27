@@ -5,11 +5,11 @@
 //! ids, loads/caches the manifest, and wraps the typed results in
 //! `serde_json::Value` for the command layer.
 
+use renderpilot_orchestration::Context;
 use renderpilot_orchestration::addons::renodx;
 use renderpilot_orchestration::net::ProgressObserver;
-use renderpilot_orchestration::Context;
 
-use crate::utils::{parse_game_id, to_json, JsonResult};
+use crate::utils::{JsonResult, parse_game_id, to_json};
 
 /// Returns the current RenoDX install state for a game.
 pub fn renodx_status(context: &Context, game_id: impl Into<String>) -> JsonResult {

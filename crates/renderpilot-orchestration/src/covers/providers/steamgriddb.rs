@@ -1,10 +1,10 @@
 //! SteamGridDB API: autocomplete search and vertical grid candidates.
 
 use reqwest::{
-    blocking::{Client, Response},
     StatusCode, Url,
+    blocking::{Client, Response},
 };
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{Deserialize, de::DeserializeOwned};
 
 use super::super::validation::validate_cover_bytes;
 use super::download::download_unvalidated_cover;

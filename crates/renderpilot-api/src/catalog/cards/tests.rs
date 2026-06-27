@@ -1,7 +1,7 @@
+use super::QueryGameCardsRequest;
 use super::normalize::normalize_library_name;
 use super::output::GameCardOutput;
 use super::query::QueryGameCards;
-use super::QueryGameCardsRequest;
 use crate::utils::DashboardRiskLevel;
 
 fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {

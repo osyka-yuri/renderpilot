@@ -5,7 +5,7 @@ use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId, GameRuntime,
     GraphicsTechnology, Launcher, PathRef, Platform, Swappability,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
 use crate::error::{invalid_row, storage_context};

@@ -655,13 +655,15 @@ mod tests {
 
     #[test]
     fn candidate_extensions_falls_back_to_any_when_pattern_has_wildcard_extension() {
-        let patterns = LibraryPatternSet::new(vec![LibraryPattern::new(
-            "weird.*",
-            super::PatternKind::Glob,
-            super::PatternPlatform::Windows,
-            renderpilot_domain::GraphicsTechnology::Unknown,
-        )
-        .expect("valid pattern")])
+        let patterns = LibraryPatternSet::new(vec![
+            LibraryPattern::new(
+                "weird.*",
+                super::PatternKind::Glob,
+                super::PatternPlatform::Windows,
+                renderpilot_domain::GraphicsTechnology::Unknown,
+            )
+            .expect("valid pattern"),
+        ])
         .expect("valid set");
 
         let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Windows);

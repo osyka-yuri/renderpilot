@@ -1,6 +1,6 @@
 use renderpilot_orchestration::catalog;
 
-use super::utils::{parse_artifact_id, parse_component_id, parse_game_id, JsonResult};
+use super::utils::{JsonResult, parse_artifact_id, parse_component_id, parse_game_id};
 
 /// Applies a swap using a caller-provided storage connection.
 pub fn apply_swap(

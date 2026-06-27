@@ -9,8 +9,8 @@ mod validation;
 
 pub use error::CommandError;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use renderpilot_api::{self as desktop, ApiError};
@@ -543,7 +543,7 @@ pub fn get_app_initialization_state(
 pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
     #[cfg(windows)]
     {
-        use crate::elevation::{attempt_self_relaunch_elevated, ElevationStartupDecision};
+        use crate::elevation::{ElevationStartupDecision, attempt_self_relaunch_elevated};
         match attempt_self_relaunch_elevated() {
             ElevationStartupDecision::Relaunched => {
                 app.exit(0);

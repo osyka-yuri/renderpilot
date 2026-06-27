@@ -45,8 +45,8 @@ pub use lineage::{
     has_entry_point, is_native_fsr4, is_split_set, same_release_build, upscaler_represents_set,
 };
 pub use naming::{
-    fsr_graphics_api, is_entry_point, is_loader, is_optional_effect, is_split_marker,
-    is_split_member, is_upscaling_member, FsrApi, ENTRY_POINT_FILE_DX12, ENTRY_POINT_FILE_VK,
+    ENTRY_POINT_FILE_DX12, ENTRY_POINT_FILE_VK, FsrApi, fsr_graphics_api, is_entry_point,
+    is_loader, is_optional_effect, is_split_marker, is_split_member, is_upscaling_member,
 };
 pub use representative::{
     display_component_file, primary_rank, sort_representative_first, version_representative,

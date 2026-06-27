@@ -6,8 +6,8 @@
 //! (that lives in [`super::matcher`]).
 
 use renderpilot_domain::{
-    fsr, ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    PathRef, Version,
+    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    PathRef, Version, fsr,
 };
 
 /// Replacement candidates applicable to one detected component (bundle).

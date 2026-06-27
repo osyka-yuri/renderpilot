@@ -16,13 +16,13 @@ use renderpilot_domain::{GameId, InstalledAddon, TrackedSource, TrackedSourceRol
 
 use crate::addons::engine;
 use crate::addons::update::{combine, digest_verdict, validator_fast_path};
-use crate::net::{head_validators, DownloadProgress, ProgressObserver};
+use crate::net::{DownloadProgress, ProgressObserver, head_validators};
 use crate::{Context, ServiceError};
 
 use super::errors;
 use super::{
     arch_from_addon_file,
-    reshade::{detect_reshade, ReshadeState},
+    reshade::{ReshadeState, detect_reshade},
 };
 use super::{fetch, install};
 

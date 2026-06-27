@@ -16,8 +16,8 @@ use renderpilot_domain::{
 use serde::Serialize;
 
 use crate::{
-    file_metadata::{try_read_detected_file_metadata, DetectedFileMetadata, FileHashCache},
     FileCacheKey, LibraryPatternError, LibraryPatternSet, PatternPlatform, VersionDetectionStatus,
+    file_metadata::{DetectedFileMetadata, FileHashCache, try_read_detected_file_metadata},
 };
 
 use self::classification::LibraryFileClassification;

@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::component::{ComponentFile, Sha256Hash};
-use crate::text::{normalize_required_text, RequiredTextError};
+use crate::text::{RequiredTextError, normalize_required_text};
 
 macro_rules! define_identifier {
     ($(#[$meta:meta])* $name:ident) => {

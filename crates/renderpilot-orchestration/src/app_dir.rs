@@ -49,7 +49,7 @@ mod tests {
 
     use super::*;
 
-    fn env_map(entries: &[(&str, &str)]) -> impl FnMut(&str) -> Option<OsString> {
+    fn env_map(entries: &[(&str, &str)]) -> impl FnMut(&str) -> Option<OsString> + use<> {
         let map: HashMap<String, OsString> = entries
             .iter()
             .map(|(k, v)| ((*k).to_owned(), OsString::from(v)))

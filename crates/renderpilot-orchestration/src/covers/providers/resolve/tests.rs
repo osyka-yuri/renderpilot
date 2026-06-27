@@ -5,8 +5,8 @@ use reqwest::blocking::Client;
 
 use super::super::backend::CoverSourceBackend;
 use super::{
-    normalized_steamgriddb_api_key, resolve_cover_bytes_with_backend, CoverResolutionRequest,
-    EffectiveCoverRemotePolicy, RemoteCoverLauncher,
+    CoverResolutionRequest, EffectiveCoverRemotePolicy, RemoteCoverLauncher,
+    normalized_steamgriddb_api_key, resolve_cover_bytes_with_backend,
 };
 use crate::ServiceError;
 

@@ -5,15 +5,15 @@ use std::collections::{HashMap, HashSet};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{
-    fsr, ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
     GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
-    Swappability,
+    Swappability, fsr,
 };
 
 use crate::error::detection_error;
 
-use super::classification::component_file_from_detection;
 use super::DetectedLibraryFile;
+use super::classification::component_file_from_detection;
 
 /// Groups detected library files into one [`GraphicsComponent`] per
 /// `(directory, grouping technology)`.
@@ -174,11 +174,7 @@ fn primary_rank(
         return fsr::primary_rank(file.file_name(), fsr_upscaler_represents);
     }
 
-    if file.technology() == family {
-        0
-    } else {
-        1
-    }
+    if file.technology() == family { 0 } else { 1 }
 }
 
 fn group_kind(ordered: &[&DetectedLibraryFile]) -> ComponentKind {

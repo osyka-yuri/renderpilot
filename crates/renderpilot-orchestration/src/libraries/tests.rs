@@ -49,10 +49,12 @@ fn test_decompress_library_size_zero() {
 
     let result = super::compression::decompress_library(&entry, &[]);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("must be greater than zero"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("must be greater than zero")
+    );
 }
 
 #[test]
@@ -62,10 +64,12 @@ fn test_decompress_library_too_large() {
 
     let result = super::compression::decompress_library(&entry, &[]);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("exceeds maximum allowed"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("exceeds maximum allowed")
+    );
 }
 
 #[test]
@@ -130,10 +134,12 @@ fn test_validate_compressed_size_mismatch() {
 
     let result = super::validate::validate_compressed_size(&entry, b"too long");
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("downloaded archive size mismatch"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("downloaded archive size mismatch")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -153,10 +159,12 @@ fn test_validate_dll_hash_mismatch() {
     let wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000";
     let result = super::validate::validate_dll_hash("test", wrong_hash, data);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("DLL hash mismatch"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("DLL hash mismatch")
+    );
 }
 
 #[test]
@@ -170,10 +178,12 @@ fn test_validate_dll_hash_uppercase_rejected() {
         result.is_err(),
         "uppercase hash should be rejected with == comparison"
     );
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("DLL hash mismatch"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("DLL hash mismatch")
+    );
 }
 
 #[test]
@@ -231,10 +241,12 @@ fn test_validate_entry_http_rejected() {
     entry.files.zst.download_url = format!("http://{}/file.dll.zst", crate::cdn::CDN_HOST);
     let result = super::validate::validate_entry(&entry);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("only HTTPS URLs are allowed"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("only HTTPS URLs are allowed")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -272,10 +284,12 @@ fn test_validate_manifest_invalid_schema() {
     };
     let result = validate_manifest(&manifest);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unsupported manifest schema version"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported manifest schema version")
+    );
 }
 
 #[test]
@@ -288,10 +302,12 @@ fn test_validate_manifest_duplicate_ids() {
     };
     let result = validate_manifest(&manifest);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("duplicate library entry id"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate library entry id")
+    );
 }
 
 #[test]
@@ -303,10 +319,12 @@ fn test_validate_manifest_invalid_build_type() {
     };
     let result = validate_manifest(&manifest);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("invalid build type"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid build type")
+    );
 }
 
 #[test]
@@ -352,10 +370,12 @@ fn test_validate_entry_rejects_oversized_dll() {
     entry.files.dll.size_bytes = super::compression::MAX_DLL_SIZE + 1;
     let result = super::validate::validate_entry(&entry);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("exceeds maximum allowed"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("exceeds maximum allowed")
+    );
 }
 
 #[test]
@@ -364,10 +384,12 @@ fn test_validate_entry_rejects_oversized_zst() {
     entry.files.zst.size_bytes = super::compression::MAX_ARCHIVE_SIZE + 1;
     let result = super::validate::validate_entry(&entry);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("exceeds maximum allowed"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("exceeds maximum allowed")
+    );
 }
 
 // ---------------------------------------------------------------------------
