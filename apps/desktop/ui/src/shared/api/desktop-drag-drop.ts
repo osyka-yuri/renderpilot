@@ -31,7 +31,9 @@ export async function createFileDropTarget(
 
   const isInside = (physicalX: number, physicalY: number): boolean => {
     const rect = getRect();
-    if (!rect) return false;
+    if (!rect) {
+      return false;
+    }
     const dpr = window.devicePixelRatio || 1;
     const x = physicalX / dpr;
     const y = physicalY / dpr;

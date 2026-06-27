@@ -35,7 +35,9 @@
   }
 
   function handleSortClick(): void {
-    if (!canSort) return;
+    if (!canSort) {
+      return;
+    }
 
     column.toggleSorting();
   }

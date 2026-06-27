@@ -27,7 +27,9 @@ let handler: ProgressHandler | undefined;
 });
 
 function emitProgress(payload: ProgressPayload): void {
-  if (!handler) throw new Error('download-progress listener is not registered');
+  if (!handler) {
+    throw new Error('download-progress listener is not registered');
+  }
   handler({ payload });
 }
 

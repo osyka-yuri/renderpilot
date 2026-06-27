@@ -32,7 +32,9 @@
   // Supported values first, preserving catalog order within each group.
   const orderedValues = $derived(
     [...state.available_values].sort((a, b) => {
-      if (a.supported !== b.supported) return a.supported ? -1 : 1;
+      if (a.supported !== b.supported) {
+        return a.supported ? -1 : 1;
+      }
       return 0;
     }),
   );
@@ -46,7 +48,9 @@
   function handleChange(value: string | undefined) {
     // Ignore the echo from syncing `selected` programmatically; only act on a
     // genuine user pick of a different value.
-    if (!value || disabled || value === state.current.wire) return;
+    if (!value || disabled || value === state.current.wire) {
+      return;
+    }
     onChange(value);
   }
 

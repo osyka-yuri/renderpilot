@@ -122,7 +122,9 @@ describe('background-cover-sync', () => {
 
     it('fetches covers for missing games and reports combined errors', async () => {
       const fetchGameCover = vi.fn((gameId: string) => {
-        if (gameId === 'steam-game') return Promise.resolve();
+        if (gameId === 'steam-game') {
+          return Promise.resolve();
+        }
         return Promise.reject(new Error('fetch failed'));
       });
       const refreshGameCards = vi.fn(() => Promise.resolve());
@@ -133,8 +135,9 @@ describe('background-cover-sync', () => {
 
       await executeBackgroundCoverSync([steamGame(), gogGame()], {
         readSetting: vi.fn((key: string) => {
-          if (key.includes('steam_cdn') || key.includes('gog_cdn'))
+          if (key.includes('steam_cdn') || key.includes('gog_cdn')) {
             return Promise.resolve({ value: 'true' });
+          }
           return Promise.resolve({ value: 'false' });
         }),
         fetchGameCover,
@@ -162,8 +165,9 @@ describe('background-cover-sync', () => {
 
       await executeBackgroundCoverSync([steamGame(), gogGame({ external_id: '789' })], {
         readSetting: vi.fn((key: string) => {
-          if (key.includes('steam_cdn') || key.includes('gog_cdn'))
+          if (key.includes('steam_cdn') || key.includes('gog_cdn')) {
             return Promise.resolve({ value: 'true' });
+          }
           return Promise.resolve({ value: 'false' });
         }),
         fetchGameCover,

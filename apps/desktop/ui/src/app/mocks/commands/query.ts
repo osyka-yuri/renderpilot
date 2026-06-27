@@ -54,7 +54,9 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
       .sort((left, right) => {
         // Favorites always float to the top, mirroring the Rust backend behaviour.
         const favoriteDiff = Number(right.is_favorite) - Number(left.is_favorite);
-        if (favoriteDiff !== 0) return favoriteDiff;
+        if (favoriteDiff !== 0) {
+          return favoriteDiff;
+        }
         return compareCards(left, right, normalizedQuery.sort);
       });
 

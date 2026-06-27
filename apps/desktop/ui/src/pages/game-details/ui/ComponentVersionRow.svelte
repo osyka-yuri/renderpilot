@@ -74,7 +74,9 @@
   });
 
   function handleSwapChange(value: string | undefined) {
-    if (!value || value === currentValue || busy) return;
+    if (!value || value === currentValue || busy) {
+      return;
+    }
     const candidate = candidates.find((c) => c.artifact_id === value);
     if (candidate) {
       pendingArtifactId = value;
@@ -83,7 +85,9 @@
   }
 
   function handleRollback() {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     onRollback(component.id);
   }
 

@@ -30,7 +30,9 @@
   );
 
   async function handleActionClick() {
-    if (isBusy) return;
+    if (isBusy) {
+      return;
+    }
 
     // The model returns `false` when it ignored the action (e.g. a manifest
     // load/refresh is running) — never report success for an action that

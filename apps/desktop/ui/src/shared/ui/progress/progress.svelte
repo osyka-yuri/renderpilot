@@ -12,7 +12,9 @@
   }: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
 
   const translateX = $derived.by(() => {
-    if (max <= 0) return -100;
+    if (max <= 0) {
+      return -100;
+    }
     const clamped = Math.min(Math.max(value ?? 0, 0), max);
     return (100 * clamped) / max - 100;
   });

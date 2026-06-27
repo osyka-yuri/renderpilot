@@ -107,7 +107,9 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
     rows: Row<LibraryManifestEntry>[],
     index: number,
   ): Row<LibraryManifestEntry> | undefined {
-    if (index < 0 || index >= rows.length) return undefined;
+    if (index < 0 || index >= rows.length) {
+      return undefined;
+    }
     return rows[index];
   }
 
@@ -116,7 +118,9 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
     const rowCount = tableRows.length;
     const resetKey = getVirtualizerResetKey();
 
-    if (viewport === null || rowCount === 0) return;
+    if (viewport === null || rowCount === 0) {
+      return;
+    }
 
     scheduleVirtualizerReset(resetKey);
   });

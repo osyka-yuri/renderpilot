@@ -65,12 +65,24 @@ function detectSystemLocale(): Locale {
 
   const language = navigator.language.toLowerCase();
 
-  if (language.startsWith('ru')) return 'ru';
-  if (language.startsWith('es')) return 'es';
-  if (language.startsWith('zh')) return 'zh';
-  if (language.startsWith('fr')) return 'fr';
-  if (language.startsWith('de')) return 'de';
-  if (language.startsWith('ja')) return 'ja';
+  if (language.startsWith('ru')) {
+    return 'ru';
+  }
+  if (language.startsWith('es')) {
+    return 'es';
+  }
+  if (language.startsWith('zh')) {
+    return 'zh';
+  }
+  if (language.startsWith('fr')) {
+    return 'fr';
+  }
+  if (language.startsWith('de')) {
+    return 'de';
+  }
+  if (language.startsWith('ja')) {
+    return 'ja';
+  }
 
   return DEFAULT_LOCALE;
 }

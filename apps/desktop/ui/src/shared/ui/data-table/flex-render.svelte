@@ -31,7 +31,9 @@
   const rendered = $derived(resolveContent(content, context));
 
   function resolveContent(template: Props['content'], ctx: TContext): unknown {
-    if (typeof template === 'string') return template;
+    if (typeof template === 'string') {
+      return template;
+    }
 
     if (typeof template === 'function') {
       return (template as TemplateRenderer)(ctx);

@@ -37,7 +37,9 @@ export function createGlobalNvidiaPresetsContext({
   let inFlight = false;
 
   async function load(): Promise<void> {
-    if (inFlight) return;
+    if (inFlight) {
+      return;
+    }
     inFlight = true;
     store.setBusy(true);
     store.setLoadError(null);
@@ -54,14 +56,18 @@ export function createGlobalNvidiaPresetsContext({
   }
 
   async function setValue(key: string, wire: string): Promise<void> {
-    if (!store.ensureElevated(t('nvidia.action.changeSetting'))) return;
+    if (!store.ensureElevated(t('nvidia.action.changeSetting'))) {
+      return;
+    }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
       setGlobalNvapiSettingValue(key, wire),
     );
   }
 
   async function revertDefault(key: string): Promise<void> {
-    if (!store.ensureElevated(t('nvidia.action.revertSetting'))) return;
+    if (!store.ensureElevated(t('nvidia.action.revertSetting'))) {
+      return;
+    }
     await store.runWrite(key, t('nvidia.revertDefaultFailed'), () =>
       revertGlobalNvapiSetting(key, 'predefined'),
     );

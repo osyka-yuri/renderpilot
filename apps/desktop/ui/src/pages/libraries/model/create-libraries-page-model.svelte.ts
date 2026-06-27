@@ -129,7 +129,9 @@ export function createLibrariesPageModel() {
   // leak into the sum; finished entries are already covered by `bulkCompleted`,
   // so there is no double counting.
   const bulkProgressValue = $derived.by(() => {
-    if (!bulkDownloading) return 0;
+    if (!bulkDownloading) {
+      return 0;
+    }
     const inFlight = bulkTargetIds.filter((id) => pendingActions.get(id) === 'download');
     return bulkCompleted + sumDownloadFractions(inFlight);
   });
@@ -147,7 +149,9 @@ export function createLibrariesPageModel() {
   }
 
   async function refreshManifest(): Promise<void> {
-    if (isBusy) return;
+    if (isBusy) {
+      return;
+    }
 
     await loadLibraries({
       mode: 'refresh',
@@ -174,12 +178,16 @@ export function createLibrariesPageModel() {
         getLibraryStates(),
       ]);
 
-      if (!isCurrentLoadRequest(requestId)) return;
+      if (!isCurrentLoadRequest(requestId)) {
+        return;
+      }
 
       manifest = nextManifest;
       setStates(nextStates);
     } catch (error) {
-      if (!isCurrentLoadRequest(requestId)) return;
+      if (!isCurrentLoadRequest(requestId)) {
+        return;
+      }
 
       if (isInitialLoad) {
         manifest = null;
@@ -198,7 +206,9 @@ export function createLibrariesPageModel() {
   }
 
   function handleVendorChange(value: unknown): void {
-    if (typeof value !== 'string' || !isVendor(value)) return;
+    if (typeof value !== 'string' || !isVendor(value)) {
+      return;
+    }
 
     activeVendor = value;
     activeType = getLastValidTypeForVendor(value);
@@ -242,10 +252,14 @@ export function createLibrariesPageModel() {
    * A failing entry never aborts the rest — failures are counted, not thrown.
    */
   async function downloadAllLatest(): Promise<BulkDownloadResult> {
-    if (isBusy) return EMPTY_BULK_RESULT;
+    if (isBusy) {
+      return EMPTY_BULK_RESULT;
+    }
 
     const targets = latestStableEntries.filter((entry) => !downloadedEntryIds.has(entry.entry_id));
-    if (targets.length === 0) return EMPTY_BULK_RESULT;
+    if (targets.length === 0) {
+      return EMPTY_BULK_RESULT;
+    }
 
     bulkDownloading = true;
     bulkTotal = targets.length;
@@ -306,7 +320,9 @@ export function createLibrariesPageModel() {
    *   `describeCommandError`); the bulk runner instead counts it as failed.
    */
   async function runEntryAction(options: RunEntryActionOptions): Promise<boolean> {
-    if (loading || refreshing || pendingActions.has(options.entryId)) return false;
+    if (loading || refreshing || pendingActions.has(options.entryId)) {
+      return false;
+    }
 
     pendingActions.set(options.entryId, options.action);
     if (options.action === 'download') {
@@ -427,9 +443,15 @@ export function createLibrariesPageModel() {
     currentError: string | null,
     entryCount: number,
   ): string | null {
-    if (isLoading) return t('libraries.empty.loading');
-    if (currentManifest === null && currentError !== null) return t('libraries.empty.unavailable');
-    if (entryCount === 0) return t('libraries.empty.none');
+    if (isLoading) {
+      return t('libraries.empty.loading');
+    }
+    if (currentManifest === null && currentError !== null) {
+      return t('libraries.empty.unavailable');
+    }
+    if (entryCount === 0) {
+      return t('libraries.empty.none');
+    }
 
     return null;
   }

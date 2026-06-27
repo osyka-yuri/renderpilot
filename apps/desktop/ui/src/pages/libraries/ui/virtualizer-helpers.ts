@@ -20,7 +20,9 @@ type ResetVirtualizerOptions = {
 };
 
 export function getTopVirtualPadding(items: readonly VirtualPaddingItem[]): number {
-  if (items.length === 0) return 0;
+  if (items.length === 0) {
+    return 0;
+  }
 
   return items[0].start;
 }
@@ -29,7 +31,9 @@ export function getBottomVirtualPadding(
   items: readonly VirtualPaddingItem[],
   totalSize: number,
 ): number {
-  if (items.length === 0) return 0;
+  if (items.length === 0) {
+    return 0;
+  }
 
   const lastItem = items[items.length - 1];
 
@@ -45,9 +49,15 @@ export async function resetVirtualizerAfterLayout(options: ResetVirtualizerOptio
   await tick();
   await nextAnimationFrame();
 
-  if (options.resetId !== options.currentResetId()) return;
-  if (options.resetKey !== options.currentResetKey()) return;
-  if (options.viewport === null) return;
+  if (options.resetId !== options.currentResetId()) {
+    return;
+  }
+  if (options.resetKey !== options.currentResetKey()) {
+    return;
+  }
+  if (options.viewport === null) {
+    return;
+  }
 
   options.viewport.scrollTo({ top: 0, left: 0 });
   options.virtualizer.scrollToOffset(0, { align: 'start' });

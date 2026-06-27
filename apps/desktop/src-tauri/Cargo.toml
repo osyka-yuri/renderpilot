@@ -22,7 +22,7 @@ redundant_clone = "warn"
 unnecessary_to_owned = "warn"
 
 [build-dependencies]
-tauri-build = { version = "2.6.2", features = [] }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 renderpilot-api = { path = "../../../crates/renderpilot-api" }
@@ -31,7 +31,7 @@ env_logger = "0.11"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2.11.2", features = [] }
+tauri = { version = "2.11.3", features = [] }
 tauri-plugin-dialog = "2.7.1"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-process = "2"

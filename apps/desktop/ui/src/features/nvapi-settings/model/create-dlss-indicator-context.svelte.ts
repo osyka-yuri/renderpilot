@@ -38,7 +38,9 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
 
   // ── actions ──────────────────────────────────────────────────────
   async function load(): Promise<void> {
-    if (inFlight) return;
+    if (inFlight) {
+      return;
+    }
     inFlight = true;
     busy = true;
     error = null;
@@ -56,14 +58,20 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
   }
 
   function ensureElevated(): boolean {
-    if (isElevated()) return true;
+    if (isElevated()) {
+      return true;
+    }
     reportActionError(t('nvidia.adminRequired'), new Error(t('indicator.relaunchToToggle')));
     return false;
   }
 
   async function setEnabled(next: boolean): Promise<void> {
-    if (busy || next === enabled) return;
-    if (!ensureElevated()) return;
+    if (busy || next === enabled) {
+      return;
+    }
+    if (!ensureElevated()) {
+      return;
+    }
 
     const previous = enabled;
     // Optimistic: reflect the new state immediately, revert if the write fails.

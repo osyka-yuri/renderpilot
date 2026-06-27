@@ -28,7 +28,9 @@
   const visible = $derived(elevationSupported && !isElevated && !dismissed);
 
   async function handleRelaunch() {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     busy = true;
     try {
       // On success the process exits and this promise never resolves; on

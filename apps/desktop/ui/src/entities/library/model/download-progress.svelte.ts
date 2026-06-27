@@ -22,7 +22,9 @@ let listenerStarted = false;
 let seq = 0;
 
 function ensureListener(): void {
-  if (listenerStarted) return;
+  if (listenerStarted) {
+    return;
+  }
   listenerStarted = true;
 
   listen<DownloadProgress>(DOWNLOAD_PROGRESS_EVENT, (event) => {

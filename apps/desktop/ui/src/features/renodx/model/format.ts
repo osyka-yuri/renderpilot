@@ -52,7 +52,9 @@ export function formatRelative(ms: number): string {
  * for a missing/unparseable value so the caller can fall back to the install date.
  */
 export function formatHttpDate(raw: string | null | undefined): string | null {
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   const ms = Date.parse(raw);
   return Number.isNaN(ms) ? null : formatDate(ms);
 }

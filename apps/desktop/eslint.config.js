@@ -821,4 +821,20 @@ export default defineConfig([
   },
 
   prettier,
+
+  {
+    name: 'project/prettier-safe-overrides',
+
+    files: LINTED_SOURCE_FILE_GLOBS,
+
+    rules: {
+      /*
+       * eslint-config-prettier disables `curly` as a "special" rule, so it must
+       * be re-asserted after the prettier config or it stays off. The `'all'`
+       * mode is prettier-safe: it only requires block braces, which Prettier
+       * never adds or removes, so there is no formatting conflict.
+       */
+      curly: ['error', 'all'],
+    },
+  },
 ]);

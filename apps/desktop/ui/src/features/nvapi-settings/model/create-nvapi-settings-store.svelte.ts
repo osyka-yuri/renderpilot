@@ -109,7 +109,9 @@ export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStor
   }
 
   function ensureElevated(action: string): boolean {
-    if (isElevated()) return true;
+    if (isElevated()) {
+      return true;
+    }
     reportActionError(t('nvidia.adminRequired'), new Error(t('nvidia.relaunchTo', { action })));
     return false;
   }

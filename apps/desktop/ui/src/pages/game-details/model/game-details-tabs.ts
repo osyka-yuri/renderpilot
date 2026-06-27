@@ -30,7 +30,9 @@ function compareComponents(a: GameGraphicsComponent, b: GameGraphicsComponent): 
   const orderA = COMPONENT_TECHNOLOGY_ORDER[a.technology] ?? 999;
   const orderB = COMPONENT_TECHNOLOGY_ORDER[b.technology] ?? 999;
 
-  if (orderA !== orderB) return orderA - orderB;
+  if (orderA !== orderB) {
+    return orderA - orderB;
+  }
   return a.id.localeCompare(b.id);
 }
 
@@ -46,7 +48,9 @@ export type VendorTab = {
  * and components within tabs by technology importance.
  */
 export function createVendorTabs(details: GameDetails | null): VendorTab[] {
-  if (!details) return [];
+  if (!details) {
+    return [];
+  }
 
   const byVendor = libraryVendorOrder.reduce(
     (acc, key) => {

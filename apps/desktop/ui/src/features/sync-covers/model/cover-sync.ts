@@ -127,7 +127,7 @@ export async function runCoverFetchBatch(
     return { failures: [] };
   }
 
-  const failuresByInputIndex = new Array<CoverFetchFailure | undefined>(items.length);
+  const failuresByInputIndex = Array.from<CoverFetchFailure | undefined>({ length: items.length });
 
   const fetchOne = async (game: GameSummary, index: number): Promise<void> => {
     const gameId = game.game_id;

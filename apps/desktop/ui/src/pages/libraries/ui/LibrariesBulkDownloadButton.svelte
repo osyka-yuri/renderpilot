@@ -29,7 +29,9 @@
   );
 
   async function handleClick() {
-    if (model.isBusy) return;
+    if (model.isBusy) {
+      return;
+    }
 
     try {
       const { succeeded, failed } = await model.downloadAllLatest();

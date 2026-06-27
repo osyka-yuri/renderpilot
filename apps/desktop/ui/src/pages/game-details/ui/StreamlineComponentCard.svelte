@@ -73,7 +73,9 @@
   });
 
   function handleBulkChange(value: string | undefined) {
-    if (!value || busy) return;
+    if (!value || busy) {
+      return;
+    }
     const option = versionModel.options.find((o) => o.version === value);
     if (option && !option.isCurrent) {
       pendingArtifactIds = option.items.map((item) => item.artifactId);
@@ -91,7 +93,9 @@
   );
 
   function handleRestoreAll() {
-    if (busy || rollbackIds.length === 0) return;
+    if (busy || rollbackIds.length === 0) {
+      return;
+    }
     onBulkRollback(rollbackIds);
   }
 </script>
