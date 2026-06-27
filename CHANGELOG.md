@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-06-28
+
+### Added
+- **Game Details → RenoDX**: One-click HDR for supported games through the RenoDX ReShade add-on. RenderPilot detects the game, installs the add-on (and an add-on-enabled ReShade host — stable or nightly — when one is missing), and can fully reverse the change. Before installing, each game shows a confidence badge (verified / experimental / untested) and an anti-cheat risk note, so online titles are flagged up front. Add-ons are fetched live from upstream, so you always get the latest build.
+  - **Updates**: A per-game update check with a freshness indicator and the add-on's publish date, so you can tell when a newer build exists and refresh it in place. The ReShade host is updated alongside the add-on, and you can switch it between stable and nightly at any time. A host that already supports add-ons is reused untouched — including one you installed yourself — and is only replaced (reversibly) when it lacks the add-on support RenoDX needs.
+  - **External add-ons**: For games whose add-on is distributed off-GitHub, the card links to the source and lets you install the downloaded file directly — via file picker or drag-and-drop — while RenderPilot still performs the real install and tracks it for clean removal.
+  - **DLSS Frame Generation fix**: An optional companion fix that stops ReShade from drawing over generated frames, resolving flicker when DLSS Frame Generation is active.
+- **Localization**: The RenoDX experience is fully translated across all seven supported languages.
+- **Game Details → executable selector**: A per-game control to choose which executable RenderPilot targets — shared by the NVIDIA driver profile and RenoDX — with smart auto-detection (launcher metadata plus the binary's imported graphics APIs) and a one-click manual override for the rare miss. The "install your own add-on file" path now works for any DirectX game, not only off-GitHub titles.
+
+### Changed (Refactoring & Maintenance)
+- **Add-on framework**: Added a tool-agnostic install/update engine — atomic install, strict ordered rollback, and upstream-source tracking — with RenoDX as its first consumer, so future add-ons reuse the same mechanics.
+- **Internal structure**: Extracted shared HTTP/CDN/filesystem infrastructure into reusable modules, restructured executable (PE) parsing into a dedicated module, and reshaped installed-add-on storage around a single tracked-sources record.
+- **Tooling**: Consolidated desktop linting on a single ESLint configuration (removing a redundant second linter) and enforced consistent block braces across the UI.
+
 ## [1.2.0] - 2026-06-20
 
 ### Added

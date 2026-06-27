@@ -24,7 +24,7 @@
   <img src="docs/screenshot.webp" alt="RenderPilot Screenshot" width="90%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" />
 </div>
 
-RenderPilot automatically scans your installed games, identifies which upscaler libraries they use, and lets you upgrade, downgrade, or swap them in one click. All processing happens locally — no telemetry, no cloud accounts required.
+RenderPilot automatically scans your installed games, identifies which upscaler libraries they use, and lets you upgrade, downgrade, or swap them in one click — and can even add HDR to supported games through the RenoDX ReShade add-on. All processing happens locally — no telemetry, no cloud accounts required.
 
 ## ✨ Features
 
@@ -36,6 +36,7 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 - **⚡ Native Performance:** Built on Tauri and Rust — tiny binary, instant startup, minimal memory footprint.
 - **🎮 Game Covers & Artwork:** Automatically fetch game covers from SteamGridDB or set custom artwork from your files.
 - **🔧 NVIDIA Driver-Level Settings:** Manage the full range of DLSS Super Resolution, Frame Generation, and Ray Reconstruction driver settings (including presets) per game via NVAPI.
+- **🌈 One-Click HDR (RenoDX):** Add HDR to supported games through the RenoDX ReShade add-on. RenderPilot detects the game, installs the add-on (and an add-on-enabled ReShade host when one is missing), and can fully reverse the change. Each game shows a confidence badge and an anti-cheat risk note, with per-game update checks; add-ons distributed off-GitHub can be installed from a file you downloaded (file picker or drag-and-drop), and an optional DLSS Frame Generation fix stops ReShade drawing over generated frames.
 - **📟 DLSS Indicator Overlay:** Toggle the built-in NVIDIA DLSS indicator to see which upscaler version is active in real-time.
 - **🏷️ Advanced Game Filtering:** Filter by library or launcher, search by name, mark favorites, hide games — organize your catalog your way.
 - **📋 Operation Journal:** Review every library swap and rollback in a detailed history log.
@@ -51,6 +52,7 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 |          <img src="https://img.shields.io/badge/AMD-ed1c24?style=flat-square&logo=amd&logoColor=white" alt="AMD" />          | FSR (Upscaler, Loader, Radiance Cache) · FSR Frame Generation · FSR Ray Regeneration |
 |       <img src="https://img.shields.io/badge/Intel-0071c5?style=flat-square&logo=intel&logoColor=white" alt="Intel" />       | XeSS · XeFG · Xe Low Latency                                                         |
 | <img src="https://img.shields.io/badge/Microsoft-0078d4?style=flat-square&logo=microsoft&logoColor=white" alt="Microsoft" /> | DirectStorage                                                                        |
+|     <img src="https://img.shields.io/badge/ReShade-e8a33d?style=flat-square&logoColor=black" alt="ReShade" />      | RenoDX HDR add-on (one-click HDR) · DLSS Frame Generation fix                         |
 
 **Supported Launchers:** Steam, Epic Games Store, GOG, EA App, Ubisoft Connect — plus any manual folder you choose.
 
@@ -177,10 +179,10 @@ class DETECT,SQLITE,WINDOWS,NVAPI infra;
 | `renderpilot-storage-sqlite`               | **Adapter**                        | SQLite persistence — implements all `*Repository` traits. Atomic scan writes, WAL mode, schema migrations.                                                                        |
 | `renderpilot-platform-windows`             | **Adapter**                        | Windows platform — Steam install discovery, manual folder scanning, executable detection, Windows Registry helpers, DLSS indicator toggle. Implements `GameSourceProvider`.       |
 | `renderpilot-nvapi`                        | **Adapter**                        | NVAPI FFI bindings via runtime `libloading` — reads/writes NVIDIA Driver Settings (DRS profiles). Gracefully degrades on non-NVIDIA hardware.                                     |
-| `renderpilot-orchestration`                | **Orchestration**                  | Wires ports to adapters. Owns all heavyweight dependencies (`reqwest`, `zip`, `rusqlite`). Feature modules: catalog, covers, DLSS, libraries, NVAPI.                              |
+| `renderpilot-orchestration`                | **Orchestration**                  | Wires ports to adapters. Owns all heavyweight dependencies (`reqwest`, `zip`, `rusqlite`). Feature modules: catalog, covers, DLSS, libraries, NVAPI, add-ons (RenoDX).                              |
 | `renderpilot-api`                          | **Presentation** (driving adapter) | GUI facade for the desktop frontend — converts typed orchestration results to `serde_json::Value`. Also serves `rp-cover://` URIs for game cover images.                          |
 | `renderpilot-cli`                          | **Presentation**                   | Binary (`renderpilot`) — arg parsing, JSON/text output, manifest generation.                                                                                                      |
-| `renderpilot-desktop` (in `apps/desktop/`) | **Shell**                          | Tauri 2 desktop app — 31 IPC command handlers, UAC elevation, portable mode, updater.                                                                                             |
+| `renderpilot-desktop` (in `apps/desktop/`) | **Shell**                          | Tauri 2 desktop app — IPC command handlers, UAC elevation, portable mode, updater.                                                                                             |
 
 ### Frontend
 
