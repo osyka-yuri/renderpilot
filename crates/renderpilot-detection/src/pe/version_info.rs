@@ -36,6 +36,15 @@ impl<'a> VersionInfo<'a> {
         self.string_version().or_else(|| self.fixed_version())
     }
 
+    pub(super) fn identity_strings(&self) -> VersionIdentityStrings {
+        VersionIdentityStrings {
+            product_name: self.string_value("ProductName"),
+            file_description: self.string_value("FileDescription"),
+            original_filename: self.string_value("OriginalFilename"),
+            company_name: self.string_value("CompanyName"),
+        }
+    }
+
     fn string_version(&self) -> Option<Version> {
         STRING_VERSION_KEYS.into_iter().find_map(|key| {
             self.string_value(key)
@@ -81,6 +90,20 @@ impl<'a> VersionInfo<'a> {
         ))
         .ok()
     }
+}
+
+/// Selected string fields from a Windows version resource that help identify a
+/// product when stronger binary signals are absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VersionIdentityStrings {
+    /// `ProductName`, when present.
+    pub product_name: Option<String>,
+    /// `FileDescription`, when present.
+    pub file_description: Option<String>,
+    /// `OriginalFilename`, when present.
+    pub original_filename: Option<String>,
+    /// `CompanyName`, when present.
+    pub company_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]

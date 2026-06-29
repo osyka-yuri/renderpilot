@@ -14,17 +14,23 @@
 //! installability) lives in [`policy`], separate from the generic detection facts.
 
 pub(crate) mod anticheat;
+mod channel;
 pub(crate) mod dlss_fix;
 mod errors;
 pub(crate) mod facts;
 mod fetch;
+mod host_policy;
 pub(crate) mod install;
 pub mod manifest_store;
 pub(crate) mod matcher;
+mod operation_lock;
 pub(crate) mod policy;
+mod progress;
 pub(crate) mod reshade;
+mod reshade_ini;
 pub mod service;
 mod source;
+mod tracking;
 pub mod types;
 pub mod update;
 mod validate;
@@ -75,13 +81,16 @@ mod tests {
         "schema_version": 3,
         "generated_at": "2026-06-15T00:00:00Z",
         "reshade": {
+            "stable": {
+                "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe"
+            },
             "nightly": {
                 "url64": "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip",
                 "url32": "https://nightly.link/crosire/reshade/workflows/build/main/x32.zip"
             }
         },
         "generics": [
-            { "engine": "unity", "url64": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64", "label_key": "renodx.generic.unity" },
+            { "engine": "unity", "slug": "unityengine", "url64": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64", "url32": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32", "label_key": "renodx.generic.unity" },
             { "engine": "unreal", "slug": "_univ", "label_key": "renodx.generic.universal" }
         ],
         "defaults": {

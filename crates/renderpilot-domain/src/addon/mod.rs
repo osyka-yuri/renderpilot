@@ -110,7 +110,7 @@ pub enum RenoDxInstallState {
         #[serde(default)]
         dlss_fix_installed: bool,
         /// Whether the add-on has a tracked upstream source (a normal install).
-        /// `false` for a user-file install, which records no add-on source.
+        /// `false` for a user-file install, which records no upstream URL.
         /// Surfaced directly on the state for the same reason as
         /// `dlss_fix_installed`, so the "installed from a file" hint stays correct
         /// while the update probe is in flight or after it fails (the report's
@@ -130,6 +130,19 @@ impl RenoDxInstallState {
             self,
             Self::Installed {
                 dlss_fix_installed: true,
+                ..
+            }
+        )
+    }
+
+    /// Returns whether this state is `Installed` and its add-on payload has a
+    /// non-empty upstream source URL.
+    #[must_use]
+    pub fn is_addon_tracked(&self) -> bool {
+        matches!(
+            self,
+            Self::Installed {
+                addon_tracked: true,
                 ..
             }
         )
@@ -175,6 +188,10 @@ pub struct TrackedSource {
     /// `None`.
     #[serde(default)]
     last_modified: Option<String>,
+    /// Tool-owned source variant/provenance tag. Generic at the domain layer:
+    /// RenoDX uses `stable` / `nightly` for ReShade Host sources.
+    #[serde(default)]
+    channel: Option<String>,
 }
 
 impl TrackedSource {
@@ -193,6 +210,7 @@ impl TrackedSource {
             etag,
             digest: digest.into(),
             last_modified: None,
+            channel: None,
         }
     }
 
@@ -201,6 +219,13 @@ impl TrackedSource {
     #[must_use]
     pub fn with_last_modified(mut self, last_modified: Option<String>) -> Self {
         self.last_modified = last_modified;
+        self
+    }
+
+    /// Attaches a tool-owned source variant/provenance tag.
+    #[must_use]
+    pub fn with_channel(mut self, channel: impl Into<String>) -> Self {
+        self.channel = Some(channel.into());
         self
     }
 
@@ -232,6 +257,12 @@ impl TrackedSource {
     #[must_use]
     pub fn last_modified(&self) -> Option<&str> {
         self.last_modified.as_deref()
+    }
+
+    /// Returns the tool-owned source variant/provenance tag, when present.
+    #[must_use]
+    pub fn channel(&self) -> Option<&str> {
+        self.channel.as_deref()
     }
 }
 
@@ -453,13 +484,14 @@ impl InstalledAddon {
     }
 
     /// Returns whether the add-on payload has a tracked upstream source (a normal
-    /// upstream install). A user-file install records none, so this is `false` and
-    /// the UI shows the "installed from a file" note.
+    /// upstream install). A user-file install may keep a local-date placeholder
+    /// with an empty URL, so this stays `false` and the UI shows the "installed
+    /// from a file" note.
     #[must_use]
     pub fn has_addon_source(&self) -> bool {
-        self.tracked_sources
-            .iter()
-            .any(|source| source.role() == TrackedSourceRole::AddonPayload)
+        self.tracked_sources.iter().any(|source| {
+            source.role() == TrackedSourceRole::AddonPayload && !source.url().is_empty()
+        })
     }
 
     /// Returns the current install state described by this record.
@@ -621,6 +653,22 @@ mod tests {
     }
 
     #[test]
+    fn local_addon_date_placeholder_is_not_a_tracked_upstream_source() {
+        let installed = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
+            .with_tracked_source(
+                TrackedSource::new(TrackedSourceRole::AddonPayload, "", None, "addon-digest")
+                    .with_last_modified(Some("Wed, 18 Jun 2026 12:00:00 GMT".to_owned())),
+            );
+
+        assert_eq!(
+            installed.addon_dated(),
+            Some("Wed, 18 Jun 2026 12:00:00 GMT")
+        );
+        assert!(!installed.has_addon_source());
+        assert!(!installed.install_state().is_addon_tracked());
+    }
+
+    #[test]
     fn has_dlss_fix_and_install_state_reflect_dlss_fix_source() {
         let base = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path());
         assert!(!base.has_dlss_fix());
@@ -676,5 +724,27 @@ mod tests {
         let legacy = r#"{"role":"addon_payload","url":"https://example/addon","etag":null,"digest":"digest"}"#;
         let parsed: TrackedSource = serde_json::from_str(legacy).expect("legacy parse");
         assert_eq!(parsed.last_modified(), None);
+        assert_eq!(parsed.channel(), None);
+    }
+
+    #[test]
+    fn tracked_source_channel_round_trips_and_defaults() {
+        let source = TrackedSource::new(
+            TrackedSourceRole::Host,
+            "https://example/host.zip",
+            None,
+            "digest",
+        )
+        .with_channel("stable");
+        let json = serde_json::to_string(&source).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<TrackedSource>(&json).expect("round-trip"),
+            source
+        );
+
+        let legacy =
+            r#"{"role":"host","url":"https://example/host.zip","etag":null,"digest":"digest"}"#;
+        let parsed: TrackedSource = serde_json::from_str(legacy).expect("legacy parse");
+        assert_eq!(parsed.channel(), None);
     }
 }

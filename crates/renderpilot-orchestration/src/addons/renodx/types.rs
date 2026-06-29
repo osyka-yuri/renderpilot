@@ -107,13 +107,46 @@ pub fn manifest_defaults() -> Defaults {
 
 /// Global add-on-enabled ReShade host configuration.
 ///
-/// The host is the crosire CI build (a plain zip) proxied by nightly.link. The
-/// reshade.me "stable" installer is an NSIS archive that cannot be extracted
-/// without bundling 7-Zip, so it is intentionally not a source here.
+/// The host can be the manifest-current stable reshade.me add-on installer or the
+/// crosire CI build proxied by nightly.link.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReshadeConfig {
+    /// Manifest-current stable ReShade add-on installer. This is a versioned
+    /// reshade.me URL, not a latest alias; new stable builds become visible only
+    /// when the manifest refreshes this URL.
+    #[serde(default)]
+    pub stable: Option<ReshadeStable>,
     /// Nightly ReShade build (a plain zip per architecture).
     pub nightly: ReshadeNightly,
+}
+
+impl ReshadeConfig {
+    /// Whether the manifest can provide a source for `channel`.
+    #[must_use]
+    pub fn supports_channel(&self, channel: ReshadeChannel) -> bool {
+        match channel {
+            ReshadeChannel::Stable => self.stable.is_some(),
+            ReshadeChannel::Nightly => true,
+        }
+    }
+
+    /// The effective channel used only by install paths. Stable is the default,
+    /// but old manifests without a stable URL gracefully fall back to nightly.
+    #[must_use]
+    pub fn effective_install_channel(&self, requested: ReshadeChannel) -> ReshadeChannel {
+        if self.supports_channel(requested) {
+            requested
+        } else {
+            ReshadeChannel::Nightly
+        }
+    }
+}
+
+/// Manifest-current stable ReShade add-on installer URL.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReshadeStable {
+    /// Versioned `_Addon.exe` URL from reshade.me.
+    pub url: String,
 }
 
 /// Nightly ReShade build URLs (zip artifacts containing `ReShade{64,32}.dll`).
@@ -125,19 +158,47 @@ pub struct ReshadeNightly {
     pub url32: String,
 }
 
+/// ReShade host source channel. Serialized in snake_case for API/record
+/// provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReshadeChannel {
+    /// Manifest-current stable ReShade add-on installer.
+    #[default]
+    Stable,
+    /// Nightly CI artifact from nightly.link.
+    Nightly,
+}
+
+impl ReshadeChannel {
+    /// Stable wire representation used in records and UI payloads.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Nightly => "nightly",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Engine generics
 // ---------------------------------------------------------------------------
 
 /// An engine-generic add-on, resolved when a game matches by engine rather than id.
 ///
-/// Either references a clshortfuse `slug` (default host) or an explicit `url64`/
-/// `url32` for generics hosted elsewhere (e.g. the Unity generic).
+/// `slug` is the canonical local add-on identity (`renodx-<slug>.addon*`).
+/// Optional explicit `url64`/`url32` override the download host for generics
+/// published outside clshortfuse.github.io (e.g. the Unity generic).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Generic {
     /// Engine this generic targets.
     pub engine: Engine,
-    /// clshortfuse slug for the generic add-on (e.g. `_univ`), when host-default.
+    /// Compatibility status for this generic add-on. Defaults to unknown for
+    /// manifests generated before generic confidence existed.
+    #[serde(default)]
+    pub status: Status,
+    /// Canonical add-on slug (e.g. `_univ`, `unityengine`) used for the local file name.
     #[serde(default)]
     pub slug: Option<String>,
     /// Explicit 64-bit add-on URL, when hosted off the default host.
@@ -161,6 +222,18 @@ pub enum Engine {
     UnrealExtended,
     /// Unity.
     Unity,
+}
+
+impl Engine {
+    /// Stable manifest/local-identity string for this engine.
+    #[must_use]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unreal => "unreal",
+            Self::UnrealExtended => "unreal_extended",
+            Self::Unity => "unity",
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

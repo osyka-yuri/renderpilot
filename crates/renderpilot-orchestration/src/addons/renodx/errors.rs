@@ -28,6 +28,13 @@ pub(super) fn game_not_found(game_id: &GameId) -> ServiceError {
     ServiceError::GameNotFound(game_id.as_str().to_owned())
 }
 
+/// The install record carries more than one ReShade host source, so the managed
+/// host is ambiguous. The single source of truth for this message, shared by every
+/// flow that reads or rewrites the host source.
+pub(super) fn duplicate_host_sources() -> ServiceError {
+    invalid("RenoDX install record has multiple ReShade host sources".to_owned())
+}
+
 /// A filesystem operation failure, e.g. `failed to back up \`<path>\`: <error>`.
 pub(super) fn io(action: &str, path: &Path, error: &io::Error) -> ServiceError {
     failed(format!("failed to {action} `{}`: {error}", path.display()))

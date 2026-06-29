@@ -101,6 +101,33 @@ impl Ini {
             .retain(|s| !s.header.eq_ignore_ascii_case(section));
     }
 
+    /// Returns the trimmed value of `key` in `section` (both case-insensitive), or
+    /// `None` when the section or key is absent. Comment and blank lines carry no
+    /// `=` and are skipped, so a `;commented=out` key never matches.
+    #[must_use]
+    pub(crate) fn get(&self, section: &str, key: &str) -> Option<&str> {
+        self.sections
+            .iter()
+            .find(|s| s.header.eq_ignore_ascii_case(section))?
+            .lines
+            .iter()
+            .find_map(|line| {
+                let (line_key, value) = line.split_once('=')?;
+                line_key
+                    .trim()
+                    .eq_ignore_ascii_case(key)
+                    .then(|| value.trim())
+            })
+    }
+
+    /// Whether a `[section]` header is present (case-insensitive).
+    #[must_use]
+    pub(crate) fn has_section(&self, section: &str) -> bool {
+        self.sections
+            .iter()
+            .any(|s| s.header.eq_ignore_ascii_case(section))
+    }
+
     /// Renders the INI back to text, dropping trailing empty lines and terminating
     /// with a single CRLF. A blank line separates consecutive sections, so a
     /// freshly merged or created config is readable; an existing blank line
@@ -257,6 +284,27 @@ mod tests {
         let mut ini = Ini::parse("");
         ini.set("ADDON", "AddonPath", ".");
         assert_eq!(ini.render(), "[ADDON]\r\nAddonPath=.\r\n");
+    }
+
+    #[test]
+    fn get_reads_values_case_insensitively_and_skips_comments() {
+        let ini = Ini::parse(
+            "; head\r\n[INSTALL]\r\nBasePath = C:\\Base \r\n[ADDON]\r\n;DisabledAddons=ignored\r\nAddonPath=addons\r\n",
+        );
+        assert_eq!(ini.get("install", "basepath"), Some("C:\\Base"));
+        assert_eq!(ini.get("ADDON", "AddonPath"), Some("addons"));
+        // A commented key is not a value.
+        assert_eq!(ini.get("ADDON", "DisabledAddons"), None);
+        // Missing section / key.
+        assert_eq!(ini.get("MISSING", "x"), None);
+        assert_eq!(ini.get("ADDON", "absent"), None);
+    }
+
+    #[test]
+    fn has_section_is_case_insensitive() {
+        let ini = Ini::parse("[ADDON]\r\nAddonPath=.\r\n");
+        assert!(ini.has_section("addon"));
+        assert!(!ini.has_section("install"));
     }
 
     #[test]

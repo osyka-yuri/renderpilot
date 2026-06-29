@@ -2,16 +2,19 @@
 //!
 //! With add-ons fetched live from upstream there are no artifacts/hashes to
 //! cross-check; validation now enforces a supported schema, well-formed slugs and
-//! match rules, sane risk metadata, and that every download host (ReShade sources,
-//! engine generics) is HTTPS and on the allow-list. A manifest that passes can be
-//! resolved and installed without further structural checks.
+//! match rules, sane risk metadata, and that explicit add-on URL basenames match
+//! the canonical local file name derived from the slug. A manifest that passes can
+//! be resolved and installed without further structural checks.
 
 use std::collections::HashSet;
+
+use renderpilot_domain::Architecture;
 
 use crate::ServiceError;
 use crate::fs::is_safe_file_name;
 
 use super::errors;
+use super::source;
 use super::types::{
     Category, Generic, MatchKind, MatchRule, RenoDxManifest, ReshadeConfig, Title,
     manifest_defaults,
@@ -90,25 +93,45 @@ fn validate_category(category: &Category) -> Result<(), ServiceError> {
 }
 
 fn validate_reshade(reshade: &ReshadeConfig) -> Result<(), ServiceError> {
+    if let Some(stable) = &reshade.stable {
+        ensure_stable_reshade_download("reshade stable url", &stable.url)?;
+    }
     ensure_allowed_download("reshade nightly url64", &reshade.nightly.url64)?;
     ensure_allowed_download("reshade nightly url32", &reshade.nightly.url32)?;
     Ok(())
 }
 
 fn validate_generic(generic: &Generic) -> Result<(), ServiceError> {
-    match (&generic.slug, &generic.url64) {
-        (Some(slug), _) => ensure_slug("generic slug", slug)?,
-        (None, Some(url64)) => {
-            ensure_allowed_download("generic url64", url64)?;
-            if let Some(url32) = &generic.url32 {
-                ensure_allowed_download("generic url32", url32)?;
-            }
-        }
-        (None, None) => {
-            return Err(errors::failed(
-                "generic must define either a slug or url64".to_owned(),
-            ));
-        }
+    if let Some(slug) = &generic.slug {
+        ensure_slug("generic slug", slug)?;
+    }
+
+    let has_url64 = generic.url64.is_some();
+    let has_url32 = generic.url32.is_some();
+    if has_url64 != has_url32 {
+        return Err(errors::failed(
+            "generic url64 and url32 must be provided together".to_owned(),
+        ));
+    }
+    if let Some(url64) = &generic.url64 {
+        ensure_allowed_addon_download_matches_file_name(
+            "generic url64",
+            url64,
+            &source::addon_file_name(source::generic_local_slug(generic), Architecture::X64),
+        )?;
+    }
+    if let Some(url32) = &generic.url32 {
+        ensure_allowed_addon_download_matches_file_name(
+            "generic url32",
+            url32,
+            &source::addon_file_name(source::generic_local_slug(generic), Architecture::X86),
+        )?;
+    }
+
+    if generic.slug.is_none() && (!has_url64 || !has_url32) {
+        return Err(errors::failed(
+            "generic must define a slug or both url64 and url32".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -147,7 +170,11 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
     if let Some(url) = &title.download_url {
         // download_url targets third-party hosts (various github.io pages, GitHub
         // releases), so only HTTPS is enforced — no host allow-list.
-        ensure_https("title download_url", url)?;
+        ensure_https_addon_download_matches_file_name(
+            "title download_url",
+            url,
+            &source::addon_file_name(&title.slug, title.arch),
+        )?;
     }
     ensure_semver("title min_app_version", &title.id, &title.min_app_version)?;
     for conflict in &title.compatibility.conflicts {
@@ -228,19 +255,72 @@ fn ensure_safe_file_name(field: &str, value: &str) -> Result<(), ServiceError> {
     Ok(())
 }
 
-fn ensure_https(field: &str, url: &str) -> Result<(), ServiceError> {
-    crate::net::parse_https_url(url, field)?;
-    Ok(())
+fn ensure_https(field: &str, url: &str) -> Result<reqwest::Url, ServiceError> {
+    crate::net::parse_https_url(url, field)
 }
 
-fn ensure_allowed_download(field: &str, url: &str) -> Result<(), ServiceError> {
-    let parsed = crate::net::parse_https_url(url, field)?;
+fn ensure_allowed_download(field: &str, url: &str) -> Result<reqwest::Url, ServiceError> {
+    let parsed = ensure_https(field, url)?;
     let host = parsed
         .host_str()
         .ok_or_else(|| errors::failed(format!("{field} has no host")))?;
     if !DOWNLOAD_HOST_ALLOWLIST.contains(&host) {
         return Err(errors::failed(format!(
             "{field} host `{host}` is not allow-listed"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn ensure_https_addon_download_matches_file_name(
+    field: &str,
+    url: &str,
+    expected_name: &str,
+) -> Result<(), ServiceError> {
+    let parsed = ensure_https(field, url)?;
+    ensure_url_basename_matches(field, &parsed, expected_name)
+}
+
+fn ensure_allowed_addon_download_matches_file_name(
+    field: &str,
+    url: &str,
+    expected_name: &str,
+) -> Result<(), ServiceError> {
+    let parsed = ensure_allowed_download(field, url)?;
+    ensure_url_basename_matches(field, &parsed, expected_name)
+}
+
+fn ensure_url_basename_matches(
+    field: &str,
+    url: &reqwest::Url,
+    expected_name: &str,
+) -> Result<(), ServiceError> {
+    let basename = url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .unwrap_or_default();
+    let basename_field = format!("{field} basename");
+    ensure_safe_file_name(&basename_field, basename)?;
+    if !basename.eq_ignore_ascii_case(expected_name) {
+        return Err(errors::failed(format!(
+            "{field} basename `{basename}` must match canonical local add-on `{expected_name}`"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_stable_reshade_download(field: &str, url: &str) -> Result<(), ServiceError> {
+    let parsed = ensure_https(field, url)?;
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(errors::failed(format!("{field} must not include userinfo")));
+    }
+    if parsed.host_str() != Some("reshade.me") {
+        return Err(errors::failed(format!("{field} host must be `reshade.me`")));
+    }
+    let path = parsed.path();
+    if !path.starts_with("/downloads/ReShade_Setup_") || !path.ends_with("_Addon.exe") {
+        return Err(errors::failed(format!(
+            "{field} must point at `/downloads/ReShade_Setup_*_Addon.exe`"
         )));
     }
     Ok(())
@@ -259,7 +339,7 @@ mod tests {
 
     use super::*;
     use crate::addons::renodx::test_support::{manifest, rule, title};
-    use crate::addons::renodx::types::{Category, MatchKind, Status};
+    use crate::addons::renodx::types::{Category, Engine, Generic, MatchKind, Status};
 
     fn one_title_manifest() -> RenoDxManifest {
         manifest(vec![title(
@@ -309,6 +389,127 @@ mod tests {
     fn defaults_drift_is_rejected() {
         let mut m = one_title_manifest();
         m.defaults.min_app_version = "2.0.0".to_owned();
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn generic_accepts_canonical_slug_with_explicit_urls() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
+            url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32".to_owned()),
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+
+        assert!(validate_manifest(&m).is_ok());
+    }
+
+    #[test]
+    fn generic_validates_explicit_urls_even_with_slug() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("http://example.com/renodx-unityengine.addon64".to_owned()),
+            url32: Some("https://example.com/renodx-unityengine.addon32".to_owned()),
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn generic_rejects_explicit_url_basename_mismatch() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon64".to_owned()),
+            url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32".to_owned()),
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn generic_explicit_urls_must_be_paired_even_with_slug() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
+            url32: None,
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn generic_without_slug_requires_both_explicit_urls() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: None,
+            url64: Some("https://example.com/renodx-unityengine.addon64".to_owned()),
+            url32: None,
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn legacy_generic_without_slug_uses_engine_fallback_as_local_identity() {
+        let mut m = one_title_manifest();
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: None,
+            url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon64".to_owned()),
+            url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon32".to_owned()),
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+        assert!(validate_manifest(&m).is_ok());
+
+        m.generics[0].url64 = Some(
+            "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64"
+                .to_owned(),
+        );
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn title_download_url_basename_must_match_canonical_file_name() {
+        let mut m = one_title_manifest();
+        m.titles[0].download_url = Some("https://example.com/renodx-slugx.addon64".to_owned());
+        assert!(validate_manifest(&m).is_ok());
+
+        m.titles[0].download_url = Some("https://example.com/renodx-other.addon64".to_owned());
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn stable_reshade_requires_official_addon_download_shape() {
+        let mut m = one_title_manifest();
+        m.reshade.stable.as_mut().expect("stable").url =
+            "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned();
+        assert!(validate_manifest(&m).is_ok());
+
+        m.reshade.stable.as_mut().expect("stable").url =
+            "https://example.com/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned();
+        assert!(validate_manifest(&m).is_err());
+
+        m.reshade.stable.as_mut().expect("stable").url =
+            "https://reshade.me/downloads/ReShade_Setup_6.7.3.exe".to_owned();
         assert!(validate_manifest(&m).is_err());
     }
 }

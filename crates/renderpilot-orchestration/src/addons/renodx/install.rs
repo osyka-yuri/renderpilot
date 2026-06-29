@@ -3,8 +3,9 @@
 //!
 //! Given a [`PreparedInstall`] (already-fetched, already-verified bytes plus the
 //! resolved file names), [`install`] builds the ordered file operations — the
-//! add-on, and the ReShade host + `ReShade.ini` + ownership marker when no host is
-//! present — hands them to the engine (which backs up, rolls back, and journals),
+//! add-on, and the ReShade host + `ReShade.ini` when no suitable host is present
+//! or the active host needs repair — hands them to the engine (which backs up,
+//! rolls back, and journals),
 //! and assembles the reversible [`InstalledAddon`] with the upstream sources to
 //! track for updates. [`uninstall`] is a thin tool-specific wrapper over the
 //! engine's generic reversal. (In-place file replacement for updates lives in the
@@ -23,8 +24,11 @@ use crate::addons::engine::{self, FileOp, InstallPlan};
 use crate::addons::record;
 
 use super::errors;
-use super::reshade::{self, ReshadeMarker, ReshadeState, detect_reshade, ini_merge_strategy};
-use super::types::ReshadeIniTweaks;
+use super::host_policy::{self, HostAssessment};
+use super::reshade;
+use super::reshade_ini::ini_merge_strategy;
+use super::tracking;
+use super::types::{ReshadeChannel, ReshadeIniTweaks};
 
 /// The DLSS-Fix companion add-on file name prefix (`renodx-dlssfix.`).
 pub(super) const DLSS_FIX_FILE_PREFIX: &str = "renodx-dlssfix.";
@@ -71,8 +75,6 @@ pub struct PreparedInstall {
     pub addon_bytes: Vec<u8>,
     /// ReShade host DLL bytes; used only when no ReShade host is already present.
     pub reshade_dll_bytes: Vec<u8>,
-    /// ReShade host channel label, when a host was installed.
-    pub reshade_version: Option<String>,
     /// Upstream URL the ReShade host came from (empty when no host is installed).
     pub reshade_source_url: String,
     /// The ReShade host zip's cache validator (for a cheap host update pre-check).
@@ -81,103 +83,130 @@ pub struct PreparedInstall {
     pub reshade_last_modified: Option<String>,
     /// SHA-256 of the installed ReShade host DLL (empty when none installed).
     pub reshade_digest: String,
+    /// Effective channel for the managed ReShade host source.
+    pub reshade_channel: Option<ReshadeChannel>,
     /// `ReShade.ini` tweaks RenoDX requires.
     pub ini_tweaks: ReshadeIniTweaks,
 }
 
 /// Installs RenoDX into `game_dir`, returning the record needed to reverse it.
 ///
-/// Refuses if RenderPilot already manages a RenoDX install here (the caller should
-/// uninstall first to reinstall). When no ReShade host is present one is installed
-/// (proxy DLL + fresh `ReShade.ini` + marker); a foreign host is reused with only an
-/// additive, backed-up `ReShade.ini` merge. The engine rolls back on any failure.
+/// Idempotently installs RenoDX. A suitable active ReShade host is reused
+/// regardless of who placed it; an active host without add-on support is backed up
+/// and replaced with the bundled full add-on-support build. The engine rolls back
+/// on any failure and the DB is still updated by the caller only after files land.
 pub fn install(
     game_dir: &Path,
     prepared: &PreparedInstall,
 ) -> Result<InstalledAddon, ServiceError> {
-    let reshade = detect_reshade(game_dir);
-    if matches!(reshade, ReshadeState::Managed(_)) {
+    let host = host_policy::assess(game_dir, &prepared.proxy_dll_name);
+    host.ensure_not_conflicting(&prepared.proxy_dll_name)?;
+    if host.writes_host() && prepared.reshade_dll_bytes.is_empty() {
         return Err(errors::invalid(
-            "RenoDX is already installed for this game; uninstall before reinstalling".to_owned(),
+            "the active ReShade host needs installation or repair, but no ReShade bytes were provided"
+                .to_owned(),
         ));
     }
 
-    // A RenoDX install we already manage is refused above; only `Absent` (install a
-    // host) and `Foreign` (reuse one) remain.
-    let manages_host = matches!(reshade, ReshadeState::Absent);
-    if manages_host && prepared.reshade_dll_bytes.is_empty() {
-        return Err(errors::invalid(
-            "no ReShade host present and no ReShade bytes were provided to install one".to_owned(),
-        ));
-    }
-
-    // Refuse rather than silently displace a file already occupying the proxy-DLL
-    // slot. With no ReShade host detected, an existing proxy-named DLL is another
-    // graphics overlay (a standalone ReShade, a different proxy) or a game-shipped
-    // one, and replacing it would break it; the user resolves the conflict first.
-    if manages_host && proxy_slot_occupied(game_dir, &prepared.proxy_dll_name) {
+    let paths = reshade::resolve_paths(game_dir, Some(&host.target_path));
+    if reshade::addon_path_requires_explicit_elevation(&paths.effective_addon_path) {
         return Err(errors::invalid(format!(
-            "the '{}' slot RenoDX needs is already occupied by another file; remove or \
-             relocate it before installing (it may be a different graphics overlay or proxy)",
-            prepared.proxy_dll_name
+            "ReShade AddonPath `{}` points to a protected system location; move the add-on path \
+             or run an explicit elevated install flow",
+            paths.effective_addon_path.display()
+        )));
+    }
+    if !paths.effective_addon_path.is_dir() {
+        return Err(errors::invalid(format!(
+            "ReShade AddonPath `{}` does not exist",
+            paths.effective_addon_path.display()
         )));
     }
 
-    let plan = build_plan(prepared, manages_host)?;
-    let receipt = engine::install(game_dir, &plan)?;
-    build_record(prepared, game_dir, manages_host, &receipt)
+    reshade::remove_legacy_marker(game_dir);
+
+    let receipt = install_plans(game_dir, &paths.effective_addon_path, prepared, &host)?;
+    build_record(
+        prepared,
+        &paths.effective_addon_path,
+        host.writes_host(),
+        &receipt,
+    )
 }
 
-/// Whether a file already occupies the proxy-DLL slot RenoDX would install into,
-/// matched case-insensitively (Windows filesystems are case-insensitive, and a
-/// foreign overlay may use any casing). A managed install refuses rather than
-/// displace it.
-fn proxy_slot_occupied(game_dir: &Path, proxy_dll_name: &str) -> bool {
-    let Ok(entries) = std::fs::read_dir(game_dir) else {
-        return false;
+fn install_plans(
+    game_dir: &Path,
+    addon_dir: &Path,
+    prepared: &PreparedInstall,
+    host: &HostAssessment,
+) -> Result<engine::InstallReceipt, ServiceError> {
+    if reshade::same_path(game_dir, addon_dir) {
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: combined_ops(game_dir, prepared, host.writes_host()),
+        };
+        return engine::install(game_dir, &plan);
+    }
+
+    let addon_plan = InstallPlan {
+        kind: AddonKind::RenoDx,
+        ops: vec![addon_op(prepared)],
     };
-    entries.flatten().any(|entry| {
-        entry
-            .file_type()
-            .map(|kind| kind.is_file())
-            .unwrap_or(false)
-            && entry
-                .file_name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(proxy_dll_name)
-    })
+    let addon_receipt = engine::install(addon_dir, &addon_plan)?;
+
+    let host_receipt = if host.writes_host() {
+        let host_plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: host_ops(game_dir, prepared),
+        };
+        match engine::install(game_dir, &host_plan) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let _ =
+                    engine::uninstall(&addon_receipt.created_files, &addon_receipt.backed_up_files);
+                return Err(error);
+            }
+        }
+    } else {
+        engine::InstallReceipt::default()
+    };
+
+    Ok(merge_receipts(addon_receipt, host_receipt))
 }
 
-/// Builds the ordered file operations for the install.
-///
-/// Always lays the add-on down first; when installing a host, follows with the proxy
-/// DLL, the `ReShade.ini` merge, and the ownership marker (so a later op never edits
-/// a file an earlier op has not yet created).
-fn build_plan(prepared: &PreparedInstall, manages_host: bool) -> Result<InstallPlan, ServiceError> {
-    let mut ops = vec![FileOp::Create {
+fn merge_receipts(
+    mut left: engine::InstallReceipt,
+    right: engine::InstallReceipt,
+) -> engine::InstallReceipt {
+    left.created_files.extend(right.created_files);
+    left.backed_up_files.extend(right.backed_up_files);
+    left
+}
+
+fn combined_ops(game_dir: &Path, prepared: &PreparedInstall, writes_host: bool) -> Vec<FileOp> {
+    let mut ops = vec![addon_op(prepared)];
+    if writes_host {
+        ops.extend(host_ops(game_dir, prepared));
+    }
+    ops
+}
+
+fn addon_op(prepared: &PreparedInstall) -> FileOp {
+    FileOp::Create {
         name: prepared.addon_file_name.clone(),
         bytes: prepared.addon_bytes.clone(),
-    }];
-
-    if manages_host {
-        ops.push(FileOp::BackupAndReplace {
-            name: prepared.proxy_dll_name.clone(),
-            bytes: prepared.reshade_dll_bytes.clone(),
-        });
-        ops.push(ini_op(&prepared.ini_tweaks));
-        ops.push(FileOp::Create {
-            name: reshade::MARKER_FILE_NAME.to_owned(),
-            bytes: marker_bytes(prepared)?,
-        });
     }
-    // A foreign host is reused as-is: we place only the add-on file and leave the
-    // user's `ReShade.ini` untouched (ReShade loads root add-ons by default), so a
-    // hand-tuned foreign config is never backed up, rewritten, or clobbered.
+}
 
-    Ok(InstallPlan {
-        kind: AddonKind::RenoDx,
-        ops,
-    })
+fn host_ops(game_dir: &Path, prepared: &PreparedInstall) -> Vec<FileOp> {
+    let mut ops = vec![FileOp::BackupAndReplace {
+        name: prepared.proxy_dll_name.clone(),
+        bytes: prepared.reshade_dll_bytes.clone(),
+    }];
+    if reshade::reshade_ini_path(game_dir).is_none() {
+        ops.push(ini_op(&prepared.ini_tweaks));
+    }
+    ops
 }
 
 /// The `ReShade.ini` merge operation: additively set RenoDX's `[ADDON]` keys,
@@ -190,31 +219,20 @@ fn ini_op(tweaks: &ReshadeIniTweaks) -> FileOp {
     }
 }
 
-/// Serializes the ownership marker RenderPilot drops when it installs the host.
-fn marker_bytes(prepared: &PreparedInstall) -> Result<Vec<u8>, ServiceError> {
-    let marker = ReshadeMarker::new(
-        prepared.proxy_dll_name.clone(),
-        prepared.reshade_version.clone(),
-        prepared.addon_file_name.clone(),
-    );
-    serde_json::to_vec_pretty(&marker)
-        .map_err(|error| errors::failed(format!("failed to serialize ReShade marker: {error}")))
-}
-
 /// Assembles the [`InstalledAddon`] from the engine receipt and the upstream sources
 /// to track: the add-on (when fetched from upstream) and the managed ReShade host.
 fn build_record(
     prepared: &PreparedInstall,
-    game_dir: &Path,
-    manages_host: bool,
+    addon_dir: &Path,
+    tracks_host: bool,
     receipt: &engine::InstallReceipt,
 ) -> Result<InstalledAddon, ServiceError> {
-    let addon_path = game_dir.join(&prepared.addon_file_name);
+    let addon_path = addon_dir.join(&prepared.addon_file_name);
 
     let mut sources = Vec::new();
-    // A file install has no upstream add-on URL, so it tracks no add-on source
-    // (updates honestly report `Unknown`).
-    if !prepared.addon_source_url.is_empty() {
+    // A file install has no upstream add-on URL; it may still keep a local-date
+    // placeholder so the UI has a DB fallback if file mtime stamping fails.
+    if !prepared.addon_source_url.is_empty() || prepared.source_last_modified.is_some() {
         sources.push(
             TrackedSource::new(
                 TrackedSourceRole::AddonPayload,
@@ -225,18 +243,20 @@ fn build_record(
             .with_last_modified(prepared.source_last_modified.clone()),
         );
     }
-    // A managed host records its source; a reused foreign host records none (and so
-    // reads as unmanaged and is never modified on update/uninstall).
-    if manages_host {
-        sources.push(
-            TrackedSource::new(
-                TrackedSourceRole::Host,
-                prepared.reshade_source_url.clone(),
-                prepared.reshade_source_etag.clone(),
-                prepared.reshade_digest.clone(),
-            )
-            .with_last_modified(prepared.reshade_last_modified.clone()),
-        );
+    // A host source records that this install replaced or created the active host,
+    // so update/uninstall can reverse it. A reused suitable host records none.
+    if tracks_host {
+        let mut host = TrackedSource::new(
+            TrackedSourceRole::Host,
+            prepared.reshade_source_url.clone(),
+            prepared.reshade_source_etag.clone(),
+            prepared.reshade_digest.clone(),
+        )
+        .with_last_modified(prepared.reshade_last_modified.clone());
+        if let Some(channel) = prepared.reshade_channel {
+            host = host.with_channel(channel.as_str());
+        }
+        sources.push(host);
     }
 
     record::build(
@@ -250,10 +270,28 @@ fn build_record(
 
 /// Reverses an install, returning the game folder to its prior state.
 pub fn uninstall(record: &InstalledAddon) -> Result<(), ServiceError> {
+    let log_base_path = if record.reshade_managed_by_us() {
+        tracking::managed_host_path(record).and_then(|host_path| {
+            host_path.parent().map(|game_dir| {
+                reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path
+            })
+        })
+    } else {
+        None
+    };
+
     engine::uninstall(
         &to_path_bufs(record.created_files()),
         &to_path_bufs(record.backed_up_files()),
-    )
+    )?;
+
+    if let Some(base_path) = log_base_path {
+        reshade::remove_reshade_logs_best_effort(&base_path);
+    }
+    if let Some(game_dir) = Path::new(record.addon_file().as_str()).parent() {
+        reshade::remove_legacy_marker(game_dir);
+    }
+    Ok(())
 }
 
 fn to_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
@@ -264,6 +302,9 @@ fn to_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
 mod tests {
     use super::*;
     use crate::addons::renodx::reshade::marker_path;
+    use crate::addons::renodx::test_support::{
+        MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports,
+    };
     use std::fs;
     use tempfile::tempdir;
 
@@ -278,12 +319,12 @@ mod tests {
             source_etag: Some("\"etag-1\"".to_owned()),
             source_last_modified: Some("Wed, 18 Jun 2026 12:00:00 GMT".to_owned()),
             addon_bytes: b"addon-bytes".to_vec(),
-            reshade_dll_bytes: b"reshade-dll-bytes".to_vec(),
-            reshade_version: Some("nightly".to_owned()),
+            reshade_dll_bytes: reshade_host_bytes(true),
             reshade_source_url: "https://nightly.link/crosire/reshade/x64.zip".to_owned(),
             reshade_source_etag: Some("\"rs-etag-1\"".to_owned()),
             reshade_last_modified: Some("Tue, 17 Jun 2026 09:00:00 GMT".to_owned()),
             reshade_digest: "reshade-digest".to_owned(),
+            reshade_channel: Some(ReshadeChannel::Nightly),
             ini_tweaks: ReshadeIniTweaks::renodx_defaults(),
         }
     }
@@ -301,8 +342,21 @@ mod tests {
             .unwrap_or_else(|| panic!("expected a tracked source for {role:?}"))
     }
 
+    fn reshade_host_bytes(addon_support: bool) -> Vec<u8> {
+        let mut exports = vec!["ReShadeVersion"];
+        if addon_support {
+            exports.extend([
+                "ReShadeRegisterAddon",
+                "ReShadeUnregisterAddon",
+                "ReShadeRegisterEvent",
+                "ReShadeUnregisterEvent",
+            ]);
+        }
+        build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &exports)
+    }
+
     #[test]
-    fn fresh_install_lays_down_host_addon_ini_and_marker() {
+    fn fresh_install_lays_down_host_addon_and_ini_without_marker() {
         let dir = tempdir().expect("tempdir");
         let record = install(dir.path(), &prepared()).expect("install");
 
@@ -310,9 +364,9 @@ mod tests {
             read(&dir.path().join("renodx-cp2077.addon64")),
             b"addon-bytes"
         );
-        assert_eq!(read(&dir.path().join("dxgi.dll")), b"reshade-dll-bytes");
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
         assert!(dir.path().join("ReShade.ini").is_file());
-        assert!(marker_path(dir.path()).is_file());
+        assert!(!marker_path(dir.path()).exists());
 
         assert!(record.reshade_managed_by_us());
 
@@ -331,8 +385,8 @@ mod tests {
         assert_eq!(host.digest(), "reshade-digest");
         assert_eq!(host.etag(), Some("\"rs-etag-1\""));
 
-        // addon + proxy + ini + marker.
-        assert_eq!(record.created_files().len(), 4);
+        // addon + proxy + ini.
+        assert_eq!(record.created_files().len(), 3);
         assert!(record.backed_up_files().is_empty());
     }
 
@@ -357,7 +411,7 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         // Simulate a foreign ReShade install with a hand-tuned config.
         let original_ini = "[GENERAL]\r\nPreset=mine.ini\r\n";
-        fs::write(dir.path().join("dxgi.dll"), b"foreign-reshade").expect("write");
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
         fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
 
         let record = install(dir.path(), &prepared()).expect("install");
@@ -371,7 +425,7 @@ mod tests {
                 .all(|s| s.role() != TrackedSourceRole::Host)
         );
         // Foreign DLL untouched (we did not rewrite it or back it up).
-        assert_eq!(read(&dir.path().join("dxgi.dll")), b"foreign-reshade");
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
         assert!(!marker_path(dir.path()).exists());
         // Our addon is present; the foreign ini is left byte-for-byte untouched.
         assert!(dir.path().join("renodx-cp2077.addon64").is_file());
@@ -384,30 +438,15 @@ mod tests {
     }
 
     #[test]
-    fn foreign_reshade_engine_dll_leaves_ini_absent() {
+    fn inactive_reshade_engine_dll_refuses_second_host() {
         let dir = tempdir().expect("tempdir");
-        // A foreign ReShade detected only by its engine DLL, with no ReShade.ini yet.
-        fs::write(dir.path().join("ReShade64.dll"), b"foreign").expect("write");
+        // ReShade exists, but not in the slot this game will load.
+        fs::write(dir.path().join("ReShade64.dll"), reshade_host_bytes(true)).expect("write");
 
-        let record = install(dir.path(), &prepared()).expect("install");
-
-        assert!(!record.reshade_managed_by_us());
-        // We do not create or back up a ReShade.ini for a foreign host; only the
-        // add-on is placed, and the foreign DLL is left alone.
+        let error = install(dir.path(), &prepared()).expect_err("should refuse inactive host");
+        assert!(matches!(error, ServiceError::InvalidInput(_)));
         assert!(!dir.path().join("ReShade.ini").exists());
         assert!(!marker_path(dir.path()).exists());
-        assert!(
-            record
-                .created_files()
-                .iter()
-                .all(|p| !p.as_str().ends_with("ReShade.ini"))
-        );
-        assert!(record.backed_up_files().is_empty());
-
-        uninstall(&record).expect("uninstall");
-        // No ini appears; the foreign DLL stays; the add-on is gone.
-        assert!(!dir.path().join("ReShade.ini").exists());
-        assert_eq!(read(&dir.path().join("ReShade64.dll")), b"foreign");
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
     }
 
@@ -415,7 +454,7 @@ mod tests {
     fn foreign_install_leaves_original_ini_intact() {
         let dir = tempdir().expect("tempdir");
         let original_ini = "[GENERAL]\r\nPreset=mine.ini\r\n";
-        fs::write(dir.path().join("dxgi.dll"), b"foreign-reshade").expect("write");
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
         fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
 
         let record = install(dir.path(), &prepared()).expect("install");
@@ -430,7 +469,7 @@ mod tests {
 
         // Addon removed, foreign DLL and original ini intact.
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
-        assert_eq!(read(&dir.path().join("dxgi.dll")), b"foreign-reshade");
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
         assert_eq!(
             String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap(),
             original_ini
@@ -438,12 +477,75 @@ mod tests {
     }
 
     #[test]
-    fn refuses_install_when_already_managed() {
+    fn repeated_install_is_idempotent() {
         let dir = tempdir().expect("tempdir");
         install(dir.path(), &prepared()).expect("first install");
-        // Second install must refuse because our marker is present.
-        let error = install(dir.path(), &prepared()).expect_err("should refuse");
+        let record = install(dir.path(), &prepared()).expect("second install");
+        assert!(
+            record
+                .created_files()
+                .iter()
+                .any(|path| { path.as_str().ends_with("renodx-cp2077.addon64") })
+        );
+    }
+
+    #[test]
+    fn active_host_without_addon_support_is_replaced_and_restored() {
+        let dir = tempdir().expect("tempdir");
+        // A ReShade host occupies the active slot, but it is the build WITHOUT
+        // add-on support — RenoDX's add-on cannot load there, so install must
+        // replace it with the bundled add-on-capable build, reversibly.
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
+
+        let record = install(dir.path(), &prepared()).expect("install");
+
+        // Our add-on-capable host now occupies the slot; the original is backed up.
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+        assert!(record.reshade_managed_by_us());
+        assert!(!record.backed_up_files().is_empty());
+
+        uninstall(&record).expect("uninstall");
+
+        // The original add-on-less host is restored and our add-on is gone.
+        assert_eq!(
+            read(&dir.path().join("dxgi.dll")),
+            reshade_host_bytes(false)
+        );
+        assert!(!dir.path().join("renodx-cp2077.addon64").exists());
+    }
+
+    #[test]
+    fn host_repair_requires_reshade_bytes() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
+        let mut prepared = prepared();
+        prepared.reshade_dll_bytes.clear();
+
+        let error = install(dir.path(), &prepared).expect_err("repair needs bytes");
+
         assert!(matches!(error, ServiceError::InvalidInput(_)));
+        assert_eq!(
+            read(&dir.path().join("dxgi.dll")),
+            reshade_host_bytes(false)
+        );
+        assert!(!dir.path().join("renodx-cp2077.addon64").exists());
+    }
+
+    #[test]
+    fn multiple_reshade_hosts_refuse_install_before_writes() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
+        fs::write(dir.path().join("ReShade64.dll"), reshade_host_bytes(true)).expect("write");
+
+        let error = install(dir.path(), &prepared()).expect_err("multiple hosts conflict");
+
+        assert!(matches!(error, ServiceError::InvalidInput(_)));
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+        assert_eq!(
+            read(&dir.path().join("ReShade64.dll")),
+            reshade_host_bytes(true)
+        );
+        assert!(!dir.path().join("renodx-cp2077.addon64").exists());
     }
 
     #[test]

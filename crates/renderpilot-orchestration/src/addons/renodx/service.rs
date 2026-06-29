@@ -7,24 +7,27 @@
 //! supplied by the caller (fetched/cached elsewhere).
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use renderpilot_application::{GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{
-    AddonKind, Architecture, GameId, GameInstallation, InstalledAddon, PathRef, RenoDxInstallState,
+    AddonKind, Architecture, GameId, GameInstallation, InstalledAddon, RenoDxInstallState,
     TrackedSource, TrackedSourceRole,
 };
 use serde::Serialize;
 
 use crate::addons::engine::{self, FileOp, InstallPlan};
-use crate::net::{DownloadProgress, ProgressObserver};
+use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
 use super::anticheat::{RiskAssessment, assess_risk};
 use super::arch_from_addon_file;
+use super::channel;
 use super::dlss_fix::resolve_dlss_fix;
 use super::errors;
-use super::facts::{GameAnalysis, analyze_game};
-use super::fetch::{prepare_install, prepare_install_from_file};
+use super::facts::{GameAnalysis, analyze_game, install_target_dir};
+use super::fetch::{self, LocalAddonSource, prepare_install, prepare_install_from_file};
+use super::host_policy;
 use super::install::{
     dlss_fix_file_name, dlss_fix_file_path, install as install_files, uninstall as uninstall_files,
 };
@@ -33,43 +36,72 @@ use super::matcher::{
     file_installable, generic_file_install_plan, generic_risk, matched_slug, resolve,
     resolve_external_install,
 };
-use super::reshade;
-use super::types::{DlssFixIniTweaks, RenoDxManifest, ReshadeIniTweaks};
+use super::operation_lock;
+use super::progress::emit_finalizing;
+use super::reshade::{self, RenoDxAddonState, ReshadeHost, ReshadeHostAction};
+use super::reshade_ini;
+use super::tracking;
+use super::types::{DlssFixIniTweaks, RenoDxManifest, ReshadeChannel, ReshadeIniTweaks};
 
 /// Upper bound on a user-selected add-on file, so a stray pick cannot exhaust
 /// memory. A RenoDX add-on DLL is a few MB; this is a generous ceiling.
 const MAX_ADDON_FILE_BYTES: u64 = 64 * 1024 * 1024;
-
-/// Progress phase emitted while the install finalizes on disk (laying down
-/// files, fsyncing, persisting the record) after every download has finished.
-/// `downloaded_bytes == total_bytes == 0` signals an indeterminate phase to the
-/// UI, so the bar shows a spinner + this label instead of a stuck 100% bar.
-const FINALIZING_PHASE: &str = "renodx.phase.finalizing";
-
-/// Emits an indeterminate "finalizing" progress event so the UI can show a
-/// spinner while the install writes files to disk and persists its record —
-/// the post-download phase that otherwise leaves a 100% bar frozen until the
-/// command returns.
-fn emit_finalizing(progress: Option<&ProgressObserver<'_>>) {
-    if let Some(observe) = progress {
-        observe(DownloadProgress {
-            downloaded_bytes: 0,
-            total_bytes: 0,
-            phase: Some(FINALIZING_PHASE),
-        });
-    }
-}
 
 /// Read-only preview of whether RenoDX can be installed for a game.
 #[derive(Debug, Clone, Serialize)]
 pub struct AvailabilityReport {
     /// Current install state for the game.
     pub state: RenoDxInstallState,
+    /// ReShade host detected in the proxy slot this resolution would use, when
+    /// that can be determined.
+    pub reshade_host: ReshadeHost,
+    /// Strict host policy verdict for the detected host.
+    pub reshade_host_action: ReshadeHostAction,
+    /// Whether more than one ReShade host was found in the target directory.
+    pub reshade_conflict: bool,
+    /// ReShade channel recorded for a managed host, when known.
+    pub reshade_channel: Option<ReshadeChannel>,
+    /// Whether the manifest can provide a stable ReShade host source.
+    pub reshade_stable_supported: bool,
+    /// Ownership/health of the detected or recorded ReShade host.
+    pub reshade_ownership: ReshadeHostOwnership,
+    /// Read-only state of the RenoDX add-on file/config, when the expected file
+    /// name is known.
+    pub renodx_addon: Option<RenoDxAddonState>,
     /// Whether and how RenoDX can be installed.
     pub outcome: AvailabilityOutcome,
     /// The manual "install ReShade host + your own add-on file" escape hatch,
     /// present for a DirectX game that has no automatic or curated-external path.
     pub manual_install: Option<ManualFileInstall>,
+}
+
+/// Ownership/health of the ReShade host relevant to this RenoDX install.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReshadeHostOwnership {
+    /// RenderPilot has a managed Host source for this install.
+    Managed {
+        /// Whether the recorded host source matches the file currently on disk.
+        health: ManagedReshadeHealth,
+    },
+    /// A foreign host is present and can load add-ons.
+    UnmanagedCompatible,
+    /// A foreign or conflicting host is present but not safe to reuse.
+    UnmanagedConflicting,
+    /// No ReShade host is present and no managed Host source exists.
+    Missing,
+}
+
+/// Health of a ReShade host that RenderPilot owns in the install record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedReshadeHealth {
+    /// The file exists and matches the recorded installed DLL digest.
+    Healthy,
+    /// The record owns a host but the file is missing or unreadable.
+    Missing,
+    /// The managed record or current directory scan is ambiguous.
+    Conflicting,
 }
 
 /// The installability verdict for a game.
@@ -141,8 +173,61 @@ pub fn status(context: &Context, game_id: &GameId) -> Result<RenoDxInstallState,
     Ok(context
         .storage()
         .get_installed_addon(game_id)?
-        .map(|record| record.install_state())
+        .map(|record| tracking::install_state_from_record(&record))
         .unwrap_or(RenoDxInstallState::NotInstalled))
+}
+
+fn reshade_ownership(
+    record: Option<&InstalledAddon>,
+    host: &ReshadeHost,
+    action: ReshadeHostAction,
+    conflict: bool,
+) -> ReshadeHostOwnership {
+    let Some(record) = record else {
+        return unmanaged_ownership(host, action, conflict);
+    };
+    let host_source = match channel::single_host_source(record) {
+        Ok(source) => source,
+        Err(channel::ChannelReadIssue::DuplicateHostSources) => {
+            return ReshadeHostOwnership::Managed {
+                health: ManagedReshadeHealth::Conflicting,
+            };
+        }
+    };
+    if host_source.is_none() {
+        return unmanaged_ownership(host, action, conflict);
+    }
+    if conflict || action == ReshadeHostAction::Conflict {
+        return ReshadeHostOwnership::Managed {
+            health: ManagedReshadeHealth::Conflicting,
+        };
+    }
+    // Cheap existence check only: never read+hash the multi-MB host DLL here —
+    // availability runs on every card open and after every mutation, and the
+    // host folder scan already read the DLL for its PE facts.
+    let health = match tracking::managed_host_path(record) {
+        Some(path) if path.is_file() => ManagedReshadeHealth::Healthy,
+        _ => ManagedReshadeHealth::Missing,
+    };
+    ReshadeHostOwnership::Managed { health }
+}
+
+fn unmanaged_ownership(
+    host: &ReshadeHost,
+    action: ReshadeHostAction,
+    conflict: bool,
+) -> ReshadeHostOwnership {
+    let Some(present) = host.as_present() else {
+        return ReshadeHostOwnership::Missing;
+    };
+    if !conflict
+        && action == ReshadeHostAction::UpToDate
+        && present.addon_support == reshade::ReshadeAddonSupport::Full
+    {
+        ReshadeHostOwnership::UnmanagedCompatible
+    } else {
+        ReshadeHostOwnership::UnmanagedConflicting
+    }
 }
 
 /// Previews whether RenoDX can be installed for the game, without changing disk.
@@ -151,12 +236,17 @@ pub fn availability(
     manifest: &RenoDxManifest,
     game_id: &GameId,
 ) -> Result<AvailabilityReport, ServiceError> {
-    let state = status(context, game_id)?;
+    let record = context.storage().get_installed_addon(game_id)?;
+    let state = record
+        .as_ref()
+        .map(tracking::install_state_from_record)
+        .unwrap_or(RenoDxInstallState::NotInstalled);
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
 
     let override_path = executable_override(context, game_id);
     let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());
+    let host_report = reshade_report(&analysis, &resolution, record.as_ref());
     let manual_install = manual_file_install(manifest, &analysis.facts, &resolution, scan_dir);
     let outcome = match resolution {
         RenoDxResolution::Installable(plan) => AvailabilityOutcome::Installable {
@@ -185,9 +275,100 @@ pub fn availability(
 
     Ok(AvailabilityReport {
         state,
+        reshade_host: host_report.host,
+        reshade_host_action: host_report.action,
+        reshade_conflict: host_report.conflict,
+        reshade_channel: host_report.channel,
+        reshade_stable_supported: manifest.reshade.supports_channel(ReshadeChannel::Stable),
+        reshade_ownership: host_report.ownership,
+        renodx_addon: host_report.addon,
         outcome,
         manual_install,
     })
+}
+
+struct ReshadeReport {
+    host: ReshadeHost,
+    action: ReshadeHostAction,
+    conflict: bool,
+    channel: Option<ReshadeChannel>,
+    ownership: ReshadeHostOwnership,
+    addon: Option<RenoDxAddonState>,
+}
+
+fn reshade_report(
+    analysis: &GameAnalysis,
+    resolution: &RenoDxResolution,
+    record: Option<&InstalledAddon>,
+) -> ReshadeReport {
+    let Some(target_dir) = install_target_dir(analysis).ok() else {
+        return missing_host_report(record);
+    };
+    let Some(active_proxy) = active_proxy_slot(resolution) else {
+        return missing_host_report(record);
+    };
+    let assessment = host_policy::assess(&target_dir, active_proxy);
+    let paths = reshade::resolve_paths(
+        &target_dir,
+        assessment.host.as_present().map(|present| present.path),
+    );
+    let addon = expected_addon_file_name(resolution)
+        .map(|file_name| reshade::renodx_addon_state(&paths, &file_name));
+    let ownership = reshade_ownership(
+        record,
+        &assessment.host,
+        assessment.action,
+        assessment.conflict,
+    );
+
+    ReshadeReport {
+        host: assessment.host,
+        action: assessment.action,
+        conflict: assessment.conflict,
+        channel: recorded_channel(record),
+        ownership,
+        addon,
+    }
+}
+
+/// The host report for an install whose install target directory or active proxy
+/// slot cannot be resolved: no host, a conflict verdict, and only the channel
+/// carried through from the install record.
+fn missing_host_report(record: Option<&InstalledAddon>) -> ReshadeReport {
+    ReshadeReport {
+        host: ReshadeHost::Absent,
+        action: ReshadeHostAction::Conflict,
+        conflict: false,
+        channel: recorded_channel(record),
+        ownership: ReshadeHostOwnership::Missing,
+        addon: None,
+    }
+}
+
+/// The ReShade channel recorded on the install's managed host source, if any. A
+/// record with duplicate host sources or an unreadable channel degrades to `None`.
+fn recorded_channel(record: Option<&InstalledAddon>) -> Option<ReshadeChannel> {
+    record.and_then(|record| channel::installed_channel(record).ok().flatten())
+}
+
+fn active_proxy_slot(resolution: &RenoDxResolution) -> Option<&str> {
+    match resolution {
+        RenoDxResolution::Installable(plan) => Some(plan.proxy_dll_name.as_str()),
+        RenoDxResolution::External {
+            file_install: Some(plan),
+            ..
+        } => Some(plan.proxy_dll_name.as_str()),
+        _ => None,
+    }
+}
+
+fn expected_addon_file_name(resolution: &RenoDxResolution) -> Option<String> {
+    match resolution {
+        RenoDxResolution::Installable(plan) => {
+            Some(super::source::addon_file_name(&plan.slug, plan.arch))
+        }
+        _ => None,
+    }
 }
 
 /// The manual file-install escape hatch for the availability preview: offered only
@@ -210,7 +391,8 @@ fn manual_file_install(
     }
     Some(ManualFileInstall {
         risk: assess_risk(&generic_risk(), scan_dir),
-        expected_addon_name: matched_slug(manifest, facts).map(|slug| format!("renodx-{slug}")),
+        expected_addon_name: matched_slug(manifest, facts)
+            .map(|slug| super::source::addon_file_stem(&slug)),
         game_arch: facts.graphics.architecture().map(arch_str),
     })
 }
@@ -248,14 +430,17 @@ fn analyze_and_resolve(
 /// persisting the record needed to reverse it.
 ///
 /// `confirm_anticheat` must be `true` to proceed when the risk assessment requires
-/// it. The ReShade host (when one must be installed) is the nightly build.
+/// it. The ReShade host (when one must be installed) uses the requested channel,
+/// with old manifests falling back from stable to nightly.
 pub async fn install(
     context: &Context,
     manifest: &RenoDxManifest,
     game_id: &GameId,
+    requested_channel: ReshadeChannel,
     confirm_anticheat: bool,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<InstalledAddon, ServiceError> {
+    let _guard = operation_lock::lock(game_id).await;
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
     let override_path = executable_override(context, game_id);
@@ -294,16 +479,28 @@ pub async fn install(
     let risk = assess_risk(&plan.risk, scan_dir);
     enforce_gate(&risk, confirm_anticheat)?;
 
+    let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
+    host.ensure_not_conflicting(&plan.proxy_dll_name)?;
+
+    let channel = manifest
+        .reshade
+        .effective_install_channel(requested_channel);
     let prepared = prepare_install(
         &plan,
         &manifest.reshade,
-        &target_dir,
         game_id.clone(),
+        channel,
+        host.writes_host(),
         progress,
     )
     .await?;
     emit_finalizing(progress);
     let record = install_files(&target_dir, &prepared)?;
+    crate::fs::stamp_mtime_best_effort(
+        Path::new(record.addon_file().as_str()),
+        prepared.source_last_modified.as_deref(),
+        None,
+    );
     persist_or_revert(context, record)
 }
 
@@ -322,9 +519,11 @@ pub async fn install_from_file(
     manifest: &RenoDxManifest,
     game_id: &GameId,
     file_path: &str,
+    requested_channel: ReshadeChannel,
     confirm_anticheat: bool,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<InstalledAddon, ServiceError> {
+    let _guard = operation_lock::lock(game_id).await;
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
     let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
@@ -365,25 +564,36 @@ pub async fn install_from_file(
     let risk = assess_risk(&plan.risk, scan_dir);
     enforce_gate(&risk, confirm_anticheat)?;
 
-    let addon_bytes = read_addon_file(file_path)?;
+    let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
+    host.ensure_not_conflicting(&plan.proxy_dll_name)?;
+
+    let (addon_bytes, source_mtime) = read_addon_file(file_path)?;
+    let channel = manifest
+        .reshade
+        .effective_install_channel(requested_channel);
     let prepared = prepare_install_from_file(
         &plan,
         &manifest.reshade,
-        &target_dir,
         game_id.clone(),
-        addon_bytes,
+        LocalAddonSource {
+            bytes: addon_bytes,
+            last_modified: source_mtime.map(crate::fs::format_http_date),
+        },
+        channel,
+        host.writes_host(),
         progress,
     )
     .await?;
     emit_finalizing(progress);
     let record = install_files(&target_dir, &prepared)?;
+    crate::fs::stamp_mtime_best_effort(Path::new(record.addon_file().as_str()), None, source_mtime);
     persist_or_revert(context, record)
 }
 
 /// Reads a user-selected add-on file, rejecting non-files and anything larger than
 /// a sane add-on so a stray pick cannot exhaust memory. PE validation happens in
 /// the fetch layer alongside the download path.
-fn read_addon_file(file_path: &str) -> Result<Vec<u8>, ServiceError> {
+fn read_addon_file(file_path: &str) -> Result<(Vec<u8>, Option<SystemTime>), ServiceError> {
     let path = Path::new(file_path);
     let metadata =
         std::fs::metadata(path).map_err(|error| errors::io("read add-on file", path, &error))?;
@@ -398,7 +608,10 @@ fn read_addon_file(file_path: &str) -> Result<Vec<u8>, ServiceError> {
             MAX_ADDON_FILE_BYTES / (1024 * 1024)
         )));
     }
-    std::fs::read(path).map_err(|error| errors::io("read add-on file", path, &error))
+    let source_mtime = metadata.modified().ok();
+    let bytes =
+        std::fs::read(path).map_err(|error| errors::io("read add-on file", path, &error))?;
+    Ok((bytes, source_mtime))
 }
 
 /// Human-readable bitness label for an add-on/game architecture-mismatch message.
@@ -468,6 +681,7 @@ fn require_game(context: &Context, game_id: &GameId) -> Result<GameInstallation,
 /// Order matters: the filesystem is reverted *before* the record is deleted, so a
 /// failed restore keeps the record and uninstall stays retryable.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
+    let _guard = operation_lock::blocking_lock(game_id);
     let record = context
         .storage()
         .get_installed_addon(game_id)?
@@ -478,15 +692,104 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
     Ok(())
 }
 
+/// Switches a managed ReShade host between stable and nightly for this game.
+pub async fn switch_reshade_channel(
+    context: &Context,
+    manifest: &RenoDxManifest,
+    game_id: &GameId,
+    target_channel: ReshadeChannel,
+    progress: Option<&ProgressObserver<'_>>,
+) -> Result<RenoDxInstallState, ServiceError> {
+    let _guard = operation_lock::lock(game_id).await;
+    let record = context
+        .storage()
+        .get_installed_addon(game_id)?
+        .ok_or_else(|| errors::invalid("RenoDX is not installed for this game".to_owned()))?;
+    let host_source = channel::single_host_source(&record)
+        .map_err(|_| errors::duplicate_host_sources())?
+        .ok_or_else(|| {
+            errors::invalid("RenoDX does not manage the ReShade host for this game".to_owned())
+        })?;
+
+    if !manifest.reshade.supports_channel(target_channel) {
+        return Err(errors::invalid(format!(
+            "ReShade channel `{}` is not available",
+            target_channel.as_str()
+        )));
+    }
+
+    let current = channel::installed_channel(&record)
+        .map_err(|_| errors::duplicate_host_sources())?
+        .or_else(|| channel::infer_legacy_channel_from_url(host_source.url()));
+
+    if current == Some(target_channel) {
+        let healed_source = channel::with_host_channel(host_source, target_channel);
+        let healed = tracking::replace_host_source(&record, &healed_source)?;
+        context.storage().upsert_installed_addon(&healed)?;
+        return Ok(tracking::install_state_from_record(&healed));
+    }
+
+    let game = require_game(context, game_id)?;
+    let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
+    let resolution = resolve(manifest, &analysis.facts);
+    let (arch, proxy_dll_name) = match resolution {
+        RenoDxResolution::Installable(plan) => (plan.arch, plan.proxy_dll_name.clone()),
+        RenoDxResolution::External {
+            file_install: Some(plan),
+            ..
+        } => (plan.arch, plan.proxy_dll_name.clone()),
+        _ => {
+            return Err(errors::invalid(
+                "cannot resolve the ReShade proxy slot for this game".to_owned(),
+            ));
+        }
+    };
+    let source = super::source::reshade_source(&manifest.reshade, target_channel, arch)
+        .ok_or_else(|| {
+            errors::invalid(format!(
+                "ReShade channel `{}` is not available",
+                target_channel.as_str()
+            ))
+        })?;
+    let download = fetch::fetch_reshade_from_source(&source, arch, progress).await?;
+
+    let host_path = tracking::managed_host_path(&record).unwrap_or_else(|| {
+        install_target_dir(&analysis)
+            .unwrap_or_default()
+            .join(proxy_dll_name)
+    });
+    if !host_path.is_file() {
+        return Err(errors::invalid(
+            "managed ReShade host is missing; repair it before switching channel".to_owned(),
+        ));
+    }
+    let original = crate::fs::read_file(&host_path)?;
+    emit_finalizing(progress);
+    engine::replace_file(&host_path, &download.bytes)?;
+
+    let new_source = TrackedSource::new(
+        TrackedSourceRole::Host,
+        source.url,
+        download.etag,
+        download.digest,
+    )
+    .with_last_modified(download.last_modified)
+    .with_channel(target_channel.as_str());
+    let updated = tracking::replace_host_source(&record, &new_source)?;
+    if let Err(error) = context.storage().upsert_installed_addon(&updated) {
+        if let Err(revert_error) = engine::replace_file(&host_path, &original) {
+            log::warn!(
+                "RenoDX channel switch: record persistence failed and DLL rollback failed: {revert_error}"
+            );
+        }
+        return Err(error.into());
+    }
+    Ok(tracking::install_state_from_record(&updated))
+}
+
 // ---------------------------------------------------------------------------
 // DLSS-Fix companion add-on: install / uninstall / status
 // ---------------------------------------------------------------------------
-
-/// Returns whether the installed record includes a DLSS-Fix companion add-on.
-/// Thin wrapper over [`InstalledAddon::has_dlss_fix`] kept for local readability.
-fn has_dlss_fix(record: &InstalledAddon) -> bool {
-    record.has_dlss_fix()
-}
 
 /// Installs the DLSS-Fix companion add-on for a game that already has RenoDX.
 ///
@@ -501,12 +804,13 @@ pub async fn install_dlss_fix(
     game_id: &GameId,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<RenoDxInstallState, ServiceError> {
+    let _guard = operation_lock::lock(game_id).await;
     let record = context
         .storage()
         .get_installed_addon(game_id)?
         .ok_or_else(|| errors::invalid("RenoDX is not installed for this game".to_owned()))?;
 
-    if has_dlss_fix(&record) {
+    if record.has_dlss_fix() {
         return Err(errors::invalid(
             "DLSS-Fix is already installed for this game".to_owned(),
         ));
@@ -530,6 +834,7 @@ pub async fn install_dlss_fix(
     let file_name = dlss_fix_file_name(arch);
 
     let download = super::fetch::fetch_dlss_fix(arch, progress).await?;
+    let download_last_modified = download.last_modified.clone();
 
     let ini_tweaks = ReshadeIniTweaks {
         disabled_addons: Vec::new(),
@@ -540,7 +845,7 @@ pub async fn install_dlss_fix(
             streamline_path: request.streamline_path,
         }),
     };
-    let strategy = reshade::ini_merge_strategy(&ini_tweaks);
+    let strategy = reshade_ini::ini_merge_strategy(&ini_tweaks);
 
     let plan = InstallPlan {
         kind: AddonKind::RenoDx,
@@ -559,6 +864,11 @@ pub async fn install_dlss_fix(
 
     emit_finalizing(progress);
     let receipt = engine::install(game_dir, &plan)?;
+    crate::fs::stamp_mtime_best_effort(
+        &game_dir.join(&file_name),
+        download_last_modified.as_deref(),
+        None,
+    );
 
     let source = TrackedSource::new(
         TrackedSourceRole::DlssFix,
@@ -567,10 +877,11 @@ pub async fn install_dlss_fix(
         download.digest,
     )
     .with_last_modified(download.last_modified);
-    let updated = rebuild_record_after_dlss_fix(&record, &receipt, None, Some(source))?;
+    let updated =
+        tracking::rebuild_after_receipt(&record, &receipt, None, Some(source), "DLSS-Fix rebuild")?;
     context.storage().upsert_installed_addon(&updated)?;
 
-    Ok(updated.install_state())
+    Ok(tracking::install_state_from_record(&updated))
 }
 
 /// Removes the DLSS-Fix companion add-on, leaving the main RenoDX install intact.
@@ -581,12 +892,13 @@ pub fn uninstall_dlss_fix(
     context: &Context,
     game_id: &GameId,
 ) -> Result<RenoDxInstallState, ServiceError> {
+    let _guard = operation_lock::blocking_lock(game_id);
     let record = context
         .storage()
         .get_installed_addon(game_id)?
         .ok_or_else(|| errors::invalid("RenoDX is not installed for this game".to_owned()))?;
 
-    if !has_dlss_fix(&record) {
+    if !record.has_dlss_fix() {
         return Err(errors::invalid(
             "DLSS-Fix is not installed for this game".to_owned(),
         ));
@@ -598,7 +910,7 @@ pub fn uninstall_dlss_fix(
         .parent()
         .ok_or_else(|| errors::invalid("dlss-fix path has no parent".to_owned()))?;
 
-    let strategy = reshade::ini_remove_dlss_fix_strategy();
+    let strategy = reshade_ini::ini_remove_dlss_fix_strategy();
     let plan = InstallPlan {
         kind: AddonKind::RenoDx,
         ops: vec![
@@ -619,15 +931,16 @@ pub fn uninstall_dlss_fix(
 
     let receipt = engine::install(game_dir, &plan)?;
 
-    let updated = rebuild_record_after_dlss_fix(
+    let updated = tracking::rebuild_after_receipt(
         &record,
         &receipt,
         Some((&dll_path, TrackedSourceRole::DlssFix)),
         None,
+        "DLSS-Fix rebuild",
     )?;
     context.storage().upsert_installed_addon(&updated)?;
 
-    Ok(updated.install_state())
+    Ok(tracking::install_state_from_record(&updated))
 }
 
 /// Returns whether a DLSS-Fix can be installed for this game (RenoDX installed +
@@ -636,79 +949,10 @@ pub fn dlss_fix_availability(context: &Context, game_id: &GameId) -> Result<bool
     let Some(record) = context.storage().get_installed_addon(game_id)? else {
         return Ok(false);
     };
-    if has_dlss_fix(&record) {
+    if record.has_dlss_fix() {
         return Ok(false);
     }
     Ok(resolve_dlss_fix(context.storage(), game_id)?.is_some())
-}
-
-/// Rebuilds the record after a DLSS-Fix plan: folds in the receipt's files, and
-/// optionally removes a file path and tracked-source role (for an uninstall) or
-/// adds a tracked source (for an install). Keeping both mutations in one place
-/// ensures the `addon_file` invariant is preserved consistently either way.
-///
-/// The `addon_file` is carried through unchanged, so the invariant
-/// [`InstalledAddon::from_parts`] checks should always hold; a violation is
-/// surfaced as a [`ServiceError`] rather than a panic so a user-triggered
-/// install/uninstall can never crash the app.
-fn rebuild_record_after_dlss_fix(
-    record: &InstalledAddon,
-    receipt: &engine::InstallReceipt,
-    removal: Option<(&Path, TrackedSourceRole)>,
-    new_source: Option<TrackedSource>,
-) -> Result<InstalledAddon, ServiceError> {
-    let mut created = record.created_files().to_vec();
-    if let Some((removed_path, _)) = removal {
-        let removed_str = removed_path.to_string_lossy();
-        created.retain(|f| f.as_str() != removed_str);
-    }
-    merge_paths(&mut created, &receipt.created_files);
-
-    let mut backed_up = record.backed_up_files().to_vec();
-    merge_paths(&mut backed_up, &receipt.backed_up_files);
-
-    let mut sources = record.tracked_sources().to_vec();
-    if let Some((_, removed_role)) = removal {
-        sources.retain(|s| s.role() != removed_role);
-    }
-    if let Some(source) = new_source {
-        sources.push(source);
-    }
-
-    InstalledAddon::from_parts(
-        record.game_id().clone(),
-        record.kind(),
-        record.addon_file().clone(),
-        record.addon_version().map(str::to_owned),
-        created,
-        backed_up,
-        sources,
-    )
-    .ok_or_else(|| errors::failed("DLSS-Fix rebuild violated the addon_file invariant".to_owned()))
-}
-
-/// Appends `files` to `existing`, skipping any already present (dedup by `PathRef`).
-///
-/// A path that is not a valid [`PathRef`] is logged and skipped. In practice the
-/// receipt paths come straight from the filesystem, so this only guards against an
-/// empty or NUL-containing path that a real game-folder path cannot be — it should
-/// never fire.
-fn merge_paths(existing: &mut Vec<PathRef>, files: &[PathBuf]) {
-    for file in files {
-        match PathRef::new(file.to_string_lossy().into_owned()) {
-            Ok(path_ref) => {
-                if !existing.contains(&path_ref) {
-                    existing.push(path_ref);
-                }
-            }
-            Err(error) => {
-                log::warn!(
-                    "DLSS-Fix record rebuild: skipping invalid path `{}`: {error}",
-                    file.display()
-                );
-            }
-        }
-    }
 }
 
 /// Whether an install may proceed given its risk and the user's confirmation.
@@ -728,18 +972,6 @@ fn gate(risk: &RiskAssessment, confirm_anticheat: bool) -> InstallGate {
     } else {
         InstallGate::Proceed
     }
-}
-
-/// Resolves the folder RenoDX installs into: the rendering executable's folder.
-fn install_target_dir(analysis: &GameAnalysis) -> Result<PathBuf, ServiceError> {
-    let executable = analysis
-        .primary_executable
-        .as_ref()
-        .ok_or_else(|| errors::invalid("no rendering executable found for this game".to_owned()))?;
-    let parent = Path::new(executable.as_str()).parent().ok_or_else(|| {
-        errors::invalid("rendering executable has no parent directory".to_owned())
-    })?;
-    Ok(parent.to_path_buf())
 }
 
 #[cfg(test)]
@@ -774,6 +1006,25 @@ mod tests {
         let error = ensure_addon_arch(Architecture::X86, Architecture::X64)
             .expect_err("a 32-bit add-on for a 64-bit host must be rejected");
         assert!(matches!(error, ServiceError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn expected_addon_file_name_uses_resolved_canonical_slug() {
+        let plan = ResolvedInstall {
+            slug: "unityengine".to_owned(),
+            addon_url: "https://example.com/renodx-unityengine.addon64".to_owned(),
+            arch: Architecture::X64,
+            proxy_dll_name: "dxgi.dll".to_owned(),
+            risk: generic_risk(),
+            confidence: MatchConfidence::Verified,
+            notes_keys: Vec::new(),
+        };
+        let resolution = RenoDxResolution::Installable(Box::new(plan));
+
+        assert_eq!(
+            expected_addon_file_name(&resolution).as_deref(),
+            Some("renodx-unityengine.addon64")
+        );
     }
 
     #[test]

@@ -92,6 +92,8 @@ impl ResolvedInstall {
     /// file-installable external title.
     fn into_external_install(self) -> ExternalInstall {
         ExternalInstall {
+            arch: self.arch,
+            proxy_dll_name: self.proxy_dll_name,
             confidence: self.confidence,
             risk: self.risk,
             notes_keys: self.notes_keys,
@@ -104,6 +106,10 @@ impl ResolvedInstall {
 /// is compatible; risk is the raw manifest risk (the service assesses it).
 #[derive(Debug, Clone)]
 pub struct ExternalInstall {
+    /// Architecture of the add-on / executable.
+    pub arch: Architecture,
+    /// Proxy DLL file name to install ReShade as.
+    pub proxy_dll_name: String,
     /// Confidence shown to the user.
     pub confidence: MatchConfidence,
     /// Raw ban/stability risk to gate the install on (assessed by the service).
@@ -285,15 +291,17 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
     };
 
     RenoDxResolution::Installable(Box::new(ResolvedInstall {
+        // Prefer the manifest's canonical slug for the local file name. Legacy
+        // explicit-URL generics without a slug fall back to the engine key.
         slug: generic
             .slug
             .clone()
-            .unwrap_or_else(|| engine_str(engine).to_owned()),
+            .unwrap_or_else(|| engine.as_str().to_owned()),
         addon_url,
         arch,
         proxy_dll_name,
         risk: generic_risk(),
-        confidence: MatchConfidence::Untested,
+        confidence: confidence_for_status(generic.status),
         // The generic's engine label is surfaced as a note so the card can flag
         // "this is a universal, not per-game, add-on".
         notes_keys: generic.label_key.clone().into_iter().collect(),
@@ -417,6 +425,10 @@ fn confidence_for(status: Status, kind: MatchKind) -> MatchConfidence {
     if matches!(kind, MatchKind::Engine | MatchKind::Generic) {
         return MatchConfidence::Untested;
     }
+    confidence_for_status(status)
+}
+
+fn confidence_for_status(status: Status) -> MatchConfidence {
     match status {
         Status::Working => MatchConfidence::Verified,
         Status::Construction => MatchConfidence::Experimental,
@@ -438,14 +450,6 @@ fn parse_engine(value: &str) -> Option<Engine> {
         "unreal_extended" | "unreal-extended" => Some(Engine::UnrealExtended),
         "unity" => Some(Engine::Unity),
         _ => None,
-    }
-}
-
-fn engine_str(engine: Engine) -> &'static str {
-    match engine {
-        Engine::Unreal => "unreal",
-        Engine::UnrealExtended => "unreal_extended",
-        Engine::Unity => "unity",
     }
 }
 
@@ -719,6 +723,7 @@ mod tests {
         )]);
         m.generics = vec![Generic {
             engine: Engine::Unreal,
+            status: Status::Unknown,
             slug: Some("_univ".to_owned()),
             url64: None,
             url32: None,
@@ -741,6 +746,31 @@ mod tests {
     }
 
     #[test]
+    fn engine_generic_uses_manifest_slug_for_local_identity_with_explicit_url() {
+        let mut m = manifest(vec![]);
+        m.generics = vec![Generic {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("https://example/renodx-unityengine.addon64".to_owned()),
+            url32: Some("https://example/renodx-unityengine.addon32".to_owned()),
+            label_key: Some("renodx.generic.unity".to_owned()),
+        }];
+        let mut facts = facts();
+        facts.external_id = Some("999".to_owned());
+        facts.engine = Some("unity".to_owned());
+
+        match resolve(&m, &facts) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(plan.confidence, MatchConfidence::Verified);
+                assert_eq!(plan.slug, "unityengine");
+                assert_eq!(plan.addon_url, "https://example/renodx-unityengine.addon64");
+            }
+            other => panic!("expected generic installable, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn engine_generic_installs_on_inconclusive_detection() {
         // A detected engine with no curated title and empty graphics (dynamic
         // Direct3D loading) still gets the engine generic — the engine signal
@@ -748,6 +778,7 @@ mod tests {
         let mut m = manifest(vec![]);
         m.generics = vec![Generic {
             engine: Engine::Unreal,
+            status: Status::Unknown,
             slug: Some("_univ".to_owned()),
             url64: None,
             url32: None,
@@ -772,6 +803,7 @@ mod tests {
         let mut m = manifest(vec![]);
         m.generics = vec![Generic {
             engine: Engine::Unreal,
+            status: Status::Unknown,
             slug: Some("_univ".to_owned()),
             url64: None,
             url32: None,

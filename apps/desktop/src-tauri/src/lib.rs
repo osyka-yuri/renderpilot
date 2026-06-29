@@ -359,6 +359,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::renodx_availability,
         commands::renodx_install,
         commands::renodx_install_from_file,
+        commands::renodx_switch_reshade_channel,
         commands::renodx_uninstall,
         commands::renodx_check_update,
         commands::renodx_update,

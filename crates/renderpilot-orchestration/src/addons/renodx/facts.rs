@@ -12,12 +12,14 @@
 //! fills it in only when a title actually matches on a fingerprint rule.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{ExeGraphicsInfo, GameInstallation, PathRef};
 
+use crate::ServiceError;
 use crate::game_executable::{self, ResolvedExecutable};
 
+use super::errors;
 use super::matcher::MatchFacts;
 
 /// Result of inspecting a game: the facts the matcher needs plus the chosen
@@ -43,6 +45,20 @@ pub fn analyze_game(install: &GameInstallation, override_path: Option<&Path>) ->
         facts,
         primary_executable: primary.map(|resolved| resolved.path),
     }
+}
+
+/// The folder RenoDX installs into: the resolved rendering executable's directory.
+/// Shared by the install, update, and availability flows so they agree on the
+/// target location.
+pub fn install_target_dir(analysis: &GameAnalysis) -> Result<PathBuf, ServiceError> {
+    let executable = analysis
+        .primary_executable
+        .as_ref()
+        .ok_or_else(|| errors::invalid("no rendering executable found for this game".to_owned()))?;
+    Path::new(executable.as_str())
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| errors::invalid("rendering executable has no parent directory".to_owned()))
 }
 
 /// Assembles [`MatchFacts`] from a game and its already-resolved primary

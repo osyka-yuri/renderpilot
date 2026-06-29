@@ -603,10 +603,12 @@ pub async fn renodx_availability(
 pub async fn renodx_install(
     app: tauri::AppHandle,
     game_id: String,
+    reshade_channel: String,
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
+    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
     let context = Arc::clone(&context);
 
     run_desktop_async_command(move || async move {
@@ -614,6 +616,7 @@ pub async fn renodx_install(
         desktop::renodx_install(
             &context,
             game_id,
+            reshade_channel,
             confirm_anticheat,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
@@ -627,11 +630,13 @@ pub async fn renodx_install_from_file(
     app: tauri::AppHandle,
     game_id: String,
     file_path: String,
+    reshade_channel: String,
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
     let file_path = require_non_empty_string("file_path", file_path)?;
+    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
     let context = Arc::clone(&context);
 
     run_desktop_async_command(move || async move {
@@ -640,7 +645,32 @@ pub async fn renodx_install_from_file(
             &context,
             game_id,
             file_path,
+            reshade_channel,
             confirm_anticheat,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_switch_reshade_channel(
+    app: tauri::AppHandle,
+    game_id: String,
+    reshade_channel: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let game_id = require_non_empty_string("game_id", game_id)?;
+    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, game_id.clone());
+        desktop::renodx_switch_reshade_channel(
+            &context,
+            game_id,
+            reshade_channel,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await

@@ -155,10 +155,25 @@ pub(crate) async fn download_with_validators(
     operation: &str,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<(Vec<u8>, HttpValidators), ServiceError> {
+    let (bytes, validators, _final_url) =
+        download_with_validators_and_final_url(url, max_size_bytes, operation, progress).await?;
+    Ok((bytes, validators))
+}
+
+/// Like [`download_with_validators`], but also returns the final response URL
+/// after redirects so callers with stricter provenance requirements can validate
+/// redirect targets.
+pub(crate) async fn download_with_validators_and_final_url(
+    url: &str,
+    max_size_bytes: u64,
+    operation: &str,
+    progress: Option<&ProgressObserver<'_>>,
+) -> Result<(Vec<u8>, HttpValidators, Url), ServiceError> {
     let response = get_successful_response(url, operation).await?;
+    let final_url = response.url().clone();
     let validators = validators_of(&response);
     let bytes = read_capped_body(response, max_size_bytes, operation, progress).await?;
-    Ok((bytes, validators))
+    Ok((bytes, validators, final_url))
 }
 
 /// Downloads up to `max_size_bytes` with an explicit `Referer` header (some hosts,

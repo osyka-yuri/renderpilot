@@ -21,4 +21,8 @@ pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,
     PatternPlatform,
 };
-pub use pe::{analyze_executable, analyze_executable_bytes, read_windows_file_version};
+pub use pe::{
+    PeInspection, VersionIdentityStrings, analyze_executable, analyze_executable_bytes, inspect_pe,
+    read_pe_architecture_from_bytes, read_pe_export_names, read_windows_file_version,
+    read_windows_version_strings,
+};

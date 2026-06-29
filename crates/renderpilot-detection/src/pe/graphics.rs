@@ -291,7 +291,7 @@ fn walk_import_dir<S: ByteSource>(
 }
 
 /// Maps a COFF machine type to a [`Architecture`].
-fn architecture_from_machine(machine: u16) -> Option<Architecture> {
+pub(super) fn architecture_from_machine(machine: u16) -> Option<Architecture> {
     match machine {
         MACHINE_I386 => Some(Architecture::X86),
         MACHINE_AMD64 => Some(Architecture::X64),
