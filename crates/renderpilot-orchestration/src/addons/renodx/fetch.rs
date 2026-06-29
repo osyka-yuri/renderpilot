@@ -20,6 +20,7 @@ use crate::net::{
 use super::errors;
 use super::install::PreparedInstall;
 use super::matcher::ResolvedInstall;
+use super::policy::HostKind;
 use super::source;
 use super::types::{ReshadeChannel, ReshadeConfig, ReshadeIniTweaks};
 
@@ -144,17 +145,23 @@ async fn build_prepared_install(
     ensure_pe(&source.bytes, "RenoDX add-on")?;
     let source_digest = sha256_hex(&source.bytes);
 
-    let reshade = fetch_reshade_host_if_needed(
-        reshade_config,
-        resolved.arch,
-        channel,
-        writes_host,
-        progress,
-    )
-    .await?;
+    let reshade = match resolved.host_kind {
+        HostKind::Vulkan => FetchedReshade::none(),
+        HostKind::Proxy => {
+            fetch_reshade_host_if_needed(
+                reshade_config,
+                resolved.arch,
+                channel,
+                writes_host,
+                progress,
+            )
+            .await?
+        }
+    };
 
     Ok(PreparedInstall {
         game_id,
+        host_kind: resolved.host_kind,
         proxy_dll_name: resolved.proxy_dll_name.clone(),
         addon_file_name: source::addon_file_name(&resolved.slug, resolved.arch),
         addon_source_url: source.url,

@@ -25,10 +25,16 @@ use crate::addons::record;
 
 use super::errors;
 use super::host_policy::{self, HostAssessment};
+use super::policy::HostKind;
 use super::reshade;
 use super::reshade_ini::ini_merge_strategy;
 use super::tracking;
 use super::types::{ReshadeChannel, ReshadeIniTweaks};
+
+/// Per-game ownership sentinel a Vulkan install drops next to the add-on, so a
+/// re-install is refused and an uninstall removes it. The Vulkan host is the global
+/// layer (not a file here), so the proxy ReShade marker does not apply.
+pub(super) const VULKAN_MARKER_FILE_NAME: &str = "renderpilot-renodx-vulkan.json";
 
 /// The DLSS-Fix companion add-on file name prefix (`renodx-dlssfix.`).
 pub(super) const DLSS_FIX_FILE_PREFIX: &str = "renodx-dlssfix.";
@@ -59,7 +65,11 @@ pub(super) fn dlss_fix_file_path(record: &InstalledAddon) -> Option<PathBuf> {
 pub struct PreparedInstall {
     /// Game the install belongs to.
     pub game_id: GameId,
+    /// How RenoDX hooks into this game: a per-game proxy DLL or the global Vulkan
+    /// layer. Selects which per-game file layout [`install`] lays down.
+    pub host_kind: HostKind,
     /// Proxy DLL file name to install the ReShade host as (for example `dxgi.dll`).
+    /// Used only for [`HostKind::Proxy`]; empty for a Vulkan install.
     pub proxy_dll_name: String,
     /// Add-on file name to place (for example `renodx-cp2077.addon64`).
     pub addon_file_name: String,
@@ -91,11 +101,27 @@ pub struct PreparedInstall {
 
 /// Installs RenoDX into `game_dir`, returning the record needed to reverse it.
 ///
-/// Idempotently installs RenoDX. A suitable active ReShade host is reused
-/// regardless of who placed it; an active host without add-on support is backed up
-/// and replaced with the bundled full add-on-support build. The engine rolls back
-/// on any failure and the DB is still updated by the caller only after files land.
+/// Dispatches on the host kind: a [`HostKind::Proxy`] install lays down a per-game
+/// ReShade proxy DLL (or reuses a foreign host); a [`HostKind::Vulkan`] install lays
+/// down only per-game files — the global Vulkan layer is managed separately by the
+/// service. The engine rolls back on any failure.
 pub fn install(
+    game_dir: &Path,
+    prepared: &PreparedInstall,
+) -> Result<InstalledAddon, ServiceError> {
+    match prepared.host_kind {
+        HostKind::Proxy => install_proxy(game_dir, prepared),
+        HostKind::Vulkan => install_vulkan(game_dir, prepared),
+    }
+}
+
+/// Installs a Direct3D (proxy-DLL) RenoDX host.
+///
+/// Refuses if RenderPilot already manages a RenoDX install here (the caller should
+/// uninstall first to reinstall). When no ReShade host is present one is installed
+/// (proxy DLL + fresh `ReShade.ini` + marker); a foreign host is reused with only an
+/// additive, backed-up `ReShade.ini` merge.
+fn install_proxy(
     game_dir: &Path,
     prepared: &PreparedInstall,
 ) -> Result<InstalledAddon, ServiceError> {
@@ -268,6 +294,112 @@ fn build_record(
     )
 }
 
+/// The upstream add-on source to track for updates, or `None` for a file install
+/// (empty URL and no mtime placeholder) which has nothing to track. Shared by the
+/// proxy and Vulkan record builders. A file install with a `source_last_modified`
+/// placeholder (but no URL) still records it so the UI has a DB fallback if file
+/// mtime stamping fails — mirroring the proxy path's `build_record`.
+fn addon_tracked_source(prepared: &PreparedInstall) -> Option<TrackedSource> {
+    if prepared.addon_source_url.is_empty() && prepared.source_last_modified.is_none() {
+        return None;
+    }
+    Some(
+        TrackedSource::new(
+            TrackedSourceRole::AddonPayload,
+            prepared.addon_source_url.clone(),
+            prepared.source_etag.clone(),
+            prepared.source_digest.clone(),
+        )
+        .with_last_modified(prepared.source_last_modified.clone()),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Vulkan host: per-game files only (the global layer is the service's concern)
+// ---------------------------------------------------------------------------
+
+/// Per-game Vulkan install ownership sentinel (presence is the signal).
+#[derive(serde::Serialize)]
+struct VulkanInstallMarker {
+    schema_version: u32,
+    addon_file_name: String,
+}
+
+/// Installs a Vulkan RenoDX add-on into `game_dir`.
+///
+/// The host is the shared global Vulkan layer (installed separately by the service),
+/// so this lays down only per-game files: the add-on, a per-game `ReShade.ini` whose
+/// `AddonPath` points at the game folder (so the global-layer ReShade finds the
+/// add-on), and an ownership marker. Refuses if a RenderPilot Vulkan install is
+/// already present here.
+fn install_vulkan(
+    game_dir: &Path,
+    prepared: &PreparedInstall,
+) -> Result<InstalledAddon, ServiceError> {
+    if game_dir.join(VULKAN_MARKER_FILE_NAME).is_file() {
+        return Err(errors::invalid(
+            "RenoDX is already installed for this game; uninstall before reinstalling".to_owned(),
+        ));
+    }
+
+    let plan = build_vulkan_plan(prepared, game_dir)?;
+    let receipt = engine::install(game_dir, &plan)?;
+
+    let addon_path = game_dir.join(&prepared.addon_file_name);
+    let sources: Vec<TrackedSource> = addon_tracked_source(prepared).into_iter().collect();
+    record::build(
+        prepared.game_id.clone(),
+        AddonKind::RenoDx,
+        &addon_path,
+        &receipt,
+        sources,
+    )
+}
+
+/// Builds the per-game file operations for a Vulkan install: the add-on, the
+/// `ReShade.ini` merge (with `AddonPath` set to the game folder), and the marker.
+fn build_vulkan_plan(
+    prepared: &PreparedInstall,
+    game_dir: &Path,
+) -> Result<InstallPlan, ServiceError> {
+    // The global-layer ReShade lives in AppData, so its default add-on search path is
+    // not the game folder; point `AddonPath` at the game folder explicitly so the
+    // add-on placed here is found. (How the global layer discovers the per-game
+    // config is the one detail pending real-game verification.)
+    let tweaks = ReshadeIniTweaks {
+        addon_path: Some(game_dir.to_string_lossy().replace('/', "\\")),
+        ..ReshadeIniTweaks::renodx_defaults()
+    };
+    let ops = vec![
+        FileOp::Create {
+            name: prepared.addon_file_name.clone(),
+            bytes: prepared.addon_bytes.clone(),
+        },
+        ini_op(&tweaks),
+        FileOp::Create {
+            name: VULKAN_MARKER_FILE_NAME.to_owned(),
+            bytes: vulkan_marker_bytes(prepared)?,
+        },
+    ];
+    Ok(InstallPlan {
+        kind: AddonKind::RenoDx,
+        ops,
+    })
+}
+
+/// Serializes the per-game Vulkan ownership marker.
+fn vulkan_marker_bytes(prepared: &PreparedInstall) -> Result<Vec<u8>, ServiceError> {
+    let marker = VulkanInstallMarker {
+        schema_version: 1,
+        addon_file_name: prepared.addon_file_name.clone(),
+    };
+    serde_json::to_vec_pretty(&marker).map_err(|error| {
+        errors::failed(format!(
+            "failed to serialize Vulkan install marker: {error}"
+        ))
+    })
+}
+
 /// Reverses an install, returning the game folder to its prior state.
 pub fn uninstall(record: &InstalledAddon) -> Result<(), ServiceError> {
     let log_base_path = if record.reshade_managed_by_us() {
@@ -311,6 +443,7 @@ mod tests {
     fn prepared() -> PreparedInstall {
         PreparedInstall {
             game_id: GameId::new("steam:1091500").expect("id"),
+            host_kind: HostKind::Proxy,
             proxy_dll_name: "dxgi.dll".to_owned(),
             addon_file_name: "renodx-cp2077.addon64".to_owned(),
             addon_source_url: "https://clshortfuse.github.io/renodx/renodx-cp2077.addon64"
@@ -561,5 +694,68 @@ mod tests {
         // The occupying file is left untouched, and nothing else was laid down.
         assert_eq!(read(&dir.path().join("dxgi.dll")), b"another-overlay");
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
+    }
+
+    /// A Vulkan-host prepared install: no proxy DLL, no ReShade bytes (the host is
+    /// the global layer, managed separately by the service).
+    fn vulkan_prepared() -> PreparedInstall {
+        PreparedInstall {
+            host_kind: HostKind::Vulkan,
+            proxy_dll_name: String::new(),
+            reshade_dll_bytes: Vec::new(),
+            ..prepared()
+        }
+    }
+
+    #[test]
+    fn vulkan_install_lays_down_addon_ini_and_marker_without_a_proxy() {
+        let dir = tempdir().expect("tempdir");
+        let record = install(dir.path(), &vulkan_prepared()).expect("vulkan install");
+
+        assert_eq!(
+            read(&dir.path().join("renodx-cp2077.addon64")),
+            b"addon-bytes"
+        );
+        assert!(dir.path().join("ReShade.ini").is_file());
+        assert!(dir.path().join(VULKAN_MARKER_FILE_NAME).is_file());
+        // No proxy DLL is written for a Vulkan install (the host is the global layer).
+        assert!(!dir.path().join("dxgi.dll").exists());
+        // The per-game ini points ReShade's add-on search at the game folder.
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(ini.contains("AddonPath="));
+        // No proxy marker; the Vulkan marker is the only ownership signal.
+        assert!(!marker_path(dir.path()).exists());
+        // A file install (no upstream URL is set on the addon source here) still
+        // tracks the add-on when one is recorded; the host is never tracked.
+        assert!(
+            record
+                .tracked_sources()
+                .iter()
+                .all(|s| s.role() != TrackedSourceRole::Host)
+        );
+        // addon + ini + marker.
+        assert_eq!(record.created_files().len(), 3);
+    }
+
+    #[test]
+    fn vulkan_install_round_trips_to_clean_folder() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("game.exe"), b"game").expect("write");
+
+        let record = install(dir.path(), &vulkan_prepared()).expect("install");
+        uninstall(&record).expect("uninstall");
+
+        assert!(!dir.path().join("renodx-cp2077.addon64").exists());
+        assert!(!dir.path().join("ReShade.ini").exists());
+        assert!(!dir.path().join(VULKAN_MARKER_FILE_NAME).exists());
+        assert_eq!(read(&dir.path().join("game.exe")), b"game");
+    }
+
+    #[test]
+    fn vulkan_install_refuses_when_already_installed() {
+        let dir = tempdir().expect("tempdir");
+        install(dir.path(), &vulkan_prepared()).expect("first install");
+        let error = install(dir.path(), &vulkan_prepared()).expect_err("should refuse");
+        assert!(matches!(error, ServiceError::InvalidInput(_)));
     }
 }
