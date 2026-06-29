@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If RenderPilot helps you, please cite it."
+title: "RenderPilot — Manage and swap DLSS, FSR, XeSS and HDR in PC games"
+abstract: >-
+  Local-first Windows app to manage, update and swap DLSS, FSR, XeSS,
+  DirectStorage upscaler libraries and NVIDIA driver presets across PC games,
+  with one-click HDR via the RenoDX ReShade add-on. Built with Tauri 2,
+  Svelte 5 and Rust.
+authors:
+  - family-names: Osyka
+    given-names: Yuri
+keywords:
+  - dlss
+  - dlss-swapper
+  - fsr
+  - xess
+  - upscaling
+  - upscaler
+  - directstorage
+  - nvapi
+  - nvidia
+  - frame-generation
+  - ray-reconstruction
+  - hdr
+  - renodx
+  - reshade
+  - tauri
+  - svelte
+  - rust
+  - windows
+  - pc-gaming
+  - game-manager
+license: GPL-3.0-only
+repository-code: "https://github.com/osyka-yuri/renderpilot"
+url: "https://github.com/osyka-yuri/renderpilot/releases"
+version: "1.3.0"
+date-released: "2026-06-28"
