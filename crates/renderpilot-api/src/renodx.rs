@@ -7,6 +7,7 @@
 
 use renderpilot_orchestration::Context;
 use renderpilot_orchestration::addons::renodx;
+use renderpilot_orchestration::addons::renodx::service::InstallRequest;
 use renderpilot_orchestration::net::ProgressObserver;
 use renodx::types::ReshadeChannel;
 
@@ -26,40 +27,44 @@ pub async fn renodx_availability(context: &Context, game_id: impl Into<String>) 
 }
 
 /// Installs RenoDX into a game, reporting download progress, and returns the
-/// resulting install state. `confirm_anticheat` must be `true` to proceed when
-/// the risk assessment requires confirmation.
+/// resulting install state. `confirm_anticheat` must be `true` to proceed when the
+/// risk assessment requires confirmation; `confirm_vulkan_layer` must be `true` for a
+/// Vulkan game when no ReShade Vulkan layer is present yet (installing one adds a
+/// system-wide layer).
 pub async fn renodx_install(
     context: &Context,
     game_id: impl Into<String>,
     reshade_channel: impl Into<String>,
     confirm_anticheat: bool,
+    confirm_vulkan_layer: bool,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
     let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    renodx::service::install(
+    renodx::service::install(InstallRequest {
         context,
-        &manifest,
-        &game_id,
-        reshade_channel,
+        manifest: &manifest,
+        game_id: &game_id,
+        requested_channel: reshade_channel,
         confirm_anticheat,
+        confirm_vulkan_layer,
         progress,
-    )
+    })
     .await?;
     to_json(renodx::service::status(context, &game_id)?)
 }
 
-/// Installs RenoDX into a game from a user-downloaded add-on file (for external,
-/// Discord/Nexus-distributed games), reporting ReShade-host download progress, and
-/// returns the resulting install state. `confirm_anticheat` must be `true` to
-/// proceed when the risk assessment requires confirmation.
+/// Installs RenoDX into a game from a user-downloaded add-on file (for external,/// Discord/Nexus-distributed games), reporting ReShade-host download progress, and
+/// returns the resulting install state. `confirm_anticheat` / `confirm_vulkan_layer`
+/// gate the anti-cheat risk and the global Vulkan layer respectively.
 pub async fn renodx_install_from_file(
     context: &Context,
     game_id: impl Into<String>,
     file_path: impl Into<String>,
     reshade_channel: impl Into<String>,
     confirm_anticheat: bool,
+    confirm_vulkan_layer: bool,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
@@ -67,13 +72,16 @@ pub async fn renodx_install_from_file(
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
     let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
     renodx::service::install_from_file(
-        context,
-        &manifest,
-        &game_id,
+        InstallRequest {
+            context,
+            manifest: &manifest,
+            game_id: &game_id,
+            requested_channel: reshade_channel,
+            confirm_anticheat,
+            confirm_vulkan_layer,
+            progress,
+        },
         &file_path,
-        reshade_channel,
-        confirm_anticheat,
-        progress,
     )
     .await?;
     to_json(renodx::service::status(context, &game_id)?)
@@ -105,6 +113,21 @@ pub async fn renodx_switch_reshade_channel(
     )
     .await?;
     to_json(state)
+}
+
+/// Returns the global ReShade Vulkan layer status (`absent` / `foreign` / `managed`
+/// / `unsupported`), so the UI can decide whether a Vulkan install needs the user to
+/// consent to adding the system-wide layer first.
+pub fn renodx_vulkan_layer_status() -> JsonResult {
+    to_json(renodx::service::vulkan_layer_status())
+}
+
+/// Removes RenderPilot's global ReShade Vulkan layer (a foreign layer is left
+/// untouched), returning the resulting layer status. A user maintenance action;
+/// per-game installs are unaffected but stop loading until a layer is present again.
+pub fn renodx_remove_vulkan_layer() -> JsonResult {
+    renodx::service::remove_vulkan_layer()?;
+    to_json(renodx::service::vulkan_layer_status())
 }
 
 /// Checks whether the installed RenoDX add-on for a game has an upstream update.

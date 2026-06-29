@@ -37,11 +37,15 @@ use super::matcher::{
     resolve_external_install,
 };
 use super::operation_lock;
+use super::policy::HostKind;
 use super::progress::emit_finalizing;
 use super::reshade::{self, RenoDxAddonState, ReshadeHost, ReshadeHostAction};
 use super::reshade_ini;
 use super::tracking;
-use super::types::{DlssFixIniTweaks, RenoDxManifest, ReshadeChannel, ReshadeIniTweaks};
+use super::types::{
+    DlssFixIniTweaks, RenoDxManifest, ReshadeChannel, ReshadeConfig, ReshadeIniTweaks,
+};
+use super::vulkan::{self, VulkanLayerStatus};
 
 /// Upper bound on a user-selected add-on file, so a stray pick cannot exhaust
 /// memory. A RenoDX add-on DLL is a few MB; this is a generous ceiling.
@@ -73,6 +77,9 @@ pub struct AvailabilityReport {
     /// The manual "install ReShade host + your own add-on file" escape hatch,
     /// present for a DirectX game that has no automatic or curated-external path.
     pub manual_install: Option<ManualFileInstall>,
+    /// Current global ReShade Vulkan layer state. The UI uses this together with an
+    /// install's [`HostKind`] to decide whether to ask for layer consent first.
+    pub vulkan_layer: VulkanLayerStatus,
 }
 
 /// Ownership/health of the ReShade host relevant to this RenoDX install.
@@ -116,6 +123,9 @@ pub enum AvailabilityOutcome {
         risk: RiskAssessment,
         /// i18n note/requirement keys (a generic install carries its engine label here).
         notes_keys: Vec<String>,
+        /// How RenoDX would hook in: a per-game proxy DLL or the global Vulkan layer.
+        /// A Vulkan install may require the user to consent to the global layer first.
+        host_kind: HostKind,
     },
     /// The add-on is distributed off-GitHub; link the user out, and — when the
     /// game is compatible — offer to install a file the user downloaded.
@@ -166,6 +176,8 @@ pub struct ExternalFileInstall {
     pub risk: RiskAssessment,
     /// i18n note/requirement keys.
     pub notes_keys: Vec<String>,
+    /// How RenoDX would hook in: a per-game proxy DLL or the global Vulkan layer.
+    pub host_kind: HostKind,
 }
 
 /// Returns the current RenoDX install state for a game from the persisted record.
@@ -253,6 +265,7 @@ pub fn availability(
             confidence: plan.confidence,
             risk: assess_risk(&plan.risk, scan_dir),
             notes_keys: plan.notes_keys,
+            host_kind: plan.host_kind,
         },
         RenoDxResolution::External {
             url,
@@ -265,6 +278,7 @@ pub fn availability(
                 confidence: fi.confidence,
                 risk: assess_risk(&fi.risk, scan_dir),
                 notes_keys: fi.notes_keys,
+                host_kind: fi.host_kind,
             }),
         },
         RenoDxResolution::NativeHdr => AvailabilityOutcome::NativeHdr,
@@ -284,6 +298,7 @@ pub fn availability(
         renodx_addon: host_report.addon,
         outcome,
         manual_install,
+        vulkan_layer: vulkan::layer_status(),
     })
 }
 
@@ -426,20 +441,46 @@ fn analyze_and_resolve(
     (analysis, resolution)
 }
 
+/// Shared parameters for a RenoDX install operation (both upstream and file-based).
+///
+/// Groups the context, manifest, channel, consent gates, and progress reporter
+/// so [`install`] and [`install_from_file`] stay under the argument-count limit
+/// without sacrificing clarity.
+pub struct InstallRequest<'a> {
+    /// Backend context (game repository, addon repository, settings).
+    pub context: &'a Context,
+    /// The resolved RenoDX manifest (catalogue + ReShade host config).
+    pub manifest: &'a RenoDxManifest,
+    /// The game to install RenoDX for.
+    pub game_id: &'a GameId,
+    /// The ReShade host channel to install (stable or nightly).
+    pub requested_channel: ReshadeChannel,
+    /// Must be `true` to proceed when the anti-cheat risk assessment requires confirmation.
+    pub confirm_anticheat: bool,
+    /// Must be `true` for a Vulkan game when no ReShade Vulkan layer is present yet.
+    pub confirm_vulkan_layer: bool,
+    /// Optional download progress observer.
+    pub progress: Option<&'a ProgressObserver<'a>>,
+}
+
 /// Installs RenoDX into `game`, fetching the add-on + ReShade from upstream and
 /// persisting the record needed to reverse it.
 ///
 /// `confirm_anticheat` must be `true` to proceed when the risk assessment requires
-/// it. The ReShade host (when one must be installed) uses the requested channel,
-/// with old manifests falling back from stable to nightly.
-pub async fn install(
-    context: &Context,
-    manifest: &RenoDxManifest,
-    game_id: &GameId,
-    requested_channel: ReshadeChannel,
-    confirm_anticheat: bool,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<InstalledAddon, ServiceError> {
+/// it. `confirm_vulkan_layer` must be `true` for a Vulkan game when no ReShade Vulkan
+/// layer is present yet, since installing one adds a system-wide layer. The ReShade
+/// host (when one must be installed) uses the requested channel, with old manifests
+/// falling back from stable to nightly.
+pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, ServiceError> {
+    let InstallRequest {
+        context,
+        manifest,
+        game_id,
+        requested_channel,
+        confirm_anticheat,
+        confirm_vulkan_layer,
+        progress,
+    } = request;
     let _guard = operation_lock::lock(game_id).await;
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
@@ -478,6 +519,7 @@ pub async fn install(
 
     let risk = assess_risk(&plan.risk, scan_dir);
     enforce_gate(&risk, confirm_anticheat)?;
+    ensure_vulkan_layer_if_needed(&plan, &manifest.reshade, confirm_vulkan_layer, progress).await?;
 
     let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
     host.ensure_not_conflicting(&plan.proxy_dll_name)?;
@@ -515,14 +557,18 @@ pub async fn install(
 /// proxy DLL (a confirmed Vulkan/OpenGL game is refused), and the add-on's
 /// architecture must match the game's.
 pub async fn install_from_file(
-    context: &Context,
-    manifest: &RenoDxManifest,
-    game_id: &GameId,
+    request: InstallRequest<'_>,
     file_path: &str,
-    requested_channel: ReshadeChannel,
-    confirm_anticheat: bool,
-    progress: Option<&ProgressObserver<'_>>,
 ) -> Result<InstalledAddon, ServiceError> {
+    let InstallRequest {
+        context,
+        manifest,
+        game_id,
+        requested_channel,
+        confirm_anticheat,
+        confirm_vulkan_layer,
+        progress,
+    } = request;
     let _guard = operation_lock::lock(game_id).await;
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
@@ -563,6 +609,7 @@ pub async fn install_from_file(
 
     let risk = assess_risk(&plan.risk, scan_dir);
     enforce_gate(&risk, confirm_anticheat)?;
+    ensure_vulkan_layer_if_needed(&plan, &manifest.reshade, confirm_vulkan_layer, progress).await?;
 
     let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
     host.ensure_not_conflicting(&plan.proxy_dll_name)?;
@@ -785,6 +832,62 @@ pub async fn switch_reshade_channel(
         return Err(error.into());
     }
     Ok(tracking::install_state_from_record(&updated))
+}
+
+// ---------------------------------------------------------------------------
+// Global ReShade Vulkan layer
+// ---------------------------------------------------------------------------
+
+/// Ensures the global ReShade Vulkan layer is present before a Vulkan install lays
+/// down its per-game files. A proxy install needs nothing here. A reused
+/// foreign/managed layer is left as-is; an absent layer is installed only with the
+/// user's consent (`confirm_vulkan_layer`), fetching the nightly ReShade host for it.
+/// On a non-Windows host a Vulkan install is refused.
+async fn ensure_vulkan_layer_if_needed(
+    plan: &ResolvedInstall,
+    reshade_config: &ReshadeConfig,
+    confirm_vulkan_layer: bool,
+    progress: Option<&ProgressObserver<'_>>,
+) -> Result<(), ServiceError> {
+    if !matches!(plan.host_kind, HostKind::Vulkan) {
+        return Ok(());
+    }
+    match vulkan::layer_status() {
+        VulkanLayerStatus::Foreign | VulkanLayerStatus::Managed => Ok(()),
+        VulkanLayerStatus::Unsupported => Err(errors::invalid(
+            "RenoDX for Vulkan games is only supported on Windows".to_owned(),
+        )),
+        VulkanLayerStatus::Absent => {
+            if !confirm_vulkan_layer {
+                return Err(errors::invalid(
+                    "installing RenoDX for this Vulkan game adds a global ReShade Vulkan layer; \
+                     confirm to proceed"
+                        .to_owned(),
+                ));
+            }
+            let source =
+                super::source::reshade_source(reshade_config, ReshadeChannel::Nightly, plan.arch)
+                    .ok_or_else(|| {
+                    errors::invalid("ReShade nightly channel is not available".to_owned())
+                })?;
+            let download =
+                super::fetch::fetch_reshade_from_source(&source, plan.arch, progress).await?;
+            vulkan::install_layer(&download.bytes, None)
+        }
+    }
+}
+
+/// Returns the current global ReShade Vulkan layer status (a read-only preview).
+#[must_use]
+pub fn vulkan_layer_status() -> VulkanLayerStatus {
+    vulkan::layer_status()
+}
+
+/// Removes RenderPilot's global ReShade Vulkan layer (a user maintenance action). A
+/// foreign layer is never touched. Per-game installs are left in place; they simply
+/// stop loading until a layer is present again.
+pub fn remove_vulkan_layer() -> Result<(), ServiceError> {
+    vulkan::remove_layer()
 }
 
 // ---------------------------------------------------------------------------
@@ -1018,6 +1121,7 @@ mod tests {
             risk: generic_risk(),
             confidence: MatchConfidence::Verified,
             notes_keys: Vec::new(),
+            host_kind: HostKind::Proxy,
         };
         let resolution = RenoDxResolution::Installable(Box::new(plan));
 

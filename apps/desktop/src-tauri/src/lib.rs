@@ -361,6 +361,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::renodx_install_from_file,
         commands::renodx_switch_reshade_channel,
         commands::renodx_uninstall,
+        commands::renodx_vulkan_layer_status,
+        commands::renodx_remove_vulkan_layer,
         commands::renodx_check_update,
         commands::renodx_update,
         commands::renodx_check_updates,

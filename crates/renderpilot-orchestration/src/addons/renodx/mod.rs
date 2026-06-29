@@ -34,6 +34,7 @@ mod tracking;
 pub mod types;
 pub mod update;
 mod validate;
+pub mod vulkan;
 
 #[cfg(test)]
 mod test_support;

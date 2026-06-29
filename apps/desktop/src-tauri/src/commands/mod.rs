@@ -605,6 +605,7 @@ pub async fn renodx_install(
     game_id: String,
     reshade_channel: String,
     confirm_anticheat: bool,
+    confirm_vulkan_layer: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
@@ -618,6 +619,7 @@ pub async fn renodx_install(
             game_id,
             reshade_channel,
             confirm_anticheat,
+            confirm_vulkan_layer,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await
@@ -632,6 +634,7 @@ pub async fn renodx_install_from_file(
     file_path: String,
     reshade_channel: String,
     confirm_anticheat: bool,
+    confirm_vulkan_layer: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
@@ -647,6 +650,7 @@ pub async fn renodx_install_from_file(
             file_path,
             reshade_channel,
             confirm_anticheat,
+            confirm_vulkan_layer,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await
@@ -687,6 +691,16 @@ pub async fn renodx_uninstall(
     let context = Arc::clone(&context);
 
     run_desktop_command(move || desktop::renodx_uninstall(&context, game_id)).await
+}
+
+#[tauri::command]
+pub async fn renodx_vulkan_layer_status() -> JsonCommandResult {
+    run_desktop_command(desktop::renodx_vulkan_layer_status).await
+}
+
+#[tauri::command]
+pub async fn renodx_remove_vulkan_layer() -> JsonCommandResult {
+    run_desktop_command(desktop::renodx_remove_vulkan_layer).await
 }
 
 #[tauri::command]
