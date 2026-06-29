@@ -6,6 +6,7 @@ import type {
   RenoDxInstallState,
   RenoDxUpdateReport,
   ReshadeChannel,
+  VulkanLayerStatus,
 } from '../model/types';
 
 /** Previews whether RenoDX can be installed for a game (loads/caches the manifest). */
@@ -24,11 +25,13 @@ export async function installRenoDx(
   gameId: string,
   reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
+  confirmVulkanLayer: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     reshadeChannel,
     confirmAnticheat,
+    confirmVulkanLayer,
   });
 }
 
@@ -42,12 +45,14 @@ export async function installRenoDxFromFile(
   filePath: string,
   reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
+  confirmVulkanLayer: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install_from_file', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     filePath: requireNonBlankString(filePath, 'filePath'),
     reshadeChannel,
     confirmAnticheat,
+    confirmVulkanLayer,
   });
 }
 
@@ -113,6 +118,22 @@ export async function getRenoDxDlssFixAvailability(gameId: string): Promise<bool
   });
 }
 
+/**
+ * Returns the global ReShade Vulkan layer status, so the UI can decide whether a
+ * Vulkan install needs the user to consent to adding the system-wide layer first.
+ */
+export async function getVulkanLayerStatus(): Promise<VulkanLayerStatus> {
+  return invokeDesktop<VulkanLayerStatus>('renodx_vulkan_layer_status', {});
+}
+
+/**
+ * Removes RenderPilot's global ReShade Vulkan layer (a foreign layer is left
+ * untouched), returning the resulting status. A user maintenance action.
+ */
+export async function removeVulkanLayer(): Promise<VulkanLayerStatus> {
+  return invokeDesktop<VulkanLayerStatus>('renodx_remove_vulkan_layer', {});
+}
+
 /** The set of RenoDX backend calls, injectable for testing. */
 export type RenoDxApi = {
   getAvailability: typeof getRenoDxAvailability;
@@ -125,6 +146,8 @@ export type RenoDxApi = {
   installDlssFix: typeof installRenoDxDlssFix;
   uninstallDlssFix: typeof uninstallRenoDxDlssFix;
   dlssFixAvailability: typeof getRenoDxDlssFixAvailability;
+  vulkanLayerStatus: typeof getVulkanLayerStatus;
+  removeVulkanLayer: typeof removeVulkanLayer;
 };
 
 /** The default API bound to the real Tauri commands. */
@@ -139,4 +162,6 @@ export const renodxApi: RenoDxApi = {
   installDlssFix: installRenoDxDlssFix,
   uninstallDlssFix: uninstallRenoDxDlssFix,
   dlssFixAvailability: getRenoDxDlssFixAvailability,
+  vulkanLayerStatus: getVulkanLayerStatus,
+  removeVulkanLayer,
 };

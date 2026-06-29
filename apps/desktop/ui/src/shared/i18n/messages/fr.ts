@@ -452,6 +452,12 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.confirmBody':
     'Ce jeu utilise un anti-triche. Le module ReShade peut le déclencher et entraîner un bannissement. Continuez à vos risques et périls.',
   'gameDetails.renodx.cancel': 'Annuler',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    'Ce jeu Vulkan nécessite une couche Vulkan ReShade globale. Elle charge ReShade dans toutes les applications Vulkan (jeux, navigateurs, IDE), pas seulement ce jeu, et reste inactive jusqu’à son activation par jeu. Continuer ?',
+  'gameDetails.renodx.vulkanLayer.consentAccept': 'Ajouter la couche et installer',
+  'gameDetails.renodx.vulkanLayer.removeError':
+    'Impossible de supprimer la couche Vulkan ReShade globale.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'API graphique non prise en charge',
   'gameDetails.renodx.reason.api_not_allowed': 'API graphique non autorisée pour ce jeu',

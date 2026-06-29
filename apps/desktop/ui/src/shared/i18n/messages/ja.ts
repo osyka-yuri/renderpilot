@@ -445,6 +445,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.confirmBody':
     'このゲームはアンチチートを使用します。ReShade アドオンがそれを作動させ、BAN につながる可能性があります。自己責任で続行してください。',
   'gameDetails.renodx.cancel': 'キャンセル',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    'このVulkanゲームにはグローバルなReShade Vulkanレイヤーが必要です。このゲームだけでなく、すべてのVulkanアプリ（ゲーム、ブラウザ、IDE）にReShadeを読み込みますが、ゲームごとに有効化するまでは動作しません。続行しますか？',
+  'gameDetails.renodx.vulkanLayer.consentAccept': 'レイヤーを追加してインストール',
+  'gameDetails.renodx.vulkanLayer.removeError':
+    'グローバルなReShade Vulkanレイヤーを削除できませんでした。',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': '非対応のグラフィックス API',
   'gameDetails.renodx.reason.api_not_allowed': 'このゲームでは許可されていないグラフィックス API',

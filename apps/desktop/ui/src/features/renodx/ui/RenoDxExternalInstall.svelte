@@ -76,9 +76,30 @@
     beginFileInstall(file);
   }
 
-  // Warn-risk external titles step through confirmation; otherwise install directly.
-  function beginFileInstall(filePath: string): void {
+  // A warn-risk external title and/or the global-Vulkan-layer consent gate the
+  // file-install behind a confirmation step.
+  const needsConfirm = $derived(store.externalRequiresConfirmation || store.vulkanConsentNeeded);
+  const confirmBodyText = $derived.by(() => {
+    const parts: string[] = [];
     if (store.externalRequiresConfirmation) {
+      parts.push(t('gameDetails.renodx.confirmBody'));
+    }
+    if (store.vulkanConsentNeeded) {
+      parts.push(t('gameDetails.renodx.vulkanLayer.consentBody'));
+    }
+    return parts.join(' ');
+  });
+  const confirmAcceptLabel = $derived(
+    store.externalRequiresConfirmation
+      ? t('gameDetails.renodx.confirmAccept')
+      : t('gameDetails.renodx.vulkanLayer.consentAccept'),
+  );
+
+  // A warn-risk or Vulkan-consent title steps through confirmation; otherwise it
+  // installs directly. The confirmation passes the anti-cheat and Vulkan-layer
+  // consents the backend gates require.
+  function beginFileInstall(filePath: string): void {
+    if (needsConfirm) {
       pendingFilePath = filePath;
     } else {
       void store.installFromFile(gameId, filePath, store.selectedReshadeChannel, false);
@@ -89,7 +110,13 @@
     const file = pendingFilePath;
     pendingFilePath = null;
     if (file) {
-      void store.installFromFile(gameId, file, store.selectedReshadeChannel, true);
+      void store.installFromFile(
+        gameId,
+        file,
+        store.selectedReshadeChannel,
+        true,
+        store.vulkanConsentNeeded,
+      );
     }
   }
 
@@ -145,8 +172,13 @@
       <Button size="sm" variant="outline" onclick={() => (pendingFilePath = null)}>
         {t('gameDetails.renodx.cancel')}
       </Button>
-      <Button size="sm" variant="destructive" disabled={busy} onclick={confirmFileInstall}>
-        {t('gameDetails.renodx.confirmAccept')}
+      <Button
+        size="sm"
+        variant={store.externalRequiresConfirmation ? 'destructive' : 'default'}
+        disabled={busy}
+        onclick={confirmFileInstall}
+      >
+        {confirmAcceptLabel}
       </Button>
     {:else}
       <Button size="sm" disabled={busy} onclick={pickFile}>{fileInstallLabel}</Button>
@@ -155,4 +187,17 @@
       {externalLabel}
     </Button>
   </div>
+  <p class="w-full text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
+  {#if externalNotes.length > 0}
+    <ul class="w-full list-inside list-disc text-xs text-muted-foreground">
+      {#each externalNotes as note (note)}
+        <li>{note}</li>
+      {/each}
+    </ul>
+  {/if}
+  {#if pendingFilePath}
+    <p class="w-full text-xs text-destructive" aria-live="polite">
+      {confirmBodyText}
+    </p>
+  {/if}
 </div>

@@ -418,6 +418,11 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.confirmBody':
     '本游戏使用反作弊系统。ReShade 插件可能触发它并导致封号。继续操作风险自负。',
   'gameDetails.renodx.cancel': '取消',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    '此 Vulkan 游戏需要全局 ReShade Vulkan 层。它会将 ReShade 加载到所有 Vulkan 应用（游戏、浏览器、IDE），而不仅是此游戏，并在按游戏启用前保持非活动状态。是否继续？',
+  'gameDetails.renodx.vulkanLayer.consentAccept': '添加层并安装',
+  'gameDetails.renodx.vulkanLayer.removeError': '无法移除全局 ReShade Vulkan 层。',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': '不支持的图形 API',
   'gameDetails.renodx.reason.api_not_allowed': '此游戏不允许该图形 API',

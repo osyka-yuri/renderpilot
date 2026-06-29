@@ -503,6 +503,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.confirmBody':
     'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
   'gameDetails.renodx.cancel': 'Отмена',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    'Этой Vulkan-игре нужен глобальный Vulkan-слой ReShade. Он загружает ReShade во все Vulkan-приложения (игры, браузеры, IDE), а не только в эту игру, и остаётся неактивным, пока не включён для конкретной игры. Продолжить?',
+  'gameDetails.renodx.vulkanLayer.consentAccept': 'Добавить слой и установить',
+  'gameDetails.renodx.vulkanLayer.removeError':
+    'Не удалось удалить глобальный Vulkan-слой ReShade.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'неподдерживаемый графический API',
   'gameDetails.renodx.reason.api_not_allowed': 'графический API не разрешён для этой игры',

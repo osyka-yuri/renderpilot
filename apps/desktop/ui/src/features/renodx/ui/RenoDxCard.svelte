@@ -109,10 +109,30 @@
       : t('gameDetails.renodx.blacklisted'),
   );
 
-  // Single install entry point: warn-risk titles step through confirmation,
-  // everything else installs directly.
-  function startInstall(): void {
+  // An anti-cheat warning and/or the global-Vulkan-layer consent gate the install
+  // behind an explicit confirmation step; a safe Direct3D title installs directly.
+  const needsConfirm = $derived(store.requiresConfirmation || store.vulkanConsentNeeded);
+  const confirmMessage = $derived.by(() => {
+    const parts: string[] = [];
     if (store.requiresConfirmation) {
+      parts.push(t('gameDetails.renodx.confirmBody'));
+    }
+    if (store.vulkanConsentNeeded) {
+      parts.push(t('gameDetails.renodx.vulkanLayer.consentBody'));
+    }
+    return parts.join(' ');
+  });
+  const confirmAcceptLabel = $derived(
+    store.requiresConfirmation
+      ? t('gameDetails.renodx.confirmAccept')
+      : t('gameDetails.renodx.vulkanLayer.consentAccept'),
+  );
+
+  // Single install entry point: a warn-risk or Vulkan-consent title steps through
+  // confirmation, everything else installs directly. The confirmation passes the
+  // anti-cheat and Vulkan-layer consents the backend gates require.
+  function startInstall(): void {
+    if (needsConfirm) {
       confirming = true;
     } else {
       void store.install(gameId, store.selectedReshadeChannel, false);
@@ -121,7 +141,7 @@
 
   function installConfirmed(): void {
     confirming = false;
-    void store.install(gameId, store.selectedReshadeChannel, true);
+    void store.install(gameId, store.selectedReshadeChannel, true, store.vulkanConsentNeeded);
   }
 
   function selectChannel(channel: ReshadeChannel): void {
@@ -216,23 +236,19 @@
 
         {#if store.isBlocked}
           <RenoDxStateMessage tone="warning" icon="warning" message={riskText} />
-        {:else if store.requiresConfirmation && confirming}
-          <RenoDxStateMessage
-            tone="warning"
-            icon="warning"
-            message={t('gameDetails.renodx.confirmBody')}
-          >
+        {:else if needsConfirm && confirming}
+          <RenoDxStateMessage tone="warning" icon="warning" message={confirmMessage}>
             {#snippet actions()}
               <Button size="sm" variant="outline" onclick={() => (confirming = false)}>
                 {t('gameDetails.renodx.cancel')}
               </Button>
               <Button
                 size="sm"
-                variant="destructive"
+                variant={store.requiresConfirmation ? 'destructive' : 'default'}
                 disabled={combinedBusy}
                 onclick={installConfirmed}
               >
-                {t('gameDetails.renodx.confirmAccept')}
+                {confirmAcceptLabel}
               </Button>
             {/snippet}
           </RenoDxStateMessage>
@@ -250,7 +266,7 @@
           </ul>
         {/if}
 
-        {#if !(store.requiresConfirmation && confirming)}
+        {#if !(needsConfirm && confirming)}
           {#if installsManagedHost && !hostConflict}
             <RenoDxChannelSelect
               value={store.selectedReshadeChannel}

@@ -14,6 +14,18 @@ export type GraphicsApi = 'D3D9' | 'D3D10' | 'D3D11' | 'D3D12' | 'OpenGl' | 'Vul
  */
 export type MatchConfidence = 'verified' | 'experimental' | 'untested';
 
+/**
+ * How RenoDX hooks into a game (`HostKind`): a per-game ReShade proxy DLL
+ * (Direct3D) or the single global ReShade Vulkan layer (Vulkan games).
+ */
+export type HostKind = 'proxy' | 'vulkan';
+
+/**
+ * Global ReShade Vulkan layer state (`VulkanLayerStatus`): not installed, a
+ * foreign one present (reused), one RenderPilot manages, or off-Windows.
+ */
+export type VulkanLayerStatus = 'absent' | 'foreign' | 'managed' | 'unsupported';
+
 /** Effective install risk severity. */
 export type RiskSeverity = 'info' | 'warn' | 'block';
 
@@ -160,6 +172,8 @@ export type AvailabilityOutcome =
       risk: RiskAssessment;
       /** i18n note/requirement keys (a generic install carries its engine label here). */
       notes_keys: string[];
+      /** Proxy DLL or the global Vulkan layer; a Vulkan install may need layer consent. */
+      host_kind: HostKind;
     }
   /**
    * The add-on is distributed off-GitHub (Discord/Nexus): link the user out, and
@@ -174,6 +188,8 @@ export type AvailabilityOutcome =
         confidence: MatchConfidence;
         risk: RiskAssessment;
         notes_keys: string[];
+        /** Proxy DLL or the global Vulkan layer. */
+        host_kind: HostKind;
       } | null;
     }
   /** The game already has native HDR; RenoDX is not offered. */
@@ -208,4 +224,7 @@ export type AvailabilityReport = {
   renodx_addon: RenoDxAddonState | null;
   outcome: AvailabilityOutcome;
   manual_install: ManualFileInstall | null;
+  /** Global ReShade Vulkan layer state, used with an install's host kind to decide
+   * whether to ask for layer consent first. */
+  vulkan_layer: VulkanLayerStatus;
 };

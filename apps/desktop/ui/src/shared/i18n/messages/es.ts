@@ -449,6 +449,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.confirmBody':
     'Este juego usa anti-trampas. El complemento ReShade puede activarlo y provocar un baneo. Continúa bajo tu propio riesgo.',
   'gameDetails.renodx.cancel': 'Cancelar',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    'Este juego Vulkan necesita una capa Vulkan global de ReShade. Carga ReShade en todas las aplicaciones Vulkan (juegos, navegadores, IDE), no solo en este juego, y permanece inactiva hasta que se active por juego. ¿Continuar?',
+  'gameDetails.renodx.vulkanLayer.consentAccept': 'Añadir capa e instalar',
+  'gameDetails.renodx.vulkanLayer.removeError':
+    'No se pudo eliminar la capa Vulkan global de ReShade.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'API gráfica no compatible',
   'gameDetails.renodx.reason.api_not_allowed': 'API gráfica no permitida para este juego',

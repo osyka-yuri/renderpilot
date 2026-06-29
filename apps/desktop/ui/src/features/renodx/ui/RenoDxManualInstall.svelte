@@ -66,8 +66,15 @@
     const path = pending?.path;
     pending = null;
     if (path) {
-      // The explicit confirmation here also acknowledges the risk gate.
-      void store.installFromFile(gameId, path, store.selectedReshadeChannel, true);
+      // The explicit confirmation here acknowledges the anti-cheat risk and, for a
+      // Vulkan game with no layer yet, consents to the global ReShade Vulkan layer.
+      void store.installFromFile(
+        gameId,
+        path,
+        store.selectedReshadeChannel,
+        true,
+        store.vulkanConsentNeeded,
+      );
     }
   }
 
@@ -121,6 +128,11 @@
         <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
           {t(pending.validation.warning.key, pending.validation.warning.params)}
+        </p>
+      {/if}
+      {#if store.vulkanConsentNeeded}
+        <p class="text-xs text-muted-foreground">
+          {t('gameDetails.renodx.vulkanLayer.consentBody')}
         </p>
       {/if}
       <div class="flex items-center gap-2">

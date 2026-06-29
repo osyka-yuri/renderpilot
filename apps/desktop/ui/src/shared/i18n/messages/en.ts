@@ -471,6 +471,11 @@ export const en = {
   'gameDetails.renodx.confirmBody':
     'This game uses anti-cheat. The ReShade add-on may trigger it and get you banned. Continue at your own risk.',
   'gameDetails.renodx.cancel': 'Cancel',
+  // ── Game details: RenoDX global Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.consentBody':
+    'This Vulkan game needs a global ReShade Vulkan layer. It loads ReShade into every Vulkan application (games, browsers, IDEs), not just this game, and stays inactive until enabled per game. Continue?',
+  'gameDetails.renodx.vulkanLayer.consentAccept': 'Add layer & install',
+  'gameDetails.renodx.vulkanLayer.removeError': "Couldn't remove the global ReShade Vulkan layer.",
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'unsupported graphics API',
   'gameDetails.renodx.reason.api_not_allowed': 'graphics API not allowed for this game',

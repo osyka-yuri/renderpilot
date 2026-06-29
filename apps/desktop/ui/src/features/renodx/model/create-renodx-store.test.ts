@@ -26,6 +26,7 @@ function availability(
     | 'reshade_stable_supported'
     | 'reshade_ownership'
     | 'renodx_addon'
+    | 'vulkan_layer'
   >,
 ): AvailabilityReport {
   return {
@@ -36,6 +37,7 @@ function availability(
     reshade_stable_supported: true,
     reshade_ownership: { kind: 'missing' },
     renodx_addon: null,
+    vulkan_layer: 'absent',
     ...report,
   };
 }
@@ -55,6 +57,7 @@ const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
       detected_locally: false,
     },
     notes_keys: [],
+    host_kind: 'proxy',
   },
   manual_install: null,
 });
@@ -100,6 +103,8 @@ function fakeApi(overrides: Partial<RenoDxApi> = {}): RenoDxApi {
     installDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
     uninstallDlssFix: vi.fn(() => Promise.resolve(INSTALLED.state)),
     dlssFixAvailability: vi.fn(() => Promise.resolve(false)),
+    vulkanLayerStatus: vi.fn(() => Promise.resolve('absent' as const)),
+    removeVulkanLayer: vi.fn(() => Promise.resolve('absent' as const)),
     ...overrides,
   };
 }
@@ -199,6 +204,7 @@ describe('createRenoDxStore', () => {
           detected_locally: true,
         },
         notes_keys: [],
+        host_kind: 'proxy',
       },
       manual_install: null,
     });
@@ -225,10 +231,71 @@ describe('createRenoDxStore', () => {
 
     await store.install('steam:1091500', 'stable', true);
 
-    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', true);
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', true, false);
     expect(store.isInstalled).toBe(true);
     expect(store.isManaged).toBe(true);
     expect(store.busy).toBe(false);
+  });
+
+  it('flags Vulkan-layer consent and threads it through install', async () => {
+    const VULKAN: AvailabilityReport = availability({
+      state: { status: 'not_installed' },
+      outcome: {
+        kind: 'installable',
+        confidence: 'untested',
+        risk: {
+          severity: 'info',
+          anticheat_engine: 'none',
+          online: 'singleplayer',
+          message_key: 'renodx.risk.sp_safe',
+          confidence: 'high',
+          source: null,
+          detected_locally: false,
+        },
+        notes_keys: [],
+        host_kind: 'vulkan',
+      },
+      manual_install: null,
+    });
+    const api = fakeApi({ getAvailability: vi.fn(() => Promise.resolve(VULKAN)) });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    // A Vulkan install with no layer present needs the user's consent first.
+    expect(store.vulkanConsentNeeded).toBe(true);
+
+    await store.install('steam:1091500', 'nightly', false, true);
+
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'nightly', false, true);
+    // The consented layer install is reflected optimistically (no reload needed).
+    expect(store.vulkanLayer).toBe('managed');
+  });
+
+  it('does not need Vulkan consent when a layer is already present', async () => {
+    const VULKAN_LAYER_PRESENT: AvailabilityReport = {
+      ...NOT_INSTALLED_SAFE,
+      outcome: {
+        ...NOT_INSTALLED_SAFE.outcome,
+        host_kind: 'vulkan',
+      } as AvailabilityReport['outcome'],
+      vulkan_layer: 'foreign',
+    };
+    const store = createRenoDxStore(
+      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(VULKAN_LAYER_PRESENT)) }),
+    );
+    await store.load('steam:1091500');
+    expect(store.vulkanConsentNeeded).toBe(false);
+  });
+
+  it('removeVulkanLayer clears the managed layer', async () => {
+    const api = fakeApi();
+    const store = createRenoDxStore(api);
+
+    const ok = await store.removeVulkanLayer();
+
+    expect(ok).toBe(true);
+    expect(api.removeVulkanLayer).toHaveBeenCalled();
+    expect(store.vulkanLayer).toBe('absent');
   });
 
   it('surfaces an available update for an installed game', async () => {
@@ -366,6 +433,7 @@ describe('createRenoDxStore', () => {
             detected_locally: false,
           },
           notes_keys: [],
+          host_kind: 'proxy',
         },
       },
       manual_install: null,
@@ -397,6 +465,7 @@ describe('createRenoDxStore', () => {
       'steam:1091500',
       'C:\\dl\\renodx-x.addon64',
       'nightly',
+      false,
       false,
     );
     expect(store.isInstalled).toBe(true);

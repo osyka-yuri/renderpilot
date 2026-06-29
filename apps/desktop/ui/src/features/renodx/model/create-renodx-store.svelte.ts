@@ -6,6 +6,7 @@ import { clearDownloadProgress } from '@entities/library';
 import { renodxApi, type RenoDxApi } from '../api/desktop';
 import type {
   AvailabilityOutcome,
+  HostKind,
   ManualFileInstall,
   MatchConfidence,
   RenoDxAddonState,
@@ -17,6 +18,7 @@ import type {
   ReshadeChannel,
   ReshadeHostOwnership,
   RiskAssessment,
+  VulkanLayerStatus,
 } from './types';
 
 /** Reactive store backing the RenoDX card for a single game. */
@@ -102,6 +104,9 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   let selectedReshadeChannel = $state<ReshadeChannel>('stable');
   let outcome = $state<AvailabilityOutcome | null>(null);
   let manualInstall = $state<ManualFileInstall | null>(null);
+  // Global ReShade Vulkan layer status (from the availability preview); drives the
+  // consent prompt for a Vulkan install and the layer-management note.
+  let vulkanLayer = $state<VulkanLayerStatus | null>(null);
   let loading = $state(false);
   let loaded = $state(false);
   let busy = $state(false);
@@ -152,6 +157,16 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   const externalNotes = $derived<string[]>(externalFileInstall?.notes_keys ?? []);
   const externalRequiresConfirmation = $derived(externalRisk?.severity === 'warn');
   const externalIsBlocked = $derived(externalRisk?.severity === 'block');
+  // How RenoDX would hook in for the resolved install / external file-install.
+  const installHostKind = $derived<HostKind | null>(
+    outcome?.kind === 'installable' ? outcome.host_kind : null,
+  );
+  const externalHostKind = $derived<HostKind | null>(externalFileInstall?.host_kind ?? null);
+  // A Vulkan install needs consent to add the global ReShade Vulkan layer first, but
+  // only when none is present yet (a foreign/managed layer is reused without consent).
+  const vulkanConsentNeeded = $derived(
+    (installHostKind === 'vulkan' || externalHostKind === 'vulkan') && vulkanLayer === 'absent',
+  );
   const blacklistReason = $derived(outcome?.kind === 'blacklisted' ? outcome.reason : null);
   const risk = $derived<RiskAssessment | null>(
     outcome?.kind === 'installable' ? outcome.risk : null,
@@ -226,6 +241,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
       applyAvailabilitySnapshot(report, 'resetSelection');
       outcome = report.outcome;
       manualInstall = report.manual_install;
+      vulkanLayer = report.vulkan_layer;
       loaded = true;
     } catch (error) {
       if (token !== requestId) {
@@ -415,13 +431,25 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   }
 
   /**
-   * Installs RenoDX, then refreshes state. `confirmAnticheat` gates the warn
-   * case. Returns whether the install succeeded.
+   * Marks the global Vulkan layer as ours after a consented Vulkan install added it,
+   * so the card reflects the new state without waiting for a reload.
+   */
+  function notePossibleVulkanLayerInstall(confirmVulkanLayer: boolean): void {
+    if (confirmVulkanLayer && vulkanLayer === 'absent') {
+      vulkanLayer = 'managed';
+    }
+  }
+
+  /**
+   * Installs RenoDX, then refreshes state. `confirmAnticheat` gates the warn case;
+   * `confirmVulkanLayer` consents to adding the global ReShade Vulkan layer for a
+   * Vulkan game when none is present yet. Returns whether the install succeeded.
    */
   async function install(
     gameId: string,
     channel: ReshadeChannel,
     confirmAnticheat: boolean,
+    confirmVulkanLayer = false,
   ): Promise<boolean> {
     if (busy) {
       return false;
@@ -429,9 +457,10 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.install(gameId, channel, confirmAnticheat);
+      const nextState = await api.install(gameId, channel, confirmAnticheat, confirmVulkanLayer);
       selectedReshadeChannel = channel;
       refreshAfterMutation(gameId, nextState);
+      notePossibleVulkanLayerInstall(confirmVulkanLayer);
       return true;
     } catch (error) {
       publishErrorNotification(
@@ -446,13 +475,15 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
 
   /**
    * Installs RenoDX for an external game from a user-downloaded add-on file, then
-   * refreshes state. `confirmAnticheat` gates the warn case. Returns success.
+   * refreshes state. `confirmAnticheat` gates the warn case; `confirmVulkanLayer`
+   * consents to the global Vulkan layer for a Vulkan game. Returns success.
    */
   async function installFromFile(
     gameId: string,
     filePath: string,
     channel: ReshadeChannel,
     confirmAnticheat: boolean,
+    confirmVulkanLayer = false,
   ): Promise<boolean> {
     if (busy) {
       return false;
@@ -460,9 +491,16 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.installFromFile(gameId, filePath, channel, confirmAnticheat);
+      const nextState = await api.installFromFile(
+        gameId,
+        filePath,
+        channel,
+        confirmAnticheat,
+        confirmVulkanLayer,
+      );
       selectedReshadeChannel = channel;
       refreshAfterMutation(gameId, nextState);
+      notePossibleVulkanLayerInstall(confirmVulkanLayer);
       return true;
     } catch (error) {
       publishErrorNotification(
@@ -594,6 +632,29 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     }
   }
 
+  /**
+   * Removes RenderPilot's global ReShade Vulkan layer (user maintenance). A foreign
+   * layer is never touched. Updates the reported status. Returns success.
+   */
+  async function removeVulkanLayer(): Promise<boolean> {
+    if (busy) {
+      return false;
+    }
+    busy = true;
+    try {
+      vulkanLayer = await api.removeVulkanLayer();
+      return true;
+    } catch (error) {
+      publishErrorNotification(
+        t('gameDetails.renodx.vulkanLayer.removeError'),
+        describeCommandErrorTechnical(error),
+      );
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
+
   return {
     get state() {
       return state;
@@ -695,6 +756,14 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     get externalIsBlocked() {
       return externalIsBlocked;
     },
+    /** Global ReShade Vulkan layer status (null until the availability preview loads). */
+    get vulkanLayer() {
+      return vulkanLayer;
+    },
+    /** Whether installing this game needs the user to consent to the global Vulkan layer. */
+    get vulkanConsentNeeded() {
+      return vulkanConsentNeeded;
+    },
     get blacklistReason() {
       return blacklistReason;
     },
@@ -759,5 +828,6 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     uninstall,
     installDlssFix,
     uninstallDlssFix,
+    removeVulkanLayer,
   };
 }
