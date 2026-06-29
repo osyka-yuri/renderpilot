@@ -7,6 +7,20 @@
 //! tool-specific knowledge out of the generic domain and detection layers.
 
 use renderpilot_domain::{ExeGraphicsInfo, GraphicsApi};
+use serde::Serialize;
+
+/// How RenoDX hooks itself into a game, decided by the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostKind {
+    /// A per-game ReShade proxy DLL loaded next to the executable (Direct3D, or an
+    /// inconclusive read that defaults to a dxgi-style proxy).
+    Proxy,
+    /// The single global ReShade Vulkan implicit layer (a Vulkan game cannot load a
+    /// proxy DLL). Shared across all Vulkan games; see
+    /// [`renderpilot_platform_windows::vulkan_layer`].
+    Vulkan,
+}
 
 /// Returns whether RenoDX, a DirectX-only renovation engine, can target a game
 /// rendering with `api`.
@@ -18,14 +32,20 @@ pub const fn api_supports_renodx(api: GraphicsApi) -> bool {
     )
 }
 
-/// Whether `api` is a **confirmed** non-DirectX renderer (Vulkan or OpenGL) — one
-/// that cannot load a dxgi-style proxy, ruling RenoDX out. An `Unknown`/inconclusive
-/// read is *not* confirmed non-DirectX (it returns `false`), so the caller keeps
-/// trusting a curated title or an engine signal. Note this is **not** the negation
-/// of [`api_supports_renodx`], which also rejects `Unknown`.
+/// Decides how RenoDX hosts itself for a renderer, or `None` when it cannot.
+///
+/// Direct3D and an inconclusive (`Unknown`) read use a per-game [`HostKind::Proxy`]
+/// (a curated title or engine signal is trusted over an empty detection); a
+/// **confirmed** Vulkan renderer uses the global [`HostKind::Vulkan`] layer; a
+/// **confirmed** OpenGL renderer is unsupported (`None`). This is the single gate
+/// that turns a detected API into an install strategy.
 #[must_use]
-pub const fn is_non_directx_renderer(api: GraphicsApi) -> bool {
-    matches!(api, GraphicsApi::Vulkan | GraphicsApi::OpenGl)
+pub const fn host_decision(api: GraphicsApi) -> Option<HostKind> {
+    match api {
+        GraphicsApi::OpenGl => None,
+        GraphicsApi::Vulkan => Some(HostKind::Vulkan),
+        _ => Some(HostKind::Proxy),
+    }
 }
 
 /// Picks the single graphics API RenoDX should target from the detected set,
@@ -106,6 +126,24 @@ mod tests {
         ] {
             assert!(!api_supports_renodx(api));
         }
+    }
+
+    #[test]
+    fn host_decision_routes_proxy_vulkan_and_declines_opengl() {
+        // Direct3D and an inconclusive read use a per-game proxy DLL.
+        for api in [
+            GraphicsApi::D3D9,
+            GraphicsApi::D3D10,
+            GraphicsApi::D3D11,
+            GraphicsApi::D3D12,
+            GraphicsApi::Unknown,
+        ] {
+            assert_eq!(host_decision(api), Some(HostKind::Proxy));
+        }
+        // A confirmed Vulkan renderer uses the global Vulkan layer.
+        assert_eq!(host_decision(GraphicsApi::Vulkan), Some(HostKind::Vulkan));
+        // A confirmed OpenGL renderer is unsupported.
+        assert_eq!(host_decision(GraphicsApi::OpenGl), None);
     }
 
     #[test]

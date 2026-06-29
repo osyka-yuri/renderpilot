@@ -11,7 +11,7 @@
 use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
 use serde::Serialize;
 
-use super::policy::{api_supports_renodx, is_non_directx_renderer, primary_api, proxy_dll};
+use super::policy::{HostKind, api_supports_renodx, host_decision, primary_api, proxy_dll};
 use super::source;
 use super::types::{
     AnticheatEngine, AssessmentConfidence, Category, Channel, Engine, MatchKind, MatchRule,
@@ -77,7 +77,12 @@ pub struct ResolvedInstall {
     pub addon_url: String,
     /// Architecture of the add-on / executable.
     pub arch: Architecture,
-    /// Proxy DLL file name to install ReShade as.
+    /// How RenoDX hooks into this game: a per-game proxy DLL or the global Vulkan
+    /// layer. Determines which install path the service drives.
+    pub host_kind: HostKind,
+    /// Proxy DLL file name to install ReShade as. Meaningful only for
+    /// [`HostKind::Proxy`]; empty for a [`HostKind::Vulkan`] install (the host is
+    /// the global layer, not a file in the game folder).
     pub proxy_dll_name: String,
     /// Risk assessment to gate the install on.
     pub risk: Risk,
@@ -97,6 +102,7 @@ impl ResolvedInstall {
             confidence: self.confidence,
             risk: self.risk,
             notes_keys: self.notes_keys,
+            host_kind: self.host_kind,
         }
     }
 }
@@ -116,6 +122,9 @@ pub struct ExternalInstall {
     pub risk: Risk,
     /// i18n note/requirement keys.
     pub notes_keys: Vec<String>,
+    /// How RenoDX would hook into this game (proxy DLL or the global Vulkan layer),
+    /// so the file-install path drives the right one.
+    pub host_kind: HostKind,
 }
 
 /// Outcome of resolving a game against the manifest.
@@ -193,7 +202,7 @@ fn build_install_plan(
     rule: &MatchRule,
     facts: &MatchFacts,
 ) -> Result<ResolvedInstall, IncompatibilityReason> {
-    let proxy_dll_name = check_title_compatibility(title, facts)?;
+    let (host_kind, proxy_dll_name) = check_title_compatibility(title, facts)?;
     Ok(ResolvedInstall {
         slug: title.slug.clone(),
         // Prefer an explicit per-title download URL (third-party host) over the
@@ -203,6 +212,7 @@ fn build_install_plan(
             .clone()
             .unwrap_or_else(|| source::addon_url(&title.slug, title.arch)),
         arch: title.arch,
+        host_kind,
         proxy_dll_name,
         risk: title.risk.clone(),
         confidence: confidence_for(title.status, rule.kind),
@@ -226,12 +236,13 @@ pub fn resolve_external_install(
 }
 
 /// Whether RenoDX can be installed for this game from a user-supplied add-on file.
-/// The renderer must be DirectX or inconclusive — a confirmed Vulkan/OpenGL renderer
-/// cannot load a dxgi-style proxy. Backs the manual-install escape hatch for games
-/// with no automatic or curated-external path.
+/// True for a DirectX or inconclusive renderer (a per-game proxy) and for a confirmed
+/// Vulkan renderer (the global Vulkan layer); only a confirmed OpenGL renderer is
+/// refused. Backs the manual-install escape hatch for games with no automatic or
+/// curated-external path.
 #[must_use]
 pub fn file_installable(facts: &MatchFacts) -> bool {
-    !is_non_directx_renderer(primary_api(&facts.graphics))
+    host_decision(primary_api(&facts.graphics)).is_some()
 }
 
 /// The catalogue add-on slug for this game, if a title matches — so a manual install
@@ -243,19 +254,25 @@ pub fn matched_slug(manifest: &RenoDxManifest, facts: &MatchFacts) -> Option<Str
 }
 
 /// A generic install plan for a manual file install when no catalogue title matched:
-/// the host is the proxy DLL the game actually loads, `arch` is what the user's
-/// add-on targets, and risk is the conservative generic assessment. `None` when the
-/// renderer is confirmed non-DirectX (no proxy can load).
+/// the host is the proxy DLL the game loads (Direct3D) or the global Vulkan layer
+/// (confirmed Vulkan), `arch` is what the user's add-on targets, and risk is the
+/// conservative generic assessment. `None` when the renderer is confirmed OpenGL (no
+/// host RenoDX can drive).
 #[must_use]
 pub fn generic_file_install_plan(
     facts: &MatchFacts,
     arch: Architecture,
 ) -> Option<ResolvedInstall> {
-    file_installable(facts).then(|| ResolvedInstall {
+    let host_kind = host_decision(primary_api(&facts.graphics))?;
+    Some(ResolvedInstall {
         slug: String::new(),
         addon_url: String::new(),
         arch,
-        proxy_dll_name: resolve_proxy_dll(None, &facts.graphics),
+        host_kind,
+        proxy_dll_name: match host_kind {
+            HostKind::Proxy => resolve_proxy_dll(None, &facts.graphics),
+            HostKind::Vulkan => String::new(),
+        },
         risk: generic_risk(),
         confidence: MatchConfidence::Untested,
         notes_keys: Vec::new(),
@@ -272,20 +289,19 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
     };
 
     let api = primary_api(&facts.graphics);
-    // A confirmed non-DirectX renderer rules RenoDX out even with an engine
-    // match; an inconclusive (`Unknown`) detection does not — the engine signal
-    // (e.g. `UnityPlayer.dll`) already implies a DirectX renderer on Windows.
-    if is_non_directx_renderer(api) {
+    // Pick the host from the renderer: Direct3D / inconclusive → a proxy DLL (the
+    // engine signal, e.g. `UnityPlayer.dll`, implies a DirectX renderer on Windows);
+    // confirmed Vulkan → the global Vulkan layer; confirmed OpenGL → unsupported.
+    let Some(host_kind) = host_decision(api) else {
         return RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ApiUnsupported { detected: api },
         };
-    }
+    };
     let Some(arch) = facts.graphics.architecture() else {
         return RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ArchUnknown,
         };
     };
-    let proxy_dll_name = resolve_proxy_dll(None, &facts.graphics);
     let Some(addon_url) = source::generic_addon_url(generic, arch) else {
         return RenoDxResolution::NoMatch;
     };
@@ -299,7 +315,11 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
             .unwrap_or_else(|| engine.as_str().to_owned()),
         addon_url,
         arch,
-        proxy_dll_name,
+        host_kind,
+        proxy_dll_name: match host_kind {
+            HostKind::Proxy => resolve_proxy_dll(None, &facts.graphics),
+            HostKind::Vulkan => String::new(),
+        },
         risk: generic_risk(),
         confidence: confidence_for_status(generic.status),
         // The generic's engine label is surfaced as a note so the card can flag
@@ -323,27 +343,29 @@ fn resolve_proxy_dll(override_name: Option<&str>, graphics: &ExeGraphicsInfo) ->
         .unwrap_or_else(|| DEFAULT_PROXY_DLL.to_owned())
 }
 
-/// Validates a matched curated title and returns its proxy DLL name.
+/// Validates a matched curated title and returns its [`HostKind`] and (for a proxy
+/// host) the proxy DLL name.
 ///
 /// A curated title is RenoDX-supported by definition (it is in the catalogue) and
 /// carries its own architecture, so unreliable runtime API/architecture detection
 /// — which comes back empty whenever a game loads Direct3D dynamically — must
-/// never veto it. Detection is advisory here: it only refines the proxy DLL.
+/// never veto it. Detection is advisory here: it only picks the host and refines the
+/// proxy DLL.
 ///
-/// The two hard gates are physical: a **confirmed** non-DirectX renderer
-/// (Vulkan/OpenGL) cannot load a dxgi-style proxy, so the title is declined even
-/// though it is curated (an `Unknown`/inconclusive read is still trusted); and an
-/// explicit `required_api`, enforced only when detection identified a supported API
-/// to check against. External/native-HDR titles route by category before reaching
-/// here, so e.g. RDR2-Vulkan stays a Discord link rather than a broken proxy install.
+/// The two hard gates are physical: a **confirmed** OpenGL renderer has no host
+/// RenoDX can drive, so the title is declined even though it is curated (a confirmed
+/// Vulkan renderer is now hosted by the global Vulkan layer, and an
+/// `Unknown`/inconclusive read still defaults to a proxy); and an explicit
+/// `required_api`, enforced only when detection identified a supported API to check
+/// against.
 fn check_title_compatibility(
     title: &Title,
     facts: &MatchFacts,
-) -> Result<String, IncompatibilityReason> {
+) -> Result<(HostKind, String), IncompatibilityReason> {
     let detected = primary_api(&facts.graphics);
-    if is_non_directx_renderer(detected) {
+    let Some(host_kind) = host_decision(detected) else {
         return Err(IncompatibilityReason::ApiUnsupported { detected });
-    }
+    };
     if api_supports_renodx(detected)
         && !title.compatibility.required_api.is_empty()
         && !title.compatibility.required_api.contains(&detected)
@@ -353,10 +375,11 @@ fn check_title_compatibility(
             required: title.compatibility.required_api.clone(),
         });
     }
-    Ok(resolve_proxy_dll(
-        title.proxy_dll_override.as_deref(),
-        &facts.graphics,
-    ))
+    let proxy_dll_name = match host_kind {
+        HostKind::Proxy => resolve_proxy_dll(title.proxy_dll_override.as_deref(), &facts.graphics),
+        HostKind::Vulkan => String::new(),
+    };
+    Ok((host_kind, proxy_dll_name))
 }
 
 /// Selects the best `(title, matching-rule)` for the facts: highest rule tier,
@@ -630,11 +653,10 @@ mod tests {
     }
 
     #[test]
-    fn confirmed_non_directx_renderer_declines_even_a_curated_title() {
-        // A curated title is trusted over an inconclusive read, but a *confirmed*
-        // Vulkan/OpenGL renderer physically cannot load a dxgi-style proxy, so it is
-        // declined rather than given a non-loading install. (The unified resolver
-        // picks the real renderer, so a Vulkan reading is the game, not a stub.)
+    fn confirmed_vulkan_curated_title_installs_via_the_vulkan_layer() {
+        // A confirmed Vulkan renderer is now hosted by the global Vulkan layer, so a
+        // curated title installs (host_kind = Vulkan, no proxy DLL) rather than being
+        // declined as it was before.
         let m = manifest(vec![title(
             "cp2077",
             "cp2077",
@@ -644,6 +666,27 @@ mod tests {
         )]);
         let mut facts = facts();
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
+        match resolve(&m, &facts) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(plan.host_kind, HostKind::Vulkan);
+                assert!(plan.proxy_dll_name.is_empty());
+            }
+            other => panic!("expected installable via Vulkan, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn confirmed_opengl_curated_title_is_declined() {
+        // OpenGL has no host RenoDX can drive, so even a curated title is declined.
+        let m = manifest(vec![title(
+            "cp2077",
+            "cp2077",
+            Architecture::X64,
+            Status::Working,
+            vec![rule(MatchKind::SteamAppid, "1091500", 100)],
+        )]);
+        let mut facts = facts();
+        facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
         assert!(matches!(
             resolve(&m, &facts),
             RenoDxResolution::Incompatible {
@@ -797,9 +840,9 @@ mod tests {
     }
 
     #[test]
-    fn engine_generic_declines_confirmed_non_directx() {
-        // Detection that positively identifies a non-DirectX renderer still rules
-        // RenoDX out, even with an engine match.
+    fn engine_generic_installs_vulkan_and_declines_opengl() {
+        // An engine match with a confirmed Vulkan renderer now installs the generic
+        // via the global Vulkan layer; a confirmed OpenGL renderer is still declined.
         let mut m = manifest(vec![]);
         m.generics = vec![Generic {
             engine: Engine::Unreal,
@@ -811,7 +854,17 @@ mod tests {
         }];
         let mut facts = facts();
         facts.engine = Some("unreal".to_owned());
+
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
+        match resolve(&m, &facts) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(plan.host_kind, HostKind::Vulkan);
+                assert_eq!(plan.confidence, MatchConfidence::Untested);
+            }
+            other => panic!("expected generic Vulkan install, got {other:?}"),
+        }
+
+        facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
         assert!(matches!(
             resolve(&m, &facts),
             RenoDxResolution::Incompatible {
@@ -836,9 +889,10 @@ mod tests {
     }
 
     #[test]
-    fn external_vulkan_title_keeps_link_without_a_broken_file_install() {
+    fn external_vulkan_title_offers_a_vulkan_file_install() {
         // An external title whose renderer is confirmed Vulkan still shows its link
-        // (e.g. RDR2's Discord), but offers no file-install — a dxgi proxy can't load.
+        // (e.g. RDR2's Discord) AND now offers a file-install hosted by the global
+        // Vulkan layer (host_kind = Vulkan).
         let m = external_manifest();
         let mut facts = facts();
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
@@ -846,14 +900,28 @@ mod tests {
             RenoDxResolution::External {
                 file_install, url, ..
             } => {
-                assert!(
-                    file_install.is_none(),
-                    "no proxy file-install for a Vulkan renderer"
-                );
+                let fi = file_install.expect("a Vulkan external is file-installable via the layer");
+                assert_eq!(fi.host_kind, HostKind::Vulkan);
                 assert_eq!(url, "https://discord.gg/example");
             }
             other => panic!("expected external link, got {other:?}"),
         }
+        let plan = resolve_external_install(&m, &facts).expect("external vulkan install plan");
+        assert_eq!(plan.host_kind, HostKind::Vulkan);
+        assert!(plan.proxy_dll_name.is_empty());
+    }
+
+    #[test]
+    fn external_opengl_title_keeps_link_without_a_file_install() {
+        // OpenGL has no host RenoDX can drive: the external add-on stays link-only.
+        let m = external_manifest();
+        let mut facts = facts();
+        facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
+        match resolve(&m, &facts) {
+            RenoDxResolution::External { file_install, .. } => assert!(file_install.is_none()),
+            other => panic!("expected external link, got {other:?}"),
+        }
+        assert!(resolve_external_install(&m, &facts).is_none());
     }
 
     #[test]
@@ -872,30 +940,42 @@ mod tests {
     }
 
     #[test]
-    fn file_installable_for_directx_and_inconclusive_but_not_vulkan() {
+    fn file_installable_for_directx_inconclusive_and_vulkan_but_not_opengl() {
         let mut facts = facts();
-        // A confirmed Direct3D renderer is file-installable.
+        // A confirmed Direct3D renderer is file-installable (proxy).
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::D3D12], Some(Architecture::X64));
         assert!(file_installable(&facts));
-        // An inconclusive read still allows it (the renderer is unknown, not Vulkan).
+        // An inconclusive read still allows it (defaults to a proxy).
         facts.graphics = ExeGraphicsInfo::new(Vec::new(), None);
         assert!(file_installable(&facts));
-        // A confirmed Vulkan renderer cannot load a proxy.
+        // A confirmed Vulkan renderer is file-installable via the global layer.
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
+        assert!(file_installable(&facts));
+        // A confirmed OpenGL renderer is not.
+        facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
         assert!(!file_installable(&facts));
     }
 
     #[test]
-    fn generic_file_install_plan_for_directx_none_for_vulkan() {
+    fn generic_file_install_plan_routes_host_and_declines_opengl() {
         let mut facts = facts();
+        // Direct3D → a proxy-hosted generic plan.
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::D3D11], Some(Architecture::X64));
         let plan =
             generic_file_install_plan(&facts, Architecture::X64).expect("directx installable");
+        assert_eq!(plan.host_kind, HostKind::Proxy);
         assert!(plan.slug.is_empty(), "a generic plan has no catalogue slug");
         assert_eq!(plan.arch, Architecture::X64);
         assert!(!plan.proxy_dll_name.is_empty());
 
+        // Vulkan → a layer-hosted generic plan (no proxy DLL).
         facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::Vulkan], Some(Architecture::X64));
+        let vk = generic_file_install_plan(&facts, Architecture::X64).expect("vulkan installable");
+        assert_eq!(vk.host_kind, HostKind::Vulkan);
+        assert!(vk.proxy_dll_name.is_empty());
+
+        // OpenGL → no plan.
+        facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
         assert!(generic_file_install_plan(&facts, Architecture::X64).is_none());
     }
 
