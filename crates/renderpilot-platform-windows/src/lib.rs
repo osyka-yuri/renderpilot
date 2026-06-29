@@ -13,6 +13,8 @@ pub(crate) mod fs_walk;
 pub mod game_libraries;
 mod manual_folder;
 mod steam_appmanifest;
+#[cfg(windows)]
+pub mod vulkan_layer;
 
 #[cfg(windows)]
 pub use executable_detection::{
