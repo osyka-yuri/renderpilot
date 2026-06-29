@@ -83,6 +83,53 @@ export type RenoDxInstallState =
  */
 export type UpdateStatus = 'current' | 'available' | 'unknown';
 
+export type ReshadeChannel = 'stable' | 'nightly';
+
+export type ReshadeAddonSupport = 'full' | 'none' | 'unknown';
+export type ReshadeIdentity = 'weak' | 'probable' | 'confirmed';
+export type SlotActivity = 'active' | 'inactive' | 'ambiguous';
+export type ActiveSlotReason = 'detected_by_matcher' | 'dynamic_load_unknown';
+
+export type ReshadeHost =
+  | { status: 'absent' }
+  | {
+      status: 'present';
+      path: string;
+      slot: string;
+      version: string | null;
+      addon_support: ReshadeAddonSupport;
+      identity: ReshadeIdentity;
+      active: {
+        state: SlotActivity;
+        reason: ActiveSlotReason;
+      };
+    };
+
+export type ReshadeHostAction =
+  | 'conflict'
+  | 'reinstall_with_addon_support'
+  | 'repair_host'
+  | 'update_host'
+  | 'up_to_date';
+
+export type ManagedReshadeHealth = 'healthy' | 'missing' | 'conflicting';
+
+export type ReshadeHostOwnership =
+  | { kind: 'managed'; health: ManagedReshadeHealth }
+  | { kind: 'unmanaged_compatible' }
+  | { kind: 'unmanaged_conflicting' }
+  | { kind: 'missing' };
+
+export type RenoDxAddonLoadMode = 'auto_search' | 'load_from_dll_main' | 'unknown';
+
+export type RenoDxAddonState = {
+  present_on_disk: boolean;
+  expected_path: string;
+  discovered_path: string | null;
+  enabled_by_config: boolean | null;
+  load_mode: RenoDxAddonLoadMode;
+};
+
 /**
  * Single freshness verdict the card renders as a status pill. Derived in the
  * store from the update report and probe state:
@@ -152,6 +199,13 @@ export type ManualFileInstall = {
 /** Read-only preview returned by `renodx_availability`. */
 export type AvailabilityReport = {
   state: RenoDxInstallState;
+  reshade_host: ReshadeHost;
+  reshade_host_action: ReshadeHostAction;
+  reshade_conflict: boolean;
+  reshade_channel: ReshadeChannel | null;
+  reshade_stable_supported: boolean;
+  reshade_ownership: ReshadeHostOwnership;
+  renodx_addon: RenoDxAddonState | null;
   outcome: AvailabilityOutcome;
   manual_install: ManualFileInstall | null;
 };

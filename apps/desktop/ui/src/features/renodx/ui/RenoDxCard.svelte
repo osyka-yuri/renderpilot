@@ -5,7 +5,6 @@
   import { openExternal } from '@shared/api';
   import { t, translateKey } from '@shared/i18n';
   import {
-    Badge,
     Button,
     Card,
     CardContent,
@@ -18,7 +17,10 @@
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
   import { createRenoDxStore, type RenoDxStore } from '../model/create-renodx-store.svelte';
-  import type { MatchConfidence } from '../model/types';
+  import { humanizeMessageKey, riskFallbackKey } from '../model/reshade-presenters';
+  import type { ReshadeChannel } from '../model/types';
+  import RenoDxChannelSelect from './RenoDxChannelSelect.svelte';
+  import RenoDxConfidenceBadge from './RenoDxConfidenceBadge.svelte';
   import RenoDxExternalInstall from './RenoDxExternalInstall.svelte';
   import RenoDxInstalledPanel from './RenoDxInstalledPanel.svelte';
   import RenoDxManualInstall from './RenoDxManualInstall.svelte';
@@ -59,36 +61,29 @@
   // curated-external path), surfaced under the "unsupported"/"incompatible" states.
   const manualInstall = $derived(store.manualInstall);
 
-  // Confidence badge: an honest label for how the match was made. `verified`
-  // reads as a positive (secondary) badge; the weaker tiers stay outlined.
-  const CONFIDENCE_LABELS = {
-    verified: 'gameDetails.renodx.confidenceVerified',
-    experimental: 'gameDetails.renodx.confidenceExperimental',
-    untested: 'gameDetails.renodx.confidenceUntested',
-  } as const satisfies Record<MatchConfidence, string>;
-  const confidenceVariant = (confidence: MatchConfidence | null): 'secondary' | 'outline' =>
-    confidence === 'verified' ? 'secondary' : 'outline';
+  // A ReShade host conflict that would make a fresh install refuse: a non-ReShade
+  // file occupying the proxy slot, ReShade in a slot the game won't load, or more
+  // than one host present. Surfaced before the install button so the failure is
+  // explained up front rather than only as an install error.
+  const hostConflict = $derived(store.reshadeConflict || store.reshadeHostAction === 'conflict');
+  const installsManagedHost = $derived(
+    store.reshadeHostAction === 'update_host' ||
+      store.reshadeHostAction === 'repair_host' ||
+      store.reshadeHostAction === 'reinstall_with_addon_support',
+  );
 
   // Risk text: prefer a backend-provided message key, falling back to a
   // severity-based localized string when the key is not in the catalog.
-  const riskFallback = $derived(
-    store.isBlocked
-      ? t('gameDetails.renodx.riskBlocked')
-      : store.requiresConfirmation
-        ? t('gameDetails.renodx.riskWarn')
-        : t('gameDetails.renodx.riskSafe'),
+  const riskText = $derived(
+    store.risk ? translateKey(store.risk.message_key, t(riskFallbackKey(store.risk.severity))) : '',
   );
-  const riskText = $derived(store.risk ? translateKey(store.risk.message_key, riskFallback) : '');
-  const confidenceLabel = $derived(store.confidence ? t(CONFIDENCE_LABELS[store.confidence]) : '');
-
   const installLabel = $derived(
     store.busy ? t('gameDetails.renodx.installing') : t('gameDetails.renodx.actionInstall'),
   );
 
   // Inline notes/requirements (e.g. "run in DirectX"), each an i18n key with a
   // humanized fallback for keys not yet in the catalog.
-  const humanizeKey = (key: string): string => key.replace(/^.*\./, '').replace(/_/g, ' ');
-  const notes = $derived(store.notesKeys.map((key) => translateKey(key, humanizeKey(key))));
+  const notes = $derived(store.notesKeys.map((key) => translateKey(key, humanizeMessageKey(key))));
 
   // Localized incompatibility reason, falling back to the humanized enum name.
   const incompatibleReason = $derived(
@@ -120,13 +115,17 @@
     if (store.requiresConfirmation) {
       confirming = true;
     } else {
-      void store.install(gameId, false);
+      void store.install(gameId, store.selectedReshadeChannel, false);
     }
   }
 
   function installConfirmed(): void {
     confirming = false;
-    void store.install(gameId, true);
+    void store.install(gameId, store.selectedReshadeChannel, true);
+  }
+
+  function selectChannel(channel: ReshadeChannel): void {
+    store.setSelectedReshadeChannel(channel);
   }
 
   function retry(): void {
@@ -146,7 +145,7 @@
     <CardDescription>{t('gameDetails.renodx.description')}</CardDescription>
   </CardHeader>
 
-  <CardContent class="flex flex-wrap items-center gap-3">
+  <CardContent class="flex w-full flex-col gap-4">
     {#if store.loading && !store.loaded}
       <Spinner class="size-4" />
       <span class="text-sm text-muted-foreground">{t('gameDetails.renodx.loading')}</span>
@@ -203,8 +202,16 @@
       <div class="flex w-full flex-col gap-3">
         {#if store.confidence}
           <div>
-            <Badge variant={confidenceVariant(store.confidence)}>{confidenceLabel}</Badge>
+            <RenoDxConfidenceBadge confidence={store.confidence} />
           </div>
+        {/if}
+
+        {#if hostConflict}
+          <RenoDxStateMessage
+            tone="warning"
+            icon="warning"
+            message={t('gameDetails.renodx.host.conflictBlocksInstall')}
+          />
         {/if}
 
         {#if store.isBlocked}
@@ -244,6 +251,14 @@
         {/if}
 
         {#if !(store.requiresConfirmation && confirming)}
+          {#if installsManagedHost && !hostConflict}
+            <RenoDxChannelSelect
+              value={store.selectedReshadeChannel}
+              stableSupported={store.reshadeStableSupported}
+              disabled={combinedBusy}
+              onValueChange={selectChannel}
+            />
+          {/if}
           <div class="flex items-center gap-2">
             <DownloadProgressBar ids={[gameId]} active={store.busy} />
             {#if store.isBlocked}

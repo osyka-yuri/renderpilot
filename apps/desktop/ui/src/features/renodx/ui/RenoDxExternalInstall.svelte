@@ -3,12 +3,15 @@
   import { openExternal } from '@shared/api';
   import { t, translateKey } from '@shared/i18n';
   import { publishErrorNotification } from '@shared/notifications';
-  import { Badge, Button } from '@shared/ui';
+  import { Button } from '@shared/ui';
 
   import { ADDON_EXTENSIONS, isAddonFile } from '../model/validate-addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
-  import type { MatchConfidence } from '../model/types';
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
+  import { humanizeMessageKey, riskFallbackKey } from '../model/reshade-presenters';
+  import type { ReshadeChannel } from '../model/types';
+  import RenoDxChannelSelect from './RenoDxChannelSelect.svelte';
+  import RenoDxConfidenceBadge from './RenoDxConfidenceBadge.svelte';
 
   type Props = {
     gameId: string;
@@ -26,36 +29,21 @@
 
   const drop = createAddonDrop(() => externalDropEl, handleDroppedPaths);
 
-  const CONFIDENCE_LABELS = {
-    verified: 'gameDetails.renodx.confidenceVerified',
-    experimental: 'gameDetails.renodx.confidenceExperimental',
-    untested: 'gameDetails.renodx.confidenceUntested',
-  } as const satisfies Record<MatchConfidence, string>;
-  const confidenceVariant = (confidence: MatchConfidence | null): 'secondary' | 'outline' =>
-    confidence === 'verified' ? 'secondary' : 'outline';
-
   const externalLabel = $derived(
     store.externalLabelKey
       ? translateKey(store.externalLabelKey, t('gameDetails.renodx.actionOpenExternal'))
       : t('gameDetails.renodx.actionOpenExternal'),
   );
-  const externalConfidenceLabel = $derived(
-    store.externalConfidence ? t(CONFIDENCE_LABELS[store.externalConfidence]) : '',
-  );
-  const externalRiskFallback = $derived(
-    store.externalIsBlocked
-      ? t('gameDetails.renodx.riskBlocked')
-      : store.externalRequiresConfirmation
-        ? t('gameDetails.renodx.riskWarn')
-        : t('gameDetails.renodx.riskSafe'),
-  );
   const externalRiskText = $derived(
-    store.externalRisk ? translateKey(store.externalRisk.message_key, externalRiskFallback) : '',
+    store.externalRisk
+      ? translateKey(
+          store.externalRisk.message_key,
+          t(riskFallbackKey(store.externalRisk.severity)),
+        )
+      : '',
   );
   const externalNotes = $derived(
-    store.externalNotes.map((key) =>
-      translateKey(key, key.replace(/^.*\./, '').replace(/_/g, ' ')),
-    ),
+    store.externalNotes.map((key) => translateKey(key, humanizeMessageKey(key))),
   );
   const fileInstallLabel = $derived(
     store.busy
@@ -93,7 +81,7 @@
     if (store.externalRequiresConfirmation) {
       pendingFilePath = filePath;
     } else {
-      void store.installFromFile(gameId, filePath, false);
+      void store.installFromFile(gameId, filePath, store.selectedReshadeChannel, false);
     }
   }
 
@@ -101,8 +89,12 @@
     const file = pendingFilePath;
     pendingFilePath = null;
     if (file) {
-      void store.installFromFile(gameId, file, true);
+      void store.installFromFile(gameId, file, store.selectedReshadeChannel, true);
     }
+  }
+
+  function selectChannel(channel: ReshadeChannel): void {
+    store.setSelectedReshadeChannel(channel);
   }
 </script>
 
@@ -110,21 +102,43 @@
   bind:this={externalDropEl}
   role="region"
   aria-label={t('gameDetails.renodx.external.dropHint')}
-  class="flex w-full flex-wrap items-center gap-3 rounded-md border-2 border-dashed p-3 transition-colors"
-  class:border-primary={drop.dragActive}
-  class:border-transparent={!drop.dragActive}
+  class="flex w-full flex-col gap-3 rounded-md transition-shadow"
+  class:ring-2={drop.dragActive}
+  class:ring-primary={drop.dragActive}
 >
   {#if store.externalConfidence}
-    <Badge variant={confidenceVariant(store.externalConfidence)}>
-      {externalConfidenceLabel}
-    </Badge>
+    <div>
+      <RenoDxConfidenceBadge confidence={store.externalConfidence} />
+    </div>
   {/if}
-  <span class="text-sm text-muted-foreground">{externalRiskText}</span>
-  <div class="ml-auto flex items-center gap-2">
+
+  <p class="text-sm text-muted-foreground">{externalRiskText}</p>
+
+  {#if externalNotes.length > 0}
+    <ul class="list-inside list-disc text-xs text-muted-foreground">
+      {#each externalNotes as note (note)}
+        <li>{note}</li>
+      {/each}
+    </ul>
+  {/if}
+
+  <p class="text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
+
+  <RenoDxChannelSelect
+    value={store.selectedReshadeChannel}
+    stableSupported={store.reshadeStableSupported}
+    disabled={busy}
+    onValueChange={selectChannel}
+  />
+
+  {#if pendingFilePath}
+    <p class="text-xs text-destructive" aria-live="polite">
+      {t('gameDetails.renodx.confirmBody')}
+    </p>
+  {/if}
+
+  <div class="flex flex-wrap items-center gap-2">
     <DownloadProgressBar ids={[gameId]} active={store.busy} />
-    <Button variant="outline" size="sm" disabled={busy} onclick={openExternalLink}>
-      {externalLabel}
-    </Button>
     {#if store.externalIsBlocked}
       <Button size="sm" disabled>{t('gameDetails.renodx.external.installFromFile')}</Button>
     {:else if pendingFilePath}
@@ -137,18 +151,8 @@
     {:else}
       <Button size="sm" disabled={busy} onclick={pickFile}>{fileInstallLabel}</Button>
     {/if}
+    <Button variant="outline" size="sm" disabled={busy} onclick={openExternalLink}>
+      {externalLabel}
+    </Button>
   </div>
-  <p class="w-full text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
-  {#if externalNotes.length > 0}
-    <ul class="w-full list-inside list-disc text-xs text-muted-foreground">
-      {#each externalNotes as note (note)}
-        <li>{note}</li>
-      {/each}
-    </ul>
-  {/if}
-  {#if pendingFilePath}
-    <p class="w-full text-xs text-destructive" aria-live="polite">
-      {t('gameDetails.renodx.confirmBody')}
-    </p>
-  {/if}
 </div>

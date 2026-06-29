@@ -16,7 +16,31 @@ import type { RenoDxApi } from '../api/desktop';
 import { createRenoDxStore, deriveFreshness } from './create-renodx-store.svelte';
 import type { AvailabilityReport, RenoDxInstallState, RenoDxUpdateReport } from './types';
 
-const NOT_INSTALLED_SAFE: AvailabilityReport = {
+function availability(
+  report: Omit<
+    AvailabilityReport,
+    | 'reshade_host'
+    | 'reshade_host_action'
+    | 'reshade_conflict'
+    | 'reshade_channel'
+    | 'reshade_stable_supported'
+    | 'reshade_ownership'
+    | 'renodx_addon'
+  >,
+): AvailabilityReport {
+  return {
+    reshade_host: { status: 'absent' },
+    reshade_host_action: 'update_host',
+    reshade_conflict: false,
+    reshade_channel: null,
+    reshade_stable_supported: true,
+    reshade_ownership: { kind: 'missing' },
+    renodx_addon: null,
+    ...report,
+  };
+}
+
+const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
   state: { status: 'not_installed' },
   outcome: {
     kind: 'installable',
@@ -33,9 +57,9 @@ const NOT_INSTALLED_SAFE: AvailabilityReport = {
     notes_keys: [],
   },
   manual_install: null,
-};
+});
 
-const INSTALLED: AvailabilityReport = {
+const INSTALLED: AvailabilityReport = availability({
   state: {
     status: 'installed',
     version: 'snapshot-2026.06',
@@ -48,7 +72,7 @@ const INSTALLED: AvailabilityReport = {
   },
   outcome: { kind: 'unsupported' },
   manual_install: null,
-};
+});
 
 /** Install state with a DLSS-Fix companion tracked (mirrors the backend's
  *  `install_dlss_fix` response, which records a DlssFix tracked source). */
@@ -72,6 +96,7 @@ function fakeApi(overrides: Partial<RenoDxApi> = {}): RenoDxApi {
       } as RenoDxUpdateReport),
     ),
     update: vi.fn(() => Promise.resolve(INSTALLED.state)),
+    switchChannel: vi.fn(() => Promise.resolve(INSTALLED.state)),
     installDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
     uninstallDlssFix: vi.fn(() => Promise.resolve(INSTALLED.state)),
     dlssFixAvailability: vi.fn(() => Promise.resolve(false)),
@@ -98,8 +123,68 @@ describe('createRenoDxStore', () => {
     expect(store.risk?.severity).toBe('info');
   });
 
+  it('falls back the selected ReShade channel when stable is unsupported', async () => {
+    const withoutStable: AvailabilityReport = {
+      ...NOT_INSTALLED_SAFE,
+      reshade_stable_supported: false,
+    };
+    const store = createRenoDxStore(
+      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(withoutStable)) }),
+    );
+
+    await store.load('steam:1091500');
+    store.setSelectedReshadeChannel('stable');
+
+    expect(store.reshadeStableSupported).toBe(false);
+    expect(store.selectedReshadeChannel).toBe('nightly');
+  });
+
+  it('applies the availability snapshot consistently on load', async () => {
+    const report: AvailabilityReport = {
+      ...INSTALLED,
+      reshade_host: {
+        status: 'present',
+        path: 'C:\\Games\\Game\\dxgi.dll',
+        slot: 'dxgi.dll',
+        version: '6.5.1',
+        addon_support: 'full',
+        identity: 'confirmed',
+        active: {
+          state: 'active',
+          reason: 'detected_by_matcher',
+        },
+      },
+      reshade_host_action: 'up_to_date',
+      reshade_conflict: false,
+      reshade_channel: 'nightly',
+      reshade_stable_supported: false,
+      reshade_ownership: { kind: 'managed', health: 'healthy' },
+      renodx_addon: {
+        present_on_disk: true,
+        expected_path: 'C:\\Games\\Game\\renodx.addon64',
+        discovered_path: 'C:\\Games\\Game\\renodx.addon64',
+        enabled_by_config: true,
+        load_mode: 'auto_search',
+      },
+    };
+    const store = createRenoDxStore(
+      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
+    );
+
+    await store.load('steam:1091500');
+
+    expect(store.reshadeHost).toEqual(report.reshade_host);
+    expect(store.reshadeHostAction).toBe('up_to_date');
+    expect(store.reshadeConflict).toBe(false);
+    expect(store.reshadeChannel).toBe('nightly');
+    expect(store.reshadeStableSupported).toBe(false);
+    expect(store.reshadeOwnership).toEqual({ kind: 'managed', health: 'healthy' });
+    expect(store.renodxAddon).toEqual(report.renodx_addon);
+    expect(store.selectedReshadeChannel).toBe('nightly');
+  });
+
   it('flags a warn-risk game as requiring confirmation', async () => {
-    const warn: AvailabilityReport = {
+    const warn: AvailabilityReport = availability({
       state: { status: 'not_installed' },
       outcome: {
         kind: 'installable',
@@ -116,7 +201,7 @@ describe('createRenoDxStore', () => {
         notes_keys: [],
       },
       manual_install: null,
-    };
+    });
     const store = createRenoDxStore(
       fakeApi({ getAvailability: vi.fn(() => Promise.resolve(warn)) }),
     );
@@ -138,9 +223,9 @@ describe('createRenoDxStore', () => {
     });
     const store = createRenoDxStore(api);
 
-    await store.install('steam:1091500', true);
+    await store.install('steam:1091500', 'stable', true);
 
-    expect(api.install).toHaveBeenCalledWith('steam:1091500', true);
+    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'stable', true);
     expect(store.isInstalled).toBe(true);
     expect(store.isManaged).toBe(true);
     expect(store.busy).toBe(false);
@@ -196,8 +281,74 @@ describe('createRenoDxStore', () => {
     expect(store.updateAvailable).toBe(false);
   });
 
+  it('switchChannel() calls the backend and updates the current channel', async () => {
+    let switched = false;
+    const installedNightly: AvailabilityReport = {
+      ...INSTALLED,
+      reshade_channel: 'nightly',
+      reshade_ownership: { kind: 'managed', health: 'healthy' },
+    };
+    const installedStable: AvailabilityReport = {
+      ...installedNightly,
+      reshade_channel: 'stable',
+    };
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(switched ? installedStable : installedNightly)),
+      switchChannel: vi.fn(() => {
+        switched = true;
+        return Promise.resolve(INSTALLED.state);
+      }),
+    });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    const ok = await store.switchChannel('steam:1091500', 'stable');
+
+    expect(ok).toBe(true);
+    expect(api.switchChannel).toHaveBeenCalledWith('steam:1091500', 'stable');
+    expect(store.reshadeChannel).toBe('stable');
+  });
+
+  it('switchChannel() no-ops when the requested channel is already active', async () => {
+    const installedStable: AvailabilityReport = {
+      ...INSTALLED,
+      reshade_channel: 'stable',
+      reshade_ownership: { kind: 'managed', health: 'healthy' },
+    };
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(installedStable)),
+    });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    const ok = await store.switchChannel('steam:1091500', 'stable');
+
+    expect(ok).toBe(false);
+    expect(api.switchChannel).not.toHaveBeenCalled();
+  });
+
+  it('switchChannel() preserves the current channel on backend failure', async () => {
+    const installedNightly: AvailabilityReport = {
+      ...INSTALLED,
+      reshade_channel: 'nightly',
+      reshade_ownership: { kind: 'managed', health: 'healthy' },
+    };
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(installedNightly)),
+      switchChannel: vi.fn(() => Promise.reject(new Error('boom'))),
+    });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    const ok = await store.switchChannel('steam:1091500', 'stable');
+
+    expect(ok).toBe(false);
+    expect(api.switchChannel).toHaveBeenCalledWith('steam:1091500', 'stable');
+    expect(store.reshadeChannel).toBe('nightly');
+  });
+
   it('exposes the file-install offer for a compatible external game', async () => {
-    const EXTERNAL: AvailabilityReport = {
+    const EXTERNAL: AvailabilityReport = availability({
       state: { status: 'not_installed' },
       outcome: {
         kind: 'external',
@@ -218,7 +369,7 @@ describe('createRenoDxStore', () => {
         },
       },
       manual_install: null,
-    };
+    });
     let installed = false;
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(installed ? INSTALLED : EXTERNAL)),
@@ -234,19 +385,25 @@ describe('createRenoDxStore', () => {
     expect(store.externalFileInstallable).toBe(true);
     expect(store.externalConfidence).toBe('verified');
 
-    const ok = await store.installFromFile('steam:1091500', 'C:\\dl\\renodx-x.addon64', false);
+    const ok = await store.installFromFile(
+      'steam:1091500',
+      'C:\\dl\\renodx-x.addon64',
+      'nightly',
+      false,
+    );
 
     expect(ok).toBe(true);
     expect(api.installFromFile).toHaveBeenCalledWith(
       'steam:1091500',
       'C:\\dl\\renodx-x.addon64',
+      'nightly',
       false,
     );
     expect(store.isInstalled).toBe(true);
   });
 
   it('treats a link-only external game as not file-installable', async () => {
-    const LINK_ONLY: AvailabilityReport = {
+    const LINK_ONLY: AvailabilityReport = availability({
       state: { status: 'not_installed' },
       outcome: {
         kind: 'external',
@@ -255,7 +412,7 @@ describe('createRenoDxStore', () => {
         file_install: null,
       },
       manual_install: null,
-    };
+    });
     const store = createRenoDxStore(
       fakeApi({ getAvailability: vi.fn(() => Promise.resolve(LINK_ONLY)) }),
     );
@@ -285,7 +442,7 @@ describe('createRenoDxStore', () => {
     });
     const store = createRenoDxStore(api);
 
-    const ok = await store.install('steam:1091500', false);
+    const ok = await store.install('steam:1091500', 'stable', false);
 
     expect(ok).toBe(false);
     expect(store.busy).toBe(false);
@@ -374,16 +531,16 @@ describe('createRenoDxStore', () => {
     const store = createRenoDxStore(api);
     vi.mocked(clearDownloadProgress).mockClear();
 
-    await store.install('steam:1091500', false);
+    await store.install('steam:1091500', 'stable', false);
 
     expect(vi.mocked(clearDownloadProgress)).toHaveBeenCalledWith(['steam:1091500']);
   });
 
-  it('install() does not re-fetch availability or re-probe updates after the mutation', async () => {
-    // The perf regression guard: a mutation must not trigger a second
-    // getAvailability (which re-reads the game executable) nor a checkUpdate
-    // (which would re-download the add-on + ReShade host to compare digests).
-    // We just installed, so every tracked source is current by construction.
+  it('install() refreshes host state but does not re-probe updates after the mutation', async () => {
+    // A mutation re-reads the host (one local getAvailability scan, so the freshly
+    // installed ReShade replaces the pre-install host state) but must NOT trigger a
+    // checkUpdate (which would re-download the add-on + ReShade host to compare
+    // digests) — we just installed, so every tracked source is current.
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       checkUpdate: vi.fn(() =>
@@ -402,18 +559,90 @@ describe('createRenoDxStore', () => {
     const availabilityCallsAfterLoad = vi.mocked(api.getAvailability).mock.calls.length;
     const updateCallsAfterLoad = vi.mocked(api.checkUpdate).mock.calls.length;
 
-    await store.install('steam:1091500', false);
+    await store.install('steam:1091500', 'stable', false);
 
-    // No additional availability or update-check calls from the post-mutation
-    // refresh; the install verdict is derived from the command's nextState.
-    expect(vi.mocked(api.getAvailability).mock.calls.length).toBe(availabilityCallsAfterLoad);
+    // Exactly one extra availability scan (the host refresh) and no update-check:
+    // the install verdict is derived from the command's nextState.
+    expect(vi.mocked(api.getAvailability).mock.calls.length).toBe(availabilityCallsAfterLoad + 1);
     expect(vi.mocked(api.checkUpdate).mock.calls.length).toBe(updateCallsAfterLoad);
     expect(store.isInstalled).toBe(true);
     expect(store.updateStatus).toBe('current');
     expect(store.updateProbing).toBe(false);
   });
 
-  it('uninstall() clears the update report without re-fetching availability', async () => {
+  it('mutation host refresh applies the availability snapshot without changing state', async () => {
+    let installed = false;
+    const afterInstall: AvailabilityReport = {
+      ...INSTALLED,
+      reshade_host: {
+        status: 'present',
+        path: 'C:\\Games\\Game\\dxgi.dll',
+        slot: 'dxgi.dll',
+        version: '6.5.1',
+        addon_support: 'full',
+        identity: 'confirmed',
+        active: {
+          state: 'active',
+          reason: 'detected_by_matcher',
+        },
+      },
+      reshade_host_action: 'up_to_date',
+      reshade_conflict: false,
+      reshade_channel: 'stable',
+      reshade_stable_supported: true,
+      reshade_ownership: { kind: 'managed', health: 'healthy' },
+      renodx_addon: {
+        present_on_disk: true,
+        expected_path: 'C:\\Games\\Game\\renodx.addon64',
+        discovered_path: 'C:\\Games\\Game\\renodx.addon64',
+        enabled_by_config: true,
+        load_mode: 'auto_search',
+      },
+    };
+    const api = fakeApi({
+      getAvailability: vi.fn(() => Promise.resolve(installed ? afterInstall : NOT_INSTALLED_SAFE)),
+      install: vi.fn(() => {
+        installed = true;
+        return Promise.resolve(INSTALLED.state);
+      }),
+    });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    const ok = await store.install('steam:1091500', 'stable', false);
+    await Promise.resolve();
+
+    expect(ok).toBe(true);
+    expect(store.isInstalled).toBe(true);
+    expect(store.reshadeHost).toEqual(afterInstall.reshade_host);
+    expect(store.reshadeHostAction).toBe('up_to_date');
+    expect(store.reshadeChannel).toBe('stable');
+    expect(store.renodxAddon).toEqual(afterInstall.renodx_addon);
+  });
+
+  it('mutation host refresh failures keep the optimistic install state', async () => {
+    let calls = 0;
+    const api = fakeApi({
+      getAvailability: vi.fn(() => {
+        calls += 1;
+        return calls === 1
+          ? Promise.resolve(NOT_INSTALLED_SAFE)
+          : Promise.reject(new Error('scan failed'));
+      }),
+      install: vi.fn(() => Promise.resolve(INSTALLED.state)),
+    });
+    const store = createRenoDxStore(api);
+    await store.load('steam:1091500');
+
+    const ok = await store.install('steam:1091500', 'stable', false);
+    await Promise.resolve();
+
+    expect(ok).toBe(true);
+    expect(store.isInstalled).toBe(true);
+    expect(store.reshadeHost).toEqual({ status: 'absent' });
+  });
+
+  it('uninstall() refreshes host state and clears the update report', async () => {
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       uninstall: vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE.state)),
@@ -428,7 +657,8 @@ describe('createRenoDxStore', () => {
     expect(ok).toBe(true);
     expect(store.isInstalled).toBe(false);
     expect(store.updateStatus).toBeNull();
-    expect(vi.mocked(api.getAvailability).mock.calls.length).toBe(availabilityCallsAfterLoad);
+    // One extra availability scan refreshes the host after removal (no update probe).
+    expect(vi.mocked(api.getAvailability).mock.calls.length).toBe(availabilityCallsAfterLoad + 1);
   });
 
   it('surfaces the add-on date and install timestamps when installed', async () => {
@@ -489,7 +719,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({ install: vi.fn(() => Promise.resolve(installedWithoutDates)) });
     const store = createRenoDxStore(api);
 
-    await store.install('steam:1091500', false);
+    await store.install('steam:1091500', 'stable', false);
 
     expect(store.isInstalled).toBe(true);
     expect(store.installedAt).not.toBeNull();

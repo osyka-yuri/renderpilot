@@ -10,8 +10,9 @@
     type AddonValidation,
   } from '../model/validate-addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
-  import type { ManualFileInstall } from '../model/types';
+  import type { ManualFileInstall, ReshadeChannel } from '../model/types';
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
+  import RenoDxChannelSelect from './RenoDxChannelSelect.svelte';
 
   type Props = {
     gameId: string;
@@ -66,8 +67,12 @@
     pending = null;
     if (path) {
       // The explicit confirmation here also acknowledges the risk gate.
-      void store.installFromFile(gameId, path, true);
+      void store.installFromFile(gameId, path, store.selectedReshadeChannel, true);
     }
+  }
+
+  function selectChannel(channel: ReshadeChannel): void {
+    store.setSelectedReshadeChannel(channel);
   }
 </script>
 
@@ -75,12 +80,11 @@
   bind:this={dropEl}
   role="region"
   aria-label={t('gameDetails.renodx.external.dropHint')}
-  class="flex w-full flex-col gap-2 rounded-md border-2 border-dashed p-3 transition-colors"
-  class:border-primary={drop.dragActive}
-  class:border-transparent={!drop.dragActive}
+  class="flex w-full flex-col gap-3 rounded-md transition-shadow"
+  class:ring-2={drop.dragActive}
+  class:ring-primary={drop.dragActive}
 >
   <p class="text-sm font-medium">{t('gameDetails.renodx.fileInstall.title')}</p>
-  <p class="text-xs text-muted-foreground">{t('gameDetails.renodx.fileInstall.description')}</p>
 
   {#if blocked}
     <p class="flex items-center gap-1 text-sm text-destructive">
@@ -107,6 +111,12 @@
           {t('gameDetails.renodx.fileInstall.expected', { name: manual.expected_addon_name })}
         </p>
       {/if}
+      <RenoDxChannelSelect
+        value={store.selectedReshadeChannel}
+        stableSupported={store.reshadeStableSupported}
+        disabled={busy}
+        onValueChange={selectChannel}
+      />
       {#if pending.validation.warning}
         <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
@@ -129,6 +139,12 @@
       </p>
     {/if}
     <p class="text-xs text-muted-foreground">{riskText}</p>
+    <RenoDxChannelSelect
+      value={store.selectedReshadeChannel}
+      stableSupported={store.reshadeStableSupported}
+      disabled={busy}
+      onValueChange={selectChannel}
+    />
     <div>
       <Button size="sm" disabled={busy} onclick={pickFile}>
         {t('gameDetails.renodx.fileInstall.chooseFile')}

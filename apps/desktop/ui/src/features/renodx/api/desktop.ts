@@ -1,7 +1,12 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
 
-import type { AvailabilityReport, RenoDxInstallState, RenoDxUpdateReport } from '../model/types';
+import type {
+  AvailabilityReport,
+  RenoDxInstallState,
+  RenoDxUpdateReport,
+  ReshadeChannel,
+} from '../model/types';
 
 /** Previews whether RenoDX can be installed for a game (loads/caches the manifest). */
 export async function getRenoDxAvailability(gameId: string): Promise<AvailabilityReport> {
@@ -12,15 +17,17 @@ export async function getRenoDxAvailability(gameId: string): Promise<Availabilit
 
 /**
  * Installs RenoDX into a game and returns the resulting install state. Progress
- * is reported via `download-progress` events keyed by the game id. The ReShade
- * host, when one must be installed, is the nightly build.
+ * is reported via `download-progress` events keyed by the game id. The requested
+ * ReShade channel is recorded when RenderPilot manages the host.
  */
 export async function installRenoDx(
   gameId: string,
+  reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+    reshadeChannel,
     confirmAnticheat,
   });
 }
@@ -33,11 +40,13 @@ export async function installRenoDx(
 export async function installRenoDxFromFile(
   gameId: string,
   filePath: string,
+  reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install_from_file', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     filePath: requireNonBlankString(filePath, 'filePath'),
+    reshadeChannel,
     confirmAnticheat,
   });
 }
@@ -66,6 +75,17 @@ export async function checkRenoDxUpdate(gameId: string): Promise<RenoDxUpdateRep
 export async function updateRenoDx(gameId: string): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_update', {
     gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+/** Switches a managed ReShade host between stable and nightly. */
+export async function switchRenoDxReshadeChannel(
+  gameId: string,
+  reshadeChannel: ReshadeChannel,
+): Promise<RenoDxInstallState> {
+  return invokeDesktop<RenoDxInstallState>('renodx_switch_reshade_channel', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+    reshadeChannel,
   });
 }
 
@@ -101,6 +121,7 @@ export type RenoDxApi = {
   uninstall: typeof uninstallRenoDx;
   checkUpdate: typeof checkRenoDxUpdate;
   update: typeof updateRenoDx;
+  switchChannel: typeof switchRenoDxReshadeChannel;
   installDlssFix: typeof installRenoDxDlssFix;
   uninstallDlssFix: typeof uninstallRenoDxDlssFix;
   dlssFixAvailability: typeof getRenoDxDlssFixAvailability;
@@ -114,6 +135,7 @@ export const renodxApi: RenoDxApi = {
   uninstall: uninstallRenoDx,
   checkUpdate: checkRenoDxUpdate,
   update: updateRenoDx,
+  switchChannel: switchRenoDxReshadeChannel,
   installDlssFix: installRenoDxDlssFix,
   uninstallDlssFix: uninstallRenoDxDlssFix,
   dlssFixAvailability: getRenoDxDlssFixAvailability,

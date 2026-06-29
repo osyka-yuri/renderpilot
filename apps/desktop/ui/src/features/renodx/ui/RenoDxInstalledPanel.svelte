@@ -9,6 +9,15 @@
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import { formatDate, formatHttpDate, formatRelative } from '../model/format';
+  import {
+    CHANNEL_LABEL,
+    canSwitchReshadeChannel,
+    getAddonDescriptionKey,
+    getReshadeDescription,
+    getReshadeSwitchTarget,
+    isReshadeSwitchDisabled,
+    type ReshadeDescriptionPart,
+  } from '../model/reshade-presenters';
   import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
   import RenoDxComponentRow from './RenoDxComponentRow.svelte';
 
@@ -27,15 +36,52 @@
   const installedLabel = $derived(store.installedAt ? formatDate(store.installedAt) : null);
   const checkedLabel = $derived(store.lastCheckedAt ? formatRelative(store.lastCheckedAt) : null);
   const probing = $derived(store.freshness === 'checking');
+  const reshadeHost = $derived(store.reshadeHost);
+
+  function renderReshadeDescriptionPart(part: ReshadeDescriptionPart): string {
+    if (part.kind === 'version') {
+      return t(part.key, { version: part.version });
+    }
+    return t(part.key);
+  }
+
+  const reshadeChannelLabel = $derived(
+    store.reshadeChannel ? t(CHANNEL_LABEL[store.reshadeChannel]) : null,
+  );
+  const reshadeDescription = $derived.by((): string => {
+    const description = getReshadeDescription({
+      host: reshadeHost,
+      action: store.reshadeHostAction,
+      conflict: store.reshadeConflict,
+      ownership: store.reshadeOwnership,
+    });
+    if (description.kind === 'conflict') {
+      return t(description.key);
+    }
+    const parts = description.parts.map(renderReshadeDescriptionPart);
+    return parts.length > 0 ? parts.join(' · ') : t(description.fallbackKey);
+  });
+  const switchTarget = $derived(getReshadeSwitchTarget(store.reshadeChannel));
+  const canSwitchChannel = $derived(canSwitchReshadeChannel(store.reshadeOwnership, switchTarget));
+  const switchDisabled = $derived(
+    isReshadeSwitchDisabled({
+      busy,
+      target: switchTarget,
+      stableSupported: store.reshadeStableSupported,
+    }),
+  );
+  const switchLabel = $derived(
+    switchTarget
+      ? t('gameDetails.renodx.channel.switchTo', { channel: t(CHANNEL_LABEL[switchTarget]) })
+      : '',
+  );
 
   // "Installed from a file — not tracked" reads straight off the install state
   // (`addonTracked`), so it is correct on load, during the probe, and after a
   // probe failure — unlike inferring it from the update report's `addon`, which
   // is `null` in all three cases.
   const addonDescription = $derived(
-    store.addonTracked === false
-      ? t('gameDetails.renodx.component.addonFileInstall')
-      : t('gameDetails.renodx.component.addonDesc'),
+    t(getAddonDescriptionKey(store.renodxAddon, store.addonTracked)),
   );
 
   function checkForUpdates(): void {
@@ -52,6 +98,11 @@
   }
   function uninstallDlssFix(): void {
     void store.uninstallDlssFix(gameId);
+  }
+  function switchChannel(): void {
+    if (switchTarget) {
+      void store.switchChannel(gameId, switchTarget);
+    }
   }
 </script>
 
@@ -85,11 +136,28 @@
     <RenoDxComponentRow
       icon="reshade"
       title={t('gameDetails.renodx.component.reshade')}
-      description={store.isManaged
-        ? t('gameDetails.renodx.hostManaged')
-        : t('gameDetails.renodx.hostForeign')}
-      status={store.isManaged ? store.hostUpdate : null}
-    />
+      description={reshadeDescription}
+      status={store.hostUpdate}
+    >
+      {#snippet actions()}
+        {#if reshadeChannelLabel}
+          <Badge variant="outline">{reshadeChannelLabel}</Badge>
+        {/if}
+        {#if canSwitchChannel}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={switchDisabled}
+            title={switchTarget === 'stable' && !store.reshadeStableSupported
+              ? t('gameDetails.renodx.channel.stableUnavailable')
+              : switchLabel}
+            onclick={switchChannel}
+          >
+            {switchLabel}
+          </Button>
+        {/if}
+      {/snippet}
+    </RenoDxComponentRow>
     <RenoDxComponentRow
       icon="addon"
       title={t('gameDetails.renodx.component.addon')}

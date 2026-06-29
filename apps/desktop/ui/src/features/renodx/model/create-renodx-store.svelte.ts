@@ -8,14 +8,49 @@ import type {
   AvailabilityOutcome,
   ManualFileInstall,
   MatchConfidence,
+  RenoDxAddonState,
   RenoDxFreshness,
+  ReshadeHost,
+  ReshadeHostAction,
   RenoDxInstallState,
   RenoDxUpdateReport,
+  ReshadeChannel,
+  ReshadeHostOwnership,
   RiskAssessment,
 } from './types';
 
 /** Reactive store backing the RenoDX card for a single game. */
 export type RenoDxStore = ReturnType<typeof createRenoDxStore>;
+
+type AvailabilitySnapshot = {
+  reshadeHost: ReshadeHost;
+  reshadeHostAction: ReshadeHostAction;
+  reshadeConflict: boolean;
+  reshadeChannel: ReshadeChannel | null;
+  reshadeStableSupported: boolean;
+  reshadeOwnership: ReshadeHostOwnership;
+  renodxAddon: RenoDxAddonState | null;
+};
+
+function availabilitySnapshotFromReport(report: {
+  reshade_host: ReshadeHost;
+  reshade_host_action: ReshadeHostAction;
+  reshade_conflict: boolean;
+  reshade_channel: ReshadeChannel | null;
+  reshade_stable_supported: boolean;
+  reshade_ownership: ReshadeHostOwnership;
+  renodx_addon: RenoDxAddonState | null;
+}): AvailabilitySnapshot {
+  return {
+    reshadeHost: report.reshade_host,
+    reshadeHostAction: report.reshade_host_action,
+    reshadeConflict: report.reshade_conflict,
+    reshadeChannel: report.reshade_channel,
+    reshadeStableSupported: report.reshade_stable_supported,
+    reshadeOwnership: report.reshade_ownership,
+    renodxAddon: report.renodx_addon,
+  };
+}
 
 /**
  * Maps the probe state + update report to the single freshness verdict the card
@@ -55,6 +90,16 @@ export function deriveFreshness(
  */
 export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   let state = $state<RenoDxInstallState | null>(null);
+  let availabilitySnapshot = $state<AvailabilitySnapshot>({
+    reshadeHost: { status: 'absent' },
+    reshadeHostAction: 'conflict',
+    reshadeConflict: false,
+    reshadeChannel: null,
+    reshadeStableSupported: true,
+    reshadeOwnership: { kind: 'missing' },
+    renodxAddon: null,
+  });
+  let selectedReshadeChannel = $state<ReshadeChannel>('stable');
   let outcome = $state<AvailabilityOutcome | null>(null);
   let manualInstall = $state<ManualFileInstall | null>(null);
   let loading = $state(false);
@@ -138,6 +183,21 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   // logic lives in the pure, unit-tested `deriveFreshness` above.
   const freshness = $derived.by(() => deriveFreshness(updateProbing, probeFailed, updateReport));
 
+  function applyAvailabilitySnapshot(
+    report: Parameters<typeof availabilitySnapshotFromReport>[0],
+    mode: 'resetSelection' | 'preserveSelection',
+  ): void {
+    const nextSnapshot = availabilitySnapshotFromReport(report);
+    availabilitySnapshot = nextSnapshot;
+    if (nextSnapshot.reshadeChannel) {
+      selectedReshadeChannel = nextSnapshot.reshadeChannel;
+    } else if (mode === 'resetSelection') {
+      selectedReshadeChannel = nextSnapshot.reshadeStableSupported ? 'stable' : 'nightly';
+    } else if (!nextSnapshot.reshadeStableSupported && selectedReshadeChannel === 'stable') {
+      selectedReshadeChannel = 'nightly';
+    }
+  }
+
   /**
    * Loads the current install state and availability for `gameId`. Only the
    * most recent invocation commits its result; a stale response (a newer load
@@ -163,6 +223,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
         return;
       }
       state = report.state;
+      applyAvailabilitySnapshot(report, 'resetSelection');
       outcome = report.outcome;
       manualInstall = report.manual_install;
       loaded = true;
@@ -216,9 +277,33 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     // `outcome` is left as-is: installability is independent of the current
     // install state, so the last load's verdict is still valid.
 
+    // The host the slot loads *does* change on install/uninstall/replace, so the
+    // host state (version / add-on support / action / conflict / add-on config)
+    // must be re-read — otherwise a fresh install keeps the pre-install `Absent`
+    // host and the panel shows "version unknown · add-on support unknown". This is
+    // a local scan (no upstream probe); it does not touch the optimistic `state`.
+    void refreshHostInfo(gameId, token);
+
     // Offer to install a DLSS-Fix only when RenoDX is installed without one.
     if (stamped.status === 'installed' && !stamped.dlss_fix_installed) {
       void probeDlssFixAvailability(gameId, token);
+    }
+  }
+
+  /**
+   * Re-reads the ReShade host state after a mutation from a fresh availability
+   * scan (local, no upstream probe). Best-effort and token-guarded; a stale result
+   * (a newer load/mutation started meanwhile) is discarded, and the optimistic
+   * install `state` set by [`refreshAfterMutation`] is left untouched.
+   */
+  async function refreshHostInfo(gameId: string, token: number): Promise<void> {
+    try {
+      const report = await api.getAvailability(gameId);
+      if (token === requestId) {
+        applyAvailabilitySnapshot(report, 'preserveSelection');
+      }
+    } catch {
+      // Best-effort: a failed host refresh leaves the optimistic state in place.
     }
   }
 
@@ -333,14 +418,19 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
    * Installs RenoDX, then refreshes state. `confirmAnticheat` gates the warn
    * case. Returns whether the install succeeded.
    */
-  async function install(gameId: string, confirmAnticheat: boolean): Promise<boolean> {
+  async function install(
+    gameId: string,
+    channel: ReshadeChannel,
+    confirmAnticheat: boolean,
+  ): Promise<boolean> {
     if (busy) {
       return false;
     }
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.install(gameId, confirmAnticheat);
+      const nextState = await api.install(gameId, channel, confirmAnticheat);
+      selectedReshadeChannel = channel;
       refreshAfterMutation(gameId, nextState);
       return true;
     } catch (error) {
@@ -361,6 +451,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   async function installFromFile(
     gameId: string,
     filePath: string,
+    channel: ReshadeChannel,
     confirmAnticheat: boolean,
   ): Promise<boolean> {
     if (busy) {
@@ -369,7 +460,8 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.installFromFile(gameId, filePath, confirmAnticheat);
+      const nextState = await api.installFromFile(gameId, filePath, channel, confirmAnticheat);
+      selectedReshadeChannel = channel;
       refreshAfterMutation(gameId, nextState);
       return true;
     } catch (error) {
@@ -407,6 +499,35 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     } finally {
       busy = false;
     }
+  }
+
+  /** Switches the managed ReShade host channel and keeps the add-on channel-pinned. */
+  async function switchChannel(gameId: string, channel: ReshadeChannel): Promise<boolean> {
+    if (busy || channel === availabilitySnapshot.reshadeChannel) {
+      return false;
+    }
+    busy = true;
+    clearDownloadProgress([gameId]);
+    try {
+      const nextState = await api.switchChannel(gameId, channel);
+      selectedReshadeChannel = channel;
+      availabilitySnapshot = { ...availabilitySnapshot, reshadeChannel: channel };
+      refreshAfterMutation(gameId, nextState);
+      return true;
+    } catch (error) {
+      publishErrorNotification(
+        t('gameDetails.renodx.switchError'),
+        describeCommandErrorTechnical(error),
+      );
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
+
+  function setSelectedReshadeChannel(channel: ReshadeChannel): void {
+    selectedReshadeChannel =
+      channel === 'stable' && !availabilitySnapshot.reshadeStableSupported ? 'nightly' : channel;
   }
 
   /** Uninstalls RenoDX, then refreshes state. Returns whether it succeeded. */
@@ -476,6 +597,30 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   return {
     get state() {
       return state;
+    },
+    get reshadeHost() {
+      return availabilitySnapshot.reshadeHost;
+    },
+    get reshadeHostAction() {
+      return availabilitySnapshot.reshadeHostAction;
+    },
+    get reshadeConflict() {
+      return availabilitySnapshot.reshadeConflict;
+    },
+    get reshadeChannel() {
+      return availabilitySnapshot.reshadeChannel;
+    },
+    get reshadeStableSupported() {
+      return availabilitySnapshot.reshadeStableSupported;
+    },
+    get reshadeOwnership() {
+      return availabilitySnapshot.reshadeOwnership;
+    },
+    get selectedReshadeChannel() {
+      return selectedReshadeChannel;
+    },
+    get renodxAddon() {
+      return availabilitySnapshot.renodxAddon;
     },
     get outcome() {
       return outcome;
@@ -608,6 +753,8 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     checkForUpdates,
     install,
     installFromFile,
+    setSelectedReshadeChannel,
+    switchChannel,
     update,
     uninstall,
     installDlssFix,
