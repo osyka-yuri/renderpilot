@@ -3,6 +3,7 @@
 //! The crate contains data-driven library classification and filesystem
 //! detection helpers. It does not call platform APIs.
 
+mod anticheat;
 mod error;
 mod file_metadata;
 mod filesystem_detector;
@@ -11,6 +12,11 @@ mod normalize;
 mod pattern;
 mod pe;
 
+pub use anticheat::{
+    AntiCheatEngine, AntiCheatEvidence, AntiCheatEvidenceKind, AntiCheatScanOptions,
+    AntiCheatScanReport, DEFAULT_ANTICHEAT_MAX_SCANNED_ENTRIES, scan_anticheat,
+    scan_anticheat_with_options,
+};
 pub use error::LibraryPatternError;
 pub use file_metadata::{FileCacheKey, FileHashCache, VersionDetectionStatus, sha256_file};
 pub use filesystem_detector::{

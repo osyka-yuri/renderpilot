@@ -42,6 +42,7 @@ impl<'a> VersionInfo<'a> {
             file_description: self.string_value("FileDescription"),
             original_filename: self.string_value("OriginalFilename"),
             company_name: self.string_value("CompanyName"),
+            product_version: self.string_value("ProductVersion"),
         }
     }
 
@@ -104,6 +105,8 @@ pub struct VersionIdentityStrings {
     pub original_filename: Option<String>,
     /// `CompanyName`, when present.
     pub company_name: Option<String>,
+    /// `ProductVersion`, when present.
+    pub product_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]
