@@ -21,6 +21,9 @@
 //! Source resolution and the resulting [`super::matcher::RenoDxResolution`] live in
 //! [`super::source`] and [`super::matcher`]; this module is just the wire model.
 
+use std::fmt;
+use std::str::FromStr;
+
 use renderpilot_domain::{Architecture, GraphicsApi};
 use serde::{Deserialize, Serialize};
 
@@ -179,7 +182,78 @@ impl ReshadeChannel {
             Self::Nightly => "nightly",
         }
     }
+
+    /// Parses a channel stored in legacy/advisory metadata. Unknown or missing values are
+    /// recoverable: callers fall back to their default channel policy.
+    #[must_use]
+    pub fn parse_recorded(value: Option<&str>) -> RecordedChannelParse {
+        let Some(val) = value else {
+            return RecordedChannelParse::MissingDefaulted;
+        };
+        match val.parse() {
+            Ok(channel) => RecordedChannelParse::Parsed(channel),
+            Err(error) => {
+                log::warn!("{error}; falling back to default ReShade channel");
+                RecordedChannelParse::InvalidDefaulted {
+                    raw: val.to_owned(),
+                }
+            }
+        }
+    }
 }
+
+/// Result of parsing a channel from legacy/advisory metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordedChannelParse {
+    /// Successfully parsed into a known channel.
+    Parsed(ReshadeChannel),
+    /// The record had no channel (legacy). Defaulted.
+    MissingDefaulted,
+    /// The record had an unknown channel string. Defaulted.
+    InvalidDefaulted {
+        /// The raw string that failed to parse.
+        raw: String,
+    },
+}
+
+impl RecordedChannelParse {
+    /// Returns the parsed channel if valid, or `None` if it was missing/invalid.
+    #[must_use]
+    pub fn into_parsed(self) -> Option<ReshadeChannel> {
+        match self {
+            Self::Parsed(c) => Some(c),
+            Self::MissingDefaulted | Self::InvalidDefaulted { .. } => None,
+        }
+    }
+}
+
+impl FromStr for ReshadeChannel {
+    type Err = ReshadeChannelParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "stable" => Ok(Self::Stable),
+            "nightly" => Ok(Self::Nightly),
+            _ => Err(ReshadeChannelParseError {
+                value: value.to_owned(),
+            }),
+        }
+    }
+}
+
+/// Error returned when a user/API supplied ReShade channel is not recognized.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReshadeChannelParseError {
+    value: String,
+}
+
+impl fmt::Display for ReshadeChannelParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid ReShade channel: {}", self.value)
+    }
+}
+
+impl std::error::Error for ReshadeChannelParseError {}
 
 // ---------------------------------------------------------------------------
 // Engine generics
@@ -480,13 +554,13 @@ pub enum AssessmentConfidence {
     Low,
 }
 
-/// `reshade.ini` adjustments required for a RenoDX add-on to behave correctly.
+/// `reshade.ini` adjustments requested for a RenoDX add-on to behave correctly.
 ///
-/// Constant across games (RenoDX always wants the bundled depth/runtime add-ons
-/// off and the add-on search path set to the ReShade folder), so the install flow
-/// supplies [`ReshadeIniTweaks::renodx_defaults`] rather than the manifest carrying
-/// it per title. The optional [`DlssFixIniTweaks`] is populated only when a
-/// DLSS-Fix companion add-on is installed.
+/// The install flow starts from [`ReshadeIniTweaks::renodx_defaults`] rather than
+/// carrying these values in the manifest, then filters the default disabled-addons
+/// list when the target folder already has user ReShade effects/presets. The
+/// optional [`DlssFixIniTweaks`] is populated only when a DLSS-Fix companion add-on
+/// is installed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReshadeIniTweaks {
     /// Bundled ReShade add-ons to disable.
@@ -515,10 +589,10 @@ pub struct DlssFixIniTweaks {
 }
 
 impl ReshadeIniTweaks {
-    /// The tweaks every RenoDX install applies. `AddonPath` is left unset —
-    /// ReShade already defaults its add-on search path to the ReShade DLL
-    /// folder (the game folder), where the RenoDX add-on is placed, so an
-    /// explicit `AddonPath=.` would be redundant.
+    /// The default tweaks a RenoDX install requests before folder-specific
+    /// filtering. `AddonPath` is left unset — ReShade already defaults its add-on
+    /// search path to the ReShade DLL folder (the game folder), where the RenoDX
+    /// add-on is placed, so an explicit `AddonPath=.` would be redundant.
     #[must_use]
     pub fn renodx_defaults() -> Self {
         Self {

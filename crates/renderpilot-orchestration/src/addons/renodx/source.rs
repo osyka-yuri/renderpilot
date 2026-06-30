@@ -7,7 +7,9 @@
 
 use renderpilot_domain::Architecture;
 
+use super::errors;
 use super::types::{Generic, ReshadeChannel, ReshadeConfig};
+use crate::ServiceError;
 
 /// GitHub Pages host serving the per-game RenoDX add-ons.
 const RENODX_BASE: &str = "https://clshortfuse.github.io/renodx";
@@ -63,9 +65,9 @@ pub(super) fn dlss_fix_url(arch: Architecture) -> String {
 
 /// A concrete ReShade host source for a channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ReshadeSource {
-    pub channel: ReshadeChannel,
-    pub url: String,
+pub(crate) struct ReshadeSource {
+    pub(crate) channel: ReshadeChannel,
+    pub(crate) url: String,
 }
 
 /// The add-on-enabled ReShade host archive URL for a channel and architecture.
@@ -88,6 +90,16 @@ pub(super) fn reshade_source(
             },
         }),
     }
+}
+
+/// Like [`reshade_source`], but rejects a channel absent from the manifest
+/// with the shared "channel not available" error instead of returning `None`.
+pub(super) fn require_reshade_source(
+    config: &ReshadeConfig,
+    channel: ReshadeChannel,
+    arch: Architecture,
+) -> Result<ReshadeSource, ServiceError> {
+    reshade_source(config, channel, arch).ok_or_else(|| errors::channel_unavailable(channel))
 }
 
 #[cfg(test)]
@@ -187,5 +199,28 @@ mod tests {
         assert!(
             reshade_source(&without_stable, ReshadeChannel::Stable, Architecture::X64).is_none()
         );
+    }
+
+    #[test]
+    fn require_reshade_source_rejects_absent_channel_with_shared_message() {
+        let config = ReshadeConfig {
+            stable: None,
+            nightly: ReshadeNightly {
+                url64: "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip"
+                    .to_owned(),
+                url32: "https://nightly.link/crosire/reshade/workflows/build/main/x86.zip"
+                    .to_owned(),
+            },
+        };
+
+        let error = require_reshade_source(&config, ReshadeChannel::Stable, Architecture::X64)
+            .expect_err("stable channel is absent from the manifest");
+
+        match error {
+            crate::ServiceError::InvalidInput(message) => {
+                assert_eq!(message, "ReShade channel `stable` is not available");
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
     }
 }

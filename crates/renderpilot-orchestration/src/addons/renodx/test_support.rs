@@ -196,3 +196,35 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
 fn align_up(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
 }
+
+use renderpilot_application::{AppResult, SharedArtifactRepository};
+use renderpilot_domain::{SharedArtifactKind, SharedArtifactRecord};
+use std::sync::{Arc, Mutex};
+
+#[derive(Default, Clone)]
+pub(crate) struct InMemorySharedArtifactRepository {
+    pub artifacts: Arc<Mutex<Vec<SharedArtifactRecord>>>,
+}
+
+impl SharedArtifactRepository for InMemorySharedArtifactRepository {
+    fn upsert_shared_artifact(&self, record: &SharedArtifactRecord) -> AppResult<()> {
+        let mut artifacts = self.artifacts.lock().unwrap();
+        artifacts.retain(|r| r.kind() != record.kind());
+        artifacts.push(record.clone());
+        Ok(())
+    }
+
+    fn get_shared_artifact(
+        &self,
+        kind: SharedArtifactKind,
+    ) -> AppResult<Option<SharedArtifactRecord>> {
+        let artifacts = self.artifacts.lock().unwrap();
+        Ok(artifacts.iter().find(|r| r.kind() == kind).cloned())
+    }
+
+    fn delete_shared_artifact(&self, kind: SharedArtifactKind) -> AppResult<()> {
+        let mut artifacts = self.artifacts.lock().unwrap();
+        artifacts.retain(|r| r.kind() != kind);
+        Ok(())
+    }
+}
