@@ -3,6 +3,7 @@
   import { ToggleGroup, ToggleGroupItem } from '@shared/ui';
 
   import type { ReshadeChannel } from '../model/types';
+  import RenoDxFieldLabel from './RenoDxFieldLabel.svelte';
 
   type Props = {
     value: ReshadeChannel;
@@ -32,18 +33,20 @@
   }
 </script>
 
-<ToggleGroup
-  type="single"
-  variant="outline"
-  size="sm"
-  {value}
-  onValueChange={handleValueChange}
-  aria-label={t('gameDetails.renodx.channel.label')}
->
-  <ToggleGroupItem value="stable" disabled={stableDisabled} title={stableTitle}>
-    {t('gameDetails.renodx.channel.stable')}
-  </ToggleGroupItem>
-  <ToggleGroupItem value="nightly" {disabled}>
-    {t('gameDetails.renodx.channel.nightly')}
-  </ToggleGroupItem>
-</ToggleGroup>
+<RenoDxFieldLabel label={t('gameDetails.renodx.channel.label')} inline={false}>
+  <ToggleGroup
+    type="single"
+    variant="outline"
+    size="sm"
+    {value}
+    onValueChange={handleValueChange}
+    aria-label={t('gameDetails.renodx.channel.label')}
+  >
+    <ToggleGroupItem value="stable" disabled={stableDisabled} title={stableTitle}>
+      {t('gameDetails.renodx.channel.stable')}
+    </ToggleGroupItem>
+    <ToggleGroupItem value="nightly" {disabled}>
+      {t('gameDetails.renodx.channel.nightly')}
+    </ToggleGroupItem>
+  </ToggleGroup>
+</RenoDxFieldLabel>

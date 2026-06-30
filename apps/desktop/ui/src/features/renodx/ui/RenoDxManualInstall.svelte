@@ -78,6 +78,10 @@
     }
   }
 
+  function cancelReview(): void {
+    pending = null;
+  }
+
   function selectChannel(channel: ReshadeChannel): void {
     store.setSelectedReshadeChannel(channel);
   }
@@ -114,7 +118,7 @@
         {t('gameDetails.renodx.fileInstall.confirm', { fileName: pending.validation.fileName })}
       </p>
       {#if manual.expected_addon_name}
-        <p class="text-xs text-muted-foreground">
+        <p class="text-sm text-muted-foreground">
           {t('gameDetails.renodx.fileInstall.expected', { name: manual.expected_addon_name })}
         </p>
       {/if}
@@ -131,12 +135,12 @@
         </p>
       {/if}
       {#if store.vulkanConsentNeeded}
-        <p class="text-xs text-muted-foreground">
+        <p class="text-sm text-muted-foreground">
           {t('gameDetails.renodx.vulkanLayer.consentBody')}
         </p>
       {/if}
       <div class="flex items-center gap-2">
-        <Button variant="outline" size="sm" onclick={() => (pending = null)}>
+        <Button variant="outline" size="sm" onclick={cancelReview}>
           {t('gameDetails.renodx.cancel')}
         </Button>
         <Button size="sm" disabled={busy} onclick={confirmInstall}>
@@ -146,11 +150,11 @@
     {/if}
   {:else}
     {#if manual.expected_addon_name}
-      <p class="text-xs text-muted-foreground">
+      <p class="text-sm text-muted-foreground">
         {t('gameDetails.renodx.fileInstall.expected', { name: manual.expected_addon_name })}
       </p>
     {/if}
-    <p class="text-xs text-muted-foreground">{riskText}</p>
+    <p class="text-sm text-muted-foreground">{riskText}</p>
     <RenoDxChannelSelect
       value={store.selectedReshadeChannel}
       stableSupported={store.reshadeStableSupported}
@@ -164,5 +168,5 @@
     </div>
   {/if}
 
-  <p class="text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
+  <p class="text-sm text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
 </div>

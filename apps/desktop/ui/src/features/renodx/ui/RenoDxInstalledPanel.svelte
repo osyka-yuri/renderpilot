@@ -6,6 +6,7 @@
   import ClockIcon from '@lucide/svelte/icons/clock';
   import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
+  import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import { formatDate, formatHttpDate, formatRelative } from '../model/format';
@@ -20,6 +21,8 @@
   } from '../model/reshade-presenters';
   import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
   import RenoDxComponentRow from './RenoDxComponentRow.svelte';
+  import RenoDxFieldLabel from './RenoDxFieldLabel.svelte';
+  import RenoDxUninstallAction from './RenoDxUninstallAction.svelte';
 
   type Props = {
     gameId: string;
@@ -29,6 +32,8 @@
   };
 
   const { gameId, store, busy }: Props = $props();
+
+  const BRAND_LABEL = 'RenoDX';
 
   // The concrete "what's installed" anchor: the add-on's upstream date when known,
   // otherwise the local install date. (A rolling-snapshot add-on has no version.)
@@ -107,9 +112,13 @@
 </script>
 
 <div class="flex w-full flex-col gap-4">
-  <div class="flex flex-wrap items-center gap-2">
-    <Badge variant="secondary">{t('gameDetails.renodx.statusInstalled')}</Badge>
-    <RenoDxStatusBadge status={store.freshness} />
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <RenoDxFieldLabel label={BRAND_LABEL} wrap={false} gap={1.5}>
+      <Badge variant="secondary">{t('gameDetails.renodx.statusInstalled')}</Badge>
+    </RenoDxFieldLabel>
+    <RenoDxFieldLabel label={t('gameDetails.renodx.fresh.label')} wrap={false} gap={1.5}>
+      <RenoDxStatusBadge status={store.freshness} />
+    </RenoDxFieldLabel>
   </div>
 
   <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -173,7 +182,8 @@
         status={store.dlssFixUpdate}
       >
         {#snippet actions()}
-          <Button variant="ghost" size="sm" disabled={busy} onclick={uninstallDlssFix}>
+          <Button variant="destructive" size="sm" disabled={busy} onclick={uninstallDlssFix}>
+            <Trash2Icon class="size-4" aria-hidden="true" />
             {t('gameDetails.renodx.actionRemoveDlssFix')}
           </Button>
         {/snippet}
@@ -216,8 +226,6 @@
         {/if}
       </Button>
     {/if}
-    <Button variant="ghost" size="sm" class="ml-auto" disabled={busy} onclick={uninstall}>
-      {t('gameDetails.renodx.actionUninstall')}
-    </Button>
+    <RenoDxUninstallAction {busy} onConfirm={uninstall} />
   </div>
 </div>

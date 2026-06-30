@@ -144,6 +144,10 @@
     void store.install(gameId, store.selectedReshadeChannel, true, store.vulkanConsentNeeded);
   }
 
+  function cancelInstallConfirmation(): void {
+    confirming = false;
+  }
+
   function selectChannel(channel: ReshadeChannel): void {
     store.setSelectedReshadeChannel(channel);
   }
@@ -239,7 +243,7 @@
         {:else if needsConfirm && confirming}
           <RenoDxStateMessage tone="warning" icon="warning" message={confirmMessage}>
             {#snippet actions()}
-              <Button size="sm" variant="outline" onclick={() => (confirming = false)}>
+              <Button size="sm" variant="outline" onclick={cancelInstallConfirmation}>
                 {t('gameDetails.renodx.cancel')}
               </Button>
               <Button
@@ -259,7 +263,7 @@
         {/if}
 
         {#if notes.length > 0}
-          <ul class="list-inside list-disc text-xs text-muted-foreground">
+          <ul class="list-inside list-disc text-sm text-muted-foreground">
             {#each notes as note (note)}
               <li>{note}</li>
             {/each}

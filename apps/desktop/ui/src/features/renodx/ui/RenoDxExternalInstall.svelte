@@ -120,6 +120,10 @@
     }
   }
 
+  function cancelFileInstall(): void {
+    pendingFilePath = null;
+  }
+
   function selectChannel(channel: ReshadeChannel): void {
     store.setSelectedReshadeChannel(channel);
   }
@@ -142,14 +146,14 @@
   <p class="text-sm text-muted-foreground">{externalRiskText}</p>
 
   {#if externalNotes.length > 0}
-    <ul class="list-inside list-disc text-xs text-muted-foreground">
+    <ul class="list-inside list-disc text-sm text-muted-foreground">
       {#each externalNotes as note (note)}
         <li>{note}</li>
       {/each}
     </ul>
   {/if}
 
-  <p class="text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
+  <p class="text-sm text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
 
   <RenoDxChannelSelect
     value={store.selectedReshadeChannel}
@@ -159,8 +163,8 @@
   />
 
   {#if pendingFilePath}
-    <p class="text-xs text-destructive" aria-live="polite">
-      {t('gameDetails.renodx.confirmBody')}
+    <p class="text-sm text-destructive" aria-live="polite">
+      {confirmBodyText}
     </p>
   {/if}
 
@@ -169,7 +173,7 @@
     {#if store.externalIsBlocked}
       <Button size="sm" disabled>{t('gameDetails.renodx.external.installFromFile')}</Button>
     {:else if pendingFilePath}
-      <Button size="sm" variant="outline" onclick={() => (pendingFilePath = null)}>
+      <Button size="sm" variant="outline" onclick={cancelFileInstall}>
         {t('gameDetails.renodx.cancel')}
       </Button>
       <Button
@@ -187,17 +191,4 @@
       {externalLabel}
     </Button>
   </div>
-  <p class="w-full text-xs text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
-  {#if externalNotes.length > 0}
-    <ul class="w-full list-inside list-disc text-xs text-muted-foreground">
-      {#each externalNotes as note (note)}
-        <li>{note}</li>
-      {/each}
-    </ul>
-  {/if}
-  {#if pendingFilePath}
-    <p class="w-full text-xs text-destructive" aria-live="polite">
-      {confirmBodyText}
-    </p>
-  {/if}
 </div>
