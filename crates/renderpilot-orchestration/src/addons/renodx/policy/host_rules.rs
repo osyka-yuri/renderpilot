@@ -100,6 +100,21 @@ pub fn proxy_dll(info: &ExeGraphicsInfo) -> Option<String> {
     Some(proxy.to_owned())
 }
 
+/// Default ReShade proxy DLL when the detected API is inconclusive: dxgi.dll
+/// loads for D3D10/11/12, which covers essentially every modern RenoDX title.
+pub const DEFAULT_PROXY_DLL: &str = "dxgi.dll";
+
+/// The proxy DLL ReShade installs as: an explicit per-title override, else the
+/// DLL the game actually imports (via [proxy_dll], in ReShade preference), else
+/// the [DEFAULT_PROXY_DLL] — so the install hooks the DLL the game really loads
+/// and an inconclusive read still resolves to a sane modern default.
+pub fn resolve_proxy_dll(override_name: Option<&str>, graphics: &ExeGraphicsInfo) -> String {
+    override_name
+        .map(str::to_owned)
+        .or_else(|| proxy_dll(graphics))
+        .unwrap_or_else(|| DEFAULT_PROXY_DLL.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,7 +155,7 @@ mod tests {
         ] {
             assert_eq!(host_decision(api), Some(HostKind::Proxy));
         }
-        // A confirmed Vulkan renderer uses the global Vulkan layer.
+        // A confirmed Vulkan renderer uses the shared Vulkan layer.
         assert_eq!(host_decision(GraphicsApi::Vulkan), Some(HostKind::Vulkan));
         // A confirmed OpenGL renderer is unsupported.
         assert_eq!(host_decision(GraphicsApi::OpenGl), None);
