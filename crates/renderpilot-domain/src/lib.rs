@@ -14,7 +14,9 @@ mod text;
 mod version;
 
 pub use addon::{
-    ExeGraphicsInfo, InstalledAddon, RenoDxInstallState, TrackedSource, TrackedSourceRole,
+    ExeGraphicsInfo, InstalledAddon, InstalledAddonHostKind, RenoDxHostKind, RenoDxInstallState,
+    SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource,
+    TrackedSource, TrackedSourceRole,
 };
 pub use component::{
     ArtifactTrustLevel, ComponentError, ComponentFile, GraphicsComponent, LibraryArtifact,

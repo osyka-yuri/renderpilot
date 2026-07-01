@@ -11,11 +11,13 @@
 use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
 use serde::Serialize;
 
-use super::policy::{HostKind, api_supports_renodx, host_decision, primary_api, proxy_dll};
+use super::policy::{
+    HostKind, check_title_compatibility, generic_risk, host_decision, primary_api,
+    resolve_proxy_dll,
+};
 use super::source;
 use super::types::{
-    AnticheatEngine, AssessmentConfidence, Category, Channel, Engine, MatchKind, MatchRule,
-    OnlineKind, RenoDxManifest, Risk, RiskSeverity, Status, Title,
+    Category, Channel, Engine, MatchKind, MatchRule, RenoDxManifest, Risk, Status, Title,
 };
 
 /// Facts about an installed game that match rules are evaluated against.
@@ -122,7 +124,7 @@ pub struct ExternalInstall {
     pub risk: Risk,
     /// i18n note/requirement keys.
     pub notes_keys: Vec<String>,
-    /// How RenoDX would hook into this game (proxy DLL or the global Vulkan layer),
+    /// How RenoDX would hook into this game (proxy DLL or the shared Vulkan layer),
     /// so the file-install path drives the right one.
     pub host_kind: HostKind,
 }
@@ -237,7 +239,7 @@ pub fn resolve_external_install(
 
 /// Whether RenoDX can be installed for this game from a user-supplied add-on file.
 /// True for a DirectX or inconclusive renderer (a per-game proxy) and for a confirmed
-/// Vulkan renderer (the global Vulkan layer); only a confirmed OpenGL renderer is
+/// Vulkan renderer (the shared Vulkan layer); only a confirmed OpenGL renderer is
 /// refused. Backs the manual-install escape hatch for games with no automatic or
 /// curated-external path.
 #[must_use]
@@ -254,7 +256,7 @@ pub fn matched_slug(manifest: &RenoDxManifest, facts: &MatchFacts) -> Option<Str
 }
 
 /// A generic install plan for a manual file install when no catalogue title matched:
-/// the host is the proxy DLL the game loads (Direct3D) or the global Vulkan layer
+/// the host is the proxy DLL the game loads (Direct3D) or the shared Vulkan layer
 /// (confirmed Vulkan), `arch` is what the user's add-on targets, and risk is the
 /// conservative generic assessment. `None` when the renderer is confirmed OpenGL (no
 /// host RenoDX can drive).
@@ -291,7 +293,7 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
     let api = primary_api(&facts.graphics);
     // Pick the host from the renderer: Direct3D / inconclusive → a proxy DLL (the
     // engine signal, e.g. `UnityPlayer.dll`, implies a DirectX renderer on Windows);
-    // confirmed Vulkan → the global Vulkan layer; confirmed OpenGL → unsupported.
+    // confirmed Vulkan -> the shared Vulkan layer; confirmed OpenGL -> unsupported.
     let Some(host_kind) = host_decision(api) else {
         return RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ApiUnsupported { detected: api },
@@ -326,60 +328,6 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
         // "this is a universal, not per-game, add-on".
         notes_keys: generic.label_key.clone().into_iter().collect(),
     }))
-}
-
-/// Default ReShade proxy DLL when the detected API is inconclusive: `dxgi.dll`
-/// loads for D3D10/11/12, which covers essentially every modern RenoDX title.
-const DEFAULT_PROXY_DLL: &str = "dxgi.dll";
-
-/// The proxy DLL ReShade installs as: an explicit per-title override, else the
-/// DLL the game actually imports (via [`proxy_dll`], in ReShade preference), else
-/// the [`DEFAULT_PROXY_DLL`] — so the install hooks the DLL the game really loads
-/// and an inconclusive read still resolves to a sane modern default.
-fn resolve_proxy_dll(override_name: Option<&str>, graphics: &ExeGraphicsInfo) -> String {
-    override_name
-        .map(str::to_owned)
-        .or_else(|| proxy_dll(graphics))
-        .unwrap_or_else(|| DEFAULT_PROXY_DLL.to_owned())
-}
-
-/// Validates a matched curated title and returns its [`HostKind`] and (for a proxy
-/// host) the proxy DLL name.
-///
-/// A curated title is RenoDX-supported by definition (it is in the catalogue) and
-/// carries its own architecture, so unreliable runtime API/architecture detection
-/// — which comes back empty whenever a game loads Direct3D dynamically — must
-/// never veto it. Detection is advisory here: it only picks the host and refines the
-/// proxy DLL.
-///
-/// The two hard gates are physical: a **confirmed** OpenGL renderer has no host
-/// RenoDX can drive, so the title is declined even though it is curated (a confirmed
-/// Vulkan renderer is now hosted by the global Vulkan layer, and an
-/// `Unknown`/inconclusive read still defaults to a proxy); and an explicit
-/// `required_api`, enforced only when detection identified a supported API to check
-/// against.
-fn check_title_compatibility(
-    title: &Title,
-    facts: &MatchFacts,
-) -> Result<(HostKind, String), IncompatibilityReason> {
-    let detected = primary_api(&facts.graphics);
-    let Some(host_kind) = host_decision(detected) else {
-        return Err(IncompatibilityReason::ApiUnsupported { detected });
-    };
-    if api_supports_renodx(detected)
-        && !title.compatibility.required_api.is_empty()
-        && !title.compatibility.required_api.contains(&detected)
-    {
-        return Err(IncompatibilityReason::ApiNotAllowed {
-            detected,
-            required: title.compatibility.required_api.clone(),
-        });
-    }
-    let proxy_dll_name = match host_kind {
-        HostKind::Proxy => resolve_proxy_dll(title.proxy_dll_override.as_deref(), &facts.graphics),
-        HostKind::Vulkan => String::new(),
-    };
-    Ok((host_kind, proxy_dll_name))
 }
 
 /// Selects the best `(title, matching-rule)` for the facts: highest rule tier,
@@ -473,22 +421,6 @@ fn parse_engine(value: &str) -> Option<Engine> {
         "unreal_extended" | "unreal-extended" => Some(Engine::UnrealExtended),
         "unity" => Some(Engine::Unity),
         _ => None,
-    }
-}
-
-/// i18n key for the generic-install risk message (engine fallback matches).
-const RISK_GENERIC_KEY: &str = "renodx.risk.generic";
-
-/// A generic match has no curated risk; treat it as single-player safe (the user
-/// still sees the `Untested` confidence).
-pub(super) fn generic_risk() -> Risk {
-    Risk {
-        anticheat_engine: AnticheatEngine::None,
-        online: OnlineKind::Singleplayer,
-        severity: RiskSeverity::Info,
-        message_key: RISK_GENERIC_KEY.to_owned(),
-        confidence: AssessmentConfidence::Low,
-        source: None,
     }
 }
 
@@ -654,7 +586,7 @@ mod tests {
 
     #[test]
     fn confirmed_vulkan_curated_title_installs_via_the_vulkan_layer() {
-        // A confirmed Vulkan renderer is now hosted by the global Vulkan layer, so a
+        // A confirmed Vulkan renderer is now hosted by the shared Vulkan layer, so a
         // curated title installs (host_kind = Vulkan, no proxy DLL) rather than being
         // declined as it was before.
         let m = manifest(vec![title(
@@ -842,7 +774,7 @@ mod tests {
     #[test]
     fn engine_generic_installs_vulkan_and_declines_opengl() {
         // An engine match with a confirmed Vulkan renderer now installs the generic
-        // via the global Vulkan layer; a confirmed OpenGL renderer is still declined.
+        // via the shared Vulkan layer; a confirmed OpenGL renderer is still declined.
         let mut m = manifest(vec![]);
         m.generics = vec![Generic {
             engine: Engine::Unreal,

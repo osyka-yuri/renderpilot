@@ -14,8 +14,8 @@ mod validation;
 mod tests;
 
 use self::migration::{
-    MigrationAction, apply_initial_migration, determine_migration_action, reset_catalog_schema,
-    set_user_version,
+    MigrationAction, apply_initial_migration, determine_migration_action, migrate_v8_to_v9,
+    reset_catalog_schema, set_user_version,
 };
 use self::objects::SchemaObjectKind;
 use self::pragmas::ForeignKeysState;
@@ -27,7 +27,8 @@ const INITIAL_MIGRATION: &str = include_str!("../../migrations/0001_initial.sql"
 //   2 → 3: bundle-swap reshape of `library_artifacts` (files_json) + `component_backups` table.
 //   4 → 8: `installed_addons` table for RenoDX install tracking, with `tracked_sources_json`
 //          array (intermediate 5/6/7 iterations were never released and squashed into 8).
-const CURRENT_SCHEMA_VERSION: i32 = 8;
+//   8 → 9: advisory shared artifact provenance + nullable RenoDX host metadata.
+const CURRENT_SCHEMA_VERSION: i32 = 9;
 
 const REQUIRED_TABLES: &[&str] = &[
     "games",
@@ -36,6 +37,7 @@ const REQUIRED_TABLES: &[&str] = &[
     "components",
     "component_backups",
     "installed_addons",
+    "shared_artifacts",
     "library_artifacts",
     "operations",
     "operation_items",
@@ -58,6 +60,7 @@ const REQUIRED_INDEXES: &[&str] = &[
 const REQUIRED_TRIGGERS: &[&str] = &[
     "trg_operation_items_artifact_library_insert",
     "trg_operation_items_artifact_library_update",
+    "trg_shared_artifacts_touch_updated_at",
 ];
 
 const REQUIRED_SCHEMA_OBJECT_GROUPS: &[(SchemaObjectKind, &[&str])] = &[
@@ -88,6 +91,9 @@ fn apply_in_transaction(connection: &mut Connection) -> AppResult<()> {
             apply_initial_migration(&transaction)?;
             set_user_version(&transaction, CURRENT_SCHEMA_VERSION)?;
             validate_catalog_schema(&transaction)?;
+        }
+        MigrationAction::MigrateV8ToV9 => {
+            migrate_v8_to_v9(&transaction)?;
         }
         MigrationAction::Rebuild => {
             reset_catalog_schema(&transaction)?;

@@ -5,36 +5,42 @@
 //! (clshortfuse.github.io and the engine-generic repos) rather than mirrored, so the
 //! manifest is a lightweight overrides + catalogue document with no hashes.
 //!
-//! The end-to-end flows live in [`service`] (`availability`, `status`, `install`,
-//! `uninstall`) and [`update`] (`check_update`, `update`, `check_updates`), built on
-//! the [`types`] model, its [`parse_manifest`] validation, the [`facts`] gatherer,
-//! the deterministic [`matcher`], the [`anticheat`] risk gate, [`reshade`] host
-//! orchestration, the [`source`] URL/host resolver, the [`fetch`] downloader, and
-//! the [`install`] filesystem engine. RenoDX-specific policy (which API to target,
-//! installability) lives in [`policy`], separate from the generic detection facts.
+//! The end-to-end flows live in [`use_cases`], built on the [`types`] model, its
+//! [`parse_manifest`] validation, the [`facts`] gatherer, the deterministic
+//! [`matcher`], the [`anticheat`] risk gate, [`reshade`] host orchestration, the
+//! [`source`] URL/host resolver, the [`fetch`] downloader, and the [`install`]
+//! filesystem engine. RenoDX-specific policy (which API to target, installability)
+//! lives in [`policy`], separate from the generic detection facts.
 
 pub(crate) mod anticheat;
 mod channel;
 pub(crate) mod dlss_fix;
+/// DTOs
+pub mod dto;
 mod errors;
 pub(crate) mod facts;
 mod fetch;
+pub(crate) mod game_context;
 mod host_policy;
 pub(crate) mod install;
 pub mod manifest_store;
 pub(crate) mod matcher;
 mod operation_lock;
+/// Platform infrastructure.
+pub mod platform;
 pub(crate) mod policy;
 mod progress;
+mod reconciliation;
 pub(crate) mod reshade;
 mod reshade_ini;
-pub mod service;
 mod source;
 mod tracking;
 pub mod types;
-pub mod update;
+/// Use cases.
+pub mod use_cases;
 mod validate;
-pub mod vulkan;
+
+pub use platform::vulkan;
 
 #[cfg(test)]
 mod test_support;

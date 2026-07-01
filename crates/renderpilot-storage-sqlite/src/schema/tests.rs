@@ -109,6 +109,98 @@ fn apply_rebuilds_stale_v2_schema_with_old_artifact_shape() {
 }
 
 #[test]
+fn apply_migrates_v8_to_v9_without_rebuilding_catalog_rows() {
+    let mut connection = open_test_connection();
+
+    apply(&mut connection).expect("initial migration should succeed");
+    connection
+        .execute(
+            "
+            INSERT INTO installed_addons
+                (game_id, kind, addon_file, addon_version,
+                 created_files_json, backed_up_files_json, tracked_sources_json)
+            VALUES
+                ('steam:42', 'renodx', 'C:/Games/Test/renodx-test.addon64', NULL,
+                 '[\"C:/Games/Test/renodx-test.addon64\"]', '[]', '[]')
+            ",
+            [],
+        )
+        .expect("installed addon should insert");
+    connection
+        .execute_batch(
+            "
+            DROP TRIGGER IF EXISTS trg_shared_artifacts_touch_updated_at;
+            DROP TABLE IF EXISTS shared_artifacts;
+            PRAGMA user_version = 8;
+            ",
+        )
+        .expect("database should be downgraded to v8 shape");
+
+    apply(&mut connection).expect("v8 schema should migrate in place");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert_catalog_schema_exists(&connection);
+    assert!(schema_object_exists(
+        &connection,
+        "table",
+        "shared_artifacts"
+    ));
+    assert!(table_has_column(
+        &connection,
+        "installed_addons",
+        "host_kind"
+    ));
+    let addon_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM installed_addons", [], |row| {
+            row.get(0)
+        })
+        .expect("installed addon count should be readable");
+    assert_eq!(addon_count, 1);
+}
+
+#[test]
+fn apply_rebuilds_current_schema_when_shared_artifact_trigger_is_missing() {
+    let mut connection = open_test_connection();
+
+    apply(&mut connection).expect("initial migration should succeed");
+    connection
+        .execute(
+            "
+            INSERT INTO settings (key, value)
+            VALUES ('transient_marker', 'will be rebuilt')
+            ",
+            [],
+        )
+        .expect("marker setting should insert");
+    connection
+        .execute_batch(
+            "
+            DROP TRIGGER IF EXISTS trg_shared_artifacts_touch_updated_at;
+            PRAGMA user_version = 9;
+            ",
+        )
+        .expect("schema should be made incomplete");
+
+    apply(&mut connection).expect("incomplete v9 schema should rebuild");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert_catalog_schema_exists(&connection);
+    assert!(schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_shared_artifacts_touch_updated_at"
+    ));
+    let marker_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM settings WHERE key = 'transient_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("settings should be readable after rebuild");
+    assert_eq!(marker_count, 0);
+}
+
+#[test]
 fn apply_resets_unknown_schema_version() {
     let mut connection = open_test_connection();
 
@@ -164,6 +256,11 @@ fn assert_catalog_schema_exists(connection: &Connection) {
         connection,
         "trigger",
         "trg_operation_items_artifact_library_insert"
+    ));
+    assert!(schema_object_exists(
+        connection,
+        "trigger",
+        "trg_shared_artifacts_touch_updated_at"
     ));
 }
 

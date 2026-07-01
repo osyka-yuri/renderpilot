@@ -15,19 +15,26 @@ use renderpilot_domain::Version;
 use serde::Serialize;
 
 use crate::addons::ini::Ini;
+use crate::addons::renodx::install::DLSS_FIX_FILE_PREFIX;
+use crate::addons::renodx::types::ReshadeChannel;
 
 use super::reshade_ini::{
     ADDON_PATH_KEY, ADDON_SECTION, BASE_PATH_KEY, DISABLED_ADDONS_KEY, INSTALL_SECTION,
     LOAD_FROM_DLL_MAIN_KEY,
 };
 
-/// Legacy ownership sentinel from the pre-versioned host model. New installs do
-/// not create it; install/uninstall flows remove it best-effort when encountered.
-pub const MARKER_FILE_NAME: &str = "renderpilot-renodx.json";
-
 /// Conventional ReShade configuration file name, used when creating one.
 pub const RESHADE_INI_FILE_NAME: &str = "ReShade.ini";
 const RESHADE_INI: &str = RESHADE_INI_FILE_NAME;
+const GENERAL_SECTION: &str = "GENERAL";
+const EFFECT_SEARCH_PATHS_KEY: &str = "EffectSearchPaths";
+const TEXTURE_SEARCH_PATHS_KEY: &str = "TextureSearchPaths";
+const PRESET_PATH_KEYS: &[&str] = &["PresetPath", "CurrentPresetPath"];
+const EFFECT_EXTENSIONS: &[&str] = &["fx", "fxh"];
+const TEXTURE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "dds", "bmp", "tga"];
+const DEFAULT_DISABLED_ADDONS: &[&str] = &["Generic Depth", "Effect Runtime Sync"];
+const EFFECT_SCAN_DEPTH_LIMIT: usize = 4;
+const EFFECT_SCAN_ENTRY_LIMIT: usize = 512;
 
 /// Environment override ReShade honours for its base path (config/log/add-on
 /// search root) when no `[INSTALL] BasePath` is set.
@@ -299,25 +306,6 @@ impl ReshadeHostAction {
     }
 }
 
-/// Returns the path of the legacy marker within `game_dir`.
-#[must_use]
-pub fn marker_path(game_dir: &Path) -> PathBuf {
-    game_dir.join(MARKER_FILE_NAME)
-}
-
-/// Removes the legacy ownership marker best-effort.
-pub fn remove_legacy_marker(game_dir: &Path) {
-    let path = marker_path(game_dir);
-    if let Err(error) = fs::remove_file(&path) {
-        if error.kind() != std::io::ErrorKind::NotFound {
-            log::warn!(
-                "failed to remove legacy RenoDX marker `{}`: {error}",
-                path.display()
-            );
-        }
-    }
-}
-
 /// Detects ReShade hosts in `game_dir`, marking `active_proxy_slot` as the slot
 /// the resolved executable should load when known.
 #[must_use]
@@ -456,6 +444,28 @@ fn version_strings_point_to_reshade(strings: &VersionIdentityStrings) -> bool {
     })
 }
 
+/// Determines an advisory channel (Stable or Nightly) from a PE's identity
+/// strings, used when adopting orphaned installs. Stable ReShade builds do not
+/// contain the "unofficial" marker in their identity strings.
+pub(crate) fn guess_advisory_channel(identity: &VersionIdentityStrings) -> ReshadeChannel {
+    let values = [
+        identity.product_name.as_deref(),
+        identity.file_description.as_deref(),
+        identity.original_filename.as_deref(),
+        identity.product_version.as_deref(),
+    ];
+    let is_unofficial = values
+        .into_iter()
+        .flatten()
+        .any(|value| value.to_ascii_lowercase().contains("unofficial"));
+
+    if is_unofficial {
+        ReshadeChannel::Nightly
+    } else {
+        ReshadeChannel::Stable
+    }
+}
+
 fn has_neighboring_reshade_files(game_dir: &Path) -> bool {
     reshade_ini_path(game_dir).is_some() || reshade_log_paths(game_dir).next().is_some()
 }
@@ -476,6 +486,30 @@ pub fn reshade_ini_path(game_dir: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Returns whether the game folder appears to contain user ReShade effects,
+/// textures, or presets. Used before writing RenoDX's default `DisabledAddons`:
+/// empty ReShade setups should have bundled effects disabled, while an existing
+/// effects setup is left alone.
+#[must_use]
+pub(super) fn has_user_effect_assets(game_dir: &Path) -> bool {
+    has_direct_effect_file(game_dir)
+        || configured_preset_exists(game_dir)
+        || standard_effect_roots(game_dir)
+            .into_iter()
+            .any(|root| contains_effect_asset(&root))
+        || configured_effect_roots(game_dir)
+            .into_iter()
+            .any(|root| contains_effect_asset(&root))
+}
+
+/// Returns the existing `ReShade.ini` path when it matches the minimal config
+/// RenderPilot writes for a no-effects RenoDX install.
+#[must_use]
+pub(super) fn renderpilot_minimal_ini_path(game_dir: &Path) -> Option<PathBuf> {
+    let path = reshade_ini_path(game_dir)?;
+    is_renderpilot_minimal_ini(&path).then_some(path)
 }
 
 /// Resolves ReShade's effective base and add-on paths.
@@ -587,8 +621,8 @@ pub fn renodx_addon_state(paths: &ReshadePaths, addon_file_name: &str) -> RenoDx
 ///
 /// An absent host yields [`ReshadeHostAction::UpdateHost`] — "a host must be
 /// written" — which the install flow treats as "install a fresh host" and the
-/// update flow as "place the managed host". Version resources are display-only:
-/// freshness is decided by channel-source digest checks.
+/// update flow as "place a recorded host binary". Version resources are display-only:
+/// freshness is decided by channel artifact validation.
 #[must_use]
 pub fn host_action(host: &ReshadeHost) -> ReshadeHostAction {
     let Some(host) = host.as_present() else {
@@ -645,8 +679,10 @@ fn discover_renodx_addon(addon_dir: &Path) -> Option<PathBuf> {
             return None;
         }
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        (name.starts_with("renodx-") && (name.ends_with(".addon64") || name.ends_with(".addon32")))
-            .then(|| entry.path())
+        let is_renodx_addon = name.starts_with("renodx-")
+            && (name.ends_with(".addon64") || name.ends_with(".addon32"));
+        let is_dlss_fix = name.starts_with(DLSS_FIX_FILE_PREFIX);
+        (is_renodx_addon && !is_dlss_fix).then(|| entry.path())
     })
 }
 
@@ -677,6 +713,152 @@ fn split_ini_list(value: &str) -> Vec<String> {
         .filter(|part| !part.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+fn has_direct_effect_file(dir: &Path) -> bool {
+    fs::read_dir(dir).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_file())
+                && extension_matches(&entry.path(), EFFECT_EXTENSIONS)
+        })
+    })
+}
+
+fn configured_preset_exists(game_dir: &Path) -> bool {
+    let paths = resolve_paths(game_dir, None);
+    let Some(ini_path) = paths.ini_path.as_deref() else {
+        return false;
+    };
+    let Some(ini) = load_ini(ini_path) else {
+        return false;
+    };
+    PRESET_PATH_KEYS.iter().any(|key| {
+        ini.get(GENERAL_SECTION, key)
+            .map(|raw| resolve_config_path(&paths.effective_base_path, raw))
+            .is_some_and(|path| path.is_file() && !same_path(&path, ini_path))
+    })
+}
+
+fn standard_effect_roots(game_dir: &Path) -> Vec<PathBuf> {
+    [
+        game_dir.join("reshade-shaders").join("Shaders"),
+        game_dir.join("reshade-shaders").join("Textures"),
+        game_dir.join("Shaders"),
+        game_dir.join("Textures"),
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn configured_effect_roots(game_dir: &Path) -> Vec<PathBuf> {
+    let paths = resolve_paths(game_dir, None);
+    let Some(ini_path) = paths.ini_path.as_deref() else {
+        return Vec::new();
+    };
+    let Some(ini) = load_ini(ini_path) else {
+        return Vec::new();
+    };
+    [EFFECT_SEARCH_PATHS_KEY, TEXTURE_SEARCH_PATHS_KEY]
+        .into_iter()
+        .filter_map(|key| ini.get(GENERAL_SECTION, key))
+        .flat_map(split_ini_list)
+        .map(|raw| resolve_config_path(&paths.effective_base_path, &raw))
+        .filter(|path| !same_path(path, game_dir))
+        .collect()
+}
+
+fn contains_effect_asset(root: &Path) -> bool {
+    let mut remaining = EFFECT_SCAN_ENTRY_LIMIT;
+    contains_effect_asset_inner(root, 0, &mut remaining)
+}
+
+fn contains_effect_asset_inner(path: &Path, depth: usize, remaining: &mut usize) -> bool {
+    if *remaining == 0 {
+        return false;
+    }
+    *remaining -= 1;
+
+    if path.is_file() {
+        return extension_matches(path, EFFECT_EXTENSIONS)
+            || extension_matches(path, TEXTURE_EXTENSIONS);
+    }
+    if depth >= EFFECT_SCAN_DEPTH_LIMIT || !path.is_dir() {
+        return false;
+    }
+    fs::read_dir(path).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|entry| contains_effect_asset_inner(&entry.path(), depth + 1, remaining))
+    })
+}
+
+fn extension_matches(path: &Path, expected: &[&str]) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            expected
+                .iter()
+                .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        })
+}
+
+fn is_renderpilot_minimal_ini(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path) else {
+        return false;
+    };
+    let mut current_section: Option<String> = None;
+    let mut saw_owned_key = false;
+
+    for raw in text.lines() {
+        let line = raw.trim().trim_end_matches('\r');
+        if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') && line.len() >= 2 {
+            let section = line[1..line.len() - 1].trim();
+            if !section.eq_ignore_ascii_case(ADDON_SECTION) {
+                return false;
+            }
+            current_section = Some(section.to_owned());
+            continue;
+        }
+        if !current_section
+            .as_deref()
+            .is_some_and(|section| section.eq_ignore_ascii_case(ADDON_SECTION))
+        {
+            return false;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            return false;
+        };
+        let key = key.trim();
+        let value = value.trim();
+        if key.eq_ignore_ascii_case(DISABLED_ADDONS_KEY) {
+            if !is_default_disabled_addons(value) {
+                return false;
+            }
+            saw_owned_key = true;
+        } else if key.eq_ignore_ascii_case(ADDON_PATH_KEY) {
+            if value.trim_matches('"') != "." {
+                return false;
+            }
+            saw_owned_key = true;
+        } else {
+            return false;
+        }
+    }
+
+    saw_owned_key
+}
+
+fn is_default_disabled_addons(value: &str) -> bool {
+    let values = split_ini_list(value);
+    values.len() == DEFAULT_DISABLED_ADDONS.len()
+        && DEFAULT_DISABLED_ADDONS.iter().all(|expected| {
+            values
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(expected))
+        })
 }
 
 /// Reads and parses a `ReShade.ini`, returning `None` when it cannot be read.
@@ -795,6 +977,36 @@ mod tests {
     }
 
     #[test]
+    fn renodx_addon_state_does_not_report_dlss_fix_file_as_main_addon() {
+        let dir = tempdir().expect("tempdir");
+        // Only the DLSS-Fix companion is on disk; no real per-game addon exists.
+        fs::write(dir.path().join("renodx-dlssfix.addon64"), b"x").expect("addon");
+        let paths = resolve_paths(dir.path(), Some(&dir.path().join("dxgi.dll")));
+
+        let state = renodx_addon_state(&paths, "renodx-cp2077.addon64");
+
+        assert!(!state.present_on_disk);
+        assert!(state.discovered_path.is_none());
+    }
+
+    #[test]
+    fn renodx_addon_state_discovers_real_addon_even_with_dlss_fix_present() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("renodx-dlssfix.addon64"), b"x").expect("dlssfix");
+        fs::write(dir.path().join("renodx-othertitle.addon64"), b"x").expect("addon");
+        let paths = resolve_paths(dir.path(), Some(&dir.path().join("dxgi.dll")));
+
+        // Expected file name differs from what's on disk, forcing discovery to run.
+        let state = renodx_addon_state(&paths, "renodx-cp2077.addon64");
+
+        assert!(state.present_on_disk);
+        assert_eq!(
+            state.discovered_path.as_deref().and_then(Path::file_name),
+            Some(std::ffi::OsStr::new("renodx-othertitle.addon64"))
+        );
+    }
+
+    #[test]
     fn remove_reshade_logs_removes_rotated_logs_only() {
         let dir = tempdir().expect("tempdir");
         fs::write(dir.path().join("ReShade.log"), b"x").expect("log");
@@ -903,5 +1115,31 @@ mod tests {
             )),
             A::UpToDate
         );
+    }
+
+    #[test]
+    fn guess_advisory_channel_defaults_to_stable_for_clean_identity() {
+        assert_eq!(
+            guess_advisory_channel(&VersionIdentityStrings::default()),
+            ReshadeChannel::Stable
+        );
+    }
+
+    #[test]
+    fn guess_advisory_channel_detects_unofficial_marker_case_insensitively() {
+        let identity = VersionIdentityStrings {
+            product_version: Some("1.0.0 UNOFFICIAL".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(guess_advisory_channel(&identity), ReshadeChannel::Nightly);
+    }
+
+    #[test]
+    fn guess_advisory_channel_checks_product_name_too() {
+        let identity = VersionIdentityStrings {
+            product_name: Some("ReShade (unofficial build)".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(guess_advisory_channel(&identity), ReshadeChannel::Nightly);
     }
 }

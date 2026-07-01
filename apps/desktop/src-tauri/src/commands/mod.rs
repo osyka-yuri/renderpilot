@@ -605,7 +605,6 @@ pub async fn renodx_install(
     game_id: String,
     reshade_channel: String,
     confirm_anticheat: bool,
-    confirm_vulkan_layer: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
@@ -619,7 +618,6 @@ pub async fn renodx_install(
             game_id,
             reshade_channel,
             confirm_anticheat,
-            confirm_vulkan_layer,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await
@@ -634,7 +632,6 @@ pub async fn renodx_install_from_file(
     file_path: String,
     reshade_channel: String,
     confirm_anticheat: bool,
-    confirm_vulkan_layer: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let game_id = require_non_empty_string("game_id", game_id)?;
@@ -650,7 +647,6 @@ pub async fn renodx_install_from_file(
             file_path,
             reshade_channel,
             confirm_anticheat,
-            confirm_vulkan_layer,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await
@@ -699,8 +695,45 @@ pub async fn renodx_vulkan_layer_status() -> JsonCommandResult {
 }
 
 #[tauri::command]
-pub async fn renodx_remove_vulkan_layer() -> JsonCommandResult {
-    run_desktop_command(desktop::renodx_remove_vulkan_layer).await
+pub async fn renodx_vulkan_layer_management_status(
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        desktop::renodx_vulkan_layer_management_status(&context).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_apply_vulkan_layer(
+    app: tauri::AppHandle,
+    reshade_channel: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_async_command(move || async move {
+        let emit = download_progress_emitter(app, "renodx:vulkan_layer".to_owned());
+        desktop::renodx_apply_vulkan_layer(
+            &context,
+            reshade_channel,
+            Some(&emit as &desktop::ProgressObserver<'_>),
+        )
+        .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn renodx_remove_vulkan_layer(
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || desktop::renodx_remove_vulkan_layer(&context)).await
 }
 
 #[tauri::command]

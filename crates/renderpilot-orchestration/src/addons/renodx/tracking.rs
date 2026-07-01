@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{
-    InstalledAddon, PathRef, RenoDxInstallState, TrackedSource, TrackedSourceRole,
+    InstalledAddon, InstalledAddonHostKind, PathRef, RenoDxHostKind, RenoDxInstallState,
+    TrackedSource, TrackedSourceRole,
 };
 
 use crate::ServiceError;
@@ -10,15 +11,23 @@ use crate::addons::engine::InstallReceipt;
 use super::errors;
 use super::reshade;
 
+/// Derives the `RenoDxInstallState` from the `managed_app_record` (the per-game `InstalledAddon`).
 pub(super) fn install_state_from_record(record: &InstalledAddon) -> RenoDxInstallState {
     RenoDxInstallState::Installed {
+        host_kind: record.host_kind().map(ui_host_kind),
         version: record.addon_version().map(str::to_owned),
-        reshade_managed_by_us: record.reshade_managed_by_us(),
         addon_dated: addon_dated_from_file_or_record(record),
         installed_at: record.installed_at(),
         updated_at: record.updated_at(),
         dlss_fix_installed: record.has_dlss_fix(),
         addon_tracked: record.has_addon_source(),
+    }
+}
+
+fn ui_host_kind(host_kind: InstalledAddonHostKind) -> RenoDxHostKind {
+    match host_kind {
+        InstalledAddonHostKind::Proxy => RenoDxHostKind::Proxy,
+        InstalledAddonHostKind::SharedVulkanLayer => RenoDxHostKind::Vulkan,
     }
 }
 
@@ -32,7 +41,7 @@ fn addon_dated_from_file_or_record(record: &InstalledAddon) -> Option<String> {
     record.addon_dated().map(str::to_owned)
 }
 
-pub(super) fn managed_host_path(record: &InstalledAddon) -> Option<PathBuf> {
+pub(super) fn rollback_host_path(record: &InstalledAddon) -> Option<PathBuf> {
     record
         .created_files()
         .iter()
@@ -45,8 +54,10 @@ pub(super) fn managed_host_path(record: &InstalledAddon) -> Option<PathBuf> {
         })
 }
 
-pub(super) fn required_managed_host_path(record: &InstalledAddon) -> Result<PathBuf, ServiceError> {
-    managed_host_path(record).ok_or_else(|| {
+pub(super) fn required_rollback_host_path(
+    record: &InstalledAddon,
+) -> Result<PathBuf, ServiceError> {
+    rollback_host_path(record).ok_or_else(|| {
         errors::invalid("RenoDX install record does not identify a ReShade host path".to_owned())
     })
 }
@@ -58,7 +69,7 @@ pub(super) fn replace_host_source(
     let mut replaced = false;
     let mut sources = Vec::with_capacity(record.tracked_sources().len());
     for source in record.tracked_sources() {
-        if source.role() == TrackedSourceRole::Host {
+        if source.role() == TrackedSourceRole::HostBinary {
             if replaced {
                 return Err(errors::duplicate_host_sources());
             }
@@ -70,7 +81,7 @@ pub(super) fn replace_host_source(
     }
     if !replaced {
         return Err(errors::invalid(
-            "RenoDX install record has no managed ReShade host source".to_owned(),
+            "RenoDX install record has no ReShade host binary artifact".to_owned(),
         ));
     }
     rebuild_with_parts(
@@ -143,8 +154,26 @@ fn rebuild_with_parts(
         backed_up_files,
         tracked_sources,
     )
-    .map(|record| record.with_timestamps(installed_at, updated_at))
-    .ok_or_else(|| errors::failed(format!("{label} violated the addon_file invariant")))
+    .map(|rebuilt| preserve_metadata(record, rebuilt).with_timestamps(installed_at, updated_at))
+    .ok_or_else(|| {
+        errors::failed(format!(
+            "{label} violated the addon_file invariant: `{}` is missing from the rebuilt created_files list",
+            record.addon_file().as_str()
+        ))
+    })
+}
+
+fn preserve_metadata(source: &InstalledAddon, mut rebuilt: InstalledAddon) -> InstalledAddon {
+    if let Some(host_kind) = source.host_kind() {
+        rebuilt = rebuilt.with_host_kind(host_kind);
+    }
+    if let Some(channel) = source.reshade_channel() {
+        rebuilt = rebuilt.with_reshade_channel(channel.to_owned());
+    }
+    if let Some(path) = source.registered_exe_path() {
+        rebuilt = rebuilt.with_registered_exe_path(path.clone());
+    }
+    rebuilt
 }
 
 fn merge_path_refs(
@@ -168,7 +197,7 @@ fn merge_path_refs(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::{AddonKind, GameId, TrackedSourceRole};
+    use renderpilot_domain::{AddonKind, GameId, InstalledAddonHostKind, TrackedSourceRole};
 
     use super::*;
 
@@ -194,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_host_path_reads_created_or_backed_up_proxy_slot() {
+    fn rollback_host_path_reads_created_or_backed_up_proxy_slot() {
         let from_created = record(
             vec![
                 path(r"C:\Games\Test\renodx-test.addon64"),
@@ -203,7 +232,7 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(
-            managed_host_path(&from_created).as_deref(),
+            rollback_host_path(&from_created).as_deref(),
             Some(Path::new("C:/Games/Test/dxgi.dll"))
         );
 
@@ -212,7 +241,7 @@ mod tests {
             vec![path(r"C:\Games\Test\d3d11.dll")],
         );
         assert_eq!(
-            required_managed_host_path(&from_backup)
+            required_rollback_host_path(&from_backup)
                 .expect("host")
                 .file_name()
                 .and_then(|name| name.to_str()),
@@ -223,13 +252,13 @@ mod tests {
     #[test]
     fn replace_host_source_preserves_timestamps() {
         let source = TrackedSource::new(
-            TrackedSourceRole::Host,
+            TrackedSourceRole::HostBinary,
             "https://nightly.link/old.zip",
             None,
             "old",
         );
         let replacement = TrackedSource::new(
-            TrackedSourceRole::Host,
+            TrackedSourceRole::HostBinary,
             "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe",
             Some("\"etag\"".to_owned()),
             "new",
@@ -248,12 +277,12 @@ mod tests {
 
     #[test]
     fn replace_host_source_rejects_duplicate_host_sources() {
-        let first = TrackedSource::new(TrackedSourceRole::Host, "https://a", None, "a");
-        let second = TrackedSource::new(TrackedSourceRole::Host, "https://b", None, "b");
+        let first = TrackedSource::new(TrackedSourceRole::HostBinary, "https://a", None, "a");
+        let second = TrackedSource::new(TrackedSourceRole::HostBinary, "https://b", None, "b");
         let record = record(vec![path(r"C:\Games\Test\renodx-test.addon64")], Vec::new())
             .with_tracked_source(first)
             .with_tracked_source(second);
-        let replacement = TrackedSource::new(TrackedSourceRole::Host, "https://c", None, "c");
+        let replacement = TrackedSource::new(TrackedSourceRole::HostBinary, "https://c", None, "c");
 
         assert!(replace_host_source(&record, &replacement).is_err());
     }
@@ -278,5 +307,60 @@ mod tests {
         assert_eq!(updated.backed_up_files().len(), 1);
         assert_eq!(updated.installed_at(), Some(10));
         assert_eq!(updated.updated_at(), Some(20));
+    }
+
+    #[test]
+    fn rebuild_with_parts_names_the_missing_addon_file_in_its_error() {
+        let addon_path = path(r"C:\Games\Test\renodx-test.addon64");
+        let record = record(vec![addon_path.clone()], Vec::new());
+        let receipt = InstallReceipt::default();
+
+        // Removing the addon file's own path from `created_files` violates the
+        // `from_parts` invariant — the error should name it, not just say
+        // "the invariant was violated".
+        let error = rebuild_after_receipt(
+            &record,
+            &receipt,
+            Some((
+                Path::new(addon_path.as_str()),
+                TrackedSourceRole::HostBinary,
+            )),
+            None,
+            "test rebuild",
+        )
+        .expect_err("removing the addon file violates the addon_file invariant");
+
+        match error {
+            ServiceError::CommandFailed(message) => {
+                assert!(
+                    message.contains("renodx-test.addon64"),
+                    "expected the offending file name in: {message}"
+                );
+            }
+            other => panic!("expected CommandFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rebuild_with_receipt_preserves_host_metadata() {
+        let record = record(vec![path(r"C:\Games\Test\renodx-test.addon64")], Vec::new())
+            .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer)
+            .with_reshade_channel("stable")
+            .with_registered_exe_path(path(r"C:\Games\Test\Game.exe"));
+        let receipt = InstallReceipt::default();
+
+        let updated =
+            rebuild_with_sources_and_receipt(&record, Vec::new(), Some(&receipt), "test rebuild")
+                .expect("rebuild");
+
+        assert_eq!(
+            updated.host_kind(),
+            Some(InstalledAddonHostKind::SharedVulkanLayer)
+        );
+        assert_eq!(updated.reshade_channel(), Some("stable"));
+        assert_eq!(
+            updated.registered_exe_path().map(PathRef::as_str),
+            Some("C:/Games/Test/Game.exe")
+        );
     }
 }

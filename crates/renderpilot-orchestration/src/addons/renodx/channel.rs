@@ -1,6 +1,6 @@
 use renderpilot_domain::{InstalledAddon, TrackedSource, TrackedSourceRole};
 
-use super::types::ReshadeChannel;
+use super::types::{RecordedChannelParse, ReshadeChannel};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ChannelReadIssue {
@@ -11,7 +11,7 @@ pub(super) fn host_sources(record: &InstalledAddon) -> Vec<&TrackedSource> {
     record
         .tracked_sources()
         .iter()
-        .filter(|source| source.role() == TrackedSourceRole::Host)
+        .filter(|source| source.role() == TrackedSourceRole::HostBinary)
         .collect()
 }
 
@@ -28,23 +28,17 @@ pub(super) fn single_host_source(
 
 pub(super) fn installed_channel(
     record: &InstalledAddon,
-) -> Result<Option<ReshadeChannel>, ChannelReadIssue> {
+) -> Result<Option<RecordedChannelParse>, ChannelReadIssue> {
     let Some(source) = single_host_source(record)? else {
         return Ok(None);
     };
-    if let Some(channel) = source.channel() {
-        return match channel {
-            "stable" => Ok(Some(ReshadeChannel::Stable)),
-            "nightly" => Ok(Some(ReshadeChannel::Nightly)),
-            other => {
-                log::warn!(
-                    "RenoDX install record has unknown ReShade channel `{other}`; falling back to unknown"
-                );
-                Ok(None)
-            }
-        };
+    if source.channel().is_some() {
+        return Ok(Some(ReshadeChannel::parse_recorded(source.channel())));
     }
-    Ok(infer_legacy_channel_from_url(source.url()))
+    Ok(Some(match infer_legacy_channel_from_url(source.url()) {
+        Some(c) => RecordedChannelParse::Parsed(c),
+        None => RecordedChannelParse::MissingDefaulted,
+    }))
 }
 
 pub(super) fn infer_legacy_channel_from_url(url: &str) -> Option<ReshadeChannel> {
@@ -91,7 +85,7 @@ mod tests {
     }
 
     fn host(url: &str) -> TrackedSource {
-        TrackedSource::new(TrackedSourceRole::Host, url, None, "digest")
+        TrackedSource::new(TrackedSourceRole::HostBinary, url, None, "digest")
     }
 
     #[test]
@@ -101,7 +95,10 @@ mod tests {
                 .with_channel("stable"),
         ]);
 
-        assert_eq!(installed_channel(&record), Ok(Some(ReshadeChannel::Stable)));
+        assert_eq!(
+            installed_channel(&record),
+            Ok(Some(RecordedChannelParse::Parsed(ReshadeChannel::Stable)))
+        );
     }
 
     #[test]
@@ -111,7 +108,12 @@ mod tests {
                 .with_channel("canary"),
         ]);
 
-        assert_eq!(installed_channel(&record), Ok(None));
+        assert_eq!(
+            installed_channel(&record),
+            Ok(Some(RecordedChannelParse::InvalidDefaulted {
+                raw: "canary".to_owned()
+            }))
+        );
     }
 
     #[test]
@@ -123,10 +125,13 @@ mod tests {
             "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip",
         )]);
 
-        assert_eq!(installed_channel(&stable), Ok(Some(ReshadeChannel::Stable)));
+        assert_eq!(
+            installed_channel(&stable),
+            Ok(Some(RecordedChannelParse::Parsed(ReshadeChannel::Stable)))
+        );
         assert_eq!(
             installed_channel(&nightly),
-            Ok(Some(ReshadeChannel::Nightly))
+            Ok(Some(RecordedChannelParse::Parsed(ReshadeChannel::Nightly)))
         );
     }
 

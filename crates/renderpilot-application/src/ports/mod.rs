@@ -7,5 +7,5 @@ pub use game_source::GameSourceProvider;
 
 pub use repositories::{
     ArtifactRepository, ComponentRepository, GameRepository, InstalledAddonRepository,
-    OperationRepository,
+    OperationRepository, SharedArtifactRepository,
 };

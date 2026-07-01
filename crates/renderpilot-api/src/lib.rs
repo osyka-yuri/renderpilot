@@ -59,9 +59,10 @@ pub use self::nvapi::{
 };
 pub use self::operations::{apply_swap, rollback_component};
 pub use self::renodx::{
-    renodx_availability, renodx_check_update, renodx_check_updates, renodx_dlss_fix_availability,
-    renodx_install, renodx_install_dlss_fix, renodx_install_from_file, renodx_remove_vulkan_layer,
-    renodx_status, renodx_switch_reshade_channel, renodx_uninstall, renodx_uninstall_dlss_fix,
-    renodx_update, renodx_vulkan_layer_status,
+    renodx_apply_vulkan_layer, renodx_availability, renodx_check_update, renodx_check_updates,
+    renodx_dlss_fix_availability, renodx_install, renodx_install_dlss_fix,
+    renodx_install_from_file, renodx_remove_vulkan_layer, renodx_status,
+    renodx_switch_reshade_channel, renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
+    renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};

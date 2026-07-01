@@ -19,6 +19,12 @@ pub enum UpdateStatus {
     Available,
     /// Could not determine (network failure, or no recorded source).
     Unknown,
+    /// The content matches a different known channel than the selected/effective
+    /// one — a channel mismatch, not an update.
+    ChannelMismatch,
+    /// The backend needs stronger validation before it can claim current/update
+    /// (e.g. a nightly host whose only signal is a PE-version match).
+    UnknownNeedsValidation,
 }
 
 /// The cheap `HEAD` fast-path: only a *present and matching* validator is conclusive
@@ -43,15 +49,20 @@ pub fn digest_verdict(stored_digest: &str, fetched_digest: &str) -> UpdateStatus
     }
 }
 
-/// Combines two per-source verdicts: an update is available if *either* changed;
-/// current only when *both* are current; otherwise unknown (a check failed and
-/// nothing is known-available).
+/// Combines two per-source verdicts by priority: an available update wins; then a
+/// channel mismatch; then needs-validation; then unknown; current only when both
+/// are current.
 #[must_use]
 pub fn combine(a: UpdateStatus, b: UpdateStatus) -> UpdateStatus {
+    use UpdateStatus as U;
     match (a, b) {
-        (UpdateStatus::Available, _) | (_, UpdateStatus::Available) => UpdateStatus::Available,
-        (UpdateStatus::Current, UpdateStatus::Current) => UpdateStatus::Current,
-        _ => UpdateStatus::Unknown,
+        (U::Available, _) | (_, U::Available) => U::Available,
+        (U::ChannelMismatch, _) | (_, U::ChannelMismatch) => U::ChannelMismatch,
+        (U::UnknownNeedsValidation, _) | (_, U::UnknownNeedsValidation) => {
+            U::UnknownNeedsValidation
+        }
+        (U::Current, U::Current) => U::Current,
+        _ => U::Unknown,
     }
 }
 
@@ -100,7 +111,7 @@ mod tests {
 
     #[test]
     fn combine_reports_available_when_either_part_changed() {
-        use UpdateStatus::{Available, Current, Unknown};
+        use UpdateStatus::*;
         // A changed host with a current add-on → available.
         assert_eq!(combine(Current, Available), Available);
         assert_eq!(combine(Available, Current), Available);
@@ -111,5 +122,43 @@ mod tests {
         assert_eq!(combine(Unknown, Current), Unknown);
         // Availability wins even over an unknown.
         assert_eq!(combine(Available, Unknown), Available);
+    }
+
+    #[test]
+    fn combine_priority_available_beats_channel_mismatch() {
+        use UpdateStatus::*;
+        assert_eq!(combine(Available, ChannelMismatch), Available);
+        assert_eq!(combine(ChannelMismatch, Available), Available);
+    }
+
+    #[test]
+    fn combine_channel_mismatch_beats_unknown_needs_validation() {
+        use UpdateStatus::*;
+        assert_eq!(
+            combine(ChannelMismatch, UnknownNeedsValidation),
+            ChannelMismatch
+        );
+        assert_eq!(
+            combine(UnknownNeedsValidation, ChannelMismatch),
+            ChannelMismatch
+        );
+        assert_eq!(combine(ChannelMismatch, Current), ChannelMismatch);
+    }
+
+    #[test]
+    fn combine_unknown_needs_validation_beats_unknown() {
+        use UpdateStatus::*;
+        assert_eq!(
+            combine(UnknownNeedsValidation, Unknown),
+            UnknownNeedsValidation
+        );
+        assert_eq!(
+            combine(Unknown, UnknownNeedsValidation),
+            UnknownNeedsValidation
+        );
+        assert_eq!(
+            combine(UnknownNeedsValidation, Current),
+            UnknownNeedsValidation
+        );
     }
 }

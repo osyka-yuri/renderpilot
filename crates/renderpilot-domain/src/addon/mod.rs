@@ -82,16 +82,15 @@ pub enum RenoDxInstallState {
     NotInstalled,
     /// RenoDX is installed.
     Installed {
+        /// Host mechanism used by this install, mapped to a UI-facing stable
+        /// vocabulary. `None` for legacy records that predate host metadata.
+        #[serde(default)]
+        host_kind: Option<RenoDxHostKind>,
         /// Installed add-on version label, when known (free-form, e.g.
         /// `snapshot-2026.06`). RenoDX add-ons are rolling snapshots with no version
         /// number, so this is effectively always `null`; the UI uses `addon_dated`
         /// as the concrete anchor instead.
         version: Option<String>,
-        /// Whether RenderPilot installed and therefore manages the ReShade host.
-        ///
-        /// When `false`, a pre-existing (foreign) ReShade install was reused and
-        /// must be left untouched on uninstall.
-        reshade_managed_by_us: bool,
         /// The add-on's upstream `Last-Modified` HTTP-date string (its publish-date
         /// proxy), when the host sent one — the UI's "Add-on dated …" anchor.
         #[serde(default)]
@@ -118,6 +117,25 @@ pub enum RenoDxInstallState {
         #[serde(default)]
         addon_tracked: bool,
     },
+}
+
+/// UI-facing host mechanism used by an installed RenoDX add-on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenoDxHostKind {
+    /// A per-game ReShade proxy DLL.
+    Proxy,
+    /// The shared ReShade Vulkan implicit layer.
+    Vulkan,
+}
+
+impl From<InstalledAddonHostKind> for RenoDxHostKind {
+    fn from(value: InstalledAddonHostKind) -> Self {
+        match value {
+            InstalledAddonHostKind::Proxy => Self::Proxy,
+            InstalledAddonHostKind::SharedVulkanLayer => Self::Vulkan,
+        }
+    }
 }
 
 impl RenoDxInstallState {
@@ -160,10 +178,24 @@ pub enum TrackedSourceRole {
     /// The DLSS-Fix companion add-on (`renodx-dlssfix.addon64`), installed alongside
     /// the main add-on when the game has NVIDIA Frame Generation + DLSS + Streamline.
     DlssFix,
-    /// A host the tool installed and therefore manages and may update in place
-    /// (e.g. the ReShade host). A foreign host the install merely reused records no
-    /// source, so its presence marks the host as managed.
-    Host,
+    /// A host binary artifact recorded for update/rollback provenance (e.g. the
+    /// ReShade proxy binary).
+    #[serde(rename = "host")]
+    HostBinary,
+}
+
+/// Host mechanism used by an installed add-on.
+///
+/// This is persisted as per-game metadata so reversible flows do not have to
+/// re-derive the host from mutable facts such as the currently selected
+/// executable override.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstalledAddonHostKind {
+    /// A per-game ReShade proxy DLL, such as `dxgi.dll`.
+    Proxy,
+    /// The shared ReShade Vulkan implicit layer.
+    SharedVulkanLayer,
 }
 
 /// One upstream source an install tracks for updates: where a placed file came
@@ -192,6 +224,256 @@ pub struct TrackedSource {
     /// RenoDX uses `stable` / `nightly` for ReShade Host sources.
     #[serde(default)]
     channel: Option<String>,
+    /// Whether this source was reconstructed from on-disk facts (e.g. adopting an
+    /// install RenderPilot did not create) rather than recorded from an actual
+    /// download. An advisory source's URL/digest are a best-effort guess, not
+    /// proof of what is on disk. `#[serde(default)]` so records persisted before
+    /// this field deserialize as `false`.
+    #[serde(default)]
+    advisory: bool,
+}
+
+/// Shared artifact kind tracked outside any single game install.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedArtifactKind {
+    /// The global ReShade Vulkan implicit layer used by RenoDX Vulkan games.
+    RenoDxVulkanLayer,
+}
+
+/// Audit/provenance classification for a shared artifact record.
+///
+/// This must never be the sole source of truth for lifecycle decisions. Shared
+/// resources are reconciled from filesystem/registry facts first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedArtifactOrigin {
+    /// RenderPilot created or fully replaced the artifact.
+    RenderPilotCreated,
+    /// RenderPilot adopted an official-compatible artifact already on disk.
+    AdoptedOfficial,
+    /// The artifact was discovered without enough provenance to classify it.
+    Unknown,
+}
+
+/// Advisory provenance record for a shared artifact.
+///
+/// The row is deliberately optional from a behavior standpoint: callers must be
+/// able to reconstruct facts from disk/registry if this record is missing or
+/// stale. Optional source fields allow adopting an already-installed official
+/// artifact before RenderPilot has refreshed it from a known upstream source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedArtifactRecord {
+    kind: SharedArtifactKind,
+    install_dir: PathRef,
+    manifest_path: PathRef,
+    dll_path: PathRef,
+    source_url: Option<String>,
+    source_etag: Option<String>,
+    source_digest: Option<String>,
+    source_last_modified: Option<String>,
+    channel: Option<String>,
+    origin: SharedArtifactOrigin,
+    created_files: Vec<PathRef>,
+    #[serde(default)]
+    installed_at: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<i64>,
+}
+
+impl SharedArtifactRecord {
+    /// Creates a shared artifact provenance record.
+    #[must_use]
+    pub fn new(
+        kind: SharedArtifactKind,
+        install_dir: PathRef,
+        manifest_path: PathRef,
+        dll_path: PathRef,
+        origin: SharedArtifactOrigin,
+    ) -> Self {
+        Self {
+            kind,
+            install_dir,
+            manifest_path,
+            dll_path,
+            source_url: None,
+            source_etag: None,
+            source_digest: None,
+            source_last_modified: None,
+            channel: None,
+            origin,
+            created_files: Vec::new(),
+            installed_at: None,
+            updated_at: None,
+        }
+    }
+
+    /// Reconstructs a record from all persisted fields.
+    #[must_use]
+    pub fn from_parts(
+        kind: SharedArtifactKind,
+        install_dir: PathRef,
+        manifest_path: PathRef,
+        dll_path: PathRef,
+        source: SharedArtifactSource,
+        origin: SharedArtifactOrigin,
+        created_files: Vec<PathRef>,
+    ) -> Self {
+        Self {
+            kind,
+            install_dir,
+            manifest_path,
+            dll_path,
+            source_url: source.url,
+            source_etag: source.etag,
+            source_digest: source.digest,
+            source_last_modified: source.last_modified,
+            channel: source.channel,
+            origin,
+            created_files,
+            installed_at: None,
+            updated_at: None,
+        }
+    }
+
+    /// Sets source identity/provenance fields.
+    #[must_use]
+    pub fn with_source(mut self, source: SharedArtifactSource) -> Self {
+        self.source_url = source.url;
+        self.source_etag = source.etag;
+        self.source_digest = source.digest;
+        self.source_last_modified = source.last_modified;
+        self.channel = source.channel;
+        self
+    }
+
+    /// Sets files RenderPilot created or replaced for this shared artifact.
+    #[must_use]
+    pub fn with_created_files(mut self, created_files: Vec<PathRef>) -> Self {
+        self.created_files = created_files;
+        self
+    }
+
+    /// Sets persisted timestamps.
+    #[must_use]
+    pub fn with_timestamps(mut self, installed_at: Option<i64>, updated_at: Option<i64>) -> Self {
+        self.installed_at = installed_at;
+        self.updated_at = updated_at;
+        self
+    }
+
+    /// Returns the shared artifact kind.
+    #[must_use]
+    pub fn kind(&self) -> SharedArtifactKind {
+        self.kind
+    }
+
+    /// Returns the install directory.
+    #[must_use]
+    pub fn install_dir(&self) -> &PathRef {
+        &self.install_dir
+    }
+
+    /// Returns the manifest path.
+    #[must_use]
+    pub fn manifest_path(&self) -> &PathRef {
+        &self.manifest_path
+    }
+
+    /// Returns the layer DLL path.
+    #[must_use]
+    pub fn dll_path(&self) -> &PathRef {
+        &self.dll_path
+    }
+
+    /// Returns the source URL, if known.
+    #[must_use]
+    pub fn source_url(&self) -> Option<&str> {
+        self.source_url.as_deref()
+    }
+
+    /// Returns the HTTP cache validator, if known.
+    #[must_use]
+    pub fn source_etag(&self) -> Option<&str> {
+        self.source_etag.as_deref()
+    }
+
+    /// Returns the source digest, if known.
+    #[must_use]
+    pub fn source_digest(&self) -> Option<&str> {
+        self.source_digest.as_deref()
+    }
+
+    /// Returns the source last-modified date, if known.
+    #[must_use]
+    pub fn source_last_modified(&self) -> Option<&str> {
+        self.source_last_modified.as_deref()
+    }
+
+    /// Returns the source channel, if known.
+    #[must_use]
+    pub fn channel(&self) -> Option<&str> {
+        self.channel.as_deref()
+    }
+
+    /// Returns the advisory origin.
+    #[must_use]
+    pub fn origin(&self) -> SharedArtifactOrigin {
+        self.origin
+    }
+
+    /// Returns files RenderPilot created or replaced for this shared artifact.
+    #[must_use]
+    pub fn created_files(&self) -> &[PathRef] {
+        &self.created_files
+    }
+
+    /// Returns the persisted creation timestamp.
+    #[must_use]
+    pub fn installed_at(&self) -> Option<i64> {
+        self.installed_at
+    }
+
+    /// Returns the persisted update timestamp.
+    #[must_use]
+    pub fn updated_at(&self) -> Option<i64> {
+        self.updated_at
+    }
+}
+
+/// Optional source identity for a shared artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SharedArtifactSource {
+    /// Upstream URL, if RenderPilot knows it.
+    pub url: Option<String>,
+    /// HTTP cache validator, if known.
+    pub etag: Option<String>,
+    /// SHA-256 digest of the artifact bytes, if known.
+    pub digest: Option<String>,
+    /// Raw upstream Last-Modified value, if known.
+    pub last_modified: Option<String>,
+    /// Tool-owned source channel/provenance, if known.
+    pub channel: Option<String>,
+}
+
+impl SharedArtifactSource {
+    /// Creates a source record from known upstream download identity.
+    #[must_use]
+    pub fn known(
+        url: impl Into<String>,
+        etag: Option<String>,
+        digest: impl Into<String>,
+        last_modified: Option<String>,
+        channel: impl Into<String>,
+    ) -> Self {
+        Self {
+            url: Some(url.into()),
+            etag,
+            digest: Some(digest.into()),
+            last_modified,
+            channel: Some(channel.into()),
+        }
+    }
 }
 
 impl TrackedSource {
@@ -211,6 +493,7 @@ impl TrackedSource {
             digest: digest.into(),
             last_modified: None,
             channel: None,
+            advisory: false,
         }
     }
 
@@ -226,6 +509,14 @@ impl TrackedSource {
     #[must_use]
     pub fn with_channel(mut self, channel: impl Into<String>) -> Self {
         self.channel = Some(channel.into());
+        self
+    }
+
+    /// Marks this source as reconstructed from on-disk facts rather than a
+    /// recorded download.
+    #[must_use]
+    pub fn with_advisory(mut self) -> Self {
+        self.advisory = true;
         self
     }
 
@@ -264,6 +555,13 @@ impl TrackedSource {
     pub fn channel(&self) -> Option<&str> {
         self.channel.as_deref()
     }
+
+    /// Returns whether this source was reconstructed from on-disk facts rather
+    /// than recorded from an actual download.
+    #[must_use]
+    pub fn is_advisory(&self) -> bool {
+        self.advisory
+    }
 }
 
 /// Record of an installed add-on: the source of truth for reversing an install.
@@ -280,9 +578,8 @@ pub struct InstalledAddon {
     addon_version: Option<String>,
     created_files: Vec<PathRef>,
     backed_up_files: Vec<PathRef>,
-    /// Upstream sources to check for updates — one per file the install fetched and
-    /// manages. A managed host contributes a [`TrackedSourceRole::Host`] entry; a
-    /// reused foreign host contributes none.
+    /// Upstream artifacts to check for updates — one per fetched file whose
+    /// identity is needed by the private update/rollback flow.
     tracked_sources: Vec<TrackedSource>,
     /// When the add-on was first installed (Unix epoch ms). Set from the persisted
     /// `created_at` column when a record is rehydrated; `None` for a freshly built
@@ -293,6 +590,17 @@ pub struct InstalledAddon {
     /// `updated_at` column on rehydrate; `None` for a freshly built record.
     #[serde(default)]
     updated_at: Option<i64>,
+    /// Host mechanism used by this install. Optional for records created before
+    /// host metadata existed.
+    #[serde(default)]
+    host_kind: Option<InstalledAddonHostKind>,
+    /// Effective ReShade channel used for the host, when known.
+    #[serde(default)]
+    reshade_channel: Option<String>,
+    /// Executable registered with a shared host, when applicable. Persisted so
+    /// uninstall does not depend on the current executable override.
+    #[serde(default)]
+    registered_exe_path: Option<PathRef>,
 }
 
 impl InstalledAddon {
@@ -313,6 +621,9 @@ impl InstalledAddon {
             tracked_sources: Vec::new(),
             installed_at: None,
             updated_at: None,
+            host_kind: None,
+            reshade_channel: None,
+            registered_exe_path: None,
         }
     }
 
@@ -348,6 +659,9 @@ impl InstalledAddon {
             tracked_sources,
             installed_at: None,
             updated_at: None,
+            host_kind: None,
+            reshade_channel: None,
+            registered_exe_path: None,
         })
     }
 
@@ -365,6 +679,27 @@ impl InstalledAddon {
     pub fn with_timestamps(mut self, installed_at: Option<i64>, updated_at: Option<i64>) -> Self {
         self.installed_at = installed_at;
         self.updated_at = updated_at;
+        self
+    }
+
+    /// Attaches host metadata to the install.
+    #[must_use]
+    pub fn with_host_kind(mut self, host_kind: InstalledAddonHostKind) -> Self {
+        self.host_kind = Some(host_kind);
+        self
+    }
+
+    /// Attaches the effective ReShade channel to the install.
+    #[must_use]
+    pub fn with_reshade_channel(mut self, channel: impl Into<String>) -> Self {
+        self.reshade_channel = Some(channel.into());
+        self
+    }
+
+    /// Attaches the executable registered with a shared host.
+    #[must_use]
+    pub fn with_registered_exe_path(mut self, path: PathRef) -> Self {
+        self.registered_exe_path = Some(path);
         self
     }
 
@@ -422,14 +757,13 @@ impl InstalledAddon {
         self.addon_version.as_deref()
     }
 
-    /// Returns whether RenderPilot manages the host for this install — derived from
-    /// the presence of a [`TrackedSourceRole::Host`] source (a reused foreign host
-    /// records none, so it reads as unmanaged and is left untouched on uninstall).
+    /// Returns whether this record carries private update provenance for a host
+    /// binary.
     #[must_use]
-    pub fn reshade_managed_by_us(&self) -> bool {
+    pub fn has_host_binary_provenance(&self) -> bool {
         self.tracked_sources
             .iter()
-            .any(|source| source.role() == TrackedSourceRole::Host)
+            .any(|source| source.role() == TrackedSourceRole::HostBinary)
     }
 
     /// Returns the files created by the install (removed on uninstall).
@@ -474,6 +808,24 @@ impl InstalledAddon {
         self.updated_at
     }
 
+    /// Returns the persisted host kind, if known.
+    #[must_use]
+    pub fn host_kind(&self) -> Option<InstalledAddonHostKind> {
+        self.host_kind
+    }
+
+    /// Returns the persisted ReShade channel, if known.
+    #[must_use]
+    pub fn reshade_channel(&self) -> Option<&str> {
+        self.reshade_channel.as_deref()
+    }
+
+    /// Returns the executable registered with a shared host, if known.
+    #[must_use]
+    pub fn registered_exe_path(&self) -> Option<&PathRef> {
+        self.registered_exe_path.as_ref()
+    }
+
     /// Returns whether the install includes the DLSS-Fix companion add-on (a
     /// `DlssFix` tracked source is present).
     #[must_use]
@@ -498,8 +850,8 @@ impl InstalledAddon {
     #[must_use]
     pub fn install_state(&self) -> RenoDxInstallState {
         RenoDxInstallState::Installed {
+            host_kind: self.host_kind.map(RenoDxHostKind::from),
             version: self.addon_version.clone(),
-            reshade_managed_by_us: self.reshade_managed_by_us(),
             addon_dated: self.addon_dated().map(str::to_owned),
             installed_at: self.installed_at,
             updated_at: self.updated_at,
@@ -527,17 +879,17 @@ mod tests {
 
         assert_eq!(installed.created_files(), &[addon_path()]);
         assert!(installed.backed_up_files().is_empty());
-        assert!(!installed.reshade_managed_by_us());
+        assert!(!installed.has_host_binary_provenance());
     }
 
     #[test]
-    fn installed_addon_records_managed_host_and_files() {
+    fn installed_addon_records_host_binary_artifact_and_files() {
         let proxy = PathRef::new(r"C:\Games\CP2077\dxgi.dll").expect("valid path");
         let ini_backup = PathRef::new(r"C:\Games\CP2077\reshade.ini").expect("valid path");
 
         let installed = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
             .with_tracked_source(TrackedSource::new(
-                TrackedSourceRole::Host,
+                TrackedSourceRole::HostBinary,
                 "https://nightly.link/x64.zip",
                 None,
                 "host-digest",
@@ -545,14 +897,13 @@ mod tests {
             .with_created_file(proxy.clone())
             .with_backed_up_file(ini_backup.clone());
 
-        // A Host source means we manage the host.
-        assert!(installed.reshade_managed_by_us());
+        assert!(installed.has_host_binary_provenance());
         assert_eq!(installed.created_files(), &[addon_path(), proxy]);
         assert_eq!(installed.backed_up_files(), &[ini_backup]);
     }
 
     #[test]
-    fn reshade_managed_is_derived_from_a_host_source() {
+    fn host_binary_provenance_is_derived_from_a_host_artifact() {
         let base = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
             .with_tracked_source(TrackedSource::new(
                 TrackedSourceRole::AddonPayload,
@@ -560,16 +911,54 @@ mod tests {
                 None,
                 "addon-digest",
             ));
-        // Only an add-on source → host is foreign/absent → unmanaged.
-        assert!(!base.reshade_managed_by_us());
+        assert!(!base.has_host_binary_provenance());
 
         let with_host = base.with_tracked_source(TrackedSource::new(
-            TrackedSourceRole::Host,
+            TrackedSourceRole::HostBinary,
             "https://example/host",
             None,
             "host-digest",
         ));
-        assert!(with_host.reshade_managed_by_us());
+        assert!(with_host.has_host_binary_provenance());
+    }
+
+    #[test]
+    fn tracked_source_is_not_advisory_by_default() {
+        let source = TrackedSource::new(
+            TrackedSourceRole::HostBinary,
+            "https://example/host",
+            None,
+            "digest",
+        );
+        assert!(!source.is_advisory());
+    }
+
+    #[test]
+    fn tracked_source_with_advisory_round_trips_through_json() {
+        let source = TrackedSource::new(
+            TrackedSourceRole::HostBinary,
+            "https://example/host",
+            None,
+            "digest",
+        )
+        .with_advisory();
+        assert!(source.is_advisory());
+
+        let json = serde_json::to_string(&source).expect("serializes");
+        let round_tripped: TrackedSource = serde_json::from_str(&json).expect("deserializes");
+        assert!(round_tripped.is_advisory());
+    }
+
+    #[test]
+    fn tracked_source_json_without_advisory_field_deserializes_as_false() {
+        let legacy_json = r#"{
+            "role": "host",
+            "url": "https://example/host",
+            "etag": null,
+            "digest": "digest"
+        }"#;
+        let source: TrackedSource = serde_json::from_str(legacy_json).expect("deserializes");
+        assert!(!source.is_advisory());
     }
 
     #[test]
@@ -605,15 +994,14 @@ mod tests {
 
     #[test]
     fn installed_addon_install_state_reflects_fields() {
-        // No Host source → unmanaged host (a reused foreign host).
         let installed = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
             .with_addon_version("snapshot-2026.06");
 
         assert_eq!(
             installed.install_state(),
             RenoDxInstallState::Installed {
+                host_kind: None,
                 version: Some("snapshot-2026.06".to_owned()),
-                reshade_managed_by_us: false,
                 addon_dated: None,
                 installed_at: None,
                 updated_at: None,
@@ -640,14 +1028,47 @@ mod tests {
         assert_eq!(
             installed.install_state(),
             RenoDxInstallState::Installed {
+                host_kind: None,
                 version: None,
-                reshade_managed_by_us: false,
                 addon_dated: Some("Wed, 18 Jun 2026 12:00:00 GMT".to_owned()),
                 installed_at: Some(1_700_000_000_000),
                 updated_at: Some(1_700_000_500_000),
                 dlss_fix_installed: false,
                 // The test record has an AddonPayload tracked source.
                 addon_tracked: true,
+            }
+        );
+    }
+
+    #[test]
+    fn install_state_maps_persisted_host_kind_to_ui_host_kind() {
+        let proxy = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
+            .with_host_kind(InstalledAddonHostKind::Proxy);
+        let vulkan = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
+            .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+
+        assert_eq!(
+            proxy.install_state(),
+            RenoDxInstallState::Installed {
+                host_kind: Some(RenoDxHostKind::Proxy),
+                version: None,
+                addon_dated: None,
+                installed_at: None,
+                updated_at: None,
+                dlss_fix_installed: false,
+                addon_tracked: false,
+            }
+        );
+        assert_eq!(
+            vulkan.install_state(),
+            RenoDxInstallState::Installed {
+                host_kind: Some(RenoDxHostKind::Vulkan),
+                version: None,
+                addon_dated: None,
+                installed_at: None,
+                updated_at: None,
+                dlss_fix_installed: false,
+                addon_tracked: false,
             }
         );
     }
@@ -689,8 +1110,8 @@ mod tests {
         assert_eq!(json, r#"{"status":"not_installed"}"#);
 
         let installed = RenoDxInstallState::Installed {
+            host_kind: Some(RenoDxHostKind::Proxy),
             version: None,
-            reshade_managed_by_us: true,
             addon_dated: None,
             installed_at: None,
             updated_at: None,
@@ -700,7 +1121,7 @@ mod tests {
         let json = serde_json::to_string(&installed).expect("serialize");
         assert_eq!(
             json,
-            r#"{"status":"installed","version":null,"reshade_managed_by_us":true,"addon_dated":null,"installed_at":null,"updated_at":null,"dlss_fix_installed":false,"addon_tracked":true}"#
+            r#"{"status":"installed","host_kind":"proxy","version":null,"addon_dated":null,"installed_at":null,"updated_at":null,"dlss_fix_installed":false,"addon_tracked":true}"#
         );
     }
 
@@ -730,7 +1151,7 @@ mod tests {
     #[test]
     fn tracked_source_channel_round_trips_and_defaults() {
         let source = TrackedSource::new(
-            TrackedSourceRole::Host,
+            TrackedSourceRole::HostBinary,
             "https://example/host.zip",
             None,
             "digest",

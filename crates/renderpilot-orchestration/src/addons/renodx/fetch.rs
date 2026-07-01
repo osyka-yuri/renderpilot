@@ -120,7 +120,7 @@ struct AddonSource {
 /// A re-downloaded, PE-checked file (the RenoDX add-on, the DLSS-Fix companion, or
 /// the extracted ReShade host DLL) plus the upstream identity recorded as a
 /// [`TrackedSource`].
-pub(super) struct Download {
+pub(crate) struct Download {
     pub bytes: Vec<u8>,
     /// SHA-256 of the bytes — the durable change-detection digest.
     pub digest: String,
@@ -222,7 +222,7 @@ struct FetchedReshade {
     pub last_modified: Option<String>,
     /// SHA-256 of the extracted DLL, the durable host change-detection digest.
     pub digest: String,
-    /// Effective channel for this managed host source.
+    /// Effective channel for this host artifact.
     pub channel: Option<ReshadeChannel>,
 }
 
@@ -263,12 +263,7 @@ async fn fetch_reshade_dll(
     channel: ReshadeChannel,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<FetchedReshade, ServiceError> {
-    let source = source::reshade_source(config, channel, arch).ok_or_else(|| {
-        errors::invalid(format!(
-            "ReShade channel `{}` is not available",
-            channel.as_str()
-        ))
-    })?;
+    let source = source::require_reshade_source(config, channel, arch)?;
     let download = fetch_reshade_from_source(&source, arch, progress).await?;
     Ok(FetchedReshade {
         bytes: download.bytes,

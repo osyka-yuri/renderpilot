@@ -18,9 +18,9 @@ fn installed_record() -> InstalledAddon {
         PathRef::new("C:/Games/RenoGame/renodx-renogame.addon64").expect("path"),
     )
     .with_addon_version("snapshot-2026.06")
-    // A Host source marks the install as managing the ReShade host.
+    // A HostBinary entry records a ReShade host artifact.
     .with_tracked_source(TrackedSource::new(
-        TrackedSourceRole::Host,
+        TrackedSourceRole::HostBinary,
         "https://nightly.link/x64.zip",
         None,
         "host-digest",
@@ -54,7 +54,7 @@ fn renodx_status_reports_installed_after_a_record_is_stored() {
 
     assert_eq!(json["status"], "installed");
     assert_eq!(json["version"], "snapshot-2026.06");
-    assert_eq!(json["reshade_managed_by_us"], true);
+    assert!(json.get("reshade_managed_by_us").is_none());
 }
 
 #[test]
@@ -97,11 +97,10 @@ fn renodx_uninstall_on_a_game_without_an_addon_is_an_error() {
 }
 
 #[test]
-fn renodx_status_reports_foreign_host_when_no_host_source_is_recorded() {
-    let fixture = CatalogFixture::new("renodx-status-foreign");
-    // A foreign-host install records no Host source, so `reshade_managed_by_us`
-    // reads as `false`.
-    let foreign = InstalledAddon::new(
+fn renodx_status_omits_host_origin_when_no_host_entry_is_recorded() {
+    let fixture = CatalogFixture::new("renodx-status-local-file");
+    // A local file install records no HostBinary entry.
+    let local_file = InstalledAddon::new(
         game_id(),
         AddonKind::RenoDx,
         PathRef::new("C:/Games/RenoGame/renodx-renogame.addon64").expect("path"),
@@ -109,8 +108,8 @@ fn renodx_status_reports_foreign_host_when_no_host_source_is_recorded() {
     .with_backed_up_file(PathRef::new("C:/Games/RenoGame/ReShade.ini").expect("path"));
     fixture
         .storage()
-        .upsert_installed_addon(&foreign)
-        .expect("seed foreign record");
+        .upsert_installed_addon(&local_file)
+        .expect("seed record");
 
     let output = fixture
         .run(args(&["renodx", "status", "--game", GAME_ID]))
@@ -118,5 +117,5 @@ fn renodx_status_reports_foreign_host_when_no_host_source_is_recorded() {
     let json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
 
     assert_eq!(json["status"], "installed");
-    assert_eq!(json["reshade_managed_by_us"], false);
+    assert!(json.get("reshade_managed_by_us").is_none());
 }

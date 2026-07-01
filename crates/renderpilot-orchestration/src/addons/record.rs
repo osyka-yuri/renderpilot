@@ -103,7 +103,7 @@ mod tests {
 
         let receipt = engine::install(game, &plan).expect("install");
 
-        // The proxy DLL is the primary file; the record carries a managed-host source.
+        // The proxy DLL is the primary file; the record carries a host binary entry.
         let proxy = game.join("dxgi.dll");
         let record = build(
             GameId::new("steam:42").expect("id"),
@@ -111,7 +111,7 @@ mod tests {
             &proxy,
             &receipt,
             vec![TrackedSource::new(
-                TrackedSourceRole::Host,
+                TrackedSourceRole::HostBinary,
                 "https://example.com/optiscaler.zip",
                 None,
                 "opti-digest",
@@ -119,7 +119,7 @@ mod tests {
         )
         .expect("record");
 
-        assert!(record.reshade_managed_by_us());
+        assert!(record.has_host_binary_provenance());
         assert_eq!(record.tracked_sources().len(), 1);
         // proxy + ini + marker, with the original dxgi.dll backed up.
         assert_eq!(record.created_files().len(), 3);

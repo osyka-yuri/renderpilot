@@ -11,6 +11,7 @@ mod installed_addons;
 pub mod nvapi;
 mod operations;
 mod row_mapping;
+mod shared_artifacts;
 
 use std::sync::Mutex;
 
