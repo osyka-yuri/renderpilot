@@ -35,6 +35,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.language.ja': '日本語',
 
   'settings.tabs.general': '一般',
+  'settings.tabs.reshade': 'ReShade',
+  'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'カタログ',
   'settings.tabs.nvidia': 'NVIDIA',
 
@@ -136,6 +138,15 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.show': 'API キーを表示',
   'settings.catalog.steamKey.hide': 'API キーを非表示',
   'settings.catalog.steamKey.getKey': 'API キーを取得',
+
+  'settings.renodx.vulkan.description':
+    'Vulkan RenoDX ゲームで使う共有 ReShade Vulkan レイヤーを管理します。',
+  'settings.renodx.vulkan.channel': 'Vulkan レイヤーチャネル',
+  'settings.renodx.vulkan.channelDescription':
+    '共有 Vulkan レイヤーで使う ReShade チャネルを選択します。',
+  'settings.renodx.vulkan.loadError': 'Vulkan レイヤーの状態を読み込めませんでした。',
+  'settings.renodx.vulkan.saveError': 'Vulkan レイヤーチャネルを保存できませんでした。',
+  'settings.renodx.vulkan.applyError': 'Vulkan レイヤーを適用できませんでした。',
 
   'common.unknown': '不明',
   'common.downloadProgress': 'ダウンロードの進行状況',
@@ -434,27 +445,79 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.switchError': 'ReShade チャンネルの切り替えに失敗しました',
   'gameDetails.renodx.unsupported': 'このゲームに利用できる RenoDX プロファイルはありません。',
   'gameDetails.renodx.incompatible': 'RenoDX をインストールできません：{reason}。',
+  'gameDetails.renodx.status.label': 'Status',
   'gameDetails.renodx.statusInstalled': 'インストール済み',
   'gameDetails.renodx.actionInstall': 'インストール',
   'gameDetails.renodx.actionUninstall': 'RenoDX を削除',
+  'gameDetails.renodx.actionRepair': '修復',
   'gameDetails.renodx.uninstallConfirmTitle': 'このゲームから RenoDX を削除しますか？',
   'gameDetails.renodx.uninstallConfirmBody':
-    'このゲームの RenoDX アドオンと RenderPilot 管理の ReShade ファイルを削除し、利用可能なバックアップがあれば復元します。',
+    'RenoDX アドオンを削除し、RenoDX セットアップ中に変更された ReShade ファイルだけを復元します。',
   'gameDetails.renodx.uninstallConfirmAction': '削除',
   'gameDetails.renodx.installing': 'インストール中…',
-  'gameDetails.renodx.riskSafe': 'シングルプレイヤー作品——安全にインストールできます。',
+  'gameDetails.renodx.riskSafe': 'アンチチートは検出されませんでした——安全にインストールできます。',
   'gameDetails.renodx.riskWarn': 'アンチチートを検出——インストールするとBANの恐れがあります。',
   'gameDetails.renodx.riskBlocked': 'このゲームではインストールがブロックされています。',
+  'gameDetails.renodx.confirmTitle':
+    'アンチチートのリスクがあっても RenoDX をインストールしますか？',
   'gameDetails.renodx.confirmAccept': 'それでもインストール',
   'gameDetails.renodx.confirmBody':
     'このゲームはアンチチートを使用します。ReShade アドオンがそれを作動させ、BAN につながる可能性があります。自己責任で続行してください。',
+  'gameDetails.renodx.fullAddonWarning':
+    'ReShade の full add-on support は、マルチプレイヤーやアンチチート保護付きゲームでは安全でない場合があります。',
   'gameDetails.renodx.cancel': 'キャンセル',
-  // ── Game details: RenoDX global Vulkan layer ──
-  'gameDetails.renodx.vulkanLayer.consentBody':
-    'このVulkanゲームにはグローバルなReShade Vulkanレイヤーが必要です。このゲームだけでなく、すべてのVulkanアプリ（ゲーム、ブラウザ、IDE）にReShadeを読み込みますが、ゲームごとに有効化するまでは動作しません。続行しますか？',
-  'gameDetails.renodx.vulkanLayer.consentAccept': 'レイヤーを追加してインストール',
+  // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
-    'グローバルなReShade Vulkanレイヤーを削除できませんでした。',
+    '共有 ReShade Vulkan レイヤーを削除できませんでした。',
+  'gameDetails.renodx.vulkanLayer.title': '共有 Vulkan レイヤー',
+  'gameDetails.renodx.vulkanLayer.removeConfirmTitle': '共有 Vulkan レイヤーを削除しますか？',
+  'gameDetails.renodx.vulkanLayer.removeConfirmBody':
+    '共有 ReShade Vulkan レイヤーを削除すると、すべての Vulkan RenoDX ゲームに影響します。続行しますか？',
+  'gameDetails.renodx.vulkanLayer.openSettings': 'RenoDX 設定を開く',
+  'gameDetails.renodx.vulkanLayer.externalReadOnly':
+    '既存の Vulkan レイヤーを検出しました。このバージョンでは読み取り専用です',
+  'gameDetails.renodx.vulkanLayer.state.not_installed': '未インストール',
+  'gameDetails.renodx.vulkanLayer.state.installed': 'インストール済み',
+  'gameDetails.renodx.vulkanLayer.state.installed_disabled': 'Disabled in registry',
+  'gameDetails.renodx.vulkanLayer.state.external_read_only': '読み取り専用',
+  'gameDetails.renodx.vulkanLayer.state.conflict': '競合',
+  'gameDetails.renodx.vulkanLayer.state.needs_repair': '修復が必要',
+  'gameDetails.renodx.vulkanLayer.state.unsupported': '非対応',
+  'gameDetails.renodx.vulkanLayer.action.install': 'インストール',
+  'gameDetails.renodx.vulkanLayer.action.update': '更新',
+  'gameDetails.renodx.vulkanLayer.action.switch_channel': 'チャンネルを切り替え',
+  'gameDetails.renodx.vulkanLayer.action.repair': 'レイヤーを修復',
+  'gameDetails.renodx.vulkanLayer.action.remove': '削除',
+  'gameDetails.renodx.vulkanLayer.diagnostic.external_layer_detected':
+    '既存の Vulkan レイヤーが検出されました。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.duplicate_layer_manifest':
+    '複数の ReShade レイヤーマニフェストが登録されています。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility':
+    'ローダーの可視性が不明確です。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_layer_dll': 'レイヤー DLL がありません。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unreadable_dll':
+    'The layer DLL could not be read (permission denied or locked).',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_manifest': 'The layer manifest is missing.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_missing':
+    'レイヤーファイルはありますが、Vulkan ローダー登録がありません。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_disabled':
+    'The loader registry entry is disabled.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unsupported_architecture':
+    'レイヤーのアーキテクチャが非対応です。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hkcu_not_visible_when_elevated':
+    'レイヤーは HKCU に登録されており、昇格して実行されたゲームでは読み込まれない可能性があります。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.manifest_malformed':
+    'レイヤーマニフェストを解析できませんでした。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_scope_not_writable':
+    '必要なレジストリスコープに書き込めません。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.permission_denied':
+    'オペレーティングシステムが要求された操作を拒否しました。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.backend_validation_failed':
+    'バックエンドの検証に失敗しました。レイヤー要確認です。',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hash_mismatch':
+    'The layer DLL hash does not match the expected version.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.db_only_fallback':
+    'The layer DLL is missing; using advisory database record.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': '非対応のグラフィックス API',
   'gameDetails.renodx.reason.api_not_allowed': 'このゲームでは許可されていないグラフィックス API',
@@ -495,20 +558,15 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.blacklisted': 'このゲームには RenoDX は推奨されません。',
   'gameDetails.renodx.updatesNotTracked': '更新は追跡されません',
   'gameDetails.renodx.channel.label': 'ReShade ホストチャンネル',
+  'gameDetails.renodx.channel.hostLabel': 'ReShade ホスト',
   'gameDetails.renodx.channel.stable': 'Stable',
   'gameDetails.renodx.channel.nightly': 'Nightly',
-  'gameDetails.renodx.channel.stableUnavailable': 'このマニフェストでは Stable を利用できません',
-  'gameDetails.renodx.channel.switchTo': '{channel} に切り替え',
-  'gameDetails.renodx.host.version': 'ReShade {version}',
+  'gameDetails.renodx.host.version': '{version}',
   'gameDetails.renodx.host.versionUnknown': 'ReShade のバージョン不明',
   'gameDetails.renodx.host.addons.none': 'アドオン非対応',
   'gameDetails.renodx.host.addons.unknown': 'アドオン対応は不明',
   'gameDetails.renodx.host.action.update_host': '更新あり',
-  'gameDetails.renodx.host.action.reinstall_with_addon_support': 'アドオン対応版が必要',
-  'gameDetails.renodx.host.action.repair_host': '修復を推奨',
-  'gameDetails.renodx.host.action.conflict': 'スロットの競合',
-  'gameDetails.renodx.host.health.missing': 'ReShade ファイルがありません',
-  'gameDetails.renodx.host.health.conflicting': 'ReShade の競合',
+  'gameDetails.renodx.host.action.repair_host': 'RenoDX アドオン対応のため ReShade を修復',
   'gameDetails.renodx.host.conflictMultiple':
     '複数の ReShade ホストを検出 — アクティブなスロットを確認してください',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -520,12 +578,17 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.actionRemoveDlssFix': '削除',
   'gameDetails.renodx.dlssFixInstallError': 'DLSS-Fixのインストールに失敗しました',
   'gameDetails.renodx.dlssFixRemoveError': 'DLSS-Fixの削除に失敗しました',
-  'gameDetails.renodx.updateAvailableDlssFix': 'DLSS-Fixのアップデートが利用可能です',
   'gameDetails.renodx.fresh.label': 'アップデート',
   'gameDetails.renodx.fresh.current': '最新',
   'gameDetails.renodx.fresh.available': 'アップデートあり',
+  'gameDetails.renodx.fresh.channelMismatch': 'チャンネル変更が利用可能',
+  'gameDetails.renodx.fresh.validationRequired': '検証が必要です',
   'gameDetails.renodx.fresh.unknown': '確認できませんでした',
   'gameDetails.renodx.fresh.checking': '確認中…',
+  'gameDetails.renodx.updateConfirmTitle': '現在のReShadeビルドを置換しますか？',
+  'gameDetails.renodx.updateConfirmBody':
+    '現在のReShade DLLはRenderPilotによって追跡されていません。更新すると、公式のReShadeビルドに置換されます。カスタム変更や別のローカルビルドは失われる可能性があります。',
+  'gameDetails.renodx.updateConfirmAction': '置換',
   'gameDetails.renodx.addonDated': 'アドオン日付: {date}',
   'gameDetails.renodx.installedOn': 'インストール: {date}',
   'gameDetails.renodx.lastChecked': '確認: {time}',

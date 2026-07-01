@@ -1,29 +1,20 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
 
   import { cn } from '@shared/classnames';
 
-  type Props = {
+  type Props = Omit<HTMLAttributes<HTMLDivElement>, 'children'> & {
     label: string;
-    inline?: boolean;
-    wrap?: boolean;
-    gap?: 1.5 | 2;
-    children: Snippet;
+    children?: Snippet;
   };
 
-  const { label, inline = true, wrap = true, gap = 2, children }: Props = $props();
+  let { label, children, class: className, ...restProps }: Props = $props();
 
-  const containerClass = $derived(
-    cn(
-      inline ? 'inline-flex' : 'flex',
-      wrap && 'flex-wrap',
-      'items-center',
-      gap === 1.5 ? 'gap-1.5' : 'gap-2',
-    ),
-  );
+  const containerClass = $derived(cn('inline-flex flex-wrap items-center gap-2', className));
 </script>
 
-<div class={containerClass}>
+<div {...restProps} class={containerClass}>
   <span class="text-sm font-medium text-muted-foreground">{label}</span>
-  {@render children()}
+  {@render children?.()}
 </div>

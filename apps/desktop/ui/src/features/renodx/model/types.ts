@@ -16,15 +16,138 @@ export type MatchConfidence = 'verified' | 'experimental' | 'untested';
 
 /**
  * How RenoDX hooks into a game (`HostKind`): a per-game ReShade proxy DLL
- * (Direct3D) or the single global ReShade Vulkan layer (Vulkan games).
+ * (Direct3D) or the shared ReShade Vulkan layer (Vulkan games).
  */
 export type HostKind = 'proxy' | 'vulkan';
 
-/**
- * Global ReShade Vulkan layer state (`VulkanLayerStatus`): not installed, a
- * foreign one present (reused), one RenderPilot manages, or off-Windows.
- */
-export type VulkanLayerStatus = 'absent' | 'foreign' | 'managed' | 'unsupported';
+export type ActionConfirmationScope =
+  | 'anticheat'
+  | 'all_vulkan_reno_dx_games'
+  | 'adopted_unofficial_update';
+
+export type ActionDisabledReason =
+  | 'blocked_by_conflict'
+  | 'blocked_by_risk'
+  | 'stable_unavailable'
+  | 'read_only'
+  | 'unsupported'
+  | 'validation_required';
+
+/** Backend-authored action rights and disablement (`ActionDescriptor`). */
+export type ActionDescriptor = {
+  enabled: boolean;
+  requires_confirmation: boolean;
+  confirmation_scope: ActionConfirmationScope | null;
+  disabled_reason: ActionDisabledReason | null;
+  target_channel: ReshadeChannel | null;
+};
+
+/** Per-slot ReShade host actions the backend currently permits (`RenoDxActions`). */
+export type RenoDxActions = {
+  install?: ActionDescriptor;
+  use_existing?: ActionDescriptor;
+  repair?: ActionDescriptor;
+  update?: ActionDescriptor;
+  switch_channel?: ActionDescriptor;
+  resolve_conflict?: ActionDescriptor;
+};
+
+/** Whether a ReShade proxy host is present in the game's slot (`HostDetection`). */
+export type HostDetection = 'absent' | 'present' | 'conflict';
+export type HostAddonSupport = 'full' | 'limited' | 'unknown';
+/** Freshness of the detected proxy host (`HostUpdateStatus`). */
+export type HostUpdateStatus =
+  | 'current'
+  | 'update_available'
+  | 'repair_available'
+  | 'unknown_needs_validation'
+  | 'channel_mismatch';
+
+export type HostChannelFacts = {
+  selected: ReshadeChannel;
+  effective: ReshadeChannel;
+  detected: ReshadeChannel | null;
+};
+
+/** Observable state of the detected proxy host (`HostFacts`). */
+export type HostFacts = {
+  slot: string | null;
+  active: boolean;
+  path: string | null;
+  version: string | null;
+  addon_support: HostAddonSupport;
+  channel: HostChannelFacts;
+  update_status: HostUpdateStatus;
+};
+
+/** Shared Vulkan layer detection state (`VulkanLayerDetection`). Never encodes
+ * install origin; action rights come only from `VulkanLayerActions`. */
+export type VulkanLayerDetection =
+  | 'not_installed'
+  | 'installed'
+  | 'installed_disabled'
+  | 'external_read_only'
+  | 'conflict'
+  | 'unsupported';
+
+export type VulkanLoaderVisibility = 'normal' | 'hkcu_not_visible_when_elevated' | 'ambiguous';
+
+export type VulkanLayerArchitecture = 'x64' | 'x86' | 'unknown';
+
+/** Closed diagnostics for a read-only/conflict/broken layer state, ordered by
+ * display priority (`LayerDiagnosticReason`). */
+export type LayerDiagnosticReason =
+  | 'external_layer_detected'
+  | 'duplicate_layer_manifest'
+  | 'ambiguous_loader_visibility'
+  | 'missing_layer_dll'
+  | 'unreadable_dll'
+  | 'missing_manifest'
+  | 'registry_missing'
+  | 'registry_disabled'
+  | 'unsupported_architecture'
+  | 'hkcu_not_visible_when_elevated'
+  | 'manifest_malformed'
+  | 'registry_scope_not_writable'
+  | 'permission_denied'
+  | 'backend_validation_failed'
+  | 'hash_mismatch'
+  | 'db_only_fallback';
+
+/** Observable state of the shared Vulkan layer (`VulkanLayerFacts`). */
+export type VulkanLayerFacts = {
+  manifest_path: string | null;
+  dll_path: string | null;
+  version: string | null;
+  architecture: VulkanLayerArchitecture;
+  loader_visibility: VulkanLoaderVisibility;
+};
+
+/** Backend-authored actions for the shared Vulkan layer (`VulkanLayerActions`). */
+export type VulkanLayerActions = {
+  install?: ActionDescriptor;
+  update?: ActionDescriptor;
+  switch_channel?: ActionDescriptor;
+  remove?: ActionDescriptor;
+  resolve_conflict?: ActionDescriptor;
+};
+
+/** Full shared Vulkan layer report returned by the availability preview
+ * (`VulkanLayerReport`). */
+export type VulkanLayerReport = {
+  layer_detection: VulkanLayerDetection;
+  layer_facts: VulkanLayerFacts;
+  diagnostic_reasons: LayerDiagnosticReason[];
+  actions: VulkanLayerActions;
+};
+
+export type VulkanLayerManagementReport = {
+  layer: VulkanLayerReport;
+  reshade_stable_supported: boolean;
+  recorded_channel: ReshadeChannel | null;
+  default_channel: ReshadeChannel;
+  update_status?: UpdateStatus;
+};
 
 /** Effective install risk severity. */
 export type RiskSeverity = 'info' | 'warn' | 'block';
@@ -45,7 +168,7 @@ export type RiskAssessment = {
   online: OnlineKind;
   message_key: string;
   confidence: AssessmentConfidence;
-  source: string | null;
+  reference_url: string | null;
   detected_locally: boolean;
 };
 
@@ -60,8 +183,9 @@ export type RenoDxInstallState =
   | { status: 'not_installed' }
   | {
       status: 'installed';
+      /** Host mechanism used by this install; null for legacy records. */
+      host_kind: HostKind | null;
       version: string | null;
-      reshade_managed_by_us: boolean;
       /**
        * The add-on's upstream `Last-Modified` HTTP-date string (its publish-date
        * proxy), when the host sent one. Parsed/formatted on the UI as the
@@ -93,44 +217,14 @@ export type RenoDxInstallState =
  * ships rolling snapshots, so `unknown` (network failure / no recorded source)
  * is a normal, non-error result.
  */
-export type UpdateStatus = 'current' | 'available' | 'unknown';
+export type UpdateStatus =
+  | 'current'
+  | 'available'
+  | 'unknown'
+  | 'channel_mismatch'
+  | 'unknown_needs_validation';
 
 export type ReshadeChannel = 'stable' | 'nightly';
-
-export type ReshadeAddonSupport = 'full' | 'none' | 'unknown';
-export type ReshadeIdentity = 'weak' | 'probable' | 'confirmed';
-export type SlotActivity = 'active' | 'inactive' | 'ambiguous';
-export type ActiveSlotReason = 'detected_by_matcher' | 'dynamic_load_unknown';
-
-export type ReshadeHost =
-  | { status: 'absent' }
-  | {
-      status: 'present';
-      path: string;
-      slot: string;
-      version: string | null;
-      addon_support: ReshadeAddonSupport;
-      identity: ReshadeIdentity;
-      active: {
-        state: SlotActivity;
-        reason: ActiveSlotReason;
-      };
-    };
-
-export type ReshadeHostAction =
-  | 'conflict'
-  | 'reinstall_with_addon_support'
-  | 'repair_host'
-  | 'update_host'
-  | 'up_to_date';
-
-export type ManagedReshadeHealth = 'healthy' | 'missing' | 'conflicting';
-
-export type ReshadeHostOwnership =
-  | { kind: 'managed'; health: ManagedReshadeHealth }
-  | { kind: 'unmanaged_compatible' }
-  | { kind: 'unmanaged_conflicting' }
-  | { kind: 'missing' };
 
 export type RenoDxAddonLoadMode = 'auto_search' | 'load_from_dll_main' | 'unknown';
 
@@ -147,7 +241,7 @@ export type RenoDxAddonState = {
  * store from the update report and probe state:
  * - `checking`  — a probe is in flight (suppresses a transient verdict).
  * - `available` — some tracked source has an upstream update.
- * - `untracked` — nothing is tracked (a file install with a foreign/absent host).
+ * - `untracked` — no upstream add-on source is tracked.
  * - `current`   — every tracked source is up to date.
  * - `unknown`   — no verdict yet, or the check failed (network).
  */
@@ -155,13 +249,15 @@ export type RenoDxFreshness = 'checking' | 'available' | 'untracked' | 'current'
 
 /**
  * A per-source update report. null indicates the source is not tracked
- * (e.g. file install) or absent (e.g. foreign host).
+ * (e.g. file install) or absent.
  */
 export type RenoDxUpdateReport = {
   addon: UpdateStatus | null;
   host: UpdateStatus | null;
   dlssFix: UpdateStatus | null;
   overall: UpdateStatus;
+  /** Vulkan-layer digest-mismatch diagnostics (empty for proxy installs). */
+  vulkan_diagnostics?: LayerDiagnosticReason[];
 };
 /** Installability verdict (`AvailabilityOutcome`, tag `kind`). */
 export type AvailabilityOutcome =
@@ -172,7 +268,7 @@ export type AvailabilityOutcome =
       risk: RiskAssessment;
       /** i18n note/requirement keys (a generic install carries its engine label here). */
       notes_keys: string[];
-      /** Proxy DLL or the global Vulkan layer; a Vulkan install may need layer consent. */
+      /** Proxy DLL or the shared Vulkan layer. */
       host_kind: HostKind;
     }
   /**
@@ -188,7 +284,7 @@ export type AvailabilityOutcome =
         confidence: MatchConfidence;
         risk: RiskAssessment;
         notes_keys: string[];
-        /** Proxy DLL or the global Vulkan layer. */
+        /** Proxy DLL or the shared Vulkan layer. */
         host_kind: HostKind;
       } | null;
     }
@@ -202,10 +298,12 @@ export type AvailabilityOutcome =
 
 /**
  * The manual "install ReShade host + your own add-on file" escape hatch, present
- * for a DirectX game with no automatic or curated-external path.
+ * when no automatic or curated-external path is available.
  */
 export type ManualFileInstall = {
   risk: RiskAssessment;
+  /** Proxy DLL or the shared Vulkan layer. */
+  host_kind: HostKind;
   /** Catalogue add-on stem (`renodx-<slug>`) for a soft filename check, or null. */
   expected_addon_name: string | null;
   /** The game's architecture (`x64` / `x86`) for an add-on-arch check, or null. */
@@ -215,16 +313,12 @@ export type ManualFileInstall = {
 /** Read-only preview returned by `renodx_availability`. */
 export type AvailabilityReport = {
   state: RenoDxInstallState;
-  reshade_host: ReshadeHost;
-  reshade_host_action: ReshadeHostAction;
-  reshade_conflict: boolean;
-  reshade_channel: ReshadeChannel | null;
+  host_detection: HostDetection;
+  host_facts: HostFacts;
+  actions: RenoDxActions;
   reshade_stable_supported: boolean;
-  reshade_ownership: ReshadeHostOwnership;
   renodx_addon: RenoDxAddonState | null;
   outcome: AvailabilityOutcome;
   manual_install: ManualFileInstall | null;
-  /** Global ReShade Vulkan layer state, used with an install's host kind to decide
-   * whether to ask for layer consent first. */
-  vulkan_layer: VulkanLayerStatus;
+  vulkan_layer: VulkanLayerReport;
 };

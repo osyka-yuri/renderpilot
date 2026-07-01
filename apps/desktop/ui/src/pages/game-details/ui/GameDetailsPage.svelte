@@ -56,6 +56,7 @@
     onBulkSwap?: BulkSwapHandler;
     onBulkRollback?: BulkRollbackHandler;
     onOpenOperations?: () => void;
+    onOpenRenoDxSettings?: () => void;
   };
 
   const {
@@ -67,6 +68,7 @@
     onBulkSwap = () => undefined,
     onBulkRollback = () => undefined,
     onOpenOperations,
+    onOpenRenoDxSettings = () => undefined,
   }: Props = $props();
 
   const vendorTabs = $derived(createVendorTabs(details));
@@ -115,7 +117,7 @@
   }
 
   // Library components run through the existing bulk-swap path; RenoDX (add-on +
-  // managed ReShade host) updates via its own store, in the same single action.
+  // ReShade host updates via its own store, in the same single action.
   async function runUpdateAll() {
     if (updatePlan.items.length > 0) {
       await onBulkSwap(updatePlan.items);
@@ -342,7 +344,7 @@
         {/each}
 
         <TabsContent value={OTHER_TAB} class="grid gap-3">
-          <RenoDxCard {gameId} {busy} store={renodx} />
+          <RenoDxCard {gameId} {busy} store={renodx} {onOpenRenoDxSettings} />
         </TabsContent>
       </Tabs>
     {/if}

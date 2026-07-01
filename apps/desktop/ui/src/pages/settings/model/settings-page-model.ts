@@ -34,6 +34,7 @@ export type SettingsTabOption = {
 
 export const tabOptions = [
   { value: 'general', labelKey: 'settings.tabs.general' },
+  { value: 'renodx', labelKey: 'settings.tabs.renodx' },
   { value: 'catalog', labelKey: 'settings.tabs.catalog' },
   { value: 'nvidia', labelKey: 'settings.tabs.nvidia' },
 ] as const satisfies readonly SettingsTabOption[];
@@ -45,6 +46,13 @@ export type SettingsTabMemory = {
   getInitialTab: () => SettingsTabValue;
   rememberTab: (value: string) => void;
 };
+
+function normalizeTabValue(value: string): SettingsTabValue | null {
+  if (value === 'reshade') {
+    return 'renodx';
+  }
+  return tabOptions.find((tab) => tab.value === value)?.value ?? null;
+}
 
 /**
  * Creates a self-contained settings tab memory.
@@ -62,8 +70,9 @@ export function createSettingsTabMemory(): SettingsTabMemory {
       return rememberedTab;
     },
     rememberTab(value: string) {
-      if (tabOptions.some((tab) => tab.value === value)) {
-        rememberedTab = value as SettingsTabValue;
+      const normalized = normalizeTabValue(value);
+      if (normalized) {
+        rememberedTab = normalized;
       }
     },
   };

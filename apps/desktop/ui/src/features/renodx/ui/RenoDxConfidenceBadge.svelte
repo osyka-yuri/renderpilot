@@ -8,30 +8,42 @@
   import type { MatchConfidence } from '../model/types';
   import RenoDxFieldLabel from './RenoDxFieldLabel.svelte';
 
-  const { confidence }: { confidence: MatchConfidence } = $props();
+  type Props = {
+    confidence: MatchConfidence;
+  };
 
-  const LABEL = {
-    verified: 'gameDetails.renodx.confidenceVerified',
-    experimental: 'gameDetails.renodx.confidenceExperimental',
-    untested: 'gameDetails.renodx.confidenceUntested',
-  } satisfies Record<MatchConfidence, MessageKey>;
+  type ConfidenceView = {
+    label: MessageKey;
+    tint: string;
+    Icon: typeof CircleCheckIcon;
+  };
 
-  const TINT = {
-    verified: 'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-    experimental: 'border-transparent bg-amber-500/10 text-amber-700 dark:text-amber-400',
-    untested: 'border-border bg-muted/50 text-muted-foreground',
-  } satisfies Record<MatchConfidence, string>;
+  const CONFIDENCE_VIEW = {
+    verified: {
+      label: 'gameDetails.renodx.confidenceVerified',
+      tint: 'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      Icon: CircleCheckIcon,
+    },
+    experimental: {
+      label: 'gameDetails.renodx.confidenceExperimental',
+      tint: 'border-transparent bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      Icon: FlaskConicalIcon,
+    },
+    untested: {
+      label: 'gameDetails.renodx.confidenceUntested',
+      tint: 'border-border bg-muted/50 text-muted-foreground',
+      Icon: CircleHelpIcon,
+    },
+  } satisfies Record<MatchConfidence, ConfidenceView>;
+
+  let { confidence }: Props = $props();
+
+  const view = $derived(CONFIDENCE_VIEW[confidence]);
 </script>
 
 <RenoDxFieldLabel label={t('gameDetails.renodx.confidenceLabel')}>
-  <Badge variant="outline" class={TINT[confidence]}>
-    {#if confidence === 'verified'}
-      <CircleCheckIcon aria-hidden="true" />
-    {:else if confidence === 'experimental'}
-      <FlaskConicalIcon aria-hidden="true" />
-    {:else}
-      <CircleHelpIcon aria-hidden="true" />
-    {/if}
-    {t(LABEL[confidence])}
+  <Badge variant="outline" class={view.tint}>
+    <view.Icon aria-hidden={true} />
+    {t(view.label)}
   </Badge>
 </RenoDxFieldLabel>

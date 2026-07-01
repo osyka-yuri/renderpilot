@@ -3,86 +3,131 @@
   import { Button } from '@shared/ui';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
-  import {
-    ADDON_EXTENSIONS,
-    isAddonFile,
-    validateAddonFile,
-    type AddonValidation,
-  } from '../model/validate-addon';
+  import { ADDON_EXTENSIONS, isAddonFile, validateAddonFile } from '../model/validate-addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
   import type { ManualFileInstall, ReshadeChannel } from '../model/types';
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-  import RenoDxChannelSelect from './RenoDxChannelSelect.svelte';
+  import RenoDxChannelControl from './RenoDxChannelControl.svelte';
+  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
 
   type Props = {
     gameId: string;
     store: RenoDxStore;
     manual: ManualFileInstall;
-    /** Global busy flag (any exclusive operation in flight). */
+    /** Global busy flag: any exclusive RenoDX operation is in flight. */
     busy: boolean;
   };
 
   const { gameId, store, manual, busy }: Props = $props();
 
   let dropEl = $state<HTMLElement | null>(null);
-  // The picked file pending confirmation, with its tiered validation result.
-  let pending = $state<{ path: string; validation: AddonValidation } | null>(null);
+  let pendingPath = $state<string | null>(null);
 
   const blocked = $derived(manual.risk.severity === 'block');
+  const showFullAddonWarning = $derived(manual.risk.severity === 'warn');
+  const showDxChannelControl = $derived(manual.host_kind === 'proxy');
+  const expectedAddonName = $derived(manual.expected_addon_name ?? null);
+
+  const canReview = $derived(!busy && !blocked);
+
   const riskText = $derived(
     translateKey(manual.risk.message_key, t('gameDetails.renodx.riskSafe')),
   );
 
+  const pendingValidation = $derived(
+    pendingPath === null
+      ? null
+      : validateAddonFile(pendingPath, {
+          gameArch: manual.game_arch,
+          expectedAddonName: manual.expected_addon_name,
+        }),
+  );
+
+  const pendingError = $derived(pendingValidation?.error ?? null);
+  const pendingWarning = $derived(pendingValidation?.warning ?? null);
+  const pendingFileName = $derived(pendingValidation?.fileName ?? '');
+
+  const canConfirmInstall = $derived(canReview && pendingPath !== null && pendingError === null);
+
+  const installLabel = $derived(
+    store.busy ? t('gameDetails.renodx.installing') : t('gameDetails.renodx.actionInstall'),
+  );
+
   const drop = createAddonDrop(() => dropEl, handleDropped);
+  const dropActive = $derived(canReview && drop.dragActive);
+
+  function firstReviewablePath(paths: readonly string[]): string | null {
+    const addonPath = paths.find(isAddonFile);
+
+    if (addonPath !== undefined) {
+      return addonPath;
+    }
+
+    if (paths.length === 0) {
+      return null;
+    }
+
+    return paths[0];
+  }
 
   function review(path: string): void {
-    pending = {
-      path,
-      validation: validateAddonFile(path, {
-        gameArch: manual.game_arch,
-        expectedAddonName: manual.expected_addon_name,
-      }),
-    };
+    if (!canReview) {
+      return;
+    }
+
+    pendingPath = path;
   }
 
   function handleDropped(paths: string[]): void {
-    const first = paths.find(isAddonFile) ?? paths[0];
-    if (first) {
-      review(first);
+    const path = firstReviewablePath(paths);
+
+    if (path === null) {
+      return;
     }
+
+    review(path);
+  }
+
+  function chooseFile(): void {
+    if (!canReview) {
+      return;
+    }
+
+    void pickFile();
   }
 
   async function pickFile(): Promise<void> {
     const { openFilePicker } = await import('@shared/api');
+
     const file = await openFilePicker({
       filters: [{ name: 'RenoDX add-on', extensions: [...ADDON_EXTENSIONS] }],
     });
+
     if (file) {
       review(file);
     }
   }
 
   function confirmInstall(): void {
-    const path = pending?.path;
-    pending = null;
-    if (path) {
-      // The explicit confirmation here acknowledges the anti-cheat risk and, for a
-      // Vulkan game with no layer yet, consents to the global ReShade Vulkan layer.
-      void store.installFromFile(
-        gameId,
-        path,
-        store.selectedReshadeChannel,
-        true,
-        store.vulkanConsentNeeded,
-      );
+    const path = pendingPath;
+
+    if (!canConfirmInstall || path === null) {
+      return;
     }
+
+    pendingPath = null;
+    void store.installFromFile(gameId, path, store.selectedReshadeChannel, true);
   }
 
   function cancelReview(): void {
-    pending = null;
+    pendingPath = null;
   }
 
-  function selectChannel(channel: ReshadeChannel): void {
+  function setChannel(channel: ReshadeChannel): void {
+    if (channel === store.selectedReshadeChannel) {
+      return;
+    }
+
     store.setSelectedReshadeChannel(channel);
   }
 </script>
@@ -90,83 +135,117 @@
 <div
   bind:this={dropEl}
   role="region"
-  aria-label={t('gameDetails.renodx.external.dropHint')}
+  aria-label={t('gameDetails.renodx.fileInstall.title')}
   class="flex w-full flex-col gap-3 rounded-md transition-shadow"
-  class:ring-2={drop.dragActive}
-  class:ring-primary={drop.dragActive}
+  class:ring-2={dropActive}
+  class:ring-primary={dropActive}
 >
   <p class="text-sm font-medium">{t('gameDetails.renodx.fileInstall.title')}</p>
 
   {#if blocked}
     <p class="flex items-center gap-1 text-sm text-destructive">
-      <TriangleAlertIcon class="size-4" aria-hidden="true" />
+      <TriangleAlertIcon class="size-4 shrink-0" aria-hidden="true" />
       {t('gameDetails.renodx.riskBlocked')}
     </p>
-  {:else if pending}
-    {#if pending.validation.error}
+  {:else if pendingPath !== null}
+    {#if pendingError}
       <p class="flex items-center gap-1 text-sm text-destructive" aria-live="polite">
         <TriangleAlertIcon class="size-4 shrink-0" aria-hidden="true" />
-        {t(pending.validation.error.key, pending.validation.error.params)}
+        {t(pendingError.key, pendingError.params)}
       </p>
+
       <div>
-        <Button variant="outline" size="sm" disabled={busy} onclick={pickFile}>
+        <Button variant="outline" size="sm" disabled={!canReview} onclick={chooseFile}>
           {t('gameDetails.renodx.fileInstall.chooseAnother')}
         </Button>
       </div>
     {:else}
       <p class="text-sm" aria-live="polite">
-        {t('gameDetails.renodx.fileInstall.confirm', { fileName: pending.validation.fileName })}
+        {t('gameDetails.renodx.fileInstall.confirm', { fileName: pendingFileName })}
       </p>
-      {#if manual.expected_addon_name}
+
+      {#if expectedAddonName}
         <p class="text-sm text-muted-foreground">
-          {t('gameDetails.renodx.fileInstall.expected', { name: manual.expected_addon_name })}
+          {t('gameDetails.renodx.fileInstall.expected', { name: expectedAddonName })}
         </p>
       {/if}
-      <RenoDxChannelSelect
-        value={store.selectedReshadeChannel}
-        stableSupported={store.reshadeStableSupported}
-        disabled={busy}
-        onValueChange={selectChannel}
-      />
-      {#if pending.validation.warning}
+
+      {#if showFullAddonWarning}
+        <RenoDxStateMessage
+          tone="warning"
+          icon="warning"
+          message={t('gameDetails.renodx.fullAddonWarning')}
+        />
+      {/if}
+
+      {#if pendingWarning}
         <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
-          {t(pending.validation.warning.key, pending.validation.warning.params)}
+          {t(pendingWarning.key, pendingWarning.params)}
         </p>
       {/if}
-      {#if store.vulkanConsentNeeded}
-        <p class="text-sm text-muted-foreground">
-          {t('gameDetails.renodx.vulkanLayer.consentBody')}
-        </p>
-      {/if}
-      <div class="flex items-center gap-2">
+
+      <div class="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onclick={cancelReview}>
           {t('gameDetails.renodx.cancel')}
         </Button>
-        <Button size="sm" disabled={busy} onclick={confirmInstall}>
-          {store.busy ? t('gameDetails.renodx.installing') : t('gameDetails.renodx.actionInstall')}
+
+        {#if showDxChannelControl}
+          <RenoDxChannelControl
+            class="max-w-72"
+            value={store.selectedReshadeChannel}
+            stableSupported={store.reshadeStableSupported}
+            {busy}
+            label={t('gameDetails.renodx.channel.hostLabel')}
+            onChange={setChannel}
+          />
+        {/if}
+
+        <Button size="sm" disabled={!canConfirmInstall} onclick={confirmInstall}>
+          {installLabel}
         </Button>
       </div>
     {/if}
   {:else}
-    {#if manual.expected_addon_name}
+    {#if expectedAddonName}
       <p class="text-sm text-muted-foreground">
-        {t('gameDetails.renodx.fileInstall.expected', { name: manual.expected_addon_name })}
+        {t('gameDetails.renodx.fileInstall.expected', { name: expectedAddonName })}
       </p>
     {/if}
+
     <p class="text-sm text-muted-foreground">{riskText}</p>
-    <RenoDxChannelSelect
-      value={store.selectedReshadeChannel}
-      stableSupported={store.reshadeStableSupported}
-      disabled={busy}
-      onValueChange={selectChannel}
-    />
+
+    {#if showFullAddonWarning}
+      <RenoDxStateMessage
+        tone="warning"
+        icon="warning"
+        message={t('gameDetails.renodx.fullAddonWarning')}
+      />
+    {/if}
+
     <div>
-      <Button size="sm" disabled={busy} onclick={pickFile}>
+      {#if showDxChannelControl}
+        <div class="mb-2">
+          <RenoDxChannelControl
+            class="max-w-72"
+            value={store.selectedReshadeChannel}
+            stableSupported={store.reshadeStableSupported}
+            {busy}
+            label={t('gameDetails.renodx.channel.hostLabel')}
+            onChange={setChannel}
+          />
+        </div>
+      {/if}
+
+      <Button size="sm" disabled={!canReview} onclick={chooseFile}>
         {t('gameDetails.renodx.fileInstall.chooseFile')}
       </Button>
     </div>
   {/if}
 
-  <p class="text-sm text-muted-foreground">{t('gameDetails.renodx.external.dropHint')}</p>
+  {#if !blocked}
+    <p class="text-sm text-muted-foreground">
+      {t('gameDetails.renodx.external.dropHint')}
+    </p>
+  {/if}
 </div>

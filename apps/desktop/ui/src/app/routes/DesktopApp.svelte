@@ -30,7 +30,7 @@
   } from '@pages/game-details';
   import { GamesPage as GamesScreen } from '@pages/games';
   import { OperationsPage as OperationsScreen } from '@pages/operations';
-  import { SettingsPage as SettingsScreen } from '@pages/settings';
+  import { SettingsPage as SettingsScreen, settingsTabMemory } from '@pages/settings';
   import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
   import { createDesktopAppModel } from '@app/model/create-desktop-app-model.svelte';
   import {
@@ -165,6 +165,11 @@
     });
   }
 
+  function openRenoDxSettings(): void {
+    settingsTabMemory.rememberTab('renodx');
+    model.handleNavigate('settings');
+  }
+
   // ---------------------------------------------------------------------------
   // Background cover sync
   // ---------------------------------------------------------------------------
@@ -236,6 +241,7 @@
         onRollback={gameDetailsModel.handleRollback}
         onBulkSwap={gameDetailsModel.handleBulkSwap}
         onBulkRollback={gameDetailsModel.handleBulkRollback}
+        onOpenRenoDxSettings={openRenoDxSettings}
         onOpenOperations={() => {
           model.handleNavigate('operations');
         }}

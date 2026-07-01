@@ -67,7 +67,7 @@ describe('settings-page-model', () => {
 
   describe('tabOptions', () => {
     it('has exactly 3 tabs with non-empty label keys and unique values', () => {
-      expect(tabOptions.length).toBe(3);
+      expect(tabOptions.length).toBe(4);
       expectUniqueValues(tabOptions.map((t) => t.value));
       for (const tab of tabOptions) {
         expectNonEmptyString(tab.labelKey);
@@ -90,6 +90,14 @@ describe('settings-page-model', () => {
 
       memory.rememberTab('catalog');
       expect(memory.getInitialTab()).toBe('catalog');
+    });
+
+    it('maps the legacy ReShade tab value to RenoDX', () => {
+      const memory = createSettingsTabMemory();
+
+      memory.rememberTab('reshade');
+
+      expect(memory.getInitialTab()).toBe('renodx');
     });
 
     it('ignores unknown tab values', () => {

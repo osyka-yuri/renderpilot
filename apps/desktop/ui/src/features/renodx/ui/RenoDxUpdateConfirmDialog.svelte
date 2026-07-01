@@ -9,31 +9,22 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    Button,
   } from '@shared/ui';
-  import Trash2Icon from '@lucide/svelte/icons/trash-2';
+  import DownloadIcon from '@lucide/svelte/icons/download';
 
   type Props = {
+    open?: boolean;
     busy?: boolean;
-    onConfirm: () => void | Promise<void>;
+    onConfirm: () => unknown;
   };
 
-  let { busy = false, onConfirm }: Props = $props();
+  let { open = $bindable(), busy = false, onConfirm }: Props = $props();
 
-  let open = $state(false);
   let confirming = $state(false);
 
   const disabled = $derived(busy || confirming);
 
-  function openConfirmDialog(): void {
-    if (disabled) {
-      return;
-    }
-
-    open = true;
-  }
-
-  async function confirmUninstall(): Promise<void> {
+  async function confirmUpdate(): Promise<void> {
     if (disabled) {
       return;
     }
@@ -47,28 +38,21 @@
       confirming = false;
     }
   }
+
+  function handleOpenChange(nextOpen: boolean): void {
+    if (disabled && !nextOpen) {
+      return;
+    }
+    open = nextOpen;
+  }
 </script>
 
-<Button
-  type="button"
-  variant="destructive"
-  size="sm"
-  class="ml-auto"
-  {disabled}
-  aria-haspopup="dialog"
-  aria-expanded={open}
-  onclick={openConfirmDialog}
->
-  <Trash2Icon class="size-4" aria-hidden="true" />
-  {t('gameDetails.renodx.actionUninstall')}
-</Button>
-
-<AlertDialog bind:open>
+<AlertDialog {open} onOpenChange={handleOpenChange}>
   <AlertDialogContent class="sm:max-w-md" escapeKeydownBehavior={disabled ? 'ignore' : 'close'}>
     <AlertDialogHeader>
-      <AlertDialogTitle>{t('gameDetails.renodx.uninstallConfirmTitle')}</AlertDialogTitle>
+      <AlertDialogTitle>{t('gameDetails.renodx.updateConfirmTitle')}</AlertDialogTitle>
       <AlertDialogDescription>
-        {t('gameDetails.renodx.uninstallConfirmBody')}
+        {t('gameDetails.renodx.updateConfirmBody')}
       </AlertDialogDescription>
     </AlertDialogHeader>
 
@@ -77,9 +61,9 @@
         {t('common.cancel')}
       </AlertDialogCancel>
 
-      <AlertDialogAction type="button" {disabled} onclick={confirmUninstall}>
-        <Trash2Icon class="size-4" aria-hidden="true" />
-        {t('gameDetails.renodx.uninstallConfirmAction')}
+      <AlertDialogAction type="button" {disabled} onclick={confirmUpdate}>
+        <DownloadIcon class="size-4" aria-hidden="true" />
+        {t('gameDetails.renodx.updateConfirmAction')}
       </AlertDialogAction>
     </AlertDialogFooter>
   </AlertDialogContent>

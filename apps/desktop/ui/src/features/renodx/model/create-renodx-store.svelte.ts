@@ -4,87 +4,29 @@ import { publishErrorNotification } from '@shared/notifications';
 import { clearDownloadProgress } from '@entities/library';
 
 import { renodxApi, type RenoDxApi } from '../api/desktop';
+import {
+  availabilitySnapshotFromReport,
+  currentHostChannel,
+  defaultHostFacts,
+  degradeUnsupportedStableChannel,
+  deriveFreshness,
+  type AvailabilitySnapshot,
+} from './renodx-store-helpers';
 import type {
   AvailabilityOutcome,
-  HostKind,
   ManualFileInstall,
   MatchConfidence,
-  RenoDxAddonState,
-  RenoDxFreshness,
-  ReshadeHost,
-  ReshadeHostAction,
   RenoDxInstallState,
   RenoDxUpdateReport,
   ReshadeChannel,
-  ReshadeHostOwnership,
   RiskAssessment,
-  VulkanLayerStatus,
+  VulkanLayerReport,
 } from './types';
 
 /** Reactive store backing the RenoDX card for a single game. */
 export type RenoDxStore = ReturnType<typeof createRenoDxStore>;
 
-type AvailabilitySnapshot = {
-  reshadeHost: ReshadeHost;
-  reshadeHostAction: ReshadeHostAction;
-  reshadeConflict: boolean;
-  reshadeChannel: ReshadeChannel | null;
-  reshadeStableSupported: boolean;
-  reshadeOwnership: ReshadeHostOwnership;
-  renodxAddon: RenoDxAddonState | null;
-};
-
-function availabilitySnapshotFromReport(report: {
-  reshade_host: ReshadeHost;
-  reshade_host_action: ReshadeHostAction;
-  reshade_conflict: boolean;
-  reshade_channel: ReshadeChannel | null;
-  reshade_stable_supported: boolean;
-  reshade_ownership: ReshadeHostOwnership;
-  renodx_addon: RenoDxAddonState | null;
-}): AvailabilitySnapshot {
-  return {
-    reshadeHost: report.reshade_host,
-    reshadeHostAction: report.reshade_host_action,
-    reshadeConflict: report.reshade_conflict,
-    reshadeChannel: report.reshade_channel,
-    reshadeStableSupported: report.reshade_stable_supported,
-    reshadeOwnership: report.reshade_ownership,
-    renodxAddon: report.renodx_addon,
-  };
-}
-
-/**
- * Maps the probe state + update report to the single freshness verdict the card
- * renders as a pill. A pure function (exported for unit tests). Order matters:
- * - a probe in flight wins, suppressing a transient verdict;
- * - a failed probe reads `unknown` — it writes the same `{ addon: null, host: null }`
- *   report as a successful *untracked* probe, so it must be ruled out before the
- *   `untracked` check;
- * - `available` (some source changed) outranks the per-source breakdown.
- */
-export function deriveFreshness(
-  updateProbing: boolean,
-  probeFailed: boolean,
-  updateReport: RenoDxUpdateReport | null,
-): RenoDxFreshness {
-  if (updateProbing) {
-    return 'checking';
-  }
-  if (probeFailed || updateReport === null) {
-    return 'unknown';
-  }
-  if (updateReport.overall === 'available') {
-    return 'available';
-  }
-  if (updateReport.addon === null && updateReport.host === null) {
-    return 'untracked';
-  }
-  if (updateReport.overall === 'current') {
-    return 'current';
-  }
-  return 'unknown';
-}
+export { deriveFreshness };
 
 /**
  * Creates the RenoDX store. The backend API is injected so tests can drive the
@@ -93,20 +35,18 @@ export function deriveFreshness(
 export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   let state = $state<RenoDxInstallState | null>(null);
   let availabilitySnapshot = $state<AvailabilitySnapshot>({
-    reshadeHost: { status: 'absent' },
-    reshadeHostAction: 'conflict',
-    reshadeConflict: false,
-    reshadeChannel: null,
+    hostDetection: 'absent',
+    hostFacts: defaultHostFacts(),
+    actions: {},
     reshadeStableSupported: true,
-    reshadeOwnership: { kind: 'missing' },
     renodxAddon: null,
   });
   let selectedReshadeChannel = $state<ReshadeChannel>('stable');
   let outcome = $state<AvailabilityOutcome | null>(null);
   let manualInstall = $state<ManualFileInstall | null>(null);
-  // Global ReShade Vulkan layer status (from the availability preview); drives the
-  // consent prompt for a Vulkan install and the layer-management note.
-  let vulkanLayer = $state<VulkanLayerStatus | null>(null);
+  // Shared ReShade Vulkan layer report (from the availability preview); drives
+  // the layer-management note and backend-authored maintenance actions.
+  let vulkanLayer = $state<VulkanLayerReport | null>(null);
   let loading = $state(false);
   let loaded = $state(false);
   let busy = $state(false);
@@ -120,7 +60,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   let updateProbing = $state(false);
   // True when the last update probe failed (network). Without it, the failure
   // verdict — `{ addon: null, host: null, … }` — is indistinguishable from a
-  // successful probe of an untracked (file + foreign host) install, so the card
+  // successful probe of an install with only a local add-on file, so the card
   // would mislabel a network failure as "Updates not tracked".
   let probeFailed = $state(false);
   // Wall-clock time of the last completed update probe (load or manual check), in
@@ -134,7 +74,6 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   let requestId = 0;
 
   const isInstalled = $derived(state?.status === 'installed');
-  const isManaged = $derived(state?.status === 'installed' && state.reshade_managed_by_us);
   const isInstallable = $derived(outcome?.kind === 'installable');
   const isExternal = $derived(outcome?.kind === 'external');
   const isNativeHdr = $derived(outcome?.kind === 'native_hdr');
@@ -157,26 +96,19 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   const externalNotes = $derived<string[]>(externalFileInstall?.notes_keys ?? []);
   const externalRequiresConfirmation = $derived(externalRisk?.severity === 'warn');
   const externalIsBlocked = $derived(externalRisk?.severity === 'block');
-  // How RenoDX would hook in for the resolved install / external file-install.
-  const installHostKind = $derived<HostKind | null>(
-    outcome?.kind === 'installable' ? outcome.host_kind : null,
-  );
-  const externalHostKind = $derived<HostKind | null>(externalFileInstall?.host_kind ?? null);
-  // A Vulkan install needs consent to add the global ReShade Vulkan layer first, but
-  // only when none is present yet (a foreign/managed layer is reused without consent).
-  const vulkanConsentNeeded = $derived(
-    (installHostKind === 'vulkan' || externalHostKind === 'vulkan') && vulkanLayer === 'absent',
-  );
   const blacklistReason = $derived(outcome?.kind === 'blacklisted' ? outcome.reason : null);
   const risk = $derived<RiskAssessment | null>(
     outcome?.kind === 'installable' ? outcome.risk : null,
   );
   const requiresConfirmation = $derived(risk?.severity === 'warn');
   const isBlocked = $derived(risk?.severity === 'block');
-  const updateAvailable = $derived(updateReport?.overall === 'available');
+  const updateAvailable = $derived(
+    updateReport?.overall === 'available' || updateReport?.overall === 'channel_mismatch',
+  );
   const addonUpdate = $derived(updateReport?.addon ?? null);
   const hostUpdate = $derived(updateReport?.host ?? null);
   const dlssFixUpdate = $derived(updateReport?.dlssFix ?? null);
+  const vulkanUpdateDiagnostics = $derived(updateReport?.vulkan_diagnostics ?? []);
   // Whether the install includes the DLSS-Fix companion. Read straight off the
   // install state (the backend records a DlssFix tracked source) so this stays
   // correct even while the update probe is in flight or after it failed — the
@@ -195,7 +127,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   const addonTracked = $derived(state?.status === 'installed' ? state.addon_tracked : null);
 
   // The single freshness verdict the card renders as a status pill. The mapping
-  // logic lives in the pure, unit-tested `deriveFreshness` above.
+  // logic lives in the pure, unit-tested `deriveFreshness` helper.
   const freshness = $derived.by(() => deriveFreshness(updateProbing, probeFailed, updateReport));
 
   function applyAvailabilitySnapshot(
@@ -204,13 +136,16 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   ): void {
     const nextSnapshot = availabilitySnapshotFromReport(report);
     availabilitySnapshot = nextSnapshot;
-    if (nextSnapshot.reshadeChannel) {
-      selectedReshadeChannel = nextSnapshot.reshadeChannel;
-    } else if (mode === 'resetSelection') {
-      selectedReshadeChannel = nextSnapshot.reshadeStableSupported ? 'stable' : 'nightly';
+    if (mode === 'resetSelection') {
+      selectedReshadeChannel = selectedChannelFromSnapshot(nextSnapshot);
     } else if (!nextSnapshot.reshadeStableSupported && selectedReshadeChannel === 'stable') {
       selectedReshadeChannel = 'nightly';
     }
+  }
+
+  function selectedChannelFromSnapshot(snapshot: AvailabilitySnapshot): ReshadeChannel {
+    const channel = currentHostChannel(snapshot) ?? snapshot.hostFacts.channel.effective;
+    return degradeUnsupportedStableChannel(channel, snapshot.reshadeStableSupported);
   }
 
   /**
@@ -269,7 +204,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
    * re-resolve the manifest for nothing. The upstream-update probe is skipped
    * too: we just installed/updated, so every tracked source is current by
    * construction (running the probe would needlessly re-download the add-on
-   * and ReShade host to compare digests). `nextState` carries the new install
+   * and ReShade host to compare bytes). `nextState` carries the new install
    * state (including `dlss_fix_installed`, read straight off it), so
    * `dlssFixInstalled` and the DLSS-Fix-availability probe stay correct.
    *
@@ -278,7 +213,7 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
    * guarded by `token`, so the mutation's `busy` flag clears as soon as the
    * state is applied rather than blocking on a network round-trip.
    */
-  function refreshAfterMutation(gameId: string, nextState: RenoDxInstallState): void {
+  function refreshAfterMutation(gameId: string, nextState: RenoDxInstallState): number {
     const token = ++requestId;
     const stamped = stampMutationTimestamps(nextState, state);
     state = stamped;
@@ -304,6 +239,8 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     if (stamped.status === 'installed' && !stamped.dlss_fix_installed) {
       void probeDlssFixAvailability(gameId, token);
     }
+
+    return token;
   }
 
   /**
@@ -430,26 +367,27 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     await probeUpdateStatus(gameId, token);
   }
 
-  /**
-   * Marks the global Vulkan layer as ours after a consented Vulkan install added it,
-   * so the card reflects the new state without waiting for a reload.
-   */
-  function notePossibleVulkanLayerInstall(confirmVulkanLayer: boolean): void {
-    if (confirmVulkanLayer && vulkanLayer === 'absent') {
-      vulkanLayer = 'managed';
+  /** Re-reads the backend-authored shared Vulkan layer report after mutations. */
+  async function refreshVulkanLayerStatus(token: number): Promise<void> {
+    try {
+      const report = await api.vulkanLayerStatus();
+      if (token === requestId) {
+        vulkanLayer = report;
+      }
+    } catch {
+      // Best-effort: a failed layer-status refresh leaves the previous report.
     }
   }
 
   /**
-   * Installs RenoDX, then refreshes state. `confirmAnticheat` gates the warn case;
-   * `confirmVulkanLayer` consents to adding the global ReShade Vulkan layer for a
-   * Vulkan game when none is present yet. Returns whether the install succeeded.
+   * Installs RenoDX, then refreshes state. `confirmAnticheat` gates the warn
+   * case. The shared Vulkan layer is installed transparently (no user consent
+   * needed) when the game is a Vulkan title.
    */
   async function install(
     gameId: string,
     channel: ReshadeChannel,
     confirmAnticheat: boolean,
-    confirmVulkanLayer = false,
   ): Promise<boolean> {
     if (busy) {
       return false;
@@ -457,10 +395,10 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.install(gameId, channel, confirmAnticheat, confirmVulkanLayer);
+      const nextState = await api.install(gameId, channel, confirmAnticheat);
       selectedReshadeChannel = channel;
-      refreshAfterMutation(gameId, nextState);
-      notePossibleVulkanLayerInstall(confirmVulkanLayer);
+      const token = refreshAfterMutation(gameId, nextState);
+      await refreshVulkanLayerStatus(token);
       return true;
     } catch (error) {
       publishErrorNotification(
@@ -474,16 +412,15 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   }
 
   /**
-   * Installs RenoDX for an external game from a user-downloaded add-on file, then
-   * refreshes state. `confirmAnticheat` gates the warn case; `confirmVulkanLayer`
-   * consents to the global Vulkan layer for a Vulkan game. Returns success.
+   * Installs RenoDX for an external game from a user-downloaded add-on file,
+   * then refreshes state. `confirmAnticheat` gates the warn case. The shared
+   * Vulkan layer is installed transparently for Vulkan games.
    */
   async function installFromFile(
     gameId: string,
     filePath: string,
     channel: ReshadeChannel,
     confirmAnticheat: boolean,
-    confirmVulkanLayer = false,
   ): Promise<boolean> {
     if (busy) {
       return false;
@@ -491,16 +428,10 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.installFromFile(
-        gameId,
-        filePath,
-        channel,
-        confirmAnticheat,
-        confirmVulkanLayer,
-      );
+      const nextState = await api.installFromFile(gameId, filePath, channel, confirmAnticheat);
       selectedReshadeChannel = channel;
-      refreshAfterMutation(gameId, nextState);
-      notePossibleVulkanLayerInstall(confirmVulkanLayer);
+      const token = refreshAfterMutation(gameId, nextState);
+      await refreshVulkanLayerStatus(token);
       return true;
     } catch (error) {
       publishErrorNotification(
@@ -522,6 +453,9 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     if (busy) {
       return false;
     }
+    if (!updateAvailable) {
+      return false;
+    }
     busy = true;
     clearDownloadProgress([gameId]);
     try {
@@ -539,18 +473,40 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     }
   }
 
-  /** Switches the managed ReShade host channel and keeps the add-on channel-pinned. */
+  /** Switches the backend-authorized ReShade host channel and keeps the add-on channel-pinned. */
+  async function applyChannelSwitch(gameId: string, channel: ReshadeChannel): Promise<void> {
+    const nextState = await api.switchChannel(gameId, channel);
+    selectedReshadeChannel = channel;
+    availabilitySnapshot = {
+      ...availabilitySnapshot,
+      hostFacts: {
+        ...availabilitySnapshot.hostFacts,
+        channel: {
+          ...availabilitySnapshot.hostFacts.channel,
+          effective: channel,
+          detected: channel,
+        },
+      },
+    };
+    refreshAfterMutation(gameId, nextState);
+  }
+
   async function switchChannel(gameId: string, channel: ReshadeChannel): Promise<boolean> {
-    if (busy || channel === availabilitySnapshot.reshadeChannel) {
+    const action = availabilitySnapshot.actions.switch_channel;
+    if (
+      busy ||
+      state?.status !== 'installed' ||
+      state.host_kind !== 'proxy' ||
+      action?.enabled !== true ||
+      action.target_channel !== channel ||
+      channel === currentHostChannel(availabilitySnapshot)
+    ) {
       return false;
     }
     busy = true;
     clearDownloadProgress([gameId]);
     try {
-      const nextState = await api.switchChannel(gameId, channel);
-      selectedReshadeChannel = channel;
-      availabilitySnapshot = { ...availabilitySnapshot, reshadeChannel: channel };
-      refreshAfterMutation(gameId, nextState);
+      await applyChannelSwitch(gameId, channel);
       return true;
     } catch (error) {
       publishErrorNotification(
@@ -564,8 +520,10 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
   }
 
   function setSelectedReshadeChannel(channel: ReshadeChannel): void {
-    selectedReshadeChannel =
-      channel === 'stable' && !availabilitySnapshot.reshadeStableSupported ? 'nightly' : channel;
+    selectedReshadeChannel = degradeUnsupportedStableChannel(
+      channel,
+      availabilitySnapshot.reshadeStableSupported,
+    );
   }
 
   /** Uninstalls RenoDX, then refreshes state. Returns whether it succeeded. */
@@ -632,50 +590,24 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     }
   }
 
-  /**
-   * Removes RenderPilot's global ReShade Vulkan layer (user maintenance). A foreign
-   * layer is never touched. Updates the reported status. Returns success.
-   */
-  async function removeVulkanLayer(): Promise<boolean> {
-    if (busy) {
-      return false;
-    }
-    busy = true;
-    try {
-      vulkanLayer = await api.removeVulkanLayer();
-      return true;
-    } catch (error) {
-      publishErrorNotification(
-        t('gameDetails.renodx.vulkanLayer.removeError'),
-        describeCommandErrorTechnical(error),
-      );
-      return false;
-    } finally {
-      busy = false;
-    }
-  }
-
   return {
     get state() {
       return state;
     },
-    get reshadeHost() {
-      return availabilitySnapshot.reshadeHost;
+    get hostDetection() {
+      return availabilitySnapshot.hostDetection;
     },
-    get reshadeHostAction() {
-      return availabilitySnapshot.reshadeHostAction;
+    get hostFacts() {
+      return availabilitySnapshot.hostFacts;
     },
-    get reshadeConflict() {
-      return availabilitySnapshot.reshadeConflict;
+    get hostActions() {
+      return availabilitySnapshot.actions;
     },
     get reshadeChannel() {
-      return availabilitySnapshot.reshadeChannel;
+      return currentHostChannel(availabilitySnapshot);
     },
     get reshadeStableSupported() {
       return availabilitySnapshot.reshadeStableSupported;
-    },
-    get reshadeOwnership() {
-      return availabilitySnapshot.reshadeOwnership;
     },
     get selectedReshadeChannel() {
       return selectedReshadeChannel;
@@ -704,9 +636,6 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     },
     get isInstalled() {
       return isInstalled;
-    },
-    get isManaged() {
-      return isManaged;
     },
     get isInstallable() {
       return isInstallable;
@@ -756,13 +685,9 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     get externalIsBlocked() {
       return externalIsBlocked;
     },
-    /** Global ReShade Vulkan layer status (null until the availability preview loads). */
+    /** Shared ReShade Vulkan layer report (null until the availability preview loads). */
     get vulkanLayer() {
       return vulkanLayer;
-    },
-    /** Whether installing this game needs the user to consent to the global Vulkan layer. */
-    get vulkanConsentNeeded() {
-      return vulkanConsentNeeded;
     },
     get blacklistReason() {
       return blacklistReason;
@@ -809,6 +734,9 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     get dlssFixUpdate() {
       return dlssFixUpdate;
     },
+    get vulkanUpdateDiagnostics() {
+      return vulkanUpdateDiagnostics;
+    },
     get dlssFixInstalled() {
       return dlssFixInstalled;
     },
@@ -828,6 +756,5 @@ export function createRenoDxStore(api: RenoDxApi = renodxApi) {
     uninstall,
     installDlssFix,
     uninstallDlssFix,
-    removeVulkanLayer,
   };
 }

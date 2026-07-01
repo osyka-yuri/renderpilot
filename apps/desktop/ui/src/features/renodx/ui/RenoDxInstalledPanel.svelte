@@ -3,120 +3,189 @@
   import { t } from '@shared/i18n';
   import { Badge, Button, ItemGroup, Spinner } from '@shared/ui';
   import CalendarIcon from '@lucide/svelte/icons/calendar';
+  import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import ClockIcon from '@lucide/svelte/icons/clock';
   import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
-  import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
+  import WrenchIcon from '@lucide/svelte/icons/wrench';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
+  import type { ReshadeChannel } from '../model/types';
   import { formatDate, formatHttpDate, formatRelative } from '../model/format';
   import {
     CHANNEL_LABEL,
-    canSwitchReshadeChannel,
+    VULKAN_DIAGNOSTIC_LABEL,
+    actionDisabledMessage,
     getAddonDescriptionKey,
     getReshadeDescription,
-    getReshadeSwitchTarget,
-    isReshadeSwitchDisabled,
     type ReshadeDescriptionPart,
   } from '../model/reshade-presenters';
-  import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
+  import RenoDxChannelControl from './RenoDxChannelControl.svelte';
   import RenoDxComponentRow from './RenoDxComponentRow.svelte';
   import RenoDxFieldLabel from './RenoDxFieldLabel.svelte';
+  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
+  import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
   import RenoDxUninstallAction from './RenoDxUninstallAction.svelte';
+  import RenoDxUpdateConfirmDialog from './RenoDxUpdateConfirmDialog.svelte';
 
   type Props = {
     gameId: string;
     store: RenoDxStore;
-    /** Combined busy flag (page-global or store mutation in flight). */
+    /** Combined busy flag: page-global or store mutation in flight. */
     busy: boolean;
   };
 
   const { gameId, store, busy }: Props = $props();
 
-  const BRAND_LABEL = 'RenoDX';
+  const downloadIds = $derived.by(() => [gameId]);
 
-  // The concrete "what's installed" anchor: the add-on's upstream date when known,
-  // otherwise the local install date. (A rolling-snapshot add-on has no version.)
   const addonDateLabel = $derived(formatHttpDate(store.addonDated));
   const installedLabel = $derived(store.installedAt ? formatDate(store.installedAt) : null);
   const checkedLabel = $derived(store.lastCheckedAt ? formatRelative(store.lastCheckedAt) : null);
-  const probing = $derived(store.freshness === 'checking');
-  const reshadeHost = $derived(store.reshadeHost);
 
-  function renderReshadeDescriptionPart(part: ReshadeDescriptionPart): string {
-    if (part.kind === 'version') {
-      return t(part.key, { version: part.version });
-    }
-    return t(part.key);
-  }
+  const isCheckingForUpdates = $derived(store.freshness === 'checking');
+  const checkUpdatesDisabled = $derived(busy || isCheckingForUpdates);
+
+  const updateAction = $derived(store.hostActions.update);
+  const updateDisabledByHost = $derived(updateAction?.enabled === false);
+  const updateDisabled = $derived(busy || updateDisabledByHost);
+  const updateRequiresConfirmation = $derived(updateAction?.requires_confirmation === true);
+  const updateDisabledMessage = $derived(actionDisabledMessage(updateAction));
+
+  let confirmUpdateDialogOpen = $state(false);
+
+  const repairAction = $derived(store.hostActions.repair);
+  const repairVisible = $derived(repairAction !== undefined);
+  const repairDisabledByHost = $derived(repairAction?.enabled !== true);
+  const repairDisabled = $derived(busy || repairDisabledByHost);
+  const repairDisabledMessage = $derived(actionDisabledMessage(repairAction));
+
+  const primaryHostDisabledMessage = $derived(updateDisabledMessage ?? repairDisabledMessage);
+
+  const hasVulkanDiagnostics = $derived(store.vulkanUpdateDiagnostics.length > 0);
+
+  const showFullAddonWarning = $derived(
+    store.requiresConfirmation &&
+      (store.hostFacts.addon_support === 'full' || updateAction !== undefined),
+  );
 
   const reshadeChannelLabel = $derived(
     store.reshadeChannel ? t(CHANNEL_LABEL[store.reshadeChannel]) : null,
   );
+
+  const installedChannelValue = $derived(store.reshadeChannel ?? store.selectedReshadeChannel);
+
+  const showChannelControl = $derived(
+    store.state?.status === 'installed' && store.state.host_kind === 'proxy',
+  );
+
+  const channelSwitchEnabled = $derived(store.hostActions.switch_channel?.enabled === true);
+  const channelControlBusy = $derived(busy || !channelSwitchEnabled);
+
   const reshadeDescription = $derived.by((): string => {
     const description = getReshadeDescription({
-      host: reshadeHost,
-      action: store.reshadeHostAction,
-      conflict: store.reshadeConflict,
-      ownership: store.reshadeOwnership,
+      detection: store.hostDetection,
+      facts: store.hostFacts,
     });
+
     if (description.kind === 'conflict') {
       return t(description.key);
     }
+
     const parts = description.parts.map(renderReshadeDescriptionPart);
+
     return parts.length > 0 ? parts.join(' · ') : t(description.fallbackKey);
   });
-  const switchTarget = $derived(getReshadeSwitchTarget(store.reshadeChannel));
-  const canSwitchChannel = $derived(canSwitchReshadeChannel(store.reshadeOwnership, switchTarget));
-  const switchDisabled = $derived(
-    isReshadeSwitchDisabled({
-      busy,
-      target: switchTarget,
-      stableSupported: store.reshadeStableSupported,
-    }),
-  );
-  const switchLabel = $derived(
-    switchTarget
-      ? t('gameDetails.renodx.channel.switchTo', { channel: t(CHANNEL_LABEL[switchTarget]) })
-      : '',
-  );
 
-  // "Installed from a file — not tracked" reads straight off the install state
-  // (`addonTracked`), so it is correct on load, during the probe, and after a
-  // probe failure — unlike inferring it from the update report's `addon`, which
-  // is `null` in all three cases.
+  /*
+   * Read from install state, not from the latest update report. This keeps the
+   * description correct on initial load, while probing, and after probe errors.
+   */
   const addonDescription = $derived(
     t(getAddonDescriptionKey(store.renodxAddon, store.addonTracked)),
   );
 
-  function checkForUpdates(): void {
+  const showDlssFixRow = $derived(store.dlssFixInstalled || store.dlssFixAvailable);
+  const dlssFixDescription = $derived(
+    store.dlssFixInstalled
+      ? t('gameDetails.renodx.component.dlssFixDesc')
+      : t('gameDetails.renodx.component.dlssFixOffer'),
+  );
+  const dlssFixStatus = $derived(store.dlssFixInstalled ? store.dlssFixUpdate : undefined);
+
+  function renderReshadeDescriptionPart(part: ReshadeDescriptionPart): string {
+    return part.kind === 'version' ? t(part.key, { version: part.version }) : t(part.key);
+  }
+
+  function handleCheckForUpdates(): void {
+    if (checkUpdatesDisabled) {
+      return;
+    }
+
     void store.checkForUpdates(gameId);
   }
-  function update(): void {
+
+  function handleUpdate(): void {
+    if (updateDisabled || !store.updateAvailable) {
+      return;
+    }
+
+    if (updateRequiresConfirmation) {
+      confirmUpdateDialogOpen = true;
+      return;
+    }
+
     void store.update(gameId);
   }
-  function uninstall(): void {
-    void store.uninstall(gameId);
+
+  function handleSwitchChannel(channel: ReshadeChannel): void {
+    if (busy || !channelSwitchEnabled || channel === installedChannelValue) {
+      return;
+    }
+
+    void store.switchChannel(gameId, channel);
   }
-  function installDlssFix(): void {
+
+  function handleInstallDlssFix(): void {
+    if (busy || !store.dlssFixAvailable) {
+      return;
+    }
+
     void store.installDlssFix(gameId);
   }
-  function uninstallDlssFix(): void {
+
+  function handleUninstallDlssFix(): void {
+    if (busy || !store.dlssFixInstalled) {
+      return;
+    }
+
     void store.uninstallDlssFix(gameId);
   }
-  function switchChannel(): void {
-    if (switchTarget) {
-      void store.switchChannel(gameId, switchTarget);
+
+  function handleRepair(): void {
+    if (repairDisabled) {
+      return;
     }
+
+    void store.install(gameId, store.selectedReshadeChannel, false);
+  }
+
+  function handleUninstall(): void {
+    if (busy) {
+      return;
+    }
+
+    void store.uninstall(gameId);
   }
 </script>
 
 <div class="flex w-full flex-col gap-4">
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-    <RenoDxFieldLabel label={BRAND_LABEL} wrap={false} gap={1.5}>
+    <RenoDxFieldLabel label={t('gameDetails.renodx.status.label')} class="flex-nowrap gap-1.5">
       <Badge variant="secondary">{t('gameDetails.renodx.statusInstalled')}</Badge>
     </RenoDxFieldLabel>
-    <RenoDxFieldLabel label={t('gameDetails.renodx.fresh.label')} wrap={false} gap={1.5}>
+
+    <RenoDxFieldLabel label={t('gameDetails.renodx.fresh.label')} class="flex-nowrap gap-1.5">
       <RenoDxStatusBadge status={store.freshness} />
     </RenoDxFieldLabel>
   </div>
@@ -128,11 +197,11 @@
         {t('gameDetails.renodx.addonDated', { date: addonDateLabel })}
       </span>
     {/if}
+
     {#if installedLabel}
-      <span>
-        {t('gameDetails.renodx.installedOn', { date: installedLabel })}
-      </span>
+      <span>{t('gameDetails.renodx.installedOn', { date: installedLabel })}</span>
     {/if}
+
     <span>
       <ClockIcon class="mr-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
       {checkedLabel
@@ -140,6 +209,14 @@
         : t('gameDetails.renodx.lastCheckedNever')}
     </span>
   </div>
+
+  {#if showFullAddonWarning}
+    <RenoDxStateMessage
+      tone="warning"
+      icon="warning"
+      message={t('gameDetails.renodx.fullAddonWarning')}
+    />
+  {/if}
 
   <ItemGroup class="rounded-md border bg-muted/30">
     <RenoDxComponentRow
@@ -149,65 +226,86 @@
       status={store.hostUpdate}
     >
       {#snippet actions()}
-        {#if reshadeChannelLabel}
+        {#if showChannelControl}
+          <RenoDxChannelControl
+            value={installedChannelValue}
+            stableSupported={store.reshadeStableSupported}
+            busy={channelControlBusy}
+            ariaLabel={t('gameDetails.renodx.channel.label')}
+            onChange={handleSwitchChannel}
+          />
+        {:else if reshadeChannelLabel}
           <Badge variant="outline">{reshadeChannelLabel}</Badge>
-        {/if}
-        {#if canSwitchChannel}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={switchDisabled}
-            title={switchTarget === 'stable' && !store.reshadeStableSupported
-              ? t('gameDetails.renodx.channel.stableUnavailable')
-              : switchLabel}
-            onclick={switchChannel}
-          >
-            {switchLabel}
-          </Button>
         {/if}
       {/snippet}
     </RenoDxComponentRow>
+
     <RenoDxComponentRow
       icon="addon"
       title={t('gameDetails.renodx.component.addon')}
       description={addonDescription}
       status={store.addonUpdate}
     />
-    {#if store.dlssFixInstalled}
+
+    {#if showDlssFixRow}
       <RenoDxComponentRow
         icon="dlssfix"
         title={t('gameDetails.renodx.component.dlssFix')}
-        description={t('gameDetails.renodx.component.dlssFixDesc')}
+        description={dlssFixDescription}
         hint={t('gameDetails.renodx.component.dlssFixHint')}
-        status={store.dlssFixUpdate}
+        status={dlssFixStatus}
       >
         {#snippet actions()}
-          <Button variant="destructive" size="sm" disabled={busy} onclick={uninstallDlssFix}>
-            <Trash2Icon class="size-4" aria-hidden="true" />
-            {t('gameDetails.renodx.actionRemoveDlssFix')}
-          </Button>
-        {/snippet}
-      </RenoDxComponentRow>
-    {:else if store.dlssFixAvailable}
-      <RenoDxComponentRow
-        icon="dlssfix"
-        title={t('gameDetails.renodx.component.dlssFix')}
-        description={t('gameDetails.renodx.component.dlssFixOffer')}
-        hint={t('gameDetails.renodx.component.dlssFixHint')}
-      >
-        {#snippet actions()}
-          <Button variant="outline" size="sm" disabled={busy} onclick={installDlssFix}>
-            {t('gameDetails.renodx.actionInstallDlssFix')}
-          </Button>
+          {#if store.dlssFixInstalled}
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={busy}
+              onclick={handleUninstallDlssFix}
+            >
+              <Trash2Icon class="size-4" aria-hidden="true" />
+              {t('gameDetails.renodx.actionRemoveDlssFix')}
+            </Button>
+          {:else}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onclick={handleInstallDlssFix}
+            >
+              {t('gameDetails.renodx.actionInstallDlssFix')}
+            </Button>
+          {/if}
         {/snippet}
       </RenoDxComponentRow>
     {/if}
   </ItemGroup>
 
-  <div class="flex flex-wrap items-center gap-2">
-    <DownloadProgressBar ids={[gameId]} active={store.busy} />
-    <Button variant="outline" size="sm" disabled={busy || probing} onclick={checkForUpdates}>
-      {#if probing}
+  {#if hasVulkanDiagnostics}
+    <ul class="list-inside list-disc text-sm text-muted-foreground">
+      {#each store.vulkanUpdateDiagnostics as reason (reason)}
+        <li>{t(VULKAN_DIAGNOSTIC_LABEL[reason])}</li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if primaryHostDisabledMessage}
+    <RenoDxStateMessage tone="warning" icon="warning" message={primaryHostDisabledMessage} />
+  {/if}
+
+  <div class="flex flex-wrap items-center justify-end gap-2 px-1">
+    <DownloadProgressBar ids={downloadIds} active={store.busy} />
+
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={checkUpdatesDisabled}
+      onclick={handleCheckForUpdates}
+    >
+      {#if isCheckingForUpdates}
         <Spinner class="size-4" />
         {t('gameDetails.renodx.fresh.checking')}
       {:else}
@@ -215,8 +313,15 @@
         {t('gameDetails.renodx.actionCheckUpdates')}
       {/if}
     </Button>
+
     {#if store.updateAvailable}
-      <Button variant="default" size="sm" disabled={busy} onclick={update}>
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        disabled={updateDisabled}
+        onclick={handleUpdate}
+      >
         {#if store.busy}
           <Spinner class="size-4" />
           {t('gameDetails.renodx.updating')}
@@ -226,6 +331,25 @@
         {/if}
       </Button>
     {/if}
-    <RenoDxUninstallAction {busy} onConfirm={uninstall} />
+
+    {#if repairVisible}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={repairDisabled}
+        onclick={handleRepair}
+      >
+        <WrenchIcon class="size-4" aria-hidden="true" />
+        {t('gameDetails.renodx.actionRepair')}
+      </Button>
+    {/if}
+
+    <RenoDxUninstallAction {busy} onConfirm={handleUninstall} />
   </div>
 </div>
+<RenoDxUpdateConfirmDialog
+  bind:open={confirmUpdateDialogOpen}
+  {busy}
+  onConfirm={() => store.update(gameId)}
+/>

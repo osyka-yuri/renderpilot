@@ -4,6 +4,7 @@
   import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
   import ImageIcon from '@lucide/svelte/icons/image';
   import CpuIcon from '@lucide/svelte/icons/cpu';
+  import WandIcon from '@lucide/svelte/icons/wand';
   import type { ThemeMode } from '@shared/theme';
   import type { LanguageMode } from '@shared/i18n';
   import { t } from '@shared/i18n';
@@ -26,6 +27,7 @@
     SettingsAppearanceSection,
     SettingsCatalogSection,
     SettingsNvidiaSection,
+    SettingsRenoDxSection,
     SettingsAboutSection,
     createSettingsPanelModel,
   } from '@widgets/settings-panel';
@@ -61,6 +63,7 @@
 
   const tabIcons: Record<SettingsTabValue, Component> = {
     general: SlidersHorizontalIcon,
+    renodx: WandIcon,
     catalog: ImageIcon,
     nvidia: CpuIcon,
   };
@@ -106,6 +109,10 @@
       isDownloading={appUpdaterModel.isDownloading}
       onCheckForUpdates={appUpdaterModel.handleCheckForUpdates}
     />
+  </SettingsTabPanel>
+
+  <SettingsTabPanel value="renodx">
+    <SettingsRenoDxSection />
   </SettingsTabPanel>
 
   <SettingsTabPanel value="catalog">

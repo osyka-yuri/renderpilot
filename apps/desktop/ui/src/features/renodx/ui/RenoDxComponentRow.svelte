@@ -19,56 +19,64 @@
   import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
   import type { UpdateStatus } from '../model/types';
 
-  // One row in the installed-state component list: the ReShade host, the RenoDX
-  // add-on, or the DLSS-Fix companion. `icon` is a small enum so callers never
-  // pass a component; `status` renders a freshness pill when set; `hint` adds an
-  // info tooltip after the title (progressive disclosure for a longer "how it
-  // works" note); `actions` is an optional trailing snippet (a button).
+  const ICON_BY_KIND = {
+    reshade: ShieldCheckIcon,
+    addon: PuzzleIcon,
+    dlssfix: SparklesIcon,
+  } as const;
+
+  type ItemIcon = keyof typeof ICON_BY_KIND;
+
   type Props = {
-    icon: 'reshade' | 'addon' | 'dlssfix';
+    icon: ItemIcon;
     title: string;
     description: string;
     status?: UpdateStatus | null;
-    hint?: string;
+    hint?: string | null;
     actions?: Snippet;
   };
 
-  const { icon, title, description, status = null, hint, actions }: Props = $props();
+  let { icon, title, description, status = null, hint = null, actions }: Props = $props();
+
+  const Icon = $derived(ICON_BY_KIND[icon]);
+  const hintText = $derived(hint?.trim() ?? null);
 </script>
 
 <Item size="sm">
   <ItemMedia>
-    {#if icon === 'reshade'}
-      <ShieldCheckIcon class="size-4 text-muted-foreground" aria-hidden="true" />
-    {:else if icon === 'addon'}
-      <PuzzleIcon class="size-4 text-muted-foreground" aria-hidden="true" />
-    {:else}
-      <SparklesIcon class="size-4 text-muted-foreground" aria-hidden="true" />
-    {/if}
+    <Icon class="size-4 text-muted-foreground" aria-hidden="true" />
   </ItemMedia>
+
   <ItemContent>
     <ItemTitle>
       <span class="inline-flex items-center gap-1.5">
         {title}
-        {#if hint}
+
+        {#if hintText}
           <Tooltip>
             <TooltipTrigger
-              class="text-muted-foreground hover:text-foreground inline-flex"
-              aria-label={hint}
+              class="inline-flex text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={hintText}
             >
               <InfoIcon class="size-3.5" aria-hidden="true" />
             </TooltipTrigger>
-            <TooltipContent class="max-w-xs">{hint}</TooltipContent>
+
+            <TooltipContent class="max-w-xs">
+              {hintText}
+            </TooltipContent>
           </Tooltip>
         {/if}
       </span>
     </ItemTitle>
+
     <ItemDescription>{description}</ItemDescription>
   </ItemContent>
+
   <ItemActions>
-    {#if status}
+    {#if status !== null}
       <RenoDxStatusBadge {status} />
     {/if}
+
     {@render actions?.()}
   </ItemActions>
 </Item>

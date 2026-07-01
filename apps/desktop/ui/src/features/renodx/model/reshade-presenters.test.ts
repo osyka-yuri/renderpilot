@@ -1,37 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  canSwitchReshadeChannel,
   getAddonDescriptionKey,
   getReshadeDescription,
-  getReshadeSwitchTarget,
   humanizeMessageKey,
-  isReshadeSwitchDisabled,
   riskFallbackKey,
 } from './reshade-presenters';
-import type { ReshadeHost } from './types';
+import type { HostFacts } from './types';
 
-const PRESENT_HOST = {
-  status: 'present',
+const PRESENT_HOST_FACTS = {
   path: 'C:\\Games\\Game\\dxgi.dll',
   slot: 'dxgi.dll',
   version: '6.5.1',
   addon_support: 'full',
-  identity: 'confirmed',
-  active: {
-    state: 'active',
-    reason: 'detected_by_matcher',
+  active: true,
+  channel: {
+    selected: 'stable',
+    effective: 'stable',
+    detected: 'stable',
   },
-} satisfies ReshadeHost;
+  update_status: 'current',
+} satisfies HostFacts;
 
 describe('reshade presenters', () => {
   it('surfaces host conflicts as the blocking description', () => {
     expect(
       getReshadeDescription({
-        host: PRESENT_HOST,
-        action: 'up_to_date',
-        conflict: true,
-        ownership: { kind: 'managed', health: 'healthy' },
+        detection: 'conflict',
+        facts: PRESENT_HOST_FACTS,
       }),
     ).toEqual({
       kind: 'conflict',
@@ -39,17 +35,16 @@ describe('reshade presenters', () => {
     });
   });
 
-  it('builds a stable host description from version, health, support, and action', () => {
+  it('builds a host description from version, support, and update status', () => {
     expect(
       getReshadeDescription({
-        host: {
-          ...PRESENT_HOST,
+        detection: 'present',
+        facts: {
+          ...PRESENT_HOST_FACTS,
           version: '6.4.0',
-          addon_support: 'none',
+          addon_support: 'limited',
+          update_status: 'repair_available',
         },
-        action: 'reinstall_with_addon_support',
-        conflict: false,
-        ownership: { kind: 'managed', health: 'missing' },
       }),
     ).toEqual({
       kind: 'parts',
@@ -62,35 +57,43 @@ describe('reshade presenters', () => {
         },
         {
           kind: 'message',
-          key: 'gameDetails.renodx.host.health.missing',
-        },
-        {
-          kind: 'message',
           key: 'gameDetails.renodx.host.addons.none',
         },
         {
           kind: 'message',
-          key: 'gameDetails.renodx.host.action.reinstall_with_addon_support',
+          key: 'gameDetails.renodx.host.action.repair_host',
         },
       ],
     });
   });
 
-  it('derives channel switch affordances', () => {
-    expect(getReshadeSwitchTarget('stable')).toBe('nightly');
-    expect(getReshadeSwitchTarget('nightly')).toBe('stable');
-    expect(getReshadeSwitchTarget(null)).toBeNull();
-    expect(canSwitchReshadeChannel({ kind: 'managed', health: 'healthy' }, 'nightly')).toBe(true);
-    expect(canSwitchReshadeChannel({ kind: 'unmanaged_compatible' }, 'nightly')).toBe(false);
-    expect(isReshadeSwitchDisabled({ busy: false, target: 'stable', stableSupported: false })).toBe(
-      true,
-    );
+  it('labels a host channel mismatch as a channel change, not a generic update', () => {
     expect(
-      isReshadeSwitchDisabled({ busy: false, target: 'nightly', stableSupported: false }),
-    ).toBe(false);
+      getReshadeDescription({
+        detection: 'present',
+        facts: {
+          ...PRESENT_HOST_FACTS,
+          update_status: 'channel_mismatch',
+        },
+      }),
+    ).toEqual({
+      kind: 'parts',
+      fallbackKey: 'gameDetails.renodx.host.versionUnknown',
+      parts: [
+        {
+          kind: 'version',
+          key: 'gameDetails.renodx.host.version',
+          version: '6.5.1',
+        },
+        {
+          kind: 'message',
+          key: 'gameDetails.renodx.fresh.channelMismatch',
+        },
+      ],
+    });
   });
 
-  it('derives the add-on description key from config and provenance', () => {
+  it('derives the add-on description key from config and install state', () => {
     expect(
       getAddonDescriptionKey(
         {

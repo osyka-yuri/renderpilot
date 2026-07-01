@@ -1,44 +1,85 @@
 <script lang="ts">
-  import { Badge, Spinner } from '@shared/ui';
+  import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
+  import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+  import InfoIcon from '@lucide/svelte/icons/info';
   import { t } from '@shared/i18n';
   import type { MessageKey } from '@shared/i18n';
-  import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
-  import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
-  import InfoIcon from '@lucide/svelte/icons/info';
+  import { Badge, Spinner } from '@shared/ui';
 
-  import type { RenoDxFreshness } from '../model/types';
+  import type { RenoDxFreshness, UpdateStatus } from '../model/types';
 
-  // The shared freshness verdict the card renders as a pill. `current` reads as
-  // success (emerald), `available` as attention (warning), and the rest stay
-  // muted. Kept colour-coded but quiet so the card never feels alarming.
-  const { status }: { status: RenoDxFreshness } = $props();
+  type RenoDxBadgeStatus = RenoDxFreshness | UpdateStatus;
 
-  const LABEL = {
-    current: 'gameDetails.renodx.fresh.current',
-    available: 'gameDetails.renodx.fresh.available',
-    unknown: 'gameDetails.renodx.fresh.unknown',
-    untracked: 'gameDetails.renodx.updatesNotTracked',
-    checking: 'gameDetails.renodx.fresh.checking',
-  } satisfies Record<RenoDxFreshness, MessageKey>;
+  type Props = {
+    status: RenoDxBadgeStatus;
+  };
 
-  const TINT = {
-    current: 'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-    available: 'border-transparent bg-warning/10 text-warning',
-    unknown: 'text-muted-foreground',
-    untracked: 'text-muted-foreground',
-    checking: 'text-muted-foreground',
-  } satisfies Record<RenoDxFreshness, string>;
+  type StatusIcon = 'success' | 'update' | 'checking' | 'info';
+
+  type StatusMeta = {
+    label: MessageKey;
+    tint: string;
+    icon: StatusIcon;
+  };
+
+  const MUTED_TINT = 'text-muted-foreground';
+  const SUCCESS_TINT =
+    'border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+  const WARNING_TINT = 'border-transparent bg-warning/10 text-warning';
+
+  const STATUS_META = {
+    current: {
+      label: 'gameDetails.renodx.fresh.current',
+      tint: SUCCESS_TINT,
+      icon: 'success',
+    },
+    available: {
+      label: 'gameDetails.renodx.fresh.available',
+      tint: WARNING_TINT,
+      icon: 'update',
+    },
+    unknown: {
+      label: 'gameDetails.renodx.fresh.unknown',
+      tint: MUTED_TINT,
+      icon: 'info',
+    },
+    untracked: {
+      label: 'gameDetails.renodx.updatesNotTracked',
+      tint: MUTED_TINT,
+      icon: 'info',
+    },
+    checking: {
+      label: 'gameDetails.renodx.fresh.checking',
+      tint: MUTED_TINT,
+      icon: 'checking',
+    },
+    channel_mismatch: {
+      label: 'gameDetails.renodx.fresh.channelMismatch',
+      tint: WARNING_TINT,
+      icon: 'update',
+    },
+    unknown_needs_validation: {
+      label: 'gameDetails.renodx.fresh.validationRequired',
+      tint: MUTED_TINT,
+      icon: 'info',
+    },
+  } satisfies Record<RenoDxBadgeStatus, StatusMeta>;
+
+  const { status }: Props = $props();
+
+  const meta = $derived(STATUS_META[status]);
 </script>
 
-<Badge variant="outline" class={TINT[status]}>
-  {#if status === 'current'}
+<Badge variant="outline" class={meta.tint}>
+  {#if meta.icon === 'success'}
     <CircleCheckIcon aria-hidden="true" />
-  {:else if status === 'available'}
+  {:else if meta.icon === 'update'}
     <CircleArrowUpIcon aria-hidden="true" />
-  {:else if status === 'checking'}
+  {:else if meta.icon === 'checking'}
     <Spinner class="size-3" />
   {:else}
     <InfoIcon aria-hidden="true" />
   {/if}
-  {t(LABEL[status])}
+
+  {t(meta.label)}
 </Badge>

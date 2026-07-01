@@ -44,6 +44,8 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Settings: tabs ──
   'settings.tabs.general': 'Общие',
+  'settings.tabs.reshade': 'ReShade',
+  'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'Каталог',
   'settings.tabs.nvidia': 'NVIDIA',
 
@@ -163,6 +165,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.show': 'Показать API-ключ',
   'settings.catalog.steamKey.hide': 'Скрыть API-ключ',
   'settings.catalog.steamKey.getKey': 'Получить API-ключ',
+
+  // ── Settings: RenoDX ──
+  'settings.renodx.vulkan.description':
+    'Управление общим Vulkan-слоем ReShade для Vulkan-игр RenoDX.',
+  'settings.renodx.vulkan.channel': 'Канал Vulkan-слоя',
+  'settings.renodx.vulkan.channelDescription': 'Выберите канал ReShade для общего Vulkan-слоя.',
+  'settings.renodx.vulkan.loadError': 'Не удалось загрузить состояние Vulkan-слоя.',
+  'settings.renodx.vulkan.saveError': 'Не удалось сохранить канал Vulkan-слоя.',
+  'settings.renodx.vulkan.applyError': 'Не удалось применить Vulkan-слой.',
 
   // ── Settings: about ──
   'settings.about.title': 'Обновления',
@@ -492,27 +503,77 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.switchError': 'Не удалось переключить канал ReShade',
   'gameDetails.renodx.unsupported': 'Для этой игры нет профиля RenoDX.',
   'gameDetails.renodx.incompatible': 'RenoDX нельзя установить: {reason}.',
-  'gameDetails.renodx.statusInstalled': 'Установлено',
+  'gameDetails.renodx.status.label': 'Статус',
+  'gameDetails.renodx.statusInstalled': 'Установлен',
   'gameDetails.renodx.actionInstall': 'Установить',
   'gameDetails.renodx.actionUninstall': 'Удалить RenoDX',
+  'gameDetails.renodx.actionRepair': 'Восстановить',
   'gameDetails.renodx.uninstallConfirmTitle': 'Удалить RenoDX из этой игры?',
   'gameDetails.renodx.uninstallConfirmBody':
-    'Будут удалены аддон RenoDX и файлы ReShade, которыми RenderPilot управляет для этой игры. Если есть резервные копии, файлы будут восстановлены.',
+    'Будет удалён аддон RenoDX и восстановлены только файлы ReShade, изменённые во время настройки RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Удалить',
   'gameDetails.renodx.installing': 'Установка…',
-  'gameDetails.renodx.riskSafe': 'Одиночная игра — установка безопасна.',
+  'gameDetails.renodx.riskSafe': 'Античит не обнаружен — установка безопасна.',
   'gameDetails.renodx.riskWarn': 'Обнаружен античит — установка может привести к бану.',
   'gameDetails.renodx.riskBlocked': 'Установка для этой игры заблокирована.',
+  'gameDetails.renodx.confirmTitle': 'Установить RenoDX несмотря на риск из-за античита?',
   'gameDetails.renodx.confirmAccept': 'Всё равно установить',
   'gameDetails.renodx.confirmBody':
     'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
+  'gameDetails.renodx.fullAddonWarning':
+    'Полная поддержка аддонов ReShade может быть небезопасна для мультиплеера или игр с античитом.',
   'gameDetails.renodx.cancel': 'Отмена',
-  // ── Game details: RenoDX global Vulkan layer ──
-  'gameDetails.renodx.vulkanLayer.consentBody':
-    'Этой Vulkan-игре нужен глобальный Vulkan-слой ReShade. Он загружает ReShade во все Vulkan-приложения (игры, браузеры, IDE), а не только в эту игру, и остаётся неактивным, пока не включён для конкретной игры. Продолжить?',
-  'gameDetails.renodx.vulkanLayer.consentAccept': 'Добавить слой и установить',
-  'gameDetails.renodx.vulkanLayer.removeError':
-    'Не удалось удалить глобальный Vulkan-слой ReShade.',
+  // ── Game details: RenoDX shared Vulkan layer ──
+  'gameDetails.renodx.vulkanLayer.removeError': 'Не удалось удалить общий Vulkan-слой ReShade.',
+  'gameDetails.renodx.vulkanLayer.title': 'Общий Vulkan-слой',
+  'gameDetails.renodx.vulkanLayer.removeConfirmTitle': 'Удалить общий Vulkan-слой?',
+  'gameDetails.renodx.vulkanLayer.removeConfirmBody':
+    'Удаление общего Vulkan-слоя ReShade влияет на все Vulkan-игры RenoDX. Продолжить?',
+  'gameDetails.renodx.vulkanLayer.openSettings': 'Открыть настройки RenoDX',
+  'gameDetails.renodx.vulkanLayer.externalReadOnly':
+    'Обнаружен существующий Vulkan-слой; в этой версии только для чтения',
+  'gameDetails.renodx.vulkanLayer.state.not_installed': 'Не установлен',
+  'gameDetails.renodx.vulkanLayer.state.installed': 'Установлен',
+  'gameDetails.renodx.vulkanLayer.state.installed_disabled': 'Отключён в реестре',
+  'gameDetails.renodx.vulkanLayer.state.external_read_only': 'Только для чтения',
+  'gameDetails.renodx.vulkanLayer.state.conflict': 'Конфликт',
+  'gameDetails.renodx.vulkanLayer.state.needs_repair': 'Требует ремонта',
+  'gameDetails.renodx.vulkanLayer.state.unsupported': 'Не поддерживается',
+  'gameDetails.renodx.vulkanLayer.action.install': 'Установить',
+  'gameDetails.renodx.vulkanLayer.action.update': 'Обновить',
+  'gameDetails.renodx.vulkanLayer.action.switch_channel': 'Сменить канал',
+  'gameDetails.renodx.vulkanLayer.action.repair': 'Починить слой',
+  'gameDetails.renodx.vulkanLayer.action.remove': 'Удалить',
+  'gameDetails.renodx.vulkanLayer.diagnostic.external_layer_detected':
+    'Обнаружен существующий Vulkan-слой.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.duplicate_layer_manifest':
+    'Зарегистрировано несколько манифестов слоёв ReShade.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility':
+    'Видимость загрузчика неоднозначна.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_layer_dll': 'Отсутствует DLL слоя.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unreadable_dll':
+    'DLL слоя не удалось прочитать (нет доступа или файл заблокирован).',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_manifest': 'Отсутствует манифест слоя.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_missing':
+    'Файлы слоя есть, но запись в загрузчике Vulkan отсутствует.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_disabled':
+    'Запись в реестре загрузчика отключена.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unsupported_architecture':
+    'Архитектура слоя не поддерживается.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hkcu_not_visible_when_elevated':
+    'Слой зарегистрирован в HKCU и может не загружаться для игр, запущенных с повышенными правами.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.manifest_malformed':
+    'Не удалось разобрать манифест слоя.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_scope_not_writable':
+    'Требуемую область реестра нельзя перезаписать.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.permission_denied':
+    'Операционная система отклонила требуемую операцию.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.backend_validation_failed':
+    'Проверка бэкенда не прошла; слой требует проверки.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hash_mismatch':
+    'Хэш DLL слоя не совпадает с ожидаемой версией.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.db_only_fallback':
+    'DLL слоя отсутствует; используется advisory-запись из базы данных.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'неподдерживаемый графический API',
   'gameDetails.renodx.reason.api_not_allowed': 'графический API не разрешён для этой игры',
@@ -552,21 +613,15 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.blacklisted': 'RenoDX не рекомендуется для этой игры.',
   'gameDetails.renodx.updatesNotTracked': 'Обновления не отслеживаются',
   'gameDetails.renodx.channel.label': 'Канал ReShade-хоста',
+  'gameDetails.renodx.channel.hostLabel': 'ReShade-хост',
   'gameDetails.renodx.channel.stable': 'Stable',
   'gameDetails.renodx.channel.nightly': 'Nightly',
-  'gameDetails.renodx.channel.stableUnavailable': 'Stable недоступен в этом манифесте',
-  'gameDetails.renodx.channel.switchTo': 'Переключить на {channel}',
-  'gameDetails.renodx.host.version': 'ReShade {version}',
-  'gameDetails.renodx.host.versionUnknown': 'Версия ReShade неизвестна',
+  'gameDetails.renodx.host.version': '{version}',
+  'gameDetails.renodx.host.versionUnknown': 'Версия неизвестна',
   'gameDetails.renodx.host.addons.none': 'аддоны не поддерживаются',
   'gameDetails.renodx.host.addons.unknown': 'поддержка аддонов неизвестна',
   'gameDetails.renodx.host.action.update_host': 'доступно обновление',
-  'gameDetails.renodx.host.action.reinstall_with_addon_support':
-    'нужна сборка с поддержкой аддонов',
-  'gameDetails.renodx.host.action.repair_host': 'нужно восстановить',
-  'gameDetails.renodx.host.action.conflict': 'конфликт ReShade-слота',
-  'gameDetails.renodx.host.health.missing': 'файл ReShade отсутствует',
-  'gameDetails.renodx.host.health.conflicting': 'конфликт ReShade',
+  'gameDetails.renodx.host.action.repair_host': 'Восстановить ReShade для поддержки аддонов RenoDX',
   'gameDetails.renodx.host.conflictMultiple':
     'Найдено несколько хостов ReShade — проверьте активный слот',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -578,12 +633,17 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.actionRemoveDlssFix': 'Удалить',
   'gameDetails.renodx.dlssFixInstallError': 'Ошибка установки DLSS-Fix',
   'gameDetails.renodx.dlssFixRemoveError': 'Ошибка удаления DLSS-Fix',
-  'gameDetails.renodx.updateAvailableDlssFix': 'Доступно обновление DLSS-Fix',
-  'gameDetails.renodx.fresh.label': 'Обновления',
-  'gameDetails.renodx.fresh.current': 'Актуально',
+  'gameDetails.renodx.fresh.label': 'Версия',
+  'gameDetails.renodx.fresh.current': 'Последняя',
   'gameDetails.renodx.fresh.available': 'Доступно обновление',
+  'gameDetails.renodx.fresh.channelMismatch': 'Доступна смена канала',
+  'gameDetails.renodx.fresh.validationRequired': 'Требуется проверка',
   'gameDetails.renodx.fresh.unknown': 'Не удалось проверить',
   'gameDetails.renodx.fresh.checking': 'Проверка…',
+  'gameDetails.renodx.updateConfirmTitle': 'Заменить текущую сборку ReShade?',
+  'gameDetails.renodx.updateConfirmBody':
+    'Текущая DLL ReShade не отслеживается RenderPilot. При обновлении она будет заменена официальной сборкой ReShade. Кастомные изменения или другая локальная сборка могут быть потеряны.',
+  'gameDetails.renodx.updateConfirmAction': 'Заменить',
   'gameDetails.renodx.addonDated': 'Аддон от {date}',
   'gameDetails.renodx.installedOn': 'Установлено {date}',
   'gameDetails.renodx.lastChecked': 'Проверено {time}',

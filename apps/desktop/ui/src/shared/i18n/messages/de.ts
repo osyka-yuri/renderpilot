@@ -35,6 +35,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.language.ja': '日本語',
 
   'settings.tabs.general': 'Allgemein',
+  'settings.tabs.reshade': 'ReShade',
+  'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'Katalog',
   'settings.tabs.nvidia': 'NVIDIA',
 
@@ -137,6 +139,15 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.catalog.steamKey.show': 'API-Schlüssel anzeigen',
   'settings.catalog.steamKey.hide': 'API-Schlüssel ausblenden',
   'settings.catalog.steamKey.getKey': 'API-Schlüssel erhalten',
+
+  'settings.renodx.vulkan.description':
+    'Verwalte den gemeinsamen ReShade-Vulkan-Layer für Vulkan-RenoDX-Spiele.',
+  'settings.renodx.vulkan.channel': 'Vulkan-Layer-Kanal',
+  'settings.renodx.vulkan.channelDescription':
+    'Wähle den ReShade-Kanal für den gemeinsamen Vulkan-Layer.',
+  'settings.renodx.vulkan.loadError': 'Vulkan-Layer-Status konnte nicht geladen werden.',
+  'settings.renodx.vulkan.saveError': 'Vulkan-Layer-Kanal konnte nicht gespeichert werden.',
+  'settings.renodx.vulkan.applyError': 'Vulkan-Layer konnte nicht angewendet werden.',
 
   'common.unknown': 'Unbekannt',
   'common.downloadProgress': 'Download-Fortschritt',
@@ -449,28 +460,79 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.switchError': 'ReShade-Kanalwechsel fehlgeschlagen',
   'gameDetails.renodx.unsupported': 'Für dieses Spiel ist kein RenoDX-Profil verfügbar.',
   'gameDetails.renodx.incompatible': 'RenoDX kann nicht installiert werden: {reason}.',
+  'gameDetails.renodx.status.label': 'Status',
   'gameDetails.renodx.statusInstalled': 'Installiert',
   'gameDetails.renodx.actionInstall': 'Installieren',
   'gameDetails.renodx.actionUninstall': 'RenoDX entfernen',
+  'gameDetails.renodx.actionRepair': 'Reparieren',
   'gameDetails.renodx.uninstallConfirmTitle': 'RenoDX aus diesem Spiel entfernen?',
   'gameDetails.renodx.uninstallConfirmBody':
-    'Dies entfernt das RenoDX-Add-on und die von RenderPilot verwalteten ReShade-Dateien für dieses Spiel und stellt Sicherungen wieder her, wenn sie verfügbar sind.',
+    'Dies entfernt das RenoDX-Add-on und stellt nur ReShade-Dateien wieder her, die während der RenoDX-Einrichtung geändert wurden.',
   'gameDetails.renodx.uninstallConfirmAction': 'Entfernen',
   'gameDetails.renodx.installing': 'Installation…',
-  'gameDetails.renodx.riskSafe': 'Einzelspieler-Titel — Installation unbedenklich.',
+  'gameDetails.renodx.riskSafe': 'Kein Anti-Cheat erkannt — Installation unbedenklich.',
   'gameDetails.renodx.riskWarn':
     'Anti-Cheat erkannt — die Installation kann zu einer Sperre führen.',
   'gameDetails.renodx.riskBlocked': 'Die Installation ist für dieses Spiel blockiert.',
+  'gameDetails.renodx.confirmTitle': 'RenoDX trotz Anti-Cheat-Risiko installieren?',
   'gameDetails.renodx.confirmAccept': 'Trotzdem installieren',
   'gameDetails.renodx.confirmBody':
     'Dieses Spiel verwendet Anti-Cheat. Das ReShade-Add-on kann es auslösen und zu einer Sperre führen. Fortfahren auf eigenes Risiko.',
+  'gameDetails.renodx.fullAddonWarning':
+    'Vollständige ReShade-Add-on-Unterstützung kann für Multiplayer- oder Anti-Cheat-geschützte Spiele unsicher sein.',
   'gameDetails.renodx.cancel': 'Abbrechen',
-  // ── Game details: RenoDX global Vulkan layer ──
-  'gameDetails.renodx.vulkanLayer.consentBody':
-    'Dieses Vulkan-Spiel benötigt eine globale ReShade-Vulkan-Ebene. Sie lädt ReShade in jede Vulkan-Anwendung (Spiele, Browser, IDEs), nicht nur in dieses Spiel, und bleibt inaktiv, bis sie pro Spiel aktiviert wird. Fortfahren?',
-  'gameDetails.renodx.vulkanLayer.consentAccept': 'Ebene hinzufügen & installieren',
+  // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
-    'Die globale ReShade-Vulkan-Ebene konnte nicht entfernt werden.',
+    'Die gemeinsam genutzte ReShade-Vulkan-Ebene konnte nicht entfernt werden.',
+  'gameDetails.renodx.vulkanLayer.title': 'Gemeinsam genutzte Vulkan-Ebene',
+  'gameDetails.renodx.vulkanLayer.removeConfirmTitle': 'Geteilte Vulkan-Ebene entfernen?',
+  'gameDetails.renodx.vulkanLayer.removeConfirmBody':
+    'Das Entfernen der gemeinsam genutzten ReShade Vulkan-Ebene betrifft alle Vulkan RenoDX-Spiele. Fortfahren?',
+  'gameDetails.renodx.vulkanLayer.openSettings': 'RenoDX-Einstellungen öffnen',
+  'gameDetails.renodx.vulkanLayer.externalReadOnly':
+    'Vorhandene Vulkan-Ebene erkannt; in dieser Version schreibgeschützt',
+  'gameDetails.renodx.vulkanLayer.state.not_installed': 'Nicht installiert',
+  'gameDetails.renodx.vulkanLayer.state.installed': 'Installiert',
+  'gameDetails.renodx.vulkanLayer.state.installed_disabled': 'Disabled in registry',
+  'gameDetails.renodx.vulkanLayer.state.external_read_only': 'Schreibgeschützt',
+  'gameDetails.renodx.vulkanLayer.state.conflict': 'Konflikt',
+  'gameDetails.renodx.vulkanLayer.state.needs_repair': 'Reparatur nötig',
+  'gameDetails.renodx.vulkanLayer.state.unsupported': 'Nicht unterstützt',
+  'gameDetails.renodx.vulkanLayer.action.install': 'Installieren',
+  'gameDetails.renodx.vulkanLayer.action.update': 'Aktualisieren',
+  'gameDetails.renodx.vulkanLayer.action.switch_channel': 'Kanal wechseln',
+  'gameDetails.renodx.vulkanLayer.action.repair': 'Layer reparieren',
+  'gameDetails.renodx.vulkanLayer.action.remove': 'Entfernen',
+  'gameDetails.renodx.vulkanLayer.diagnostic.external_layer_detected':
+    'Es wurde eine vorhandene Vulkan-Ebene erkannt.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.duplicate_layer_manifest':
+    'Es sind mehrere ReShade-Ebenen-Manifeste registriert.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility':
+    'Die Sichtbarkeit des Loaders ist mehrdeutig.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_layer_dll': 'Die DLL der Ebene fehlt.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unreadable_dll':
+    'The layer DLL could not be read (permission denied or locked).',
+  'gameDetails.renodx.vulkanLayer.diagnostic.missing_manifest': 'The layer manifest is missing.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_missing':
+    'Layer-Dateien sind vorhanden, aber die Vulkan-Loader-Registrierung fehlt.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_disabled':
+    'The loader registry entry is disabled.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.unsupported_architecture':
+    'Die Architektur der Ebene wird nicht unterstützt.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hkcu_not_visible_when_elevated':
+    'Die Ebene ist unter HKCU registriert und wird für Spiele mit erhöhten Rechten möglicherweise nicht geladen.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.manifest_malformed':
+    'Ein Ebenen-Manifest konnte nicht analysiert werden.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.registry_scope_not_writable':
+    'Der erforderliche Registrierungsbereich kann nicht beschrieben werden.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.permission_denied':
+    'Das Betriebssystem hat einen erforderlichen Vorgang abgelehnt.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.backend_validation_failed':
+    'Backend-Validierung fehlgeschlagen; die Ebene muss geprüft werden.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.hash_mismatch':
+    'The layer DLL hash does not match the expected version.',
+  'gameDetails.renodx.vulkanLayer.diagnostic.db_only_fallback':
+    'The layer DLL is missing; using advisory database record.',
   // ── Game details: RenoDX incompatibility reasons ──
   'gameDetails.renodx.reason.api_unsupported': 'nicht unterstützte Grafik-API',
   'gameDetails.renodx.reason.api_not_allowed': 'Grafik-API für dieses Spiel nicht zulässig',
@@ -511,20 +573,16 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.blacklisted': 'RenoDX wird für dieses Spiel nicht empfohlen.',
   'gameDetails.renodx.updatesNotTracked': 'Updates werden nicht verfolgt',
   'gameDetails.renodx.channel.label': 'ReShade-Host-Kanal',
+  'gameDetails.renodx.channel.hostLabel': 'ReShade-Host',
   'gameDetails.renodx.channel.stable': 'Stable',
   'gameDetails.renodx.channel.nightly': 'Nightly',
-  'gameDetails.renodx.channel.stableUnavailable': 'Stable ist in diesem Manifest nicht verfügbar',
-  'gameDetails.renodx.channel.switchTo': 'Zu {channel} wechseln',
-  'gameDetails.renodx.host.version': 'ReShade {version}',
-  'gameDetails.renodx.host.versionUnknown': 'ReShade-Version unbekannt',
+  'gameDetails.renodx.host.version': '{version}',
+  'gameDetails.renodx.host.versionUnknown': 'Version unbekannt',
   'gameDetails.renodx.host.addons.none': 'Add-ons nicht unterstützt',
   'gameDetails.renodx.host.addons.unknown': 'Add-on-Unterstützung unbekannt',
   'gameDetails.renodx.host.action.update_host': 'Update verfügbar',
-  'gameDetails.renodx.host.action.reinstall_with_addon_support': 'Add-on-fähige Variante nötig',
-  'gameDetails.renodx.host.action.repair_host': 'Reparatur empfohlen',
-  'gameDetails.renodx.host.action.conflict': 'Slot-Konflikt',
-  'gameDetails.renodx.host.health.missing': 'ReShade-Datei fehlt',
-  'gameDetails.renodx.host.health.conflicting': 'ReShade-Konflikt',
+  'gameDetails.renodx.host.action.repair_host':
+    'ReShade für RenoDX-Add-on-Unterstützung reparieren',
   'gameDetails.renodx.host.conflictMultiple':
     'Mehrere ReShade-Hosts gefunden – aktiver Slot muss geprüft werden',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -536,12 +594,17 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.actionRemoveDlssFix': 'Entfernen',
   'gameDetails.renodx.dlssFixInstallError': 'DLSS-Fix Installation fehlgeschlagen',
   'gameDetails.renodx.dlssFixRemoveError': 'DLSS-Fix Entfernung fehlgeschlagen',
-  'gameDetails.renodx.updateAvailableDlssFix': 'DLSS-Fix Update verfügbar',
   'gameDetails.renodx.fresh.label': 'Updates',
   'gameDetails.renodx.fresh.current': 'Aktuell',
   'gameDetails.renodx.fresh.available': 'Update verfügbar',
+  'gameDetails.renodx.fresh.channelMismatch': 'Kanalwechsel verfügbar',
+  'gameDetails.renodx.fresh.validationRequired': 'Überprüfung erforderlich',
   'gameDetails.renodx.fresh.unknown': 'Konnte nicht prüfen',
   'gameDetails.renodx.fresh.checking': 'Wird geprüft…',
+  'gameDetails.renodx.updateConfirmTitle': 'Aktuellen ReShade-Build ersetzen?',
+  'gameDetails.renodx.updateConfirmBody':
+    'Die aktuelle ReShade-DLL wird nicht von RenderPilot überwacht. Durch das Update wird sie durch den offiziellen ReShade-Build ersetzt. Benutzerdefinierte Änderungen oder ein anderer lokaler Build können verloren gehen.',
+  'gameDetails.renodx.updateConfirmAction': 'Ersetzen',
   'gameDetails.renodx.addonDated': 'Add-on vom {date}',
   'gameDetails.renodx.installedOn': 'Installiert {date}',
   'gameDetails.renodx.lastChecked': 'Geprüft {time}',

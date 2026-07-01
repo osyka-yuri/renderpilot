@@ -18,6 +18,9 @@ export const CATALOG_SETTING_KEYS = {
    * This is independent of the SteamGridDB API key setting.
    */
   COVERS_STEAMGRIDDB_REMOTE_ENABLED: 'covers_steamgriddb_enabled',
+
+  /** Preferred ReShade channel for the shared RenoDX Vulkan layer. */
+  RENODX_RESHADE_CHANNEL: 'renodx_reshade_channel',
 } as const;
 
 export type CatalogSettingKey = (typeof CATALOG_SETTING_KEYS)[keyof typeof CATALOG_SETTING_KEYS];

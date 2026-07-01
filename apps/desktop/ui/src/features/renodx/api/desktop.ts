@@ -6,7 +6,8 @@ import type {
   RenoDxInstallState,
   RenoDxUpdateReport,
   ReshadeChannel,
-  VulkanLayerStatus,
+  VulkanLayerManagementReport,
+  VulkanLayerReport,
 } from '../model/types';
 
 /** Previews whether RenoDX can be installed for a game (loads/caches the manifest). */
@@ -19,19 +20,17 @@ export async function getRenoDxAvailability(gameId: string): Promise<Availabilit
 /**
  * Installs RenoDX into a game and returns the resulting install state. Progress
  * is reported via `download-progress` events keyed by the game id. The requested
- * ReShade channel is recorded when RenderPilot manages the host.
+ * ReShade channel is sent explicitly; the backend decides which action is safe.
  */
 export async function installRenoDx(
   gameId: string,
   reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
-  confirmVulkanLayer: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     reshadeChannel,
     confirmAnticheat,
-    confirmVulkanLayer,
   });
 }
 
@@ -45,14 +44,12 @@ export async function installRenoDxFromFile(
   filePath: string,
   reshadeChannel: ReshadeChannel,
   confirmAnticheat: boolean,
-  confirmVulkanLayer: boolean,
 ): Promise<RenoDxInstallState> {
   return invokeDesktop<RenoDxInstallState>('renodx_install_from_file', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     filePath: requireNonBlankString(filePath, 'filePath'),
     reshadeChannel,
     confirmAnticheat,
-    confirmVulkanLayer,
   });
 }
 
@@ -83,7 +80,7 @@ export async function updateRenoDx(gameId: string): Promise<RenoDxInstallState> 
   });
 }
 
-/** Switches a managed ReShade host between stable and nightly. */
+/** Switches a recorded ReShade host binary between stable and nightly. */
 export async function switchRenoDxReshadeChannel(
   gameId: string,
   reshadeChannel: ReshadeChannel,
@@ -119,19 +116,33 @@ export async function getRenoDxDlssFixAvailability(gameId: string): Promise<bool
 }
 
 /**
- * Returns the global ReShade Vulkan layer status, so the UI can decide whether a
- * Vulkan install needs the user to consent to adding the system-wide layer first.
+ * Returns the shared ReShade Vulkan layer report. Action permissions are authored
+ * by the backend; the UI must not infer them from detection or path facts.
  */
-export async function getVulkanLayerStatus(): Promise<VulkanLayerStatus> {
-  return invokeDesktop<VulkanLayerStatus>('renodx_vulkan_layer_status', {});
+export async function getVulkanLayerStatus(): Promise<VulkanLayerReport> {
+  return invokeDesktop<VulkanLayerReport>('renodx_vulkan_layer_status', {});
+}
+
+/** Returns the settings-facing shared Vulkan layer management report. */
+export async function getVulkanLayerManagementStatus(): Promise<VulkanLayerManagementReport> {
+  return invokeDesktop<VulkanLayerManagementReport>('renodx_vulkan_layer_management_status', {});
+}
+
+/** Applies the shared ReShade Vulkan layer for the selected settings channel. */
+export async function applyVulkanLayer(
+  reshadeChannel: ReshadeChannel,
+): Promise<VulkanLayerManagementReport> {
+  return invokeDesktop<VulkanLayerManagementReport>('renodx_apply_vulkan_layer', {
+    reshadeChannel,
+  });
 }
 
 /**
- * Removes RenderPilot's global ReShade Vulkan layer (a foreign layer is left
- * untouched), returning the resulting status. A user maintenance action.
+ * Requests removal of the shared ReShade Vulkan layer. The backend only exposes
+ * this action when it can perform it safely.
  */
-export async function removeVulkanLayer(): Promise<VulkanLayerStatus> {
-  return invokeDesktop<VulkanLayerStatus>('renodx_remove_vulkan_layer', {});
+export async function removeVulkanLayer(): Promise<VulkanLayerReport> {
+  return invokeDesktop<VulkanLayerReport>('renodx_remove_vulkan_layer', {});
 }
 
 /** The set of RenoDX backend calls, injectable for testing. */
@@ -147,6 +158,8 @@ export type RenoDxApi = {
   uninstallDlssFix: typeof uninstallRenoDxDlssFix;
   dlssFixAvailability: typeof getRenoDxDlssFixAvailability;
   vulkanLayerStatus: typeof getVulkanLayerStatus;
+  vulkanLayerManagementStatus: typeof getVulkanLayerManagementStatus;
+  applyVulkanLayer: typeof applyVulkanLayer;
   removeVulkanLayer: typeof removeVulkanLayer;
 };
 
@@ -163,5 +176,7 @@ export const renodxApi: RenoDxApi = {
   uninstallDlssFix: uninstallRenoDxDlssFix,
   dlssFixAvailability: getRenoDxDlssFixAvailability,
   vulkanLayerStatus: getVulkanLayerStatus,
+  vulkanLayerManagementStatus: getVulkanLayerManagementStatus,
+  applyVulkanLayer,
   removeVulkanLayer,
 };
