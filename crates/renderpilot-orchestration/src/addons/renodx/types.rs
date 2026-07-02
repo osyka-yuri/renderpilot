@@ -472,6 +472,9 @@ pub struct Compatibility {
     /// Known-conflicting mod ids (e.g. `special_k`); empty means "no known conflicts".
     #[serde(default)]
     pub conflicts: Vec<String>,
+    /// Optional provenance of a non-empty `conflicts` list (a URL or note).
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 /// Structured ban- and stability-risk assessment for a [`Title`].

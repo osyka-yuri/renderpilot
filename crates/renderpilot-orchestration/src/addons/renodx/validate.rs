@@ -180,6 +180,7 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
     for conflict in &title.compatibility.conflicts {
         ensure_not_blank("title compatibility.conflicts entry", conflict)?;
     }
+    ensure_compatibility_source(title)?;
     validate_category(&title.category)?;
     Ok(())
 }
@@ -197,6 +198,22 @@ fn ensure_semver(field: &str, title_id: &str, value: &str) -> Result<(), Service
         )));
     }
     Ok(())
+}
+
+/// A non-empty `conflicts` list must carry a `source`, so an unsourced conflict
+/// claim can't reappear silently the way the historical `special_k`/Cyberpunk 2077
+/// entry did.
+fn ensure_compatibility_source(title: &Title) -> Result<(), ServiceError> {
+    if title.compatibility.conflicts.is_empty() {
+        return Ok(());
+    }
+    match &title.compatibility.source {
+        Some(source) if !source.trim().is_empty() => Ok(()),
+        _ => Err(errors::failed(format!(
+            "title `{}` compatibility.conflicts is non-empty but compatibility.source is missing",
+            title.id
+        ))),
+    }
 }
 
 fn validate_match_rule_value(title: &Title, rule: &MatchRule) -> Result<(), ServiceError> {
@@ -339,7 +356,9 @@ mod tests {
 
     use super::*;
     use crate::addons::renodx::test_support::{manifest, rule, title};
-    use crate::addons::renodx::types::{Category, Engine, Generic, MatchKind, Status};
+    use crate::addons::renodx::types::{
+        Category, Compatibility, Engine, Generic, MatchKind, Status,
+    };
 
     fn one_title_manifest() -> RenoDxManifest {
         manifest(vec![title(
@@ -511,5 +530,49 @@ mod tests {
         m.reshade.stable.as_mut().expect("stable").url =
             "https://reshade.me/downloads/ReShade_Setup_6.7.3.exe".to_owned();
         assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn compatibility_conflicts_with_source_passes() {
+        let mut m = one_title_manifest();
+        m.titles[0].compatibility = Compatibility {
+            conflicts: vec!["special_k".to_owned()],
+            source: Some("https://example.test/conflict-report".to_owned()),
+            ..Default::default()
+        };
+        assert!(validate_manifest(&m).is_ok());
+    }
+
+    #[test]
+    fn compatibility_conflicts_without_source_is_rejected() {
+        let mut m = one_title_manifest();
+        m.titles[0].compatibility = Compatibility {
+            conflicts: vec!["special_k".to_owned()],
+            source: None,
+            ..Default::default()
+        };
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn compatibility_conflicts_with_blank_source_is_rejected() {
+        let mut m = one_title_manifest();
+        m.titles[0].compatibility = Compatibility {
+            conflicts: vec!["special_k".to_owned()],
+            source: Some("   ".to_owned()),
+            ..Default::default()
+        };
+        assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn empty_compatibility_conflicts_does_not_require_source() {
+        let mut m = one_title_manifest();
+        m.titles[0].compatibility = Compatibility {
+            conflicts: Vec::new(),
+            source: None,
+            ..Default::default()
+        };
+        assert!(validate_manifest(&m).is_ok());
     }
 }

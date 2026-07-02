@@ -110,7 +110,7 @@ mod tests {
                 "id": "cyberpunk-2077", "name": "Cyberpunk 2077", "slug": "cp2077",
                 "arch": "X64", "status": "working",
                 "match": [{ "kind": "steam_appid", "value": "1091500", "tier": 100 }],
-                "compatibility": { "conflicts": ["special_k"] },
+                "compatibility": { "conflicts": ["special_k"], "source": "https://example.test/conflict-report" },
                 "notes_keys": ["renodx.note.cp2077.hdr10"]
             },
             {
@@ -135,6 +135,10 @@ mod tests {
         assert_eq!(
             manifest.titles[0].compatibility.conflicts,
             vec!["special_k"]
+        );
+        assert_eq!(
+            manifest.titles[0].compatibility.source.as_deref(),
+            Some("https://example.test/conflict-report")
         );
         // An installable title omits `category`, defaulting to `Installable`; a
         // categorized title carries its tagged payload.
