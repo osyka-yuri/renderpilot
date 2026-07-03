@@ -50,6 +50,7 @@ const DEFAULT_HOST_FACTS: HostFacts = {
     detected: null,
   },
   update_status: 'unknown_needs_validation',
+  is_custom_build: false,
 };
 
 const PRESENT_HOST_FACTS: HostFacts = {
@@ -64,6 +65,7 @@ const PRESENT_HOST_FACTS: HostFacts = {
     detected: 'stable',
   },
   update_status: 'current',
+  is_custom_build: false,
 };
 
 const VULKAN_NOT_INSTALLED: VulkanLayerReport = {

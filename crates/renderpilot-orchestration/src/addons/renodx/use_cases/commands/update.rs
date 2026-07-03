@@ -11,8 +11,9 @@ use crate::addons::engine::{self, FileOp, InstallPlan, InstallReceipt};
 use crate::addons::renodx::progress::emit_finalizing;
 use crate::addons::renodx::types::{RecordedChannelParse, RenoDxManifest, ReshadeChannel};
 use crate::addons::renodx::use_cases::reshade_update::{
-    HostUpdateTarget, addon_label, host_binary_source, persistence_failure_error,
-    recorded_reshade_channel, resolve_host_update_target, source_with_role,
+    HostUpdateTarget, OriginalFile, Replacement, addon_label, apply_replacements,
+    host_binary_source, persistence_failure_error, recorded_reshade_channel,
+    resolve_host_update_target, restore_originals, restore_originals_best_effort, source_with_role,
 };
 use crate::addons::renodx::{channel, errors, fetch, install, operation_lock, reshade, tracking};
 use crate::net::ProgressObserver;
@@ -66,6 +67,9 @@ pub async fn update(
             }),
         }
     };
+    // `resolve_host_update_target` returns `Ok(None)` for a recognized custom
+    // build (e.g. GShade) — never replaced, its versioning is its own
+    // maintainer's concern — so that guarantee holds here for free.
     let host_target = match host_channel.and_then(|c| c.into_parsed()) {
         Some(channel) => resolve_host_update_target(context, manifest, game_id, channel)?,
         None => None,
@@ -141,9 +145,9 @@ pub async fn update(
     }
 
     emit_finalizing(progress);
-    let originals = apply_replacements(&replacements)?;
+    let mut originals = apply_replacements(&replacements)?;
     let host_receipt = match host_install.as_ref() {
-        Some(install) => match apply_host_install(install) {
+        Some(install) => match apply_host_install(install, &mut originals) {
             Ok(receipt) => Some(receipt),
             Err(error) => {
                 restore_originals_best_effort(&originals);
@@ -152,20 +156,27 @@ pub async fn update(
         },
         None => None,
     };
-    let refreshed = tracking::rebuild_with_sources_and_receipt(
+    // `originals` now covers every file this update touched — replacements and,
+    // if any, the host install — so one rollback call restores all of them
+    // uniformly, whichever step fails from here.
+    let refreshed = match tracking::rebuild_with_sources_and_receipt(
         &record,
         refreshed_sources,
         host_receipt.as_ref(),
         "RenoDX update rebuild",
-    )?;
+    ) {
+        Ok(refreshed) => refreshed,
+        Err(error) => {
+            restore_originals_best_effort(&originals);
+            return Err(error);
+        }
+    };
     if let Err(error) = context.storage().upsert_installed_addon(&refreshed) {
-        let host_restore = host_receipt
-            .as_ref()
-            .map(|receipt| engine::uninstall(&receipt.created_files, &receipt.backed_up_files));
-        let files_restore = restore_originals(&originals);
-        let restore_results: Vec<Result<(), ServiceError>> =
-            host_restore.into_iter().chain([files_restore]).collect();
-        return Err(persistence_failure_error(error.into(), &restore_results));
+        let restore_result = restore_originals(&originals);
+        return Err(persistence_failure_error(
+            error.into(),
+            std::slice::from_ref(&restore_result),
+        ));
     }
     Ok(())
 }
@@ -173,12 +184,6 @@ pub async fn update(
 struct PreparedSourceUpdate {
     source: TrackedSource,
     replacement: Option<Replacement>,
-}
-
-struct Replacement {
-    path: PathBuf,
-    bytes: Vec<u8>,
-    mtime: Option<String>,
 }
 
 struct HostInstall {
@@ -195,11 +200,6 @@ enum HostReplacement {
 struct PreparedHostPolicyUpdate {
     source: TrackedSource,
     replacement: Option<HostReplacement>,
-}
-
-struct OriginalFile {
-    path: PathBuf,
-    bytes: Vec<u8>,
 }
 
 async fn prepare_addon_update(
@@ -302,74 +302,38 @@ fn dlss_fix_path(record: &InstalledAddon) -> Result<PathBuf, ServiceError> {
         .ok_or_else(|| errors::invalid("no DLSS-Fix add-on in this install".to_owned()))
 }
 
-fn apply_host_install(install: &HostInstall) -> Result<InstallReceipt, ServiceError> {
-    engine::install(
+/// Installs `install`'s bytes at its destination via a no-backup `Replace` op
+/// (so the returned receipt still updates the record's `created_files` the way
+/// it always has), then appends the destination's pre-write state to
+/// `originals` — so a later failure, before this update's result is durably
+/// persisted, can restore it via [`restore_originals`]/
+/// [`restore_originals_best_effort`] alongside every other file this update
+/// touched, in one uniform pass. A failure from the write itself needs no entry
+/// here: the engine's own single-op rollback already leaves the destination
+/// exactly as it was.
+fn apply_host_install(
+    install: &HostInstall,
+    originals: &mut Vec<OriginalFile>,
+) -> Result<InstallReceipt, ServiceError> {
+    let path = install.game_dir.join(&install.name);
+    let original_bytes = if path.is_file() {
+        Some(crate::fs::read_file(&path)?)
+    } else {
+        None
+    };
+    let receipt = engine::install(
         &install.game_dir,
         &InstallPlan {
             kind: AddonKind::RenoDx,
-            ops: vec![FileOp::BackupAndReplace {
+            ops: vec![FileOp::Replace {
                 name: install.name.clone(),
                 bytes: install.bytes.clone(),
             }],
         },
-    )
-}
-
-fn apply_replacements(replacements: &[Replacement]) -> Result<Vec<OriginalFile>, ServiceError> {
-    let mut originals = Vec::with_capacity(replacements.len());
-
-    for replacement in replacements {
-        let original = match crate::fs::read_file(&replacement.path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                restore_originals_best_effort(&originals);
-                return Err(error);
-            }
-        };
-
-        if let Err(error) = engine::replace_file(&replacement.path, &replacement.bytes) {
-            restore_originals_best_effort(&originals);
-            return Err(error);
-        }
-        crate::fs::stamp_mtime_best_effort(&replacement.path, replacement.mtime.as_deref(), None);
-
-        originals.push(OriginalFile {
-            path: replacement.path.clone(),
-            bytes: original,
-        });
-    }
-
-    Ok(originals)
-}
-
-fn restore_originals(originals: &[OriginalFile]) -> Result<(), ServiceError> {
-    let failures = restore_originals_inner(originals);
-    if failures == 0 {
-        Ok(())
-    } else {
-        Err(errors::failed(format!(
-            "failed to restore {failures} updated RenoDX file(s)"
-        )))
-    }
-}
-
-fn restore_originals_best_effort(originals: &[OriginalFile]) {
-    let failures = restore_originals_inner(originals);
-    if failures > 0 {
-        log::warn!("RenoDX update rollback failed to restore {failures} file(s)");
-    }
-}
-
-fn restore_originals_inner(originals: &[OriginalFile]) -> usize {
-    let mut failures = 0;
-    for original in originals.iter().rev() {
-        if let Err(error) = engine::replace_file(&original.path, &original.bytes) {
-            log::warn!(
-                "RenoDX update rollback: failed to restore `{}`: {error}",
-                original.path.display()
-            );
-            failures += 1;
-        }
-    }
-    failures
+    )?;
+    originals.push(OriginalFile {
+        path,
+        bytes: original_bytes,
+    });
+    Ok(receipt)
 }

@@ -526,6 +526,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.host.addons.unknown': '插件支持情况未知',
   'gameDetails.renodx.host.action.update_host': '有可用更新',
   'gameDetails.renodx.host.action.repair_host': '修复 ReShade 以支持 RenoDX 插件',
+  'gameDetails.renodx.host.customBuild': '自定义版本（如 GShade）— 由您自行更新',
   'gameDetails.renodx.host.conflictMultiple': '发现多个 ReShade 宿主 — 需检查活动槽位',
   'gameDetails.renodx.host.conflictBlocksInstall':
     '此游戏使用的 ReShade 槽位被其他文件占用，或 ReShade 位于其他槽位 — 请先解决再安装。',
@@ -543,10 +544,6 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.fresh.validationRequired': '需要验证',
   'gameDetails.renodx.fresh.unknown': '无法检查',
   'gameDetails.renodx.fresh.checking': '检查中…',
-  'gameDetails.renodx.updateConfirmTitle': '替换当前的ReShade版本？',
-  'gameDetails.renodx.updateConfirmBody':
-    '当前的ReShade DLL未被RenderPilot跟踪。更新将使用官方ReShade版本替换它。自定义更改或其他本地版本可能会丢失。',
-  'gameDetails.renodx.updateConfirmAction': '替换',
   'gameDetails.renodx.addonDated': '插件日期 {date}',
   'gameDetails.renodx.installedOn': '安装于 {date}',
   'gameDetails.renodx.lastChecked': '检查于 {time}',

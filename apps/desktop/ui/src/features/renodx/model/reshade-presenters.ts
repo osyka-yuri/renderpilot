@@ -85,6 +85,16 @@ export function getReshadeDescription({
   detection: HostDetection;
   facts: HostFacts;
 }): ReshadeDescription {
+  // A recognized custom build (e.g. GShade) is reported as a conflict at the
+  // backend (the slot is never safe to write to), but it isn't a problem to
+  // resolve — say so plainly instead of the generic conflict/update wording.
+  if (facts.is_custom_build) {
+    return {
+      kind: 'parts',
+      fallbackKey: 'gameDetails.renodx.host.versionUnknown',
+      parts: [{ kind: 'message', key: 'gameDetails.renodx.host.customBuild' }],
+    };
+  }
   if (detection === 'conflict') {
     return {
       kind: 'conflict',

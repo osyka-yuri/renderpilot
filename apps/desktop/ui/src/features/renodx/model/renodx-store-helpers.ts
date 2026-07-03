@@ -35,6 +35,7 @@ export function defaultHostFacts(): HostFacts {
       detected: null,
     },
     update_status: 'unknown_needs_validation',
+    is_custom_build: false,
   };
 }
 

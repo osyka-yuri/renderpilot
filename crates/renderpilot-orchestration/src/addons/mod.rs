@@ -2,10 +2,11 @@
 //! (a proxy DLL plus a config, tracked for reversal and upstream updates), with each
 //! tool a thin module over the shared mechanics.
 //!
-//! * [`engine`] applies a serializable [`engine::InstallPlan`] of file operations —
-//!   backing up any pre-existing file, with ordered execution, reverse-order
-//!   rollback, and a crash-safety sentinel — and reverses an install from the file
-//!   lists it recorded.
+//! * [`engine`] applies a serializable [`engine::InstallPlan`] of file operations,
+//!   each per its own backup policy (some back up a pre-existing file, some never
+//!   do — see [`engine::FileOp`]), with ordered execution, reverse-order rollback,
+//!   and a crash-safety sentinel — and reverses an install from the file lists it
+//!   recorded.
 //! * [`record`] maps an engine receipt into the persisted, reversible
 //!   `InstalledAddon` (created/backed-up files + the upstream sources to track).
 //! * [`update`] owns the generic update-verdict vocabulary (HEAD/ETag fast-path,

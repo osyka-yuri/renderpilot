@@ -567,6 +567,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.host.addons.unknown': 'アドオン対応は不明',
   'gameDetails.renodx.host.action.update_host': '更新あり',
   'gameDetails.renodx.host.action.repair_host': 'RenoDX アドオン対応のため ReShade を修復',
+  'gameDetails.renodx.host.customBuild':
+    'カスタムビルド（GShadeなど）— 更新はご自身で管理してください',
   'gameDetails.renodx.host.conflictMultiple':
     '複数の ReShade ホストを検出 — アクティブなスロットを確認してください',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -585,10 +587,6 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.fresh.validationRequired': '検証が必要です',
   'gameDetails.renodx.fresh.unknown': '確認できませんでした',
   'gameDetails.renodx.fresh.checking': '確認中…',
-  'gameDetails.renodx.updateConfirmTitle': '現在のReShadeビルドを置換しますか？',
-  'gameDetails.renodx.updateConfirmBody':
-    '現在のReShade DLLはRenderPilotによって追跡されていません。更新すると、公式のReShadeビルドに置換されます。カスタム変更や別のローカルビルドは失われる可能性があります。',
-  'gameDetails.renodx.updateConfirmAction': '置換',
   'gameDetails.renodx.addonDated': 'アドオン日付: {date}',
   'gameDetails.renodx.installedOn': 'インストール: {date}',
   'gameDetails.renodx.lastChecked': '確認: {time}',

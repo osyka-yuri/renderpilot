@@ -2,23 +2,22 @@
 
 use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{
-    AddonKind, GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState, TrackedSource,
+    GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState, TrackedSource,
     TrackedSourceRole,
 };
 
-use crate::addons::engine::{self, FileOp, InstallPlan, InstallReceipt};
+use crate::addons::engine::InstallReceipt;
 use crate::addons::renodx::channel;
 use crate::addons::renodx::errors;
-use crate::addons::renodx::facts::{analyze_game, install_target_dir};
 use crate::addons::renodx::fetch;
-use crate::addons::renodx::game_context::{executable_override, require_game};
-use crate::addons::renodx::matcher::{RenoDxResolution, resolve};
 use crate::addons::renodx::operation_lock;
 use crate::addons::renodx::progress::emit_finalizing;
-use crate::addons::renodx::source;
 use crate::addons::renodx::tracking;
 use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel};
-use crate::addons::renodx::use_cases::reshade_update::{self, recorded_reshade_channel};
+use crate::addons::renodx::use_cases::reshade_update::{
+    self, Replacement, apply_replacements, recorded_reshade_channel, resolve_host_update_target,
+    restore_originals, restore_originals_best_effort,
+};
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -62,60 +61,59 @@ pub async fn switch_reshade_channel(
         return Ok(tracking::install_state_from_record(&healed));
     }
 
-    let game = require_game(context, game_id)?;
-    let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
-    let resolution = resolve(manifest, &analysis.facts);
-    let (arch, proxy_dll_name) = match resolution {
-        RenoDxResolution::Installable(plan) => (plan.arch, plan.proxy_dll_name.clone()),
-        RenoDxResolution::External {
-            file_install: Some(plan),
-            ..
-        } => (plan.arch, plan.proxy_dll_name.clone()),
-        _ => {
-            return Err(errors::invalid(
-                "cannot resolve the ReShade proxy slot for this game".to_owned(),
-            ));
-        }
-    };
-    let source = source::require_reshade_source(&manifest.reshade, target_channel, arch)?;
-    let download = fetch::fetch_reshade_from_source(&source, arch, progress).await?;
-
-    let host_path = tracking::rollback_host_path(&record).unwrap_or_else(|| {
-        install_target_dir(&analysis)
-            .unwrap_or_default()
-            .join(&proxy_dll_name)
-    });
-    if !host_path.is_file() {
+    // `resolve_host_update_target` also returns `None` for a recognized custom
+    // build (e.g. GShade) — RenoDX doesn't manage its channel either, and the
+    // action isn't offered in the UI for one in the first place.
+    let target = resolve_host_update_target(context, manifest, game_id, target_channel)?
+        .ok_or_else(|| {
+            errors::invalid("cannot resolve the ReShade proxy slot for this game".to_owned())
+        })?;
+    if target.conflict {
+        return Err(errors::invalid(
+            "ReShade host conflict must be resolved before switching channel".to_owned(),
+        ));
+    }
+    if !target.target_path.is_file() {
         return Err(errors::invalid(
             "ReShade host binary is missing; repair it before switching channel".to_owned(),
         ));
     }
-    let game_dir = host_path
-        .parent()
-        .ok_or_else(|| errors::invalid("ReShade host path has no parent directory".to_owned()))?;
+
+    let download = fetch::fetch_reshade_from_source(&target.source, target.arch, progress).await?;
     emit_finalizing(progress);
-    let plan = InstallPlan {
-        kind: AddonKind::RenoDx,
-        ops: vec![FileOp::BackupAndReplace {
-            name: proxy_dll_name.clone(),
-            bytes: download.bytes.clone(),
-        }],
-    };
-    let receipt = engine::install(game_dir, &plan)?;
+    let originals = apply_replacements(&[Replacement {
+        path: target.target_path.clone(),
+        bytes: download.bytes,
+        mtime: None,
+    }])?;
 
     let new_source = reshade_update::host_binary_source(
-        source.url,
+        target.source.url.clone(),
         download.etag,
         download.digest,
         download.last_modified,
         Some(target_channel),
     );
-    let updated = rebuild_proxy_switch_record(&record, new_source, Some(&receipt), target_channel)?;
+    // The record may not have tracked this exact path before (a legacy record
+    // adopted without host provenance, or the active slot changed) — carry it
+    // through as a receipt so the rebuild below adds it to `created_files`.
+    let receipt = InstallReceipt {
+        created_files: vec![target.target_path.clone()],
+        backed_up_files: Vec::new(),
+    };
+    let updated =
+        match rebuild_proxy_switch_record(&record, new_source, Some(&receipt), target_channel) {
+            Ok(updated) => updated,
+            Err(error) => {
+                restore_originals_best_effort(&originals);
+                return Err(error);
+            }
+        };
     if let Err(error) = context.storage().upsert_installed_addon(&updated) {
-        let dll_restore = engine::uninstall(&receipt.created_files, &receipt.backed_up_files);
+        let restore_result = restore_originals(&originals);
         return Err(reshade_update::persistence_failure_error(
             error.into(),
-            &[dll_restore],
+            std::slice::from_ref(&restore_result),
         ));
     }
     Ok(tracking::install_state_from_record(&updated))

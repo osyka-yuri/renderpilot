@@ -2,9 +2,7 @@
 use renderpilot_domain::{InstalledAddon, TrackedSourceRole};
 
 use crate::addons::renodx::channel;
-use crate::addons::renodx::dto::actions::{
-    ActionConfirmationScope, ActionDescriptor, ActionDisabledReason,
-};
+use crate::addons::renodx::dto::actions::{ActionDescriptor, ActionDisabledReason};
 use crate::addons::renodx::dto::availability::*;
 use crate::addons::renodx::facts::{GameAnalysis, install_target_dir};
 use crate::addons::renodx::host_policy;
@@ -53,6 +51,7 @@ pub(super) fn reshade_report(
     let addon = expected_addon_file_name(resolution)
         .map(|file_name| reshade::renodx_addon_state(&paths, &file_name));
     let detected_channel = recorded_channel(record);
+    let is_custom_build = assessment.is_known_custom_build();
 
     ReshadeReport {
         detection: host_detection(&assessment.host, assessment.conflict),
@@ -60,6 +59,7 @@ pub(super) fn reshade_report(
             &assessment.host,
             assessment.action,
             assessment.conflict,
+            is_custom_build,
             detected_channel,
             reshade_config,
         ),
@@ -67,6 +67,7 @@ pub(super) fn reshade_report(
             &assessment.host,
             assessment.action,
             assessment.conflict,
+            is_custom_build,
             detected_channel,
             reshade_config,
             record,
@@ -102,6 +103,7 @@ fn missing_host_report(
             &ReshadeHost::Absent,
             ReshadeHostAction::Conflict,
             false,
+            false,
             detected_channel,
             reshade_config,
         ),
@@ -125,6 +127,7 @@ fn host_facts(
     host: &ReshadeHost,
     action: ReshadeHostAction,
     conflict: bool,
+    is_custom_build: bool,
     detected_channel: Option<ReshadeChannel>,
     reshade_config: &ReshadeConfig,
 ) -> HostFacts {
@@ -150,6 +153,7 @@ fn host_facts(
             detected: detected_channel,
         },
         update_status: host_update_status(host, action, conflict, detected_channel, effective),
+        is_custom_build,
     }
 }
 
@@ -185,8 +189,13 @@ fn host_update_status(
 
 /// Whether the record's host binary provenance was reconstructed by adopting an
 /// on-disk install RenderPilot did not create, rather than recorded from an
-/// actual download — the signal that an update should ask for confirmation
-/// before replacing whatever ReShade build is currently in the game folder.
+/// actual download. Gates whether an "Update" action is offered at all when the
+/// host otherwise reads as up to date — a normal, freshly-downloaded host has
+/// nothing to normalize, but an adopted one may still silently need to move onto
+/// an upstream-verified build. Never gates *confirmation*: both RenoDX's own
+/// artifacts and this advisory case update silently, per the same "we already
+/// PE-sanity-checked what we fetch" reasoning; only a recognized custom build
+/// (see `is_custom_build`) is ever left untouched.
 fn has_advisory_host_source(record: Option<&InstalledAddon>) -> bool {
     record.is_some_and(|record| {
         record
@@ -200,10 +209,17 @@ fn host_actions(
     host: &ReshadeHost,
     action: ReshadeHostAction,
     conflict: bool,
+    is_custom_build: bool,
     detected_channel: Option<ReshadeChannel>,
     reshade_config: &ReshadeConfig,
     record: Option<&InstalledAddon>,
 ) -> RenoDxActions {
+    if is_custom_build {
+        // A recognized custom build (e.g. GShade): neither a conflict to
+        // resolve nor ours to update/repair/switch channel — RenoDX offers no
+        // host action for it at all.
+        return RenoDxActions::default();
+    }
     if conflict || action == ReshadeHostAction::Conflict {
         return RenoDxActions {
             resolve_conflict: Some(ActionDescriptor::disabled(
@@ -220,18 +236,11 @@ fn host_actions(
             switch_channel,
             ..RenoDxActions::default()
         },
-        ReshadeHostAction::UpdateHost => {
-            let mut update_action = ActionDescriptor::enabled();
-            if has_advisory_host_source(record) {
-                update_action = update_action
-                    .with_confirmation(ActionConfirmationScope::AdoptedUnofficialUpdate);
-            }
-            RenoDxActions {
-                update: Some(update_action),
-                switch_channel,
-                ..RenoDxActions::default()
-            }
-        }
+        ReshadeHostAction::UpdateHost => RenoDxActions {
+            update: Some(ActionDescriptor::enabled()),
+            switch_channel,
+            ..RenoDxActions::default()
+        },
         ReshadeHostAction::ReinstallWithAddonSupport | ReshadeHostAction::RepairHost => {
             RenoDxActions {
                 repair: Some(ActionDescriptor::enabled()),
@@ -240,10 +249,7 @@ fn host_actions(
             }
         }
         ReshadeHostAction::UpToDate => {
-            let update = has_advisory_host_source(record).then(|| {
-                ActionDescriptor::enabled()
-                    .with_confirmation(ActionConfirmationScope::AdoptedUnofficialUpdate)
-            });
+            let update = has_advisory_host_source(record).then(ActionDescriptor::enabled);
             RenoDxActions {
                 use_existing: host.as_present().map(|_| ActionDescriptor::enabled()),
                 switch_channel,
@@ -343,6 +349,7 @@ mod tests {
             &ReshadeHost::Absent,
             ReshadeHostAction::Conflict,
             true,
+            false,
             None,
             &manifest(Vec::new()).reshade,
             None,
@@ -353,6 +360,39 @@ mod tests {
         assert!(actions.use_existing.is_none());
         assert!(actions.repair.is_none());
         assert!(actions.update.is_none());
+        assert!(actions.switch_channel.is_none());
+    }
+
+    #[test]
+    fn recognized_custom_build_offers_no_host_actions_even_when_otherwise_up_to_date() {
+        let present = ReshadeHost::Present {
+            path: std::path::PathBuf::from("C:\\game\\dxgi.dll"),
+            slot: "dxgi.dll".to_owned(),
+            version: None,
+            addon_support: reshade::ReshadeAddonSupport::Full,
+            identity: reshade::ReshadeIdentity::Confirmed,
+            active: reshade::ActiveSlotState {
+                state: reshade::SlotActivity::Active,
+                reason: reshade::ActiveSlotReason::DetectedByMatcher,
+            },
+        };
+        // `conflict: true` mirrors what `host_policy::assess` actually reports for
+        // a recognized custom build (folded into the same conflict signal); the
+        // `is_custom_build` bit must still short-circuit before the generic
+        // conflict branch, offering nothing rather than a resolve-conflict action.
+        let actions = host_actions(
+            &present,
+            ReshadeHostAction::UpToDate,
+            true,
+            true,
+            Some(ReshadeChannel::Stable),
+            &manifest(Vec::new()).reshade,
+            None,
+        );
+        assert!(actions.resolve_conflict.is_none());
+        assert!(actions.use_existing.is_none());
+        assert!(actions.update.is_none());
+        assert!(actions.repair.is_none());
         assert!(actions.switch_channel.is_none());
     }
 
@@ -372,6 +412,7 @@ mod tests {
         let actions = host_actions(
             &present,
             ReshadeHostAction::UpToDate,
+            false,
             false,
             Some(ReshadeChannel::Stable),
             &manifest(Vec::new()).reshade,
@@ -401,6 +442,7 @@ mod tests {
             &present,
             ReshadeHostAction::ReinstallWithAddonSupport,
             false,
+            false,
             Some(ReshadeChannel::Stable),
             &manifest(Vec::new()).reshade,
             None,
@@ -419,6 +461,7 @@ mod tests {
         let actions = host_actions(
             &ReshadeHost::Absent,
             ReshadeHostAction::UpToDate,
+            false,
             false,
             Some(ReshadeChannel::Nightly),
             &manifest.reshade,
@@ -468,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn up_to_date_offers_confirmed_update_for_advisory_host_source() {
+    fn up_to_date_offers_a_silent_update_for_an_advisory_host_source() {
         let present = ReshadeHost::Present {
             path: std::path::PathBuf::from("C:\\game\\dxgi.dll"),
             slot: "dxgi.dll".to_owned(),
@@ -494,25 +537,24 @@ mod tests {
             &present,
             ReshadeHostAction::UpToDate,
             false,
+            false,
             Some(ReshadeChannel::Stable),
             &manifest(Vec::new()).reshade,
             Some(&record),
         );
 
+        // An advisory (adopted) host still offers an "Update" action even when
+        // otherwise up to date, so the user can normalize onto an upstream-
+        // verified build — but never requires confirmation. Only a recognized
+        // custom build (`is_custom_build`) is left untouched entirely.
         let update = actions.update.expect("update offered for advisory source");
-        assert!(update.requires_confirmation);
-        assert_eq!(
-            update.confirmation_scope,
-            Some(ActionConfirmationScope::AdoptedUnofficialUpdate)
-        );
+        assert!(update.enabled);
+        assert!(!update.requires_confirmation);
+        assert_eq!(update.confirmation_scope, None);
     }
 
-    /// Regression test: a `HostBinary` source recorded from a real download with no
-    /// upstream `ETag` (the old, discarded heuristic used `etag.is_none()` as the
-    /// "adopted" signal) must not require confirmation — only the explicit
-    /// `advisory` flag does.
     #[test]
-    fn update_host_does_not_require_confirmation_for_non_advisory_source_without_etag() {
+    fn update_host_is_enabled_without_confirmation_for_non_advisory_source_without_etag() {
         let present = ReshadeHost::Present {
             path: std::path::PathBuf::from("C:\\game\\dxgi.dll"),
             slot: "dxgi.dll".to_owned(),
@@ -534,6 +576,7 @@ mod tests {
         let actions = host_actions(
             &present,
             ReshadeHostAction::UpdateHost,
+            false,
             false,
             Some(ReshadeChannel::Stable),
             &manifest(Vec::new()).reshade,

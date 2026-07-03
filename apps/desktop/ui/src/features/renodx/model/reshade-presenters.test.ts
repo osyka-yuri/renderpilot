@@ -20,6 +20,7 @@ const PRESENT_HOST_FACTS = {
     detected: 'stable',
   },
   update_status: 'current',
+  is_custom_build: false,
 } satisfies HostFacts;
 
 describe('reshade presenters', () => {
@@ -64,6 +65,25 @@ describe('reshade presenters', () => {
           key: 'gameDetails.renodx.host.action.repair_host',
         },
       ],
+    });
+  });
+
+  it('labels a recognized custom build plainly, ignoring conflict/update wording', () => {
+    expect(
+      getReshadeDescription({
+        // The backend reports a recognized custom build as a conflict (the
+        // slot is never safe to write to); the frontend must still show the
+        // plain custom-build label, not the generic conflict message.
+        detection: 'conflict',
+        facts: {
+          ...PRESENT_HOST_FACTS,
+          is_custom_build: true,
+        },
+      }),
+    ).toEqual({
+      kind: 'parts',
+      fallbackKey: 'gameDetails.renodx.host.versionUnknown',
+      parts: [{ kind: 'message', key: 'gameDetails.renodx.host.customBuild' }],
     });
   });
 

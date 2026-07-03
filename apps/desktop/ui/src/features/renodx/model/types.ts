@@ -20,10 +20,7 @@ export type MatchConfidence = 'verified' | 'experimental' | 'untested';
  */
 export type HostKind = 'proxy' | 'vulkan';
 
-export type ActionConfirmationScope =
-  | 'anticheat'
-  | 'all_vulkan_reno_dx_games'
-  | 'adopted_unofficial_update';
+export type ActionConfirmationScope = 'anticheat' | 'all_vulkan_reno_dx_games';
 
 export type ActionDisabledReason =
   | 'blocked_by_conflict'
@@ -78,6 +75,9 @@ export type HostFacts = {
   addon_support: HostAddonSupport;
   channel: HostChannelFacts;
   update_status: HostUpdateStatus;
+  /** Whether the active slot is a recognized non-ReShade build (e.g. GShade)
+   * RenoDX never checks for updates or replaces automatically. */
+  is_custom_build: boolean;
 };
 
 /** Shared Vulkan layer detection state (`VulkanLayerDetection`). Never encodes

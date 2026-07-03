@@ -3,20 +3,27 @@
 //!
 //! Given a [`PreparedInstall`] (already-fetched, already-verified bytes plus the
 //! resolved file names), [`install`] builds the ordered file operations — the
-//! add-on, and the ReShade host + `ReShade.ini` when no suitable host is present
-//! or the active host needs repair — hands them to the engine (which backs up,
-//! rolls back, and journals),
-//! and assembles the reversible [`InstalledAddon`] with the upstream sources to
-//! track for updates. [`uninstall`] is a thin tool-specific wrapper over the
-//! engine's generic reversal. (In-place file replacement for updates lives in the
-//! update flow, which drives the engine directly.)
+//! add-on and ReShade host DLL via a no-backup [`FileOp::Replace`] (both are
+//! rolling snapshots or official redistributables RenoDX already PE-checked, so
+//! nothing about a prior version is worth preserving), `ReShade.ini` via a
+//! no-backup [`FileOp::UpdateText`] merge (it may carry the user's own hand-tuned
+//! ReShade settings) — hands them to the engine (which rolls back and journals
+//! each op per its own backup policy) and assembles the reversible
+//! [`InstalledAddon`] with the upstream sources to track for updates.
+//! [`uninstall`] reverses everything the engine's generic list-based reversal
+//! covers, plus bespoke handling for `ReShade.ini` (see its own docs) since a
+//! config merge is never something that reversal alone can undo correctly.
+//! (In-place file replacement for updates/channel switches lives in
+//! [`super::use_cases::reshade_update`], shared by the update and channel-switch
+//! commands, which drive the engine directly only for a host moving to a new slot.)
 //!
 //! All ReShade/HDR specifics live here; the filesystem mechanics are the engine's.
 
 use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{
-    AddonKind, Architecture, GameId, InstalledAddon, PathRef, TrackedSource, TrackedSourceRole,
+    AddonKind, Architecture, GameId, InstalledAddon, InstalledAddonHostKind, PathRef,
+    TrackedSource, TrackedSourceRole,
 };
 
 use crate::ServiceError;
@@ -27,7 +34,7 @@ use super::errors;
 use super::host_policy::{self, HostAssessment};
 use super::policy::HostKind;
 use super::reshade;
-use super::reshade_ini::ini_merge_strategy;
+use super::reshade_ini::{ini_merge_strategy, ini_remove_renodx_strategy};
 use super::tracking;
 use super::types::{ReshadeChannel, ReshadeIniTweaks};
 use super::use_cases::reshade_update::host_binary_source;
@@ -220,15 +227,21 @@ fn combined_ops(game_dir: &Path, prepared: &PreparedInstall, writes_host: bool) 
     ops
 }
 
+/// The RenoDX add-on file op: a rolling upstream snapshot RenoDx already
+/// PE-sanity-checked, so a pre-existing file at that path (a prior install) is
+/// simply overwritten — nothing about the old bytes is worth preserving.
 fn addon_op(prepared: &PreparedInstall) -> FileOp {
-    FileOp::Create {
+    FileOp::Replace {
         name: prepared.addon_file_name.clone(),
         bytes: prepared.addon_bytes.clone(),
     }
 }
 
+/// The ReShade host DLL op: an official redistributable RenoDx fetched itself,
+/// so a pre-existing file in that slot is overwritten with no on-disk backup —
+/// its identity is confirmed by [`host_policy::assess`] before this ever runs.
 fn host_op(prepared: &PreparedInstall) -> FileOp {
-    FileOp::BackupAndReplace {
+    FileOp::Replace {
         name: prepared.proxy_dll_name.clone(),
         bytes: prepared.reshade_dll_bytes.clone(),
     }
@@ -246,10 +259,14 @@ fn host_ops(game_dir: &Path, prepared: &PreparedInstall, writes_host: bool) -> V
 }
 
 /// The `ReShade.ini` merge operation: additively set RenoDX's `[ADDON]` keys,
-/// creating the file from empty when none exists.
+/// creating the file from empty when none exists. Uses `UpdateText` rather than
+/// `MergeText` — RenoDX never keeps a `.bak` of a config file that may carry the
+/// user's own hand-tuned ReShade settings. The engine itself tracks a from-empty
+/// write as `created_files` (see `engine::InstallChanges::into_receipt`), so
+/// `install_plans`/`build_vulkan_plan` need no extra book-keeping for it.
 fn ini_op_for_game(game_dir: &Path, tweaks: &ReshadeIniTweaks) -> Option<FileOp> {
     let tweaks = effective_ini_tweaks(game_dir, tweaks);
-    ini_tweaks_write_keys(&tweaks).then(|| FileOp::MergeText {
+    ini_tweaks_write_keys(&tweaks).then(|| FileOp::UpdateText {
         name: reshade::RESHADE_INI_FILE_NAME.to_owned(),
         default: String::new(),
         strategy: ini_merge_strategy(&tweaks),
@@ -372,10 +389,7 @@ fn build_vulkan_plan(
     prepared: &PreparedInstall,
     game_dir: &Path,
 ) -> Result<InstallPlan, ServiceError> {
-    let mut ops = vec![FileOp::Create {
-        name: prepared.addon_file_name.clone(),
-        bytes: prepared.addon_bytes.clone(),
-    }];
+    let mut ops = vec![addon_op(prepared)];
     if let Some(ini_op) = ini_op_for_game(game_dir, &prepared.ini_tweaks) {
         ops.push(ini_op);
     }
@@ -386,7 +400,30 @@ fn build_vulkan_plan(
 }
 
 /// Reverses an install, returning the game folder to its prior state.
-pub fn uninstall(record: &InstalledAddon) -> Result<(), ServiceError> {
+///
+/// `ReShade.ini` is never part of the engine's generic list-based reversal below —
+/// it is filtered out of `created_files`/`backed_up_files` first and handled on
+/// its own, so it is **never restored from a `.bak` snapshot** even for a legacy
+/// record whose ini predates RenoDX's no-backup policy (an old `MergeText`
+/// install that backed one up). Its fate: deleted outright only when this record
+/// created it from nothing, no legacy backup exists for it either, *and* this
+/// install owns the whole ReShade stack it sits beside — a Vulkan install (the
+/// per-game ini is exclusively RenoDX's; the shared layer is a separate concern),
+/// or a proxy install that also wrote/replaced the host DLL itself. A reused,
+/// merely-compatible host (nothing about it is "ours") never gets its freshly
+/// created ini deleted either, even though RenoDX is the one that wrote it —
+/// only stripped, same as a pre-existing one. Stripping (via
+/// [`ini_remove_renodx_strategy`]) removes exactly RenoDX's own keys, leaving
+/// everything else — the user's own settings, and any orphaned legacy `.bak` —
+/// exactly as it was. `game_dir_hint` (from the caller's own game-folder
+/// resolution) is a best-effort assist for locating an ini this record's
+/// book-keeping doesn't reference at all (an `UpdateText` merge into a
+/// pre-existing ini is deliberately untracked; see [`ini_op_for_game`]) if the
+/// host's own directory can't be resolved either.
+pub fn uninstall(
+    record: &InstalledAddon,
+    game_dir_hint: Option<&Path>,
+) -> Result<(), ServiceError> {
     let log_base_path = if record.has_host_binary_provenance() {
         tracking::rollback_host_path(record).and_then(|host_path| {
             host_path.parent().map(|game_dir| {
@@ -397,10 +434,32 @@ pub fn uninstall(record: &InstalledAddon) -> Result<(), ServiceError> {
         None
     };
 
+    let ini_in_created = ini_path_in(record.created_files());
+    let ini_in_backed_up = ini_path_in(record.backed_up_files());
+    let owns_whole_stack = matches!(
+        record.host_kind(),
+        Some(InstalledAddonHostKind::SharedVulkanLayer)
+    ) || host_dll_written_by_this_install(record);
+
     engine::uninstall(
-        &to_path_bufs(record.created_files()),
-        &to_path_bufs(record.backed_up_files()),
+        &non_ini_path_bufs(record.created_files()),
+        &non_ini_path_bufs(record.backed_up_files()),
     )?;
+
+    match ini_in_created.or(ini_in_backed_up) {
+        Some(ini_ref) if ini_in_backed_up.is_none() && owns_whole_stack => {
+            // Created by this record from nothing, no legacy `.bak` snapshot
+            // exists for it, and this install owns the whole ReShade stack it
+            // sits beside — it's ours outright.
+            crate::fs::remove_file_if_exists(Path::new(ini_ref.as_str()))?;
+        }
+        Some(ini_ref) => strip_renodx_ini_keys_best_effort(Path::new(ini_ref.as_str())),
+        None => {
+            if let Some(ini_path) = locate_untracked_ini(record, game_dir_hint) {
+                strip_renodx_ini_keys_best_effort(&ini_path);
+            }
+        }
+    }
 
     if let Some(base_path) = log_base_path {
         reshade::remove_reshade_logs_best_effort(&base_path);
@@ -408,8 +467,82 @@ pub fn uninstall(record: &InstalledAddon) -> Result<(), ServiceError> {
     Ok(())
 }
 
-fn to_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
-    paths.iter().map(|p| PathBuf::from(p.as_str())).collect()
+/// Whether this record's `created_files` includes the proxy host DLL — i.e. this
+/// install wrote or replaced the active ReShade host itself (whether via a
+/// no-backup `Replace` or an older `BackupAndReplace`, both of which land in
+/// `created_files`), rather than reusing one that was already there and never
+/// touching it.
+fn host_dll_written_by_this_install(record: &InstalledAddon) -> bool {
+    record
+        .created_files()
+        .iter()
+        .any(|path| path.file_name().is_some_and(reshade::is_proxy_slot))
+}
+
+/// The `ReShade.ini` entry in `paths`, if any (case-insensitive by file name).
+fn ini_path_in(paths: &[PathRef]) -> Option<&PathRef> {
+    paths.iter().find(|path| is_ini_path(path))
+}
+
+fn is_ini_path(path: &PathRef) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case(reshade::RESHADE_INI_FILE_NAME))
+}
+
+/// `paths` as owned `PathBuf`s with the `ReShade.ini` entry, if any, excluded —
+/// so the engine's generic reversal never touches it (see [`uninstall`]).
+fn non_ini_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
+    paths
+        .iter()
+        .filter(|path| !is_ini_path(path))
+        .map(|path| PathBuf::from(path.as_str()))
+        .collect()
+}
+
+/// Best-effort location of a `ReShade.ini` this record's book-keeping doesn't
+/// reference at all — the common case: a compatible detected host merged into a
+/// pre-existing ini (never tracked; see [`ini_op_for_game`]). Tries the proxy
+/// host's own directory (most reliable, when this record replaced or reused
+/// one), then the caller-supplied game-directory hint, then the add-on's own
+/// parent directory (RenoDX never sets an explicit `AddonPath`, so this is
+/// usually the same folder anyway).
+fn locate_untracked_ini(record: &InstalledAddon, game_dir_hint: Option<&Path>) -> Option<PathBuf> {
+    let host_dir =
+        tracking::rollback_host_path(record).and_then(|path| path.parent().map(Path::to_path_buf));
+    let addon_dir = Path::new(record.addon_file().as_str())
+        .parent()
+        .map(Path::to_path_buf);
+
+    host_dir
+        .into_iter()
+        .chain(game_dir_hint.map(Path::to_path_buf))
+        .chain(addon_dir)
+        .find_map(|dir| reshade::reshade_ini_path(&dir))
+}
+
+/// Removes exactly the keys/sections RenoDX itself added to a `ReShade.ini` it
+/// does not exclusively own, leaving the rest of the file (including the user's
+/// own settings, and any legacy `.bak` sitting next to it) untouched.
+/// Best-effort: an unreadable or unwritable ini is logged and left as-is rather
+/// than failing the whole uninstall.
+fn strip_renodx_ini_keys_best_effort(ini_path: &Path) {
+    let existing = match std::fs::read_to_string(ini_path) {
+        Ok(contents) => contents,
+        Err(error) => {
+            log::warn!(
+                "RenoDX uninstall: failed to read `{}` to strip its keys: {error}",
+                ini_path.display()
+            );
+            return;
+        }
+    };
+    let stripped = ini_remove_renodx_strategy().apply(&existing);
+    if let Err(error) = crate::fs::write_file_atomically(ini_path, stripped.as_bytes()) {
+        log::warn!(
+            "RenoDX uninstall: failed to strip its keys from `{}`: {error}",
+            ini_path.display()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -445,6 +578,10 @@ mod tests {
 
     fn read(path: &Path) -> Vec<u8> {
         fs::read(path).expect("file should exist")
+    }
+
+    fn path_ref(path: &Path) -> PathRef {
+        PathRef::new(path.to_string_lossy().into_owned()).expect("valid path")
     }
 
     fn write_effect_asset(game_dir: &Path) {
@@ -518,7 +655,7 @@ mod tests {
         fs::write(dir.path().join("game.exe"), b"game").expect("write");
 
         let record = install(dir.path(), &prepared()).expect("install");
-        uninstall(&record).expect("uninstall");
+        uninstall(&record, None).expect("uninstall");
 
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
         assert!(!dir.path().join("dxgi.dll").exists());
@@ -571,16 +708,130 @@ mod tests {
             String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap(),
             "[GENERAL]\r\nNoPreset=1\r\n\r\n[ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n"
         );
-        assert_eq!(record.backed_up_files().len(), 1);
+        // No `.bak` — the merge into a pre-existing ini uses `UpdateText`, not
+        // `MergeText`, so it is never backed up.
+        assert!(record.backed_up_files().is_empty());
+        assert!(!dir.path().join("ReShade.ini.bak").exists());
 
-        uninstall(&record).expect("uninstall");
+        uninstall(&record, None).expect("uninstall");
 
-        assert_eq!(
-            String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap(),
-            original_ini
-        );
+        // The ini pre-dates this install (never in `created_files`), so uninstall
+        // never deletes or snapshot-restores it — only RenoDX's own key is
+        // stripped, leaving the user's `[GENERAL]` content exactly as it was.
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(ini.contains("NoPreset=1"));
+        assert!(!ini.contains("DisabledAddons"));
         assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
+    }
+
+    #[test]
+    fn reused_host_with_no_pre_existing_ini_gets_a_fresh_one_stripped_not_deleted() {
+        let dir = tempdir().expect("tempdir");
+        // A compatible, already-active ReShade host — reused, never rewritten —
+        // but no `ReShade.ini` exists yet (e.g. installed but never launched).
+        fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
+
+        let record = install(dir.path(), &prepared()).expect("install");
+        assert!(!record.has_host_binary_provenance());
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(ini.contains("DisabledAddons=Generic Depth,Effect Runtime Sync"));
+
+        uninstall(&record, None).expect("uninstall");
+
+        // The ini RenoDX created from nothing survives uninstall — stripped, not
+        // deleted — because the host beside it was merely reused, never written
+        // by this install; RenoDX doesn't own the whole stack here, only the
+        // add-on and the keys it added to the config.
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(!ini.contains("DisabledAddons"));
+        assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+    }
+
+    #[test]
+    fn legacy_backed_up_ini_is_stripped_not_restored_from_its_stale_snapshot() {
+        let dir = tempdir().expect("tempdir");
+        let addon_path = dir.path().join("renodx-cp2077.addon64");
+        fs::write(&addon_path, b"addon").expect("write addon");
+        // The current ini: what an old `MergeText`-based install produced, plus a
+        // setting the user added by hand afterward.
+        fs::write(
+            dir.path().join("ReShade.ini"),
+            "[GENERAL]\r\nPreset=mine.ini\r\n\r\n\
+             [ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n",
+        )
+        .expect("write ini");
+        // The stale pre-install snapshot that install's `MergeText` backed up —
+        // this must never come back, even though it's still sitting right there.
+        fs::write(
+            dir.path().join("ReShade.ini.bak"),
+            "[GENERAL]\r\nPreset=old.ini\r\n",
+        )
+        .expect("write bak");
+
+        let addon_ref = path_ref(&addon_path);
+        let ini_ref = path_ref(&dir.path().join("ReShade.ini"));
+        let record = InstalledAddon::from_parts(
+            GameId::new("steam:1091500").expect("id"),
+            AddonKind::RenoDx,
+            addon_ref.clone(),
+            None,
+            vec![addon_ref, ini_ref.clone()],
+            vec![ini_ref],
+            Vec::new(),
+        )
+        .expect("record");
+
+        uninstall(&record, None).expect("uninstall");
+
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(ini.contains("Preset=mine.ini"));
+        assert!(!ini.contains("DisabledAddons"));
+        assert!(!ini.contains("Preset=old.ini"));
+        // The legacy `.bak` is left exactly as it was — orphaned, never restored
+        // from and never deleted either.
+        assert_eq!(
+            String::from_utf8(read(&dir.path().join("ReShade.ini.bak"))).unwrap(),
+            "[GENERAL]\r\nPreset=old.ini\r\n"
+        );
+    }
+
+    #[test]
+    fn strip_locates_an_untracked_ini_via_the_host_directory_not_the_addon_directory() {
+        let dir = tempdir().expect("tempdir");
+        // The add-on lives in a subfolder (a custom `[ADDON] AddonPath`); the host
+        // and the pre-existing `ReShade.ini` live in the game directory itself.
+        let addons_subdir = dir.path().join("addons");
+        fs::create_dir_all(&addons_subdir).expect("mkdir");
+        let addon_path = addons_subdir.join("renodx-cp2077.addon64");
+        fs::write(&addon_path, b"addon").expect("write addon");
+        let host_path = dir.path().join("dxgi.dll");
+        fs::write(&host_path, reshade_host_bytes(true)).expect("write host");
+        fs::write(
+            dir.path().join("ReShade.ini"),
+            "[GENERAL]\r\nPreset=mine.ini\r\n\r\n\
+             [ADDON]\r\nAddonPath=addons\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n",
+        )
+        .expect("write ini");
+
+        let record = InstalledAddon::from_parts(
+            GameId::new("steam:1091500").expect("id"),
+            AddonKind::RenoDx,
+            path_ref(&addon_path),
+            None,
+            vec![path_ref(&addon_path), path_ref(&host_path)],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("record");
+
+        uninstall(&record, None).expect("uninstall");
+
+        // The ini is found via the host's own directory (not the add-on's
+        // subfolder) and stripped, not left with RenoDX's key still in it.
+        let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
+        assert!(ini.contains("Preset=mine.ini"));
+        assert!(!ini.contains("DisabledAddons"));
     }
 
     #[test]
@@ -611,7 +862,7 @@ mod tests {
             original_ini
         );
 
-        uninstall(&record).expect("uninstall");
+        uninstall(&record, None).expect("uninstall");
 
         // Add-on removed, existing DLL and original ini intact.
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
@@ -636,27 +887,29 @@ mod tests {
     }
 
     #[test]
-    fn active_host_without_addon_support_is_replaced_and_restored() {
+    fn active_host_without_addon_support_is_replaced_with_no_backup() {
         let dir = tempdir().expect("tempdir");
         // A ReShade host occupies the active slot, but it is the build WITHOUT
         // add-on support — RenoDX's add-on cannot load there, so install must
-        // replace it with the bundled add-on-capable build, reversibly.
+        // replace it with the bundled add-on-capable build. Its identity was
+        // already confirmed by `host_policy::assess` before this runs, so RenoDX
+        // treats it as an unambiguous official ReShade build: no backup is kept.
         fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
 
         let record = install(dir.path(), &prepared()).expect("install");
 
-        // Our add-on-capable host now occupies the slot; the original is backed up.
+        // Our add-on-capable host now occupies the slot; the original is gone,
+        // not backed up.
         assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
         assert!(record.has_host_binary_provenance());
-        assert!(!record.backed_up_files().is_empty());
+        assert!(record.backed_up_files().is_empty());
+        assert!(!dir.path().join("dxgi.dll.bak").exists());
 
-        uninstall(&record).expect("uninstall");
+        uninstall(&record, None).expect("uninstall");
 
-        // The original add-on-less host is restored and our add-on is gone.
-        assert_eq!(
-            read(&dir.path().join("dxgi.dll")),
-            reshade_host_bytes(false)
-        );
+        // Uninstall deletes the host we installed outright — there is no `.bak`
+        // to restore the original add-on-less build from.
+        assert!(!dir.path().join("dxgi.dll").exists());
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
     }
 
@@ -751,8 +1004,13 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         fs::write(dir.path().join("game.exe"), b"game").expect("write");
 
-        let record = install(dir.path(), &vulkan_prepared()).expect("install");
-        uninstall(&record).expect("uninstall");
+        // In production, `use_cases::commands::install::annotate_install_record`
+        // stamps `host_kind` onto the record straight after this call — `uninstall`
+        // relies on it to know a Vulkan install owns its per-game ini outright.
+        let record = install(dir.path(), &vulkan_prepared())
+            .expect("install")
+            .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+        uninstall(&record, None).expect("uninstall");
 
         assert!(!dir.path().join("renodx-cp2077.addon64").exists());
         assert!(!dir.path().join("ReShade.ini").exists());

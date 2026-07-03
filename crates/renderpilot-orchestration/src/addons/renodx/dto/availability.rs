@@ -105,6 +105,9 @@ pub struct HostFacts {
     pub channel: HostChannelFacts,
     /// Update/repair verdict.
     pub update_status: HostUpdateStatus,
+    /// Whether the active slot is a recognized non-ReShade build (e.g. GShade)
+    /// RenoDX never checks for updates or replaces automatically.
+    pub is_custom_build: bool,
 }
 
 /// Backend-derived RenoDX actions.

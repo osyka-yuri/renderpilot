@@ -110,12 +110,16 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
 /// it is always a per-game file next to the main add-on. Every step degrades
 /// gracefully: a file that cannot be inspected or hashed, or a channel/URL
 /// that cannot be resolved, just leaves the record without that piece of
-/// provenance.
+/// provenance. A recognized custom build (see
+/// [`reshade::is_known_custom_build`], e.g. GShade) gets neither a channel
+/// guess nor a `HostBinary` source at all — RenoDX has no business guessing at
+/// a build it doesn't own the update path for.
 fn attach_advisory_provenance(
     mut record: InstalledAddon,
     candidate: &OrphanedInstall,
 ) -> InstalledAddon {
     match renderpilot_detection::inspect_pe(&candidate.host_file) {
+        Some(pe) if reshade::is_known_custom_build(&candidate.game_dir, Some(&pe.identity)) => {}
         Some(pe) => {
             let channel = reshade::guess_advisory_channel(&pe.identity);
             record = record.with_reshade_channel(channel.as_str());
@@ -522,6 +526,36 @@ mod tests {
         let host = host_source(&record).expect("advisory host source recorded");
         assert!(host.is_advisory());
         assert_eq!(host.channel(), Some("stable"));
+    }
+
+    #[test]
+    fn attach_advisory_provenance_skips_channel_and_host_source_for_a_recognized_custom_build() {
+        let dir = tempdir().expect("tempdir");
+        let host_file = dir.path().join("dxgi.dll");
+        write_file(
+            &host_file,
+            &test_support::build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]),
+        );
+        // GShade's real runtime sitting next to the proxy stub is the reliable
+        // signal — adoption must never guess a channel or track this as ours.
+        write_file(&dir.path().join("GShade64.dll"), b"gshade-runtime");
+        let candidate = OrphanedInstall {
+            game_id: game_id("1091500"),
+            game_dir: dir.path().to_path_buf(),
+            addon_file: dir.path().join("renodx-test.addon64"),
+            host_file,
+            host_kind: InstalledAddonHostKind::Proxy,
+            registered_exe_path: None,
+            reshade_config: test_support::manifest(Vec::new()).reshade,
+            game_arch: None,
+            addon_url: None,
+        };
+
+        let record =
+            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+
+        assert_eq!(record.reshade_channel(), None);
+        assert!(host_source(&record).is_none());
     }
 
     #[test]

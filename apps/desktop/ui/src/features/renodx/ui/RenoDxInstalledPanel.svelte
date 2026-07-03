@@ -26,7 +26,6 @@
   import RenoDxStateMessage from './RenoDxStateMessage.svelte';
   import RenoDxStatusBadge from './RenoDxStatusBadge.svelte';
   import RenoDxUninstallAction from './RenoDxUninstallAction.svelte';
-  import RenoDxUpdateConfirmDialog from './RenoDxUpdateConfirmDialog.svelte';
 
   type Props = {
     gameId: string;
@@ -49,10 +48,7 @@
   const updateAction = $derived(store.hostActions.update);
   const updateDisabledByHost = $derived(updateAction?.enabled === false);
   const updateDisabled = $derived(busy || updateDisabledByHost);
-  const updateRequiresConfirmation = $derived(updateAction?.requires_confirmation === true);
   const updateDisabledMessage = $derived(actionDisabledMessage(updateAction));
-
-  let confirmUpdateDialogOpen = $state(false);
 
   const repairAction = $derived(store.hostActions.repair);
   const repairVisible = $derived(repairAction !== undefined);
@@ -127,11 +123,6 @@
 
   function handleUpdate(): void {
     if (updateDisabled || !store.updateAvailable) {
-      return;
-    }
-
-    if (updateRequiresConfirmation) {
-      confirmUpdateDialogOpen = true;
       return;
     }
 
@@ -348,8 +339,3 @@
     <RenoDxUninstallAction {busy} onConfirm={handleUninstall} />
   </div>
 </div>
-<RenoDxUpdateConfirmDialog
-  bind:open={confirmUpdateDialogOpen}
-  {busy}
-  onConfirm={() => store.update(gameId)}
-/>

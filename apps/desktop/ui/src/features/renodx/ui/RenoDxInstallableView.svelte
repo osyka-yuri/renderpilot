@@ -34,6 +34,11 @@
 
   const progressIds = $derived([gameId]);
   const hostConflict = $derived(store.hostDetection === 'conflict');
+  // A recognized custom build (e.g. GShade) is reported as a conflict at the
+  // backend (the slot is never safe to write to), but it isn't a problem to
+  // resolve — the install button is disabled the same way, with a plain label
+  // instead of the generic "conflict, resolve it" wording.
+  const customBuild = $derived(store.hostFacts.is_custom_build);
 
   const installHostKind = $derived(
     store.outcome?.kind === 'installable' ? store.outcome.host_kind : null,
@@ -45,7 +50,7 @@
   const installDisabledByHost = $derived(installAction?.enabled === false);
   const installDisabledMessage = $derived(actionDisabledMessage(installAction) ?? '');
 
-  const installBlocked = $derived(store.isBlocked || installDisabledByHost);
+  const installBlocked = $derived(store.isBlocked || installDisabledByHost || customBuild);
   const canStartInstall = $derived(store.isInstallable && !busy && !installBlocked);
 
   const riskText = $derived.by((): string => {
@@ -125,7 +130,13 @@
     </div>
   {/if}
 
-  {#if hostConflict}
+  {#if customBuild}
+    <RenoDxStateMessage
+      tone="warning"
+      icon="warning"
+      message={t('gameDetails.renodx.host.customBuild')}
+    />
+  {:else if hostConflict}
     <RenoDxStateMessage
       tone="warning"
       icon="warning"

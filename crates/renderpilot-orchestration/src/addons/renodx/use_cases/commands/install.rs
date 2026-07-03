@@ -158,7 +158,7 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         prepared.source_last_modified.as_deref(),
         None,
     );
-    persist_or_revert(context, record)
+    persist_or_revert(context, record, &target_dir)
 }
 
 /// Installs RenoDX from a user-downloaded add-on file — the manual path for any
@@ -273,7 +273,7 @@ pub async fn install_from_file(
         registered_exe_path,
     )?;
     crate::fs::stamp_mtime_best_effort(Path::new(record.addon_file().as_str()), None, source_mtime);
-    persist_or_revert(context, record)
+    persist_or_revert(context, record, &target_dir)
 }
 
 fn annotate_install_record(
@@ -368,13 +368,16 @@ fn enforce_gate(risk: &RiskAssessment, confirm_anticheat: bool) -> Result<(), Se
 
 /// Persists the install record, reverting the filesystem if persistence fails so an
 /// install never survives without a record to reverse it. A double-fault (revert
-/// also fails) is logged, never silent.
+/// also fails) is logged, never silent. `game_dir` is passed through as the
+/// uninstall's ini-location hint — this install just resolved it, so the revert
+/// can find a pre-existing `ReShade.ini` the record itself doesn't reference.
 fn persist_or_revert(
     context: &Context,
     record: InstalledAddon,
+    game_dir: &Path,
 ) -> Result<InstalledAddon, ServiceError> {
     if let Err(error) = context.storage().upsert_installed_addon(&record) {
-        if let Err(revert_error) = uninstall_files(&record) {
+        if let Err(revert_error) = uninstall_files(&record, Some(game_dir)) {
             log::warn!(
                 "RenoDX install: record persistence failed and the filesystem revert also failed: {revert_error}"
             );

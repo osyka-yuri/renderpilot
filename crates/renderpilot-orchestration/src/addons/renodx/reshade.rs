@@ -444,6 +444,54 @@ fn version_strings_point_to_reshade(strings: &VersionIdentityStrings) -> bool {
     })
 }
 
+/// Runtime DLL names that reliably identify a specific non-ReShade injector
+/// framework sharing ReShade's proxy-DLL naming convention — so the proxy
+/// stub's own PE identity can't be trusted to tell them apart, but the presence
+/// of the framework's real runtime binary next to it can. GShade (a maintained
+/// ReShade fork) documents this exact aliasing in its changelog: it hooks the
+/// same slots ReShade does (`dxgi.dll`, `d3d11.dll`, …) while its actual runtime
+/// is always named `GShade64.dll`/`GShade32.dll` regardless of which slot.
+const KNOWN_CUSTOM_RUNTIME_DLLS: &[&str] = &["gshade64.dll", "gshade32.dll"];
+
+/// Whether `game_dir` shows the on-disk signature of a recognized non-ReShade
+/// build (currently: GShade) that RenoDX must never silently replace or check
+/// upstream for updates against — its versioning and update cadence are its own
+/// maintainer's concern, not RenoDX's. `host_identity`, when available, is an
+/// independent secondary signal: the proxy DLL's own PE version-resource
+/// strings mentioning the framework by name.
+#[must_use]
+pub fn is_known_custom_build(
+    game_dir: &Path,
+    host_identity: Option<&VersionIdentityStrings>,
+) -> bool {
+    let has_custom_runtime = fs::read_dir(game_dir).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_file())
+                && KNOWN_CUSTOM_RUNTIME_DLLS.contains(
+                    &entry
+                        .file_name()
+                        .to_string_lossy()
+                        .to_ascii_lowercase()
+                        .as_str(),
+                )
+        })
+    });
+    has_custom_runtime || host_identity.is_some_and(identity_mentions_a_known_custom_build)
+}
+
+fn identity_mentions_a_known_custom_build(identity: &VersionIdentityStrings) -> bool {
+    let values = [
+        identity.product_name.as_deref(),
+        identity.file_description.as_deref(),
+        identity.company_name.as_deref(),
+        identity.original_filename.as_deref(),
+    ];
+    values
+        .into_iter()
+        .flatten()
+        .any(|value| value.to_ascii_lowercase().contains("gshade"))
+}
+
 /// Determines an advisory channel (Stable or Nightly) from a PE's identity
 /// strings, used when adopting orphaned installs. Stable ReShade builds do not
 /// contain the "unofficial" marker in their identity strings.
@@ -1141,5 +1189,40 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(guess_advisory_channel(&identity), ReshadeChannel::Nightly);
+    }
+
+    #[test]
+    fn is_known_custom_build_detects_gshade_runtime_dll_case_insensitively() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("dxgi.dll"), b"stub").expect("write");
+        fs::write(dir.path().join("GShade64.dll"), b"runtime").expect("write");
+
+        assert!(is_known_custom_build(dir.path(), None));
+    }
+
+    #[test]
+    fn is_known_custom_build_detects_identity_strings_mentioning_gshade() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("dxgi.dll"), b"stub").expect("write");
+        let identity = VersionIdentityStrings {
+            product_name: Some("GShade".to_owned()),
+            ..Default::default()
+        };
+
+        assert!(is_known_custom_build(dir.path(), Some(&identity)));
+    }
+
+    #[test]
+    fn is_known_custom_build_is_false_for_a_plain_reshade_folder() {
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("dxgi.dll"), b"stub").expect("write");
+        fs::write(dir.path().join("ReShade.ini"), b"[GENERAL]\r\n").expect("write");
+
+        assert!(!is_known_custom_build(dir.path(), None));
+        let reshade_identity = VersionIdentityStrings {
+            company_name: Some("crosire".to_owned()),
+            ..Default::default()
+        };
+        assert!(!is_known_custom_build(dir.path(), Some(&reshade_identity)));
     }
 }

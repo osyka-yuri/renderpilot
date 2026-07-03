@@ -11,8 +11,6 @@ pub enum ActionConfirmationScope {
     Anticheat,
     /// Action affects all Vulkan RenoDX games.
     AllVulkanRenoDxGames,
-    /// Updating an unofficial or adopted installation.
-    AdoptedUnofficialUpdate,
 }
 
 /// Public disabled reason for an action.

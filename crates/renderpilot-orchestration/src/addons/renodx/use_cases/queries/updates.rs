@@ -151,6 +151,9 @@ async fn check_proxy_host(
         Err(channel::ChannelReadIssue::DuplicateHostSources) => return Some(UpdateStatus::Unknown),
     };
     let recorded_channel = recorded_reshade_channel(record)?;
+    // `resolve_host_update_target` returns `Ok(None)` for a recognized custom
+    // build (e.g. GShade) — never checked for updates, its versioning is its own
+    // maintainer's concern — so that guarantee holds here for free.
     let target =
         match resolve_host_update_target(context, manifest, record.game_id(), recorded_channel) {
             Ok(target) => target?,

@@ -12,6 +12,7 @@ enum HostConflictKind {
     MultipleHosts,
     InactiveSlot,
     WeakIdentity,
+    KnownCustomBuild,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,13 @@ pub(super) struct HostAssessment {
 impl HostAssessment {
     pub(super) fn writes_host(&self) -> bool {
         !self.conflict && self.action.writes_host()
+    }
+
+    /// Whether the active slot is occupied by a recognized non-ReShade build
+    /// (e.g. GShade) RenoDX must never silently replace. See
+    /// [`reshade::is_known_custom_build`].
+    pub(super) fn is_known_custom_build(&self) -> bool {
+        self.conflict_kind == Some(HostConflictKind::KnownCustomBuild)
     }
 
     pub(super) fn ensure_not_conflicting(&self, proxy_dll_name: &str) -> Result<(), ServiceError> {
@@ -45,6 +53,10 @@ impl HostAssessment {
             HostConflictKind::WeakIdentity => format!(
                 "the '{proxy_dll_name}' slot RenoDX needs is occupied by a non-ReShade file; remove or relocate it before installing"
             ),
+            HostConflictKind::KnownCustomBuild => {
+                "a recognized custom ReShade build (e.g. GShade) occupies this slot; RenoDX never replaces it automatically"
+                    .to_owned()
+            }
         };
         Err(errors::invalid(message))
     }
@@ -61,7 +73,16 @@ fn assess_scan(game_dir: &Path, proxy_dll_name: &str, scan: &ReshadeScan) -> Hos
     let action = reshade::host_action(&host);
     let present = host.as_present();
 
-    let conflict_kind = if multiple_hosts {
+    // Checked first, ahead of every other conflict kind: a recognized custom
+    // build's own proxy stub can otherwise read as `WeakIdentity` (its identity
+    // can't be trusted) or, with more than one aliased slot, `MultipleHosts` —
+    // either would report the wrong reason. Gated on at least one scanned
+    // candidate so an unrelated, leftover `GShade64.dll` with nothing at all
+    // resembling a host in the folder doesn't block a normal fresh install.
+    let conflict_kind = if !scan.hosts.is_empty() && reshade::is_known_custom_build(game_dir, None)
+    {
+        Some(HostConflictKind::KnownCustomBuild)
+    } else if multiple_hosts {
         Some(HostConflictKind::MultipleHosts)
     } else if let Some(present) = present {
         if present.active.state != SlotActivity::Active {
@@ -194,6 +215,107 @@ mod tests {
         assert_eq!(assessment.action, ReshadeHostAction::Conflict);
         assert!(assessment.conflict);
         assert!(!assessment.writes_host());
+    }
+
+    #[test]
+    fn recognized_custom_build_is_conflict_even_with_confirmed_identity() {
+        // A proxy stub that otherwise reads as confirmed, active, full-support
+        // ReShade must still be refused when GShade's real runtime sits next to
+        // it — the proxy's own identity can't be trusted to rule this out.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
+        let host = ReshadeHost::Present {
+            path: dir.path().join("dxgi.dll"),
+            slot: "dxgi.dll".to_owned(),
+            version: Some(Version::parse("6.7.3").expect("version")),
+            addon_support: ReshadeAddonSupport::Full,
+            identity: ReshadeIdentity::Confirmed,
+            active: ActiveSlotState {
+                state: SlotActivity::Active,
+                reason: ActiveSlotReason::DetectedByMatcher,
+            },
+        };
+
+        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: vec![host] });
+
+        assert!(assessment.conflict);
+        assert!(assessment.is_known_custom_build());
+        assert!(!assessment.writes_host());
+    }
+
+    #[test]
+    fn recognized_custom_build_wins_over_multiple_hosts() {
+        // GShade's typical layout: it aliases more than one proxy slot at once
+        // (its changelog documents `dxgi.dll`, `d3d11.dll`, etc. as common
+        // aliases). Without the custom-build check running first, this would
+        // report `MultipleHosts` instead — the wrong reason, and a message that
+        // tells the user to "resolve the active proxy slot" when there is
+        // nothing to resolve.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
+        let confirmed = |slot: &str| ReshadeHost::Present {
+            path: dir.path().join(slot),
+            slot: slot.to_owned(),
+            version: Some(Version::parse("6.7.3").expect("version")),
+            addon_support: ReshadeAddonSupport::Full,
+            identity: ReshadeIdentity::Confirmed,
+            active: ActiveSlotState {
+                state: SlotActivity::Inactive,
+                reason: ActiveSlotReason::DetectedByMatcher,
+            },
+        };
+
+        let assessment = assess_scan(
+            dir.path(),
+            "dxgi.dll",
+            &ReshadeScan {
+                hosts: vec![confirmed("dxgi.dll"), confirmed("d3d11.dll")],
+            },
+        );
+
+        assert!(assessment.is_known_custom_build());
+    }
+
+    #[test]
+    fn recognized_custom_build_wins_over_weak_identity() {
+        // The proxy stub itself establishes no ReShade identity at all (no
+        // export, no version-string match, no neighboring ReShade files) — on
+        // its own this would read as `WeakIdentity`. The custom-build check must
+        // still win, since the stub's own identity is exactly what GShade's
+        // aliasing makes untrustworthy.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
+        let weak = ReshadeHost::Present {
+            path: dir.path().join("dxgi.dll"),
+            slot: "dxgi.dll".to_owned(),
+            version: None,
+            addon_support: ReshadeAddonSupport::Unknown,
+            identity: ReshadeIdentity::Weak,
+            active: ActiveSlotState {
+                state: SlotActivity::Active,
+                reason: ActiveSlotReason::DetectedByMatcher,
+            },
+        };
+
+        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: vec![weak] });
+
+        assert!(assessment.is_known_custom_build());
+    }
+
+    #[test]
+    fn custom_build_marker_alone_does_not_block_a_normal_fresh_install() {
+        // A leftover `GShade64.dll` from something unrelated, with nothing at
+        // all resembling a ReShade host in the folder, must not block a normal
+        // install — the marker only matters when correlated with an actual
+        // scanned candidate.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
+
+        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: Vec::new() });
+
+        assert!(!assessment.is_known_custom_build());
+        assert!(!assessment.conflict);
+        assert!(assessment.writes_host());
     }
 
     #[test]

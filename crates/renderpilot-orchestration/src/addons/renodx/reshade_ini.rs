@@ -76,6 +76,32 @@ pub(super) fn ini_remove_dlss_fix_strategy() -> MergeStrategy {
     }
 }
 
+/// Builds the merge strategy an uninstall applies to a `ReShade.ini` RenoDX did
+/// not create from scratch (so it is never blanket-deleted): removes exactly the
+/// keys/sections RenoDX itself ever writes there — `[ADDON]` `DisabledAddons`,
+/// `AddonPath`, and (when a DLSS-Fix companion was installed) `LoadFromDllMain`
+/// plus the whole `[RENODX-DLSSFIX]` section — leaving every other key, section,
+/// comment, and blank line (including the user's own settings) untouched.
+#[must_use]
+pub(super) fn ini_remove_renodx_strategy() -> MergeStrategy {
+    MergeStrategy::IniRemoveKeys {
+        sections: vec![
+            IniSectionRemoval {
+                name: ADDON_SECTION.to_owned(),
+                keys: vec![
+                    DISABLED_ADDONS_KEY.to_owned(),
+                    ADDON_PATH_KEY.to_owned(),
+                    LOAD_FROM_DLL_MAIN_KEY.to_owned(),
+                ],
+            },
+            IniSectionRemoval {
+                name: DLSS_FIX_SECTION.to_owned(),
+                keys: Vec::new(),
+            },
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::types::DlssFixIniTweaks;
@@ -144,5 +170,35 @@ mod tests {
         assert!(merged.contains("AddonPath=."));
         assert!(!merged.contains("LoadFromDllMain"));
         assert!(!merged.contains("RENODX-DLSSFIX"));
+    }
+
+    #[test]
+    fn ini_remove_renodx_strategy_strips_only_renodx_keys() {
+        let strategy = ini_remove_renodx_strategy();
+        let base = "; user comment\r\n\
+                    [GENERAL]\r\nPreset=mine.ini\r\n\r\n\
+                    [ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n\
+                    AddonPath=.\r\nLoadFromDllMain=renodx-dlssfix.addon64\r\n\
+                    UserAddonKey=keep-me\r\n\r\n\
+                    [RENODX-DLSSFIX]\r\nDLSSPath=C:\\d.dll\r\nStreamlinePath=C:\\s.dll\r\n";
+        let merged = strategy.apply(base);
+
+        // User settings outside RenoDX's own keys/section survive untouched.
+        assert!(merged.contains("; user comment"));
+        assert!(merged.contains("[GENERAL]"));
+        assert!(merged.contains("Preset=mine.ini"));
+        assert!(merged.contains("UserAddonKey=keep-me"));
+        // RenoDX's own keys and section are gone.
+        assert!(!merged.contains("DisabledAddons"));
+        assert!(!merged.contains("AddonPath"));
+        assert!(!merged.contains("LoadFromDllMain"));
+        assert!(!merged.contains("RENODX-DLSSFIX"));
+    }
+
+    #[test]
+    fn ini_remove_renodx_strategy_is_a_no_op_on_a_foreign_config() {
+        let strategy = ini_remove_renodx_strategy();
+        let base = "[GENERAL]\r\nPreset=mine.ini\r\n";
+        assert_eq!(strategy.apply(base), base);
     }
 }

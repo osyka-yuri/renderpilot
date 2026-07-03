@@ -6,7 +6,7 @@ use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{GameId, InstalledAddon, InstalledAddonHostKind};
 
 use crate::addons::renodx::errors;
-use crate::addons::renodx::facts::analyze_game;
+use crate::addons::renodx::facts::{analyze_game, install_target_dir};
 use crate::addons::renodx::game_context::{executable_override, require_game};
 use crate::addons::renodx::install::uninstall as uninstall_files;
 use crate::addons::renodx::operation_lock;
@@ -23,7 +23,11 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
         .ok_or_else(errors::not_installed)?;
 
     // 1. Per-game files: restore the game folder (add-on, ReShade.ini, backups).
-    uninstall_files(&record)?;
+    //    The resolved game directory is only a best-effort hint for locating a
+    //    pre-existing `ReShade.ini` the record itself doesn't reference (see
+    //    `install::uninstall`) — a game that can no longer be resolved (e.g.
+    //    removed from the library) still uninstalls fine without it.
+    uninstall_files(&record, resolved_game_dir(context, game_id).as_deref())?;
 
     // 2. Shared Vulkan layer cleanup: unregister this game's exe from
     //    ReShadeApps.ini. If it was the last app, remove the empty shared
@@ -42,6 +46,15 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
     // 3. Delete the per-game DB row.
     context.storage().delete_installed_addon(game_id)?;
     Ok(())
+}
+
+/// Best-effort resolved game directory, `None` if the game can no longer be
+/// resolved (e.g. removed from the library) or its install path can't be
+/// determined. See the call site in [`uninstall`].
+fn resolved_game_dir(context: &Context, game_id: &GameId) -> Option<PathBuf> {
+    let game = require_game(context, game_id).ok()?;
+    let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
+    install_target_dir(&analysis).ok()
 }
 
 fn registered_vulkan_exe_for_uninstall(

@@ -1,12 +1,16 @@
 //! Tool-agnostic install engine.
 //!
-//! Applies a serializable [`InstallPlan`] of file operations into a game folder —
-//! backing up any pre-existing file, running ops in list order, and rolling back in
-//! strict reverse order if any step fails — and reverses an install from the file
-//! lists it recorded. A crash-safety **sentinel** is written before the first
-//! mutation and removed once the folder is in a consistent state (a clean install or
-//! a fully reverted rollback); a rollback that cannot complete leaves the sentinel
-//! behind so a torn install is detectable on the next scan instead of silently
+//! Applies a serializable [`InstallPlan`] of file operations into a game folder,
+//! running ops in list order and rolling back in strict reverse order if any step
+//! fails, and reverses an install from the file lists it recorded. Each [`FileOp`]
+//! declares its own backup policy: [`FileOp::Create`]/[`FileOp::BackupAndReplace`]/
+//! [`FileOp::MergeText`] move a pre-existing file aside to `.bak` first (for an
+//! artifact worth manually recovering); [`FileOp::Replace`]/[`FileOp::UpdateText`]
+//! never do (for an artifact whose identity is never ambiguous — see their own
+//! docs). A crash-safety **sentinel** is written before the first mutation and
+//! removed once the folder is in a consistent state (a clean install or a fully
+//! reverted rollback); a rollback that cannot complete leaves the sentinel behind
+//! so a torn install is detectable on the next scan instead of silently
 //! half-applied.
 //!
 //! The engine is pure over the filesystem (tempdir-testable) and knows nothing
@@ -129,6 +133,21 @@ pub enum FileOp {
     /// (back up any prior file, then write); the distinct name documents that
     /// shadowing a pre-existing file is the expected case.
     BackupAndReplace {
+        /// Bare file name placed in the game folder.
+        name: String,
+        /// File contents.
+        bytes: Vec<u8>,
+    },
+    /// Write a payload file with **no on-disk backup**, for an artifact whose
+    /// identity is never ambiguous — a rolling upstream snapshot or an official
+    /// redistributable RenderPilot fetched and PE-sanity-checked itself, so there is
+    /// nothing about a prior version worth manually recovering. Rolled back, within
+    /// the same [`install`] call, by restoring the pre-write bytes it captured in
+    /// memory (or deleting the file if none existed) — but once an install commits,
+    /// a later [`uninstall`] simply deletes the file; there is no `.bak` to restore
+    /// from. Contrast [`BackupAndReplace`](Self::BackupAndReplace), which preserves
+    /// whatever was there for the user to recover by hand.
+    Replace {
         /// Bare file name placed in the game folder.
         name: String,
         /// File contents.
@@ -307,6 +326,10 @@ fn apply_op(
             let path = safe_join(game_dir, "file name", name)?;
             place_file(&path, bytes, changes)
         }
+        FileOp::Replace { name, bytes } => {
+            let path = safe_join(game_dir, "file name", name)?;
+            replace_file_tracked(&path, bytes, changes)
+        }
         FileOp::MergeText {
             name,
             default,
@@ -342,6 +365,7 @@ fn apply_op(
             changes.actions.push(Action::Updated {
                 path,
                 original_bytes,
+                whole_file_owned: false,
             });
             Ok(())
         }
@@ -369,11 +393,21 @@ enum Action {
     /// A file moved to `bak`, then the original deleted (rolled back by renaming
     /// `bak` back to `path`). The `bak` is cleaned up on success.
     Removed { path: PathBuf, bak: PathBuf },
-    /// A file updated in-place without touching `.bak` (rolled back by writing the
-    /// original bytes back, or deleting if it didn't exist).
+    /// A file updated in-place with no on-disk `.bak` (rolled back by writing the
+    /// original bytes back, or deleting the file if none existed before). Reported
+    /// in the receipt's `created_files` when either `whole_file_owned` is set (this
+    /// op replaces the *entire* file — e.g. an addon/host DLL `Replace`, whose
+    /// content, whoever wrote it originally, is now this artifact's identity — so
+    /// `uninstall()` deletes it outright) or the file didn't exist before (a config
+    /// merge that created it from empty is just as much this install's own file as
+    /// one written fresh). A merge into a file that already existed is never
+    /// reported either way — only specific keys were touched, not the whole file,
+    /// so the caller (not a blanket `uninstall()` delete) is responsible for
+    /// reversing just those keys.
     Updated {
         path: PathBuf,
         original_bytes: Option<Vec<u8>>,
+        whole_file_owned: bool,
     },
 }
 
@@ -429,6 +463,7 @@ impl InstallChanges {
                 Action::Updated {
                     path,
                     original_bytes,
+                    ..
                 } => match original_bytes {
                     Some(bytes) => {
                         if let Err(error) = crate::fs::write_file_atomically(path, bytes) {
@@ -498,9 +533,23 @@ impl InstallChanges {
                     backed_up_files.push(path.clone());
                     created_files.push(path);
                 }
-                Action::Removed { .. } | Action::Updated { .. } => {
-                    // Removed and Updated files don't appear in the receipt; the caller knows
-                    // which file it asked to remove or update and updates its record directly.
+                Action::Updated {
+                    path,
+                    original_bytes,
+                    whole_file_owned,
+                } => {
+                    // No `.bak` regardless — this path never enters `backed_up_files`.
+                    // It's `created_files` (so a later `uninstall()` deletes it
+                    // outright) when this op owns the whole file, or when there was
+                    // nothing here before it ran; a merge into a pre-existing file
+                    // is left for the caller to reverse key-by-key instead.
+                    if whole_file_owned || original_bytes.is_none() {
+                        created_files.push(path);
+                    }
+                }
+                Action::Removed { .. } => {
+                    // Removed files don't appear in the receipt; the caller knows
+                    // which file it asked to remove and updates its record directly.
                 }
             }
         }
@@ -535,6 +584,36 @@ fn place_file(path: &Path, bytes: &[u8], changes: &mut InstallChanges) -> Result
         crate::fs::write_file_atomically(path, bytes)?;
         changes.actions.push(Action::Created(path.to_path_buf()));
     }
+    Ok(())
+}
+
+/// Writes `bytes` to `path` with no on-disk backup, capturing any pre-write bytes
+/// in memory so a same-call rollback ([`InstallChanges::undo`]) can restore them.
+/// Unlike [`place_file`], a pre-existing file is never moved aside to `.bak` — for
+/// [`FileOp::Replace`], the caller has already decided the artifact's identity is
+/// unambiguous enough that nothing here is worth preserving for manual recovery.
+fn replace_file_tracked(
+    path: &Path,
+    bytes: &[u8],
+    changes: &mut InstallChanges,
+) -> Result<(), ServiceError> {
+    let original_bytes = if path.exists() {
+        if !path.is_file() {
+            return Err(invalid(format!(
+                "cannot replace `{}`: not a regular file",
+                path.display()
+            )));
+        }
+        Some(fs::read(path).map_err(|error| io_error("read before replace", path, &error))?)
+    } else {
+        None
+    };
+    crate::fs::write_file_atomically(path, bytes)?;
+    changes.actions.push(Action::Updated {
+        path: path.to_path_buf(),
+        original_bytes,
+        whole_file_owned: true,
+    });
     Ok(())
 }
 
@@ -781,6 +860,124 @@ mod tests {
     }
 
     #[test]
+    fn replace_over_a_missing_file_creates_it_with_no_backup() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: vec![FileOp::Replace {
+                name: "renodx-cp2077.addon64".to_owned(),
+                bytes: b"addon-v1".to_vec(),
+            }],
+        };
+        let receipt = install(game, &plan).expect("install");
+
+        assert_eq!(read(&game.join("renodx-cp2077.addon64")), b"addon-v1");
+        assert_eq!(
+            receipt_paths(&receipt.created_files),
+            vec!["renodx-cp2077.addon64"]
+        );
+        assert!(receipt.backed_up_files.is_empty());
+        assert!(!game.join("renodx-cp2077.addon64.bak").exists());
+    }
+
+    #[test]
+    fn replace_over_an_existing_file_overwrites_it_with_no_backup() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+        fs::write(game.join("dxgi.dll"), b"old-reshade").expect("write");
+
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: vec![FileOp::Replace {
+                name: "dxgi.dll".to_owned(),
+                bytes: b"new-reshade".to_vec(),
+            }],
+        };
+        let receipt = install(game, &plan).expect("install");
+
+        assert_eq!(read(&game.join("dxgi.dll")), b"new-reshade");
+        // The overwritten file counts as created (an uninstall deletes it outright),
+        // never as backed-up (there is no `.bak` to restore from).
+        assert_eq!(receipt_paths(&receipt.created_files), vec!["dxgi.dll"]);
+        assert!(receipt.backed_up_files.is_empty());
+        assert!(!game.join("dxgi.dll.bak").exists());
+    }
+
+    #[test]
+    fn replace_rolls_back_to_pre_write_bytes_when_a_later_op_fails() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+        fs::write(game.join("dxgi.dll"), b"old-reshade").expect("write");
+
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: vec![
+                FileOp::Replace {
+                    name: "dxgi.dll".to_owned(),
+                    bytes: b"new-reshade".to_vec(),
+                },
+                FileOp::Create {
+                    name: "../escape.dll".to_owned(),
+                    bytes: b"evil".to_vec(),
+                },
+            ],
+        };
+        install(game, &plan).expect_err("unsafe op should fail");
+
+        // Rolled back to the pre-write bytes, in place — no `.bak` was ever involved.
+        assert_eq!(read(&game.join("dxgi.dll")), b"old-reshade");
+        assert!(!game.join("dxgi.dll.bak").exists());
+        assert!(!is_install_torn(game, AddonKind::RenoDx));
+    }
+
+    #[test]
+    fn replace_rolls_back_to_absent_when_it_created_the_file() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: vec![
+                FileOp::Replace {
+                    name: "renodx-cp2077.addon64".to_owned(),
+                    bytes: b"addon".to_vec(),
+                },
+                FileOp::Create {
+                    name: "../escape.dll".to_owned(),
+                    bytes: b"evil".to_vec(),
+                },
+            ],
+        };
+        install(game, &plan).expect_err("unsafe op should fail");
+
+        assert!(!game.join("renodx-cp2077.addon64").exists());
+        assert!(!game.join("renodx-cp2077.addon64.bak").exists());
+    }
+
+    #[test]
+    fn uninstall_deletes_a_replaced_file_outright() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+        fs::write(game.join("dxgi.dll"), b"old-reshade").expect("write");
+
+        let plan = InstallPlan {
+            kind: AddonKind::RenoDx,
+            ops: vec![FileOp::Replace {
+                name: "dxgi.dll".to_owned(),
+                bytes: b"new-reshade".to_vec(),
+            }],
+        };
+        let receipt = install(game, &plan).expect("install");
+
+        // Unlike `BackupAndReplace`, uninstalling a `Replace`'d file does not bring
+        // the old game-shipped bytes back — there was never a `.bak` to restore.
+        uninstall(&receipt.created_files, &receipt.backed_up_files).expect("uninstall");
+        assert!(!game.join("dxgi.dll").exists());
+    }
+
+    #[test]
     fn ops_run_in_order_so_a_later_merge_sees_an_earlier_one() {
         let dir = tempdir().expect("tempdir");
         let game = dir.path();
@@ -909,8 +1106,10 @@ mod tests {
         let receipt = install(game, &plan).expect("install");
         let ini = String::from_utf8(read(&game.join("ReShade.ini"))).unwrap();
         assert_eq!(ini, "[ADDON]\r\nAddonPath=.\r\n");
-        // UpdateText records no created/backed-up file: the caller tracks the file.
-        assert!(receipt.created_files.is_empty());
+        // UpdateText created this file from empty, so it's just as much this
+        // install's own file as one written fresh — it's in created_files (for
+        // uninstall to find), never backed up (there was nothing to back up).
+        assert_eq!(receipt_paths(&receipt.created_files), vec!["ReShade.ini"]);
         assert!(receipt.backed_up_files.is_empty());
         assert!(!game.join("ReShade.ini.bak").exists());
     }

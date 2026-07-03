@@ -583,6 +583,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.host.action.update_host': 'Update verfügbar',
   'gameDetails.renodx.host.action.repair_host':
     'ReShade für RenoDX-Add-on-Unterstützung reparieren',
+  'gameDetails.renodx.host.customBuild':
+    'Custom-Build (z. B. GShade) — Sie aktualisieren es selbst',
   'gameDetails.renodx.host.conflictMultiple':
     'Mehrere ReShade-Hosts gefunden – aktiver Slot muss geprüft werden',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -601,10 +603,6 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.fresh.validationRequired': 'Überprüfung erforderlich',
   'gameDetails.renodx.fresh.unknown': 'Konnte nicht prüfen',
   'gameDetails.renodx.fresh.checking': 'Wird geprüft…',
-  'gameDetails.renodx.updateConfirmTitle': 'Aktuellen ReShade-Build ersetzen?',
-  'gameDetails.renodx.updateConfirmBody':
-    'Die aktuelle ReShade-DLL wird nicht von RenderPilot überwacht. Durch das Update wird sie durch den offiziellen ReShade-Build ersetzt. Benutzerdefinierte Änderungen oder ein anderer lokaler Build können verloren gehen.',
-  'gameDetails.renodx.updateConfirmAction': 'Ersetzen',
   'gameDetails.renodx.addonDated': 'Add-on vom {date}',
   'gameDetails.renodx.installedOn': 'Installiert {date}',
   'gameDetails.renodx.lastChecked': 'Geprüft {time}',

@@ -622,6 +622,8 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.host.addons.unknown': 'поддержка аддонов неизвестна',
   'gameDetails.renodx.host.action.update_host': 'доступно обновление',
   'gameDetails.renodx.host.action.repair_host': 'Восстановить ReShade для поддержки аддонов RenoDX',
+  'gameDetails.renodx.host.customBuild':
+    'Кастомная сборка (например, GShade) — вы обновляете её сами',
   'gameDetails.renodx.host.conflictMultiple':
     'Найдено несколько хостов ReShade — проверьте активный слот',
   'gameDetails.renodx.host.conflictBlocksInstall':
@@ -640,10 +642,6 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.fresh.validationRequired': 'Требуется проверка',
   'gameDetails.renodx.fresh.unknown': 'Не удалось проверить',
   'gameDetails.renodx.fresh.checking': 'Проверка…',
-  'gameDetails.renodx.updateConfirmTitle': 'Заменить текущую сборку ReShade?',
-  'gameDetails.renodx.updateConfirmBody':
-    'Текущая DLL ReShade не отслеживается RenderPilot. При обновлении она будет заменена официальной сборкой ReShade. Кастомные изменения или другая локальная сборка могут быть потеряны.',
-  'gameDetails.renodx.updateConfirmAction': 'Заменить',
   'gameDetails.renodx.addonDated': 'Аддон от {date}',
   'gameDetails.renodx.installedOn': 'Установлено {date}',
   'gameDetails.renodx.lastChecked': 'Проверено {time}',
