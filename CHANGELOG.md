@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-07-03
+
+### Added
+- **Game Details → RenoDX**: Vulkan games can now get RenoDX HDR too, through a single, system-wide ReShade Vulkan layer shared across every Vulkan title — installed once, with your explicit consent, rather than per game. A layer you already have installed yourself (or from another tool) is detected and left untouched; RenderPilot only manages the one it installs.
+- **Game Details → RenoDX**: Removing the add-on or applying an update now asks for confirmation first, so a misclick can't silently undo an install.
+- **Settings → RenoDX**: A new section for the shared Vulkan layer — see its status, switch it between stable and nightly, or install/remove it independently of any single game.
+
+### Changed
+- **Game Details → RenoDX**: Clearer wording for the compatibility badge ("Works" / "In progress" / "Unverified") and the freshness indicator, and a redesigned channel switch control.
+
+### Changed (Refactoring & Maintenance)
+- **RenoDX engine**: Replaced the single install/update service with one focused module per operation (install, uninstall, channel switch, update, availability, status), built on a shared anti-cheat detection database and split host/compatibility/install-risk policy rules.
+- **Storage**: Added a persistence layer for the shared Vulkan layer's install/detection state, so it survives restarts the same way per-game installs already do.
+
 ## [1.3.0] - 2026-06-28
 
 ### Added
