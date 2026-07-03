@@ -164,7 +164,7 @@ pub enum RenoDxResolution {
 #[must_use]
 pub fn resolve(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResolution {
     match select_title(manifest, facts) {
-        Some((title, rule)) => resolve_title(title, rule, facts),
+        Some((title, rule)) => resolve_title(manifest, title, rule, facts),
         None => resolve_generic(manifest, facts),
     }
 }
@@ -172,7 +172,12 @@ pub fn resolve(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResolutio
 /// Routes a matched title by its [`Category`]: a categorized game (external link /
 /// native HDR / blacklist) takes its branch; an installable game is gated by its
 /// compatibility constraints.
-fn resolve_title(title: &Title, rule: &MatchRule, facts: &MatchFacts) -> RenoDxResolution {
+fn resolve_title(
+    manifest: &RenoDxManifest,
+    title: &Title,
+    rule: &MatchRule,
+    facts: &MatchFacts,
+) -> RenoDxResolution {
     match &title.category {
         Category::Blacklist { reason } => RenoDxResolution::Unsupported {
             reason: Some(reason.clone()),
@@ -180,7 +185,7 @@ fn resolve_title(title: &Title, rule: &MatchRule, facts: &MatchFacts) -> RenoDxR
         Category::NativeHdr => RenoDxResolution::NativeHdr,
         Category::External { url, label_key } => {
             // A compatible external game can be installed from a user-downloaded file.
-            let file_install = build_install_plan(title, rule, facts)
+            let file_install = build_install_plan(manifest, title, rule, facts)
                 .ok()
                 .map(|plan| Box::new(plan.into_external_install()));
             RenoDxResolution::External {
@@ -189,7 +194,7 @@ fn resolve_title(title: &Title, rule: &MatchRule, facts: &MatchFacts) -> RenoDxR
                 file_install,
             }
         }
-        Category::Installable => match build_install_plan(title, rule, facts) {
+        Category::Installable => match build_install_plan(manifest, title, rule, facts) {
             Ok(plan) => RenoDxResolution::Installable(Box::new(plan)),
             Err(reason) => RenoDxResolution::Incompatible { reason },
         },
@@ -200,6 +205,7 @@ fn resolve_title(title: &Title, rule: &MatchRule, facts: &MatchFacts) -> RenoDxR
 /// is incompatible. Shared by the standard install path and the external
 /// file-install path.
 fn build_install_plan(
+    manifest: &RenoDxManifest,
     title: &Title,
     rule: &MatchRule,
     facts: &MatchFacts,
@@ -207,12 +213,7 @@ fn build_install_plan(
     let (host_kind, proxy_dll_name) = check_title_compatibility(title, facts)?;
     Ok(ResolvedInstall {
         slug: title.slug.clone(),
-        // Prefer an explicit per-title download URL (third-party host) over the
-        // clshortfuse URL derived from the slug.
-        addon_url: title
-            .download_url
-            .clone()
-            .unwrap_or_else(|| source::addon_url(&title.slug, title.arch)),
+        addon_url: title_addon_url(manifest, title),
         arch: title.arch,
         host_kind,
         proxy_dll_name,
@@ -220,6 +221,29 @@ fn build_install_plan(
         confidence: confidence_for(title.status, rule.kind),
         notes_keys: title.notes_keys.clone(),
     })
+}
+
+/// Resolves a title's upstream add-on URL: an explicit per-title download URL
+/// (third-party host) wins; otherwise, when the title's slug names one of the
+/// manifest's engine-generics (a per-game title pointing at a universal add-on,
+/// e.g. a Unity game curated onto the `unityengine` generic), that generic's
+/// resolved URL is used — generics can carry an explicit non-clshortfuse host
+/// (see [`source::generic_addon_url`]), and a title must not bypass that by
+/// re-deriving a clshortfuse URL from the same slug. Only a slug that matches
+/// neither falls back to the clshortfuse URL derived from the slug itself.
+fn title_addon_url(manifest: &RenoDxManifest, title: &Title) -> String {
+    if let Some(url) = title.download_url.clone() {
+        return url;
+    }
+    if let Some(generic) = manifest
+        .generics
+        .iter()
+        .find(|generic| generic.slug.as_deref() == Some(title.slug.as_str()))
+        && let Some(url) = source::generic_addon_url(generic, title.arch)
+    {
+        return url;
+    }
+    source::addon_url(&title.slug, title.arch)
 }
 
 /// Resolves a game to the install plan for an **external** file-install, or `None`
@@ -234,7 +258,7 @@ pub fn resolve_external_install(
     if !matches!(title.category, Category::External { .. }) {
         return None;
     }
-    build_install_plan(title, rule, facts).ok()
+    build_install_plan(manifest, title, rule, facts).ok()
 }
 
 /// Whether RenoDX can be installed for this game from a user-supplied add-on file.
@@ -527,6 +551,95 @@ mod tests {
                 );
                 // The slug is still used for the on-disk file name.
                 assert_eq!(plan.slug, "ryza2");
+            }
+            other => panic!("expected installable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn title_slug_matching_a_generic_uses_the_generics_explicit_url() {
+        // A per-game title curated onto a universal engine add-on (matched by
+        // `slug`, e.g. a Unity game routed to the `unityengine` generic) must
+        // resolve through that generic's explicit host — the clshortfuse URL
+        // derived from the same slug may not exist (see `title_addon_url`).
+        let t = title(
+            "some-curated-unity-title",
+            "unityengine",
+            Architecture::X64,
+            Status::Working,
+            vec![rule(MatchKind::SteamAppid, "1091500", 100)],
+        );
+        let mut m = manifest(vec![t]);
+        m.generics.push(Generic {
+            engine: crate::addons::renodx::types::Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some(
+                "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64"
+                    .to_owned(),
+            ),
+            url32: None,
+            label_key: None,
+        });
+
+        match resolve(&m, &facts()) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(
+                    plan.addon_url,
+                    "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64"
+                );
+                assert_eq!(plan.slug, "unityengine");
+            }
+            other => panic!("expected installable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn title_download_url_still_wins_over_a_matching_generic() {
+        let mut t = title(
+            "curated-unity-game",
+            "unityengine",
+            Architecture::X64,
+            Status::Working,
+            vec![rule(MatchKind::SteamAppid, "1091500", 100)],
+        );
+        t.download_url = Some("https://example.com/renodx-unityengine.addon64".to_owned());
+        let mut m = manifest(vec![t]);
+        m.generics.push(Generic {
+            engine: crate::addons::renodx::types::Engine::Unity,
+            status: Status::Working,
+            slug: Some("unityengine".to_owned()),
+            url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
+            url32: None,
+            label_key: None,
+        });
+
+        match resolve(&m, &facts()) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(
+                    plan.addon_url,
+                    "https://example.com/renodx-unityengine.addon64"
+                );
+            }
+            other => panic!("expected installable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn title_slug_with_no_matching_generic_falls_back_to_clshortfuse() {
+        let m = manifest(vec![title(
+            "cp2077",
+            "cp2077",
+            Architecture::X64,
+            Status::Working,
+            vec![rule(MatchKind::SteamAppid, "1091500", 100)],
+        )]);
+        match resolve(&m, &facts()) {
+            RenoDxResolution::Installable(plan) => {
+                assert_eq!(
+                    plan.addon_url,
+                    source::addon_url("cp2077", Architecture::X64)
+                );
             }
             other => panic!("expected installable, got {other:?}"),
         }
