@@ -200,14 +200,16 @@ fn arch_str(arch: Architecture) -> String {
 mod tests {
     use super::*;
     use crate::addons::renodx::matcher::IncompatibilityReason;
+    use crate::addons::renodx::test_support::manifest;
+    #[cfg(windows)]
     use crate::addons::renodx::test_support::{
-        MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports, manifest, rule, title,
+        MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports, rule, title,
     };
+    #[cfg(windows)]
     use renderpilot_application::{GameRepository, InstalledAddonRepository};
-    use renderpilot_domain::{
-        ExeGraphicsInfo, GameIdentity, GameInstallation, GameRuntime, GraphicsApi, Launcher,
-        PathRef, Platform,
-    };
+    use renderpilot_domain::{ExeGraphicsInfo, GraphicsApi, Launcher};
+    #[cfg(windows)]
+    use renderpilot_domain::{GameIdentity, GameInstallation, GameRuntime, PathRef, Platform};
     use tempfile::tempdir;
 
     fn directx_facts() -> MatchFacts {
@@ -222,6 +224,7 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     fn full_reshade_host_bytes() -> Vec<u8> {
         build_pe_with_exports(
             MACHINE_AMD64,

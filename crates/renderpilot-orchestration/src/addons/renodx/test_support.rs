@@ -197,15 +197,20 @@ fn align_up(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
 }
 
+#[cfg(windows)]
 use renderpilot_application::{AppResult, SharedArtifactRepository};
+#[cfg(windows)]
 use renderpilot_domain::{SharedArtifactKind, SharedArtifactRecord};
+#[cfg(windows)]
 use std::sync::{Arc, Mutex};
 
+#[cfg(windows)]
 #[derive(Default, Clone)]
 pub(crate) struct InMemorySharedArtifactRepository {
     pub artifacts: Arc<Mutex<Vec<SharedArtifactRecord>>>,
 }
 
+#[cfg(windows)]
 impl SharedArtifactRepository for InMemorySharedArtifactRepository {
     fn upsert_shared_artifact(&self, record: &SharedArtifactRecord) -> AppResult<()> {
         let mut artifacts = self.artifacts.lock().unwrap();
