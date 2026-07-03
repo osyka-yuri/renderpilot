@@ -125,17 +125,17 @@ pub(crate) fn classify_manifest(
         // The manifest file exists — validate it parses as JSON. A corrupt
         // manifest means the Vulkan loader cannot use the layer even if the
         // DLL is present.
-        if let Ok(content) = std::fs::read_to_string(manifest_path) {
-            if serde_json::from_str::<serde_json::Value>(&content).is_err() {
-                return ManifestKind::Broken {
-                    diagnostic: VulkanLayerDiagnostic::ManifestMalformed,
-                    facts: VulkanLayerFacts {
-                        manifest_path: Some(manifest_path.to_path_buf()),
-                        dll_path: Some(layer_dir.join(LAYER_DLL_NAME)),
-                        ..VulkanLayerFacts::default()
-                    },
-                };
-            }
+        if let Ok(content) = std::fs::read_to_string(manifest_path)
+            && serde_json::from_str::<serde_json::Value>(&content).is_err()
+        {
+            return ManifestKind::Broken {
+                diagnostic: VulkanLayerDiagnostic::ManifestMalformed,
+                facts: VulkanLayerFacts {
+                    manifest_path: Some(manifest_path.to_path_buf()),
+                    dll_path: Some(layer_dir.join(LAYER_DLL_NAME)),
+                    ..VulkanLayerFacts::default()
+                },
+            };
         }
         let dll_path = layer_dir.join(LAYER_DLL_NAME);
         let architecture = match read_pe_architecture(&dll_path) {

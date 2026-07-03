@@ -43,20 +43,20 @@ pub fn availability(
     };
     let mut host_report = report(record.as_ref());
 
-    if record.is_none() {
-        if let Some(candidate) = orphaned_install_candidate(
+    if record.is_none()
+        && let Some(candidate) = orphaned_install_candidate(
             game_id,
             &analysis,
             &resolution,
             &host_report,
             &manifest.reshade,
-        ) {
-            record = reconciliation::reconcile_orphaned_install(context, &candidate)?;
+        )
+    {
+        record = reconciliation::reconcile_orphaned_install(context, &candidate)?;
 
-            // The freshly adopted record carries the advisory channel and tracking
-            // sources the host report needs for accurate status/actions.
-            host_report = report(record.as_ref());
-        }
+        // The freshly adopted record carries the advisory channel and tracking
+        // sources the host report needs for accurate status/actions.
+        host_report = report(record.as_ref());
     }
 
     let state = record

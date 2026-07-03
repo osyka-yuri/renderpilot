@@ -258,14 +258,14 @@ async fn read_capped_body(
 
     let total = response.content_length().unwrap_or(0);
     let report = |downloaded: u64| {
-        if total > 0 {
-            if let Some(observe) = progress {
-                observe(DownloadProgress {
-                    downloaded_bytes: downloaded,
-                    total_bytes: total,
-                    phase: Some(operation),
-                });
-            }
+        if total > 0
+            && let Some(observe) = progress
+        {
+            observe(DownloadProgress {
+                downloaded_bytes: downloaded,
+                total_bytes: total,
+                phase: Some(operation),
+            });
         }
     };
 
@@ -325,12 +325,12 @@ fn ensure_content_length_at_most(
     content_length: Option<u64>,
     max_size_bytes: u64,
 ) -> Result<(), ServiceError> {
-    if let Some(content_length) = content_length {
-        if content_length > max_size_bytes {
-            return Err(err(format!(
-                "{operation} response is too large: expected at most {max_size_bytes} bytes, got {content_length} bytes"
-            )));
-        }
+    if let Some(content_length) = content_length
+        && content_length > max_size_bytes
+    {
+        return Err(err(format!(
+            "{operation} response is too large: expected at most {max_size_bytes} bytes, got {content_length} bytes"
+        )));
     }
 
     Ok(())
@@ -341,12 +341,12 @@ fn ensure_exact_content_length(
     content_length: Option<u64>,
     expected_size_bytes: u64,
 ) -> Result<(), ServiceError> {
-    if let Some(content_length) = content_length {
-        if content_length != expected_size_bytes {
-            return Err(err(format!(
-                "{operation} size mismatch: expected {expected_size_bytes} bytes, got {content_length} bytes"
-            )));
-        }
+    if let Some(content_length) = content_length
+        && content_length != expected_size_bytes
+    {
+        return Err(err(format!(
+            "{operation} size mismatch: expected {expected_size_bytes} bytes, got {content_length} bytes"
+        )));
     }
 
     Ok(())

@@ -118,15 +118,15 @@ pub fn resolve_primary_executable(
     use renderpilot_detection::analyze_executable;
     use renderpilot_platform_windows::{detect_executable_candidates, launcher_launch_executable};
 
-    if let Some(over) = override_path.filter(|path| path.exists()) {
-        if let Ok(path) = PathRef::new(to_forward_slashes(over)) {
-            return Some(ResolvedExecutable {
-                file_name: file_name_of(over),
-                graphics: analyze_executable(over),
-                path,
-                source: ExeSource::Override,
-            });
-        }
+    if let Some(over) = override_path.filter(|path| path.exists())
+        && let Ok(path) = PathRef::new(to_forward_slashes(over))
+    {
+        return Some(ResolvedExecutable {
+            file_name: file_name_of(over),
+            graphics: analyze_executable(over),
+            path,
+            source: ExeSource::Override,
+        });
     }
 
     let launch_exe = launcher_launch_executable(install_dir);

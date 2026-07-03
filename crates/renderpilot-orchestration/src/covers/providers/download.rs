@@ -153,10 +153,10 @@ fn classify_status(status: StatusCode) -> Result<(), AttemptError> {
 }
 
 fn classify_declared_size(response: &Response) -> Result<(), AttemptError> {
-    if let Some(content_length) = response.content_length() {
-        if content_length > MAX_COVER_BYTES {
-            return Err(AttemptError::Permanent(cover_too_large()));
-        }
+    if let Some(content_length) = response.content_length()
+        && content_length > MAX_COVER_BYTES
+    {
+        return Err(AttemptError::Permanent(cover_too_large()));
     }
 
     Ok(())

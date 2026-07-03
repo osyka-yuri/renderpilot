@@ -273,17 +273,17 @@ fn walk_import_dir<S: ByteSource>(
         if first_field == 0 && name_rva == 0 {
             break;
         }
-        if name_rva != 0 {
-            if let Some(name_offset) = rva_to_offset(headers.sections(), name_rva) {
-                // Read up to MAX_DLL_NAME_LEN bytes; a name near the end of the
-                // source may be truncated, which `read_ascii_dll_name` handles
-                // (it stops at NUL or buffer end). A strict full read would
-                // wrongly drop such a name.
-                if let Some(chunk) = source.read_at_most(name_offset, MAX_DLL_NAME_LEN) {
-                    if let Some(name) = read_ascii_dll_name(&chunk, 0) {
-                        f(&name);
-                    }
-                }
+        if name_rva != 0
+            && let Some(name_offset) = rva_to_offset(headers.sections(), name_rva)
+        {
+            // Read up to MAX_DLL_NAME_LEN bytes; a name near the end of the
+            // source may be truncated, which `read_ascii_dll_name` handles
+            // (it stops at NUL or buffer end). A strict full read would
+            // wrongly drop such a name.
+            if let Some(chunk) = source.read_at_most(name_offset, MAX_DLL_NAME_LEN)
+                && let Some(name) = read_ascii_dll_name(&chunk, 0)
+            {
+                f(&name);
             }
         }
         offset = descriptor_end;

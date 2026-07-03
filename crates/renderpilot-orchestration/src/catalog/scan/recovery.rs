@@ -32,12 +32,11 @@ pub(super) fn recover_orphaned_backups(
         // 2. FSR-specific: recover orphaned split-member backups from a previous downgrade.
         //    When an FSR 4 package is replaced by a single-file FSR 3 package, the split
         //    member `.bak` files remain on disk but are no longer tracked by the component.
-        if component.technology().family() == GraphicsTechnology::AmdFsr {
-            if let Some(primary) = component.files().first() {
-                if let Some(parent) = primary.path().parent() {
-                    recover_orphaned_fsr_split_members(parent, &mut recovered_baseline)?;
-                }
-            }
+        if component.technology().family() == GraphicsTechnology::AmdFsr
+            && let Some(primary) = component.files().first()
+            && let Some(parent) = primary.path().parent()
+        {
+            recover_orphaned_fsr_split_members(parent, &mut recovered_baseline)?;
         }
 
         if !recovered_baseline.is_empty() {

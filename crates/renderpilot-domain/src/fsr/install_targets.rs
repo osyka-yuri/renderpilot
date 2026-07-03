@@ -32,14 +32,14 @@ pub fn resolve_artifact_install_target(
         .or_else(|| artifact_file.path().file_name())
         .unwrap_or("");
 
-    if naming::is_entry_point(default_target) && !lineage::has_entry_point(component_files) {
-        if let Some(native_loader) = component_files
+    if naming::is_entry_point(default_target)
+        && !lineage::has_entry_point(component_files)
+        && let Some(native_loader) = component_files
             .iter()
             .filter_map(|file| file.path().file_name())
             .find(|name| naming::is_loader(name))
-        {
-            return native_loader.to_owned();
-        }
+    {
+        return native_loader.to_owned();
     }
 
     default_target.to_owned()

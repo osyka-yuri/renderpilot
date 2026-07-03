@@ -106,11 +106,11 @@ fn build_package(
     files.push(member_component_file(loader, Some(entry_point_file))?);
     member_entry_ids.push(loader.entry_id.clone());
 
-    if let Some(framegen) = framegen {
-        if let Some(file) = member_component_file(framegen, None) {
-            files.push(file);
-            member_entry_ids.push(framegen.entry_id.clone());
-        }
+    if let Some(framegen) = framegen
+        && let Some(file) = member_component_file(framegen, None)
+    {
+        files.push(file);
+        member_entry_ids.push(framegen.entry_id.clone());
     }
 
     let shas: Vec<&Sha256Hash> = files.iter().filter_map(ComponentFile::sha256).collect();

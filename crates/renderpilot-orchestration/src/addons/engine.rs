@@ -464,10 +464,10 @@ impl InstallChanges {
                 | Action::Removed { path, .. }
                 | Action::Updated { path, .. } => path,
             };
-            if let Some(parent) = path.parent() {
-                if synced.insert(parent.to_path_buf()) {
-                    crate::fs::sync_directory_best_effort(parent);
-                }
+            if let Some(parent) = path.parent()
+                && synced.insert(parent.to_path_buf())
+            {
+                crate::fs::sync_directory_best_effort(parent);
             }
         }
     }
@@ -476,13 +476,13 @@ impl InstallChanges {
     /// are not needed after a successful plan.
     fn cleanup_remove_backups(&self) {
         for action in &self.actions {
-            if let Action::Removed { bak, .. } = action {
-                if let Err(error) = remove_existing(bak) {
-                    log::warn!(
-                        "addon install: failed to clean up remove backup `{}`: {error}",
-                        bak.display()
-                    );
-                }
+            if let Action::Removed { bak, .. } = action
+                && let Err(error) = remove_existing(bak)
+            {
+                log::warn!(
+                    "addon install: failed to clean up remove backup `{}`: {error}",
+                    bak.display()
+                );
             }
         }
     }

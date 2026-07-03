@@ -163,23 +163,15 @@ pub async fn apply_vulkan_layer(
 #[cfg(test)]
 mod tests {
     use std::future::Future;
-    use std::sync::Arc;
-    use std::task::{Context as TaskContext, Poll, Wake, Waker};
+    use std::task::{Context as TaskContext, Poll, Waker};
 
     use crate::addons::renodx::test_support;
     use crate::{Context, ServiceError};
 
     use super::*;
 
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
-
     fn poll_ready<F: Future>(future: F) -> F::Output {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut task_context = TaskContext::from_waker(&waker);
+        let mut task_context = TaskContext::from_waker(Waker::noop());
         let mut future = Box::pin(future);
         match Future::poll(future.as_mut(), &mut task_context) {
             Poll::Ready(output) => output,

@@ -168,14 +168,14 @@ async fn check_proxy_host(
     if target.action.writes_host() {
         return Some(UpdateStatus::Available);
     }
-    if target.source.url == host.url() {
-        if let Ok(validators) = head_validators(host.url(), "ReShade update check").await {
-            let current = validators.cache_validator();
-            if let Some(status) = validator_fast_path(host.etag(), current.as_deref()) {
-                if status == UpdateStatus::Current {
-                    return Some(UpdateStatus::Current);
-                }
-            }
+    if target.source.url == host.url()
+        && let Ok(validators) = head_validators(host.url(), "ReShade update check").await
+    {
+        let current = validators.cache_validator();
+        if let Some(status) = validator_fast_path(host.etag(), current.as_deref())
+            && status == UpdateStatus::Current
+        {
+            return Some(UpdateStatus::Current);
         }
     }
     let recorded_digest = host.digest().to_owned();
@@ -187,14 +187,12 @@ async fn check_proxy_host(
             // The recorded channel's upstream artifact does not match the installed
             // digest. Check whether the digest matches the other known channel — a
             // channel mismatch, not an update.
-            if let Some(other) = other_channel_source(manifest, recorded_channel, target.arch) {
-                if let Ok(other_download) =
+            if let Some(other) = other_channel_source(manifest, recorded_channel, target.arch)
+                && let Ok(other_download) =
                     fetch::fetch_reshade_from_source(&other, target.arch, None).await
-                {
-                    if other_download.digest == recorded_digest {
-                        return Some(UpdateStatus::ChannelMismatch);
-                    }
-                }
+                && other_download.digest == recorded_digest
+            {
+                return Some(UpdateStatus::ChannelMismatch);
             }
             Some(UpdateStatus::Available)
         }

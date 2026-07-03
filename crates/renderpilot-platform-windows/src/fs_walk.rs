@@ -42,10 +42,10 @@ pub(crate) fn walk_files(
         };
 
         if file_type.is_dir() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip)) {
-                    continue;
-                }
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip))
+            {
+                continue;
             }
             walk_files(&path, depth + 1, on_file);
             continue;

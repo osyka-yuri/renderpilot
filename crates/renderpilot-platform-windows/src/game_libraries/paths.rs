@@ -155,10 +155,11 @@ pub(super) fn parse_steam_library_roots(content: &str) -> Vec<PathBuf> {
 
         // Legacy Steam format:
         // "1" "D:\\SteamLibrary"
-        if key.parse::<u32>().is_ok() && looks_like_windows_path(value) {
-            if let Some(path) = path_from_string(value) {
-                roots.push(path);
-            }
+        if key.parse::<u32>().is_ok()
+            && looks_like_windows_path(value)
+            && let Some(path) = path_from_string(value)
+        {
+            roots.push(path);
         }
     }
 

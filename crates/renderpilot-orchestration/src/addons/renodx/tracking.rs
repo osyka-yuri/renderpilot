@@ -33,10 +33,10 @@ fn ui_host_kind(host_kind: InstalledAddonHostKind) -> RenoDxHostKind {
 
 fn addon_dated_from_file_or_record(record: &InstalledAddon) -> Option<String> {
     let path = Path::new(record.addon_file().as_str());
-    if let Ok(modified) = std::fs::metadata(path).and_then(|metadata| metadata.modified()) {
-        if crate::fs::is_reasonable_file_mtime(modified) {
-            return Some(crate::fs::format_http_date(modified));
-        }
+    if let Ok(modified) = std::fs::metadata(path).and_then(|metadata| metadata.modified())
+        && crate::fs::is_reasonable_file_mtime(modified)
+    {
+        return Some(crate::fs::format_http_date(modified));
     }
     record.addon_dated().map(str::to_owned)
 }

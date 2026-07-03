@@ -70,12 +70,12 @@ pub async fn update(
         Some(channel) => resolve_host_update_target(context, manifest, game_id, channel)?,
         None => None,
     };
-    if let Some(target) = host_target.as_ref() {
-        if target.conflict {
-            return Err(errors::invalid(
-                "ReShade host conflict must be resolved before updating RenoDX".to_owned(),
-            ));
-        }
+    if let Some(target) = host_target.as_ref()
+        && target.conflict
+    {
+        return Err(errors::invalid(
+            "ReShade host conflict must be resolved before updating RenoDX".to_owned(),
+        ));
     }
     let host_policy_writes = host.is_some()
         && host_target

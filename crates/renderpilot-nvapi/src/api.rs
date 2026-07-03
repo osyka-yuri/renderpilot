@@ -306,10 +306,10 @@ impl Nvapi {
         // profile owns the exe, re-resolve it through `GetProfileInfo` →
         // `FindProfileByName`.  That is identical to Inspector's lookup path,
         // so both tools always operate on the same handle.
-        if let Some(info) = self.get_profile_info_raw(session, profile) {
-            if let Some(by_name) = self.find_profile_by_name_raw(session, &info.profileName) {
-                return Ok(by_name);
-            }
+        if let Some(info) = self.get_profile_info_raw(session, profile)
+            && let Some(by_name) = self.find_profile_by_name_raw(session, &info.profileName)
+        {
+            return Ok(by_name);
         }
 
         // Fallback: the profile-name re-lookup failed (very old driver, or

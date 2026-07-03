@@ -120,10 +120,10 @@ fn attach_advisory_provenance(
             let channel = reshade::guess_advisory_channel(&pe.identity);
             record = record.with_reshade_channel(channel.as_str());
 
-            if candidate.host_kind == InstalledAddonHostKind::Proxy {
-                if let Some(source) = build_advisory_host_source(candidate, channel) {
-                    record = record.with_tracked_source(source);
-                }
+            if candidate.host_kind == InstalledAddonHostKind::Proxy
+                && let Some(source) = build_advisory_host_source(candidate, channel)
+            {
+                record = record.with_tracked_source(source);
             }
         }
         None => log::debug!(

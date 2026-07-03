@@ -73,10 +73,10 @@ pub(super) fn record_operation_journal_entry(
 
     let item_records = build_item_records(&op_id, component_id, items);
 
-    if let Ok(entry) = OperationJournalEntry::try_new(operation_record, item_records) {
-        if let Err(e) = OperationRepository::save_operation_entry(storage, &entry) {
-            log::warn!("Failed to save operation journal entry: {}", e);
-        }
+    if let Ok(entry) = OperationJournalEntry::try_new(operation_record, item_records)
+        && let Err(e) = OperationRepository::save_operation_entry(storage, &entry)
+    {
+        log::warn!("Failed to save operation journal entry: {}", e);
     }
 }
 

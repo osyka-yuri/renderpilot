@@ -143,10 +143,10 @@ fn sync_touched_directories(changes: &AppliedFsChanges) {
         .iter()
         .chain(changes.renamed_to_bak.iter().map(|(target, _bak)| target));
     for path in touched {
-        if let Some(parent) = path.parent() {
-            if synced.insert(parent.to_path_buf()) {
-                crate::fs::sync_directory_best_effort(parent);
-            }
+        if let Some(parent) = path.parent()
+            && synced.insert(parent.to_path_buf())
+        {
+            crate::fs::sync_directory_best_effort(parent);
         }
     }
 }
@@ -219,10 +219,10 @@ fn sync_component_file_dirs<'a>(files: impl IntoIterator<Item = &'a ComponentFil
     let mut synced: HashSet<PathBuf> = HashSet::new();
     for file in files {
         let path = real_path(file);
-        if let Some(parent) = path.parent() {
-            if synced.insert(parent.to_path_buf()) {
-                crate::fs::sync_directory_best_effort(parent);
-            }
+        if let Some(parent) = path.parent()
+            && synced.insert(parent.to_path_buf())
+        {
+            crate::fs::sync_directory_best_effort(parent);
         }
     }
 }

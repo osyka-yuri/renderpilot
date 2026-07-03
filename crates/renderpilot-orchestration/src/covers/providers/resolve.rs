@@ -92,10 +92,10 @@ fn resolve_steam_cover_bytes(
 ) -> Result<Vec<u8>, ServiceError> {
     let app_id = external_id_or_cover_not_found(request)?;
 
-    if policy.steam_cdn {
-        if let Some(bytes) = backend.try_steam_cdn(client, app_id) {
-            return Ok(bytes);
-        }
+    if policy.steam_cdn
+        && let Some(bytes) = backend.try_steam_cdn(client, app_id)
+    {
+        return Ok(bytes);
     }
 
     let key = require_griddb_key_if_allowed(api_key, policy)?;
@@ -113,10 +113,10 @@ fn resolve_gog_cover_bytes(
 ) -> Result<Vec<u8>, ServiceError> {
     let product_id = external_id_or_cover_not_found(request)?;
 
-    if policy.gog_cdn {
-        if let Some(bytes) = backend.try_gog_cdn(client, product_id) {
-            return Ok(bytes);
-        }
+    if policy.gog_cdn
+        && let Some(bytes) = backend.try_gog_cdn(client, product_id)
+    {
+        return Ok(bytes);
     }
 
     let key = require_griddb_key_if_allowed(api_key, policy)?;

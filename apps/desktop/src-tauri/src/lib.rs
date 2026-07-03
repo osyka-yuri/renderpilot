@@ -163,13 +163,13 @@ fn apply_portable_mode() {
 #[cfg(windows)]
 fn apply_webview2_elevation_workaround() {
     use std::path::PathBuf;
-    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
-        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-            let path = PathBuf::from(local).join("RenderPilot").join("WebView2");
-            // SAFETY: single-threaded during startup, before any plugin init.
-            unsafe {
-                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", path);
-            }
+    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none()
+        && let Some(local) = std::env::var_os("LOCALAPPDATA")
+    {
+        let path = PathBuf::from(local).join("RenderPilot").join("WebView2");
+        // SAFETY: single-threaded during startup, before any plugin init.
+        unsafe {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", path);
         }
     }
 }

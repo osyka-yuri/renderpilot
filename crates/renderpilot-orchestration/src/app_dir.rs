@@ -22,10 +22,10 @@ pub(crate) fn app_dir() -> Result<PathBuf, ServiceError> {
 pub(crate) fn resolve_app_dir(
     mut get_env: impl FnMut(&str) -> Option<OsString>,
 ) -> Result<PathBuf, ServiceError> {
-    if let Some(value) = get_env(crate::portable::APP_DIR_ENV) {
-        if !value.as_os_str().is_empty() {
-            return Ok(PathBuf::from(value));
-        }
+    if let Some(value) = get_env(crate::portable::APP_DIR_ENV)
+        && !value.as_os_str().is_empty()
+    {
+        return Ok(PathBuf::from(value));
     }
 
     for candidate in ["LOCALAPPDATA", "APPDATA"] {

@@ -197,14 +197,14 @@ pub async fn install_from_file(
     })?;
     // Hard guard: a known game architecture must match the add-on's, or ReShade
     // would load a wrong-bitness add-on it cannot use.
-    if let Some(game_arch) = analysis.facts.graphics.architecture() {
-        if game_arch != file_arch {
-            return Err(errors::invalid(format!(
-                "this add-on is {} but the game is {} — download the matching add-on",
-                arch_label(file_arch),
-                arch_label(game_arch),
-            )));
-        }
+    if let Some(game_arch) = analysis.facts.graphics.architecture()
+        && game_arch != file_arch
+    {
+        return Err(errors::invalid(format!(
+            "this add-on is {} but the game is {} — download the matching add-on",
+            arch_label(file_arch),
+            arch_label(game_arch),
+        )));
     }
 
     // A curated External title's plan, else a generic plan for any DirectX game.

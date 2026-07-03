@@ -237,12 +237,11 @@ pub(super) fn delete_local_library(
     let dll_path = local_dll_path(entry)?;
     if dll_path.exists() {
         // Best-effort: unregister the artifact from the catalog before deleting the file.
-        if let Ok(sha256) = read_or_compute_dll_sha256(&dll_path) {
-            if let Ok(artifact) =
+        if let Ok(sha256) = read_or_compute_dll_sha256(&dll_path)
+            && let Ok(artifact) =
                 artifact_builder::build_manifest_artifact(entry, &dll_path, &sha256)
-            {
-                let _ = context.storage().delete_artifact(artifact.id());
-            }
+        {
+            let _ = context.storage().delete_artifact(artifact.id());
         }
         // Remove the DLL and its sidecar SHA-256 cache.
         crate::fs::remove_file_if_exists(&dll_path)?;
@@ -295,12 +294,11 @@ async fn ensure_member_dll(
     let maybe_artifact = ensure_local_archive(entry, &archive_path, progress).await?;
 
     let dll_path = local_dll_path(entry)?;
-    if dll_path.exists() {
-        if let Ok(metadata) = std::fs::metadata(&dll_path) {
-            if metadata.len() == entry.files.dll.size_bytes {
-                return Ok(dll_path);
-            }
-        }
+    if dll_path.exists()
+        && let Ok(metadata) = std::fs::metadata(&dll_path)
+        && metadata.len() == entry.files.dll.size_bytes
+    {
+        return Ok(dll_path);
     }
 
     let artifact = decompress_or_reuse(entry, &archive_path, maybe_artifact)?;
