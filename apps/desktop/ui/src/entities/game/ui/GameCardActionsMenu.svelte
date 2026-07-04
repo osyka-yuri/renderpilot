@@ -21,11 +21,7 @@
   } from '@shared/ui';
 
   type MenuActionId =
-    | 'fetch-cover'
-    | 'pick-cover'
-    | 'clear-cover'
-    | 'toggle-favorite'
-    | 'toggle-hidden';
+    'fetch-cover' | 'pick-cover' | 'clear-cover' | 'toggle-favorite' | 'toggle-hidden';
 
   type MenuActionHandler = () => void | Promise<void>;
 

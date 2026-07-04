@@ -3,8 +3,7 @@ import { scanAutoLibraries } from '../api/desktop';
 import { describeCommandErrorBrief } from '@shared/api';
 
 export type ScanLibrariesResult =
-  | { kind: 'ok'; errors: readonly ScanError[] }
-  | { kind: 'error'; message: string };
+  { kind: 'ok'; errors: readonly ScanError[] } | { kind: 'error'; message: string };
 
 /**
  * Triggers an automatic library scan and returns the result.

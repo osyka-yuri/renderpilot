@@ -20,13 +20,7 @@ export type RollbackComponentResult = {
 };
 
 export type KnownOperationStatus =
-  | 'planned'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'blocked'
-  | 'rolled_back'
-  | 'cancelled';
+  'planned' | 'running' | 'completed' | 'failed' | 'blocked' | 'rolled_back' | 'cancelled';
 
 export type KnownOperationKind = 'scan' | 'replace_component' | 'rollback_component';
 

@@ -9,6 +9,7 @@
 /.local/
 /apps/desktop/dist/
 /apps/desktop/node_modules/
+/apps/desktop/ui/node_modules/
 /apps/desktop/src-tauri/gen/
 /apps/desktop/.prettiercache
 /apps/desktop/.eslintcache
@@ -22,3 +23,10 @@ gemini-debug.log
 
 # Devin workspace notes
 /.devin/
+
+# MCP local task definitions (JSON tool schemas for the tasks server)
+# Local integration only (like .gemini/ and .devin/), not part of the project source.
+mcps/
+
+# Local agent terminal session dumps
+/terminals/

@@ -218,11 +218,7 @@ export type RenoDxInstallState =
  * is a normal, non-error result.
  */
 export type UpdateStatus =
-  | 'current'
-  | 'available'
-  | 'unknown'
-  | 'channel_mismatch'
-  | 'unknown_needs_validation';
+  'current' | 'available' | 'unknown' | 'channel_mismatch' | 'unknown_needs_validation';
 
 export type ReshadeChannel = 'stable' | 'nightly';
 
