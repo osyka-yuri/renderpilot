@@ -4,20 +4,26 @@ use std::path::Path;
 
 use renderpilot_domain::{Architecture, SharedArtifactOrigin};
 
+use crate::addons::operation_lock;
 use crate::addons::renodx::dto::vulkan::VulkanLayerManagementReport;
 use crate::addons::renodx::errors;
-use crate::addons::renodx::fetch;
 use crate::addons::renodx::matcher::ResolvedInstall;
-use crate::addons::renodx::operation_lock;
 use crate::addons::renodx::platform::vulkan::validation::{LayerMutationGate, layer_mutation_gate};
-use crate::addons::renodx::policy::HostKind;
-use crate::addons::renodx::source;
-use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel, ReshadeConfig};
+use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::vulkan::{self, VulkanLayerDetection};
+use crate::addons::reshade::fetch::fetch_reshade_from_source;
+use crate::addons::reshade::proxy::HostKind;
+use crate::addons::reshade::source::require_reshade_source;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
 use super::update_reshade::UpdateReShadeCommand;
+
+/// Ensures the shared Vulkan host is ready for this install.
+///
+/// Returns `true` only when this call downloaded the host, allowing the caller
+/// to place the following add-on download in the next operation-progress stage.
 pub(crate) async fn ensure_for_install(
     context: &Context,
     plan: &ResolvedInstall,
@@ -26,9 +32,9 @@ pub(crate) async fn ensure_for_install(
     allow_shared_vulkan_layer_install: bool,
     exe_path: Option<&Path>,
     progress: Option<&ProgressObserver<'_>>,
-) -> Result<(), ServiceError> {
+) -> Result<bool, ServiceError> {
     if !matches!(plan.host_kind, HostKind::Vulkan) {
-        return Ok(());
+        return Ok(false);
     }
     let exe_path = exe_path.ok_or_else(|| {
         errors::invalid(
@@ -58,7 +64,7 @@ pub(crate) async fn ensure_for_install(
             SharedArtifactOrigin::AdoptedOfficial,
             Some(channel),
         ));
-        return Ok(());
+        return Ok(false);
     }
 
     // Remaining states after the gate above: NotInstalled, InstalledDisabled, or a
@@ -76,8 +82,8 @@ pub(crate) async fn ensure_for_install(
                 .to_owned(),
         ));
     }
-    let source = source::require_reshade_source(reshade_config, channel, plan.arch)?;
-    let download = fetch::fetch_reshade_from_source(&source, plan.arch, progress).await?;
+    let source = require_reshade_source(reshade_config, channel, plan.arch)?;
+    let download = fetch_reshade_from_source(&source, plan.arch, progress).await?;
     // Nothing existed before this attempt, so a failure partway through should
     // try to leave nothing behind rather than stranding a partial install that
     // the next detection pass would report as a Conflict.
@@ -103,7 +109,7 @@ pub(crate) async fn ensure_for_install(
         &download,
         SharedArtifactOrigin::RenderPilotCreated,
     ));
-    Ok(())
+    Ok(true)
 }
 
 /// Best-effort cleanup after a from-scratch layer install fails partway

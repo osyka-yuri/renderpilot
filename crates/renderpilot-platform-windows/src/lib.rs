@@ -11,7 +11,9 @@ pub mod executable_detection;
 pub(crate) mod fs_walk;
 #[cfg(windows)]
 pub mod game_libraries;
+mod install_identity;
 mod manual_folder;
+mod path_normalize;
 mod steam_appmanifest;
 #[cfg(windows)]
 pub mod vulkan_layer;
@@ -22,6 +24,7 @@ pub use executable_detection::{
 };
 #[cfg(windows)]
 pub use game_libraries::launcher_launch_executable;
+pub use install_identity::{InstallIdentityDetails, detect_install_identity};
 pub use manual_folder::ManualFolderGameSource;
 pub use steam_appmanifest::{
     SteamInstallDetails, steam_install_details, steam_install_dirs_in_steamapps,

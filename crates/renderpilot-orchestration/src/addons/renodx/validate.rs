@@ -6,19 +6,18 @@
 //! the canonical local file name derived from the slug. A manifest that passes can
 //! be resolved and installed without further structural checks.
 
-use std::collections::HashSet;
-
 use renderpilot_domain::Architecture;
 
 use crate::ServiceError;
-use crate::fs::is_safe_file_name;
 
 use super::errors;
 use super::source;
-use super::types::{
-    Category, Generic, MatchKind, MatchRule, RenoDxManifest, ReshadeConfig, Title,
-    manifest_defaults,
+use super::types::{Category, Generic, RenoDxManifest, Title, manifest_defaults};
+use crate::addons::manifest_validate::{
+    ensure_defaults_match, ensure_not_blank, ensure_safe_file_name, ensure_schema_version,
+    ensure_semver, ensure_unique_title_ids, validate_match_rules,
 };
+use crate::addons::reshade::types::ReshadeConfig;
 
 /// Schema version this build understands.
 const SUPPORTED_SCHEMA_VERSION: u32 = 3;
@@ -28,17 +27,12 @@ const DOWNLOAD_HOST_ALLOWLIST: &[&str] = &["clshortfuse.github.io", "github.com"
 
 /// Validates an entire manifest.
 pub(super) fn validate_manifest(manifest: &RenoDxManifest) -> Result<(), ServiceError> {
-    if manifest.schema_version != SUPPORTED_SCHEMA_VERSION {
-        return Err(errors::failed(format!(
-            "unsupported RenoDX manifest schema version: expected {SUPPORTED_SCHEMA_VERSION}, got {}",
-            manifest.schema_version
-        )));
-    }
+    ensure_schema_version("RenoDX", manifest.schema_version, SUPPORTED_SCHEMA_VERSION)?;
 
     // The manifest's shared `defaults` (schema v3) must agree with the Rust-side
     // `#[serde(default)]` values used to fill omitted title fields; a drift would
     // silently change install behaviour, so catch it at load time.
-    validate_defaults(&manifest.defaults)?;
+    ensure_defaults_match("RenoDX", &manifest.defaults, &manifest_defaults())?;
 
     validate_reshade(&manifest.reshade)?;
 
@@ -46,32 +40,11 @@ pub(super) fn validate_manifest(manifest: &RenoDxManifest) -> Result<(), Service
         validate_generic(generic)?;
     }
 
-    let mut title_ids: HashSet<&str> = HashSet::with_capacity(manifest.titles.len());
     for title in &manifest.titles {
         validate_title(title)?;
-        if !title_ids.insert(title.id.as_str()) {
-            return Err(errors::failed(format!(
-                "duplicate title id `{}` in manifest",
-                title.id
-            )));
-        }
     }
+    ensure_unique_title_ids(manifest.titles.iter().map(|title| title.id.as_str()))?;
 
-    Ok(())
-}
-
-/// Asserts that the manifest's `defaults` (schema v3) match the Rust-side defaults
-/// backing the title `#[serde(default)]` fields. The generator emits these same
-/// values, so a mismatch indicates a generator/validator drift.
-fn validate_defaults(defaults: &super::types::Defaults) -> Result<(), ServiceError> {
-    let expected = manifest_defaults();
-    if defaults != &expected {
-        return Err(errors::failed(
-            "RenoDX manifest `defaults` do not match the validator's expected defaults \
-             (risk / min_app_version / channel drift between generator and parser)"
-                .to_owned(),
-        ));
-    }
     Ok(())
 }
 
@@ -92,12 +65,24 @@ fn validate_category(category: &Category) -> Result<(), ServiceError> {
     Ok(())
 }
 
+// Delegates to the shared checks in `addons::reshade::manifest`, so RenoDX's
+// own embedded `reshade` block is held to exactly the same shape as the
+// standalone `reshade_manifest.json` (see that module's doc comment).
 fn validate_reshade(reshade: &ReshadeConfig) -> Result<(), ServiceError> {
     if let Some(stable) = &reshade.stable {
-        ensure_stable_reshade_download("reshade stable url", &stable.url)?;
+        crate::addons::reshade::manifest::ensure_stable_reshade_download(
+            "reshade stable url",
+            &stable.url,
+        )?;
     }
-    ensure_allowed_download("reshade nightly url64", &reshade.nightly.url64)?;
-    ensure_allowed_download("reshade nightly url32", &reshade.nightly.url32)?;
+    crate::addons::reshade::manifest::ensure_allowed_nightly_download(
+        "reshade nightly url64",
+        &reshade.nightly.url64,
+    )?;
+    crate::addons::reshade::manifest::ensure_allowed_nightly_download(
+        "reshade nightly url32",
+        &reshade.nightly.url32,
+    )?;
     Ok(())
 }
 
@@ -140,29 +125,8 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
     ensure_not_blank("title id", &title.id)?;
     ensure_not_blank("title name", &title.name)?;
     ensure_slug("title slug", &title.slug)?;
-    ensure_not_blank("title risk message_key", &title.risk.message_key)?;
 
-    if title.match_rules.is_empty() {
-        return Err(errors::failed(format!(
-            "title `{}` must declare at least one match rule",
-            title.id
-        )));
-    }
-    for rule in &title.match_rules {
-        if rule.tier == 0 {
-            return Err(errors::failed(format!(
-                "title `{}` match rule tier must be greater than zero",
-                title.id
-            )));
-        }
-        if rule.kind != MatchKind::Generic && rule.value.trim().is_empty() {
-            return Err(errors::failed(format!(
-                "title `{}` match rule of kind {:?} requires a value",
-                title.id, rule.kind
-            )));
-        }
-        validate_match_rule_value(title, rule)?;
-    }
+    validate_match_rules(&title.id, &title.match_rules)?;
 
     if let Some(proxy) = &title.proxy_dll_override {
         ensure_safe_file_name("title proxy_dll_override", proxy)?;
@@ -176,27 +140,16 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
             &source::addon_file_name(&title.slug, title.arch),
         )?;
     }
-    ensure_semver("title min_app_version", &title.id, &title.min_app_version)?;
+    ensure_semver(
+        &format!("title `{}`", title.id),
+        "min_app_version",
+        &title.min_app_version,
+    )?;
     for conflict in &title.compatibility.conflicts {
         ensure_not_blank("title compatibility.conflicts entry", conflict)?;
     }
     ensure_compatibility_source(title)?;
     validate_category(&title.category)?;
-    Ok(())
-}
-
-/// Asserts a value is a dotted-triple version (e.g. `1.0.0`).
-fn ensure_semver(field: &str, title_id: &str, value: &str) -> Result<(), ServiceError> {
-    let ok = !value.is_empty()
-        && value
-            .split('.')
-            .map(|part| part.parse::<u32>())
-            .all(|part| part.is_ok());
-    if !ok {
-        return Err(errors::failed(format!(
-            "title `{title_id}` {field} must be a dotted-triple version, got `{value}`"
-        )));
-    }
     Ok(())
 }
 
@@ -216,37 +169,6 @@ fn ensure_compatibility_source(title: &Title) -> Result<(), ServiceError> {
     }
 }
 
-fn validate_match_rule_value(title: &Title, rule: &MatchRule) -> Result<(), ServiceError> {
-    match rule.kind {
-        MatchKind::ExeSha256 if !is_lowercase_sha256_hex(&rule.value) => {
-            Err(errors::failed(format!(
-                "title `{}` ExeSha256 rule value must be lowercase hex SHA-256",
-                title.id
-            )))
-        }
-        MatchKind::SteamAppid if !rule.value.parse::<u64>().is_ok_and(|appid| appid > 0) => {
-            Err(errors::failed(format!(
-                "title `{}` SteamAppid rule value must be a positive integer",
-                title.id
-            )))
-        }
-        MatchKind::EpicId | MatchKind::GogId if rule.value.trim().is_empty() => {
-            Err(errors::failed(format!(
-                "title `{}` {:?} rule value must not be empty",
-                title.id, rule.kind
-            )))
-        }
-        _ => Ok(()),
-    }
-}
-
-fn ensure_not_blank(field: &str, value: &str) -> Result<(), ServiceError> {
-    if value.trim().is_empty() {
-        return Err(errors::failed(format!("`{field}` must not be empty")));
-    }
-    Ok(())
-}
-
 /// A slug is a bare upstream add-on identifier: file-name-safe (so it can be
 /// interpolated into a URL/path) and non-empty.
 fn ensure_slug(field: &str, value: &str) -> Result<(), ServiceError> {
@@ -257,16 +179,6 @@ fn ensure_slug(field: &str, value: &str) -> Result<(), ServiceError> {
     if !ok {
         return Err(errors::failed(format!(
             "`{field}` must be a bare slug ([A-Za-z0-9._-]), got `{value}`"
-        )));
-    }
-    Ok(())
-}
-
-fn ensure_safe_file_name(field: &str, value: &str) -> Result<(), ServiceError> {
-    ensure_not_blank(field, value)?;
-    if !is_safe_file_name(value) {
-        return Err(errors::failed(format!(
-            "`{field}` must be a bare file name, got `{value}`"
         )));
     }
     Ok(())
@@ -324,30 +236,6 @@ fn ensure_url_basename_matches(
         )));
     }
     Ok(())
-}
-
-fn ensure_stable_reshade_download(field: &str, url: &str) -> Result<(), ServiceError> {
-    let parsed = ensure_https(field, url)?;
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err(errors::failed(format!("{field} must not include userinfo")));
-    }
-    if parsed.host_str() != Some("reshade.me") {
-        return Err(errors::failed(format!("{field} host must be `reshade.me`")));
-    }
-    let path = parsed.path();
-    if !path.starts_with("/downloads/ReShade_Setup_") || !path.ends_with("_Addon.exe") {
-        return Err(errors::failed(format!(
-            "{field} must point at `/downloads/ReShade_Setup_*_Addon.exe`"
-        )));
-    }
-    Ok(())
-}
-
-fn is_lowercase_sha256_hex(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .chars()
-            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
 
 #[cfg(test)]

@@ -1,57 +1,32 @@
 use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{
-    InstalledAddon, InstalledAddonHostKind, PathRef, RenoDxHostKind, RenoDxInstallState,
-    TrackedSource, TrackedSourceRole,
+    InstalledAddon, PathRef, RenoDxHostKind, RenoDxInstallState, TrackedSource, TrackedSourceRole,
 };
 
 use crate::ServiceError;
 use crate::addons::engine::InstallReceipt;
+use crate::addons::tracking;
 
 use super::errors;
-use super::reshade;
 
 /// Derives the `RenoDxInstallState` from the `managed_app_record` (the per-game `InstalledAddon`).
 pub(super) fn install_state_from_record(record: &InstalledAddon) -> RenoDxInstallState {
     RenoDxInstallState::Installed {
-        host_kind: record.host_kind().map(ui_host_kind),
+        host_kind: record.host_kind().map(RenoDxHostKind::from),
         version: record.addon_version().map(str::to_owned),
-        addon_dated: addon_dated_from_file_or_record(record),
-        installed_at: record.installed_at(),
-        updated_at: record.updated_at(),
+        addon_dated: tracking::effective_addon_dated(record),
+        installed_at: record.installed_at().unwrap_or(0),
+        updated_at: record.updated_at().unwrap_or(0),
         dlss_fix_installed: record.has_dlss_fix(),
         addon_tracked: record.has_addon_source(),
     }
 }
 
-fn ui_host_kind(host_kind: InstalledAddonHostKind) -> RenoDxHostKind {
-    match host_kind {
-        InstalledAddonHostKind::Proxy => RenoDxHostKind::Proxy,
-        InstalledAddonHostKind::SharedVulkanLayer => RenoDxHostKind::Vulkan,
-    }
-}
-
-fn addon_dated_from_file_or_record(record: &InstalledAddon) -> Option<String> {
-    let path = Path::new(record.addon_file().as_str());
-    if let Ok(modified) = std::fs::metadata(path).and_then(|metadata| metadata.modified())
-        && crate::fs::is_reasonable_file_mtime(modified)
-    {
-        return Some(crate::fs::format_http_date(modified));
-    }
-    record.addon_dated().map(str::to_owned)
-}
-
+/// Delegates to the shared implementation so callers inside the renodx module
+/// keep using the familiar name.
 pub(super) fn rollback_host_path(record: &InstalledAddon) -> Option<PathBuf> {
-    record
-        .created_files()
-        .iter()
-        .chain(record.backed_up_files())
-        .map(|path| PathBuf::from(path.as_str()))
-        .find(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(reshade::is_proxy_slot)
-        })
+    tracking::host_proxy_path(record)
 }
 
 pub(super) fn required_rollback_host_path(
@@ -143,37 +118,18 @@ fn rebuild_with_parts(
     tracked_sources: Vec<TrackedSource>,
     label: &str,
 ) -> Result<InstalledAddon, ServiceError> {
-    let installed_at = record.installed_at();
-    let updated_at = record.updated_at();
-    InstalledAddon::from_parts(
-        record.game_id().clone(),
-        record.kind(),
-        record.addon_file().clone(),
-        record.addon_version().map(str::to_owned),
-        created_files,
-        backed_up_files,
-        tracked_sources,
+    tracking::rebuild_install_record(
+        record,
+        tracking::RebuildParts {
+            addon_file: record.addon_file().clone(),
+            addon_version: tracking::AddonVersionUpdate::Keep,
+            created_files,
+            backed_up_files,
+            tracked_sources,
+            label: label.to_owned(),
+        },
+        tracking::PreserveMetadata::renodx(),
     )
-    .map(|rebuilt| preserve_metadata(record, rebuilt).with_timestamps(installed_at, updated_at))
-    .ok_or_else(|| {
-        errors::failed(format!(
-            "{label} violated the addon_file invariant: `{}` is missing from the rebuilt created_files list",
-            record.addon_file().as_str()
-        ))
-    })
-}
-
-fn preserve_metadata(source: &InstalledAddon, mut rebuilt: InstalledAddon) -> InstalledAddon {
-    if let Some(host_kind) = source.host_kind() {
-        rebuilt = rebuilt.with_host_kind(host_kind);
-    }
-    if let Some(channel) = source.reshade_channel() {
-        rebuilt = rebuilt.with_reshade_channel(channel.to_owned());
-    }
-    if let Some(path) = source.registered_exe_path() {
-        rebuilt = rebuilt.with_registered_exe_path(path.clone());
-    }
-    rebuilt
 }
 
 fn merge_path_refs(

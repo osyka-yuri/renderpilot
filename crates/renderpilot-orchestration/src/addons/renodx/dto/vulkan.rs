@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-use super::super::types::ReshadeChannel;
-use super::actions::ActionDescriptor;
+use crate::addons::reshade::dto::ActionDescriptor;
+use crate::addons::reshade::types::ReshadeChannel;
 
 /// Public Vulkan layer detection state. This never encodes install origin; action
 /// rights are expressed only via [`VulkanLayerActions`].

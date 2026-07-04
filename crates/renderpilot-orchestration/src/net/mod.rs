@@ -210,9 +210,20 @@ pub(crate) async fn head_validators(
     url: &str,
     operation: &str,
 ) -> Result<HttpValidators, ServiceError> {
-    let url = parse_https_url(url, operation)?;
+    let (validators, _final_url) = head_validators_and_final_url(url, operation).await?;
+    Ok(validators)
+}
+
+/// Like [`head_validators`], but also returns the final response URL after
+/// redirects — for a rolling-release host whose redirect target itself encodes
+/// a version (e.g. Luma's `releases/latest/download/<asset>` → `releases/download/latest-<n>/<asset>`).
+pub(crate) async fn head_validators_and_final_url(
+    url: &str,
+    operation: &str,
+) -> Result<(HttpValidators, Url), ServiceError> {
+    let parsed = parse_https_url(url, operation)?;
     let response = http_client()?
-        .head(url)
+        .head(parsed)
         .send()
         .await
         .map_err(|error| err(format!("{operation} failed: {error}")))?;
@@ -222,7 +233,8 @@ pub(crate) async fn head_validators(
             response.status()
         )));
     }
-    Ok(validators_of(&response))
+    let final_url = response.url().clone();
+    Ok((validators_of(&response), final_url))
 }
 
 // ---------------------------------------------------------------------------

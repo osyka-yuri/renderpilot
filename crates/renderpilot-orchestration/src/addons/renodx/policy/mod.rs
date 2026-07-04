@@ -1,7 +1,8 @@
+//! RenoDX-specific title compatibility policy.
+//!
+//! DirectX proxy decisions (`HostKind`, `host_decision`, …) live in
+//! [`crate::addons::reshade::proxy`] and are imported from there directly.
+
 pub mod compatibility;
-pub mod host_rules;
-pub mod install_risk;
 
 pub use compatibility::check_title_compatibility;
-pub use host_rules::*;
-pub use install_risk::*;

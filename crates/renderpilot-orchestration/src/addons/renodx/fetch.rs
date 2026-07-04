@@ -3,35 +3,28 @@
 //! Nothing is hashed against the manifest (add-ons are rolling snapshots); instead
 //! the bytes are sanity-checked as a well-formed PE, the SHA-256 of the installed
 //! add-on is recorded for update *detection*, and the response's cache validators
-//! (ETag/Last-Modified) are captured. The add-on-enabled ReShade host can be the
-//! manifest-current reshade.me stable add-on installer or the nightly.link CI zip;
-//! in both cases the recorded host digest is the extracted DLL's digest.
+//! (ETag/Last-Modified) are captured. The ReShade host download/extraction is
+//! shared ([`crate::addons::reshade::fetch`]); this module orchestrates the RenoDX
+//! add-on download and bundles the [`PreparedInstall`] the engine lays down.
 
 use renderpilot_domain::{Architecture, GameId};
-use sha2::{Digest, Sha256};
-use std::io::{Cursor, Read};
 
 use crate::ServiceError;
-use crate::net::{
-    ProgressObserver, download_with_referer, download_with_validators,
-    download_with_validators_and_final_url,
-};
+use crate::net::{ProgressObserver, download_with_validators};
 
-use super::errors;
 use super::install::PreparedInstall;
 use super::matcher::ResolvedInstall;
-use super::policy::HostKind;
 use super::source;
-use super::types::{ReshadeChannel, ReshadeConfig, ReshadeIniTweaks};
+use super::types::renodx_ini_defaults;
+use crate::addons::reshade::proxy::HostKind;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
+
+use crate::addons::progress::sequential_stage_observer;
+use crate::addons::reshade::fetch::{Download, ensure_pe, fetch_reshade_from_source, sha256_hex};
+use crate::addons::reshade::source::require_reshade_source;
 
 /// An add-on DLL is small; cap well under that.
 const MAX_ADDON_BYTES: u64 = 64 * 1024 * 1024;
-/// ReShade source archives are a few MB.
-const MAX_RESHADE_ARCHIVE_BYTES: u64 = 128 * 1024 * 1024;
-/// The extracted ReShade DLL should stay comfortably below this ceiling.
-const MAX_RESHADE_DLL_BYTES: u64 = 64 * 1024 * 1024;
-/// GitHub artifact downloads (nightly.link) expect a GitHub referer.
-const NIGHTLY_REFERER: &str = "https://github.com";
 
 /// Fetches everything needed to install `resolved` into `game_dir`.
 ///
@@ -46,15 +39,30 @@ pub(super) async fn prepare_install(
     writes_host: bool,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<PreparedInstall, ServiceError> {
+    let downloads_host = matches!(resolved.host_kind, HostKind::Proxy) && writes_host;
+    let stage_count = 1 + u64::from(downloads_host);
+    let addon_progress_fn = sequential_stage_observer(progress, 0, stage_count);
+    let addon_progress = addon_progress_fn
+        .as_ref()
+        .map(|observer| observer as &ProgressObserver<'_>);
     let label = format!("RenoDX add-on {}", resolved.slug);
     let (addon_bytes, validators) =
-        download_with_validators(&resolved.addon_url, MAX_ADDON_BYTES, &label, progress).await?;
+        download_with_validators(&resolved.addon_url, MAX_ADDON_BYTES, &label, addon_progress)
+            .await?;
     let source = AddonSource {
         bytes: addon_bytes,
         url: resolved.addon_url.clone(),
         etag: validators.cache_validator(),
         last_modified: validators.last_modified,
     };
+    let host_progress_fn = if downloads_host {
+        sequential_stage_observer(progress, 1, stage_count)
+    } else {
+        None
+    };
+    let host_progress = host_progress_fn
+        .as_ref()
+        .map(|observer| observer as &ProgressObserver<'_>);
     build_prepared_install(
         resolved,
         reshade_config,
@@ -62,7 +70,7 @@ pub(super) async fn prepare_install(
         source,
         channel,
         writes_host,
-        progress,
+        host_progress,
     )
     .await
 }
@@ -117,19 +125,6 @@ struct AddonSource {
     last_modified: Option<String>,
 }
 
-/// A re-downloaded, PE-checked file (the RenoDX add-on, the DLSS-Fix companion, or
-/// the extracted ReShade host DLL) plus the upstream identity recorded as a
-/// [`TrackedSource`].
-pub(crate) struct Download {
-    pub bytes: Vec<u8>,
-    /// SHA-256 of the bytes — the durable change-detection digest.
-    pub digest: String,
-    /// ETag (or `Last-Modified` fallback) for the fast-path change pre-check.
-    pub etag: Option<String>,
-    /// Raw `Last-Modified` HTTP-date string, when the host sent one.
-    pub last_modified: Option<String>,
-}
-
 /// Shared core of [`prepare_install`] and [`prepare_install_from_file`]: PE-checks
 /// the add-on bytes, fetches the ReShade host when needed, and assembles the
 /// [`PreparedInstall`].
@@ -175,7 +170,7 @@ async fn build_prepared_install(
         reshade_last_modified: reshade.last_modified,
         reshade_digest: reshade.digest,
         reshade_channel: reshade.channel,
-        ini_tweaks: ReshadeIniTweaks::renodx_defaults(),
+        ini_tweaks: renodx_ini_defaults(),
     })
 }
 
@@ -263,7 +258,7 @@ async fn fetch_reshade_dll(
     channel: ReshadeChannel,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<FetchedReshade, ServiceError> {
-    let source = source::require_reshade_source(config, channel, arch)?;
+    let source = require_reshade_source(config, channel, arch)?;
     let download = fetch_reshade_from_source(&source, arch, progress).await?;
     Ok(FetchedReshade {
         bytes: download.bytes,
@@ -273,234 +268,4 @@ async fn fetch_reshade_dll(
         digest: download.digest,
         channel: Some(channel),
     })
-}
-
-/// Re-downloads the ReShade host from a concrete channel source,
-/// returning the extracted DLL bytes, the new cache validator, and the DLL digest.
-/// `arch` selects which `ReShade*.dll` to extract.
-pub(super) async fn fetch_reshade_from_source(
-    source: &source::ReshadeSource,
-    arch: Architecture,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<Download, ServiceError> {
-    let (zip, validators) = match source.channel {
-        ReshadeChannel::Stable => {
-            let (zip, validators, final_url) = download_with_validators_and_final_url(
-                &source.url,
-                MAX_RESHADE_ARCHIVE_BYTES,
-                "ReShade stable",
-                progress,
-            )
-            .await?;
-            ensure_stable_final_url(&final_url)?;
-            (zip, validators)
-        }
-        ReshadeChannel::Nightly => {
-            download_with_referer(
-                &source.url,
-                NIGHTLY_REFERER,
-                MAX_RESHADE_ARCHIVE_BYTES,
-                "ReShade nightly",
-                progress,
-            )
-            .await?
-        }
-    };
-    let bytes = extract_reshade_dll(&zip, arch)?;
-    ensure_pe_arch(&bytes, arch, "ReShade host")?;
-    let digest = sha256_hex(&bytes);
-    Ok(Download {
-        bytes,
-        digest,
-        etag: validators.cache_validator(),
-        last_modified: validators.last_modified,
-    })
-}
-
-fn ensure_stable_final_url(url: &reqwest::Url) -> Result<(), ServiceError> {
-    if url.scheme() != "https" || url.host_str() != Some("reshade.me") {
-        return Err(errors::failed(format!(
-            "ReShade stable download redirected to an untrusted URL: {url}"
-        )));
-    }
-    Ok(())
-}
-
-/// Extracts `ReShade64.dll`/`ReShade32.dll` from a zip-compatible ReShade
-/// archive/SFX, matching the entry by base name (some artifacts nest it).
-fn extract_reshade_dll(archive: &[u8], arch: Architecture) -> Result<Vec<u8>, ServiceError> {
-    let target = match arch {
-        Architecture::X64 => "ReShade64.dll",
-        Architecture::X86 => "ReShade32.dll",
-    };
-    let mut zip = zip::ZipArchive::new(Cursor::new(archive))
-        .map_err(|error| errors::failed(format!("ReShade archive is not a valid zip: {error}")))?;
-    let mut match_bytes: Option<Vec<u8>> = None;
-    for index in 0..zip.len() {
-        let mut entry = zip
-            .by_index(index)
-            .map_err(|error| errors::failed(format!("failed to read ReShade archive: {error}")))?;
-        let Some(enclosed) = entry.enclosed_name() else {
-            return Err(errors::failed(format!(
-                "ReShade archive contains an unsafe path `{}`",
-                entry.name()
-            )));
-        };
-        let base = enclosed
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_owned();
-        if base.eq_ignore_ascii_case(target) {
-            if match_bytes.is_some() {
-                return Err(errors::failed(format!(
-                    "ReShade archive contains multiple `{target}` candidates"
-                )));
-            }
-            if entry.compressed_size() > MAX_RESHADE_DLL_BYTES
-                || entry.size() > MAX_RESHADE_DLL_BYTES
-            {
-                return Err(errors::failed(format!(
-                    "{target} in the ReShade archive is too large"
-                )));
-            }
-            let mut buf = Vec::with_capacity(usize::try_from(entry.size()).unwrap_or(0));
-            let limit = MAX_RESHADE_DLL_BYTES + 1;
-            entry
-                .by_ref()
-                .take(limit)
-                .read_to_end(&mut buf)
-                .map_err(|error| errors::failed(format!("failed to extract {target}: {error}")))?;
-            if buf.len() as u64 > MAX_RESHADE_DLL_BYTES {
-                return Err(errors::failed(format!(
-                    "{target} in the ReShade archive exceeds the size limit"
-                )));
-            }
-            ensure_pe(&buf, target)?;
-            match_bytes = Some(buf);
-        }
-    }
-    match_bytes.ok_or_else(|| errors::failed(format!("{target} not found in the ReShade archive")))
-}
-
-/// A RenoDX add-on and the ReShade DLL are both PE binaries; reject anything that
-/// is not (a truncated download or an HTML error page).
-fn ensure_pe(bytes: &[u8], what: &str) -> Result<(), ServiceError> {
-    if bytes.len() < 64 || &bytes[..2] != b"MZ" {
-        return Err(errors::failed(format!(
-            "{what} download is not a valid PE binary ({} bytes)",
-            bytes.len()
-        )));
-    }
-    Ok(())
-}
-
-fn ensure_pe_arch(bytes: &[u8], expected: Architecture, what: &str) -> Result<(), ServiceError> {
-    ensure_pe(bytes, what)?;
-    let actual =
-        renderpilot_detection::read_pe_architecture_from_bytes(bytes).ok_or_else(|| {
-            errors::failed(format!(
-                "{what} download has an unsupported PE machine type"
-            ))
-        })?;
-    if actual != expected {
-        return Err(errors::failed(format!(
-            "{what} architecture mismatch: expected {expected:?}, got {actual:?}"
-        )));
-    }
-    Ok(())
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::Write;
-
-    use super::*;
-    use crate::addons::renodx::test_support::{
-        MACHINE_AMD64, MACHINE_I386, PE32_MAGIC, PE32_PLUS_MAGIC, build_pe_with_exports,
-    };
-
-    #[test]
-    fn rejects_non_pe_addon() {
-        assert!(ensure_pe(b"<!doctype html>", "add-on").is_err());
-        let mut pe = vec![b'M', b'Z'];
-        pe.extend(std::iter::repeat_n(0u8, 100));
-        assert!(ensure_pe(&pe, "add-on").is_ok());
-    }
-
-    #[test]
-    fn stable_final_url_must_stay_on_official_https_host() {
-        let official =
-            reqwest::Url::parse("https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe")
-                .expect("url");
-        let wrong_host =
-            reqwest::Url::parse("https://example.com/downloads/ReShade_Setup_6.7.3_Addon.exe")
-                .expect("url");
-        let wrong_scheme =
-            reqwest::Url::parse("http://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe")
-                .expect("url");
-
-        assert!(ensure_stable_final_url(&official).is_ok());
-        assert!(ensure_stable_final_url(&wrong_host).is_err());
-        assert!(ensure_stable_final_url(&wrong_scheme).is_err());
-    }
-
-    #[test]
-    fn extracts_reshade_from_zip_compatible_stable_sfx() {
-        let dll = build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]);
-        let mut archive = b"MZ fake installer prefix".to_vec();
-        archive.extend(zip_with_entries(&[(
-            "nested/ReShade64.dll",
-            dll.as_slice(),
-        )]));
-
-        let bytes = extract_reshade_dll(&archive, Architecture::X64).expect("extract");
-
-        assert_eq!(bytes, dll);
-    }
-
-    #[test]
-    fn rejects_unsafe_reshade_archive_paths() {
-        let dll = build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]);
-        let archive = zip_with_entries(&[("../ReShade64.dll", dll.as_slice())]);
-
-        assert!(extract_reshade_dll(&archive, Architecture::X64).is_err());
-    }
-
-    #[test]
-    fn rejects_duplicate_reshade_candidates() {
-        let dll = build_pe_with_exports(MACHINE_AMD64, PE32_PLUS_MAGIC, &[]);
-        let archive = zip_with_entries(&[
-            ("a/ReShade64.dll", dll.as_slice()),
-            ("b/ReShade64.dll", dll.as_slice()),
-        ]);
-
-        assert!(extract_reshade_dll(&archive, Architecture::X64).is_err());
-    }
-
-    #[test]
-    fn rejects_reshade_architecture_mismatch() {
-        let dll = build_pe_with_exports(MACHINE_I386, PE32_MAGIC, &[]);
-        let archive = zip_with_entries(&[("ReShade64.dll", dll.as_slice())]);
-        let extracted = extract_reshade_dll(&archive, Architecture::X64).expect("extract");
-
-        assert!(ensure_pe_arch(&extracted, Architecture::X64, "ReShade host").is_err());
-    }
-
-    fn zip_with_entries(entries: &[(&str, &[u8])]) -> Vec<u8> {
-        let cursor = Cursor::new(Vec::new());
-        let mut zip = zip::ZipWriter::new(cursor);
-        for (name, bytes) in entries {
-            zip.start_file(*name, zip::write::SimpleFileOptions::default())
-                .expect("start file");
-            zip.write_all(bytes).expect("write entry");
-        }
-        zip.finish().expect("finish zip").into_inner()
-    }
 }

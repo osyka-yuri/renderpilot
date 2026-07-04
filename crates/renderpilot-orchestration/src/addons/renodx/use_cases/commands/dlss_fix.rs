@@ -6,21 +6,21 @@ use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{AddonKind, GameId, RenoDxInstallState, TrackedSource, TrackedSourceRole};
 
 use crate::addons::engine::{self, FileOp, InstallPlan, InstallReceipt};
+use crate::addons::file_update::{OriginalFile, restore_originals_best_effort};
+use crate::addons::operation_lock;
+use crate::addons::progress::emit_tool_finalizing;
+use crate::addons::records;
 use crate::addons::renodx::arch_from_addon_file;
 use crate::addons::renodx::dlss_fix::resolve_dlss_fix;
 use crate::addons::renodx::errors;
 use crate::addons::renodx::fetch;
 use crate::addons::renodx::install::{dlss_fix_file_name, dlss_fix_file_path};
-use crate::addons::renodx::operation_lock;
-use crate::addons::renodx::progress::emit_finalizing;
-use crate::addons::renodx::reshade;
 use crate::addons::renodx::reshade_ini;
 use crate::addons::renodx::source;
 use crate::addons::renodx::tracking;
-use crate::addons::renodx::types::{DlssFixIniTweaks, ReshadeIniTweaks};
-use crate::addons::renodx::use_cases::reshade_update::{
-    OriginalFile, restore_originals_best_effort,
-};
+use crate::addons::reshade::ini_schema::ini_merge_strategy;
+use crate::addons::reshade::scan as reshade;
+use crate::addons::reshade::types::{DlssFixIniTweaks, ReshadeIniTweaks};
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -31,9 +31,7 @@ pub async fn install_dlss_fix(
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<RenoDxInstallState, ServiceError> {
     let _guard = operation_lock::lock(game_id).await;
-    let record = context
-        .storage()
-        .get_installed_addon(game_id)?
+    let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
 
     if record.has_dlss_fix() {
@@ -71,7 +69,7 @@ pub async fn install_dlss_fix(
             streamline_path: request.streamline_path,
         }),
     };
-    let strategy = reshade_ini::ini_merge_strategy(&ini_tweaks);
+    let strategy = ini_merge_strategy(&ini_tweaks);
 
     let plan = InstallPlan {
         kind: AddonKind::RenoDx,
@@ -104,7 +102,7 @@ pub async fn install_dlss_fix(
             .transpose()?,
     };
 
-    emit_finalizing(progress);
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
     let receipt = engine::install(game_dir, &plan)?;
     crate::fs::stamp_mtime_best_effort(
         &game_dir.join(&file_name),
@@ -164,9 +162,7 @@ pub fn uninstall_dlss_fix(
     game_id: &GameId,
 ) -> Result<RenoDxInstallState, ServiceError> {
     let _guard = operation_lock::blocking_lock(game_id);
-    let record = context
-        .storage()
-        .get_installed_addon(game_id)?
+    let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
 
     if !record.has_dlss_fix() {
@@ -243,7 +239,7 @@ mod tests {
                 streamline_path: r"C:\Game\sl.interposer.dll".to_owned(),
             }),
         };
-        let strategy = reshade_ini::ini_merge_strategy(&ini_tweaks);
+        let strategy = ini_merge_strategy(&ini_tweaks);
 
         // Captured before the merge runs, exactly as `install_dlss_fix` does.
         let ini_path = reshade::reshade_ini_path(game_dir).expect("ini exists");

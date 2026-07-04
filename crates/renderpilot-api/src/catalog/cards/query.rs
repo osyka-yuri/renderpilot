@@ -6,7 +6,8 @@ use std::collections::BTreeSet;
 
 use super::QueryGameCardsRequest;
 use super::normalize::{
-    normalize_search_query, normalize_selected_launchers, normalize_selected_libraries,
+    normalize_addon_names, normalize_search_query, normalize_selected_launchers,
+    normalize_selected_libraries,
 };
 use super::output::GameCardOutput;
 use super::sort::{
@@ -25,6 +26,7 @@ struct QueryGameCardsUiFilters {
 pub(super) struct QueryGameCards {
     search_query: String,
     selected_libraries: Vec<String>,
+    selected_addons: Vec<String>,
     selected_launchers: Vec<String>,
     #[serde(flatten)]
     ui_filters: QueryGameCardsUiFilters,
@@ -35,10 +37,16 @@ pub(super) struct QueryGameCards {
     selected_library_set: BTreeSet<String>,
 
     #[serde(skip_serializing)]
+    selected_addon_set: BTreeSet<String>,
+
+    #[serde(skip_serializing)]
     selected_launcher_set: BTreeSet<String>,
 
     #[serde(skip_serializing)]
     has_library_filter: bool,
+
+    #[serde(skip_serializing)]
+    has_addon_filter: bool,
 
     #[serde(skip_serializing)]
     has_launcher_filter: bool,
@@ -52,10 +60,13 @@ impl QueryGameCards {
     ) -> Self {
         let search_query = normalize_search_query(&req.search_query);
         let has_library_filter = !req.selected_libraries.is_empty();
+        let has_addon_filter = !req.selected_addons.is_empty();
         let has_launcher_filter = !req.selected_launchers.is_empty();
         let selected_libraries =
             normalize_selected_libraries(req.selected_libraries, available_libraries);
         let selected_library_set = selected_libraries.iter().cloned().collect();
+        let selected_addons = normalize_addon_names(req.selected_addons);
+        let selected_addon_set = selected_addons.iter().cloned().collect();
         let selected_launchers =
             normalize_selected_launchers(req.selected_launchers, available_launchers);
         let selected_launcher_set = selected_launchers.iter().cloned().collect();
@@ -63,6 +74,7 @@ impl QueryGameCards {
         Self {
             search_query,
             selected_libraries,
+            selected_addons,
             selected_launchers,
             ui_filters: QueryGameCardsUiFilters {
                 show_hidden: req.show_hidden,
@@ -71,8 +83,10 @@ impl QueryGameCards {
             sort: QueryGameCardsSort::new(&req.sort_field, &req.sort_direction),
             page: QueryGameCardsPage::new(req.page_limit, req.page_offset),
             selected_library_set,
+            selected_addon_set,
             selected_launcher_set,
             has_library_filter,
+            has_addon_filter,
             has_launcher_filter,
         }
     }
@@ -86,9 +100,19 @@ impl QueryGameCards {
             return false;
         }
 
+        let matches_library_or_addon = if self.has_library_filter && self.has_addon_filter {
+            self.matches_selected_libraries(card) || self.matches_selected_addons(card)
+        } else if self.has_library_filter {
+            self.matches_selected_libraries(card)
+        } else if self.has_addon_filter {
+            self.matches_selected_addons(card)
+        } else {
+            true
+        };
+
         self.matches_search_query(card)
-            && self.matches_selected_libraries(card)
             && self.matches_selected_launchers(card)
+            && matches_library_or_addon
     }
 
     fn matches_search_query(&self, card: &GameCardOutput) -> bool {
@@ -101,6 +125,14 @@ impl QueryGameCards {
                 .library_tags
                 .iter()
                 .any(|tag| self.selected_library_set.contains(tag))
+    }
+
+    fn matches_selected_addons(&self, card: &GameCardOutput) -> bool {
+        !self.has_addon_filter
+            || card
+                .addon_capabilities
+                .iter()
+                .any(|kind| self.selected_addon_set.contains(kind.as_str()))
     }
 
     fn matches_selected_launchers(&self, card: &GameCardOutput) -> bool {

@@ -5,11 +5,12 @@ use std::path::PathBuf;
 
 use renderpilot_application::{
     AppError, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
-    GameRepository, OperationPlan, OperationRecord, find_replacement_candidates,
+    GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
+    find_replacement_candidates,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    GameId, GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    AddonKind, GameId, GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
 };
 
 use crate::ServiceError;
@@ -79,6 +80,40 @@ pub struct OperationListCatalogEntry {
     pub item_count: usize,
     /// String ids of the components affected.
     pub component_ids: Vec<String>,
+}
+
+/// Computes the add-on capabilities (RenoDX / Luma) for a single game using the
+/// same rules as the catalog cards list: profile snapshot (from manifests) union
+/// any currently recorded installed add-on for the game.
+pub fn addon_capabilities(
+    context: &crate::Context,
+    game_id: &GameId,
+) -> Result<Vec<AddonKind>, ServiceError> {
+    let profile = context
+        .profile_capability_snapshot()
+        .capabilities_for(game_id);
+    let installed = context
+        .storage()
+        .get_installed_addon(game_id)?
+        .map(|record| record.kind());
+    Ok(merge_addon_capabilities(&profile, installed))
+}
+
+/// Merge profile-derived capabilities (from manifest matchers in the snapshot)
+/// with any currently tracked installed add-on for the game.
+///
+/// A game appears to "support" an add-on (and therefore gets a card / badge /
+/// filter option) if *either* the profile snapshot says the manifest matches
+/// *or* the game has a record in `installed_addons`.
+pub(crate) fn merge_addon_capabilities(
+    profile_capabilities: &[AddonKind],
+    installed: Option<AddonKind>,
+) -> Vec<AddonKind> {
+    AddonKind::ALL
+        .iter()
+        .copied()
+        .filter(|kind| profile_capabilities.contains(kind) || installed == Some(*kind))
+        .collect()
 }
 
 /// Scans a folder path for game installations and persists or updates catalog rows.
@@ -301,4 +336,17 @@ where
     repository
         .find_game(game_id)?
         .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_addon_capabilities_deduplicates_profile_and_installed_kind() {
+        assert_eq!(
+            merge_addon_capabilities(&[AddonKind::RenoDx], Some(AddonKind::RenoDx)),
+            vec![AddonKind::RenoDx]
+        );
+    }
 }

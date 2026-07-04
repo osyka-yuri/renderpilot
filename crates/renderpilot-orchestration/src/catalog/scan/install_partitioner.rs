@@ -17,5 +17,13 @@ pub(super) fn derive_install_roots(
         InstallRootStrategy::SplitByFirstDiverge => {
             super::detect_game_install_roots(&scan_root, libraries)
         }
+        // Resolved in `scan_impl` before this function is called.
+        InstallRootStrategy::FromSelectedIdentity => {
+            debug_assert!(
+                false,
+                "FromSelectedIdentity must be resolved before derive_install_roots"
+            );
+            vec![scan_root]
+        }
     }
 }

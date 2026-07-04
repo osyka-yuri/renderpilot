@@ -1,7 +1,7 @@
 //! The game-card DTOs the GUI renders and the metrics derived for them.
 
 use renderpilot_orchestration::catalog as orch_catalog;
-use renderpilot_orchestration::domain::{GameInstallation, GraphicsComponent};
+use renderpilot_orchestration::domain::{AddonKind, GameInstallation, GraphicsComponent};
 use serde::Serialize;
 
 use crate::catalog::{is_component_visible, visible_component_ids};
@@ -29,6 +29,7 @@ pub(super) struct GameCardOutput {
     pub(super) external_id: Option<String>,
     pub(super) library_tags: Vec<String>,
     pub(super) component_count: usize,
+    pub(super) addon_capabilities: Vec<AddonKind>,
     pub(super) updates_available: bool,
     pub(super) update_count: usize,
     pub(super) risk_level: String,
@@ -63,6 +64,7 @@ impl GameCardOutput {
         rollback_available: bool,
         is_favorite: bool,
         is_hidden: bool,
+        addon_capabilities: Vec<AddonKind>,
     ) -> Self {
         let identity = game.identity();
         let title = identity.title().to_owned();
@@ -79,6 +81,7 @@ impl GameCardOutput {
             external_id: identity.external_id().map(str::to_owned),
             library_tags: metrics.library_tags,
             component_count: metrics.component_count,
+            addon_capabilities,
             updates_available: metrics.available_update_count > 0,
             update_count: metrics.available_update_count,
             risk_level: metrics.risk_level.as_str().to_owned(),

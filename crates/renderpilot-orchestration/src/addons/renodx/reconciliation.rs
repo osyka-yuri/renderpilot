@@ -7,10 +7,14 @@ use renderpilot_domain::{
     SharedArtifactOrigin, TrackedSource, TrackedSourceRole,
 };
 
+use crate::addons::operation_lock;
+use crate::addons::records;
 use crate::{Context, ServiceError};
 
-use super::types::{ReshadeChannel, ReshadeConfig};
-use super::{errors, install, operation_lock, reshade, source, vulkan};
+use super::{errors, install, reshade as renodx_reshade, source, vulkan};
+use crate::addons::reshade::scan as reshade;
+use crate::addons::reshade::source::reshade_source;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
 
 /// An on-disk RenoDX install found while no per-game DB row exists.
 #[derive(Debug, Clone)]
@@ -36,6 +40,12 @@ pub(crate) struct OrphanedInstall {
 /// it uses a non-blocking lock attempt: if the game is already locked by a
 /// concurrent install/update/uninstall, this call returns `Ok(None)` instead
 /// of waiting, and the next `availability()` call retries.
+///
+/// A record already present for a **different** addon kind (e.g. Luma) is never
+/// adopted over: this returns `Ok(None)` exactly as if there were nothing to
+/// adopt, so a foreign-tool install is never silently overwritten. The
+/// availability caller already gates this whole path behind its own
+/// exclusivity check; this is defense in depth for any other caller.
 pub(crate) fn reconcile_orphaned_install(
     context: &Context,
     candidate: &OrphanedInstall,
@@ -43,7 +53,10 @@ pub(crate) fn reconcile_orphaned_install(
     let Some(_guard) = operation_lock::try_lock(&candidate.game_id) else {
         return Ok(None);
     };
-    if let Some(record) = context.storage().get_installed_addon(&candidate.game_id)? {
+    if records::foreign_record(context, &candidate.game_id, AddonKind::RenoDx)?.is_some() {
+        return Ok(None);
+    }
+    if let Some(record) = records::record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)? {
         return Ok(Some(record));
     }
 
@@ -57,9 +70,7 @@ pub(crate) fn reconcile_orphaned_install(
         record_shared_vulkan_layer_best_effort(context);
     }
 
-    let record = context
-        .storage()
-        .get_installed_addon(&candidate.game_id)?
+    let record = records::record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)?
         .ok_or_else(|| errors::failed("adopted RenoDX install was not persisted".to_owned()))?;
     Ok(Some(record))
 }
@@ -79,7 +90,9 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
             if proxy_files_are_renderpilot_owned(candidate) {
                 record = with_created_path(record, &candidate.host_file)?;
                 record = with_backup_if_present(record, &candidate.host_file)?;
-                if let Some(ini_path) = reshade::renderpilot_minimal_ini_path(&candidate.game_dir) {
+                if let Some(ini_path) =
+                    renodx_reshade::renderpilot_minimal_ini_path(&candidate.game_dir)
+                {
                     record = with_created_path(record, &ini_path)?;
                     record = with_backup_if_present(record, &ini_path)?;
                 }
@@ -156,7 +169,7 @@ fn build_advisory_host_source(
     channel: ReshadeChannel,
 ) -> Option<TrackedSource> {
     let arch = candidate.game_arch.unwrap_or(Architecture::X64);
-    let url = source::reshade_source(&candidate.reshade_config, channel, arch)?.url;
+    let url = reshade_source(&candidate.reshade_config, channel, arch)?.url;
 
     let digest = match renderpilot_detection::sha256_file(&candidate.host_file) {
         Ok(digest) => digest.to_string(),
@@ -249,7 +262,7 @@ fn proxy_files_are_renderpilot_owned(candidate: &OrphanedInstall) -> bool {
         .parent()
         .is_some_and(|parent| reshade::same_path(parent, &candidate.game_dir))
         && !reshade::has_user_effect_assets(&candidate.game_dir)
-        && reshade::renderpilot_minimal_ini_path(&candidate.game_dir).is_some()
+        && renodx_reshade::renderpilot_minimal_ini_path(&candidate.game_dir).is_some()
 }
 
 fn with_created_path(

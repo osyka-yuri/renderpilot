@@ -36,9 +36,7 @@ fn normalize_existing_dir(path: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let normalized = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-
-    Some(strip_verbatim_prefix(normalized))
+    Some(crate::path_normalize::canonicalize_install_dir(path))
 }
 
 pub(super) fn comparable_path_key(path: &Path) -> String {
@@ -49,20 +47,6 @@ pub(super) fn comparable_path_key(path: &Path) -> String {
     }
 
     value.to_ascii_lowercase()
-}
-
-pub(super) fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
-    let replacement = {
-        let value = path.to_string_lossy();
-
-        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
-            Some(PathBuf::from(format!(r"\\{rest}")))
-        } else {
-            value.strip_prefix(r"\\?\").map(PathBuf::from)
-        }
-    };
-
-    replacement.unwrap_or(path)
 }
 
 pub(super) fn path_from_string(value: &str) -> Option<PathBuf> {

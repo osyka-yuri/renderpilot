@@ -3,25 +3,29 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use renderpilot_application::InstalledAddonRepository;
-use renderpilot_domain::{Architecture, GameId, InstalledAddon, InstalledAddonHostKind, PathRef};
+use renderpilot_domain::{
+    AddonKind, Architecture, GameId, InstalledAddon, InstalledAddonHostKind, PathRef,
+};
 
-use crate::addons::renodx::anticheat::{RiskAssessment, assess_risk};
+use crate::addons::anticheat::{RiskSeverity, assess_risk};
+use crate::addons::game_analysis::{analyze_game, install_target_dir};
+use crate::addons::install_guard;
+use crate::addons::operation_lock;
+use crate::addons::progress::{emit_tool_finalizing, sequential_stage_observer};
+use crate::addons::records;
 use crate::addons::renodx::arch_from_addon_file;
 use crate::addons::renodx::errors;
-use crate::addons::renodx::facts::{analyze_game, install_target_dir};
 use crate::addons::renodx::fetch::{LocalAddonSource, prepare_install, prepare_install_from_file};
 use crate::addons::renodx::game_context::{analyze_and_resolve, executable_override, require_game};
-use crate::addons::renodx::host_policy;
 use crate::addons::renodx::install::{install as install_files, uninstall as uninstall_files};
 use crate::addons::renodx::matcher::{
     RenoDxResolution, ResolvedInstall, generic_file_install_plan, resolve_external_install,
 };
-use crate::addons::renodx::operation_lock;
-use crate::addons::renodx::policy::HostKind;
-use crate::addons::renodx::progress::emit_finalizing;
-use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel};
+use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::use_cases::commands::shared_vulkan_layer;
+use crate::addons::reshade::host_policy;
+use crate::addons::reshade::proxy::HostKind;
+use crate::addons::reshade::types::ReshadeChannel;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -73,6 +77,8 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     let override_path = executable_override(context, game_id);
     let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());
     let target_dir = install_target_dir(&analysis)?;
+    let roots = install_guard::resolve_install_scan_roots(&analysis)?;
+    install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::RenoDx, &roots)?;
 
     let plan: ResolvedInstall = match resolution {
         RenoDxResolution::Installable(plan) => *plan,
@@ -103,8 +109,8 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         }
     };
 
-    let risk = assess_risk(&plan.risk, scan_dir);
-    enforce_gate(&risk, confirm_anticheat)?;
+    let risk = assess_risk(scan_dir, RiskSeverity::Info);
+    crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
     let channel = manifest
         .reshade
         .effective_install_channel(requested_channel);
@@ -112,14 +118,18 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         .primary_executable
         .as_ref()
         .map(|e| Path::new(e.as_str()));
-    shared_vulkan_layer::ensure_for_install(
+    let shared_layer_progress_fn = sequential_stage_observer(progress, 0, 2);
+    let shared_layer_progress = shared_layer_progress_fn
+        .as_ref()
+        .map(|observer| observer as &ProgressObserver<'_>);
+    let downloaded_shared_layer = shared_vulkan_layer::ensure_for_install(
         context,
         &plan,
         &manifest.reshade,
         channel,
         allow_shared_vulkan_layer_install,
         registered_exe_path,
-        progress,
+        shared_layer_progress,
     )
     .await?;
 
@@ -137,16 +147,25 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
         host.writes_host()
     };
 
+    let addon_progress_fn = if downloaded_shared_layer {
+        sequential_stage_observer(progress, 1, 2)
+    } else {
+        None
+    };
+    let install_progress = addon_progress_fn
+        .as_ref()
+        .map(|observer| observer as &ProgressObserver<'_>)
+        .or(progress);
     let prepared = prepare_install(
         &plan,
         &manifest.reshade,
         game_id.clone(),
         channel,
         writes_host,
-        progress,
+        install_progress,
     )
     .await?;
-    emit_finalizing(progress);
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
     let record = annotate_install_record(
         install_files(&target_dir, &prepared)?,
         plan.host_kind,
@@ -189,6 +208,8 @@ pub async fn install_from_file(
     let scan_dir = Path::new(game.install_path().as_str());
     let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
     let target_dir = install_target_dir(&analysis)?;
+    let roots = install_guard::resolve_install_scan_roots(&analysis)?;
+    install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::RenoDx, &roots)?;
 
     // The architecture the user's add-on targets (`.addon64` → X64). A non-add-on
     // file is rejected outright.
@@ -222,8 +243,8 @@ pub async fn install_from_file(
     // friendly game-vs-add-on check above could not catch).
     ensure_addon_arch(file_arch, plan.arch)?;
 
-    let risk = assess_risk(&plan.risk, scan_dir);
-    enforce_gate(&risk, confirm_anticheat)?;
+    let risk = assess_risk(scan_dir, RiskSeverity::Info);
+    crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
     let channel = manifest
         .reshade
         .effective_install_channel(requested_channel);
@@ -265,7 +286,7 @@ pub async fn install_from_file(
         progress,
     )
     .await?;
-    emit_finalizing(progress);
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
     let record = annotate_install_record(
         install_files(&target_dir, &prepared)?,
         plan.host_kind,
@@ -352,95 +373,46 @@ fn ensure_addon_arch(file_arch: Architecture, plan_arch: Architecture) -> Result
     Ok(())
 }
 
-/// Anti-cheat / risk gate shared by every install path: a manifest block always
-/// refuses; a warning requires explicit confirmation.
-fn enforce_gate(risk: &RiskAssessment, confirm_anticheat: bool) -> Result<(), ServiceError> {
-    match gate(risk, confirm_anticheat) {
-        InstallGate::Proceed => Ok(()),
-        InstallGate::Blocked => Err(errors::invalid(
-            "RenoDX is blocked for this game and will not be installed".to_owned(),
-        )),
-        InstallGate::NeedsConfirmation => Err(errors::invalid(
-            "RenoDX install requires explicit confirmation of the anti-cheat ban risk".to_owned(),
-        )),
-    }
-}
-
-/// Persists the install record, reverting the filesystem if persistence fails so an
-/// install never survives without a record to reverse it. A double-fault (revert
-/// also fails) is logged, never silent. `game_dir` is passed through as the
-/// uninstall's ini-location hint — this install just resolved it, so the revert
-/// can find a pre-existing `ReShade.ini` the record itself doesn't reference.
+/// Persists the install record using the canonical helper. `game_dir` is passed
+/// to uninstall_files as the ini-location hint.
 fn persist_or_revert(
     context: &Context,
     record: InstalledAddon,
     game_dir: &Path,
 ) -> Result<InstalledAddon, ServiceError> {
-    if let Err(error) = context.storage().upsert_installed_addon(&record) {
-        if let Err(revert_error) = uninstall_files(&record, Some(game_dir)) {
-            log::warn!(
-                "RenoDX install: record persistence failed and the filesystem revert also failed: {revert_error}"
-            );
-        }
-        return Err(error.into());
-    }
-    Ok(record)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InstallGate {
-    Proceed,
-    Blocked,
-    NeedsConfirmation,
-}
-
-/// A manifest block always refuses; a warning requires explicit confirmation.
-fn gate(risk: &RiskAssessment, confirm_anticheat: bool) -> InstallGate {
-    if risk.is_blocked() {
-        InstallGate::Blocked
-    } else if risk.requires_confirmation() && !confirm_anticheat {
-        InstallGate::NeedsConfirmation
-    } else {
-        InstallGate::Proceed
-    }
+    records::persist_record_or_revert(context, record, |r| uninstall_files(r, Some(game_dir)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::addons::renodx::types::{
-        AnticheatEngine, AssessmentConfidence, OnlineKind, RiskSeverity,
-    };
+    use crate::addons::anticheat::{InstallGate, RiskAssessment, RiskSeverity, decide_gate};
 
     fn risk(severity: RiskSeverity) -> RiskAssessment {
         RiskAssessment {
             severity,
-            anticheat_engine: AnticheatEngine::None,
-            online: OnlineKind::Singleplayer,
             message_key: "k".to_owned(),
-            confidence: AssessmentConfidence::Medium,
-            reference_url: None,
-            detected_locally: false,
         }
     }
 
     #[test]
     fn safe_risk_proceeds_without_confirmation() {
-        assert_eq!(gate(&risk(RiskSeverity::Info), false), InstallGate::Proceed);
+        assert_eq!(
+            decide_gate(&risk(RiskSeverity::Info), false),
+            InstallGate::Proceed
+        );
     }
 
     #[test]
     fn warn_risk_needs_confirmation_then_proceeds() {
         assert_eq!(
-            gate(&risk(RiskSeverity::Warn), false),
+            decide_gate(&risk(RiskSeverity::Warn), false),
             InstallGate::NeedsConfirmation
         );
-        assert_eq!(gate(&risk(RiskSeverity::Warn), true), InstallGate::Proceed);
-    }
-
-    #[test]
-    fn blocked_risk_is_refused_even_with_confirmation() {
-        assert_eq!(gate(&risk(RiskSeverity::Block), true), InstallGate::Blocked);
+        assert_eq!(
+            decide_gate(&risk(RiskSeverity::Warn), true),
+            InstallGate::Proceed
+        );
     }
 
     #[test]

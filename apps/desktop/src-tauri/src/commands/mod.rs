@@ -3,11 +3,14 @@
 //! Blocking catalog / filesystem work is dispatched via `run_desktop_command` to avoid
 //! stalling the async runtime.
 
+pub(crate) mod addon_catalog;
 mod error;
 mod query_game_cards;
+mod renodx;
 mod validation;
 
 pub use error::CommandError;
+pub use renodx::*;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,6 +27,17 @@ type DesktopCommandResult = Result<Value, ApiError>;
 
 use query_game_cards::{QueryGameCardsArgs, QueryGameCardsDto};
 use validation::{require_non_empty_path, require_non_empty_string};
+
+/// Validates `game_id` and clones the managed orchestration context for a command.
+pub(crate) fn require_game_context(
+    game_id: String,
+    context: &tauri::State<'_, Arc<Context>>,
+) -> Result<(String, Arc<Context>), CommandError> {
+    Ok((
+        require_non_empty_string("game_id", game_id)?,
+        Arc::clone(context),
+    ))
+}
 
 // ---------------------------------------------------------------------------
 // Download-progress event contract
@@ -49,7 +63,7 @@ struct DownloadProgressEvent<'a> {
 /// * Intermediate emits are skipped when less than
 ///   `DOWNLOAD_PROGRESS_MIN_INTERVAL` has elapsed since the last one.
 /// * A race on `last_ms` can only cause an extra emit — never a missed final.
-fn download_progress_emitter(
+pub(crate) fn download_progress_emitter(
     app: tauri::AppHandle,
     id: String,
 ) -> impl Fn(desktop::DownloadProgress<'_>) + Send + Sync {
@@ -83,7 +97,7 @@ fn download_progress_emitter(
     }
 }
 
-async fn run_desktop_command<F>(command: F) -> JsonCommandResult
+pub(crate) async fn run_desktop_command<F>(command: F) -> JsonCommandResult
 where
     F: FnOnce() -> DesktopCommandResult + Send + 'static,
 {
@@ -93,7 +107,7 @@ where
         .map_err(CommandError::from)
 }
 
-async fn run_desktop_async_command<F, Fut>(command: F) -> JsonCommandResult
+pub(crate) async fn run_desktop_async_command<F, Fut>(command: F) -> JsonCommandResult
 where
     F: FnOnce() -> Fut + Send + 'static,
     Fut: std::future::Future<Output = DesktopCommandResult> + Send + 'static,
@@ -111,14 +125,26 @@ pub async fn scan_manual_folder(
 ) -> JsonCommandResult {
     let path = require_non_empty_path(path)?;
     let context = Arc::clone(&context);
+    let scan_context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::scan_manual_folder(&context, path)).await
+    let result =
+        run_desktop_command(move || desktop::scan_manual_folder(&scan_context, path)).await;
+    if result.is_ok() {
+        addon_catalog::refresh_catalog_addon_capabilities(context).await;
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
     let context = Arc::clone(&context);
-    run_desktop_command(move || desktop::scan_auto_libraries(&context)).await
+    let scan_context = Arc::clone(&context);
+
+    let result = run_desktop_command(move || desktop::scan_auto_libraries(&scan_context)).await;
+    if result.is_ok() {
+        addon_catalog::refresh_catalog_addon_capabilities(context).await;
+    }
+    result
 }
 
 #[tauri::command]
@@ -129,6 +155,7 @@ pub async fn query_game_cards(
     let QueryGameCardsArgs {
         search_query,
         selected_libraries,
+        selected_addons,
         selected_launchers,
         show_hidden,
         favorites_only,
@@ -145,6 +172,7 @@ pub async fn query_game_cards(
             desktop::QueryGameCardsRequest {
                 search_query,
                 selected_libraries,
+                selected_addons,
                 selected_launchers,
                 show_hidden,
                 favorites_only,
@@ -163,8 +191,7 @@ pub async fn get_game_details(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
 
     run_desktop_command(move || desktop::get_game_details(&context, game_id)).await
 }
@@ -174,8 +201,7 @@ pub async fn fetch_game_cover(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
 
     run_desktop_command(move || desktop::fetch_game_cover(&context, game_id)).await
 }
@@ -185,8 +211,7 @@ pub async fn clear_game_cover(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
 
     run_desktop_command(move || desktop::clear_game_cover(&context, game_id)).await
 }
@@ -197,9 +222,8 @@ pub async fn set_game_cover(
     source_path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let source_path = require_non_empty_string("source_path", source_path)?;
-    let context = Arc::clone(&context);
 
     run_desktop_command(move || desktop::set_game_cover(&context, game_id, source_path)).await
 }
@@ -210,8 +234,7 @@ pub async fn set_game_favorite(
     is_favorite: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
 
     run_desktop_command(move || desktop::set_game_favorite(&context, game_id, is_favorite)).await
 }
@@ -222,8 +245,7 @@ pub async fn set_game_hidden(
     is_hidden: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
 
     run_desktop_command(move || desktop::set_game_hidden(&context, game_id, is_hidden)).await
 }
@@ -258,10 +280,9 @@ pub async fn apply_swap(
     artifact_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let component_id = require_non_empty_string("component_id", component_id)?;
     let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
-    let context = Arc::clone(&context);
 
     run_desktop_command(move || desktop::apply_swap(&context, game_id, component_id, artifact_id))
         .await
@@ -273,9 +294,8 @@ pub async fn rollback_component(
     component_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let component_id = require_non_empty_string("component_id", component_id)?;
-    let context = Arc::clone(&context);
 
     run_desktop_command(move || desktop::rollback_component(&context, game_id, component_id)).await
 }
@@ -366,8 +386,7 @@ pub async fn list_nvapi_setting_states(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
     run_desktop_command(move || desktop::list_nvapi_setting_states(&context, game_id)).await
 }
 
@@ -376,8 +395,7 @@ pub async fn list_game_executable_candidates(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
     run_desktop_command(move || desktop::list_game_executable_candidates(&context, game_id)).await
 }
 
@@ -386,8 +404,7 @@ pub async fn resolve_game_executable(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
     run_desktop_command(move || desktop::resolve_game_executable(&context, game_id)).await
 }
 
@@ -397,9 +414,8 @@ pub async fn set_game_executable_override(
     absolute_path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
-    let context = Arc::clone(&context);
     run_desktop_command(move || {
         desktop::set_game_executable_override(&context, game_id, &absolute_path)
     })
@@ -411,8 +427,7 @@ pub async fn clear_game_executable_override(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
+    let (game_id, context) = require_game_context(game_id, &context)?;
     run_desktop_command(move || desktop::clear_game_executable_override(&context, game_id)).await
 }
 
@@ -422,9 +437,8 @@ pub async fn get_nvapi_setting_state(
     setting_key: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    let context = Arc::clone(&context);
     run_desktop_command(move || desktop::get_nvapi_setting_state(&context, game_id, &setting_key))
         .await
 }
@@ -436,10 +450,9 @@ pub async fn set_nvapi_setting_value(
     value: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
     let value = require_non_empty_string("value", value)?;
-    let context = Arc::clone(&context);
     run_desktop_command(move || {
         desktop::set_nvapi_setting_value(&context, game_id, &setting_key, &value)
     })
@@ -453,10 +466,9 @@ pub async fn revert_nvapi_setting(
     target: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
+    let (game_id, context) = require_game_context(game_id, &context)?;
     let setting_key = require_non_empty_string("setting_key", setting_key)?;
     let target = require_non_empty_string("target", target)?;
-    let context = Arc::clone(&context);
     run_desktop_command(move || {
         desktop::revert_nvapi_setting(&context, game_id, &setting_key, &target)
     })
@@ -568,251 +580,4 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
             ),
         )))
     }
-}
-
-// ---------------------------------------------------------------------------
-// RenoDX HDR add-on
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn renodx_status(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_command(move || desktop::renodx_status(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn renodx_availability(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        desktop::renodx_availability(&context, game_id).await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_install(
-    app: tauri::AppHandle,
-    game_id: String,
-    reshade_channel: String,
-    confirm_anticheat: bool,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::renodx_install(
-            &context,
-            game_id,
-            reshade_channel,
-            confirm_anticheat,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_install_from_file(
-    app: tauri::AppHandle,
-    game_id: String,
-    file_path: String,
-    reshade_channel: String,
-    confirm_anticheat: bool,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let file_path = require_non_empty_string("file_path", file_path)?;
-    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::renodx_install_from_file(
-            &context,
-            game_id,
-            file_path,
-            reshade_channel,
-            confirm_anticheat,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_switch_reshade_channel(
-    app: tauri::AppHandle,
-    game_id: String,
-    reshade_channel: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::renodx_switch_reshade_channel(
-            &context,
-            game_id,
-            reshade_channel,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_uninstall(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_command(move || desktop::renodx_uninstall(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn renodx_vulkan_layer_status() -> JsonCommandResult {
-    run_desktop_command(desktop::renodx_vulkan_layer_status).await
-}
-
-#[tauri::command]
-pub async fn renodx_vulkan_layer_management_status(
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        desktop::renodx_vulkan_layer_management_status(&context).await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_apply_vulkan_layer(
-    app: tauri::AppHandle,
-    reshade_channel: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let reshade_channel = require_non_empty_string("reshade_channel", reshade_channel)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, "renodx:vulkan_layer".to_owned());
-        desktop::renodx_apply_vulkan_layer(
-            &context,
-            reshade_channel,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_remove_vulkan_layer(
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-
-    run_desktop_command(move || desktop::renodx_remove_vulkan_layer(&context)).await
-}
-
-#[tauri::command]
-pub async fn renodx_check_update(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        desktop::renodx_check_update(&context, game_id).await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_update(
-    app: tauri::AppHandle,
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::renodx_update(
-            &context,
-            game_id,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_check_updates(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move { desktop::renodx_check_updates(&context).await })
-        .await
-}
-
-#[tauri::command]
-pub async fn renodx_install_dlss_fix(
-    context: tauri::State<'_, Arc<Context>>,
-    app: tauri::AppHandle,
-    game_id: String,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-    let progress = download_progress_emitter(app, game_id.clone());
-
-    run_desktop_async_command(move || async move {
-        desktop::renodx_install_dlss_fix(&context, game_id, Some(&progress)).await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn renodx_uninstall_dlss_fix(
-    context: tauri::State<'_, Arc<Context>>,
-    game_id: String,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_command(move || desktop::renodx_uninstall_dlss_fix(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn renodx_dlss_fix_availability(
-    context: tauri::State<'_, Arc<Context>>,
-    game_id: String,
-) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    let context = Arc::clone(&context);
-
-    run_desktop_command(move || desktop::renodx_dlss_fix_availability(&context, game_id)).await
 }

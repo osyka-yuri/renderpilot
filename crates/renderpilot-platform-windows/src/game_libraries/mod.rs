@@ -198,8 +198,9 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::paths::{comparable_path_key, strip_verbatim_prefix};
+    use super::paths::comparable_path_key;
     use super::*;
+    use crate::path_normalize::strip_verbatim_prefix;
 
     #[test]
     fn enumerate_library_root_children_lists_immediate_subdirectories() {

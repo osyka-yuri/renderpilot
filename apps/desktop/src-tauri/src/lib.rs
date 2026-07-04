@@ -259,6 +259,7 @@ fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder 
             );
             renderpilot_api::gc_cover_orphans_on_startup(&context);
             refresh_libraries_manifest_in_background();
+            refresh_catalog_addon_capabilities_in_background(context);
             Ok(())
         },
     )
@@ -269,6 +270,14 @@ fn refresh_libraries_manifest_in_background() {
         if let Err(error) = renderpilot_api::fetch_libraries_manifest().await {
             log::warn!("Failed to refresh libraries manifest on startup: {error}");
         }
+    });
+}
+
+/// Warms profile-derived add-on capability flags so catalog badges/filters work
+/// on cold start without requiring a library rescan.
+fn refresh_catalog_addon_capabilities_in_background(context: Arc<Context>) {
+    tauri::async_runtime::spawn(async move {
+        commands::addon_catalog::refresh_catalog_addon_capabilities(context).await;
     });
 }
 

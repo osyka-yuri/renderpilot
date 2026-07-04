@@ -1,13 +1,15 @@
+//! Reading the ReShade host channel recorded on an install.
+
 use renderpilot_domain::{InstalledAddon, TrackedSource, TrackedSourceRole};
 
 use super::types::{RecordedChannelParse, ReshadeChannel};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ChannelReadIssue {
+pub(crate) enum ChannelReadIssue {
     DuplicateHostSources,
 }
 
-pub(super) fn host_sources(record: &InstalledAddon) -> Vec<&TrackedSource> {
+pub(crate) fn host_sources(record: &InstalledAddon) -> Vec<&TrackedSource> {
     record
         .tracked_sources()
         .iter()
@@ -15,7 +17,7 @@ pub(super) fn host_sources(record: &InstalledAddon) -> Vec<&TrackedSource> {
         .collect()
 }
 
-pub(super) fn single_host_source(
+pub(crate) fn single_host_source(
     record: &InstalledAddon,
 ) -> Result<Option<&TrackedSource>, ChannelReadIssue> {
     let sources = host_sources(record);
@@ -26,7 +28,7 @@ pub(super) fn single_host_source(
     }
 }
 
-pub(super) fn installed_channel(
+pub(crate) fn installed_channel(
     record: &InstalledAddon,
 ) -> Result<Option<RecordedChannelParse>, ChannelReadIssue> {
     let Some(source) = single_host_source(record)? else {
@@ -41,7 +43,7 @@ pub(super) fn installed_channel(
     }))
 }
 
-pub(super) fn infer_legacy_channel_from_url(url: &str) -> Option<ReshadeChannel> {
+pub(crate) fn infer_legacy_channel_from_url(url: &str) -> Option<ReshadeChannel> {
     // Reuse the net layer's URL parsing so reqwest stays encapsulated there; the
     // recorded host URLs are always HTTPS. This is a legacy-only fallback for
     // records written before the `channel` provenance tag existed.
@@ -53,7 +55,7 @@ pub(super) fn infer_legacy_channel_from_url(url: &str) -> Option<ReshadeChannel>
     }
 }
 
-pub(super) fn with_host_channel(source: &TrackedSource, channel: ReshadeChannel) -> TrackedSource {
+pub(crate) fn with_host_channel(source: &TrackedSource, channel: ReshadeChannel) -> TrackedSource {
     TrackedSource::new(
         source.role(),
         source.url().to_owned(),

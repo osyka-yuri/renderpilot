@@ -67,7 +67,7 @@ impl Ini {
         {
             Some(target) => {
                 if let Some(line) = target.lines.iter_mut().find(|line| line_key_eq(line, key)) {
-                    *line = entry;
+                    *line = replace_line_value(line, key, value);
                 } else {
                     target.lines.push(entry);
                 }
@@ -163,6 +163,26 @@ fn line_key_eq(line: &str, key: &str) -> bool {
         .is_some_and(|(line_key, _)| line_key.trim().eq_ignore_ascii_case(key))
 }
 
+fn replace_line_value(line: &str, fallback_key: &str, value: &str) -> String {
+    let Some((left, right)) = line.split_once('=') else {
+        return format!("{fallback_key}={value}");
+    };
+    let key = left.trim_end();
+    let left_padding = trailing_whitespace(left);
+    let right_padding: String = right.chars().take_while(|ch| ch.is_whitespace()).collect();
+    format!("{key}{left_padding}={right_padding}{value}")
+}
+
+fn trailing_whitespace(value: &str) -> String {
+    let mut chars: Vec<char> = value
+        .chars()
+        .rev()
+        .take_while(|ch| ch.is_whitespace())
+        .collect();
+    chars.reverse();
+    chars.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,7 +233,15 @@ mod tests {
     fn replaces_key_case_insensitively() {
         let mut ini = Ini::parse("[S]\r\nMyKey=old\r\n");
         ini.set("S", "mykey", "new");
-        assert_eq!(ini.render(), "[S]\r\nmykey=new\r\n");
+        assert_eq!(ini.render(), "[S]\r\nMyKey=new\r\n");
+    }
+
+    #[test]
+    fn replacing_key_preserves_spaces_around_equals() {
+        let mut ini = Ini::parse("[S]\r\nMyKey  = old\r\nOther\t=\told\r\n");
+        ini.set("S", "mykey", "new");
+        ini.set("S", "other", "new");
+        assert_eq!(ini.render(), "[S]\r\nMyKey  = new\r\nOther\t=\tnew\r\n");
     }
 
     #[test]

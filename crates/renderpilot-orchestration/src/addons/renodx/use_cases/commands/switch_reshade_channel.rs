@@ -2,22 +2,28 @@
 
 use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{
-    GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState, TrackedSource,
+    AddonKind, GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState, TrackedSource,
     TrackedSourceRole,
 };
 
 use crate::addons::engine::InstallReceipt;
-use crate::addons::renodx::channel;
-use crate::addons::renodx::errors;
-use crate::addons::renodx::fetch;
-use crate::addons::renodx::operation_lock;
-use crate::addons::renodx::progress::emit_finalizing;
-use crate::addons::renodx::tracking;
-use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel};
-use crate::addons::renodx::use_cases::reshade_update::{
-    self, Replacement, apply_replacements, recorded_reshade_channel, resolve_host_update_target,
-    restore_originals, restore_originals_best_effort,
+use crate::addons::file_update::{
+    Replacement, apply_replacements, persistence_failure_error, restore_originals,
+    restore_originals_best_effort,
 };
+use crate::addons::operation_lock;
+use crate::addons::progress::emit_tool_finalizing;
+use crate::addons::records;
+use crate::addons::renodx::errors;
+use crate::addons::renodx::tracking;
+use crate::addons::renodx::types::RenoDxManifest;
+use crate::addons::renodx::use_cases::reshade_update::{
+    recorded_reshade_channel, resolve_host_update_target,
+};
+use crate::addons::reshade::channel;
+use crate::addons::reshade::fetch::fetch_reshade_from_source;
+use crate::addons::reshade::types::ReshadeChannel;
+use crate::addons::reshade::update::host_binary_source;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -30,9 +36,7 @@ pub async fn switch_reshade_channel(
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<RenoDxInstallState, ServiceError> {
     let _guard = operation_lock::lock(game_id).await;
-    let record = context
-        .storage()
-        .get_installed_addon(game_id)?
+    let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
     if matches!(
         record.host_kind(),
@@ -79,15 +83,15 @@ pub async fn switch_reshade_channel(
         ));
     }
 
-    let download = fetch::fetch_reshade_from_source(&target.source, target.arch, progress).await?;
-    emit_finalizing(progress);
-    let originals = apply_replacements(&[Replacement {
+    let download = fetch_reshade_from_source(&target.source, target.arch, progress).await?;
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
+    let originals = apply_replacements(vec![Replacement {
         path: target.target_path.clone(),
         bytes: download.bytes,
         mtime: None,
     }])?;
 
-    let new_source = reshade_update::host_binary_source(
+    let new_source = host_binary_source(
         target.source.url.clone(),
         download.etag,
         download.digest,
@@ -111,7 +115,7 @@ pub async fn switch_reshade_channel(
         };
     if let Err(error) = context.storage().upsert_installed_addon(&updated) {
         let restore_result = restore_originals(&originals);
-        return Err(reshade_update::persistence_failure_error(
+        return Err(persistence_failure_error(
             error.into(),
             std::slice::from_ref(&restore_result),
         ));

@@ -4,9 +4,9 @@ use std::path::Path;
 
 use crate::ServiceError;
 use crate::addons::renodx::errors;
-use crate::addons::renodx::fetch::Download;
-use crate::addons::renodx::source::ReshadeSource;
-use crate::addons::renodx::types::ReshadeChannel;
+use crate::addons::reshade::fetch::Download;
+use crate::addons::reshade::source::ReshadeSource;
+use crate::addons::reshade::types::ReshadeChannel;
 use renderpilot_application::SharedArtifactRepository;
 use renderpilot_domain::PathRef;
 use renderpilot_domain::{

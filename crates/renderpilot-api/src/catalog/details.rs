@@ -4,7 +4,7 @@
 use renderpilot_orchestration::application::ComponentReplacementCandidates;
 use renderpilot_orchestration::catalog as orch_catalog;
 use renderpilot_orchestration::catalog::output as catalog_output;
-use renderpilot_orchestration::domain::{GameId, GraphicsComponent};
+use renderpilot_orchestration::domain::{AddonKind, GameId, GraphicsComponent};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -35,6 +35,7 @@ pub(crate) struct GameDetailsOutput {
     components: Vec<GameComponentOutput>,
     candidate_groups: Value,
     operations: Value,
+    addon_capabilities: Vec<AddonKind>,
 }
 
 impl GameDetailsOutput {
@@ -57,6 +58,9 @@ impl GameDetailsOutput {
         ))
         .map_err(ApiError::from)?;
 
+        let addon_capabilities =
+            orch_catalog::addon_capabilities(context, game_id).map_err(ApiError::from)?;
+
         let components = visible_components
             .into_iter()
             .map(|component| {
@@ -73,6 +77,7 @@ impl GameDetailsOutput {
             components,
             candidate_groups,
             operations,
+            addon_capabilities,
         })
     }
 }

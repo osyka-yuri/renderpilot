@@ -1,8 +1,8 @@
-use super::host_rules::{
-    HostKind, api_supports_renodx, host_decision, primary_api, resolve_proxy_dll,
-};
-use crate::addons::renodx::matcher::{IncompatibilityReason, MatchFacts};
+use crate::addons::matching::{IncompatibilityReason, MatchFacts};
 use crate::addons::renodx::types::Title;
+use crate::addons::reshade::proxy::{
+    HostKind, api_supports_directx_addon, host_decision, primary_api, resolve_proxy_dll,
+};
 
 /// Validates a matched curated title and returns its [`HostKind`] and (for a proxy
 /// host) the proxy DLL name.
@@ -27,7 +27,7 @@ pub fn check_title_compatibility(
     let Some(host_kind) = host_decision(detected) else {
         return Err(IncompatibilityReason::ApiUnsupported { detected });
     };
-    if api_supports_renodx(detected)
+    if api_supports_directx_addon(detected)
         && !title.compatibility.required_api.is_empty()
         && !title.compatibility.required_api.contains(&detected)
     {

@@ -145,6 +145,143 @@ fn scan_folder_reports_missing_folder() {
     );
 }
 
+#[test]
+fn rescan_preserves_steam_launcher_when_manifest_disappears() {
+    use renderpilot_orchestration::domain::Launcher;
+
+    let fixture = CatalogFixture::new("scan-preserve-steam");
+    let context = fixture.context();
+    let root = TempGameFolder::new("cli-scan-preserve-steam");
+
+    let steamapps = root.path().join("steamapps");
+    let game_dir = steamapps.join("common").join("PreserveGame");
+    create_dlss_file(&game_dir, b"steam-preserve");
+    let manifest_path =
+        write_steam_appmanifest(&steamapps, "424242", "PreserveGame", "Preserve Me");
+
+    scan_catalog_folder(&context, &game_dir, "initial steam scan should succeed");
+
+    let first = catalog::list_games(&context)
+        .expect("games should list")
+        .into_iter()
+        .next()
+        .expect("one game after first scan");
+    assert_eq!(first.identity().launcher(), Launcher::Steam);
+    assert_eq!(first.identity().external_id(), Some("424242"));
+    assert_eq!(first.identity().title(), "Preserve Me");
+    let first_id = first.id().as_str().to_owned();
+
+    // Simulate a re-scan where Steam metadata is no longer readable.
+    fs::remove_file(&manifest_path).expect("appmanifest should be removable");
+
+    scan_catalog_folder(
+        &context,
+        &game_dir,
+        "rescan without manifest should succeed",
+    );
+
+    let games = catalog::list_games(&context).expect("games should list after rescan");
+    assert_eq!(games.len(), 1, "rescan must not create a second Manual row");
+
+    let second = &games[0];
+    assert_eq!(
+        second.id().as_str(),
+        first_id,
+        "game id must stay stable across rescan"
+    );
+    assert_eq!(
+        second.identity().launcher(),
+        Launcher::Steam,
+        "launcher must not demote to Manual when catalog already has Steam"
+    );
+    assert_eq!(second.identity().external_id(), Some("424242"));
+    assert_eq!(second.identity().title(), "Preserve Me");
+}
+
+#[test]
+fn steam_game_with_diverging_dll_paths_stays_single_steam_install() {
+    use renderpilot_orchestration::domain::Launcher;
+
+    let fixture = CatalogFixture::new("scan-steam-no-split");
+    let context = fixture.context();
+    let root = TempGameFolder::new("cli-scan-steam-no-split");
+
+    let steamapps = root.path().join("steamapps");
+    let game_dir = steamapps.join("common").join("SplitTrap");
+    create_dlss_file(&game_dir.join("bin").join("x64"), b"left-branch");
+    create_dlss_file(&game_dir.join("engine").join("plugins"), b"right-branch");
+    write_steam_appmanifest(&steamapps, "777", "SplitTrap", "Split Trap");
+
+    scan_catalog_folder(&context, &game_dir, "steam game scan should succeed");
+
+    let games = catalog::list_games(&context).expect("games should list");
+    assert_eq!(
+        games.len(),
+        1,
+        "launcher-owned install must not split into Manual sub-roots, got: {games:#?}",
+    );
+    assert_eq!(games[0].identity().launcher(), Launcher::Steam);
+    assert_eq!(games[0].identity().external_id(), Some("777"));
+}
+
+#[test]
+fn gog_info_file_tags_scanned_folder_as_gog() {
+    use renderpilot_orchestration::domain::Launcher;
+
+    let fixture = CatalogFixture::new("scan-gog-tag");
+    let context = fixture.context();
+    let folder = TempGameFolder::new("cli-scan-gog-tag");
+
+    create_dlss_file(folder.path(), b"gog-bytes");
+    write_gog_info(folder.path(), "1207659999", "GOG Tagged Game");
+
+    scan_catalog_folder(&context, folder.path(), "gog scan should succeed");
+
+    let games = catalog::list_games(&context).expect("games should list");
+    assert_eq!(games.len(), 1);
+    assert_eq!(games[0].identity().launcher(), Launcher::Gog);
+    assert_eq!(games[0].identity().external_id(), Some("1207659999"));
+    assert_eq!(games[0].identity().title(), "GOG Tagged Game");
+}
+
+fn write_steam_appmanifest(
+    steamapps: &Path,
+    app_id: &str,
+    installdir: &str,
+    name: &str,
+) -> PathBuf {
+    fs::create_dir_all(steamapps).expect("steamapps dir should exist");
+    let path = steamapps.join(format!("appmanifest_{app_id}.acf"));
+    fs::write(
+        &path,
+        format!(
+            r#""AppState"
+{{
+    "appid" "{app_id}"
+    "installdir" "{installdir}"
+    "name" "{name}"
+}}
+"#
+        ),
+    )
+    .expect("appmanifest should be written");
+    path
+}
+
+fn write_gog_info(install_dir: &Path, game_id: &str, name: &str) {
+    fs::write(
+        install_dir.join(format!("goggame-{game_id}.info")),
+        format!(
+            r#"{{
+            "gameId": "{game_id}",
+            "name": "{name}",
+            "playTasks": [{{ "type": "FileTask", "isPrimary": true, "path": "Game.exe" }}]
+        }}"#
+        ),
+    )
+    .expect("goggame info should be written");
+}
+
 fn create_child_game_with_dlss(parent: &Path, game_name: &str, contents: &[u8]) -> PathBuf {
     let game_path = parent.join(game_name);
     create_dlss_file(&game_path, contents);

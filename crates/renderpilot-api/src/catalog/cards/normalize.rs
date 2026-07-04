@@ -1,7 +1,7 @@
 //! Input normalization for the game-card query: search text, page bounds, and
 //! the library / launcher filter sets validated against what is available.
 
-use renderpilot_orchestration::domain::GraphicsTechnology;
+use renderpilot_orchestration::domain::{AddonKind, GraphicsTechnology};
 use std::collections::BTreeSet;
 
 pub(super) fn normalize_search_query(value: &str) -> String {
@@ -59,6 +59,17 @@ pub(super) fn normalize_selected_libraries(
     selected_libraries.retain(|library| allowed_libraries.contains(library.as_str()));
 
     selected_libraries
+}
+
+pub(super) fn normalize_addon_names(values: Vec<String>) -> Vec<String> {
+    let mut normalized = values
+        .into_iter()
+        .filter_map(|value| AddonKind::from_stable_str(&value).map(|kind| kind.as_str().to_owned()))
+        .collect::<Vec<_>>();
+
+    normalized.sort();
+    normalized.dedup();
+    normalized
 }
 
 pub(super) fn normalize_launcher_names(values: Vec<String>) -> Vec<String> {

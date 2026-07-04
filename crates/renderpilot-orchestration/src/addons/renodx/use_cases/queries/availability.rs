@@ -1,28 +1,28 @@
 /// Queries RenoDX availability for a specific game.
 use std::path::{Path, PathBuf};
 
-use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{
-    Architecture, GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState,
+    AddonKind, Architecture, GameId, InstalledAddon, InstalledAddonHostKind, RenoDxInstallState,
 };
 
 use crate::Context;
 use crate::ServiceError;
 
-use crate::addons::renodx::anticheat::assess_risk;
+use crate::addons::anticheat::{RiskSeverity, assess_risk};
+use crate::addons::availability_pipeline::{self, AvailabilityPreflight};
+use crate::addons::game_analysis::{GameAnalysis, install_target_dir};
 use crate::addons::renodx::dto::availability::*;
-use crate::addons::renodx::facts::{GameAnalysis, install_target_dir};
-use crate::addons::renodx::game_context::{analyze_and_resolve, executable_override, require_game};
+use crate::addons::renodx::game_context::analyze_and_resolve;
 use crate::addons::renodx::matcher::{
     MatchFacts, RenoDxResolution, file_installable, matched_slug,
 };
-use crate::addons::renodx::policy::generic_risk;
-use crate::addons::renodx::policy::{HostKind, host_decision, primary_api};
 use crate::addons::renodx::reconciliation::{self, OrphanedInstall};
 use crate::addons::renodx::source;
 use crate::addons::renodx::tracking;
-use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel, ReshadeConfig};
+use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::vulkan;
+use crate::addons::reshade::proxy::{HostKind, host_decision, primary_api};
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
 
 use super::host_report::{self, ReshadeReport};
 
@@ -32,18 +32,27 @@ pub fn availability(
     manifest: &RenoDxManifest,
     game_id: &GameId,
 ) -> Result<AvailabilityReport, ServiceError> {
-    let mut record = context.storage().get_installed_addon(game_id)?;
-    let game = require_game(context, game_id)?;
+    let AvailabilityPreflight {
+        mut record,
+        game,
+        blocked,
+        analysis,
+        resolution,
+    } = availability_pipeline::preflight(
+        context,
+        game_id,
+        AddonKind::RenoDx,
+        manifest,
+        analyze_and_resolve,
+    )?;
     let scan_dir = Path::new(game.install_path().as_str());
-
-    let override_path = executable_override(context, game_id);
-    let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());
     let report = |record: Option<&InstalledAddon>| {
         host_report::reshade_report(&analysis, &resolution, record, &manifest.reshade)
     };
     let mut host_report = report(record.as_ref());
 
-    if record.is_none()
+    if blocked.is_none()
+        && record.is_none()
         && let Some(candidate) = orphaned_install_candidate(
             game_id,
             &analysis,
@@ -64,32 +73,50 @@ pub fn availability(
         .map(tracking::install_state_from_record)
         .unwrap_or(RenoDxInstallState::NotInstalled);
 
-    let manual_install = manual_file_install(manifest, &analysis.facts, &resolution, scan_dir);
-    let outcome = match resolution {
-        RenoDxResolution::Installable(plan) => AvailabilityOutcome::Installable {
-            confidence: plan.confidence,
-            risk: assess_risk(&plan.risk, scan_dir),
-            notes_keys: plan.notes_keys,
-            host_kind: plan.host_kind,
-        },
-        RenoDxResolution::External {
-            url,
-            label_key,
-            file_install,
-        } => AvailabilityOutcome::External {
-            url,
-            label_key,
-            file_install: file_install.map(|fi| ExternalFileInstall {
-                confidence: fi.confidence,
-                risk: assess_risk(&fi.risk, scan_dir),
-                notes_keys: fi.notes_keys,
-                host_kind: fi.host_kind,
-            }),
-        },
-        RenoDxResolution::NativeHdr => AvailabilityOutcome::NativeHdr,
-        RenoDxResolution::Incompatible { reason } => AvailabilityOutcome::Incompatible { reason },
-        RenoDxResolution::Unsupported { reason } => AvailabilityOutcome::Blacklisted { reason },
-        RenoDxResolution::NoMatch => AvailabilityOutcome::Unsupported,
+    // The manual file-install escape hatch would let a user bypass the
+    // exclusivity block by hand-installing RenoDX anyway; withhold it too. Must
+    // run before `resolution` is consumed by the `outcome` match below.
+    let manual_install = if blocked.is_none() {
+        manual_file_install(manifest, &analysis.facts, &resolution, scan_dir)
+    } else {
+        None
+    };
+
+    let outcome = if let Some(block) = blocked {
+        let blocked = availability_pipeline::blocked_outcome(block);
+        AvailabilityOutcome::BlockedByOtherAddon {
+            other_kind: blocked.other_kind,
+            unmanaged: blocked.unmanaged,
+        }
+    } else {
+        match resolution {
+            RenoDxResolution::Installable(plan) => AvailabilityOutcome::Installable {
+                confidence: plan.confidence,
+                risk: assess_risk(scan_dir, RiskSeverity::Info),
+                notes_keys: plan.notes_keys,
+                host_kind: plan.host_kind,
+            },
+            RenoDxResolution::External {
+                url,
+                label_key,
+                file_install,
+            } => AvailabilityOutcome::External {
+                url,
+                label_key,
+                file_install: file_install.map(|fi| ExternalFileInstall {
+                    confidence: fi.confidence,
+                    risk: assess_risk(scan_dir, RiskSeverity::Info),
+                    notes_keys: fi.notes_keys,
+                    host_kind: fi.host_kind,
+                }),
+            },
+            RenoDxResolution::NativeHdr => AvailabilityOutcome::NativeHdr,
+            RenoDxResolution::Incompatible { reason } => {
+                AvailabilityOutcome::Incompatible { reason }
+            }
+            RenoDxResolution::Unsupported { reason } => AvailabilityOutcome::Blacklisted { reason },
+            RenoDxResolution::NoMatch => AvailabilityOutcome::Unsupported,
+        }
     };
 
     Ok(AvailabilityReport {
@@ -179,7 +206,7 @@ fn manual_file_install(
         return None;
     }
     Some(ManualFileInstall {
-        risk: assess_risk(&generic_risk(), scan_dir),
+        risk: assess_risk(scan_dir, RiskSeverity::Info),
         host_kind,
         expected_addon_name: matched_slug(manifest, facts)
             .map(|slug| source::addon_file_stem(&slug)),
@@ -199,6 +226,8 @@ fn arch_str(arch: Architecture) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    use crate::addons::records;
     use crate::addons::renodx::matcher::IncompatibilityReason;
     use crate::addons::renodx::test_support::manifest;
     #[cfg(windows)]
@@ -325,9 +354,7 @@ mod tests {
         assert!(matches!(report.state, RenoDxInstallState::Installed { .. }));
         assert!(report.actions.install.is_none());
         assert!(report.actions.use_existing.is_some());
-        let record = context
-            .storage()
-            .get_installed_addon(&game_id)
+        let record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
             .expect("read adopted record")
             .expect("adopted record");
         assert!(record.installed_at().is_some());
@@ -397,9 +424,7 @@ mod tests {
 
         assert!(matches!(report.state, RenoDxInstallState::Installed { .. }));
 
-        let record = context
-            .storage()
-            .get_installed_addon(&game_id)
+        let record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
             .expect("read adopted record")
             .expect("adopted record");
 
@@ -483,6 +508,7 @@ mod tests {
         let report = availability(&context, &manifest, &game_id).expect("availability");
 
         assert_eq!(report.state, RenoDxInstallState::NotInstalled);
+        // Raw repository read on purpose: asserts no record of ANY kind was created.
         assert!(
             context
                 .storage()

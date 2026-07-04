@@ -1,8 +1,9 @@
 /// Queries shared ReShade Vulkan layer status.
 use crate::Context;
 use crate::addons::renodx::dto::vulkan::VulkanLayerManagementReport;
-use crate::addons::renodx::types::{RenoDxManifest, ReshadeChannel};
+use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::vulkan::{self, VulkanLayerReport};
+use crate::addons::reshade::types::ReshadeChannel;
 
 /// Returns the current global ReShade Vulkan layer status.
 #[must_use]

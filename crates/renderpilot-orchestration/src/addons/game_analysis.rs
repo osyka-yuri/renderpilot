@@ -1,11 +1,12 @@
 //! Assembling [`MatchFacts`] for a game by inspecting it on disk.
 //!
-//! This bridges an installed game and the pure [`matcher`](super::matcher): the
-//! game's rendering executable is resolved once by the shared
-//! [`game_executable`](crate::game_executable) resolver (which also reads its
-//! graphics API/architecture), and the engine is detected from folder/exe markers.
-//! [`assemble_facts`] is pure given the resolved executable, so the matcher logic
-//! stays platform-agnostic; only the resolver step is Windows-specific.
+//! This bridges an installed game and the pure matching layer
+//! ([`crate::addons::matching`]): the game's rendering executable is resolved once
+//! by the shared [`game_executable`](crate::game_executable) resolver (which also
+//! reads its graphics API/architecture), and the engine is detected from
+//! folder/exe markers. [`assemble_facts`] is pure given the resolved executable,
+//! so the matcher logic stays platform-agnostic; only the resolver step is
+//! Windows-specific.
 //!
 //! The fingerprint ([`MatchFacts::exe_sha256`]) is left unset here because hashing
 //! a multi-hundred-megabyte executable on every scan is wasteful; the install flow
@@ -16,11 +17,10 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{ExeGraphicsInfo, GameInstallation, PathRef};
 
+use super::errors::invalid;
 use crate::ServiceError;
+use crate::addons::matching::{Engine, MatchFacts};
 use crate::game_executable::{self, ResolvedExecutable};
-
-use super::errors;
-use super::matcher::MatchFacts;
 
 /// Result of inspecting a game: the facts the matcher needs plus the chosen
 /// rendering executable, whose folder is where ReShade and the add-on install.
@@ -47,18 +47,31 @@ pub fn analyze_game(install: &GameInstallation, override_path: Option<&Path>) ->
     }
 }
 
-/// The folder RenoDX installs into: the resolved rendering executable's directory.
-/// Shared by the install, update, and availability flows so they agree on the
-/// target location.
+/// The folder an add-on installs into: the resolved rendering executable's
+/// directory. Shared by the install, update, and availability flows so they agree
+/// on the target location.
 pub fn install_target_dir(analysis: &GameAnalysis) -> Result<PathBuf, ServiceError> {
     let executable = analysis
         .primary_executable
         .as_ref()
-        .ok_or_else(|| errors::invalid("no rendering executable found for this game".to_owned()))?;
+        .ok_or_else(|| invalid("no rendering executable found for this game".to_owned()))?;
     Path::new(executable.as_str())
         .parent()
         .map(Path::to_path_buf)
-        .ok_or_else(|| errors::invalid("rendering executable has no parent directory".to_owned()))
+        .ok_or_else(|| invalid("rendering executable has no parent directory".to_owned()))
+}
+
+/// Resolves the same install roots that install/update/exclusivity use for on-disk
+/// scans: the rendering executable's parent plus any split `AddonPath` from
+/// `ReShade.ini`. Returns `None` when no executable is known yet so callers can
+/// fall back to a DB-only exclusivity check.
+#[must_use]
+pub fn install_roots_for_analysis(
+    analysis: &GameAnalysis,
+) -> Option<crate::addons::reshade::InstallRoots> {
+    install_target_dir(analysis)
+        .ok()
+        .map(|dir| crate::addons::reshade::InstallRoots::resolve_from_ini(&dir))
 }
 
 /// Assembles [`MatchFacts`] from a game and its already-resolved primary
@@ -98,14 +111,14 @@ pub fn assemble_facts(
 ///
 /// Conservative on purpose: returns a known engine only on a strong signal, so
 /// the matcher's generic engine fallbacks apply only when warranted.
-fn detect_engine(install_dir: &Path, exe_names: &[String]) -> Option<String> {
+fn detect_engine(install_dir: &Path, exe_names: &[String]) -> Option<Engine> {
     if exe_names.iter().any(|name| is_unreal_exe_name(name))
         || install_dir.join("Engine").join("Binaries").is_dir()
     {
-        return Some("unreal".to_owned());
+        return Some(Engine::Unreal);
     }
     if install_dir.join("UnityPlayer.dll").is_file() || has_unity_data_dir(install_dir) {
-        return Some("unity".to_owned());
+        return Some(Engine::Unity);
     }
     None
 }
@@ -204,11 +217,9 @@ mod tests {
     #[test]
     fn assemble_facts_detects_engine_from_candidate_names() {
         let dir = tempdir().expect("tempdir");
-        // The renderer is unknown, but the scanned candidate name is a strong
-        // Unreal fingerprint — engine detection is independent of the chosen exe.
         let install = install_in(dir.path(), "MyGame-Win64-Shipping.exe");
         let facts = assemble_facts(&install, None);
-        assert_eq!(facts.engine.as_deref(), Some("unreal"));
+        assert_eq!(facts.engine, Some(Engine::Unreal));
     }
 
     #[test]
@@ -221,7 +232,7 @@ mod tests {
                 "launcher.exe".to_owned(),
             ],
         );
-        assert_eq!(engine.as_deref(), Some("unreal"));
+        assert_eq!(engine, Some(Engine::Unreal));
     }
 
     #[test]
@@ -229,8 +240,8 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         fs::create_dir_all(dir.path().join("Engine").join("Binaries")).expect("mkdir");
         assert_eq!(
-            detect_engine(dir.path(), &["game.exe".to_owned()]).as_deref(),
-            Some("unreal")
+            detect_engine(dir.path(), &["game.exe".to_owned()]),
+            Some(Engine::Unreal)
         );
     }
 
@@ -239,8 +250,8 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         fs::create_dir(dir.path().join("MyGame_Data")).expect("mkdir");
         assert_eq!(
-            detect_engine(dir.path(), &["MyGame.exe".to_owned()]).as_deref(),
-            Some("unity")
+            detect_engine(dir.path(), &["MyGame.exe".to_owned()]),
+            Some(Engine::Unity)
         );
     }
 
@@ -249,8 +260,8 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         fs::write(dir.path().join("UnityPlayer.dll"), b"stub").expect("write");
         assert_eq!(
-            detect_engine(dir.path(), &["MyGame.exe".to_owned()]).as_deref(),
-            Some("unity")
+            detect_engine(dir.path(), &["MyGame.exe".to_owned()]),
+            Some(Engine::Unity)
         );
     }
 

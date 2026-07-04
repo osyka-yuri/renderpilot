@@ -50,17 +50,12 @@ fn to_path_ref(path: &Path) -> Result<PathRef, ServiceError> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
 
     use renderpilot_domain::TrackedSourceRole;
     use tempfile::tempdir;
 
     use super::*;
     use crate::addons::engine::{self, FileOp, IniSection, InstallPlan, MergeStrategy};
-
-    fn path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
-        paths.iter().map(|p| PathBuf::from(p.as_str())).collect()
-    }
 
     /// The extensibility seam: a *second* tool with a different shape — an
     /// OptiScaler-style proxy DLL plus an `OptiScaler.ini` (a different section and
@@ -126,8 +121,16 @@ mod tests {
         assert_eq!(record.backed_up_files().len(), 1);
 
         engine::uninstall(
-            &path_bufs(record.created_files()),
-            &path_bufs(record.backed_up_files()),
+            &record
+                .created_files()
+                .iter()
+                .map(|path| std::path::PathBuf::from(path.as_str()))
+                .collect::<Vec<_>>(),
+            &record
+                .backed_up_files()
+                .iter()
+                .map(|path| std::path::PathBuf::from(path.as_str()))
+                .collect::<Vec<_>>(),
         )
         .expect("uninstall");
 
@@ -139,4 +142,5 @@ mod tests {
         assert!(!game.join("OptiScaler.ini").exists());
         assert!(!game.join("optiscaler-marker.json").exists());
     }
+
 }

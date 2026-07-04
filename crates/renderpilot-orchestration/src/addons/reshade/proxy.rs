@@ -1,15 +1,17 @@
-//! RenoDX-specific policy applied on top of detection facts.
+//! How a DirectX ReShade add-on hooks itself into a game, decided by the renderer.
 //!
-//! The detection layer ([`renderpilot_detection::analyze_executable`]) reports
-//! the set of graphics APIs a binary imports as a plain fact, without ranking.
-//! This module owns the RenoDX product policy that picks the primary API and
-//! decides whether RenoDX can target a given executable, keeping such
-//! tool-specific knowledge out of the generic domain and detection layers.
+//! The detection layer ([`renderpilot_detection::analyze_executable`]) reports the
+//! set of graphics APIs a binary imports as a plain fact, without ranking. This
+//! module owns the tool-agnostic policy that picks the primary API and the ReShade
+//! proxy DLL, keeping such knowledge out of the generic domain and detection
+//! layers. Both RenoDX and Luma target DirectX via a ReShade proxy DLL, so this is
+//! shared; RenoDX additionally routes confirmed-Vulkan games to the shared Vulkan
+//! layer ([`HostKind::Vulkan`]).
 
 use renderpilot_domain::{ExeGraphicsInfo, GraphicsApi};
 use serde::Serialize;
 
-/// How RenoDX hooks itself into a game, decided by the renderer.
+/// How a ReShade add-on hooks itself into a game, decided by the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostKind {
@@ -18,21 +20,21 @@ pub enum HostKind {
     Proxy,
     /// The single global ReShade Vulkan implicit layer (a Vulkan game cannot load a
     /// proxy DLL). Shared across all Vulkan games; see
-    /// [`renderpilot_platform_windows::vulkan_layer`].
+    /// [`renderpilot_platform_windows::vulkan_layer`]. Only RenoDX drives this;
+    /// Luma is DX11-only.
     Vulkan,
 }
 
-/// Returns whether RenoDX, a DirectX-only renovation engine, can target a game
-/// rendering with `api`.
+/// Returns whether a DirectX ReShade add-on can target a game rendering with `api`.
 #[must_use]
-pub const fn api_supports_renodx(api: GraphicsApi) -> bool {
+pub const fn api_supports_directx_addon(api: GraphicsApi) -> bool {
     matches!(
         api,
         GraphicsApi::D3D9 | GraphicsApi::D3D10 | GraphicsApi::D3D11 | GraphicsApi::D3D12
     )
 }
 
-/// Decides how RenoDX hosts itself for a renderer, or `None` when it cannot.
+/// Decides how an add-on hosts itself for a renderer, or `None` when it cannot.
 ///
 /// Direct3D and an inconclusive (`Unknown`) read use a per-game [`HostKind::Proxy`]
 /// (a curated title or engine signal is trusted over an empty detection); a
@@ -48,9 +50,9 @@ pub const fn host_decision(api: GraphicsApi) -> Option<HostKind> {
     }
 }
 
-/// Picks the single graphics API RenoDX should target from the detected set,
-/// applying the "most capable DirectX wins, then DirectX over Vulkan/OpenGL"
-/// tie-break. Returns [`GraphicsApi::Unknown`] when no known API was imported.
+/// Picks the single graphics API to target from the detected set, applying the
+/// "most capable DirectX wins, then DirectX over Vulkan/OpenGL" tie-break. Returns
+/// [`GraphicsApi::Unknown`] when no known API was imported.
 #[must_use]
 pub fn primary_api(info: &ExeGraphicsInfo) -> GraphicsApi {
     info.apis()
@@ -60,8 +62,8 @@ pub fn primary_api(info: &ExeGraphicsInfo) -> GraphicsApi {
         .unwrap_or(GraphicsApi::Unknown)
 }
 
-/// Preference order for the RenoDX target: the most capable DirectX version
-/// wins, then DirectX over Vulkan/OpenGL.
+/// Preference order for the render target: the most capable DirectX version wins,
+/// then DirectX over Vulkan/OpenGL.
 fn api_rank(api: GraphicsApi) -> u8 {
     match api {
         GraphicsApi::D3D12 => 6,
@@ -101,7 +103,7 @@ pub fn proxy_dll(info: &ExeGraphicsInfo) -> Option<String> {
 }
 
 /// Default ReShade proxy DLL when the detected API is inconclusive: dxgi.dll
-/// loads for D3D10/11/12, which covers essentially every modern RenoDX title.
+/// loads for D3D10/11/12, which covers essentially every modern add-on title.
 pub const DEFAULT_PROXY_DLL: &str = "dxgi.dll";
 
 /// The proxy DLL ReShade installs as: an explicit per-title override, else the
@@ -125,27 +127,26 @@ mod tests {
     }
 
     #[test]
-    fn supports_renodx_only_for_directx() {
+    fn supports_directx_addon_only_for_directx() {
         for api in [
             GraphicsApi::D3D9,
             GraphicsApi::D3D10,
             GraphicsApi::D3D11,
             GraphicsApi::D3D12,
         ] {
-            assert!(api_supports_renodx(api));
+            assert!(api_supports_directx_addon(api));
         }
         for api in [
             GraphicsApi::OpenGl,
             GraphicsApi::Vulkan,
             GraphicsApi::Unknown,
         ] {
-            assert!(!api_supports_renodx(api));
+            assert!(!api_supports_directx_addon(api));
         }
     }
 
     #[test]
     fn host_decision_routes_proxy_vulkan_and_declines_opengl() {
-        // Direct3D and an inconclusive read use a per-game proxy DLL.
         for api in [
             GraphicsApi::D3D9,
             GraphicsApi::D3D10,
@@ -155,9 +156,7 @@ mod tests {
         ] {
             assert_eq!(host_decision(api), Some(HostKind::Proxy));
         }
-        // A confirmed Vulkan renderer uses the shared Vulkan layer.
         assert_eq!(host_decision(GraphicsApi::Vulkan), Some(HostKind::Vulkan));
-        // A confirmed OpenGL renderer is unsupported.
         assert_eq!(host_decision(GraphicsApi::OpenGl), None);
     }
 

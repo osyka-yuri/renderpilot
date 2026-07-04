@@ -8,14 +8,23 @@ use renderpilot_domain::{
 };
 
 use crate::addons::engine::{self, FileOp, InstallPlan, InstallReceipt};
-use crate::addons::renodx::progress::emit_finalizing;
-use crate::addons::renodx::types::{RecordedChannelParse, RenoDxManifest, ReshadeChannel};
-use crate::addons::renodx::use_cases::reshade_update::{
-    HostUpdateTarget, OriginalFile, Replacement, addon_label, apply_replacements,
-    host_binary_source, persistence_failure_error, recorded_reshade_channel,
-    resolve_host_update_target, restore_originals, restore_originals_best_effort, source_with_role,
+use crate::addons::file_update::{
+    OriginalFile, Replacement, apply_replacements, persistence_failure_error, restore_originals,
+    restore_originals_best_effort,
 };
-use crate::addons::renodx::{channel, errors, fetch, install, operation_lock, reshade, tracking};
+use crate::addons::operation_lock;
+use crate::addons::progress::{emit_tool_finalizing, sequential_stage_observer};
+use crate::addons::records::{self, addon_label, source_with_role};
+use crate::addons::renodx::types::RenoDxManifest;
+use crate::addons::renodx::use_cases::reshade_update::{
+    HostUpdateTarget, recorded_reshade_channel, resolve_host_update_target,
+};
+use crate::addons::renodx::{errors, fetch, install, tracking};
+use crate::addons::reshade::channel;
+use crate::addons::reshade::fetch::{Download, fetch_reshade_from_source};
+use crate::addons::reshade::scan as reshade;
+use crate::addons::reshade::types::{RecordedChannelParse, ReshadeChannel};
+use crate::addons::reshade::update::host_binary_source;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -27,9 +36,7 @@ pub async fn update(
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<(), ServiceError> {
     let _guard = operation_lock::lock(game_id).await;
-    let record = context
-        .storage()
-        .get_installed_addon(game_id)?
+    let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
     let shared_vulkan_channel = if matches!(
         record.host_kind(),
@@ -103,30 +110,49 @@ pub async fn update(
     let mut refreshed_sources: Vec<TrackedSource> = Vec::new();
     let mut replacements: Vec<Replacement> = Vec::new();
     let mut host_install: Option<HostInstall> = None;
+    let stage_count = u64::from(shared_vulkan_channel.is_some())
+        + u64::from(addon_tracked)
+        + u64::from(host.is_some() && host_target.is_some())
+        + u64::from(dlss_fix.is_some());
+    let mut stage_index = 0;
 
     if let Some(channel) = shared_vulkan_channel {
+        let stage_progress_fn = sequential_stage_observer(progress, stage_index, stage_count);
+        let stage_progress = stage_progress_fn
+            .as_ref()
+            .map(|observer| observer as &ProgressObserver<'_>);
         crate::addons::renodx::use_cases::commands::update_reshade::UpdateReShadeCommand {
             context,
             manifest,
             channel,
-            progress,
+            progress: stage_progress,
         }
         .execute()
         .await?;
+        stage_index += 1;
     }
 
     if let Some(addon) = addon {
         if addon.url().is_empty() {
             refreshed_sources.push(addon.clone());
         } else {
-            let prepared = prepare_addon_update(&record, addon, progress).await?;
+            let stage_progress_fn = sequential_stage_observer(progress, stage_index, stage_count);
+            let stage_progress = stage_progress_fn
+                .as_ref()
+                .map(|observer| observer as &ProgressObserver<'_>);
+            let prepared = prepare_addon_update(&record, addon, stage_progress).await?;
             refreshed_sources.push(prepared.source);
             replacements.extend(prepared.replacement);
+            stage_index += 1;
         }
     }
 
     if let (Some(host), Some(target)) = (host, host_target.as_ref()) {
-        let prepared = prepare_policy_host_update(&record, target, host, progress).await?;
+        let stage_progress_fn = sequential_stage_observer(progress, stage_index, stage_count);
+        let stage_progress = stage_progress_fn
+            .as_ref()
+            .map(|observer| observer as &ProgressObserver<'_>);
+        let prepared = prepare_policy_host_update(&record, target, host, stage_progress).await?;
         refreshed_sources.push(prepared.source);
         if let Some(replacement) = prepared.replacement {
             match replacement {
@@ -134,18 +160,25 @@ pub async fn update(
                 HostReplacement::Install(install) => host_install = Some(install),
             }
         }
+        stage_index += 1;
     } else if let Some(host) = host {
         refreshed_sources.push(host.clone());
     }
 
     if let Some(dlss_fix) = dlss_fix {
-        let prepared = prepare_dlss_fix_update(&record, dlss_fix, progress).await?;
+        let stage_progress_fn = sequential_stage_observer(progress, stage_index, stage_count);
+        let stage_progress = stage_progress_fn
+            .as_ref()
+            .map(|observer| observer as &ProgressObserver<'_>);
+        let prepared = prepare_dlss_fix_update(&record, dlss_fix, stage_progress).await?;
         refreshed_sources.push(prepared.source);
         replacements.extend(prepared.replacement);
+        stage_index += 1;
     }
+    debug_assert_eq!(stage_index, stage_count);
 
-    emit_finalizing(progress);
-    let mut originals = apply_replacements(&replacements)?;
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
+    let mut originals = apply_replacements(replacements)?;
     let host_receipt = match host_install.as_ref() {
         Some(install) => match apply_host_install(install, &mut originals) {
             Ok(receipt) => Some(receipt),
@@ -226,7 +259,7 @@ async fn prepare_policy_host_update(
     existing_source: &TrackedSource,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<PreparedHostPolicyUpdate, ServiceError> {
-    let download = fetch::fetch_reshade_from_source(&target.source, target.arch, progress).await?;
+    let download = fetch_reshade_from_source(&target.source, target.arch, progress).await?;
     let source = host_binary_source(
         target.source.url.clone(),
         download.etag.clone(),
@@ -283,7 +316,7 @@ async fn prepare_dlss_fix_update(
     })
 }
 
-fn refreshed_source(source: &TrackedSource, download: &fetch::Download) -> TrackedSource {
+fn refreshed_source(source: &TrackedSource, download: &Download) -> TrackedSource {
     TrackedSource::new(
         source.role(),
         source.url().to_owned(),

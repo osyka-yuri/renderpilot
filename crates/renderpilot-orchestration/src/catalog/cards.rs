@@ -3,7 +3,8 @@
 
 use std::collections::HashMap;
 
-use renderpilot_domain::GameInstallation;
+use renderpilot_application::InstalledAddonRepository;
+use renderpilot_domain::{AddonKind, GameInstallation};
 
 use crate::ServiceError;
 
@@ -26,6 +27,8 @@ pub struct GameCardData {
     pub is_favorite: bool,
     /// Whether the user marked this game as hidden.
     pub is_hidden: bool,
+    /// Add-ons with a usable profile or an existing install for this game.
+    pub addon_capabilities: Vec<AddonKind>,
 }
 
 /// Loads every game in the catalog as an aggregated [`GameCardData`] row.
@@ -45,6 +48,12 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
             (game_id, row)
         })
         .collect();
+    let installed_addons: HashMap<_, _> = storage
+        .list_installed_addons()?
+        .into_iter()
+        .map(|addon| (addon.game_id().clone(), addon.kind()))
+        .collect();
+    let profile_capabilities = context.profile_capability_snapshot();
 
     // Loaded once and reused for every game: the artifacts table and the
     // libraries manifest are identical across games, so re-reading the table
@@ -64,6 +73,11 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
             let ui_state = ui_states.get(game.id().as_str());
             let is_favorite = ui_state.is_some_and(|state| state.is_favorite);
             let is_hidden = ui_state.is_some_and(|state| state.is_hidden);
+            let profile = profile_capabilities.capabilities_for(game.id());
+            // Shared merge (profile OR installed). We preload the installed map for
+            // the whole dashboard instead of calling get_installed_addon per game.
+            let addon_capabilities =
+                super::merge_addon_capabilities(&profile, installed_addons.get(game.id()).copied());
 
             Ok(GameCardData {
                 game,
@@ -72,6 +86,7 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
                 rollback_available,
                 is_favorite,
                 is_hidden,
+                addon_capabilities,
             })
         })
         .collect()

@@ -1,16 +1,23 @@
 /// Availability data transfer objects.
-use renderpilot_domain::RenoDxInstallState;
+use renderpilot_domain::{AddonKind, RenoDxInstallState};
 use serde::Serialize;
 
-use super::super::anticheat::RiskAssessment;
+use crate::addons::anticheat::RiskAssessment;
+
 use super::super::matcher::IncompatibilityReason;
 use super::super::matcher::MatchConfidence;
-use super::super::policy::HostKind;
 use super::super::reshade::RenoDxAddonState;
-use super::super::types::ReshadeChannel;
-use super::actions::ActionDescriptor;
 use super::vulkan::VulkanLayerReport;
-use std::path::PathBuf;
+use crate::addons::reshade::proxy::HostKind;
+
+// The observable ReShade host DTOs are shared; re-exported so the RenoDX
+// availability report keeps addressing them here.
+pub use crate::addons::reshade::dto::{
+    HostActions, HostAddonSupport, HostChannelFacts, HostDetection, HostFacts, HostUpdateStatus,
+};
+
+/// Backend-derived RenoDX actions (shared host-action wire shape).
+pub type RenoDxActions = HostActions;
 
 /// Read-only preview of whether RenoDX can be installed for a game.
 #[derive(Debug, Clone, Serialize)]
@@ -35,102 +42,6 @@ pub struct AvailabilityReport {
     pub manual_install: Option<ManualFileInstall>,
     /// Shared Vulkan layer report for Vulkan RenoDX flows.
     pub vulkan_layer: VulkanLayerReport,
-}
-
-/// Public Direct3D ReShade host detection state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostDetection {
-    /// No usable proxy host was detected.
-    Absent,
-    /// A single proxy host was detected.
-    Present,
-    /// The proxy host state is ambiguous or unsafe.
-    Conflict,
-}
-
-/// Whether the detected ReShade host can load RenoDX add-ons.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostAddonSupport {
-    /// Full ReShade add-on API support is available.
-    Full,
-    /// ReShade is present but does not expose the add-on API RenoDX needs.
-    Limited,
-    /// The backend could not confirm the add-on API capability.
-    Unknown,
-}
-
-/// Public update/repair verdict for the ReShade host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostUpdateStatus {
-    /// The host is current for the known channel.
-    Current,
-    /// A host update is available.
-    UpdateAvailable,
-    /// Repair is available to provide add-on support or replace an incomplete host.
-    RepairAvailable,
-    /// The backend needs stronger validation before it can claim current/update.
-    UnknownNeedsValidation,
-    /// The host matches a different known channel than the selected/effective one.
-    ChannelMismatch,
-}
-
-/// Selected/effective/detected channel facts for a ReShade host.
-#[derive(Debug, Clone, Serialize)]
-pub struct HostChannelFacts {
-    /// User-selected channel for new actions.
-    pub selected: ReshadeChannel,
-    /// Effective channel after manifest fallback.
-    pub effective: ReshadeChannel,
-    /// Channel detected from private install metadata, when available.
-    pub detected: Option<ReshadeChannel>,
-}
-
-/// Observable Direct3D ReShade host facts.
-#[derive(Debug, Clone, Serialize)]
-pub struct HostFacts {
-    /// Proxy slot/file name, when known.
-    pub slot: Option<String>,
-    /// Whether the detected host is in the active slot.
-    pub active: bool,
-    /// Host path, when present.
-    pub path: Option<PathBuf>,
-    /// ReShade file version, when readable.
-    pub version: Option<String>,
-    /// Add-on API support.
-    pub addon_support: HostAddonSupport,
-    /// Channel facts.
-    pub channel: HostChannelFacts,
-    /// Update/repair verdict.
-    pub update_status: HostUpdateStatus,
-    /// Whether the active slot is a recognized non-ReShade build (e.g. GShade)
-    /// RenoDX never checks for updates or replaces automatically.
-    pub is_custom_build: bool,
-}
-
-/// Backend-derived RenoDX actions.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct RenoDxActions {
-    /// Install action.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub install: Option<ActionDescriptor>,
-    /// Use the compatible detected host without claiming host removal rights.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_existing: Option<ActionDescriptor>,
-    /// Repair ReShade for RenoDX add-on support.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub repair: Option<ActionDescriptor>,
-    /// Update the detected host when backend validation allows it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub update: Option<ActionDescriptor>,
-    /// Switch the host channel when a recorded host artifact allows it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub switch_channel: Option<ActionDescriptor>,
-    /// Resolve a host conflict.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolve_conflict: Option<ActionDescriptor>,
 }
 
 /// The installability verdict for a game.
@@ -172,6 +83,18 @@ pub enum AvailabilityOutcome {
     },
     /// No RenoDX profile matched the game.
     Unsupported,
+    /// A different addon tool (Luma) is already installed — or unmanaged files
+    /// belonging to it were found on disk — for this game. RenoDX and Luma are
+    /// mutually exclusive per game; uninstall the other one first.
+    BlockedByOtherAddon {
+        /// The other addon tool occupying this game. Named `other_kind`, not
+        /// `kind`, because the latter collides with this enum's own
+        /// `#[serde(tag = "kind")]` discriminant field.
+        other_kind: AddonKind,
+        /// Whether the block came from an unmanaged on-disk install (`true`)
+        /// rather than a tracked database record (`false`).
+        unmanaged: bool,
+    },
 }
 
 /// The manual file-install escape hatch when no automatic or curated-external

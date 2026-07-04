@@ -16,7 +16,7 @@ pub(crate) enum GameCardsSortFieldDto {
 }
 
 impl GameCardsSortFieldDto {
-    fn as_cli_value(&self) -> &'static str {
+    fn as_api_value(&self) -> &'static str {
         match self {
             Self::Title => "title",
             Self::Updates => "updates",
@@ -33,7 +33,7 @@ pub(crate) enum GameCardsSortDirectionDto {
 }
 
 impl GameCardsSortDirectionDto {
-    fn as_cli_value(&self) -> &'static str {
+    fn as_api_value(&self) -> &'static str {
         match self {
             Self::Asc => "asc",
             Self::Desc => "desc",
@@ -49,10 +49,10 @@ pub(crate) struct GameCardsSortDto {
 }
 
 impl GameCardsSortDto {
-    fn into_cli_values(self) -> (String, String) {
+    fn into_api_values(self) -> (String, String) {
         (
-            self.field.as_cli_value().to_owned(),
-            self.direction.as_cli_value().to_owned(),
+            self.field.as_api_value().to_owned(),
+            self.direction.as_api_value().to_owned(),
         )
     }
 }
@@ -65,7 +65,7 @@ pub(crate) struct GameCardsPageDto {
 }
 
 impl GameCardsPageDto {
-    fn into_cli_values(self) -> Result<(i64, i64), CommandError> {
+    fn into_api_values(self) -> Result<(i64, i64), CommandError> {
         if self.limit == 0 {
             return Err(CommandError::invalid_argument(
                 "limit",
@@ -94,6 +94,9 @@ pub(crate) struct QueryGameCardsDto {
     selected_libraries: Vec<String>,
 
     #[serde(default)]
+    selected_addons: Vec<String>,
+
+    #[serde(default)]
     selected_launchers: Vec<String>,
 
     #[serde(default)]
@@ -109,6 +112,7 @@ pub(crate) struct QueryGameCardsDto {
 pub(crate) struct QueryGameCardsArgs {
     pub(super) search_query: String,
     pub(super) selected_libraries: Vec<String>,
+    pub(super) selected_addons: Vec<String>,
     pub(super) selected_launchers: Vec<String>,
     pub(super) show_hidden: bool,
     pub(super) favorites_only: bool,
@@ -122,17 +126,20 @@ impl QueryGameCardsDto {
     pub(super) fn into_desktop_args(self) -> Result<QueryGameCardsArgs, CommandError> {
         let search_query = trim_string(&self.search_query);
         let selected_libraries = trim_string_vec(self.selected_libraries);
+        let selected_addons = trim_string_vec(self.selected_addons);
         let selected_launchers = trim_string_vec(self.selected_launchers);
 
         reject_empty_items("selected_libraries", &selected_libraries)?;
+        reject_empty_items("selected_addons", &selected_addons)?;
         reject_empty_items("selected_launchers", &selected_launchers)?;
 
-        let (sort_field, sort_direction) = self.sort.into_cli_values();
-        let (limit, offset) = self.page.into_cli_values()?;
+        let (sort_field, sort_direction) = self.sort.into_api_values();
+        let (limit, offset) = self.page.into_api_values()?;
 
         Ok(QueryGameCardsArgs {
             search_query,
             selected_libraries,
+            selected_addons,
             selected_launchers,
             show_hidden: self.show_hidden,
             favorites_only: self.favorites_only,

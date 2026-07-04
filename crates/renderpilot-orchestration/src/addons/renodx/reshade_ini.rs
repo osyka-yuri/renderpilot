@@ -1,67 +1,18 @@
-//! `ReShade.ini` schema vocabulary and the merge transforms RenoDX applies.
+//! RenoDX's `ReShade.ini` uninstall/DLSS-Fix removal transforms.
 //!
-//! Centralizes the INI section/key names RenoDX both **reads** (path resolution and
-//! add-on state in [`super::reshade`]) and **writes** (the install and DLSS-Fix
-//! merge strategies here), so the two sides cannot drift. The transforms produce a
-//! [`MergeStrategy`] for the shared [`addons::engine`](crate::addons::engine); the
-//! host-detection model and the INI *reads* live in [`super::reshade`].
+//! The `[ADDON]`/`[INSTALL]` schema constants and the additive
+//! `ini_merge_strategy` write transform are shared at
+//! [`crate::addons::reshade::ini_schema`]. This module owns only the
+//! RenoDX-shaped *removal* strategies used on uninstall.
 
-use crate::addons::engine::{IniSection, IniSectionRemoval, MergeStrategy};
-
-use super::types::ReshadeIniTweaks;
-
-pub(super) const ADDON_SECTION: &str = "ADDON";
-pub(super) const INSTALL_SECTION: &str = "INSTALL";
-pub(super) const DLSS_FIX_SECTION: &str = "RENODX-DLSSFIX";
-pub(super) const ADDON_PATH_KEY: &str = "AddonPath";
-pub(super) const BASE_PATH_KEY: &str = "BasePath";
-pub(super) const DISABLED_ADDONS_KEY: &str = "DisabledAddons";
-pub(super) const LOAD_FROM_DLL_MAIN_KEY: &str = "LoadFromDllMain";
-
-/// Builds the merge strategy for RenoDX's required `ReShade.ini` tweaks.
-#[must_use]
-pub(super) fn ini_merge_strategy(tweaks: &ReshadeIniTweaks) -> MergeStrategy {
-    let mut addon_keys: Vec<(String, String)> = Vec::new();
-    if !tweaks.disabled_addons.is_empty() {
-        addon_keys.push((
-            DISABLED_ADDONS_KEY.to_owned(),
-            tweaks.disabled_addons.join(","),
-        ));
-    }
-    if let Some(addon_path) = &tweaks.addon_path {
-        addon_keys.push((ADDON_PATH_KEY.to_owned(), addon_path.clone()));
-    }
-    if let Some(dlss_fix) = &tweaks.dlss_fix {
-        addon_keys.push((
-            LOAD_FROM_DLL_MAIN_KEY.to_owned(),
-            dlss_fix.addon_file_name.clone(),
-        ));
-    }
-
-    let mut sections = vec![IniSection {
-        name: ADDON_SECTION.to_owned(),
-        keys: addon_keys,
-    }];
-
-    if let Some(dlss_fix) = &tweaks.dlss_fix {
-        sections.push(IniSection {
-            name: DLSS_FIX_SECTION.to_owned(),
-            keys: vec![
-                ("DLSSPath".to_owned(), dlss_fix.dlss_path.clone()),
-                (
-                    "StreamlinePath".to_owned(),
-                    dlss_fix.streamline_path.clone(),
-                ),
-            ],
-        });
-    }
-
-    MergeStrategy::IniSetKeys { sections }
-}
+use crate::addons::engine::{IniSectionRemoval, MergeStrategy};
+use crate::addons::reshade::ini_schema::{
+    ADDON_PATH_KEY, ADDON_SECTION, DISABLED_ADDONS_KEY, DLSS_FIX_SECTION, LOAD_FROM_DLL_MAIN_KEY,
+};
 
 /// Builds the merge strategy to remove DLSS-Fix keys from `ReShade.ini`.
 #[must_use]
-pub(super) fn ini_remove_dlss_fix_strategy() -> MergeStrategy {
+pub(crate) fn ini_remove_dlss_fix_strategy() -> MergeStrategy {
     MergeStrategy::IniRemoveKeys {
         sections: vec![
             IniSectionRemoval {
@@ -83,7 +34,7 @@ pub(super) fn ini_remove_dlss_fix_strategy() -> MergeStrategy {
 /// plus the whole `[RENODX-DLSSFIX]` section — leaving every other key, section,
 /// comment, and blank line (including the user's own settings) untouched.
 #[must_use]
-pub(super) fn ini_remove_renodx_strategy() -> MergeStrategy {
+pub(crate) fn ini_remove_renodx_strategy() -> MergeStrategy {
     MergeStrategy::IniRemoveKeys {
         sections: vec![
             IniSectionRemoval {
@@ -104,16 +55,15 @@ pub(super) fn ini_remove_renodx_strategy() -> MergeStrategy {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::DlssFixIniTweaks;
     use super::*;
-
-    fn tweaks() -> ReshadeIniTweaks {
-        ReshadeIniTweaks::renodx_defaults()
-    }
+    use crate::addons::renodx::types::renodx_ini_defaults;
+    use crate::addons::reshade::ini_schema::ini_merge_strategy;
+    use crate::addons::reshade::types::{DlssFixIniTweaks, ReshadeIniTweaks};
 
     #[test]
     fn ini_merge_strategy_carries_only_the_set_keys() {
-        let MergeStrategy::IniSetKeys { sections } = ini_merge_strategy(&tweaks()) else {
+        let MergeStrategy::IniSetKeys { sections } = ini_merge_strategy(&renodx_ini_defaults())
+        else {
             panic!("expected IniSetKeys")
         };
         assert_eq!(sections.len(), 1);
@@ -125,15 +75,6 @@ mod tests {
                 "Generic Depth,Effect Runtime Sync".to_owned()
             )]
         );
-
-        let MergeStrategy::IniSetKeys { sections, .. } = ini_merge_strategy(&ReshadeIniTweaks {
-            disabled_addons: Vec::new(),
-            addon_path: None,
-            dlss_fix: None,
-        }) else {
-            panic!("expected IniSetKeys")
-        };
-        assert!(sections[0].keys.is_empty());
     }
 
     #[test]

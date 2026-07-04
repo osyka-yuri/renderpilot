@@ -30,14 +30,22 @@ pub fn list_games(context: &renderpilot_orchestration::Context) -> JsonResult {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct QueryGameCardsRequest {
     /// The search query to filter game titles by.
+    #[serde(default)]
     pub search_query: String,
     /// List of selected library tags to filter by.
+    #[serde(default)]
     pub selected_libraries: Vec<String>,
+    /// List of selected add-on capability tags to filter by.
+    #[serde(default)]
+    pub selected_addons: Vec<String>,
     /// List of selected launcher names to filter by.
+    #[serde(default)]
     pub selected_launchers: Vec<String>,
     /// Whether to show games marked as hidden.
+    #[serde(default)]
     pub show_hidden: bool,
     /// Whether to only show games marked as favorite.
+    #[serde(default)]
     pub favorites_only: bool,
     /// The field to sort the results by (e.g., 'title', 'risk').
     pub sort_field: String,
@@ -104,6 +112,7 @@ fn load_game_cards(
                 card.rollback_available,
                 card.is_favorite,
                 card.is_hidden,
+                card.addon_capabilities.clone(),
             )
         })
         .collect())

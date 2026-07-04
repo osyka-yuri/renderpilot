@@ -1,9 +1,19 @@
+//! Deciding what to do about a detected ReShade host for a specific tool.
+//!
+//! [`assess`] is the RenoDX-shaped entry point (tool name "RenoDX", no minimum
+//! host version); [`assess_for_tool`] generalizes it so Luma can name itself and
+//! gate on a minimum ReShade version (a host older than Luma's add-on API would
+//! silently refuse to load its add-on, so an under-min host is rewritten rather
+//! than reused). RenoDX passing `None` yields byte-identical decisions and
+//! messages.
+
 use std::path::{Path, PathBuf};
+
+use renderpilot_domain::Version;
 
 use crate::ServiceError;
 
-use super::errors;
-use super::reshade::{
+use super::scan::{
     self, ReshadeHost, ReshadeHostAction, ReshadeIdentity, ReshadeScan, SlotActivity,
 };
 
@@ -16,31 +26,33 @@ enum HostConflictKind {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct HostAssessment {
+pub(crate) struct HostAssessment {
     pub host: ReshadeHost,
     pub conflict: bool,
     pub action: ReshadeHostAction,
     pub target_path: PathBuf,
     pub slot: String,
     conflict_kind: Option<HostConflictKind>,
+    tool_name: &'static str,
 }
 
 impl HostAssessment {
-    pub(super) fn writes_host(&self) -> bool {
+    pub(crate) fn writes_host(&self) -> bool {
         !self.conflict && self.action.writes_host()
     }
 
     /// Whether the active slot is occupied by a recognized non-ReShade build
-    /// (e.g. GShade) RenoDX must never silently replace. See
-    /// [`reshade::is_known_custom_build`].
-    pub(super) fn is_known_custom_build(&self) -> bool {
+    /// (e.g. GShade) a tool must never silently replace. See
+    /// [`scan::is_known_custom_build`].
+    pub(crate) fn is_known_custom_build(&self) -> bool {
         self.conflict_kind == Some(HostConflictKind::KnownCustomBuild)
     }
 
-    pub(super) fn ensure_not_conflicting(&self, proxy_dll_name: &str) -> Result<(), ServiceError> {
+    pub(crate) fn ensure_not_conflicting(&self, proxy_dll_name: &str) -> Result<(), ServiceError> {
         let Some(kind) = self.conflict_kind else {
             return Ok(());
         };
+        let tool = self.tool_name;
         let message = match kind {
             HostConflictKind::MultipleHosts => {
                 "multiple ReShade hosts were found; resolve the active proxy slot before installing or updating"
@@ -51,26 +63,45 @@ impl HostAssessment {
                     .to_owned()
             }
             HostConflictKind::WeakIdentity => format!(
-                "the '{proxy_dll_name}' slot RenoDX needs is occupied by a non-ReShade file; remove or relocate it before installing"
+                "the '{proxy_dll_name}' slot {tool} needs is occupied by a non-ReShade file; remove or relocate it before installing"
             ),
-            HostConflictKind::KnownCustomBuild => {
-                "a recognized custom ReShade build (e.g. GShade) occupies this slot; RenoDX never replaces it automatically"
-                    .to_owned()
-            }
+            HostConflictKind::KnownCustomBuild => format!(
+                "a recognized custom ReShade build (e.g. GShade) occupies this slot; {tool} never replaces it automatically"
+            ),
         };
-        Err(errors::invalid(message))
+        Err(ServiceError::InvalidInput(message))
     }
 }
 
-pub(super) fn assess(game_dir: &Path, proxy_dll_name: &str) -> HostAssessment {
-    let scan = reshade::scan_reshade_hosts(game_dir, Some(proxy_dll_name));
-    assess_scan(game_dir, proxy_dll_name, &scan)
+/// RenoDX-shaped assessment: tool name "RenoDX", no minimum host version.
+pub(crate) fn assess(game_dir: &Path, proxy_dll_name: &str) -> HostAssessment {
+    assess_for_tool(game_dir, proxy_dll_name, "RenoDX", None)
 }
 
-fn assess_scan(game_dir: &Path, proxy_dll_name: &str, scan: &ReshadeScan) -> HostAssessment {
+/// Assessment for a named tool, optionally gating on a minimum ReShade host
+/// version. A present, active, full-support host below `min_host_version` (or with
+/// an unreadable version) is not a conflict — it is rewritten with the tool's
+/// channel build so its add-on will actually load.
+pub(crate) fn assess_for_tool(
+    game_dir: &Path,
+    proxy_dll_name: &str,
+    tool_name: &'static str,
+    min_host_version: Option<&Version>,
+) -> HostAssessment {
+    let scan = scan::scan_reshade_hosts(game_dir, Some(proxy_dll_name));
+    assess_scan(game_dir, proxy_dll_name, &scan, tool_name, min_host_version)
+}
+
+fn assess_scan(
+    game_dir: &Path,
+    proxy_dll_name: &str,
+    scan: &ReshadeScan,
+    tool_name: &'static str,
+    min_host_version: Option<&Version>,
+) -> HostAssessment {
     let multiple_hosts = scan.has_multiple_reshade_hosts();
     let host = scan.primary_host();
-    let action = reshade::host_action(&host);
+    let mut action = scan::host_action(&host);
     let present = host.as_present();
 
     // Checked first, ahead of every other conflict kind: a recognized custom
@@ -79,8 +110,7 @@ fn assess_scan(game_dir: &Path, proxy_dll_name: &str, scan: &ReshadeScan) -> Hos
     // either would report the wrong reason. Gated on at least one scanned
     // candidate so an unrelated, leftover `GShade64.dll` with nothing at all
     // resembling a host in the folder doesn't block a normal fresh install.
-    let conflict_kind = if !scan.hosts.is_empty() && reshade::is_known_custom_build(game_dir, None)
-    {
+    let conflict_kind = if !scan.hosts.is_empty() && scan::is_known_custom_build(game_dir, None) {
         Some(HostConflictKind::KnownCustomBuild)
     } else if multiple_hosts {
         Some(HostConflictKind::MultipleHosts)
@@ -96,6 +126,21 @@ fn assess_scan(game_dir: &Path, proxy_dll_name: &str, scan: &ReshadeScan) -> Hos
         None
     };
 
+    // Minimum-version gate: only when there is no conflict and the host would
+    // otherwise be reused as-is. An under-min (or unreadable) version means the
+    // tool's add-on would refuse to load, so rewrite the host instead of reusing.
+    if conflict_kind.is_none()
+        && action == ReshadeHostAction::UpToDate
+        && let Some(min) = min_host_version
+        && let Some(present) = present
+    {
+        action = match present.version {
+            Some(version) if version >= min => ReshadeHostAction::UpToDate,
+            Some(_) => ReshadeHostAction::ReinstallWithAddonSupport,
+            None => ReshadeHostAction::RepairHost,
+        };
+    }
+
     let target_path = present
         .map(|host| host.path.to_path_buf())
         .unwrap_or_else(|| game_dir.join(proxy_dll_name));
@@ -110,6 +155,7 @@ fn assess_scan(game_dir: &Path, proxy_dll_name: &str, scan: &ReshadeScan) -> Hos
         target_path,
         slot,
         conflict_kind,
+        tool_name,
     }
 }
 
@@ -118,7 +164,7 @@ mod tests {
     use renderpilot_domain::Version;
 
     use super::*;
-    use crate::addons::renodx::reshade::{ActiveSlotReason, ActiveSlotState, ReshadeAddonSupport};
+    use crate::addons::reshade::scan::{ActiveSlotReason, ActiveSlotState, ReshadeAddonSupport};
 
     fn present_host(
         slot: &str,
@@ -144,6 +190,8 @@ mod tests {
             Path::new(r"C:\Games\Test"),
             "dxgi.dll",
             &ReshadeScan { hosts },
+            "RenoDX",
+            None,
         )
     }
 
@@ -218,10 +266,55 @@ mod tests {
     }
 
     #[test]
+    fn min_version_gate_rewrites_an_older_but_otherwise_reusable_host() {
+        // A confirmed, active, full-support host that would normally be reused,
+        // but whose version is below the tool's minimum → rewrite, not reuse.
+        let host = present_host(
+            "dxgi.dll",
+            ReshadeAddonSupport::Full,
+            ReshadeIdentity::Confirmed,
+            SlotActivity::Active,
+        );
+        let min = Version::parse("6.7.5").expect("version");
+        let assessment = assess_scan(
+            Path::new(r"C:\Games\Test"),
+            "dxgi.dll",
+            &ReshadeScan { hosts: vec![host] },
+            "Luma",
+            Some(&min),
+        );
+
+        assert_eq!(
+            assessment.action,
+            ReshadeHostAction::ReinstallWithAddonSupport
+        );
+        assert!(!assessment.conflict);
+        assert!(assessment.writes_host());
+    }
+
+    #[test]
+    fn min_version_gate_reuses_a_new_enough_host() {
+        let host = present_host(
+            "dxgi.dll",
+            ReshadeAddonSupport::Full,
+            ReshadeIdentity::Confirmed,
+            SlotActivity::Active,
+        );
+        let min = Version::parse("6.7.0").expect("version");
+        let assessment = assess_scan(
+            Path::new(r"C:\Games\Test"),
+            "dxgi.dll",
+            &ReshadeScan { hosts: vec![host] },
+            "Luma",
+            Some(&min),
+        );
+
+        assert_eq!(assessment.action, ReshadeHostAction::UpToDate);
+        assert!(!assessment.writes_host());
+    }
+
+    #[test]
     fn recognized_custom_build_is_conflict_even_with_confirmed_identity() {
-        // A proxy stub that otherwise reads as confirmed, active, full-support
-        // ReShade must still be refused when GShade's real runtime sits next to
-        // it — the proxy's own identity can't be trusted to rule this out.
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
         let host = ReshadeHost::Present {
@@ -236,7 +329,13 @@ mod tests {
             },
         };
 
-        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: vec![host] });
+        let assessment = assess_scan(
+            dir.path(),
+            "dxgi.dll",
+            &ReshadeScan { hosts: vec![host] },
+            "RenoDX",
+            None,
+        );
 
         assert!(assessment.conflict);
         assert!(assessment.is_known_custom_build());
@@ -245,12 +344,6 @@ mod tests {
 
     #[test]
     fn recognized_custom_build_wins_over_multiple_hosts() {
-        // GShade's typical layout: it aliases more than one proxy slot at once
-        // (its changelog documents `dxgi.dll`, `d3d11.dll`, etc. as common
-        // aliases). Without the custom-build check running first, this would
-        // report `MultipleHosts` instead — the wrong reason, and a message that
-        // tells the user to "resolve the active proxy slot" when there is
-        // nothing to resolve.
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
         let confirmed = |slot: &str| ReshadeHost::Present {
@@ -271,6 +364,8 @@ mod tests {
             &ReshadeScan {
                 hosts: vec![confirmed("dxgi.dll"), confirmed("d3d11.dll")],
             },
+            "RenoDX",
+            None,
         );
 
         assert!(assessment.is_known_custom_build());
@@ -278,11 +373,6 @@ mod tests {
 
     #[test]
     fn recognized_custom_build_wins_over_weak_identity() {
-        // The proxy stub itself establishes no ReShade identity at all (no
-        // export, no version-string match, no neighboring ReShade files) — on
-        // its own this would read as `WeakIdentity`. The custom-build check must
-        // still win, since the stub's own identity is exactly what GShade's
-        // aliasing makes untrustworthy.
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
         let weak = ReshadeHost::Present {
@@ -297,21 +387,29 @@ mod tests {
             },
         };
 
-        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: vec![weak] });
+        let assessment = assess_scan(
+            dir.path(),
+            "dxgi.dll",
+            &ReshadeScan { hosts: vec![weak] },
+            "RenoDX",
+            None,
+        );
 
         assert!(assessment.is_known_custom_build());
     }
 
     #[test]
     fn custom_build_marker_alone_does_not_block_a_normal_fresh_install() {
-        // A leftover `GShade64.dll` from something unrelated, with nothing at
-        // all resembling a ReShade host in the folder, must not block a normal
-        // install — the marker only matters when correlated with an actual
-        // scanned candidate.
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::write(dir.path().join("GShade64.dll"), b"gshade-runtime").expect("write");
 
-        let assessment = assess_scan(dir.path(), "dxgi.dll", &ReshadeScan { hosts: Vec::new() });
+        let assessment = assess_scan(
+            dir.path(),
+            "dxgi.dll",
+            &ReshadeScan { hosts: Vec::new() },
+            "RenoDX",
+            None,
+        );
 
         assert!(!assessment.is_known_custom_build());
         assert!(!assessment.conflict);

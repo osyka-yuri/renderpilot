@@ -9,14 +9,14 @@
 //! [`VulkanLayerDetection::Unsupported`] / errors — RenoDX for Vulkan is a Windows
 //! feature.
 
-#[cfg(any(test, windows))]
-use crate::addons::renodx::dto::actions::ActionDescriptor;
-#[cfg(windows)]
-use crate::addons::renodx::dto::actions::{ActionConfirmationScope, ActionDisabledReason};
 use crate::addons::renodx::dto::vulkan::{
     LayerDiagnosticReason, VulkanLayerActions, VulkanLayerArchitecture, VulkanLayerDetection,
     VulkanLayerFacts, VulkanLayerReport, VulkanLoaderVisibility,
 };
+#[cfg(any(test, windows))]
+use crate::addons::reshade::dto::ActionDescriptor;
+#[cfg(windows)]
+use crate::addons::reshade::dto::{ActionConfirmationScope, ActionDisabledReason};
 #[cfg(windows)]
 const VULKAN_CONFIRM: ActionConfirmationScope = ActionConfirmationScope::AllVulkanRenoDxGames;
 

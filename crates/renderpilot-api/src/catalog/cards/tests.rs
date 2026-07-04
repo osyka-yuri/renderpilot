@@ -16,6 +16,7 @@ fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
         external_id: None,
         library_tags: library_tags.iter().map(|&t| String::from(t)).collect(),
         component_count: 1,
+        addon_capabilities: Vec::new(),
         updates_available: false,
         update_count: 0,
         risk_level: String::from("safe"),
@@ -51,6 +52,7 @@ fn empty_selected_launchers_matches_all_cards() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: Vec::new(),
+            selected_addons: Vec::new(),
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -75,6 +77,7 @@ fn selected_launcher_matches_only_same_launcher() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: Vec::new(),
+            selected_addons: Vec::new(),
             selected_launchers: vec![String::from("Steam")],
             show_hidden: false,
             favorites_only: false,
@@ -99,6 +102,7 @@ fn selected_launcher_not_in_available_excludes_all() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: Vec::new(),
+            selected_addons: Vec::new(),
             selected_launchers: vec![String::from("Epic")],
             show_hidden: false,
             favorites_only: false,
@@ -121,6 +125,7 @@ fn empty_selected_libraries_matches_all_cards() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: Vec::new(),
+            selected_addons: Vec::new(),
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -146,6 +151,7 @@ fn selected_library_matches_only_same_library() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: vec![String::from("dlss_super_resolution")],
+            selected_addons: Vec::new(),
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -173,6 +179,7 @@ fn selected_library_not_in_available_excludes_all() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: vec![String::from("intel_xess")],
+            selected_addons: Vec::new(),
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -187,4 +194,107 @@ fn selected_library_not_in_available_excludes_all() {
     let dlss_card = stub_card("Steam", &["dlss_super_resolution"]);
 
     assert!(!query.matches(&dlss_card));
+}
+
+#[test]
+fn no_filters_keep_a_card_without_components_or_addons() {
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: Vec::new(),
+            selected_addons: Vec::new(),
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[String::from("dlss_super_resolution")],
+        &[String::from("Steam")],
+    );
+    let mut card = stub_card("Steam", &[]);
+    card.component_count = 0;
+
+    assert!(query.matches(&card));
+}
+
+#[test]
+fn selected_addon_matches_only_cards_with_that_capability() {
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: Vec::new(),
+            selected_addons: vec![String::from("renodx")],
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[],
+        &[String::from("Steam")],
+    );
+    let mut addon_card = stub_card("Steam", &[]);
+    addon_card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+    let plain_card = stub_card("Steam", &[]);
+
+    assert!(query.matches(&addon_card));
+    assert!(!query.matches(&plain_card));
+}
+
+#[test]
+fn unknown_selected_addon_does_not_weaken_the_filter() {
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: Vec::new(),
+            selected_addons: vec![String::from("unknown")],
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[],
+        &[String::from("Steam")],
+    );
+    let mut card = stub_card("Steam", &[]);
+    card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+
+    assert!(!query.matches(&card));
+}
+
+#[test]
+fn library_and_addon_filters_are_combined_with_or() {
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: vec![String::from("dlss_super_resolution")],
+            selected_addons: vec![String::from("renodx")],
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[String::from("dlss_super_resolution")],
+        &[String::from("Steam")],
+    );
+    let mut both = stub_card("Steam", &["dlss_super_resolution"]);
+    both.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+    let library_only = stub_card("Steam", &["dlss_super_resolution"]);
+    let mut addon_only = stub_card("Steam", &[]);
+    addon_only.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+
+    assert!(query.matches(&both));
+    assert!(query.matches(&library_only));
+    assert!(query.matches(&addon_only));
 }

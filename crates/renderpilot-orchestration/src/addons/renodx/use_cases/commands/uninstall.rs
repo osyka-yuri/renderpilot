@@ -3,23 +3,24 @@
 use std::path::PathBuf;
 
 use renderpilot_application::InstalledAddonRepository;
-use renderpilot_domain::{GameId, InstalledAddon, InstalledAddonHostKind};
+use renderpilot_domain::{AddonKind, GameId, InstalledAddon, InstalledAddonHostKind};
 
+use crate::addons::game_analysis::{analyze_game, install_target_dir};
+use crate::addons::operation_lock;
+use crate::addons::records;
 use crate::addons::renodx::errors;
-use crate::addons::renodx::facts::{analyze_game, install_target_dir};
 use crate::addons::renodx::game_context::{executable_override, require_game};
 use crate::addons::renodx::install::uninstall as uninstall_files;
-use crate::addons::renodx::operation_lock;
-use crate::addons::renodx::policy::{HostKind, host_decision, primary_api};
 use crate::addons::renodx::vulkan;
+use crate::addons::reshade::proxy::{HostKind, host_decision, primary_api};
 use crate::{Context, ServiceError};
 
 /// Uninstalls RenoDX from a game, restoring files and clearing install metadata.
+/// A record belonging to a different addon kind (e.g. Luma) is never touched —
+/// this reports "not installed" for RenoDX exactly as if there were no record.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
     let _guard = operation_lock::blocking_lock(game_id);
-    let record = context
-        .storage()
-        .get_installed_addon(game_id)?
+    let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
 
     // 1. Per-game files: restore the game folder (add-on, ReShade.ini, backups).

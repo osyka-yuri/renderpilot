@@ -6,34 +6,29 @@
 //! manifest is a lightweight overrides + catalogue document with no hashes.
 //!
 //! The end-to-end flows live in [`use_cases`], built on the [`types`] model, its
-//! [`parse_manifest`] validation, the [`facts`] gatherer, the deterministic
-//! [`matcher`], the [`anticheat`] risk gate, [`reshade`] host orchestration, the
-//! [`source`] URL/host resolver, the [`fetch`] downloader, and the [`install`]
-//! filesystem engine. RenoDX-specific policy (which API to target, installability)
-//! lives in [`policy`], separate from the generic detection facts.
+//! [`parse_manifest`] validation, the [`crate::addons::game_analysis`] gatherer, the
+//! deterministic [`matcher`], the [`anticheat`] risk gate, [`reshade`] host
+//! orchestration, the [`source`] URL/host resolver, the [`fetch`] downloader, and
+//! the [`install`] filesystem engine. RenoDX-specific policy (which API to target,
+//! installability) lives in [`policy`], separate from the generic detection facts.
 
-pub(crate) mod anticheat;
-mod channel;
 pub(crate) mod dlss_fix;
 /// DTOs
 pub mod dto;
 mod errors;
-pub(crate) mod facts;
 mod fetch;
-pub(crate) mod game_context;
-mod host_policy;
+mod game_context;
 pub(crate) mod install;
 pub mod manifest_store;
 pub(crate) mod matcher;
-mod operation_lock;
 /// Platform infrastructure.
 pub mod platform;
 pub(crate) mod policy;
-mod progress;
 mod reconciliation;
 pub(crate) mod reshade;
 mod reshade_ini;
 mod source;
+pub(crate) mod tool;
 mod tracking;
 pub mod types;
 /// Use cases.
@@ -42,18 +37,20 @@ mod validate;
 
 pub use platform::vulkan;
 
+/// Progress phase key for post-download finalization (i18n key the frontend looks up).
+/// Exposed via [`tool::RenoDxTool::finalizing_phase`] and
+/// [`crate::addons::progress::emit_tool_finalizing`].
+pub(crate) const RENODX_PHASE_FINALIZING: &str = "renodx.phase.finalizing";
+
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 use renderpilot_domain::Architecture;
 
 use crate::ServiceError;
 
 use self::types::RenoDxManifest;
-
-/// UTF-8 byte-order mark some publishing tools prepend to JSON, which `serde_json`
-/// rejects; stripped at the parse boundary.
-const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
+use super::UTF8_BOM;
 
 /// Parses and validates a RenoDX manifest document.
 ///
@@ -101,7 +98,6 @@ mod tests {
             { "engine": "unreal", "slug": "_univ", "label_key": "renodx.generic.universal" }
         ],
         "defaults": {
-            "risk": { "anticheat_engine": "none", "online": "singleplayer", "severity": "info", "message_key": "renodx.risk.sp_safe", "confidence": "medium", "source": "https://github.com/clshortfuse/renodx/wiki/Mods" },
             "min_app_version": "1.0.0",
             "channel": "stable"
         },
@@ -128,9 +124,8 @@ mod tests {
         assert_eq!(manifest.titles.len(), 2);
         assert_eq!(manifest.titles[0].slug, "cp2077");
         assert_eq!(manifest.generics.len(), 2);
-        // The title omits `risk`/`channel`/`min_app_version`; the parser fills them
+        // The title omits `channel`/`min_app_version`; the parser fills them
         // from the manifest's `defaults` via `#[serde(default)]`.
-        assert_eq!(manifest.titles[0].risk.message_key, "renodx.risk.sp_safe");
         assert_eq!(manifest.titles[0].min_app_version, "1.0.0");
         assert_eq!(
             manifest.titles[0].compatibility.conflicts,

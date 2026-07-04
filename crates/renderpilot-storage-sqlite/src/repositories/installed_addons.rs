@@ -6,7 +6,7 @@
 //! key to `games` and survives catalog pruning/rescans.
 
 use renderpilot_application::AppResult;
-use renderpilot_application::InstalledAddonRepository;
+use renderpilot_application::{AppError, InstalledAddonRepository};
 #[cfg(test)]
 use renderpilot_domain::TrackedSourceRole;
 use renderpilot_domain::{
@@ -18,6 +18,8 @@ use crate::error::{invalid_row, storage_error};
 use crate::{mapping, sqlite_clock};
 
 use super::SqliteStorage;
+
+const EXISTING_KIND_SQL: &str = "SELECT kind FROM installed_addons WHERE game_id = :game_id";
 
 const UPSERT_SQL: &str = "
     INSERT INTO installed_addons
@@ -64,6 +66,26 @@ const LIST_SQL: &str = "
 impl InstalledAddonRepository for SqliteStorage {
     fn upsert_installed_addon(&self, addon: &InstalledAddon) -> AppResult<()> {
         self.with_transaction(|transaction| {
+            let existing_kind: Option<String> = transaction
+                .prepare_cached(EXISTING_KIND_SQL)
+                .map_err(storage_error)?
+                .query_row(
+                    named_params! { ":game_id": addon.game_id().as_str() },
+                    |row| row.get("kind"),
+                )
+                .optional()
+                .map_err(storage_error)?;
+            let new_kind = addon.kind().as_str();
+            if let Some(existing_kind) = &existing_kind
+                && existing_kind != new_kind
+            {
+                return Err(AppError::invalid_input(format!(
+                    "refusing to overwrite a '{existing_kind}' install record with a \
+                     '{new_kind}' one for {}; uninstall it first",
+                    addon.game_id()
+                )));
+            }
+
             let now_ms = sqlite_clock::now_ms(transaction)?;
             let host_kind = addon
                 .host_kind()
@@ -331,4 +353,29 @@ mod tests {
             .expect("upsert");
         assert_eq!(storage.list_installed_addons().expect("list").len(), 1);
     }
+
+    #[test]
+    fn upsert_replaces_a_same_kind_record_without_a_guard_error() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage
+            .upsert_installed_addon(&recorded_host_addon())
+            .expect("first insert");
+
+        let updated = InstalledAddon::new(
+            game_id(),
+            AddonKind::RenoDx,
+            path("C:/Games/CP2077/renodx-cp2077.addon64"),
+        )
+        .with_addon_version("snapshot-2026.07");
+        storage
+            .upsert_installed_addon(&updated)
+            .expect("same-kind replace");
+
+        let loaded = storage
+            .get_installed_addon(&game_id())
+            .expect("get")
+            .expect("present");
+        assert_eq!(loaded.addon_version(), Some("snapshot-2026.07"));
+    }
+
 }
