@@ -11,6 +11,7 @@
 
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
+  import { formatError, publishErrorNotification } from '@shared/notifications';
   import {
     Button,
     Popover,
@@ -153,7 +154,7 @@
     try {
       await action.handler();
     } catch (error) {
-      console.error(`Game menu action "${action.id}" failed.`, error);
+      publishErrorNotification(t('notify.statusError'), formatError(error));
     }
   }
 

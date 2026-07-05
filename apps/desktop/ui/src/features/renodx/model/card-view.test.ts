@@ -7,6 +7,7 @@ const BASE: CardViewSource = {
   loaded: true,
   loadError: null,
   isInstalled: false,
+  isBlockedByOtherAddon: false,
   isExternal: false,
   isNativeHdr: false,
   isBlacklisted: false,
@@ -29,6 +30,11 @@ const cardViewCases = [
   },
   { name: 'load error', flags: { loadError: 'boom' }, expected: 'load-error' },
   { name: 'installed', flags: { isInstalled: true }, expected: 'installed' },
+  {
+    name: 'blocked by other addon',
+    flags: { isBlockedByOtherAddon: true },
+    expected: 'blocked-by-other-addon',
+  },
   { name: 'external', flags: { isExternal: true }, expected: 'external' },
   { name: 'native HDR', flags: { isNativeHdr: true }, expected: 'native-hdr' },
   { name: 'blacklisted', flags: { isBlacklisted: true }, expected: 'blacklisted' },
@@ -60,6 +66,16 @@ const cardViewCases = [
     name: 'installed wins over external',
     flags: { isInstalled: true, isExternal: true },
     expected: 'installed',
+  },
+  {
+    name: 'installed wins over blocked by other addon',
+    flags: { isInstalled: true, isBlockedByOtherAddon: true },
+    expected: 'installed',
+  },
+  {
+    name: 'blocked by other addon wins over external',
+    flags: { isBlockedByOtherAddon: true, isExternal: true },
+    expected: 'blocked-by-other-addon',
   },
   {
     name: 'external wins over native HDR',

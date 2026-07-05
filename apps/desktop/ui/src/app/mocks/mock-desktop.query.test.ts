@@ -3,11 +3,14 @@ import {
   mockGetCatalogSetting,
   mockQueryGameCards,
   mockSetCatalogSetting,
+  mockSetGameFavorite,
+  mockSetGameHidden,
   resetMockDesktopState,
 } from './desktop';
-import { createGameSummaryFromDetails, createManualPreviewDetails } from './desktop-state';
+import { createGameSummaryFromDetails } from './build-game-summary';
+import { createManualPreviewDetails } from './fixtures';
 
-describe('mockQueryGameCards parity', () => {
+describe('mockQueryGameCards', () => {
   beforeEach(() => {
     resetMockDesktopState();
   });
@@ -16,6 +19,7 @@ describe('mockQueryGameCards parity', () => {
     const baseline = await mockQueryGameCards({
       searchQuery: '',
       selectedLibraries: [],
+      selectedAddons: [],
       selectedLaunchers: [],
       showHidden: false,
       favoritesOnly: false,
@@ -29,6 +33,7 @@ describe('mockQueryGameCards parity', () => {
     const filtered = await mockQueryGameCards({
       searchQuery: '',
       selectedLibraries: [selectedLibrary],
+      selectedAddons: [],
       selectedLaunchers: [],
       showHidden: false,
       favoritesOnly: false,
@@ -45,6 +50,7 @@ describe('mockQueryGameCards parity', () => {
     const left = await mockQueryGameCards({
       searchQuery: '  cyber  ',
       selectedLibraries: [' dlss_super_resolution ', 'dlss_super_resolution'],
+      selectedAddons: [],
       selectedLaunchers: [],
       showHidden: false,
       favoritesOnly: false,
@@ -55,6 +61,7 @@ describe('mockQueryGameCards parity', () => {
     const right = await mockQueryGameCards({
       searchQuery: 'cyber',
       selectedLibraries: ['dlss_super_resolution'],
+      selectedAddons: [],
       selectedLaunchers: [],
       showHidden: false,
       favoritesOnly: false,
@@ -65,13 +72,69 @@ describe('mockQueryGameCards parity', () => {
     expect(left.queryFingerprint).toBe(right.queryFingerprint);
   });
 
+  it('filters favoritesOnly and floats favorites when sorting', async () => {
+    await mockSetGameFavorite('steam:1091500', true);
+
+    const result = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: true,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 50, offset: 0 },
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.items[0]?.game_id).toBe('steam:1091500');
+    expect(result.items[0]?.is_favorite).toBe(true);
+  });
+
+  it('hides hidden cards until showHidden is enabled', async () => {
+    await mockSetGameHidden('epic:alanwake2', true);
+
+    const hidden = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 50, offset: 0 },
+    });
+    expect(hidden.items.every((item) => item.game_id !== 'epic:alanwake2')).toBe(true);
+    expect(hidden.hiddenCount).toBeGreaterThanOrEqual(1);
+
+    const shown = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: true,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 50, offset: 0 },
+    });
+    expect(shown.items.some((item) => item.game_id === 'epic:alanwake2')).toBe(true);
+  });
+});
+
+describe('mock catalog settings', () => {
+  beforeEach(() => {
+    resetMockDesktopState();
+  });
+
   it('deletes persisted setting when value is blank', async () => {
     await mockSetCatalogSetting('games_filters_v3', '{"libraries":["x"]}');
     await mockSetCatalogSetting('games_filters_v3', '   ');
     const payload = await mockGetCatalogSetting('games_filters_v3');
     expect(payload.value).toBeNull();
   });
+});
 
+describe('createGameSummaryFromDetails', () => {
   it('builds mock card summaries with the same visible-only library semantics as runtime', () => {
     const details = createManualPreviewDetails(
       'manual:preview:test',

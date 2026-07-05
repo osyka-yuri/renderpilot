@@ -66,6 +66,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'game.card.action.details': '詳細',
   'game.card.action.detailsAria': '{title} の詳細を開く',
   'game.card.detectedLibraries': '検出されたコンポーネント',
+  'game.card.availableAddons': '利用可能なアドオン',
   'game.card.badge.upToDate': '最新',
   'game.card.badge.updatesAvailable': '利用可能なアップデート',
   'game.card.badge.updatesAvailableCount': {
@@ -80,7 +81,6 @@ export const ja: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'ゲームを隠す',
   'game.card.menu.hidden.remove': 'ゲームの非表示を解除',
   'game.card.menu.hidden.toggleHint': 'このゲームの非表示状態を切り替えます。',
-  'game.libraries.empty': 'コンポーネントが見つかりません',
 
   'game.cover.alt': 'カバー画像',
   'game.cover.altWithTitle': 'カバー画像：{title}',
@@ -271,6 +271,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': '{label} を移動',
   'filters.libraries.title': 'コンポーネント',
   'filters.libraries.empty': 'コンポーネントが見つかりません',
+  'filters.addons.title': 'アドオン',
 
   'games.favoritesToggle': 'お気に入り',
   'games.favoritesToggleActive': 'お気に入り（有効）',
@@ -455,16 +456,8 @@ export const ja: Record<MessageKey, MessageValue> = {
     'RenoDX アドオンを削除し、RenoDX セットアップ中に変更された ReShade ファイルだけを復元します。',
   'gameDetails.renodx.uninstallConfirmAction': '削除',
   'gameDetails.renodx.installing': 'インストール中…',
-  'gameDetails.renodx.riskSafe': 'アンチチートは検出されませんでした——安全にインストールできます。',
-  'gameDetails.renodx.riskWarn': 'アンチチートを検出——インストールするとBANの恐れがあります。',
-  'gameDetails.renodx.riskBlocked': 'このゲームではインストールがブロックされています。',
   'gameDetails.renodx.confirmTitle':
     'アンチチートのリスクがあっても RenoDX をインストールしますか？',
-  'gameDetails.renodx.confirmAccept': 'それでもインストール',
-  'gameDetails.renodx.confirmBody':
-    'このゲームはアンチチートを使用します。ReShade アドオンがそれを作動させ、BAN につながる可能性があります。自己責任で続行してください。',
-  'gameDetails.renodx.fullAddonWarning':
-    'ReShade の full add-on support は、マルチプレイヤーやアンチチート保護付きゲームでは安全でない場合があります。',
   'gameDetails.renodx.cancel': 'キャンセル',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -604,4 +597,21 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.component.dlssFixOffer': '利用可能 — DLSS Frame Generation のちらつきを防止',
   'gameDetails.renodx.component.dlssFixHint':
     'ReShade 全般で動作し、RenoDX 専用ではありません。ReShade をフレーム生成フレームではなくゲーム本来のフレームに描画させ、ゲームが Streamline を正しく実装している場合は DLSS（アップスケーリング）を ReShade から隠します。',
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'アンチチートは検出されていません — 安全にインストールできます。',
+  'gameDetails.addon.riskWarn':
+    'アンチチートが検出されました — インストールするとBANされる可能性があります。',
+  'addon.risk.sp_safe':
+    '既知のアンチチートシグネチャは検出されませんでした — {addonName} のインストールはおそらく安全ですが、保証はされません。',
+  'addon.risk.anticheat_detected':
+    'アンチチートシグネチャが検出されました — {addonName} をインストールするとBANの恐れがあります。',
+  'gameDetails.addon.confirmAccept': 'それでもインストールする',
+  'gameDetails.addon.confirmBody':
+    'このゲームはアンチチートを使用しています。ReShade アドオンがこれを誘発し、BANされる可能性があります。自己責任で続行してください。',
+  'gameDetails.addon.fullAddonWarning':
+    'ReShade のフルアドオン対応は、マルチプレイヤーやアンチチート保護されたゲームでは安全でない場合があります。',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    'このゲームには {installedAddon} がインストールされています — {blockedAddon} をインストールする前にアンインストールしてください。',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'このゲームのディスク上に {installedAddon} のファイルが見つかりました — {blockedAddon} をインストールする前に削除してください。',
 };

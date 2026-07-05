@@ -1,30 +1,26 @@
 import type { MessageKey } from '@shared/i18n';
+import { ADDON_DISPLAY_NAME } from '@shared/model';
+import {
+  actionDisabledMessage,
+  createReshadePresenters,
+  humanizeMessageKey,
+} from '@entities/addon';
+import type {
+  HostDescription as ReshadeDescription,
+  HostDescriptionPart as ReshadeDescriptionPart,
+  RiskAssessment,
+  RiskSeverity,
+} from '@entities/addon';
 
 import type {
-  ActionDescriptor,
-  HostAddonSupport,
   HostDetection,
   HostFacts,
-  HostUpdateStatus,
   LayerDiagnosticReason,
   RenoDxAddonState,
   ReshadeChannel,
-  RiskSeverity,
   VulkanLayerDetection,
   VulkanLoaderVisibility,
 } from './types';
-
-export const ADDON_SUPPORT_LABEL = {
-  limited: 'gameDetails.renodx.host.addons.none',
-  unknown: 'gameDetails.renodx.host.addons.unknown',
-} satisfies Record<Exclude<HostAddonSupport, 'full'>, MessageKey>;
-
-export const HOST_UPDATE_STATUS_LABEL = {
-  update_available: 'gameDetails.renodx.host.action.update_host',
-  repair_available: 'gameDetails.renodx.host.action.repair_host',
-  unknown_needs_validation: 'gameDetails.renodx.fresh.validationRequired',
-  channel_mismatch: 'gameDetails.renodx.fresh.channelMismatch',
-} satisfies Record<Exclude<HostUpdateStatus, 'current'>, MessageKey>;
 
 export const CHANNEL_LABEL = {
   stable: 'gameDetails.renodx.channel.stable',
@@ -56,78 +52,37 @@ export const VULKAN_LOADER_VISIBILITY_NOTE = {
   ambiguous: 'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility',
 } satisfies Partial<Record<VulkanLoaderVisibility, MessageKey>>;
 
-export type ReshadeDescriptionPart =
-  | {
-      kind: 'version';
-      key: 'gameDetails.renodx.host.version';
-      version: string;
-    }
-  | {
-      kind: 'message';
-      key: MessageKey;
-    };
+export type { ReshadeDescription, ReshadeDescriptionPart };
 
-export type ReshadeDescription =
-  | {
-      kind: 'conflict';
-      key: 'gameDetails.renodx.host.conflictMultiple';
-    }
-  | {
-      kind: 'parts';
-      fallbackKey: 'gameDetails.renodx.host.versionUnknown';
-      parts: ReshadeDescriptionPart[];
-    };
+const presenters = createReshadePresenters('gameDetails.renodx', ADDON_DISPLAY_NAME.renodx);
 
-export function getReshadeDescription({
-  detection,
-  facts,
-}: {
+export function getReshadeDescription(input: {
   detection: HostDetection;
   facts: HostFacts;
 }): ReshadeDescription {
-  // A recognized custom build (e.g. GShade) is reported as a conflict at the
-  // backend (the slot is never safe to write to), but it isn't a problem to
-  // resolve — say so plainly instead of the generic conflict/update wording.
-  if (facts.is_custom_build) {
-    return {
-      kind: 'parts',
-      fallbackKey: 'gameDetails.renodx.host.versionUnknown',
-      parts: [{ kind: 'message', key: 'gameDetails.renodx.host.customBuild' }],
-    };
-  }
-  if (detection === 'conflict') {
-    return {
-      kind: 'conflict',
-      key: 'gameDetails.renodx.host.conflictMultiple',
-    };
-  }
+  return presenters.getReshadeDescription(input);
+}
 
-  const parts: ReshadeDescriptionPart[] = [];
-  if (detection === 'present' && facts.version) {
-    parts.push({
-      kind: 'version',
-      key: 'gameDetails.renodx.host.version',
-      version: facts.version,
-    });
-  }
-  if (detection === 'present' && facts.addon_support !== 'full') {
-    parts.push({
-      kind: 'message',
-      key: ADDON_SUPPORT_LABEL[facts.addon_support],
-    });
-  }
-  if (facts.update_status !== 'current') {
-    parts.push({
-      kind: 'message',
-      key: HOST_UPDATE_STATUS_LABEL[facts.update_status],
-    });
-  }
+/**
+ * The severity-based fallback message key for an install risk, shown when the
+ * backend's `message_key` is not present in the i18n catalog.
+ */
+export function riskFallbackKey(severity: RiskSeverity): MessageKey {
+  return presenters.riskFallbackKey(severity);
+}
 
-  return {
-    kind: 'parts',
-    fallbackKey: 'gameDetails.renodx.host.versionUnknown',
-    parts,
-  };
+/**
+ * Renders an install-risk message: the backend's own `message_key` when it's
+ * in the catalog, else the severity-based fallback — either way interpolated
+ * with RenoDX's display name (the risk copy is addon-agnostic).
+ */
+export function riskMessage(risk: RiskAssessment): string {
+  return presenters.riskMessage(risk);
+}
+
+/** Structured host description → single i18n string (tool keys via factory). */
+export function describeReshadeHost(input: { detection: HostDetection; facts: HostFacts }): string {
+  return presenters.describeHost(input);
 }
 
 export type HostVersionDescription =
@@ -146,16 +101,7 @@ export function hostVersionDescription(version: string | null | undefined): Host
     : { kind: 'unknown', key: 'gameDetails.renodx.host.versionUnknown' };
 }
 
-/**
- * The humanized disabled-reason message for a backend-authored action, when
- * it's disabled with a reason — `undefined` otherwise. Shared by every panel
- * that surfaces why an install/update/repair action is unavailable.
- */
-export function actionDisabledMessage(action: ActionDescriptor | undefined): string | undefined {
-  return action?.enabled === false && action.disabled_reason
-    ? humanizeMessageKey(action.disabled_reason)
-    : undefined;
-}
+export { actionDisabledMessage, humanizeMessageKey };
 
 export function getAddonDescriptionKey(
   addon: RenoDxAddonState | null,
@@ -168,30 +114,6 @@ export function getAddonDescriptionKey(
     return 'gameDetails.renodx.component.addonFileInstall';
   }
   return 'gameDetails.renodx.component.addonDesc';
-}
-
-/**
- * The severity-based fallback message key for an install risk, shown when the
- * backend's `message_key` is not present in the i18n catalog.
- */
-export function riskFallbackKey(severity: RiskSeverity): MessageKey {
-  switch (severity) {
-    case 'block':
-      return 'gameDetails.renodx.riskBlocked';
-    case 'warn':
-      return 'gameDetails.renodx.riskWarn';
-    default:
-      return 'gameDetails.renodx.riskSafe';
-  }
-}
-
-/**
- * Humanizes an i18n key for display when it is not in the catalog: drops the
- * dotted namespace and turns underscores into spaces (`a.b.foo_bar` → `foo bar`).
- * Used as the fallback for backend-provided note/requirement keys.
- */
-export function humanizeMessageKey(key: string): string {
-  return key.replace(/^.*\./, '').replace(/_/g, ' ');
 }
 
 /**

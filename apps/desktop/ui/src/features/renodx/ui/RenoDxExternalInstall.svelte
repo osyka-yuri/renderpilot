@@ -1,19 +1,17 @@
 <script lang="ts">
+  import { AddonConfidenceBadge, AddonRiskConfirmDialog, AddonStateMessage } from '@entities/addon';
   import { DownloadProgressBar } from '@entities/library';
   import { openExternal } from '@shared/api';
-  import { t, translateKey } from '@shared/i18n';
-  import { publishErrorNotification } from '@shared/notifications';
+  import { t, translateKey, type MessageKey } from '@shared/i18n';
+  import { publishErrorNotification, formatError } from '@shared/notifications';
   import { Button } from '@shared/ui';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-  import { humanizeMessageKey, riskFallbackKey } from '../model/reshade-presenters';
-  import type { ReshadeChannel } from '../model/types';
+  import { humanizeMessageKey, riskMessage } from '../model/reshade-presenters';
+  import type { MatchConfidence, ReshadeChannel } from '../model/types';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
   import { ADDON_EXTENSIONS, isAddonFile } from '../model/validate-addon';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
-  import RenoDxConfidenceBadge from './RenoDxConfidenceBadge.svelte';
-  import RenoDxRiskConfirmDialog from './RenoDxRiskConfirmDialog.svelte';
-  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
 
   type Props = {
     gameId: string;
@@ -24,6 +22,12 @@
 
   const { gameId, store, busy }: Props = $props();
 
+  const CONFIDENCE_LABEL_KEY = {
+    verified: 'gameDetails.renodx.confidenceVerified',
+    experimental: 'gameDetails.renodx.confidenceExperimental',
+    untested: 'gameDetails.renodx.confidenceUntested',
+  } as const satisfies Record<MatchConfidence, MessageKey>;
+
   let externalDropEl = $state<HTMLElement | null>(null);
   let pendingFilePath = $state<string | null>(null);
 
@@ -32,7 +36,7 @@
   const progressIds = $derived([gameId]);
 
   const isActionBusy = $derived(busy || store.busy);
-  const canPickFile = $derived(!store.externalIsBlocked && !isActionBusy);
+  const canPickFile = $derived(!isActionBusy);
   const canOpenExternal = $derived(Boolean(store.externalUrl) && !isActionBusy);
 
   const dropHint = $derived(t('gameDetails.renodx.external.dropHint'));
@@ -49,14 +53,7 @@
       : t('gameDetails.renodx.actionOpenExternal'),
   );
 
-  const externalRiskText = $derived(
-    store.externalRisk
-      ? translateKey(
-          store.externalRisk.message_key,
-          t(riskFallbackKey(store.externalRisk.severity)),
-        )
-      : null,
-  );
+  const externalRiskText = $derived(store.externalRisk ? riskMessage(store.externalRisk) : null);
 
   const externalNotes = $derived.by(() =>
     store.externalNotes.map((key) => translateKey(key, humanizeMessageKey(key))),
@@ -69,18 +66,6 @@
   );
 
   const confirmOpen = $derived(pendingFilePath !== null);
-
-  function formatError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    if (typeof error === 'string') {
-      return error;
-    }
-
-    return String(error);
-  }
 
   function reportError(title: string, error: unknown): void {
     publishErrorNotification(title, formatError(error));
@@ -197,9 +182,11 @@
   class:ring-primary={drop.dragActive}
 >
   {#if store.externalConfidence}
-    <div>
-      <RenoDxConfidenceBadge confidence={store.externalConfidence} />
-    </div>
+    <AddonConfidenceBadge
+      confidence={store.externalConfidence}
+      fieldLabel={t('gameDetails.renodx.confidenceLabel')}
+      confidenceLabel={t(CONFIDENCE_LABEL_KEY[store.externalConfidence])}
+    />
   {/if}
 
   {#if externalRiskText}
@@ -207,10 +194,10 @@
   {/if}
 
   {#if store.externalRequiresConfirmation}
-    <RenoDxStateMessage
+    <AddonStateMessage
       tone="warning"
       icon="warning"
-      message={t('gameDetails.renodx.fullAddonWarning')}
+      message={t('gameDetails.addon.fullAddonWarning')}
     />
   {/if}
 
@@ -238,13 +225,9 @@
       />
     {/if}
 
-    {#if store.externalIsBlocked}
-      <Button size="sm" disabled>{installFromFileLabel}</Button>
-    {:else}
-      <Button size="sm" disabled={!canPickFile} onclick={pickFile}>
-        {fileInstallLabel}
-      </Button>
-    {/if}
+    <Button size="sm" disabled={!canPickFile} onclick={pickFile}>
+      {fileInstallLabel}
+    </Button>
 
     <Button variant="outline" size="sm" disabled={!canOpenExternal} onclick={openExternalLink}>
       {externalLabel}
@@ -252,10 +235,13 @@
   </div>
 </div>
 
-<RenoDxRiskConfirmDialog
+<AddonRiskConfirmDialog
   open={confirmOpen}
   busy={isActionBusy}
   riskText={externalRiskText ?? ''}
+  titleKey="gameDetails.renodx.confirmTitle"
+  bodyKey="gameDetails.addon.confirmBody"
+  acceptKey="gameDetails.addon.confirmAccept"
   onOpenChange={setFileConfirmOpen}
   onConfirm={confirmFileInstall}
 />

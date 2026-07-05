@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AddonStateMessage } from '@entities/addon';
   import { openExternal } from '@shared/api';
   import { t, translateKey } from '@shared/i18n';
   import { Button } from '@shared/ui';
@@ -6,7 +7,6 @@
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import RenoDxExternalInstall from './RenoDxExternalInstall.svelte';
-  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
 
   type Props = {
     gameId: string;
@@ -39,7 +39,7 @@
 {#if store.externalFileInstallable}
   <RenoDxExternalInstall {gameId} {store} {busy} />
 {:else}
-  <RenoDxStateMessage icon="info" message={t('gameDetails.renodx.external')}>
+  <AddonStateMessage icon="info" message={t('gameDetails.renodx.external')}>
     {#snippet actions()}
       <Button
         type="button"
@@ -52,5 +52,5 @@
         {externalLabel}
       </Button>
     {/snippet}
-  </RenoDxStateMessage>
+  </AddonStateMessage>
 {/if}

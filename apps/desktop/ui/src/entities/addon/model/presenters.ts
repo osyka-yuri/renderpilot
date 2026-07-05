@@ -173,8 +173,8 @@ function createHostLabelMaps(prefix: ToolI18nPrefix): {
       channel_mismatch: toolKey(prefix, 'fresh.channelMismatch'),
     },
     riskFallback: {
-      warn: toolKey(prefix, 'riskWarn'),
-      safe: toolKey(prefix, 'riskSafe'),
+      warn: 'gameDetails.addon.riskWarn',
+      safe: 'gameDetails.addon.riskSafe',
     },
     descriptionKeys: {
       versionKey: toolKey(prefix, 'host.version'),
@@ -265,7 +265,7 @@ export function createInstalledLabels(prefix: ToolI18nPrefix): AddonInstalledLab
     installedOn: toolKey(prefix, 'installedOn'),
     lastChecked: toolKey(prefix, 'lastChecked'),
     lastCheckedNever: toolKey(prefix, 'lastCheckedNever'),
-    fullAddonWarning: toolKey(prefix, 'fullAddonWarning'),
+    fullAddonWarning: 'gameDetails.addon.fullAddonWarning',
     componentReshade: toolKey(prefix, 'component.reshade'),
     componentAddon: toolKey(prefix, 'component.addon'),
     checking: toolKey(prefix, 'fresh.checking'),

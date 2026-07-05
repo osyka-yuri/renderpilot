@@ -1,18 +1,55 @@
 /**
  * Wire-level DTOs mirroring the Rust backend (`renderpilot-orchestration::renodx`).
  * Field names match the JSON keys produced by serde exactly.
+ *
+ * Shapes genuinely shared with every add-on tool (`ActionDescriptor`, `HostFacts`,
+ * `RiskAssessment`, `MatchConfidence`, `IncompatibilityReason`, `UpdateStatus`,
+ * `ReshadeChannel`, …) are re-exported from `@entities/addon` rather than restated
+ * here. Only RenoDX-specific shapes (actions, install state, the shared Vulkan
+ * layer, update report, availability outcome) are defined in this file.
  */
 
-/** Graphics API as serialized by `GraphicsApi` (`#[serde(rename = "D3D11")]`, …). */
-export type GraphicsApi = 'D3D9' | 'D3D10' | 'D3D11' | 'D3D12' | 'OpenGl' | 'Vulkan' | 'Unknown';
+import type {
+  ActionConfirmationScope,
+  ActionDescriptor,
+  ActionDisabledReason,
+  AddonKind,
+  Freshness,
+  GraphicsApi,
+  HostActions,
+  HostAddonSupport,
+  HostChannelFacts,
+  HostDetection,
+  HostFacts,
+  HostUpdateStatus,
+  IncompatibilityReason,
+  MatchConfidence,
+  ReshadeChannel,
+  RiskAssessment,
+  RiskSeverity,
+  UpdateStatus,
+} from '@entities/addon';
 
-/**
- * Confidence that an install will work (`MatchConfidence`), from the wiki
- * test-map status and how the match was made: `verified` (listed working),
- * `experimental` (listed WIP), `untested` (listed-but-untested or matched only
- * by engine — a generic guess).
- */
-export type MatchConfidence = 'verified' | 'experimental' | 'untested';
+export type {
+  ActionConfirmationScope,
+  ActionDescriptor,
+  ActionDisabledReason,
+  AddonKind,
+  Freshness,
+  GraphicsApi,
+  HostActions,
+  HostAddonSupport,
+  HostChannelFacts,
+  HostDetection,
+  HostFacts,
+  HostUpdateStatus,
+  IncompatibilityReason,
+  MatchConfidence,
+  ReshadeChannel,
+  RiskAssessment,
+  RiskSeverity,
+  UpdateStatus,
+};
 
 /**
  * How RenoDX hooks into a game (`HostKind`): a per-game ReShade proxy DLL
@@ -20,65 +57,8 @@ export type MatchConfidence = 'verified' | 'experimental' | 'untested';
  */
 export type HostKind = 'proxy' | 'vulkan';
 
-export type ActionConfirmationScope = 'anticheat' | 'all_vulkan_reno_dx_games';
-
-export type ActionDisabledReason =
-  | 'blocked_by_conflict'
-  | 'blocked_by_risk'
-  | 'stable_unavailable'
-  | 'read_only'
-  | 'unsupported'
-  | 'validation_required';
-
-/** Backend-authored action rights and disablement (`ActionDescriptor`). */
-export type ActionDescriptor = {
-  enabled: boolean;
-  requires_confirmation: boolean;
-  confirmation_scope: ActionConfirmationScope | null;
-  disabled_reason: ActionDisabledReason | null;
-  target_channel: ReshadeChannel | null;
-};
-
-/** Per-slot ReShade host actions the backend currently permits (`RenoDxActions`). */
-export type RenoDxActions = {
-  install?: ActionDescriptor;
-  use_existing?: ActionDescriptor;
-  repair?: ActionDescriptor;
-  update?: ActionDescriptor;
-  switch_channel?: ActionDescriptor;
-  resolve_conflict?: ActionDescriptor;
-};
-
-/** Whether a ReShade proxy host is present in the game's slot (`HostDetection`). */
-export type HostDetection = 'absent' | 'present' | 'conflict';
-export type HostAddonSupport = 'full' | 'limited' | 'unknown';
-/** Freshness of the detected proxy host (`HostUpdateStatus`). */
-export type HostUpdateStatus =
-  | 'current'
-  | 'update_available'
-  | 'repair_available'
-  | 'unknown_needs_validation'
-  | 'channel_mismatch';
-
-export type HostChannelFacts = {
-  selected: ReshadeChannel;
-  effective: ReshadeChannel;
-  detected: ReshadeChannel | null;
-};
-
-/** Observable state of the detected proxy host (`HostFacts`). */
-export type HostFacts = {
-  slot: string | null;
-  active: boolean;
-  path: string | null;
-  version: string | null;
-  addon_support: HostAddonSupport;
-  channel: HostChannelFacts;
-  update_status: HostUpdateStatus;
-  /** Whether the active slot is a recognized non-ReShade build (e.g. GShade)
-   * RenoDX never checks for updates or replaces automatically. */
-  is_custom_build: boolean;
-};
+/** Per-slot ReShade host actions (`RenoDxActions` = shared `HostActions`). */
+export type RenoDxActions = HostActions;
 
 /** Shared Vulkan layer detection state (`VulkanLayerDetection`). Never encodes
  * install origin; action rights come only from `VulkanLayerActions`. */
@@ -149,35 +129,6 @@ export type VulkanLayerManagementReport = {
   update_status?: UpdateStatus;
 };
 
-/** Effective install risk severity. */
-export type RiskSeverity = 'info' | 'warn' | 'block';
-
-/** Anti-cheat engine classification. */
-export type AnticheatEngine = 'eac' | 'battleye' | 'none' | 'unknown';
-
-/** Online/multiplayer classification. */
-export type OnlineKind = 'singleplayer' | 'coop' | 'pvp' | 'unknown';
-
-/** Assessment confidence. */
-export type AssessmentConfidence = 'high' | 'medium' | 'low';
-
-/** Ban/stability risk assessment for installing RenoDX. */
-export type RiskAssessment = {
-  severity: RiskSeverity;
-  anticheat_engine: AnticheatEngine;
-  online: OnlineKind;
-  message_key: string;
-  confidence: AssessmentConfidence;
-  reference_url: string | null;
-  detected_locally: boolean;
-};
-
-/** Why a matched title cannot be installed (`IncompatibilityReason`, tag `reason`). */
-export type IncompatibilityReason =
-  | { reason: 'api_unsupported'; detected: GraphicsApi }
-  | { reason: 'api_not_allowed'; detected: GraphicsApi; required: GraphicsApi[] }
-  | { reason: 'arch_unknown' };
-
 /** Current install state (`RenoDxInstallState`, tag `status`). */
 export type RenoDxInstallState =
   | { status: 'not_installed' }
@@ -193,10 +144,10 @@ export type RenoDxInstallState =
        * version number, so this is the concrete freshness anchor.
        */
       addon_dated: string | null;
-      /** When the add-on was first installed (Unix epoch ms), when known. */
-      installed_at: number | null;
-      /** When the install record was last updated (Unix epoch ms), when known. */
-      updated_at: number | null;
+      /** When the add-on was first installed (Unix epoch ms). Always present for installed state. */
+      installed_at: number;
+      /** When the install record was last updated (Unix epoch ms). Always present for installed state. */
+      updated_at: number;
       /**
        * Whether the install includes the DLSS-Fix companion add-on. Surfaced
        * directly on the state (rather than derived from the update report) so it
@@ -212,16 +163,6 @@ export type RenoDxInstallState =
       addon_tracked: boolean;
     };
 
-/**
- * Whether an installed add-on has an upstream update (`UpdateStatus`). RenoDX
- * ships rolling snapshots, so `unknown` (network failure / no recorded source)
- * is a normal, non-error result.
- */
-export type UpdateStatus =
-  'current' | 'available' | 'unknown' | 'channel_mismatch' | 'unknown_needs_validation';
-
-export type ReshadeChannel = 'stable' | 'nightly';
-
 export type RenoDxAddonLoadMode = 'auto_search' | 'load_from_dll_main' | 'unknown';
 
 export type RenoDxAddonState = {
@@ -231,17 +172,6 @@ export type RenoDxAddonState = {
   enabled_by_config: boolean | null;
   load_mode: RenoDxAddonLoadMode;
 };
-
-/**
- * Single freshness verdict the card renders as a status pill. Derived in the
- * store from the update report and probe state:
- * - `checking`  — a probe is in flight (suppresses a transient verdict).
- * - `available` — some tracked source has an upstream update.
- * - `untracked` — no upstream add-on source is tracked.
- * - `current`   — every tracked source is up to date.
- * - `unknown`   — no verdict yet, or the check failed (network).
- */
-export type RenoDxFreshness = 'checking' | 'available' | 'untracked' | 'current' | 'unknown';
 
 /**
  * A per-source update report. null indicates the source is not tracked
@@ -255,6 +185,7 @@ export type RenoDxUpdateReport = {
   /** Vulkan-layer digest-mismatch diagnostics (empty for proxy installs). */
   vulkan_diagnostics?: LayerDiagnosticReason[];
 };
+
 /** Installability verdict (`AvailabilityOutcome`, tag `kind`). */
 export type AvailabilityOutcome =
   | {
@@ -290,7 +221,13 @@ export type AvailabilityOutcome =
   /** Blacklisted / known-broken, with an optional i18n reason key. */
   | { kind: 'blacklisted'; reason: string | null }
   /** No RenoDX profile matched the game. */
-  | { kind: 'unsupported' };
+  | { kind: 'unsupported' }
+  /**
+   * Another mutually exclusive add-on is already installed - or unmanaged files
+   * belonging to it were found on disk - for this game. Uninstall the other
+   * add-on first.
+   */
+  | { kind: 'blocked_by_other_addon'; other_kind: AddonKind; unmanaged: boolean };
 
 /**
  * The manual "install ReShade host + your own add-on file" escape hatch, present

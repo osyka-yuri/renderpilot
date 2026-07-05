@@ -66,6 +66,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'game.card.action.details': 'Details',
   'game.card.action.detailsAria': 'Details für {title} öffnen',
   'game.card.detectedLibraries': 'Erkannte Komponenten',
+  'game.card.availableAddons': 'Verfügbare Add-ons',
   'game.card.badge.upToDate': 'Aktuell',
   'game.card.badge.updatesAvailable': 'Updates verfügbar',
   'game.card.badge.updatesAvailableCount': {
@@ -80,7 +81,6 @@ export const de: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Spiel verstecken',
   'game.card.menu.hidden.remove': 'Spiel einblenden',
   'game.card.menu.hidden.toggleHint': 'Versteckt-Status für dieses Spiel umschalten.',
-  'game.libraries.empty': 'Keine Komponenten gefunden',
 
   'game.cover.alt': 'Cover',
   'game.cover.altWithTitle': 'Cover: {title}',
@@ -277,6 +277,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': '{label} verschieben',
   'filters.libraries.title': 'Komponenten',
   'filters.libraries.empty': 'Keine Komponenten gefunden',
+  'filters.addons.title': 'Add-ons',
 
   'games.favoritesToggle': 'Favoriten',
   'games.favoritesToggleActive': 'Favoriten (aktiv)',
@@ -470,16 +471,7 @@ export const de: Record<MessageKey, MessageValue> = {
     'Dies entfernt das RenoDX-Add-on und stellt nur ReShade-Dateien wieder her, die während der RenoDX-Einrichtung geändert wurden.',
   'gameDetails.renodx.uninstallConfirmAction': 'Entfernen',
   'gameDetails.renodx.installing': 'Installation…',
-  'gameDetails.renodx.riskSafe': 'Kein Anti-Cheat erkannt — Installation unbedenklich.',
-  'gameDetails.renodx.riskWarn':
-    'Anti-Cheat erkannt — die Installation kann zu einer Sperre führen.',
-  'gameDetails.renodx.riskBlocked': 'Die Installation ist für dieses Spiel blockiert.',
   'gameDetails.renodx.confirmTitle': 'RenoDX trotz Anti-Cheat-Risiko installieren?',
-  'gameDetails.renodx.confirmAccept': 'Trotzdem installieren',
-  'gameDetails.renodx.confirmBody':
-    'Dieses Spiel verwendet Anti-Cheat. Das ReShade-Add-on kann es auslösen und zu einer Sperre führen. Fortfahren auf eigenes Risiko.',
-  'gameDetails.renodx.fullAddonWarning':
-    'Vollständige ReShade-Add-on-Unterstützung kann für Multiplayer- oder Anti-Cheat-geschützte Spiele unsicher sein.',
   'gameDetails.renodx.cancel': 'Abbrechen',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -620,4 +612,21 @@ export const de: Record<MessageKey, MessageValue> = {
     'Verfügbar — verhindert Flackern bei DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     'Ein allgemeiner ReShade-Fix, nicht RenoDX-spezifisch. ReShade zeichnet auf den nativen Frames des Spiels statt auf den Frame-Generation-Frames und blendet DLSS-Upscaling vor ReShade aus, wenn das Spiel Streamline korrekt umsetzt.',
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'Kein Anti-Cheat erkannt — Installation ist sicher.',
+  'gameDetails.addon.riskWarn':
+    'Anti-Cheat erkannt — die Installation kann zu einer Sperre führen.',
+  'addon.risk.sp_safe':
+    'Keine bekannten Anti-Cheat-Signaturen gefunden — die Installation von {addonName} ist wahrscheinlich sicher, aber nicht garantiert.',
+  'addon.risk.anticheat_detected':
+    'Anti-Cheat-Signaturen erkannt — die Installation von {addonName} kann zu einer Sperre führen.',
+  'gameDetails.addon.confirmAccept': 'Trotzdem installieren',
+  'gameDetails.addon.confirmBody':
+    'Dieses Spiel verwendet Anti-Cheat. Das ReShade-Add-on könnte es auslösen und zu einer Sperre führen. Fahren Sie auf eigenes Risiko fort.',
+  'gameDetails.addon.fullAddonWarning':
+    'Volle ReShade-Add-on-Unterstützung kann bei Mehrspieler- oder Anti-Cheat-geschützten Spielen unsicher sein.',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '{installedAddon} ist für dieses Spiel installiert — deinstallieren Sie es, bevor Sie {blockedAddon} installieren.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'Für dieses Spiel wurden {installedAddon}-Dateien auf der Festplatte gefunden — entfernen Sie sie, bevor Sie {blockedAddon} installieren.',
 };

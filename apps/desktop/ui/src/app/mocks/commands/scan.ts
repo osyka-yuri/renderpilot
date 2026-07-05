@@ -1,15 +1,14 @@
 import type { ScanManualFolderResult, AutoScanResponse } from '@entities/game';
+import { createGameSummaryFromDetails, getLatestOperationStatus } from '../build-game-summary';
 import {
   mockState,
   getOrCreateManualGameId,
   findGameSummary,
   upsertGameSummary,
-  createManualPreviewDetails,
-  createGameSummaryFromDetails,
-  getLatestOperationStatus,
   requireGameDetails,
 } from '../desktop-state';
 import { clone, lastPathSegment, normalizeInstallPath, resolveMock } from '../desktop-utils';
+import { createManualPreviewDetails } from '../fixtures';
 
 export function mockScanManualFolder(path: string): Promise<ScanManualFolderResult> {
   return resolveMock(() => {

@@ -20,7 +20,7 @@ import {
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
   STEAMGRIDDB_SETTING_KEY,
 } from '@entities/settings';
-import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary } from '@entities/game';
+import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary, createGameSummary } from '@entities/game';
 
 describe('cover-sync', () => {
   describe('catalogSettingHasSteamGridDbKey', () => {
@@ -488,7 +488,7 @@ describe('cover-sync', () => {
 });
 
 function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
-  return {
+  return createGameSummary({
     game_id: 'game-a',
     title: 'Game A',
     launcher: 'Unknown',
@@ -506,11 +506,11 @@ function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
     is_favorite: false,
     is_hidden: false,
     ...overrides,
-  };
+  });
 }
 
 function gameWithoutCover(overrides: Partial<GameSummary> = {}): GameSummary {
-  return {
+  return createGameSummary({
     game_id: 'game-a',
     title: 'Game A',
     launcher: 'Unknown',
@@ -527,7 +527,7 @@ function gameWithoutCover(overrides: Partial<GameSummary> = {}): GameSummary {
     is_favorite: false,
     is_hidden: false,
     ...overrides,
-  };
+  });
 }
 
 function steamGame(overrides: Partial<GameSummary> = {}): GameSummary {

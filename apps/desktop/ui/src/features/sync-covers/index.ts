@@ -2,7 +2,7 @@ export {
   formatBackgroundCoverSyncError,
   executeBackgroundCoverSync,
 } from './model/background-cover-sync';
-export { createCoverSyncQueue } from './model/cover-sync-queue.svelte';
+export { createCoverSyncQueue, type CoverSyncQueue } from './model/cover-sync-queue.svelte';
 export {
   publishBackgroundCoverSyncFailureNotification,
   publishBackgroundCoverSyncIssueNotification,

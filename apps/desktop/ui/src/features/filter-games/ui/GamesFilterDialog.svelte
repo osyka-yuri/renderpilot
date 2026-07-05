@@ -14,6 +14,8 @@
   import { t } from '@shared/i18n';
   import { type GroupedLibraryFilterOptions } from '../model/library-filter-options';
   import { type LauncherFilterOption } from '../model/launcher-filter-options';
+  import type { AddonCapability } from '@entities/game';
+  import AddonFilterSection from './AddonFilterSection.svelte';
   import LauncherFilterSection from './LauncherFilterSection.svelte';
   import LibraryFilterSection from './LibraryFilterSection.svelte';
 
@@ -25,6 +27,9 @@
     groupedLibraryFilterOptions?: readonly GroupedLibraryFilterOptions[];
     draftLibraries?: readonly string[];
     onDraftLibrariesChange?: (libraries: readonly string[]) => void;
+    addonOptions?: readonly AddonCapability[];
+    draftAddons?: readonly string[];
+    onDraftAddonsChange?: (addons: readonly string[]) => void;
     launcherFilterOptions?: readonly LauncherFilterOption[];
     draftLaunchers?: readonly string[];
     onDraftLaunchersChange?: (launchers: readonly string[]) => void;
@@ -44,6 +49,9 @@
     groupedLibraryFilterOptions = EMPTY_ARRAY,
     draftLibraries = EMPTY_ARRAY,
     onDraftLibrariesChange,
+    addonOptions = EMPTY_ARRAY,
+    draftAddons = EMPTY_ARRAY,
+    onDraftAddonsChange,
     launcherFilterOptions = EMPTY_ARRAY,
     draftLaunchers = EMPTY_ARRAY,
     onDraftLaunchersChange,
@@ -91,6 +99,10 @@
       {draftLibraries}
       onLibrariesChange={onDraftLibrariesChange}
     />
+
+    <Separator />
+
+    <AddonFilterSection options={addonOptions} {draftAddons} onAddonsChange={onDraftAddonsChange} />
 
     <DialogFooter>
       <Button

@@ -1,8 +1,6 @@
 export { default as RenoDxCard } from './ui/RenoDxCard.svelte';
 export { default as RenoDxChannelControl } from './ui/RenoDxChannelControl.svelte';
 export { default as RenoDxStatusBadge } from './ui/RenoDxStatusBadge.svelte';
-export { default as RenoDxFieldLabel } from './ui/RenoDxFieldLabel.svelte';
-export { default as RenoDxComponentRow } from './ui/RenoDxComponentRow.svelte';
 
 export { createRenoDxStore, type RenoDxStore } from './model/create-renodx-store.svelte';
 export {

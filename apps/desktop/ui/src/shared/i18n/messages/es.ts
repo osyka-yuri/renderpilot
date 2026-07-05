@@ -66,6 +66,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'game.card.action.details': 'Detalles',
   'game.card.action.detailsAria': 'Abrir detalles de {title}',
   'game.card.detectedLibraries': 'Componentes detectados',
+  'game.card.availableAddons': 'Complementos disponibles',
   'game.card.badge.upToDate': 'Actualizado',
   'game.card.badge.updatesAvailable': 'Actualizaciones disponibles',
   'game.card.badge.updatesAvailableCount': {
@@ -80,7 +81,6 @@ export const es: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Ocultar juego',
   'game.card.menu.hidden.remove': 'Mostrar juego',
   'game.card.menu.hidden.toggleHint': 'Alternar el estado de oculto para este juego.',
-  'game.libraries.empty': 'No se encontraron componentes',
 
   'game.cover.alt': 'Carátula',
   'game.cover.altWithTitle': 'Carátula: {title}',
@@ -274,6 +274,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': 'Mover {label}',
   'filters.libraries.title': 'Componentes',
   'filters.libraries.empty': 'No se encontraron componentes',
+  'filters.addons.title': 'Complementos',
 
   'games.favoritesToggle': 'Favoritos',
   'games.favoritesToggleActive': 'Favoritos (activos)',
@@ -459,15 +460,7 @@ export const es: Record<MessageKey, MessageValue> = {
     'Esto elimina el add-on RenoDX y restaura solo los archivos de ReShade modificados durante la configuración de RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Quitar',
   'gameDetails.renodx.installing': 'Instalando…',
-  'gameDetails.renodx.riskSafe': 'No se detectó anti-cheat: seguro de instalar.',
-  'gameDetails.renodx.riskWarn': 'Anti-trampas detectado: instalar puede provocar un baneo.',
-  'gameDetails.renodx.riskBlocked': 'La instalación está bloqueada para este juego.',
   'gameDetails.renodx.confirmTitle': '¿Instalar RenoDX pese al riesgo de anti-trampas?',
-  'gameDetails.renodx.confirmAccept': 'Instalar de todos modos',
-  'gameDetails.renodx.confirmBody':
-    'Este juego usa anti-trampas. El complemento ReShade puede activarlo y provocar un baneo. Continúa bajo tu propio riesgo.',
-  'gameDetails.renodx.fullAddonWarning':
-    'La compatibilidad completa con add-ons de ReShade puede no ser segura en juegos multijugador o protegidos por anti-trampas.',
   'gameDetails.renodx.cancel': 'Cancelar',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -607,4 +600,21 @@ export const es: Record<MessageKey, MessageValue> = {
     'Disponible — evita el parpadeo con DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     'Una corrección general de ReShade, no específica de RenoDX. Hace que ReShade dibuje sobre los fotogramas nativos del juego en lugar de los de Frame Generation, y oculta el escalado DLSS a ReShade cuando el juego implementa Streamline correctamente.',
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'No se detectó anti-cheat — la instalación es segura.',
+  'gameDetails.addon.riskWarn':
+    'Se detectó anti-cheat — la instalación podría provocar una expulsión.',
+  'addon.risk.sp_safe':
+    'No se encontraron firmas anti-trampas conocidas — instalar {addonName} probablemente sea seguro, pero no está garantizado.',
+  'addon.risk.anticheat_detected':
+    'Se detectaron firmas anti-trampas — instalar {addonName} podría provocar una expulsión.',
+  'gameDetails.addon.confirmAccept': 'Instalar de todos modos',
+  'gameDetails.addon.confirmBody':
+    'Este juego usa anti-cheat. El complemento ReShade podría activarlo y provocar una expulsión. Continúa bajo tu propio riesgo.',
+  'gameDetails.addon.fullAddonWarning':
+    'El soporte completo de complementos de ReShade puede ser inseguro en juegos multijugador o protegidos por anti-cheat.',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '{installedAddon} está instalado para este juego — desinstálalo antes de instalar {blockedAddon}.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'Se encontraron archivos de {installedAddon} en el disco para este juego — elimínalos antes de instalar {blockedAddon}.',
 };

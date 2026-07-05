@@ -33,6 +33,7 @@
     BulkSwapHandler,
     BulkRollbackHandler,
   } from '../model/create-game-details-page-model';
+  import { createExclusiveAddonStores } from '@entities/addon';
   import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
@@ -72,19 +73,37 @@
   }: Props = $props();
 
   const vendorTabs = $derived(createVendorTabs(details));
-  // The "Other" tab (currently the RenoDX/HDR card) is fixed, always present
-  // alongside the vendor tabs.
+  // The "Other" tab always hosts the RenoDX card for the selected
+  // game. We render them unconditionally so the full availability logic inside
+  // each card can detect tracked installs, unmanaged files, orphans, etc.
+  // (addon_capabilities from the list is used for badges/filters, not to hide
+  // detail cards).
   const OTHER_TAB = 'other';
+  const gameId = $derived(details?.game.identity.id ?? null);
+  // The store is created once;
+  // the page loads every store for the selected game — not gated on
+  // addon_capabilities from the list — so each card can detect tracked installs,
+  // unmanaged files, orphans, and blocked_by_other_addon state. Successful
+  // install/uninstall mutations keep the page state synchronized.
+  const {
+    stores: { renodx },
+    list: addonStores,
+  } = createExclusiveAddonStores(
+    {
+      renodx: ({ onExclusivityChange }) => createRenoDxStore({ onExclusivityChange }),
+    },
+    { shouldReloadPeers: (id) => !!gameId && id === gameId },
+  );
 
-  // RenoDX/HDR is lifted to the page so it folds into "Update all" (single source
-  // of truth for the count + the run); the card renders from this same store.
-  const renodx = createRenoDxStore();
+  // Update availability is read from the list of stores for bulk operations.
 
   // The single "update everything to its latest version" action. Spans every
-  // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle and RenoDX, not just the
-  // active tab, and reuses the existing bulk-swap path.
+  // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle and RenoDX, not
+  // just the active tab, and reuses the existing bulk-swap path.
   const updatePlan = $derived(buildUpdateAllToLatestPlan(details));
-  const totalUpdateCount = $derived(updatePlan.updateCount + (renodx.updateAvailable ? 1 : 0));
+  const totalUpdateCount = $derived(
+    updatePlan.updateCount + addonStores.filter((s) => s.updateAvailable).length,
+  );
   const nothingToUpdate = $derived(totalUpdateCount === 0);
 
   // "Update all" progress, shown only while a run initiated by THIS button is in
@@ -95,7 +114,8 @@
   let updatingAll = $state(false);
   let pendingDownloadIds = $state<string[]>([]);
   $effect(() => {
-    if (!busy && !renodx.busy) {
+    const anyAddonBusy = addonStores.some((s) => s.busy);
+    if (!busy && !anyAddonBusy) {
       updatingAll = false;
       pendingDownloadIds = [];
     }
@@ -106,7 +126,8 @@
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
 
   function handleUpdateAll() {
-    if (busy || renodx.busy || nothingToUpdate) {
+    const anyAddonBusy = addonStores.some((s) => s.busy);
+    if (busy || anyAddonBusy || nothingToUpdate) {
       return;
     }
     updatingAll = true;
@@ -116,28 +137,41 @@
     void runUpdateAll();
   }
 
-  // Library components run through the existing bulk-swap path; RenoDX (add-on +
-  // ReShade host updates via its own store, in the same single action.
+  // Library components run through the existing bulk-swap path; RenoDX updates
+  // through its store in the same single action.
   async function runUpdateAll() {
     if (updatePlan.items.length > 0) {
       await onBulkSwap(updatePlan.items);
     }
     const id = gameId;
-    if (id && renodx.updateAvailable) {
-      await renodx.update(id);
+    if (!id) {
+      return;
+    }
+    for (const store of addonStores) {
+      if (store.updateAvailable) {
+        await store.update(id);
+      }
     }
   }
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
-  const gameId = $derived(details?.game.identity.id ?? null);
 
-  // The page owns the RenoDX store's load (the card renders from it), so its
-  // update status feeds "Update all". Reloads when the selected game changes.
+  // The page owns the addon stores' load (the cards render from them), so their
+  // update status feeds "Update all". We load all for the selected game so full
+  // on-disk / availability detection can happen (including unmanaged or orphaned
+  // installs not present in caps).
   $effect(() => {
     const id = gameId;
-    if (id) {
-      void renodx.load(id);
+
+    if (!id) {
+      return;
     }
+
+    untrack(() => {
+      for (const store of addonStores) {
+        void store.load(id);
+      }
+    });
   });
 
   // The active vendor tab is user-controlled state, not derived: a post-swap
@@ -147,9 +181,8 @@
   // that vendor still has components, otherwise fall back to the first tab.
   let selectedVendor = $state('');
   $effect(() => {
-    // Vendor tabs come and go with the game's components; the RenoDX tab is
-    // always present (and last). Keep the current selection if it still exists,
-    // otherwise fall back to the first available tab.
+    // Vendor tabs come and go with the game's components. The Other tab (RenoDX)
+    // is always present for the selected game.
     const keys = [...vendorTabs.map((tab) => tab.key as string), OTHER_TAB];
     untrack(() => {
       if (!keys.includes(selectedVendor)) {
@@ -193,23 +226,33 @@
 
   $effect(() => {
     const id = gameId;
-    if (id) {
+
+    untrack(() => {
+      if (!id) {
+        gameExe.clear();
+        return;
+      }
+
       void gameExe.reload(id);
-    } else {
-      gameExe.clear();
-    }
+    });
   });
 
   $effect(() => {
-    // Reactive reads inside the effect determine when it re-runs:
+    // Explicit reactive dependencies:
     //   - gameId / hasNvidiaTab: standard load/teardown
     //   - dlssFingerprint:       re-load after any DLSS DLL swap
+    const id = gameId;
+    const shouldLoad = hasNvidiaTab;
     void dlssFingerprint;
-    if (hasNvidiaTab && gameId) {
-      void nvidia.reload(gameId);
-    } else {
-      nvidia.clear();
-    }
+
+    untrack(() => {
+      if (!id || !shouldLoad) {
+        nvidia.clear();
+        return;
+      }
+
+      void nvidia.reload(id);
+    });
   });
 
   function getCandidateGroup(componentId: string): GameCandidateGroup | null {
@@ -259,7 +302,7 @@
                 <Button
                   variant="default"
                   size="sm"
-                  disabled={busy || renodx.busy || nothingToUpdate}
+                  disabled={busy || addonStores.some((s) => s.busy) || nothingToUpdate}
                   aria-busy={showProgress}
                   onclick={handleUpdateAll}
                 >

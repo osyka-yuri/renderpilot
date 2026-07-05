@@ -12,6 +12,15 @@ export {
 } from './model/library-filters';
 
 export {
+  ALL_ADDON_CAPABILITIES,
+  addonCapabilityLabel,
+  hasPartialAddonSelection,
+  isAddonCapability,
+  normalizeAddonCapabilities,
+} from './model/addon-capabilities';
+export { compactFullSelectionForQuery } from './model/query-filter-selection';
+
+export {
   ALL_KNOWN_LAUNCHERS,
   normalizeLauncherValues,
   extractAvailableLaunchersFromCards,
@@ -20,10 +29,13 @@ export {
 
 export { LAUNCHER_DISPLAY_LABELS, getLauncherDisplayLabel } from './model/launcher-labels';
 
+export { createGameSummary, createGameDetails } from './model/test-support';
+
 export { LAUNCHER_STEAM, LAUNCHER_GOG } from './model/types';
 
 export type {
   GameSummary,
+  AddonCapability,
   Launcher,
   CoverArtworkResult,
   GameCardsQuery,

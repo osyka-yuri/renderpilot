@@ -1,5 +1,11 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import { hasPartialLibrarySelection, hasPartialLauncherSelection } from '@entities/game';
+import {
+  ALL_ADDON_CAPABILITIES,
+  hasPartialAddonSelection,
+  hasPartialLibrarySelection,
+  hasPartialLauncherSelection,
+  normalizeAddonCapabilities,
+} from '@entities/game';
 import { getCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {
   createPersistedSnapshot,
@@ -26,17 +32,25 @@ export function syncGamesFilterState(
   nextPersisted: PersistedGamesFilters | null,
   nextAvailableLibraries: readonly string[],
   nextAvailableLaunchers: readonly string[],
+  nextAvailableAddons: readonly string[] = ALL_ADDON_CAPABILITIES,
 ): GamesFilterSyncResult {
   const shouldHydrate = preferenceLoaded && !state.ready;
 
   const hydratedState = shouldHydrate
-    ? hydrateGamesFilterState(state, nextPersisted, nextAvailableLibraries, nextAvailableLaunchers)
+    ? hydrateGamesFilterState(
+        state,
+        nextPersisted,
+        nextAvailableLibraries,
+        nextAvailableLaunchers,
+        nextAvailableAddons,
+      )
     : state;
 
   const nextState = withAvailableCatalogFilters(
     hydratedState,
     nextAvailableLibraries,
     nextAvailableLaunchers,
+    nextAvailableAddons,
   );
 
   return {
@@ -88,10 +102,16 @@ export function hasFilterIndicator(
   availableLibraries: readonly string[],
   appliedLaunchers: readonly string[],
   availableLaunchers: readonly string[],
+  appliedAddons: readonly string[] = ALL_ADDON_CAPABILITIES,
+  availableAddons: readonly string[] = ALL_ADDON_CAPABILITIES,
 ): boolean {
   return (
     searchQuery.trim().length > 0 ||
     hasPartialLibrarySelection(appliedLibraries, availableLibraries) ||
+    hasPartialAddonSelection(
+      normalizeAddonCapabilities(appliedAddons),
+      normalizeAddonCapabilities(availableAddons),
+    ) ||
     hasPartialLauncherSelection(appliedLaunchers, availableLaunchers)
   );
 }
@@ -102,6 +122,7 @@ function hasAppliedFiltersChanged(
 ): boolean {
   return (
     !shallowStringArrayEqual(previousState.appliedLibraries, nextState.appliedLibraries) ||
+    !shallowStringArrayEqual(previousState.appliedAddons, nextState.appliedAddons) ||
     !shallowStringArrayEqual(previousState.appliedLaunchers, nextState.appliedLaunchers)
   );
 }

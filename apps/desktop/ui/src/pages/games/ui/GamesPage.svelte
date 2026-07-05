@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import { getDashboardStats, type GameSelectionHandler, type GameSummary } from '@entities/game';
+  import {
+    getDashboardStats,
+    normalizeAddonCapabilities,
+    type GameSelectionHandler,
+    type GameSummary,
+  } from '@entities/game';
   import type { VoidHandler } from '@shared/callbacks';
   import {
     Button,
@@ -210,6 +215,9 @@
             groupedLibraryFilterOptions={model.groupedLibraryFilterOptions}
             draftLibraries={model.filtersState.draftLibraries}
             onDraftLibrariesChange={model.handleDraftLibrariesChange}
+            addonOptions={normalizeAddonCapabilities(model.filtersState.availableAddons)}
+            draftAddons={model.filtersState.draftAddons}
+            onDraftAddonsChange={model.handleDraftAddonsChange}
             launcherFilterOptions={model.launcherFilterOptions}
             draftLaunchers={model.filtersState.draftLaunchers}
             onDraftLaunchersChange={model.handleDraftLaunchersChange}

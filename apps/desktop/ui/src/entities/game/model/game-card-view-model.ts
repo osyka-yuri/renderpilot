@@ -1,4 +1,4 @@
-import type { GameSummary } from './types';
+import type { AddonCapability, GameSummary } from './types';
 import type { BadgeVariant } from '@shared/ui';
 import { gameCoverAssetSrcWithVersion } from './cover-urls';
 import {
@@ -24,6 +24,7 @@ export type GameCardViewModel = {
   monogram: string;
   updateBadge: UpdateBadge;
   libraries: string[];
+  addons: AddonCapability[];
   coverSrc: string | null;
   hasCover: boolean;
   isFavorite: boolean;
@@ -43,6 +44,7 @@ export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
     monogram: titleMonogram(game.title),
     updateBadge: getUpdateBadge(game),
     libraries: [...game.library_tags],
+    addons: [...game.addon_capabilities],
     coverSrc: cover.coverSrc,
     hasCover: cover.hasCover,
     isFavorite: game.is_favorite,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '@shared/i18n';
   import RenoDxChannelControlBody from './RenoDxChannelControlBody.svelte';
-  import RenoDxFieldLabel from './RenoDxFieldLabel.svelte';
+  import { AddonFieldLabel } from '@entities/addon';
 
   import type { ReshadeChannel } from '../model/types';
 
@@ -51,7 +51,7 @@
 </script>
 
 {#if visibleLabel}
-  <RenoDxFieldLabel label={visibleLabel} class={className}>
+  <AddonFieldLabel label={visibleLabel} class={className}>
     <RenoDxChannelControlBody
       {value}
       {stableSupported}
@@ -62,7 +62,7 @@
       {tooltipText}
       {onChange}
     />
-  </RenoDxFieldLabel>
+  </AddonFieldLabel>
 {:else}
   <div class={className}>
     <RenoDxChannelControlBody

@@ -17,6 +17,7 @@
   import StarIcon from '@lucide/svelte/icons/star';
   import EyeOffIcon from '@lucide/svelte/icons/eye-off';
   import GameCardActionsMenu from './GameCardActionsMenu.svelte';
+  import GameAddonBadges from './GameAddonBadges.svelte';
   import GameCardCover from './GameCardCover.svelte';
   import GameLibraryBadges from './GameLibraryBadges.svelte';
   import type { GameCardMenuHandle } from './types';
@@ -139,12 +140,26 @@
     </div>
   </CardHeader>
 
-  <CardContent class="flex-1">
-    <p class="mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-      {t('game.card.detectedLibraries')}
-    </p>
+  <CardContent class="grid flex-1 gap-3">
+    {#if game.libraries.length > 0}
+      <div>
+        <p class="mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {t('game.card.detectedLibraries')}
+        </p>
 
-    <GameLibraryBadges libraries={game.libraries} />
+        <GameLibraryBadges libraries={game.libraries} />
+      </div>
+    {/if}
+
+    {#if game.addons.length > 0}
+      <div>
+        <p class="mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {t('game.card.availableAddons')}
+        </p>
+
+        <GameAddonBadges addons={game.addons} />
+      </div>
+    {/if}
   </CardContent>
 
   <CardFooter>

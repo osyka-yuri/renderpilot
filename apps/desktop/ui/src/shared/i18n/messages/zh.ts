@@ -62,6 +62,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'game.card.action.details': '详情',
   'game.card.action.detailsAria': '打开 {title} 的详情',
   'game.card.detectedLibraries': '检测到的组件',
+  'game.card.availableAddons': '可用插件',
   'game.card.badge.upToDate': '已是最新',
   'game.card.badge.updatesAvailable': '有可用更新',
   'game.card.badge.updatesAvailableCount': {
@@ -76,7 +77,6 @@ export const zh: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': '隐藏游戏',
   'game.card.menu.hidden.remove': '取消隐藏游戏',
   'game.card.menu.hidden.toggleHint': '切换此游戏的隐藏状态。',
-  'game.libraries.empty': '未找到组件',
 
   'game.cover.alt': '封面',
   'game.cover.altWithTitle': '封面：{title}',
@@ -259,6 +259,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': '移动 {label}',
   'filters.libraries.title': '组件',
   'filters.libraries.empty': '未找到组件',
+  'filters.addons.title': '插件',
 
   'games.favoritesToggle': '收藏',
   'games.favoritesToggleActive': '收藏（已启用）',
@@ -426,15 +427,7 @@ export const zh: Record<MessageKey, MessageValue> = {
     '这会移除 RenoDX 插件，并只恢复 RenoDX 设置期间更改过的 ReShade 文件。',
   'gameDetails.renodx.uninstallConfirmAction': '移除',
   'gameDetails.renodx.installing': '正在安装…',
-  'gameDetails.renodx.riskSafe': '未检测到反作弊——可安全安装。',
-  'gameDetails.renodx.riskWarn': '检测到反作弊——安装可能导致封号。',
-  'gameDetails.renodx.riskBlocked': '本游戏已禁止安装。',
   'gameDetails.renodx.confirmTitle': '仍要在反作弊风险下安装 RenoDX 吗？',
-  'gameDetails.renodx.confirmAccept': '仍然安装',
-  'gameDetails.renodx.confirmBody':
-    '本游戏使用反作弊系统。ReShade 插件可能触发它并导致封号。继续操作风险自负。',
-  'gameDetails.renodx.fullAddonWarning':
-    'ReShade 完整 add-on 支持在多人游戏或受反作弊保护的游戏中可能不安全。',
   'gameDetails.renodx.cancel': '取消',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError': '无法移除共享 ReShade Vulkan 层。',
@@ -559,4 +552,18 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.renodx.component.dlssFixOffer': '可用 — 防止 DLSS Frame Generation 闪烁',
   'gameDetails.renodx.component.dlssFixHint':
     '这是通用的 ReShade 修复，并非 RenoDX 专用。它让 ReShade 在游戏的原生帧上绘制，而不是帧生成帧，并在游戏正确实现 Streamline 时对 ReShade 隐藏 DLSS（超分辨率）。',
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': '未检测到反作弊 — 安装是安全的。',
+  'gameDetails.addon.riskWarn': '检测到反作弊 — 安装可能导致封号。',
+  'addon.risk.sp_safe': '未发现已知的反作弊签名——安装 {addonName} 可能是安全的，但无法保证。',
+  'addon.risk.anticheat_detected': '检测到反作弊签名——安装 {addonName} 可能导致封号。',
+  'gameDetails.addon.confirmAccept': '仍然安装',
+  'gameDetails.addon.confirmBody':
+    '此游戏使用反作弊系统。ReShade 插件可能触发它并导致封号。请自行承担风险后继续。',
+  'gameDetails.addon.fullAddonWarning':
+    '对于多人游戏或受反作弊保护的游戏，完整的 ReShade 插件支持可能不安全。',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '此游戏已安装 {installedAddon} — 请先卸载它，再安装 {blockedAddon}。',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    '在磁盘上发现此游戏的 {installedAddon} 文件 — 请先删除它们，再安装 {blockedAddon}。',
 };

@@ -11,425 +11,27 @@ vi.mock('@entities/library', async (importOriginal) => {
   return { ...actual, clearDownloadProgress: vi.fn() };
 });
 
-import { clearDownloadProgress } from '@entities/library';
+vi.mock('@shared/lib', async (importOriginal) => {
+  const actual = await importOriginal<unknown>();
+  return { ...(actual as Record<string, unknown>), clearDownloadProgress: vi.fn() };
+});
+
+import { clearDownloadProgress } from '@shared/lib';
 import { publishErrorNotification } from '@shared/notifications';
-import type { RenoDxApi } from '../api/desktop';
-import { createRenoDxStore, deriveFreshness } from './create-renodx-store.svelte';
-import type {
-  ActionDescriptor,
-  AvailabilityReport,
-  HostFacts,
-  HostKind,
-  RenoDxInstallState,
-  RenoDxUpdateReport,
-  ReshadeChannel,
-  VulkanLayerManagementReport,
-  VulkanLayerReport,
-} from './types';
-
-function action(overrides: Partial<ActionDescriptor> = {}): ActionDescriptor {
-  return {
-    enabled: true,
-    requires_confirmation: false,
-    confirmation_scope: null,
-    disabled_reason: null,
-    target_channel: null,
-    ...overrides,
-  };
-}
-
-const DEFAULT_HOST_FACTS: HostFacts = {
-  slot: null,
-  active: false,
-  path: null,
-  version: null,
-  addon_support: 'unknown',
-  channel: {
-    selected: 'stable',
-    effective: 'stable',
-    detected: null,
-  },
-  update_status: 'unknown_needs_validation',
-  is_custom_build: false,
-};
-
-const PRESENT_HOST_FACTS: HostFacts = {
-  slot: 'dxgi.dll',
-  active: true,
-  path: 'C:\\Games\\Game\\dxgi.dll',
-  version: '6.5.1',
-  addon_support: 'full',
-  channel: {
-    selected: 'stable',
-    effective: 'stable',
-    detected: 'stable',
-  },
-  update_status: 'current',
-  is_custom_build: false,
-};
-
-const VULKAN_NOT_INSTALLED: VulkanLayerReport = {
-  layer_detection: 'not_installed',
-  layer_facts: {
-    manifest_path: null,
-    dll_path: null,
-    version: null,
-    architecture: 'unknown',
-    loader_visibility: 'normal',
-  },
-  diagnostic_reasons: [],
-  actions: {
-    install: action(),
-  },
-};
-
-const VULKAN_INSTALLED: VulkanLayerReport = {
-  layer_detection: 'installed',
-  layer_facts: {
-    manifest_path: 'C:\\Users\\me\\AppData\\Local\\RenderPilot\\vk_layer.json',
-    dll_path: 'C:\\Users\\me\\AppData\\Local\\RenderPilot\\ReShade64.dll',
-    version: '6.5.1',
-    architecture: 'x64',
-    loader_visibility: 'normal',
-  },
-  diagnostic_reasons: [],
-  actions: {
-    update: action({ requires_confirmation: true, confirmation_scope: 'all_vulkan_reno_dx_games' }),
-    switch_channel: action({
-      requires_confirmation: true,
-      confirmation_scope: 'all_vulkan_reno_dx_games',
-      target_channel: 'nightly',
-    }),
-    remove: action({ requires_confirmation: true, confirmation_scope: 'all_vulkan_reno_dx_games' }),
-  },
-};
-
-const VULKAN_EXTERNAL_READ_ONLY: VulkanLayerReport = {
-  layer_detection: 'external_read_only',
-  layer_facts: {
-    manifest_path: 'C:\\ReShade\\ReShade64.json',
-    dll_path: 'C:\\ReShade\\ReShade64.dll',
-    version: '6.5.1',
-    architecture: 'x64',
-    loader_visibility: 'normal',
-  },
-  diagnostic_reasons: ['external_layer_detected'],
-  actions: {},
-};
-
-function availability(
-  report: Pick<AvailabilityReport, 'state' | 'outcome' | 'manual_install'> &
-    Partial<AvailabilityReport>,
-): AvailabilityReport {
-  return {
-    host_detection: 'absent',
-    host_facts: DEFAULT_HOST_FACTS,
-    actions: {
-      install: action(),
-    },
-    reshade_stable_supported: true,
-    renodx_addon: null,
-    vulkan_layer: VULKAN_NOT_INSTALLED,
-    ...report,
-  };
-}
-
-const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
-  state: { status: 'not_installed' },
-  outcome: {
-    kind: 'installable',
-    confidence: 'verified',
-    risk: {
-      severity: 'info',
-      anticheat_engine: 'none',
-      online: 'singleplayer',
-      message_key: 'renodx.risk.sp_safe',
-      confidence: 'high',
-      reference_url: null,
-      detected_locally: false,
-    },
-    notes_keys: [],
-    host_kind: 'proxy',
-  },
-  manual_install: null,
-});
-
-const INSTALLED: AvailabilityReport = availability({
-  state: {
-    status: 'installed',
-    host_kind: 'proxy',
-    version: 'snapshot-2026.06',
-    addon_dated: 'Wed, 18 Jun 2026 12:00:00 GMT',
-    installed_at: 1_700_000_000_000,
-    updated_at: 1_700_000_500_000,
-    dlss_fix_installed: false,
-    addon_tracked: true,
-  },
-  host_detection: 'present',
-  host_facts: PRESENT_HOST_FACTS,
-  actions: {
-    use_existing: action(),
-    switch_channel: action({ target_channel: 'nightly' }),
-  },
-  outcome: { kind: 'unsupported' },
-  manual_install: null,
-});
-
-function installedWithChannel(
-  channel: ReshadeChannel,
-  hostKind: HostKind = 'proxy',
-): AvailabilityReport {
-  const other = channel === 'stable' ? 'nightly' : 'stable';
-  return {
-    ...INSTALLED,
-    state: {
-      ...(INSTALLED.state as Extract<RenoDxInstallState, { status: 'installed' }>),
-      host_kind: hostKind,
-    },
-    host_facts: {
-      ...PRESENT_HOST_FACTS,
-      channel: {
-        selected: channel,
-        effective: channel,
-        detected: channel,
-      },
-    },
-    actions: {
-      use_existing: action(),
-      switch_channel: action({ target_channel: other }),
-    },
-  };
-}
-
-/** Install state with a DLSS-Fix companion tracked (mirrors the backend's
- *  `install_dlss_fix` response, which records a DlssFix tracked source). */
-const INSTALLED_WITH_DLSS_FIX: RenoDxInstallState = {
-  ...(INSTALLED.state as Extract<RenoDxInstallState, { status: 'installed' }>),
-  dlss_fix_installed: true,
-};
-
-function fakeApi(overrides: Partial<RenoDxApi> = {}): RenoDxApi {
-  return {
-    getAvailability: vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE)),
-    install: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    installFromFile: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    uninstall: vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE.state)),
-    checkUpdate: vi.fn(() =>
-      Promise.resolve({
-        addon: 'current',
-        host: 'current',
-        dlssFix: null,
-        overall: 'current',
-      } as RenoDxUpdateReport),
-    ),
-    update: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    switchChannel: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    installDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
-    uninstallDlssFix: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    dlssFixAvailability: vi.fn(() => Promise.resolve(false)),
-    vulkanLayerStatus: vi.fn(() => Promise.resolve(VULKAN_NOT_INSTALLED)),
-    vulkanLayerManagementStatus: vi.fn(() =>
-      Promise.resolve({
-        layer: VULKAN_NOT_INSTALLED,
-        reshade_stable_supported: true,
-        recorded_channel: null,
-        default_channel: 'stable',
-      } satisfies VulkanLayerManagementReport),
-    ),
-    applyVulkanLayer: vi.fn(() =>
-      Promise.resolve({
-        layer: VULKAN_INSTALLED,
-        reshade_stable_supported: true,
-        recorded_channel: 'stable',
-        default_channel: 'stable',
-      } satisfies VulkanLayerManagementReport),
-    ),
-    removeVulkanLayer: vi.fn(() => Promise.resolve(VULKAN_NOT_INSTALLED)),
-    ...overrides,
-  };
-}
+import { createRenoDxStore } from './create-renodx-store.svelte';
+import type { AvailabilityReport, RenoDxInstallState, RenoDxUpdateReport } from './types';
+import {
+  action,
+  availability,
+  fakeApi,
+  INSTALLED,
+  INSTALLED_WITH_DLSS_FIX,
+  installedWithChannel,
+  NOT_INSTALLED_SAFE,
+  PRESENT_HOST_FACTS,
+} from './renodx-store-test-fixtures';
 
 describe('createRenoDxStore', () => {
-  it('keeps private proof fields out of availability DTO fixtures', () => {
-    const serialized = JSON.stringify([
-      NOT_INSTALLED_SAFE,
-      INSTALLED,
-      {
-        ...NOT_INSTALLED_SAFE,
-        vulkan_layer: VULKAN_EXTERNAL_READ_ONLY,
-      },
-    ]);
-    const forbidden = [
-      ['reshade_', 'mana', 'ged_by_us'].join(''),
-      ['mana', 'ged_by_us'].join(''),
-      ['mana', 'ged'].join(''),
-      ['unmana', 'ged'].join(''),
-      ['fore', 'ign'].join(''),
-      ['own', 'ed'].join(''),
-      ['owner', 'ship'].join(''),
-      ['mark', 'er'].join(''),
-      ['mark', 'er_version'].join(''),
-      ['sour', 'ce'].join(''),
-      ['dig', 'est'].join(''),
-      ['sha', '256'].join(''),
-      ['valid', 'ator'].join(''),
-      ['backup', '_path'].join(''),
-      ['rollback', '_manifest'].join(''),
-      ['created', '_by'].join(''),
-      ['installed', '_by'].join(''),
-      ['tracked', '_source'].join(''),
-      ['proven', 'ance'].join(''),
-    ];
-
-    for (const key of forbidden) {
-      expect(serialized).not.toContain(key);
-    }
-  });
-
-  it('starts empty before loading', () => {
-    const store = createRenoDxStore(fakeApi());
-    expect(store.loaded).toBe(false);
-    expect(store.isInstalled).toBe(false);
-    expect(store.isInstallable).toBe(false);
-  });
-
-  it('load() reflects an installable, safe game', async () => {
-    const store = createRenoDxStore(fakeApi());
-    await store.load('steam:1091500');
-
-    expect(store.loaded).toBe(true);
-    expect(store.isInstallable).toBe(true);
-    expect(store.requiresConfirmation).toBe(false);
-    expect(store.isBlocked).toBe(false);
-    expect(store.risk?.severity).toBe('info');
-  });
-
-  it('falls back the selected ReShade channel when stable is unsupported', async () => {
-    const withoutStable: AvailabilityReport = {
-      ...NOT_INSTALLED_SAFE,
-      reshade_stable_supported: false,
-      host_facts: {
-        ...DEFAULT_HOST_FACTS,
-        channel: {
-          selected: 'stable',
-          effective: 'nightly',
-          detected: null,
-        },
-      },
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(withoutStable)) }),
-    );
-
-    await store.load('steam:1091500');
-
-    expect(store.reshadeStableSupported).toBe(false);
-    expect(store.selectedReshadeChannel).toBe('nightly');
-  });
-
-  it('applies the availability snapshot consistently on load', async () => {
-    const report: AvailabilityReport = {
-      ...INSTALLED,
-      host_detection: 'present',
-      host_facts: {
-        ...PRESENT_HOST_FACTS,
-        channel: {
-          selected: 'nightly',
-          effective: 'nightly',
-          detected: 'nightly',
-        },
-      },
-      actions: {
-        use_existing: action(),
-        switch_channel: action({ target_channel: 'stable' }),
-      },
-      reshade_stable_supported: false,
-      renodx_addon: {
-        present_on_disk: true,
-        expected_path: 'C:\\Games\\Game\\renodx.addon64',
-        discovered_path: 'C:\\Games\\Game\\renodx.addon64',
-        enabled_by_config: true,
-        load_mode: 'auto_search',
-      },
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
-    );
-
-    await store.load('steam:1091500');
-
-    expect(store.hostDetection).toBe('present');
-    expect(store.hostFacts).toEqual(report.host_facts);
-    expect(store.hostActions).toEqual(report.actions);
-    expect(store.reshadeChannel).toBe('nightly');
-    expect(store.reshadeStableSupported).toBe(false);
-    expect(store.renodxAddon).toEqual(report.renodx_addon);
-    expect(store.selectedReshadeChannel).toBe('nightly');
-  });
-
-  it('uses the backend channel facts as the per-game card selection', async () => {
-    const detectedNightlyDx: AvailabilityReport = {
-      ...NOT_INSTALLED_SAFE,
-      host_facts: {
-        ...DEFAULT_HOST_FACTS,
-        channel: { selected: 'stable', effective: 'stable', detected: 'nightly' },
-      },
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(detectedNightlyDx)) }),
-    );
-
-    await store.load('steam:1091500');
-
-    expect(store.selectedReshadeChannel).toBe('nightly');
-  });
-
-  it('falls back to the backend effective channel when no host channel is detected', async () => {
-    const effectiveNightlyDx: AvailabilityReport = {
-      ...NOT_INSTALLED_SAFE,
-      host_facts: {
-        ...DEFAULT_HOST_FACTS,
-        channel: { selected: 'stable', effective: 'nightly', detected: null },
-      },
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(effectiveNightlyDx)) }),
-    );
-
-    await store.load('steam:1091500');
-
-    expect(store.selectedReshadeChannel).toBe('nightly');
-  });
-
-  it('flags a warn-risk game as requiring confirmation', async () => {
-    const warn: AvailabilityReport = availability({
-      state: { status: 'not_installed' },
-      outcome: {
-        kind: 'installable',
-        confidence: 'untested',
-        risk: {
-          severity: 'warn',
-          anticheat_engine: 'eac',
-          online: 'pvp',
-          message_key: 'renodx.risk.anticheat_detected',
-          confidence: 'high',
-          reference_url: null,
-          detected_locally: true,
-        },
-        notes_keys: [],
-        host_kind: 'proxy',
-      },
-      manual_install: null,
-    });
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(warn)) }),
-    );
-    await store.load('steam:42');
-
-    expect(store.requiresConfirmation).toBe(true);
-    expect(store.isBlocked).toBe(false);
-  });
-
   it('install() passes the confirmation flag and refreshes state', async () => {
     // The refresh after install must observe the new installed state.
     let installed = false;
@@ -440,7 +42,7 @@ describe('createRenoDxStore', () => {
       }),
       getAvailability: vi.fn(() => Promise.resolve(installed ? INSTALLED : NOT_INSTALLED_SAFE)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.install('steam:1091500', 'stable', true);
 
@@ -448,80 +50,6 @@ describe('createRenoDxStore', () => {
     expect(store.isInstalled).toBe(true);
     expect(store.hostActions.use_existing?.enabled).toBe(true);
     expect(store.busy).toBe(false);
-  });
-
-  it('refreshes the Vulkan layer report after a transparent Vulkan install', async () => {
-    const VULKAN: AvailabilityReport = availability({
-      state: { status: 'not_installed' },
-      outcome: {
-        kind: 'installable',
-        confidence: 'untested',
-        risk: {
-          severity: 'info',
-          anticheat_engine: 'none',
-          online: 'singleplayer',
-          message_key: 'renodx.risk.sp_safe',
-          confidence: 'high',
-          reference_url: null,
-          detected_locally: false,
-        },
-        notes_keys: [],
-        host_kind: 'vulkan',
-      },
-      manual_install: null,
-    });
-    const api = fakeApi({
-      getAvailability: vi.fn(() => Promise.resolve(VULKAN)),
-      vulkanLayerStatus: vi.fn(() => Promise.resolve(VULKAN_INSTALLED)),
-    });
-    const store = createRenoDxStore(api);
-    await store.load('steam:1091500');
-
-    // Vulkan layer is installed transparently — no consent needed.
-    await store.install('steam:1091500', 'nightly', false);
-
-    expect(api.install).toHaveBeenCalledWith('steam:1091500', 'nightly', false);
-    expect(api.vulkanLayerStatus).toHaveBeenCalled();
-    // The layer report comes from the backend, not from optimistic inference.
-    expect(store.vulkanLayer?.layer_detection).toBe('installed');
-  });
-
-  it('reuses an existing Vulkan layer without consent', async () => {
-    const VULKAN_LAYER_PRESENT: AvailabilityReport = {
-      ...NOT_INSTALLED_SAFE,
-      outcome: {
-        ...NOT_INSTALLED_SAFE.outcome,
-        host_kind: 'vulkan',
-      } as AvailabilityReport['outcome'],
-      vulkan_layer: VULKAN_EXTERNAL_READ_ONLY,
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(VULKAN_LAYER_PRESENT)) }),
-    );
-    await store.load('steam:1091500');
-    expect(store.vulkanLayer?.actions.update).toBeUndefined();
-    expect(store.vulkanLayer?.actions.switch_channel).toBeUndefined();
-    expect(store.vulkanLayer?.actions.remove).toBeUndefined();
-  });
-
-  it('keeps Vulkan action permissions backend-authored', async () => {
-    const VULKAN_LAYER_PRESENT: AvailabilityReport = {
-      ...NOT_INSTALLED_SAFE,
-      outcome: {
-        ...NOT_INSTALLED_SAFE.outcome,
-        host_kind: 'vulkan',
-      } as AvailabilityReport['outcome'],
-      vulkan_layer: VULKAN_INSTALLED,
-    };
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(VULKAN_LAYER_PRESENT)) }),
-    );
-
-    await store.load('steam:1091500');
-
-    expect(store.vulkanLayer?.layer_detection).toBe('installed');
-    expect(store.vulkanLayer?.actions.update?.requires_confirmation).toBe(true);
-    expect(store.vulkanLayer?.actions.update?.confirmation_scope).toBe('all_vulkan_reno_dx_games');
   });
 
   it('surfaces an available update for an installed game', async () => {
@@ -536,7 +64,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -557,7 +85,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -583,7 +111,7 @@ describe('createRenoDxStore', () => {
         return Promise.resolve(INSTALLED.state);
       }),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
     expect(store.updateAvailable).toBe(true);
@@ -607,7 +135,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -630,7 +158,7 @@ describe('createRenoDxStore', () => {
       switchChannel: vi.fn(() => Promise.resolve(installedWithChannel('nightly').state)),
       update: vi.fn(() => Promise.resolve(INSTALLED.state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
     const ok = await store.update('steam:1091500');
@@ -655,7 +183,7 @@ describe('createRenoDxStore', () => {
       switchChannel: vi.fn(() => Promise.resolve(installedWithChannel('nightly').state)),
       update: vi.fn(() => Promise.resolve(installedWithChannel('nightly').state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
     const ok = await store.update('steam:1091500');
@@ -689,7 +217,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -736,7 +264,7 @@ describe('createRenoDxStore', () => {
         return Promise.resolve(INSTALLED.state);
       }),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     const ok = await store.switchChannel('steam:1091500', 'stable');
@@ -765,7 +293,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(installedStable)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     const ok = await store.switchChannel('steam:1091500', 'stable');
@@ -794,7 +322,7 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve(installedNightly)),
       switchChannel: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     const ok = await store.switchChannel('steam:1091500', 'stable');
@@ -815,12 +343,7 @@ describe('createRenoDxStore', () => {
           confidence: 'verified',
           risk: {
             severity: 'info',
-            anticheat_engine: 'none',
-            online: 'singleplayer',
-            message_key: 'renodx.risk.sp_safe',
-            confidence: 'high',
-            reference_url: null,
-            detected_locally: false,
+            message_key: 'addon.risk.sp_safe',
           },
           notes_keys: [],
           host_kind: 'proxy',
@@ -836,7 +359,7 @@ describe('createRenoDxStore', () => {
         return Promise.resolve(INSTALLED.state);
       }),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     expect(store.isExternal).toBe(true);
@@ -871,9 +394,9 @@ describe('createRenoDxStore', () => {
       },
       manual_install: null,
     });
-    const store = createRenoDxStore(
-      fakeApi({ getAvailability: vi.fn(() => Promise.resolve(LINK_ONLY)) }),
-    );
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(LINK_ONLY)) }),
+    });
     await store.load('steam:1091500');
 
     expect(store.isExternal).toBe(true);
@@ -885,7 +408,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -899,7 +422,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({
       install: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     const ok = await store.install('steam:1091500', 'stable', false);
 
@@ -913,7 +436,7 @@ describe('createRenoDxStore', () => {
     const api = fakeApi({
       installFromFile: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     const ok = await store.installFromFile(
       'steam:1091500',
@@ -940,7 +463,7 @@ describe('createRenoDxStore', () => {
       ),
       update: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
     expect(store.updateAvailable).toBe(true);
 
@@ -957,7 +480,7 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       uninstall: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
     expect(store.isInstalled).toBe(true);
 
@@ -968,55 +491,19 @@ describe('createRenoDxStore', () => {
     expect(store.isInstalled).toBe(true);
   });
 
-  it('installDlssFix() resolves false and leaves dlssFixInstalled untouched when the backend fails', async () => {
+  it('does not notify peer exclusivity when uninstall fails', async () => {
+    const onExclusivityChange = vi.fn();
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
-      checkUpdate: vi.fn(() =>
-        Promise.resolve({
-          addon: 'current',
-          host: 'current',
-          dlssFix: null,
-          overall: 'current',
-        } as RenoDxUpdateReport),
-      ),
-      dlssFixAvailability: vi.fn(() => Promise.resolve(true)),
-      installDlssFix: vi.fn(() => Promise.reject(new Error('boom'))),
+      uninstall: vi.fn(() => Promise.reject(new Error('boom'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api, onExclusivityChange });
     await store.load('steam:1091500');
-    expect(store.dlssFixAvailable).toBe(true);
 
-    const ok = await store.installDlssFix('steam:1091500');
+    const ok = await store.uninstall('steam:1091500');
 
     expect(ok).toBe(false);
-    expect(store.busy).toBe(false);
-    expect(store.dlssFixInstalled).toBe(false);
-  });
-
-  it('uninstallDlssFix() resolves false and leaves dlssFixInstalled untouched when the backend fails', async () => {
-    const api = fakeApi({
-      getAvailability: vi.fn(() =>
-        Promise.resolve({ ...INSTALLED, state: INSTALLED_WITH_DLSS_FIX }),
-      ),
-      checkUpdate: vi.fn(() =>
-        Promise.resolve({
-          addon: 'current',
-          host: 'current',
-          dlssFix: 'current',
-          overall: 'current',
-        } as RenoDxUpdateReport),
-      ),
-      uninstallDlssFix: vi.fn(() => Promise.reject(new Error('boom'))),
-    });
-    const store = createRenoDxStore(api);
-    await store.load('steam:1091500');
-    expect(store.dlssFixInstalled).toBe(true);
-
-    const ok = await store.uninstallDlssFix('steam:1091500');
-
-    expect(ok).toBe(false);
-    expect(store.busy).toBe(false);
-    expect(store.dlssFixInstalled).toBe(true);
+    expect(onExclusivityChange).not.toHaveBeenCalled();
   });
 
   it('checkForUpdates() records a failed probe when the backend rejects', async () => {
@@ -1024,7 +511,7 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       checkUpdate: vi.fn(() => Promise.reject(new Error('network down'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     await store.checkForUpdates('steam:1091500');
@@ -1056,7 +543,7 @@ describe('createRenoDxStore', () => {
       }),
       install: vi.fn(() => Promise.resolve(INSTALLED.state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('game1');
 
     const installDone = store.install('game1', 'stable', false); // starts the held-open refresh
@@ -1085,7 +572,7 @@ describe('createRenoDxStore', () => {
         gameId === 'game1' ? slowGame1 : Promise.resolve(INSTALLED),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     const load1 = store.load('game1'); // in-flight, unresolved
     await store.load('game2'); // newer, resolves first → installed
@@ -1099,61 +586,9 @@ describe('createRenoDxStore', () => {
     expect(store.isInstalled).toBe(true);
   });
 
-  it('reports DLSS-Fix availability for an installed game without one', async () => {
-    const api = fakeApi({
-      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
-      checkUpdate: vi.fn(() =>
-        Promise.resolve({
-          addon: 'current',
-          host: 'current',
-          dlssFix: null,
-          overall: 'current',
-        } as RenoDxUpdateReport),
-      ),
-      dlssFixAvailability: vi.fn(() => Promise.resolve(true)),
-    });
-    const store = createRenoDxStore(api);
-
-    await store.load('steam:1091500');
-
-    expect(store.isInstalled).toBe(true);
-    expect(store.dlssFixInstalled).toBe(false);
-    expect(store.dlssFixAvailable).toBe(true);
-  });
-
-  it('installDlssFix clears availability once the companion is tracked', async () => {
-    const api = fakeApi({
-      getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
-      checkUpdate: vi.fn(() =>
-        Promise.resolve({
-          addon: 'current',
-          host: 'current',
-          dlssFix: null,
-          overall: 'current',
-        } as RenoDxUpdateReport),
-      ),
-      dlssFixAvailability: vi.fn(() => Promise.resolve(true)),
-      installDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
-    });
-    const store = createRenoDxStore(api);
-
-    await store.load('steam:1091500');
-    expect(store.dlssFixAvailable).toBe(true);
-
-    const ok = await store.installDlssFix('steam:1091500');
-
-    expect(ok).toBe(true);
-    expect(api.installDlssFix).toHaveBeenCalledWith('steam:1091500');
-    // After install, the backend reports a DlssFix tracked source, so the state
-    // carries `dlss_fix_installed` and the companion reads as installed; it is no
-    // longer "available" to install (the stale flag must not linger).
-    expect(store.dlssFixInstalled).toBe(true);
-    expect(store.dlssFixAvailable).toBe(false);
-  });
-
   it('install() clears stale download progress before starting', async () => {
     const api = fakeApi();
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     vi.mocked(clearDownloadProgress).mockClear();
 
     await store.install('steam:1091500', 'stable', false);
@@ -1178,7 +613,7 @@ describe('createRenoDxStore', () => {
       ),
       install: vi.fn(() => Promise.resolve(INSTALLED.state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
     const availabilityCallsAfterLoad = vi.mocked(api.getAvailability).mock.calls.length;
@@ -1221,7 +656,7 @@ describe('createRenoDxStore', () => {
         return Promise.resolve(INSTALLED.state);
       }),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     const ok = await store.install('steam:1091500', 'stable', false);
@@ -1235,7 +670,7 @@ describe('createRenoDxStore', () => {
     expect(store.renodxAddon).toEqual(afterInstall.renodx_addon);
   });
 
-  it('mutation host refresh failures keep the optimistic install state', async () => {
+  it('mutation host refresh failures keep the committed install state', async () => {
     let calls = 0;
     const api = fakeApi({
       getAvailability: vi.fn(() => {
@@ -1246,7 +681,7 @@ describe('createRenoDxStore', () => {
       }),
       install: vi.fn(() => Promise.resolve(INSTALLED.state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
 
     const ok = await store.install('steam:1091500', 'stable', false);
@@ -1262,7 +697,7 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       uninstall: vi.fn(() => Promise.resolve(NOT_INSTALLED_SAFE.state)),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
     expect(store.isInstalled).toBe(true);
 
@@ -1278,7 +713,7 @@ describe('createRenoDxStore', () => {
 
   it('surfaces the add-on date and install timestamps when installed', async () => {
     const api = fakeApi({ getAvailability: vi.fn(() => Promise.resolve(INSTALLED)) });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -1302,7 +737,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
     await store.load('steam:1091500');
     const checksAfterLoad = vi.mocked(api.checkUpdate).mock.calls.length;
     const stampAfterLoad = store.lastCheckedAt;
@@ -1317,28 +752,27 @@ describe('createRenoDxStore', () => {
     expect(store.lastCheckedAt).toBeGreaterThanOrEqual(stampAfterLoad ?? 0);
   });
 
-  it('install() stamps optimistic install timestamps and a current freshness', async () => {
-    // The mutation command returns a state with null timestamps (built from an
-    // in-memory record); the store fills them optimistically so the card shows
-    // "Installed just now / Up to date" without waiting for a reload.
-    const installedWithoutDates: RenoDxInstallState = {
+  it('install() commits backend install state and a synthetic current freshness', async () => {
+    // Timestamps come from the backend; the client only applies a synthetic
+    // "everything current" update report until the next real probe.
+    const installedFromBackend: RenoDxInstallState = {
       status: 'installed',
       host_kind: 'proxy',
       version: null,
       addon_dated: null,
-      installed_at: null,
-      updated_at: null,
+      installed_at: 1_000_000_000_000,
+      updated_at: 1_000_000_000_000,
       dlss_fix_installed: false,
       addon_tracked: true,
     };
-    const api = fakeApi({ install: vi.fn(() => Promise.resolve(installedWithoutDates)) });
-    const store = createRenoDxStore(api);
+    const api = fakeApi({ install: vi.fn(() => Promise.resolve(installedFromBackend)) });
+    const store = createRenoDxStore({ api });
 
     await store.install('steam:1091500', 'stable', false);
 
     expect(store.isInstalled).toBe(true);
-    expect(store.installedAt).not.toBeNull();
-    expect(store.updatedAt).not.toBeNull();
+    expect(store.installedAt).toBe(1_000_000_000_000);
+    expect(store.updatedAt).toBe(1_000_000_000_000);
     expect(store.freshness).toBe('current');
     expect(store.lastCheckedAt).not.toBeNull();
   });
@@ -1355,7 +789,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport),
       ),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -1370,7 +804,7 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       checkUpdate: vi.fn(() => Promise.reject(new Error('network down'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -1397,7 +831,7 @@ describe('createRenoDxStore', () => {
         } as RenoDxUpdateReport);
       }),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
     expect(store.freshness).toBe('unknown');
@@ -1417,7 +851,7 @@ describe('createRenoDxStore', () => {
       ),
       checkUpdate: vi.fn(() => Promise.reject(new Error('network down'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
@@ -1437,50 +871,11 @@ describe('createRenoDxStore', () => {
       getAvailability: vi.fn(() => Promise.resolve({ ...INSTALLED, state: fileInstall })),
       checkUpdate: vi.fn(() => Promise.reject(new Error('network down'))),
     });
-    const store = createRenoDxStore(api);
+    const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
     expect(store.addonTracked).toBe(false);
     expect(store.freshness).toBe('unknown');
-  });
-});
-
-describe('deriveFreshness', () => {
-  const report = (over: Partial<RenoDxUpdateReport> = {}): RenoDxUpdateReport => ({
-    addon: 'current',
-    host: 'current',
-    dlssFix: null,
-    overall: 'current',
-    ...over,
-  });
-
-  it('reports checking while a probe is in flight, regardless of report', () => {
-    expect(deriveFreshness(true, false, null)).toBe('checking');
-    expect(deriveFreshness(true, true, report())).toBe('checking');
-  });
-
-  it('reports unknown on a failed probe or a missing report', () => {
-    expect(
-      deriveFreshness(false, true, report({ addon: null, host: null, overall: 'unknown' })),
-    ).toBe('unknown');
-    expect(deriveFreshness(false, false, null)).toBe('unknown');
-  });
-
-  it('reports available when any source changed', () => {
-    expect(deriveFreshness(false, false, report({ overall: 'available' }))).toBe('available');
-    expect(deriveFreshness(false, false, report({ overall: 'channel_mismatch' }))).toBe(
-      'available',
-    );
-  });
-
-  it('reports untracked only on a successful probe with no tracked sources', () => {
-    expect(
-      deriveFreshness(false, false, report({ addon: null, host: null, overall: 'unknown' })),
-    ).toBe('untracked');
-  });
-
-  it('reports current when every source is up to date', () => {
-    expect(deriveFreshness(false, false, report())).toBe('current');
   });
 });

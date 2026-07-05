@@ -11,19 +11,7 @@
   import { ErrorBoundary } from '@shared/ui';
   import { NotificationsToaster } from '@widgets/notifications-toaster';
   import { ElevationBanner } from '@widgets/elevation-banner';
-  import {
-    createCoverSyncQueue,
-    executeBackgroundCoverSync,
-    publishBackgroundCoverSyncFailureNotification,
-    publishBackgroundCoverSyncIssueNotification,
-  } from '@features/sync-covers';
-  import {
-    publishAutomaticLibraryScanFailedNotification,
-    publishPartialLibraryScanWarning,
-    scanAutoLibrariesWithErrorRecovery,
-    selectManualScanFolder,
-    scanManualFolder,
-  } from '@features/scan-libraries';
+  import { createCoverSyncQueue } from '@features/sync-covers';
   import {
     GameDetailsPage as GameDetailsScreen,
     createGameDetailsPageModel,
@@ -38,6 +26,10 @@
     openDesktopGame,
     refreshDesktopCatalog,
     reloadSelectedGame as reloadSelectedGameWorkflow,
+    runUserCatalogRefresh,
+    scanAutoLibrariesAndRefreshCards,
+    scanManualFolderAndRefreshCards,
+    syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
   import type { AppInitializationState } from '@entities/app';
 
@@ -59,6 +51,29 @@
     reloadGameDetails: () => reloadSelectedGame('details'),
   });
 
+  /** Shared exclusive-lock + cover-sync deps for catalog mutations. */
+  function catalogRefreshDeps() {
+    return {
+      runExclusive: <T,>(task: () => Promise<T>) => model.runExclusive(task),
+      refreshGameCards,
+      coverSyncQueue,
+      syncMissingCoversAfterCardsLoad: () =>
+        syncMissingCoversAfterCardsLoad({
+          games: model.games,
+          readSetting: getCatalogSetting,
+          fetchGameCover,
+          refreshGameCards,
+          coverSyncQueue,
+          beforeSync: () => tick(),
+          onCoverReady: () => {
+            // Re-run the games-page query as each cover lands so the grid
+            // updates incrementally instead of only after the full batch.
+            model.catalog.incrementCatalogVersion();
+          },
+        }),
+    };
+  }
+
   onMount(() => {
     model.applyCurrentTheme();
 
@@ -66,68 +81,17 @@
       model.applyCurrentTheme();
     });
 
-    void scanAutoLibrariesAndRefreshCards();
+    void scanAutoLibrariesAndRefreshCards(catalogRefreshDeps());
 
     return stopThemeObserver;
   });
 
-  // ---------------------------------------------------------------------------
-  // Catalog loading
-  // ---------------------------------------------------------------------------
-
-  async function scanAutoLibrariesAndRefreshCards(): Promise<void> {
-    await runCatalogRefreshWithCoverSync(async () => {
-      const scanResult = await scanAutoLibrariesWithErrorRecovery();
-
-      if (scanResult.kind === 'error') {
-        publishAutomaticLibraryScanFailedNotification(scanResult.message);
-        return true;
-      }
-
-      if (scanResult.errors.length > 0) {
-        publishPartialLibraryScanWarning(scanResult.errors.length);
-      }
-
-      return true;
-    });
-  }
-
   async function handleScan(): Promise<void> {
-    await runCatalogRefreshWithCoverSync(async () => {
-      const selectedFolder = await selectManualScanFolder();
-
-      if (selectedFolder === null) {
-        return false;
-      }
-
-      await scanManualFolder(selectedFolder);
-      return true;
-    });
+    await scanManualFolderAndRefreshCards(catalogRefreshDeps());
   }
 
   async function handleReloadCards(): Promise<void> {
     await model.runExclusive(refreshGameCards);
-  }
-
-  async function runCatalogRefreshWithCoverSync(
-    prepareRefresh: () => Promise<boolean>,
-  ): Promise<void> {
-    const refreshed = await model.runExclusive(async () => {
-      const shouldRefresh = await prepareRefresh();
-
-      if (!shouldRefresh) {
-        return false;
-      }
-
-      await refreshGameCards();
-      return true;
-    });
-
-    if (refreshed === true) {
-      coverSyncQueue.queue(syncMissingCoversAfterCardsLoad, (error) => {
-        publishBackgroundCoverSyncFailureNotification(error);
-      });
-    }
   }
 
   async function refreshGameCards(): Promise<void> {
@@ -137,10 +101,6 @@
       clearSelectionIfSelectedGameMissing: model.clearSelectionIfSelectedGameMissing,
     });
   }
-
-  // ---------------------------------------------------------------------------
-  // Game details / operations
-  // ---------------------------------------------------------------------------
 
   async function openGameDetails(gameId: string): Promise<void> {
     await openDesktopGame(gameId, 'details', {
@@ -170,47 +130,14 @@
     model.handleNavigate('settings');
   }
 
-  // ---------------------------------------------------------------------------
-  // Background cover sync
-  // ---------------------------------------------------------------------------
-
   async function handleRefresh(): Promise<void> {
     isRefreshing = true;
     try {
-      await scanAutoLibrariesAndRefreshCards();
+      await runUserCatalogRefresh(catalogRefreshDeps());
       refreshCounter++;
     } finally {
       isRefreshing = false;
     }
-  }
-
-  async function syncMissingCoversAfterCardsLoad(): Promise<void> {
-    await tick();
-
-    const cardSnapshot = model.games.slice();
-
-    if (cardSnapshot.length === 0) {
-      return;
-    }
-
-    await executeBackgroundCoverSync(cardSnapshot, {
-      readSetting: getCatalogSetting,
-      fetchGameCover,
-      refreshGameCards,
-      onGameStart: (gameId) => {
-        coverSyncQueue.setAutoFetching(gameId, true);
-      },
-      onGameEnd: (gameId) => {
-        coverSyncQueue.setAutoFetching(gameId, false);
-      },
-      onCoverReady: () => {
-        // Re-run the games-page query so each cover shows as soon as it downloads,
-        // instead of all at once after the batch. The scheduler drops superseded
-        // in-flight queries, so rapid completions coalesce to the latest result.
-        model.catalog.incrementCatalogVersion();
-      },
-      onError: publishBackgroundCoverSyncIssueNotification,
-    });
   }
 </script>
 

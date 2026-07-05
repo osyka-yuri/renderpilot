@@ -7,6 +7,7 @@ export type GamesFiltersSyncOptions = {
   getPreferenceLoaded: () => boolean;
   getPersistedFilters: () => PersistedGamesFilters | null;
   getAvailableLibraries: () => readonly string[];
+  getAvailableAddons: () => readonly string[];
   getAvailableLaunchers: () => readonly string[];
 };
 
@@ -25,6 +26,7 @@ export function setupGamesFiltersSync(
       options.getPersistedFilters(),
       options.getAvailableLibraries(),
       options.getAvailableLaunchers(),
+      options.getAvailableAddons(),
     );
 
     if (syncResult.state !== store.state) {
@@ -67,6 +69,7 @@ export function setupGamesFiltersSync(
   // Effect 2: User Action Sync
   let prevSearchQuery = store.state.searchQuery;
   let prevAppliedLibraries = store.state.appliedLibraries;
+  let prevAppliedAddons = store.state.appliedAddons;
   let prevAppliedLaunchers = store.state.appliedLaunchers;
   let prevAppliedLauncherOrder = store.state.appliedLauncherOrder;
   let prevShowHidden = store.state.appliedShowHidden;
@@ -78,6 +81,7 @@ export function setupGamesFiltersSync(
     const searchChanged = s.searchQuery !== prevSearchQuery;
     const appliedChanged =
       s.appliedLibraries !== prevAppliedLibraries ||
+      s.appliedAddons !== prevAppliedAddons ||
       s.appliedLaunchers !== prevAppliedLaunchers ||
       s.appliedLauncherOrder !== prevAppliedLauncherOrder ||
       s.appliedShowHidden !== prevShowHidden ||
@@ -85,6 +89,7 @@ export function setupGamesFiltersSync(
 
     prevSearchQuery = s.searchQuery;
     prevAppliedLibraries = s.appliedLibraries;
+    prevAppliedAddons = s.appliedAddons;
     prevAppliedLaunchers = s.appliedLaunchers;
     prevAppliedLauncherOrder = s.appliedLauncherOrder;
     prevShowHidden = s.appliedShowHidden;

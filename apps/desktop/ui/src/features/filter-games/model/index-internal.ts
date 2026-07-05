@@ -6,6 +6,7 @@ export {
   openFilterDialog,
   cancelFilterDialog,
   setDraftLibraries,
+  setDraftAddons,
   setDraftLaunchers,
   setDraftLauncherOrder,
   setDraftShowHidden,

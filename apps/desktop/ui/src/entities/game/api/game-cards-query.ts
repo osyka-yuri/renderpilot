@@ -1,4 +1,5 @@
 import type { GameCardsQuery, GameCardsSortDirection, GameCardsSortField } from '../model/types';
+import { isAddonCapability } from '../model/addon-capabilities';
 import { isArray, isNumber, isRecord, isString } from '@shared/validation';
 import { normalizeUniqueTrimmedStrings, trimToEmpty } from '@shared/text';
 
@@ -87,6 +88,16 @@ function normalizeStringList(value: unknown, fieldName: string): string[] {
   return normalizeUniqueTrimmedStrings(requireStringList(value, fieldName));
 }
 
+function normalizeAddons(value: unknown): GameCardsQuery['selectedAddons'] {
+  const addons = normalizeStringList(value, 'query.selectedAddons');
+
+  if (!addons.every(isAddonCapability)) {
+    throw new TypeError('query.selectedAddons contains an unsupported add-on.');
+  }
+
+  return addons;
+}
+
 function normalizePageLimit(value: unknown): number {
   return Math.max(MIN_PAGE_LIMIT, requireFiniteInteger(value, 'query.page.limit'));
 }
@@ -103,6 +114,7 @@ export function normalizeGameCardsQuery(value: unknown): GameCardsQuery {
   return {
     searchQuery: trimToEmpty(requireString(query.searchQuery, 'query.searchQuery')),
     selectedLibraries: normalizeStringList(query.selectedLibraries, 'query.selectedLibraries'),
+    selectedAddons: normalizeAddons(query.selectedAddons),
     selectedLaunchers: normalizeStringList(query.selectedLaunchers, 'query.selectedLaunchers'),
     showHidden: query.showHidden === true,
     favoritesOnly: query.favoritesOnly === true,

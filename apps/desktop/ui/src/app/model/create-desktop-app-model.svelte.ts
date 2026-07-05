@@ -5,7 +5,6 @@ import { resolveSelectedGameDetails, workspaceShellGameTitle } from '@app/naviga
 import type { AppInitializationState } from '@entities/app';
 import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
-import type { SwapPlan } from '@entities/operation';
 import { ignoreError } from '@shared/callbacks';
 import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
 import type { ThemeMode } from '@shared/theme';
@@ -15,10 +14,7 @@ import { readStoredLanguageMode, setLanguageMode } from '@shared/i18n';
 import { createGamesCatalogModel } from '@widgets/games-catalog';
 import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
 import { createExclusiveTaskRunner } from '@shared/concurrency';
-import {
-  publishMissingStableGameDetailsNotification,
-  publishStalePlanNotification,
-} from './notifications';
+import { publishMissingStableGameDetailsNotification } from './notifications';
 
 export type DesktopAppModel = ReturnType<typeof createDesktopAppModel>;
 
@@ -38,6 +34,16 @@ const DEFAULT_INITIALIZATION: AppInitializationState = {
   elevationAttempted: false,
 };
 
+/**
+ * Root desktop application model.
+ *
+ * Public surface style:
+ * - **Flat getters** for template-friendly reads (screen, games, busy, theme, …)
+ * - **Nested `catalog` / `workspace`** for mutations and request tokens
+ *   (callers that need `setGames` or `beginDetailsRequest` use the submodel)
+ *
+ * Plan APIs live only on `workspace` — the root model does not re-wrap them.
+ */
 export function createDesktopAppModel(
   getInitialization: () => AppInitializationState = () => DEFAULT_INITIALIZATION,
 ) {
@@ -65,10 +71,6 @@ export function createDesktopAppModel(
   );
   const hasSelectedGameDetails = $derived(selectedDetails !== null);
 
-  // ---------------------------------------------------------------------------
-  // Navigation
-  // ---------------------------------------------------------------------------
-
   function handleNavigate(nextScreen: Screen): void {
     if (nextScreen === 'settings') {
       screen = 'settings';
@@ -93,10 +95,6 @@ export function createDesktopAppModel(
     screen = 'games';
   }
 
-  // ---------------------------------------------------------------------------
-  // Selection helpers
-  // ---------------------------------------------------------------------------
-
   function clearSelection(): void {
     workspace.clearSelection();
 
@@ -116,26 +114,6 @@ export function createDesktopAppModel(
     clearSelection();
   }
 
-  // ---------------------------------------------------------------------------
-  // State setters (encapsulated)
-  // ---------------------------------------------------------------------------
-
-  function setCurrentPlan(plan: SwapPlan | null): void {
-    workspace.setCurrentPlan(plan);
-  }
-
-  function getCurrentPlan(gameId: string): SwapPlan | null {
-    return workspace.getCurrentPlan(gameId);
-  }
-
-  function showStalePlanError(): void {
-    publishStalePlanNotification();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Presenters
-  // ---------------------------------------------------------------------------
-
   function presentGameDetails(details: GameDetails, nextScreen: WorkspaceScreen): void {
     const gameId = workspace.presentGameDetails(details);
 
@@ -145,13 +123,8 @@ export function createDesktopAppModel(
     }
 
     screen = nextScreen;
-
     clearError();
   }
-
-  // ---------------------------------------------------------------------------
-  // Error helpers
-  // ---------------------------------------------------------------------------
 
   function clearError(): void {
     clearStatusNotification();
@@ -160,10 +133,6 @@ export function createDesktopAppModel(
   function showError(error: unknown): void {
     publishCommandErrorNotification(error);
   }
-
-  // ---------------------------------------------------------------------------
-  // Settings
-  // ---------------------------------------------------------------------------
 
   function changeThemeMode(mode: ThemeMode): void {
     if (themeMode === mode) {
@@ -174,10 +143,8 @@ export function createDesktopAppModel(
 
     try {
       persistThemeMode(mode);
-
       themeMode = mode;
       applyCurrentTheme();
-
       clearError();
     } catch (error) {
       restoreThemeMode(previousMode);
@@ -194,9 +161,7 @@ export function createDesktopAppModel(
 
     try {
       setLanguageMode(mode);
-
       languageMode = mode;
-
       clearError();
     } catch (error) {
       restoreLanguageMode(previousMode);
@@ -228,10 +193,6 @@ export function createDesktopAppModel(
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Exclusive task runner
-  // ---------------------------------------------------------------------------
-
   const taskRunner = createExclusiveTaskRunner({
     onBeforeRun: clearError,
     onError: showError,
@@ -248,7 +209,7 @@ export function createDesktopAppModel(
   }
 
   return {
-    // State (read-only)
+    // Flat read surface (templates + simple callers)
     get screen() {
       return screen;
     },
@@ -276,7 +237,6 @@ export function createDesktopAppModel(
     get languageMode() {
       return languageMode;
     },
-    // Process-wide initialization snapshot (elevation, etc.). Session-stable.
     get isElevated() {
       return initialization.isElevated;
     },
@@ -286,7 +246,9 @@ export function createDesktopAppModel(
     get elevationUserDeclined() {
       return initialization.elevationUserDeclined;
     },
-    // Derived
+    get elevationAttempted() {
+      return initialization.elevationAttempted;
+    },
     get currentGameCard() {
       return currentGameCard;
     },
@@ -300,7 +262,7 @@ export function createDesktopAppModel(
       return hasSelectedGameDetails;
     },
 
-    // Sub-models (direct access for pass-through operations)
+    // Nested mutation / request surfaces
     get catalog() {
       return catalog;
     },
@@ -308,15 +270,10 @@ export function createDesktopAppModel(
       return workspace;
     },
 
-    // State mutations (encapsulated)
-    setCurrentPlan,
-
-    // Actions
+    // Root-owned actions
     handleNavigate,
     clearSelection,
     clearSelectionIfSelectedGameMissing,
-    getCurrentPlan,
-    showStalePlanError,
     presentGameDetails,
     clearError,
     showError,

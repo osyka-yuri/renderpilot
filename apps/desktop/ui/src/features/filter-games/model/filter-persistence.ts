@@ -1,11 +1,16 @@
 import { isUnknownRecord, safeJsonParse } from '@shared/validation';
 import { normalizeUniqueTrimmedStringsFromUnknown, trimToEmpty } from '@shared/text';
-import { normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
+import {
+  normalizeAddonCapabilities,
+  normalizeLibraryValues,
+  normalizeLauncherValues,
+} from '@entities/game';
 
 const EMPTY_SEARCH_QUERY = '';
 
 export type PersistedGamesFilters = {
   libraries: string[];
+  addons?: string[] | null;
   launchers: string[];
   launcherOrder: string[];
   searchQuery: string;
@@ -22,6 +27,7 @@ export function normalizePersistedGamesFilters(
 ): PersistedGamesFilters {
   return {
     libraries: normalizeLibraryValues(filters.libraries),
+    ...(filters.addons == null ? {} : { addons: normalizeAddonCapabilities(filters.addons) }),
     launchers: normalizeLauncherValues(filters.launchers),
     launcherOrder: normalizeLauncherValues(filters.launcherOrder),
     searchQuery: normalizeSearchQuery(filters.searchQuery),
@@ -48,6 +54,7 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
   if (Array.isArray(value)) {
     return {
       libraries: normalizeUniqueTrimmedStringsFromUnknown(value),
+      addons: null,
       launchers: [],
       launcherOrder: [],
       searchQuery: EMPTY_SEARCH_QUERY,
@@ -62,6 +69,7 @@ function readPersistedGamesFilters(value: unknown): PersistedGamesFilters | null
 
   return {
     libraries: readPersistedStringList(value.libraries),
+    addons: 'addons' in value ? readPersistedStringList(value.addons) : null,
     launchers: readPersistedStringList(value.launchers),
     launcherOrder: readPersistedStringList(value.launcherOrder),
     searchQuery: readPersistedSearchQuery(value.searchQuery),

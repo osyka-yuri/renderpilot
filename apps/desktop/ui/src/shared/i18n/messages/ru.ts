@@ -75,6 +75,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'game.card.action.details': 'Подробнее',
   'game.card.action.detailsAria': 'Открыть подробности: {title}',
   'game.card.detectedLibraries': 'Найденные компоненты',
+  'game.card.availableAddons': 'Доступные аддоны',
   'game.card.badge.upToDate': 'Актуально',
   'game.card.badge.updatesAvailable': 'Доступны обновления',
   'game.card.badge.updatesAvailableCount': {
@@ -91,7 +92,6 @@ export const ru: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Скрыть игру',
   'game.card.menu.hidden.remove': 'Показать игру',
   'game.card.menu.hidden.toggleHint': 'Переключить статус видимости для этой игры.',
-  'game.libraries.empty': 'Компоненты не найдены',
 
   // ── Game cover ──
   'game.cover.alt': 'Обложка',
@@ -326,6 +326,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': 'Переместить {label}',
   'filters.libraries.title': 'Компоненты',
   'filters.libraries.empty': 'Компоненты не найдены',
+  'filters.addons.title': 'Аддоны',
 
   // ── Games toolbar ──
   'games.favoritesToggle': 'Избранное',
@@ -513,15 +514,7 @@ export const ru: Record<MessageKey, MessageValue> = {
     'Будет удалён аддон RenoDX и восстановлены только файлы ReShade, изменённые во время настройки RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Удалить',
   'gameDetails.renodx.installing': 'Установка…',
-  'gameDetails.renodx.riskSafe': 'Античит не обнаружен — установка безопасна.',
-  'gameDetails.renodx.riskWarn': 'Обнаружен античит — установка может привести к бану.',
-  'gameDetails.renodx.riskBlocked': 'Установка для этой игры заблокирована.',
   'gameDetails.renodx.confirmTitle': 'Установить RenoDX несмотря на риск из-за античита?',
-  'gameDetails.renodx.confirmAccept': 'Всё равно установить',
-  'gameDetails.renodx.confirmBody':
-    'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
-  'gameDetails.renodx.fullAddonWarning':
-    'Полная поддержка аддонов ReShade может быть небезопасна для мультиплеера или игр с античитом.',
   'gameDetails.renodx.cancel': 'Отмена',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError': 'Не удалось удалить общий Vulkan-слой ReShade.',
@@ -659,4 +652,20 @@ export const ru: Record<MessageKey, MessageValue> = {
     'Доступно — убирает мерцание при DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     'Это общее исправление для ReShade, не специфичное для RenoDX. Оно заставляет ReShade рисовать по нативным кадрам игры, а не по кадрам Frame Generation, и скрывает DLSS-апскейлинг от ReShade, если игра корректно реализует Streamline.',
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'Античит не обнаружен — установка безопасна.',
+  'gameDetails.addon.riskWarn': 'Обнаружен античит — установка может привести к бану.',
+  'addon.risk.sp_safe':
+    'Известные сигнатуры античита не обнаружены — установка {addonName}, скорее всего, безопасна.',
+  'addon.risk.anticheat_detected':
+    'Обнаружены сигнатуры античита — установка {addonName} может привести к бану.',
+  'gameDetails.addon.confirmAccept': 'Всё равно установить',
+  'gameDetails.addon.confirmBody':
+    'В игре используется античит. ReShade-аддон может его активировать и привести к бану. Продолжайте на свой риск.',
+  'gameDetails.addon.fullAddonWarning':
+    'Полная поддержка аддонов ReShade может быть небезопасна для мультиплеера или игр с античитом.',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    'Для этой игры установлен {installedAddon} — удалите его перед установкой {blockedAddon}.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'На диске найдены файлы {installedAddon} для этой игры — удалите их перед установкой {blockedAddon}.',
 };

@@ -2,6 +2,7 @@ import {
   queryGameCards,
   DEFAULT_GAME_CARDS_CATALOG_PAGE,
   DEFAULT_GAME_CARDS_CATALOG_SORT,
+  type AddonCapability,
   type GameSummary,
 } from '@entities/game';
 import { createRequestChannel, type RequestChannel } from '@shared/requests';
@@ -9,6 +10,7 @@ import { createRequestChannel, type RequestChannel } from '@shared/requests';
 export function buildGameCardsQueryKey(
   searchQuery: string,
   selectedLibraries: readonly string[],
+  selectedAddons: readonly AddonCapability[],
   selectedLaunchers: readonly string[],
   showHidden: boolean,
   favoritesOnly: boolean,
@@ -16,6 +18,7 @@ export function buildGameCardsQueryKey(
   return JSON.stringify({
     searchQuery,
     selectedLibraries,
+    selectedAddons,
     selectedLaunchers,
     showHidden,
     favoritesOnly,
@@ -26,6 +29,7 @@ export type GamesQuerySnapshot = {
   requestKey: string;
   searchQuery: string;
   selectedLibraries: string[];
+  selectedAddons: AddonCapability[];
   selectedLaunchers: string[];
   showHidden: boolean;
   favoritesOnly: boolean;
@@ -47,11 +51,19 @@ function createRequestKey(
   version: number,
   searchQuery: string,
   selectedLibraries: readonly string[],
+  selectedAddons: readonly AddonCapability[],
   selectedLaunchers: readonly string[],
   showHidden: boolean,
   favoritesOnly: boolean,
 ) {
-  return `${version}:${buildGameCardsQueryKey(searchQuery, selectedLibraries, selectedLaunchers, showHidden, favoritesOnly)}`;
+  return `${version}:${buildGameCardsQueryKey(
+    searchQuery,
+    selectedLibraries,
+    selectedAddons,
+    selectedLaunchers,
+    showHidden,
+    favoritesOnly,
+  )}`;
 }
 
 export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
@@ -67,6 +79,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
     preferenceLoaded: boolean,
     searchQuery: string,
     selectedLibraries: readonly string[],
+    selectedAddons: readonly AddonCapability[],
     selectedLaunchers: readonly string[],
     showHidden: boolean,
     favoritesOnly: boolean,
@@ -77,6 +90,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
 
     const normalizedSearchQuery = searchQuery.trim();
     const normalizedSelectedLibraries = [...selectedLibraries];
+    const normalizedSelectedAddons = [...selectedAddons];
     const normalizedSelectedLaunchers = [...selectedLaunchers];
 
     return {
@@ -84,12 +98,14 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
         version,
         normalizedSearchQuery,
         normalizedSelectedLibraries,
+        normalizedSelectedAddons,
         normalizedSelectedLaunchers,
         showHidden,
         favoritesOnly,
       ),
       searchQuery: normalizedSearchQuery,
       selectedLibraries: normalizedSelectedLibraries,
+      selectedAddons: normalizedSelectedAddons,
       selectedLaunchers: normalizedSelectedLaunchers,
       showHidden,
       favoritesOnly,
@@ -116,6 +132,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
       const result = await fetchCards({
         searchQuery: snapshot.searchQuery,
         selectedLibraries: snapshot.selectedLibraries,
+        selectedAddons: snapshot.selectedAddons,
         selectedLaunchers: snapshot.selectedLaunchers,
         showHidden: snapshot.showHidden,
         favoritesOnly: snapshot.favoritesOnly,

@@ -1,7 +1,10 @@
 import type { GameSummary, GameCardMenuHandle } from '@entities/game';
 import {
   ALL_KNOWN_LAUNCHERS,
+  ALL_ADDON_CAPABILITIES,
+  compactFullSelectionForQuery,
   expandLibraryFilterAliases,
+  normalizeAddonCapabilities,
   toGameCardViewModel,
   setGameFavorite,
   setGameHidden,
@@ -38,6 +41,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
 
   const filtersModel = createGamesFiltersModel({
     getAvailableLibraries: () => ALL_KNOWN_LIBRARIES,
+    getAvailableAddons: () => ALL_ADDON_CAPABILITIES,
     getAvailableLaunchers: () => ALL_KNOWN_LAUNCHERS,
   });
   const gameItems = $derived(queriedGames.map((game) => toGameCardViewModel(game)));
@@ -58,12 +62,23 @@ export function createGamesPageModel(input: GamesPageModelInput) {
 
   $effect(() => {
     const filtersReady = filtersModel.filtersState.ready;
+    const selectedLibraries = compactFullSelectionForQuery(
+      filtersModel.filtersState.appliedLibraries,
+      filtersModel.filtersState.availableLibraries,
+    );
+    const selectedAddons = normalizeAddonCapabilities(
+      compactFullSelectionForQuery(
+        filtersModel.filtersState.appliedAddons,
+        filtersModel.filtersState.availableAddons,
+      ),
+    );
     const querySnapshot = scheduler.createGamesQuerySnapshot(
       input.getCatalogVersion(),
       filtersReady,
       filtersReady,
       filtersModel.filtersState.searchQuery,
-      expandLibraryFilterAliases(filtersModel.filtersState.appliedLibraries),
+      expandLibraryFilterAliases(selectedLibraries),
+      selectedAddons,
       filtersModel.filtersState.appliedLaunchers,
       filtersModel.filtersState.appliedShowHidden,
       filtersModel.filtersState.appliedFavoritesOnly,
@@ -208,6 +223,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     cancelFilterSelection: filtersModel.cancelFilterSelection,
     toggleFiltersDialog: filtersModel.toggleFiltersDialog,
     handleDraftLibrariesChange: filtersModel.handleDraftLibrariesChange,
+    handleDraftAddonsChange: filtersModel.handleDraftAddonsChange,
     handleDraftLaunchersChange: filtersModel.handleDraftLaunchersChange,
     handleDraftLauncherOrderChange: filtersModel.handleDraftLauncherOrderChange,
     resetFilters: filtersModel.resetFilters,

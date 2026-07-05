@@ -11,7 +11,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
 }));
 
-type ProgressPayload = { id: string; downloaded: number; total: number };
+type ProgressPayload = { id: string; downloaded: number; total: number; phase?: string };
 type ProgressHandler = (event: { payload: ProgressPayload }) => void;
 
 let handler: ProgressHandler | undefined;
@@ -55,6 +55,20 @@ describe('download-progress.svelte', () => {
     // Requesting just 'b'
     const bestForB = latestDownloadProgress(['b']);
     expect(bestForB).toEqual(expect.objectContaining({ id: 'b', downloaded: 50 }));
+  });
+
+  it('preserves the backend progress phase', () => {
+    latestDownloadProgress(['a']); // init listener
+    emitProgress({
+      id: 'a',
+      downloaded: 10,
+      total: 100,
+      phase: 'Add-on framework payload',
+    });
+
+    expect(latestDownloadProgress(['a'])).toEqual(
+      expect.objectContaining({ phase: 'Add-on framework payload' }),
+    );
   });
 
   it('returns null for unrelated ids', () => {

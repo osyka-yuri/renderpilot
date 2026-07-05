@@ -1,3 +1,4 @@
+import type { AddonKind } from '@shared/model';
 import type { FilePath, Nullable } from '@shared/types';
 
 /**
@@ -25,12 +26,14 @@ export type GameRiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'blocked' | 'un
 export type Launcher = string;
 
 /** Must match `Launcher` serde names from renderpilot-domain (`stable_enum!`). */
-export const LAUNCHER_STEAM = 'Steam' as const;
-export const LAUNCHER_GOG = 'Gog' as const;
+export const LAUNCHER_STEAM = 'Steam';
+export const LAUNCHER_GOG = 'Gog';
 
 export type Platform = string;
 export type Runtime = string;
 export type Technology = string;
+/** Catalog/filter capability id — same vocabulary as {@link AddonKind}. */
+export type AddonCapability = AddonKind;
 
 export type GameIdentity = {
   id: GameId;
@@ -58,6 +61,7 @@ export type GameSummary = {
 
   library_tags: Technology[];
   component_count: number;
+  addon_capabilities: AddonCapability[];
 
   updates_available: boolean;
   update_count: number;
@@ -90,6 +94,7 @@ export type GameCardsSortDirection = 'asc' | 'desc';
 export type GameCardsQuery = {
   searchQuery: string;
   selectedLibraries: string[];
+  selectedAddons: AddonCapability[];
   selectedLaunchers: string[];
   showHidden: boolean;
   favoritesOnly: boolean;
@@ -158,6 +163,8 @@ export type GameDetails = {
   components: GameGraphicsComponent[];
   candidate_groups: GameCandidateGroup[];
   operations: GameOperationSummary[];
+  /** Add-on capabilities derived the same way as for catalog list cards (profile + installed). */
+  addon_capabilities: AddonCapability[];
 };
 
 export type ScanError = {

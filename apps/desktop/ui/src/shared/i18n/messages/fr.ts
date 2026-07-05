@@ -66,6 +66,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'game.card.action.details': 'Détails',
   'game.card.action.detailsAria': 'Ouvrir les détails pour {title}',
   'game.card.detectedLibraries': 'Composants détectés',
+  'game.card.availableAddons': 'Add-ons disponibles',
   'game.card.badge.upToDate': 'À jour',
   'game.card.badge.updatesAvailable': 'Mises à jour disponibles',
   'game.card.badge.updatesAvailableCount': {
@@ -80,7 +81,6 @@ export const fr: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Masquer le jeu',
   'game.card.menu.hidden.remove': 'Afficher le jeu',
   'game.card.menu.hidden.toggleHint': "Basculer l'état masqué pour ce jeu.",
-  'game.libraries.empty': 'Aucun composant trouvé',
 
   'game.cover.alt': 'Jaquette',
   'game.cover.altWithTitle': 'Jaquette : {title}',
@@ -273,6 +273,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'filters.launchers.reorder': 'Déplacer {label}',
   'filters.libraries.title': 'Composants',
   'filters.libraries.empty': 'Aucun composant trouvé',
+  'filters.addons.title': 'Add-ons',
 
   'games.favoritesToggle': 'Favoris',
   'games.favoritesToggleActive': 'Favoris (actifs)',
@@ -461,16 +462,7 @@ export const fr: Record<MessageKey, MessageValue> = {
     'Cela supprime l’add-on RenoDX et restaure uniquement les fichiers ReShade modifiés pendant la configuration de RenoDX.',
   'gameDetails.renodx.uninstallConfirmAction': 'Supprimer',
   'gameDetails.renodx.installing': 'Installation…',
-  'gameDetails.renodx.riskSafe': 'Aucun anti-cheat détecté — installation sans risque.',
-  'gameDetails.renodx.riskWarn':
-    'Anti-triche détecté — l’installation peut entraîner un bannissement.',
-  'gameDetails.renodx.riskBlocked': 'L’installation est bloquée pour ce jeu.',
   'gameDetails.renodx.confirmTitle': 'Installer RenoDX malgré le risque anti-triche ?',
-  'gameDetails.renodx.confirmAccept': 'Installer quand même',
-  'gameDetails.renodx.confirmBody':
-    'Ce jeu utilise un anti-triche. Le module ReShade peut le déclencher et entraîner un bannissement. Continuez à vos risques et périls.',
-  'gameDetails.renodx.fullAddonWarning':
-    'La prise en charge complète des add-ons ReShade peut être risquée pour les jeux multijoueurs ou protégés par anti-triche.',
   'gameDetails.renodx.cancel': 'Annuler',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.removeError':
@@ -612,4 +604,21 @@ export const fr: Record<MessageKey, MessageValue> = {
     'Disponible — évite le scintillement avec DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     "Un correctif ReShade général, pas spécifique à RenoDX. Il fait dessiner ReShade sur les images natives du jeu plutôt que sur celles de Frame Generation, et masque l'upscaling DLSS à ReShade lorsque le jeu implémente Streamline correctement.",
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'Aucun anti-triche détecté — installation sûre.',
+  'gameDetails.addon.riskWarn':
+    'Anti-triche détecté — l’installation peut entraîner un bannissement.',
+  'addon.risk.sp_safe':
+    'Aucune signature anti-triche connue détectée — l’installation de {addonName} est probablement sûre, mais pas garantie.',
+  'addon.risk.anticheat_detected':
+    'Signatures anti-triche détectées — l’installation de {addonName} peut entraîner un bannissement.',
+  'gameDetails.addon.confirmAccept': 'Installer quand même',
+  'gameDetails.addon.confirmBody':
+    'Ce jeu utilise un anti-triche. L’add-on ReShade pourrait le déclencher et entraîner un bannissement. Continuez à vos risques et périls.',
+  'gameDetails.addon.fullAddonWarning':
+    'La prise en charge complète des add-ons ReShade peut être risquée pour les jeux multijoueurs ou protégés par anti-triche.',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '{installedAddon} est installé pour ce jeu — désinstallez-le avant d’installer {blockedAddon}.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    'Des fichiers {installedAddon} ont été trouvés sur le disque pour ce jeu — supprimez-les avant d’installer {blockedAddon}.',
 };

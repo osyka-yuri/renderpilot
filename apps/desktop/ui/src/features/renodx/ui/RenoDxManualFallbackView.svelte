@@ -1,9 +1,10 @@
 <script lang="ts">
   import { t, translateKey } from '@shared/i18n';
 
+  import { AddonStateMessage } from '@entities/addon';
+
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import RenoDxManualInstall from './RenoDxManualInstall.svelte';
-  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
 
   type Props = {
     gameId: string;
@@ -31,9 +32,9 @@
 
 <div class="flex w-full flex-col gap-3">
   {#if variant === 'unsupported'}
-    <RenoDxStateMessage icon="unsupported" message={t('gameDetails.renodx.unsupported')} />
+    <AddonStateMessage icon="unsupported" message={t('gameDetails.renodx.unsupported')} />
   {:else}
-    <RenoDxStateMessage
+    <AddonStateMessage
       tone="warning"
       icon="warning"
       message={t('gameDetails.renodx.incompatible', { reason: incompatibleReason })}

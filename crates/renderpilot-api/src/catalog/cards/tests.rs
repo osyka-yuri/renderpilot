@@ -247,27 +247,43 @@ fn selected_addon_matches_only_cards_with_that_capability() {
 }
 
 #[test]
-fn unknown_selected_addon_does_not_weaken_the_filter() {
-    let query = QueryGameCards::new(
-        QueryGameCardsRequest {
-            search_query: String::new(),
-            selected_libraries: Vec::new(),
-            selected_addons: vec![String::from("unknown")],
-            selected_launchers: Vec::new(),
-            show_hidden: false,
-            favorites_only: false,
-            sort_field: String::from("title"),
-            sort_direction: String::from("asc"),
-            page_limit: 100,
-            page_offset: 0,
-        },
-        &[],
-        &[String::from("Steam")],
-    );
-    let mut card = stub_card("Steam", &[]);
-    card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+fn unknown_selected_addons_are_ignored_rather_than_emptying_the_catalog() {
+    // All-unknown requests (including a future/removed kind name like "luma")
+    // normalize to no addon filter, never an always-false match set.
+    for selected in [
+        vec![String::from("unknown")],
+        vec![String::from("luma")],
+        vec![String::from("unknown"), String::from("luma")],
+    ] {
+        let query = QueryGameCards::new(
+            QueryGameCardsRequest {
+                search_query: String::new(),
+                selected_libraries: Vec::new(),
+                selected_addons: selected,
+                selected_launchers: Vec::new(),
+                show_hidden: false,
+                favorites_only: false,
+                sort_field: String::from("title"),
+                sort_direction: String::from("asc"),
+                page_limit: 100,
+                page_offset: 0,
+            },
+            &[],
+            &[String::from("Steam")],
+        );
+        let mut card = stub_card("Steam", &[]);
+        card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+        let plain = stub_card("Steam", &[]);
 
-    assert!(!query.matches(&card));
+        assert!(
+            query.matches(&card),
+            "unknown addon filter must not hide a renodx-capable card"
+        );
+        assert!(
+            query.matches(&plain),
+            "unknown addon filter must not empty the catalog"
+        );
+    }
 }
 
 #[test]

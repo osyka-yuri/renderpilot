@@ -1,27 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameSummary } from '@entities/game';
+import { createGameSummary } from '@entities/game';
 import { createGamesPageModel, type GamesPageModelInput } from './create-games-page-model.svelte';
 
 function createStubGame(id: string, title: string): GameSummary {
-  return {
+  return createGameSummary({
     game_id: id,
     title,
-    launcher: 'Steam',
-    platform: 'windows',
-    runtime: 'dx11',
-    install_path: '/games/' + id,
     library_tags: ['steam'],
     component_count: 1,
-    updates_available: false,
-    update_count: 0,
     risk_level: 'safe',
-    rollback_available: false,
-    operation_count: 0,
-    last_operation_status: null,
-    cover_updated_at_ms: null,
-    is_favorite: false,
-    is_hidden: false,
-  };
+  });
 }
 
 describe('createGamesPageModel', () => {

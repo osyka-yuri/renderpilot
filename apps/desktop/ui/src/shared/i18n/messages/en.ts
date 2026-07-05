@@ -78,6 +78,7 @@ export const en = {
   'game.card.action.details': 'Details',
   'game.card.action.detailsAria': 'Open details for {title}',
   'game.card.detectedLibraries': 'Detected components',
+  'game.card.availableAddons': 'Available add-ons',
   'game.card.badge.upToDate': 'Up to date',
   'game.card.badge.updatesAvailable': 'Updates available',
   'game.card.badge.updatesAvailableCount': {
@@ -92,7 +93,6 @@ export const en = {
   'game.card.menu.hidden.add': 'Hide game',
   'game.card.menu.hidden.remove': 'Unhide game',
   'game.card.menu.hidden.toggleHint': 'Toggle hidden status for this game.',
-  'game.libraries.empty': 'No components found',
 
   // ── Game cover ──
   'game.cover.alt': 'Cover',
@@ -310,6 +310,7 @@ export const en = {
   'filters.launchers.reorder': 'Move {label}',
   'filters.libraries.title': 'Components',
   'filters.libraries.empty': 'No components found',
+  'filters.addons.title': 'Add-ons',
 
   // ── Operation presenters (status / kind / risk labels) ──
   'operation.label.low': 'Low risk',
@@ -482,15 +483,7 @@ export const en = {
     'This removes the RenoDX add-on and restores only ReShade files that were changed during RenoDX setup.',
   'gameDetails.renodx.uninstallConfirmAction': 'Remove',
   'gameDetails.renodx.installing': 'Installing…',
-  'gameDetails.renodx.riskSafe': 'No anti-cheat detected — safe to install.',
-  'gameDetails.renodx.riskWarn': 'Anti-cheat detected — installing may risk a ban.',
-  'gameDetails.renodx.riskBlocked': 'Installation is blocked for this game.',
   'gameDetails.renodx.confirmTitle': 'Install RenoDX despite anti-cheat risk?',
-  'gameDetails.renodx.confirmAccept': 'Install anyway',
-  'gameDetails.renodx.confirmBody':
-    'This game uses anti-cheat. The ReShade add-on may trigger it and get you banned. Continue at your own risk.',
-  'gameDetails.renodx.fullAddonWarning':
-    'ReShade full add-on support can be unsafe for multiplayer or anti-cheat protected games.',
   'gameDetails.renodx.cancel': 'Cancel',
   // ── Game details: RenoDX shared Vulkan layer ──
   'gameDetails.renodx.vulkanLayer.title': 'Shared Vulkan layer',
@@ -630,6 +623,22 @@ export const en = {
     'Available — prevents flickering with DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     "A general ReShade fix, not RenoDX-specific. It makes ReShade draw on the game's native frames instead of Frame-Generation frames, and hides DLSS upscaling from ReShade when the game implements Streamline correctly.",
+  // ── Game details: shared add-on copy ──
+  'gameDetails.addon.riskSafe': 'No anti-cheat detected — safe to install.',
+  'gameDetails.addon.riskWarn': 'Anti-cheat detected — installing may risk a ban.',
+  'addon.risk.sp_safe':
+    'No known anti-cheat signatures were found — installing {addonName} is likely safe, but not guaranteed.',
+  'addon.risk.anticheat_detected':
+    'Anti-cheat signatures were detected — installing {addonName} may risk a ban.',
+  'gameDetails.addon.confirmAccept': 'Install anyway',
+  'gameDetails.addon.confirmBody':
+    'This game uses anti-cheat. The ReShade add-on may trigger it and get you banned. Continue at your own risk.',
+  'gameDetails.addon.fullAddonWarning':
+    'ReShade full add-on support can be unsafe for multiplayer or anti-cheat protected games.',
+  'gameDetails.addon.blockedByOtherAddon.tracked':
+    '{installedAddon} is installed for this game — uninstall it before installing {blockedAddon}.',
+  'gameDetails.addon.blockedByOtherAddon.unmanaged':
+    '{installedAddon} files were found on disk for this game — remove them before installing {blockedAddon}.',
 } satisfies MessageDictionary;
 
 export type MessageKey = keyof typeof en;

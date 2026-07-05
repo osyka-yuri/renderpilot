@@ -8,6 +8,21 @@ import {
   type GameDetails,
   type GameSummary,
 } from '@entities/game';
+import type { CoverArtworkResult } from '@entities/game';
+import type { CatalogSettingPayload } from '@entities/settings';
+import {
+  executeBackgroundCoverSync,
+  publishBackgroundCoverSyncFailureNotification,
+  publishBackgroundCoverSyncIssueNotification,
+  type CoverSyncQueue,
+} from '@features/sync-covers';
+import {
+  publishAutomaticLibraryScanFailedNotification,
+  publishPartialLibraryScanWarning,
+  scanAutoLibrariesWithErrorRecovery,
+  selectManualScanFolder,
+  scanManualFolder,
+} from '@features/scan-libraries';
 
 /**
  * Dependencies required for the refreshDesktopCatalog workflow.
@@ -19,20 +34,19 @@ export type RefreshDesktopCatalogDeps = {
   setGames: (games: GameSummary[]) => void;
   /** Callback to increment the catalog version for cache invalidation. */
   incrementCatalogVersion: () => void;
-  /** Callback to handle the case where the currently selected game is no longer in the catalog. */
+  /** Callback when the currently selected game is no longer in the catalog. */
   clearSelectionIfSelectedGameMissing: () => void;
 };
 
 /**
  * Refreshes the main games catalog by querying the backend with default parameters
  * and updating the local application state.
- *
- * @param deps Injected dependencies for state management and API calls.
  */
 export async function refreshDesktopCatalog(deps: RefreshDesktopCatalogDeps): Promise<void> {
   const result = await (deps.queryGameCards ?? queryGameCards)({
     searchQuery: '',
     selectedLibraries: [],
+    selectedAddons: [],
     selectedLaunchers: [],
     showHidden: false,
     favoritesOnly: false,
@@ -45,28 +59,15 @@ export async function refreshDesktopCatalog(deps: RefreshDesktopCatalogDeps): Pr
   deps.clearSelectionIfSelectedGameMissing();
 }
 
-/**
- * Dependencies required for the loadAndPresentGameDetails workflow.
- * @template RequestToken The type used to identify concurrent requests (e.g., a number or string).
- */
 export type LoadAndPresentGameDetailsDeps<RequestToken> = {
-  /** Optional override for the getGameDetails API call. */
   getGameDetails?: typeof getGameDetails;
-  /** Marks the start of a details request and returns a unique request token. */
   beginDetailsRequest: () => RequestToken;
-  /** Checks if the given token matches the currently active request. */
   isDetailsRequestActive: (token: RequestToken) => boolean;
-  /** Callback to update the state with the loaded game details. */
   presentGameDetails: (details: GameDetails, nextScreen: WorkspaceScreen) => void;
 };
 
 /**
- * Fetches the details for a specific game and presents them in the workspace,
- * ignoring the result if a newer request has been initiated in the meantime.
- *
- * @param gameId The unique identifier of the game to load.
- * @param nextScreen The screen to display once details are loaded.
- * @param deps Injected dependencies for state and concurrency management.
+ * Fetches details for a game and presents them, ignoring stale concurrent requests.
  */
 export async function loadAndPresentGameDetails<RequestToken>(
   gameId: string,
@@ -83,25 +84,14 @@ export async function loadAndPresentGameDetails<RequestToken>(
   deps.presentGameDetails(details, nextScreen);
 }
 
-/**
- * Dependencies required for the openDesktopGame workflow.
- */
 export type OpenDesktopGameDeps = {
-  /** Ensures that the provided async task runs exclusively, preventing overlapping operations. */
   runExclusive: <T>(task: () => Promise<T>) => Promise<T | null>;
-  /** Callback to load and present the game details. */
   loadGameDetails: (gameId: string, nextScreen: WorkspaceScreen) => Promise<void>;
-  /** Optional function to normalize the game ID before loading. */
   normalizeGameId?: (gameId: string) => string;
 };
 
 /**
- * Initiates the opening of a game in the workspace. Normalizes the ID, handles concurrency,
- * and triggers the details loading process.
- *
- * @param gameId The raw game ID selected by the user.
- * @param nextScreen The screen to navigate to within the game workspace.
- * @param deps Injected dependencies for concurrency and loading.
+ * Opens a game in the workspace after normalizing its id and acquiring the exclusive lock.
  */
 export async function openDesktopGame(
   gameId: string,
@@ -117,22 +107,12 @@ export async function openDesktopGame(
   await deps.runExclusive(() => deps.loadGameDetails(normalizedGameId, nextScreen));
 }
 
-/**
- * Dependencies required for the reloadSelectedGame workflow.
- */
 export type ReloadSelectedGameDeps = {
-  /** The currently selected game ID, or null if nothing is selected. */
   selectedGameId: string | null;
-  /** Callback to execute the game loading logic. */
   loadGameDetails: (gameId: string, nextScreen: WorkspaceScreen) => Promise<void>;
 };
 
-/**
- * Reloads the currently selected game if one exists, otherwise does nothing.
- *
- * @param nextScreen The screen to remain on or navigate to after reloading.
- * @param deps Injected dependencies providing current state and loading function.
- */
+/** Reloads the selected game when one is selected; no-op otherwise. */
 export async function reloadSelectedGame(
   nextScreen: WorkspaceScreen,
   deps: ReloadSelectedGameDeps,
@@ -142,4 +122,136 @@ export async function reloadSelectedGame(
   }
 
   await deps.loadGameDetails(deps.selectedGameId, nextScreen);
+}
+
+export type CatalogRefreshWithCoverSyncDeps = {
+  runExclusive: <T>(task: () => Promise<T>) => Promise<T | null>;
+  refreshGameCards: () => Promise<void>;
+  coverSyncQueue: CoverSyncQueue;
+  syncMissingCoversAfterCardsLoad: () => Promise<void>;
+};
+
+/**
+ * Runs a prepare step under the exclusive lock, refreshes the catalog when it
+ * succeeds, then queues background cover sync (outside the exclusive lock).
+ *
+ * `prepareRefresh` returns `false` to cancel without refreshing (e.g. user
+ * dismissed the folder picker).
+ */
+export async function runCatalogRefreshWithCoverSync(
+  prepareRefresh: () => Promise<boolean>,
+  deps: CatalogRefreshWithCoverSyncDeps,
+): Promise<void> {
+  const refreshed = await deps.runExclusive(async () => {
+    const shouldRefresh = await prepareRefresh();
+
+    if (!shouldRefresh) {
+      return false;
+    }
+
+    await deps.refreshGameCards();
+    return true;
+  });
+
+  if (refreshed === true) {
+    deps.coverSyncQueue.queue(deps.syncMissingCoversAfterCardsLoad, (error) => {
+      publishBackgroundCoverSyncFailureNotification(error);
+    });
+  }
+}
+
+export type ScanAutoLibrariesAndRefreshDeps = CatalogRefreshWithCoverSyncDeps;
+
+/**
+ * Runs auto library scan with recovery notifications.
+ * Always returns `true` so cards still refresh after a soft scan failure.
+ */
+async function prepareAutoLibraryScan(): Promise<boolean> {
+  const scanResult = await scanAutoLibrariesWithErrorRecovery();
+
+  if (scanResult.kind === 'error') {
+    publishAutomaticLibraryScanFailedNotification(scanResult.message);
+    return true;
+  }
+
+  if (scanResult.errors.length > 0) {
+    publishPartialLibraryScanWarning(scanResult.errors.length);
+  }
+
+  return true;
+}
+
+/** Scans auto libraries (with recovery), then refreshes cards + cover sync. */
+export async function scanAutoLibrariesAndRefreshCards(
+  deps: ScanAutoLibrariesAndRefreshDeps,
+): Promise<void> {
+  await runCatalogRefreshWithCoverSync(prepareAutoLibraryScan, deps);
+}
+
+export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps;
+
+/**
+ * Shell Refresh: auto-scan libraries, then refresh cards + cover sync.
+ */
+export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<void> {
+  await runCatalogRefreshWithCoverSync(prepareAutoLibraryScan, deps);
+}
+
+export type ManualScanAndRefreshDeps = CatalogRefreshWithCoverSyncDeps;
+
+/** Manual folder scan flow: picker → scan → catalog refresh → cover sync. */
+export async function scanManualFolderAndRefreshCards(
+  deps: ManualScanAndRefreshDeps,
+): Promise<void> {
+  await runCatalogRefreshWithCoverSync(async () => {
+    const selectedFolder = await selectManualScanFolder();
+
+    if (selectedFolder === null) {
+      return false;
+    }
+
+    await scanManualFolder(selectedFolder);
+    return true;
+  }, deps);
+}
+
+export type SyncMissingCoversDeps = {
+  games: readonly GameSummary[];
+  readSetting: (key: string) => Promise<CatalogSettingPayload>;
+  fetchGameCover: (gameId: string) => Promise<CoverArtworkResult>;
+  refreshGameCards: () => Promise<void>;
+  coverSyncQueue: CoverSyncQueue;
+  onCoverReady: () => void;
+  /** Yield before snapshotting cards (e.g. `tick()` so the UI paints first). */
+  beforeSync?: () => Promise<void>;
+};
+
+/**
+ * Background cover hydration for the current catalog snapshot.
+ * Isolated from the Svelte route so DesktopApp stays wiring-only.
+ */
+export async function syncMissingCoversAfterCardsLoad(deps: SyncMissingCoversDeps): Promise<void> {
+  if (deps.beforeSync) {
+    await deps.beforeSync();
+  }
+
+  const cardSnapshot = deps.games.slice();
+
+  if (cardSnapshot.length === 0) {
+    return;
+  }
+
+  await executeBackgroundCoverSync(cardSnapshot, {
+    readSetting: deps.readSetting,
+    fetchGameCover: deps.fetchGameCover,
+    refreshGameCards: deps.refreshGameCards,
+    onGameStart: (gameId) => {
+      deps.coverSyncQueue.setAutoFetching(gameId, true);
+    },
+    onGameEnd: (gameId) => {
+      deps.coverSyncQueue.setAutoFetching(gameId, false);
+    },
+    onCoverReady: deps.onCoverReady,
+    onError: publishBackgroundCoverSyncIssueNotification,
+  });
 }

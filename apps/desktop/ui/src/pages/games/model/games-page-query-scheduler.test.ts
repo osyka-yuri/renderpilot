@@ -5,6 +5,7 @@ import {
   type GameSummary,
   type GameCardsResult,
   type queryGameCards,
+  createGameSummary,
 } from '@entities/game';
 import {
   buildGameCardsQueryKey,
@@ -12,6 +13,7 @@ import {
   type GamesQueryResultSinks,
   type GamesQuerySnapshot,
 } from './games-page-query-scheduler';
+import type { AddonCapability } from '@entities/game';
 
 type QueryGameCardsFn = typeof queryGameCards;
 type Scheduler = ReturnType<typeof createGamesPageQueryScheduler>;
@@ -43,24 +45,7 @@ function createQueryGameCardsMock() {
 }
 
 function stubCard(gameId: string): GameSummary {
-  return {
-    game_id: gameId,
-    title: '',
-    launcher: '',
-    platform: '',
-    runtime: '',
-    install_path: '',
-    library_tags: [],
-    component_count: 0,
-    updates_available: false,
-    update_count: 0,
-    risk_level: 'unknown',
-    rollback_available: false,
-    operation_count: 0,
-    cover_updated_at_ms: null,
-    is_favorite: false,
-    is_hidden: false,
-  };
+  return createGameSummary({ game_id: gameId });
 }
 
 function makeResult(
@@ -98,6 +83,7 @@ function createReadySnapshot(
     version: number;
     searchQuery: string;
     selectedLibraries: readonly string[];
+    selectedAddons: readonly AddonCapability[];
     selectedLaunchers: readonly string[];
   }> = {},
 ): GamesQuerySnapshot {
@@ -107,6 +93,7 @@ function createReadySnapshot(
     true,
     overrides.searchQuery ?? '',
     overrides.selectedLibraries ?? [],
+    overrides.selectedAddons ?? ([] as readonly AddonCapability[]),
     overrides.selectedLaunchers ?? [],
     false,
     false,
@@ -124,19 +111,22 @@ function createReadySnapshot(
 describe('createGamesPageQueryScheduler', () => {
   describe('buildGameCardsQueryKey', () => {
     it('builds a stable key from search query and selected libraries', () => {
-      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y'], [], false, false);
+      const queryKey = buildGameCardsQueryKey('abc', ['x', 'y'], [], [], false, false);
 
       expect(JSON.parse(queryKey)).toEqual({
         searchQuery: 'abc',
         selectedLibraries: ['x', 'y'],
+        selectedAddons: [],
         selectedLaunchers: [],
         showHidden: false,
         favoritesOnly: false,
       });
 
-      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], [], false, false));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z'], [], false, false));
-      expect(queryKey).not.toBe(buildGameCardsQueryKey('changed', ['x', 'y'], [], false, false));
+      expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], [], [], false, false));
+      expect(queryKey).not.toBe(buildGameCardsQueryKey('abc', ['x', 'z'], [], [], false, false));
+      expect(queryKey).not.toBe(
+        buildGameCardsQueryKey('changed', ['x', 'y'], [], [], false, false),
+      );
     });
   });
 
@@ -168,6 +158,7 @@ describe('createGamesPageQueryScheduler', () => {
           filtersReady,
           preferenceLoaded,
           '',
+          [],
           [],
           [],
           false,
@@ -237,6 +228,7 @@ describe('createGamesPageQueryScheduler', () => {
       expect(queryGameCardsFn).toHaveBeenCalledWith({
         searchQuery: 'doom',
         selectedLibraries: ['Steam'],
+        selectedAddons: [],
         selectedLaunchers: [],
         showHidden: false,
         favoritesOnly: false,

@@ -14,6 +14,7 @@ export {
 } from './notification-status';
 
 export {
+  formatError,
   publishErrorNotification,
   publishInfoNotification,
   publishSuccessNotification,

@@ -1,11 +1,11 @@
+import { defaultHostFacts as sharedDefaultHostFacts, deriveFreshness } from '@entities/addon';
+
 import type {
   AvailabilityReport,
   HostDetection,
   HostFacts,
   RenoDxActions,
   RenoDxAddonState,
-  RenoDxFreshness,
-  RenoDxUpdateReport,
   ReshadeChannel,
 } from './types';
 
@@ -22,21 +22,10 @@ export type AvailabilitySnapshotSource = Pick<
   'host_detection' | 'host_facts' | 'actions' | 'reshade_stable_supported' | 'renodx_addon'
 >;
 
+/** RenoDX defaults to the stable ReShade channel until an availability report
+ * says otherwise. */
 export function defaultHostFacts(): HostFacts {
-  return {
-    slot: null,
-    active: false,
-    path: null,
-    version: null,
-    addon_support: 'unknown',
-    channel: {
-      selected: 'stable',
-      effective: 'stable',
-      detected: null,
-    },
-    update_status: 'unknown_needs_validation',
-    is_custom_build: false,
-  };
+  return sharedDefaultHostFacts('stable');
 }
 
 export function availabilitySnapshotFromReport(
@@ -81,33 +70,4 @@ export function normalizeReshadeChannel(
   return degradeUnsupportedStableChannel(parsed, stableSupported);
 }
 
-/**
- * Maps the probe state + update report to the single freshness verdict the card
- * renders as a pill. Order matters:
- * - a probe in flight wins, suppressing a transient verdict;
- * - a failed probe reads `unknown` because it writes the same report shape as a
- *   successful untracked probe;
- * - `available` outranks the per-source breakdown.
- */
-export function deriveFreshness(
-  updateProbing: boolean,
-  probeFailed: boolean,
-  updateReport: RenoDxUpdateReport | null,
-): RenoDxFreshness {
-  if (updateProbing) {
-    return 'checking';
-  }
-  if (probeFailed || updateReport === null) {
-    return 'unknown';
-  }
-  if (updateReport.overall === 'available' || updateReport.overall === 'channel_mismatch') {
-    return 'available';
-  }
-  if (updateReport.addon === null && updateReport.host === null) {
-    return 'untracked';
-  }
-  if (updateReport.overall === 'current') {
-    return 'current';
-  }
-  return 'unknown';
-}
+export { deriveFreshness };

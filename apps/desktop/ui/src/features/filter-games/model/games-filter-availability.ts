@@ -10,17 +10,20 @@ export function withAvailableSnapshots(
   state: GamesFilterState,
   availableLibraries: string[],
   availableLaunchers: string[],
+  availableAddons: string[] = state.availableAddons,
 ): GamesFilterState {
   const librariesChanged = !shallowStringArrayEqual(state.availableLibraries, availableLibraries);
+  const addonsChanged = !shallowStringArrayEqual(state.availableAddons, availableAddons);
   const launchersChanged = !shallowStringArrayEqual(state.availableLaunchers, availableLaunchers);
 
-  if (!librariesChanged && !launchersChanged) {
+  if (!librariesChanged && !addonsChanged && !launchersChanged) {
     return state;
   }
 
   return {
     ...state,
     availableLibraries: librariesChanged ? availableLibraries : state.availableLibraries,
+    availableAddons: addonsChanged ? availableAddons : state.availableAddons,
     availableLaunchers: launchersChanged ? availableLaunchers : state.availableLaunchers,
   };
 }

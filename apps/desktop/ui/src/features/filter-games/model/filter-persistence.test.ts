@@ -24,6 +24,7 @@ describe('filter-persistence', () => {
     it('parses legacy array payload as libraries list', () => {
       expectParsed('["LibraryAlpha","LibraryBeta"]', {
         libraries: ['LibraryAlpha', 'LibraryBeta'],
+        addons: null,
         launchers: [],
         launcherOrder: [],
         searchQuery: '',
@@ -37,6 +38,7 @@ describe('filter-persistence', () => {
         JSON.stringify([' LibraryAlpha ', 'LibraryAlpha', '', 'LibraryBeta', null, 15]),
         {
           libraries: ['LibraryAlpha', 'LibraryBeta'],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
@@ -56,6 +58,7 @@ describe('filter-persistence', () => {
         }),
         {
           libraries: ['LibraryAlpha'],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: 'alpha',
@@ -68,6 +71,7 @@ describe('filter-persistence', () => {
     it('uses safe defaults when object fields are missing', () => {
       expectParsed(JSON.stringify({}), {
         libraries: [],
+        addons: null,
         launchers: [],
         launcherOrder: [],
         searchQuery: '',
@@ -84,6 +88,7 @@ describe('filter-persistence', () => {
         }),
         {
           libraries: ['LibraryAlpha'],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
@@ -103,6 +108,7 @@ describe('filter-persistence', () => {
         }),
         {
           libraries: ['LibraryAlpha', 'LibraryBeta'],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: '',
@@ -122,6 +128,7 @@ describe('filter-persistence', () => {
         }),
         {
           libraries: [],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: 'alpha',
@@ -139,6 +146,7 @@ describe('filter-persistence', () => {
         }),
         {
           libraries: ['LibraryAlpha'],
+          addons: null,
           launchers: [],
           launcherOrder: [],
           searchQuery: '',

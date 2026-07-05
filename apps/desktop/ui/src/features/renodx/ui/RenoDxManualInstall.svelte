@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { t, translateKey } from '@shared/i18n';
+  import { t } from '@shared/i18n';
   import { Button } from '@shared/ui';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
   import { ADDON_EXTENSIONS, isAddonFile, validateAddonFile } from '../model/validate-addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
+  import { riskMessage } from '../model/reshade-presenters';
+  import { AddonStateMessage } from '@entities/addon';
+
   import type { ManualFileInstall, ReshadeChannel } from '../model/types';
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
-  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
 
   type Props = {
     gameId: string;
@@ -23,16 +25,13 @@
   let dropEl = $state<HTMLElement | null>(null);
   let pendingPath = $state<string | null>(null);
 
-  const blocked = $derived(manual.risk.severity === 'block');
   const showFullAddonWarning = $derived(manual.risk.severity === 'warn');
   const showDxChannelControl = $derived(manual.host_kind === 'proxy');
   const expectedAddonName = $derived(manual.expected_addon_name ?? null);
 
-  const canReview = $derived(!busy && !blocked);
+  const canReview = $derived(!busy);
 
-  const riskText = $derived(
-    translateKey(manual.risk.message_key, t('gameDetails.renodx.riskSafe')),
-  );
+  const riskText = $derived(riskMessage(manual.risk));
 
   const pendingValidation = $derived(
     pendingPath === null
@@ -142,12 +141,7 @@
 >
   <p class="text-sm font-medium">{t('gameDetails.renodx.fileInstall.title')}</p>
 
-  {#if blocked}
-    <p class="flex items-center gap-1 text-sm text-destructive">
-      <TriangleAlertIcon class="size-4 shrink-0" aria-hidden="true" />
-      {t('gameDetails.renodx.riskBlocked')}
-    </p>
-  {:else if pendingPath !== null}
+  {#if pendingPath !== null}
     {#if pendingError}
       <p class="flex items-center gap-1 text-sm text-destructive" aria-live="polite">
         <TriangleAlertIcon class="size-4 shrink-0" aria-hidden="true" />
@@ -171,10 +165,10 @@
       {/if}
 
       {#if showFullAddonWarning}
-        <RenoDxStateMessage
+        <AddonStateMessage
           tone="warning"
           icon="warning"
-          message={t('gameDetails.renodx.fullAddonWarning')}
+          message={t('gameDetails.addon.fullAddonWarning')}
         />
       {/if}
 
@@ -216,10 +210,10 @@
     <p class="text-sm text-muted-foreground">{riskText}</p>
 
     {#if showFullAddonWarning}
-      <RenoDxStateMessage
+      <AddonStateMessage
         tone="warning"
         icon="warning"
-        message={t('gameDetails.renodx.fullAddonWarning')}
+        message={t('gameDetails.addon.fullAddonWarning')}
       />
     {/if}
 
@@ -243,9 +237,7 @@
     </div>
   {/if}
 
-  {#if !blocked}
-    <p class="text-sm text-muted-foreground">
-      {t('gameDetails.renodx.external.dropHint')}
-    </p>
-  {/if}
+  <p class="text-sm text-muted-foreground">
+    {t('gameDetails.renodx.external.dropHint')}
+  </p>
 </div>

@@ -5,8 +5,16 @@ import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
 import { mockApplySwap, mockRollbackComponent } from './commands/operations';
+import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
 import { mockState, createMockState } from './desktop-state';
-import { isDesktopCommand, type DesktopCommand } from './desktop-utils';
+import {
+  assertNever,
+  isDesktopCommand,
+  readObjectField,
+  readPayloadRecord,
+  readStringField,
+  type DesktopCommand,
+} from './desktop-utils';
 
 const mockInvokerImpl = async (command: DesktopCommand, payload: unknown): Promise<unknown> =>
   dispatchCommand(command, payload);
@@ -15,109 +23,81 @@ export const mockInvoker = mockInvokerImpl as DesktopInvoker<DesktopCommand>;
 
 async function dispatchCommand(command: DesktopCommand, payload: unknown): Promise<unknown> {
   switch (command) {
-    case 'scan_manual_folder': {
-      const { path } = readScanManualFolderPayload(payload);
-      return mockScanManualFolder(path);
-    }
+    case 'scan_manual_folder':
+      return mockScanManualFolder(readStringField(command, payload, 'path'));
 
     case 'scan_auto_libraries':
       return mockScanAutoLibraries();
 
     case 'query_game_cards': {
-      const { query } = readQueryGameCardsPayload(payload);
+      const query = readObjectField(command, payload, 'query') as unknown as GameCardsQuery;
       return mockQueryGameCards(query);
     }
 
-    case 'get_game_details': {
-      const { gameId } = readGetGameDetailsPayload(payload);
-      return mockGetGameDetails(gameId);
-    }
+    case 'get_game_details':
+      return mockGetGameDetails(readStringField(command, payload, 'gameId'));
 
-    case 'fetch_game_cover': {
-      const { gameId } = readFetchGameCoverPayload(payload);
-      return mockFetchGameCover(gameId);
-    }
+    case 'fetch_game_cover':
+      return mockFetchGameCover(readStringField(command, payload, 'gameId'));
 
-    case 'clear_game_cover': {
-      const { gameId } = readClearGameCoverPayload(payload);
-      return mockClearGameCover(gameId);
-    }
+    case 'clear_game_cover':
+      return mockClearGameCover(readStringField(command, payload, 'gameId'));
 
-    case 'set_game_cover': {
-      const { gameId, sourcePath } = readSetGameCoverPayload(payload);
-      return mockSetGameCover(gameId, sourcePath);
-    }
+    case 'set_game_cover':
+      return mockSetGameCover(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'sourcePath'),
+      );
 
-    case 'get_catalog_setting': {
-      const { key } = readGetCatalogSettingPayload(payload);
-      return mockGetCatalogSetting(key);
-    }
+    case 'set_game_favorite':
+      return mockSetGameFavorite(
+        readStringField(command, payload, 'gameId'),
+        readBooleanField(command, payload, 'isFavorite'),
+      );
 
-    case 'set_catalog_setting': {
-      const { key, value } = readSetCatalogSettingPayload(payload);
-      return mockSetCatalogSetting(key, value);
-    }
+    case 'set_game_hidden':
+      return mockSetGameHidden(
+        readStringField(command, payload, 'gameId'),
+        readBooleanField(command, payload, 'isHidden'),
+      );
 
-    case 'apply_swap': {
-      const { gameId, componentId, artifactId } = readApplySwapPayload(payload);
-      return mockApplySwap(gameId, componentId, artifactId);
-    }
+    case 'get_catalog_setting':
+      return mockGetCatalogSetting(readStringField(command, payload, 'key'));
 
-    case 'rollback_component': {
-      const { gameId, componentId } = readRollbackComponentPayload(payload);
-      return mockRollbackComponent(gameId, componentId);
-    }
+    case 'set_catalog_setting':
+      return mockSetCatalogSetting(
+        readStringField(command, payload, 'key'),
+        readStringField(command, payload, 'value', { allowEmpty: true }),
+      );
+
+    case 'apply_swap':
+      return mockApplySwap(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'componentId'),
+        readStringField(command, payload, 'artifactId'),
+      );
+
+    case 'rollback_component':
+      return mockRollbackComponent(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'componentId'),
+      );
 
     default:
       return assertNever(command);
   }
 }
 
-function readScanManualFolderPayload(payload: unknown): { path: string } {
-  return payload as { path: string };
-}
-
-function readQueryGameCardsPayload(payload: unknown): { query: GameCardsQuery } {
-  return payload as { query: GameCardsQuery };
-}
-
-function readGetGameDetailsPayload(payload: unknown): { gameId: string } {
-  return payload as { gameId: string };
-}
-
-function readFetchGameCoverPayload(payload: unknown): { gameId: string } {
-  return payload as { gameId: string };
-}
-
-function readClearGameCoverPayload(payload: unknown): { gameId: string } {
-  return payload as { gameId: string };
-}
-
-function readSetGameCoverPayload(payload: unknown): { gameId: string; sourcePath: string } {
-  return payload as { gameId: string; sourcePath: string };
-}
-
-function readGetCatalogSettingPayload(payload: unknown): { key: string } {
-  return payload as { key: string };
-}
-
-function readSetCatalogSettingPayload(payload: unknown): { key: string; value: string } {
-  return payload as { key: string; value: string };
-}
-
-function readApplySwapPayload(payload: unknown): {
-  gameId: string;
-  componentId: string;
-  artifactId: string;
-} {
-  return payload as { gameId: string; componentId: string; artifactId: string };
-}
-
-function readRollbackComponentPayload(payload: unknown): {
-  gameId: string;
-  componentId: string;
-} {
-  return payload as { gameId: string; componentId: string };
+function readBooleanField(command: DesktopCommand, payload: unknown, field: string): boolean {
+  const record = readPayloadRecord(command, payload);
+  if (!Object.prototype.hasOwnProperty.call(record, field)) {
+    throw new Error(`Mock invoker: Missing required field "${field}" in payload for "${command}".`);
+  }
+  const value = record[field];
+  if (typeof value !== 'boolean') {
+    throw new Error(`Mock invoker: Field "${field}" for "${command}" must be a boolean.`);
+  }
+  return value;
 }
 
 async function previewInvoker(command: string, payload: unknown): Promise<unknown> {
@@ -136,10 +116,6 @@ export function resetMockDesktopState(): void {
   Object.assign(mockState, createMockState());
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Mock invoker: Unhandled command "${String(value)}".`);
-}
-
 export {
   mockScanManualFolder,
   mockScanAutoLibraries,
@@ -148,6 +124,8 @@ export {
   mockFetchGameCover,
   mockClearGameCover,
   mockSetGameCover,
+  mockSetGameFavorite,
+  mockSetGameHidden,
   mockGetCatalogSetting,
   mockSetCatalogSetting,
   mockApplySwap,

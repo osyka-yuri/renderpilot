@@ -1,13 +1,21 @@
 import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
 import {
-  requireGameDetails,
-  requireComponent,
+  recordOperation,
   requireCandidateGroup,
+  requireComponent,
   requireFirstComponentFile,
+  requireGameDetails,
   updateCandidateGroupCurrentVersion,
   updateGameSummary,
 } from '../desktop-state';
 import { clone, requireNonEmptyText, resolveMock } from '../desktop-utils';
+
+let operationSequence = 0;
+
+function nextOperationId(kind: string): string {
+  operationSequence += 1;
+  return `mock-op:${kind}:${operationSequence}`;
+}
 
 export function mockApplySwap(
   gameId: string,
@@ -33,16 +41,25 @@ export function mockApplySwap(
     }
 
     const sourceFile = requireFirstComponentFile(sourceComponent);
+    const now = Date.now();
 
     sourceFile.version = candidate.version ?? sourceFile.version;
-    sourceFile.sha256 = candidate.file_path ?? sourceFile.sha256;
+    sourceFile.sha256 = candidate.sha256 || sourceFile.sha256;
 
     updateCandidateGroupCurrentVersion(details, normalizedComponentId, sourceFile.version ?? null);
 
+    recordOperation(details, {
+      operation_id: nextOperationId('replace_component'),
+      kind: 'replace_component',
+      status: 'completed',
+      created_at: now,
+      completed_at: now,
+      item_count: 1,
+      component_id: normalizedComponentId,
+    });
+
     updateGameSummary(normalizedGameId, {
       rollback_available: true,
-      last_operation_status: 'completed',
-      operation_count: details.operations.length,
     });
 
     const result: ApplySwapResult = {
@@ -67,16 +84,25 @@ export function mockRollbackComponent(
     const details = requireGameDetails(normalizedGameId);
     const component = requireComponent(details, normalizedComponentId);
     const sourceFile = requireFirstComponentFile(component);
+    const now = Date.now();
 
     sourceFile.version = 'original-version';
     sourceFile.sha256 = 'original-sha256';
 
     updateCandidateGroupCurrentVersion(details, normalizedComponentId, 'original-version');
 
+    recordOperation(details, {
+      operation_id: nextOperationId('rollback_component'),
+      kind: 'rollback_component',
+      status: 'rolled_back',
+      created_at: now,
+      completed_at: now,
+      item_count: 1,
+      component_id: normalizedComponentId,
+    });
+
     updateGameSummary(normalizedGameId, {
       rollback_available: false,
-      last_operation_status: 'rolled_back',
-      operation_count: details.operations.length,
     });
 
     const result: RollbackComponentResult = {

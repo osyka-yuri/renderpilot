@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
 
   import { t, translateKey } from '@shared/i18n';
+  import { ADDON_DISPLAY_NAME } from '@shared/model';
   import {
     Button,
     Card,
@@ -22,7 +23,7 @@
   import RenoDxInstallableView from './RenoDxInstallableView.svelte';
   import RenoDxInstalledPanel from './RenoDxInstalledPanel.svelte';
   import RenoDxManualFallbackView from './RenoDxManualFallbackView.svelte';
-  import RenoDxStateMessage from './RenoDxStateMessage.svelte';
+  import { AddonStateMessage } from '@entities/addon';
 
   type Props = {
     gameId: string;
@@ -73,6 +74,18 @@
     store.blacklistReason
       ? translateKey(store.blacklistReason, t('gameDetails.renodx.blacklisted'))
       : t('gameDetails.renodx.blacklisted'),
+  );
+
+  const blockedByOtherAddonText = $derived(
+    t(
+      store.otherAddonUnmanaged
+        ? 'gameDetails.addon.blockedByOtherAddon.unmanaged'
+        : 'gameDetails.addon.blockedByOtherAddon.tracked',
+      {
+        installedAddon: store.otherAddonKind ? ADDON_DISPLAY_NAME[store.otherAddonKind] : 'add-on',
+        blockedAddon: ADDON_DISPLAY_NAME.renodx,
+      },
+    ),
   );
 
   const showVulkanSettingsAction = $derived.by((): boolean => {
@@ -140,25 +153,23 @@
         <span>{t('gameDetails.renodx.loading')}</span>
       </div>
     {:else if view === 'load-error'}
-      <RenoDxStateMessage
-        tone="warning"
-        icon="warning"
-        message={t('gameDetails.renodx.loadFailed')}
-      >
+      <AddonStateMessage tone="warning" icon="warning" message={t('gameDetails.renodx.loadFailed')}>
         {#snippet actions()}
           <Button type="button" variant="outline" size="sm" disabled={combinedBusy} onclick={retry}>
             {t('gameDetails.renodx.retry')}
           </Button>
         {/snippet}
-      </RenoDxStateMessage>
+      </AddonStateMessage>
     {:else if view === 'installed'}
       <RenoDxInstalledPanel {gameId} {store} busy={combinedBusy} />
+    {:else if view === 'blocked-by-other-addon'}
+      <AddonStateMessage tone="default" icon="info" message={blockedByOtherAddonText} />
     {:else if view === 'external'}
       <RenoDxExternalView {gameId} {store} busy={combinedBusy} />
     {:else if view === 'native-hdr'}
-      <RenoDxStateMessage icon="hdr" message={t('gameDetails.renodx.nativeHdr')} />
+      <AddonStateMessage icon="hdr" message={t('gameDetails.renodx.nativeHdr')} />
     {:else if view === 'blacklisted'}
-      <RenoDxStateMessage tone="warning" icon="warning" message={blacklistText} />
+      <AddonStateMessage tone="warning" icon="warning" message={blacklistText} />
     {:else if view === 'unsupported'}
       <RenoDxManualFallbackView {gameId} {store} busy={combinedBusy} variant="unsupported" />
     {:else if view === 'incompatible'}
@@ -166,7 +177,7 @@
     {:else if view === 'installable'}
       <RenoDxInstallableView {gameId} {store} busy={combinedBusy} />
     {:else}
-      <RenoDxStateMessage icon="info" message={t('gameDetails.renodx.unavailable')} />
+      <AddonStateMessage icon="info" message={t('gameDetails.renodx.unavailable')} />
     {/if}
   </CardContent>
 </Card>

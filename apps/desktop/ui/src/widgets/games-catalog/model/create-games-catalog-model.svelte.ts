@@ -1,4 +1,3 @@
-import { gameCardExists } from '@entities/game';
 import type { GameSummary } from '@entities/game';
 
 export type GamesCatalogModel = ReturnType<typeof createGamesCatalogModel>;
@@ -15,14 +14,6 @@ export function createGamesCatalogModel() {
     catalogVersion += 1;
   }
 
-  function clearSelectionIfSelectedGameMissing(selectedGameId: string | null): boolean {
-    if (selectedGameId === null || gameCardExists(games, selectedGameId)) {
-      return false;
-    }
-
-    return true;
-  }
-
   return {
     get games() {
       return games;
@@ -32,6 +23,5 @@ export function createGamesCatalogModel() {
     },
     setGames,
     incrementCatalogVersion,
-    clearSelectionIfSelectedGameMissing,
   };
 }

@@ -1,16 +1,9 @@
+import { getCardView as sharedGetCardView } from '@entities/addon';
+import type { BaseCardView } from '@entities/addon';
+
 import type { RenoDxStore } from './create-renodx-store.svelte';
 
-export type RenoDxCardView =
-  | 'loading'
-  | 'load-error'
-  | 'installed'
-  | 'external'
-  | 'native-hdr'
-  | 'blacklisted'
-  | 'unsupported'
-  | 'incompatible'
-  | 'installable'
-  | 'unavailable';
+export type RenoDxCardView = BaseCardView | 'external' | 'native-hdr';
 
 /** The subset of store state `getCardView` reads, so it's testable without a full store. */
 export type CardViewSource = Pick<
@@ -19,6 +12,7 @@ export type CardViewSource = Pick<
   | 'loaded'
   | 'loadError'
   | 'isInstalled'
+  | 'isBlockedByOtherAddon'
   | 'isExternal'
   | 'isNativeHdr'
   | 'isBlacklisted'
@@ -34,41 +28,13 @@ export type CardViewSource = Pick<
  * exclusive (the backend reports exactly one).
  */
 export function getCardView(store: CardViewSource): RenoDxCardView {
-  if (store.loading && !store.loaded) {
-    return 'loading';
-  }
-
-  if (store.loadError) {
-    return 'load-error';
-  }
-
-  if (store.isInstalled) {
-    return 'installed';
-  }
-
-  if (store.isExternal) {
-    return 'external';
-  }
-
-  if (store.isNativeHdr) {
-    return 'native-hdr';
-  }
-
-  if (store.isBlacklisted) {
-    return 'blacklisted';
-  }
-
-  if (store.isUnsupported) {
-    return 'unsupported';
-  }
-
-  if (store.isIncompatible) {
-    return 'incompatible';
-  }
-
-  if (store.isInstallable) {
-    return 'installable';
-  }
-
-  return 'unavailable';
+  return sharedGetCardView(store, () => {
+    if (store.isExternal) {
+      return 'external';
+    }
+    if (store.isNativeHdr) {
+      return 'native-hdr';
+    }
+    return null;
+  });
 }

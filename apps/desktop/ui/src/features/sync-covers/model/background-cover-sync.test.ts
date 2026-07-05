@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary } from '@entities/game';
+import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary, createGameSummary } from '@entities/game';
 import { t } from '@shared/i18n';
 import {
   refreshCardsAfterCoverSync,
@@ -8,7 +8,7 @@ import {
 } from './background-cover-sync';
 
 function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
-  return {
+  return createGameSummary({
     game_id: 'game-a',
     title: 'Game A',
     launcher: 'Unknown',
@@ -26,11 +26,11 @@ function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
     is_favorite: false,
     is_hidden: false,
     ...overrides,
-  };
+  });
 }
 
 function gameWithoutCover(overrides: Partial<GameSummary> = {}): GameSummary {
-  return {
+  return createGameSummary({
     game_id: 'game-a',
     title: 'Game A',
     launcher: 'Unknown',
@@ -47,7 +47,7 @@ function gameWithoutCover(overrides: Partial<GameSummary> = {}): GameSummary {
     is_favorite: false,
     is_hidden: false,
     ...overrides,
-  };
+  });
 }
 
 function steamGame(overrides: Partial<GameSummary> = {}): GameSummary {

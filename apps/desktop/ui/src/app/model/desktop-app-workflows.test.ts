@@ -1,14 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { GameDetails, GameSummary, getGameDetails, queryGameCards } from '@entities/game';
+import type { getGameDetails, queryGameCards } from '@entities/game';
+import { createGameDetails, createGameSummary } from '@entities/game';
 
 import type { OpenDesktopGameDeps } from './desktop-app-workflows';
+
+const scanMocks = vi.hoisted(() => ({
+  scanAutoLibrariesWithErrorRecovery: vi.fn(() => Promise.resolve({ kind: 'ok', errors: [] })),
+  publishAutomaticLibraryScanFailedNotification: vi.fn(),
+  publishPartialLibraryScanWarning: vi.fn(),
+}));
+
+vi.mock('@features/scan-libraries', () => ({
+  scanAutoLibrariesWithErrorRecovery: scanMocks.scanAutoLibrariesWithErrorRecovery,
+  publishAutomaticLibraryScanFailedNotification:
+    scanMocks.publishAutomaticLibraryScanFailedNotification,
+  publishPartialLibraryScanWarning: scanMocks.publishPartialLibraryScanWarning,
+  selectManualScanFolder: vi.fn(),
+  scanManualFolder: vi.fn(),
+}));
 
 import {
   loadAndPresentGameDetails,
   openDesktopGame,
   refreshDesktopCatalog,
   reloadSelectedGame,
+  runCatalogRefreshWithCoverSync,
+  scanAutoLibrariesAndRefreshCards,
 } from './desktop-app-workflows';
 
 describe('desktop-app-workflows', () => {
@@ -17,9 +35,10 @@ describe('desktop-app-workflows', () => {
     const incrementCatalogVersion = vi.fn();
     const clearSelectionIfSelectedGameMissing = vi.fn();
 
+    const cards = [createGameSummary({ game_id: 'game-1', title: 'Test Game' })];
     const queryGameCardsMock = vi.fn<typeof queryGameCards>(() =>
       Promise.resolve({
-        items: [{ id: 'game-1', title: 'Test Game' } as unknown as GameSummary],
+        items: cards,
         total: 1,
         hiddenCount: 0,
         availableLibraries: [],
@@ -35,7 +54,7 @@ describe('desktop-app-workflows', () => {
       clearSelectionIfSelectedGameMissing,
     });
 
-    expect(setGames).toHaveBeenCalledWith([{ id: 'game-1', title: 'Test Game' }]);
+    expect(setGames).toHaveBeenCalledWith(cards);
     expect(incrementCatalogVersion).toHaveBeenCalledTimes(1);
     expect(clearSelectionIfSelectedGameMissing).toHaveBeenCalledTimes(1);
   });
@@ -44,12 +63,17 @@ describe('desktop-app-workflows', () => {
     const presentGameDetails = vi.fn();
 
     const getGameDetailsMock = vi.fn<typeof getGameDetails>(() =>
-      Promise.resolve({
-        game: { identity: { id: 'game-1', title: 'Test Game' } },
-        components: [],
-        candidate_groups: [],
-        operations: [],
-      } as unknown as GameDetails),
+      Promise.resolve(
+        createGameDetails({
+          game: {
+            identity: { id: 'game-1', title: 'Test Game', launcher: 'Manual' },
+            platform: 'Windows',
+            runtime: 'NativeWindows',
+            install_path: '/test',
+            executable_candidates: [],
+          },
+        }),
+      ),
     );
 
     await loadAndPresentGameDetails('game-1', 'details', {
@@ -87,5 +111,67 @@ describe('desktop-app-workflows', () => {
     });
 
     expect(loadGameDetails).not.toHaveBeenCalled();
+  });
+
+  it('runCatalogRefreshWithCoverSync refreshes and queues cover sync on success', async () => {
+    const refreshGameCards = vi.fn(() => Promise.resolve());
+    const syncMissingCoversAfterCardsLoad = vi.fn(() => Promise.resolve());
+    const queue = vi.fn((fn: () => Promise<void>) => {
+      void fn();
+    });
+
+    await runCatalogRefreshWithCoverSync(() => Promise.resolve(true), {
+      runExclusive: (task) => task(),
+      refreshGameCards,
+      coverSyncQueue: {
+        queue,
+        setAutoFetching: vi.fn(),
+        autoFetchingIds: new Set<string>(),
+      } as never,
+      syncMissingCoversAfterCardsLoad,
+    });
+
+    expect(refreshGameCards).toHaveBeenCalledTimes(1);
+    expect(queue).toHaveBeenCalledTimes(1);
+    expect(syncMissingCoversAfterCardsLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('runCatalogRefreshWithCoverSync skips refresh when prepare cancels', async () => {
+    const refreshGameCards = vi.fn(() => Promise.resolve());
+    const queue = vi.fn();
+
+    await runCatalogRefreshWithCoverSync(() => Promise.resolve(false), {
+      runExclusive: (task) => task(),
+      refreshGameCards,
+      coverSyncQueue: {
+        queue,
+        setAutoFetching: vi.fn(),
+        autoFetchingIds: new Set<string>(),
+      } as never,
+      syncMissingCoversAfterCardsLoad: vi.fn(),
+    });
+
+    expect(refreshGameCards).not.toHaveBeenCalled();
+    expect(queue).not.toHaveBeenCalled();
+  });
+
+  it('scanAutoLibrariesAndRefreshCards runs the scan before refreshing cards', async () => {
+    scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({
+      kind: 'ok',
+      errors: [],
+    });
+
+    await scanAutoLibrariesAndRefreshCards({
+      runExclusive: (task) => task(),
+      refreshGameCards: vi.fn(() => Promise.resolve()),
+      coverSyncQueue: {
+        queue: vi.fn(),
+        setAutoFetching: vi.fn(),
+        autoFetchingIds: new Set<string>(),
+      } as never,
+      syncMissingCoversAfterCardsLoad: vi.fn(),
+    });
+
+    expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
   });
 });

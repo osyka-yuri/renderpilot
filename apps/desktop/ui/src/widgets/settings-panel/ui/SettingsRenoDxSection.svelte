@@ -7,13 +7,12 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
 
+  import { AddonComponentRow, AddonFieldLabel } from '@entities/addon';
   import { DownloadProgressBar } from '@entities/library';
   import {
     createVulkanLayerSettingsStore,
     RenoDxChannelControl,
     RenoDxStatusBadge,
-    RenoDxFieldLabel,
-    RenoDxComponentRow,
     VULKAN_LAYER_PROGRESS_ID,
     VULKAN_DIAGNOSTIC_LABEL,
     VULKAN_LAYER_PRIMARY_ACTION_LABEL,
@@ -22,8 +21,7 @@
     hostVersionDescription,
   } from '@features/renodx';
   import type { ReshadeChannel } from '@features/renodx';
-  import { t } from '@shared/i18n';
-  import type { MessageKey } from '@shared/i18n';
+  import { t, type MessageKey } from '@shared/i18n';
   import {
     Badge,
     Button,
@@ -155,23 +153,23 @@
 
     <div class="flex flex-col gap-4">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <RenoDxFieldLabel label={t('gameDetails.renodx.status.label')} class="flex-nowrap gap-1.5">
+        <AddonFieldLabel label={t('gameDetails.renodx.status.label')} class="flex-nowrap gap-1.5">
           {#if displayState}
             <Badge variant={displayState === 'installed' ? 'secondary' : 'outline'}>
               {t(VULKAN_LAYER_STATE_LABEL[displayState])}
             </Badge>
           {/if}
-        </RenoDxFieldLabel>
+        </AddonFieldLabel>
 
         {#if facts && isInstalled && store.updateStatus}
-          <RenoDxFieldLabel label={t('gameDetails.renodx.fresh.label')} class="flex-nowrap gap-1.5">
+          <AddonFieldLabel label={t('gameDetails.renodx.fresh.label')} class="flex-nowrap gap-1.5">
             <RenoDxStatusBadge status={store.updateStatus} />
-          </RenoDxFieldLabel>
+          </AddonFieldLabel>
         {/if}
       </div>
 
       <ItemGroup class="rounded-md border bg-muted/30">
-        <RenoDxComponentRow
+        <AddonComponentRow
           icon="reshade"
           title={t('gameDetails.renodx.component.reshade')}
           description={reshadeDescription}
@@ -186,7 +184,7 @@
               onChange={setChannel}
             />
           {/snippet}
-        </RenoDxComponentRow>
+        </AddonComponentRow>
 
         {#if showDiagnostics}
           <Item>

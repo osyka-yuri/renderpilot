@@ -9,7 +9,8 @@ import type {
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
-import { isRecord, isString } from '@shared/validation';
+import { fileNameFromPath } from '@shared/path';
+import { isRecord, isString, requireNonBlankString } from '@shared/validation';
 
 type PayloadRecord = Record<PropertyKey, unknown>;
 
@@ -21,6 +22,8 @@ export type DesktopCommandPayloadMap = {
   fetch_game_cover: { gameId: string };
   clear_game_cover: { gameId: string };
   set_game_cover: { gameId: string; sourcePath: string };
+  set_game_favorite: { gameId: string; isFavorite: boolean };
+  set_game_hidden: { gameId: string; isHidden: boolean };
   get_catalog_setting: { key: string };
   set_catalog_setting: { key: string; value: string };
   apply_swap: { gameId: string; componentId: string; artifactId: string };
@@ -35,6 +38,8 @@ export type DesktopCommandResultMap = {
   fetch_game_cover: CoverArtworkResult;
   clear_game_cover: { cleared: boolean };
   set_game_cover: CoverArtworkResult;
+  set_game_favorite: { saved: boolean };
+  set_game_hidden: { saved: boolean };
   get_catalog_setting: CatalogSettingPayload;
   set_catalog_setting: { saved: boolean };
   apply_swap: ApplySwapResult;
@@ -51,6 +56,8 @@ const ALL_DESKTOP_COMMANDS = [
   'fetch_game_cover',
   'clear_game_cover',
   'set_game_cover',
+  'set_game_favorite',
+  'set_game_hidden',
   'get_catalog_setting',
   'set_catalog_setting',
   'apply_swap',
@@ -137,14 +144,14 @@ function readRequiredField(command: DesktopCommand, record: PayloadRecord, field
   return record[field];
 }
 
+/** Mock-facing blank check with preview-oriented error text; returns trimmed text. */
 export function requireNonEmptyText(value: string, label: string): string {
-  const normalized = value.trim();
-
-  if (!normalized) {
+  try {
+    requireNonBlankString(value, label);
+  } catch {
     throw new Error(`Mock preview ${label} is required.`);
   }
-
-  return normalized;
+  return value.trim();
 }
 
 export function assertNever(value: never): never {
@@ -152,17 +159,11 @@ export function assertNever(value: never): never {
 }
 
 export function lastPathSegment(path: string): string {
-  const segments = normalizeWindowsSlashes(path).split('/').filter(Boolean);
-
-  if (segments.length === 0) {
-    return '';
-  }
-
-  return segments[segments.length - 1];
+  return fileNameFromPath(path);
 }
 
 export function normalizeInstallPath(path: string): string {
-  const normalized = normalizeWindowsSlashes(path.trim()).replace(/\/+$/, '');
+  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
 
   if (!normalized) {
     throw new Error('Mock preview manual scan path is required.');
@@ -172,17 +173,13 @@ export function normalizeInstallPath(path: string): string {
 }
 
 export function normalizeCoverSourcePath(sourcePath: string): string {
-  const normalized = normalizeWindowsSlashes(sourcePath.trim());
+  const normalized = sourcePath.replace(/\\/g, '/').trim();
 
   if (!normalized) {
     throw new Error('Mock preview cover source path is required.');
   }
 
   return normalized;
-}
-
-function normalizeWindowsSlashes(path: string): string {
-  return path.replace(/\\/g, '/');
 }
 
 export function createInstallPathKey(path: string): string {
@@ -233,12 +230,10 @@ export function compareCards(
 
   if (sort.field === 'updates') {
     const updatesDiff = left.update_count - right.update_count;
-
     return updatesDiff === 0 ? byTitle : updatesDiff * direction;
   }
 
   const riskDiff = getRiskSortValue(left.risk_level) - getRiskSortValue(right.risk_level);
-
   return riskDiff === 0 ? byTitle : riskDiff * direction;
 }
 
@@ -246,20 +241,17 @@ function compareCardsByTitle(left: GameSummary, right: GameSummary): number {
   return left.title.localeCompare(right.title) || left.game_id.localeCompare(right.game_id);
 }
 
+const RISK_SORT_ORDER: Record<GameSummary['risk_level'], number> = {
+  safe: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  blocked: 4,
+  unknown: 5,
+};
+
 function getRiskSortValue(riskLevel: GameSummary['risk_level']): number {
-  switch (riskLevel) {
-    case 'low':
-      return 0;
-
-    case 'medium':
-      return 1;
-
-    case 'high':
-      return 2;
-
-    default:
-      return 3;
-  }
+  return RISK_SORT_ORDER[riskLevel];
 }
 
 export function resolveMock<T>(factory: () => T): Promise<T> {
@@ -294,6 +286,5 @@ export function clone<T>(value: T): T {
   }
 
   const parsed: unknown = JSON.parse(serialized);
-
   return parsed as T;
 }

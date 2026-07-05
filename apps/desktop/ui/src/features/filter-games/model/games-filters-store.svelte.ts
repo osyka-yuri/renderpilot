@@ -4,6 +4,7 @@ import {
   createInitialGamesFilterState,
   openFilterDialog,
   setDraftLibraries,
+  setDraftAddons,
   setDraftLaunchers,
   setDraftLauncherOrder,
   setDraftShowHidden,
@@ -46,6 +47,10 @@ export class GamesFiltersStore {
     this.state = setDraftLibraries(this.state, nextLibraries);
   }
 
+  handleDraftAddonsChange(nextAddons: readonly string[]): void {
+    this.state = setDraftAddons(this.state, nextAddons);
+  }
+
   handleDraftLaunchersChange(nextLaunchers: readonly string[]): void {
     this.state = setDraftLaunchers(this.state, nextLaunchers);
   }
@@ -57,6 +62,7 @@ export class GamesFiltersStore {
   resetFilters(): void {
     let next = withSearchQuery(this.state, '');
     next = setDraftLibraries(next, next.availableLibraries);
+    next = setDraftAddons(next, next.availableAddons);
     next = setDraftLaunchers(next, next.availableLaunchers);
     next = setDraftLauncherOrder(next, canonicalizeLauncherOrder([], next.availableLaunchers));
     next = setDraftShowHidden(next, false);

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Screen } from './screen';
 import type { GameDetails, GameSummary } from '@entities/game';
 import {
+  createGameDetails,
+  createGameSummary,
   canonicalGameIdentityId,
   findGameSummaryForSelection,
   normalizeSelectableGameId,
@@ -22,35 +24,8 @@ const GAMES_SCREEN: Screen = 'games';
 
 const WORKSPACE_SCREENS: readonly Screen[] = [DETAILS_SCREEN, OPERATIONS_SCREEN];
 
-type GameDetailsOverrides = {
-  readonly identityId?: unknown;
-  readonly title?: string;
-};
-
-function createGameDetails(overrides: GameDetailsOverrides = {}): GameDetails {
-  const identityId = 'identityId' in overrides ? overrides.identityId : DEFAULT_GAME_ID;
-  const title = overrides.title ?? DEFAULT_GAME_TITLE;
-
-  return {
-    game: {
-      identity: {
-        id: identityId as GameDetails['game']['identity']['id'],
-        title,
-        launcher: 'manual',
-      },
-      platform: 'windows',
-      runtime: 'unknown',
-      install_path: 'D:/games/x',
-      executable_candidates: [],
-    },
-    components: [],
-    candidate_groups: [],
-    operations: [],
-  };
-}
-
-function createGameSummary(gameId = DEFAULT_GAME_ID, title = DEFAULT_GAME_TITLE): GameSummary {
-  return {
+function makeGameSummary(gameId = DEFAULT_GAME_ID, title = DEFAULT_GAME_TITLE): GameSummary {
+  return createGameSummary({
     game_id: gameId,
     title,
     launcher: 'manual',
@@ -66,7 +41,7 @@ function createGameSummary(gameId = DEFAULT_GAME_ID, title = DEFAULT_GAME_TITLE)
     operation_count: 0,
     is_favorite: false,
     is_hidden: false,
-  };
+  });
 }
 
 function expectResolvedDetails(
@@ -81,7 +56,23 @@ function expectRejectedDetails(input: ResolveSelectedGameDetailsInput): void {
 }
 
 function expectCanonicalIdentity(identityId: unknown, expected: string | null): void {
-  expect(canonicalGameIdentityId(createGameDetails({ identityId }))).toBe(expected);
+  expect(
+    canonicalGameIdentityId(
+      createGameDetails({
+        game: {
+          identity: {
+            id: identityId as GameDetails['game']['identity']['id'],
+            title: DEFAULT_GAME_TITLE,
+            launcher: 'manual',
+          },
+          platform: 'windows',
+          runtime: 'unknown',
+          install_path: 'D:/games/x',
+          executable_candidates: [],
+        },
+      }),
+    ),
+  ).toBe(expected);
 }
 
 describe('selection helpers', () => {
@@ -141,14 +132,30 @@ describe('selection helpers', () => {
       expectRejectedDetails({
         activeScreen: DETAILS_SCREEN,
         selectedGameId: DEFAULT_GAME_ID,
-        currentDetails: createGameDetails({ identityId: '   ' }),
+        currentDetails: createGameDetails({
+          game: {
+            identity: { id: '   ', title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+            platform: 'windows',
+            runtime: 'unknown',
+            install_path: 'D:/games/x',
+            executable_candidates: [],
+          },
+        }),
       });
     });
 
     it.each(WORKSPACE_SCREENS)(
       'resolves %s screen when details id matches explicit selected id',
       (activeScreen) => {
-        const details = createGameDetails();
+        const details = createGameDetails({
+          game: {
+            identity: { id: DEFAULT_GAME_ID, title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+            platform: 'windows',
+            runtime: 'unknown',
+            install_path: 'D:/games/x',
+            executable_candidates: [],
+          },
+        });
 
         expectResolvedDetails(
           {
@@ -164,7 +171,15 @@ describe('selection helpers', () => {
     it.each(WORKSPACE_SCREENS)(
       'resolves %s screen without selected id when details have a valid canonical id',
       (activeScreen) => {
-        const details = createGameDetails();
+        const details = createGameDetails({
+          game: {
+            identity: { id: DEFAULT_GAME_ID, title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+            platform: 'windows',
+            runtime: 'unknown',
+            install_path: 'D:/games/x',
+            executable_candidates: [],
+          },
+        });
 
         expectResolvedDetails(
           {
@@ -183,13 +198,29 @@ describe('selection helpers', () => {
         expectRejectedDetails({
           activeScreen,
           selectedGameId: 'manual:OTHER',
-          currentDetails: createGameDetails(),
+          currentDetails: createGameDetails({
+            game: {
+              identity: { id: DEFAULT_GAME_ID, title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+              platform: 'windows',
+              runtime: 'unknown',
+              install_path: 'D:/games/x',
+              executable_candidates: [],
+            },
+          }),
         });
       },
     );
 
     it('resolves non-workspace screen only when selected id matches details id', () => {
-      const details = createGameDetails();
+      const details = createGameDetails({
+        game: {
+          identity: { id: DEFAULT_GAME_ID, title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+          platform: 'windows',
+          runtime: 'unknown',
+          install_path: 'D:/games/x',
+          executable_candidates: [],
+        },
+      });
 
       expectResolvedDetails(
         {
@@ -221,24 +252,59 @@ describe('selection helpers', () => {
   describe('workspaceShellGameTitle', () => {
     it('prefers the game card title when present', () => {
       expect(
-        workspaceShellGameTitle(createGameSummary('id', 'Card Title'), createGameDetails()),
+        workspaceShellGameTitle(
+          makeGameSummary('id', 'Card Title'),
+          createGameDetails({
+            game: {
+              identity: { id: 'id', title: 'Card Title', launcher: 'manual' },
+              platform: 'windows',
+              runtime: 'unknown',
+              install_path: 'D:/games/x',
+              executable_candidates: [],
+            },
+          }),
+        ),
       ).toBe('Card Title');
     });
 
     it('falls back to details title when card title is missing', () => {
-      expect(workspaceShellGameTitle(createGameSummary('id', '   '), createGameDetails())).toBe(
-        DEFAULT_GAME_TITLE,
-      );
+      expect(
+        workspaceShellGameTitle(
+          makeGameSummary('id', '   '),
+          createGameDetails({
+            game: {
+              identity: { id: 'id', title: DEFAULT_GAME_TITLE, launcher: 'manual' },
+              platform: 'windows',
+              runtime: 'unknown',
+              install_path: 'D:/games/x',
+              executable_candidates: [],
+            },
+          }),
+        ),
+      ).toBe(DEFAULT_GAME_TITLE);
     });
 
     it('returns null when no usable title exists', () => {
-      expect(workspaceShellGameTitle(null, createGameDetails({ title: '   ' }))).toBeNull();
+      expect(
+        workspaceShellGameTitle(
+          null,
+          createGameDetails({
+            game: {
+              identity: { id: DEFAULT_GAME_ID, title: '   ', launcher: 'manual' },
+              platform: 'windows',
+              runtime: 'unknown',
+              install_path: 'D:/games/x',
+              executable_candidates: [],
+            },
+          }),
+        ),
+      ).toBeNull();
     });
   });
 
   describe('findGameSummaryForSelection interplay', () => {
     it('keeps the same game summary lookup semantics', () => {
-      const summary = createGameSummary();
+      const summary = makeGameSummary();
 
       expect(findGameSummaryForSelection(DEFAULT_GAME_ID, [summary])).toBe(summary);
       expect(findGameSummaryForSelection('missing', [summary])).toBeNull();

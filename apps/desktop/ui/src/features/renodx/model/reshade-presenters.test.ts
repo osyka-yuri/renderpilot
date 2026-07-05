@@ -5,6 +5,7 @@ import {
   getReshadeDescription,
   humanizeMessageKey,
   riskFallbackKey,
+  riskMessage,
 } from './reshade-presenters';
 import type { HostFacts } from './types';
 
@@ -133,9 +134,20 @@ describe('reshade presenters', () => {
   });
 
   it('maps risk severity to its fallback message key', () => {
-    expect(riskFallbackKey('block')).toBe('gameDetails.renodx.riskBlocked');
-    expect(riskFallbackKey('warn')).toBe('gameDetails.renodx.riskWarn');
-    expect(riskFallbackKey('info')).toBe('gameDetails.renodx.riskSafe');
+    expect(riskFallbackKey('warn')).toBe('gameDetails.addon.riskWarn');
+    expect(riskFallbackKey('info')).toBe('gameDetails.addon.riskSafe');
+  });
+
+  it('renders a catalogued risk message interpolated with the RenoDX display name', () => {
+    expect(riskMessage({ severity: 'info', message_key: 'addon.risk.sp_safe' })).toBe(
+      'No known anti-cheat signatures were found — installing RenoDX is likely safe, but not guaranteed.',
+    );
+  });
+
+  it('falls back to the severity default for an uncatalogued message key', () => {
+    expect(riskMessage({ severity: 'warn', message_key: 'does.not.exist' })).toBe(
+      'Anti-cheat detected — installing may risk a ban.',
+    );
   });
 
   it('humanizes namespaced note keys for the catalog-miss fallback', () => {

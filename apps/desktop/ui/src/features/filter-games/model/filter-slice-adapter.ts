@@ -1,5 +1,6 @@
 import {
   intersectLibraries,
+  normalizeAddonCapabilities,
   normalizeLibraryValues,
   normalizeLauncherValues,
 } from '@entities/game';
@@ -21,10 +22,11 @@ type Canonicalizer = (selected: readonly string[], available: readonly string[])
 // ---------------------------------------------------------------------------
 
 type SliceFieldMapping = {
-  applied: 'appliedLibraries' | 'appliedLaunchers';
-  draft: 'draftLibraries' | 'draftLaunchers';
-  deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllLaunchers';
-  pendingPersisted: 'pendingPersistedLibraries' | 'pendingPersistedLaunchers';
+  applied: 'appliedLibraries' | 'appliedAddons' | 'appliedLaunchers';
+  draft: 'draftLibraries' | 'draftAddons' | 'draftLaunchers';
+  deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllAddons' | 'deferSelectAllLaunchers';
+  pendingPersisted:
+    'pendingPersistedLibraries' | 'pendingPersistedAddons' | 'pendingPersistedLaunchers';
 };
 
 type SliceStateField = SliceFieldMapping[keyof SliceFieldMapping];
@@ -75,6 +77,13 @@ export const LIBRARY_ADAPTER = createSliceAdapter({
   pendingPersisted: 'pendingPersistedLibraries',
 });
 
+export const ADDON_ADAPTER = createSliceAdapter({
+  applied: 'appliedAddons',
+  draft: 'draftAddons',
+  deferSelectAll: 'deferSelectAllAddons',
+  pendingPersisted: 'pendingPersistedAddons',
+});
+
 export const LAUNCHER_ADAPTER = createSliceAdapter({
   applied: 'appliedLaunchers',
   draft: 'draftLaunchers',
@@ -92,6 +101,7 @@ function createCanonicalizeFn(normalizeFn: Normalizer): Canonicalizer {
 }
 
 export const canonicalizeLibraries = createCanonicalizeFn(normalizeLibraryValues);
+export const canonicalizeAddons = createCanonicalizeFn(normalizeAddonCapabilities);
 export const canonicalizeLaunchers = createCanonicalizeFn(normalizeLauncherValues);
 
 // ---------------------------------------------------------------------------

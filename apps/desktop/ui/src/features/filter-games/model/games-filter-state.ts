@@ -1,14 +1,21 @@
 import { shallowStringArrayEqual } from '@shared/text';
-import { normalizeLibraryValues, normalizeLauncherValues } from '@entities/game';
+import {
+  ALL_ADDON_CAPABILITIES,
+  normalizeAddonCapabilities,
+  normalizeLibraryValues,
+  normalizeLauncherValues,
+} from '@entities/game';
 import { encodePersistedGamesFilters, type PersistedGamesFilters } from './filter-persistence';
 import { canonicalizeLauncherOrder, buildInitialLauncherOrder } from './launcher-order';
 import {
   applyStateUpdate,
   canonicalizeLaunchers,
+  canonicalizeAddons,
   canonicalizeLibraries,
   createAvailableSliceFiltersUpdate,
   createHydratedSliceFilters,
   LAUNCHER_ADAPTER,
+  ADDON_ADAPTER,
   LIBRARY_ADAPTER,
 } from './filter-slice-adapter';
 import {
@@ -33,6 +40,12 @@ export type GamesFilterState = {
   pendingPersistedLibraries: string[] | null;
   availableLibraries: string[];
 
+  appliedAddons: string[];
+  draftAddons: string[];
+  deferSelectAllAddons: boolean;
+  pendingPersistedAddons: string[] | null;
+  availableAddons: string[];
+
   appliedLaunchers: string[];
   draftLaunchers: string[];
   deferSelectAllLaunchers: boolean;
@@ -51,6 +64,7 @@ const EMPTY_PERSISTED_SNAPSHOT = '';
 type DraftFilterFields = Pick<
   GamesFilterState,
   | 'draftLibraries'
+  | 'draftAddons'
   | 'draftLaunchers'
   | 'draftLauncherOrder'
   | 'draftShowHidden'
@@ -60,6 +74,7 @@ type DraftFilterFields = Pick<
 type AppliedFilterFields = Pick<
   GamesFilterState,
   | 'appliedLibraries'
+  | 'appliedAddons'
   | 'appliedLaunchers'
   | 'appliedLauncherOrder'
   | 'appliedShowHidden'
@@ -85,6 +100,12 @@ export function createInitialGamesFilterState(): GamesFilterState {
     pendingPersistedLibraries: null,
     availableLibraries: [],
 
+    appliedAddons: [],
+    draftAddons: [],
+    deferSelectAllAddons: false,
+    pendingPersistedAddons: null,
+    availableAddons: [],
+
     appliedLaunchers: [],
     draftLaunchers: [],
     deferSelectAllLaunchers: false,
@@ -103,8 +124,10 @@ export function hydrateGamesFilterState(
   persisted: PersistedGamesFilters | null,
   availableLibraries: readonly string[],
   availableLaunchers: readonly string[],
+  availableAddons: readonly string[] = ALL_ADDON_CAPABILITIES,
 ): GamesFilterState {
   const availableLibrariesSnapshot = copyStringArray(availableLibraries);
+  const availableAddonsSnapshot = copyStringArray(availableAddons);
   const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
   const initialLauncherOrder = buildInitialLauncherOrder(
@@ -136,6 +159,15 @@ export function hydrateGamesFilterState(
       LIBRARY_ADAPTER,
     ),
 
+    availableAddons: availableAddonsSnapshot,
+    ...createHydratedSliceFilters(
+      persisted?.addons ?? null,
+      availableAddonsSnapshot,
+      normalizeAddonCapabilities,
+      canonicalizeAddons,
+      ADDON_ADAPTER,
+    ),
+
     availableLaunchers: availableLaunchersSnapshot,
     ...createHydratedSliceFilters(
       persisted?.launchers ?? null,
@@ -159,14 +191,17 @@ export function withAvailableCatalogFilters(
   state: GamesFilterState,
   availableLibraries: readonly string[],
   availableLaunchers: readonly string[],
+  availableAddons: readonly string[] = ALL_ADDON_CAPABILITIES,
 ): GamesFilterState {
   const availableLibrariesSnapshot = copyStringArray(availableLibraries);
+  const availableAddonsSnapshot = copyStringArray(availableAddons);
   const availableLaunchersSnapshot = copyStringArray(availableLaunchers);
 
   let nextState = withAvailableSnapshots(
     state,
     availableLibrariesSnapshot,
     availableLaunchersSnapshot,
+    availableAddonsSnapshot,
   );
 
   if (!nextState.ready) {
@@ -180,6 +215,16 @@ export function withAvailableCatalogFilters(
       availableLibrariesSnapshot,
       canonicalizeLibraries,
       LIBRARY_ADAPTER,
+    ),
+  );
+
+  nextState = applyStateUpdate(
+    nextState,
+    createAvailableSliceFiltersUpdate(
+      nextState,
+      availableAddonsSnapshot,
+      canonicalizeAddons,
+      ADDON_ADAPTER,
     ),
   );
 
@@ -245,6 +290,22 @@ export function setDraftLibraries(
   return {
     ...state,
     draftLibraries,
+  };
+}
+
+export function setDraftAddons(
+  state: GamesFilterState,
+  addons: readonly string[],
+): GamesFilterState {
+  const draftAddons = canonicalizeAddons(addons, state.availableAddons);
+
+  if (shallowStringArrayEqual(state.draftAddons, draftAddons)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    draftAddons,
   };
 }
 
@@ -324,6 +385,7 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
     ...appliedFilters,
 
     draftLibraries: copyStringArray(appliedFilters.appliedLibraries),
+    draftAddons: copyStringArray(appliedFilters.appliedAddons),
     draftLaunchers: copyStringArray(appliedFilters.appliedLaunchers),
     draftLauncherOrder: copyStringArray(appliedFilters.appliedLauncherOrder),
     draftShowHidden: appliedFilters.appliedShowHidden,
@@ -336,6 +398,7 @@ export function applyDraftFilters(state: GamesFilterState): GamesFilterState {
 export function createPersistedSnapshot(state: GamesFilterState): string {
   return encodePersistedGamesFilters({
     libraries: state.appliedLibraries,
+    addons: state.appliedAddons,
     launchers: state.appliedLaunchers,
     launcherOrder: state.appliedLauncherOrder,
     searchQuery: state.searchQuery,
@@ -376,6 +439,7 @@ export function isPersistedSnapshotStillCurrent(
 function createDraftsFromApplied(state: GamesFilterState): DraftFilterFields {
   return {
     draftLibraries: copyStringArray(state.appliedLibraries),
+    draftAddons: copyStringArray(state.appliedAddons),
     draftLaunchers: copyStringArray(state.appliedLaunchers),
     draftLauncherOrder: copyStringArray(state.appliedLauncherOrder),
     draftShowHidden: state.appliedShowHidden,
@@ -386,6 +450,7 @@ function createDraftsFromApplied(state: GamesFilterState): DraftFilterFields {
 function createAppliedFiltersFromDrafts(state: GamesFilterState): AppliedFilterFields {
   return {
     appliedLibraries: canonicalizeLibraries(state.draftLibraries, state.availableLibraries),
+    appliedAddons: canonicalizeAddons(state.draftAddons, state.availableAddons),
     appliedLaunchers: canonicalizeLaunchers(state.draftLaunchers, state.availableLaunchers),
     appliedLauncherOrder: canonicalizeLauncherOrder(
       state.draftLauncherOrder,
@@ -399,6 +464,7 @@ function createAppliedFiltersFromDrafts(state: GamesFilterState): AppliedFilterF
 function areDraftsEqualToApplied(state: GamesFilterState): boolean {
   return (
     shallowStringArrayEqual(state.draftLibraries, state.appliedLibraries) &&
+    shallowStringArrayEqual(state.draftAddons, state.appliedAddons) &&
     shallowStringArrayEqual(state.draftLaunchers, state.appliedLaunchers) &&
     shallowStringArrayEqual(state.draftLauncherOrder, state.appliedLauncherOrder) &&
     state.draftShowHidden === state.appliedShowHidden &&
@@ -412,6 +478,7 @@ function areAppliedFiltersEqual(
 ): boolean {
   return (
     shallowStringArrayEqual(state.appliedLibraries, appliedFilters.appliedLibraries) &&
+    shallowStringArrayEqual(state.appliedAddons, appliedFilters.appliedAddons) &&
     shallowStringArrayEqual(state.appliedLaunchers, appliedFilters.appliedLaunchers) &&
     shallowStringArrayEqual(state.appliedLauncherOrder, appliedFilters.appliedLauncherOrder) &&
     state.appliedShowHidden === appliedFilters.appliedShowHidden &&
@@ -423,6 +490,6 @@ function areAppliedFiltersEqual(
 // String array helpers
 // ---------------------------------------------------------------------------
 
-function copyStringArray(values: readonly string[]): string[] {
+function copyStringArray<T extends string>(values: readonly T[]): T[] {
   return [...values];
 }

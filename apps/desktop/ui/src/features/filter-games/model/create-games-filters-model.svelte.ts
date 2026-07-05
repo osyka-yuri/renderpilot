@@ -1,4 +1,5 @@
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
+import { ALL_ADDON_CAPABILITIES } from '@entities/game';
 import { createGamesFilterPersistence, type PersistedGamesFilters } from './index-internal';
 import {
   hasFilterIndicator as checkHasFilterIndicator,
@@ -14,11 +15,13 @@ export type GamesFiltersModel = ReturnType<typeof createGamesFiltersModel>;
 
 export type GamesFiltersModelInput = {
   getAvailableLibraries: () => readonly string[];
+  getAvailableAddons?: () => readonly string[];
   getAvailableLaunchers: () => readonly string[];
 };
 
 export function createGamesFiltersModel(input: GamesFiltersModelInput) {
   const store = new GamesFiltersStore();
+  const getAvailableAddons = input.getAvailableAddons ?? (() => ALL_ADDON_CAPABILITIES);
 
   let filterPreferenceLoaded = $state(false);
   let persistedFilters = $state<PersistedGamesFilters | null>(null);
@@ -33,6 +36,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     getPreferenceLoaded: () => filterPreferenceLoaded,
     getPersistedFilters: () => persistedFilters,
     getAvailableLibraries: () => input.getAvailableLibraries(),
+    getAvailableAddons,
     getAvailableLaunchers: () => input.getAvailableLaunchers(),
   });
 
@@ -47,6 +51,8 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
       input.getAvailableLibraries(),
       store.state.appliedLaunchers,
       input.getAvailableLaunchers(),
+      store.state.appliedAddons,
+      getAvailableAddons(),
     ),
   );
 
@@ -106,6 +112,9 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     },
     handleDraftLibrariesChange: (nextLibraries: readonly string[]) => {
       store.handleDraftLibrariesChange(nextLibraries);
+    },
+    handleDraftAddonsChange: (nextAddons: readonly string[]) => {
+      store.handleDraftAddonsChange(nextAddons);
     },
     handleDraftLaunchersChange: (nextLaunchers: readonly string[]) => {
       store.handleDraftLaunchersChange(nextLaunchers);
