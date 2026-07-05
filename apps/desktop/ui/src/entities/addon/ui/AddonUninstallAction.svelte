@@ -1,0 +1,101 @@
+<script lang="ts">
+  import { t, type MessageKey } from '@shared/i18n';
+  import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    Button,
+  } from '@shared/ui';
+  import Trash2Icon from '@lucide/svelte/icons/trash-2';
+
+  type ConfirmResult = boolean | undefined;
+
+  type Props = {
+    busy?: boolean;
+    actionKey: MessageKey;
+    confirmTitleKey: MessageKey;
+    confirmBodyKey: MessageKey;
+    confirmActionKey: MessageKey;
+    onConfirm: () => ConfirmResult | Promise<ConfirmResult>;
+  };
+
+  let {
+    busy = false,
+    actionKey,
+    confirmTitleKey,
+    confirmBodyKey,
+    confirmActionKey,
+    onConfirm,
+  }: Props = $props();
+
+  let open = $state(false);
+  let confirming = $state(false);
+
+  const disabled = $derived(busy || confirming);
+
+  function openConfirmDialog(): void {
+    if (disabled) {
+      return;
+    }
+
+    open = true;
+  }
+
+  async function confirmUninstall(): Promise<void> {
+    if (disabled) {
+      return;
+    }
+
+    confirming = true;
+
+    try {
+      const result = await onConfirm();
+      if (result !== false) {
+        open = false;
+      }
+    } finally {
+      confirming = false;
+    }
+  }
+</script>
+
+<Button
+  type="button"
+  variant="destructive"
+  size="sm"
+  class="ml-auto"
+  {disabled}
+  aria-haspopup="dialog"
+  aria-expanded={open}
+  onclick={openConfirmDialog}
+>
+  <Trash2Icon class="size-4" aria-hidden="true" />
+  {t(actionKey)}
+</Button>
+
+<AlertDialog bind:open>
+  <AlertDialogContent class="sm:max-w-md" escapeKeydownBehavior={disabled ? 'ignore' : 'close'}>
+    <AlertDialogHeader>
+      <AlertDialogTitle>{t(confirmTitleKey)}</AlertDialogTitle>
+      <AlertDialogDescription>
+        {t(confirmBodyKey)}
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+
+    <AlertDialogFooter>
+      <AlertDialogCancel type="button" {disabled}>
+        {t('common.cancel')}
+      </AlertDialogCancel>
+
+      <AlertDialogAction type="button" {disabled} onclick={confirmUninstall}>
+        <Trash2Icon class="size-4" aria-hidden="true" />
+        {t(confirmActionKey)}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
