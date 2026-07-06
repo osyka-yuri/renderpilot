@@ -83,9 +83,8 @@ pub enum AvailabilityOutcome {
     },
     /// No RenoDX profile matched the game.
     Unsupported,
-    /// A different addon tool (Luma) is already installed — or unmanaged files
-    /// belonging to it were found on disk — for this game. RenoDX and Luma are
-    /// mutually exclusive per game; uninstall the other one first.
+    /// A different addon tool is already installed — or unmanaged files belonging to it
+    /// were found on disk — for this game. Tools are mutually exclusive per game.
     BlockedByOtherAddon {
         /// The other addon tool occupying this game. Named `other_kind`, not
         /// `kind`, because the latter collides with this enum's own

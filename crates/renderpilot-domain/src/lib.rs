@@ -15,9 +15,9 @@ mod text;
 mod version;
 
 pub use addon::{
-    InstalledAddon, InstalledAddonHostKind, RenoDxHostKind, RenoDxInstallState,
-    SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource,
-    TrackedSource, TrackedSourceRole,
+    InstalledAddon, InstalledAddonHostKind, RenoDxHostKind, RenoDxInstallState, SharedArtifactKind,
+    SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource, TrackedSource,
+    TrackedSourceRole,
 };
 pub use component::{
     ArtifactTrustLevel, ComponentError, ComponentFile, GraphicsComponent, LibraryArtifact,

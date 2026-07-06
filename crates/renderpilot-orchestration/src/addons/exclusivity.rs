@@ -1,5 +1,5 @@
 //! Mutual-exclusion policy between addon tools that install into the same game
-//! folder (RenoDX and Luma today — both a ReShade host plus one tool's own add-on
+//! folder (RenoDX today — a ReShade host plus the tool's own add-on
 //! file). Exactly one of them may be installed for a given game at a time; this
 //! module is the single place either tool asks "is the *other* one already here?"
 //!
@@ -87,6 +87,18 @@ pub(crate) fn ensure_not_blocked(
     Ok(())
 }
 
+/// Ensures no unmanaged files for the kind are present.
+pub(crate) fn ensure_not_unmanaged(
+    scan_dirs: &[&Path],
+    kind: AddonKind,
+    message: impl Into<String>,
+) -> Result<(), ServiceError> {
+    if registry::unmanaged_files_present_in_dirs(scan_dirs, kind) {
+        return Err(errors::invalid(message.into()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +124,4 @@ mod tests {
             AddonKind::RenoDx
         ));
     }
-
 }

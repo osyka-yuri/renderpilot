@@ -56,6 +56,7 @@ mod tests {
 
     use super::*;
     use crate::addons::engine::{self, FileOp, IniSection, InstallPlan, MergeStrategy};
+    use crate::addons::path_bufs;
 
     /// The extensibility seam: a *second* tool with a different shape — an
     /// OptiScaler-style proxy DLL plus an `OptiScaler.ini` (a different section and
@@ -121,16 +122,8 @@ mod tests {
         assert_eq!(record.backed_up_files().len(), 1);
 
         engine::uninstall(
-            &record
-                .created_files()
-                .iter()
-                .map(|path| std::path::PathBuf::from(path.as_str()))
-                .collect::<Vec<_>>(),
-            &record
-                .backed_up_files()
-                .iter()
-                .map(|path| std::path::PathBuf::from(path.as_str()))
-                .collect::<Vec<_>>(),
+            &path_bufs(record.created_files()),
+            &path_bufs(record.backed_up_files()),
         )
         .expect("uninstall");
 
@@ -142,5 +135,4 @@ mod tests {
         assert!(!game.join("OptiScaler.ini").exists());
         assert!(!game.join("optiscaler-marker.json").exists());
     }
-
 }

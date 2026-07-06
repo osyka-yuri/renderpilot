@@ -50,9 +50,7 @@ pub(crate) trait AddonTool: Send + Sync {
 }
 
 /// Every known tool. Adding a third tool means one more entry here.
-pub(crate) static TOOLS: &[&dyn AddonTool] = &[
-    &crate::addons::renodx::tool::RenoDxTool,
-];
+pub(crate) static TOOLS: &[&dyn AddonTool] = &[&crate::addons::renodx::tool::RenoDxTool];
 
 /// Lookup by kind. Returns `None` only if domain and registration have drifted
 /// (covered by the exhaustiveness test below).

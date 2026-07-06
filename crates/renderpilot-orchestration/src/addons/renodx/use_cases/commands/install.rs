@@ -8,6 +8,7 @@ use renderpilot_domain::{
 };
 
 use crate::addons::anticheat::{RiskSeverity, assess_risk};
+use crate::addons::exclusivity;
 use crate::addons::game_analysis::{analyze_game, install_target_dir};
 use crate::addons::install_guard;
 use crate::addons::operation_lock;
@@ -79,6 +80,18 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
     let target_dir = install_target_dir(&analysis)?;
     let roots = install_guard::resolve_install_scan_roots(&analysis)?;
     install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::RenoDx, &roots)?;
+    records::ensure_no_record(
+        context,
+        game_id,
+        AddonKind::RenoDx,
+        "RenoDX is already installed for this game; uninstall before reinstalling",
+    )?;
+    let scan_dirs = roots.scan_dir_paths();
+    exclusivity::ensure_not_unmanaged(
+        scan_dirs.as_slice(),
+        AddonKind::RenoDx,
+        "Unmanaged RenoDX files are present for this game; remove them before installing",
+    )?;
 
     let plan: ResolvedInstall = match resolution {
         RenoDxResolution::Installable(plan) => *plan,
@@ -210,6 +223,18 @@ pub async fn install_from_file(
     let target_dir = install_target_dir(&analysis)?;
     let roots = install_guard::resolve_install_scan_roots(&analysis)?;
     install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::RenoDx, &roots)?;
+    records::ensure_no_record(
+        context,
+        game_id,
+        AddonKind::RenoDx,
+        "RenoDX is already installed for this game; uninstall before reinstalling",
+    )?;
+    let scan_dirs = roots.scan_dir_paths();
+    exclusivity::ensure_not_unmanaged(
+        scan_dirs.as_slice(),
+        AddonKind::RenoDx,
+        "Unmanaged RenoDX files are present for this game; remove them before installing",
+    )?;
 
     // The architecture the user's add-on targets (`.addon64` → X64). A non-add-on
     // file is rejected outright.

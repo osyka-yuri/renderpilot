@@ -38,6 +38,7 @@ pub fn availability(
         blocked,
         analysis,
         resolution,
+        roots,
     } = availability_pipeline::preflight(
         context,
         game_id,
@@ -45,7 +46,12 @@ pub fn availability(
         manifest,
         analyze_and_resolve,
     )?;
-    let scan_dir = Path::new(game.install_path().as_str());
+    // Prefer the exe-parent install root (same roots install uses) over the
+    // library install path, which can differ on nested shipping layouts.
+    let scan_dir = roots
+        .as_ref()
+        .map(|roots| roots.game_dir.as_path())
+        .unwrap_or_else(|| Path::new(game.install_path().as_str()));
     let report = |record: Option<&InstalledAddon>| {
         host_report::reshade_report(&analysis, &resolution, record, &manifest.reshade)
     };

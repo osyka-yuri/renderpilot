@@ -94,6 +94,12 @@ pub(crate) fn canonicalize_best_effort(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// Converts a slice of [`renderpilot_domain::PathRef`]s into owned [`PathBuf`]s.
+#[must_use]
+pub(crate) fn path_bufs(paths: &[renderpilot_domain::PathRef]) -> Vec<PathBuf> {
+    paths.iter().map(|p| PathBuf::from(p.as_str())).collect()
+}
+
 /// Iterates a directory's immediate children, converts each regular-file name
 /// to ASCII lowercase, and returns `true` the moment the predicate accepts one.
 /// Returns `false` when the directory can't be read or no match is found.

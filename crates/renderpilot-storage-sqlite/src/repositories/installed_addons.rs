@@ -377,5 +377,4 @@ mod tests {
             .expect("present");
         assert_eq!(loaded.addon_version(), Some("snapshot-2026.07"));
     }
-
 }

@@ -2,9 +2,9 @@
 //! persisted [`renderpilot_domain::InstalledAddon`], plus the shared record-rebuild
 //! path both tools use after updates.
 //!
-//! These functions are the canonical implementation so that RenoDX, Luma, and
+//! These functions are the canonical implementation so that RenoDX and
 //! future tools produce identical "dated" display values and host-proxy discovery
-//! without copy-paste. Tool-specific tracking modules (renodx/tracking, luma/tracking)
+//! without copy-paste. Tool-specific tracking modules (for example renodx/tracking)
 //! delegate to (or re-export) these where possible.
 
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ pub(crate) enum AddonVersionUpdate {
 /// Parts of an install record that an update may rewrite.
 #[derive(Debug)]
 pub(crate) struct RebuildParts {
-    /// Main add-on path (may change when Luma renames the rolling-release asset).
+    /// Main add-on path (may change when a tool renames a rolling-release asset).
     pub addon_file: PathRef,
     /// Version field policy for the rebuild.
     pub addon_version: AddonVersionUpdate,
@@ -55,7 +55,6 @@ impl PreserveMetadata {
             registered_exe: true,
         }
     }
-
 }
 
 /// Rebuilds an install record from file/source lists while preserving identity

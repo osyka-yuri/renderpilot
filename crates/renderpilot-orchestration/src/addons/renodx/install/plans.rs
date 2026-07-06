@@ -5,7 +5,7 @@ use renderpilot_domain::{AddonKind, InstalledAddon, TrackedSource, TrackedSource
 use crate::ServiceError;
 use crate::addons::engine::{self, InstallPlan};
 use crate::addons::record;
-use crate::addons::reshade::split_install::{InstallRoots, run_split_install};
+use crate::addons::reshade::split_install::{InstallRoots, PayloadRollback, run_split_install};
 
 use super::super::errors;
 use super::PreparedInstall;
@@ -48,6 +48,7 @@ pub(super) fn install_proxy(
         combined_ops(game_dir, prepared, host.writes_host()),
         vec![addon_op(prepared)],
         host_ops(game_dir, prepared, host.writes_host()),
+        PayloadRollback::Flat,
     )?;
     build_record(
         prepared,

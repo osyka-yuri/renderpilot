@@ -91,11 +91,12 @@ fn is_ini_path(path: &PathRef) -> bool {
 }
 
 fn non_ini_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
-    paths
+    let filtered: Vec<PathRef> = paths
         .iter()
         .filter(|path| !is_ini_path(path))
-        .map(|path| PathBuf::from(path.as_str()))
-        .collect()
+        .cloned()
+        .collect();
+    crate::addons::path_bufs(&filtered)
 }
 
 fn locate_untracked_ini(record: &InstalledAddon, game_dir_hint: Option<&Path>) -> Option<PathBuf> {
