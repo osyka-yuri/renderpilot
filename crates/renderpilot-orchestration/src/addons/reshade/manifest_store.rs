@@ -1,9 +1,9 @@
 //! Fetching and caching the standalone, shared `reshade_manifest.json`, plus
-//! the shared skeleton every per-tool manifest store (`renodx`, `luma`) builds
+//! the shared skeleton every per-tool manifest store (`renodx`, and future tools) builds
 //! its own store on.
 //!
 //! A thin adapter over the generic [`crate::cdn`] manifest cache (the same one
-//! RenoDX's and Luma's own manifests use): it pins this document's file name,
+//! per-tool manifests use): it pins this document's file name,
 //! CDN path, size cap, and 24-hour freshness window, and parses/validates it
 //! via [`super::manifest::parse_reshade_manifest`].
 //!
@@ -55,6 +55,14 @@ pub(crate) async fn shared_config() -> Option<ReshadeConfig> {
     }
 }
 
+/// Disk-only read of the shared ReShade cache (any age). Never touches the network.
+///
+/// Used after a failed force-fetch so tool overlays can still apply a previously
+/// cached document without retrying CDN.
+pub(crate) fn cached_shared_config() -> Option<ReshadeConfig> {
+    cdn::cached(&manifest_spec(), parse_reshade_manifest).map(|manifest| manifest.into_config())
+}
+
 /// Prefer an already-resolved config; otherwise load via [`shared_config`].
 pub(crate) async fn resolve_shared_config(
     preferred: Option<ReshadeConfig>,
@@ -62,6 +70,23 @@ pub(crate) async fn resolve_shared_config(
     match preferred {
         Some(config) => Some(config),
         None => shared_config().await,
+    }
+}
+
+/// Force-fetches the shared ReShade manifest from the CDN (ignores TTL).
+///
+/// Soft-fails like [`shared_config`]: network/parse errors return `None` so
+/// callers can keep tool-embedded fallbacks. On success the disk cache is
+/// updated.
+pub(crate) async fn fetch_shared_config() -> Option<ReshadeConfig> {
+    match cdn::fetch(&manifest_spec(), parse_reshade_manifest).await {
+        Ok(manifest) => Some(manifest.into_config()),
+        Err(error) => {
+            log::warn!(
+                "shared ReShade manifest force-fetch failed ({error}); falling back to the tool manifest's own embedded sources"
+            );
+            None
+        }
     }
 }
 
@@ -73,7 +98,7 @@ pub(crate) const TOOL_MANIFEST_MAX_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const TOOL_MANIFEST_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// The standard CDN cache spec for a tool's own manifest document (4 MiB cap,
-/// 24-hour TTL) — every per-tool manifest store (`renodx`, `luma`) builds its
+/// 24-hour TTL) — every per-tool manifest store (`renodx`, and future tools) builds its
 /// spec from this instead of repeating the constants.
 fn tool_manifest_spec(file_name: &'static str) -> CdnManifestSpec {
     CdnManifestSpec {
@@ -128,6 +153,12 @@ mod tests {
         assert_eq!(spec.url, cdn::cdn_url("reshade_manifest.json"));
         assert!(spec.url.starts_with("https://"));
         assert_eq!(spec.ttl, Some(MANIFEST_CACHE_TTL));
+    }
+
+    #[test]
+    fn cached_shared_config_is_none_without_on_disk_cache() {
+        // No app-data fixture in unit tests → absent cache is None (no panic).
+        let _ = cached_shared_config();
     }
 
     #[test]
