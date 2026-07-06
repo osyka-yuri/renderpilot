@@ -19,7 +19,6 @@ import {
   type LibraryManifestEntry,
   type LibraryState,
   getLibrariesManifest,
-  fetchLibrariesManifest,
   getLibraryStates,
   downloadLibrary,
   deleteLibrary,
@@ -148,6 +147,13 @@ export function createLibrariesPageModel() {
     });
   }
 
+  /**
+   * Reloads the libraries list from the local/cache path.
+   *
+   * Shell Refresh owns the Forced CDN fetch (`refresh_remote_manifests`); this
+   * path only re-reads the already-updated disk cache so we do not double-hit
+   * the CDN after a global refresh.
+   */
   async function refreshManifest(): Promise<void> {
     if (isBusy) {
       return;
@@ -155,7 +161,7 @@ export function createLibrariesPageModel() {
 
     await loadLibraries({
       mode: 'refresh',
-      loadManifest: fetchLibrariesManifest,
+      loadManifest: getLibrariesManifest,
       failureContext: t('libraries.error.refreshFailed'),
     });
   }

@@ -29,6 +29,16 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
     case 'scan_auto_libraries':
       return mockScanAutoLibraries();
 
+    case 'refresh_remote_manifests':
+      return {
+        outcome: { kind: 'forced_fetched' },
+        kinds: {
+          libraries: { status: 'ok' },
+          renodx: { status: 'ok' },
+          reshade: { status: 'ok' },
+        },
+      };
+
     case 'query_game_cards': {
       const query = readObjectField(command, payload, 'query') as unknown as GameCardsQuery;
       return mockQueryGameCards(query);

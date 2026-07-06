@@ -17,6 +17,8 @@ mod error;
 mod fs;
 pub mod game_executable;
 pub mod libraries;
+/// Coordinated CDN manifest refresh (passive TTL vs forced + cooldown).
+pub mod manifests;
 pub mod net;
 pub mod nvapi;
 pub mod portable;

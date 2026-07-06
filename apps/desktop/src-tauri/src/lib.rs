@@ -326,6 +326,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // Library scanning
         commands::scan_manual_folder,
         commands::scan_auto_libraries,
+        // Remote CDN manifests (shell Refresh force path)
+        commands::refresh_remote_manifests,
         // Game data
         commands::query_game_cards,
         commands::get_game_details,

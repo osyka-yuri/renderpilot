@@ -29,6 +29,7 @@ pub(crate) mod catalog;
 pub(crate) mod covers;
 pub(crate) mod dlss_indicator;
 pub(crate) mod libraries;
+pub(crate) mod manifests;
 pub(crate) mod nvapi;
 pub(crate) mod operations;
 pub(crate) mod renodx;
@@ -51,6 +52,7 @@ pub use self::libraries::{
     delete_library, download_artifact, download_library, fetch_libraries_manifest,
     get_libraries_manifest, get_library_states,
 };
+pub use self::manifests::refresh_remote_manifests_forced;
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
     list_global_nvapi_setting_states, list_nvapi_setting_states, list_nvapi_supported_settings,

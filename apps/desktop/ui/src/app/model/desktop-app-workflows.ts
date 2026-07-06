@@ -19,10 +19,12 @@ import {
 import {
   publishAutomaticLibraryScanFailedNotification,
   publishPartialLibraryScanWarning,
+  refreshRemoteManifests,
   scanAutoLibrariesWithErrorRecovery,
   selectManualScanFolder,
   scanManualFolder,
 } from '@features/scan-libraries';
+import { describeCommandErrorBrief } from '@shared/api';
 
 /**
  * Dependencies required for the refreshDesktopCatalog workflow.
@@ -181,6 +183,21 @@ async function prepareAutoLibraryScan(): Promise<boolean> {
   return true;
 }
 
+/** Best-effort forced CDN manifest refresh; never throws. */
+async function forceRemoteManifestsBestEffort(
+  force: () => Promise<unknown> = refreshRemoteManifests,
+): Promise<void> {
+  try {
+    await force();
+  } catch (error) {
+    // Silent for UX; keep a brief log for diagnostics. Disk scan must continue.
+    console.error(
+      `Remote manifest refresh failed; continuing with library scan. ${describeCommandErrorBrief(error)}`,
+      error,
+    );
+  }
+}
+
 /** Scans auto libraries (with recovery), then refreshes cards + cover sync. */
 export async function scanAutoLibrariesAndRefreshCards(
   deps: ScanAutoLibrariesAndRefreshDeps,
@@ -188,13 +205,21 @@ export async function scanAutoLibrariesAndRefreshCards(
   await runCatalogRefreshWithCoverSync(prepareAutoLibraryScan, deps);
 }
 
-export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps;
+export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
+  /** Optional override for the forced remote-manifest refresh. */
+  refreshRemoteManifests?: () => Promise<unknown>;
+};
 
 /**
- * Shell Refresh: auto-scan libraries, then refresh cards + cover sync.
+ * Shell Refresh: force remote CDN manifests (cooldown-gated), then auto-scan
+ * libraries, then refresh cards + cover sync. Manifest failures never abort
+ * the disk scan. Force runs inside the exclusive catalog lock.
  */
 export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<void> {
-  await runCatalogRefreshWithCoverSync(prepareAutoLibraryScan, deps);
+  await runCatalogRefreshWithCoverSync(async () => {
+    await forceRemoteManifestsBestEffort(deps.refreshRemoteManifests);
+    return prepareAutoLibraryScan();
+  }, deps);
 }
 
 export type ManualScanAndRefreshDeps = CatalogRefreshWithCoverSyncDeps;

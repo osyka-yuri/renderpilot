@@ -5,8 +5,7 @@
 //! skeleton: it pins the RenoDX manifest's file name and supplies the parse
 //! and shared-ReShade-overlay steps. Everything else — the CDN cache spec,
 //! fresh reuse, the stale-on-failure offline fallback, and corrupt-file
-//! quarantine — lives in `cdn` / `reshade::manifest_store` and is shared with
-//! the Luma manifest.
+//! quarantine — lives in `cdn` / `reshade::manifest_store` and is shared with other tool manifests.
 //!
 //! After parsing, the manifest's own embedded `reshade` block is overlaid with
 //! the standalone, shared `reshade_manifest.json` when that document is

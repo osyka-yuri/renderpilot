@@ -147,6 +147,25 @@ pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> Jso
     result
 }
 
+/// Force-refreshes remote CDN manifests (libraries, RenoDX, ReShade).
+///
+/// Subject to a process-local cooldown / single-flight gate. Best-effort: the
+/// report encodes per-kind failures; the command itself succeeds so shell
+/// Refresh can still scan the disk. After a successful command result, rebuilds
+/// catalog add-on capability flags from the (possibly just-warmed) cache —
+/// including cooldown skips, which still re-read local manifests.
+#[tauri::command]
+pub async fn refresh_remote_manifests(
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+    let result = run_desktop_async_command(desktop::refresh_remote_manifests_forced).await;
+    if result.is_ok() {
+        addon_catalog::refresh_catalog_addon_capabilities(context).await;
+    }
+    result
+}
+
 #[tauri::command]
 pub async fn query_game_cards(
     query: QueryGameCardsDto,

@@ -9,6 +9,7 @@ import type {
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
+import type { ManifestRefreshReport } from '@features/scan-libraries';
 import { fileNameFromPath } from '@shared/path';
 import { isRecord, isString, requireNonBlankString } from '@shared/validation';
 
@@ -17,6 +18,7 @@ type PayloadRecord = Record<PropertyKey, unknown>;
 export type DesktopCommandPayloadMap = {
   scan_manual_folder: { path: string };
   scan_auto_libraries: undefined;
+  refresh_remote_manifests: undefined;
   query_game_cards: { query: GameCardsQuery };
   get_game_details: { gameId: string };
   fetch_game_cover: { gameId: string };
@@ -33,6 +35,7 @@ export type DesktopCommandPayloadMap = {
 export type DesktopCommandResultMap = {
   scan_manual_folder: ScanManualFolderResult;
   scan_auto_libraries: AutoScanResponse;
+  refresh_remote_manifests: ManifestRefreshReport;
   query_game_cards: GameCardsResult;
   get_game_details: GameDetails;
   fetch_game_cover: CoverArtworkResult;
@@ -51,6 +54,7 @@ export type DesktopCommand = keyof DesktopCommandPayloadMap & keyof DesktopComma
 const ALL_DESKTOP_COMMANDS = [
   'scan_manual_folder',
   'scan_auto_libraries',
+  'refresh_remote_manifests',
   'query_game_cards',
   'get_game_details',
   'fetch_game_cover',

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { getGameDetails, queryGameCards } from '@entities/game';
 import { createGameDetails, createGameSummary } from '@entities/game';
@@ -7,12 +7,14 @@ import type { OpenDesktopGameDeps } from './desktop-app-workflows';
 
 const scanMocks = vi.hoisted(() => ({
   scanAutoLibrariesWithErrorRecovery: vi.fn(() => Promise.resolve({ kind: 'ok', errors: [] })),
+  refreshRemoteManifests: vi.fn(() => Promise.resolve()),
   publishAutomaticLibraryScanFailedNotification: vi.fn(),
   publishPartialLibraryScanWarning: vi.fn(),
 }));
 
 vi.mock('@features/scan-libraries', () => ({
   scanAutoLibrariesWithErrorRecovery: scanMocks.scanAutoLibrariesWithErrorRecovery,
+  refreshRemoteManifests: scanMocks.refreshRemoteManifests,
   publishAutomaticLibraryScanFailedNotification:
     scanMocks.publishAutomaticLibraryScanFailedNotification,
   publishPartialLibraryScanWarning: scanMocks.publishPartialLibraryScanWarning,
@@ -26,6 +28,7 @@ import {
   refreshDesktopCatalog,
   reloadSelectedGame,
   runCatalogRefreshWithCoverSync,
+  runUserCatalogRefresh,
   scanAutoLibrariesAndRefreshCards,
 } from './desktop-app-workflows';
 
@@ -155,7 +158,64 @@ describe('desktop-app-workflows', () => {
     expect(queue).not.toHaveBeenCalled();
   });
 
-  it('scanAutoLibrariesAndRefreshCards runs the scan before refreshing cards', async () => {
+  describe('runUserCatalogRefresh', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({
+        kind: 'ok',
+        errors: [],
+      });
+      scanMocks.refreshRemoteManifests.mockResolvedValue(undefined);
+    });
+
+    function coverDeps() {
+      return {
+        runExclusive: <T>(task: () => Promise<T>) => task(),
+        refreshGameCards: vi.fn(() => Promise.resolve()),
+        coverSyncQueue: {
+          queue: vi.fn((fn: () => Promise<void>) => {
+            void fn();
+          }),
+          setAutoFetching: vi.fn(),
+          autoFetchingIds: new Set<string>(),
+        } as never,
+        syncMissingCoversAfterCardsLoad: vi.fn(() => Promise.resolve()),
+      };
+    }
+
+    it('force-refreshes remote manifests before scanning', async () => {
+      const forceManifests = vi.fn(() => Promise.resolve());
+      const deps = coverDeps();
+
+      await runUserCatalogRefresh({
+        ...deps,
+        refreshRemoteManifests: forceManifests,
+      });
+
+      expect(forceManifests).toHaveBeenCalledTimes(1);
+      expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
+      expect(deps.refreshGameCards).toHaveBeenCalledTimes(1);
+      expect(forceManifests.mock.invocationCallOrder[0]).toBeLessThan(
+        scanMocks.scanAutoLibrariesWithErrorRecovery.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('continues with scan when remote manifest force fails', async () => {
+      const forceManifests = vi.fn(() => Promise.reject(new Error('cdn down')));
+      const deps = coverDeps();
+
+      await runUserCatalogRefresh({
+        ...deps,
+        refreshRemoteManifests: forceManifests,
+      });
+
+      expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
+      expect(deps.refreshGameCards).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('scanAutoLibrariesAndRefreshCards does not force remote manifests', async () => {
+    vi.clearAllMocks();
     scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({
       kind: 'ok',
       errors: [],
@@ -172,6 +232,7 @@ describe('desktop-app-workflows', () => {
       syncMissingCoversAfterCardsLoad: vi.fn(),
     });
 
+    expect(scanMocks.refreshRemoteManifests).not.toHaveBeenCalled();
     expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
   });
 });

@@ -186,3 +186,28 @@ describe('createLibrariesPageModel.downloadAllLatest', () => {
     expect(model.bulkProgressValue).toBe(0);
   });
 });
+
+describe('createLibrariesPageModel.refreshManifest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('re-reads the local/cache path and never force-fetches the CDN', async () => {
+    const entries = [entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' })];
+    mocks.getLibrariesManifest.mockResolvedValue(manifestOf(entries));
+    mocks.getLibraryStates.mockResolvedValue([]);
+
+    const model = createLibrariesPageModel();
+    model.init();
+    await model.loadInitialLibraries();
+    vi.clearAllMocks();
+
+    mocks.getLibrariesManifest.mockResolvedValue(manifestOf(entries));
+    mocks.getLibraryStates.mockResolvedValue([]);
+
+    await model.refreshManifest();
+
+    expect(mocks.getLibrariesManifest).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchLibrariesManifest).not.toHaveBeenCalled();
+  });
+});

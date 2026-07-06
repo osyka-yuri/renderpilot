@@ -6,4 +6,9 @@ export {
 
 export { selectManualScanFolder } from './model/scan-dialog';
 
-export { scanManualFolder } from './api/desktop';
+export { scanManualFolder, refreshRemoteManifests } from './api/desktop';
+export type {
+  ManifestKindStatus,
+  ManifestRefreshOutcome,
+  ManifestRefreshReport,
+} from './model/manifest-refresh';
