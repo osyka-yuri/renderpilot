@@ -1,6 +1,7 @@
 mod artifacts;
 mod catalog_select_sql;
-mod columns;
+/// Projection aliases for row mappers (physical columns live in `schema::physical`).
+pub(crate) mod columns;
 mod component_backups;
 mod components;
 pub mod file_hash_cache;

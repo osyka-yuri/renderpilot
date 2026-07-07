@@ -2,7 +2,7 @@
 //!
 //! Projection alias strings must match [`crate::repositories::columns::projection`].
 //! `macro_rules!` embeds literals into `concat!(...)` because `concat!` does not accept
-//! `const` path fragments on this toolchain (verified with rustc 1.95); workspace MSRV is 1.85.
+//! `const` path fragments on this toolchain (verified with rustc 1.95); workspace MSRV is 1.97.
 
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::game`].
 macro_rules! projection_game_sql {
@@ -148,7 +148,8 @@ pub(super) const SELECT_OPERATION_ITEMS_FOR_GAME_SQL: &str = concat!(
 
 #[cfg(test)]
 mod tests {
-    use super::super::columns::{physical as phys, projection as proj};
+    use super::super::columns::projection as proj;
+    use crate::schema::physical as phys;
 
     fn assert_fragment_has_as_aliases(fragment: &str, aliases: &[&'static str]) {
         for alias in aliases {

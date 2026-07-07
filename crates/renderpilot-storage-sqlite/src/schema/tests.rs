@@ -240,6 +240,50 @@ fn apply_preserves_disabled_foreign_keys_state() {
     assert!(!foreign_keys_enabled(&connection));
 }
 
+/// Column-contract: the shared runtime diff is empty after the bundled DDL is
+/// applied, so physical constants cannot drift from the migration silently.
+#[test]
+fn contract_physical_columns_match_schema() {
+    let mut connection = open_test_connection();
+    super::apply(&mut connection).expect("migration should succeed");
+    assert!(
+        super::validation::physical_column_mismatches(&connection)
+            .expect("physical-column validation should query")
+            .is_empty()
+    );
+}
+
+#[test]
+fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
+    let mut connection = open_test_connection();
+    super::apply(&mut connection).expect("migration should succeed");
+    connection
+        .execute_batch("ALTER TABLE games ADD COLUMN unexpected_column TEXT;")
+        .expect("schema should accept the extra column");
+
+    assert!(
+        !super::validation::physical_column_mismatches(&connection)
+            .expect("physical-column validation should query")
+            .is_empty()
+    );
+    let error = super::validation::validate_catalog_schema(&connection)
+        .expect_err("unexpected physical column should invalidate schema");
+    assert!(
+        error
+            .message()
+            .contains("unexpected column games.unexpected_column")
+    );
+    assert!(!error.message().contains("missing required objects"));
+
+    super::apply(&mut connection).expect("unexpected physical column should rebuild schema");
+
+    assert!(
+        super::validation::physical_column_mismatches(&connection)
+            .expect("rebuilt schema should validate")
+            .is_empty()
+    );
+}
+
 fn open_test_connection() -> Connection {
     Connection::open_in_memory().expect("sqlite should open")
 }

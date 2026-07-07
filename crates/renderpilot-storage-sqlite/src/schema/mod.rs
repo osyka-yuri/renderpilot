@@ -1,5 +1,7 @@
 //! Catalog schema application: keep, initialize, or rebuild the bundled DDL.
 
+use std::collections::HashSet;
+
 use renderpilot_application::AppResult;
 use rusqlite::{Connection, TransactionBehavior};
 
@@ -7,6 +9,7 @@ use crate::error::storage_context;
 
 mod migration;
 mod objects;
+pub(crate) mod physical;
 mod pragmas;
 mod validation;
 
@@ -68,6 +71,21 @@ const REQUIRED_SCHEMA_OBJECT_GROUPS: &[(SchemaObjectKind, &[&str])] = &[
     (SchemaObjectKind::Index, REQUIRED_INDEXES),
     (SchemaObjectKind::Trigger, REQUIRED_TRIGGERS),
 ];
+
+pub(super) fn pragma_column_names(
+    connection: &Connection,
+    table_name: &str,
+) -> AppResult<HashSet<String>> {
+    let mut statement = connection
+        .prepare("SELECT name FROM pragma_table_info(?1)")
+        .map_err(|error| storage_context("prepare pragma_table_info", error))?;
+    let names = statement
+        .query_map([table_name], |row| row.get::<_, String>(0))
+        .map_err(|error| storage_context("query pragma_table_info", error))?
+        .collect::<Result<HashSet<_>, _>>()
+        .map_err(|error| storage_context("read pragma_table_info rows", error))?;
+    Ok(names)
+}
 
 /// Applies the bundled catalog DDL.
 ///
