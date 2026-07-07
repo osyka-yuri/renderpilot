@@ -104,8 +104,8 @@ impl PlannedFile {
         PathBuf::from(self.file.path().as_str())
     }
 
-    pub(super) fn target_bak(&self) -> PathBuf {
-        PathBuf::from(format!("{}.bak", self.file.path().as_str()))
+    pub(super) fn target_bak(&self) -> Result<PathBuf, crate::fs::SidecarPathError> {
+        crate::fs::backup_path(std::path::Path::new(self.file.path().as_str()))
     }
 }
 

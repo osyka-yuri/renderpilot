@@ -23,7 +23,10 @@ pub(super) fn recover_orphaned_backups(
         // 1. Recover `.bak` files directly corresponding to the component's current files.
         for file in component.files() {
             let original_path = file.path().as_str();
-            let bak_path = PathBuf::from(format!("{original_path}.bak"));
+            let Ok(bak_path) = crate::fs::backup_path(std::path::Path::new(original_path)) else {
+                log::warn!("recovery: cannot derive backup path for {original_path}, skipping");
+                continue;
+            };
             if let Some(recovered_file) = recover_bak_file(&bak_path, original_path)? {
                 recovered_baseline.push(recovered_file);
             }
@@ -131,13 +134,13 @@ fn recover_orphaned_fsr_split_members(
     for entry in read_dir.flatten() {
         let bak_path = entry.path();
 
-        // Only consider `.bak` files.
-        if bak_path.extension() != Some(std::ffi::OsStr::new("bak")) {
+        // Only consider lowercase `.bak` sidecars produced by our backup helper.
+        let Some(original) = crate::fs::original_path_from_backup(&bak_path) else {
             continue;
-        }
+        };
 
         // Only consider FSR split members (the upscaler marker is one of them).
-        let Some(stem) = bak_path.file_stem() else {
+        let Some(stem) = original.file_name() else {
             continue;
         };
         let stem_str = stem.to_string_lossy();
@@ -145,17 +148,12 @@ fn recover_orphaned_fsr_split_members(
             continue;
         }
 
-        // Derive the original (non-`.bak`) path. The extension check above
-        // guarantees the suffix is present; skip defensively if it is not.
-        let bak_str = bak_path.to_string_lossy();
-        let Some(original_path) = bak_str.strip_suffix(".bak") else {
-            continue;
-        };
+        let original_path = original.to_string_lossy();
         if already_recovered.contains(&original_path.to_ascii_lowercase()) {
             continue;
         }
 
-        if let Some(recovered_file) = recover_bak_file(&bak_path, original_path)? {
+        if let Some(recovered_file) = recover_bak_file(&bak_path, original_path.as_ref())? {
             recovered_baseline.push(recovered_file);
         }
     }

@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::InstalledAddonRepository;
@@ -280,16 +279,16 @@ fn with_backup_if_present(
     mut record: InstalledAddon,
     path: &Path,
 ) -> Result<InstalledAddon, ServiceError> {
-    if backup_path(path).is_file() {
+    let bak = crate::fs::backup_path(path).map_err(|error| {
+        errors::failed(format!(
+            "invalid adopted backup path for `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    if bak.is_file() {
         record = record.with_backed_up_file(path_ref("backed-up file", path)?);
     }
     Ok(record)
-}
-
-fn backup_path(path: &Path) -> PathBuf {
-    let mut value = OsString::from(path.as_os_str());
-    value.push(".bak");
-    PathBuf::from(value)
 }
 
 fn path_ref(label: &str, path: &Path) -> Result<PathRef, ServiceError> {

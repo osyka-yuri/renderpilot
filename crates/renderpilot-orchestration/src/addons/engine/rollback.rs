@@ -29,7 +29,16 @@ pub fn uninstall(
 
     let mut touched_dirs: HashSet<PathBuf> = HashSet::new();
     for path in backed_up_files {
-        let bak = helpers::bak_path(path);
+        let bak = match helpers::bak_path(path) {
+            Ok(bak) => bak,
+            Err(error) => {
+                log::warn!(
+                    "addon uninstall: cannot derive backup path for `{}`: {error}",
+                    path.display()
+                );
+                continue;
+            }
+        };
         if !bak.exists() {
             log::warn!(
                 "addon uninstall: backup `{}` is missing; cannot restore the original file",

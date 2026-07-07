@@ -21,7 +21,7 @@ fn comp_file_str(path: &str) -> ComponentFile {
 }
 
 fn bak_of(path: &Path) -> PathBuf {
-    PathBuf::from(format!("{}.bak", path.display()))
+    crate::fs::backup_path(path).expect("test paths include a file name")
 }
 
 fn write(path: &Path, bytes: &[u8]) {

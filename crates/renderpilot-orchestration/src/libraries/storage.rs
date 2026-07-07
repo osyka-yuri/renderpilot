@@ -43,12 +43,12 @@ pub(super) fn local_dll_path(
 
 /// Writes a sidecar `.sha256` file next to the given file.
 pub(super) fn write_sha256_cache(path: &Path, sha256: &str) -> Result<(), ServiceError> {
-    crate::fs::write_file_atomically(&sha256_cache_path(path), sha256.as_bytes())
+    crate::fs::write_file_atomically(&sha256_cache_path(path)?, sha256.as_bytes())
 }
 
 /// Reads a sidecar `.sha256` file next to the given file, if it exists.
 pub(super) fn read_sha256_cache(path: &Path) -> Result<Option<String>, ServiceError> {
-    let cache_path = sha256_cache_path(path);
+    let cache_path = sha256_cache_path(path)?;
     match fs::read_to_string(&cache_path) {
         Ok(content) => Ok(Some(content.trim().to_owned())),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -59,9 +59,15 @@ pub(super) fn read_sha256_cache(path: &Path) -> Result<Option<String>, ServiceEr
     }
 }
 
-pub(super) fn sha256_cache_path(path: &Path) -> PathBuf {
-    path.with_extension(format!(
-        "{}.sha256",
-        path.extension().and_then(|e| e.to_str()).unwrap_or("")
-    ))
+/// Sidecar path for a library DLL's cached hash (`foo.dll` → `foo.dll.sha256`).
+///
+/// Library artifact paths always include a file name; missing one is reported
+/// rather than inventing a replace-style fallback that could collide.
+pub(super) fn sha256_cache_path(path: &Path) -> Result<PathBuf, ServiceError> {
+    crate::fs::with_added_extension(path, "sha256").map_err(|error| {
+        library_error(format!(
+            "failed to derive sha256 cache path for `{}`: {error}",
+            path.display()
+        ))
+    })
 }

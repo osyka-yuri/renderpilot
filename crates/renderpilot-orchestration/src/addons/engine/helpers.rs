@@ -1,6 +1,5 @@
 //! Shared low-level filesystem helpers used by apply and rollback paths.
 
-use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -9,10 +8,12 @@ use super::errors;
 use crate::ServiceError;
 
 /// Returns `path` with a `.bak` suffix appended.
-pub(crate) fn bak_path(path: &Path) -> PathBuf {
-    let mut name = OsString::from(path.as_os_str());
-    name.push(".bak");
-    PathBuf::from(name)
+///
+/// Addon install paths are bare file names under a game directory. A missing
+/// file-name component is reported as [`ServiceError::InvalidInput`] rather than
+/// panicking so a corrupted plan cannot abort the process mid-apply.
+pub(crate) fn bak_path(path: &Path) -> Result<PathBuf, ServiceError> {
+    crate::fs::backup_path(path).map_err(|error| errors::invalid(error.to_string()))
 }
 
 /// Returns the path of an existing file in `game_dir` whose name equals `name`

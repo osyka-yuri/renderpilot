@@ -245,7 +245,14 @@ pub(super) fn delete_local_library(
         }
         // Remove the DLL and its sidecar SHA-256 cache.
         crate::fs::remove_file_if_exists(&dll_path)?;
-        let _ = crate::fs::remove_file_if_exists(&storage::sha256_cache_path(&dll_path));
+        if let Ok(cache_path) = storage::sha256_cache_path(&dll_path) {
+            let _ = crate::fs::remove_file_if_exists(&cache_path);
+        } else {
+            log::debug!(
+                "delete local library: cannot derive sha256 cache path for `{}`, skipped cleanup",
+                dll_path.display()
+            );
+        }
     }
 
     Ok(())

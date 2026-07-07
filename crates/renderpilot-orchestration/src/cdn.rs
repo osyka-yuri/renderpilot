@@ -44,6 +44,7 @@ pub(crate) struct CdnManifestSpec {
 }
 
 /// Classification of a cached manifest read.
+#[derive(Debug)]
 enum CachedManifest<T> {
     /// Present, parsed, and within the TTL.
     Fresh(T),
@@ -174,11 +175,49 @@ fn quarantine_corrupt(file_name: &str) {
     quarantine_at(&path);
 }
 
-/// Renames the file at `path` aside to `*.corrupt` (best-effort). Split from
-/// [`quarantine_corrupt`] so it can be exercised against an explicit temp file.
+/// Renames the file at `path` to the first available append-sidecar
+/// (`manifest.json` → `manifest.json.corrupt` →
+/// `manifest.json.corrupt.1`). Best-effort.
+///
+/// Existing diagnostics are retained rather than overwritten, while repeated
+/// corrupt downloads are still removed from the cache path before the next
+/// fetch attempt.
 fn quarantine_at(path: &Path) {
-    let quarantined = path.with_extension("corrupt");
-    let _ = fs::rename(path, &quarantined);
+    let Ok(Some(quarantined)) = next_quarantine_path(path) else {
+        log::debug!(
+            "cdn cache quarantine: cannot derive an available sidecar path for `{}`",
+            path.display()
+        );
+        return;
+    };
+    if let Err(error) = fs::rename(path, &quarantined) {
+        log::debug!(
+            "cdn cache quarantine: could not rename `{}` to `{}`: {error}",
+            path.display(),
+            quarantined.display()
+        );
+    }
+}
+
+/// Finds the first unused quarantine sidecar without replacing an existing
+/// diagnostic. `None` would require exhausting every `u32` suffix.
+fn next_quarantine_path(path: &Path) -> Result<Option<PathBuf>, crate::fs::SidecarPathError> {
+    let base = crate::fs::with_added_extension(path, "corrupt")?;
+    if !base.exists() {
+        return Ok(Some(base));
+    }
+
+    let mut suffix = 1_u32;
+    loop {
+        let candidate = crate::fs::with_added_extension(&base, &suffix.to_string())?;
+        if !candidate.exists() {
+            return Ok(Some(candidate));
+        }
+        let Some(next) = suffix.checked_add(1) else {
+            return Ok(None);
+        };
+        suffix = next;
+    }
 }
 
 fn cache_path(file_name: &str) -> Result<PathBuf, ServiceError> {
@@ -187,6 +226,7 @@ fn cache_path(file_name: &str) -> Result<PathBuf, ServiceError> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::fs::OpenOptions;
     use std::time::{Duration, SystemTime};
 
@@ -194,7 +234,7 @@ mod tests {
 
     use super::*;
 
-    const TTL: Duration = Duration::from_secs(24 * 60 * 60);
+    const TTL: Duration = Duration::from_hours(24);
 
     #[derive(Debug, PartialEq, Eq)]
     struct Doc(String);
@@ -253,7 +293,7 @@ mod tests {
         let meta = fresh.as_file().metadata().expect("meta");
 
         // A 1-hour TTL: a just-written file is fresh.
-        assert!(!is_cache_expired(&meta, Some(Duration::from_secs(3600))));
+        assert!(!is_cache_expired(&meta, Some(Duration::from_hours(1))));
         // A zero TTL: anything already written is stale.
         assert!(is_cache_expired(&meta, Some(Duration::ZERO)));
         // No TTL: never expires, even at zero age.
@@ -264,20 +304,20 @@ mod tests {
     fn missing_cache_classifies_as_absent() {
         let dir = tempdir().expect("temp dir");
         let path = dir.path().join("manifest.json");
-        assert!(matches!(
+        assert_matches!(
             read_cached_at(&path, Some(TTL), &parse_doc).expect("classify"),
             CachedManifest::Absent
-        ));
+        );
     }
 
     #[test]
     fn fresh_cache_classifies_as_fresh() {
         let dir = tempdir().expect("temp dir");
         let path = write_cache(dir.path(), "ok");
-        assert!(matches!(
+        assert_matches!(
             read_cached_at(&path, Some(TTL), &parse_doc).expect("classify"),
             CachedManifest::Fresh(_)
-        ));
+        );
     }
 
     #[test]
@@ -286,11 +326,11 @@ mod tests {
         // surfaced (as Stale), not silently dropped.
         let dir = tempdir().expect("temp dir");
         let path = write_cache(dir.path(), "ok");
-        age_file(&path, TTL + Duration::from_secs(3600));
-        assert!(matches!(
+        age_file(&path, TTL + Duration::from_hours(1));
+        assert_matches!(
             read_cached_at(&path, Some(TTL), &parse_doc).expect("classify"),
             CachedManifest::Stale(_)
-        ));
+        );
     }
 
     #[test]
@@ -298,10 +338,10 @@ mod tests {
         let dir = tempdir().expect("temp dir");
         let path = write_cache(dir.path(), "ok");
         age_file(&path, Duration::from_secs(10 * 365 * 24 * 60 * 60));
-        assert!(matches!(
+        assert_matches!(
             read_cached_at(&path, None, &parse_doc).expect("classify"),
             CachedManifest::Fresh(_)
-        ));
+        );
     }
 
     #[test]
@@ -332,8 +372,36 @@ mod tests {
         quarantine_at(&path);
         assert!(!path.exists(), "the corrupt file is moved aside");
         assert!(
-            path.with_extension("corrupt").exists(),
+            crate::fs::with_added_extension(&path, "corrupt")
+                .expect("cache has a file name")
+                .exists(),
             "it is preserved as *.corrupt for diagnosis"
+        );
+    }
+
+    #[test]
+    fn repeated_quarantine_keeps_each_diagnostic_and_clears_the_cache_path() {
+        let dir = tempdir().expect("temp dir");
+        let path = write_cache(dir.path(), "newly-corrupt");
+        let quarantined =
+            crate::fs::with_added_extension(&path, "corrupt").expect("cache has a file name");
+        fs::write(&quarantined, "first-corrupt").expect("write prior diagnostic");
+
+        quarantine_at(&path);
+
+        assert_eq!(
+            fs::read_to_string(&quarantined).expect("read prior diagnostic"),
+            "first-corrupt"
+        );
+        let repeated =
+            crate::fs::with_added_extension(&quarantined, "1").expect("quarantine has a file name");
+        assert_eq!(
+            fs::read_to_string(&repeated).expect("read repeated diagnostic"),
+            "newly-corrupt"
+        );
+        assert!(
+            !path.exists(),
+            "the corrupt cache path is cleared for a retry"
         );
     }
 }

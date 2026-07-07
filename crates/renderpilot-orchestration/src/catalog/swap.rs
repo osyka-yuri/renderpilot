@@ -120,7 +120,14 @@ fn component_with_backup_original(component: GraphicsComponent) -> GraphicsCompo
         return component;
     };
 
-    let backup_path = std::path::PathBuf::from(target_file.path().as_str().to_owned() + ".bak");
+    let Ok(backup_path) = crate::fs::backup_path(std::path::Path::new(target_file.path().as_str()))
+    else {
+        log::warn!(
+            "swap plan: cannot derive backup path for `{}`, proceeding without shadow",
+            target_file.path().as_str()
+        );
+        return component;
+    };
     if !backup_path.exists() {
         return component;
     }

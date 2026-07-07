@@ -104,7 +104,7 @@ pub(crate) fn place_file(
                 path.display()
             )));
         }
-        let bak = helpers::bak_path(path);
+        let bak = helpers::bak_path(path)?;
         if bak.exists() {
             fs::remove_file(&bak)
                 .map_err(|error| errors::io("clear stale backup", &bak, &error))?;
@@ -169,7 +169,7 @@ pub(crate) fn remove_file_with_backup(
             path.display()
         )));
     }
-    let bak = helpers::bak_path(path);
+    let bak = helpers::bak_path(path)?;
     if bak.exists() {
         fs::remove_file(&bak).map_err(|error| errors::io("clear stale backup", &bak, &error))?;
     }

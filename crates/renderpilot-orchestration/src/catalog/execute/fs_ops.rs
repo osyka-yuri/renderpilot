@@ -72,7 +72,7 @@ fn remove_downgrade_members(
         if !target.exists() {
             continue;
         }
-        let bak = bak_path(file);
+        let bak = bak_path(file)?;
         if bak.exists() {
             fs::remove_file(&bak).map_err(|error| {
                 AppError::provider_failed(format!(
@@ -98,7 +98,12 @@ fn overlay_planned_files(planned: &[PlannedFile], changes: &mut AppliedFsChanges
     for plan in planned {
         let target = plan.target();
         if target.exists() {
-            let bak = plan.target_bak();
+            let bak = plan.target_bak().map_err(|error| {
+                AppError::provider_failed(format!(
+                    "failed to derive backup path for {}: {error}",
+                    target.display()
+                ))
+            })?;
             // Drop any stale leftover backup so `.bak` holds the current original.
             if bak.exists() {
                 fs::remove_file(&bak).map_err(|error| {
@@ -181,7 +186,13 @@ pub(super) fn revert_to_baseline_fs(
     //    were merely kept have no `.bak` and are left as-is.
     for file in baseline {
         let real = real_path(file);
-        let bak = bak_path(file);
+        let Ok(bak) = bak_path(file) else {
+            log::warn!(
+                "catalog revert: cannot derive backup path for `{}`, skipping restore",
+                file.path().as_str()
+            );
+            continue;
+        };
         if !bak.exists() {
             continue;
         }
@@ -231,6 +242,11 @@ fn real_path(file: &ComponentFile) -> PathBuf {
     PathBuf::from(file.path().as_str())
 }
 
-fn bak_path(file: &ComponentFile) -> PathBuf {
-    PathBuf::from(format!("{}.bak", file.path().as_str()))
+fn bak_path(file: &ComponentFile) -> AppResult<PathBuf> {
+    crate::fs::backup_path(real_path(file).as_path()).map_err(|error| {
+        AppError::provider_failed(format!(
+            "failed to derive backup path for {}: {error}",
+            file.path().as_str()
+        ))
+    })
 }
