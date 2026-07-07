@@ -8,7 +8,7 @@ use super::{IMPLICIT_LAYERS_KEY, IMPLICIT_LAYERS_KEY_WOW64};
 ///
 /// Abstracted so the detect/install/uninstall logic is unit-testable without
 /// touching the real registry. The production implementation is
-/// [`WindowsLayerRegistry`] (HKLM); tests use [`FakeRegistry`].
+/// [`WindowsLayerRegistry`] (HKLM); tests use a `FakeRegistry` double.
 pub trait LayerRegistry {
     /// Every currently registered implicit-layer entry (across the hives and
     /// views consulted).

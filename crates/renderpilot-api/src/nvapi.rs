@@ -270,6 +270,8 @@ pub fn revert_global_nvapi_setting(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -296,7 +298,7 @@ mod tests {
         // GPU: an unknown key must surface the standard unknown-setting error.
         match lookup_setting_or_err("does.not.exist") {
             Ok(_) => panic!("unknown key must error"),
-            Err(err) => assert!(matches!(err, ApiError::Service(_))),
+            Err(err) => assert_matches!(err, ApiError::Service(_)),
         }
     }
 

@@ -108,6 +108,8 @@ impl Drop for ForceRefreshGuard<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use std::time::Duration;
 
@@ -115,7 +117,7 @@ mod tests {
     fn grants_first_attempt() {
         let gate = ForceRefreshGate::new();
         let permit = gate.try_begin(Duration::from_secs(90));
-        assert!(matches!(permit, ForceRefreshPermit::Granted(_)));
+        assert_matches!(permit, ForceRefreshPermit::Granted(_));
         assert!(gate.is_in_flight());
         // keep permit alive until here
         drop(permit);
@@ -128,10 +130,10 @@ mod tests {
             ForceRefreshPermit::Granted(guard) => guard,
             other => panic!("expected grant, got {other:?}"),
         };
-        assert!(matches!(
+        assert_matches!(
             gate.try_begin(Duration::from_secs(90)),
             ForceRefreshPermit::SkippedInFlight
-        ));
+        );
     }
 
     #[test]
@@ -162,10 +164,10 @@ mod tests {
                 other => panic!("expected grant, got {other:?}"),
             };
         }
-        assert!(matches!(
+        assert_matches!(
             gate.try_begin(Duration::ZERO),
             ForceRefreshPermit::Granted(_)
-        ));
+        );
     }
 
     #[test]
@@ -173,9 +175,9 @@ mod tests {
         let gate = ForceRefreshGate::new();
         gate.finish();
         assert!(!gate.is_in_flight());
-        assert!(matches!(
-            gate.try_begin(Duration::from_secs(60)),
+        assert_matches!(
+            gate.try_begin(Duration::from_mins(1)),
             ForceRefreshPermit::SkippedCooldown { .. }
-        ));
+        );
     }
 }

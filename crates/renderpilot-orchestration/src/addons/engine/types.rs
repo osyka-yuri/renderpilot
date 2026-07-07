@@ -106,9 +106,9 @@ pub enum FileOp {
     /// identity is never ambiguous — a rolling upstream snapshot or an official
     /// redistributable RenderPilot fetched and PE-sanity-checked itself, so there is
     /// nothing about a prior version worth manually recovering. Rolled back, within
-    /// the same [`install`] call, by restoring the pre-write bytes it captured in
+    /// the same `install` call, by restoring the pre-write bytes it captured in
     /// memory (or deleting the file if none existed) — but once an install commits,
-    /// a later [`uninstall`] simply deletes the file; there is no `.bak` to restore
+    /// a later `uninstall` simply deletes the file; there is no `.bak` to restore
     /// from. Contrast [`BackupAndReplace`](Self::BackupAndReplace), which preserves
     /// whatever was there for the user to recover by hand.
     Replace {
@@ -153,7 +153,7 @@ pub enum FileOp {
     /// directories are created one level at a time and each recorded for rollback
     /// (removed, deepest first, if they end up empty); a directory that already
     /// existed before the install is never a rollback candidate. Directories are
-    /// not tracked in [`InstallReceipt`] — a later [`uninstall_tree`] re-derives
+    /// not tracked in [`InstallReceipt`] — a later `uninstall_tree` re-derives
     /// cleanup candidates from the recorded files' parent chains instead.
     CreateNested {
         /// Relative path under the game folder, using `/` or `\` as the

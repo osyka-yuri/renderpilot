@@ -127,6 +127,8 @@ impl From<LibraryPatternError> for ServiceError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use renderpilot_application::{AppError, AppErrorKind, OperationStatus};
 
     use super::ServiceError;
@@ -170,10 +172,10 @@ mod tests {
     #[test]
     fn app_error_invalid_operation_state_maps_to_service_error() {
         let app_error = AppError::invalid_operation_state("op-123", OperationStatus::Completed);
-        assert!(matches!(
+        assert_matches!(
             app_error.kind(),
             &AppErrorKind::InvalidOperationState { .. }
-        ));
+        );
 
         assert_eq!(
             ServiceError::from(app_error),

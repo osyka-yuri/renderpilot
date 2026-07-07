@@ -7,9 +7,9 @@
 //! Instead, a scan refresh resolves the pure manifest matchers once and stores
 //! the resulting profile snapshot in [`crate::Context`].
 //!
-//! [`CapabilityProbe`] type-erases the per-tool manifest + pure matcher behind
+//! `CapabilityProbe` type-erases the per-tool manifest + pure matcher behind
 //! one `Fn(&MatchFacts) -> bool`, built by each tool's
-//! [`AddonTool::load_capability_probe`]. Adding a tool means implementing that
+//! `AddonTool::load_capability_probe`. Adding a tool means implementing that
 //! one method — this module never lists tools by name.
 
 use std::collections::{HashMap, HashSet};
@@ -24,8 +24,8 @@ use crate::addons::matching::MatchFacts;
 use crate::addons::tool;
 use crate::{Context, ServiceError};
 
-/// Boxed future returned by [`AddonTool::load_capability_probe`]: fetches
-/// (or reuses the cached) manifest and wraps it in a [`CapabilityProbe`].
+/// Boxed future returned by `AddonTool::load_capability_probe`: fetches
+/// (or reuses the cached) manifest and wraps it in a `CapabilityProbe`.
 pub(crate) type CapabilityProbeFuture =
     Pin<Box<dyn Future<Output = Result<CapabilityProbe, ServiceError>> + Send + 'static>>;
 
@@ -176,8 +176,8 @@ impl LoadedCapabilityProbes {
 /// catalog refresh. Per-kind failures are logged and skipped so one offline
 /// CDN does not block another tool's snapshot update.
 ///
-/// Every tool registered in [`tool::TOOLS`] is loaded automatically —
-/// implementing [`AddonTool::load_capability_probe`] is the only step a new
+/// Every tool registered in `tool::TOOLS` is loaded automatically —
+/// implementing `AddonTool::load_capability_probe` is the only step a new
 /// tool needs here.
 pub async fn load_capability_probes() -> LoadedCapabilityProbes {
     let loads = tool::TOOLS.iter().map(|t| {

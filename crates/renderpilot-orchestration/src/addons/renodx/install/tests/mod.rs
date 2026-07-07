@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::fs;
 use std::path::Path;
 
@@ -264,7 +265,7 @@ fn inactive_reshade_engine_dll_refuses_second_host() {
     // ReShade exists, but not in the slot this game will load.
     fs::write(dir.path().join("ReShade64.dll"), reshade_host_bytes(true)).expect("write");
     let error = install(dir.path(), &prepared()).expect_err("should refuse inactive host");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
     assert!(!dir.path().join("ReShade.ini").exists());
     assert!(!dir.path().join("renodx-cp2077.addon64").exists());
 }
@@ -332,7 +333,7 @@ fn host_repair_requires_reshade_bytes() {
     let mut prepared = prepared();
     prepared.reshade_dll_bytes.clear();
     let error = install(dir.path(), &prepared).expect_err("repair needs bytes");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
     assert_eq!(
         read(&dir.path().join("dxgi.dll")),
         reshade_host_bytes(false)
@@ -345,7 +346,7 @@ fn multiple_reshade_hosts_refuse_install_before_writes() {
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
     fs::write(dir.path().join("ReShade64.dll"), reshade_host_bytes(true)).expect("write");
     let error = install(dir.path(), &prepared()).expect_err("multiple hosts conflict");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
     assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
     assert_eq!(
         read(&dir.path().join("ReShade64.dll")),
@@ -361,7 +362,7 @@ fn refuses_install_when_proxy_slot_is_occupied_by_an_unknown_file() {
     // refuse rather than silently displace it.
     fs::write(dir.path().join("dxgi.dll"), b"another-overlay").expect("write");
     let error = install(dir.path(), &prepared()).expect_err("should refuse");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
     // The occupying file is left untouched, and nothing else was laid down.
     assert_eq!(read(&dir.path().join("dxgi.dll")), b"another-overlay");
     assert!(!dir.path().join("renodx-cp2077.addon64").exists());
@@ -420,5 +421,5 @@ fn vulkan_install_refuses_when_already_installed() {
     let dir = tempdir().expect("tempdir");
     install(dir.path(), &vulkan_prepared()).expect("first install");
     let error = install(dir.path(), &vulkan_prepared()).expect_err("should refuse");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
 }

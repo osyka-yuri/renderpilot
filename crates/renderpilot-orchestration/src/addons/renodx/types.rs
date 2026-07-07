@@ -9,17 +9,17 @@
 //!   optional per-game overrides.
 //! * [`Generic`] — engine fallbacks (Unreal/Unity/…) used when no per-game title
 //!   matches; the add-on is derived from a slug or an explicit upstream URL.
-//! * [`ReshadeConfig`] — the global add-on-enabled ReShade host sources (shared).
+//! * `ReshadeConfig` — the global add-on-enabled ReShade host sources (shared).
 //! * [`Defaults`] — shared title defaults (`min_app_version` / `channel`) hoisted
 //!   in schema v3 so the per-title boilerplate is emitted only on deviation; the
 //!   parser merges them via `#[serde(default)]` backed by the same values, and
-//!   [`super::validate`] asserts the manifest's `defaults` match.
+//!   `super::validate` asserts the manifest's `defaults` match.
 //!
 //! The tool-agnostic match vocabulary is shared and re-exported below from
-//! [`crate::addons::matching`] (the wire shapes are identical — serde does not
-//! encode module paths). Most ReShade-host types are addressed at their
-//! canonical [`crate::addons::reshade::types`] path instead; [`ReshadeChannel`]
-//! and [`ReshadeChannelParseError`] stay re-exported here too, since
+//! `crate::addons::matching` (the wire shapes are identical — serde does not
+//! encode module paths). Most ReShade-host types live under
+//! `crate::addons::reshade::types`; [`ReshadeChannel`] and
+//! [`ReshadeChannelParseError`] stay re-exported here too, since
 //! `reshade::types` is crate-private and `renderpilot-api` (outside this
 //! crate) needs them. This module owns the RenoDX-shaped wire model (manifest,
 //! title, generic, category) on top of all of them.
@@ -58,7 +58,7 @@ pub struct RenoDxManifest {
 
 /// Shared title defaults hoisted in schema v3. The manifest carries these once at
 /// the top level; each [`Title`] only repeats a field when it deviates. The parser
-/// applies the same values via `#[serde(default)]`, and [`super::validate`] asserts
+/// applies the same values via `#[serde(default)]`, and `super::validate` asserts
 /// the manifest's `defaults` agree with those Rust defaults (a contract that keeps
 /// the two from silently drifting).
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -91,7 +91,7 @@ pub(crate) fn renodx_ini_defaults() -> ReshadeIniTweaks {
 }
 
 /// The manifest's shared title defaults, as built by the generator (schema v3).
-/// Used by [`super::validate`] to assert `manifest.defaults` matches the Rust-side
+/// Used by `super::validate` to assert `manifest.defaults` matches the Rust-side
 /// `#[serde(default)]` values, and by test fixtures.
 #[must_use]
 pub fn manifest_defaults() -> Defaults {
@@ -176,7 +176,7 @@ pub enum Category {
 ///
 /// In schema v3 `min_app_version` and `channel` default from the manifest's
 /// top-level [`Defaults`] when a title omits them — the `#[serde(default)]`
-/// attributes below are backed by the same values, and [`super::validate`] asserts
+/// attributes below are backed by the same values, and `super::validate` asserts
 /// the manifest's `defaults` agree (so a drift is caught at load time rather than
 /// silently changing install behaviour).
 #[derive(Debug, Clone, Deserialize, Serialize)]

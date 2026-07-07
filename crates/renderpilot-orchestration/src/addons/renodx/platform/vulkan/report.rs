@@ -1,7 +1,7 @@
 //! Orchestration glue for the shared ReShade Vulkan layer.
 //!
 //! Wraps the Windows-only platform layer
-//! ([`renderpilot_platform_windows::vulkan_layer`]) in a cross-platform service API:
+//! (`renderpilot_platform_windows::vulkan_layer`) in a cross-platform service API:
 //! a status report the UI can render plus backend-authored maintenance actions. The
 //! layer is a single shared resource (one ReShade Vulkan overlay system-wide), so
 //! the service detects an existing one and reuses it, installing one only when

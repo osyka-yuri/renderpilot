@@ -148,6 +148,8 @@ pub(crate) fn persistence_failure_error(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use std::path::Path;
 
     use super::*;
@@ -206,7 +208,7 @@ mod tests {
             },
         ])
         .expect_err("second replacement should fail");
-        assert!(matches!(error, ServiceError::CommandFailed(_)));
+        assert_matches!(error, ServiceError::CommandFailed(_));
 
         // The first replacement's write is rolled back to its pre-call bytes.
         assert_eq!(read(&existing), b"old-addon");

@@ -195,6 +195,8 @@ fn cover_too_large() -> ServiceError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use std::cell::RefCell;
 
@@ -239,7 +241,7 @@ mod tests {
 
         let error =
             result.expect_err("persistent transient failures should bubble up after retries");
-        assert!(matches!(error, ServiceError::CoverDownloadFailed(_)));
+        assert_matches!(error, ServiceError::CoverDownloadFailed(_));
         assert_eq!(*attempts.borrow(), COVER_DOWNLOAD_MAX_ATTEMPTS);
 
         // Sleeps happen between attempts, never after the final failure.
@@ -299,7 +301,7 @@ mod tests {
             |_| *sleeps.borrow_mut() += 1,
         );
 
-        assert!(matches!(result, Err(ServiceError::CoverNotFound)));
+        assert_matches!(result, Err(ServiceError::CoverNotFound));
         assert_eq!(*attempts.borrow(), 1, "404/Gone must never be retried");
         assert_eq!(*sleeps.borrow(), 0);
     }

@@ -13,7 +13,7 @@
   <div style="margin-top: 10px;">
     <img src="https://img.shields.io/badge/Tauri-2.0-24c8db?style=for-the-badge&logo=tauri&logoColor=white&labelColor=1c1c1c" alt="Tauri" />
     <img src="https://img.shields.io/badge/Svelte-5.0-ff3e00?style=for-the-badge&logo=svelte&logoColor=white&labelColor=1c1c1c" alt="Svelte" />
-    <img src="https://img.shields.io/badge/Rust-1.85+-ce4a00?style=for-the-badge&logo=rust&logoColor=white&labelColor=1c1c1c" alt="Rust" />
+    <img src="https://img.shields.io/badge/Rust-1.97-ce4a00?style=for-the-badge&logo=rust&logoColor=white&labelColor=1c1c1c" alt="Rust" />
     <img src="https://img.shields.io/badge/Platform-Windows-0078d4?style=for-the-badge&logo=windows&logoColor=white&labelColor=1c1c1c" alt="Windows" />
   </div>
 </div>
@@ -60,7 +60,7 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (minimum 1.85, pinned via `rust-toolchain.toml`)
+- [Rust](https://www.rust-lang.org/tools/install) (MSRV 1.97, pinned to the exact release in `rust-toolchain.toml`)
 - [Node.js](https://nodejs.org/) v20+
 - [pnpm](https://pnpm.io/installation)
 - Windows C++ Build Tools and WebView2 Runtime

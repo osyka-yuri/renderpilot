@@ -4,14 +4,14 @@
 //! module is the single place either tool asks "is the *other* one already here?"
 //!
 //! Two signals, checked in order:
-//! 1. **DB record** ([`records::foreign_record`]) — authoritative. A record for
+//! 1. **DB record** (`records::foreign_record`) — authoritative. A record for
 //!    the other kind means that tool is genuinely managing this game.
-//! 2. **On-disk unmanaged presence** ([`unmanaged_files_present`]) — checked only
+//! 2. **On-disk unmanaged presence** (`unmanaged_files_present`) — checked only
 //!    when there is no record for *either* kind, so a hand-dropped install (or a
 //!    record lost to a wiped database) still blocks the other tool rather than
 //!    letting it install on top and corrupt the folder.
 //!
-//! Callers hold the per-game [`super::operation_lock`] across the check and the
+//! Callers hold the per-game `operation_lock` across the check and the
 //! subsequent write, so a concurrent install of the other tool can't race between
 //! the check and the write.
 

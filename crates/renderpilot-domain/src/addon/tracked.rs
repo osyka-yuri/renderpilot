@@ -8,7 +8,7 @@ use super::RenoDxHostKind;
 #[serde(rename_all = "snake_case")]
 pub enum TrackedSourceRole {
     /// The add-on payload itself (e.g. the RenoDX `.addon64`); its file is a member
-    /// of [`InstalledAddon::created_files`].
+    /// of [`super::InstalledAddon::created_files`].
     AddonPayload,
     /// The DLSS-Fix companion add-on (`renodx-dlssfix.addon64`), installed alongside
     /// the main add-on when the game has NVIDIA Frame Generation + DLSS + Streamline.

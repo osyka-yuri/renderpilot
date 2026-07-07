@@ -27,7 +27,7 @@ const MANIFEST_FILE_NAME: &str = "reshade_manifest.json";
 /// handful of URLs), so the cap is far smaller than a tool manifest's.
 const MAX_MANIFEST_SIZE_BYTES: u64 = 64 * 1024;
 /// How long a cached manifest stays fresh before it is refreshed from the CDN.
-const MANIFEST_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const MANIFEST_CACHE_TTL: Duration = Duration::from_hours(24);
 
 /// The CDN cache spec for the shared ReShade manifest: a 24-hour TTL atop the
 /// generic stale-fallback/quarantine behavior in [`crate::cdn`].
@@ -95,7 +95,7 @@ pub(crate) async fn fetch_shared_config() -> Option<ReshadeConfig> {
 /// title catalog.
 pub(crate) const TOOL_MANIFEST_MAX_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 /// How long a cached tool manifest stays fresh before it is refreshed from the CDN.
-pub(crate) const TOOL_MANIFEST_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+pub(crate) const TOOL_MANIFEST_CACHE_TTL: Duration = Duration::from_hours(24);
 
 /// The standard CDN cache spec for a tool's own manifest document (4 MiB cap,
 /// 24-hour TTL) — every per-tool manifest store (`renodx`, and future tools) builds its

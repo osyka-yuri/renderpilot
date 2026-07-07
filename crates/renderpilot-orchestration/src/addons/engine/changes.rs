@@ -73,16 +73,17 @@ impl InstallChanges {
                     path,
                     original_bytes,
                     ..
-                } => {
-                    if let Some(bytes) = original_bytes {
+                } => match original_bytes {
+                    Some(bytes) => {
                         if let Err(e) = crate::fs::write_file_atomically(path, bytes) {
                             log::warn!("rollback update {}: {}", path.display(), e);
                             failures += 1;
                         }
-                    } else {
+                    }
+                    None => {
                         let _ = fs::remove_file(path);
                     }
-                }
+                },
                 Action::CreatedDir(dir) => {
                     let _ = helpers::remove_dir_if_empty(dir);
                 }

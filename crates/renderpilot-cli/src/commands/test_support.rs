@@ -40,7 +40,7 @@ impl TempGameFolder {
             .as_nanos();
 
         Self {
-            path: std::env::temp_dir().join(format!("renderpilot-{name}-{nanos}")),
+            path: canonical_temp_dir().join(format!("renderpilot-{name}-{nanos}")),
         }
     }
 
@@ -126,7 +126,29 @@ fn temp_db_path(name: &str) -> PathBuf {
         .expect("clock should be valid")
         .as_nanos();
 
-    std::env::temp_dir().join(format!("renderpilot-{name}-{nanos}.db"))
+    canonical_temp_dir().join(format!("renderpilot-{name}-{nanos}.db"))
+}
+
+/// Resolves a possible Windows 8.3 alias in `%TEMP%` before scan tests persist paths.
+///
+/// The scanner persists canonical paths, so fixtures must start from the same
+/// long form rather than compare it with an equivalent short alias.
+fn canonical_temp_dir() -> PathBuf {
+    let temp_dir = std::env::temp_dir();
+    let canonical = temp_dir.canonicalize().unwrap_or(temp_dir);
+    strip_verbatim_prefix(canonical)
+}
+
+fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let value = path.to_string_lossy();
+
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = value.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path
+    }
 }
 
 pub(super) fn sample_game(id: &str, title: &str, install_path: &str) -> GameInstallation {

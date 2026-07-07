@@ -1,4 +1,5 @@
 use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
+use std::assert_matches;
 
 use super::*;
 use crate::addons::renodx::source;
@@ -194,7 +195,7 @@ fn no_match_returns_no_match() {
         Status::Working,
         vec![rule(MatchKind::SteamAppid, "42", 100)],
     )]);
-    assert!(matches!(resolve(&m, &facts()), RenoDxResolution::NoMatch));
+    assert_matches!(resolve(&m, &facts()), RenoDxResolution::NoMatch);
 }
 
 #[test]
@@ -258,12 +259,12 @@ fn confirmed_opengl_curated_title_is_declined() {
     )]);
     let mut facts = facts();
     facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
-    assert!(matches!(
+    assert_matches!(
         resolve(&m, &facts),
         RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ApiUnsupported { .. },
         }
-    ));
+    );
 }
 
 #[test]
@@ -439,12 +440,12 @@ fn engine_generic_installs_vulkan_and_declines_opengl() {
     }
 
     facts.graphics = ExeGraphicsInfo::new(vec![GraphicsApi::OpenGl], Some(Architecture::X64));
-    assert!(matches!(
+    assert_matches!(
         resolve(&m, &facts),
         RenoDxResolution::Incompatible {
             reason: IncompatibilityReason::ApiUnsupported { .. },
         }
-    ));
+    );
 }
 
 fn external_manifest() -> RenoDxManifest {
@@ -639,6 +640,6 @@ fn blacklist_category_yields_unsupported() {
 #[test]
 fn native_hdr_category_yields_native_hdr() {
     let m = manifest(vec![categorized("nh", Category::NativeHdr)]);
-    assert!(matches!(resolve(&m, &facts()), RenoDxResolution::NativeHdr));
+    assert_matches!(resolve(&m, &facts()), RenoDxResolution::NativeHdr);
     assert!(resolve_external_install(&m, &facts()).is_none());
 }

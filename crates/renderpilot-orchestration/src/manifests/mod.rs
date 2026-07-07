@@ -2,9 +2,9 @@
 //!
 //! Separates two policies:
 //!
-//! - [`ManifestRefreshPolicy::Passive`] — respect per-manifest TTL / cache rules
+//! - `ManifestRefreshPolicy::Passive` — respect per-manifest TTL / cache rules
 //!   (startup, post-scan capability warm). Does not touch the force gate.
-//! - [`ManifestRefreshPolicy::Forced`] — network-fetch every known manifest,
+//! - `ManifestRefreshPolicy::Forced` — network-fetch every known manifest,
 //!   ignoring TTL, gated by a process-local cooldown + single-flight lock so a
 //!   user cannot spam the CDN via shell Refresh.
 //!
@@ -234,6 +234,8 @@ fn log_kind_failures<E: std::fmt::Display>(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use std::time::Duration;
 
@@ -250,10 +252,10 @@ mod tests {
         let ok: Result<(), &str> = Ok(());
         let err: Result<(), &str> = Err("boom");
         assert_eq!(ManifestKindStatus::from_result(&ok), ManifestKindStatus::Ok);
-        assert!(matches!(
+        assert_matches!(
             ManifestKindStatus::from_result(&err),
             ManifestKindStatus::Error { message } if message.contains("boom")
-        ));
+        );
     }
 
     #[test]
@@ -272,14 +274,14 @@ mod tests {
 
         assert_eq!(report.outcome, ManifestRefreshOutcome::ForcedFetched);
         assert_eq!(report.kinds.libraries, ManifestKindStatus::Ok);
-        assert!(matches!(
+        assert_matches!(
             report.kinds.renodx,
             ManifestKindStatus::Error { message } if message.contains("renodx down")
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             report.kinds.reshade,
             ManifestKindStatus::Error { message } if message == "unavailable"
-        ));
+        );
     }
 
     #[test]
@@ -289,14 +291,14 @@ mod tests {
             ForceRefreshPermit::Granted(guard) => guard,
             other => panic!("expected grant, got {other:?}"),
         };
-        assert!(matches!(
+        assert_matches!(
             gate.try_begin(Duration::from_secs(90)),
             ForceRefreshPermit::SkippedInFlight
-        ));
+        );
         drop(guard);
-        assert!(matches!(
+        assert_matches!(
             gate.try_begin(Duration::from_secs(90)),
             ForceRefreshPermit::SkippedCooldown { .. }
-        ));
+        );
     }
 }

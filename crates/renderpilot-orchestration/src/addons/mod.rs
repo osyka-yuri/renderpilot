@@ -14,37 +14,40 @@
 //!   → tracking::rebuild_install_record + records persist (or revert)
 //! ```
 //!
-//! Availability shares the same scan roots via [`availability_pipeline`] so the
+//! Availability shares the same scan roots via `availability_pipeline` so the
 //! unmanaged exclusivity backstop cannot disagree with install.
 //!
-//! ## Extension surface: [`tool::AddonTool`]
+//! ## Extension surface: `tool::AddonTool`
 //!
 //! Cross-kind static policy (exclusive peers, unmanaged signatures, catalog
 //! profile availability, finalizing phase key, torn recovery) lives on
-//! [`tool::AddonTool`]. Registered tools sit in [`tool::TOOLS`]. Adding a third
+//! `tool::AddonTool`. Registered tools sit in `tool::TOOLS`. Adding a third
 //! tool means: domain `AddonKind` variant → `impl AddonTool` → one `TOOLS` entry
 //! → thin module (types / matcher / fetch / install / tracking / use_cases).
 //! Install and update **do not** go on the trait (different engines and DTOs).
 //!
 //! ## Module map
 //!
-//! * [`tool`] — `AddonTool` trait + registration table
+//! Private modules are listed as plain identifiers (not rustdoc links) so public
+//! crate docs stay free of private-intra-doc-link noise.
+//!
+//! * `tool` — `AddonTool` trait + registration table
 //! * [`engine`] — serializable install plan ops, sentinel, rollback
-//! * [`record`] / [`records`] — receipt → `InstalledAddon`; kind-aware row access
-//! * [`tracking`] — dated display, host proxy path, shared record rebuild
-//! * [`update`] / [`file_update`] — update verdict + in-place replace
-//! * [`operation_lock`] — per-game mutex (keyed by game_id alone)
-//! * [`exclusivity`] + [`registry`] — mutual exclusion facade over tools
-//! * [`install_guard`] — shared exclusivity + torn recovery on install roots
-//! * [`availability_pipeline`] — shared availability front half
-//! * [`progress`] — sequential stages + finalizing phase
-//! * [`game_analysis`] / [`game_context`] / [`matching`] — facts + match rules
-//! * [`reshade`] — shared host subsystem (scan, policy, report, fetch, types)
-//! * [`anticheat`] — risk gate
+//! * [`record`] / `records` — receipt → `InstalledAddon`; kind-aware row access
+//! * `tracking` — dated display, host proxy path, shared record rebuild
+//! * [`update`] / `file_update` — update verdict + in-place replace
+//! * `operation_lock` — per-game mutex (keyed by game_id alone)
+//! * `exclusivity` + `registry` — mutual exclusion facade over tools
+//! * `install_guard` — shared exclusivity + torn recovery on install roots
+//! * `availability_pipeline` — shared availability front half
+//! * `progress` — sequential stages + finalizing phase
+//! * `game_analysis` / `game_context` / `matching` — facts + match rules
+//! * `reshade` — shared host subsystem (scan, policy, report, fetch, types)
+//! * `anticheat` — risk gate
 //! * [`capabilities`] — catalog profile snapshot
 //! * [`renodx`] — tool-specific types, matching, fetch, install, tracking, and use cases
 //!
-//! A sibling tool implements [`tool::AddonTool`], registers in [`tool::TOOLS`],
+//! A sibling tool implements `tool::AddonTool`, registers in `tool::TOOLS`,
 //! and reuses the shared modules; it must never import another tool module.
 //!
 //! ## Update strategy matrix
@@ -52,7 +55,7 @@
 //! Tools deliberately use different update engines; do not unify them casually:
 //!
 //! * **RenoDX** — replace tracked host/add-on files in place via
-//!   [`file_update`] (single PE / addon payload identity is unambiguous).
+//!   `file_update` (single PE / addon payload identity is unambiguous).
 
 pub(crate) mod anticheat;
 pub(crate) mod availability_pipeline;

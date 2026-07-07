@@ -57,13 +57,18 @@ impl DlssDllKind {
 /// major component differs).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DlssVersion {
+    /// Major version component.
     pub major: u32,
+    /// Minor version component.
     pub minor: u32,
+    /// Patch version component.
     pub patch: u32,
+    /// Build version component.
     pub build: u32,
 }
 
 impl DlssVersion {
+    /// Constructs a four-part DLSS version.
     pub const fn new(major: u32, minor: u32, patch: u32, build: u32) -> Self {
         Self {
             major,
@@ -107,7 +112,9 @@ impl fmt::Display for DlssVersion {
 /// is reserved for future settings that store strings (e.g. AppName).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NvapiValueType {
+    /// 32-bit integer DRS value.
     Dword,
+    /// Wide-string DRS value (reserved for future settings).
     WString,
 }
 
@@ -119,9 +126,13 @@ pub enum NvapiValueType {
 /// them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NvapiValueOption {
+    /// Stable wire identifier used in CLI/API payloads.
     pub wire: String,
+    /// Human-readable label for UI display.
     pub label: String,
+    /// Raw DWORD sent to the driver for this option.
     pub dword: u32,
+    /// Whether the current game context supports selecting this option.
     pub supported_by_context: bool,
 }
 
@@ -173,7 +184,9 @@ pub struct BaselineSnapshot {
 /// with any baseline snapshot from the storage layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingState {
+    /// Current value read from the live NVAPI profile.
     pub live: DwordSettingState,
+    /// Optional first-write baseline for revert-to-before-RenderPilot.
     pub baseline: Option<BaselineSnapshot>,
 }
 

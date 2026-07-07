@@ -13,6 +13,10 @@
 //! All underlying Win32 Foreign Function Interface (FFI) bindings are encapsulated
 //! within this module, guarded by a `#[cfg(windows)]` attribute at the module declaration.
 #![cfg(windows)]
+#![expect(
+    unsafe_code,
+    reason = "Win32 token elevation and ShellExecuteW relaunch; each call has a local SAFETY contract"
+)]
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;

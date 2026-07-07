@@ -1,7 +1,6 @@
 //! Fetching and caching the RenoDX manifest.
 //!
-//! A thin adapter over the shared
-//! [`get_or_fetch_tool_manifest`](reshade_manifest_store::get_or_fetch_tool_manifest)
+//! A thin adapter over the shared `reshade::manifest_store::get_or_fetch_tool_manifest`
 //! skeleton: it pins the RenoDX manifest's file name and supplies the parse
 //! and shared-ReShade-overlay steps. Everything else — the CDN cache spec,
 //! fresh reuse, the stale-on-failure offline fallback, and corrupt-file
@@ -9,7 +8,7 @@
 //!
 //! After parsing, the manifest's own embedded `reshade` block is overlaid with
 //! the standalone, shared `reshade_manifest.json` when that document is
-//! reachable (see [`reshade_manifest_store::shared_config`]) — purely in
+//! reachable (see `reshade::manifest_store::shared_config`) — purely in
 //! memory; the cached `renodx_manifest.json` file on disk is never rewritten.
 //! When the shared document is unavailable, the embedded block is left
 //! untouched, which is exactly what an app version that predates the shared
@@ -42,7 +41,7 @@ pub async fn get_or_fetch_manifest() -> Result<RenoDxManifest, ServiceError> {
 ///
 /// When `shared_reshade` is `Some`, that config is used for the in-memory
 /// overlay (avoids a second ReShade CDN hit after a coordinated force). When
-/// `None`, falls back to [`reshade_manifest_store::shared_config`].
+/// `None`, falls back to `reshade::manifest_store::shared_config`.
 pub async fn fetch_manifest(
     shared_reshade: Option<ReshadeConfig>,
 ) -> Result<RenoDxManifest, ServiceError> {

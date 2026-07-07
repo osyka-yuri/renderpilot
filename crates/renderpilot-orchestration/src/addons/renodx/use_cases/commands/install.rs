@@ -410,6 +410,8 @@ fn persist_or_revert(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use crate::addons::anticheat::{InstallGate, RiskAssessment, RiskSeverity, decide_gate};
 
@@ -445,6 +447,6 @@ mod tests {
         assert!(ensure_addon_arch(Architecture::X64, Architecture::X64).is_ok());
         let error = ensure_addon_arch(Architecture::X86, Architecture::X64)
             .expect_err("a 32-bit add-on for a 64-bit host must be rejected");
-        assert!(matches!(error, ServiceError::InvalidInput(_)));
+        assert_matches!(error, ServiceError::InvalidInput(_));
     }
 }

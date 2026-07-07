@@ -6,11 +6,11 @@
 //! manifest is a lightweight overrides + catalogue document with no hashes.
 //!
 //! The end-to-end flows live in [`use_cases`], built on the [`types`] model, its
-//! [`parse_manifest`] validation, the [`crate::addons::game_analysis`] gatherer, the
-//! deterministic [`matcher`], the [`anticheat`] risk gate, [`reshade`] host
-//! orchestration, the [`source`] URL/host resolver, the [`fetch`] downloader, and
-//! the [`install`] filesystem engine. RenoDX-specific policy (which API to target,
-//! installability) lives in [`policy`], separate from the generic detection facts.
+//! [`parse_manifest`] validation, the `game_analysis` gatherer, the deterministic
+//! `matcher`, the shared `anticheat` risk gate, `reshade` host orchestration, the
+//! `source` URL/host resolver, the `fetch` downloader, and
+//! the `install` filesystem engine. RenoDX-specific policy (which API to target,
+//! installability) lives in `policy`, separate from the generic detection facts.
 
 pub(crate) mod dlss_fix;
 /// DTOs
@@ -79,6 +79,8 @@ fn arch_from_addon_file(name: &str) -> Option<Architecture> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     const SAMPLE: &str = r#"{
@@ -138,10 +140,10 @@ mod tests {
         // An installable title omits `category`, defaulting to `Installable`; a
         // categorized title carries its tagged payload.
         assert_eq!(manifest.titles[0].category, types::Category::Installable);
-        assert!(matches!(
+        assert_matches!(
             manifest.titles[1].category,
             types::Category::External { .. }
-        ));
+        );
     }
 
     #[test]

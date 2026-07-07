@@ -4,7 +4,7 @@
 //!
 //! All public helpers stream the body, enforce a size cap as bytes arrive, and
 //! report progress when the total size is known; the cap and progress logic live in
-//! exactly one place ([`read_capped_body`]). A single process-wide [`Client`] is
+//! exactly one place (`read_capped_body`). A single process-wide [`Client`] is
 //! reused across calls.
 
 use std::sync::OnceLock;
@@ -14,7 +14,7 @@ use reqwest::{Client, Response, Url};
 
 use crate::ServiceError;
 
-const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
+const HTTP_TIMEOUT: Duration = Duration::from_mins(1);
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 static HTTP_CLIENT: OnceLock<Result<Client, String>> = OnceLock::new();

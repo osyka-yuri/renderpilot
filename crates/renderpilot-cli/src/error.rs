@@ -158,6 +158,8 @@ fn write_usage_error(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use renderpilot_orchestration::ServiceError;
     use renderpilot_orchestration::application::{AppError, AppErrorKind, OperationStatus};
 
@@ -276,10 +278,10 @@ mod tests {
     #[test]
     fn app_error_invalid_operation_state_maps_to_cli_error() {
         let app_error = AppError::invalid_operation_state("op-123", OperationStatus::Completed);
-        assert!(matches!(
+        assert_matches!(
             app_error.kind(),
             &AppErrorKind::InvalidOperationState { .. }
-        ));
+        );
 
         assert_eq!(
             CliError::from(app_error),

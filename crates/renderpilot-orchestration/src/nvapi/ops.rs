@@ -647,6 +647,8 @@ fn read_dword_or_default(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use crate::dlss::settings_catalog::{self, CatalogSetting};
     use renderpilot_nvapi::{DlssDllKind, DlssVersion, SettingContext, setting::DllInfo};
@@ -735,7 +737,7 @@ mod tests {
         let setting = CatalogSetting::new(def);
         let op = resolve_revert_op(&context, &SettingTarget::Global, &setting, "predefined")
             .expect("predefined revert is always valid");
-        assert!(matches!(op, WriteOp::Delete));
+        assert_matches!(op, WriteOp::Delete);
     }
 
     #[test]

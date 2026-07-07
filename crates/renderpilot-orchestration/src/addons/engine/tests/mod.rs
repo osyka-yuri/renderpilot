@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -312,7 +313,7 @@ fn a_failed_op_rolls_back_every_prior_op_in_reverse() {
         ],
     };
     let error = install(game, &plan).expect_err("unsafe op should fail");
-    assert!(matches!(error, ServiceError::InvalidInput(_)));
+    assert_matches!(error, ServiceError::InvalidInput(_));
 
     // Folder restored: addon removed, original dxgi.dll back, no leftovers.
     assert!(!game.join("renodx.addon64").exists());

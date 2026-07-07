@@ -438,6 +438,8 @@ fn static_extension_of_pattern(normalized_pattern: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use renderpilot_domain::GraphicsTechnology;
 
     use super::{LibraryPattern, LibraryPatternSet, PatternKind, PatternPlatform};
@@ -601,10 +603,7 @@ mod tests {
         let error = LibraryPatternSet::new(vec![pattern.clone(), pattern])
             .expect_err("duplicate pattern should fail");
 
-        assert!(matches!(
-            error,
-            LibraryPatternError::DuplicatePattern { .. }
-        ));
+        assert_matches!(error, LibraryPatternError::DuplicatePattern { .. });
     }
 
     #[test]
@@ -668,7 +667,7 @@ mod tests {
 
         let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Windows);
 
-        assert!(matches!(candidates, super::CandidateFileExtensions::Any));
+        assert_matches!(candidates, super::CandidateFileExtensions::Any);
         assert!(candidates.allows_file_name("anything.txt"));
     }
 
@@ -679,6 +678,6 @@ mod tests {
         // Linux platform has no Windows-only patterns.
         let candidates = patterns.candidate_file_extensions(super::PatternPlatform::Linux);
 
-        assert!(matches!(candidates, super::CandidateFileExtensions::Any));
+        assert_matches!(candidates, super::CandidateFileExtensions::Any);
     }
 }

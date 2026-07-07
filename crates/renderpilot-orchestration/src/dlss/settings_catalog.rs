@@ -370,6 +370,8 @@ impl NvapiSetting for CatalogSetting {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -480,10 +482,7 @@ mod tests {
             {"key":"x","label":"X","family":"sr","nvapi_id":"0x1","values":[{"label":"A","wire":"a","dword":"0x0"}]},
             {"key":"x","label":"Y","family":"sr","nvapi_id":"0x2","values":[{"label":"B","wire":"b","dword":"0x0"}]}
         ]}"#;
-        assert!(matches!(
-            parse_catalog(bad),
-            Err(CatalogError::DuplicateKey(_))
-        ));
+        assert_matches!(parse_catalog(bad), Err(CatalogError::DuplicateKey(_)));
     }
 
     #[test]
@@ -494,19 +493,16 @@ mod tests {
                 {"label":"B","wire":"a","dword":"0x1"}
             ]}
         ]}"#;
-        assert!(matches!(
-            parse_catalog(bad),
-            Err(CatalogError::DuplicateWire { .. })
-        ));
+        assert_matches!(parse_catalog(bad), Err(CatalogError::DuplicateWire { .. }));
     }
 
     #[test]
     fn parse_rejects_future_schema_version() {
         let bad = r#"{"schema_version":99,"settings":[]}"#;
-        assert!(matches!(
+        assert_matches!(
             parse_catalog(bad),
             Err(CatalogError::UnsupportedSchemaVersion(99))
-        ));
+        );
     }
 
     #[test]
@@ -531,9 +527,9 @@ mod tests {
                 {"label":"A","wire":"a","dword":"0x0"}
             ]}
         ]}"#;
-        assert!(matches!(
+        assert_matches!(
             parse_catalog(bad),
             Err(CatalogError::DefaultNotInValues { .. })
-        ));
+        );
     }
 }

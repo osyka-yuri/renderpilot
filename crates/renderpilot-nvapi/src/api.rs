@@ -1,4 +1,8 @@
 //! Safe Rust wrappers over the raw NVAPI FFI.
+#![expect(
+    unsafe_code,
+    reason = "loads nvapi.dll and calls driver entry points; each block documents SAFETY invariants"
+)]
 
 use std::{iter, mem::MaybeUninit, os::raw::c_void, ptr, sync::OnceLock};
 

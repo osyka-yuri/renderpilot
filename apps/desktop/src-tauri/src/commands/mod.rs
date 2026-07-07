@@ -559,7 +559,10 @@ pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
 /// Returns the `AppInitializationState` snapshot computed at startup.
 /// Synchronous: the state is already in managed memory, no I/O.
 // `tauri::command` requires `State` parameters by value.
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects State by value in the generated command signature"
+)]
 #[tauri::command]
 pub fn get_app_initialization_state(
     state: tauri::State<'_, crate::AppInitializationState>,

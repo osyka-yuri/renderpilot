@@ -138,6 +138,8 @@ pub fn cover_unavailable_response() -> Response<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     fn payload(bytes: Vec<u8>) -> CoverPayload {
@@ -149,14 +151,14 @@ mod tests {
 
     #[test]
     fn request_path_rejects_empty_paths() {
-        assert!(matches!(
+        assert_matches!(
             game_id_from_request_path(""),
             Err(CoverProtocolError::EmptyPath)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             game_id_from_request_path("/"),
             Err(CoverProtocolError::EmptyPath)
-        ));
+        );
     }
 
     #[test]
@@ -168,10 +170,10 @@ mod tests {
     #[test]
     fn request_path_rejects_blank_decoded_id() {
         // "%20" decodes to a single space, which `GameId` rejects after trimming.
-        assert!(matches!(
+        assert_matches!(
             game_id_from_request_path("/%20"),
             Err(CoverProtocolError::InvalidGameId)
-        ));
+        );
     }
 
     #[test]

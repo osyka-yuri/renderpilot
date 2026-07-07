@@ -7,7 +7,7 @@ use crate::{Context, ServiceError};
 
 /// Returns whether DLSS-Fix can be installed for this game.
 ///
-/// Reads the record through [`records::record_of_kind`] rather than the raw
+/// Reads the record through `records::record_of_kind` rather than the raw
 /// repository, agreeing with the install flow's kind-scoped read before acting.
 pub fn availability(context: &Context, game_id: &GameId) -> Result<bool, ServiceError> {
     let Some(record) = records::record_of_kind(context, game_id, AddonKind::RenoDx)? else {

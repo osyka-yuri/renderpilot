@@ -6,19 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 description = "NVAPI FFI bindings for RenderPilot."
 
-[lints.rust]
-unsafe_code = "allow"
-
-# Local lints opt this crate out of workspace inheritance, so the ownership
-# lints from the workspace table are mirrored here.
-[lints.clippy]
-needless_pass_by_value = "warn"
-redundant_clone = "warn"
-unnecessary_to_owned = "warn"
+[lints]
+workspace = true
 
 [dependencies]
 libloading = "0.9"
-thiserror = "2"
 
 [lib]
 path = "src/lib.rs"

@@ -117,6 +117,10 @@ pub fn run() {
 /// subsystem initialises.  Both env vars are idempotent — they are only set
 /// when not already present, so the user can still override them manually.
 #[cfg(feature = "portable")]
+#[expect(
+    unsafe_code,
+    reason = "std::env::set_var is unsafe in edition 2024; only called single-threaded at process start"
+)]
 fn apply_portable_mode() {
     use renderpilot_orchestration::portable::APP_DIR_ENV;
 
@@ -161,6 +165,10 @@ fn apply_portable_mode() {
 /// regressions in elevated processes). Idempotent: only sets the env var if
 /// the user has not provided one.
 #[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "std::env::set_var is unsafe in edition 2024; only called single-threaded at process start"
+)]
 fn apply_webview2_elevation_workaround() {
     use std::path::PathBuf;
     if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none()
@@ -390,7 +398,10 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
 
 /// Reports a startup failure and terminates the process.
 // Diverging sink: consuming the error by value is the point.
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "startup failure sink consumes the error by value before process exit"
+)]
 fn exit_with_startup_error(error: tauri::Error) -> ! {
     eprintln!("{APP_NAME}: failed to run desktop shell: {error}");
     std::process::exit(STARTUP_FAILURE_EXIT_CODE);

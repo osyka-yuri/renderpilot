@@ -20,7 +20,7 @@ pub enum HostKind {
     Proxy,
     /// The single global ReShade Vulkan implicit layer (a Vulkan game cannot load a
     /// proxy DLL). Shared across all Vulkan games; see
-    /// [`renderpilot_platform_windows::vulkan_layer`]. Only RenoDX drives this;
+    /// `renderpilot_platform_windows::vulkan_layer`. Only RenoDX drives this;
     /// Luma is DX11-only.
     Vulkan,
 }

@@ -16,6 +16,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over
+  # RUSTFLAGS=-Dwarnings so the build cache is not thrash-invalidated.
+  # Note (Cargo #17142): build.warnings=deny can elevate linker_messages on some
+  # platforms even though rustc's `warnings` group does not include them. If a
+  # matrix cell fails on linker noise only, set CARGO_BUILD_WARNINGS=warn for
+  # that OS and track #17142 — do not silence linker_messages workspace-wide.
+  CARGO_BUILD_WARNINGS: deny
 
 jobs:
   rust:
@@ -50,6 +57,21 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
+      # Machine-readable MSRV + unsafe allowlist (Node, no package install).
+      # assert_msrv derives expected major.minor from rust-toolchain.toml channel
+      # and checks every workspace member's rust_version against it.
+      - name: Setup Node (policy scripts)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Assert workspace MSRV and unsafe allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --no-deps --format-version 1 --locked | node scripts/assert_msrv.mjs
+          node scripts/assert_unsafe_allowlist.mjs
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
@@ -64,7 +86,17 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
+        # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;
+        # Clippy above still denies Rust warnings for every test target.
+        env:
+          CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
+
+      - name: Build docs
+        if: runner.os == 'Linux'
+        run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: "-D warnings"
 
   desktop:
     name: Desktop UI

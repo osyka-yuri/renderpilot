@@ -231,6 +231,9 @@ fn arch_str(arch: Architecture) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use std::assert_matches;
+
     use super::*;
     #[cfg(windows)]
     use crate::addons::records;
@@ -357,7 +360,7 @@ mod tests {
 
         let report = availability(&context, &manifest, &game_id).expect("availability");
 
-        assert!(matches!(report.state, RenoDxInstallState::Installed { .. }));
+        assert_matches!(report.state, RenoDxInstallState::Installed { .. });
         assert!(report.actions.install.is_none());
         assert!(report.actions.use_existing.is_some());
         let record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
@@ -428,7 +431,7 @@ mod tests {
 
         let report = availability(&context, &manifest, &game_id).expect("availability");
 
-        assert!(matches!(report.state, RenoDxInstallState::Installed { .. }));
+        assert_matches!(report.state, RenoDxInstallState::Installed { .. });
 
         let record = records::record_of_kind(&context, &game_id, AddonKind::RenoDx)
             .expect("read adopted record")
