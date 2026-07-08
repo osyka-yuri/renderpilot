@@ -56,6 +56,7 @@ pub(super) fn normalize_selected_libraries(
 
     let mut selected_libraries = normalize_library_names(selected_libraries);
 
+    // `normalize_library_names` already sorts + dedups; retain preserves order.
     selected_libraries.retain(|library| allowed_libraries.contains(library.as_str()));
 
     selected_libraries

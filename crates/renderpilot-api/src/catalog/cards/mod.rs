@@ -118,6 +118,106 @@ fn load_game_cards(
         .collect())
 }
 
+/// Stable cache key for a game-card query.
+///
+/// Format: `v1:` + canonical JSON of the normalized query. All fields of
+/// [`QueryGameCards`] participate; collections keep insertion order as built by
+/// the request normalizers. Bump the version prefix when the schema of the
+/// serialized query changes so old keys cannot be reused.
+///
+/// Serialization is treated as infallible: `QueryGameCards` is composed of
+/// owned strings, ints, and bools with derive-generated `Serialize`. A failure
+/// would indicate a programming bug, not a user-facing error condition.
+#[must_use]
 fn query_fingerprint(query: &QueryGameCards) -> String {
-    serde_json::to_string(query).unwrap_or_else(|_| String::from("{}"))
+    let body = serde_json::to_string(query)
+        .expect("QueryGameCards Serialize is infallible for owned primitive fields");
+    format!("v1:{body}")
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::*;
+
+    fn sample_request(
+        search: &str,
+        libraries: &[&str],
+        launchers: &[&str],
+    ) -> QueryGameCardsRequest {
+        QueryGameCardsRequest {
+            search_query: search.to_owned(),
+            selected_libraries: libraries.iter().map(|s| (*s).to_owned()).collect(),
+            selected_addons: Vec::new(),
+            selected_launchers: launchers.iter().map(|s| (*s).to_owned()).collect(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 50,
+            page_offset: 0,
+        }
+    }
+
+    #[test]
+    fn fingerprint_is_versioned_and_stable_for_same_query() {
+        let available_libs = [String::from("dlss_super_resolution")];
+        let available_launchers = [String::from("Steam")];
+        let query = QueryGameCards::new(
+            sample_request("doom", &["dlss_super_resolution"], &["Steam"]),
+            &available_libs,
+            &available_launchers,
+        );
+        let first = query_fingerprint(&query);
+        let second = query_fingerprint(&query);
+        assert_eq!(first, second);
+        assert!(
+            first.starts_with("v1:"),
+            "fingerprint must be version-prefixed: {first}"
+        );
+        assert_ne!(first, "v1:{}");
+    }
+
+    #[test]
+    fn fingerprint_differs_for_semantically_different_queries() {
+        let available_libs = [String::from("dlss_super_resolution")];
+        let available_launchers = [String::from("Steam"), String::from("Epic")];
+        let a = QueryGameCards::new(
+            sample_request("doom", &["dlss_super_resolution"], &["Steam"]),
+            &available_libs,
+            &available_launchers,
+        );
+        let b = QueryGameCards::new(
+            sample_request("doom", &["dlss_super_resolution"], &["Epic"]),
+            &available_libs,
+            &available_launchers,
+        );
+        assert_ne!(query_fingerprint(&a), query_fingerprint(&b));
+    }
+
+    #[test]
+    fn fingerprint_ignores_non_semantic_selection_order() {
+        // Normalizers sort/filter every filter collection, so insertion order
+        // must not change the key after normalization.
+        let available_libs = [
+            String::from("dlss_super_resolution"),
+            String::from("amd_fsr"),
+        ];
+        let available_launchers = [String::from("Steam"), String::from("Epic")];
+        let mut first = sample_request(
+            "",
+            &["amd_fsr", "dlss_super_resolution"],
+            &["Epic", "Steam"],
+        );
+        first.selected_addons = vec![String::from("renodx"), String::from("renodx")];
+        let mut second = sample_request(
+            "",
+            &["dlss_super_resolution", "amd_fsr"],
+            &["Steam", "Epic"],
+        );
+        second.selected_addons = vec![String::from("renodx")];
+
+        let a = QueryGameCards::new(first, &available_libs, &available_launchers);
+        let b = QueryGameCards::new(second, &available_libs, &available_launchers);
+        assert_eq!(query_fingerprint(&a), query_fingerprint(&b));
+    }
 }
