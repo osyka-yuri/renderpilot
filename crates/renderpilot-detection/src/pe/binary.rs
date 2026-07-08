@@ -25,7 +25,8 @@ pub(super) fn read_utf16_value(bytes: &[u8], offset: usize, units: usize) -> Opt
     let mut value = Vec::with_capacity(units);
 
     for chunk in raw.chunks_exact(2) {
-        value.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+        let unit: [u8; 2] = chunk.try_into().ok()?;
+        value.push(u16::from_le_bytes(unit));
     }
 
     while value.last() == Some(&0) {
@@ -36,13 +37,13 @@ pub(super) fn read_utf16_value(bytes: &[u8], offset: usize, units: usize) -> Opt
 }
 
 pub(super) fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
-    let value = checked_range(bytes, offset, 2)?;
-    Some(u16::from_le_bytes([value[0], value[1]]))
+    let value: &[u8; 2] = checked_range(bytes, offset, 2)?.try_into().ok()?;
+    Some(u16::from_le_bytes(*value))
 }
 
 pub(super) fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
-    let value = checked_range(bytes, offset, 4)?;
-    Some(u32::from_le_bytes([value[0], value[1], value[2], value[3]]))
+    let value: &[u8; 4] = checked_range(bytes, offset, 4)?.try_into().ok()?;
+    Some(u32::from_le_bytes(*value))
 }
 
 pub(super) fn checked_range(bytes: &[u8], offset: usize, len: usize) -> Option<&[u8]> {
@@ -51,4 +52,58 @@ pub(super) fn checked_range(bytes: &[u8], offset: usize, len: usize) -> Option<&
 
 pub(super) fn align4(offset: usize) -> Option<usize> {
     offset.checked_add(3).map(|value| value & !3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_u16_le_at_exact_end() {
+        let bytes = [0x34, 0x12];
+        assert_eq!(read_u16(&bytes, 0), Some(0x1234));
+    }
+
+    #[test]
+    fn read_u16_rejects_one_byte_short() {
+        let bytes = [0x34];
+        assert_eq!(read_u16(&bytes, 0), None);
+    }
+
+    #[test]
+    fn read_u32_le_and_rejects_short_buffer() {
+        let bytes = [0x78, 0x56, 0x34, 0x12];
+        assert_eq!(read_u32(&bytes, 0), Some(0x1234_5678));
+        assert_eq!(read_u32(&bytes[..3], 0), None);
+    }
+
+    #[test]
+    fn read_at_offset_and_overflow_returns_none() {
+        let bytes = [0, 1, 2, 3, 4, 5];
+        assert_eq!(read_u16(&bytes, 4), Some(0x0504));
+        assert_eq!(read_u16(&bytes, 5), None);
+        assert_eq!(read_u32(&bytes, 3), None);
+        // offset + width overflow / past end
+        assert_eq!(read_u16(&bytes, usize::MAX), None);
+    }
+
+    #[test]
+    fn unaligned_offset_is_allowed() {
+        let bytes = [0x00, 0x78, 0x56, 0x34, 0x12];
+        assert_eq!(read_u32(&bytes, 1), Some(0x1234_5678));
+    }
+
+    #[test]
+    fn read_utf16_value_at_mid_location() {
+        // "AB" encoded as UTF-16 LE (4 bytes), null-terminated.
+        let data = [b'A', 0x00, b'B', 0x00, 0x00, 0x00];
+        assert_eq!(read_utf16_value(&data, 0, 3), Some(String::from("AB")));
+    }
+
+    #[test]
+    fn read_utf16_value_rejects_short_buffer() {
+        let data = [b'A', 0x00];
+        // 2 units need 4 bytes but we give only 2.
+        assert_eq!(read_utf16_value(&data, 0, 2), None);
+    }
 }

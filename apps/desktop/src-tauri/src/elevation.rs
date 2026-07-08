@@ -36,6 +36,38 @@ use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 const SE_ERR_ACCESSDENIED: isize = 5;
 const SHELL_EXECUTE_SUCCESS_THRESHOLD: isize = 32;
 
+/// Owns a Win32 process/token `HANDLE` and closes it on drop.
+///
+/// Prevents leaks if `GetTokenInformation` (or future early returns) exit the
+/// elevation probe without an explicit `CloseHandle`.
+struct OwnedHandle(HANDLE);
+
+impl OwnedHandle {
+    /// Takes ownership of a non-null handle. Null is treated as empty.
+    #[must_use]
+    fn new(handle: HANDLE) -> Option<Self> {
+        if handle.is_null() {
+            None
+        } else {
+            Some(Self(handle))
+        }
+    }
+
+    fn as_raw(&self) -> HANDLE {
+        self.0
+    }
+}
+
+impl Drop for OwnedHandle {
+    fn drop(&mut self) {
+        // SAFETY: `self.0` is a valid open handle from `OpenProcessToken` and is
+        // closed exactly once here; no other code retains a copy.
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
 /// A sentinel command-line argument appended during an elevation relaunch.
 /// This prevents recursive and infinite UAC prompt loops in edge cases where
 /// the subsequently launched process still fails to acquire elevated privileges
@@ -70,33 +102,41 @@ pub enum ElevationStartupDecision {
 /// "Relaunch as administrator" banner, and the subsequent relaunch workflow
 /// will quickly short-circuit upon verifying existing permissions.
 pub fn current_elevation() -> ElevationState {
-    unsafe {
+    // SAFETY: process handle is not owned; TOKEN_QUERY is a valid access mask;
+    // `token` is only closed via `OwnedHandle` if OpenProcessToken succeeds.
+    let token = unsafe {
         let mut token: HANDLE = std::ptr::null_mut();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
             return ElevationState::NotElevated;
         }
+        match OwnedHandle::new(token) {
+            Some(owned) => owned,
+            None => return ElevationState::NotElevated,
+        }
+    };
 
-        let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
-        let mut size: u32 = 0;
-        let ok = GetTokenInformation(
-            token,
+    let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+    let mut size: u32 = 0;
+    // SAFETY: `token` is an open process token; buffer points at a
+    // `TOKEN_ELEVATION` of the correct size for `TokenElevation`.
+    let ok = unsafe {
+        GetTokenInformation(
+            token.as_raw(),
             TokenElevation,
             &mut elevation as *mut _ as *mut core::ffi::c_void,
             std::mem::size_of::<TOKEN_ELEVATION>() as u32,
             &mut size,
-        );
+        )
+    };
 
-        let _ = CloseHandle(token);
+    if ok == 0 {
+        return ElevationState::NotElevated;
+    }
 
-        if ok == 0 {
-            return ElevationState::NotElevated;
-        }
-
-        if elevation.TokenIsElevated != 0 {
-            ElevationState::Elevated
-        } else {
-            ElevationState::NotElevated
-        }
+    if elevation.TokenIsElevated != 0 {
+        ElevationState::Elevated
+    } else {
+        ElevationState::NotElevated
     }
 }
 
@@ -140,6 +180,9 @@ pub fn attempt_self_relaunch_elevated() -> ElevationStartupDecision {
     let verb_w = to_wide("runas");
     let args_w = to_wide(args_string.as_str());
 
+    // SAFETY: all wide strings are NUL-terminated; `hwnd` is null (no owner);
+    // pointers remain valid for the duration of the call; return value is only
+    // interpreted as success/failure codes, never as an owned handle.
     let hinst = unsafe {
         ShellExecuteW(
             std::ptr::null_mut(),

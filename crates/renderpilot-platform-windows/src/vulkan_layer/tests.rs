@@ -1,4 +1,5 @@
 use super::*;
+use std::assert_matches;
 use std::cell::RefCell;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -667,5 +668,5 @@ fn install_returns_registry_scope_not_writable_when_cannot_write() {
     };
     let dir = tempdir().unwrap();
     let error = install(&registry, dir.path(), &pe64()).unwrap_err();
-    assert!(matches!(error, LayerInstallError::RegistryScopeNotWritable));
+    assert_matches!(error, LayerInstallError::RegistryScopeNotWritable);
 }

@@ -81,8 +81,13 @@ pub fn unregister_app(layer_dir: &Path, exe_path: &Path) -> io::Result<bool> {
 
 /// Writes `apps` to `ReShadeApps.ini` via a same-directory temp file plus
 /// rename, so a crash or concurrent read never observes a truncated file.
+///
+/// Temp path is the fixed sibling basename `ReShadeApps.ini.tmp` (no extension
+/// arithmetic), so the destination always keeps the `.ini` suffix.
 pub(crate) fn write_app_list(layer_dir: &Path, apps: &[PathBuf]) -> io::Result<()> {
     let ini_path = layer_dir.join(APPS_INI_NAME);
+    // Fixed basenames — do not derive via Path::with_extension / add_extension.
+    let tmp_path = layer_dir.join(format!("{APPS_INI_NAME}.tmp"));
     std::fs::create_dir_all(layer_dir)?;
     let joined = apps
         .iter()
@@ -90,7 +95,6 @@ pub(crate) fn write_app_list(layer_dir: &Path, apps: &[PathBuf]) -> io::Result<(
         .collect::<Vec<_>>()
         .join(",");
     let content = format!("{APPS_KEY}={joined}\n");
-    let tmp_path = ini_path.with_extension("ini.tmp");
     std::fs::write(&tmp_path, content)?;
     std::fs::rename(&tmp_path, &ini_path)
 }
