@@ -22,37 +22,48 @@ const BUNDLED_SR: &str = include_str!("bundled/dlss_presets.json");
 const BUNDLED_FG: &str = include_str!("bundled/dlss_g_presets.json");
 const BUNDLED_RR: &str = include_str!("bundled/dlss_d_presets.json");
 
-static MANIFEST_SR: LazyLock<DlssPresetManifest> =
-    LazyLock::new(|| load_manifest_from_disk_or_fallback("dlss_presets.json", BUNDLED_SR));
-static MANIFEST_FG: LazyLock<DlssPresetManifest> =
-    LazyLock::new(|| load_manifest_from_disk_or_fallback("dlss_g_presets.json", BUNDLED_FG));
-static MANIFEST_RR: LazyLock<DlssPresetManifest> =
-    LazyLock::new(|| load_manifest_from_disk_or_fallback("dlss_d_presets.json", BUNDLED_RR));
+static MANIFEST_SR: LazyLock<DlssPresetManifest> = LazyLock::new(|| {
+    load_manifest_from_disk_or_fallback("dlss_presets.json", BUNDLED_SR, DlssDllKind::Sr)
+});
+static MANIFEST_FG: LazyLock<DlssPresetManifest> = LazyLock::new(|| {
+    load_manifest_from_disk_or_fallback("dlss_g_presets.json", BUNDLED_FG, DlssDllKind::FrameGen)
+});
+static MANIFEST_RR: LazyLock<DlssPresetManifest> = LazyLock::new(|| {
+    load_manifest_from_disk_or_fallback(
+        "dlss_d_presets.json",
+        BUNDLED_RR,
+        DlssDllKind::RayReconstruction,
+    )
+});
 
-fn empty_manifest() -> DlssPresetManifest {
+fn empty_manifest(kind: DlssDllKind) -> DlssPresetManifest {
     DlssPresetManifest {
         schema_version: 1,
-        library_family: String::new(),
-        dll_kind: String::new(),
+        library_family: kind.manifest_library_family().to_owned(),
+        dll_kind: kind.manifest_tag().to_owned(),
         generated_at: None,
         presets: BTreeMap::new(),
         version_support: Vec::new(),
     }
 }
 
-fn load_manifest_from_disk_or_fallback(file_name: &str, bundled_json: &str) -> DlssPresetManifest {
+fn load_manifest_from_disk_or_fallback(
+    file_name: &str,
+    bundled_json: &str,
+    kind: DlssDllKind,
+) -> DlssPresetManifest {
     let from_disk = crate::libraries::local_preset_manifest_path(file_name)
         .ok()
         .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|json| parse_manifest_json(&json).ok());
+        .and_then(|json| parse_manifest_json(&json, kind).ok());
 
     if let Some(manifest) = from_disk {
         return manifest;
     }
 
     crate::util::load_bundled_asset_or_default(
-        || parse_manifest_json(bundled_json),
-        empty_manifest,
+        || parse_manifest_json(bundled_json, kind),
+        || empty_manifest(kind),
         "DLSS preset manifest",
     )
 }
@@ -67,14 +78,13 @@ pub struct DlssPresetManifest {
     /// Schema version. Currently always `1`.
     pub schema_version: u32,
     /// E.g. `"nvngx_dlss"` / `"nvngx_dlssg"` / `"nvngx_dlssd"`.
-    #[allow(dead_code)]
+    /// Validated non-empty at parse time.
     pub library_family: String,
-    /// `"sr"` / `"fg"` / `"rr"` — should match the matching [`DlssDllKind`].
-    #[allow(dead_code)]
+    /// `"sr"` / `"fg"` / `"rr"` — validated against the expected [`DlssDllKind`].
     pub dll_kind: String,
     /// ISO-8601 timestamp of when the manifest was last regenerated.
+    /// When present, validated non-empty; used for operator diagnostics.
     #[serde(default)]
-    #[allow(dead_code)]
     pub generated_at: Option<String>,
     /// Master preset table: DWORD value (as decimal string) → label/metadata.
     /// `BTreeMap` so the JSON object's key ordering does not matter and the
@@ -124,6 +134,24 @@ pub enum PresetManifestError {
     },
     /// `schema_version` is newer than the version this build understands.
     UnsupportedSchemaVersion(u32),
+    /// `dll_kind` does not match the DLL family this manifest was loaded for.
+    MismatchedDllKind {
+        /// Expected wire tag (`sr` / `fg` / `rr`).
+        expected: String,
+        /// Value from the document.
+        found: String,
+    },
+    /// `library_family` is missing or blank.
+    EmptyLibraryFamily,
+    /// `library_family` does not match the DLL family this manifest was loaded for.
+    MismatchedLibraryFamily {
+        /// Expected manifest library-family name.
+        expected: String,
+        /// Value from the document.
+        found: String,
+    },
+    /// `generated_at` is present but blank.
+    EmptyGeneratedAt,
 }
 
 impl fmt::Display for PresetManifestError {
@@ -140,6 +168,23 @@ impl fmt::Display for PresetManifestError {
                 write!(
                     formatter,
                     "preset manifest schema_version {version} is newer than supported (1)"
+                )
+            }
+            Self::MismatchedDllKind { expected, found } => write!(
+                formatter,
+                "preset manifest dll_kind `{found}` does not match expected `{expected}`"
+            ),
+            Self::EmptyLibraryFamily => {
+                write!(formatter, "preset manifest library_family is empty")
+            }
+            Self::MismatchedLibraryFamily { expected, found } => write!(
+                formatter,
+                "preset manifest library_family `{found}` does not match expected `{expected}`"
+            ),
+            Self::EmptyGeneratedAt => {
+                write!(
+                    formatter,
+                    "preset manifest generated_at is present but empty"
                 )
             }
         }
@@ -164,18 +209,46 @@ pub fn bundled_manifest(kind: DlssDllKind) -> &'static DlssPresetManifest {
     }
 }
 
-fn parse_manifest_json(json: &str) -> Result<DlssPresetManifest, PresetManifestError> {
+fn parse_manifest_json(
+    json: &str,
+    expected_kind: DlssDllKind,
+) -> Result<DlssPresetManifest, PresetManifestError> {
     let manifest: DlssPresetManifest =
         serde_json::from_str(json).map_err(|e| PresetManifestError::InvalidJson(e.to_string()))?;
-    validate_manifest(&manifest)?;
+    validate_manifest(&manifest, expected_kind)?;
     Ok(manifest)
 }
 
-fn validate_manifest(manifest: &DlssPresetManifest) -> Result<(), PresetManifestError> {
+fn validate_manifest(
+    manifest: &DlssPresetManifest,
+    expected_kind: DlssDllKind,
+) -> Result<(), PresetManifestError> {
     if manifest.schema_version != 1 {
         return Err(PresetManifestError::UnsupportedSchemaVersion(
             manifest.schema_version,
         ));
+    }
+    if manifest.library_family.trim().is_empty() {
+        return Err(PresetManifestError::EmptyLibraryFamily);
+    }
+    let expected_family = expected_kind.manifest_library_family();
+    if manifest.library_family != expected_family {
+        return Err(PresetManifestError::MismatchedLibraryFamily {
+            expected: expected_family.to_owned(),
+            found: manifest.library_family.clone(),
+        });
+    }
+    let expected_tag = expected_kind.manifest_tag();
+    if manifest.dll_kind != expected_tag {
+        return Err(PresetManifestError::MismatchedDllKind {
+            expected: expected_tag.to_owned(),
+            found: manifest.dll_kind.clone(),
+        });
+    }
+    if let Some(generated_at) = &manifest.generated_at
+        && generated_at.trim().is_empty()
+    {
+        return Err(PresetManifestError::EmptyGeneratedAt);
     }
     // Every preset referenced in version_support must exist in `presets`.
     let known: std::collections::HashSet<u32> = manifest
@@ -237,6 +310,8 @@ pub fn supported_presets_for<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -331,11 +406,11 @@ mod tests {
                 {"version": "1.0.0.0", "supported_presets": [0, 999], "label": "x"}
             ]
         }"#;
-        let err = parse_manifest_json(bad).unwrap_err();
-        assert!(matches!(
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(
             err,
             PresetManifestError::UnknownPresetInSupportList { dword: 999, .. }
-        ));
+        );
     }
 
     #[test]
@@ -347,16 +422,79 @@ mod tests {
             "presets": {},
             "version_support": []
         }"#;
-        let err = parse_manifest_json(bad).unwrap_err();
-        assert!(matches!(
-            err,
-            PresetManifestError::UnsupportedSchemaVersion(99)
-        ));
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::UnsupportedSchemaVersion(99));
+    }
+
+    #[test]
+    fn mismatched_dll_kind_is_rejected() {
+        let bad = r#"{
+            "schema_version": 1,
+            "library_family": "nvngx_dlss",
+            "dll_kind": "fg",
+            "presets": {"0": {"label": "Default"}},
+            "version_support": []
+        }"#;
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::MismatchedDllKind { .. });
+    }
+
+    #[test]
+    fn mismatched_library_family_is_rejected() {
+        let bad = r#"{
+            "schema_version": 1,
+            "library_family": "nvngx_dlssg",
+            "dll_kind": "sr",
+            "presets": {"0": {"label": "Default"}},
+            "version_support": []
+        }"#;
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::MismatchedLibraryFamily { .. });
+    }
+
+    #[test]
+    fn fallback_manifest_keeps_kind_identity() {
+        for kind in [
+            DlssDllKind::Sr,
+            DlssDllKind::FrameGen,
+            DlssDllKind::RayReconstruction,
+        ] {
+            let manifest = empty_manifest(kind);
+            assert_eq!(manifest.library_family, kind.manifest_library_family());
+            assert_eq!(manifest.dll_kind, kind.manifest_tag());
+        }
+    }
+
+    #[test]
+    fn empty_library_family_is_rejected() {
+        let bad = r#"{
+            "schema_version": 1,
+            "library_family": "  ",
+            "dll_kind": "sr",
+            "presets": {},
+            "version_support": []
+        }"#;
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::EmptyLibraryFamily);
+    }
+
+    #[test]
+    fn empty_generated_at_is_rejected() {
+        let bad = r#"{
+            "schema_version": 1,
+            "library_family": "nvngx_dlss",
+            "dll_kind": "sr",
+            "generated_at": "  ",
+            "presets": {},
+            "version_support": []
+        }"#;
+        let err = parse_manifest_json(bad, DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::EmptyGeneratedAt);
     }
 
     #[test]
     fn invalid_json_returns_parser_error() {
-        let err = parse_manifest_json("not json").unwrap_err();
-        assert!(matches!(err, PresetManifestError::InvalidJson(_)));
+        let err = parse_manifest_json("not json", DlssDllKind::Sr).unwrap_err();
+        assert_matches!(err, PresetManifestError::InvalidJson(_));
     }
 }

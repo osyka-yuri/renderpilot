@@ -26,6 +26,18 @@ const FRAMEGEN_ID_VK: &str = "amd_fidelityfx_framegeneration_vk";
 
 const PACKAGE_SOURCE: &str = "manifest-download";
 
+/// Role of a split FSR DLL within one release package.
+///
+/// Built only from the closed set of known manifest library ids below — never
+/// from free-form external strings — so assignment is exhaustive without
+/// `unreachable!`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FsrMemberRole {
+    Loader,
+    Upscaler,
+    Framegen,
+}
+
 /// One composed FSR release: a multi-file artifact (with virtual `manifest://`
 /// member paths) plus the member entry ids to download, in the artifact's file
 /// order.
@@ -49,12 +61,12 @@ pub(super) fn compose_fsr_packages(entries: &[LibraryManifestEntry]) -> Vec<FsrP
 
     for entry in entries {
         let (entry_point_file, role) = match entry.library.id.as_str() {
-            LOADER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "loader"),
-            UPSCALER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "upscaler"),
-            FRAMEGEN_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, "framegen"),
-            LOADER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "loader"),
-            UPSCALER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "upscaler"),
-            FRAMEGEN_ID_VK => (fsr::ENTRY_POINT_FILE_VK, "framegen"),
+            LOADER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, FsrMemberRole::Loader),
+            UPSCALER_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, FsrMemberRole::Upscaler),
+            FRAMEGEN_ID_DX12 => (fsr::ENTRY_POINT_FILE_DX12, FsrMemberRole::Framegen),
+            LOADER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, FsrMemberRole::Loader),
+            UPSCALER_ID_VK => (fsr::ENTRY_POINT_FILE_VK, FsrMemberRole::Upscaler),
+            FRAMEGEN_ID_VK => (fsr::ENTRY_POINT_FILE_VK, FsrMemberRole::Framegen),
             _ => continue,
         };
 
@@ -63,10 +75,9 @@ pub(super) fn compose_fsr_packages(entries: &[LibraryManifestEntry]) -> Vec<FsrP
             .or_default();
 
         match role {
-            "loader" => slot.loader = Some(entry),
-            "upscaler" => slot.upscaler = Some(entry),
-            "framegen" => slot.framegen = Some(entry),
-            _ => unreachable!(),
+            FsrMemberRole::Loader => slot.loader = Some(entry),
+            FsrMemberRole::Upscaler => slot.upscaler = Some(entry),
+            FsrMemberRole::Framegen => slot.framegen = Some(entry),
         }
     }
 

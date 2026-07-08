@@ -34,6 +34,16 @@ impl DlssDllKind {
         }
     }
 
+    /// Stable library-family name matching the `library_family` field in DLSS
+    /// preset manifests.
+    pub const fn manifest_library_family(self) -> &'static str {
+        match self {
+            Self::Sr => "nvngx_dlss",
+            Self::FrameGen => "nvngx_dlssg",
+            Self::RayReconstruction => "nvngx_dlssd",
+        }
+    }
+
     /// DLL file name on disk (case-insensitive comparison).
     pub const fn file_name(self) -> &'static str {
         match self {
@@ -324,6 +334,19 @@ mod tests {
         assert_eq!(DlssDllKind::Sr.manifest_tag(), "sr");
         assert_eq!(DlssDllKind::FrameGen.manifest_tag(), "fg");
         assert_eq!(DlssDllKind::RayReconstruction.manifest_tag(), "rr");
+    }
+
+    #[test]
+    fn dll_kind_manifest_families_are_stable() {
+        assert_eq!(DlssDllKind::Sr.manifest_library_family(), "nvngx_dlss");
+        assert_eq!(
+            DlssDllKind::FrameGen.manifest_library_family(),
+            "nvngx_dlssg"
+        );
+        assert_eq!(
+            DlssDllKind::RayReconstruction.manifest_library_family(),
+            "nvngx_dlssd"
+        );
     }
 
     #[test]
