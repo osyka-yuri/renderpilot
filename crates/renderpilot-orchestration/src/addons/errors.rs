@@ -3,7 +3,7 @@
 //!
 //! * [`failed`] — an internal or integrity fault ([`ServiceError::CommandFailed`]).
 //! * [`invalid`] — a user-actionable problem ([`ServiceError::InvalidInput`]).
-//! * [`io`] — a filesystem operation failure, formatted with the path.
+//! * [`fn@io`] — a filesystem operation failure, formatted with the path.
 //!
 //! Tool-specific constructors (a `not_installed` naming the tool, RenoDX's
 //! Vulkan/channel messages) stay in each tool's own `errors` module, which
@@ -24,7 +24,7 @@ pub(crate) fn invalid(message: impl Into<String>) -> ServiceError {
     ServiceError::InvalidInput(message.into())
 }
 
-/// A filesystem operation failure, e.g. `failed to back up \`<path>\`: <error>`.
+/// A filesystem operation failure, e.g. ``failed to back up '<path>': <error>``.
 pub(crate) fn io(action: &str, path: &Path, error: &io::Error) -> ServiceError {
     failed(format!("failed to {action} `{}`: {error}", path.display()))
 }

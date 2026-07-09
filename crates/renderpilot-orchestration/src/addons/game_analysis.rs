@@ -2,7 +2,7 @@
 //!
 //! This bridges an installed game and the pure matching layer
 //! ([`crate::addons::matching`]): the game's rendering executable is resolved once
-//! by the shared [`game_executable`](crate::game_executable) resolver (which also
+//! by the shared [`game_executable`] resolver (which also
 //! reads its graphics API/architecture), and the engine is detected from
 //! folder/exe markers. [`assemble_facts`] is pure given the resolved executable,
 //! so the matcher logic stays platform-agnostic; only the resolver step is

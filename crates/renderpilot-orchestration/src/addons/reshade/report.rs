@@ -1,4 +1,5 @@
-//! Tool-agnostic core of the host-report: mapping a [`HostAssessment`]'s ReShade
+//! Tool-agnostic core of the host-report: mapping a
+//! [`HostAssessment`](super::host_policy::HostAssessment)'s ReShade
 //! host state to the shared observable [`HostFacts`]/[`HostDetection`] DTOs, the
 //! update verdict, the channel-switch action, and the recorded channel.
 //!

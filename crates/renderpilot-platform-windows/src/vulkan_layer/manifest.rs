@@ -81,7 +81,7 @@ pub(crate) struct LayerCandidate {
     pub(crate) diagnostics: Vec<VulkanLayerDiagnostic>,
 }
 
-/// A registered manifest, classified for [`detect_report`].
+/// A registered manifest, classified for [`super::detect_report`].
 pub(crate) enum ManifestKind {
     Candidate(LayerCandidate),
     Broken {

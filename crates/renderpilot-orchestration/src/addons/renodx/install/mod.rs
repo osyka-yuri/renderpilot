@@ -1,16 +1,20 @@
-//! Turns a fetched RenoDX install into a generic [`InstallPlan`] for the shared
+//! Turns a fetched RenoDX install into a generic
+//! [`InstallPlan`](crate::addons::engine::InstallPlan) for the shared
 //! [`addons::engine`](crate::addons::engine) and maps the result back to a record.
 //!
 //! Given a [`PreparedInstall`] (already-fetched, already-verified bytes plus the
 //! resolved file names), [`install`] builds the ordered file operations — the
-//! add-on and ReShade host DLL via a no-backup [`FileOp::Replace`] (both are
+//! add-on and ReShade host DLL via a no-backup
+//! [`FileOp::Replace`](crate::addons::engine::FileOp::Replace) (both are
 //! rolling snapshots or official redistributables RenoDX already PE-checked, so
 //! nothing about a prior version is worth preserving), `ReShade.ini` via a
-//! no-backup [`FileOp::UpdateText`] merge (it may carry the user's own hand-tuned
+//! no-backup [`FileOp::UpdateText`](crate::addons::engine::FileOp::UpdateText)
+//! merge (it may carry the user's own hand-tuned
 //! ReShade settings) — hands them to the engine (which rolls back and journals
 //! each op per its own backup policy) and assembles the reversible
-//! [`InstalledAddon`] with the upstream sources to track for updates.
-//! [`uninstall`] reverses everything the engine's generic list-based reversal
+//! [`InstalledAddon`](renderpilot_domain::InstalledAddon) with the upstream
+//! sources to track for updates.
+//! [`fn@uninstall`] reverses everything the engine's generic list-based reversal
 //! covers, plus bespoke handling for `ReShade.ini` (see its own docs) since a
 //! config merge is never something that reversal alone can undo correctly.
 //! (In-place file replacement for updates/channel switches lives in

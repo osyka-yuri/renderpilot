@@ -34,7 +34,8 @@ pub(super) fn addon_op(prepared: &PreparedInstall) -> FileOp {
 
 /// The ReShade host DLL op: an official redistributable RenoDx fetched itself,
 /// so a pre-existing file in that slot is overwritten with no on-disk backup —
-/// its identity is confirmed by [`host_policy::assess`] before this ever runs.
+/// its identity is confirmed by
+/// [`assess`](crate::addons::reshade::host_policy::assess) before this ever runs.
 pub(super) fn host_op(prepared: &PreparedInstall) -> FileOp {
     FileOp::Replace {
         name: prepared.proxy_dll_name.clone(),

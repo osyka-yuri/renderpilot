@@ -8,7 +8,8 @@ use super::scan_impl;
 use super::scan_plan::{DetectionMode, InstallRootStrategy};
 
 /// Per-install auto-scan using a shared open catalog, detector, and full
-/// `file_hash_cache` prefetch (see [`crate::catalog::open_auto_scan_batch`]).
+/// `file_hash_cache` prefetch
+/// (see [`open_auto_scan_batch`](crate::catalog::auto_scan::open_auto_scan_batch)).
 pub(crate) fn scan_auto_in_shared_batch(
     storage: &SqliteStorage,
     detector: &LibraryPatternComponentDetector,

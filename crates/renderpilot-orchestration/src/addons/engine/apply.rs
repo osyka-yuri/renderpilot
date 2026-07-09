@@ -125,7 +125,7 @@ pub(crate) fn place_file(
 /// Writes `bytes` to `path` with no on-disk backup, capturing any pre-write bytes
 /// in memory so a same-call rollback ([`InstallChanges::undo`]) can restore them.
 /// Unlike [`place_file`], a pre-existing file is never moved aside to `.bak` — for
-/// [`FileOp::Replace`], the caller has already decided the artifact's identity is
+/// [`super::FileOp::Replace`], the caller has already decided the artifact's identity is
 /// unambiguous enough that nothing here is worth preserving for manual recovery.
 pub(crate) fn replace_file_tracked(
     path: &Path,

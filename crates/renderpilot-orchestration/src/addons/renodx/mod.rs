@@ -38,7 +38,8 @@ mod validate;
 pub use platform::vulkan;
 
 /// Progress phase key for post-download finalization (i18n key the frontend looks up).
-/// Exposed via [`tool::RenoDxTool::finalizing_phase`] and
+/// Exposed via the
+/// [`finalizing_phase`](crate::addons::tool::AddonTool::finalizing_phase) method and
 /// [`crate::addons::progress::emit_tool_finalizing`].
 pub(crate) const RENODX_PHASE_FINALIZING: &str = "renodx.phase.finalizing";
 
