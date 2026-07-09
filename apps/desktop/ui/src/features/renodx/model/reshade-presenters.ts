@@ -1,4 +1,4 @@
-import type { MessageKey } from '@shared/i18n';
+import { t, type MessageKey } from '@shared/i18n';
 import { ADDON_DISPLAY_NAME } from '@shared/model';
 import {
   actionDisabledMessage,
@@ -85,20 +85,36 @@ export function describeReshadeHost(input: { detection: HostDetection; facts: Ho
   return presenters.describeHost(input);
 }
 
-export type HostVersionDescription =
-  | { kind: 'version'; key: 'gameDetails.renodx.host.version'; version: string }
-  | { kind: 'unknown'; key: 'gameDetails.renodx.host.versionUnknown' };
+/** Managed RenderPilot layer: installed or installed-but-disabled in registry. */
+export function isManagedVulkanLayer(detection: VulkanLayerDetection | null | undefined): boolean {
+  return detection === 'installed' || detection === 'installed_disabled';
+}
 
 /**
- * The version-or-unknown host description for surfaces that only show a
- * version (no add-on-support/update-status context), such as the shared
- * Vulkan layer settings panel. Shares message keys with the version part of
- * {@link getReshadeDescription} so both surfaces read identically.
+ * Host version label for the shared Vulkan layer settings card.
+ * `null` when detection is not a managed install (no placeholder/spacer text).
+ * Shares message keys with the version part of {@link getReshadeDescription}.
  */
-export function hostVersionDescription(version: string | null | undefined): HostVersionDescription {
+export function vulkanLayerHostDescription(
+  detection: VulkanLayerDetection | null | undefined,
+  version: string | null | undefined,
+): string | null {
+  if (!isManagedVulkanLayer(detection)) {
+    return null;
+  }
   return version
-    ? { kind: 'version', key: 'gameDetails.renodx.host.version', version }
-    : { kind: 'unknown', key: 'gameDetails.renodx.host.versionUnknown' };
+    ? t('gameDetails.renodx.host.version', { version })
+    : t('gameDetails.renodx.host.versionUnknown');
+}
+
+/**
+ * “Check for updates” is meaningful once we have a real detection that is not
+ * empty or platform-unsupported.
+ */
+export function canCheckVulkanLayerUpdates(
+  detection: VulkanLayerDetection | null | undefined,
+): boolean {
+  return detection != null && detection !== 'not_installed' && detection !== 'unsupported';
 }
 
 export { actionDisabledMessage, humanizeMessageKey };

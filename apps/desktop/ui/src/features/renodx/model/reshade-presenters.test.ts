@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canCheckVulkanLayerUpdates,
   getAddonDescriptionKey,
   getReshadeDescription,
   humanizeMessageKey,
+  isManagedVulkanLayer,
   riskFallbackKey,
   riskMessage,
+  vulkanLayerHostDescription,
 } from './reshade-presenters';
-import type { HostFacts } from './types';
+import type { HostFacts, VulkanLayerDetection } from './types';
 
 const PRESENT_HOST_FACTS = {
   path: 'C:\\Games\\Game\\dxgi.dll',
@@ -153,5 +156,35 @@ describe('reshade presenters', () => {
   it('humanizes namespaced note keys for the catalog-miss fallback', () => {
     expect(humanizeMessageKey('gameDetails.renodx.note.run_in_dx12')).toBe('run in dx12');
     expect(humanizeMessageKey('plain')).toBe('plain');
+  });
+
+  it('treats installed and installed_disabled as managed Vulkan layers', () => {
+    expect(isManagedVulkanLayer('installed')).toBe(true);
+    expect(isManagedVulkanLayer('installed_disabled')).toBe(true);
+    expect(isManagedVulkanLayer('not_installed')).toBe(false);
+    expect(isManagedVulkanLayer('conflict')).toBe(false);
+    expect(isManagedVulkanLayer(null)).toBe(false);
+  });
+
+  it('formats a host version only for managed layer detections', () => {
+    expect(vulkanLayerHostDescription('installed', '6.5.1')).toBe('6.5.1');
+    expect(vulkanLayerHostDescription('installed_disabled', null)).toBe('Version unknown');
+    expect(vulkanLayerHostDescription('not_installed', '6.5.1')).toBeNull();
+    expect(vulkanLayerHostDescription(null, '6.5.1')).toBeNull();
+  });
+
+  it('offers check-for-updates only when detection is present and supported', () => {
+    const cases: [VulkanLayerDetection | null, boolean][] = [
+      [null, false],
+      ['not_installed', false],
+      ['unsupported', false],
+      ['installed', true],
+      ['installed_disabled', true],
+      ['conflict', true],
+      ['external_read_only', true],
+    ];
+    for (const [detection, expected] of cases) {
+      expect(canCheckVulkanLayerUpdates(detection)).toBe(expected);
+    }
   });
 });

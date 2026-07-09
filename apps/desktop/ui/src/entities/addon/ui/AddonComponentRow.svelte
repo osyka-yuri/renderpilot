@@ -29,7 +29,7 @@
   type Props = {
     icon: ItemIcon;
     title: string;
-    description: string;
+    description?: string | null;
     status?: UpdateStatus | null;
     /** The tool's own translated status-pill component (e.g. `RenoDxStatusBadge`).
      * Only required when `status` is passed. */
@@ -41,7 +41,7 @@
   let {
     icon,
     title,
-    description,
+    description = null,
     status = null,
     StatusBadge,
     hint = null,
@@ -50,6 +50,7 @@
 
   const Icon = $derived(ICON_BY_KIND[icon]);
   const hintText = $derived(hint?.trim() ?? null);
+  const descriptionText = $derived(description?.trim() ?? null);
 </script>
 
 <Item size="sm">
@@ -79,7 +80,9 @@
       </span>
     </ItemTitle>
 
-    <ItemDescription>{description}</ItemDescription>
+    {#if descriptionText}
+      <ItemDescription>{descriptionText}</ItemDescription>
+    {/if}
   </ItemContent>
 
   <ItemActions>

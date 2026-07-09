@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { cn } from '@shared/classnames';
   import type { VoidHandler } from '@shared/callbacks';
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '@shared/i18n';
@@ -30,20 +29,15 @@
   const resolvedScanButtonLabel = $derived(scanButtonLabel.trim() || t('games.scanFolder'));
 </script>
 
-<Empty {...rest} class={cn(className)}>
-  <EmptyHeader>
+<Empty {...rest} class={className}>
+  <EmptyHeader class="w-full">
     <EmptyTitle>{t('games.empty.title')}</EmptyTitle>
     <EmptyDescription>
       {t('games.empty.description')}
     </EmptyDescription>
   </EmptyHeader>
 
-  <EmptyContent
-    class={cn(
-      'flex-row flex-wrap items-start gap-2',
-      'max-sm:w-full max-sm:flex-col-reverse max-sm:items-stretch',
-    )}
-  >
+  <EmptyContent>
     <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
       {#if busy}
         <Spinner />

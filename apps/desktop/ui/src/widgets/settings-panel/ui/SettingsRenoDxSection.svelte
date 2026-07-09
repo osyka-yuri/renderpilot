@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, type Component } from 'svelte';
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import DownloadIcon from '@lucide/svelte/icons/download';
@@ -18,7 +18,9 @@
     VULKAN_LAYER_PRIMARY_ACTION_LABEL,
     VULKAN_LAYER_STATE_LABEL,
     VULKAN_LOADER_VISIBILITY_NOTE,
-    hostVersionDescription,
+    canCheckVulkanLayerUpdates,
+    isManagedVulkanLayer,
+    vulkanLayerHostDescription,
   } from '@features/renodx';
   import type { ReshadeChannel } from '@features/renodx';
   import { t, type MessageKey } from '@shared/i18n';
@@ -49,6 +51,12 @@
   type PrimaryAction = NonNullable<typeof store.primaryAction>;
   type VisiblePrimaryAction = Exclude<PrimaryAction, 'switch_channel'>;
 
+  const PRIMARY_ACTION_ICON = {
+    install: DownloadIcon,
+    repair: WrenchIcon,
+    update: CircleArrowUpIcon,
+  } satisfies Record<VisiblePrimaryAction, Component<{ class?: string }>>;
+
   let removeConfirmOpen = $state(false);
 
   onMount(() => {
@@ -61,9 +69,7 @@
   const detection = $derived(layer?.layer_detection ?? null);
   const reasons = $derived(layer?.diagnostic_reasons ?? []);
 
-  const isInitialLoading = $derived(store.loading && !store.report);
   const controlsDisabled = $derived(store.busy || store.loading);
-  const isInstalled = $derived(detection === 'installed');
   const displayState = $derived(store.displayState);
 
   const loaderVisibilityNote = $derived<MessageKey | null>(
@@ -94,20 +100,18 @@
 
   const primaryActionVariant = $derived(visiblePrimaryAction === 'repair' ? 'outline' : 'default');
 
+  const PrimaryActionIcon = $derived(
+    visiblePrimaryAction ? PRIMARY_ACTION_ICON[visiblePrimaryAction] : null,
+  );
+
   const removeAction = $derived(actions?.remove);
   const showRemove = $derived(Boolean(removeAction));
   const removeDisabled = $derived(store.busy || !removeAction?.enabled);
 
-  const reshadeDescription = $derived.by(() => {
-    if (!isInstalled) {
-      return isInitialLoading ? '\u00A0' : '';
-    }
-
-    const description = hostVersionDescription(facts?.version);
-    return description.kind === 'version'
-      ? t(description.key, { version: description.version })
-      : t(description.key);
-  });
+  const reshadeDescription = $derived(vulkanLayerHostDescription(detection, facts?.version));
+  const showCheckUpdates = $derived(store.report === null || canCheckVulkanLayerUpdates(detection));
+  const updateStatus = $derived(store.updateStatus);
+  const showFreshness = $derived(isManagedVulkanLayer(detection) && updateStatus != null);
 
   async function setChannel(channel: ReshadeChannel): Promise<void> {
     await store.setSelectedChannel(channel);
@@ -161,9 +165,9 @@
           {/if}
         </AddonFieldLabel>
 
-        {#if facts && isInstalled && store.updateStatus}
+        {#if showFreshness && updateStatus}
           <AddonFieldLabel label={t('gameDetails.renodx.fresh.label')} class="flex-nowrap gap-1.5">
-            <RenoDxStatusBadge status={store.updateStatus} />
+            <RenoDxStatusBadge status={updateStatus} />
           </AddonFieldLabel>
         {/if}
       </div>
@@ -224,15 +228,17 @@
       <div class="flex flex-wrap items-center gap-2">
         <DownloadProgressBar ids={[VULKAN_LAYER_PROGRESS_ID]} active={store.busy} />
 
-        <Button variant="outline" size="sm" disabled={controlsDisabled} onclick={loadLayer}>
-          {#if store.loading}
-            <Spinner class="size-4" />
-            {t('gameDetails.renodx.fresh.checking')}
-          {:else}
-            <RotateCwIcon class="size-4" aria-hidden="true" />
-            {t('gameDetails.renodx.actionCheckUpdates')}
-          {/if}
-        </Button>
+        {#if showCheckUpdates}
+          <Button variant="outline" size="sm" disabled={controlsDisabled} onclick={loadLayer}>
+            {#if store.loading}
+              <Spinner class="size-4" />
+              {t('gameDetails.renodx.fresh.checking')}
+            {:else}
+              <RotateCwIcon class="size-4" aria-hidden="true" />
+              {t('gameDetails.renodx.actionCheckUpdates')}
+            {/if}
+          </Button>
+        {/if}
 
         {#if visiblePrimaryAction && primaryActionLabel}
           <Button
@@ -243,14 +249,8 @@
           >
             {#if store.busy}
               <Spinner class="size-4" />
-            {:else if visiblePrimaryAction === 'install'}
-              <DownloadIcon class="size-4" aria-hidden="true" />
-            {:else if visiblePrimaryAction === 'repair'}
-              <WrenchIcon class="size-4" aria-hidden="true" />
-            {:else if visiblePrimaryAction === 'update'}
-              <CircleArrowUpIcon class="size-4" aria-hidden="true" />
-            {:else}
-              <RotateCwIcon class="size-4" aria-hidden="true" />
+            {:else if PrimaryActionIcon}
+              <PrimaryActionIcon class="size-4" aria-hidden="true" />
             {/if}
 
             {t(primaryActionLabel)}

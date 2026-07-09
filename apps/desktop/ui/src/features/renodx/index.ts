@@ -13,7 +13,9 @@ export {
   VULKAN_LAYER_PRIMARY_ACTION_LABEL,
   VULKAN_LAYER_STATE_LABEL,
   VULKAN_LOADER_VISIBILITY_NOTE,
-  hostVersionDescription,
+  canCheckVulkanLayerUpdates,
+  isManagedVulkanLayer,
+  vulkanLayerHostDescription,
   type VulkanLayerDisplayState,
 } from './model/reshade-presenters';
 
