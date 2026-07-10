@@ -32,6 +32,11 @@
     syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
   import type { AppInitializationState } from '@entities/app';
+  import {
+    AppUpdateDialog,
+    createAppUpdaterModel,
+    createTauriAppUpdaterGateway,
+  } from '@features/app-updater';
 
   type Props = {
     initState: AppInitializationState;
@@ -41,6 +46,9 @@
 
   const model = createDesktopAppModel(() => initState);
   const coverSyncQueue = createCoverSyncQueue();
+  const appUpdater = createAppUpdaterModel({
+    gateway: createTauriAppUpdaterGateway(),
+  });
 
   let refreshCounter = $state(0);
   let isRefreshing = $state(false);
@@ -81,9 +89,13 @@
       model.applyCurrentTheme();
     });
 
+    void appUpdater.start();
     void scanAutoLibrariesAndRefreshCards(catalogRefreshDeps());
 
-    return stopThemeObserver;
+    return () => {
+      stopThemeObserver();
+      void appUpdater.dispose();
+    };
   });
 
   async function handleScan(): Promise<void> {
@@ -147,6 +159,14 @@
 
 <NotificationsToaster />
 
+<AppUpdateDialog
+  state={appUpdater.dialog}
+  onInstall={() => void appUpdater.installAvailableUpdate()}
+  onRetry={() => void appUpdater.retry()}
+  onDismiss={() => void appUpdater.dismissDialog()}
+  onRestart={() => void appUpdater.restartApplication()}
+/>
+
 <DesktopShell
   screen={model.screen}
   busy={model.busy}
@@ -154,6 +174,9 @@
   selectedGameTitle={model.selectedShellGameTitle}
   onNavigate={model.handleNavigate}
   onRefresh={handleRefresh}
+  updateAvailable={appUpdater.notice !== null}
+  updateOpening={appUpdater.settingsAction === 'checking'}
+  onOpenUpdate={() => void appUpdater.openAvailableUpdate()}
 >
   {#snippet banner()}
     <ElevationBanner isElevated={model.isElevated} elevationSupported={model.elevationSupported} />
@@ -180,8 +203,17 @@
         isElevated={model.isElevated}
         themeMode={model.themeMode}
         languageMode={model.languageMode}
+        appVersion={appUpdater.appVersion}
+        updateAction={appUpdater.settingsAction}
         onThemeModeChange={model.changeThemeMode}
         onLanguageModeChange={model.changeLanguageMode}
+        onCheckForUpdates={() => {
+          if (appUpdater.settingsAction === 'open-update') {
+            void appUpdater.openAvailableUpdate();
+          } else {
+            void appUpdater.checkForUpdates();
+          }
+        }}
       />
     {:else if model.screen === 'libraries'}
       <LibrariesScreen refreshKey={refreshCounter} />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
   import { t } from '@shared/i18n';
@@ -11,6 +12,7 @@
     BreadcrumbSeparator,
     Button,
     SidebarTrigger,
+    Spinner,
   } from '@shared/ui';
   import DonateButton from './DonateButton.svelte';
 
@@ -21,9 +23,22 @@
     refreshing: boolean;
     onNavigate: ScreenHandler;
     onRefresh: () => void;
+    updateAvailable?: boolean;
+    updateOpening?: boolean;
+    onOpenUpdate?: () => void;
   };
 
-  const { screen, resolvedGameTitle, busy, refreshing, onNavigate, onRefresh }: Props = $props();
+  const {
+    screen,
+    resolvedGameTitle,
+    busy,
+    refreshing,
+    onNavigate,
+    onRefresh,
+    updateAvailable = false,
+    updateOpening = false,
+    onOpenUpdate = () => undefined,
+  }: Props = $props();
 
   type BreadcrumbEntry =
     | {
@@ -101,6 +116,17 @@
   </Breadcrumb>
 
   <div class="ml-auto flex items-center gap-2">
+    {#if updateAvailable}
+      <Button variant="outline" size="sm" disabled={updateOpening} onclick={onOpenUpdate}>
+        {#if updateOpening}
+          <Spinner class="mr-2" />
+        {:else}
+          <CircleArrowUpIcon class="mr-2" aria-hidden="true" />
+        {/if}
+        {t('shell.updateAvailable')}
+      </Button>
+    {/if}
+
     <DonateButton />
 
     <Button

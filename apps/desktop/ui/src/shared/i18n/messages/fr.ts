@@ -9,6 +9,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': 'Jeu',
   'nav.donate': 'Faire un don',
   'shell.refresh': 'Actualiser',
+  'shell.updateAvailable': 'Mise à jour disponible',
 
   'settings.appearance.title': 'Apparence',
   'settings.appearance.description': 'Personnalisez l’apparence de l’application et la langue.',
@@ -436,11 +437,48 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.about.description': 'Rechercher des mises à jour.',
   'settings.about.version.title': "Version de l'application",
   'settings.about.version.loading': 'Chargement...',
-  'settings.about.checkUpdates': 'Rechercher des mises à jour',
-  'settings.about.downloading': 'Téléchargement...',
-  'settings.about.updateAvailable': 'Mise à jour disponible: {version}. Installer et redémarrer?',
+  'settings.about.checkForUpdates': 'Rechercher des mises à jour',
+  'settings.about.checkingForUpdates': 'Recherche…',
+  'settings.about.updateInProgress': 'Mise à jour…',
+  'settings.about.updateAvailable': 'Mise à jour disponible',
   'settings.about.upToDate': 'Vous avez la dernière version',
-  'settings.about.updateError': 'Erreur lors de la recherche de mises à jour',
+  'settings.about.updateCheckError': 'Erreur lors de la recherche de mises à jour',
+
+  'settings.about.updateDialog.title': 'Mise à jour disponible',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Publiée le {date}',
+  'settings.about.updateDialog.releaseNotes': 'Notes de version',
+  'settings.about.updateDialog.noNotes':
+    "Aucune note de version n'a été fournie pour cette mise à jour.",
+  'settings.about.updateDialog.notesTruncated': 'Les notes de version ont été raccourcies.',
+
+  'settings.about.updateDialog.installAndRestart': 'Installer et redémarrer',
+  'settings.about.updateDialog.later': 'Plus tard',
+  'settings.about.updateDialog.close': 'Fermer',
+  'settings.about.updateDialog.retryDownload': 'Réessayer le téléchargement',
+  'settings.about.updateDialog.retryInstall': "Réessayer l'installation",
+  'settings.about.updateDialog.restartNow': 'Redémarrer maintenant',
+
+  'settings.about.updateDialog.downloading': 'Téléchargement de la mise à jour…',
+  'settings.about.updateDialog.downloadingBytes': '{received} téléchargés',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} sur {total}',
+  'settings.about.updateDialog.verifying': 'Vérification de la mise à jour…',
+  'settings.about.updateDialog.verifyingDescription': 'Vérification du paquet téléchargé.',
+  'settings.about.updateDialog.installing': 'Installation de la mise à jour…',
+  'settings.about.updateDialog.restarting': "Redémarrage de l'application…",
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Échec du téléchargement ou de la vérification',
+  'settings.about.updateDialog.prepareErrorDescription':
+    "La mise à jour n'a pas pu être téléchargée ou vérifiée. Vérifiez votre connexion et réessayez.",
+  'settings.about.updateDialog.installErrorTitle': "Échec de l'installation",
+  'settings.about.updateDialog.installErrorDescription':
+    "La mise à jour n'a pas pu être installée. Vous pouvez réessayer.",
+  'settings.about.updateDialog.restartRequiredTitle': 'Redémarrage requis',
+  'settings.about.updateDialog.restartRequiredDescription':
+    "La mise à jour a été installée, mais l'application n'a pas pu redémarrer automatiquement. Redémarrez RenderPilot manuellement pour terminer la mise à jour.",
+
+  'settings.about.updateDialog.progressAria': 'Progression du téléchargement : {percent} pour cent',
+  'settings.about.updateDialog.indeterminateProgressAria': 'Progression du téléchargement',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

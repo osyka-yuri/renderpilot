@@ -9,6 +9,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': 'Spiel',
   'nav.donate': 'Spenden',
   'shell.refresh': 'Aktualisieren',
+  'shell.updateAvailable': 'Update verfügbar',
 
   'settings.appearance.title': 'Erscheinungsbild',
   'settings.appearance.description': 'Passen Sie das Aussehen der Anwendung und die Sprache an.',
@@ -445,11 +446,48 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.about.description': 'Nach Updates für die Anwendung suchen.',
   'settings.about.version.title': 'App-Version',
   'settings.about.version.loading': 'Wird geladen...',
-  'settings.about.checkUpdates': 'Nach Updates suchen',
-  'settings.about.downloading': 'Wird heruntergeladen...',
-  'settings.about.updateAvailable': 'Update verfügbar: {version}. Installieren und neu starten?',
+  'settings.about.checkForUpdates': 'Nach Updates suchen',
+  'settings.about.checkingForUpdates': 'Wird geprüft…',
+  'settings.about.updateInProgress': 'Wird aktualisiert…',
+  'settings.about.updateAvailable': 'Update verfügbar',
   'settings.about.upToDate': 'Sie haben die neueste Version',
-  'settings.about.updateError': 'Fehler bei der Suche nach Updates',
+  'settings.about.updateCheckError': 'Fehler bei der Suche nach Updates',
+
+  'settings.about.updateDialog.title': 'Update verfügbar',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Veröffentlicht am {date}',
+  'settings.about.updateDialog.releaseNotes': 'Versionshinweise',
+  'settings.about.updateDialog.noNotes':
+    'Für dieses Update wurden keine Versionshinweise bereitgestellt.',
+  'settings.about.updateDialog.notesTruncated': 'Die Versionshinweise wurden gekürzt.',
+
+  'settings.about.updateDialog.installAndRestart': 'Installieren und neu starten',
+  'settings.about.updateDialog.later': 'Später',
+  'settings.about.updateDialog.close': 'Schließen',
+  'settings.about.updateDialog.retryDownload': 'Download wiederholen',
+  'settings.about.updateDialog.retryInstall': 'Installation wiederholen',
+  'settings.about.updateDialog.restartNow': 'Jetzt neu starten',
+
+  'settings.about.updateDialog.downloading': 'Update wird heruntergeladen…',
+  'settings.about.updateDialog.downloadingBytes': '{received} heruntergeladen',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} von {total}',
+  'settings.about.updateDialog.verifying': 'Update wird überprüft…',
+  'settings.about.updateDialog.verifyingDescription': 'Das heruntergeladene Paket wird geprüft.',
+  'settings.about.updateDialog.installing': 'Update wird installiert…',
+  'settings.about.updateDialog.restarting': 'Anwendung wird neu gestartet…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Download oder Überprüfung fehlgeschlagen',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'Das Update konnte nicht heruntergeladen oder überprüft werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.',
+  'settings.about.updateDialog.installErrorTitle': 'Installation fehlgeschlagen',
+  'settings.about.updateDialog.installErrorDescription':
+    'Das Update konnte nicht installiert werden. Sie können es erneut versuchen.',
+  'settings.about.updateDialog.restartRequiredTitle': 'Neustart erforderlich',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'Das Update wurde installiert, aber die Anwendung konnte nicht automatisch neu gestartet werden. Starten Sie RenderPilot manuell neu, um das Update abzuschließen.',
+
+  'settings.about.updateDialog.progressAria': 'Downloadfortschritt: {percent} Prozent',
+  'settings.about.updateDialog.indeterminateProgressAria': 'Downloadfortschritt',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

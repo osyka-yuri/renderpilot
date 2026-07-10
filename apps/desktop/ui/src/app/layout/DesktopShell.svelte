@@ -14,6 +14,9 @@
     selectedGameTitle?: string | null;
     onNavigate?: ScreenHandler;
     onRefresh?: () => void;
+    updateAvailable?: boolean;
+    updateOpening?: boolean;
+    onOpenUpdate?: () => void;
     /** Optional banner rendered between the header and main content area,
      *  inside SidebarInset so it is never obscured by the sidebar overlay. */
     banner?: Snippet;
@@ -27,6 +30,9 @@
     selectedGameTitle = null,
     onNavigate = () => undefined,
     onRefresh = () => undefined,
+    updateAvailable = false,
+    updateOpening = false,
+    onOpenUpdate = () => undefined,
     banner,
     children,
   }: Props = $props();
@@ -40,7 +46,17 @@
   <ShellSidebar {screen} {onNavigate} />
 
   <SidebarInset class="min-h-0 overflow-hidden">
-    <ShellHeader {screen} {resolvedGameTitle} {busy} {refreshing} {onNavigate} {onRefresh} />
+    <ShellHeader
+      {screen}
+      {resolvedGameTitle}
+      {busy}
+      {refreshing}
+      {onNavigate}
+      {onRefresh}
+      {updateAvailable}
+      {updateOpening}
+      {onOpenUpdate}
+    />
 
     {@render banner?.()}
 

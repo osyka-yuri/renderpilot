@@ -9,6 +9,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': 'ゲーム',
   'nav.donate': '寄付する',
   'shell.refresh': '更新',
+  'shell.updateAvailable': 'アップデートがあります',
 
   'settings.appearance.title': '外観',
   'settings.appearance.description': 'アプリケーションの見た目と言語をカスタマイズします。',
@@ -429,12 +430,48 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.about.description': 'アプリケーションのアップデートを確認します。',
   'settings.about.version.title': 'アプリのバージョン',
   'settings.about.version.loading': '読み込み中...',
-  'settings.about.checkUpdates': 'アップデートを確認',
-  'settings.about.downloading': 'ダウンロード中...',
-  'settings.about.updateAvailable':
-    'アップデートが利用可能です: {version}。インストールして再起動しますか？',
+  'settings.about.checkForUpdates': 'アップデートを確認',
+  'settings.about.checkingForUpdates': '確認中…',
+  'settings.about.updateInProgress': '更新中…',
+  'settings.about.updateAvailable': 'アップデートがあります',
   'settings.about.upToDate': '最新バージョンです',
-  'settings.about.updateError': 'アップデートの確認に失敗しました',
+  'settings.about.updateCheckError': 'アップデートの確認に失敗しました',
+
+  'settings.about.updateDialog.title': 'アップデートがあります',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'リリース日: {date}',
+  'settings.about.updateDialog.releaseNotes': 'リリースノート',
+  'settings.about.updateDialog.noNotes': 'このアップデートのリリースノートはありません。',
+  'settings.about.updateDialog.notesTruncated': 'リリースノートは短縮されています。',
+
+  'settings.about.updateDialog.installAndRestart': 'インストールして再起動',
+  'settings.about.updateDialog.later': '後で',
+  'settings.about.updateDialog.close': '閉じる',
+  'settings.about.updateDialog.retryDownload': 'ダウンロードを再試行',
+  'settings.about.updateDialog.retryInstall': 'インストールを再試行',
+  'settings.about.updateDialog.restartNow': '今すぐ再起動',
+
+  'settings.about.updateDialog.downloading': 'アップデートをダウンロード中…',
+  'settings.about.updateDialog.downloadingBytes': '{received} ダウンロード済み',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} / {total}',
+  'settings.about.updateDialog.verifying': 'アップデートを検証中…',
+  'settings.about.updateDialog.verifyingDescription':
+    'ダウンロードしたパッケージを確認しています。',
+  'settings.about.updateDialog.installing': 'アップデートをインストール中…',
+  'settings.about.updateDialog.restarting': 'アプリを再起動中…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'ダウンロードまたは検証に失敗しました',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'アップデートをダウンロードまたは検証できませんでした。接続を確認して再試行してください。',
+  'settings.about.updateDialog.installErrorTitle': 'インストールに失敗しました',
+  'settings.about.updateDialog.installErrorDescription':
+    'アップデートをインストールできませんでした。再試行できます。',
+  'settings.about.updateDialog.restartRequiredTitle': '再起動が必要です',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'アップデートはインストールされましたが、アプリを自動で再起動できませんでした。RenderPilot を手動で再起動して更新を完了してください。',
+
+  'settings.about.updateDialog.progressAria': 'ダウンロード進捗: {percent} パーセント',
+  'settings.about.updateDialog.indeterminateProgressAria': 'ダウンロード進捗',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

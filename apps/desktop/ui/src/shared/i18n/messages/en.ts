@@ -16,6 +16,7 @@ export const en = {
   'nav.gameFallback': 'Game',
   'nav.donate': 'Donate',
   'shell.refresh': 'Refresh',
+  'shell.updateAvailable': 'Update available',
 
   // ── Settings: appearance section ──
   'settings.appearance.title': 'Appearance',
@@ -170,11 +171,47 @@ export const en = {
   'settings.about.description': 'Check for app updates and version info.',
   'settings.about.version.title': 'App version',
   'settings.about.version.loading': 'Loading...',
-  'settings.about.checkUpdates': 'Check for updates',
-  'settings.about.downloading': 'Downloading...',
-  'settings.about.updateAvailable': 'Update available: {version}. Install and restart?',
+  'settings.about.checkForUpdates': 'Check for updates',
+  'settings.about.checkingForUpdates': 'Checking…',
+  'settings.about.updateInProgress': 'Updating…',
+  'settings.about.updateAvailable': 'Update available',
   'settings.about.upToDate': 'You are on the latest version',
-  'settings.about.updateError': 'Failed to check for updates',
+  'settings.about.updateCheckError': 'Failed to check for updates',
+
+  'settings.about.updateDialog.title': 'Update available',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Released {date}',
+  'settings.about.updateDialog.releaseNotes': 'Release notes',
+  'settings.about.updateDialog.noNotes': 'No release notes were provided for this update.',
+  'settings.about.updateDialog.notesTruncated': 'Release notes were shortened.',
+
+  'settings.about.updateDialog.installAndRestart': 'Install and restart',
+  'settings.about.updateDialog.later': 'Later',
+  'settings.about.updateDialog.close': 'Close',
+  'settings.about.updateDialog.retryDownload': 'Retry download',
+  'settings.about.updateDialog.retryInstall': 'Retry installation',
+  'settings.about.updateDialog.restartNow': 'Restart now',
+
+  'settings.about.updateDialog.downloading': 'Downloading update…',
+  'settings.about.updateDialog.downloadingBytes': '{received} downloaded',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} of {total}',
+  'settings.about.updateDialog.verifying': 'Verifying update…',
+  'settings.about.updateDialog.verifyingDescription': 'Checking the downloaded package.',
+  'settings.about.updateDialog.installing': 'Installing update…',
+  'settings.about.updateDialog.restarting': 'Restarting application…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Download or verification failed',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'The update could not be downloaded or verified. Check your connection and try again.',
+  'settings.about.updateDialog.installErrorTitle': 'Installation failed',
+  'settings.about.updateDialog.installErrorDescription':
+    'The update could not be installed. You can try again.',
+  'settings.about.updateDialog.restartRequiredTitle': 'Restart required',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'The update was installed, but the application could not restart automatically. Restart RenderPilot manually to finish the update.',
+
+  'settings.about.updateDialog.progressAria': 'Download progress: {percent} percent',
+  'settings.about.updateDialog.indeterminateProgressAria': 'Download progress',
 
   // ── Common ──
   'common.unknown': 'Unknown',

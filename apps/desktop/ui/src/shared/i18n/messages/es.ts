@@ -9,6 +9,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': 'Juego',
   'nav.donate': 'Donar',
   'shell.refresh': 'Actualizar',
+  'shell.updateAvailable': 'Actualización disponible',
 
   'settings.appearance.title': 'Apariencia',
   'settings.appearance.description': 'Personaliza el aspecto de la aplicación y el idioma.',
@@ -434,11 +435,48 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.about.description': 'Buscar actualizaciones de la aplicación.',
   'settings.about.version.title': 'Versión de la aplicación',
   'settings.about.version.loading': 'Cargando...',
-  'settings.about.checkUpdates': 'Buscar actualizaciones',
-  'settings.about.downloading': 'Descargando...',
-  'settings.about.updateAvailable': 'Actualización disponible: {version}. ¿Instalar y reiniciar?',
+  'settings.about.checkForUpdates': 'Buscar actualizaciones',
+  'settings.about.checkingForUpdates': 'Buscando…',
+  'settings.about.updateInProgress': 'Actualizando…',
+  'settings.about.updateAvailable': 'Actualización disponible',
   'settings.about.upToDate': 'Tienes la última versión',
-  'settings.about.updateError': 'Error al buscar actualizaciones',
+  'settings.about.updateCheckError': 'Error al buscar actualizaciones',
+
+  'settings.about.updateDialog.title': 'Actualización disponible',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Publicada el {date}',
+  'settings.about.updateDialog.releaseNotes': 'Notas de la versión',
+  'settings.about.updateDialog.noNotes':
+    'No se proporcionaron notas de la versión para esta actualización.',
+  'settings.about.updateDialog.notesTruncated': 'Las notas de la versión se acortaron.',
+
+  'settings.about.updateDialog.installAndRestart': 'Instalar y reiniciar',
+  'settings.about.updateDialog.later': 'Más tarde',
+  'settings.about.updateDialog.close': 'Cerrar',
+  'settings.about.updateDialog.retryDownload': 'Reintentar descarga',
+  'settings.about.updateDialog.retryInstall': 'Reintentar instalación',
+  'settings.about.updateDialog.restartNow': 'Reiniciar ahora',
+
+  'settings.about.updateDialog.downloading': 'Descargando actualización…',
+  'settings.about.updateDialog.downloadingBytes': '{received} descargados',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} de {total}',
+  'settings.about.updateDialog.verifying': 'Verificando actualización…',
+  'settings.about.updateDialog.verifyingDescription': 'Comprobando el paquete descargado.',
+  'settings.about.updateDialog.installing': 'Instalando actualización…',
+  'settings.about.updateDialog.restarting': 'Reiniciando la aplicación…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Error de descarga o verificación',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'No se pudo descargar o verificar la actualización. Comprueba la conexión e inténtalo de nuevo.',
+  'settings.about.updateDialog.installErrorTitle': 'Error de instalación',
+  'settings.about.updateDialog.installErrorDescription':
+    'No se pudo instalar la actualización. Puedes intentarlo de nuevo.',
+  'settings.about.updateDialog.restartRequiredTitle': 'Reinicio necesario',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'La actualización se instaló, pero la aplicación no pudo reiniciarse automáticamente. Reinicia RenderPilot manualmente para finalizar la actualización.',
+
+  'settings.about.updateDialog.progressAria': 'Progreso de descarga: {percent} por ciento',
+  'settings.about.updateDialog.indeterminateProgressAria': 'Progreso de descarga',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

@@ -9,6 +9,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': '游戏',
   'nav.donate': '捐赠',
   'shell.refresh': '刷新',
+  'shell.updateAvailable': '有可用更新',
 
   'settings.appearance.title': '外观',
   'settings.appearance.description': '自定义应用程序的外观和语言。',
@@ -402,11 +403,46 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.about.description': '检查应用程序更新。',
   'settings.about.version.title': '应用版本',
   'settings.about.version.loading': '加载中...',
-  'settings.about.checkUpdates': '检查更新',
-  'settings.about.downloading': '下载中...',
-  'settings.about.updateAvailable': '有可用更新：{version}。是否安装并重启？',
+  'settings.about.checkForUpdates': '检查更新',
+  'settings.about.checkingForUpdates': '正在检查…',
+  'settings.about.updateInProgress': '正在更新…',
+  'settings.about.updateAvailable': '有可用更新',
   'settings.about.upToDate': '已是最新版本',
-  'settings.about.updateError': '检查更新失败',
+  'settings.about.updateCheckError': '检查更新失败',
+
+  'settings.about.updateDialog.title': '有可用更新',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': '发布于 {date}',
+  'settings.about.updateDialog.releaseNotes': '更新说明',
+  'settings.about.updateDialog.noNotes': '此更新未提供更新说明。',
+  'settings.about.updateDialog.notesTruncated': '更新说明已缩短。',
+
+  'settings.about.updateDialog.installAndRestart': '安装并重启',
+  'settings.about.updateDialog.later': '稍后',
+  'settings.about.updateDialog.close': '关闭',
+  'settings.about.updateDialog.retryDownload': '重试下载',
+  'settings.about.updateDialog.retryInstall': '重试安装',
+  'settings.about.updateDialog.restartNow': '立即重启',
+
+  'settings.about.updateDialog.downloading': '正在下载更新…',
+  'settings.about.updateDialog.downloadingBytes': '已下载 {received}',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} / {total}',
+  'settings.about.updateDialog.verifying': '正在验证更新…',
+  'settings.about.updateDialog.verifyingDescription': '正在检查已下载的安装包。',
+  'settings.about.updateDialog.installing': '正在安装更新…',
+  'settings.about.updateDialog.restarting': '正在重启应用…',
+
+  'settings.about.updateDialog.prepareErrorTitle': '下载或验证失败',
+  'settings.about.updateDialog.prepareErrorDescription':
+    '无法下载或验证更新。请检查网络连接后重试。',
+  'settings.about.updateDialog.installErrorTitle': '安装失败',
+  'settings.about.updateDialog.installErrorDescription': '无法安装更新。你可以重试。',
+  'settings.about.updateDialog.restartRequiredTitle': '需要重启',
+  'settings.about.updateDialog.restartRequiredDescription':
+    '更新已安装，但应用无法自动重启。请手动重启 RenderPilot 以完成更新。',
+
+  'settings.about.updateDialog.progressAria': '下载进度：{percent} 百分比',
+  'settings.about.updateDialog.indeterminateProgressAria': '下载进度',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': '通过 RenoDX 的 ReShade 插件为本游戏添加 HDR 与色调映射。',

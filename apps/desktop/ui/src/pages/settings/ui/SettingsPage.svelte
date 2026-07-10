@@ -9,6 +9,7 @@
   import type { LanguageMode } from '@shared/i18n';
   import { t } from '@shared/i18n';
   import { Tabs, TabsList, TabsTrigger } from '@shared/ui';
+  import type { SettingsUpdateAction } from '@features/app-updater';
   import {
     createDlssIndicatorContext,
     createGlobalNvidiaPresetsContext,
@@ -31,26 +32,30 @@
     SettingsAboutSection,
     createSettingsPanelModel,
   } from '@widgets/settings-panel';
-  import { createAppUpdaterModel } from '@features/app-updater';
 
   type Props = {
     isElevated?: boolean;
     themeMode?: ThemeMode;
     languageMode?: LanguageMode;
+    appVersion?: string | null;
+    updateAction?: SettingsUpdateAction;
     onThemeModeChange?: ThemeModeHandler;
     onLanguageModeChange?: LanguageModeHandler;
+    onCheckForUpdates?: () => void;
   };
 
   const {
     isElevated = false,
     themeMode = 'system',
     languageMode = 'system',
+    appVersion = null,
+    updateAction = 'check',
     onThemeModeChange = () => undefined,
     onLanguageModeChange = () => undefined,
+    onCheckForUpdates = () => undefined,
   }: Props = $props();
 
   const model = createSettingsPanelModel();
-  const appUpdaterModel = createAppUpdaterModel();
   const dlssIndicator = createDlssIndicatorContext({ isElevated: () => isElevated });
   const globalPresets = createGlobalNvidiaPresetsContext({ isElevated: () => isElevated });
 
@@ -75,7 +80,6 @@
 
   onMount(() => {
     model.init();
-    void appUpdaterModel.init();
 
     return () => {
       model.dispose();
@@ -103,12 +107,7 @@
       onThemeChange={onThemeModeChange}
       onLanguageChange={onLanguageModeChange}
     />
-    <SettingsAboutSection
-      appVersion={appUpdaterModel.appVersion}
-      isCheckingForUpdates={appUpdaterModel.isCheckingForUpdates}
-      isDownloading={appUpdaterModel.isDownloading}
-      onCheckForUpdates={appUpdaterModel.handleCheckForUpdates}
-    />
+    <SettingsAboutSection {appVersion} {updateAction} {onCheckForUpdates} />
   </SettingsTabPanel>
 
   <SettingsTabPanel value="renodx">

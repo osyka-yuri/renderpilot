@@ -14,6 +14,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'nav.gameFallback': 'Игра',
   'nav.donate': 'Поддержать',
   'shell.refresh': 'Обновить',
+  'shell.updateAvailable': 'Доступно обновление',
 
   // ── Settings: appearance section ──
   'settings.appearance.title': 'Оформление',
@@ -180,11 +181,47 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.about.description': 'Проверьте наличие новых версий приложения.',
   'settings.about.version.title': 'Версия приложения',
   'settings.about.version.loading': 'Определение...',
-  'settings.about.checkUpdates': 'Проверить обновления',
-  'settings.about.downloading': 'Скачивание...',
-  'settings.about.updateAvailable': 'Доступно обновление: {version}. Установить и перезапустить?',
+  'settings.about.checkForUpdates': 'Проверить обновления',
+  'settings.about.checkingForUpdates': 'Проверка…',
+  'settings.about.updateInProgress': 'Обновление…',
+  'settings.about.updateAvailable': 'Доступно обновление',
   'settings.about.upToDate': 'У вас установлена последняя версия',
-  'settings.about.updateError': 'Не удалось проверить обновления',
+  'settings.about.updateCheckError': 'Не удалось проверить обновления',
+
+  'settings.about.updateDialog.title': 'Доступно обновление',
+  'settings.about.updateDialog.versionLine': '{currentVersion} → {version}',
+  'settings.about.updateDialog.releaseDate': 'Выпущено {date}',
+  'settings.about.updateDialog.releaseNotes': 'Список изменений',
+  'settings.about.updateDialog.noNotes': 'Для этого обновления нет заметок о выпуске.',
+  'settings.about.updateDialog.notesTruncated': 'Список изменений был сокращён.',
+
+  'settings.about.updateDialog.installAndRestart': 'Установить и перезапустить',
+  'settings.about.updateDialog.later': 'Позже',
+  'settings.about.updateDialog.close': 'Закрыть',
+  'settings.about.updateDialog.retryDownload': 'Повторить загрузку',
+  'settings.about.updateDialog.retryInstall': 'Повторить установку',
+  'settings.about.updateDialog.restartNow': 'Перезапустить сейчас',
+
+  'settings.about.updateDialog.downloading': 'Загрузка обновления…',
+  'settings.about.updateDialog.downloadingBytes': 'Загружено {received}',
+  'settings.about.updateDialog.downloadingBytesTotal': '{received} из {total}',
+  'settings.about.updateDialog.verifying': 'Проверка обновления…',
+  'settings.about.updateDialog.verifyingDescription': 'Проверяется загруженный пакет.',
+  'settings.about.updateDialog.installing': 'Установка обновления…',
+  'settings.about.updateDialog.restarting': 'Перезапуск приложения…',
+
+  'settings.about.updateDialog.prepareErrorTitle': 'Ошибка загрузки или проверки',
+  'settings.about.updateDialog.prepareErrorDescription':
+    'Не удалось загрузить или проверить обновление. Проверьте подключение и попробуйте снова.',
+  'settings.about.updateDialog.installErrorTitle': 'Ошибка установки',
+  'settings.about.updateDialog.installErrorDescription':
+    'Не удалось установить обновление. Вы можете попробовать снова.',
+  'settings.about.updateDialog.restartRequiredTitle': 'Требуется перезапуск',
+  'settings.about.updateDialog.restartRequiredDescription':
+    'Обновление установлено, но приложение не удалось перезапустить автоматически. Перезапустите RenderPilot вручную, чтобы завершить обновление.',
+
+  'settings.about.updateDialog.progressAria': 'Прогресс загрузки: {percent} процентов',
+  'settings.about.updateDialog.indeterminateProgressAria': 'Прогресс загрузки',
 
   // ── Common ──
   'common.unknown': 'Неизвестно',
