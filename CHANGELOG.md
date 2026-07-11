@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-07-11
+
+### Added
+- **App updates**: RenderPilot now checks for new releases from the header and Settings. Review the release notes, download and verify an update with live progress, retry a failed attempt, and restart the app to finish installing it.
+- **Games**: Filter your library by available add-ons and see each supported add-on directly on the game card.
+
+### Changed
+- **Refresh**: The main Refresh button now fetches the latest Libraries, RenoDX, and ReShade catalog data before it rescans your system, so newly published versions and compatibility changes do not wait for the cache to expire.
+
+### Fixed
+- **Games**: Centered the scan action in an empty library.
+- **Settings → RenoDX**: The shared Vulkan layer now displays the ReShade host consistently.
+
+### Changed (Refactoring & Maintenance)
+- **Add-ons**: Consolidated the RenoDX and ReShade install/update foundations and strengthened file replacement, database validation, catalog handling, and native operation boundaries for more reliable recovery from interrupted work.
+- **Tooling**: Raised the minimum Rust version to 1.97 and updated the release build action and desktop toolchain.
+
 ## [1.4.1] - 2026-07-03
 
 ### Fixed
