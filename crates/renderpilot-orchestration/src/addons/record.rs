@@ -86,14 +86,20 @@ fn to_path_ref(path: &Path) -> Result<PathRef, ServiceError> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     use renderpilot_domain::TrackedSourceRole;
     use tempfile::tempdir;
 
     use super::*;
     use crate::addons::engine::{self, FileOp, IniSection, InstallPlan, MergeStrategy};
-    use crate::addons::path_bufs;
+
+    fn path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
+        paths
+            .iter()
+            .map(|path| PathBuf::from(path.as_str()))
+            .collect()
+    }
 
     /// The extensibility seam: a *second* tool with a different shape — an
     /// OptiScaler-style proxy DLL plus an `OptiScaler.ini` (a different section and

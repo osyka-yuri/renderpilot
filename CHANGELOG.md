@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.5.1] - 2026-07-12
+
+### Fixed
+- **RenoDX / ReShade**: Existing ReShade installations are now classified safely. Empty,
+  compatible hosts can be recovered or repaired; custom, incompatible, or unclear setups
+  are left untouched.
+- **RenoDX / ReShade**: Improved recovery after tracked install data is lost. RenderPilot
+  adopts only verifiable RenoDX files, preserves user ReShade configuration and logs, and
+  never removes a reused runtime during uninstall.
+- **Games**: Corrected catalog filter logic to prevent programs without any supported technologies from appearing when all filters are checked.
+- **UI**: Improved alignment and spacing in addon views and action buttons. The "Check for updates" button now spins smoothly instead of jumping text.
+
 
 ## [1.5.0] - 2026-07-11
 

@@ -87,18 +87,6 @@ pub(crate) fn ensure_not_blocked(
     Ok(())
 }
 
-/// Ensures no unmanaged files for the kind are present.
-pub(crate) fn ensure_not_unmanaged(
-    scan_dirs: &[&Path],
-    kind: AddonKind,
-    message: impl Into<String>,
-) -> Result<(), ServiceError> {
-    if registry::unmanaged_files_present_in_dirs(scan_dirs, kind) {
-        return Err(errors::invalid(message.into()));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

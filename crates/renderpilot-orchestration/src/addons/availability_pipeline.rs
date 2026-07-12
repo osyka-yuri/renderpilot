@@ -43,9 +43,6 @@ pub(crate) struct AvailabilityPreflight<R> {
     pub(crate) analysis: GameAnalysis,
     /// This tool's manifest resolution for the game.
     pub(crate) resolution: R,
-    /// Install scan roots (exe parent + optional split AddonPath), when a
-    /// rendering executable was found. Same roots install/update use.
-    pub(crate) roots: Option<InstallRoots>,
 }
 
 /// Runs the shared availability preflight: record lookup, [`require_game`],
@@ -79,6 +76,5 @@ where
         blocked,
         analysis,
         resolution,
-        roots,
     })
 }

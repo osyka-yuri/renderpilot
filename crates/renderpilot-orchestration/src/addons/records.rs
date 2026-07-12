@@ -10,7 +10,6 @@
 use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{AddonKind, GameId, InstalledAddon, TrackedSource, TrackedSourceRole};
 
-use crate::addons::errors;
 use crate::{Context, ServiceError};
 
 /// The requested game is not present in the library. Shared "not found" error
@@ -66,20 +65,6 @@ pub(crate) fn addon_label(record: &InstalledAddon) -> &str {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("add-on")
-}
-
-/// Ensures no record exists for the given kind. Uses a tool-provided error message
-/// so the message can name the tool while the check logic stays shared.
-pub(crate) fn ensure_no_record(
-    context: &Context,
-    game_id: &GameId,
-    kind: AddonKind,
-    message: impl Into<String>,
-) -> Result<(), ServiceError> {
-    if record_of_kind(context, game_id, kind)?.is_some() {
-        return Err(errors::invalid(message.into()));
-    }
-    Ok(())
 }
 
 /// Persists the install record, calling the provided revert closure (which receives

@@ -38,7 +38,6 @@ pub fn availability(
         blocked,
         analysis,
         resolution,
-        roots: _,
     } = availability_pipeline::preflight(
         context,
         game_id,
