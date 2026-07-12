@@ -16,8 +16,6 @@ use crate::addons::reshade::proxy::{HostKind, host_decision, primary_api};
 use crate::{Context, ServiceError};
 
 /// Uninstalls RenoDX from a game, restoring files and clearing install metadata.
-/// A record belonging to a different addon kind (e.g. Luma) is never touched —
-/// this reports "not installed" for RenoDX exactly as if there were no record.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
     let _guard = operation_lock::blocking_lock(game_id);
     let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?

@@ -1,9 +1,9 @@
 //! Fetching and caching the standalone, shared `reshade_manifest.json`, plus
-//! the shared skeleton every per-tool manifest store (`renodx`, and future tools) builds
+//! the shared skeleton every per-tool manifest store (`renodx`, `luma`) builds
 //! its own store on.
 //!
 //! A thin adapter over the generic [`crate::cdn`] manifest cache (the same one
-//! per-tool manifests use): it pins this document's file name,
+//! RenoDX's and Luma's own manifests use): it pins this document's file name,
 //! CDN path, size cap, and 24-hour freshness window, and parses/validates it
 //! via [`super::manifest::parse_reshade_manifest`].
 //!
@@ -98,7 +98,7 @@ pub(crate) const TOOL_MANIFEST_MAX_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const TOOL_MANIFEST_CACHE_TTL: Duration = Duration::from_hours(24);
 
 /// The standard CDN cache spec for a tool's own manifest document (4 MiB cap,
-/// 24-hour TTL) — every per-tool manifest store (`renodx`, and future tools) builds its
+/// 24-hour TTL) — every per-tool manifest store (`renodx`, `luma`) builds its
 /// spec from this instead of repeating the constants.
 fn tool_manifest_spec(file_name: &'static str) -> CdnManifestSpec {
     CdnManifestSpec {

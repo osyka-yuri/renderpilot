@@ -68,16 +68,6 @@ impl InstallRoots {
     }
 }
 
-/// How to roll back a payload-phase receipt when the host-phase install fails.
-///
-/// Nested multi-file payloads (tree rollback) land with the second tool; RenoDX
-/// only needs flat reversal of a single add-on file.
-#[derive(Debug, Clone, Copy)]
-pub enum PayloadRollback {
-    /// Flat file-list reversal (single add-on file tools).
-    Flat,
-}
-
 /// Runs a unified or split install with one sentinel anchored at [`InstallRoots::sentinel_dir`].
 pub fn run_split_install(
     roots: &InstallRoots,
@@ -85,7 +75,6 @@ pub fn run_split_install(
     unified_ops: Vec<engine::FileOp>,
     payload_ops: Vec<engine::FileOp>,
     game_ops: Vec<engine::FileOp>,
-    payload_rollback: PayloadRollback,
 ) -> Result<InstallReceipt, ServiceError> {
     let sentinel = engine::sentinel_path(roots.sentinel_dir(), kind);
     engine::write_sentinel(&sentinel)?;
@@ -100,14 +89,7 @@ pub fn run_split_install(
         };
         engine::install_with_options(&roots.game_dir, &plan, no_sentinel)
     } else {
-        run_split_phases(
-            roots,
-            kind,
-            payload_ops,
-            game_ops,
-            payload_rollback,
-            no_sentinel,
-        )
+        run_split_phases(roots, kind, payload_ops, game_ops, no_sentinel)
     };
 
     match &result {
@@ -131,7 +113,6 @@ fn run_split_phases(
     kind: AddonKind,
     payload_ops: Vec<engine::FileOp>,
     game_ops: Vec<engine::FileOp>,
-    payload_rollback: PayloadRollback,
     options: InstallOptions,
 ) -> Result<InstallReceipt, ServiceError> {
     if payload_ops.is_empty() && game_ops.is_empty() {
@@ -159,18 +140,14 @@ fn run_split_phases(
     match engine::install_with_options(&roots.game_dir, &host_plan, options) {
         Ok(host_receipt) => Ok(merge_receipts(payload_receipt, host_receipt)),
         Err(error) => {
-            rollback_payload(&payload_receipt, &roots.addon_dir, payload_rollback);
+            rollback_payload(&payload_receipt);
             Err(error)
         }
     }
 }
 
-fn rollback_payload(receipt: &InstallReceipt, _addon_dir: &Path, mode: PayloadRollback) {
-    let rollback_result = match mode {
-        PayloadRollback::Flat => {
-            engine::uninstall(&receipt.created_files, &receipt.backed_up_files)
-        }
-    };
+fn rollback_payload(receipt: &InstallReceipt) {
+    let rollback_result = engine::uninstall(&receipt.created_files, &receipt.backed_up_files);
     if let Err(revert_error) = rollback_result {
         log::warn!(
             "split install: host-phase failed and payload rollback also failed: {revert_error}"

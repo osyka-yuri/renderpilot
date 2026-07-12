@@ -19,7 +19,7 @@ use crate::addons::reshade::scan as reshade;
 /// created it from nothing, no legacy backup exists for it either, *and* this
 /// install owns the whole ReShade stack it sits beside — a Vulkan install (the
 /// per-game ini is exclusively RenoDX's; the shared layer is a separate concern),
-/// or a proxy install that also wrote/replaced the host DLL itself. A reused,
+/// or a proxy install that wrote/repaired/adopted the host DLL. A reused,
 /// merely-compatible host (nothing about it is "ours") never gets its freshly
 /// created ini deleted either, even though RenoDX is the one that wrote it —
 /// only stripped, same as a pre-existing one. Stripping (via
@@ -34,15 +34,11 @@ pub fn uninstall(
     record: &InstalledAddon,
     game_dir_hint: Option<&Path>,
 ) -> Result<(), ServiceError> {
-    let log_base_path = if record.has_host_binary_provenance() {
-        tracking::rollback_host_path(record).and_then(|host_path| {
-            host_path.parent().map(|game_dir| {
-                reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path
-            })
-        })
-    } else {
-        None
-    };
+    let log_base_path = tracking::owned_proxy_host_path(record).and_then(|host_path| {
+        host_path
+            .parent()
+            .map(|game_dir| reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path)
+    });
 
     let ini_in_created = ini_path_in(record.created_files());
     let ini_in_backed_up = ini_path_in(record.backed_up_files());
@@ -75,10 +71,7 @@ pub fn uninstall(
 }
 
 fn host_dll_written_by_this_install(record: &InstalledAddon) -> bool {
-    record
-        .created_files()
-        .iter()
-        .any(|path| path.file_name().is_some_and(reshade::is_proxy_slot))
+    tracking::owned_proxy_host_path(record).is_some()
 }
 
 fn ini_path_in(paths: &[PathRef]) -> Option<&PathRef> {
@@ -91,12 +84,11 @@ fn is_ini_path(path: &PathRef) -> bool {
 }
 
 fn non_ini_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
-    let filtered: Vec<PathRef> = paths
+    paths
         .iter()
         .filter(|path| !is_ini_path(path))
-        .cloned()
-        .collect();
-    crate::addons::path_bufs(&filtered)
+        .map(|path| PathBuf::from(path.as_str()))
+        .collect()
 }
 
 fn locate_untracked_ini(record: &InstalledAddon, game_dir_hint: Option<&Path>) -> Option<PathBuf> {

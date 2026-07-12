@@ -2,21 +2,14 @@
 //!
 //! Tool-agnostic host detection and path resolution live in
 //! [`crate::addons::reshade::scan`]. This module owns only RenoDX-shaped bits:
-//! the `renodx-*.addon*` on-disk/config state and the detector for the minimal
-//! `ReShade.ini` a RenoDX no-effects install writes.
+//! the `renodx-*.addon*` on-disk/config state.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 use crate::addons::renodx::install::DLSS_FIX_FILE_PREFIX;
-use crate::addons::reshade::ini_schema::{ADDON_PATH_KEY, ADDON_SECTION, DISABLED_ADDONS_KEY};
-use crate::addons::reshade::scan::{
-    ReshadePaths, load_ini, read_addon_config_state, reshade_ini_path, split_ini_list,
-};
-
-/// The default `DisabledAddons` list a RenoDX no-effects install writes.
-const DEFAULT_DISABLED_ADDONS: &[&str] = &["Generic Depth", "Effect Runtime Sync"];
+use crate::addons::reshade::scan::{ReshadePaths, load_ini, read_addon_config_state};
 
 /// State of the RenoDX add-on on disk/config for a detected host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -44,14 +37,6 @@ pub enum RenoDxAddonLoadMode {
     LoadFromDllMain,
     /// The mode cannot be determined.
     Unknown,
-}
-
-/// Returns the existing `ReShade.ini` path when it matches the minimal config
-/// RenderPilot writes for a no-effects RenoDX install.
-#[must_use]
-pub(crate) fn renderpilot_minimal_ini_path(game_dir: &Path) -> Option<PathBuf> {
-    let path = reshade_ini_path(game_dir)?;
-    is_renderpilot_minimal_ini(&path).then_some(path)
 }
 
 /// Computes the RenoDX add-on state from disk and `ReShade.ini`.
@@ -116,65 +101,6 @@ fn discover_renodx_addon(addon_dir: &Path) -> Option<PathBuf> {
         let is_dlss_fix = name.starts_with(DLSS_FIX_FILE_PREFIX);
         (is_renodx_addon && !is_dlss_fix).then(|| entry.path())
     })
-}
-
-fn is_renderpilot_minimal_ini(path: &Path) -> bool {
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return false;
-    };
-    let mut current_section: Option<String> = None;
-    let mut saw_owned_key = false;
-
-    for raw in text.lines() {
-        let line = raw.trim().trim_end_matches('\r');
-        if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') && line.len() >= 2 {
-            let section = line[1..line.len() - 1].trim();
-            if !section.eq_ignore_ascii_case(ADDON_SECTION) {
-                return false;
-            }
-            current_section = Some(section.to_owned());
-            continue;
-        }
-        if !current_section
-            .as_deref()
-            .is_some_and(|section| section.eq_ignore_ascii_case(ADDON_SECTION))
-        {
-            return false;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            return false;
-        };
-        let key = key.trim();
-        let value = value.trim();
-        if key.eq_ignore_ascii_case(DISABLED_ADDONS_KEY) {
-            if !is_default_disabled_addons(value) {
-                return false;
-            }
-            saw_owned_key = true;
-        } else if key.eq_ignore_ascii_case(ADDON_PATH_KEY) {
-            if value.trim_matches('"') != "." {
-                return false;
-            }
-            saw_owned_key = true;
-        } else {
-            return false;
-        }
-    }
-
-    saw_owned_key
-}
-
-fn is_default_disabled_addons(value: &str) -> bool {
-    let values = split_ini_list(value);
-    values.len() == DEFAULT_DISABLED_ADDONS.len()
-        && DEFAULT_DISABLED_ADDONS.iter().all(|expected| {
-            values
-                .iter()
-                .any(|value| value.eq_ignore_ascii_case(expected))
-        })
 }
 
 #[cfg(test)]

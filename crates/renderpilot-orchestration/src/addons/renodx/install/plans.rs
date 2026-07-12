@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{AddonKind, InstalledAddon, TrackedSource, TrackedSourceRole};
 
 use crate::ServiceError;
 use crate::addons::engine::{self, InstallPlan};
 use crate::addons::record;
-use crate::addons::reshade::split_install::{InstallRoots, PayloadRollback, run_split_install};
+use crate::addons::reshade::split_install::{InstallRoots, run_split_install};
 
 use super::super::errors;
 use super::PreparedInstall;
@@ -18,15 +18,16 @@ use crate::addons::reshade::update::host_binary_source;
 ///
 /// Refuses if a RenoDX install record already exists here (the caller should
 /// uninstall first to reinstall). When no ReShade host is present one is installed
-/// (proxy DLL + fresh `ReShade.ini` + marker); a compatible detected host is reused
-/// with only an additive, backed-up `ReShade.ini` merge.
+/// (proxy DLL + fresh `ReShade.ini` + marker); a compatible empty host is
+/// adopted, while a compatible user setup remains reused with only RenoDX's
+/// additive, no-backup INI merge.
 pub(super) fn install_proxy(
     game_dir: &Path,
     prepared: &PreparedInstall,
 ) -> Result<InstalledAddon, ServiceError> {
     let host = host_policy::assess(game_dir, &prepared.proxy_dll_name);
-    host.ensure_not_conflicting(&prepared.proxy_dll_name)?;
-    if host.writes_host() && prepared.reshade_dll_bytes.is_empty() {
+    host.ensure_initial_installable(&prepared.proxy_dll_name)?;
+    if host.initial_writes_host() && prepared.reshade_dll_bytes.is_empty() {
         return Err(errors::invalid(
             "the active ReShade host needs installation or repair, but no ReShade bytes were provided"
                 .to_owned(),
@@ -40,20 +41,21 @@ pub(super) fn install_proxy(
             paths.effective_addon_path.display()
         )));
     }
+    let adopted_existing = host.initial_owned_existing_paths(paths.ini_path.as_deref());
 
     let roots = InstallRoots::resolve(game_dir, &host.target_path);
     let receipt = run_split_install(
         &roots,
         AddonKind::RenoDx,
-        combined_ops(game_dir, prepared, host.writes_host()),
+        combined_ops(game_dir, prepared, host.initial_writes_host()),
         vec![addon_op(prepared)],
-        host_ops(game_dir, prepared, host.writes_host()),
-        PayloadRollback::Flat,
+        host_ops(game_dir, prepared, host.initial_writes_host()),
     )?;
     build_record(
         prepared,
         &paths.effective_addon_path,
-        host.writes_host(),
+        host.initial_writes_host(),
+        &adopted_existing,
         &receipt,
     )
 }
@@ -64,6 +66,7 @@ pub(super) fn build_record(
     prepared: &PreparedInstall,
     addon_dir: &Path,
     tracks_host: bool,
+    adopted_existing: &[PathBuf],
     receipt: &engine::InstallReceipt,
 ) -> Result<InstalledAddon, ServiceError> {
     let addon_path = addon_dir.join(&prepared.addon_file_name);
@@ -90,13 +93,14 @@ pub(super) fn build_record(
         ));
     }
 
-    record::build(
+    let record = record::build(
         prepared.game_id.clone(),
         AddonKind::RenoDx,
         &addon_path,
         receipt,
         sources,
-    )
+    )?;
+    record::adopt_existing_paths(record, adopted_existing)
 }
 
 /// The upstream add-on entry to track for updates, or `None` for a file install

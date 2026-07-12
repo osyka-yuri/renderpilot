@@ -13,6 +13,7 @@ use super::dto::{
     ActionDescriptor, ActionDisabledReason, HostActions, HostAddonSupport, HostChannelFacts,
     HostDetection, HostFacts, HostUpdateStatus,
 };
+use super::host_policy::HostLifecycle;
 use super::scan::{ReshadeAddonSupport, ReshadeHost, ReshadeHostAction, SlotActivity};
 use super::types::{ReshadeChannel, ReshadeConfig};
 
@@ -139,6 +140,9 @@ pub(crate) fn host_action_core(
     }
     if conflict || action == ReshadeHostAction::Conflict {
         return HostActions {
+            install: Some(ActionDescriptor::disabled(
+                ActionDisabledReason::BlockedByConflict,
+            )),
             resolve_conflict: Some(ActionDescriptor::disabled(
                 ActionDisabledReason::BlockedByConflict,
             )),
@@ -158,6 +162,13 @@ pub(crate) fn host_action_core(
         },
         ReshadeHostAction::ReinstallWithAddonSupport | ReshadeHostAction::RepairHost => {
             HostActions {
+                // A first add-on install may not replace a user's existing
+                // host. Keep the maintenance action visible for already
+                // tracked installs, while exposing a concrete disabled reason
+                // to install cards before any write is attempted.
+                install: Some(ActionDescriptor::disabled(
+                    ActionDisabledReason::BlockedByConflict,
+                )),
                 repair: Some(ActionDescriptor::enabled()),
                 switch_channel,
                 ..HostActions::default()
@@ -214,6 +225,32 @@ pub(crate) fn build_host_report_core(
     )
 }
 
+/// Applies first-install-only lifecycle semantics after the shared action mapper
+/// has described the raw runtime state. Repairing a proved-empty runtime is part
+/// of the add-on's Install operation, not a separate prerequisite action.
+pub(crate) fn apply_initial_lifecycle_actions(
+    actions: &mut HostActions,
+    lifecycle: HostLifecycle,
+    record: Option<&InstalledAddon>,
+) {
+    if record.is_some() {
+        return;
+    }
+    match lifecycle {
+        HostLifecycle::RepairEmpty => {
+            actions.install = Some(ActionDescriptor::enabled());
+            actions.repair = None;
+        }
+        HostLifecycle::Conflict => {
+            actions.install = Some(ActionDescriptor::disabled(
+                ActionDisabledReason::BlockedByConflict,
+            ));
+            actions.repair = None;
+        }
+        HostLifecycle::InstallNew | HostLifecycle::ReuseUser | HostLifecycle::AdoptEmpty => {}
+    }
+}
+
 /// The ReShade channel recorded on the install's host binary artifact, if any. A
 /// record with duplicate host sources or an unreadable channel degrades to `None`.
 pub(crate) fn recorded_channel(record: Option<&InstalledAddon>) -> Option<ReshadeChannel> {
@@ -255,5 +292,33 @@ mod tests {
             ReshadeChannel::Stable,
         );
         assert_eq!(status, HostUpdateStatus::Current);
+    }
+
+    #[test]
+    fn initial_empty_repair_is_an_enabled_install_not_a_second_action() {
+        let mut actions = HostActions {
+            install: Some(ActionDescriptor::disabled(
+                ActionDisabledReason::BlockedByConflict,
+            )),
+            repair: Some(ActionDescriptor::enabled()),
+            ..HostActions::default()
+        };
+
+        apply_initial_lifecycle_actions(&mut actions, HostLifecycle::RepairEmpty, None);
+
+        assert!(actions.install.is_some_and(|action| action.enabled));
+        assert!(actions.repair.is_none());
+    }
+
+    #[test]
+    fn initial_conflict_keeps_install_disabled() {
+        let mut actions = HostActions::default();
+
+        apply_initial_lifecycle_actions(&mut actions, HostLifecycle::Conflict, None);
+
+        assert_eq!(
+            actions.install.and_then(|action| action.disabled_reason),
+            Some(ActionDisabledReason::BlockedByConflict)
+        );
     }
 }

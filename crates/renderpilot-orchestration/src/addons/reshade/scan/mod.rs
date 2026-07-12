@@ -19,7 +19,7 @@ mod hosts;
 mod identity;
 mod paths;
 
-pub(crate) use effects::has_user_effect_assets;
+pub(crate) use effects::{ReshadeContent, assess_reshade_content};
 pub use host_model::{
     ReshadeAddonSupport, ReshadeHost, ReshadeHostAction, ReshadeIdentity, ReshadeScan, SlotActivity,
 };
@@ -30,7 +30,7 @@ pub use paths::{
     RESHADE_INI_FILE_NAME, ReshadePaths, remove_reshade_logs_best_effort, reshade_ini_path,
     resolve_paths,
 };
-pub(crate) use paths::{load_ini, read_addon_config_state, same_path, split_ini_list};
+pub(crate) use paths::{load_ini, read_addon_config_state, same_path};
 
 /// Test fixtures construct host present-states by hand (`reshade::host_policy`,
 /// `renodx` host_report tests). Production code only names these types inside

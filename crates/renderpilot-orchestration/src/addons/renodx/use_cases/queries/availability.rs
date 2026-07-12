@@ -38,7 +38,7 @@ pub fn availability(
         blocked,
         analysis,
         resolution,
-        roots,
+        roots: _,
     } = availability_pipeline::preflight(
         context,
         game_id,
@@ -46,12 +46,7 @@ pub fn availability(
         manifest,
         analyze_and_resolve,
     )?;
-    // Prefer the exe-parent install root (same roots install uses) over the
-    // library install path, which can differ on nested shipping layouts.
-    let scan_dir = roots
-        .as_ref()
-        .map(|roots| roots.game_dir.as_path())
-        .unwrap_or_else(|| Path::new(game.install_path().as_str()));
+    let scan_dir = Path::new(game.install_path().as_str());
     let report = |record: Option<&InstalledAddon>| {
         host_report::reshade_report(&analysis, &resolution, record, &manifest.reshade)
     };
@@ -145,9 +140,6 @@ fn orphaned_install_candidate(
     host_report: &ReshadeReport,
     reshade_config: &ReshadeConfig,
 ) -> Option<OrphanedInstall> {
-    if host_report.detection != HostDetection::Present {
-        return None;
-    }
     // Adoption only trusts the exact resolved-slug filename — never the loose
     // `discovered_path` fallback (see `discover_renodx_addon`), which could
     // otherwise attribute an unrelated stray add-on file to this game. A slug
@@ -160,7 +152,7 @@ fn orphaned_install_candidate(
         .filter(|addon| addon.expected_path.is_file())?;
     let host_kind = installed_host_kind(host_report::plan_host_kind(resolution)?);
     let game_dir = install_target_dir(analysis).ok()?;
-    let host_file = host_report.facts.path.clone()?;
+    let host_file = host_report.facts.path.clone();
     let addon_file = addon.expected_path.clone();
     let registered_exe_path = if matches!(host_kind, InstalledAddonHostKind::SharedVulkanLayer) {
         Some(PathBuf::from(

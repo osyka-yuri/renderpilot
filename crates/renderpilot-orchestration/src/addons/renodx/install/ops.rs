@@ -75,7 +75,9 @@ pub(super) fn ini_op_for_game(game_dir: &Path, tweaks: &ReshadeIniTweaks) -> Opt
 
 pub(super) fn effective_ini_tweaks(game_dir: &Path, tweaks: &ReshadeIniTweaks) -> ReshadeIniTweaks {
     let mut effective = tweaks.clone();
-    if reshade::has_user_effect_assets(game_dir) {
+    // `DisabledAddons` is a RenoDX default for an empty setup, never a reason
+    // to alter a user runtime whose effects/add-ons cannot be ruled out.
+    if !reshade::assess_reshade_content(game_dir, &[]).is_empty() {
         effective.disabled_addons.clear();
     }
     effective

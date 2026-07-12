@@ -7,7 +7,7 @@
 //! every other created/backed-up file + sources), preserving the invariant that the
 //! add-on file is always a member of `created_files`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{AddonKind, GameId, InstalledAddon, PathRef, TrackedSource};
 
@@ -26,12 +26,49 @@ pub fn build(
     receipt: &InstallReceipt,
     tracked_sources: Vec<TrackedSource>,
 ) -> Result<InstalledAddon, ServiceError> {
+    build_ignoring_created(game_id, kind, addon_file, receipt, tracked_sources, &[])
+}
+
+/// Adds existing paths deliberately adopted by a successful install to the
+/// reversible record. The engine receipt contains only writes it performed;
+/// lifecycle policy uses this helper when a known-empty ReShade DLL or INI
+/// predated the operation but is now owned by the tool.
+pub fn adopt_existing_paths(
+    mut record: InstalledAddon,
+    paths: &[PathBuf],
+) -> Result<InstalledAddon, ServiceError> {
+    for path in paths {
+        let path_ref = to_path_ref(path)?;
+        if !record
+            .created_files()
+            .iter()
+            .any(|existing| existing.as_str() == path_ref.as_str())
+        {
+            record = record.with_created_file(path_ref);
+        }
+    }
+    Ok(record)
+}
+
+/// Builds an install record while leaving explicitly non-owned mutations out of
+/// the later uninstall receipt. This is for additive edits to a compatible
+/// user runtime: the engine still rolls the edit back if the *current*
+/// transaction fails, but a successful add-on uninstall must leave it in
+/// place.
+pub fn build_ignoring_created(
+    game_id: GameId,
+    kind: AddonKind,
+    addon_file: &Path,
+    receipt: &InstallReceipt,
+    tracked_sources: Vec<TrackedSource>,
+    ignored_created: &[&Path],
+) -> Result<InstalledAddon, ServiceError> {
     let mut record = InstalledAddon::new(game_id, kind, to_path_ref(addon_file)?)
         .with_tracked_sources(tracked_sources);
 
     // `new` already records the add-on file; add every *other* written file.
     for path in &receipt.created_files {
-        if path.as_path() != addon_file {
+        if path.as_path() != addon_file && !ignored_created.contains(&path.as_path()) {
             record = record.with_created_file(to_path_ref(path)?);
         }
     }

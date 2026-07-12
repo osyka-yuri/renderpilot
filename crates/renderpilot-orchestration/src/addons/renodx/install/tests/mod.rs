@@ -144,6 +144,12 @@ fn detected_host_without_effects_gets_default_disabled_addons() {
     fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
     let record = install(dir.path(), &prepared()).expect("install");
     assert!(!record.has_host_binary_provenance());
+    assert!(
+        record
+            .created_files()
+            .iter()
+            .any(|path| path.as_str().ends_with("dxgi.dll"))
+    );
     assert_eq!(
         String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap(),
         "[GENERAL]\r\nNoPreset=1\r\n\r\n[ADDON]\r\nDisabledAddons=Generic Depth,Effect Runtime Sync\r\n"
@@ -153,33 +159,23 @@ fn detected_host_without_effects_gets_default_disabled_addons() {
     assert!(record.backed_up_files().is_empty());
     assert!(!dir.path().join("ReShade.ini.bak").exists());
     uninstall(&record, None).expect("uninstall");
-    // The ini pre-dates this install (never in `created_files`), so uninstall
-    // never deletes or snapshot-restores it — only RenoDX's own key is
-    // stripped, leaving the user's `[GENERAL]` content exactly as it was.
-    let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
-    assert!(ini.contains("NoPreset=1"));
-    assert!(!ini.contains("DisabledAddons"));
-    assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+    // A compatible but empty runtime is adopted as a whole.
+    assert!(!dir.path().join("ReShade.ini").exists());
+    assert!(!dir.path().join("dxgi.dll").exists());
     assert!(!dir.path().join("renodx-cp2077.addon64").exists());
 }
 #[test]
-fn reused_host_with_no_pre_existing_ini_gets_a_fresh_one_stripped_not_deleted() {
+fn empty_host_without_ini_is_adopted_and_removed_with_renodx() {
     let dir = tempdir().expect("tempdir");
-    // A compatible, already-active ReShade host — reused, never rewritten —
-    // but no `ReShade.ini` exists yet (e.g. installed but never launched).
+    // A compatible, already-active ReShade host with no payload is adopted.
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
     let record = install(dir.path(), &prepared()).expect("install");
     assert!(!record.has_host_binary_provenance());
     let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
     assert!(ini.contains("DisabledAddons=Generic Depth,Effect Runtime Sync"));
     uninstall(&record, None).expect("uninstall");
-    // The ini RenoDX created from nothing survives uninstall — stripped, not
-    // deleted — because the host beside it was merely reused, never written
-    // by this install; RenoDX doesn't own the whole stack here, only the
-    // add-on and the keys it added to the config.
-    let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
-    assert!(!ini.contains("DisabledAddons"));
-    assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+    assert!(!dir.path().join("ReShade.ini").exists());
+    assert!(!dir.path().join("dxgi.dll").exists());
 }
 #[test]
 fn legacy_backed_up_ini_is_stripped_not_restored_from_its_stale_snapshot() {
@@ -305,34 +301,28 @@ fn repeated_install_is_idempotent() {
     );
 }
 #[test]
-fn active_host_without_addon_support_is_replaced_with_no_backup() {
+fn empty_host_without_addon_support_is_repaired_on_first_install() {
     let dir = tempdir().expect("tempdir");
-    // A ReShade host occupies the active slot, but it is the build WITHOUT
-    // add-on support — RenoDX's add-on cannot load there, so install must
-    // replace it with the bundled add-on-capable build. Its identity was
-    // already confirmed by `host_policy::assess` before this runs, so RenoDX
-    // treats it as an unambiguous official ReShade build: no backup is kept.
+    // An ordinary empty ReShade is replaced with the Add-on build RenoDX needs.
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
-    let record = install(dir.path(), &prepared()).expect("install");
-    // Our add-on-capable host now occupies the slot; the original is gone,
-    // not backed up.
-    assert_eq!(read(&dir.path().join("dxgi.dll")), reshade_host_bytes(true));
+    let prepared = prepared();
+    let record = install(dir.path(), &prepared).expect("must repair");
+
+    assert_eq!(
+        read(&dir.path().join("dxgi.dll")),
+        prepared.reshade_dll_bytes
+    );
     assert!(record.has_host_binary_provenance());
-    assert!(record.backed_up_files().is_empty());
-    assert!(!dir.path().join("dxgi.dll.bak").exists());
     uninstall(&record, None).expect("uninstall");
-    // Uninstall deletes the host we installed outright — there is no `.bak`
-    // to restore the original add-on-less build from.
     assert!(!dir.path().join("dxgi.dll").exists());
-    assert!(!dir.path().join("renodx-cp2077.addon64").exists());
 }
 #[test]
-fn host_repair_requires_reshade_bytes() {
+fn incompatible_host_is_rejected_before_reshade_bytes_are_considered() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
     let mut prepared = prepared();
     prepared.reshade_dll_bytes.clear();
-    let error = install(dir.path(), &prepared).expect_err("repair needs bytes");
+    let error = install(dir.path(), &prepared).expect_err("must refuse");
     assert_matches!(error, ServiceError::InvalidInput(_));
     assert_eq!(
         read(&dir.path().join("dxgi.dll")),

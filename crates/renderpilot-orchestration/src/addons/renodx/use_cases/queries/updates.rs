@@ -23,9 +23,7 @@ use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
 use crate::addons::update::{UpdateStatus, digest_verdict, validator_fast_path};
 use crate::net::head_validators;
 use crate::{Context, ServiceError};
-/// Checks whether the installed add-on for `game_id` has an upstream update. A
-/// record belonging to a different addon kind (e.g. Luma) reads as "nothing
-/// installed" — never checked as if it were a RenoDX install.
+/// Checks whether the installed add-on for `game_id` has an upstream update.
 pub async fn check_update(
     context: &Context,
     manifest: &RenoDxManifest,
@@ -37,9 +35,7 @@ pub async fn check_update(
     }
 }
 
-/// Bulk update check over every installed RenoDX add-on. Filters
-/// `list_installed_addons()` to RenoDX records — a Luma record must never be
-/// update-checked (or reported) as if it were RenoDX's.
+/// Bulk update check over every installed RenoDX add-on.
 pub async fn check_updates(
     context: &Context,
     manifest: &RenoDxManifest,

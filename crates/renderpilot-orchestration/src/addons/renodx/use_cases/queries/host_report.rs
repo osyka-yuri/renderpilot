@@ -10,7 +10,8 @@ use crate::addons::renodx::vulkan;
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::proxy::HostKind;
 use crate::addons::reshade::report::{
-    build_host_report_core, recorded_channel, switch_channel_action,
+    apply_initial_lifecycle_actions, build_host_report_core, recorded_channel,
+    switch_channel_action,
 };
 use crate::addons::reshade::scan::{ReshadeHost, ReshadeHostAction};
 use crate::addons::reshade::types::ReshadeConfig;
@@ -54,15 +55,24 @@ pub(super) fn reshade_report(
         .map(|file_name| reshade::renodx_addon_state(&paths, &file_name));
     let detected_channel = recorded_channel(record);
     let is_custom_build = assessment.is_known_custom_build();
-    let (detection, facts, actions) = build_host_report_core(
+    let proxy_initial = !matches!(host_kind, Some(HostKind::Vulkan));
+    let initial_conflict = proxy_initial && record.is_none() && assessment.initial_is_conflict();
+    let (detection, facts, mut actions) = build_host_report_core(
         &assessment.host,
         assessment.action,
-        assessment.conflict,
+        if initial_conflict {
+            true
+        } else {
+            assessment.conflict
+        },
         is_custom_build,
         record,
         reshade_config,
         detected_channel.map(|channel| switch_channel_action(channel, reshade_config)),
     );
+    if proxy_initial {
+        apply_initial_lifecycle_actions(&mut actions, assessment.lifecycle, record);
+    }
 
     ReshadeReport {
         detection,
@@ -160,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn conflict_yields_only_resolve_conflict() {
+    fn conflict_exposes_a_disabled_install_reason_and_resolve_conflict() {
         let actions = host_action_core(
             &ReshadeHost::Absent,
             ReshadeHostAction::Conflict,
@@ -171,7 +181,8 @@ mod tests {
         );
         assert!(actions.resolve_conflict.is_some());
         assert!(!actions.resolve_conflict.unwrap().enabled);
-        assert!(actions.install.is_none());
+        assert!(actions.install.is_some());
+        assert!(!actions.install.unwrap().enabled);
         assert!(actions.use_existing.is_none());
         assert!(actions.repair.is_none());
         assert!(actions.update.is_none());
@@ -267,7 +278,8 @@ mod tests {
         );
         assert!(actions.repair.is_some());
         assert!(actions.repair.unwrap().enabled);
-        assert!(actions.install.is_none());
+        assert!(actions.install.is_some());
+        assert!(!actions.install.unwrap().enabled);
         assert!(actions.use_existing.is_none());
     }
 

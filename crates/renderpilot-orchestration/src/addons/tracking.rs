@@ -2,10 +2,10 @@
 //! persisted [`renderpilot_domain::InstalledAddon`], plus the shared record-rebuild
 //! path both tools use after updates.
 //!
-//! These functions are the canonical implementation so that RenoDX and
-//! future tools produce identical "dated" display values and host-proxy discovery
-//! without copy-paste. Tool-specific tracking modules (for example renodx/tracking)
-//! delegate to (or re-export) these where possible.
+//! These functions are the canonical implementation so that RenoDX and future
+//! tools produce identical "dated" display values and host-proxy discovery without
+//! copy-paste. Tool-specific tracking modules delegate to (or re-export) these where
+//! possible.
 
 use std::path::{Path, PathBuf};
 
@@ -142,6 +142,22 @@ pub(crate) fn host_proxy_path(record: &InstalledAddon) -> Option<PathBuf> {
         .created_files()
         .iter()
         .chain(record.backed_up_files())
+        .map(|path| PathBuf::from(path.as_str()))
+        .find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(is_proxy_slot)
+        })
+}
+
+/// Returns a proxy DLL this record is entitled to remove. Unlike
+/// [`host_proxy_path`], this deliberately ignores legacy backup references: an
+/// adopted/managed ReShade runtime is represented by a created-file entry.
+#[must_use]
+pub(crate) fn owned_proxy_host_path(record: &InstalledAddon) -> Option<PathBuf> {
+    record
+        .created_files()
+        .iter()
         .map(|path| PathBuf::from(path.as_str()))
         .find(|path| {
             path.file_name()

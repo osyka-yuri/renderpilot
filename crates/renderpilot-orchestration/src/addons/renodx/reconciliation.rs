@@ -10,7 +10,8 @@ use crate::addons::operation_lock;
 use crate::addons::records;
 use crate::{Context, ServiceError};
 
-use super::{errors, install, reshade as renodx_reshade, source, vulkan};
+use super::{errors, install, source, vulkan};
+use crate::addons::reshade::host_policy::{self, HostLifecycle};
 use crate::addons::reshade::scan as reshade;
 use crate::addons::reshade::source::reshade_source;
 use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
@@ -21,7 +22,10 @@ pub(crate) struct OrphanedInstall {
     pub(crate) game_id: GameId,
     pub(crate) game_dir: PathBuf,
     pub(crate) addon_file: PathBuf,
-    pub(crate) host_file: PathBuf,
+    /// Detected runtime file, when one is actually present. A DB-loss recovery
+    /// may legitimately find only the add-on payload; absent runtime files are
+    /// never invented or claimed.
+    pub(crate) host_file: Option<PathBuf>,
     pub(crate) host_kind: InstalledAddonHostKind,
     pub(crate) registered_exe_path: Option<PathBuf>,
     pub(crate) reshade_config: ReshadeConfig,
@@ -40,7 +44,7 @@ pub(crate) struct OrphanedInstall {
 /// concurrent install/update/uninstall, this call returns `Ok(None)` instead
 /// of waiting, and the next `availability()` call retries.
 ///
-/// A record already present for a **different** addon kind (e.g. Luma) is never
+/// A record already present for a **different** addon kind is never
 /// adopted over: this returns `Ok(None)` exactly as if there were nothing to
 /// adopt, so a foreign-tool install is never silently overwritten. The
 /// availability caller already gates this whole path behind its own
@@ -65,7 +69,8 @@ pub(crate) fn reconcile_orphaned_install(
     if matches!(
         candidate.host_kind,
         InstalledAddonHostKind::SharedVulkanLayer
-    ) {
+    ) && candidate.host_file.is_some()
+    {
         record_shared_vulkan_layer_best_effort(context);
     }
 
@@ -82,18 +87,22 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
     )
     .with_host_kind(candidate.host_kind);
 
-    record = attach_advisory_provenance(record, candidate);
+    let adopts_proxy_runtime = matches!(candidate.host_kind, InstalledAddonHostKind::Proxy)
+        && candidate
+            .host_file
+            .as_deref()
+            .is_some_and(|host_file| may_adopt_proxy_runtime(candidate, host_file));
+    record = attach_advisory_provenance(record, candidate, adopts_proxy_runtime);
 
     match candidate.host_kind {
         InstalledAddonHostKind::Proxy => {
-            if proxy_files_are_renderpilot_owned(candidate) {
-                record = with_created_path(record, &candidate.host_file)?;
-                record = with_backup_if_present(record, &candidate.host_file)?;
-                if let Some(ini_path) =
-                    renodx_reshade::renderpilot_minimal_ini_path(&candidate.game_dir)
-                {
+            if let Some(host_file) = candidate.host_file.as_deref()
+                && adopts_proxy_runtime
+            {
+                record = with_created_path(record, host_file)?;
+                let paths = reshade::resolve_paths(&candidate.game_dir, Some(host_file));
+                if let Some(ini_path) = paths.ini_path.filter(|path| path.is_file()) {
                     record = with_created_path(record, &ini_path)?;
-                    record = with_backup_if_present(record, &ini_path)?;
                 }
             }
         }
@@ -129,23 +138,37 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
 fn attach_advisory_provenance(
     mut record: InstalledAddon,
     candidate: &OrphanedInstall,
+    owns_proxy_runtime: bool,
 ) -> InstalledAddon {
-    match renderpilot_detection::inspect_pe(&candidate.host_file) {
-        Some(pe) if reshade::is_known_custom_build(&candidate.game_dir, Some(&pe.identity)) => {}
-        Some(pe) => {
-            let channel = reshade::guess_advisory_channel(&pe.identity);
-            record = record.with_reshade_channel(channel.as_str());
+    let may_describe_host =
+        candidate.host_kind == InstalledAddonHostKind::SharedVulkanLayer || owns_proxy_runtime;
+    if may_describe_host {
+        match candidate
+            .host_file
+            .as_deref()
+            .and_then(renderpilot_detection::inspect_pe)
+        {
+            Some(pe) if reshade::is_known_custom_build(&candidate.game_dir, Some(&pe.identity)) => {
+            }
+            Some(pe) => {
+                let channel = reshade::guess_advisory_channel(&pe.identity);
+                record = record.with_reshade_channel(channel.as_str());
 
-            if candidate.host_kind == InstalledAddonHostKind::Proxy
-                && let Some(source) = build_advisory_host_source(candidate, channel)
-            {
-                record = record.with_tracked_source(source);
+                if candidate.host_kind == InstalledAddonHostKind::Proxy
+                    && let Some(source) = build_advisory_host_source(candidate, channel)
+                {
+                    record = record.with_tracked_source(source);
+                }
+            }
+            None => {
+                if let Some(host_file) = candidate.host_file.as_deref() {
+                    log::debug!(
+                        "Failed to inspect PE for adopted file: {}",
+                        host_file.display()
+                    );
+                }
             }
         }
-        None => log::debug!(
-            "Failed to inspect PE for adopted file: {}",
-            candidate.host_file.display()
-        ),
     }
 
     if let Some(source) = build_advisory_addon_source(candidate) {
@@ -167,15 +190,16 @@ fn build_advisory_host_source(
     candidate: &OrphanedInstall,
     channel: ReshadeChannel,
 ) -> Option<TrackedSource> {
+    let host_file = candidate.host_file.as_deref()?;
     let arch = candidate.game_arch.unwrap_or(Architecture::X64);
     let url = reshade_source(&candidate.reshade_config, channel, arch)?.url;
 
-    let digest = match renderpilot_detection::sha256_file(&candidate.host_file) {
+    let digest = match renderpilot_detection::sha256_file(host_file) {
         Ok(digest) => digest.to_string(),
         Err(error) => {
             log::debug!(
                 "Failed to hash adopted file {}: {error}",
-                candidate.host_file.display()
+                host_file.display()
             );
             return None;
         }
@@ -255,13 +279,34 @@ fn build_advisory_dlss_fix_source(candidate: &OrphanedInstall) -> Option<Tracked
     )
 }
 
-fn proxy_files_are_renderpilot_owned(candidate: &OrphanedInstall) -> bool {
-    candidate
-        .host_file
+fn may_adopt_proxy_runtime(candidate: &OrphanedInstall, host_file: &Path) -> bool {
+    let Some(proxy_dll_name) = host_file.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let mut allowed = vec![
+        candidate
+            .addon_file
+            .file_name()
+            .and_then(|name| name.to_str()),
+    ];
+    let dlss_fix = install::dlss_fix_file_name(candidate.game_arch.unwrap_or(Architecture::X64));
+    if candidate
+        .addon_file
         .parent()
-        .is_some_and(|parent| reshade::same_path(parent, &candidate.game_dir))
-        && !reshade::has_user_effect_assets(&candidate.game_dir)
-        && renodx_reshade::renderpilot_minimal_ini_path(&candidate.game_dir).is_some()
+        .is_some_and(|dir| dir.join(&dlss_fix).is_file())
+    {
+        allowed.push(Some(dlss_fix.as_str()));
+    }
+    let allowed: Vec<&str> = allowed.into_iter().flatten().collect();
+    let assessment = host_policy::assess_for_tool_with_allowed_addons(
+        &candidate.game_dir,
+        proxy_dll_name,
+        "RenoDX",
+        None,
+        &allowed,
+    );
+    assessment.lifecycle == HostLifecycle::AdoptEmpty
+        && reshade::same_path(&assessment.target_path, host_file)
 }
 
 fn with_created_path(
@@ -271,22 +316,6 @@ fn with_created_path(
     let path = path_ref("created file", path)?;
     if !record.created_files().contains(&path) {
         record = record.with_created_file(path);
-    }
-    Ok(record)
-}
-
-fn with_backup_if_present(
-    mut record: InstalledAddon,
-    path: &Path,
-) -> Result<InstalledAddon, ServiceError> {
-    let bak = crate::fs::backup_path(path).map_err(|error| {
-        errors::failed(format!(
-            "invalid adopted backup path for `{}`: {error}",
-            path.display()
-        ))
-    })?;
-    if bak.is_file() {
-        record = record.with_backed_up_file(path_ref("backed-up file", path)?);
     }
     Ok(record)
 }
@@ -335,6 +364,20 @@ mod tests {
         std::fs::write(path, bytes).expect("write file");
     }
 
+    fn full_reshade_host() -> Vec<u8> {
+        test_support::build_pe_with_exports(
+            MACHINE_AMD64,
+            PE32_PLUS_MAGIC,
+            &[
+                "ReShadeVersion",
+                "ReShadeRegisterAddon",
+                "ReShadeUnregisterAddon",
+                "ReShadeRegisterEvent",
+                "ReShadeUnregisterEvent",
+            ],
+        )
+    }
+
     /// A distinct game ID per test — the per-game operation lock is a global
     /// `static`, so tests sharing one ID would contend for the same lock when
     /// `cargo test` runs them in parallel.
@@ -347,7 +390,7 @@ mod tests {
             game_id: game_id(appid),
             game_dir: game_dir.to_path_buf(),
             addon_file: game_dir.join("renodx-cp2077.addon64"),
-            host_file: game_dir.join("dxgi.dll"),
+            host_file: Some(game_dir.join("dxgi.dll")),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -379,7 +422,7 @@ mod tests {
         let (_db_dir, context) = context();
         let game_dir = tempdir().expect("game dir");
         write_file(&game_dir.path().join("renodx-cp2077.addon64"), b"addon");
-        write_file(&game_dir.path().join("dxgi.dll"), b"reshade");
+        write_file(&game_dir.path().join("dxgi.dll"), &full_reshade_host());
         write_file(&game_dir.path().join("dxgi.dll.bak"), b"original");
         write_file(
             &game_dir.path().join("ReShade.ini"),
@@ -400,7 +443,7 @@ mod tests {
             created_names(&record),
             vec!["renodx-cp2077.addon64", "dxgi.dll", "ReShade.ini"]
         );
-        assert_eq!(backed_names(&record), vec!["dxgi.dll", "ReShade.ini"]);
+        assert!(backed_names(&record).is_empty());
     }
 
     #[tokio::test]
@@ -454,6 +497,51 @@ mod tests {
     }
 
     #[test]
+    fn proxy_adoption_keeps_foreign_addon_hosts_read_only() {
+        let (_db_dir, context) = context();
+        let game_dir = tempdir().expect("game dir");
+        write_file(&game_dir.path().join("renodx-cp2077.addon64"), b"addon");
+        write_file(&game_dir.path().join("dxgi.dll"), &full_reshade_host());
+        write_file(&game_dir.path().join("foreign.addon64"), b"foreign");
+
+        let record =
+            reconcile_orphaned_install(&context, &proxy_candidate(game_dir.path(), "1145361"))
+                .expect("adopt")
+                .expect("adopted record");
+
+        assert_eq!(created_names(&record), vec!["renodx-cp2077.addon64"]);
+        assert!(host_source(&record).is_none());
+    }
+
+    #[test]
+    fn proxy_adoption_without_a_detected_host_keeps_only_the_addon_payload() {
+        let (_db_dir, context) = context();
+        let game_dir = tempdir().expect("game dir");
+        let addon = game_dir.path().join("renodx-cp2077.addon64");
+        write_file(&addon, b"addon");
+
+        let record = reconcile_orphaned_install(
+            &context,
+            &OrphanedInstall {
+                game_id: game_id("1145362"),
+                game_dir: game_dir.path().to_path_buf(),
+                addon_file: addon,
+                host_file: None,
+                host_kind: InstalledAddonHostKind::Proxy,
+                registered_exe_path: None,
+                reshade_config: test_support::manifest(Vec::new()).reshade,
+                game_arch: None,
+                addon_url: None,
+            },
+        )
+        .expect("adopt")
+        .expect("adopted record");
+
+        assert_eq!(created_names(&record), vec!["renodx-cp2077.addon64"]);
+        assert!(record.tracked_sources().is_empty());
+    }
+
+    #[test]
     fn vulkan_adoption_records_registered_exe_without_claiming_shared_layer() {
         let (_db_dir, context) = context();
         let game_dir = tempdir().expect("game dir");
@@ -469,7 +557,7 @@ mod tests {
                 game_id: game_id("1817070"),
                 game_dir: game_dir.path().to_path_buf(),
                 addon_file: game_dir.path().join("renodx-cp2077.addon64"),
-                host_file: layer_dir.path().join("ReShade64.dll"),
+                host_file: Some(layer_dir.path().join("ReShade64.dll")),
                 host_kind: InstalledAddonHostKind::SharedVulkanLayer,
                 registered_exe_path: Some(exe.clone()),
                 reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -523,7 +611,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file: dir.path().join("renodx-test.addon64"),
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -531,8 +619,11 @@ mod tests {
             addon_url: None,
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         assert_eq!(record.reshade_channel(), Some("stable"));
         let host = host_source(&record).expect("advisory host source recorded");
@@ -555,7 +646,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file: dir.path().join("renodx-test.addon64"),
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -563,8 +654,11 @@ mod tests {
             addon_url: None,
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         assert_eq!(record.reshade_channel(), None);
         assert!(host_source(&record).is_none());
@@ -579,7 +673,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file: dir.path().join("renodx-test.addon64"),
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -587,8 +681,11 @@ mod tests {
             addon_url: None,
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         assert_eq!(record.reshade_channel(), None);
         assert!(host_source(&record).is_none());
@@ -606,7 +703,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file: dir.path().join("renodx-test.addon64"),
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::SharedVulkanLayer,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -617,6 +714,7 @@ mod tests {
         let record = attach_advisory_provenance(
             base_record(InstalledAddonHostKind::SharedVulkanLayer),
             &candidate,
+            false,
         );
 
         assert_eq!(record.reshade_channel(), Some("stable"));
@@ -634,7 +732,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file,
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -642,8 +740,11 @@ mod tests {
             addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         let addon = record
             .tracked_sources()
@@ -673,7 +774,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file,
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -681,8 +782,11 @@ mod tests {
             addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         let dlss_fix = dlss_fix_source(&record).expect("advisory dlss-fix source recorded");
         assert!(dlss_fix.is_advisory());
@@ -717,7 +821,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file,
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::SharedVulkanLayer,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -728,6 +832,7 @@ mod tests {
         let record = attach_advisory_provenance(
             base_record(InstalledAddonHostKind::SharedVulkanLayer),
             &candidate,
+            false,
         );
 
         // Proves DLSS-Fix attribution is NOT gated by host kind, unlike HostBinary (Proxy-only).
@@ -747,7 +852,7 @@ mod tests {
             game_id: game_id("1091500"),
             game_dir: dir.path().to_path_buf(),
             addon_file,
-            host_file,
+            host_file: Some(host_file),
             host_kind: InstalledAddonHostKind::Proxy,
             registered_exe_path: None,
             reshade_config: test_support::manifest(Vec::new()).reshade,
@@ -755,8 +860,11 @@ mod tests {
             addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
         };
 
-        let record =
-            attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate);
+        let record = attach_advisory_provenance(
+            base_record(InstalledAddonHostKind::Proxy),
+            &candidate,
+            true,
+        );
 
         assert!(dlss_fix_source(&record).is_none());
     }
