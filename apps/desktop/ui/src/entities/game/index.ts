@@ -18,7 +18,6 @@ export {
   isAddonCapability,
   normalizeAddonCapabilities,
 } from './model/addon-capabilities';
-export { compactFullSelectionForQuery } from './model/query-filter-selection';
 
 export {
   ALL_KNOWN_LAUNCHERS,

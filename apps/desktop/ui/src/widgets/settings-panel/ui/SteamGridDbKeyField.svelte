@@ -101,7 +101,7 @@
     </div>
     <Button variant="default" size="sm" disabled={!isEditable} onclick={handleSave}>
       {#if busy}
-        <Spinner class="mr-2" />
+        <Spinner />
       {/if}
       {t('settings.catalog.steamKey.save')}
     </Button>

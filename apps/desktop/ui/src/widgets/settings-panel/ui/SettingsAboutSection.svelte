@@ -15,7 +15,6 @@
     ItemDescription,
     ItemGroup,
     ItemTitle,
-    Spinner,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
   import type { SettingsUpdateAction } from '@features/app-updater';
@@ -37,12 +36,11 @@
 
   const buttonLabel = $derived.by(() => {
     switch (updateAction) {
-      case 'checking':
-        return t('settings.about.checkingForUpdates');
       case 'open-update':
         return t('settings.about.updateAvailable');
       case 'busy':
         return t('settings.about.updateInProgress');
+      case 'checking':
       case 'check':
       default:
         return t('settings.about.checkForUpdates');
@@ -70,12 +68,10 @@
         </ItemContent>
         <ItemActions>
           <Button variant="secondary" size="sm" disabled={isDisabled} onclick={onCheckForUpdates}>
-            {#if showSpinner}
-              <Spinner class="mr-2" />
-            {:else if updateAction === 'open-update'}
-              <CircleArrowUpIcon class="mr-2" aria-hidden="true" />
+            {#if updateAction === 'open-update'}
+              <CircleArrowUpIcon aria-hidden="true" />
             {:else}
-              <RefreshCwIcon class="mr-2" aria-hidden="true" />
+              <RefreshCwIcon class={showSpinner ? 'animate-spin' : undefined} aria-hidden="true" />
             {/if}
             {buttonLabel}
           </Button>

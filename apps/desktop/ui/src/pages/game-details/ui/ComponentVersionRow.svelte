@@ -105,7 +105,7 @@
     {#if candidates.length === 0}
       <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
-      <DownloadProgressBar ids={progressIds} active={busy} class="mr-2" />
+      <DownloadProgressBar ids={progressIds} active={busy} />
       <Select type="single" bind:value={selected} disabled={busy} onValueChange={handleSwapChange}>
         <SelectTrigger size="sm" class="w-60">
           <span class="truncate">{currentLabel}</span>

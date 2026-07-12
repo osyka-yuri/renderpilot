@@ -2,7 +2,6 @@ import type { GameSummary, GameCardMenuHandle } from '@entities/game';
 import {
   ALL_KNOWN_LAUNCHERS,
   ALL_ADDON_CAPABILITIES,
-  compactFullSelectionForQuery,
   expandLibraryFilterAliases,
   normalizeAddonCapabilities,
   toGameCardViewModel,
@@ -62,16 +61,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
 
   $effect(() => {
     const filtersReady = filtersModel.filtersState.ready;
-    const selectedLibraries = compactFullSelectionForQuery(
-      filtersModel.filtersState.appliedLibraries,
-      filtersModel.filtersState.availableLibraries,
-    );
-    const selectedAddons = normalizeAddonCapabilities(
-      compactFullSelectionForQuery(
-        filtersModel.filtersState.appliedAddons,
-        filtersModel.filtersState.availableAddons,
-      ),
-    );
+    const selectedLibraries = filtersModel.filtersState.appliedLibraries;
+    const selectedAddons = normalizeAddonCapabilities(filtersModel.filtersState.appliedAddons);
     const querySnapshot = scheduler.createGamesQuerySnapshot(
       input.getCatalogVersion(),
       filtersReady,

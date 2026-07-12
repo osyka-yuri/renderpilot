@@ -212,8 +212,6 @@
   <p class="text-sm text-muted-foreground">{dropHint}</p>
 
   <div class="flex flex-wrap items-center gap-2">
-    <DownloadProgressBar ids={progressIds} active={store.busy} />
-
     {#if showHostChannelControl}
       <RenoDxChannelControl
         class="max-w-72"
@@ -232,6 +230,8 @@
     <Button variant="outline" size="sm" disabled={!canOpenExternal} onclick={openExternalLink}>
       {externalLabel}
     </Button>
+
+    <DownloadProgressBar ids={progressIds} active={store.busy} />
   </div>
 </div>
 

@@ -24,11 +24,6 @@
 
 {#if progress && progress.total > 0}
   <div class={cn('flex items-center gap-2', className)}>
-    {#if phaseLabel}
-      <span class="text-xs text-muted-foreground whitespace-nowrap truncate max-w-[120px]"
-        >{phaseLabel}</span
-      >
-    {/if}
     <div class="w-16">
       <Progress
         value={progress.downloaded}
@@ -36,6 +31,11 @@
         aria-label={t('common.downloadProgress')}
       />
     </div>
+    {#if phaseLabel}
+      <span class="text-xs text-muted-foreground whitespace-nowrap truncate max-w-[120px]"
+        >{phaseLabel}</span
+      >
+    {/if}
   </div>
 {:else if progress?.total === 0 && phaseLabel}
   <!-- Indeterminate phase (e.g. disk I/O / record persistence after a download

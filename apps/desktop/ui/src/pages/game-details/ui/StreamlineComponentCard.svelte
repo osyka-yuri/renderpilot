@@ -121,7 +121,7 @@
             >{t('gameDetails.streamline.noOtherVersions')}</span
           >
         {:else}
-          <DownloadProgressBar ids={pendingArtifactIds} active={busy} class="mr-2" />
+          <DownloadProgressBar ids={pendingArtifactIds} active={busy} />
           <Select
             type="single"
             bind:value={selected}

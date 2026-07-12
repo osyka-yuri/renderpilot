@@ -166,8 +166,12 @@
     <AddonStateMessage tone="warning" icon="warning" message={installDisabledMessage} />
   {/if}
 
-  <div class="flex items-center gap-2">
-    {@render downloadProgress?.()}
+  <div class="flex flex-wrap items-center justify-end gap-2 px-1">
+    {#if downloadProgress}
+      <div class="mr-auto flex-1">
+        {@render downloadProgress()}
+      </div>
+    {/if}
 
     {#if installBlocked}
       <Button type="button" size="sm" disabled>

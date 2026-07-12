@@ -119,9 +119,9 @@
     {#if updateAvailable}
       <Button variant="outline" size="sm" disabled={updateOpening} onclick={onOpenUpdate}>
         {#if updateOpening}
-          <Spinner class="mr-2" />
+          <Spinner />
         {:else}
-          <CircleArrowUpIcon class="mr-2" aria-hidden="true" />
+          <CircleArrowUpIcon aria-hidden="true" />
         {/if}
         {t('shell.updateAvailable')}
       </Button>

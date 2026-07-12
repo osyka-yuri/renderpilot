@@ -190,7 +190,11 @@
   {/if}
 
   <div class="flex flex-wrap items-center justify-end gap-2 px-1">
-    {@render downloadProgress?.()}
+    {#if downloadProgress}
+      <div class="mr-auto flex-1">
+        {@render downloadProgress()}
+      </div>
+    {/if}
 
     <Button
       type="button"
