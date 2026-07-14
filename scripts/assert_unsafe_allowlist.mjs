@@ -25,7 +25,7 @@ const SCAN_ROOTS = [path.join(ROOT, "crates"), path.join(ROOT, "apps")];
 const ALLOWLIST = new Set([
   "crates/renderpilot-nvapi/src/api.rs",
   "crates/renderpilot-nvapi/src/ffi.rs",
-  "apps/desktop/src-tauri/src/elevation.rs",
+  "apps/desktop/src-tauri/src/elevation/mod.rs",
   "apps/desktop/src-tauri/src/lib.rs", // std::env::set_var at single-threaded startup
 ]);
 

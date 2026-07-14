@@ -34,7 +34,10 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGMDQyNUREMDBBMkJENQpSV1RWS3dyUVhVTHdCVi9mamMvYnR4bG8vNytnVDRTRkVTWThJRGc0bTl1anowa1Zkcm9UcTZuQQo=",
       "endpoints": [
         "https://github.com/osyka-yuri/renderpilot/releases/latest/download/latest.json"
-      ]
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "app": {

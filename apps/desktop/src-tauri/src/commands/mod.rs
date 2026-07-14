@@ -577,8 +577,10 @@ pub fn get_app_initialization_state(
 pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
     #[cfg(windows)]
     {
-        use crate::elevation::{ElevationStartupDecision, attempt_self_relaunch_elevated};
-        match attempt_self_relaunch_elevated() {
+        use crate::elevation::{
+            ElevationRelaunchTrigger, ElevationStartupDecision, attempt_self_relaunch_elevated,
+        };
+        match attempt_self_relaunch_elevated(ElevationRelaunchTrigger::UserRequest) {
             ElevationStartupDecision::Relaunched => {
                 app.exit(0);
                 Ok(serde_json::json!({ "relaunched": true }))
@@ -591,6 +593,15 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
                     "OS denied the elevation request (ShellExecute code {code})"
                 ))),
             )),
+            // UserRequest never suppresses on a live handoff; keep exhaustiveness.
+            ElevationStartupDecision::SkippedRecentHandoff => {
+                debug_assert!(false, "UserRequest must not skip elevation handoff");
+                Err(CommandError::from(ApiError::Service(
+                    ServiceError::CommandFailed(
+                        "elevation relaunch was unexpectedly skipped".to_owned(),
+                    ),
+                )))
+            }
         }
     }
     #[cfg(not(windows))]

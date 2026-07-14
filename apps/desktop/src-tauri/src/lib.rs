@@ -27,11 +27,12 @@ pub struct AppInitializationState {
     pub is_elevated: bool,
     /// `false` on non-Windows platforms; UI hides the elevation banner.
     pub elevation_supported: bool,
-    /// `true` if we attempted elevation and the user (or group policy)
-    /// said no — used to surface a "Relaunch as administrator" banner.
+    /// Degraded unelevated mode after cancel, policy block, or live handoff skip.
+    /// IPC name kept for compatibility; not only a literal UAC cancel.
+    /// Banner visibility still keys off `!is_elevated && elevation_supported`.
     pub elevation_user_declined: bool,
-    /// `true` if we already invoked `ShellExecuteExW` once in this session,
-    /// regardless of outcome. Stops infinite UAC prompt loops.
+    /// Startup auto-elevation was attempted or skipped due to a live handoff
+    /// marker (file-based anti-loop). Does not mean UserRequest was shown.
     pub elevation_attempted: bool,
     /// Internal-only: `true` if an elevated relaunch is starting and the
     /// current (un-elevated) process should return from `run` immediately.
@@ -53,8 +54,9 @@ impl AppInitializationState {
         }
     }
 
-    /// User cancelled or group policy blocked the UAC prompt.
-    #[cfg(all(windows, not(debug_assertions)))]
+    /// Degraded unelevated mode after cancel, policy block, or live handoff skip.
+    /// Field `elevation_user_declined` remains the IPC name for the banner flag.
+    #[cfg(windows)]
     fn declined() -> Self {
         Self {
             is_elevated: false,
@@ -66,7 +68,7 @@ impl AppInitializationState {
     }
 
     /// Elevated relaunch is starting; current (un-elevated) process should exit.
-    #[cfg(all(windows, not(debug_assertions)))]
+    #[cfg(windows)]
     fn relaunching() -> Self {
         Self {
             is_elevated: false,
@@ -170,11 +172,10 @@ fn apply_portable_mode() {
     reason = "std::env::set_var is unsafe in edition 2024; only called single-threaded at process start"
 )]
 fn apply_webview2_elevation_workaround() {
-    use std::path::PathBuf;
     if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none()
-        && let Some(local) = std::env::var_os("LOCALAPPDATA")
+        && std::env::var_os("LOCALAPPDATA").is_some()
     {
-        let path = PathBuf::from(local).join("RenderPilot").join("WebView2");
+        let path = elevation::renderpilot_local_data_dir().join("WebView2");
         // SAFETY: single-threaded during startup, before any plugin init.
         unsafe {
             std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", path);
@@ -184,59 +185,51 @@ fn apply_webview2_elevation_workaround() {
 
 #[cfg(windows)]
 fn compute_initialization_state() -> AppInitializationState {
-    use elevation::{ElevationState, current_elevation};
+    use elevation::{ElevationState, clear_elevation_handoff_marker, current_elevation};
 
-    // Already running elevated — nothing more to do.
+    // Already running elevated — clear any handoff marker from the unelevated
+    // parent so a later NSIS `/ARGS` restart is not mistaken for a failed
+    // elevation attempt, then proceed normally.
     if matches!(current_elevation(), ElevationState::Elevated) {
+        clear_elevation_handoff_marker();
         return AppInitializationState::elevated();
     }
 
     resolve_unelevated_startup()
 }
 
-/// Debug builds skip the startup auto-relaunch.
+/// Unelevated process startup policy.
 ///
-/// `cargo tauri dev` spawns both the Vite dev server and the app binary as
-/// child processes. When the initial (un-elevated) binary exits to hand off
-/// to the elevated copy, the Tauri CLI detects the child death and tears
-/// down the Vite server — the elevated copy then starts to a blank window
-/// because `http://localhost:1420` no longer exists.
+/// **Debug:** skips auto-relaunch. `cargo tauri dev` owns the Vite server as a
+/// sibling of this process; exiting to hand off elevation would tear Vite down
+/// and leave the elevated copy on a blank `localhost` window. The in-app
+/// elevation banner and "Relaunch as administrator" still work.
 ///
-/// Skipping auto-relaunch lets the dev session keep running normally.
-/// The in-app `ElevationBanner` still appears and its "Relaunch as
-/// administrator" button still works; developers who need NVAPI write access
-/// can also run the compiled binary directly as administrator.
+/// **Release:** attempts UAC auto-relaunch (handoff anti-loop is inside
+/// [`elevation::attempt_self_relaunch_elevated`]).
 #[cfg(windows)]
-#[cfg(debug_assertions)]
 fn resolve_unelevated_startup() -> AppInitializationState {
-    AppInitializationState {
-        is_elevated: false,
-        elevation_supported: true,
-        elevation_user_declined: false,
-        elevation_attempted: false,
-        relaunch_in_progress: false,
+    // Keep both arms in one function so release-only triggers stay type-checked
+    // and variant-used in debug builds (avoids cfg-split dead_code noise).
+    if cfg!(debug_assertions) {
+        return AppInitializationState {
+            is_elevated: false,
+            elevation_supported: true,
+            elevation_user_declined: false,
+            elevation_attempted: false,
+            relaunch_in_progress: false,
+        };
     }
-}
 
-/// Release builds attempt a UAC auto-relaunch on first startup.
-#[cfg(windows)]
-#[cfg(not(debug_assertions))]
-fn resolve_unelevated_startup() -> AppInitializationState {
     use elevation::{
-        ElevationStartupDecision, attempt_self_relaunch_elevated, has_elevation_attempted_marker,
+        ElevationRelaunchTrigger, ElevationStartupDecision, attempt_self_relaunch_elevated,
     };
 
-    // This session already tried — don't loop on the relaunch.
-    if has_elevation_attempted_marker() {
-        return AppInitializationState::declined();
-    }
-
-    // First attempt this session.
-    match attempt_self_relaunch_elevated() {
+    match attempt_self_relaunch_elevated(ElevationRelaunchTrigger::StartupAuto) {
         ElevationStartupDecision::Relaunched => AppInitializationState::relaunching(),
-        ElevationStartupDecision::UserCancelled | ElevationStartupDecision::PolicyBlocked(_) => {
-            AppInitializationState::declined()
-        }
+        ElevationStartupDecision::UserCancelled
+        | ElevationStartupDecision::PolicyBlocked(_)
+        | ElevationStartupDecision::SkippedRecentHandoff => AppInitializationState::declined(),
     }
 }
 

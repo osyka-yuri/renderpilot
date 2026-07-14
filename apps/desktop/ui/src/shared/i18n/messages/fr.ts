@@ -464,7 +464,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} sur {total}',
   'settings.about.updateDialog.verifying': 'Vérification de la mise à jour…',
   'settings.about.updateDialog.verifyingDescription': 'Vérification du paquet téléchargé.',
-  'settings.about.updateDialog.installing': 'Installation de la mise à jour…',
+  'settings.about.updateDialog.installing':
+    'Installation de la mise à jour… L’application va se fermer ; l’installateur peut apparaître brièvement.',
   'settings.about.updateDialog.restarting': "Redémarrage de l'application…",
 
   'settings.about.updateDialog.prepareErrorTitle': 'Échec du téléchargement ou de la vérification',

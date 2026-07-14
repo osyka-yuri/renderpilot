@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyDownloadEvent, EMPTY_PROGRESS, toProgressView } from './progress';
+import {
+  applyDownloadEvent,
+  EMPTY_PROGRESS,
+  toCompletedProgressView,
+  toProgressView,
+} from './progress';
 
 describe('applyDownloadEvent', () => {
   it('starts from the empty state', () => {
@@ -94,7 +99,7 @@ describe('applyDownloadEvent', () => {
     expect(toProgressView(state).percent).toBe(100);
   });
 
-  it('marks Finished with known total as 100%', () => {
+  it('marks Finished with known total as 100% without inventing received bytes', () => {
     let state = applyDownloadEvent(EMPTY_PROGRESS, {
       type: 'started',
       contentLength: 100,
@@ -137,5 +142,33 @@ describe('applyDownloadEvent', () => {
       receivedBytes: 0,
       networkFinished: false,
     });
+  });
+});
+
+describe('toCompletedProgressView', () => {
+  it('always reports 100% for the install-boundary paint frame', () => {
+    let state = applyDownloadEvent(EMPTY_PROGRESS, {
+      type: 'started',
+      contentLength: null,
+    });
+    state = applyDownloadEvent(state, { type: 'progress', chunkLength: 40 });
+
+    const view = toCompletedProgressView(state);
+    expect(view.percent).toBe(100);
+    expect(view.receivedBytes).toBe(40);
+    expect(view.networkFinished).toBe(true);
+  });
+
+  it('snaps received bytes up to total when Content-Length was overestimated', () => {
+    let state = applyDownloadEvent(EMPTY_PROGRESS, {
+      type: 'started',
+      contentLength: 200,
+    });
+    state = applyDownloadEvent(state, { type: 'progress', chunkLength: 90 });
+
+    const view = toCompletedProgressView(state);
+    expect(view.percent).toBe(100);
+    expect(view.receivedBytes).toBe(200);
+    expect(view.totalBytes).toBe(200);
   });
 });

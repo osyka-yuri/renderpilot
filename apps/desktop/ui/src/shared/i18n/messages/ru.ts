@@ -207,7 +207,8 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} из {total}',
   'settings.about.updateDialog.verifying': 'Проверка обновления…',
   'settings.about.updateDialog.verifyingDescription': 'Проверяется загруженный пакет.',
-  'settings.about.updateDialog.installing': 'Установка обновления…',
+  'settings.about.updateDialog.installing':
+    'Установка обновления… Приложение закроется; может кратко появиться установщик.',
   'settings.about.updateDialog.restarting': 'Перезапуск приложения…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Ошибка загрузки или проверки',

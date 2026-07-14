@@ -457,7 +457,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.verifying': 'アップデートを検証中…',
   'settings.about.updateDialog.verifyingDescription':
     'ダウンロードしたパッケージを確認しています。',
-  'settings.about.updateDialog.installing': 'アップデートをインストール中…',
+  'settings.about.updateDialog.installing':
+    'アップデートをインストール中… アプリは終了し、インストーラーが短く表示される場合があります。',
   'settings.about.updateDialog.restarting': 'アプリを再起動中…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'ダウンロードまたは検証に失敗しました',

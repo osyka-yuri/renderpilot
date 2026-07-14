@@ -13,8 +13,11 @@
 
   const { phase, progress = null }: Props = $props();
 
+  const showsProgressBar = $derived(phase === 'downloading' || phase === 'verifying');
   const isDownloadPhase = $derived(phase === 'downloading');
-  const isDeterminate = $derived(isDownloadPhase && progress !== null && progress.percent !== null);
+  const isDeterminate = $derived(
+    showsProgressBar && progress !== null && progress.percent !== null,
+  );
 
   const statusLabel = $derived(t(phaseStatusKey(phase)));
 
@@ -54,7 +57,7 @@
 
 <div class="flex flex-col gap-2" role="status" aria-live="polite" aria-atomic="true">
   <div class="flex items-center gap-2 text-sm font-medium">
-    {#if phase !== 'downloading' || !isDeterminate}
+    {#if !isDeterminate}
       <Spinner class="size-4" />
     {/if}
     <span>{statusLabel}</span>
@@ -65,7 +68,7 @@
     {/if}
   </div>
 
-  {#if isDownloadPhase}
+  {#if showsProgressBar}
     <Progress
       value={isDeterminate ? (progress?.percent ?? 0) : undefined}
       max={100}

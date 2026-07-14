@@ -5,10 +5,12 @@ import { createDisposableRequestChannel } from '@shared/requests';
 
 import type { AppUpdateHandle, AppUpdaterGateway } from '../api/app-updater-gateway';
 import { canDismissDialog } from './dialog-view';
+import { settleUiBeforeInstallExit as defaultSettleUiBeforeInstallExit } from './install-exit-settle';
 import { toOffer } from './offer';
 import {
   applyDownloadEvent,
   EMPTY_PROGRESS,
+  toCompletedProgressView,
   toProgressView,
   type DownloadProgressState,
 } from './progress';
@@ -25,12 +27,20 @@ export type CreateAppUpdaterModelOptions = {
   /** Override for tests; defaults to svelte-sonner toasts. */
   notifySuccess?: (message: string) => void;
   notifyError?: (message: string) => void;
+  /**
+   * Yields so the dialog can paint completed download / installing state before
+   * Windows `update.install()` exits the process. Defaults to production settle;
+   * tests inject a no-op.
+   */
+  settleUiBeforeInstallExit?: () => Promise<void>;
 };
 
 export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): AppUpdaterModel {
   const { gateway } = options;
   const notifySuccess = options.notifySuccess ?? ((message: string) => toast.success(message));
   const notifyError = options.notifyError ?? ((message: string) => toast.error(message));
+  const settleUiBeforeInstallExit =
+    options.settleUiBeforeInstallExit ?? defaultSettleUiBeforeInstallExit;
 
   let appVersion = $state<string | null>(null);
   let notice = $state<AppUpdateNotice | null>(null);
@@ -184,6 +194,46 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     }
   }
 
+  /** Set dialog, settle for paint, return whether the operation is still current. */
+  async function paintBusyAndContinue(id: number, next: AppUpdateDialogState): Promise<boolean> {
+    if (!isCurrentOperation(id)) {
+      return false;
+    }
+    dialog = next;
+    await settleUiBeforeInstallExit();
+    return isCurrentOperation(id);
+  }
+
+  /**
+   * Paint a completed (100%) busy frame then installing before Windows
+   * `install()` may exit. Uses `verifying` (not `downloading`) so status does
+   * not regress after network finish. When Finished already left us on
+   * verifying, snap progress without an extra settle.
+   */
+  async function paintCompletedDownloadThenInstalling(
+    id: number,
+    offer: AppUpdateOffer,
+    progressState: DownloadProgressState,
+  ): Promise<boolean> {
+    const completed = toCompletedProgressView(progressState);
+
+    if (!progressState.networkFinished) {
+      if (
+        !(await paintBusyAndContinue(id, {
+          phase: 'verifying',
+          offer,
+          progress: completed,
+        }))
+      ) {
+        return false;
+      }
+    } else if (isCurrentOperation(id)) {
+      dialog = { phase: 'verifying', offer, progress: completed };
+    }
+
+    return paintBusyAndContinue(id, { phase: 'installing', offer });
+  }
+
   async function performInstall(
     id: number,
     handle: AppUpdateHandle,
@@ -212,7 +262,8 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       return;
     }
 
-    // An installed update is no longer actionable, even if relaunch fails.
+    // Windows: tauri-plugin-updater launches NSIS then process::exit(0), so this
+    // never runs. Non-Windows: install returns and we relaunch the app here.
     notice = null;
     await relaunchOrRequireRestart(id, offer);
   }
@@ -244,7 +295,10 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
         return;
       }
 
-      dialog = { phase: 'installing', offer };
+      if (!(await paintCompletedDownloadThenInstalling(id, offer, progressState))) {
+        return;
+      }
+
       await performInstall(id, handle, offer);
     } catch (error) {
       console.error('Failed to download or verify update:', error);
@@ -260,7 +314,10 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       return;
     }
 
-    dialog = { phase: 'installing', offer };
+    if (!(await paintBusyAndContinue(id, { phase: 'installing', offer }))) {
+      return;
+    }
+
     await performInstall(id, handle, offer);
   }
 

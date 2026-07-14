@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AppUpdateDownloadEvent, AppUpdateHandle } from '../api/app-updater-gateway';
 import { createGateway, createHandle, createModel, deferred } from './app-updater-test-fixtures';
+import type { AppUpdaterModel } from './types';
 
 describe('createAppUpdaterModel', () => {
   describe('startup advisory check', () => {
@@ -247,6 +248,77 @@ describe('createAppUpdaterModel', () => {
       expect(model.notice).toBeNull();
     });
 
+    it('shows completed verifying progress and installing before calling install', async () => {
+      const phasesAtInstall: (string | undefined)[] = [];
+      const settleFrames: { phase: string | undefined; percent: number | null }[] = [];
+      const modelRef: { current: AppUpdaterModel | null } = { current: null };
+      const handle = createHandle({
+        downloadImpl: (onEvent) => {
+          onEvent({ type: 'started', contentLength: 100 });
+          onEvent({ type: 'progress', chunkLength: 40 });
+          // download() may resolve without Finished; model still paints 100% before install.
+          return Promise.resolve();
+        },
+        installImpl: () => {
+          phasesAtInstall.push(modelRef.current?.dialog?.phase);
+          return Promise.resolve();
+        },
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+        {
+          settleUiBeforeInstallExit: () => {
+            const d = modelRef.current?.dialog;
+            settleFrames.push({
+              phase: d?.phase,
+              percent:
+                d?.phase === 'downloading' || d?.phase === 'verifying' ? d.progress.percent : null,
+            });
+            return Promise.resolve();
+          },
+        },
+      );
+      modelRef.current = model;
+      await model.checkForUpdates();
+
+      await model.installAvailableUpdate();
+
+      expect(settleFrames).toContainEqual({ phase: 'verifying', percent: 100 });
+      expect(settleFrames.some((frame) => frame.phase === 'downloading')).toBe(false);
+      expect(settleFrames.some((frame) => frame.phase === 'installing')).toBe(true);
+      expect(phasesAtInstall).toEqual(['installing']);
+      expect(handle.install).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips intermediate settle after Finished and only settles into installing', async () => {
+      const settleFrames: (string | undefined)[] = [];
+      const modelRef: { current: AppUpdaterModel | null } = { current: null };
+      const handle = createHandle({
+        downloadImpl: (onEvent) => {
+          onEvent({ type: 'started', contentLength: 100 });
+          onEvent({ type: 'progress', chunkLength: 100 });
+          onEvent({ type: 'finished' });
+          return Promise.resolve();
+        },
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+        {
+          settleUiBeforeInstallExit: () => {
+            settleFrames.push(modelRef.current?.dialog?.phase);
+            return Promise.resolve();
+          },
+        },
+      );
+      modelRef.current = model;
+      await model.checkForUpdates();
+
+      await model.installAvailableUpdate();
+
+      expect(settleFrames).toEqual(['installing']);
+      expect(handle.install).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the dialog open after download failure and retries the download', async () => {
       let attempts = 0;
       const handle = createHandle({
@@ -398,6 +470,33 @@ describe('createAppUpdaterModel', () => {
       expect(handle.install).not.toHaveBeenCalled();
     });
 
+    it('does not re-set dialog when disposed during pre-install settle', async () => {
+      const modelRef: { current: AppUpdaterModel | null } = { current: null };
+      const handle = createHandle({
+        downloadImpl: (onEvent) => {
+          onEvent({ type: 'started', contentLength: 10 });
+          onEvent({ type: 'progress', chunkLength: 10 });
+          onEvent({ type: 'finished' });
+          return Promise.resolve();
+        },
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+        {
+          settleUiBeforeInstallExit: async () => {
+            await modelRef.current?.dispose();
+          },
+        },
+      );
+      modelRef.current = model;
+      await model.checkForUpdates();
+
+      await model.installAvailableUpdate();
+
+      expect(model.dialog).toBeNull();
+      expect(handle.install).not.toHaveBeenCalled();
+    });
+
     it('releases an installation handle only when installation fails after disposal', async () => {
       const installation = deferred<undefined>();
       const handle = createHandle({ installImpl: () => installation.promise });
@@ -408,8 +507,10 @@ describe('createAppUpdaterModel', () => {
       await model.checkForUpdates();
 
       const install = model.installAvailableUpdate();
-      await Promise.resolve();
-      expect(model.dialog?.phase).toBe('installing');
+      // Download + completed-progress paint + installing paint before install awaits.
+      await vi.waitFor(() => {
+        expect(model.dialog?.phase).toBe('installing');
+      });
       await model.dispose();
       installation.reject(new Error('install failed'));
       await install;

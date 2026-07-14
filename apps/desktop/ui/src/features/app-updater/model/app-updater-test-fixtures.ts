@@ -6,7 +6,10 @@ import type {
   AppUpdateMetadata,
   AppUpdaterGateway,
 } from '../api/app-updater-gateway';
-import { createAppUpdaterModel } from './create-app-updater-model.svelte';
+import {
+  createAppUpdaterModel,
+  type CreateAppUpdaterModelOptions,
+} from './create-app-updater-model.svelte';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -72,13 +75,20 @@ export function createGateway(overrides: Partial<AppUpdaterGateway> = {}): AppUp
   };
 }
 
-export function createModel(gateway: AppUpdaterGateway) {
-  const notifySuccess = vi.fn();
-  const notifyError = vi.fn();
+export function createModel(
+  gateway: AppUpdaterGateway,
+  options: Partial<Omit<CreateAppUpdaterModelOptions, 'gateway'>> = {},
+) {
+  const notifySuccess = options.notifySuccess ?? vi.fn();
+  const notifyError = options.notifyError ?? vi.fn();
+  // Skip production paint delay so tests stay fast and deterministic.
+  const settleUiBeforeInstallExit = options.settleUiBeforeInstallExit ?? (() => Promise.resolve());
+
   const model = createAppUpdaterModel({
     gateway,
     notifySuccess,
     notifyError,
+    settleUiBeforeInstallExit,
   });
   return { model, notifySuccess, notifyError };
 }

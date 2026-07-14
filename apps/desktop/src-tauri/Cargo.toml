@@ -45,7 +45,6 @@ portable = []
 [lib]
 name = "renderpilot_desktop"
 path = "src/lib.rs"
-test = false
 
 [[bin]]
 name = "renderpilot-desktop"

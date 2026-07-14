@@ -430,7 +430,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} / {total}',
   'settings.about.updateDialog.verifying': '正在验证更新…',
   'settings.about.updateDialog.verifyingDescription': '正在检查已下载的安装包。',
-  'settings.about.updateDialog.installing': '正在安装更新…',
+  'settings.about.updateDialog.installing': '正在安装更新… 应用将关闭；安装程序可能会短暂出现。',
   'settings.about.updateDialog.restarting': '正在重启应用…',
 
   'settings.about.updateDialog.prepareErrorTitle': '下载或验证失败',

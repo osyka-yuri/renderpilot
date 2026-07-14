@@ -462,7 +462,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} de {total}',
   'settings.about.updateDialog.verifying': 'Verificando actualización…',
   'settings.about.updateDialog.verifyingDescription': 'Comprobando el paquete descargado.',
-  'settings.about.updateDialog.installing': 'Instalando actualización…',
+  'settings.about.updateDialog.installing':
+    'Instalando actualización… La app se cerrará; el instalador puede aparecer un momento.',
   'settings.about.updateDialog.restarting': 'Reiniciando la aplicación…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Error de descarga o verificación',

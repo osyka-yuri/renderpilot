@@ -473,7 +473,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} von {total}',
   'settings.about.updateDialog.verifying': 'Update wird überprüft…',
   'settings.about.updateDialog.verifyingDescription': 'Das heruntergeladene Paket wird geprüft.',
-  'settings.about.updateDialog.installing': 'Update wird installiert…',
+  'settings.about.updateDialog.installing':
+    'Update wird installiert… Die App wird geschlossen; der Installer kann kurz erscheinen.',
   'settings.about.updateDialog.restarting': 'Anwendung wird neu gestartet…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Download oder Überprüfung fehlgeschlagen',

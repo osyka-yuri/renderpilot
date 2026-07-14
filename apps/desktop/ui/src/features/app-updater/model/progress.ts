@@ -45,6 +45,7 @@ export function applyDownloadEvent(
   }
 }
 
+/** In-flight progress for the dialog — never invents 100% without evidence. */
 export function toProgressView(state: DownloadProgressState): DownloadProgressView {
   const { totalBytes, receivedBytes, networkFinished } = state;
 
@@ -59,6 +60,23 @@ export function toProgressView(state: DownloadProgressState): DownloadProgressVi
     receivedBytes,
     totalBytes,
     networkFinished,
+  };
+}
+
+/**
+ * Display-only 100% frame for the last busy paint before install exit.
+ * Does not mutate download state; only snaps received bytes up to total when known.
+ */
+export function toCompletedProgressView(state: DownloadProgressState): DownloadProgressView {
+  const totalBytes = state.totalBytes;
+  const receivedBytes =
+    totalBytes !== null ? Math.max(state.receivedBytes, totalBytes) : state.receivedBytes;
+
+  return {
+    percent: 100,
+    receivedBytes,
+    totalBytes,
+    networkFinished: true,
   };
 }
 

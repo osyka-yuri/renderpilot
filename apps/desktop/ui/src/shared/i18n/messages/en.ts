@@ -197,7 +197,8 @@ export const en = {
   'settings.about.updateDialog.downloadingBytesTotal': '{received} of {total}',
   'settings.about.updateDialog.verifying': 'Verifying update…',
   'settings.about.updateDialog.verifyingDescription': 'Checking the downloaded package.',
-  'settings.about.updateDialog.installing': 'Installing update…',
+  'settings.about.updateDialog.installing':
+    'Installing update… The app will close; the installer may appear briefly.',
   'settings.about.updateDialog.restarting': 'Restarting application…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Download or verification failed',
