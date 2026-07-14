@@ -1,18 +1,21 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [1.5.2] - 2026-07-14
+
+### Fixed
+- **Libraries**: Before swapping a DLL, RenderPilot verifies that the replacement file is still present and matches what the catalog expects. If you restored game files outside the app, or a cached copy was corrupted, the swap is blocked with a clear recovery message instead of writing the wrong file. After a rescan, outdated local copies no longer appear as valid replacements.
+- **Streamline**: Updating Streamline now applies a matching multi-file package for the plugins already in the game, instead of updating only a single DLL. When plugins are on different versions, the UI shows a mixed state so you can bring the whole set back in sync.
+- **App updates**: After installing an update on Windows, the app can request administrator rights again on restart instead of staying without them. The update dialog shows a completed download and an installing step before the window closes for the installer, with clearer wording about what happens next.
+
 ## [1.5.1] - 2026-07-12
 
 ### Fixed
-- **RenoDX / ReShade**: Existing ReShade installations are now classified safely. Empty,
-  compatible hosts can be recovered or repaired; custom, incompatible, or unclear setups
-  are left untouched.
-- **RenoDX / ReShade**: Improved recovery after tracked install data is lost. RenderPilot
-  adopts only verifiable RenoDX files, preserves user ReShade configuration and logs, and
-  never removes a reused runtime during uninstall.
+- **RenoDX / ReShade**: Existing ReShade installations are now classified safely. Empty, compatible hosts can be recovered or repaired; custom, incompatible, or unclear setups are left untouched.
+- **RenoDX / ReShade**: Improved recovery after tracked install data is lost. RenderPilot adopts only verifiable RenoDX files, preserves user ReShade configuration and logs, and never removes a reused runtime during uninstall.
 - **Games**: Corrected catalog filter logic to prevent programs without any supported technologies from appearing when all filters are checked.
 - **UI**: Improved alignment and spacing in addon views and action buttons. The "Check for updates" button now spins smoothly instead of jumping text.
-
 
 ## [1.5.0] - 2026-07-11
 
