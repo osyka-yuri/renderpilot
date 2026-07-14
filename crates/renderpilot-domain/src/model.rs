@@ -487,6 +487,9 @@ stable_enum! {
     pub enum AddonKind {
         /// RenoDX (Renovation Engine for DirectX): HDR and tone-mapping add-on.
         RenoDx = "renodx",
+        /// Luma Framework: DirectX 11 ReShade add-on for upscaling, HDR, and
+        /// shader replacement.
+        Luma = "luma",
     }
 }
 

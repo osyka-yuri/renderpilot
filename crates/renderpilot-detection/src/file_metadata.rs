@@ -324,6 +324,15 @@ pub fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
     Sha256Hash::new(hash).map_err(detection_error)
 }
 
+/// Computes the SHA-256 hash of in-memory bytes, using the same hex encoding
+/// and [`Sha256Hash`] validation as [`sha256_file`].
+pub fn sha256_bytes(bytes: &[u8]) -> AppResult<Sha256Hash> {
+    let hash = sha256_reader_hex(bytes).map_err(|error| {
+        detection_context_error(format_args!("could not hash in-memory bytes"), error)
+    })?;
+    Sha256Hash::new(hash).map_err(detection_error)
+}
+
 fn open_file_for_hashing(path: &Path) -> AppResult<File> {
     File::open(path).map_err(|error| {
         detection_context_error(

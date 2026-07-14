@@ -288,6 +288,12 @@ impl fmt::Display for AppError {
 
 impl Error for AppError {}
 
+impl From<renderpilot_domain::InstalledAddonInvariantError> for AppError {
+    fn from(error: renderpilot_domain::InstalledAddonInvariantError) -> Self {
+        Self::invalid_input(error.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AppError, AppErrorKind, invalid_operation_state_display_message};

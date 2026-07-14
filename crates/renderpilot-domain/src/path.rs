@@ -28,6 +28,18 @@ pub struct PathRef(
     String,
 );
 
+/// Lowercased, forward-slash comparison key for a path string.
+///
+/// Purely lexical — no filesystem access. Strips a Windows verbatim prefix
+/// (`\\?\`) so canonicalized and raw forms compare equal. Used by domain
+/// invariants and orchestration path maps; orchestration's `normalized_key`
+/// for `std::path::Path` is a thin wrapper over this.
+#[must_use]
+pub fn normalized_path_key(path: &str) -> String {
+    let stripped = path.strip_prefix(r"\\?\").unwrap_or(path);
+    stripped.replace('\\', "/").to_ascii_lowercase()
+}
+
 impl PathRef {
     /// Creates a normalized path reference.
     pub fn new(value: impl Into<String>) -> Result<Self, PathRefError> {
@@ -314,6 +326,18 @@ mod tests {
                 .unwrap()
                 .parent(),
             Some("C:/Games/Game")
+        );
+    }
+
+    #[test]
+    fn normalized_path_key_strips_verbatim_prefix_and_normalizes() {
+        assert_eq!(
+            super::normalized_path_key(r"\\?\C:\Games\DLSS.dll"),
+            "c:/games/dlss.dll"
+        );
+        assert_eq!(
+            super::normalized_path_key(r"C:\Games\DLSS.dll"),
+            super::normalized_path_key("C:/Games/DLSS.dll")
         );
     }
 }

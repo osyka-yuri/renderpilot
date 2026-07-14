@@ -51,6 +51,17 @@ pub fn read_windows_file_version(path: &Path) -> Option<Version> {
     read_windows_file_version_from_bytes(&bytes)
 }
 
+/// Parses a version string as it appears in a Windows version resource.
+///
+/// Product-version strings are often decorated (for example with commas or a
+/// surrounding label), so consumers that specifically require `ProductVersion`
+/// should use this instead of treating the generic file-version fallback as an
+/// identity signal.
+#[must_use]
+pub fn parse_windows_version_text(value: &str) -> Option<Version> {
+    version_info::parse_version_text(value)
+}
+
 pub(crate) fn read_windows_file_version_from_bytes(bytes: &[u8]) -> Option<Version> {
     let image = PeResourceImage::parse(bytes)?;
     let resource = image.version_resource()?;

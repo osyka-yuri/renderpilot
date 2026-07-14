@@ -207,7 +207,7 @@ impl CompatibilityPolicy {
             Self::AlwaysCompatible => true,
             Self::DlssSuperResolution => match (current, candidate) {
                 (Some(current), Some(candidate)) => {
-                    (current.major() == 1) == (candidate.major() == 1)
+                    renderpilot_domain::dlss::versions_are_compatible(current, candidate)
                 }
                 _ => true,
             },

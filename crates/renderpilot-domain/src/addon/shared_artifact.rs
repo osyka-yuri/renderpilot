@@ -1,3 +1,5 @@
+//! Shared artifacts that live outside any single game install.
+
 use serde::{Deserialize, Serialize};
 
 use crate::PathRef;

@@ -83,6 +83,24 @@ impl GraphicsComponent {
         self.files.push(file);
         self
     }
+
+    /// Returns a new component with the same identity and classification as
+    /// `self` but with `files` replacing its file set.
+    ///
+    /// This is the shared builder for catalog snapshots that re-read a
+    /// component's files from disk (baseline resolution, post-overlay rebind,
+    /// freshness checks): the identity stays stable while the files are
+    /// recomputed.
+    pub fn rebuild_with_files(&self, files: Vec<ComponentFile>) -> Self {
+        Self {
+            id: self.id.clone(),
+            game_id: self.game_id.clone(),
+            kind: self.kind,
+            technology: self.technology,
+            swappability: self.swappability,
+            files,
+        }
+    }
 }
 
 /// File that belongs to a detected graphics component.

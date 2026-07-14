@@ -1,3 +1,5 @@
+//! Update provenance: tracked sources, roles, and host kind metadata.
+
 use serde::{Deserialize, Serialize};
 
 use super::RenoDxHostKind;
@@ -17,6 +19,9 @@ pub enum TrackedSourceRole {
     /// ReShade proxy binary).
     #[serde(rename = "host")]
     HostBinary,
+    /// A managed dgVoodoo2 wrapper archive installed for Luma profiles that need
+    /// a D3D9-to-D3D11 bridge.
+    DgVoodooWrapper,
 }
 
 /// Host mechanism used by an installed add-on.
@@ -70,9 +75,9 @@ pub struct TrackedSource {
     channel: Option<String>,
     /// Whether this source was reconstructed from on-disk facts (e.g. adopting an
     /// install RenderPilot did not create) rather than recorded from an actual
-    /// download. An advisory source's URL/digest are a best-effort guess, not
-    /// proof of what is on disk. `#[serde(default)]` so records persisted before
-    /// this field deserialize as `false`.
+    /// download. Its URL/digest must be treated as advisory, even when a tool
+    /// can derive a strict local content identity from a manifest. `#[serde(default)]`
+    /// keeps records persisted before this field deserializing as `false`.
     #[serde(default)]
     advisory: bool,
 }

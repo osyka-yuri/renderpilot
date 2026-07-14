@@ -1,35 +1,42 @@
-//! Domain types for injected game add-ons (initially RenoDX).
+//! Domain types for injected game add-ons (RenoDX, Luma, …).
 //!
 //! Unlike a [`crate::GraphicsComponent`], which models a vendor library that
 //! already exists in a game folder and is swapped between versions, an add-on is
-//! a third-party runtime that RenderPilot *introduces* into a game (the RenoDX
-//! ReShade add-on, plus the ReShade host when absent). These types describe what
-//! a game's executable renders with and what an installed add-on left behind, so
-//! an install can be fully and safely reversed.
+//! a third-party runtime that RenderPilot *introduces* into a game (a ReShade
+//! host and tool payload, plus any coordinated managed files such as Luma's
+//! `nvngx_dlss.dll`). These types describe what a game's executable renders
+//! with and what an installed add-on left behind, so an install can be fully
+//! and safely reversed.
 //!
 //! # Submodules
 //!
 //! - [`installed`] — core install record ([`InstalledAddon`])
+//! - [`managed_file`] — coordinated live/sidecar ownership ([`ManagedAddonFile`])
 //! - [`tracked`] — update provenance ([`TrackedSource`], [`TrackedSourceRole`], ...)
-//! - [`states`] — UI-ready install state projections ([`RenoDxInstallState`], ...)
+//! - [`states`] — wire install-state projections for status/availability DTOs
+//!   ([`RenoDxInstallState`], [`LumaInstallState`]); not core ownership models
 //! - [`shared_artifact`] — global shared resources ([`SharedArtifactRecord`], ...)
 
 pub mod installed;
+pub mod managed_file;
 pub mod shared_artifact;
 pub mod states;
 pub mod tracked;
 
-pub use installed::InstalledAddon;
+pub use installed::{InstalledAddon, InstalledAddonParts};
+pub use managed_file::{
+    InstalledAddonInvariantError, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode,
+};
 pub use shared_artifact::{
     SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource,
 };
-pub use states::{RenoDxHostKind, RenoDxInstallState};
+pub use states::{LumaInstallState, RenoDxHostKind, RenoDxInstallState};
 pub use tracked::{InstalledAddonHostKind, TrackedSource, TrackedSourceRole};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AddonKind, GameId, PathRef};
+    use crate::{AddonKind, GameId, PathRef, Sha256Hash};
 
     fn game_id() -> GameId {
         GameId::new("steam:1091500").expect("valid id")
@@ -159,6 +166,79 @@ mod tests {
     }
 
     #[test]
+    fn managed_files_are_unique_and_disjoint_from_engine_files() {
+        let managed_path = PathRef::new(r"C:\Games\CP2077\nvngx_dlss.dll").expect("path");
+        let hash = Sha256Hash::new("a".repeat(64)).expect("hash");
+        let binding =
+            ManagedAddonFile::owned(managed_path.clone(), ManagedFileBaseline::Absent, hash);
+
+        let duplicate = InstalledAddon::new(game_id(), AddonKind::Luma, addon_path())
+            .try_with_managed_files(vec![binding.clone(), binding.clone()])
+            .expect_err("duplicate managed paths must fail");
+        assert!(matches!(
+            duplicate,
+            InstalledAddonInvariantError::DuplicateManagedPath(_)
+        ));
+
+        let overlap = InstalledAddon::new(game_id(), AddonKind::Luma, addon_path())
+            .with_created_file(managed_path)
+            .try_with_managed_files(vec![binding])
+            .expect_err("generic and coordinated ownership must be disjoint");
+        assert!(matches!(
+            overlap,
+            InstalledAddonInvariantError::ManagedPathOwnedByEngine(_)
+        ));
+    }
+
+    #[test]
+    fn without_engine_managed_path_matches_normalized_path_keys() {
+        let mixed = PathRef::new(r"C:\Games\CP2077\nvngx_dlss.dll").expect("path");
+        let alt = PathRef::new(r"c:/Games/CP2077/nvngx_dlss.dll").expect("path");
+        let record = InstalledAddon::new(game_id(), AddonKind::Luma, addon_path())
+            .with_created_file(mixed.clone())
+            .with_backed_up_file(mixed)
+            .without_engine_managed_path(&alt);
+        assert!(!record.created_files().iter().any(|path| {
+            crate::normalized_path_key(path.as_str()) == crate::normalized_path_key(alt.as_str())
+        }));
+        assert!(!record.backed_up_files().iter().any(|path| {
+            crate::normalized_path_key(path.as_str()) == crate::normalized_path_key(alt.as_str())
+        }));
+    }
+
+    #[test]
+    fn reused_binding_always_records_a_present_baseline() {
+        let path = PathRef::new(r"C:\Games\CP2077\nvngx_dlss.dll").expect("path");
+        let hash = Sha256Hash::new("b".repeat(64)).expect("hash");
+        let binding = ManagedAddonFile::reused(path, hash.clone());
+
+        assert_eq!(binding.mode(), ManagedFileMode::Reused);
+        assert_eq!(
+            binding.baseline(),
+            &ManagedFileBaseline::Present { sha256: hash }
+        );
+    }
+
+    #[test]
+    fn persisted_reused_binding_with_absent_baseline_is_rejected() {
+        let binding: ManagedAddonFile = serde_json::from_value(serde_json::json!({
+            "path": "C:/Games/CP2077/nvngx_dlss.dll",
+            "mode": "reused",
+            "baseline": { "state": "absent" },
+            "installed_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }))
+        .expect("wire shape");
+
+        let error = InstalledAddon::new(game_id(), AddonKind::Luma, addon_path())
+            .try_with_managed_files(vec![binding])
+            .expect_err("invalid persisted binding");
+        assert!(matches!(
+            error,
+            InstalledAddonInvariantError::ReusedFileHasAbsentBaseline(_)
+        ));
+    }
+
+    #[test]
     fn installed_addon_fields_reflect_version_for_state() {
         let installed = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path())
             .with_addon_version("snapshot-2026.06");
@@ -254,6 +334,26 @@ mod tests {
         assert_eq!(
             json,
             r#"{"status":"installed","host_kind":"proxy","version":null,"addon_dated":null,"installed_at":1700000000000,"updated_at":1700000000000,"dlss_fix_installed":false,"addon_tracked":true}"#
+        );
+    }
+
+    #[test]
+    fn luma_install_state_serializes_with_status_tag() {
+        let json = serde_json::to_string(&LumaInstallState::NotInstalled).expect("serialize");
+        assert_eq!(json, r#"{"status":"not_installed"}"#);
+
+        let installed = LumaInstallState::Installed {
+            version: Some("Build 515".to_owned()),
+            addon_dated: None,
+            installed_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+            reshade_channel: Some("nightly".to_owned()),
+            launch_args: vec!["-dx11".to_owned()],
+        };
+        let json = serde_json::to_string(&installed).expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"status":"installed","version":"Build 515","addon_dated":null,"installed_at":1700000000000,"updated_at":1700000000000,"reshade_channel":"nightly","launch_args":["-dx11"]}"#
         );
     }
 

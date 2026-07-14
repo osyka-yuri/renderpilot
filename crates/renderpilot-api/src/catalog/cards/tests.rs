@@ -248,12 +248,12 @@ fn selected_addon_matches_only_cards_with_that_capability() {
 
 #[test]
 fn unknown_selected_addons_are_ignored_rather_than_emptying_the_catalog() {
-    // All-unknown requests (including a future/removed kind name like "luma")
+    // All-unknown requests (including future/removed kind names)
     // normalize to no addon filter, never an always-false match set.
     for selected in [
         vec![String::from("unknown")],
-        vec![String::from("luma")],
-        vec![String::from("unknown"), String::from("luma")],
+        vec![String::from("future-addon")],
+        vec![String::from("unknown"), String::from("future-addon")],
     ] {
         let query = QueryGameCards::new(
             QueryGameCardsRequest {

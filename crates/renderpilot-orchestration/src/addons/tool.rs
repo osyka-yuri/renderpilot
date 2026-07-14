@@ -49,11 +49,11 @@ pub(crate) trait AddonTool: Send + Sync {
     fn load_capability_probe(&self) -> CapabilityProbeFuture;
 }
 
-/// Every known tool. Adding a third tool means one more entry here.
+/// Every registered tool. Adding an implementation means one more entry here.
 pub(crate) static TOOLS: &[&dyn AddonTool] = &[&crate::addons::renodx::tool::RenoDxTool];
 
-/// Lookup by kind. Returns `None` only if domain and registration have drifted
-/// (covered by the exhaustiveness test below).
+/// Lookup by kind. Returns `None` when a domain kind has not yet been registered.
+/// This supports introducing shared domain primitives before a tool implementation.
 #[must_use]
 pub(crate) fn tool(kind: AddonKind) -> Option<&'static dyn AddonTool> {
     TOOLS.iter().copied().find(|t| t.kind() == kind)
@@ -76,17 +76,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tools_cover_every_addon_kind_exactly_once() {
-        for kind in AddonKind::ALL {
-            let matches: Vec<_> = TOOLS.iter().filter(|t| t.kind() == *kind).collect();
-            assert_eq!(
-                matches.len(),
-                1,
-                "expected exactly one AddonTool for {kind:?}, found {}",
-                matches.len()
+    fn registered_tools_have_distinct_known_kinds() {
+        for (index, tool) in TOOLS.iter().enumerate() {
+            assert!(
+                AddonKind::ALL.contains(&tool.kind()),
+                "registered tool {:?} has no domain AddonKind",
+                tool.kind()
+            );
+            assert!(
+                TOOLS[..index]
+                    .iter()
+                    .all(|previous| previous.kind() != tool.kind()),
+                "AddonTool for {:?} is registered more than once",
+                tool.kind()
             );
         }
-        assert_eq!(TOOLS.len(), AddonKind::ALL.len());
     }
 
     #[test]

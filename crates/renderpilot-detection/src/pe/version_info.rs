@@ -213,7 +213,7 @@ fn find_string_value(
     None
 }
 
-pub(super) fn parse_version_text(value: &str) -> Option<Version> {
+pub(crate) fn parse_version_text(value: &str) -> Option<Version> {
     normalized_version_text(value)
         .and_then(|normalized| Version::parse(&normalized).ok())
         .or_else(|| parse_first_numeric_version(value))

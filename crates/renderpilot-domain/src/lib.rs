@@ -5,19 +5,22 @@
 
 mod addon;
 mod component;
+pub mod dlss;
 mod exe_graphics;
 pub mod fsr;
 mod game;
 mod ids;
 mod model;
+pub mod mutation_features;
 mod path;
 mod text;
 mod version;
 
 pub use addon::{
-    InstalledAddon, InstalledAddonHostKind, RenoDxHostKind, RenoDxInstallState, SharedArtifactKind,
-    SharedArtifactOrigin, SharedArtifactRecord, SharedArtifactSource, TrackedSource,
-    TrackedSourceRole,
+    InstalledAddon, InstalledAddonHostKind, InstalledAddonInvariantError, InstalledAddonParts,
+    LumaInstallState, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode, RenoDxHostKind,
+    RenoDxInstallState, SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord,
+    SharedArtifactSource, TrackedSource, TrackedSourceRole,
 };
 pub use component::{
     ArtifactTrustLevel, ComponentError, ComponentFile, ComponentVersionReport, GraphicsComponent,
@@ -30,7 +33,7 @@ pub use model::{
     AddonKind, Architecture, ComponentKind, GameRuntime, GraphicsApi, GraphicsTechnology, Launcher,
     Platform, Swappability,
 };
-pub use path::{PathRef, PathRefError};
+pub use path::{PathRef, PathRefError, normalized_path_key};
 pub use version::{Version, VersionParseError};
 
 /// Human-readable product name used across user-facing entry points.
