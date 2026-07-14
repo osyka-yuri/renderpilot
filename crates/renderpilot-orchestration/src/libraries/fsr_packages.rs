@@ -9,11 +9,15 @@
 //! the matched cohesive package for entry-point-lineage upgrades.
 
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
-    Sha256Hash, Version, fsr,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, Sha256Hash,
+    fsr,
 };
 use std::collections::BTreeMap;
 
+use crate::ServiceError;
+
+use super::composed_package::{ComposedPackage, PACKAGE_SOURCE, manifest_member_file};
+use super::library_error;
 use super::types::LibraryManifestEntry;
 
 const LOADER_ID_DX12: &str = "amd_fidelityfx_loader_dx12";
@@ -23,8 +27,6 @@ const FRAMEGEN_ID_DX12: &str = "amd_fidelityfx_framegeneration_dx12";
 const LOADER_ID_VK: &str = "amd_fidelityfx_loader_vk";
 const UPSCALER_ID_VK: &str = "amd_fidelityfx_upscaler_vk";
 const FRAMEGEN_ID_VK: &str = "amd_fidelityfx_framegeneration_vk";
-
-const PACKAGE_SOURCE: &str = "manifest-download";
 
 /// Role of a split FSR DLL within one release package.
 ///
@@ -38,14 +40,6 @@ enum FsrMemberRole {
     Framegen,
 }
 
-/// One composed FSR release: a multi-file artifact (with virtual `manifest://`
-/// member paths) plus the member entry ids to download, in the artifact's file
-/// order.
-pub(super) struct FsrPackage {
-    pub artifact: LibraryArtifact,
-    pub member_entry_ids: Vec<String>,
-}
-
 #[derive(Default)]
 struct ReleaseMembers<'a> {
     loader: Option<&'a LibraryManifestEntry>,
@@ -56,7 +50,9 @@ struct ReleaseMembers<'a> {
 /// Composes one FSR package per release and per API (DX12, Vulkan). Releases are grouped by their shared
 /// build number (the last segment of `version.sort_key`); a release needs a loader
 /// and an upscaler (frame generation is optional).
-pub(super) fn compose_fsr_packages(entries: &[LibraryManifestEntry]) -> Vec<FsrPackage> {
+pub(super) fn compose_fsr_packages(
+    entries: &[LibraryManifestEntry],
+) -> Result<Vec<ComposedPackage>, ServiceError> {
     let mut by_release: BTreeMap<(String, &'static str), ReleaseMembers<'_>> = BTreeMap::new();
 
     for entry in entries {
@@ -74,24 +70,32 @@ pub(super) fn compose_fsr_packages(entries: &[LibraryManifestEntry]) -> Vec<FsrP
             .entry((release_key(&entry.version.sort_key), entry_point_file))
             .or_default();
 
-        match role {
-            FsrMemberRole::Loader => slot.loader = Some(entry),
-            FsrMemberRole::Upscaler => slot.upscaler = Some(entry),
-            FsrMemberRole::Framegen => slot.framegen = Some(entry),
+        let member = match role {
+            FsrMemberRole::Loader => &mut slot.loader,
+            FsrMemberRole::Upscaler => &mut slot.upscaler,
+            FsrMemberRole::Framegen => &mut slot.framegen,
+        };
+        if member.is_some() {
+            return Err(library_error(format!(
+                "duplicate FSR package member for release {} ({})",
+                entry.version.sort_key, entry.library.id
+            )));
         }
+        *member = Some(entry);
     }
 
-    by_release
-        .into_iter()
-        .filter_map(
-            |((_, entry_point_file), members)| match (members.upscaler, members.loader) {
-                (Some(upscaler), Some(loader)) => {
-                    build_package(upscaler, loader, members.framegen, entry_point_file)
-                }
-                _ => None,
-            },
-        )
-        .collect()
+    let mut packages = Vec::new();
+    for ((_, entry_point_file), members) in by_release {
+        if let (Some(upscaler), Some(loader)) = (members.upscaler, members.loader) {
+            packages.push(build_package(
+                upscaler,
+                loader,
+                members.framegen,
+                entry_point_file,
+            )?);
+        }
+    }
+    Ok(packages)
 }
 
 /// The release key shared by a loader/upscaler/framegen of one SDK build: the last
@@ -105,26 +109,25 @@ fn build_package(
     loader: &LibraryManifestEntry,
     framegen: Option<&LibraryManifestEntry>,
     entry_point_file: &str,
-) -> Option<FsrPackage> {
+) -> Result<ComposedPackage, ServiceError> {
     // The upscaler is the representative (its version is the FSR ML version, e.g.
     // 4.0.3), so it is files[0]. The loader installs as the FSR entry point.
     let mut files = Vec::new();
     let mut member_entry_ids = Vec::new();
 
-    files.push(member_component_file(upscaler, None)?);
+    files.push(manifest_member_file(upscaler, None)?);
     member_entry_ids.push(upscaler.entry_id.clone());
 
-    files.push(member_component_file(loader, Some(entry_point_file))?);
+    files.push(manifest_member_file(loader, Some(entry_point_file))?);
     member_entry_ids.push(loader.entry_id.clone());
 
-    if let Some(framegen) = framegen
-        && let Some(file) = member_component_file(framegen, None)
-    {
-        files.push(file);
+    if let Some(framegen) = framegen {
+        files.push(manifest_member_file(framegen, None)?);
         member_entry_ids.push(framegen.entry_id.clone());
     }
 
-    let shas: Vec<&Sha256Hash> = files.iter().filter_map(ComponentFile::sha256).collect();
+    let shas: Option<Vec<&Sha256Hash>> = files.iter().map(ComponentFile::sha256).collect();
+    let shas = shas.ok_or_else(|| library_error("FSR package member lacks SHA-256"))?;
     let artifact = LibraryArtifact::new(
         ArtifactId::for_bundle(shas),
         GraphicsTechnology::AmdFsr,
@@ -132,33 +135,11 @@ fn build_package(
         files,
         ArtifactTrustLevel::ManifestDownloaded,
     )
-    .ok()?
+    .map_err(|error| library_error(format!("failed to build FSR package: {error}")))?
     .with_source(PACKAGE_SOURCE)
-    .ok()?;
+    .map_err(|error| library_error(format!("failed to tag FSR package source: {error}")))?;
 
-    Some(FsrPackage {
-        artifact,
-        member_entry_ids,
-    })
-}
-
-/// Builds a member file with a virtual `manifest://` source path and, for the
-/// loader, the install-as target.
-fn member_component_file(
-    entry: &LibraryManifestEntry,
-    install_as: Option<&str>,
-) -> Option<ComponentFile> {
-    let path = PathRef::new(format!("manifest://{}", entry.entry_id)).ok()?;
-    let sha256 = Sha256Hash::new(&entry.files.dll.hashes.sha256).ok()?;
-    let version = Version::parse(&entry.version.value).ok()?;
-
-    let mut file = ComponentFile::new(path)
-        .with_sha256(sha256)
-        .with_version(version);
-    if let Some(install_as) = install_as {
-        file = file.with_install_as(install_as);
-    }
-    Some(file)
+    ComposedPackage::new(artifact, member_entry_ids)
 }
 
 #[cfg(test)]
@@ -241,7 +222,7 @@ mod tests {
             ),
         ];
 
-        let packages = compose_fsr_packages(&entries);
+        let packages = compose_fsr_packages(&entries).expect("valid package composition");
         assert_eq!(packages.len(), 1, "one release composes one package");
         let package = &packages[0];
 
@@ -261,15 +242,21 @@ mod tests {
 
         let files = artifact.files();
         assert_eq!(files.len(), 3);
-        // Upscaler is primary, placed under its own name.
+        // Upscaler is primary; install target is its real DLL basename.
         assert_eq!(files[0].path().as_str(), "manifest://e-upscaler");
-        assert_eq!(files[0].install_as(), None);
+        assert_eq!(
+            files[0].install_as(),
+            Some("amd_fidelityfx_upscaler_dx12.dll")
+        );
         // Loader takes over the FSR entry point.
         assert_eq!(files[1].path().as_str(), "manifest://e-loader");
         assert_eq!(files[1].install_as(), Some(fsr::ENTRY_POINT_FILE_DX12));
-        // Frame generation is added under its own name.
+        // Frame generation installs under its own DLL basename.
         assert_eq!(files[2].path().as_str(), "manifest://e-framegen");
-        assert_eq!(files[2].install_as(), None);
+        assert_eq!(
+            files[2].install_as(),
+            Some("amd_fidelityfx_framegeneration_dx12.dll")
+        );
 
         // The id is content-stable over the member shas, in artifact file order.
         let hashes: Vec<Sha256Hash> = [
@@ -304,7 +291,7 @@ mod tests {
             ),
         ];
 
-        let packages = compose_fsr_packages(&entries);
+        let packages = compose_fsr_packages(&entries).expect("valid package composition");
         assert_eq!(packages.len(), 1);
         assert_eq!(
             packages[0].artifact.files().len(),
@@ -337,7 +324,9 @@ mod tests {
         ];
 
         assert!(
-            compose_fsr_packages(&entries).is_empty(),
+            compose_fsr_packages(&entries)
+                .expect("valid package composition")
+                .is_empty(),
             "a release without a loader is not a package"
         );
     }
@@ -380,7 +369,9 @@ mod tests {
         ];
 
         assert_eq!(
-            compose_fsr_packages(&entries).len(),
+            compose_fsr_packages(&entries)
+                .expect("valid package composition")
+                .len(),
             2,
             "two distinct build numbers compose two packages"
         );

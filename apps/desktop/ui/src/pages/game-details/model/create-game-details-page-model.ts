@@ -3,8 +3,8 @@ import {
   publishRollbackCompletedNotification,
   rollbackComponent,
 } from '@entities/operation';
-import { publishErrorNotification } from '@shared/notifications';
-import { t } from '@shared/i18n';
+import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
+import { t, type MessageKey } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { clearDownloadProgress } from '@entities/library';
 
@@ -27,6 +27,18 @@ export type GameDetailsPageModelDeps = {
   checkIsGameStillSelected: (gameId: string) => boolean;
   runExclusive: <T>(task: () => Promise<T>) => Promise<T | null>;
   reloadGameDetails: () => Promise<void>;
+};
+
+type BatchOutcome = {
+  succeeded: number;
+  failed: number;
+  hasFirstError: boolean;
+  firstError: unknown;
+};
+
+type BatchFailureMessages = {
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
 };
 
 export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
@@ -60,21 +72,18 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
   ): Promise<void> {
     clearDownloadProgress([artifactId]);
     const result = await runForSelectedGameWithSignal(async (gameId, signal) => {
-      const appliedOperation = await executeGraphicsSwap({
-        gameId,
-        componentId,
-        artifactId,
-        isDownloaded,
-        signal,
-      });
-
-      if (appliedOperation === null) {
-        return null;
+      try {
+        return await executeGraphicsSwap({
+          gameId,
+          componentId,
+          artifactId,
+          isDownloaded,
+          signal,
+        });
+      } finally {
+        // Refresh even on failure so invalidated stale sources leave the candidate list.
+        await deps.reloadGameDetails();
       }
-
-      await deps.reloadGameDetails();
-
-      return appliedOperation;
     });
 
     if (result !== null) {
@@ -82,20 +91,11 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     }
   }
 
-  /**
-   * Runs an async operation across many items inside a single exclusive session:
-   * skips when no game is selected or the list is empty, isolates per-item
-   * failures, reloads details once at the end, and reports how many succeeded vs
-   * failed (`perItem` returns `true` when the item counts as applied).
-   *
-   * The shared `AbortSignal` is tripped when the active game changed before the
-   * lock was acquired — swaps honor it to skip stale work; rollback ignores it,
-   * matching the single-item rollback.
-   */
+  /** Exclusive multi-item run: isolate failures, reload once, keep first error. */
   async function runBatch<T>(
     items: readonly T[],
     perItem: (gameId: string, item: T, signal: AbortSignal) => Promise<boolean>,
-  ): Promise<{ succeeded: number; failed: number } | null> {
+  ): Promise<BatchOutcome | null> {
     if (items.length === 0) {
       return null;
     }
@@ -103,29 +103,57 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     return runForSelectedGameWithSignal(async (gameId, signal) => {
       let succeeded = 0;
       let failed = 0;
+      let hasFirstError = false;
+      let firstError: unknown;
 
       for (const item of items) {
         try {
           if (await perItem(gameId, item, signal)) {
             succeeded += 1;
           }
-        } catch {
+        } catch (error) {
           failed += 1;
+          if (!hasFirstError) {
+            hasFirstError = true;
+            firstError = error;
+          }
         }
       }
 
       await deps.reloadGameDetails();
 
-      return { succeeded, failed };
+      return { succeeded, failed, hasFirstError, firstError };
     });
   }
 
   /**
-   * Applies a set of component swaps in one exclusive run, reusing the
-   * per-component download-then-apply path. Serves both the Streamline "bundle
-   * swap" and the page-level "update all" button — failures are isolated and the
-   * applied count is reported, with any failures surfaced in aggregate.
+   * One failure → typed command error only; several → typed first error plus
+   * aggregate count toast.
    */
+  function publishBatchFailures(
+    failed: number,
+    total: number,
+    hasFirstError: boolean,
+    firstError: unknown,
+    aggregate: BatchFailureMessages,
+  ): void {
+    if (failed <= 0) {
+      return;
+    }
+
+    if (hasFirstError) {
+      publishCommandErrorNotification(firstError);
+    }
+
+    if (failed > 1 || !hasFirstError) {
+      publishErrorNotification(
+        t(aggregate.titleKey),
+        t(aggregate.descriptionKey, { failed, total }),
+      );
+    }
+  }
+
+  /** Bulk download-then-apply (Streamline bundle swap / update-all). */
   async function handleBulkSwap(items: BulkSwapItem[]): Promise<void> {
     clearDownloadProgress(items.map((item) => item.artifactId));
     const outcome = await runBatch(items, async (gameId, item, signal) => {
@@ -147,12 +175,10 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
       publishApplyCompletedNotification(outcome.succeeded);
     }
 
-    if (outcome.failed > 0) {
-      publishErrorNotification(
-        t('notify.swapBatchFailed.title'),
-        t('notify.swapBatchFailed.description', { failed: outcome.failed, total: items.length }),
-      );
-    }
+    publishBatchFailures(outcome.failed, items.length, outcome.hasFirstError, outcome.firstError, {
+      titleKey: 'notify.swapBatchFailed.title',
+      descriptionKey: 'notify.swapBatchFailed.description',
+    });
   }
 
   async function handleRollback(componentId: string): Promise<void> {
@@ -167,10 +193,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     }
   }
 
-  /**
-   * Restores several components to their pre-RenderPilot `.bak` originals in one
-   * run — the bulk counterpart to the per-plugin rollback.
-   */
+  /** Bulk restore to pre-RenderPilot `.bak` originals. */
   async function handleBulkRollback(componentIds: string[]): Promise<void> {
     const outcome = await runBatch(componentIds, async (gameId, componentId) => {
       await rollbackComponent(gameId, componentId);
@@ -185,15 +208,16 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
       publishRollbackCompletedNotification(outcome.succeeded);
     }
 
-    if (outcome.failed > 0) {
-      publishErrorNotification(
-        t('notify.rollbackBatchFailed.title'),
-        t('notify.rollbackBatchFailed.description', {
-          failed: outcome.failed,
-          total: componentIds.length,
-        }),
-      );
-    }
+    publishBatchFailures(
+      outcome.failed,
+      componentIds.length,
+      outcome.hasFirstError,
+      outcome.firstError,
+      {
+        titleKey: 'notify.rollbackBatchFailed.title',
+        descriptionKey: 'notify.rollbackBatchFailed.description',
+      },
+    );
   }
 
   return {

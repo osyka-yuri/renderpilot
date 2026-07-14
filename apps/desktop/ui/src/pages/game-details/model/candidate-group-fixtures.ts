@@ -46,7 +46,7 @@ export function group(
     component_id: componentId,
     technology,
     file_path: `C:/Game/${componentId}.dll`,
-    current_version: current,
+    version_report: current ? { kind: 'known', version: current } : { kind: 'unknown' },
     candidates,
   };
 }

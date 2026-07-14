@@ -6,9 +6,14 @@
 //! (that lives in [`super::matcher`]).
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    PathRef, Version, fsr,
+    ArtifactId, ArtifactTrustLevel, ComponentId, ComponentVersionReport, GameId, GraphicsComponent,
+    GraphicsTechnology, LibraryArtifact, PathRef, Version, component_version_report, fsr,
 };
+
+/// Version state used for both the DTO and matcher comparison baseline.
+pub(super) fn component_version_state(component: &GraphicsComponent) -> ComponentVersionReport {
+    component_version_report(component.files(), component.technology())
+}
 
 /// Replacement candidates applicable to one detected component (bundle).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,21 +22,21 @@ pub struct ComponentReplacementCandidates {
     game_id: GameId,
     technology: GraphicsTechnology,
     file_path: PathRef,
-    current_version: Option<Version>,
+    version_report: ComponentVersionReport,
     candidates: Vec<ReplacementCandidate>,
 }
 
 impl ComponentReplacementCandidates {
     /// Creates a per-component candidate group.
     ///
-    /// `current_version` describes the component's version representative
-    /// ([`fsr::version_representative`]: for cohesive FSR the upscaler
-    /// carries the FSR 4.x version; next to a real unified FSR 3.1 the entry
-    /// point does), while `file_path` is the user-facing display path — the dx12
-    /// entry point is still the path the user expects to see.
-    pub fn new(component: &GraphicsComponent, candidates: Vec<ReplacementCandidate>) -> Self {
-        let representative = fsr::version_representative(component.files())
-            .expect("component candidate group requires at least one file");
+    /// `version_report` distinguishes known, mixed, and unknown state instead
+    /// of overloading `None`. `file_path` is the user-facing display path
+    /// (dx12 entry point for FSR, name-min for Streamline).
+    pub fn new(
+        component: &GraphicsComponent,
+        version_report: ComponentVersionReport,
+        candidates: Vec<ReplacementCandidate>,
+    ) -> Self {
         let display = fsr::display_component_file(component.files())
             .expect("component candidate group requires at least one display file");
 
@@ -40,7 +45,7 @@ impl ComponentReplacementCandidates {
             game_id: component.game_id().clone(),
             technology: component.technology(),
             file_path: display.path().clone(),
-            current_version: representative.version().cloned(),
+            version_report,
             candidates,
         }
     }
@@ -73,14 +78,21 @@ impl ComponentReplacementCandidates {
         &self.file_path
     }
 
-    /// Returns the currently detected version, when available.
-    pub fn current_version(&self) -> Option<&Version> {
-        self.current_version.as_ref()
+    /// Returns the honest installed-version state for this component.
+    pub fn version_report(&self) -> &ComponentVersionReport {
+        &self.version_report
     }
 
-    /// Returns replacement candidates in stable presentation order: newest
-    /// version first with unknown versions last, ties broken by file name and
-    /// build type.
+    /// Returns replacement candidates in stable presentation order.
+    ///
+    /// Sort keys, in priority order:
+    /// 1. version descending (unknown versions last);
+    /// 2. multi-file packages ahead of single-file twins of the same version;
+    /// 3. file name (lexical);
+    /// 4. release before debug;
+    /// 5. preferred trust level (CDN/cache ahead of game-folder observations);
+    /// 6. downloaded twin last among identity ties (so the local copy wins
+    ///    deduplication while remaining a single visible row).
     pub fn candidates(&self) -> &[ReplacementCandidate] {
         &self.candidates
     }
@@ -99,6 +111,10 @@ pub struct ReplacementCandidate {
     manifest_entry_id: Option<String>,
     is_downloaded: bool,
     is_debug: bool,
+    /// Sort-only: prefer CDN/cache over game-folder observations.
+    trust_level: ArtifactTrustLevel,
+    /// Sort-only: multi-file packages sort ahead of single-file twins.
+    file_count: usize,
 }
 
 /// Named sort key for [`ReplacementCandidate`] ordering — every field is named
@@ -109,10 +125,16 @@ pub(super) struct CandidateSortKey<'a> {
     /// Version descending: `Reverse` makes `Some(3.0)` sort before `Some(2.0)`,
     /// and `Reverse(None)` sorts after every `Some(..)` — unknown versions last.
     version: std::cmp::Reverse<Option<&'a Version>>,
+    /// Multi-file packages (FSR / Streamline) sort ahead of single-file twins of
+    /// the same version so bulk swaps pick the full set.
+    file_count: std::cmp::Reverse<usize>,
     /// Secondary key: file name in lexical order.
     file_name: &'a str,
     /// Release builds before debug builds at the same version.
     is_debug: bool,
+    /// Prefer CDN/cache artifacts over game-folder observations when both
+    /// survive as candidates for the same version key.
+    trust_rank: u8,
     /// Downloaded twins sort before their non-downloaded counterpart so the
     /// downloaded copy survives deduplication.
     downloaded: std::cmp::Reverse<bool>,
@@ -146,24 +168,29 @@ impl ReplacementCandidate {
             manifest_entry_id,
             is_downloaded,
             is_debug,
+            trust_level: artifact.trust_level(),
+            // Domain forbids empty file lists; len is the package size for sort.
+            file_count: artifact.files().len(),
         }
     }
 
-    /// Stable presentation order: always version-descending, independent of the
-    /// installed version and of any mutable state.
+    /// Stable presentation / dedup order used by the matcher.
     ///
-    /// Deliberately excluded from the key: the comparison verdict (it shifts
-    /// every candidate's position whenever the installed version changes) and
-    /// the local file path (it appears when a download completes). The one
-    /// mutable field kept, `is_downloaded`, sits *after* every field that
-    /// distinguishes two post-dedup rows — it only orders identical
-    /// `(version, file_name, is_debug)` twins so the downloaded one survives
-    /// deduplication, and such twins collapse to a single visible row.
+    /// Field order of [`CandidateSortKey`] *is* the sort order and must stay
+    /// aligned with the public description on
+    /// [`ComponentReplacementCandidates::candidates`].
+    ///
+    /// Deliberately excluded: comparison verdict (shifts whenever the installed
+    /// version changes) and local path (appears after download). Trust and
+    /// `is_downloaded` sit after identity-distinguishing fields so the preferred
+    /// twin survives deduplication without reordering distinct candidates.
     pub(super) fn ordering_key(&self) -> CandidateSortKey<'_> {
         CandidateSortKey {
             version: std::cmp::Reverse(self.version.as_ref()),
+            file_count: std::cmp::Reverse(self.file_count),
             file_name: self.file_name.as_str(),
             is_debug: self.is_debug,
+            trust_rank: self.trust_level.candidate_preference_rank(),
             downloaded: std::cmp::Reverse(self.is_downloaded),
             sha256: self.sha256.as_str(),
         }

@@ -68,6 +68,11 @@ command_error_kinds! {
         severity: Warning,
         actions: suggested_action::REFRESH_CANDIDATES,
     },
+    StaleReplacementSource => {
+        code: "stale_replacement_source",
+        severity: Warning,
+        actions: suggested_action::REFRESH_CANDIDATES,
+    },
     InvalidOperationId => {
         code: "invalid_operation_id",
         severity: Warning,

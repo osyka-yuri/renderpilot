@@ -54,7 +54,7 @@ export function createCyberpunkDetails(): GameDetails {
       component_id: 'component:cp2077:dlss',
       technology: 'dlss_super_resolution',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlss.dll',
-      current_version: '3.5.10',
+      version_report: { kind: 'known', version: '3.5.10' },
       candidates: [
         {
           artifact_id: 'artifact:dlss:3.7.20',
@@ -73,7 +73,7 @@ export function createCyberpunkDetails(): GameDetails {
       component_id: 'component:cp2077:dlssg',
       technology: 'dlss_frame_generation',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlssg.dll',
-      current_version: '3.5.0',
+      version_report: { kind: 'known', version: '3.5.0' },
       candidates: [
         {
           artifact_id: 'artifact:dlssg:3.7.10',

@@ -1,52 +1,39 @@
-//! Loads prerequisites and validates an apply before any mutation runs.
+//! Loads and plans an apply before filesystem overlay.
+//!
+//! Source validation and stale-artifact recovery belong to the execution
+//! boundary. This module remains a catalog/planning step once loaded inputs are
+//! supplied.
 
 use renderpilot_application::{AppError, AppResult, build_swap_operation_plan};
-use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact, fsr,
-};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::catalog::swap::{require_artifact, require_component_for_game, require_game};
 
-use super::planning::{
-    additive_active_files, fsr_members_to_remove, full_component_set, planned_target_files,
-    rebuild_component, resolve_target_dir, validate_artifact_sources_exist,
-};
+use super::planning::{fsr_members_to_remove, planned_target_files, resolve_target_dir};
 use super::types::{LoadedApplySwap, PreparedApplySwap};
 
 pub(super) fn prepare_apply_swap(
-    storage: &SqliteStorage,
     game_id: &GameId,
     component_id: &ComponentId,
-    artifact_id: &ArtifactId,
+    loaded: LoadedApplySwap,
 ) -> AppResult<PreparedApplySwap> {
     let LoadedApplySwap {
         component,
         artifact,
         baseline,
         first_swap,
-    } = load_apply_swap(storage, game_id, component_id, artifact_id)?;
+    } = loaded;
 
-    validate_artifact_sources_exist(&artifact)?;
     validate_apply_is_allowed(&component, &artifact)?;
 
     let target_dir = resolve_target_dir(&component)?;
     let planned = planned_target_files(&artifact, &target_dir, &component)?;
 
-    // New active set = baseline files not overwritten by the package (kept) +
-    // the package's installed files, minus any FSR member a unified downgrade drops.
-    // Computed before any FS/DB mutation, against the baseline — the file set the
-    // directory holds once a re-swap's revert has run.
+    // Membership removals are planned against the baseline before any FS/DB
+    // mutation. The post-apply component set is rebuilt after the overlay so
+    // installed PE version / hash can be re-read from disk.
     let removed = fsr_members_to_remove(&baseline, &artifact, &planned);
-    // additive_active_files appends kept baseline files first, which would leave
-    // e.g. a denoiser in front of the entry point (FSR) or a stale plugin in
-    // front of a Streamline bundle's representative — store representative-first
-    // (mirroring detection) so files()[0] carries the right version until the
-    // next rescan.
-    let mut new_files = additive_active_files(&baseline, &planned, &removed);
-    fsr::sort_representative_first(&mut new_files);
-    let rebuilt = rebuild_component(&component, new_files);
-    let next_components = full_component_set(storage, game_id, rebuilt)?;
 
     Ok(PreparedApplySwap {
         game_id: game_id.clone(),
@@ -56,7 +43,6 @@ pub(super) fn prepare_apply_swap(
         baseline,
         planned,
         removed,
-        next_components,
         first_swap,
     })
 }
@@ -83,7 +69,7 @@ fn validate_apply_is_allowed(
     )))
 }
 
-fn load_apply_swap(
+pub(super) fn load_apply_swap(
     storage: &SqliteStorage,
     game_id: &GameId,
     component_id: &ComponentId,

@@ -177,6 +177,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': 'Wendet dieselbe Version auf alle Plugins an.',
   'gameDetails.streamline.noOtherVersions': 'Keine anderen Versionen',
   'gameDetails.streamline.mixed': 'Gemischte Versionen',
+  'gameDetails.streamline.mixedRange': 'Gemischte Versionen (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} Updates · {missing} fehlen',
   'gameDetails.streamline.restoreAllAria': 'Alle Plugins auf Original wiederherstellen',
   'gameDetails.streamline.restoreAllTooltip': 'Alle auf Original wiederherstellen',
@@ -187,9 +188,6 @@ export const de: Record<MessageKey, MessageValue> = {
     one: '1 Komponente auf die neueste Version aktualisieren',
     other: '{count} Komponenten auf die neueste Version aktualisieren',
   },
-  'gameDetails.streamline.mixedWarning':
-    'Plugins verwenden unterschiedliche Versionen. Wählen Sie oben eine Version aus, um sie zu synchronisieren.',
-
   'gameDetails.executable.title': 'Spiel-Programmdatei',
   'gameDetails.executable.description':
     'Die Programmdatei des Spiels — das NVIDIA-Profil gilt für sie, und RenoDX wird in ihren Ordner installiert.',
@@ -418,6 +416,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'user_message.cover_artwork_not_found': 'Kein Cover für dieses Spiel gefunden.',
   'user_message.cover_file_system_error':
     'Cover konnte nicht auf der Festplatte gespeichert werden.',
+  'user_message.stale_replacement_source':
+    'Dieses Update konnte nicht angewendet werden, weil die Quelldatei außerhalb von RenderPilot ersetzt oder geändert wurde. Bitte wählen Sie die Version erneut — möglicherweise ist ein Download erforderlich.',
   'user_message.nvapi_requires_administrator':
     'Zum Ändern dieser Einstellung sind Administratorrechte erforderlich.',
 

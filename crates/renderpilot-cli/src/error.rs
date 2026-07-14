@@ -88,6 +88,7 @@ const fn service_error_category(error: &ServiceError) -> ErrorCategory {
     match error {
         ServiceError::CommandFailed(_)
         | ServiceError::InvalidInput(_)
+        | ServiceError::StaleReplacementSource
         | ServiceError::StorageFailed(_)
         | ServiceError::ProviderFailed(_)
         | ServiceError::DetectionFailed(_)

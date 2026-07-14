@@ -7,7 +7,8 @@ import {
   publishApplyCompletedNotification,
   publishRollbackCompletedNotification,
 } from '@entities/operation';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
+import { DesktopCommandError } from '@shared/api';
 import {
   createGameDetailsPageModel,
   type GameDetailsPageModelDeps,
@@ -22,6 +23,7 @@ vi.mock('@entities/operation', () => ({
 
 vi.mock('@shared/notifications', () => ({
   publishErrorNotification: vi.fn(),
+  publishCommandErrorNotification: vi.fn(),
 }));
 
 const ACTIVE_GAME_ID = 'game-1';
@@ -63,6 +65,24 @@ describe('createGameDetailsPageModel', () => {
     expect(publishApplyCompletedNotification).not.toHaveBeenCalled();
   });
 
+  it('reloads details on single-swap failure so stale candidates clear (error bubbles to runExclusive)', async () => {
+    const commandError = new DesktopCommandError({
+      code: 'stale_replacement_source',
+      severity: 'warning',
+      messageKey: 'user_message.stale_replacement_source',
+      details:
+        'This update could not be applied because the source file was replaced or modified outside RenderPilot.',
+      suggestedActions: [],
+    });
+    vi.mocked(applySwap).mockRejectedValue(commandError);
+    const { model, reloadGameDetails } = createModel();
+
+    await expect(model.handleSwap('component-1', 'artifact-1', true)).rejects.toBe(commandError);
+    expect(reloadGameDetails).toHaveBeenCalledTimes(1);
+    expect(publishApplyCompletedNotification).not.toHaveBeenCalled();
+    // Typed toast is owned by createExclusiveTaskRunner.onError → showError at app shell.
+  });
+
   describe('handleBulkSwap', () => {
     const items = [
       { componentId: 'c1', artifactId: 'a1', isDownloaded: true },
@@ -81,16 +101,39 @@ describe('createGameDetailsPageModel', () => {
       expect(publishErrorNotification).not.toHaveBeenCalled();
     });
 
-    it('isolates a failed plugin: notifies the applied count and reports the failure', async () => {
+    it('isolates a failed plugin: notifies applied count and surfaces the typed error', async () => {
+      const commandError = new DesktopCommandError({
+        code: 'stale_replacement_source',
+        severity: 'warning',
+        messageKey: 'user_message.stale_replacement_source',
+        details:
+          'This update could not be applied because the source file was replaced or modified outside RenderPilot.',
+        suggestedActions: [],
+      });
       vi.mocked(applySwap)
         .mockResolvedValueOnce(createApplySwapResult())
-        .mockRejectedValueOnce(new Error('swap failed'));
+        .mockRejectedValueOnce(commandError);
       const { model, reloadGameDetails } = createModel();
 
       await model.handleBulkSwap(items);
 
       expect(reloadGameDetails).toHaveBeenCalledTimes(1);
       expect(publishApplyCompletedNotification).toHaveBeenCalledWith(1);
+      // Single failure: typed recovery message only (no generic batch toast).
+      expect(publishCommandErrorNotification).toHaveBeenCalledWith(commandError);
+      expect(publishErrorNotification).not.toHaveBeenCalled();
+    });
+
+    it('reports aggregate batch failure when multiple items fail', async () => {
+      const firstError = new Error('first swap failed');
+      vi.mocked(applySwap)
+        .mockRejectedValueOnce(firstError)
+        .mockRejectedValueOnce(new Error('second swap failed'));
+      const { model } = createModel();
+
+      await model.handleBulkSwap(items);
+
+      expect(publishCommandErrorNotification).toHaveBeenCalledWith(firstError);
       expect(publishErrorNotification).toHaveBeenCalledTimes(1);
     });
 
@@ -118,17 +161,19 @@ describe('createGameDetailsPageModel', () => {
       expect(publishErrorNotification).not.toHaveBeenCalled();
     });
 
-    it('isolates a failed plugin: notifies the restored count and reports the failure', async () => {
+    it('isolates a failed plugin: notifies restored count and surfaces the typed error', async () => {
+      const commandError = new Error('rollback failed');
       vi.mocked(rollbackComponent)
         .mockResolvedValueOnce(createRollbackResult())
-        .mockRejectedValueOnce(new Error('rollback failed'));
+        .mockRejectedValueOnce(commandError);
       const { model, reloadGameDetails } = createModel();
 
       await model.handleBulkRollback(['c1', 'c2']);
 
       expect(reloadGameDetails).toHaveBeenCalledTimes(1);
       expect(publishRollbackCompletedNotification).toHaveBeenCalledWith(1);
-      expect(publishErrorNotification).toHaveBeenCalledTimes(1);
+      expect(publishCommandErrorNotification).toHaveBeenCalledWith(commandError);
+      expect(publishErrorNotification).not.toHaveBeenCalled();
     });
 
     it('is a no-op for an empty list', async () => {

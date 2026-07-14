@@ -52,6 +52,9 @@ pub(super) struct LoadedApplySwap {
 }
 
 /// Fully prepared apply state, ready for the filesystem and storage steps.
+///
+/// Component rows written to the catalog are rebuilt after the FS overlay so
+/// they can rebind PE version / hash from the installed files.
 pub(super) struct PreparedApplySwap {
     pub(super) game_id: GameId,
     pub(super) component_id: ComponentId,
@@ -62,7 +65,6 @@ pub(super) struct PreparedApplySwap {
     /// FSR split members the (unified) target abandons and must delete — see
     /// [`super::planning::fsr_members_to_remove`]. Empty for every non-downgrade swap.
     pub(super) removed: Vec<ComponentFile>,
-    pub(super) next_components: Vec<GraphicsComponent>,
     pub(super) first_swap: bool,
 }
 
@@ -91,6 +93,7 @@ impl PreparedApplySwap {
 }
 
 /// One artifact file resolved to where it will be installed.
+#[derive(Debug)]
 pub(super) struct PlannedFile {
     /// Source artifact file on disk to copy from.
     pub(super) source: PathBuf,

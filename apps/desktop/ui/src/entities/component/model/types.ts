@@ -38,11 +38,16 @@ export type Candidate = {
   sha256: string;
 };
 
+export type ComponentVersionReport =
+  | { kind: 'known'; version: Version }
+  | { kind: 'mixed'; min_version: Version; max_version: Version }
+  | { kind: 'unknown' };
+
 export type CandidateGroup = {
   component_id: ComponentId;
   technology: Technology;
   file_path: FilePath;
-  current_version?: Nullable<Version>;
+  version_report: ComponentVersionReport;
   candidates: Candidate[];
 };
 

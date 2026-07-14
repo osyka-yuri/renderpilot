@@ -3,7 +3,11 @@ use std::{cmp::Ordering, error::Error, fmt, str::FromStr};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Normalized dotted numeric version, for example `3.7.20`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// Display text keeps the parsed segment count (`2.9.0` stays `2.9.0`), but
+/// equality and ordering treat trailing zero segments as insignificant so a PE
+/// file version `2.9.0.0` matches a manifest label `2.9.0`.
+#[derive(Debug, Clone)]
 pub struct Version {
     text: String,
     segments: Vec<u64>,
@@ -67,15 +71,57 @@ impl fmt::Display for Version {
     }
 }
 
+// Eq / Ord / Hash all use trailing-zero-insensitive segment identity so PE
+// `2.9.0.0` and manifest `2.9.0` compare and hash as the same release.
+
+impl PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Version {}
+
+impl std::hash::Hash for Version {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for segment in significant_segments(&self.segments) {
+            segment.hash(state);
+        }
+    }
+}
+
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.segments.cmp(&other.segments)
+        compare_segments_trailing_zeros(&self.segments, &other.segments)
     }
 }
 
 impl PartialOrd for Version {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+/// Compares version segments as if the shorter side were padded with trailing zeros.
+fn compare_segments_trailing_zeros(left: &[u64], right: &[u64]) -> Ordering {
+    let len = left.len().max(right.len());
+    for index in 0..len {
+        let left_seg = left.get(index).copied().unwrap_or(0);
+        let right_seg = right.get(index).copied().unwrap_or(0);
+        match left_seg.cmp(&right_seg) {
+            Ordering::Equal => {}
+            other => return other,
+        }
+    }
+    Ordering::Equal
+}
+
+/// Segments that participate in [`Hash`]: drop trailing zeros (all-zero → empty).
+/// Must agree with [`compare_segments_trailing_zeros`] equality.
+fn significant_segments(segments: &[u64]) -> &[u64] {
+    match segments.iter().rposition(|&segment| segment != 0) {
+        Some(last) => &segments[..=last],
+        None => &[],
     }
 }
 
@@ -172,6 +218,48 @@ mod tests {
         let newer = Version::parse("10.0").expect("valid version");
 
         assert!(older < newer);
+    }
+
+    #[test]
+    fn version_ordering_preserves_full_u64_segment_precision() {
+        let penultimate = Version::parse("18446744073709551614").expect("valid version");
+        let maximum = Version::parse("18446744073709551615").expect("valid version");
+
+        assert!(penultimate < maximum);
+    }
+
+    #[test]
+    fn trailing_zero_segments_are_insignificant_for_eq_and_ord() {
+        let short = Version::parse("2.9.0").expect("valid");
+        let long = Version::parse("2.9.0.0").expect("valid");
+        let shorter = Version::parse("2.9").expect("valid");
+        let patch = Version::parse("2.9.1").expect("valid");
+
+        assert_eq!(short, long);
+        assert_eq!(short, shorter);
+        assert_eq!(short.as_str(), "2.9.0");
+        assert_eq!(long.as_str(), "2.9.0.0");
+        assert!(short < patch);
+        assert!(long < patch);
+        assert_eq!(short.cmp(&long), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn trailing_zero_equivalent_versions_share_hash_map_keys() {
+        use std::collections::{HashMap, HashSet};
+
+        let short = Version::parse("2.9.0").expect("valid");
+        let long = Version::parse("2.9.0.0").expect("valid");
+        let other = Version::parse("2.9.1").expect("valid");
+
+        let mut set = HashSet::new();
+        set.insert(short.clone());
+        assert!(set.contains(&long));
+        assert!(!set.contains(&other));
+
+        let mut map = HashMap::new();
+        map.insert(long, "label");
+        assert_eq!(map.get(&short), Some(&"label"));
     }
 
     #[test]

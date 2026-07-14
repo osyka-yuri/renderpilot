@@ -98,6 +98,10 @@ impl CommandError {
                 Self::debug(Kind::InvalidArgument, Msg::INVALID_ARGUMENT, message)
             }
 
+            ServiceError::StaleReplacementSource => {
+                Self::user_facing(Kind::StaleReplacementSource, Msg::STALE_REPLACEMENT_SOURCE)
+            }
+
             ServiceError::StorageFailed(message) => {
                 Self::debug(Kind::StorageFailed, Msg::STORAGE_FAILED, message)
             }

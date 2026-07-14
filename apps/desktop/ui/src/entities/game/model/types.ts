@@ -150,11 +150,17 @@ export type GameCandidate = {
   sha256: string;
 };
 
+/** Honest installed-version state emitted by the Rust candidate DTO. */
+export type ComponentVersionReport =
+  | { kind: 'known'; version: string }
+  | { kind: 'mixed'; min_version: string; max_version: string }
+  | { kind: 'unknown' };
+
 export type GameCandidateGroup = {
   component_id: string;
   technology: string;
   file_path: string;
-  current_version?: string | null;
+  version_report: ComponentVersionReport;
   candidates: GameCandidate[];
 };
 

@@ -254,6 +254,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': 'Применяет одну версию ко всем плагинам.',
   'gameDetails.streamline.noOtherVersions': 'Других версий нет',
   'gameDetails.streamline.mixed': 'Разные версии',
+  'gameDetails.streamline.mixedRange': 'Разные версии (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': 'обновлений: {updates} · отсутствует: {missing}',
   'gameDetails.streamline.restoreAllAria': 'Восстановить исходные версии',
   'gameDetails.streamline.restoreAllTooltip': 'Восстановить исходные',
@@ -266,9 +267,6 @@ export const ru: Record<MessageKey, MessageValue> = {
     many: 'Обновить {count} компонентов до последней версии',
     other: 'Обновить {count} компонентов до последней версии',
   },
-  'gameDetails.streamline.mixedWarning':
-    'Плагины используют разные версии. Выберите версию выше для синхронизации.',
-
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
   'gameDetails.executable.description':
@@ -512,6 +510,8 @@ export const ru: Record<MessageKey, MessageValue> = {
   'user_message.cover_download_failed': 'Не удалось скачать обложку.',
   'user_message.cover_artwork_not_found': 'Обложка для этой игры не найдена.',
   'user_message.cover_file_system_error': 'Не удалось сохранить обложку на диск.',
+  'user_message.stale_replacement_source':
+    'Не удалось применить обновление: исходный файл был заменён или изменён вне RenderPilot. Выберите версию снова — может потребоваться загрузка.',
   'user_message.nvapi_requires_administrator':
     'Для изменения этой настройки требуются права администратора.',
 

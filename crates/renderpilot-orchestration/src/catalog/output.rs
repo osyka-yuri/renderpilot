@@ -5,6 +5,7 @@
 //! `renderpilot-api` crate use them so the wire format stays consistent.
 
 use renderpilot_application::{ComponentReplacementCandidates, ReplacementCandidate};
+use renderpilot_domain::ComponentVersionReport;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -23,10 +24,45 @@ pub struct ComponentCandidateOutput {
     pub technology: String,
     /// Installed file path of the component.
     pub file_path: String,
-    /// Currently installed version, if detectable.
-    pub current_version: Option<String>,
+    /// Honest installed-version state for this component.
+    pub version_report: ComponentVersionReportOutput,
     /// Available replacement candidates for this component.
     pub candidates: Vec<CandidateOutput>,
+}
+
+/// JSON-safe representation of the installed component version state.
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ComponentVersionReportOutput {
+    /// All relevant installed files resolve to one version.
+    Known {
+        /// Display version.
+        version: String,
+    },
+    /// Known installed files prove the component is on multiple releases.
+    Mixed {
+        /// Lowest known version.
+        min_version: String,
+        /// Highest known version.
+        max_version: String,
+    },
+    /// Metadata cannot establish a trustworthy installed version.
+    Unknown,
+}
+
+impl From<&ComponentVersionReport> for ComponentVersionReportOutput {
+    fn from(report: &ComponentVersionReport) -> Self {
+        match report {
+            ComponentVersionReport::Known(version) => Self::Known {
+                version: version.as_str().to_owned(),
+            },
+            ComponentVersionReport::Mixed { min, max } => Self::Mixed {
+                min_version: min.as_str().to_owned(),
+                max_version: max.as_str().to_owned(),
+            },
+            ComponentVersionReport::Unknown => Self::Unknown,
+        }
+    }
 }
 
 /// Serializable shape for a single replacement candidate artifact.
@@ -65,9 +101,7 @@ impl From<ComponentReplacementCandidates> for ComponentCandidateOutput {
             component_id: group.component_id().as_str().to_owned(),
             technology: group.technology().as_slug().to_owned(),
             file_path: group.file_path().as_str().to_owned(),
-            current_version: group
-                .current_version()
-                .map(|version| version.as_str().to_owned()),
+            version_report: ComponentVersionReportOutput::from(group.version_report()),
             candidates,
         }
     }
@@ -162,4 +196,44 @@ pub fn operation_summary_outputs(
         .iter()
         .map(OperationSummaryOutput::from)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ComponentVersionReportOutput;
+    use renderpilot_domain::{ComponentVersionReport, Version};
+    use serde_json::json;
+
+    #[test]
+    fn version_report_domain_variants_serialize_to_stable_wire_shapes() {
+        // Domain → output → JSON in one path: both the From mapping and the
+        // wire contract must stay locked together.
+        let cases = [
+            (
+                ComponentVersionReport::Known(Version::parse("2.9.0").expect("version")),
+                json!({ "kind": "known", "version": "2.9.0" }),
+            ),
+            (
+                ComponentVersionReport::Mixed {
+                    min: Version::parse("2.4.0").expect("version"),
+                    max: Version::parse("2.9.0").expect("version"),
+                },
+                json!({
+                    "kind": "mixed",
+                    "min_version": "2.4.0",
+                    "max_version": "2.9.0",
+                }),
+            ),
+            (
+                ComponentVersionReport::Unknown,
+                json!({ "kind": "unknown" }),
+            ),
+        ];
+
+        for (domain, expected_wire) in cases {
+            let wire =
+                serde_json::to_value(ComponentVersionReportOutput::from(&domain)).expect("json");
+            assert_eq!(wire, expected_wire);
+        }
+    }
 }

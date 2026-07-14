@@ -1,7 +1,7 @@
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash, Swappability,
-    Version,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind,
+    ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    PathRef, Sha256Hash, Swappability, Version,
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates};
@@ -397,6 +397,159 @@ fn unknown_versions_are_manual_candidates() {
 }
 
 #[test]
+fn mixed_streamline_reports_range_and_comparisons_are_unknown() {
+    // Matcher baseline and DTO report share the domain state: mixed plugins
+    // have no comparison baseline, so every candidate remains manual-review.
+    let component = streamline_component(&[
+        ("sl.common.dll", Some("2.9.0")),
+        ("sl.interposer.dll", Some("2.4.0")),
+    ]);
+    let package = streamline_package_artifact("artifact:sl-2.9", "2.9.0", 3);
+
+    let groups = find_test_candidates(&[component], &[package]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0].version_report(),
+        &ComponentVersionReport::Mixed {
+            min: Version::parse("2.4.0").expect("version"),
+            max: Version::parse("2.9.0").expect("version"),
+        }
+    );
+    assert_eq!(
+        groups[0].candidates()[0].comparison(),
+        CandidateComparison::UnknownVersion,
+        "with no baseline, same-release package is still offered as unknown"
+    );
+}
+
+#[test]
+fn uniform_streamline_compares_against_shared_version() {
+    let component = streamline_component(&[
+        ("sl.common.dll", Some("2.4.0")),
+        ("sl.interposer.dll", Some("2.4.0")),
+    ]);
+    let newer = streamline_package_artifact("artifact:sl-2.9", "2.9.0", 2);
+
+    let groups = find_test_candidates(&[component], &[newer]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0]
+            .version_report()
+            .known_version()
+            .map(Version::as_str),
+        Some("2.4.0")
+    );
+    assert_eq!(
+        groups[0].candidates()[0].comparison(),
+        CandidateComparison::NewerVersion
+    );
+}
+
+#[test]
+fn pe_trailing_zeros_match_manifest_label_for_streamline_baseline() {
+    // PE often reports 4-part versions; CDN packages may label 3-part. Equality
+    // must not invent Newer/Older solely from trailing zeros.
+    let component = streamline_component(&[
+        ("sl.common.dll", Some("2.9.0.0")),
+        ("sl.interposer.dll", Some("2.9.0.0")),
+    ]);
+    let same_release = streamline_package_artifact("artifact:sl-2.9", "2.9.0", 2);
+
+    let groups = find_test_candidates(&[component], &[same_release]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0]
+            .version_report()
+            .known_version()
+            .map(Version::as_str),
+        Some("2.9.0.0")
+    );
+    assert_eq!(
+        groups[0].candidates()[0].comparison(),
+        CandidateComparison::UnknownVersion,
+        "2.9.0.0 and 2.9.0 are the same release (not newer/older)"
+    );
+}
+
+#[test]
+fn multi_file_streamline_package_sorts_ahead_of_single_file_twin() {
+    let component = streamline_component(&[
+        ("sl.common.dll", Some("2.4.0")),
+        ("sl.dlss.dll", Some("2.4.0")),
+    ]);
+    let single = sample_artifact(
+        "artifact:sl-common-only",
+        GraphicsTechnology::NvidiaStreamline,
+        Some("2.9.0"),
+        &"c".repeat(64),
+        "C:/Lib/sl.common.dll",
+        None,
+    );
+    // Force ManifestDownloaded so trust alone does not explain package winning.
+    let single = LibraryArtifact::new(
+        single.id().clone(),
+        GraphicsTechnology::NvidiaStreamline,
+        "sl.common.dll",
+        single.files().to_vec(),
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("single");
+    let package = streamline_package_artifact("artifact:sl-pkg-2.9", "2.9.0", 2);
+
+    let groups = find_test_candidates(&[component], &[single, package.clone()]);
+    assert_eq!(groups.len(), 1);
+    // Same version + file_name collapse: package (higher file_count) must win.
+    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(
+        groups[0].candidates()[0].artifact_id(),
+        package.id(),
+        "multi-file package must beat single-file twin at the same version"
+    );
+}
+
+#[test]
+fn manifest_downloaded_outranks_local_observed_for_same_version_key() {
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let local = sample_artifact(
+        "artifact:local",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"b".repeat(64),
+        "C:/Other/nvngx_dlss.dll",
+        Some("game:b"),
+    );
+    let manifest = LibraryArtifact::new(
+        ArtifactId::new("artifact:manifest").expect("id"),
+        GraphicsTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(PathRef::new("C:/cache/nvngx_dlss.dll").expect("path"))
+                .with_sha256(Sha256Hash::new("c".repeat(64)).expect("sha"))
+                .with_version(Version::parse("3.7.0").expect("version")),
+        ],
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("manifest artifact");
+
+    let groups = find_test_candidates(&[component], &[local, manifest.clone()]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(
+        groups[0].candidates()[0].artifact_id(),
+        manifest.id(),
+        "ManifestDownloaded must outrank LocalObserved when version keys collide"
+    );
+}
+
+#[test]
 fn matches_same_family_artifacts_across_file_names() {
     // A Streamline component and a Streamline artifact with different file
     // names are a valid bundle swap now (the engine swaps the whole bundle),
@@ -559,6 +712,53 @@ fn sample_artifact(
     }
 }
 
+/// Multi-file Streamline component with optional per-file PE versions.
+fn streamline_component(files: &[(&str, Option<&str>)]) -> GraphicsComponent {
+    let mut component = GraphicsComponent::new(
+        ComponentId::new("component:game-a:streamline").expect("component id"),
+        GameId::new("game:a").expect("game id"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::NvidiaStreamline,
+        Swappability::BundleOnly,
+    );
+    for (index, (name, version)) in files.iter().enumerate() {
+        let sha = char::from(b'a' + index as u8).to_string().repeat(64);
+        let mut file = ComponentFile::new(PathRef::new(format!("C:/Game/{name}")).expect("path"))
+            .with_sha256(Sha256Hash::new(sha).expect("sha"));
+        if let Some(version) = version {
+            file = file.with_version(Version::parse(*version).expect("version"));
+        }
+        component = component.with_file(file);
+    }
+    component
+}
+
+/// Multi-file Streamline package (name-min primary = first member after sort).
+fn streamline_package_artifact(
+    artifact_id: &str,
+    version: &str,
+    member_count: usize,
+) -> LibraryArtifact {
+    let names = ["sl.common.dll", "sl.dlss.dll", "sl.interposer.dll"];
+    let files: Vec<_> = (0..member_count)
+        .map(|index| {
+            let name = names[index % names.len()];
+            let sha = char::from(b'a' + index as u8).to_string().repeat(64);
+            ComponentFile::new(PathRef::new(format!("manifest://{name}")).expect("path"))
+                .with_sha256(Sha256Hash::new(sha).expect("sha"))
+                .with_version(Version::parse(version).expect("version"))
+        })
+        .collect();
+    LibraryArtifact::new(
+        ArtifactId::new(artifact_id).expect("artifact id"),
+        GraphicsTechnology::NvidiaStreamline,
+        "sl.common.dll",
+        files,
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("streamline package")
+}
+
 /// Builds a multi-file (split) FSR package artifact with virtual `manifest://`
 /// member paths — like a composed FSR 4 release: upscaler (primary) + loader.
 fn split_package_artifact(artifact_id: &str, version: &str) -> LibraryArtifact {
@@ -672,7 +872,10 @@ fn cohesive_fsr_candidate_group_uses_entry_point_as_display_path() {
         "C:/Game/amd_fidelityfx_dx12.dll"
     );
     assert_eq!(
-        groups[0].current_version().map(|version| version.as_str()),
+        groups[0]
+            .version_report()
+            .known_version()
+            .map(|version| version.as_str()),
         Some("4.0.3")
     );
 }
@@ -718,7 +921,10 @@ fn mixed_fsr_component_reports_the_entry_points_version() {
         "C:/Game/amd_fidelityfx_dx12.dll"
     );
     assert_eq!(
-        groups[0].current_version().map(|version| version.as_str()),
+        groups[0]
+            .version_report()
+            .known_version()
+            .map(|version| version.as_str()),
         Some("1.0.1.41314"),
         "the leftover upscaler must not hijack the current version"
     );

@@ -127,6 +127,13 @@ fn persist_scan_result_in_transaction(
     games::upsert_game_within_transaction(transaction, game)?;
     components::replace_components_for_game_within_transaction(transaction, game.id(), components)?;
     artifacts::upsert_artifacts_within_transaction(transaction, artifacts)?;
+    // Drop LocalObserved rows from earlier scans of this game that no longer
+    // match on-disk content (e.g. user restored originals outside RenderPilot).
+    artifacts::prune_stale_local_observed_for_game_within_transaction(
+        transaction,
+        game.id(),
+        artifacts,
+    )?;
 
     Ok(ScanWriteReport {
         game_rows_written: 1,

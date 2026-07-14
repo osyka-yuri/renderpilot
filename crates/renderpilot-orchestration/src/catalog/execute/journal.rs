@@ -1,6 +1,8 @@
 //! Best-effort recording of completed swap / rollback operations in the journal.
 
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, PathRef, fsr};
+use renderpilot_domain::{
+    ArtifactId, ComponentId, GameId, GraphicsComponent, PathRef, component_version_report,
+};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use renderpilot_application::{
@@ -98,9 +100,9 @@ fn build_metadata_json(
     let metadata = OperationMetadata {
         game_name,
         library: component.technology().as_slug().to_string(),
-        from_version: fsr::version_representative(component.files())
-            .and_then(|f| f.version())
-            .map(|v| v.to_string()),
+        from_version: component_version_report(component.files(), component.technology())
+            .known_version()
+            .map(ToString::to_string),
         to_version: to_version.unwrap_or(UNKNOWN_VERSION).to_owned(),
     };
     let metadata_str = serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_owned());

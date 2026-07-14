@@ -233,6 +233,10 @@ mod tests {
                 ServiceError::InvalidInput("bad id".into()),
                 "invalid_argument",
             ),
+            (
+                ServiceError::StaleReplacementSource,
+                "stale_replacement_source",
+            ),
         ];
 
         for (service_error, expected_code) in cases {
@@ -249,6 +253,25 @@ mod tests {
                 "category must not collapse into the generic command_failed code"
             );
         }
+    }
+
+    #[test]
+    fn stale_replacement_source_maps_to_user_facing_recovery_message() {
+        let err = CommandError::from(ApiError::Service(ServiceError::StaleReplacementSource));
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(
+            value.get("messageKey"),
+            Some(&json!(
+                strings::user_message::STALE_REPLACEMENT_SOURCE.key()
+            ))
+        );
+        assert_eq!(
+            value.get("details"),
+            Some(&json!(
+                strings::user_message::STALE_REPLACEMENT_SOURCE.default_text()
+            ))
+        );
     }
 
     #[test]

@@ -44,6 +44,11 @@ pub enum AppErrorKind {
     /// The requested component was not found.
     ComponentNotFound,
 
+    /// Catalog replacement snapshot is unusable (path gone or content changed
+    /// outside RenderPilot). User should re-select the version; a download may
+    /// be needed after the stale row is invalidated.
+    StaleReplacementSource,
+
     /// The operation is in an invalid state for the requested transition.
     InvalidOperationState {
         /// Operation identifier (as persisted or referenced by the caller).
@@ -69,6 +74,7 @@ impl AppErrorKind {
             Self::OperationNotFound => "operation_not_found",
             Self::ArtifactNotFound => "artifact_not_found",
             Self::ComponentNotFound => "component_not_found",
+            Self::StaleReplacementSource => "stale_replacement_source",
             Self::InvalidOperationState { .. } => "invalid_operation_state",
         }
     }
@@ -86,6 +92,7 @@ impl AppErrorKind {
             Self::OperationNotFound => "operation not found",
             Self::ArtifactNotFound => "artifact not found",
             Self::ComponentNotFound => "component not found",
+            Self::StaleReplacementSource => "stale replacement source",
             Self::InvalidOperationState { .. } => "invalid operation state",
         }
     }
@@ -203,6 +210,16 @@ impl AppError {
         Self::new(
             AppErrorKind::ComponentNotFound,
             format!("graphics component `{component_id}` was not found"),
+        )
+    }
+
+    /// Creates an error when a cataloged replacement source is missing or no
+    /// longer matches its recorded content hash (manual restore, external edit).
+    #[must_use]
+    pub fn stale_replacement_source() -> Self {
+        Self::new(
+            AppErrorKind::StaleReplacementSource,
+            "replacement source is missing or was modified outside RenderPilot",
         )
     }
 
@@ -326,6 +343,10 @@ mod tests {
         assert_eq!(
             AppErrorKind::ComponentNotFound.code(),
             "component_not_found"
+        );
+        assert_eq!(
+            AppErrorKind::StaleReplacementSource.code(),
+            "stale_replacement_source"
         );
         assert_eq!(
             AppErrorKind::InvalidOperationState {

@@ -175,6 +175,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': 'Aplica la misma versión a todos los complementos.',
   'gameDetails.streamline.noOtherVersions': 'Sin otras versiones',
   'gameDetails.streamline.mixed': 'Versiones mixtas',
+  'gameDetails.streamline.mixedRange': 'Versiones mixtas (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} actualizaciones · {missing} faltantes',
   'gameDetails.streamline.restoreAllAria': 'Restaurar todos los complementos a su estado original',
   'gameDetails.streamline.restoreAllTooltip': 'Restaurar todo a su estado original',
@@ -185,9 +186,6 @@ export const es: Record<MessageKey, MessageValue> = {
     one: 'Actualizar 1 componente a su última versión',
     other: 'Actualizar {count} componentes a sus últimas versiones',
   },
-  'gameDetails.streamline.mixedWarning':
-    'Los complementos utilizan versiones diferentes. Selecciona una versión de arriba para sincronizarlos.',
-
   'gameDetails.executable.title': 'Ejecutable del juego',
   'gameDetails.executable.description':
     'El ejecutable del juego: el perfil de NVIDIA se aplica a él y RenoDX se instala en su carpeta.',
@@ -413,6 +411,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'user_message.cover_download_failed': 'Error al descargar la carátula.',
   'user_message.cover_artwork_not_found': 'No se encontró carátula para este juego.',
   'user_message.cover_file_system_error': 'Error al guardar la carátula en el disco.',
+  'user_message.stale_replacement_source':
+    'No se pudo aplicar esta actualización porque el archivo de origen se reemplazó o modificó fuera de RenderPilot. Vuelva a seleccionar la versión; es posible que se necesite una descarga.',
   'user_message.nvapi_requires_administrator':
     'Se requieren derechos de administrador para cambiar esta configuración.',
 

@@ -1,13 +1,25 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use renderpilot_application::{
+    AppErrorKind, ArtifactRepository, ComponentRepository, GameRepository,
+};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash, Swappability,
+    GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher,
+    LibraryArtifact, PathRef, Platform, Sha256Hash, Swappability, Version,
 };
+use renderpilot_storage_sqlite::SqliteStorage;
 
+use crate::Context;
+use crate::catalog::execute::apply_swap;
+
+use super::abort_apply_after_fs;
+use super::ensure_artifact_sources_usable;
 use super::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
-use super::planning::fsr_members_to_remove;
+use super::planning::{fsr_members_to_remove, planned_target_files};
+use super::prepare::load_apply_swap;
+use super::source_integrity::rebind_planned_files_from_disk;
 use super::types::{AppliedFsChanges, PlannedFile};
 
 const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -250,6 +262,432 @@ fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
     assert!(
         fsr_members_to_remove(&baseline, &artifact, &planned).is_empty(),
         "the loader+denoiser stack is not part of the upscaling lineage"
+    );
+}
+
+/// Planning helpers for Streamline path building (policy lives in
+/// `streamline_install`; these assert `planned_target_files` wiring).
+fn streamline_component(installed_names: &[&str]) -> GraphicsComponent {
+    let mut component = GraphicsComponent::new(
+        ComponentId::new("component:streamline").expect("id"),
+        GameId::new("manual:C:/Games/Test").expect("game id"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::NvidiaStreamline,
+        Swappability::BundleOnly,
+    );
+    for name in installed_names {
+        component = component.with_file(comp_file_str(&format!("C:/game/{name}")));
+    }
+    component
+}
+
+fn streamline_package(member_names: &[&str]) -> LibraryArtifact {
+    let files: Vec<_> = member_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let sha = char::from(b'a' + index as u8).to_string().repeat(64);
+            ComponentFile::new(PathRef::new(format!("C:/lib/{name}")).expect("path"))
+                .with_sha256(Sha256Hash::new(sha).expect("sha"))
+                .with_version(Version::parse("2.9.0.0").expect("version"))
+        })
+        .collect();
+    LibraryArtifact::new(
+        ArtifactId::new("artifact:sl-pkg").expect("id"),
+        GraphicsTechnology::NvidiaStreamline,
+        member_names[0],
+        files,
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("package")
+}
+
+#[test]
+fn planned_streamline_targets_intersect_package_with_installed_set() {
+    let component = streamline_component(&["sl.common.dll", "sl.interposer.dll"]);
+    let artifact = streamline_package(&["sl.common.dll", "sl.dlss.dll", "sl.interposer.dll"]);
+
+    let planned = planned_target_files(&artifact, Path::new("C:/game"), &component)
+        .expect("plan should succeed");
+    let names: Vec<&str> = planned
+        .iter()
+        .filter_map(|p| p.file.path().file_name())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["sl.common.dll", "sl.interposer.dll"],
+        "optional SDK members must not expand the game's plugin set"
+    );
+}
+
+#[test]
+fn planned_streamline_empty_overlap_is_an_error() {
+    let component = streamline_component(&["sl.common.dll"]);
+    let artifact = streamline_package(&["sl.dlss.dll", "sl.reflex.dll"]);
+
+    match planned_target_files(&artifact, Path::new("C:/game"), &component) {
+        Err(err) => assert!(
+            err.message().contains("no installable files"),
+            "unexpected error: {}",
+            err.message()
+        ),
+        Ok(_) => panic!("expected empty intersection to fail"),
+    }
+}
+
+#[test]
+fn planned_non_streamline_multi_file_package_keeps_all_members() {
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:fsr").expect("id"),
+        GameId::new("manual:C:/Games/Test").expect("game id"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::AmdFsr,
+        Swappability::BundleOnly,
+    )
+    .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"));
+
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:fsr-pkg").expect("id"),
+        GraphicsTechnology::AmdFsr,
+        "amd_fidelityfx_upscaler_dx12.dll",
+        vec![
+            comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
+                .with_sha256(Sha256Hash::new("a".repeat(64)).expect("sha")),
+            comp_file_str("C:/lib/amd_fidelityfx_loader_dx12.dll")
+                .with_sha256(Sha256Hash::new("b".repeat(64)).expect("sha")),
+        ],
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("artifact");
+
+    let planned = planned_target_files(&artifact, Path::new("C:/game"), &component)
+        .expect("non-streamline multi-file plans all members");
+    assert_eq!(planned.len(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Integration: full apply_swap + prepare_apply_swap (ship-quality locks)
+// ---------------------------------------------------------------------------
+
+fn path_as_ref(path: &Path) -> PathRef {
+    PathRef::new(path.to_string_lossy().as_ref()).expect("path ref")
+}
+
+fn sha_of(path: &Path) -> Sha256Hash {
+    renderpilot_detection::sha256_file(path).expect("hash file")
+}
+
+fn sample_game_at(install: &Path) -> GameInstallation {
+    let install_str = install.to_string_lossy();
+    let id = format!("manual:{install_str}");
+    let identity = GameIdentity::new(
+        GameId::new(id).expect("game id"),
+        "Test Game",
+        Launcher::Manual,
+    )
+    .expect("identity");
+    GameInstallation::new(
+        identity,
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        path_as_ref(install),
+    )
+}
+
+#[test]
+fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let game_dir = root.path().join("game");
+    let lib_dir = root.path().join("lib");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&lib_dir).expect("lib dir");
+
+    // Package on disk: three release members + one SDK extra the game never had.
+    let pkg = [
+        ("sl.common.dll", b"common-v2.9".as_slice()),
+        ("sl.interposer.dll", b"interposer-v2.9".as_slice()),
+        ("sl.dlss.dll", b"dlss-v2.9".as_slice()),
+        ("sl.pcl.dll", b"pcl-v2.9-extra".as_slice()),
+    ];
+    for (name, bytes) in &pkg {
+        write(&lib_dir.join(name), bytes);
+    }
+
+    // Game currently has three older plugins only.
+    for name in ["sl.common.dll", "sl.interposer.dll", "sl.dlss.dll"] {
+        write(&game_dir.join(name), format!("old-{name}").as_bytes());
+    }
+
+    let mut package_files = Vec::new();
+    for (name, _) in &pkg {
+        let path = lib_dir.join(name);
+        package_files.push(
+            ComponentFile::new(path_as_ref(&path))
+                .with_sha256(sha_of(&path))
+                .with_version(Version::parse("2.9.0.0").expect("version")),
+        );
+    }
+    let shas: Vec<_> = package_files
+        .iter()
+        .map(|f| f.sha256().expect("sha").clone())
+        .collect();
+    let artifact = LibraryArtifact::new(
+        ArtifactId::for_bundle(shas.iter()),
+        GraphicsTechnology::NvidiaStreamline,
+        "sl.common.dll",
+        package_files,
+        ArtifactTrustLevel::ManifestDownloaded,
+    )
+    .expect("package artifact")
+    .with_source("manifest-download")
+    .expect("source");
+
+    let game = sample_game_at(&game_dir);
+    let mut component = GraphicsComponent::new(
+        ComponentId::new("component:streamline").expect("id"),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::NvidiaStreamline,
+        Swappability::BundleOnly,
+    );
+    for name in ["sl.common.dll", "sl.interposer.dll", "sl.dlss.dll"] {
+        let path = game_dir.join(name);
+        component = component.with_file(
+            ComponentFile::new(path_as_ref(&path))
+                .with_sha256(sha_of(&path))
+                .with_version(Version::parse("2.4.0.0").expect("version")),
+        );
+    }
+
+    let storage = SqliteStorage::in_memory().expect("sqlite");
+    storage.upsert_game(&game).expect("store game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("store components");
+    storage.upsert_artifact(&artifact).expect("store artifact");
+
+    let context = Context::from_storage(storage);
+    apply_swap(
+        &context,
+        game.id(),
+        &ComponentId::new("component:streamline").expect("id"),
+        artifact.id(),
+    )
+    .expect("package apply should succeed");
+
+    // All three installed plugins updated to package bytes.
+    for (name, bytes) in &pkg[..3] {
+        assert_eq!(
+            fs::read(game_dir.join(name)).expect("read installed"),
+            *bytes,
+            "{name} must receive package content"
+        );
+    }
+    // Extra package member must not be added to the game folder.
+    assert!(
+        !game_dir.join("sl.pcl.dll").exists(),
+        "intersection policy must not expand the plugin set"
+    );
+
+    let stored = context
+        .storage()
+        .list_components_for_game(game.id())
+        .expect("list components");
+    assert_eq!(stored.len(), 1);
+    assert_eq!(
+        stored[0].files().len(),
+        3,
+        "component must still have exactly the installed plugin set"
+    );
+    for file in stored[0].files() {
+        let name = file.path().file_name().expect("installed basename");
+        let on_disk = sha_of(&game_dir.join(name));
+        assert_eq!(
+            file.sha256(),
+            Some(&on_disk),
+            "{name}: catalog must store the re-read installed hash, not a stale plan snapshot"
+        );
+        assert_eq!(
+            file.version().map(Version::as_str),
+            None,
+            "each stored file must remain version-unknown when PE metadata is absent"
+        );
+    }
+}
+
+#[test]
+fn preflight_rejects_stale_source_invalidates_artifact_and_leaves_game_untouched() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let game_dir = root.path().join("game");
+    let lib_dir = root.path().join("lib");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&lib_dir).expect("lib dir");
+
+    let source = lib_dir.join("nvngx_dlss.dll");
+    let target = game_dir.join("nvngx_dlss.dll");
+    write(&source, b"dlss-310.7-original");
+    write(&target, b"dlss-game-original");
+    let expected_sha = sha_of(&source);
+
+    // Snapshot says 310.7, then the source file is overwritten (manual restore).
+    let artifact = LibraryArtifact::new(
+        ArtifactId::for_bundle([&expected_sha]),
+        GraphicsTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(path_as_ref(&source))
+                .with_sha256(expected_sha)
+                .with_version(Version::parse("310.7.0.0").expect("version")),
+        ],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact")
+    .with_source("scan-folder")
+    .expect("source");
+
+    write(&source, b"dlss-3.1.30-after-manual-restore");
+
+    let game = sample_game_at(&game_dir);
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:dlss").expect("id"),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&target))
+            .with_sha256(sha_of(&target))
+            .with_version(Version::parse("3.1.0.0").expect("version")),
+    );
+
+    let storage = SqliteStorage::in_memory().expect("sqlite");
+    storage.upsert_game(&game).expect("store game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("store components");
+    storage.upsert_artifact(&artifact).expect("store artifact");
+    let artifact_id = artifact.id().clone();
+
+    let loaded = load_apply_swap(
+        &storage,
+        game.id(),
+        &ComponentId::new("component:dlss").expect("id"),
+        &artifact_id,
+    )
+    .expect("load apply swap");
+    match ensure_artifact_sources_usable(&storage, &loaded.artifact) {
+        Ok(()) => panic!("stale source must fail preflight"),
+        Err(error) => assert_eq!(
+            *error.kind(),
+            AppErrorKind::StaleReplacementSource,
+            "expected StaleReplacementSource, got {:?}",
+            error.kind()
+        ),
+    }
+
+    let remaining = storage.list_artifacts().expect("list artifacts");
+    assert!(
+        remaining.iter().all(|a| a.id() != &artifact_id),
+        "stale artifact row must be invalidated"
+    );
+    assert_eq!(
+        fs::read(&target).expect("game file"),
+        b"dlss-game-original",
+        "game DLL must not be modified when prepare fails"
+    );
+}
+
+#[test]
+fn post_copy_hash_mismatch_uses_apply_recovery_boundary() {
+    // TOCTOU after copy cannot be injected into apply_swap without a seam, so
+    // this test drives the same recovery function apply_swap calls when rebind
+    // returns StaleReplacementSource. Reimplementing undo/delete here would
+    // pass even if apply_swap stopped recovering.
+    let root = tempfile::tempdir().expect("tempdir");
+    let game_dir = root.path().join("game");
+    let lib_dir = root.path().join("lib");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&lib_dir).expect("lib dir");
+
+    let source = lib_dir.join("nvngx_dlss.dll");
+    let target = game_dir.join("nvngx_dlss.dll");
+    write(&source, b"dlss-replacement-bytes");
+    write(&target, b"dlss-game-original");
+    let expected_sha = sha_of(&source);
+
+    let artifact = LibraryArtifact::new(
+        ArtifactId::for_bundle([&expected_sha]),
+        GraphicsTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(path_as_ref(&source))
+                .with_sha256(expected_sha)
+                .with_version(Version::parse("310.7.0.0").expect("version")),
+        ],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact")
+    .with_source("scan-folder")
+    .expect("source");
+
+    let game = sample_game_at(&game_dir);
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:dlss").expect("id"),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&target))
+            .with_sha256(sha_of(&target))
+            .with_version(Version::parse("3.1.0.0").expect("version")),
+    );
+
+    let storage = SqliteStorage::in_memory().expect("sqlite");
+    storage.upsert_game(&game).expect("store game");
+    // Keep `component` for direct plan/apply calls below — unlike the full
+    // apply_swap path which reloads from storage by id.
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("store components");
+    storage.upsert_artifact(&artifact).expect("store artifact");
+    let artifact_id = artifact.id().clone();
+
+    let mut planned = planned_target_files(&artifact, &game_dir, &component).expect("plan");
+    let changes = perform_apply_fs(&component, component.files(), &planned, &[], true)
+        .expect("copy should succeed");
+    assert_eq!(
+        fs::read(&target).expect("copied target"),
+        b"dlss-replacement-bytes",
+        "precondition: overlay must install the replacement before the mutation"
+    );
+
+    write(&target, b"mutated-after-copy");
+    let rebind_error =
+        rebind_planned_files_from_disk(&mut planned).expect_err("mutated target must fail rebind");
+    assert_eq!(*rebind_error.kind(), AppErrorKind::StaleReplacementSource);
+
+    let service_error = abort_apply_after_fs(&storage, &changes, &artifact_id, rebind_error);
+    assert!(
+        matches!(service_error, crate::ServiceError::StaleReplacementSource),
+        "recovery must preserve the stable stale-source error, got {service_error:?}"
+    );
+
+    assert_eq!(
+        fs::read(&target).expect("restored game file"),
+        b"dlss-game-original",
+        "overlay must roll back to the pre-swap game bytes"
+    );
+    assert!(
+        !bak_of(&target).exists(),
+        "restored target must leave no leftover .bak after undo"
+    );
+    let remaining = storage.list_artifacts().expect("list artifacts");
+    assert!(
+        remaining.iter().all(|a| a.id() != &artifact_id),
+        "stale artifact row must be invalidated after post-copy mismatch"
     );
 }
 

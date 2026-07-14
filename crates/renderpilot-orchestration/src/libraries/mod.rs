@@ -4,11 +4,13 @@
 mod tests;
 
 mod artifact_builder;
+mod composed_package;
 mod compression;
 mod fsr_packages;
 mod local_library;
 mod manifest;
 mod storage;
+mod streamline_packages;
 mod types;
 mod validate;
 
@@ -58,8 +60,9 @@ pub async fn download_library(
 
 /// Materializes a swap artifact by its artifact id.
 ///
-/// Handles both single manifest DLL entries and composed FSR release packages.
-/// Returns a [`LibraryState`] whose `artifact_id` is the downloaded artifact.
+/// Handles single manifest DLL entries and composed multi-file packages (FSR
+/// and Streamline). Returns a [`LibraryState`] whose `artifact_id` is the
+/// downloaded artifact.
 pub async fn download_artifact(
     context: &crate::Context,
     artifact_id: String,
@@ -69,9 +72,9 @@ pub async fn download_artifact(
         .map_err(|error| library_error(format!("invalid artifact id: {error}")))?;
     let manifest = manifest::require_local_manifest()?;
 
-    // Single-file manifest artifact.
-    let (_, entry_ids, _) = artifact_builder::manifest_entries_as_artifacts()?;
-    if let Some(entry_id) = entry_ids.get(&target_id) {
+    let index = artifact_builder::manifest_artifact_index(&manifest)?;
+
+    if let Some(entry_id) = index.single_entry_id(&target_id) {
         let entry = manifest::require_entry(&manifest, entry_id)?.clone();
         let downloaded =
             local_library::ensure_downloaded_and_registered(context, &entry, progress).await?;
@@ -83,18 +86,28 @@ pub async fn download_artifact(
         ));
     }
 
-    // Composed FSR release package (download every member, register one artifact).
-    if let Some(package) = fsr_packages::compose_fsr_packages(&manifest.entries)
-        .into_iter()
-        .find(|package| *package.artifact.id() == target_id)
-    {
-        let registered =
-            local_library::ensure_package_downloaded(context, &manifest, &package, progress)
-                .await?;
-        return Ok(fsr_package_state(&package, registered));
+    if let Some((package_artifact, member_entry_ids)) = index.package(&target_id) {
+        let registered = local_library::ensure_package_downloaded(
+            context,
+            &manifest,
+            package_artifact,
+            member_entry_ids,
+            progress,
+        )
+        .await?;
+        return Ok(composed_package_state(package_artifact, registered));
     }
 
     Err(library_error(format!("unknown artifact id: {artifact_id}")))
+}
+
+/// Composed multi-file packages from the manifest (FSR, then Streamline).
+pub(in crate::libraries) fn compose_all_packages(
+    entries: &[types::LibraryManifestEntry],
+) -> Result<Vec<composed_package::ComposedPackage>, ServiceError> {
+    let mut packages = fsr_packages::compose_fsr_packages(entries)?;
+    packages.extend(streamline_packages::compose_streamline_packages(entries)?);
+    Ok(packages)
 }
 
 /// Deletes a locally downloaded library by its manifest entry ID.
@@ -125,11 +138,13 @@ pub fn get_library_states() -> Result<Vec<LibraryState>, ServiceError> {
     local_library::library_states(&entries)
 }
 
-fn fsr_package_state(package: &fsr_packages::FsrPackage, artifact_id: String) -> LibraryState {
+fn composed_package_state(
+    artifact: &renderpilot_domain::LibraryArtifact,
+    artifact_id: String,
+) -> LibraryState {
     LibraryState {
         id: artifact_id.clone(),
-        version: package
-            .artifact
+        version: artifact
             .version()
             .map(|version| version.as_str().to_owned())
             .unwrap_or_default(),

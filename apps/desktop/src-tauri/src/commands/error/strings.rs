@@ -71,6 +71,9 @@ pub(crate) enum UserMessage {
     CoverFileSystemError,
 
     NvapiRequiresAdministrator,
+
+    /// Replacement DLL path was missing or no longer matches the catalog hash.
+    StaleReplacementSource,
 }
 
 impl UserMessage {
@@ -99,6 +102,7 @@ impl UserMessage {
         Self::CoverArtworkNotFound,
         Self::CoverFileSystemError,
         Self::NvapiRequiresAdministrator,
+        Self::StaleReplacementSource,
     ];
 
     #[must_use]
@@ -208,6 +212,13 @@ impl UserMessage {
                 "user_message.nvapi_requires_administrator",
                 "Administrator privileges are required to change this NVIDIA setting.",
             ),
+
+            Self::StaleReplacementSource => LocalizedText::new(
+                "user_message.stale_replacement_source",
+                "This update could not be applied because the source file was \
+                 replaced or modified outside RenderPilot. Please select the \
+                 version again — a download may be needed.",
+            ),
         }
     }
 
@@ -279,6 +290,8 @@ pub(crate) mod user_message {
 
     pub(crate) const NVAPI_REQUIRES_ADMINISTRATOR: UserMessage =
         UserMessage::NvapiRequiresAdministrator;
+
+    pub(crate) const STALE_REPLACEMENT_SOURCE: UserMessage = UserMessage::StaleReplacementSource;
 
     #[cfg(test)]
     pub(crate) const ALL: &[UserMessage] = UserMessage::ALL;

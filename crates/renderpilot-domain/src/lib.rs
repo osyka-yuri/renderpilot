@@ -20,8 +20,8 @@ pub use addon::{
     TrackedSourceRole,
 };
 pub use component::{
-    ArtifactTrustLevel, ComponentError, ComponentFile, GraphicsComponent, LibraryArtifact,
-    Sha256Digest, Sha256Hash,
+    ArtifactTrustLevel, ComponentError, ComponentFile, ComponentVersionReport, GraphicsComponent,
+    LibraryArtifact, Sha256Digest, Sha256Hash, component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
 pub use game::{GameIdentity, GameInstallation, GameModelError};

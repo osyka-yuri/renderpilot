@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildStreamlineVersionModel } from './streamline-versions';
+import { compareVersionAsc, versionsEqual } from './version-compare';
 import { candidate, component, group as makeGroup } from './candidate-group-fixtures';
 
 const STREAMLINE = 'nvidia_streamline';
@@ -14,7 +15,9 @@ function group(
 }
 
 function findOption(model: ReturnType<typeof buildStreamlineVersionModel>, version: string) {
-  const option = model.options.find((o) => o.version === version);
+  const option = model.options.find(
+    (o) => o.version === version || versionsEqual(o.version, version),
+  );
   if (!option) {
     throw new Error(`expected an option for version ${version}`);
   }
@@ -72,6 +75,7 @@ describe('buildStreamlineVersionModel', () => {
 
     expect(model.currentVersion).toBeNull();
     expect(model.isMixed).toBe(true);
+    expect(model.versionRange).toEqual({ min: '2.3.0', max: '2.4.0' });
 
     // When mixed, no single current version is known — nothing is pre-inserted.
     expect(model.options.every((o) => !o.isCurrent)).toBe(true);
@@ -134,5 +138,82 @@ describe('buildStreamlineVersionModel', () => {
 
     const v230 = findOption(model, '2.3.0');
     expect(v230.isCurrent).toBe(false);
+  });
+
+  it('uses the backend mixed report without re-reading raw component files', () => {
+    const bundle = component('streamline');
+    const groupsById = {
+      streamline: {
+        ...group('streamline', null, [
+          candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
+          candidate('2.4.0', { artifact_id: 'pkg-240', file_name: 'sl.common.dll' }),
+        ]),
+        version_report: { kind: 'mixed' as const, min_version: '2.4.0', max_version: '2.9.0' },
+      },
+    };
+
+    const model = buildStreamlineVersionModel([bundle], groupsById);
+
+    expect(model.isMixed).toBe(true);
+    expect(model.currentVersion).toBeNull();
+    expect(model.versionRange).toEqual({ min: '2.4.0', max: '2.9.0' });
+
+    const v290 = findOption(model, '2.9.0');
+    expect(v290.isCurrent).toBe(false);
+    expect(v290.updateCount).toBe(1);
+    expect(v290.items[0]?.artifactId).toBe('pkg-290');
+  });
+
+  it('treats trailing-zero-equivalent known reports as current', () => {
+    const bundle = component('streamline');
+    // PE often reports 2.9.0.0 while package options use 2.9.0 — equality must
+    // mark the option current without inventing a second Select entry.
+    const groupsById = {
+      streamline: group('streamline', '2.9.0.0', [
+        candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
+        candidate('2.8.0', { artifact_id: 'pkg-280', file_name: 'sl.common.dll' }),
+      ]),
+    };
+
+    const model = buildStreamlineVersionModel([bundle], groupsById);
+
+    expect(model.isMixed).toBe(false);
+    expect(model.currentVersion).toBe('2.9.0.0');
+    // First spelling of an equivalent release is kept (known report before package label).
+    expect(model.options.map((o) => o.version)).toEqual(['2.9.0.0', '2.8.0']);
+    const current = findOption(model, '2.9.0');
+    expect(current.isCurrent).toBe(true);
+    expect(current.version).toBe('2.9.0.0');
+    expect(current.updateCount).toBe(0);
+  });
+
+  it('does not invent a uniform current from an unknown report', () => {
+    const bundle = component('streamline');
+    const groupsById = {
+      streamline: group('streamline', null, [
+        candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
+      ]),
+    };
+
+    const model = buildStreamlineVersionModel([bundle], groupsById);
+
+    expect(model.currentVersion).toBeNull();
+    expect(model.isMixed).toBe(false);
+    const v290 = findOption(model, '2.9.0');
+    expect(v290.isCurrent).toBe(false);
+    expect(v290.updateCount).toBe(1);
+  });
+});
+
+describe('versionsEqual (version-compare)', () => {
+  it('ignores trailing zero segments', () => {
+    expect(versionsEqual('2.9.0', '2.9.0.0')).toBe(true);
+    expect(versionsEqual('2.9', '2.9.0.0')).toBe(true);
+    expect(versionsEqual('2.9.0', '2.9.1')).toBe(false);
+  });
+
+  it('compares u64-sized segments without JavaScript Number rounding', () => {
+    expect(compareVersionAsc('18446744073709551614', '18446744073709551615')).toBeLessThan(0);
+    expect(compareVersionAsc('18446744073709551615.0', '18446744073709551615')).toBe(0);
   });
 });

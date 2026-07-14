@@ -176,6 +176,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': 'Applique la même version à tous les plugins.',
   'gameDetails.streamline.noOtherVersions': 'Aucune autre version',
   'gameDetails.streamline.mixed': 'Versions mixtes',
+  'gameDetails.streamline.mixedRange': 'Versions mixtes (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} mises à jour · {missing} manquants',
   'gameDetails.streamline.restoreAllAria': 'Restaurer tous les plugins à l’original',
   'gameDetails.streamline.restoreAllTooltip': 'Tout restaurer à l’original',
@@ -186,9 +187,6 @@ export const fr: Record<MessageKey, MessageValue> = {
     one: 'Mettre à jour 1 composant vers sa dernière version',
     other: 'Mettre à jour {count} composants vers leur dernière version',
   },
-  'gameDetails.streamline.mixedWarning':
-    'Les plugins utilisent des versions différentes. Sélectionnez une version ci-dessus pour les synchroniser.',
-
   'gameDetails.executable.title': 'Exécutable du jeu',
   'gameDetails.executable.description':
     'L’exécutable du jeu : le profil NVIDIA s’y applique et RenoDX s’installe dans son dossier.',
@@ -414,6 +412,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'user_message.cover_download_failed': 'Échec du téléchargement de la jaquette.',
   'user_message.cover_artwork_not_found': 'Aucune jaquette trouvée pour ce jeu.',
   'user_message.cover_file_system_error': 'Échec de l’enregistrement de la jaquette sur le disque.',
+  'user_message.stale_replacement_source':
+    'Cette mise à jour n’a pas pu être appliquée car le fichier source a été remplacé ou modifié en dehors de RenderPilot. Sélectionnez à nouveau la version — un téléchargement peut être nécessaire.',
   'user_message.nvapi_requires_administrator':
     'Les droits d’administrateur sont requis pour modifier ce paramètre.',
 

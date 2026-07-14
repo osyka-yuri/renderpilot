@@ -5,14 +5,10 @@ use sha2::{Digest, Sha256};
 use crate::ServiceError;
 use crate::net::{DownloadProgress, ProgressObserver};
 use renderpilot_application::ArtifactRepository;
-use renderpilot_domain::{
-    ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
-};
+use renderpilot_domain::{ArtifactTrustLevel, ComponentFile, LibraryArtifact, PathRef};
 
 use super::{
-    artifact_builder, compression,
-    fsr_packages::FsrPackage,
-    library_error, storage,
+    artifact_builder, compression, library_error, storage,
     types::{LibraryManifest, LibraryManifestEntry, LibraryState},
     validate,
 };
@@ -305,7 +301,25 @@ async fn ensure_member_dll(
         && let Ok(metadata) = std::fs::metadata(&dll_path)
         && metadata.len() == entry.files.dll.size_bytes
     {
-        return Ok(dll_path);
+        // Size alone is not enough: a same-size corrupt cache after stale
+        // invalidation would loop forever. Verify the member hash before reuse.
+        match read_or_compute_dll_sha256(&dll_path) {
+            Ok(actual) if actual.eq_ignore_ascii_case(entry.files.dll.hashes.sha256.as_str()) => {
+                return Ok(dll_path);
+            }
+            Ok(_) => {
+                log::info!(
+                    "member dll hash mismatch for {}; re-extracting",
+                    entry.entry_id
+                );
+            }
+            Err(error) => {
+                log::warn!(
+                    "failed to hash member dll for {}: {error}; re-extracting",
+                    entry.entry_id
+                );
+            }
+        }
     }
 
     let artifact = decompress_or_reuse(entry, &archive_path, maybe_artifact)?;
@@ -314,77 +328,67 @@ async fn ensure_member_dll(
     Ok(dll_path)
 }
 
-/// Materializes every member of an FSR package, then registers a single composed
-/// `LibraryArtifact` whose files point at the local DLLs and carry their install
-/// targets. Returns the registered package artifact id. All-or-nothing: the
-/// package artifact is registered only after every member is on disk.
+/// Materializes every member of a composed package, then registers a multi-file
+/// [`LibraryArtifact`] whose files point at the local DLLs.
+///
+/// All-or-nothing: registration happens only after every member is on disk.
+/// `package_artifact` is the virtual catalog row (from
+/// [`super::artifact_builder::ManifestArtifactIndex::package`]);
+/// `member_entry_ids` are the manifest members in the same file order.
 pub(super) async fn ensure_package_downloaded(
     context: &crate::Context,
     manifest: &LibraryManifest,
-    package: &FsrPackage,
+    package_artifact: &LibraryArtifact,
+    member_entry_ids: &[String],
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<String, ServiceError> {
-    // Collect members and total byte count in a single pass — no duplicate
-    // `require_entry` calls, no extra allocations.
-    let members: Vec<&LibraryManifestEntry> = package
-        .member_entry_ids
+    if package_artifact.files().len() != member_entry_ids.len() {
+        return Err(library_error(
+            "composed package artifact files and member entry ids are out of sync",
+        ));
+    }
+
+    let members: Vec<&LibraryManifestEntry> = member_entry_ids
         .iter()
         .map(|id| super::manifest::require_entry(manifest, id))
         .collect::<Result<_, _>>()?;
-
-    let total_bytes: u64 = members.iter().map(|e| e.files.zst.size_bytes).sum();
+    let total_bytes: u64 = members.iter().map(|entry| entry.files.zst.size_bytes).sum();
 
     let mut local_files = Vec::with_capacity(members.len());
     let mut cumulative_downloaded: u64 = 0;
 
     for (index, entry) in members.iter().enumerate() {
         let offset = cumulative_downloaded;
-
-        // Build a per-member closure that translates member-local bytes into
-        // cumulative package bytes — no `Box` allocation needed.
-        let member_progress_fn = progress.map(|cb| {
-            move |p: DownloadProgress<'_>| {
-                cb(DownloadProgress {
-                    downloaded_bytes: offset + p.downloaded_bytes,
+        let member_progress_fn = progress.map(|callback| {
+            move |progress: DownloadProgress<'_>| {
+                callback(DownloadProgress {
+                    downloaded_bytes: offset + progress.downloaded_bytes,
                     total_bytes,
-                    phase: p.phase,
+                    phase: progress.phase,
                 });
             }
         });
-        let member_progress: Option<&ProgressObserver<'_>> = member_progress_fn
+        let member_progress = member_progress_fn
             .as_ref()
-            .map(|f| f as &ProgressObserver<'_>);
+            .map(|callback| callback as &ProgressObserver<'_>);
 
         let dll_path = ensure_member_dll(entry, member_progress).await?;
         cumulative_downloaded += entry.files.zst.size_bytes;
-
-        // Mirror the virtual package file (sha / version / install_as) but point
-        // it at the local DLL.
-        let template = &package.artifact.files()[index];
-        let path = PathRef::new(dll_path.to_string_lossy().as_ref())
-            .map_err(|error| library_error(format!("invalid member dll path: {error}")))?;
-        let mut file = ComponentFile::new(path);
-        if let Some(sha256) = template.sha256() {
-            file = file.with_sha256(sha256.clone());
-        }
-        if let Some(version) = template.version() {
-            file = file.with_version(version.clone());
-        }
-        if let Some(install_as) = template.install_as() {
-            file = file.with_install_as(install_as);
-        }
-        local_files.push(file);
+        local_files.push(localize_package_member(
+            &package_artifact.files()[index],
+            &dll_path,
+        )?);
     }
 
     let artifact = LibraryArtifact::new(
-        package.artifact.id().clone(),
-        GraphicsTechnology::AmdFsr,
-        package.artifact.file_name(),
+        package_artifact.id().clone(),
+        package_artifact.technology(),
+        package_artifact.file_name(),
         local_files,
         ArtifactTrustLevel::ManifestDownloaded,
     )
-    .map_err(|error| library_error(format!("failed to build FSR package artifact: {error}")))?
-    .with_source("manifest-download")
+    .map_err(|error| library_error(format!("failed to build package artifact: {error}")))?
+    .with_source(super::composed_package::PACKAGE_SOURCE)
     .map_err(|error| library_error(format!("failed to attach package source: {error}")))?;
 
     let artifact_id = artifact.id().as_str().to_owned();
@@ -392,8 +396,27 @@ pub(super) async fn ensure_package_downloaded(
         .storage()
         .upsert_artifact(&artifact)
         .map_err(ServiceError::from)?;
-
     Ok(artifact_id)
+}
+
+/// Copies virtual package metadata onto a real on-disk DLL path.
+fn localize_package_member(
+    template: &ComponentFile,
+    dll_path: &Path,
+) -> Result<ComponentFile, ServiceError> {
+    let path = PathRef::new(dll_path.to_string_lossy().as_ref())
+        .map_err(|error| library_error(format!("invalid member dll path: {error}")))?;
+    let mut file = ComponentFile::new(path);
+    if let Some(sha256) = template.sha256() {
+        file = file.with_sha256(sha256.clone());
+    }
+    if let Some(version) = template.version() {
+        file = file.with_version(version.clone());
+    }
+    if let Some(install_as) = template.install_as() {
+        file = file.with_install_as(install_as);
+    }
+    Ok(file)
 }
 
 // ---------------------------------------------------------------------------

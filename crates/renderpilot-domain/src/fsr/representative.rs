@@ -55,6 +55,10 @@ pub fn primary_rank(file_name: &str, upscaler_represents: bool) -> u8 {
 /// Streamline bundle) selects the file-name-minimum member, mirroring detection.
 /// The choice is order-independent, so `current_version` is correct regardless
 /// of how a caller happened to store the file list.
+///
+/// For user-facing Streamline state, prefer [`crate::component_version_report`]
+/// — a mixed `sl.*` folder must not look fully updated just because
+/// `sl.common` matches.
 #[must_use]
 pub fn version_representative(files: &[ComponentFile]) -> Option<&ComponentFile> {
     if !is_fsr_named_set(files) {

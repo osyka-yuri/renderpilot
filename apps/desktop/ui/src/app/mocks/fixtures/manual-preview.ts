@@ -44,7 +44,7 @@ export function createManualPreviewDetails(
         component_id: `${gameId}:dlss`,
         technology: 'dlss_super_resolution',
         file_path: dlssPath,
-        current_version: '3.5.10',
+        version_report: { kind: 'known', version: '3.5.10' },
         candidates: [
           {
             artifact_id: `artifact:${gameId}:dlss-preview`,

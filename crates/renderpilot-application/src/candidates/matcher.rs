@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version, fsr,
+    ArtifactId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version, fsr,
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
@@ -75,7 +75,8 @@ pub fn find_replacement_candidates(
             continue;
         };
 
-        let current_version = primary_component_version(component);
+        let version_report = super::dto::component_version_state(component);
+        let current_version = version_report.known_version();
         let candidates = component_artifacts
             .iter()
             .filter_map(|artifact| {
@@ -108,7 +109,11 @@ pub fn find_replacement_candidates(
         }
 
         let candidates = sort_and_deduplicate_candidates(candidates);
-        groups.push(ComponentReplacementCandidates::new(component, candidates));
+        groups.push(ComponentReplacementCandidates::new(
+            component,
+            version_report,
+            candidates,
+        ));
     }
 
     groups.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
@@ -284,14 +289,6 @@ fn require_not_split_downgrade(
         return None;
     }
     Some(())
-}
-
-/// The version the component is compared by: the FSR-aware representative
-/// (entry point vs upscaler per release cohesion), not blindly `files()[0]` —
-/// components persisted before the representative-ranking fix may still carry
-/// an arbitrary stored order.
-fn primary_component_version(component: &GraphicsComponent) -> Option<&Version> {
-    fsr::version_representative(component.files()).and_then(ComponentFile::version)
 }
 
 fn require_version_compatible(

@@ -1,11 +1,8 @@
 import type { GameCandidateGroup, GameDetails } from '@entities/game';
 
 import { NVIDIA_STREAMLINE_TECHNOLOGY } from './game-details-tabs';
-import {
-  buildStreamlineVersionModel,
-  compareVersionDesc,
-  type BulkSwapItem,
-} from './streamline-versions';
+import { buildStreamlineVersionModel, type BulkSwapItem } from './streamline-versions';
+import { compareVersionDesc } from './version-compare';
 
 type GameCandidate = GameCandidateGroup['candidates'][number];
 

@@ -37,7 +37,9 @@
   const candidates = $derived(group?.candidates ?? []);
 
   const currentHash = $derived(component.files[0]?.sha256);
-  const currentVersion = $derived(group?.current_version);
+  const currentVersion = $derived(
+    group?.version_report.kind === 'known' ? group.version_report.version : undefined,
+  );
 
   const currentCandidate = $derived(
     candidates.find((c) => currentHash && c.sha256 === currentHash),
@@ -48,9 +50,7 @@
   const isCurrentDebug = $derived(currentCandidate?.is_debug ?? false);
 
   const currentLabel = $derived(
-    group?.current_version
-      ? `v${group.current_version}${isCurrentDebug ? ' (Debug)' : ''}`
-      : t('common.unknown'),
+    currentVersion ? `v${currentVersion}${isCurrentDebug ? ' (Debug)' : ''}` : t('common.unknown'),
   );
 
   // Track which artifact id the user actually clicked to download so the

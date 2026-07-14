@@ -165,6 +165,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': '将同一版本应用于所有插件。',
   'gameDetails.streamline.noOtherVersions': '没有其他版本',
   'gameDetails.streamline.mixed': '混合版本',
+  'gameDetails.streamline.mixedRange': '混合版本 (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} 个更新 · 缺失 {missing} 个',
   'gameDetails.streamline.restoreAllAria': '将所有插件恢复为原始版本',
   'gameDetails.streamline.restoreAllTooltip': '全部恢复为原始状态',
@@ -175,8 +176,6 @@ export const zh: Record<MessageKey, MessageValue> = {
     one: '将 {count} 个组件更新到最新版本',
     other: '将 {count} 个组件更新到最新版本',
   },
-  'gameDetails.streamline.mixedWarning': '插件使用的是不同的版本。请在上方选择一个版本以同步它们。',
-
   'gameDetails.executable.title': '游戏可执行文件',
   'gameDetails.executable.description':
     '游戏可执行文件 — NVIDIA 配置文件应用于它，RenoDX 安装到它所在的文件夹。',
@@ -384,6 +383,8 @@ export const zh: Record<MessageKey, MessageValue> = {
   'user_message.cover_download_failed': '下载封面失败。',
   'user_message.cover_artwork_not_found': '未找到此游戏的封面。',
   'user_message.cover_file_system_error': '将封面保存到磁盘失败。',
+  'user_message.stale_replacement_source':
+    '无法应用此更新，因为源文件已在 RenderPilot 外部被替换或修改。请重新选择版本——可能需要重新下载。',
   'user_message.nvapi_requires_administrator': '需要管理员权限才能更改此设置。',
 
   'suggested_action.refresh_games': '刷新游戏列表并重试。',

@@ -244,6 +244,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
     fs::write(&source_path, b"original-bytes").expect("source file should be written");
     fs::write(&artifact_path, b"replacement-bytes").expect("artifact file should be written");
     let source_sha256 = sha256_hex(b"original-bytes");
+    let artifact_sha256 = sha256_hex(b"replacement-bytes");
 
     let install_path = path_string(game_folder.path());
     let artifact_path_string = path_string(&artifact_path);
@@ -269,7 +270,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
-        REPLACEMENT_SHA256,
+        &artifact_sha256,
         None,
     ));
 
@@ -308,13 +309,14 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
         components[0].files()[0]
             .version()
             .map(|version| version.as_str()),
-        Some("3.7.0")
+        None,
+        "a non-PE replacement must remain version-unknown rather than inheriting manifest metadata"
     );
     assert_eq!(
         components[0].files()[0]
             .sha256()
             .map(|sha256| sha256.as_str()),
-        Some(REPLACEMENT_SHA256)
+        Some(artifact_sha256.as_str())
     );
 }
 
@@ -349,6 +351,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
     let artifact_path_string = path_string(&artifact_path);
     let dlss_source_sha = sha256_hex(b"dlss-original");
     let fsr_sibling_sha = sha256_hex(b"fsr-sibling-bytes");
+    let artifact_sha256 = sha256_hex(b"dlss-replacement");
     let game_id = format!("manual:{install_path}");
     let game = sample_game(&game_id, "Game With Two Components", &install_path);
 
@@ -381,7 +384,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
         GraphicsTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
-        REPLACEMENT_SHA256,
+        &artifact_sha256,
         None,
     ));
 
@@ -423,8 +426,8 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
         .expect("DLSS component must be present");
     assert_eq!(
         dlss_component.files()[0].version().map(|v| v.as_str()),
-        Some("3.7.0"),
-        "the DLSS component should reflect the new version"
+        None,
+        "a non-PE replacement must remain version-unknown rather than inheriting manifest metadata"
     );
     let fsr_component = components
         .iter()

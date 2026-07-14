@@ -1,7 +1,10 @@
 mod hash;
+mod version_report;
 
 #[cfg(test)]
 mod tests;
+
+pub use version_report::{ComponentVersionReport, component_version_report};
 
 use std::{error::Error, fmt};
 
@@ -287,6 +290,20 @@ impl ArtifactTrustLevel {
             Self::UserImported => "user_imported",
             Self::ManifestDownloaded => "manifest_downloaded",
             Self::Unknown => "unknown",
+        }
+    }
+
+    /// Lower rank wins when ranking replacement candidates of the same version.
+    ///
+    /// Prefers CDN/manifest cache over user imports over game-folder
+    /// observations so the preferred twin survives candidate deduplication.
+    #[must_use]
+    pub const fn candidate_preference_rank(self) -> u8 {
+        match self {
+            Self::ManifestDownloaded => 0,
+            Self::UserImported => 1,
+            Self::LocalObserved => 2,
+            Self::Unknown => 3,
         }
     }
 }

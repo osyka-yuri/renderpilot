@@ -1,5 +1,7 @@
 use renderpilot_application::{AppResult, ArtifactRepository};
-use renderpilot_domain::LibraryArtifact;
+use std::collections::HashSet;
+
+use renderpilot_domain::{ArtifactTrustLevel, GameId, LibraryArtifact};
 use rusqlite::{Statement, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
@@ -128,6 +130,55 @@ fn upsert_artifact_with_statement(
     Ok(())
 }
 
+/// Drops LocalObserved artifacts previously sourced from `game_id` that are no
+/// longer present in the latest scan set for that game.
+///
+/// Manual restores outside RenderPilot leave stale rows pointing at the same
+/// path with outdated version/hash snapshots; pruning on rescan keeps the
+/// replacement pool honest. The retained-id check runs in Rust rather than a
+/// variable-length `NOT IN` clause, so a large scan cannot hit SQLite's bind
+/// parameter limit. ManifestDownloaded / UserImported rows are never removed.
+pub(super) fn prune_stale_local_observed_for_game_within_transaction(
+    transaction: &Transaction<'_>,
+    game_id: &GameId,
+    retain: &[LibraryArtifact],
+) -> AppResult<()> {
+    let local_observed = mapping::enum_to_text(&ArtifactTrustLevel::LocalObserved)?;
+    let retained_ids: HashSet<&str> = retain
+        .iter()
+        .map(|artifact| artifact.id().as_str())
+        .collect();
+    let stale_ids = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT id FROM library_artifacts
+                 WHERE source_game_id = ?1 AND trust_level = ?2",
+            )
+            .map_err(storage_error)?;
+        statement
+            .query_map(
+                rusqlite::params![game_id.as_str(), local_observed.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)?
+    };
+
+    for artifact_id in stale_ids {
+        if !retained_ids.contains(artifact_id.as_str()) {
+            transaction
+                .execute(
+                    "DELETE FROM library_artifacts WHERE id = ?1",
+                    rusqlite::params![artifact_id],
+                )
+                .map_err(storage_error)?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug)]
 struct ArtifactSqlRow<'a> {
     id: &'a str,
@@ -157,8 +208,9 @@ impl<'a> ArtifactSqlRow<'a> {
 mod tests {
     use renderpilot_application::{ArtifactRepository, GameRepository};
     use renderpilot_domain::{
-        ArtifactId, ArtifactTrustLevel, ComponentFile, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact, PathRef, Platform, Sha256Hash,
+        ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+        GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology,
+        Launcher, LibraryArtifact, PathRef, Platform, Sha256Hash, Swappability,
     };
 
     use super::SqliteStorage;
@@ -408,6 +460,172 @@ mod tests {
         assert_eq!(
             artifacts[0].trust_level(),
             ArtifactTrustLevel::ManifestDownloaded
+        );
+    }
+
+    #[test]
+    fn prune_removes_stale_local_observed_for_game_but_keeps_others() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let game_a = sample_game("manual:C:/Games/A", "Game A");
+        let game_b = sample_game("manual:C:/Games/B", "Game B");
+        storage.upsert_game(&game_a).expect("game a");
+        storage.upsert_game(&game_b).expect("game b");
+
+        let stale_a = sample_artifact(
+            "artifact:stale-a",
+            "C:/Games/A/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_A,
+        )
+        .with_source_game_id(game_a.id().clone());
+        let current_a = sample_artifact(
+            "artifact:current-a",
+            "C:/Games/A/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_B,
+        )
+        .with_source_game_id(game_a.id().clone());
+        let other_b = sample_artifact(
+            "artifact:other-b",
+            "C:/Games/B/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        )
+        .with_source_game_id(game_b.id().clone());
+        let cached = sample_artifact_with_trust(
+            "artifact:cached",
+            "C:/AppData/cache/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            ArtifactTrustLevel::ManifestDownloaded,
+        );
+
+        for artifact in [&stale_a, &current_a, &other_b, &cached] {
+            storage
+                .upsert_artifact(artifact)
+                .expect("artifact should store");
+        }
+
+        // Rescan game A with only current_a in the write unit (plus empty
+        // components): prune runs inside save_scan_write_unit.
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:a:dlss").expect("component id"),
+            game_a.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(PathRef::new("C:/Games/A/nvngx_dlss.dll").expect("path"))
+                .with_sha256(Sha256Hash::new(HASH_B).expect("sha")),
+        );
+
+        storage
+            .save_scan_result(&game_a, &[component], std::slice::from_ref(&current_a))
+            .expect("rescan should prune stale LocalObserved");
+
+        let ids: Vec<String> = storage
+            .list_artifacts()
+            .expect("list")
+            .into_iter()
+            .map(|artifact| artifact.id().as_str().to_owned())
+            .collect();
+
+        assert!(
+            !ids.iter().any(|id| id == "artifact:stale-a"),
+            "stale LocalObserved for game A must be pruned"
+        );
+        assert!(ids.iter().any(|id| id == "artifact:current-a"));
+        assert!(
+            ids.iter().any(|id| id == "artifact:other-b"),
+            "LocalObserved from other games must remain"
+        );
+        assert!(
+            ids.iter().any(|id| id == "artifact:cached"),
+            "ManifestDownloaded must never be pruned by game scan"
+        );
+    }
+
+    #[test]
+    fn empty_scan_prunes_only_current_games_local_observed_artifacts() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let game_a = sample_game("manual:C:/Games/A", "Game A");
+        let game_b = sample_game("manual:C:/Games/B", "Game B");
+        storage.upsert_game(&game_a).expect("game a");
+        storage.upsert_game(&game_b).expect("game b");
+
+        let stale_a = sample_artifact(
+            "artifact:stale-a",
+            "C:/Games/A/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_A,
+        )
+        .with_source_game_id(game_a.id().clone());
+        let other_b = sample_artifact(
+            "artifact:other-b",
+            "C:/Games/B/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_B,
+        )
+        .with_source_game_id(game_b.id().clone());
+        let imported_a = sample_artifact_with_trust(
+            "artifact:imported-a",
+            "C:/Imported/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            ArtifactTrustLevel::UserImported,
+        )
+        .with_source_game_id(game_a.id().clone());
+
+        for artifact in [&stale_a, &other_b, &imported_a] {
+            storage
+                .upsert_artifact(artifact)
+                .expect("artifact should store");
+        }
+
+        storage
+            .save_scan_result(&game_a, &[], &[])
+            .expect("empty scan should prune only game a's observations");
+
+        let ids: Vec<String> = storage
+            .list_artifacts()
+            .expect("list")
+            .into_iter()
+            .map(|artifact| artifact.id().as_str().to_owned())
+            .collect();
+        assert!(!ids.iter().any(|id| id == "artifact:stale-a"));
+        assert!(ids.iter().any(|id| id == "artifact:other-b"));
+        assert!(ids.iter().any(|id| id == "artifact:imported-a"));
+    }
+
+    #[test]
+    fn prune_handles_a_retain_set_larger_than_sqlite_parameter_limit() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let game = sample_game("manual:C:/Games/Large", "Large Scan");
+        storage.upsert_game(&game).expect("game should store");
+
+        // SQLite's common 999-variable limit would reject the old NOT IN
+        // implementation. These retained LocalObserved rows are written and
+        // pruned in one transaction without a variable-length SQL statement.
+        let retain: Vec<LibraryArtifact> = (0..1_100)
+            .map(|index| {
+                sample_artifact(
+                    &format!("artifact:retain-{index}"),
+                    &format!("C:/Games/Large/lib-{index}.dll"),
+                    &format!("lib-{index}.dll"),
+                    &format!("{index:064x}"),
+                )
+                .with_source_game_id(game.id().clone())
+            })
+            .collect();
+
+        storage
+            .save_scan_result(&game, &[], &retain)
+            .expect("large retain set must not exceed SQLite parameter limits");
+        assert_eq!(
+            storage.list_artifacts().expect("list").len(),
+            retain.len(),
+            "every retained LocalObserved artifact must survive"
         );
     }
 

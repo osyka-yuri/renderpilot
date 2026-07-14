@@ -1,16 +1,15 @@
-//! Computes the new component file set and install plan before any mutation.
+//! Pure planning for swap apply: baseline / artifact / component inspection.
 //!
-//! Everything here is pure planning: it inspects the baseline, artifact and
-//! component to decide what will be installed, what an FSR downgrade must drop,
-//! and how the resulting component set looks — all without touching the
-//! filesystem or the database.
+//! Filesystem integrity checks and post-install PE rebind live in
+//! [`super::source_integrity`].
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_domain::{
-    ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, fsr,
+    ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    PathRef, component_version_report, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -105,26 +104,15 @@ pub(super) fn resolve_target_dir(component: &GraphicsComponent) -> AppResult<Pat
     Ok(PathBuf::from(parent))
 }
 
-pub(super) fn validate_artifact_sources_exist(artifact: &LibraryArtifact) -> AppResult<()> {
-    for file in artifact.files() {
-        let path = Path::new(file.path().as_str());
-        if !path.exists() {
-            return Err(AppError::invalid_input(format!(
-                "artifact file does not exist: {}",
-                file.path().as_str()
-            )));
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn planned_target_files(
     artifact: &LibraryArtifact,
     target_dir: &Path,
     component: &GraphicsComponent,
 ) -> AppResult<Vec<PlannedFile>> {
-    artifact
-        .files()
+    let artifact_files =
+        super::streamline_install::installable_artifact_files(artifact, component)?;
+
+    let planned: AppResult<Vec<PlannedFile>> = artifact_files
         .iter()
         .map(|artifact_file| {
             let install_name =
@@ -148,7 +136,30 @@ pub(super) fn planned_target_files(
                 file,
             })
         })
-        .collect()
+        .collect();
+
+    let planned = planned?;
+    if planned.is_empty() {
+        return Err(AppError::invalid_input(
+            "artifact has no installable files for this component",
+        ));
+    }
+    ensure_unique_install_targets(&planned)?;
+    Ok(planned)
+}
+
+fn ensure_unique_install_targets(planned: &[PlannedFile]) -> AppResult<()> {
+    let mut seen = HashSet::with_capacity(planned.len());
+    for plan in planned {
+        let target = plan.file.path().as_str().to_ascii_lowercase();
+        if seen.contains(&target) {
+            return Err(AppError::invalid_input(format!(
+                "artifact resolves multiple members to install target: {target}"
+            )));
+        }
+        seen.insert(target);
+    }
+    Ok(())
 }
 
 pub(super) fn rebuild_component(
@@ -187,4 +198,37 @@ pub(super) fn full_component_set(
     }
 
     Ok(components)
+}
+
+/// Rebuilds the catalog component set and journal version label after the FS
+/// overlay, using rebound on-disk metadata for the planned install targets.
+///
+/// Returns `(next_components, to_version)` where `to_version` is
+/// [`component_version_report`]. No artifact label is substituted when the
+/// installed files cannot prove their own version.
+pub(super) fn rebuild_component_set_after_overlay(
+    storage: &SqliteStorage,
+    game_id: &GameId,
+    component: &GraphicsComponent,
+    component_id: &ComponentId,
+    baseline: &[ComponentFile],
+    rebound_planned: &[PlannedFile],
+    removed: &[ComponentFile],
+) -> AppResult<(Vec<GraphicsComponent>, Option<String>)> {
+    let mut new_files = additive_active_files(baseline, rebound_planned, removed);
+    fsr::sort_representative_first(&mut new_files);
+    let rebuilt = rebuild_component(component, new_files);
+    let next_components = full_component_set(storage, game_id, rebuilt)?;
+
+    let applied_files = next_components
+        .iter()
+        .find(|entry| entry.id() == component_id)
+        .map(|entry| entry.files())
+        .unwrap_or(&[]);
+
+    let to_version = component_version_report(applied_files, component.technology())
+        .known_version()
+        .map(|version| version.as_str().to_owned());
+
+    Ok((next_components, to_version))
 }

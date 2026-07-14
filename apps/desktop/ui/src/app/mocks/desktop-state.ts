@@ -147,7 +147,7 @@ export function updateCandidateGroupCurrentVersion(
   );
 
   if (candidateGroup) {
-    candidateGroup.current_version = version;
+    candidateGroup.version_report = version ? { kind: 'known', version } : { kind: 'unknown' };
   }
 }
 

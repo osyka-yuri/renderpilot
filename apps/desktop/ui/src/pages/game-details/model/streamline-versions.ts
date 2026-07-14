@@ -1,87 +1,65 @@
 import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
 
-/**
- * Streamline plugins (`sl.*.dll`) are `BundleOnly`: they must all run on the same
- * release. The backend now groups them into a single Streamline component and
- * swaps the whole bundle as a unit, but this module still presents the available
- * releases as one list of versions that can be applied across every plugin at
- * once — the safe bundle swap.
- *
- * A candidate never repeats a plugin's *current* version (the backend filters by
- * content hash), so a plugin already on the target version simply contributes
- * nothing to apply.
- */
+import {
+  collapseEquivalentVersions,
+  compareVersionAsc,
+  compareVersionDesc,
+  versionsEqual,
+} from './version-compare';
 
-/** One plugin's swap target within a bulk Streamline version change. */
+/** One component's swap target within a Streamline version change. */
 export type BulkSwapItem = {
   componentId: string;
   artifactId: string;
   isDownloaded: boolean;
 };
 
-/** A Streamline release that can be applied across all installed plugins. */
+/** A Streamline release that can be applied across all installed components. */
 export type StreamlineVersionOption = {
   /** Raw version string, e.g. `"2.4.0"`. */
   version: string;
   /** Display label, e.g. `"v2.4.0"`. */
   label: string;
-  /**
-   * True when every plugin is already on this version. The option is always
-   * present in the list so the `SelectItem` has a stable DOM position and
-   * bits-ui never loses the active selection after a reload.
-   */
+  /** Every installed component is already known to be on this version. */
   isCurrent: boolean;
-  /** Plugins that will be swapped to reach this version (empty when `isCurrent`). */
+  /** Components that will be swapped to reach this version. */
   items: BulkSwapItem[];
-  /** How many plugins this swap updates (`items.length`). */
+  /** How many components this swap updates (`items.length`). */
   updateCount: number;
-  /** Installed plugins that can't reach this version (no candidate, not already on it). */
+  /** Components that cannot reach this version with a candidate. */
   missingCount: number;
-  /** Every installed plugin ends on this version after applying. */
+  /** Every installed component can reach this version. */
   isComplete: boolean;
-  /** Every plugin to update already has its artifact downloaded locally. */
+  /** Every required replacement is already available locally. */
   allDownloaded: boolean;
 };
 
 export type StreamlineVersionModel = {
-  /**
-   * All selectable versions, newest first. Always includes the current version
-   * (when known and uniform) so the corresponding `SelectItem` is never
-   * remounted between `{#if}` and `{#each}` blocks after a swap completes.
-   */
+  /** All selectable versions, newest first. */
   options: StreamlineVersionOption[];
-  /** Common current version across all plugins, or `null` when mixed/unknown. */
+  /** Common installed version when every component reports the same release. */
   currentVersion: string | null;
-  /** Plugins are currently on differing versions. */
+  /** Backend reports, or component reports together, prove version divergence. */
   isMixed: boolean;
-  /** Number of installed Streamline plugins. */
+  /** Known min/max label for a mixed set. */
+  versionRange: { min: string; max: string } | null;
+  /** Number of installed Streamline components (normally one bundle). */
   totalCount: number;
 };
 
 /**
- * Builds the bulk-version model for a set of Streamline plugin components and
- * their candidate groups.
+ * Builds the bulk-version model from backend-owned `version_report` values.
+ * The UI never re-derives Streamline state from raw PE file metadata: the
+ * backend is the only authority for known, mixed, and unknown classification.
  */
 export function buildStreamlineVersionModel(
   components: GameGraphicsComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
 ): StreamlineVersionModel {
-  const totalCount = components.length;
+  const reports = components.map((component) => groupsById[component.id]?.version_report);
+  const installed = summarizeInstalledVersions(reports);
+  const versions = new Set<string>(installed.knownVersions);
 
-  const currentVersions = components.map(
-    (component) => groupsById[component.id]?.current_version ?? null,
-  );
-  const distinctCurrent = [
-    ...new Set(currentVersions.filter((version): version is string => version != null)),
-  ];
-  const allKnown = currentVersions.every((version) => version != null);
-  const currentVersion = allKnown && distinctCurrent.length === 1 ? distinctCurrent[0] : null;
-  const isMixed = distinctCurrent.length > 1;
-
-  const versions = new Set<string>();
-  if (currentVersion) {
-    versions.add(currentVersion);
-  }
   for (const component of components) {
     for (const candidate of groupsById[component.id]?.candidates ?? []) {
       if (candidate.version) {
@@ -90,32 +68,90 @@ export function buildStreamlineVersionModel(
     }
   }
 
-  const options = [...versions]
+  const options = collapseEquivalentVersions([...versions])
     .sort(compareVersionDesc)
-    .map((version) => buildOption(version, components, groupsById, currentVersion));
+    .map((version) => buildOption(version, components, groupsById));
 
-  return { options, currentVersion, isMixed, totalCount };
+  return {
+    options,
+    currentVersion: installed.currentVersion,
+    isMixed: installed.isMixed,
+    versionRange: installed.versionRange,
+    totalCount: components.length,
+  };
+}
+
+type InstalledVersionSummary = {
+  knownVersions: string[];
+  currentVersion: string | null;
+  isMixed: boolean;
+  versionRange: { min: string; max: string } | null;
+};
+
+function summarizeInstalledVersions(
+  reports: (GameCandidateGroup['version_report'] | undefined)[],
+): InstalledVersionSummary {
+  const knownVersions: string[] = [];
+  const rangeVersions: string[] = [];
+  let hasMixedReport = false;
+  let hasUnknownReport = false;
+
+  for (const report of reports) {
+    if (!report || report.kind === 'unknown') {
+      hasUnknownReport = true;
+      continue;
+    }
+    if (report.kind === 'known') {
+      knownVersions.push(report.version);
+      rangeVersions.push(report.version);
+      continue;
+    }
+
+    hasMixedReport = true;
+    rangeVersions.push(report.min_version, report.max_version);
+  }
+
+  const distinctKnown = collapseEquivalentVersions(knownVersions);
+  const isMixed = hasMixedReport || distinctKnown.length > 1;
+  const versionRange = isMixed ? mixedVersionRange(rangeVersions) : null;
+  const currentVersion =
+    !isMixed && !hasUnknownReport && distinctKnown.length === 1 ? distinctKnown[0] : null;
+
+  return { knownVersions, currentVersion, isMixed, versionRange };
+}
+
+function mixedVersionRange(versions: string[]): { min: string; max: string } | null {
+  const distinct = collapseEquivalentVersions(versions);
+  if (distinct.length < 2) {
+    return null;
+  }
+  const sorted = [...distinct].sort(compareVersionAsc);
+  return { min: sorted[0], max: sorted[sorted.length - 1] };
 }
 
 function buildOption(
   version: string,
   components: GameGraphicsComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
-  currentVersion: string | null,
 ): StreamlineVersionOption {
   const items: BulkSwapItem[] = [];
   let missingCount = 0;
   let allDownloaded = true;
+  let fullyOnVersionCount = 0;
 
   for (const component of components) {
     const group = groupsById[component.id];
-
-    // Already on the target version (no candidate exists for it) — nothing to do.
-    if ((group?.current_version ?? null) === version) {
+    if (componentFullyOnVersion(group, version)) {
+      fullyOnVersionCount += 1;
       continue;
     }
 
-    const candidate = (group?.candidates ?? []).find((entry) => entry.version === version);
+    const candidate = (group?.candidates ?? []).find(
+      (entry) =>
+        entry.version !== null &&
+        entry.version !== undefined &&
+        versionsEqual(entry.version, version),
+    );
     if (!candidate) {
       missingCount += 1;
       continue;
@@ -134,39 +170,19 @@ function buildOption(
   return {
     version,
     label: `v${version}`,
-    isCurrent: version === currentVersion,
+    isCurrent: fullyOnVersionCount === components.length,
     items,
     updateCount: items.length,
     missingCount,
     isComplete: missingCount === 0,
-    // When isCurrent there are no items to download; treat as fully local.
     allDownloaded: items.length === 0 || allDownloaded,
   };
 }
 
-/** Orders dotted version strings newest-first, with a string fallback per segment. */
-export function compareVersionDesc(left: string, right: string): number {
-  const leftParts = left.split('.');
-  const rightParts = right.split('.');
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const rawLeft = leftParts[index] ?? '0';
-    const rawRight = rightParts[index] ?? '0';
-    const numLeft = Number(rawLeft);
-    const numRight = Number(rawRight);
-
-    if (Number.isFinite(numLeft) && Number.isFinite(numRight)) {
-      if (numLeft !== numRight) {
-        return numRight - numLeft;
-      }
-    } else {
-      const compared = rawRight.localeCompare(rawLeft);
-      if (compared !== 0) {
-        return compared;
-      }
-    }
-  }
-
-  return 0;
+function componentFullyOnVersion(
+  group: GameCandidateGroup | null | undefined,
+  version: string,
+): boolean {
+  const report = group?.version_report;
+  return report?.kind === 'known' && versionsEqual(report.version, version);
 }

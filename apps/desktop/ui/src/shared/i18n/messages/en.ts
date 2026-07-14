@@ -244,6 +244,7 @@ export const en = {
   'gameDetails.streamline.versionDescription': 'Applies the same version to all plugins.',
   'gameDetails.streamline.noOtherVersions': 'No other versions',
   'gameDetails.streamline.mixed': 'Mixed versions',
+  'gameDetails.streamline.mixedRange': 'Mixed versions (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} updates · {missing} missing',
   'gameDetails.streamline.restoreAllAria': 'Restore all plugins to original',
   'gameDetails.streamline.restoreAllTooltip': 'Restore all to original',
@@ -254,9 +255,6 @@ export const en = {
     one: 'Update 1 component to its latest version',
     other: 'Update {count} components to their latest versions',
   },
-  'gameDetails.streamline.mixedWarning':
-    'Plugins are using different versions. Select a version above to sync them.',
-
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
   'gameDetails.executable.description':
@@ -483,6 +481,8 @@ export const en = {
   'user_message.cover_download_failed': 'Failed to download the cover.',
   'user_message.cover_artwork_not_found': 'No cover found for this game.',
   'user_message.cover_file_system_error': 'Failed to save the cover to disk.',
+  'user_message.stale_replacement_source':
+    'This update could not be applied because the source file was replaced or modified outside RenderPilot. Please select the version again — a download may be needed.',
   'user_message.nvapi_requires_administrator':
     'Administrator rights are required to change this setting.',
 

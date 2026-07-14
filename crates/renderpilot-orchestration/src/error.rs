@@ -20,6 +20,8 @@ pub enum ServiceError {
     ComponentNotFound(String),
     /// Caller supplied malformed, incomplete, or inconsistent input.
     InvalidInput(String),
+    /// Catalog replacement snapshot is missing or no longer matches its hash.
+    StaleReplacementSource,
     /// A storage adapter (the catalog database) failed.
     StorageFailed(String),
     /// A game-source or remote provider failed.
@@ -59,6 +61,8 @@ impl fmt::Display for ServiceError {
             Self::ArtifactNotFound(id) => write!(formatter, "artifact not found: {id}"),
             Self::ComponentNotFound(id) => write!(formatter, "component not found: {id}"),
             Self::InvalidInput(message) => write!(formatter, "invalid input: {message}"),
+            Self::StaleReplacementSource => formatter
+                .write_str("replacement source is missing or was modified outside RenderPilot"),
             Self::StorageFailed(message) => write!(formatter, "storage failed: {message}"),
             Self::ProviderFailed(message) => write!(formatter, "provider failed: {message}"),
             Self::DetectionFailed(message) => write!(formatter, "detection failed: {message}"),
@@ -100,6 +104,7 @@ impl From<AppError> for ServiceError {
         // new `AppErrorKind` must force a decision here.
         match kind {
             AppErrorKind::InvalidInput => Self::InvalidInput(message),
+            AppErrorKind::StaleReplacementSource => Self::StaleReplacementSource,
             AppErrorKind::StorageFailed => Self::StorageFailed(message),
             AppErrorKind::ProviderFailed => Self::ProviderFailed(message),
             AppErrorKind::DetectionFailed => Self::DetectionFailed(message),
@@ -217,6 +222,10 @@ mod tests {
         assert_eq!(
             ServiceError::from(AppError::detection_failed("could not read PE header")),
             ServiceError::DetectionFailed("could not read PE header".to_owned()),
+        );
+        assert_eq!(
+            ServiceError::from(AppError::stale_replacement_source()),
+            ServiceError::StaleReplacementSource,
         );
     }
 }

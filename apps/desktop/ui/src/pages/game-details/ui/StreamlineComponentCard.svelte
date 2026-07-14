@@ -1,11 +1,8 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
   import DownloadIcon from '@lucide/svelte/icons/download';
-  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
   import {
-    Alert,
-    AlertDescription,
     Button,
     Card,
     CardContent,
@@ -40,25 +37,33 @@
   const { components, groupsById, busy, onBulkSwap, onBulkRollback }: Props = $props();
 
   // Streamline plugins are a matched set: one chosen version is applied to every
-  // plugin at once. The model always includes the current version so the Select
-  // has a stable SelectItem for it and never loses its selection after a swap.
+  // plugin at once. Only a known uniform release is selected; mixed and unknown
+  // state stays descriptive in the trigger rather than becoming a fake option.
   const versionModel = $derived(buildStreamlineVersionModel(components, groupsById));
 
   // Track which artifact ids the user clicked for bulk swap so the progress bar
   // appears only on the initiating control.
   let pendingArtifactIds = $state<string[]>([]);
 
+  const mixedLabel = $derived(
+    versionModel.versionRange
+      ? t('gameDetails.streamline.mixedRange', {
+          min: versionModel.versionRange.min,
+          max: versionModel.versionRange.max,
+        })
+      : t('gameDetails.streamline.mixed'),
+  );
+
   const triggerLabel = $derived(
     versionModel.currentVersion
       ? `v${versionModel.currentVersion}`
       : versionModel.isMixed
-        ? t('gameDetails.streamline.mixed')
+        ? mixedLabel
         : t('common.unknown'),
   );
 
-  // The dropdown marks the common current version as selected; after a swap it
-  // follows the new version automatically. When plugins are on mixed versions
-  // there is no single current, so nothing is marked.
+  // A mixed set is descriptive, not a selectable pseudo-release. The trigger
+  // displays its range while the menu contains only actual package versions.
   const currentValue = $derived(versionModel.currentVersion ?? undefined);
 
   // Bound selection, re-pinned to the current version whenever an operation
@@ -133,8 +138,8 @@
             </SelectTrigger>
             <SelectContent>
               <!--
-                All options come from a single loop so SelectItems are never
-                remounted between rendering paths when the current version changes.
+                All version options come from a single loop so SelectItems are
+                never remounted between rendering paths when current changes.
               -->
               {#each versionModel.options as option (option.version)}
                 <SelectItem value={option.version} label={option.label}>
@@ -181,14 +186,5 @@
         {/if}
       </ItemActions>
     </Item>
-
-    {#if versionModel.isMixed}
-      <Alert variant="warning" size="sm" role="note">
-        <TriangleAlertIcon aria-hidden="true" />
-        <AlertDescription>
-          {t('gameDetails.streamline.mixedWarning')}
-        </AlertDescription>
-      </Alert>
-    {/if}
   </CardContent>
 </Card>

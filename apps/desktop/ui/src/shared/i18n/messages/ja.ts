@@ -176,6 +176,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.versionDescription': 'すべてのプラグインに同じバージョンを適用します。',
   'gameDetails.streamline.noOtherVersions': '他のバージョンはありません',
   'gameDetails.streamline.mixed': '混在するバージョン',
+  'gameDetails.streamline.mixedRange': '混在するバージョン (v{min} – v{max})',
   'gameDetails.streamline.updatesSummary': '{updates} 件のアップデート · {missing} 個の不足',
   'gameDetails.streamline.restoreAllAria': 'すべてのプラグインを元の状態に復元',
   'gameDetails.streamline.restoreAllTooltip': 'すべて元の状態に復元',
@@ -186,9 +187,6 @@ export const ja: Record<MessageKey, MessageValue> = {
     one: '{count} 個のコンポーネントを最新バージョンに更新します',
     other: '{count} 個のコンポーネントを最新バージョンに更新します',
   },
-  'gameDetails.streamline.mixedWarning':
-    'プラグインのバージョンが異なります。同期するには、上記からバージョンを選択してください。',
-
   'gameDetails.executable.title': 'ゲームの実行ファイル',
   'gameDetails.executable.description':
     'ゲームの実行ファイル — NVIDIA プロファイルが適用され、RenoDX はそのフォルダーにインストールされます。',
@@ -409,6 +407,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'user_message.cover_download_failed': 'カバー画像のダウンロードに失敗しました。',
   'user_message.cover_artwork_not_found': 'このゲームのカバー画像が見つかりません。',
   'user_message.cover_file_system_error': 'カバー画像をディスクに保存できませんでした。',
+  'user_message.stale_replacement_source':
+    'ソースファイルが RenderPilot の外で置き換えまたは変更されたため、この更新を適用できませんでした。バージョンを再度選択してください。ダウンロードが必要になる場合があります。',
   'user_message.nvapi_requires_administrator': 'この設定を変更するには管理者権限が必要です。',
 
   'suggested_action.refresh_games': 'ゲームリストを更新して再試行してください。',
