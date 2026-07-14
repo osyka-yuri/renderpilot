@@ -21,7 +21,7 @@
   class="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
 >
   <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-  <div class="min-w-0 flex flex-col gap-1">
+  <div class="flex min-w-0 flex-col gap-1">
     <p class="font-medium">{t(failureTitleKey(kind))}</p>
     <p class="text-destructive/90">{t(failureDescriptionKey(kind))}</p>
   </div>

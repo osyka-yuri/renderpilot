@@ -62,7 +62,7 @@
     {/if}
     <span>{statusLabel}</span>
     {#if isDeterminate && progress}
-      <span class="ms-auto tabular-nums text-muted-foreground">
+      <span class="ms-auto text-muted-foreground tabular-nums">
         {Math.round(progress.percent ?? 0)}%
       </span>
     {/if}

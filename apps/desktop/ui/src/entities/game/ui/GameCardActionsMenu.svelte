@@ -189,7 +189,7 @@
           <Button
             variant={action.danger === true ? 'destructive' : 'ghost'}
             size="sm"
-            class={cn('w-full justify-start text-left gap-2')}
+            class={cn('w-full justify-start gap-2 text-left')}
             role="menuitem"
             disabled={action.disabled}
             title={action.title}

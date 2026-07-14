@@ -125,7 +125,7 @@
           <CardTitle id={titleId} role="heading" aria-level={3} class="flex items-center gap-2">
             {game.title}
             {#if game.isFavorite}
-              <StarIcon class="size-4 text-yellow-500 fill-yellow-500" aria-label="Favorite" />
+              <StarIcon class="size-4 fill-yellow-500 text-yellow-500" aria-label="Favorite" />
             {/if}
             {#if game.isHidden}
               <EyeOffIcon class="size-4 text-muted-foreground" aria-label="Hidden" />

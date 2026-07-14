@@ -106,7 +106,7 @@
     value={model.activeVendor}
     onValueChange={model.handleVendorChange}
   >
-    <div class="flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
       <TabsList class="flex flex-wrap">
         {#each vendorOptions as vendor (vendor.value)}
           <TabsTrigger value={vendor.value}>{vendor.label}</TabsTrigger>
