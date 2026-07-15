@@ -10,6 +10,7 @@ description = "SQLite storage adapter boundary for RenderPilot."
 workspace = true
 
 [dependencies]
+log = "0.4"
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-domain = { path = "../renderpilot-domain" }
 rusqlite = { version = "0.40", features = ["bundled"] }

@@ -43,7 +43,9 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
     }
 
     // 3. Delete the per-game DB row.
-    context.storage().delete_installed_addon(game_id)?;
+    context
+        .storage()
+        .delete_installed_addon(game_id, AddonKind::RenoDx)?;
     Ok(())
 }
 

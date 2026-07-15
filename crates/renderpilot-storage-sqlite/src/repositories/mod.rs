@@ -6,12 +6,15 @@ mod component_backups;
 mod components;
 pub mod file_hash_cache;
 pub mod game_covers;
+mod game_mutations;
 pub mod game_ui_state;
 mod games;
 mod installed_addons;
 pub mod nvapi;
 mod operations;
+mod pending_file_mutations;
 mod row_mapping;
+mod settings;
 mod shared_artifacts;
 
 use std::sync::Mutex;
@@ -21,6 +24,9 @@ use renderpilot_domain::{GameInstallation, GraphicsComponent, LibraryArtifact};
 use rusqlite::{Connection, Params, Transaction};
 
 use crate::error::storage_error;
+
+pub use game_mutations::{ComponentBaselineInsert, GameMutationCommit, InstalledAddonMutation};
+pub use pending_file_mutations::{PendingFileMutationRow, PendingFileMutationState};
 
 /// SQLite-backed storage adapter implementing application repository ports.
 #[derive(Debug)]
@@ -105,16 +111,21 @@ impl SqliteStorage {
         })
     }
 
+    /// `rusqlite::query_map` returns `rusqlite::Result<Rows>`, and each row
+    /// accessor can fail with either a `rusqlite::Error` (driver) or an
+    /// `AppError` (domain validation). The outer Result covers driver errors
+    /// during iteration; the inner Result covers per-row domain mapping.
     pub(super) fn query_list<T, P, F>(&self, sql: &str, params: P, map: F) -> AppResult<Vec<T>>
     where
         P: Params,
         F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<AppResult<T>>,
     {
-        let connection = self.connection()?;
-        let mut statement = connection.prepare_cached(sql).map_err(storage_error)?;
-        let rows = statement.query_map(params, map).map_err(storage_error)?;
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare_cached(sql).map_err(storage_error)?;
+            let rows = statement.query_map(params, map).map_err(storage_error)?;
 
-        row_mapping::collect_rows(rows)
+            row_mapping::collect_rows(rows)
+        })
     }
 }
 

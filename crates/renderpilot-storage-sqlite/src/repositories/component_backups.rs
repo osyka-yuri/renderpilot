@@ -3,6 +3,10 @@
 //! The `.bak` sidecars on disk hold the original *bytes*; this table holds their
 //! *identity* so an N-to-1 rollback can restore exactly the right files even when
 //! the active bundle was renamed (1→N upgrades) or re-swapped (A→B→C).
+//!
+//! Follows the `method()` / `method_within_transaction()` pattern: the public
+//! method wraps in a fresh transaction; the `pub(super)` variant accepts an
+//! existing one for composition in `game_mutations.rs`.
 
 use std::collections::HashSet;
 
@@ -12,7 +16,7 @@ use rusqlite::{OptionalExtension, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
 
-use super::{SqliteStorage, components};
+use super::{ComponentBaselineInsert, GameMutationCommit, InstalledAddonMutation, SqliteStorage};
 
 const SELECT_BACKUP_SQL: &str = "
     SELECT files_json
@@ -45,84 +49,92 @@ impl SqliteStorage {
         &self,
         component_id: &ComponentId,
     ) -> AppResult<Option<Vec<ComponentFile>>> {
-        let connection = self.connection()?;
-        let mut statement = connection
-            .prepare_cached(SELECT_BACKUP_SQL)
-            .map_err(storage_error)?;
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached(SELECT_BACKUP_SQL)
+                .map_err(storage_error)?;
 
-        let files_json: Option<String> = statement
-            .query_row(
-                named_params! { ":component_id": component_id.as_str() },
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(storage_error)?;
+            let files_json: Option<String> = statement
+                .query_row(
+                    named_params! { ":component_id": component_id.as_str() },
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(storage_error)?;
 
-        match files_json {
-            Some(files_json) => Ok(Some(mapping::component_files(&files_json)?)),
-            None => Ok(None),
-        }
+            match files_json {
+                Some(files_json) => Ok(Some(mapping::component_files(&files_json)?)),
+                None => Ok(None),
+            }
+        })
     }
 
     /// Returns the ids of components in a game that currently have a swap baseline
     /// (i.e. can be rolled back). One query per game.
     pub fn component_backup_ids_for_game(&self, game_id: &GameId) -> AppResult<HashSet<String>> {
-        let connection = self.connection()?;
-        let mut statement = connection
-            .prepare_cached("SELECT component_id FROM component_backups WHERE game_id = :game_id")
-            .map_err(storage_error)?;
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached(
+                    "SELECT component_id FROM component_backups WHERE game_id = :game_id",
+                )
+                .map_err(storage_error)?;
 
-        let rows = statement
-            .query_map(named_params! { ":game_id": game_id.as_str() }, |row| {
-                row.get::<_, String>(0)
-            })
-            .map_err(storage_error)?;
+            let rows = statement
+                .query_map(named_params! { ":game_id": game_id.as_str() }, |row| {
+                    row.get::<_, String>(0)
+                })
+                .map_err(storage_error)?;
 
-        let mut ids = HashSet::new();
-        for row in rows {
-            ids.insert(row.map_err(storage_error)?);
-        }
-        Ok(ids)
+            let mut ids = HashSet::new();
+            for row in rows {
+                ids.insert(row.map_err(storage_error)?);
+            }
+            Ok(ids)
+        })
     }
 
-    /// Persists the post-apply component set and records the swap baseline in one
-    /// transaction. `backup` is `Some` only on the first swap of a component, so
-    /// the original baseline is preserved across re-swaps (A→B→C).
+    /// Compatibility adapter retained while catalog execution migrates to
+    /// [`Self::commit_game_mutation`].
+    #[allow(dead_code)]
     pub fn commit_bundle_apply(
         &self,
         game_id: &GameId,
         components: &[GraphicsComponent],
         backup: Option<(&ComponentId, &[ComponentFile])>,
     ) -> AppResult<()> {
-        self.with_transaction(|transaction| {
-            components::replace_components_for_game_within_transaction(
-                transaction,
-                game_id,
-                components,
-            )?;
-            if let Some((component_id, files)) = backup {
-                set_component_backup_within_transaction(transaction, game_id, component_id, files)?;
-            }
-            Ok(())
+        let baseline_inserts = backup
+            .map(|(component_id, files)| ComponentBaselineInsert {
+                component_id,
+                files,
+            })
+            .into_iter()
+            .collect::<Vec<_>>();
+        self.commit_game_mutation(GameMutationCommit {
+            game_id,
+            component_set: Some(components),
+            baseline_inserts: &baseline_inserts,
+            baseline_deletes: &[],
+            addon: InstalledAddonMutation::Keep,
+            mutation_id: None,
         })
     }
 
-    /// Restores the post-rollback component set and clears the swap baseline in
-    /// one transaction.
+    /// Compatibility adapter retained while catalog execution migrates to
+    /// [`Self::commit_game_mutation`].
+    #[allow(dead_code)]
     pub fn commit_bundle_rollback(
         &self,
         game_id: &GameId,
         components: &[GraphicsComponent],
         component_id: &ComponentId,
     ) -> AppResult<()> {
-        self.with_transaction(|transaction| {
-            components::replace_components_for_game_within_transaction(
-                transaction,
-                game_id,
-                components,
-            )?;
-            delete_component_backup_within_transaction(transaction, component_id)?;
-            Ok(())
+        self.commit_game_mutation(GameMutationCommit {
+            game_id,
+            component_set: Some(components),
+            baseline_inserts: &[],
+            baseline_deletes: std::slice::from_ref(component_id),
+            addon: InstalledAddonMutation::Keep,
+            mutation_id: None,
         })
     }
 
@@ -140,7 +152,7 @@ impl SqliteStorage {
     }
 }
 
-fn set_component_backup_within_transaction(
+pub(super) fn set_component_backup_within_transaction(
     transaction: &Transaction<'_>,
     game_id: &GameId,
     component_id: &ComponentId,
@@ -163,7 +175,7 @@ fn set_component_backup_within_transaction(
     Ok(())
 }
 
-fn delete_component_backup_within_transaction(
+pub(super) fn delete_component_backup_within_transaction(
     transaction: &Transaction<'_>,
     component_id: &ComponentId,
 ) -> AppResult<()> {

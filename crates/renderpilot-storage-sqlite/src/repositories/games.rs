@@ -71,9 +71,7 @@ impl GameRepository for SqliteStorage {
     }
 
     fn find_game(&self, id: &GameId) -> AppResult<Option<GameInstallation>> {
-        let connection = self.connection()?;
-
-        find_game_in_connection(&connection, id)
+        self.with_connection(|connection| find_game_in_connection(connection, id))
     }
 }
 

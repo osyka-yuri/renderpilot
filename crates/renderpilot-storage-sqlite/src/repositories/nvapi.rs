@@ -1,6 +1,6 @@
 //! NVAPI overrides and baselines tables.
 //!
-//! Both tables live in `migrations/0001_initial.sql` and CASCADE on `games.id`,
+//! Both tables live in the composed catalog baseline and CASCADE on `games.id`,
 //! so deleting a game also tears down its NVAPI state.
 
 use renderpilot_application::AppResult;
@@ -68,20 +68,23 @@ impl SqliteStorage {
         selected_path: &str,
         selected_basename: &str,
     ) -> AppResult<()> {
-        let connection = self.connection()?;
-        connection
-            .execute(
-                "INSERT INTO nvapi_executable_overrides
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT INTO nvapi_executable_overrides
                     (game_id, selected_path, selected_basename, updated_at)
                  VALUES (?1, ?2, ?3, CAST(unixepoch('subsec') * 1000 AS INTEGER))
                  ON CONFLICT(game_id) DO UPDATE SET
                     selected_path     = excluded.selected_path,
                     selected_basename = excluded.selected_basename,
                     updated_at        = excluded.updated_at",
-                params![game_id, selected_path, selected_basename],
-            )
-            .map(|_| ())
-            .map_err(|error| storage_context("could not upsert nvapi executable override", error))
+                    params![game_id, selected_path, selected_basename],
+                )
+                .map(|_| ())
+                .map_err(|error| {
+                    storage_context("could not upsert nvapi executable override", error)
+                })
+        })
     }
 
     /// Returns the executable override for `game_id`, if any.
@@ -89,36 +92,40 @@ impl SqliteStorage {
         &self,
         game_id: &str,
     ) -> AppResult<Option<NvapiExecutableOverrideRow>> {
-        let connection = self.connection()?;
-        connection
-            .query_row(
-                "SELECT game_id, selected_path, selected_basename, updated_at
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT game_id, selected_path, selected_basename, updated_at
                  FROM nvapi_executable_overrides
                  WHERE game_id = ?1",
-                params![game_id],
-                |row| {
-                    Ok(NvapiExecutableOverrideRow {
-                        game_id: row.get(0)?,
-                        selected_path: row.get(1)?,
-                        selected_basename: row.get(2)?,
-                        updated_at: row.get(3)?,
-                    })
-                },
-            )
-            .optional()
-            .map_err(|error| storage_context("could not read nvapi executable override", error))
+                    params![game_id],
+                    |row| {
+                        Ok(NvapiExecutableOverrideRow {
+                            game_id: row.get(0)?,
+                            selected_path: row.get(1)?,
+                            selected_basename: row.get(2)?,
+                            updated_at: row.get(3)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(|error| storage_context("could not read nvapi executable override", error))
+        })
     }
 
     /// Deletes the executable override for `game_id`, if any.
     pub fn delete_nvapi_executable_override(&self, game_id: &str) -> AppResult<()> {
-        let connection = self.connection()?;
-        connection
-            .execute(
-                "DELETE FROM nvapi_executable_overrides WHERE game_id = ?1",
-                params![game_id],
-            )
-            .map(|_| ())
-            .map_err(|error| storage_context("could not delete nvapi executable override", error))
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "DELETE FROM nvapi_executable_overrides WHERE game_id = ?1",
+                    params![game_id],
+                )
+                .map(|_| ())
+                .map_err(|error| {
+                    storage_context("could not delete nvapi executable override", error)
+                })
+        })
     }
 
     /// Records an initial baseline snapshot exclusively if no preexisting record
@@ -139,26 +146,29 @@ impl SqliteStorage {
         predefined_dword: Option<u32>,
         captured_exe: &str,
     ) -> AppResult<bool> {
-        let connection = self.connection()?;
-        let rows_affected = connection
-            .execute(
-                "INSERT INTO nvapi_setting_baselines
+        self.with_connection(|connection| {
+            let rows_affected = connection
+                .execute(
+                    "INSERT INTO nvapi_setting_baselines
                     (game_id, setting_key, baseline_dword, baseline_was_predefined,
                      predefined_dword, captured_exe, captured_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6,
                      CAST(unixepoch('subsec') * 1000 AS INTEGER))
                  ON CONFLICT (game_id, setting_key) DO NOTHING",
-                params![
-                    game_id,
-                    setting_key,
-                    baseline_dword,
-                    if baseline_was_predefined { 1 } else { 0 },
-                    predefined_dword,
-                    captured_exe,
-                ],
-            )
-            .map_err(|error| storage_context("could not capture nvapi setting baseline", error))?;
-        Ok(rows_affected > 0)
+                    params![
+                        game_id,
+                        setting_key,
+                        baseline_dword,
+                        if baseline_was_predefined { 1 } else { 0 },
+                        predefined_dword,
+                        captured_exe,
+                    ],
+                )
+                .map_err(|error| {
+                    storage_context("could not capture nvapi setting baseline", error)
+                })?;
+            Ok(rows_affected > 0)
+        })
     }
 
     /// Returns the baseline row for `(game_id, setting_key)`, if any.
@@ -167,29 +177,30 @@ impl SqliteStorage {
         game_id: &str,
         setting_key: &str,
     ) -> AppResult<Option<NvapiSettingBaselineRow>> {
-        let connection = self.connection()?;
-        connection
-            .query_row(
-                "SELECT game_id, setting_key, baseline_dword, baseline_was_predefined,
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT game_id, setting_key, baseline_dword, baseline_was_predefined,
                         predefined_dword, captured_exe, captured_at
                  FROM nvapi_setting_baselines
                  WHERE game_id = ?1 AND setting_key = ?2",
-                params![game_id, setting_key],
-                |row| {
-                    let was_predefined: i32 = row.get(3)?;
-                    Ok(NvapiSettingBaselineRow {
-                        game_id: row.get(0)?,
-                        setting_key: row.get(1)?,
-                        baseline_dword: row.get(2)?,
-                        baseline_was_predefined: was_predefined != 0,
-                        predefined_dword: row.get(4)?,
-                        captured_exe: row.get(5)?,
-                        captured_at: row.get(6)?,
-                    })
-                },
-            )
-            .optional()
-            .map_err(|error| storage_context("could not read nvapi setting baseline", error))
+                    params![game_id, setting_key],
+                    |row| {
+                        let was_predefined: i32 = row.get(3)?;
+                        Ok(NvapiSettingBaselineRow {
+                            game_id: row.get(0)?,
+                            setting_key: row.get(1)?,
+                            baseline_dword: row.get(2)?,
+                            baseline_was_predefined: was_predefined != 0,
+                            predefined_dword: row.get(4)?,
+                            captured_exe: row.get(5)?,
+                            captured_at: row.get(6)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(|error| storage_context("could not read nvapi setting baseline", error))
+        })
     }
 
     /// Erases any existing baseline snapshot associated with the `(game_id, setting_key)`
@@ -197,15 +208,16 @@ impl SqliteStorage {
     /// production workflows generally require the baseline to be durably persisted
     /// for the entire lifecycle of the game's registration.
     pub fn delete_nvapi_baseline(&self, game_id: &str, setting_key: &str) -> AppResult<()> {
-        let connection = self.connection()?;
-        connection
-            .execute(
-                "DELETE FROM nvapi_setting_baselines
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "DELETE FROM nvapi_setting_baselines
                  WHERE game_id = ?1 AND setting_key = ?2",
-                params![game_id, setting_key],
-            )
-            .map(|_| ())
-            .map_err(|error| storage_context("could not delete nvapi setting baseline", error))
+                    params![game_id, setting_key],
+                )
+                .map(|_| ())
+                .map_err(|error| storage_context("could not delete nvapi setting baseline", error))
+        })
     }
 }
 

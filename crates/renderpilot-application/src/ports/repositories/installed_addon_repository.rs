@@ -1,4 +1,4 @@
-use renderpilot_domain::{GameId, InstalledAddon};
+use renderpilot_domain::{AddonKind, GameId, InstalledAddon};
 
 use crate::AppResult;
 
@@ -18,6 +18,8 @@ pub trait InstalledAddonRepository: Send + Sync {
     /// Lists every recorded add-on install.
     fn list_installed_addons(&self) -> AppResult<Vec<InstalledAddon>>;
 
-    /// Deletes the add-on install record for a game. Missing rows are a no-op.
-    fn delete_installed_addon(&self, game_id: &GameId) -> AppResult<()>;
+    /// Deletes the add-on install record for a game when it matches `kind`.
+    /// Missing rows and kind mismatches are a no-op (defense-in-depth under the
+    /// one-row-per-game exclusivity model).
+    fn delete_installed_addon(&self, game_id: &GameId, kind: AddonKind) -> AppResult<()>;
 }

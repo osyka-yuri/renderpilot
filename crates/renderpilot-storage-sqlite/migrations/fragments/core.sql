@@ -1,22 +1,4 @@
-PRAGMA foreign_keys = ON;
-
--- =============================================================================
--- RenderPilot catalog schema v2
---
--- Notes:
--- - Timestamps are Unix milliseconds.
--- - Paths are normalized PathRef-style UTF-8 strings with "/" separators.
--- - JSON fields are stored as TEXT and validated with json_valid/json_type.
--- - Tables use STRICT mode.
--- - Lifecycle: there is no incremental migration from older on-disk shapes; see `src/schema.rs`
---   (`apply` / `validate_catalog_schema`) and `src/repositories/columns.rs` for the bundled-schema contract.
--- =============================================================================
-
-
--- =============================================================================
 -- Games
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS games (
     id                         TEXT    PRIMARY KEY NOT NULL,
     title                      TEXT    NOT NULL,
@@ -58,11 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_games_launcher_install_path
 CREATE INDEX IF NOT EXISTS idx_games_updated_at
     ON games(updated_at DESC);
 
-
--- =============================================================================
 -- Game covers (image files live beside catalog.db under covers/)
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS game_covers (
     game_id    TEXT    PRIMARY KEY NOT NULL,
     file_name  TEXT    NOT NULL,
@@ -82,11 +60,7 @@ CREATE TABLE IF NOT EXISTS game_covers (
 CREATE INDEX IF NOT EXISTS idx_game_covers_updated_at
     ON game_covers(updated_at DESC);
 
-
--- =============================================================================
 -- Components
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS components (
     id           TEXT    PRIMARY KEY NOT NULL,
     game_id      TEXT    NOT NULL,
@@ -127,11 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_components_game_id_library
 CREATE INDEX IF NOT EXISTS idx_components_library
     ON components(library);
 
-
--- =============================================================================
 -- Library artifacts
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS library_artifacts (
     id             TEXT    PRIMARY KEY NOT NULL,
     library        TEXT    NOT NULL,
@@ -175,20 +145,10 @@ CREATE INDEX IF NOT EXISTS idx_library_artifacts_source_game_id
 CREATE INDEX IF NOT EXISTS idx_library_artifacts_updated_at
     ON library_artifacts(updated_at DESC);
 
-
--- =============================================================================
 -- Component swap backups (baseline manifest for deterministic rollback)
--- =============================================================================
---
--- Records the *original* file set that existed before a component's first swap,
--- so an N-to-1 rollback can restore exactly those files regardless of how the
--- currently active bundle is named. The `.bak` sidecars hold the original bytes;
--- this table holds their identity.
---
 -- Intentionally NOT foreign-keyed to components(id): scans delete-and-reinsert
 -- the component set, which would otherwise cascade-wipe baselines on every
 -- rescan. The game foreign key still cleans backups up when a game is removed.
-
 CREATE TABLE IF NOT EXISTS component_backups (
     component_id TEXT    PRIMARY KEY NOT NULL,
     game_id      TEXT    NOT NULL,
@@ -215,15 +175,7 @@ CREATE TABLE IF NOT EXISTS component_backups (
 CREATE INDEX IF NOT EXISTS idx_component_backups_game_id
     ON component_backups(game_id);
 
-
--- =============================================================================
--- Installed add-ons (RenoDX)
--- =============================================================================
--- Records each RenoDX install so it can be fully reversed: the files RenderPilot
--- created and the pre-existing files it backed up. Deliberately has no foreign
--- key to `games`, so the record survives game pruning/rescans and remains the
--- source of truth for an on-disk install regardless of catalog state.
-
+-- Installed add-ons (RenoDX). No FK to games by design.
 CREATE TABLE IF NOT EXISTS installed_addons (
     game_id               TEXT    PRIMARY KEY NOT NULL,
     kind                  TEXT    NOT NULL,
@@ -231,18 +183,8 @@ CREATE TABLE IF NOT EXISTS installed_addons (
     addon_version         TEXT,
     created_files_json    TEXT    NOT NULL,
     backed_up_files_json  TEXT    NOT NULL,
-    -- One JSON array of upstream sources to check for updates ({role, url, etag,
-    -- digest, advisory}). A managed host contributes a `host` entry; a reused
-    -- foreign host contributes none. An adopted proxy host (a pre-existing
-    -- install RenderPilot did not create) also contributes a `host` entry, but
-    -- with `advisory: true` — its URL/digest are a best-effort guess from disk,
-    -- not a recorded download, so it asks for confirmation before an update
-    -- replaces the file. This replaces the former per-source columns
-    -- (slug/source_*/reshade_*) and the `reshade_managed_by_us` flag, both now
-    -- derived from this list.
+    managed_files_json    TEXT    NOT NULL DEFAULT '[]',
     tracked_sources_json  TEXT    NOT NULL DEFAULT '[]',
-    -- Advisory per-game host metadata. Nullable for legacy records; behavior
-    -- must fall back to filesystem facts when these are absent.
     host_kind             TEXT,
     reshade_channel       TEXT,
     registered_exe_path   TEXT,
@@ -260,6 +202,8 @@ CREATE TABLE IF NOT EXISTS installed_addons (
     CHECK (json_type(created_files_json) = 'array'),
     CHECK (json_valid(backed_up_files_json)),
     CHECK (json_type(backed_up_files_json) = 'array'),
+    CHECK (json_valid(managed_files_json)),
+    CHECK (json_type(managed_files_json) = 'array'),
     CHECK (json_valid(tracked_sources_json)),
     CHECK (json_type(tracked_sources_json) = 'array'),
     CHECK (host_kind IS NULL OR length(trim(host_kind)) > 0),
@@ -270,54 +214,7 @@ CREATE TABLE IF NOT EXISTS installed_addons (
     CHECK (updated_at >= created_at)
 ) STRICT;
 
-
--- =============================================================================
--- Shared add-on artifacts (advisory provenance; facts still come from disk/OS)
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS shared_artifacts (
-    kind                 TEXT    PRIMARY KEY NOT NULL,
-    install_dir          TEXT    NOT NULL,
-    manifest_path        TEXT    NOT NULL,
-    dll_path             TEXT    NOT NULL,
-    source_url           TEXT,
-    source_etag          TEXT,
-    source_digest        TEXT,
-    source_last_modified TEXT,
-    channel              TEXT,
-    origin               TEXT    NOT NULL,
-    created_files_json   TEXT    NOT NULL DEFAULT '[]',
-    created_at           INTEGER NOT NULL DEFAULT (
-        CAST(unixepoch('subsec') * 1000 AS INTEGER)
-    ),
-    updated_at           INTEGER NOT NULL DEFAULT (
-        CAST(unixepoch('subsec') * 1000 AS INTEGER)
-    ),
-
-    CHECK (length(trim(kind)) > 0),
-    CHECK (length(trim(install_dir)) > 0),
-    CHECK (instr(install_dir, char(0)) = 0),
-    CHECK (length(trim(manifest_path)) > 0),
-    CHECK (instr(manifest_path, char(0)) = 0),
-    CHECK (length(trim(dll_path)) > 0),
-    CHECK (instr(dll_path, char(0)) = 0),
-    CHECK (source_url IS NULL OR length(trim(source_url)) > 0),
-    CHECK (source_etag IS NULL OR length(trim(source_etag)) > 0),
-    CHECK (source_digest IS NULL OR length(trim(source_digest)) > 0),
-    CHECK (source_last_modified IS NULL OR length(trim(source_last_modified)) > 0),
-    CHECK (channel IS NULL OR length(trim(channel)) > 0),
-    CHECK (length(trim(origin)) > 0),
-    CHECK (json_valid(created_files_json)),
-    CHECK (json_type(created_files_json) = 'array'),
-    CHECK (created_at >= 0),
-    CHECK (updated_at >= created_at)
-) STRICT;
-
-
--- =============================================================================
 -- Operations
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS operations (
     id            TEXT    PRIMARY KEY NOT NULL,
     game_id       TEXT    NOT NULL,
@@ -358,11 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_operations_game_id_created_at
 CREATE INDEX IF NOT EXISTS idx_operations_status
     ON operations(status);
 
-
--- =============================================================================
 -- Operation items
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS operation_items (
     id            INTEGER PRIMARY KEY,
     operation_id  TEXT    NOT NULL,
@@ -424,11 +317,7 @@ CREATE INDEX IF NOT EXISTS idx_operation_items_artifact_id
 CREATE INDEX IF NOT EXISTS idx_operation_items_status
     ON operation_items(status);
 
-
--- =============================================================================
 -- Settings
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS settings (
     key        TEXT    PRIMARY KEY NOT NULL,
     value      TEXT    NOT NULL,
@@ -448,11 +337,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_settings_updated_at
     ON settings(updated_at DESC);
 
-
--- =============================================================================
 -- File hash cache
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS file_hash_cache (
     path        TEXT    PRIMARY KEY NOT NULL,
     size        INTEGER NOT NULL,
@@ -482,11 +367,7 @@ CREATE TABLE IF NOT EXISTS file_hash_cache (
 CREATE INDEX IF NOT EXISTS idx_file_hash_cache_updated_at
     ON file_hash_cache(updated_at DESC);
 
-
--- =============================================================================
 -- NVAPI executable overrides + setting baselines
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS nvapi_executable_overrides (
     game_id           TEXT    PRIMARY KEY NOT NULL,
     selected_path     TEXT    NOT NULL,
@@ -505,7 +386,6 @@ CREATE TABLE IF NOT EXISTS nvapi_executable_overrides (
 
     FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 ) STRICT;
-
 
 CREATE TABLE IF NOT EXISTS nvapi_setting_baselines (
     game_id                 TEXT    NOT NULL,
@@ -530,11 +410,7 @@ CREATE TABLE IF NOT EXISTS nvapi_setting_baselines (
     FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 ) STRICT;
 
-
--- =============================================================================
 -- Game UI state
--- =============================================================================
-
 CREATE TABLE IF NOT EXISTS game_ui_state (
     game_id     TEXT    PRIMARY KEY NOT NULL,
     is_favorite INTEGER NOT NULL DEFAULT 0,
@@ -553,11 +429,7 @@ CREATE TABLE IF NOT EXISTS game_ui_state (
         ON DELETE CASCADE
 ) STRICT;
 
-
--- =============================================================================
 -- Cross-table integrity triggers
--- =============================================================================
-
 CREATE TRIGGER IF NOT EXISTS trg_operation_items_artifact_library_insert
 BEFORE INSERT ON operation_items
 FOR EACH ROW
@@ -592,11 +464,7 @@ BEGIN
     );
 END;
 
-
--- =============================================================================
--- updated_at touch triggers
--- =============================================================================
-
+-- updated_at touch triggers (shared_artifacts trigger comes from ddl module)
 CREATE TRIGGER IF NOT EXISTS trg_games_touch_updated_at
 AFTER UPDATE ON games
 FOR EACH ROW
@@ -738,17 +606,4 @@ BEGIN
            OLD.updated_at + 1
        )
      WHERE game_id = NEW.game_id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_shared_artifacts_touch_updated_at
-AFTER UPDATE ON shared_artifacts
-FOR EACH ROW
-WHEN NEW.updated_at = OLD.updated_at
-BEGIN
-    UPDATE shared_artifacts
-       SET updated_at = max(
-           CAST(unixepoch('subsec') * 1000 AS INTEGER),
-           OLD.updated_at + 1
-       )
-     WHERE kind = NEW.kind;
 END;

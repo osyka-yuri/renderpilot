@@ -1,69 +1,63 @@
-//! Completeness checks for the catalog schema against the required objects.
+//! Completeness checks for the catalog schema against the required contract.
 
 use renderpilot_application::AppResult;
-use rusqlite::{Connection, Error as SqliteError};
+use rusqlite::Connection;
 
-use crate::error::storage_context;
+use crate::error::storage_error;
 
-use super::REQUIRED_SCHEMA_OBJECT_GROUPS;
+use super::contract::{CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS};
+use super::ddl::pending_file_mutations;
 use super::objects::{SchemaObjectKind, object_exists};
-use super::physical;
 
 pub(super) fn catalog_schema_is_valid(connection: &Connection) -> AppResult<bool> {
-    for &(object_kind, object_names) in REQUIRED_SCHEMA_OBJECT_GROUPS {
-        if !required_objects_exist(connection, object_kind, object_names)? {
-            return Ok(false);
-        }
-    }
-
-    if !physical_column_mismatches(connection)?.is_empty() {
-        return Ok(false);
-    }
-
-    Ok(true)
-}
-
-fn required_objects_exist(
-    connection: &Connection,
-    object_kind: SchemaObjectKind,
-    object_names: &[&str],
-) -> AppResult<bool> {
-    for &object_name in object_names {
-        if !object_exists(connection, object_kind, object_name)? {
-            return Ok(false);
-        }
-    }
-
-    Ok(true)
+    Ok(validate_violations(connection)?.is_empty())
 }
 
 pub(super) fn validate_catalog_schema(connection: &Connection) -> AppResult<()> {
-    let mut violations = Vec::new();
-
-    for &(object_kind, object_names) in REQUIRED_SCHEMA_OBJECT_GROUPS {
-        collect_missing_object_violations(connection, object_kind, object_names, &mut violations)?;
-    }
-
-    violations.extend(physical_column_mismatches(connection)?);
-
+    let violations = validate_violations(connection)?;
     if violations.is_empty() {
         return Ok(());
     }
 
-    Err(storage_context(
-        &format!(
-            "sqlite catalog schema validation failed: {}",
-            violations.join(", ")
-        ),
-        SqliteError::InvalidQuery,
-    ))
+    Err(storage_error(format!(
+        "sqlite catalog schema validation failed: {}",
+        violations.join(", ")
+    )))
+}
+
+fn validate_violations(connection: &Connection) -> AppResult<Vec<String>> {
+    let mut violations = Vec::new();
+
+    collect_missing_object_violations(
+        connection,
+        SchemaObjectKind::Table,
+        REQUIRED_TABLES,
+        &mut violations,
+    )?;
+    collect_missing_object_violations(
+        connection,
+        SchemaObjectKind::Index,
+        REQUIRED_INDEXES,
+        &mut violations,
+    )?;
+    collect_missing_object_violations(
+        connection,
+        SchemaObjectKind::Trigger,
+        REQUIRED_TRIGGERS,
+        &mut violations,
+    )?;
+
+    violations.extend(physical_column_mismatches(connection)?);
+    violations.extend(constraint_mismatches(connection)?);
+
+    Ok(violations)
 }
 
 /// Exact physical-column contract: each contracted table must have precisely the
 /// expected column set (no missing names, no unexpected extras).
 pub(super) fn physical_column_mismatches(connection: &Connection) -> AppResult<Vec<String>> {
     let mut mismatches = Vec::new();
-    for &(table_name, expected_columns) in physical::CONTRACT_TABLES {
+    for &(table_name, expected_columns) in CONTRACT_TABLES {
         let live = super::pragma_column_names(connection, table_name)?;
 
         for column in expected_columns {
@@ -76,6 +70,17 @@ pub(super) fn physical_column_mismatches(connection: &Connection) -> AppResult<V
                 mismatches.push(format!("unexpected column {table_name}.{column}"));
             }
         }
+    }
+    Ok(mismatches)
+}
+
+/// Semantic CHECK probes that column lists cannot express.
+fn constraint_mismatches(connection: &Connection) -> AppResult<Vec<String>> {
+    let mut mismatches = Vec::new();
+    if !pending_file_mutations::allows_preparing(connection)? {
+        mismatches.push(
+            "pending_file_mutations.state must accept 'preparing' (CHECK constraint)".to_owned(),
+        );
     }
     Ok(mismatches)
 }

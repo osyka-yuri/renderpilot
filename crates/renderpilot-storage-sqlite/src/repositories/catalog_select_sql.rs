@@ -225,7 +225,7 @@ mod tests {
                 ("components", phys::components::ID),
                 ("components", phys::components::GAME_ID),
                 ("components", phys::components::KIND),
-                ("components", phys::components::TECHNOLOGY),
+                ("components", phys::components::LIBRARY),
                 ("components", phys::components::SWAPPABILITY),
                 ("components", phys::components::FILES_JSON),
             ],
@@ -251,7 +251,7 @@ mod tests {
             f,
             &[
                 ("library_artifacts", phys::library_artifacts::ID),
-                ("library_artifacts", phys::library_artifacts::TECHNOLOGY),
+                ("library_artifacts", phys::library_artifacts::LIBRARY),
                 ("library_artifacts", phys::library_artifacts::FILE_NAME),
                 ("library_artifacts", phys::library_artifacts::FILES_JSON),
                 ("library_artifacts", phys::library_artifacts::SOURCE),

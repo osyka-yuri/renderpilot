@@ -1,6 +1,6 @@
 use renderpilot_domain::{GameId, GameInstallation};
 
-use crate::AppResult;
+use crate::{AppError, AppResult};
 
 /// Repository port for storing and loading game installations.
 pub trait GameRepository: Send + Sync {
@@ -20,4 +20,13 @@ pub trait GameRepository: Send + Sync {
 
     /// Loads a game installation by its stable ID.
     fn find_game(&self, id: &GameId) -> AppResult<Option<GameInstallation>>;
+
+    /// Loads a game installation by its stable ID, or fails with a "not found" error.
+    ///
+    /// This is the single canonical replacement for the
+    /// `storage.find_game(id)?.ok_or_else(|| AppError::game_not_found(...))` idiom.
+    fn require_game(&self, id: &GameId) -> AppResult<GameInstallation> {
+        self.find_game(id)?
+            .ok_or_else(|| AppError::game_not_found(id.as_str()))
+    }
 }

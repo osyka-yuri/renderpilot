@@ -1,6 +1,66 @@
+use std::fs;
+use std::path::PathBuf;
+
 use rusqlite::Connection;
 
-use super::{CURRENT_SCHEMA_VERSION, apply};
+use super::contract::{CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS};
+use super::physical;
+use super::{CURRENT_SCHEMA_VERSION, apply, ddl};
+
+const LEGACY_PENDING_WITHOUT_PREPARING: &str = r#"
+DROP TABLE IF EXISTS pending_file_mutations;
+CREATE TABLE pending_file_mutations (
+    id             TEXT    PRIMARY KEY NOT NULL,
+    game_id        TEXT    NOT NULL,
+    feature        TEXT    NOT NULL,
+    subject_id     TEXT,
+    state          TEXT    NOT NULL,
+    manifest_json  TEXT    NOT NULL,
+    created_at     INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+    updated_at     INTEGER NOT NULL DEFAULT (
+        CAST(unixepoch('subsec') * 1000 AS INTEGER)
+    ),
+    CHECK (length(trim(id)) > 0),
+    CHECK (length(trim(game_id)) > 0),
+    CHECK (length(trim(feature)) > 0),
+    CHECK (subject_id IS NULL OR length(trim(subject_id)) > 0),
+    CHECK (state IN ('prepared', 'committed')),
+    CHECK (json_valid(manifest_json)),
+    CHECK (json_type(manifest_json) = 'object'),
+    CHECK (created_at >= 0),
+    CHECK (updated_at >= created_at)
+) STRICT;
+CREATE INDEX idx_pending_file_mutations_game_id
+    ON pending_file_mutations(game_id);
+"#;
+
+const REDUCE_INSTALLED_ADDONS_TO_V9: &str = "
+DROP TABLE pending_file_mutations;
+DROP TRIGGER trg_installed_addons_touch_updated_at;
+CREATE TABLE installed_addons_v9 AS
+SELECT game_id, kind, addon_file, addon_version,
+       created_files_json, backed_up_files_json, tracked_sources_json,
+       host_kind, reshade_channel, registered_exe_path,
+       created_at, updated_at
+  FROM installed_addons;
+DROP TABLE installed_addons;
+ALTER TABLE installed_addons_v9 RENAME TO installed_addons;
+CREATE TRIGGER trg_installed_addons_touch_updated_at
+AFTER UPDATE ON installed_addons
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+    UPDATE installed_addons
+       SET updated_at = max(
+           CAST(unixepoch('subsec') * 1000 AS INTEGER),
+           OLD.updated_at + 1
+       )
+     WHERE game_id = NEW.game_id;
+END;
+PRAGMA user_version = 9;
+";
 
 #[test]
 fn apply_creates_catalog_schema() {
@@ -10,6 +70,7 @@ fn apply_creates_catalog_schema() {
 
     assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
     assert_catalog_schema_exists(&connection);
+    assert_preparing_state_is_accepted(&connection);
 }
 
 #[test]
@@ -21,6 +82,30 @@ fn apply_is_idempotent() {
 
     assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
     assert_catalog_schema_exists(&connection);
+}
+
+#[test]
+fn apply_keep_preserves_catalog_rows_on_healthy_current() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial");
+    connection
+        .execute(
+            "INSERT INTO settings (key, value) VALUES ('keep_marker', 'alive')",
+            [],
+        )
+        .expect("marker");
+
+    apply(&mut connection).expect("healthy keep must not wipe");
+
+    let marker: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM settings WHERE key = 'keep_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(marker, 1);
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
 }
 
 #[test]
@@ -109,7 +194,7 @@ fn apply_rebuilds_stale_v2_schema_with_old_artifact_shape() {
 }
 
 #[test]
-fn apply_migrates_v8_to_v9_without_rebuilding_catalog_rows() {
+fn apply_migrates_v8_to_current_without_rebuilding_catalog_rows() {
     let mut connection = open_test_connection();
 
     apply(&mut connection).expect("initial migration should succeed");
@@ -156,6 +241,104 @@ fn apply_migrates_v8_to_v9_without_rebuilding_catalog_rows() {
         })
         .expect("installed addon count should be readable");
     assert_eq!(addon_count, 1);
+    assert_preparing_state_is_accepted(&connection);
+}
+
+#[test]
+fn apply_migrates_v9_to_current_additively_and_preserves_addon_rows() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration should succeed");
+    connection
+        .execute(
+            "
+            INSERT INTO installed_addons
+                (game_id, kind, addon_file, addon_version,
+                 created_files_json, backed_up_files_json, managed_files_json,
+                 tracked_sources_json)
+            VALUES
+                ('steam:43', 'luma', 'C:/Games/Test/Luma-Test.addon', NULL,
+                 '[\"C:/Games/Test/Luma-Test.addon\"]', '[]', '[]', '[]')
+            ",
+            [],
+        )
+        .expect("installed addon should insert");
+    connection
+        .execute_batch(REDUCE_INSTALLED_ADDONS_TO_V9)
+        .expect("database should be reduced to v9 shape");
+
+    apply(&mut connection).expect("v9 schema should migrate in place");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert!(table_has_column(
+        &connection,
+        "installed_addons",
+        "managed_files_json"
+    ));
+    assert!(schema_object_exists(
+        &connection,
+        "table",
+        "pending_file_mutations"
+    ));
+    let row: (i64, String) = connection
+        .query_row(
+            "SELECT COUNT(*), managed_files_json FROM installed_addons WHERE game_id = 'steam:43'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("migrated row");
+    assert_eq!(row, (1, "[]".to_owned()));
+    assert_preparing_state_is_accepted(&connection);
+}
+
+#[test]
+fn apply_heals_v10_pending_mutations_that_reject_preparing_without_wipe() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration should succeed");
+    connection
+        .execute(
+            "
+            INSERT INTO settings (key, value)
+            VALUES ('keep_me', 'alive')
+            ",
+            [],
+        )
+        .expect("marker setting should insert");
+    connection
+        .execute_batch(LEGACY_PENDING_WITHOUT_PREPARING)
+        .expect("legacy WIP pending_file_mutations shape");
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO pending_file_mutations
+                (id, game_id, feature, subject_id, state, manifest_json)
+            VALUES
+                ('tx-legacy', 'steam:1', 'catalog_swap', NULL, 'prepared',
+                 '{"format_version":1,"roots":[],"transaction_dir":"x","snapshots":[]}');
+            PRAGMA user_version = 10;
+            "#,
+        )
+        .expect("seed legacy prepared row");
+
+    apply(&mut connection).expect("current schema should soft-heal pending table");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert_preparing_state_is_accepted(&connection);
+    let kept: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pending_file_mutations WHERE id = 'tx-legacy'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("legacy prepared row");
+    assert_eq!(kept, 1);
+    let marker: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM settings WHERE key = 'keep_me'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("catalog rows must survive soft-heal");
+    assert_eq!(marker, 1);
 }
 
 #[test]
@@ -176,12 +359,12 @@ fn apply_rebuilds_current_schema_when_shared_artifact_trigger_is_missing() {
         .execute_batch(
             "
             DROP TRIGGER IF EXISTS trg_shared_artifacts_touch_updated_at;
-            PRAGMA user_version = 9;
+            PRAGMA user_version = 10;
             ",
         )
         .expect("schema should be made incomplete");
 
-    apply(&mut connection).expect("incomplete v9 schema should rebuild");
+    apply(&mut connection).expect("incomplete current schema should rebuild");
 
     assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
     assert_catalog_schema_exists(&connection);
@@ -254,6 +437,19 @@ fn contract_physical_columns_match_schema() {
 }
 
 #[test]
+fn contract_required_tables_match_physical_contract() {
+    assert_eq!(REQUIRED_TABLES.len(), CONTRACT_TABLES.len());
+    assert_eq!(REQUIRED_TABLES.len(), physical::CONTRACT_TABLES.len());
+    for (index, &table) in REQUIRED_TABLES.iter().enumerate() {
+        assert_eq!(
+            CONTRACT_TABLES[index].0, table,
+            "REQUIRED_TABLES and CONTRACT_TABLES order/name drift at {index}"
+        );
+        assert_eq!(physical::CONTRACT_TABLES[index].0, table);
+    }
+}
+
+#[test]
 fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
     let mut connection = open_test_connection();
     super::apply(&mut connection).expect("migration should succeed");
@@ -273,7 +469,6 @@ fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
             .message()
             .contains("unexpected column games.unexpected_column")
     );
-    assert!(!error.message().contains("missing required objects"));
 
     super::apply(&mut connection).expect("unexpected physical column should rebuild schema");
 
@@ -284,28 +479,139 @@ fn apply_rebuilds_current_schema_with_an_unexpected_physical_column() {
     );
 }
 
+#[test]
+fn contract_rejects_pending_mutations_without_preparing() {
+    let mut connection = open_test_connection();
+    super::apply(&mut connection).expect("baseline");
+    connection
+        .execute_batch(LEGACY_PENDING_WITHOUT_PREPARING)
+        .expect("broken CHECK");
+
+    assert!(!super::validation::catalog_schema_is_valid(&connection).expect("validate"));
+    let error = super::validation::validate_catalog_schema(&connection).expect_err("must fail");
+    assert!(error.message().contains("preparing"));
+}
+
+#[test]
+fn compose_baseline_is_non_empty_and_includes_shared_fragments() {
+    let baseline = ddl::compose_baseline();
+    assert!(baseline.contains("CREATE TABLE IF NOT EXISTS games"));
+    assert!(baseline.contains("CREATE TABLE IF NOT EXISTS pending_file_mutations"));
+    assert!(baseline.contains("CREATE TABLE IF NOT EXISTS shared_artifacts"));
+    assert!(baseline.contains("trg_shared_artifacts_touch_updated_at"));
+    assert!(baseline.contains("'preparing'"));
+}
+
+#[test]
+fn apply_backs_up_file_database_before_rebuild() {
+    let dir =
+        std::env::temp_dir().join(format!("renderpilot-schema-backup-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("temp dir");
+    let db_path = dir.join("catalog.db");
+
+    {
+        let mut connection = Connection::open(&db_path).expect("open file db");
+        apply(&mut connection).expect("initial apply");
+        connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('marker', 'alive')",
+                [],
+            )
+            .expect("marker");
+        connection
+            .execute_batch(
+                "
+                DROP TRIGGER IF EXISTS trg_shared_artifacts_touch_updated_at;
+                PRAGMA user_version = 10;
+                ",
+            )
+            .expect("break schema");
+        apply(&mut connection).expect("rebuild with backup");
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        let marker: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'marker'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(marker, 0);
+    }
+
+    let backups: Vec<PathBuf> = fs::read_dir(&dir)
+        .expect("list temp")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(".pre-rebuild.") && name.ends_with(".bak"))
+        })
+        .collect();
+    assert_eq!(backups.len(), 1, "expected one pre-rebuild backup");
+
+    let backup = Connection::open(&backups[0]).expect("open backup");
+    let restored: i64 = backup
+        .query_row(
+            "SELECT COUNT(*) FROM settings WHERE key = 'marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("marker in backup");
+    assert_eq!(restored, 1);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 fn open_test_connection() -> Connection {
     Connection::open_in_memory().expect("sqlite should open")
 }
 
 fn assert_catalog_schema_exists(connection: &Connection) {
-    assert!(table_has_columns(connection, "games"));
-    assert!(table_has_columns(connection, "game_covers"));
-    assert!(schema_object_exists(
-        connection,
-        "index",
-        "uq_games_launcher_external_id"
-    ));
-    assert!(schema_object_exists(
-        connection,
-        "trigger",
-        "trg_operation_items_artifact_library_insert"
-    ));
-    assert!(schema_object_exists(
-        connection,
-        "trigger",
-        "trg_shared_artifacts_touch_updated_at"
-    ));
+    for &table in REQUIRED_TABLES {
+        assert!(
+            schema_object_exists(connection, "table", table),
+            "missing table {table}"
+        );
+        assert!(
+            table_has_columns(connection, table),
+            "table {table} has no columns"
+        );
+    }
+    for &index in REQUIRED_INDEXES {
+        assert!(
+            schema_object_exists(connection, "index", index),
+            "missing index {index}"
+        );
+    }
+    for &trigger in REQUIRED_TRIGGERS {
+        assert!(
+            schema_object_exists(connection, "trigger", trigger),
+            "missing trigger {trigger}"
+        );
+    }
+}
+
+fn assert_preparing_state_is_accepted(connection: &Connection) {
+    connection
+        .execute(
+            "
+            INSERT INTO pending_file_mutations
+                (id, game_id, feature, subject_id, state, manifest_json)
+            VALUES
+                ('tx-preparing-assert', 'steam:probe', 'schema_probe', NULL, 'preparing',
+                 '{\"snapshots\":[]}')
+            ",
+            [],
+        )
+        .expect("preparing state must be accepted");
+    connection
+        .execute(
+            "DELETE FROM pending_file_mutations WHERE id = 'tx-preparing-assert'",
+            [],
+        )
+        .expect("cleanup probe row");
 }
 
 fn user_version(connection: &Connection) -> i32 {

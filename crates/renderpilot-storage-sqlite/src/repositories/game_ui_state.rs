@@ -36,45 +36,47 @@ impl SqliteStorage {
             return self.delete_game_ui_state(game_id);
         }
 
-        let connection = self.connection()?;
-        connection
-            .execute(
-                "INSERT INTO game_ui_state
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "INSERT INTO game_ui_state
                     (game_id, is_favorite, is_hidden, updated_at)
                  VALUES (?1, ?2, ?3, CAST(unixepoch('subsec') * 1000 AS INTEGER))
                  ON CONFLICT(game_id) DO UPDATE SET
                     is_favorite = excluded.is_favorite,
                     is_hidden   = excluded.is_hidden,
                     updated_at  = excluded.updated_at",
-                params![game_id, i32::from(is_favorite), i32::from(is_hidden)],
-            )
-            .map(|_| ())
-            .map_err(|error| storage_context("could not save game ui state", error))
+                    params![game_id, i32::from(is_favorite), i32::from(is_hidden)],
+                )
+                .map(|_| ())
+                .map_err(|error| storage_context("could not save game ui state", error))
+        })
     }
 
     /// Reads the UI state for `game_id`, if any.
     pub fn get_game_ui_state(&self, game_id: &str) -> AppResult<Option<GameUiStateRow>> {
-        let connection = self.connection()?;
-        connection
-            .query_row(
-                "SELECT game_id, is_favorite, is_hidden, updated_at
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT game_id, is_favorite, is_hidden, updated_at
                  FROM game_ui_state
                  WHERE game_id = ?1",
-                params![game_id],
-                |row| {
-                    let is_favorite: i32 = row.get(1)?;
-                    let is_hidden: i32 = row.get(2)?;
+                    params![game_id],
+                    |row| {
+                        let is_favorite: i32 = row.get(1)?;
+                        let is_hidden: i32 = row.get(2)?;
 
-                    Ok(GameUiStateRow {
-                        game_id: row.get(0)?,
-                        is_favorite: is_favorite != 0,
-                        is_hidden: is_hidden != 0,
-                        updated_at: row.get(3)?,
-                    })
-                },
-            )
-            .optional()
-            .map_err(|error| storage_context("could not read game ui state", error))
+                        Ok(GameUiStateRow {
+                            game_id: row.get(0)?,
+                            is_favorite: is_favorite != 0,
+                            is_hidden: is_hidden != 0,
+                            updated_at: row.get(3)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(|error| storage_context("could not read game ui state", error))
+        })
     }
 
     /// Lists all stored UI-state rows in stable game-id order.
@@ -100,14 +102,15 @@ impl SqliteStorage {
 
     /// Deletes the UI-state row for `game_id`, if any.
     pub fn delete_game_ui_state(&self, game_id: &str) -> AppResult<()> {
-        let connection = self.connection()?;
-        connection
-            .execute(
-                "DELETE FROM game_ui_state WHERE game_id = ?1",
-                params![game_id],
-            )
-            .map(|_| ())
-            .map_err(|error| storage_context("could not delete game ui state", error))
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "DELETE FROM game_ui_state WHERE game_id = ?1",
+                    params![game_id],
+                )
+                .map(|_| ())
+                .map_err(|error| storage_context("could not delete game ui state", error))
+        })
     }
 }
 

@@ -3174,6 +3174,7 @@ dependencies = [
 name = "renderpilot-storage-sqlite"
 version = "1.5.2"
 dependencies = [
+ "log",
  "renderpilot-application",
  "renderpilot-detection",
  "renderpilot-domain",
