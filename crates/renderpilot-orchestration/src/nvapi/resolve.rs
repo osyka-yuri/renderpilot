@@ -42,19 +42,19 @@ pub fn set_executable_override(
     let exe_path = Path::new(absolute_path);
 
     let canonical_install = install_dir.canonicalize().map_err(|error| {
-        ServiceError::CommandFailed(format!(
+        ServiceError::command_failed(format!(
             "could not canonicalize install dir {}: {error}",
             install_dir.display()
         ))
     })?;
     let canonical_exe = exe_path.canonicalize().map_err(|error| {
-        ServiceError::CommandFailed(format!(
+        ServiceError::command_failed(format!(
             "could not canonicalize executable {}: {error}",
             exe_path.display()
         ))
     })?;
     if !canonical_exe.starts_with(&canonical_install) {
-        return Err(ServiceError::CommandFailed(format!(
+        return Err(ServiceError::command_failed(format!(
             "executable must be located inside the install directory ({})",
             install_dir.display()
         )));
@@ -62,9 +62,7 @@ pub fn set_executable_override(
     let file_name = canonical_exe
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| {
-            ServiceError::CommandFailed("executable path has no file name".to_owned())
-        })?;
+        .ok_or_else(|| ServiceError::command_failed("executable path has no file name"))?;
 
     let normalized = canonical_exe.to_string_lossy().replace('\\', "/");
     context

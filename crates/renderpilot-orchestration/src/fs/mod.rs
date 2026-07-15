@@ -1,0 +1,55 @@
+//! Crash-safe filesystem primitives shared across orchestration features.
+//!
+//! Provider- and domain-neutral: the library swapper and the add-on installers
+//! both build on these. Nothing here knows about a concrete add-on kind.
+//!
+//! ## Modules
+//!
+//! - [`durability`] -- directory-entry fsync (batched, best-effort)
+//! - [`atomic`] -- content-durable write/copy via temp + rename
+//! - [`io`] -- read, remove, BOM strip
+//! - [`mtime`] -- HTTP-date parse/format and best-effort mtime stamping
+//! - [`hash`] -- non-empty regular-file SHA-256
+//! - [`sidecar`] -- classic `.bak` path naming and verify/create/restore
+//!
+//! Call sites use the flat `crate::fs::*` surface re-exported below. Internal
+//! layout documents dependency rules only.
+//!
+//! ## Dependency rules
+//!
+//! ```text
+//! durability, io, mtime, hash  ->  (std / domain only)
+//! atomic                       ->  (std only)
+//! sidecar::naming              ->  (std only)
+//! sidecar::ops                 ->  atomic + hash + naming
+//! ```
+//!
+//! Pure bare-name safety lives in [`crate::paths`] (no I/O).
+//! Multi-file protocols live in `file_mutation` / `coordinated_files`.
+//!
+//! Writing a file with `std::fs::write` only schedules the data for the OS page
+//! cache; a crash before the cache is flushed can leave a torn file.
+//! [`write_file_atomically`] makes a write **content-durable** via a temp file,
+//! `sync_all`, and an atomic rename. Directory-entry durability is a separate,
+//! explicit step ([`sync_directory_best_effort`]) that callers invoke once over
+//! the dirs they touched.
+
+mod atomic;
+mod durability;
+mod hash;
+mod io;
+mod mtime;
+mod sidecar;
+
+pub(crate) use atomic::{copy_file_atomically, write_file_atomically};
+pub(crate) use durability::{sync_directory_best_effort, sync_parent_directory_best_effort};
+pub(crate) use hash::{NonEmptyFileError, sha256_of_non_empty_file};
+pub(crate) use io::{read_file, remove_file_if_exists, strip_utf8_bom};
+pub(crate) use mtime::{format_http_date, is_reasonable_file_mtime, stamp_mtime_best_effort};
+pub(crate) use sidecar::naming::{
+    SidecarPathError, backup_path, expand_with_sidecars, original_path_from_backup,
+    with_added_extension,
+};
+pub(crate) use sidecar::ops::{
+    SidecarVerifyError, create_sidecar, restore_from_sidecar, verify_sidecar,
+};

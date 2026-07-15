@@ -6,7 +6,7 @@ use super::types::{
     LibraryManifestEntry, SignatureInfo, VersionInfo, ZstFileInfo,
 };
 use super::validate::validate_manifest;
-use crate::fs::sanitize_path_component;
+use crate::paths::sanitize_path_component;
 
 // ---------------------------------------------------------------------------
 // compression::decompress_library tests

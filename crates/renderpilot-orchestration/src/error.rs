@@ -94,6 +94,26 @@ impl fmt::Display for ServiceError {
 
 impl Error for ServiceError {}
 
+pub(crate) fn failed(message: impl Into<String>) -> ServiceError {
+    ServiceError::command_failed(message)
+}
+
+impl ServiceError {
+    /// Constructs a [`ServiceError::CommandFailed`] from any string-like value.
+    /// Feature modules and `addons::errors` route through it so construction
+    /// stays in one place.
+    #[must_use]
+    pub fn command_failed(message: impl Into<String>) -> Self {
+        Self::CommandFailed(message.into())
+    }
+
+    /// Constructs a [`ServiceError::InvalidInput`] from any string-like value.
+    #[must_use]
+    pub fn invalid_input(message: impl Into<String>) -> Self {
+        Self::InvalidInput(message.into())
+    }
+}
+
 impl From<AppError> for ServiceError {
     fn from(error: AppError) -> Self {
         let (kind, message) = error.into_parts();

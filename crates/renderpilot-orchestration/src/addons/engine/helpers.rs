@@ -40,7 +40,7 @@ pub(crate) fn safe_join(game_dir: &Path, field: &str, name: &str) -> Result<Path
 }
 
 pub(crate) fn ensure_bare_file_name(field: &str, name: &str) -> Result<(), ServiceError> {
-    if !crate::fs::is_safe_file_name(name) {
+    if !crate::paths::is_safe_file_name(name) {
         return Err(errors::invalid(format!(
             "unsafe {field} `{name}`: must be a bare file name"
         )));

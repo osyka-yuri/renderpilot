@@ -12,6 +12,16 @@ use crate::api::DwordSettingState;
 // DLSS DLL family
 // -----------------------------------------------------------------------------
 
+/// On-disk file names for the three NVAPI DLSS DLL families.
+///
+/// Kept local to this FFI leaf crate (no dependency on `renderpilot-detection`).
+/// Super-resolution identity for PE inspection lives in detection as
+/// `NVNGX_DLSS_FILE_NAME` and must stay string-equal to [`SR_FILE_NAME`]; that
+/// contract is enforced by an orchestration unit test in `nvapi/ops`.
+const SR_FILE_NAME: &str = "nvngx_dlss.dll";
+const FRAME_GEN_FILE_NAME: &str = "nvngx_dlssg.dll";
+const RAY_RECONSTRUCTION_FILE_NAME: &str = "nvngx_dlssd.dll";
+
 /// DLSS DLL family. Each ships in a different file with an independent
 /// version stream, and each supports a different preset table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,9 +57,9 @@ impl DlssDllKind {
     /// DLL file name on disk (case-insensitive comparison).
     pub const fn file_name(self) -> &'static str {
         match self {
-            Self::Sr => "nvngx_dlss.dll",
-            Self::FrameGen => "nvngx_dlssg.dll",
-            Self::RayReconstruction => "nvngx_dlssd.dll",
+            Self::Sr => SR_FILE_NAME,
+            Self::FrameGen => FRAME_GEN_FILE_NAME,
+            Self::RayReconstruction => RAY_RECONSTRUCTION_FILE_NAME,
         }
     }
 }

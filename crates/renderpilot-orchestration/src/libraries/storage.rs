@@ -37,7 +37,7 @@ pub(super) fn local_dll_path(
 ) -> Result<PathBuf, ServiceError> {
     Ok(libraries_storage_dir()?
         .join(group_key)
-        .join(crate::fs::sanitize_path_component(entry_id))
+        .join(crate::paths::sanitize_path_component(entry_id))
         .join(file_name))
 }
 

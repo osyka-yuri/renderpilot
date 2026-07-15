@@ -41,7 +41,7 @@ pub(crate) fn ensure_semver(context: &str, field: &str, value: &str) -> Result<(
 /// Asserts a field is a bare, safe file name (non-blank, no path separators).
 pub(crate) fn ensure_safe_file_name(field: &str, value: &str) -> Result<(), ServiceError> {
     ensure_not_blank(field, value)?;
-    if !crate::fs::is_safe_file_name(value) {
+    if !crate::paths::is_safe_file_name(value) {
         return Err(failed(format!(
             "`{field}` must be a bare file name, got `{value}`"
         )));

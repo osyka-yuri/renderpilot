@@ -21,6 +21,7 @@ pub mod libraries;
 pub mod manifests;
 pub mod net;
 pub mod nvapi;
+mod paths;
 pub mod portable;
 pub mod storage;
 mod util;
@@ -28,6 +29,7 @@ mod util;
 pub use context::Context;
 
 pub use error::ServiceError;
+pub(crate) use error::failed;
 
 pub use renderpilot_application as application;
 pub use renderpilot_detection as detection;
