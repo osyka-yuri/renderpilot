@@ -60,6 +60,7 @@
 pub(crate) mod anticheat;
 pub(crate) mod availability_pipeline;
 pub mod capabilities;
+pub(crate) mod durable;
 pub mod engine;
 pub(crate) mod errors;
 pub(crate) mod exclusivity;
@@ -70,6 +71,8 @@ mod ini;
 pub(crate) mod install_guard;
 pub(crate) mod manifest_validate;
 pub(crate) mod matching;
+pub(crate) mod mutation_features;
+pub(crate) mod mutation_targets;
 pub(crate) mod operation_lock;
 pub(crate) mod progress;
 pub mod record;

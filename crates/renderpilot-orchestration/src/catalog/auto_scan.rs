@@ -51,7 +51,7 @@ pub fn scan_auto_in_batch(
     path: &std::path::Path,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
     scan_auto_in_shared_batch(
-        batch.context().storage(),
+        batch.context(),
         &batch.detector,
         &batch.prefetched_cache,
         path,
@@ -60,5 +60,7 @@ pub fn scan_auto_in_batch(
 
 fn load_full_hash_cache(storage: &SqliteStorage) -> Result<FileHashCache, ServiceError> {
     let rows = storage.load_all_file_hash_cache()?;
-    Ok(crate::catalog::scan::populate_file_hash_cache(rows))
+    Ok(crate::catalog::scan::hash_cache::populate_file_hash_cache(
+        rows,
+    ))
 }

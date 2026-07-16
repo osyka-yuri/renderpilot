@@ -11,11 +11,14 @@ pub mod catalog;
 mod cdn;
 /// Application-wide orchestration context and state management.
 pub mod context;
+mod coordinated_files;
 pub mod covers;
 pub mod dlss;
 mod error;
+mod file_mutation;
 mod fs;
 pub mod game_executable;
+mod game_mutation_lock;
 pub mod libraries;
 /// Coordinated CDN manifest refresh (passive TTL vs forced + cooldown).
 pub mod manifests;

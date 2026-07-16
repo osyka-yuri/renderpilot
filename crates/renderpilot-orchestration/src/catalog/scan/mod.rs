@@ -22,7 +22,6 @@
 mod detect;
 // crate-visible for auto_scan batch prefetch (hard path).
 pub(crate) mod hash_cache;
-pub(crate) use hash_cache::populate_file_hash_cache;
 mod install_partitioner;
 mod paths;
 mod persist;
@@ -49,7 +48,6 @@ use install_partitioner::derive_install_roots;
 use renderpilot_application::AppError;
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
 use renderpilot_platform_windows::ManualFolderGameSource;
-use renderpilot_storage_sqlite::SqliteStorage;
 use scan_plan::{DetectionMode, InstallRootStrategy, resolve_install_root_strategy};
 
 use crate::ServiceError;
@@ -94,7 +92,7 @@ use self::persist::persist_scan_results;
 /// diverging DLL paths would re-tag subfolders as `Manual` and drop the store
 /// identity that auto-scan established.
 pub(super) fn scan_folder_impl(
-    storage: &SqliteStorage,
+    context: &crate::Context,
     path: PathBuf,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
     let detector = LibraryPatternComponentDetector::windows_default()
@@ -104,7 +102,7 @@ pub(super) fn scan_folder_impl(
     // launcher-owned installs never get split into Manual sub-roots.
     scan_impl(
         ScanInputs {
-            storage,
+            context,
             detector: &detector,
         },
         path,
@@ -117,7 +115,7 @@ pub(super) fn scan_folder_impl(
 /// Borrowed storage + detector for one [`scan_impl`] invocation.
 #[derive(Clone, Copy)]
 struct ScanInputs<'a> {
-    storage: &'a SqliteStorage,
+    context: &'a crate::Context,
     detector: &'a LibraryPatternComponentDetector,
 }
 
@@ -128,10 +126,14 @@ fn scan_impl(
     install_root_strategy: InstallRootStrategy,
     prefetched_cache: Option<&FileHashCache>,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
-    let storage = inputs.storage;
+    let storage = inputs.context.storage();
     let detector = inputs.detector;
 
     let selected_game = ManualFolderGameSource::new(path).discover_game()?;
+    let _guard = crate::game_mutation_lock::enter_game_mutation_boundary(
+        inputs.context,
+        selected_game.id(),
+    )?;
     let scope_root = selected_game.install_path().as_str().to_owned();
     let install_root_strategy =
         resolve_install_root_strategy(install_root_strategy, &selected_game);

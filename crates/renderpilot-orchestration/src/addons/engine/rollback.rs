@@ -4,10 +4,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::canonicalize_best_effort;
 use super::errors;
 use super::helpers;
 use crate::ServiceError;
+use crate::paths::canonicalize_best_effort;
 
 /// Reverses an install described by its recorded file lists, returning the folder to
 /// its prior state. Idempotent and safe to re-run: missing files are ignored.
@@ -29,7 +29,7 @@ pub fn uninstall(
 
     let mut touched_dirs: HashSet<PathBuf> = HashSet::new();
     for path in backed_up_files {
-        let bak = match helpers::bak_path(path) {
+        let bak = match crate::fs::backup_path(path) {
             Ok(bak) => bak,
             Err(error) => {
                 log::warn!(

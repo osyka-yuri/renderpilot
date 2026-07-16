@@ -14,13 +14,12 @@
 //! half-applied.
 //!
 //! The engine is pure over the filesystem (tempdir-testable) and knows nothing
-//! tool-specific: a tool layer (RenoDX today, OptiScaler tomorrow) builds the plan —
-//! which files to place, which config keys to merge — and maps the returned
-//! [`InstallReceipt`] into its own persisted install record.
+//! tool-specific: tool layers (RenoDX, Luma, …) build the plan — which files to
+//! place, which config keys to merge — and map the returned [`InstallReceipt`]
+//! into their own persisted install record.
 
 use std::path::Path;
 
-use super::canonicalize_best_effort;
 use super::errors;
 use crate::ServiceError;
 
@@ -39,7 +38,22 @@ pub use types::{
     MergeStrategy,
 };
 
-pub(crate) use sentinel::{remove_sentinel, sentinel_path, write_sentinel};
+pub(crate) use sentinel::{
+    OperationSentinel, PendingInstallCommit, remove_sentinel, sentinel_path, write_sentinel,
+};
+
+/// Engine failure plus whether its in-call rollback restored every mutation.
+pub(crate) struct InstallFailure {
+    pub(crate) error: ServiceError,
+    pub(crate) rollback_complete: bool,
+}
+
+/// Successful filesystem apply whose sentinel remains open until the caller
+/// durably persists the install record.
+pub(crate) struct PendingInstall {
+    pub(crate) receipt: InstallReceipt,
+    pub(crate) commit: PendingInstallCommit,
+}
 
 /// Installs `plan` into `game_dir`, returning the receipt needed to reverse it.
 ///
@@ -50,42 +64,90 @@ pub fn install(game_dir: &Path, plan: &InstallPlan) -> Result<InstallReceipt, Se
     install_with_options(game_dir, plan, InstallOptions::default())
 }
 
+/// Applies a plan while retaining its sentinel across the following database
+/// commit. This is the transaction shape used by every managed add-on install.
+pub(crate) fn install_pending(
+    game_dir: &Path,
+    plan: &InstallPlan,
+) -> Result<PendingInstall, ServiceError> {
+    let commit = PendingInstallCommit::begin(game_dir, plan.kind)?;
+    match install_with_options_outcome(
+        game_dir,
+        plan,
+        InstallOptions {
+            manage_sentinel: false,
+        },
+    ) {
+        Ok(receipt) => Ok(PendingInstall { receipt, commit }),
+        Err(failure) => {
+            if failure.rollback_complete {
+                commit.finish_rolled_back();
+            } else {
+                log::warn!(
+                    "addon install rollback was incomplete; leaving sentinel `{}` to flag a torn install",
+                    commit.path().display()
+                );
+            }
+            Err(failure.error)
+        }
+    }
+}
+
 /// Like [`install`], but allows an outer orchestrator to own the crash-safety sentinel.
 pub fn install_with_options(
     game_dir: &Path,
     plan: &InstallPlan,
     options: InstallOptions,
 ) -> Result<InstallReceipt, ServiceError> {
-    let sentinel = options
-        .manage_sentinel
-        .then(|| sentinel::sentinel_path(game_dir, plan.kind));
-    if let Some(ref path) = sentinel {
-        sentinel::write_sentinel(path)?;
-    }
+    install_with_options_outcome(game_dir, plan, options).map_err(|failure| failure.error)
+}
+
+/// Internal outcome-preserving variant used by an outer transaction that owns
+/// the sentinel and must distinguish a clean rollback from a torn one.
+pub(crate) fn install_with_options_outcome(
+    game_dir: &Path,
+    plan: &InstallPlan,
+    options: InstallOptions,
+) -> Result<InstallReceipt, InstallFailure> {
+    let sentinel = if options.manage_sentinel {
+        Some(
+            sentinel::OperationSentinel::begin(game_dir, plan.kind).map_err(|error| {
+                InstallFailure {
+                    error,
+                    rollback_complete: true,
+                }
+            })?,
+        )
+    } else {
+        None
+    };
 
     let mut changes = InstallChanges::default();
     match apply::apply_ops(game_dir, &plan.ops, &mut changes) {
         Ok(()) => {
             changes.sync_touched_dirs();
             changes.cleanup_remove_backups();
-            if let Some(ref path) = sentinel {
-                sentinel::remove_sentinel(path);
+            if let Some(sentinel) = sentinel {
+                sentinel.finish_committed();
             }
             Ok(changes.into_receipt())
         }
         Err(error) => {
             let rollback_complete = changes.undo().is_complete();
-            if let Some(ref path) = sentinel {
+            if let Some(sentinel) = sentinel {
                 if rollback_complete {
-                    sentinel::remove_sentinel(path);
+                    sentinel.finish_rolled_back();
                 } else {
                     log::warn!(
                         "addon install rollback was incomplete; leaving sentinel `{}` to flag a torn install",
-                        path.display()
+                        sentinel.path().display()
                     );
                 }
             }
-            Err(error)
+            Err(InstallFailure {
+                error,
+                rollback_complete,
+            })
         }
     }
 }

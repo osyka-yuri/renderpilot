@@ -39,6 +39,15 @@ pub enum ServiceError {
     },
     /// A command failed while running.
     CommandFailed(String),
+    /// The feature mutation failed and restoring the pre-mutation filesystem
+    /// before-state also failed. Both messages are preserved so neither side is
+    /// lost in logs or UI.
+    RollbackAlsoFailed {
+        /// Original feature / work error.
+        primary: String,
+        /// Error from the durable before-state restore.
+        rollback: String,
+    },
     /// SteamGridDB API key is required for this cover lookup but is not configured.
     SteamGridDbApiKeyMissing,
     /// Cover bytes are not a supported raster image type.
@@ -77,6 +86,10 @@ impl fmt::Display for ServiceError {
                 state.as_str(),
             )),
             Self::CommandFailed(message) => formatter.write_str(message),
+            Self::RollbackAlsoFailed { primary, rollback } => write!(
+                formatter,
+                "{primary}; restoring the pre-mutation filesystem state also failed: {rollback}"
+            ),
             Self::SteamGridDbApiKeyMissing => {
                 formatter.write_str("steamgriddb api key is not configured")
             }
@@ -111,6 +124,21 @@ impl ServiceError {
     #[must_use]
     pub fn invalid_input(message: impl Into<String>) -> Self {
         Self::InvalidInput(message.into())
+    }
+
+    /// Combines a primary failure with a durable-transaction rollback failure.
+    #[must_use]
+    pub fn rollback_also_failed(primary: impl Into<String>, rollback: impl Into<String>) -> Self {
+        Self::RollbackAlsoFailed {
+            primary: primary.into(),
+            rollback: rollback.into(),
+        }
+    }
+
+    /// Returns true when both the feature work and the before-state restore failed.
+    #[must_use]
+    pub fn is_rollback_also_failed(&self) -> bool {
+        matches!(self, Self::RollbackAlsoFailed { .. })
     }
 }
 
@@ -181,6 +209,10 @@ mod tests {
     fn runtime_variants_display_correctly() {
         let errors = [
             ServiceError::CommandFailed("scan failed".to_owned()),
+            ServiceError::RollbackAlsoFailed {
+                primary: "install failed".to_owned(),
+                rollback: "restore failed".to_owned(),
+            },
             ServiceError::SteamGridDbApiKeyMissing,
             ServiceError::UnsupportedCoverImageType,
             ServiceError::CoverDownloadFailed("timeout".to_owned()),

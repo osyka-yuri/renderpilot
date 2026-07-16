@@ -1,0 +1,264 @@
+use std::fs;
+
+use renderpilot_domain::{
+    ComponentFile, ComponentId, ComponentKind, GameId, GraphicsComponent, GraphicsTechnology,
+    ManagedAddonFile, ManagedFileBaseline, PathRef, Swappability,
+};
+
+use super::*;
+
+#[test]
+fn adopts_a_valid_unrecorded_classic_sidecar() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"overlay").expect("live");
+    fs::write(root.path().join("nvngx_dlss.dll.bak"), b"original").expect("bak");
+
+    let resolved = BaselineResolver::new(root.path(), &[])
+        .resolve(&live, None)
+        .expect("valid sidecar");
+
+    assert!(matches!(
+        resolved,
+        ResolvedBaseline::ExistingSidecarBaseline(_)
+    ));
+}
+
+#[test]
+fn rejects_an_empty_unrecorded_sidecar() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"overlay").expect("live");
+    fs::write(root.path().join("nvngx_dlss.dll.bak"), b"").expect("bak");
+
+    assert!(matches!(
+        BaselineResolver::new(root.path(), &[]).resolve(&live, None),
+        Err(BaselineConflict::Empty(_))
+    ));
+}
+
+#[test]
+fn owned_absent_binding_wins_over_the_current_live_overlay() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"luma-overlay").expect("live");
+    let binding = ManagedAddonFile::owned(
+        PathRef::new(live.to_string_lossy().into_owned()).expect("path"),
+        ManagedFileBaseline::Absent,
+        renderpilot_detection::sha256_file(&live).expect("hash"),
+    );
+
+    let resolved = BaselineResolver::new(root.path(), &[binding])
+        .resolve(&live, None)
+        .expect("owned binding");
+
+    assert_eq!(resolved, ResolvedBaseline::AddonOwnedAbsent);
+}
+
+#[test]
+fn current_snapshot_rejects_external_replacement_and_missing_members() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"scanned").expect("live");
+    let scanned_hash = renderpilot_detection::sha256_file(&live).expect("hash");
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:freshness").expect("component"),
+        GameId::new("manual:freshness").expect("game"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(PathRef::new(live.to_string_lossy().into_owned()).expect("path"))
+            .with_sha256(scanned_hash),
+    );
+
+    fs::write(&live, b"external").expect("replace");
+    assert!(matches!(
+        current_component_snapshot(&component, &[]),
+        Err(BaselineConflict::ActiveHashMismatch { .. })
+    ));
+    fs::remove_file(&live).expect("remove");
+    assert!(matches!(
+        current_component_snapshot(&component, &[]),
+        Err(BaselineConflict::MissingActiveFile(_))
+    ));
+}
+
+#[test]
+fn executor_rechecks_sidecar_immediately_before_overlay() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"active").expect("live");
+    fs::write(&sidecar, b"original").expect("sidecar");
+    let live_hash = renderpilot_detection::sha256_file(&live).expect("hash");
+    let baseline_hash = renderpilot_detection::sha256_file(&sidecar).expect("hash");
+    let next_source = root.path().join("next.dll");
+    fs::write(&next_source, b"next").expect("next_source");
+
+    let plan = CoordinatedFilePlan::OverlayPreservingBaseline {
+        path: live.clone(),
+        baseline: ManagedFileBaseline::Present {
+            sha256: baseline_hash,
+        },
+        expected_live: ExpectedLive::Hashes(vec![live_hash]),
+        source: next_source,
+    };
+
+    fs::write(&sidecar, b"tampered").expect("tamper");
+    assert!(execute_file_plan(&plan).is_err());
+    assert_eq!(fs::read(live).expect("live"), b"active");
+}
+
+#[test]
+fn overlay_from_path_copies_source() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let source = root.path().join("source.dll");
+    fs::write(&source, b"next-bytes").expect("source");
+
+    execute_file_plan(&CoordinatedFilePlan::OverlayFromPath {
+        path: live.clone(),
+        source,
+    })
+    .expect("overlay");
+
+    assert_eq!(fs::read(live).expect("live"), b"next-bytes");
+}
+
+#[test]
+fn ensure_baseline_sidecar_creates_from_live() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"original").expect("live");
+    let expected_live = renderpilot_detection::sha256_file(&live).expect("hash");
+
+    execute_file_plan(&CoordinatedFilePlan::EnsureBaselineSidecar {
+        path: live.clone(),
+        expected_live: expected_live.clone(),
+    })
+    .expect("ensure sidecar");
+
+    assert!(sidecar.exists());
+    assert_eq!(
+        renderpilot_detection::sha256_file(&sidecar).expect("sidecar hash"),
+        expected_live
+    );
+    assert_eq!(fs::read(live).expect("live"), b"original");
+}
+
+#[test]
+fn archive_live_to_sidecar_and_remove() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"to-archive").expect("live");
+    let expected_live = renderpilot_detection::sha256_file(&live).expect("hash");
+
+    execute_file_plan(&CoordinatedFilePlan::ArchiveLiveToSidecarAndRemove {
+        path: live.clone(),
+        expected_live,
+    })
+    .expect("archive");
+
+    assert!(!live.exists());
+    assert_eq!(fs::read(sidecar).expect("sidecar"), b"to-archive");
+}
+
+#[test]
+fn restore_preserving_sidecar() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"overlay").expect("live");
+    fs::write(&sidecar, b"baseline").expect("sidecar");
+    let baseline_sha256 = renderpilot_detection::sha256_file(&sidecar).expect("hash");
+
+    execute_file_plan(&CoordinatedFilePlan::RestorePreservingSidecar {
+        path: live.clone(),
+        baseline_sha256,
+    })
+    .expect("restore");
+
+    assert_eq!(fs::read(&live).expect("live"), b"baseline");
+    assert_eq!(fs::read(sidecar).expect("sidecar"), b"baseline");
+}
+
+#[test]
+fn release_sidecar_removes_bak_and_tolerates_missing() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"restored").expect("live");
+    fs::write(&sidecar, b"baseline").expect("sidecar");
+
+    execute_file_plan(&CoordinatedFilePlan::ReleaseSidecar { path: live.clone() })
+        .expect("release");
+    assert!(!sidecar.exists());
+
+    execute_file_plan(&CoordinatedFilePlan::ReleaseSidecar { path: live })
+        .expect("missing sidecar is ok");
+}
+
+#[test]
+fn remove_live_deletes_file() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("added.dll");
+    fs::write(&live, b"temp").expect("live");
+
+    execute_file_plan(&CoordinatedFilePlan::RemoveLive { path: live.clone() }).expect("remove");
+
+    assert!(!live.exists());
+}
+
+#[test]
+fn restore_batch_enforces_kinds() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"x").expect("live");
+    let hash = renderpilot_detection::sha256_file(&live).expect("hash");
+
+    let err = execute_restore_batch(
+        [CoordinatedFilePlan::OverlayFromPath {
+            path: live.clone(),
+            source: live.clone(),
+        }],
+        [],
+    )
+    .expect_err("non-restore plan");
+    assert!(err.to_string().contains("non-restore"));
+
+    let err = execute_restore_batch(
+        [CoordinatedFilePlan::RestorePreservingSidecar {
+            path: live.clone(),
+            baseline_sha256: hash,
+        }],
+        [CoordinatedFilePlan::RemoveLive { path: live }],
+    )
+    .expect_err("non-release plan");
+    assert!(err.to_string().contains("non-release"));
+}
+
+#[test]
+fn restore_batch_runs_restore_before_release() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let sidecar = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"overlay").expect("live");
+    fs::write(&sidecar, b"baseline").expect("sidecar");
+    let baseline_sha256 = renderpilot_detection::sha256_file(&sidecar).expect("hash");
+
+    execute_restore_batch(
+        [CoordinatedFilePlan::RestorePreservingSidecar {
+            path: live.clone(),
+            baseline_sha256,
+        }],
+        [CoordinatedFilePlan::ReleaseSidecar { path: live.clone() }],
+    )
+    .expect("batch");
+
+    assert_eq!(fs::read(live).expect("live"), b"baseline");
+    assert!(!sidecar.exists());
+}

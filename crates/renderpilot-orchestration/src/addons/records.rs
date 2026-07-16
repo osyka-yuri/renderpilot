@@ -7,10 +7,48 @@
 //! [`record_of_kind`] (or [`foreign_record`] when it specifically wants the
 //! opposite) rather than calling the repository directly.
 
-use renderpilot_application::InstalledAddonRepository;
-use renderpilot_domain::{AddonKind, GameId, InstalledAddon, TrackedSource, TrackedSourceRole};
+use std::path::PathBuf;
 
+use renderpilot_application::InstalledAddonRepository;
+use renderpilot_domain::{
+    AddonKind, GameId, InstalledAddon, ManagedFileMode, TrackedSource, TrackedSourceRole,
+};
+
+use crate::addons::errors;
 use crate::{Context, ServiceError};
+
+/// Live paths owned by an install record, expanded with `.bak` sidecars.
+///
+/// Collects `created_files`, `backed_up_files`, and `managed_files`, then expands
+/// each with [`crate::fs::expand_with_sidecars`] so durable mutation scopes
+/// snapshot both the live file and its sidecar.
+pub(crate) fn record_live_and_sidecar_paths(record: &InstalledAddon) -> Vec<PathBuf> {
+    let live = record
+        .created_files()
+        .iter()
+        .chain(record.backed_up_files())
+        .map(|path| PathBuf::from(path.as_str()))
+        .chain(
+            record
+                .managed_files()
+                .iter()
+                .map(|managed| PathBuf::from(managed.path().as_str())),
+        );
+    crate::fs::expand_with_sidecars(live)
+}
+
+/// Live paths of managed bindings with [`ManagedFileMode::Owned`].
+///
+/// Shared selector for cascade planning when those bindings are about to
+/// disappear (uninstall, or an update that no longer ships them).
+pub(crate) fn owned_managed_paths(record: &InstalledAddon) -> Vec<PathBuf> {
+    record
+        .managed_files()
+        .iter()
+        .filter(|managed| managed.mode() == ManagedFileMode::Owned)
+        .map(|managed| PathBuf::from(managed.path().as_str()))
+        .collect()
+}
 
 /// The requested game is not present in the library. Shared "not found" error
 /// constructor for every addon flow that requires an installed game.
@@ -59,6 +97,22 @@ pub(crate) fn source_with_role(
         .find(|source| source.role() == role)
 }
 
+/// Removes any existing source with `role`, then optionally inserts `replacement`.
+///
+/// When `replacement` is `Some`, its role must match `role` (debug-asserted).
+/// Used by update apply paths that refresh HostBinary / DgVoodooWrapper / etc.
+pub(crate) fn replace_source_with_role(
+    sources: &mut Vec<TrackedSource>,
+    role: TrackedSourceRole,
+    replacement: Option<TrackedSource>,
+) {
+    sources.retain(|source| source.role() != role);
+    if let Some(source) = replacement {
+        debug_assert_eq!(source.role(), role);
+        sources.push(source);
+    }
+}
+
 /// A cosmetic fetch/log label for an add-on (the file name identifies the title).
 pub(crate) fn addon_label(record: &InstalledAddon) -> &str {
     std::path::Path::new(record.addon_file().as_str())
@@ -67,20 +121,27 @@ pub(crate) fn addon_label(record: &InstalledAddon) -> &str {
         .unwrap_or("add-on")
 }
 
-/// Persists the install record, calling the provided revert closure (which receives
-/// a reference to the record) if persistence fails. This ensures an install never
-/// survives without a reversible record. Double-faults are logged.
+/// Ensures no record exists for the given kind. Uses a tool-provided error message
+/// so the message can be specific ("Luma is already...") while the check logic is shared.
+pub(crate) fn ensure_no_record(
+    context: &Context,
+    game_id: &GameId,
+    kind: AddonKind,
+    message: impl Into<String>,
+) -> Result<(), ServiceError> {
+    if record_of_kind(context, game_id, kind)?.is_some() {
+        return Err(errors::invalid(message.into()));
+    }
+    Ok(())
+}
 pub(crate) fn persist_record_or_revert(
     context: &Context,
     record: InstalledAddon,
     revert: impl FnOnce(&InstalledAddon) -> Result<(), ServiceError>,
 ) -> Result<InstalledAddon, ServiceError> {
-    use renderpilot_application::InstalledAddonRepository;
     if let Err(error) = context.storage().upsert_installed_addon(&record) {
         if let Err(revert_error) = revert(&record) {
-            log::warn!(
-                "addon install: record persistence failed and the filesystem revert also failed: {revert_error}"
-            );
+            log::warn!("addon install: persistence failed and revert failed: {revert_error}");
         }
         return Err(error.into());
     }
@@ -93,6 +154,38 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    /// Test-only sentinel finish helper. Production installs use
+    /// `durable::run_install_mutation` + `commit_game_mutation`.
+    fn persist_record_or_revert(
+        context: &Context,
+        record: InstalledAddon,
+        commit: crate::addons::engine::PendingInstallCommit,
+        revert: impl FnOnce(&InstalledAddon) -> Result<(), ServiceError>,
+    ) -> Result<InstalledAddon, ServiceError> {
+        match context.storage().upsert_installed_addon(&record) {
+            Ok(()) => {
+                commit.finish_committed();
+                Ok(record)
+            }
+            Err(error) => {
+                match revert(&record) {
+                    Ok(()) => {
+                        commit.finish_rolled_back();
+                    }
+                    Err(revert_error) => {
+                        log::warn!(
+                            "addon install: record persistence failed and filesystem revert also \
+                             failed (leaving torn sentinel `{}`): {revert_error}",
+                            commit.path().display()
+                        );
+                        drop(commit);
+                    }
+                }
+                Err(error.into())
+            }
+        }
+    }
 
     #[test]
     fn record_of_kind_is_none_when_nothing_is_installed() {
@@ -113,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn record_of_kind_returns_a_matching_record() {
+    fn record_of_kind_returns_a_matching_record_and_hides_others() {
         let db_dir = tempdir().expect("tempdir");
         let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
         let game_id = GameId::new("steam:1").expect("game id");
@@ -125,6 +218,22 @@ mod tests {
 
         assert_eq!(
             record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("query")
+                .as_ref()
+                .map(InstalledAddon::kind),
+            Some(AddonKind::RenoDx)
+        );
+        // A second kind now exists: the RenoDX record must read as "nothing
+        // installed" for Luma...
+        assert!(
+            record_of_kind(&context, &game_id, AddonKind::Luma)
+                .expect("query")
+                .is_none()
+        );
+        // ...while Luma's foreign-record view finds it, and RenoDX's own foreign
+        // view stays empty.
+        assert_eq!(
+            foreign_record(&context, &game_id, AddonKind::Luma)
                 .expect("query")
                 .as_ref()
                 .map(InstalledAddon::kind),
@@ -143,6 +252,61 @@ mod tests {
             AddonKind::RenoDx,
             PathRef::new(r"C:\games\x\addon.dll").expect("path"),
         )
+    }
+
+    fn context_with_broken_install_table(
+        db_path: &std::path::Path,
+    ) -> (Context, tempfile::TempDir) {
+        let sentinel_dir = tempdir().expect("sentinel dir");
+        let context = Context::open_at(db_path).expect("context");
+        rusqlite::Connection::open(db_path)
+            .expect("second connection")
+            .execute_batch("DROP TABLE installed_addons")
+            .expect("drop installed_addons");
+        (context, sentinel_dir)
+    }
+
+    #[test]
+    fn persistence_failure_clears_sentinel_after_complete_revert() {
+        let db_dir = tempdir().expect("db dir");
+        let db_path = db_dir.path().join("catalog.sqlite");
+        let (context, sentinel_dir) = context_with_broken_install_table(&db_path);
+        let commit = crate::addons::engine::PendingInstallCommit::begin(
+            sentinel_dir.path(),
+            AddonKind::RenoDx,
+        )
+        .expect("commit");
+
+        let error = persist_record_or_revert(&context, addon_record(), commit, |_| Ok(()))
+            .expect_err("persistence must fail");
+
+        assert!(matches!(error, ServiceError::StorageFailed(_)));
+        assert!(!crate::addons::engine::is_install_torn(
+            sentinel_dir.path(),
+            AddonKind::RenoDx
+        ));
+    }
+
+    #[test]
+    fn persistence_and_revert_failure_retain_sentinel() {
+        let db_dir = tempdir().expect("db dir");
+        let db_path = db_dir.path().join("catalog.sqlite");
+        let (context, sentinel_dir) = context_with_broken_install_table(&db_path);
+        let commit = crate::addons::engine::PendingInstallCommit::begin(
+            sentinel_dir.path(),
+            AddonKind::RenoDx,
+        )
+        .expect("commit");
+
+        persist_record_or_revert(&context, addon_record(), commit, |_| {
+            Err(ServiceError::command_failed("revert failed"))
+        })
+        .expect_err("persistence must fail");
+
+        assert!(crate::addons::engine::is_install_torn(
+            sentinel_dir.path(),
+            AddonKind::RenoDx
+        ));
     }
 
     #[test]

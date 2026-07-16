@@ -121,8 +121,7 @@ pub fn scan_folder(
     context: &crate::Context,
     path: PathBuf,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
-    let storage = context.storage();
-    scan_folder_impl(storage, path)
+    scan_folder_impl(context, path)
 }
 
 /// Returns all game installations stored in the catalog.

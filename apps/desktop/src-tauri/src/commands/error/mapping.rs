@@ -94,6 +94,14 @@ impl CommandError {
                 message,
             ),
 
+            ServiceError::RollbackAlsoFailed { primary, rollback } => Self::debug(
+                Kind::CommandFailed,
+                Msg::OPERATION_COULD_NOT_COMPLETE,
+                format!(
+                    "{primary}; restoring the pre-mutation filesystem state also failed: {rollback}"
+                ),
+            ),
+
             ServiceError::InvalidInput(message) => {
                 Self::debug(Kind::InvalidArgument, Msg::INVALID_ARGUMENT, message)
             }

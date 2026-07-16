@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use renderpilot_application::AppResult;
+use renderpilot_application::{AppResult, GameRepository, InstalledAddonRepository};
 use renderpilot_detection::{read_windows_file_version, sha256_file};
 use renderpilot_domain::{
     ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
@@ -12,9 +12,19 @@ pub(super) fn recover_orphaned_backups(
     game_id: &GameId,
     components: &[GraphicsComponent],
 ) -> AppResult<()> {
+    let installed_addon = storage.get_installed_addon(game_id)?;
+    let game = storage.require_game(game_id)?;
+    let game_root = std::path::Path::new(game.install_path().as_str());
     for component in components {
-        // If the database already knows about a backup for this component, skip.
-        if storage.get_component_backup(component.id())?.is_some() {
+        // A recorded rollback claim must still match the immutable sidecars on
+        // disk. Merely having a DB row is not enough to skip validation.
+        if let Some(baseline) = storage.get_component_backup(component.id())? {
+            crate::coordinated_files::resolve_component_baseline(
+                game_root,
+                component.files(),
+                Some(&baseline),
+                crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
+            )?;
             continue;
         }
 
@@ -23,6 +33,23 @@ pub(super) fn recover_orphaned_backups(
         // 1. Recover `.bak` files directly corresponding to the component's current files.
         for file in component.files() {
             let original_path = file.path().as_str();
+            let original_path_on_disk = std::path::Path::new(original_path);
+            if installed_addon.as_ref().is_some_and(|record| {
+                record.managed_files().iter().any(|binding| {
+                    binding.mode() == renderpilot_domain::ManagedFileMode::Owned
+                        && crate::paths::same_path(
+                            std::path::Path::new(binding.path().as_str()),
+                            original_path_on_disk,
+                        )
+                }) || record.backed_up_files().iter().any(|path| {
+                    crate::paths::same_path(
+                        std::path::Path::new(path.as_str()),
+                        original_path_on_disk,
+                    )
+                })
+            }) {
+                continue;
+            }
             let Ok(bak_path) = crate::fs::backup_path(std::path::Path::new(original_path)) else {
                 log::warn!("recovery: cannot derive backup path for {original_path}, skipping");
                 continue;
@@ -53,44 +80,40 @@ pub(super) fn recover_orphaned_backups(
 /// Recovers a `.bak` file as a `ComponentFile` referencing `original_path` (the
 /// live path the backup would be restored to).
 ///
-/// Returns `None` when the backup does not exist, is empty, or cannot be read in
-/// full. A backup we cannot verify is worse than no backup: restoring it on
-/// rollback would overwrite the live file with truncated or corrupt bytes, so we
-/// skip (and log) it rather than record an unverifiable baseline.
+/// Returns `None` only when the backup does not exist. Once a classic sidecar
+/// exists it is a baseline claim: invalid, empty or unreadable bytes block the
+/// scan instead of being silently ignored and later overwritten by a mutator.
 fn recover_bak_file(
     bak_path: &std::path::Path,
     original_path: &str,
 ) -> AppResult<Option<ComponentFile>> {
     match std::fs::metadata(bak_path) {
-        Ok(meta) if meta.len() == 0 => {
-            log::warn!("recovery: skipping empty backup {}", bak_path.display());
-            return Ok(None);
+        Ok(meta) if !meta.is_file() || meta.len() == 0 => {
+            return Err(renderpilot_application::AppError::invalid_input(format!(
+                "classic backup is not a readable non-empty file: {}",
+                bak_path.display()
+            )));
         }
         Ok(_) => {}
         // No `.bak` for this file is the normal case (most files were never
         // swapped), not a corruption to warn about.
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            log::warn!(
-                "recovery: skipping backup with unreadable metadata {}: {error}",
+            return Err(renderpilot_application::AppError::provider_failed(format!(
+                "cannot inspect classic backup {}: {error}",
                 bak_path.display()
-            );
-            return Ok(None);
+            )));
         }
     }
 
     // Require a full content hash — this both records the integrity digest and
     // proves the backup is readable end-to-end before we trust it as a baseline.
-    let sha256 = match sha256_file(bak_path) {
-        Ok(hash) => hash,
-        Err(error) => {
-            log::warn!(
-                "recovery: skipping unreadable backup {}: {error}",
-                bak_path.display()
-            );
-            return Ok(None);
-        }
-    };
+    let sha256 = sha256_file(bak_path).map_err(|error| {
+        renderpilot_application::AppError::provider_failed(format!(
+            "cannot read classic backup {}: {error}",
+            bak_path.display()
+        ))
+    })?;
 
     let path_ref = PathRef::new(original_path)
         .map_err(|e| renderpilot_application::AppError::invalid_input(e.to_string()))?;
@@ -181,17 +204,14 @@ mod tests {
     }
 
     #[test]
-    fn empty_backup_is_rejected() {
+    fn empty_backup_blocks_recovery() {
         let dir = tempfile::tempdir().expect("temp dir");
         let bak = dir.path().join("nvngx_dlss.dll.bak");
         write(&bak, b"");
         let original = dir.path().join("nvngx_dlss.dll");
-        let recovered =
-            recover_bak_file(&bak, original.to_string_lossy().as_ref()).expect("no error");
-        assert!(
-            recovered.is_none(),
-            "a zero-byte backup must never be recovered as a baseline"
-        );
+        let error = recover_bak_file(&bak, original.to_string_lossy().as_ref())
+            .expect_err("invalid sidecar must block");
+        assert!(error.message().contains("non-empty"));
     }
 
     #[test]
