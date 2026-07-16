@@ -148,7 +148,7 @@ impl CoverInstallPaths {
         })?;
 
         let title_fragment = safe_title_fragment(display_title);
-        let ulid = ulid::Ulid::new().to_string();
+        let ulid = ulid::Ulid::generate().to_string();
 
         let file_name = format!("cover-{title_fragment}-{ulid}.{extension}");
         let temp_path = covers_dir.join(format!(".tmp-cover-{ulid}.part"));

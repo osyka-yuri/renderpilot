@@ -55,7 +55,7 @@ pub(super) fn record_operation_journal_entry(
         items,
     } = params;
 
-    let Ok(op_id) = renderpilot_domain::OperationId::new(ulid::Ulid::new().to_string()) else {
+    let Ok(op_id) = renderpilot_domain::OperationId::new(ulid::Ulid::generate().to_string()) else {
         log::warn!("Failed to generate operation id for journal");
         return;
     };
