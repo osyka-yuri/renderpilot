@@ -1,10 +1,8 @@
 use renderpilot_application::{
     AppError, AppResult, ArtifactRepository, ComponentRepository, GameRepository,
-    build_swap_operation_plan, find_replacement_candidates,
+    InstalledAddonRepository, build_swap_operation_plan, find_replacement_candidates,
 };
-use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact,
-};
+use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
 
 use crate::ServiceError;
 
@@ -16,7 +14,7 @@ pub fn find_candidates(
     game_id: &GameId,
 ) -> Result<CandidateCatalogResult, ServiceError> {
     let storage = context.storage();
-    require_game(storage, game_id)?;
+    let _ = storage.require_game(game_id)?;
 
     let components = storage.list_components_for_game(game_id)?;
     let artifacts = storage.list_artifacts()?;
@@ -38,10 +36,21 @@ pub fn build_swap_plan(
     component_id: &ComponentId,
     artifact_id: &ArtifactId,
 ) -> Result<SwapPlanCatalogResult, ServiceError> {
+    let _guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
     let storage = context.storage();
     let (component, artifact) = require_swap_inputs(storage, game_id, component_id, artifact_id)?;
-
-    let component_for_plan = component_with_backup_original(component);
+    let game = storage.require_game(game_id)?;
+    let recorded = storage.get_component_backup(component_id)?;
+    let installed_addon = storage.get_installed_addon(game_id)?;
+    let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
+    let baseline = crate::coordinated_files::resolve_component_baseline(
+        std::path::Path::new(game.install_path().as_str()),
+        component.files(),
+        recorded.as_deref(),
+        managed_files,
+    )
+    .map_err(AppError::from)?;
+    let component_for_plan = component.rebuild_with_files(baseline);
 
     let plan = build_swap_operation_plan(&component_for_plan, &artifact)?;
 
@@ -57,22 +66,12 @@ fn require_swap_inputs<S>(
 where
     S: GameRepository + ComponentRepository + ArtifactRepository,
 {
-    require_game(storage, game_id)?;
+    let _ = storage.require_game(game_id)?;
 
     let component = require_component_for_game(storage, game_id, component_id)?;
     let artifact = require_artifact(storage, artifact_id)?;
 
     Ok((component, artifact))
-}
-
-pub(super) fn require_game<S>(storage: &S, game_id: &GameId) -> AppResult<()>
-where
-    S: GameRepository,
-{
-    storage
-        .find_game(game_id)?
-        .map(|_| ())
-        .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
 }
 
 pub(super) fn require_component_for_game<S>(
@@ -110,45 +109,4 @@ pub(super) fn find_required<T>(
     not_found: impl FnOnce() -> AppError,
 ) -> AppResult<T> {
     items.into_iter().find(predicate).ok_or_else(not_found)
-}
-
-/// If a `.bak` sidecar exists for the component's target file, treat the
-/// backup as the true original and use its version / SHA-256 for the swap
-/// plan.  This keeps the original metadata stable across multiple swaps.
-fn component_with_backup_original(component: GraphicsComponent) -> GraphicsComponent {
-    let Some(target_file) = component.files().first() else {
-        return component;
-    };
-
-    let Ok(backup_path) = crate::fs::backup_path(std::path::Path::new(target_file.path().as_str()))
-    else {
-        log::warn!(
-            "swap plan: cannot derive backup path for `{}`, proceeding without shadow",
-            target_file.path().as_str()
-        );
-        return component;
-    };
-    if !backup_path.exists() {
-        return component;
-    }
-
-    let sha256 = match renderpilot_detection::sha256_file(&backup_path) {
-        Ok(hash) => hash,
-        Err(_) => return component,
-    };
-    let version = renderpilot_detection::read_windows_file_version(&backup_path);
-
-    let mut modified_file = ComponentFile::new(target_file.path().clone()).with_sha256(sha256);
-    if let Some(version) = version {
-        modified_file = modified_file.with_version(version);
-    }
-
-    GraphicsComponent::new(
-        component.id().clone(),
-        component.game_id().clone(),
-        component.kind(),
-        component.technology(),
-        component.swappability(),
-    )
-    .with_file(modified_file)
 }

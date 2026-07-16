@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use renderpilot_application::{
-    AppError, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
+    AppError, AppResult, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
     GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
     find_replacement_candidates,
 };
@@ -12,14 +12,30 @@ use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
     AddonKind, GameId, GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
 };
+use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::ServiceError;
+
+/// Game install root for a mutation, falling back to an owned-path parent when
+/// the catalog row was pruned but add-on debris remains on disk.
+pub(crate) fn game_root_for_mutation(
+    storage: &SqliteStorage,
+    game_id: &GameId,
+    fallback_parent: Option<PathBuf>,
+) -> AppResult<PathBuf> {
+    storage
+        .find_game(game_id)?
+        .map(|game| PathBuf::from(game.install_path().as_str()))
+        .or(fallback_parent)
+        .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
+}
 
 use self::scan::scan_folder_impl;
 
 #[cfg(windows)]
 pub mod auto_scan;
 mod cards;
+pub(crate) mod cascade;
 pub mod execute;
 mod operations;
 pub mod output;
@@ -187,7 +203,7 @@ pub(crate) fn get_game_details_with_universe(
     universe: &ReplacementUniverse,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
     let storage = context.storage();
-    let game = require_game(storage, game_id)?;
+    let game = storage.require_game(game_id)?;
     let components = storage.list_components_for_game(game_id)?;
 
     let candidate_groups = find_replacement_candidates(
@@ -328,24 +344,17 @@ fn filter_artifacts_by_technology(
     }
 }
 
-fn require_game<R>(repository: &R, game_id: &GameId) -> Result<GameInstallation, AppError>
-where
-    R: GameRepository + ?Sized,
-{
-    repository
-        .find_game(game_id)?
-        .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn merge_addon_capabilities_deduplicates_profile_and_installed_kind() {
+    fn merge_addon_capabilities_unions_profile_with_installed_in_stable_order() {
+        // Merge (used by catalog cards and GameDetails) unions profile + installed
+        // capabilities and preserves AddonKind::ALL order.
         assert_eq!(
-            merge_addon_capabilities(&[AddonKind::RenoDx], Some(AddonKind::RenoDx)),
-            vec![AddonKind::RenoDx]
+            merge_addon_capabilities(&[AddonKind::Luma], Some(AddonKind::RenoDx)),
+            vec![AddonKind::RenoDx, AddonKind::Luma]
         );
     }
 }

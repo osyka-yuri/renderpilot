@@ -92,6 +92,13 @@ fn apply_op(
 
 /// Writes `bytes` to `path`, first moving any pre-existing regular file aside to
 /// `.bak`, recording the action for rollback.
+///
+/// An existing `.bak` is **not** deleted: for [`super::FileOp::BackupAndReplace`]
+/// / [`super::FileOp::MergeText`] the committed `.bak` is the game's original and
+/// is restored on uninstall. A pre-existing bak from a torn install must be
+/// recovered by the **tool** before backup-ops run (allowlisted orphan restore /
+/// torn recovery); the engine never clobbers a surviving bak, which would
+/// permanently lose game files.
 pub(crate) fn place_file(
     path: &Path,
     bytes: &[u8],
@@ -104,10 +111,15 @@ pub(crate) fn place_file(
                 path.display()
             )));
         }
-        let bak = helpers::bak_path(path)?;
+        let bak = crate::fs::backup_path(path).map_err(|error| invalid(error.to_string()))?;
         if bak.exists() {
-            fs::remove_file(&bak)
-                .map_err(|error| errors::io("clear stale backup", &bak, &error))?;
+            return Err(invalid(format!(
+                "cannot back up `{}`: backup already exists at `{}` \
+                 (restore or remove the existing `.bak` sibling first; \
+                 a torn install recovers allowlisted backups automatically)",
+                path.display(),
+                bak.display()
+            )));
         }
         fs::rename(path, &bak).map_err(|error| errors::io("back up", path, &error))?;
         crate::fs::write_file_atomically(path, bytes)?;
@@ -169,7 +181,7 @@ pub(crate) fn remove_file_with_backup(
             path.display()
         )));
     }
-    let bak = helpers::bak_path(path)?;
+    let bak = crate::fs::backup_path(path).map_err(|error| invalid(error.to_string()))?;
     if bak.exists() {
         fs::remove_file(&bak).map_err(|error| errors::io("clear stale backup", &bak, &error))?;
     }

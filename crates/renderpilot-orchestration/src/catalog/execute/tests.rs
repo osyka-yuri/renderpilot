@@ -14,13 +14,12 @@ use renderpilot_storage_sqlite::SqliteStorage;
 use crate::Context;
 use crate::catalog::execute::apply_swap;
 
-use super::abort_apply_after_fs;
 use super::ensure_artifact_sources_usable;
 use super::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
 use super::planning::{fsr_members_to_remove, planned_target_files};
 use super::prepare::load_apply_swap;
 use super::source_integrity::rebind_planned_files_from_disk;
-use super::types::{AppliedFsChanges, PlannedFile};
+use super::types::PlannedFile;
 
 const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -69,7 +68,8 @@ fn overlay_backs_up_existing_target_and_installs_durably() {
     write(&source, b"new-version");
 
     let plans = vec![planned_copy(&source, &target)];
-    let changes = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true)
+    let baseline = vec![comp_file(&target).with_sha256(sha_of(&target))];
+    let changes = perform_apply_fs(&placeholder_component(), &baseline, &plans, &[])
         .expect("apply should succeed");
 
     assert_eq!(fs::read(&target).expect("target readable"), b"new-version");
@@ -79,7 +79,7 @@ fn overlay_backs_up_existing_target_and_installs_durably() {
     );
     assert_eq!(changes.copied, vec![target.clone()]);
     assert_eq!(
-        changes.renamed_to_bak,
+        changes.created_sidecars,
         vec![(target.clone(), bak_of(&target))]
     );
 }
@@ -92,15 +92,15 @@ fn overlay_adds_new_file_without_creating_backup() {
     write(&source, b"fresh");
 
     let plans = vec![planned_copy(&source, &target)];
-    let changes = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true)
-        .expect("apply should succeed");
+    let changes =
+        perform_apply_fs(&placeholder_component(), &[], &plans, &[]).expect("apply should succeed");
 
     assert_eq!(fs::read(&target).expect("target readable"), b"fresh");
     assert!(
         !bak_of(&target).exists(),
         "no backup for a newly added file"
     );
-    assert!(changes.renamed_to_bak.is_empty());
+    assert!(changes.created_sidecars.is_empty());
 }
 
 #[test]
@@ -109,9 +109,11 @@ fn removed_member_is_backed_up_then_deleted() {
     let member = dir.path().join("amd_fidelityfx_framegeneration_dx12.dll");
     write(&member, b"fsr4-member");
 
-    let removed = vec![comp_file(&member)];
-    let changes = perform_apply_fs(&placeholder_component(), &[], &[], &removed, true)
-        .expect("apply should succeed");
+    let member_file = comp_file(&member).with_sha256(sha_of(&member));
+    let removed = vec![member_file.clone()];
+    let component = placeholder_component().with_file(member_file.clone());
+    let changes =
+        perform_apply_fs(&component, &[member_file], &[], &removed).expect("apply should succeed");
 
     assert!(!member.exists(), "removed member should be gone");
     assert_eq!(
@@ -120,7 +122,7 @@ fn removed_member_is_backed_up_then_deleted() {
         "removed member must be preserved as a .bak for rollback"
     );
     assert_eq!(
-        changes.renamed_to_bak,
+        changes.created_sidecars,
         vec![(member.clone(), bak_of(&member))]
     );
 }
@@ -138,9 +140,30 @@ fn apply_failure_midway_rolls_back_every_change() {
         planned_copy(&good_source, &target),
         planned_copy(&missing_source, &dir.path().join("second.dll")),
     ];
-    let result = perform_apply_fs(&placeholder_component(), &[], &plans, &[], true);
+    let baseline = vec![comp_file(&target).with_sha256(sha_of(&target))];
+    let context = crate::Context::from_storage(SqliteStorage::in_memory().expect("storage"));
+    let game_id =
+        GameId::new(format!("manual:apply-failure-{}", ulid::Ulid::generate())).expect("game id");
+    let guard = crate::game_mutation_lock::blocking_lock(&game_id);
+    let mutation = crate::file_mutation::DurableFileTransaction::prepare(
+        &context,
+        &guard,
+        &crate::file_mutation::MutationScope::single(dir.path()).expect("scope"),
+        "test_apply_failure",
+        None,
+        [
+            target.clone(),
+            bak_of(&target),
+            dir.path().join("second.dll"),
+        ],
+    )
+    .expect("durable transaction");
+    let result = perform_apply_fs(&placeholder_component(), &baseline, &plans, &[]);
 
     assert!(result.is_err(), "missing source must fail the apply");
+    mutation
+        .rollback(context.storage())
+        .expect("durable rollback");
     assert_eq!(
         fs::read(&target).expect("target readable"),
         b"original",
@@ -166,29 +189,12 @@ fn revert_to_baseline_restores_backup_and_deletes_added_files() {
     write(&added, b"added-by-swap");
 
     let current = vec![comp_file(&replaced), comp_file(&added)];
-    let baseline = vec![comp_file(&replaced)];
+    let baseline = vec![comp_file(&replaced).with_sha256(sha_of(&bak_of(&replaced)))];
     revert_to_baseline_fs(&current, &baseline).expect("revert should succeed");
 
     assert_eq!(fs::read(&replaced).expect("readable"), b"original");
     assert!(!bak_of(&replaced).exists(), "backup consumed by restore");
     assert!(!added.exists(), "overlay-added file removed on revert");
-}
-
-#[test]
-fn undo_removes_copies_and_restores_backups() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let target = dir.path().join("nvngx_dlss.dll");
-    write(&target, b"overlay");
-    write(&bak_of(&target), b"original");
-
-    let changes = AppliedFsChanges {
-        renamed_to_bak: vec![(target.clone(), bak_of(&target))],
-        copied: vec![target.clone()],
-    };
-    changes.undo();
-
-    assert_eq!(fs::read(&target).expect("readable"), b"original");
-    assert!(!bak_of(&target).exists());
 }
 
 #[test]
@@ -656,7 +662,7 @@ fn post_copy_hash_mismatch_uses_apply_recovery_boundary() {
     let artifact_id = artifact.id().clone();
 
     let mut planned = planned_target_files(&artifact, &game_dir, &component).expect("plan");
-    let changes = perform_apply_fs(&component, component.files(), &planned, &[], true)
+    let _receipt = perform_apply_fs(&component, component.files(), &planned, &[])
         .expect("copy should succeed");
     assert_eq!(
         fs::read(&target).expect("copied target"),
@@ -669,21 +675,13 @@ fn post_copy_hash_mismatch_uses_apply_recovery_boundary() {
         rebind_planned_files_from_disk(&mut planned).expect_err("mutated target must fail rebind");
     assert_eq!(*rebind_error.kind(), AppErrorKind::StaleReplacementSource);
 
-    let service_error = abort_apply_after_fs(&storage, &changes, &artifact_id, rebind_error);
+    super::invalidate_stale_artifact(&storage, &artifact_id, "installed target hash mismatch");
+    let service_error: crate::ServiceError = rebind_error.into();
     assert!(
         matches!(service_error, crate::ServiceError::StaleReplacementSource),
         "recovery must preserve the stable stale-source error, got {service_error:?}"
     );
 
-    assert_eq!(
-        fs::read(&target).expect("restored game file"),
-        b"dlss-game-original",
-        "overlay must roll back to the pre-swap game bytes"
-    );
-    assert!(
-        !bak_of(&target).exists(),
-        "restored target must leave no leftover .bak after undo"
-    );
     let remaining = storage.list_artifacts().expect("list artifacts");
     assert!(
         remaining.iter().all(|a| a.id() != &artifact_id),

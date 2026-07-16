@@ -16,25 +16,25 @@ const UNKNOWN_GAME_NAME: &str = "Unknown Game";
 const UNKNOWN_VERSION: &str = "Unknown";
 
 /// A single file affected by the operation.
-pub(super) struct JournalEntryItem<'a> {
-    pub(super) path: &'a PathRef,
-    pub(super) artifact_id: Option<ArtifactId>,
+pub(crate) struct JournalEntryItem<'a> {
+    pub(crate) path: &'a PathRef,
+    pub(crate) artifact_id: Option<ArtifactId>,
 }
 
 /// Parameters for recording a completed operation in the journal.
 ///
 /// Passed as a single value to [`record_operation_journal_entry`] so that the
 /// call sites remain readable without a 7-argument call.
-pub(super) struct JournalEntryParams<'a> {
-    pub(super) game_id: &'a GameId,
-    pub(super) component_id: &'a ComponentId,
-    pub(super) kind: OperationKind,
-    pub(super) component: &'a GraphicsComponent,
+pub(crate) struct JournalEntryParams<'a> {
+    pub(crate) game_id: &'a GameId,
+    pub(crate) component_id: &'a ComponentId,
+    pub(crate) kind: OperationKind,
+    pub(crate) component: &'a GraphicsComponent,
     /// The version the component is being swapped to.
     /// `None` falls back to [`UNKNOWN_VERSION`] in the stored metadata.
-    pub(super) to_version: Option<&'a str>,
+    pub(crate) to_version: Option<&'a str>,
     /// Files affected by the operation.
-    pub(super) items: Vec<JournalEntryItem<'a>>,
+    pub(crate) items: Vec<JournalEntryItem<'a>>,
 }
 
 /// Records a journal entry for the completed operation, best-effort.
@@ -42,7 +42,7 @@ pub(super) struct JournalEntryParams<'a> {
 /// Failures are logged as warnings and do **not** propagate — journal
 /// persistence is informational and must never disrupt the main swap / rollback
 /// flow.
-pub(super) fn record_operation_journal_entry(
+pub(crate) fn record_operation_journal_entry(
     storage: &SqliteStorage,
     params: JournalEntryParams<'_>,
 ) {

@@ -1,4 +1,4 @@
-use renderpilot_application::{AppError, AppResult, GameRepository, OperationRepository};
+use renderpilot_application::{GameRepository, OperationRepository};
 use renderpilot_domain::GameId;
 
 use crate::ServiceError;
@@ -12,7 +12,7 @@ pub fn list_operations(
 ) -> Result<super::OperationListCatalogResult, ServiceError> {
     let storage = context.storage();
 
-    ensure_game_exists(storage, game_id)?;
+    storage.require_game(game_id)?;
     let entries = storage
         .list_operation_entries_for_game(game_id)?
         .into_iter()
@@ -33,12 +33,4 @@ pub fn list_operations(
         game_id: game_id.clone(),
         operations: entries,
     })
-}
-
-fn ensure_game_exists<S: GameRepository>(storage: &S, game_id: &GameId) -> AppResult<()> {
-    storage
-        .find_game(game_id)?
-        .ok_or_else(|| AppError::invalid_input(format!("game not found: {}", game_id.as_str())))?;
-
-    Ok(())
 }

@@ -11,12 +11,12 @@
 use std::collections::HashSet;
 
 use renderpilot_application::AppResult;
-use renderpilot_domain::{ComponentFile, ComponentId, GameId, GraphicsComponent};
+use renderpilot_domain::{ComponentFile, ComponentId, GameId};
 use rusqlite::{OptionalExtension, Transaction, named_params};
 
 use crate::{error::storage_error, mapping, sqlite_clock};
 
-use super::{ComponentBaselineInsert, GameMutationCommit, InstalledAddonMutation, SqliteStorage};
+use super::SqliteStorage;
 
 const SELECT_BACKUP_SQL: &str = "
     SELECT files_json
@@ -90,51 +90,6 @@ impl SqliteStorage {
                 ids.insert(row.map_err(storage_error)?);
             }
             Ok(ids)
-        })
-    }
-
-    /// Compatibility adapter retained while catalog execution migrates to
-    /// [`Self::commit_game_mutation`].
-    #[allow(dead_code)]
-    pub fn commit_bundle_apply(
-        &self,
-        game_id: &GameId,
-        components: &[GraphicsComponent],
-        backup: Option<(&ComponentId, &[ComponentFile])>,
-    ) -> AppResult<()> {
-        let baseline_inserts = backup
-            .map(|(component_id, files)| ComponentBaselineInsert {
-                component_id,
-                files,
-            })
-            .into_iter()
-            .collect::<Vec<_>>();
-        self.commit_game_mutation(GameMutationCommit {
-            game_id,
-            component_set: Some(components),
-            baseline_inserts: &baseline_inserts,
-            baseline_deletes: &[],
-            addon: InstalledAddonMutation::Keep,
-            mutation_id: None,
-        })
-    }
-
-    /// Compatibility adapter retained while catalog execution migrates to
-    /// [`Self::commit_game_mutation`].
-    #[allow(dead_code)]
-    pub fn commit_bundle_rollback(
-        &self,
-        game_id: &GameId,
-        components: &[GraphicsComponent],
-        component_id: &ComponentId,
-    ) -> AppResult<()> {
-        self.commit_game_mutation(GameMutationCommit {
-            game_id,
-            component_set: Some(components),
-            baseline_inserts: &[],
-            baseline_deletes: std::slice::from_ref(component_id),
-            addon: InstalledAddonMutation::Keep,
-            mutation_id: None,
         })
     }
 

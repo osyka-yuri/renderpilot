@@ -38,9 +38,8 @@ pub use types::{
     MergeStrategy,
 };
 
-pub(crate) use sentinel::{
-    OperationSentinel, PendingInstallCommit, remove_sentinel, sentinel_path, write_sentinel,
-};
+pub(crate) use sentinel::write_sentinel;
+pub(crate) use sentinel::{OperationSentinel, PendingInstallCommit, remove_sentinel, sentinel_path};
 
 /// Engine failure plus whether its in-call rollback restored every mutation.
 pub(crate) struct InstallFailure {

@@ -162,24 +162,9 @@ fn ensure_unique_install_targets(planned: &[PlannedFile]) -> AppResult<()> {
     Ok(())
 }
 
-pub(super) fn rebuild_component(
-    component: &GraphicsComponent,
-    files: Vec<ComponentFile>,
-) -> GraphicsComponent {
-    let mut rebuilt = GraphicsComponent::new(
-        component.id().clone(),
-        component.game_id().clone(),
-        component.kind(),
-        component.technology(),
-        component.swappability(),
-    );
-    for file in files {
-        rebuilt = rebuilt.with_file(file);
-    }
-    rebuilt
-}
-
-/// Returns the game's full component set with `rebuilt` substituted in.
+/// Returns the game's full component set with `rebuilt` substituted in. An
+/// empty rebuilt component means its pre-overlay path was absent and therefore
+/// removes the component rather than persisting a file-less catalog entry.
 ///
 /// `replace_components_for_game` rewrites the entire set, so the swap must pass
 /// every sibling component too; otherwise applying one swap would wipe the rest
@@ -191,7 +176,9 @@ pub(super) fn full_component_set(
 ) -> AppResult<Vec<GraphicsComponent>> {
     let mut components = storage.list_components_for_game(game_id)?;
 
-    if let Some(component) = components.iter_mut().find(|c| c.id() == rebuilt.id()) {
+    if rebuilt.files().is_empty() {
+        components.retain(|component| component.id() != rebuilt.id());
+    } else if let Some(component) = components.iter_mut().find(|c| c.id() == rebuilt.id()) {
         *component = rebuilt;
     } else {
         components.push(rebuilt);
@@ -217,7 +204,7 @@ pub(super) fn rebuild_component_set_after_overlay(
 ) -> AppResult<(Vec<GraphicsComponent>, Option<String>)> {
     let mut new_files = additive_active_files(baseline, rebound_planned, removed);
     fsr::sort_representative_first(&mut new_files);
-    let rebuilt = rebuild_component(component, new_files);
+    let rebuilt = component.rebuild_with_files(new_files);
     let next_components = full_component_set(storage, game_id, rebuilt)?;
 
     let applied_files = next_components

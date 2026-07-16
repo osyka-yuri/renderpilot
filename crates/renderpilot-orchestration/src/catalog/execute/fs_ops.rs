@@ -1,152 +1,186 @@
 //! Filesystem mutations for an overlay apply and its revert, with crash-durable
 //! flushing and best-effort rollback of partial changes.
+//!
+//! Catalog apply/revert builds [`CoordinatedFilePlan`] steps and runs them through
+//! [`execute_file_plans`](crate::coordinated_files::execute_file_plans):
+//!
+//! - path-source installs use `OverlayFromPath` (no full-DLL memory load);
+//! - baseline archive+remove uses `ArchiveLiveToSidecarAndRemove`;
+//! - revert restores with `RestorePreservingSidecar` first, then `ReleaseSidecar`
+//!   so a mid-batch failure leaves sidecars for a safe retry;
+//! - [`AppliedFsLog`] is filled from the batch touch log for parent-dir fsync.
 
-use std::collections::HashSet;
-use std::fs;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use renderpilot_application::{AppError, AppResult};
-use renderpilot_domain::{ComponentFile, GraphicsComponent};
+use renderpilot_domain::{ComponentFile, GraphicsComponent, Sha256Hash};
 
-use super::types::{AppliedFsChanges, PlannedFile};
+use crate::coordinated_files::{
+    CoordinatedFilePlan, FilePlanBatchLog, execute_file_plans, execute_restore_batch,
+};
+
+use super::types::{AppliedFsLog, PlannedFile};
 
 pub(super) fn perform_apply_fs(
     component: &GraphicsComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
     removed: &[ComponentFile],
-    first_swap: bool,
-) -> AppResult<AppliedFsChanges> {
-    let mut changes = AppliedFsChanges::default();
-    let result = apply_fs_steps(
-        component,
-        baseline,
-        planned,
-        removed,
-        first_swap,
-        &mut changes,
-    );
-    if let Err(error) = result {
-        changes.undo();
-        return Err(error);
-    }
+) -> AppResult<AppliedFsLog> {
+    // Pre-mutation validation and snapshotting are performed once by
+    // `DurableFileTransaction::prepare` (→ `build_manifest`) using the path set
+    // from `apply_mutation_paths`. `perform_apply_fs` does not recompute or
+    // re-validate that set — doing so would be a redundant second pass that
+    // could diverge from the snapshotted set.
+    let plans = plan_converge_active_set(component, baseline, planned, removed)?;
+    let log = execute_file_plans(&plans).map_err(map_service_error)?;
+    let changes = AppliedFsLog {
+        created_sidecars: log.created_sidecars,
+        copied: log.copied,
+    };
+    sync_touched_directories(&changes);
     Ok(changes)
 }
 
-fn apply_fs_steps(
+/// Builds the ordered plan list that converges immutable baseline + current
+/// active set onto the next desired overlay.
+fn plan_converge_active_set(
     component: &GraphicsComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
     removed: &[ComponentFile],
-    first_swap: bool,
-    changes: &mut AppliedFsChanges,
-) -> AppResult<()> {
-    // On a re-swap, revert the current overlay back to the recorded baseline first
-    // so the new package installs cleanly — no mixed versions, no stale leftovers.
-    if !first_swap {
-        revert_to_baseline_fs(component.files(), baseline)?;
+) -> AppResult<Vec<CoordinatedFilePlan>> {
+    let baseline_by_key: HashMap<String, &ComponentFile> = baseline
+        .iter()
+        .map(|file| (crate::paths::normalized_key(&real_path(file)), file))
+        .collect();
+    let baseline_paths: HashSet<String> = baseline_by_key.keys().cloned().collect();
+    let current_paths: HashSet<String> = component
+        .files()
+        .iter()
+        .map(|file| crate::paths::normalized_key(&real_path(file)))
+        .collect();
+    let planned_paths: HashSet<String> = planned
+        .iter()
+        .map(|plan| crate::paths::normalized_key(&plan.target()))
+        .collect();
+    let removed_paths: HashSet<String> = removed
+        .iter()
+        .map(|file| crate::paths::normalized_key(&real_path(file)))
+        .collect();
+    let desired_baseline_paths: HashSet<String> = baseline_paths
+        .iter()
+        .filter(|path| !planned_paths.contains(*path) && !removed_paths.contains(*path))
+        .cloned()
+        .collect();
+
+    let mut plans = Vec::new();
+
+    for file in baseline {
+        let target = real_path(file);
+        if desired_baseline_paths.contains(&crate::paths::normalized_key(&target)) {
+            plans.push(CoordinatedFilePlan::RestorePreservingSidecar {
+                path: target,
+                baseline_sha256: require_baseline_hash(file)?,
+            });
+        }
     }
 
-    remove_downgrade_members(removed, changes)?;
-    overlay_planned_files(planned, changes)?;
-
-    // Flush the directory entries (renames to `.bak`, new files) so the layout
-    // is durable, not just the file contents above. Best-effort: the data is
-    // already durable, and a directory-sync failure must not fail the swap.
-    sync_touched_directories(changes);
-
-    Ok(())
-}
-
-/// Downgrade cleanup: a unified FSR 3.x target drops the upscaling-stack
-/// members the baseline holds. Back each up to its `.bak` (so rollback can
-/// restore it) and remove it, so the folder lands on a clean FSR 3.1 — never
-/// a mix. On a re-swap the revert that precedes this restores baseline-owned
-/// members from their `.bak`s first, and this pass removes them again.
-fn remove_downgrade_members(
-    removed: &[ComponentFile],
-    changes: &mut AppliedFsChanges,
-) -> AppResult<()> {
-    for file in removed {
+    for file in component.files() {
         let target = real_path(file);
-        if !target.exists() {
+        let key = crate::paths::normalized_key(&target);
+        if planned_paths.contains(&key) || desired_baseline_paths.contains(&key) {
             continue;
         }
-        let bak = bak_path(file)?;
-        if bak.exists() {
-            fs::remove_file(&bak).map_err(|error| {
-                AppError::provider_failed(format!(
-                    "failed to clear stale backup {}: {error}",
-                    bak.display()
-                ))
-            })?;
+        if let Some(baseline_file) = baseline_by_key.get(&key) {
+            plans.push(CoordinatedFilePlan::ArchiveLiveToSidecarAndRemove {
+                path: target,
+                expected_live: require_baseline_hash(baseline_file)?,
+            });
+        } else {
+            plans.push(CoordinatedFilePlan::RemoveLive { path: target });
         }
-        fs::rename(&target, &bak).map_err(|error| {
-            AppError::provider_failed(format!(
-                "failed to back up {} before removing it: {error}",
-                target.display()
-            ))
-        })?;
-        changes.renamed_to_bak.push((target, bak));
     }
-    Ok(())
-}
 
-/// Overlay the package: back up + replace any file already at a target, add the
-/// rest. Untouched files stay where they are.
-fn overlay_planned_files(planned: &[PlannedFile], changes: &mut AppliedFsChanges) -> AppResult<()> {
     for plan in planned {
         let target = plan.target();
-        if target.exists() {
-            let bak = plan.target_bak().map_err(|error| {
-                AppError::provider_failed(format!(
-                    "failed to derive backup path for {}: {error}",
-                    target.display()
-                ))
-            })?;
-            // Drop any stale leftover backup so `.bak` holds the current original.
-            if bak.exists() {
-                fs::remove_file(&bak).map_err(|error| {
-                    AppError::provider_failed(format!(
-                        "failed to clear stale backup {}: {error}",
-                        bak.display()
-                    ))
-                })?;
-            }
-            fs::rename(&target, &bak).map_err(|error| {
-                AppError::provider_failed(format!(
-                    "failed to back up {} before replacing it: {error}",
-                    target.display()
-                ))
-            })?;
-            changes.renamed_to_bak.push((target.clone(), bak));
-        }
-
-        // Install the file crash-atomically. A bare `fs::copy` to the live path can
-        // leave a torn or zero-length DLL on a crash/power-loss mid-copy, which the
-        // game would then load. `copy_file_atomically` stages into a synced temp in
-        // the destination directory and atomically replaces the target, so it is
-        // always either the prior file or the complete new one — never torn. On
-        // failure the target is left untouched (the `.bak` above is the rollback).
-        crate::fs::copy_file_atomically(&plan.source, &target).map_err(|error| {
-            AppError::provider_failed(format!(
-                "failed to install file to {}: {error}",
+        let key = crate::paths::normalized_key(&target);
+        if let Some(baseline_file) = baseline_by_key.get(&key) {
+            plans.push(CoordinatedFilePlan::EnsureBaselineSidecar {
+                path: target.clone(),
+                expected_live: require_baseline_hash(baseline_file)?,
+            });
+        } else if target.exists() && !current_paths.contains(&key) {
+            return Err(AppError::provider_failed(format!(
+                "refusing to overwrite untracked file {}",
                 target.display()
-            ))
-        })?;
-        changes.copied.push(target.clone());
+            )));
+        }
+        // Install crash-atomically via the shared path-source plan variant.
+        plans.push(CoordinatedFilePlan::OverlayFromPath {
+            path: target,
+            source: plan.source.clone(),
+        });
     }
+
+    Ok(plans)
+}
+
+/// Reverts the directory to `baseline`: delete files the overlay added (current
+/// files whose path is not a baseline path) and restore each baseline file that
+/// has a `.bak`. Retry-safe: restores keep sidecars until every copy succeeds.
+pub(crate) fn revert_to_baseline_fs(
+    current: &[ComponentFile],
+    baseline: &[ComponentFile],
+) -> AppResult<()> {
+    let baseline_paths: HashSet<String> = baseline
+        .iter()
+        .map(|file| crate::paths::normalized_key(&real_path(file)))
+        .collect();
+
+    // 1. Delete files the swap added (not part of the baseline).
+    let removes: Vec<_> = current
+        .iter()
+        .filter(|file| !baseline_paths.contains(&crate::paths::normalized_key(&real_path(file))))
+        .map(|file| CoordinatedFilePlan::RemoveLive {
+            path: real_path(file),
+        })
+        .collect();
+    execute_file_plans(&removes).map_err(map_service_error)?;
+
+    // 2–3. Restore every baseline while retaining sidecars, then release.
+    // [`execute_restore_batch`] enforces restore-before-release ordering.
+    let mut restores = Vec::with_capacity(baseline.len());
+    for file in baseline {
+        restores.push(CoordinatedFilePlan::RestorePreservingSidecar {
+            path: real_path(file),
+            baseline_sha256: require_baseline_hash(file)?,
+        });
+    }
+    let releases: Vec<_> = baseline
+        .iter()
+        .map(|file| CoordinatedFilePlan::ReleaseSidecar {
+            path: real_path(file),
+        })
+        .collect();
+    let _log: FilePlanBatchLog =
+        execute_restore_batch(restores, releases).map_err(map_service_error)?;
+
+    // Flush the restored copies and sidecar deletes before the DB commit.
+    sync_component_file_dirs(current.iter().chain(baseline));
+
     Ok(())
 }
 
-/// Fsyncs each distinct directory touched by the overlay so renames and new
+/// Fsyncs each distinct directory touched by the overlay so sidecars and new
 /// files survive a crash. Best-effort; see [`crate::fs::sync_directory_best_effort`].
-fn sync_touched_directories(changes: &AppliedFsChanges) {
+fn sync_touched_directories(changes: &AppliedFsLog) {
     let mut synced: HashSet<PathBuf> = HashSet::new();
     let touched = changes
         .copied
         .iter()
-        .chain(changes.renamed_to_bak.iter().map(|(target, _bak)| target));
+        .chain(changes.created_sidecars.iter().map(|(target, _bak)| target));
     for path in touched {
         if let Some(parent) = path.parent()
             && synced.insert(parent.to_path_buf())
@@ -156,76 +190,8 @@ fn sync_touched_directories(changes: &AppliedFsChanges) {
     }
 }
 
-/// Reverts the directory to `baseline`: delete files the overlay added (current
-/// files whose path is not a baseline path) and restore each baseline file that
-/// has a `.bak`. Used by both rollback and the re-swap path. Retry-safe: it only
-/// touches files that still have a `.bak`, so re-running after a partial failure
-/// completes cleanly.
-pub(super) fn revert_to_baseline_fs(
-    current: &[ComponentFile],
-    baseline: &[ComponentFile],
-) -> AppResult<()> {
-    let baseline_paths: HashSet<&str> = baseline.iter().map(|f| f.path().as_str()).collect();
-
-    // 1. Delete files the swap added (not part of the baseline).
-    for file in current {
-        if !baseline_paths.contains(file.path().as_str()) {
-            let path = real_path(file);
-            if path.exists() {
-                fs::remove_file(&path).map_err(|error| {
-                    AppError::provider_failed(format!(
-                        "failed to remove added file {}: {error}",
-                        path.display()
-                    ))
-                })?;
-            }
-        }
-    }
-
-    // 2. Restore each baseline file that was replaced (has a `.bak`). Files that
-    //    were merely kept have no `.bak` and are left as-is.
-    for file in baseline {
-        let real = real_path(file);
-        let Ok(bak) = bak_path(file) else {
-            log::warn!(
-                "catalog revert: cannot derive backup path for `{}`, skipping restore",
-                file.path().as_str()
-            );
-            continue;
-        };
-        if !bak.exists() {
-            continue;
-        }
-        if real.exists() {
-            fs::remove_file(&real).map_err(|error| {
-                AppError::provider_failed(format!(
-                    "failed to clear {} before restore: {error}",
-                    real.display()
-                ))
-            })?;
-        }
-        fs::rename(&bak, &real).map_err(|error| {
-            AppError::provider_failed(format!(
-                "failed to restore backup to {}: {error}",
-                real.display()
-            ))
-        })?;
-    }
-
-    // Flush the directory entries so the deletes/renames above survive a crash.
-    // Without this, `rollback_component` could commit the rollback to SQLite while
-    // the `.bak`→live rename never reaches disk, leaving the catalog claiming a
-    // restore the filesystem lost. The restored content is the pre-existing `.bak`
-    // (already durable), so a directory fsync is sufficient. Best-effort, mirroring
-    // the apply path; on a re-swap the later overlay fsync of the same directory is
-    // a cheap, idempotent repeat.
-    sync_component_file_dirs(current.iter().chain(baseline));
-
-    Ok(())
-}
-
 /// Fsyncs the distinct parent directories of `files` (best-effort), making the
-/// deletes/renames performed against them durable.
+/// deletes/copies performed against them durable.
 fn sync_component_file_dirs<'a>(files: impl IntoIterator<Item = &'a ComponentFile>) {
     let mut synced: HashSet<PathBuf> = HashSet::new();
     for file in files {
@@ -242,11 +208,20 @@ fn real_path(file: &ComponentFile) -> PathBuf {
     PathBuf::from(file.path().as_str())
 }
 
-fn bak_path(file: &ComponentFile) -> AppResult<PathBuf> {
-    crate::fs::backup_path(real_path(file).as_path()).map_err(|error| {
+fn require_baseline_hash(file: &ComponentFile) -> AppResult<Sha256Hash> {
+    file.sha256().cloned().ok_or_else(|| {
         AppError::provider_failed(format!(
-            "failed to derive backup path for {}: {error}",
+            "baseline {} has no integrity hash",
             file.path().as_str()
         ))
     })
+}
+
+fn map_service_error(error: crate::ServiceError) -> AppError {
+    match error {
+        crate::ServiceError::InvalidInput(message) => AppError::invalid_input(message),
+        crate::ServiceError::ProviderFailed(message)
+        | crate::ServiceError::CommandFailed(message) => AppError::provider_failed(message),
+        other => AppError::provider_failed(other.to_string()),
+    }
 }

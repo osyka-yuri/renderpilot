@@ -1,6 +1,5 @@
 //! Data types shared across the swap-execution submodules.
 
-use std::fs;
 use std::path::PathBuf;
 
 use renderpilot_domain::{ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
@@ -106,49 +105,21 @@ impl PlannedFile {
     pub(super) fn target(&self) -> PathBuf {
         PathBuf::from(self.file.path().as_str())
     }
-
-    pub(super) fn target_bak(&self) -> Result<PathBuf, crate::fs::SidecarPathError> {
-        crate::fs::backup_path(std::path::Path::new(self.file.path().as_str()))
-    }
 }
 
-/// Records the filesystem mutations of an overlay so they can be undone on failure.
+/// Records the filesystem paths touched by an overlay so directory fsync can
+/// flush them after apply. The durable receipt is the [`DurableFileTransaction`]
+/// manifest — this struct only tracks sidecars/copies for best-effort fsync.
+///
+/// Pre-mutation validation of the path set is performed once by
+/// `DurableFileTransaction::prepare` (→ `build_manifest`) in the production apply
+/// path. Tests that call `perform_apply_fs` directly rely on the
+/// `DurableFileTransaction` they prepare (or on their controlled fixtures) for
+/// validation, so no separate capture pass is needed here.
 #[derive(Default)]
-pub(super) struct AppliedFsChanges {
-    /// Files renamed to `.bak` (target, bak) before being overwritten.
-    pub(super) renamed_to_bak: Vec<(PathBuf, PathBuf)>,
+pub(super) struct AppliedFsLog {
+    /// Classic sidecars created by this apply (target, sidecar).
+    pub(super) created_sidecars: Vec<(PathBuf, PathBuf)>,
     /// Files copied into place.
     pub(super) copied: Vec<PathBuf>,
-}
-
-impl AppliedFsChanges {
-    /// Best-effort reversal of the overlay: remove copies, restore backups.
-    ///
-    /// A re-swap's revert-to-baseline (run before the overlay) is intentionally
-    /// not tracked here — the recorded baseline `.bak` files remain intact, so a
-    /// later `rollback` always recovers the original.
-    ///
-    /// Reversal is best-effort by necessity (the disk may be full, a file may be
-    /// locked by anti-virus), but every failure is logged at error level: a swap
-    /// whose rollback could not complete leaves the game folder in a mixed state,
-    /// and that must be diagnosable rather than silently swallowed.
-    pub(super) fn undo(&self) {
-        for copied in &self.copied {
-            if let Err(error) = fs::remove_file(copied) {
-                log::error!(
-                    "swap rollback: failed to remove copied file {}: {error}",
-                    copied.display()
-                );
-            }
-        }
-        for (target, bak) in &self.renamed_to_bak {
-            if let Err(error) = fs::rename(bak, target) {
-                log::error!(
-                    "swap rollback: failed to restore backup {} to {}: {error}",
-                    bak.display(),
-                    target.display()
-                );
-            }
-        }
-    }
 }

@@ -95,7 +95,8 @@ pub enum FileOp {
     /// Install a file *over* one that may already exist — e.g. a proxy DLL shadowing
     /// a game-shipped `dxgi.dll`. Mechanically identical to [`Create`](Self::Create)
     /// (back up any prior file, then write); the distinct name documents that
-    /// shadowing a pre-existing file is the expected case.
+    /// shadowing a pre-existing file is the expected case. Callers must clear or
+    /// restore orphan `{name}.bak` siblings before applying (engine hard-fails).
     BackupAndReplace {
         /// Bare file name placed in the game folder.
         name: String,
@@ -119,7 +120,8 @@ pub enum FileOp {
     },
     /// Merge content into a text-config file, resolving an existing file by name
     /// case-insensitively (config casing varies) and using `default` as the base
-    /// when none is present. The pre-merge file, if any, is backed up.
+    /// when none is present. The pre-merge file, if any, is backed up (same orphan
+    /// `.bak` contract as [`BackupAndReplace`](Self::BackupAndReplace)).
     MergeText {
         /// Conventional bare file name (also the name created when none exists).
         name: String,

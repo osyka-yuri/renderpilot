@@ -7,15 +7,6 @@ use std::path::{Path, PathBuf};
 use super::errors;
 use crate::ServiceError;
 
-/// Returns `path` with a `.bak` suffix appended.
-///
-/// Addon install paths are bare file names under a game directory. A missing
-/// file-name component is reported as [`ServiceError::InvalidInput`] rather than
-/// panicking so a corrupted plan cannot abort the process mid-apply.
-pub(crate) fn bak_path(path: &Path) -> Result<PathBuf, ServiceError> {
-    crate::fs::backup_path(path).map_err(|error| errors::invalid(error.to_string()))
-}
-
 /// Returns the path of an existing file in `game_dir` whose name equals `name`
 /// case-insensitively.
 pub(crate) fn existing_case_insensitive(game_dir: &Path, name: &str) -> Option<PathBuf> {
@@ -48,7 +39,9 @@ pub(crate) fn ensure_bare_file_name(field: &str, name: &str) -> Result<(), Servi
     Ok(())
 }
 
-const MAX_RELATIVE_PATH_DEPTH: usize = 8;
+/// Maximum path components for nested payload files (e.g. Luma shader trees).
+/// Zip-slip safety still comes from bare-component checks; this only bounds depth.
+const MAX_RELATIVE_PATH_DEPTH: usize = 16;
 
 pub(crate) fn ensure_safe_relative_path(field: &str, raw: &str) -> Result<PathBuf, ServiceError> {
     if raw.is_empty() {

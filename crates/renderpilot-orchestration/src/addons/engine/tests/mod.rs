@@ -96,9 +96,38 @@ fn backs_up_and_restores_a_preexisting_file() {
     let receipt = install(game, &renodx_like_plan()).expect("install");
     assert_eq!(read(&game.join("dxgi.dll")), b"reshade-dll");
     assert_eq!(receipt_paths(&receipt.backed_up_files), vec!["dxgi.dll"]);
+    assert!(
+        game.join("dxgi.dll.bak").exists(),
+        "committed BackupAndReplace must keep the on-disk bak for uninstall"
+    );
 
     uninstall(&receipt.created_files, &receipt.backed_up_files).expect("uninstall");
     assert_eq!(read(&game.join("dxgi.dll")), b"game-shipped");
+}
+
+#[test]
+fn place_file_refuses_when_a_backup_already_exists() {
+    // A surviving `.bak` is the game's original (or torn-install debris).
+    // Deleting it would permanently lose those bytes — refuse instead.
+    let dir = tempdir().expect("tempdir");
+    let game = dir.path();
+    fs::write(game.join("dxgi.dll"), b"current").expect("write");
+    fs::write(game.join("dxgi.dll.bak"), b"game-original").expect("write bak");
+
+    let plan = InstallPlan {
+        kind: AddonKind::RenoDx,
+        ops: vec![FileOp::BackupAndReplace {
+            name: "dxgi.dll".to_owned(),
+            bytes: b"new-host".to_vec(),
+        }],
+    };
+    let error = install(game, &plan).expect_err("must refuse clobbering an existing bak");
+    assert!(
+        matches!(error, ServiceError::InvalidInput(_)),
+        "unexpected error: {error}"
+    );
+    assert_eq!(read(&game.join("dxgi.dll")), b"current");
+    assert_eq!(read(&game.join("dxgi.dll.bak")), b"game-original");
 }
 
 #[test]
@@ -792,8 +821,8 @@ fn uninstall_tree_leaves_a_directory_alone_when_it_still_holds_unrelated_content
 
 #[test]
 fn relative_path_rejection_matrix() {
-    // 9 components exceeds `MAX_RELATIVE_PATH_DEPTH` (8).
-    let too_deep = "a/".repeat(9);
+    // 17 components exceeds `MAX_RELATIVE_PATH_DEPTH` (16).
+    let too_deep = "a/".repeat(17);
     let too_deep = too_deep.trim_end_matches('/');
     let cases = [
         "../escape.hlsl",
