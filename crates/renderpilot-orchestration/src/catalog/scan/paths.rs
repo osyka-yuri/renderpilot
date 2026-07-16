@@ -3,6 +3,11 @@
 //! Domain `PathRef` values use `/` as a separator even on Windows.
 //! Because of that, this module intentionally works with normalized path strings
 //! instead of `std::path::Path`.
+//!
+//! **Not** the same as [`crate::paths`]: that module normalizes OS paths
+//! (`\\` → `/`, case-fold, `\\?\` strip) for filesystem mutation keys.
+//! Scan helpers assume PathRef-normalized input and add scope/drive-root
+//! boundary checks for library discovery.
 
 const PATH_SEPARATOR: u8 = b'/';
 const WINDOWS_DRIVE_ROOT_LEN: usize = 3;
