@@ -7,7 +7,7 @@
 
 use renderpilot_domain::Architecture;
 
-use super::types::Generic;
+use super::types::RenoDxGeneric;
 
 /// GitHub Pages host serving the per-game RenoDX add-ons.
 const RENODX_BASE: &str = "https://clshortfuse.github.io/renodx";
@@ -29,7 +29,7 @@ pub(super) fn addon_file_name(slug: &str, arch: Architecture) -> String {
 /// Canonical local slug for an engine-generic add-on. New manifests provide an
 /// explicit slug; legacy explicit-URL generics fall back to the engine key.
 #[must_use]
-pub(super) fn generic_local_slug(generic: &Generic) -> &str {
+pub(super) fn generic_local_slug(generic: &RenoDxGeneric) -> &str {
     generic
         .slug
         .as_deref()
@@ -46,7 +46,7 @@ pub(super) fn addon_url(slug: &str, arch: Architecture) -> String {
 /// when the generic is hosted elsewhere, else the canonical slug maps to the
 /// default clshortfuse host.
 #[must_use]
-pub(super) fn generic_addon_url(generic: &Generic, arch: Architecture) -> Option<String> {
+pub(super) fn generic_addon_url(generic: &RenoDxGeneric, arch: Architecture) -> Option<String> {
     let explicit = match arch {
         Architecture::X64 => generic.url64.clone(),
         Architecture::X86 => generic.url32.clone(),
@@ -95,13 +95,16 @@ mod tests {
 
     #[test]
     fn generic_url_prefers_explicit_override_then_slug() {
-        let explicit = Generic {
+        let explicit = RenoDxGeneric {
             engine: super::super::types::Engine::Unity,
             status: super::super::types::Status::Unknown,
             slug: Some("unityengine".to_owned()),
             url64: Some("https://github.com/x/y/renodx-unityengine.addon64".to_owned()),
             url32: Some("https://github.com/x/y/renodx-unityengine.addon32".to_owned()),
-            label_key: None,
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         };
         assert_eq!(
             generic_addon_url(&explicit, Architecture::X64).as_deref(),
@@ -112,13 +115,16 @@ mod tests {
             Some("https://github.com/x/y/renodx-unityengine.addon32")
         );
 
-        let slugged = Generic {
+        let slugged = RenoDxGeneric {
             engine: super::super::types::Engine::Unreal,
             status: super::super::types::Status::Unknown,
             slug: Some("_univ".to_owned()),
             url64: None,
             url32: None,
-            label_key: None,
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.universal",
+                "Generic Unreal profile",
+            ),
         };
         assert_eq!(
             generic_addon_url(&slugged, Architecture::X64).as_deref(),

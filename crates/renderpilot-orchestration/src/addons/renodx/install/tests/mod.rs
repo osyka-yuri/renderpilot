@@ -10,6 +10,7 @@ use tempfile::tempdir;
 
 use super::{PreparedInstall, install, uninstall};
 use crate::ServiceError;
+use crate::addons::engine;
 use crate::addons::renodx::test_support::{MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports};
 use crate::addons::renodx::types::renodx_ini_defaults;
 use crate::addons::reshade::proxy::HostKind;
@@ -69,7 +70,8 @@ fn reshade_host_bytes(addon_support: bool) -> Vec<u8> {
 #[test]
 fn fresh_install_lays_down_host_addon_and_ini_without_marker() {
     let dir = tempdir().expect("tempdir");
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     assert_eq!(
         read(&dir.path().join("renodx-cp2077.addon64")),
         b"addon-bytes"
@@ -101,7 +103,8 @@ fn fresh_install_round_trips_to_clean_folder() {
     let dir = tempdir().expect("tempdir");
     // A pre-existing unrelated file must survive the round trip.
     fs::write(dir.path().join("game.exe"), b"game").expect("write");
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     uninstall(&record, None).expect("uninstall");
     assert!(!dir.path().join("renodx-cp2077.addon64").exists());
     assert!(!dir.path().join("dxgi.dll").exists());
@@ -116,7 +119,8 @@ fn compatible_detected_reshade_is_reused_untouched() {
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
     fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
     write_effect_asset(dir.path());
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     assert!(!record.has_host_binary_provenance());
     // No Host source is tracked for a reused detected host.
     assert!(
@@ -142,7 +146,8 @@ fn detected_host_without_effects_gets_default_disabled_addons() {
     let original_ini = "[GENERAL]\r\nNoPreset=1\r\n";
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
     fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     assert!(!record.has_host_binary_provenance());
     assert!(
         record
@@ -169,7 +174,8 @@ fn empty_host_without_ini_is_adopted_and_removed_with_renodx() {
     let dir = tempdir().expect("tempdir");
     // A compatible, already-active ReShade host with no payload is adopted.
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     assert!(!record.has_host_binary_provenance());
     let ini = String::from_utf8(read(&dir.path().join("ReShade.ini"))).unwrap();
     assert!(ini.contains("DisabledAddons=Generic Depth,Effect Runtime Sync"));
@@ -272,7 +278,8 @@ fn detected_host_install_leaves_original_ini_intact() {
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(true)).expect("write");
     fs::write(dir.path().join("ReShade.ini"), original_ini).expect("write");
     write_effect_asset(dir.path());
-    let record = install(dir.path(), &prepared()).expect("install");
+    let (record, commit) = install(dir.path(), &prepared()).expect("install");
+    commit.finish_committed();
     // The existing ini is never backed up or rewritten.
     assert!(record.backed_up_files().is_empty());
     assert_eq!(
@@ -291,8 +298,10 @@ fn detected_host_install_leaves_original_ini_intact() {
 #[test]
 fn repeated_install_is_idempotent() {
     let dir = tempdir().expect("tempdir");
-    install(dir.path(), &prepared()).expect("first install");
-    let record = install(dir.path(), &prepared()).expect("second install");
+    let (_, commit) = install(dir.path(), &prepared()).expect("first install");
+    commit.finish_committed();
+    let (record, commit) = install(dir.path(), &prepared()).expect("second install");
+    commit.finish_committed();
     assert!(
         record
             .created_files()
@@ -306,7 +315,8 @@ fn empty_host_without_addon_support_is_repaired_on_first_install() {
     // An ordinary empty ReShade is replaced with the Add-on build RenoDX needs.
     fs::write(dir.path().join("dxgi.dll"), reshade_host_bytes(false)).expect("write");
     let prepared = prepared();
-    let record = install(dir.path(), &prepared).expect("must repair");
+    let (record, commit) = install(dir.path(), &prepared).expect("must repair");
+    commit.finish_committed();
 
     assert_eq!(
         read(&dir.path().join("dxgi.dll")),
@@ -370,7 +380,10 @@ fn vulkan_prepared() -> PreparedInstall {
 #[test]
 fn vulkan_install_lays_down_addon_and_ini_without_a_proxy() {
     let dir = tempdir().expect("tempdir");
-    let record = install(dir.path(), &vulkan_prepared()).expect("vulkan install");
+    let (record, commit) = install(dir.path(), &vulkan_prepared()).expect("vulkan install");
+    assert!(engine::is_install_torn(dir.path(), AddonKind::RenoDx));
+    commit.finish_committed();
+    assert!(!engine::is_install_torn(dir.path(), AddonKind::RenoDx));
     assert_eq!(
         read(&dir.path().join("renodx-cp2077.addon64")),
         b"addon-bytes"
@@ -398,9 +411,9 @@ fn vulkan_install_round_trips_to_clean_folder() {
     // In production, `use_cases::commands::install::annotate_install_record`
     // stamps `host_kind` onto the record straight after this call — `uninstall`
     // relies on it to know a Vulkan install owns its per-game ini outright.
-    let record = install(dir.path(), &vulkan_prepared())
-        .expect("install")
-        .with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
+    let (record, commit) = install(dir.path(), &vulkan_prepared()).expect("install");
+    commit.finish_committed();
+    let record = record.with_host_kind(InstalledAddonHostKind::SharedVulkanLayer);
     uninstall(&record, None).expect("uninstall");
     assert!(!dir.path().join("renodx-cp2077.addon64").exists());
     assert!(!dir.path().join("ReShade.ini").exists());
@@ -409,7 +422,8 @@ fn vulkan_install_round_trips_to_clean_folder() {
 #[test]
 fn vulkan_install_refuses_when_already_installed() {
     let dir = tempdir().expect("tempdir");
-    install(dir.path(), &vulkan_prepared()).expect("first install");
+    let (_, commit) = install(dir.path(), &vulkan_prepared()).expect("first install");
+    commit.finish_committed();
     let error = install(dir.path(), &vulkan_prepared()).expect_err("should refuse");
     assert_matches!(error, ServiceError::InvalidInput(_));
 }

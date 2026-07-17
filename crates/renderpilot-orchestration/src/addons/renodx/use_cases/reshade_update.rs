@@ -13,7 +13,7 @@ use crate::addons::reshade::channel;
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::scan::ReshadeHostAction;
 use crate::addons::reshade::source::{ReshadeSource, require_reshade_source};
-use crate::addons::reshade::types::ReshadeChannel;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 
 /// Recorded ReShade channel, including legacy URL-derived records.
 pub(crate) fn recorded_reshade_channel(record: &InstalledAddon) -> Option<ReshadeChannel> {
@@ -29,6 +29,7 @@ pub(crate) fn recorded_reshade_channel(record: &InstalledAddon) -> Option<Reshad
 }
 
 /// Resolved ReShade host update target for proxy installs.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HostUpdateTarget {
     /// Game directory holding the proxy host.
     pub(crate) game_dir: PathBuf,
@@ -42,7 +43,7 @@ pub(crate) struct HostUpdateTarget {
     pub(crate) conflict: bool,
     /// ReShade source for the requested channel.
     pub(crate) source: ReshadeSource,
-    /// Requested/effective channel.
+    /// Explicitly selected target channel.
     pub(crate) channel: ReshadeChannel,
     /// Existing target path for the host.
     pub(crate) target_path: PathBuf,
@@ -57,15 +58,14 @@ pub(crate) struct HostUpdateTarget {
 pub(crate) fn resolve_host_update_target(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     game_id: &GameId,
     channel: ReshadeChannel,
 ) -> Result<Option<HostUpdateTarget>, ServiceError> {
     let Some(game) = context.storage().find_game(game_id)? else {
         return Ok(None);
     };
-    let override_path = crate::nvapi::resolve::stored_override_path(context, game_id.as_str())
-        .ok()
-        .flatten();
+    let override_path = crate::addons::game_context::executable_override(context, game_id);
     let analysis = analyze_game(&game, override_path.as_deref());
     let resolution = resolve(manifest, &analysis.facts);
     let (arch, proxy_dll_name) = match resolution {
@@ -81,7 +81,7 @@ pub(crate) fn resolve_host_update_target(
     if assessment.is_known_custom_build() {
         return Ok(None);
     }
-    let source = require_reshade_source(&manifest.reshade, channel, arch)?;
+    let source = require_reshade_source(reshade_sources, channel, arch)?;
     Ok(Some(HostUpdateTarget {
         game_dir,
         slot: assessment.slot,

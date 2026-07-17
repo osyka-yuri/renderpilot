@@ -12,15 +12,14 @@ use crate::ServiceError;
 
 use super::errors;
 use super::source;
-use super::types::{Category, Generic, RenoDxManifest, Title, manifest_defaults};
+use super::types::{RenoDxCategory, RenoDxGeneric, RenoDxManifest, RenoDxTitle};
 use crate::addons::manifest_validate::{
-    ensure_defaults_match, ensure_not_blank, ensure_safe_file_name, ensure_schema_version,
-    ensure_semver, ensure_unique_title_ids, validate_match_rules,
+    ensure_not_blank, ensure_safe_file_name, ensure_schema_version, ensure_unique_title_ids,
+    validate_match_rules,
 };
-use crate::addons::reshade::types::ReshadeConfig;
 
 /// Schema version this build understands.
-const SUPPORTED_SCHEMA_VERSION: u32 = 3;
+const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 
 /// Hosts a RenoDX add-on or ReShade build may be downloaded from.
 const DOWNLOAD_HOST_ALLOWLIST: &[&str] = &["clshortfuse.github.io", "github.com", "nightly.link"];
@@ -28,13 +27,7 @@ const DOWNLOAD_HOST_ALLOWLIST: &[&str] = &["clshortfuse.github.io", "github.com"
 /// Validates an entire manifest.
 pub(super) fn validate_manifest(manifest: &RenoDxManifest) -> Result<(), ServiceError> {
     ensure_schema_version("RenoDX", manifest.schema_version, SUPPORTED_SCHEMA_VERSION)?;
-
-    // The manifest's shared `defaults` (schema v3) must agree with the Rust-side
-    // `#[serde(default)]` values used to fill omitted title fields; a drift would
-    // silently change install behaviour, so catch it at load time.
-    ensure_defaults_match("RenoDX", &manifest.defaults, &manifest_defaults())?;
-
-    validate_reshade(&manifest.reshade)?;
+    ensure_not_blank("manifest generated_at", &manifest.generated_at)?;
 
     for generic in &manifest.generics {
         validate_generic(generic)?;
@@ -48,45 +41,25 @@ pub(super) fn validate_manifest(manifest: &RenoDxManifest) -> Result<(), Service
     Ok(())
 }
 
-/// Validates a title's [`Category`] payload: an external link must be HTTPS with a
-/// non-blank label; a blacklist entry must carry a non-blank reason. The
+/// Validates a title's [`RenoDxCategory`] payload: external URLs must be HTTPS and all
+/// catalogue messages must retain both their id and reviewed fallback. The
 /// installable and native-HDR categories carry no payload to check.
-fn validate_category(category: &Category) -> Result<(), ServiceError> {
+fn validate_category(category: &RenoDxCategory) -> Result<(), ServiceError> {
     match category {
-        Category::External { url, label_key } => {
+        RenoDxCategory::External { url, message } => {
             ensure_https("title external url", url)?;
-            ensure_not_blank("title external label_key", label_key)?;
+            message.validate("title external message")?;
         }
-        Category::Blacklist { reason } => {
-            ensure_not_blank("title blacklist reason", reason)?;
+        RenoDxCategory::Blacklist { message } => {
+            message.validate("title blacklist message")?;
         }
-        Category::Installable | Category::NativeHdr => {}
+        RenoDxCategory::Installable | RenoDxCategory::NativeHdr => {}
     }
     Ok(())
 }
 
-// Delegates to the shared checks in `addons::reshade::manifest`, so RenoDX's
-// own embedded `reshade` block is held to exactly the same shape as the
-// standalone `reshade_manifest.json` (see that module's doc comment).
-fn validate_reshade(reshade: &ReshadeConfig) -> Result<(), ServiceError> {
-    if let Some(stable) = &reshade.stable {
-        crate::addons::reshade::manifest::ensure_stable_reshade_download(
-            "reshade stable url",
-            &stable.url,
-        )?;
-    }
-    crate::addons::reshade::manifest::ensure_allowed_nightly_download(
-        "reshade nightly url64",
-        &reshade.nightly.url64,
-    )?;
-    crate::addons::reshade::manifest::ensure_allowed_nightly_download(
-        "reshade nightly url32",
-        &reshade.nightly.url32,
-    )?;
-    Ok(())
-}
-
-fn validate_generic(generic: &Generic) -> Result<(), ServiceError> {
+fn validate_generic(generic: &RenoDxGeneric) -> Result<(), ServiceError> {
+    generic.message.validate("generic message")?;
     if let Some(slug) = &generic.slug {
         ensure_slug("generic slug", slug)?;
     }
@@ -121,7 +94,7 @@ fn validate_generic(generic: &Generic) -> Result<(), ServiceError> {
     Ok(())
 }
 
-fn validate_title(title: &Title) -> Result<(), ServiceError> {
+fn validate_title(title: &RenoDxTitle) -> Result<(), ServiceError> {
     ensure_not_blank("title id", &title.id)?;
     ensure_not_blank("title name", &title.name)?;
     ensure_slug("title slug", &title.slug)?;
@@ -140,11 +113,6 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
             &source::addon_file_name(&title.slug, title.arch),
         )?;
     }
-    ensure_semver(
-        &format!("title `{}`", title.id),
-        "min_app_version",
-        &title.min_app_version,
-    )?;
     for conflict in &title.compatibility.conflicts {
         ensure_not_blank("title compatibility.conflicts entry", conflict)?;
     }
@@ -156,7 +124,7 @@ fn validate_title(title: &Title) -> Result<(), ServiceError> {
 /// A non-empty `conflicts` list must carry a `source`, so an unsourced conflict
 /// claim can't reappear silently the way the historical `special_k`/Cyberpunk 2077
 /// entry did.
-fn ensure_compatibility_source(title: &Title) -> Result<(), ServiceError> {
+fn ensure_compatibility_source(title: &RenoDxTitle) -> Result<(), ServiceError> {
     if title.compatibility.conflicts.is_empty() {
         return Ok(());
     }
@@ -245,7 +213,7 @@ mod tests {
     use super::*;
     use crate::addons::renodx::test_support::{manifest, rule, title};
     use crate::addons::renodx::types::{
-        Category, Compatibility, Engine, Generic, MatchKind, Status,
+        Engine, MatchKind, RenoDxCategory, RenoDxCompatibility, RenoDxGeneric, Status,
     };
 
     fn one_title_manifest() -> RenoDxManifest {
@@ -266,9 +234,12 @@ mod tests {
     #[test]
     fn external_category_passes_with_https_url_and_label() {
         let mut m = one_title_manifest();
-        m.titles[0].category = Category::External {
+        m.titles[0].category = RenoDxCategory::External {
             url: "https://discord.gg/example".to_owned(),
-            label_key: "renodx.external.discord".to_owned(),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.external.discord",
+                "Open the RenoDX Discord",
+            ),
         };
         assert!(validate_manifest(&m).is_ok());
     }
@@ -276,9 +247,12 @@ mod tests {
     #[test]
     fn external_category_rejects_non_https_url() {
         let mut m = one_title_manifest();
-        m.titles[0].category = Category::External {
+        m.titles[0].category = RenoDxCategory::External {
             url: "http://discord.gg/example".to_owned(),
-            label_key: "renodx.external.discord".to_owned(),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.external.discord",
+                "Open the RenoDX Discord",
+            ),
         };
         assert!(validate_manifest(&m).is_err());
     }
@@ -286,29 +260,25 @@ mod tests {
     #[test]
     fn blacklist_category_requires_a_reason() {
         let mut m = one_title_manifest();
-        m.titles[0].category = Category::Blacklist {
-            reason: String::new(),
+        m.titles[0].category = RenoDxCategory::Blacklist {
+            message: crate::addons::CatalogMessage::new("", "Known broken"),
         };
-        assert!(validate_manifest(&m).is_err());
-    }
-
-    #[test]
-    fn defaults_drift_is_rejected() {
-        let mut m = one_title_manifest();
-        m.defaults.min_app_version = "2.0.0".to_owned();
         assert!(validate_manifest(&m).is_err());
     }
 
     #[test]
     fn generic_accepts_canonical_slug_with_explicit_urls() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: Some("unityengine".to_owned()),
             url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
             url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32".to_owned()),
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
 
         assert!(validate_manifest(&m).is_ok());
@@ -317,13 +287,16 @@ mod tests {
     #[test]
     fn generic_validates_explicit_urls_even_with_slug() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: Some("unityengine".to_owned()),
             url64: Some("http://example.com/renodx-unityengine.addon64".to_owned()),
             url32: Some("https://example.com/renodx-unityengine.addon32".to_owned()),
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
 
         assert!(validate_manifest(&m).is_err());
@@ -332,13 +305,16 @@ mod tests {
     #[test]
     fn generic_rejects_explicit_url_basename_mismatch() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: Some("unityengine".to_owned()),
             url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon64".to_owned()),
             url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32".to_owned()),
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
 
         assert!(validate_manifest(&m).is_err());
@@ -347,13 +323,16 @@ mod tests {
     #[test]
     fn generic_explicit_urls_must_be_paired_even_with_slug() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: Some("unityengine".to_owned()),
             url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
             url32: None,
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
 
         assert!(validate_manifest(&m).is_err());
@@ -362,13 +341,16 @@ mod tests {
     #[test]
     fn generic_without_slug_requires_both_explicit_urls() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: None,
             url64: Some("https://example.com/renodx-unityengine.addon64".to_owned()),
             url32: None,
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
 
         assert!(validate_manifest(&m).is_err());
@@ -377,13 +359,16 @@ mod tests {
     #[test]
     fn legacy_generic_without_slug_uses_engine_fallback_as_local_identity() {
         let mut m = one_title_manifest();
-        m.generics = vec![Generic {
+        m.generics = vec![RenoDxGeneric {
             engine: Engine::Unity,
             status: Status::Working,
             slug: None,
             url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon64".to_owned()),
             url32: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unity.addon32".to_owned()),
-            label_key: Some("renodx.generic.unity".to_owned()),
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
         }];
         assert!(validate_manifest(&m).is_ok());
 
@@ -405,25 +390,9 @@ mod tests {
     }
 
     #[test]
-    fn stable_reshade_requires_official_addon_download_shape() {
-        let mut m = one_title_manifest();
-        m.reshade.stable.as_mut().expect("stable").url =
-            "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned();
-        assert!(validate_manifest(&m).is_ok());
-
-        m.reshade.stable.as_mut().expect("stable").url =
-            "https://example.com/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned();
-        assert!(validate_manifest(&m).is_err());
-
-        m.reshade.stable.as_mut().expect("stable").url =
-            "https://reshade.me/downloads/ReShade_Setup_6.7.3.exe".to_owned();
-        assert!(validate_manifest(&m).is_err());
-    }
-
-    #[test]
     fn compatibility_conflicts_with_source_passes() {
         let mut m = one_title_manifest();
-        m.titles[0].compatibility = Compatibility {
+        m.titles[0].compatibility = RenoDxCompatibility {
             conflicts: vec!["special_k".to_owned()],
             source: Some("https://example.test/conflict-report".to_owned()),
             ..Default::default()
@@ -434,7 +403,7 @@ mod tests {
     #[test]
     fn compatibility_conflicts_without_source_is_rejected() {
         let mut m = one_title_manifest();
-        m.titles[0].compatibility = Compatibility {
+        m.titles[0].compatibility = RenoDxCompatibility {
             conflicts: vec!["special_k".to_owned()],
             source: None,
             ..Default::default()
@@ -445,7 +414,7 @@ mod tests {
     #[test]
     fn compatibility_conflicts_with_blank_source_is_rejected() {
         let mut m = one_title_manifest();
-        m.titles[0].compatibility = Compatibility {
+        m.titles[0].compatibility = RenoDxCompatibility {
             conflicts: vec!["special_k".to_owned()],
             source: Some("   ".to_owned()),
             ..Default::default()
@@ -456,7 +425,7 @@ mod tests {
     #[test]
     fn empty_compatibility_conflicts_does_not_require_source() {
         let mut m = one_title_manifest();
-        m.titles[0].compatibility = Compatibility {
+        m.titles[0].compatibility = RenoDxCompatibility {
             conflicts: Vec::new(),
             source: None,
             ..Default::default()

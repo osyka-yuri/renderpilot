@@ -1,13 +1,20 @@
-/// Availability data transfer objects.
-use renderpilot_domain::{AddonKind, RenoDxInstallState};
+//! Availability data transfer objects.
+//!
+//! Wire install state lives in domain as a shared serde contract; re-exported
+//! here as the tool DTO boundary preferred by use-cases.
+
+use renderpilot_domain::AddonKind;
 use serde::Serialize;
 
-use crate::addons::anticheat::RiskAssessment;
+pub use renderpilot_domain::{RenoDxHostKind, RenoDxInstallState};
 
-use super::super::matcher::IncompatibilityReason;
-use super::super::matcher::MatchConfidence;
+use crate::addons::CatalogMessage;
+use crate::addons::anticheat::RiskAssessment;
+use crate::addons::renodx::types::RenoDxGenericProfile;
+
 use super::super::reshade::RenoDxAddonState;
 use super::vulkan::VulkanLayerReport;
+use crate::addons::matching::{IncompatibilityReason, MatchConfidence};
 use crate::addons::reshade::proxy::HostKind;
 
 // The observable ReShade host DTOs are shared; re-exported so the RenoDX
@@ -54,8 +61,8 @@ pub enum AvailabilityOutcome {
         confidence: MatchConfidence,
         /// Ban/stability risk and whether explicit confirmation is required.
         risk: RiskAssessment,
-        /// i18n note/requirement keys (a generic install carries its engine label here).
-        notes_keys: Vec<String>,
+        /// Present when this install comes from an engine-level generic profile.
+        generic_profile: Option<RenoDxGenericProfile>,
         /// How RenoDX would hook in: a per-game proxy DLL or the shared Vulkan layer.
         host_kind: HostKind,
     },
@@ -64,8 +71,8 @@ pub enum AvailabilityOutcome {
     External {
         /// Where to send the user (Discord/Nexus).
         url: String,
-        /// i18n label key for the link.
-        label_key: String,
+        /// Localizable link label supplied by the catalogue.
+        message: CatalogMessage,
         /// Present when the game is compatible, enabling "install from file".
         file_install: Option<ExternalFileInstall>,
     },
@@ -78,14 +85,14 @@ pub enum AvailabilityOutcome {
     },
     /// The game is blacklisted / known-broken.
     Blacklisted {
-        /// i18n reason key, when the manifest gives one.
-        reason: Option<String>,
+        /// Localizable explanation supplied by the catalogue.
+        message: CatalogMessage,
     },
     /// No RenoDX profile matched the game.
     Unsupported,
-    /// A different addon tool is already installed — or unmanaged files
-    /// belonging to it were found on disk — for this game. Uninstall the other
-    /// tool first.
+    /// A different addon tool (Luma) is already installed — or unmanaged files
+    /// belonging to it were found on disk — for this game. RenoDX and Luma are
+    /// mutually exclusive per game; uninstall the other one first.
     BlockedByOtherAddon {
         /// The other addon tool occupying this game. Named `other_kind`, not
         /// `kind`, because the latter collides with this enum's own
@@ -120,8 +127,8 @@ pub struct ExternalFileInstall {
     pub confidence: MatchConfidence,
     /// Ban/stability risk and whether explicit confirmation is required.
     pub risk: RiskAssessment,
-    /// i18n note/requirement keys.
-    pub notes_keys: Vec<String>,
     /// How RenoDX would hook in: a per-game proxy DLL or the shared Vulkan layer.
     pub host_kind: HostKind,
+    /// Engine generic this offer came from, when applicable.
+    pub generic_profile: Option<RenoDxGenericProfile>,
 }

@@ -6,7 +6,6 @@ use renderpilot_domain::{
     SharedArtifactOrigin, TrackedSource, TrackedSourceRole,
 };
 
-use crate::addons::operation_lock;
 use crate::addons::records;
 use crate::addons::vulkan_lock;
 use crate::{Context, ServiceError};
@@ -69,18 +68,6 @@ pub(crate) fn reconcile_orphaned_install_locked(
     let record = records::record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)?
         .ok_or_else(|| errors::failed("adopted RenoDX install was not persisted".to_owned()))?;
     Ok(Some(record))
-}
-
-/// Compatibility bridge for the legacy availability query. It disappears with
-/// the command migration, whose caller already owns the game mutation lock.
-pub(crate) fn reconcile_orphaned_install(
-    context: &Context,
-    candidate: &OrphanedInstall,
-) -> Result<Option<InstalledAddon>, ServiceError> {
-    let Some(_guard) = operation_lock::try_lock(&candidate.game_id) else {
-        return Ok(None);
-    };
-    reconcile_orphaned_install_locked(context, candidate)
 }
 
 fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, ServiceError> {

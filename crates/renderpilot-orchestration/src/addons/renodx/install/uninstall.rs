@@ -6,7 +6,6 @@ use crate::ServiceError;
 use crate::addons::engine;
 
 use super::super::reshade_ini::ini_remove_renodx_strategy;
-use super::super::tracking;
 use crate::addons::reshade::scan as reshade;
 
 /// Reverses an install, returning the game folder to its prior state.
@@ -34,11 +33,12 @@ pub fn uninstall(
     record: &InstalledAddon,
     game_dir_hint: Option<&Path>,
 ) -> Result<(), ServiceError> {
-    let log_base_path = tracking::owned_proxy_host_path(record).and_then(|host_path| {
-        host_path
-            .parent()
-            .map(|game_dir| reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path)
-    });
+    let log_base_path =
+        crate::addons::tracking::owned_proxy_host_path(record).and_then(|host_path| {
+            host_path.parent().map(|game_dir| {
+                reshade::resolve_paths(game_dir, Some(&host_path)).effective_base_path
+            })
+        });
 
     let ini_in_created = ini_path_in(record.created_files());
     let ini_in_backed_up = ini_path_in(record.backed_up_files());
@@ -71,7 +71,7 @@ pub fn uninstall(
 }
 
 fn host_dll_written_by_this_install(record: &InstalledAddon) -> bool {
-    tracking::owned_proxy_host_path(record).is_some()
+    crate::addons::tracking::owned_proxy_host_path(record).is_some()
 }
 
 fn ini_path_in(paths: &[PathRef]) -> Option<&PathRef> {
@@ -92,8 +92,8 @@ fn non_ini_path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
 }
 
 fn locate_untracked_ini(record: &InstalledAddon, game_dir_hint: Option<&Path>) -> Option<PathBuf> {
-    let host_dir =
-        tracking::rollback_host_path(record).and_then(|path| path.parent().map(Path::to_path_buf));
+    let host_dir = crate::addons::tracking::host_proxy_path(record)
+        .and_then(|path| path.parent().map(Path::to_path_buf));
     let addon_dir = Path::new(record.addon_file().as_str())
         .parent()
         .map(Path::to_path_buf);

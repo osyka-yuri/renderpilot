@@ -114,10 +114,18 @@ pub struct PreparedInstall {
 /// ReShade proxy DLL (or reuses a compatible detected host); a [`HostKind::Vulkan`] install lays
 /// down only per-game files — the shared Vulkan layer is handled separately by the
 /// service. The engine rolls back on any failure.
+/// Returns the install record plus a pending commit guard. Every host kind keeps
+/// its crash-safety sentinel open until durable database persistence.
 pub fn install(
     game_dir: &Path,
     prepared: &PreparedInstall,
-) -> Result<renderpilot_domain::InstalledAddon, ServiceError> {
+) -> Result<
+    (
+        renderpilot_domain::InstalledAddon,
+        crate::addons::engine::PendingInstallCommit,
+    ),
+    ServiceError,
+> {
     match prepared.host_kind {
         HostKind::Proxy => plans::install_proxy(game_dir, prepared),
         HostKind::Vulkan => plans::install_vulkan(game_dir, prepared),

@@ -203,7 +203,7 @@ async fn force_fetch_all_kinds() -> ManifestRefreshReport {
 
     let (libraries, renodx) = tokio::join!(
         libraries::fetch_manifest(),
-        renodx::manifest_store::fetch_manifest(shared_for_tools),
+        renodx::manifest_store::fetch_manifest(),
     );
 
     ManifestRefreshReport::from_kind_fetches(

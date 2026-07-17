@@ -3,10 +3,8 @@
 use renderpilot_domain::Architecture;
 
 use super::types::{
-    Category, Channel, Compatibility, MatchKind, MatchRule, RenoDxManifest, Status, Title,
-    manifest_defaults,
+    MatchKind, MatchRule, RenoDxCategory, RenoDxCompatibility, RenoDxManifest, RenoDxTitle, Status,
 };
-use crate::addons::reshade::types::{ReshadeConfig, ReshadeNightly, ReshadeStable};
 
 /// Builds a single match rule.
 pub(crate) fn rule(kind: MatchKind, value: &str, tier: u32) -> MatchRule {
@@ -24,46 +22,32 @@ pub(crate) fn title(
     arch: Architecture,
     status: Status,
     match_rules: Vec<MatchRule>,
-) -> Title {
-    Title {
+) -> RenoDxTitle {
+    RenoDxTitle {
         id: id.to_owned(),
         name: format!("Game {id}"),
-        category: Category::default(),
+        category: RenoDxCategory::default(),
         slug: slug.to_owned(),
         arch,
         status,
-        channel: Channel::default(),
-        min_app_version: "1.0.0".to_owned(),
         match_rules,
-        compatibility: Compatibility::default(),
+        compatibility: RenoDxCompatibility::default(),
         proxy_dll_override: None,
-        notes_keys: Vec::new(),
         download_url: None,
     }
 }
 
-/// Builds a manifest over the given titles with a default ReShade config.
-pub(crate) fn manifest(titles: Vec<Title>) -> RenoDxManifest {
+/// Builds a manifest over the given titles.
+pub(crate) fn manifest(titles: Vec<RenoDxTitle>) -> RenoDxManifest {
     RenoDxManifest {
-        schema_version: 3,
+        schema_version: 1,
         generated_at: "2026-06-15T00:00:00Z".to_owned(),
-        reshade: ReshadeConfig {
-            stable: Some(ReshadeStable {
-                url: "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned(),
-            }),
-            nightly: ReshadeNightly {
-                url64: "https://nightly.link/crosire/reshade/workflows/build/main/ReShade%20(64-bit).zip".to_owned(),
-                url32: "https://nightly.link/crosire/reshade/workflows/build/main/ReShade%20(32-bit).zip".to_owned(),
-            },
-        },
         generics: Vec::new(),
-        defaults: manifest_defaults(),
         titles,
     }
 }
 
-// Synthetic PE images are shared with ReShade fetch tests; re-exported from
-// [`crate::addons::test_support`] so RenoDX fixtures keep addressing them here.
+// Shared fixtures re-exported so RenoDX tests keep addressing them here.
 pub(crate) use crate::addons::test_support::{
     MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports, reshade_sources,
 };

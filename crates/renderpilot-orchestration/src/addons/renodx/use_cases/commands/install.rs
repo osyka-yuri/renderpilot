@@ -1,6 +1,6 @@
 //! Installs RenoDX from upstream or from a user-selected add-on file.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use renderpilot_domain::{
@@ -10,14 +10,12 @@ use renderpilot_domain::{
 use crate::addons::anticheat::{RiskSeverity, assess_risk};
 use crate::addons::game_analysis::{analyze_game, install_target_dir};
 use crate::addons::install_guard;
-use crate::addons::operation_lock;
-use crate::addons::progress::{emit_tool_finalizing, sequential_stage_observer};
-use crate::addons::records;
+use crate::addons::progress::emit_tool_finalizing;
 use crate::addons::renodx::arch_from_addon_file;
 use crate::addons::renodx::errors;
 use crate::addons::renodx::fetch::{LocalAddonSource, prepare_install, prepare_install_from_file};
 use crate::addons::renodx::game_context::{analyze_and_resolve, executable_override, require_game};
-use crate::addons::renodx::install::{install as install_files, uninstall as uninstall_files};
+use crate::addons::renodx::install::install as install_files;
 use crate::addons::renodx::matcher::{
     RenoDxResolution, ResolvedInstall, generic_file_install_plan, resolve_external_install,
 };
@@ -25,7 +23,8 @@ use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::use_cases::commands::shared_vulkan_layer;
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::proxy::HostKind;
-use crate::addons::reshade::types::ReshadeChannel;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
+use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -37,8 +36,10 @@ const MAX_ADDON_FILE_BYTES: u64 = 64 * 1024 * 1024;
 pub struct InstallRequest<'a> {
     /// Backend context (game repository, addon repository, settings).
     pub context: &'a Context,
-    /// The resolved RenoDX manifest (catalogue + ReShade host config).
+    /// The resolved RenoDX tool catalogue.
     pub manifest: &'a RenoDxManifest,
+    /// Independently resolved ReShade source catalogue.
+    pub reshade_sources: &'a ReshadeSourceCatalog,
     /// The game to install RenoDX for.
     pub game_id: &'a GameId,
     /// The ReShade host channel to install (stable or nightly).
@@ -57,21 +58,231 @@ pub struct InstallRequest<'a> {
 /// `confirm_anticheat` must be `true` to proceed when the risk assessment requires
 /// it. `allow_shared_vulkan_layer_install` must be `true` for a Vulkan game when
 /// no ReShade Vulkan layer is present yet. The ReShade host (when one must be
-/// installed) uses the requested channel, with old manifests falling back from
-/// stable to nightly.
+/// installed) uses the requested channel. An unavailable explicit channel is
+/// rejected rather than silently remapped.
 ///
 /// Returns the `managed_app_record` (the per-game `InstalledAddon`).
+///
+/// Network prepare runs **outside** the per-game `game_mutation_lock` (same 3-phase
+/// contract as Luma install) so a slow download does not block peer availability.
 pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, ServiceError> {
     let InstallRequest {
         context,
         manifest,
+        reshade_sources,
         game_id,
         requested_channel,
         confirm_anticheat,
         allow_shared_vulkan_layer_install,
         progress,
     } = request;
-    let _guard = operation_lock::lock(game_id).await;
+    ensure_requested_channel(reshade_sources, requested_channel)?;
+
+    // Phase 1: snapshot under the per-game lock (fail-fast gates + plan).
+    let snapshot = {
+        let _guard =
+            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+        resolve_catalog_install_snapshot(
+            context,
+            manifest,
+            game_id,
+            requested_channel,
+            confirm_anticheat,
+        )?
+    };
+
+    // Phase 2: downloads only — no game-folder mutation.
+    let prepared = prepare_install(
+        &snapshot.plan,
+        reshade_sources,
+        game_id.clone(),
+        snapshot.channel,
+        snapshot.writes_host,
+        progress,
+    )
+    .await?;
+
+    // Phase 3: re-lock, revalidate, shared Vulkan host (system mutation), apply.
+    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let revalidated = resolve_catalog_install_snapshot(
+        context,
+        manifest,
+        game_id,
+        requested_channel,
+        confirm_anticheat,
+    )?;
+    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
+
+    shared_vulkan_layer::ensure_for_install(
+        context,
+        &revalidated.plan,
+        reshade_sources,
+        revalidated.channel,
+        allow_shared_vulkan_layer_install,
+        revalidated.registered_exe_path.as_deref(),
+        progress,
+    )
+    .await?;
+
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
+    let targets = crate::addons::renodx::mutation_targets::install_targets(
+        &revalidated.target_dir,
+        &prepared,
+    )?;
+    let source_last_modified = prepared.source_last_modified.as_deref();
+    crate::addons::durable::run_install_mutation(
+        context,
+        &guard,
+        targets,
+        crate::addons::mutation_features::RENODX_INSTALL,
+        game_id,
+        || {
+            let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
+            let record = annotate_install_record(
+                record,
+                revalidated.plan.host_kind,
+                revalidated.channel,
+                revalidated.registered_exe_path.as_deref(),
+            )?;
+            crate::fs::stamp_mtime_best_effort(
+                Path::new(record.addon_file().as_str()),
+                source_last_modified,
+                None,
+            );
+            Ok((record, commit))
+        },
+    )
+}
+
+/// Installs RenoDX from a user-downloaded add-on file — the manual path for any
+/// DirectX game, whether or not the catalogue knows it.
+///
+/// Same engine and reversibility as [`install`]; the add-on bytes come from
+/// `file_path` (validated as a PE) instead of an upstream download, and the record
+/// tracks no upstream source. A curated *External* title is no longer a special
+/// case: it just yields a richer plan, while any DirectX game falls back to a
+/// generic "ReShade host + your add-on" plan. The renderer must be able to load a
+/// proxy DLL (a confirmed Vulkan/OpenGL game is refused), and the add-on's
+/// architecture must match the game's.
+pub async fn install_from_file(
+    request: InstallRequest<'_>,
+    file_path: &str,
+) -> Result<InstalledAddon, ServiceError> {
+    let InstallRequest {
+        context,
+        manifest,
+        reshade_sources,
+        game_id,
+        requested_channel,
+        confirm_anticheat,
+        allow_shared_vulkan_layer_install,
+        progress,
+    } = request;
+    ensure_requested_channel(reshade_sources, requested_channel)?;
+
+    // Read the user file outside the game lock (local I/O only).
+    let (addon_bytes, source_mtime) = read_addon_file(file_path)?;
+    let file_arch = arch_from_addon_file(file_path).ok_or_else(|| {
+        errors::invalid("the selected file is not a RenoDX add-on (.addon64 / .addon32)".to_owned())
+    })?;
+
+    // Phase 1: snapshot under the per-game lock.
+    let snapshot = {
+        let _guard =
+            game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+        resolve_file_install_snapshot(
+            context,
+            manifest,
+            game_id,
+            requested_channel,
+            confirm_anticheat,
+            file_arch,
+        )?
+    };
+
+    // Phase 2: host download (when needed) — no game-folder mutation.
+    let prepared = prepare_install_from_file(
+        &snapshot.plan,
+        reshade_sources,
+        game_id.clone(),
+        LocalAddonSource {
+            bytes: addon_bytes,
+            last_modified: source_mtime.map(crate::fs::format_http_date),
+        },
+        snapshot.channel,
+        snapshot.writes_host,
+        progress,
+    )
+    .await?;
+
+    // Phase 3: re-lock, revalidate, shared Vulkan host, apply.
+    let guard = game_mutation_lock::enter_game_mutation_boundary_async(context, game_id).await?;
+    let revalidated = resolve_file_install_snapshot(
+        context,
+        manifest,
+        game_id,
+        requested_channel,
+        confirm_anticheat,
+        file_arch,
+    )?;
+    ensure_catalog_install_snapshot_matches(&snapshot, &revalidated)?;
+
+    shared_vulkan_layer::ensure_for_install(
+        context,
+        &revalidated.plan,
+        reshade_sources,
+        revalidated.channel,
+        allow_shared_vulkan_layer_install,
+        revalidated.registered_exe_path.as_deref(),
+        progress,
+    )
+    .await?;
+
+    emit_tool_finalizing(progress, AddonKind::RenoDx);
+    let targets = crate::addons::renodx::mutation_targets::install_targets(
+        &revalidated.target_dir,
+        &prepared,
+    )?;
+    crate::addons::durable::run_install_mutation(
+        context,
+        &guard,
+        targets,
+        crate::addons::mutation_features::RENODX_INSTALL_FROM_FILE,
+        game_id,
+        || {
+            let (record, commit) = install_files(&revalidated.target_dir, &prepared)?;
+            let record = annotate_install_record(
+                record,
+                revalidated.plan.host_kind,
+                revalidated.channel,
+                revalidated.registered_exe_path.as_deref(),
+            )?;
+            crate::fs::stamp_mtime_best_effort(
+                Path::new(record.addon_file().as_str()),
+                None,
+                source_mtime,
+            );
+            Ok((record, commit))
+        },
+    )
+}
+
+/// Owned install plan snapshot used across the unlocked network prepare window.
+struct CatalogInstallSnapshot {
+    plan: ResolvedInstall,
+    target_dir: std::path::PathBuf,
+    channel: ReshadeChannel,
+    writes_host: bool,
+    registered_exe_path: Option<std::path::PathBuf>,
+}
+
+fn resolve_catalog_install_snapshot(
+    context: &Context,
+    manifest: &RenoDxManifest,
+    game_id: &GameId,
+    requested_channel: ReshadeChannel,
+    confirm_anticheat: bool,
+) -> Result<CatalogInstallSnapshot, ServiceError> {
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
     let override_path = executable_override(context, game_id);
@@ -97,10 +308,11 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
                 "RenoDX is not compatible with this game: {reason:?}"
             )));
         }
-        RenoDxResolution::Unsupported { .. } => {
-            return Err(errors::invalid(
-                "RenoDX is not supported for this game".to_owned(),
-            ));
+        RenoDxResolution::Blacklisted { message } => {
+            return Err(errors::invalid(format!(
+                "RenoDX is not supported for this game: {}",
+                message.fallback_text
+            )));
         }
         RenoDxResolution::NoMatch => {
             return Err(errors::invalid(
@@ -111,99 +323,28 @@ pub async fn install(request: InstallRequest<'_>) -> Result<InstalledAddon, Serv
 
     let risk = assess_risk(scan_dir, RiskSeverity::Info);
     crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
-    let channel = manifest
-        .reshade
-        .effective_install_channel(requested_channel);
+    let writes_host = resolve_writes_host(&plan, &target_dir)?;
     let registered_exe_path = analysis
         .primary_executable
         .as_ref()
-        .map(|e| Path::new(e.as_str()));
-    let shared_layer_progress_fn = sequential_stage_observer(progress, 0, 2);
-    let shared_layer_progress = shared_layer_progress_fn
-        .as_ref()
-        .map(|observer| observer as &ProgressObserver<'_>);
-    let downloaded_shared_layer = shared_vulkan_layer::ensure_for_install(
-        context,
-        &plan,
-        &manifest.reshade,
-        channel,
-        allow_shared_vulkan_layer_install,
-        registered_exe_path,
-        shared_layer_progress,
-    )
-    .await?;
-
-    // The DirectX host policy scans the game folder for ReShade proxy DLLs and
-    // refuses install on slot conflicts. This is irrelevant for Vulkan — the
-    // host is a shared system-wide layer, not a per-game proxy. Running the
-    // proxy assessment with an empty `proxy_dll_name` can flag leftover
-    // ReShade DLLs in the game folder as `InactiveSlot` conflicts and block
-    // the Vulkan install. Skip it for Vulkan.
-    let writes_host = if matches!(plan.host_kind, HostKind::Vulkan) {
-        false
-    } else {
-        let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
-        host.ensure_initial_installable(&plan.proxy_dll_name)?;
-        host.initial_writes_host()
-    };
-
-    let addon_progress_fn = if downloaded_shared_layer {
-        sequential_stage_observer(progress, 1, 2)
-    } else {
-        None
-    };
-    let install_progress = addon_progress_fn
-        .as_ref()
-        .map(|observer| observer as &ProgressObserver<'_>)
-        .or(progress);
-    let prepared = prepare_install(
-        &plan,
-        &manifest.reshade,
-        game_id.clone(),
-        channel,
+        .map(|e| PathBuf::from(e.as_str()));
+    Ok(CatalogInstallSnapshot {
+        plan,
+        target_dir,
+        channel: requested_channel,
         writes_host,
-        install_progress,
-    )
-    .await?;
-    emit_tool_finalizing(progress, AddonKind::RenoDx);
-    let record = annotate_install_record(
-        install_files(&target_dir, &prepared)?,
-        plan.host_kind,
-        channel,
         registered_exe_path,
-    )?;
-    crate::fs::stamp_mtime_best_effort(
-        Path::new(record.addon_file().as_str()),
-        prepared.source_last_modified.as_deref(),
-        None,
-    );
-    persist_or_revert(context, record, &target_dir)
+    })
 }
 
-/// Installs RenoDX from a user-downloaded add-on file — the manual path for any
-/// DirectX game, whether or not the catalogue knows it.
-///
-/// Same engine and reversibility as [`install`]; the add-on bytes come from
-/// `file_path` (validated as a PE) instead of an upstream download, and the record
-/// tracks no upstream source. A curated *External* title is no longer a special
-/// case: it just yields a richer plan, while any DirectX game falls back to a
-/// generic "ReShade host + your add-on" plan. The renderer must be able to load a
-/// proxy DLL (a confirmed Vulkan/OpenGL game is refused), and the add-on's
-/// architecture must match the game's.
-pub async fn install_from_file(
-    request: InstallRequest<'_>,
-    file_path: &str,
-) -> Result<InstalledAddon, ServiceError> {
-    let InstallRequest {
-        context,
-        manifest,
-        game_id,
-        requested_channel,
-        confirm_anticheat,
-        allow_shared_vulkan_layer_install,
-        progress,
-    } = request;
-    let _guard = operation_lock::lock(game_id).await;
+fn resolve_file_install_snapshot(
+    context: &Context,
+    manifest: &RenoDxManifest,
+    game_id: &GameId,
+    requested_channel: ReshadeChannel,
+    confirm_anticheat: bool,
+    file_arch: Architecture,
+) -> Result<CatalogInstallSnapshot, ServiceError> {
     let game = require_game(context, game_id)?;
     let scan_dir = Path::new(game.install_path().as_str());
     let analysis = analyze_game(&game, executable_override(context, game_id).as_deref());
@@ -211,13 +352,6 @@ pub async fn install_from_file(
     let roots = install_guard::resolve_install_scan_roots(&analysis)?;
     install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::RenoDx, &roots)?;
 
-    // The architecture the user's add-on targets (`.addon64` → X64). A non-add-on
-    // file is rejected outright.
-    let file_arch = arch_from_addon_file(file_path).ok_or_else(|| {
-        errors::invalid("the selected file is not a RenoDX add-on (.addon64 / .addon32)".to_owned())
-    })?;
-    // Hard guard: a known game architecture must match the add-on's, or ReShade
-    // would load a wrong-bitness add-on it cannot use.
     if let Some(game_arch) = analysis.facts.graphics.architecture()
         && game_arch != file_arch
     {
@@ -228,7 +362,6 @@ pub async fn install_from_file(
         )));
     }
 
-    // A curated External title's plan, else a generic plan for any DirectX game.
     let plan = resolve_external_install(manifest, &analysis.facts)
         .or_else(|| generic_file_install_plan(&analysis.facts, file_arch))
         .ok_or_else(|| {
@@ -236,65 +369,59 @@ pub async fn install_from_file(
                 "RenoDX cannot be installed for this game: its renderer is not Direct3D".to_owned(),
             )
         })?;
-
-    // Authoritative invariant: the add-on and the ReShade host it sits beside must be
-    // the same bitness. A generic plan satisfies this by construction; a curated title
-    // enforces *its* architecture even when detection was inconclusive (which the
-    // friendly game-vs-add-on check above could not catch).
     ensure_addon_arch(file_arch, plan.arch)?;
 
     let risk = assess_risk(scan_dir, RiskSeverity::Info);
     crate::addons::anticheat::enforce_gate(&risk, confirm_anticheat)?;
-    let channel = manifest
-        .reshade
-        .effective_install_channel(requested_channel);
+    let writes_host = resolve_writes_host(&plan, &target_dir)?;
     let registered_exe_path = analysis
         .primary_executable
         .as_ref()
-        .map(|e| Path::new(e.as_str()));
-    shared_vulkan_layer::ensure_for_install(
-        context,
-        &plan,
-        &manifest.reshade,
-        channel,
-        allow_shared_vulkan_layer_install,
-        registered_exe_path,
-        progress,
-    )
-    .await?;
-
-    // Same Vulkan guard as in `install()` — see comment there.
-    let writes_host = if matches!(plan.host_kind, HostKind::Vulkan) {
-        false
-    } else {
-        let host = host_policy::assess(&target_dir, &plan.proxy_dll_name);
-        host.ensure_initial_installable(&plan.proxy_dll_name)?;
-        host.initial_writes_host()
-    };
-
-    let (addon_bytes, source_mtime) = read_addon_file(file_path)?;
-    let prepared = prepare_install_from_file(
-        &plan,
-        &manifest.reshade,
-        game_id.clone(),
-        LocalAddonSource {
-            bytes: addon_bytes,
-            last_modified: source_mtime.map(crate::fs::format_http_date),
-        },
-        channel,
+        .map(|e| PathBuf::from(e.as_str()));
+    Ok(CatalogInstallSnapshot {
+        plan,
+        target_dir,
+        channel: requested_channel,
         writes_host,
-        progress,
-    )
-    .await?;
-    emit_tool_finalizing(progress, AddonKind::RenoDx);
-    let record = annotate_install_record(
-        install_files(&target_dir, &prepared)?,
-        plan.host_kind,
-        channel,
         registered_exe_path,
-    )?;
-    crate::fs::stamp_mtime_best_effort(Path::new(record.addon_file().as_str()), None, source_mtime);
-    persist_or_revert(context, record, &target_dir)
+    })
+}
+
+fn resolve_writes_host(plan: &ResolvedInstall, target_dir: &Path) -> Result<bool, ServiceError> {
+    // DirectX host policy is irrelevant for Vulkan — the host is a shared layer.
+    if matches!(plan.host_kind, HostKind::Vulkan) {
+        return Ok(false);
+    }
+    let host = host_policy::assess(target_dir, &plan.proxy_dll_name);
+    host.ensure_initial_installable(&plan.proxy_dll_name)?;
+    Ok(host.initial_writes_host())
+}
+
+fn ensure_catalog_install_snapshot_matches(
+    snapshot: &CatalogInstallSnapshot,
+    current: &CatalogInstallSnapshot,
+) -> Result<(), ServiceError> {
+    use crate::paths::same_path;
+
+    if snapshot.plan.slug != current.plan.slug
+        || snapshot.plan.addon_url != current.plan.addon_url
+        || snapshot.plan.arch != current.plan.arch
+        || snapshot.plan.host_kind != current.plan.host_kind
+        || snapshot.plan.proxy_dll_name != current.plan.proxy_dll_name
+        || snapshot.channel != current.channel
+        || snapshot.writes_host != current.writes_host
+        || !same_path(&snapshot.target_dir, &current.target_dir)
+    {
+        return Err(errors::state_changed_retry_install());
+    }
+    match (
+        snapshot.registered_exe_path.as_deref(),
+        current.registered_exe_path.as_deref(),
+    ) {
+        (None, None) => Ok(()),
+        (Some(a), Some(b)) if same_path(a, b) => Ok(()),
+        _ => Err(errors::state_changed_retry_install()),
+    }
 }
 
 fn annotate_install_record(
@@ -373,14 +500,15 @@ fn ensure_addon_arch(file_arch: Architecture, plan_arch: Architecture) -> Result
     Ok(())
 }
 
-/// Persists the install record using the canonical helper. `game_dir` is passed
-/// to uninstall_files as the ini-location hint.
-fn persist_or_revert(
-    context: &Context,
-    record: InstalledAddon,
-    game_dir: &Path,
-) -> Result<InstalledAddon, ServiceError> {
-    records::persist_record_or_revert(context, record, |r| uninstall_files(r, Some(game_dir)))
+fn ensure_requested_channel(
+    reshade_sources: &ReshadeSourceCatalog,
+    requested_channel: ReshadeChannel,
+) -> Result<(), ServiceError> {
+    if reshade_sources.supports_channel(requested_channel) {
+        Ok(())
+    } else {
+        Err(errors::channel_unavailable(requested_channel))
+    }
 }
 
 #[cfg(test)]
@@ -422,6 +550,17 @@ mod tests {
         assert!(ensure_addon_arch(Architecture::X64, Architecture::X64).is_ok());
         let error = ensure_addon_arch(Architecture::X86, Architecture::X64)
             .expect_err("a 32-bit add-on for a 64-bit host must be rejected");
+        assert_matches!(error, ServiceError::InvalidInput(_));
+    }
+
+    #[test]
+    fn every_install_path_rejects_an_explicit_unavailable_stable_channel() {
+        let mut reshade_sources = crate::addons::renodx::test_support::reshade_sources();
+        reshade_sources.stable = None;
+
+        let error = ensure_requested_channel(&reshade_sources, ReshadeChannel::Stable)
+            .expect_err("Stable must not silently remap to Nightly");
+
         assert_matches!(error, ServiceError::InvalidInput(_));
     }
 }

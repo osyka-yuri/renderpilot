@@ -2,7 +2,9 @@ use renderpilot_domain::Architecture;
 
 use super::super::policy::check_title_compatibility;
 use super::super::source;
-use super::super::types::{Category, MatchRule, RenoDxManifest, Title};
+use super::super::types::{
+    MatchRule, RenoDxCategory, RenoDxGenericProfile, RenoDxManifest, RenoDxTitle,
+};
 use super::types::{RenoDxResolution, ResolvedInstall};
 use crate::addons::matching::{
     IncompatibilityReason, MatchConfidence, MatchFacts, confidence_for_match,
@@ -19,32 +21,32 @@ pub fn resolve(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResolutio
     }
 }
 
-/// Routes a matched title by its [`Category`]: a categorized game (external link /
+/// Routes a matched title by its [`RenoDxCategory`]: a categorized game (external link /
 /// native HDR / blacklist) takes its branch; an installable game is gated by its
 /// compatibility constraints.
 fn resolve_title(
     manifest: &RenoDxManifest,
-    title: &Title,
+    title: &RenoDxTitle,
     rule: &MatchRule,
     facts: &MatchFacts,
 ) -> RenoDxResolution {
     match &title.category {
-        Category::Blacklist { reason } => RenoDxResolution::Unsupported {
-            reason: Some(reason.clone()),
+        RenoDxCategory::Blacklist { message } => RenoDxResolution::Blacklisted {
+            message: message.clone(),
         },
-        Category::NativeHdr => RenoDxResolution::NativeHdr,
-        Category::External { url, label_key } => {
+        RenoDxCategory::NativeHdr => RenoDxResolution::NativeHdr,
+        RenoDxCategory::External { url, message } => {
             // A compatible external game can be installed from a user-downloaded file.
             let file_install = build_install_plan(manifest, title, rule, facts)
                 .ok()
                 .map(|plan| Box::new(plan.into_external_install()));
             RenoDxResolution::External {
                 url: url.clone(),
-                label_key: label_key.clone(),
+                message: message.clone(),
                 file_install,
             }
         }
-        Category::Installable => match build_install_plan(manifest, title, rule, facts) {
+        RenoDxCategory::Installable => match build_install_plan(manifest, title, rule, facts) {
             Ok(plan) => RenoDxResolution::Installable(Box::new(plan)),
             Err(reason) => RenoDxResolution::Incompatible { reason },
         },
@@ -56,7 +58,7 @@ fn resolve_title(
 /// file-install path.
 fn build_install_plan(
     manifest: &RenoDxManifest,
-    title: &Title,
+    title: &RenoDxTitle,
     rule: &MatchRule,
     facts: &MatchFacts,
 ) -> Result<ResolvedInstall, IncompatibilityReason> {
@@ -68,7 +70,7 @@ fn build_install_plan(
         host_kind,
         proxy_dll_name,
         confidence: confidence_for_match(title.status, rule.kind),
-        notes_keys: title.notes_keys.clone(),
+        generic_profile: None,
     })
 }
 
@@ -80,7 +82,7 @@ fn build_install_plan(
 /// (see [`source::generic_addon_url`]), and a title must not bypass that by
 /// re-deriving a clshortfuse URL from the same slug. Only a slug that matches
 /// neither falls back to the clshortfuse URL derived from the slug itself.
-fn title_addon_url(manifest: &RenoDxManifest, title: &Title) -> String {
+fn title_addon_url(manifest: &RenoDxManifest, title: &RenoDxTitle) -> String {
     if let Some(url) = title.download_url.clone() {
         return url;
     }
@@ -104,7 +106,7 @@ pub fn resolve_external_install(
     facts: &MatchFacts,
 ) -> Option<ResolvedInstall> {
     let (title, rule) = select_title(&manifest.titles, facts)?;
-    if !matches!(title.category, Category::External { .. }) {
+    if !matches!(title.category, RenoDxCategory::External { .. }) {
         return None;
     }
     build_install_plan(manifest, title, rule, facts).ok()
@@ -149,7 +151,7 @@ pub fn generic_file_install_plan(
             HostKind::Vulkan => String::new(),
         },
         confidence: MatchConfidence::Untested,
-        notes_keys: Vec::new(),
+        generic_profile: None,
     })
 }
 
@@ -195,8 +197,9 @@ fn resolve_generic(manifest: &RenoDxManifest, facts: &MatchFacts) -> RenoDxResol
             HostKind::Vulkan => String::new(),
         },
         confidence: confidence_for_status(generic.status),
-        // The generic's engine label is surfaced as a note so the card can flag
-        // "this is a universal, not per-game, add-on".
-        notes_keys: generic.label_key.clone().into_iter().collect(),
+        generic_profile: Some(RenoDxGenericProfile {
+            engine,
+            message: generic.message.clone(),
+        }),
     }))
 }

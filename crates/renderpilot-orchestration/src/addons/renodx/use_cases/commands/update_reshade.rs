@@ -6,12 +6,11 @@ use crate::addons::renodx::errors;
 use crate::addons::renodx::platform::vulkan::validation::{
     LayerMutationGate, layer_mutation_gate, resolve_digest_verdict,
 };
-use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::vulkan;
 use crate::addons::renodx::vulkan::VulkanLayerDetection;
 use crate::addons::reshade::fetch::fetch_reshade_from_source;
 use crate::addons::reshade::source::require_reshade_source;
-use crate::addons::reshade::types::ReshadeChannel;
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 use crate::addons::update::UpdateStatus;
 use crate::net::ProgressObserver;
 
@@ -19,8 +18,8 @@ use crate::net::ProgressObserver;
 pub struct UpdateReShadeCommand<'a> {
     /// The application context.
     pub context: &'a Context,
-    /// The RenoDX manifest containing update configuration.
-    pub manifest: &'a RenoDxManifest,
+    /// Independently resolved ReShade sources.
+    pub reshade_sources: &'a ReshadeSourceCatalog,
     /// The ReShade release channel to fetch from.
     pub channel: ReshadeChannel,
     /// Optional progress observer for the download.
@@ -30,7 +29,7 @@ pub struct UpdateReShadeCommand<'a> {
 impl<'a> UpdateReShadeCommand<'a> {
     /// Executes the update command.
     pub async fn execute(self) -> Result<UpdateStatus, ServiceError> {
-        let _guard = crate::addons::operation_lock::shared_vulkan_lock().await;
+        let _guard = crate::addons::vulkan_lock::shared_vulkan_lock().await;
 
         let report = vulkan::layer_report();
         match layer_mutation_gate(&report) {
@@ -47,8 +46,7 @@ impl<'a> UpdateReShadeCommand<'a> {
             LayerMutationGate::Proceed => {}
         }
 
-        let source =
-            require_reshade_source(&self.manifest.reshade, self.channel, Architecture::X64)?;
+        let source = require_reshade_source(self.reshade_sources, self.channel, Architecture::X64)?;
 
         let download = fetch_reshade_from_source(&source, Architecture::X64, self.progress).await?;
         let upstream_digest = download.digest.as_str();

@@ -19,47 +19,71 @@ use crate::addons::renodx::{fetch, vulkan};
 use crate::addons::reshade::channel;
 use crate::addons::reshade::fetch::fetch_reshade_from_source;
 use crate::addons::reshade::source::{ReshadeSource, reshade_source};
-use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 use crate::addons::update::{UpdateStatus, digest_verdict, validator_fast_path};
 use crate::net::head_validators;
 use crate::{Context, ServiceError};
-/// Checks whether the installed add-on for `game_id` has an upstream update.
+/// Checks whether the installed add-on for `game_id` has an upstream update. A
+/// record belonging to a different addon kind (e.g. Luma) reads as "nothing
+/// installed" — never checked as if it were a RenoDX install.
 pub async fn check_update(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     game_id: &GameId,
 ) -> Result<RenoDxUpdateReport, ServiceError> {
     match records::record_of_kind(context, game_id, AddonKind::RenoDx)? {
-        Some(record) => Ok(check_record(context, manifest, &record).await),
+        Some(record) => Ok(check_record(context, manifest, reshade_sources, &record).await),
         None => Ok(RenoDxUpdateReport::new(None, None, None)),
     }
 }
 
-/// Bulk update check over every installed RenoDX add-on.
+/// Bulk update check over every installed RenoDX add-on. Filters
+/// `list_installed_addons()` to RenoDX records — a Luma record must never be
+/// update-checked (or reported) as if it were RenoDX's.
 pub async fn check_updates(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
 ) -> Result<Vec<(GameId, UpdateStatus)>, ServiceError> {
-    let records = context
-        .storage()
-        .list_installed_addons()?
-        .into_iter()
-        .filter(|record| record.kind() == AddonKind::RenoDx);
+    let records = installed_renodx_records(context)?;
     let mut out = Vec::new();
     for record in records {
-        let report = check_record(context, manifest, &record).await;
+        let report = check_record(context, manifest, reshade_sources, &record).await;
         out.push((record.game_id().clone(), report.overall));
     }
     Ok(out)
 }
 
+/// Produces the honest bulk result when the live manifest is unavailable.
+/// Presentation layers use this instead of returning an empty map that would
+/// imply no installed RenoDX add-ons.
+pub fn unknown_updates_for_installed(
+    context: &Context,
+) -> Result<Vec<(GameId, UpdateStatus)>, ServiceError> {
+    Ok(installed_renodx_records(context)?
+        .map(|record| (record.game_id().clone(), UpdateStatus::Unknown))
+        .collect())
+}
+
+fn installed_renodx_records(
+    context: &Context,
+) -> Result<impl Iterator<Item = InstalledAddon>, ServiceError> {
+    Ok(context
+        .storage()
+        .list_installed_addons()?
+        .into_iter()
+        .filter(|record| record.kind() == AddonKind::RenoDx))
+}
+
 async fn check_record(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     record: &InstalledAddon,
 ) -> RenoDxUpdateReport {
     let addon = check_addon(record).await;
-    let host_check = check_host(context, manifest, record).await;
+    let host_check = check_host(context, manifest, reshade_sources, record).await;
     let dlss_fix = check_dlss_fix(record).await;
     RenoDxUpdateReport::with_vulkan_diagnostics(
         addon,
@@ -114,6 +138,7 @@ async fn check_addon(record: &InstalledAddon) -> Option<UpdateStatus> {
 async fn check_host(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     record: &InstalledAddon,
 ) -> HostCheckResult {
     if matches!(
@@ -121,13 +146,14 @@ async fn check_host(
         Some(InstalledAddonHostKind::SharedVulkanLayer)
     ) {
         let channel = recorded_reshade_channel(record)
-            .map(|channel| manifest.reshade.effective_install_channel(channel))
-            .unwrap_or_else(|| {
-                manifest
-                    .reshade
-                    .effective_install_channel(ReshadeChannel::Stable)
-            });
-        match check_layer_update(context.storage(), &manifest.reshade, channel).await {
+            .unwrap_or_else(|| reshade_sources.default_install_channel());
+        if !reshade_sources.supports_channel(channel) {
+            return HostCheckResult {
+                status: Some(UpdateStatus::Unknown),
+                vulkan_diagnostics: Vec::new(),
+            };
+        }
+        match check_layer_update(context.storage(), reshade_sources, channel).await {
             Some(verdict) => HostCheckResult {
                 status: Some(verdict.status),
                 vulkan_diagnostics: verdict.diagnostics,
@@ -136,7 +162,7 @@ async fn check_host(
         }
     } else {
         HostCheckResult {
-            status: check_proxy_host(context, manifest, record).await,
+            status: check_proxy_host(context, manifest, reshade_sources, record).await,
             vulkan_diagnostics: Vec::new(),
         }
     }
@@ -153,6 +179,7 @@ async fn check_host(
 async fn check_proxy_host(
     context: &Context,
     manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     record: &InstalledAddon,
 ) -> Option<UpdateStatus> {
     let host = match channel::single_host_source(record) {
@@ -163,17 +190,22 @@ async fn check_proxy_host(
     // `resolve_host_update_target` returns `Ok(None)` for a recognized custom
     // build (e.g. GShade) — never checked for updates, its versioning is its own
     // maintainer's concern — so that guarantee holds here for free.
-    let target =
-        match resolve_host_update_target(context, manifest, record.game_id(), recorded_channel) {
-            Ok(target) => target?,
-            Err(error) => {
-                log::warn!(
-                    "RenoDX host update check skipped for {}: {error}",
-                    record.game_id()
-                );
-                return Some(UpdateStatus::Unknown);
-            }
-        };
+    let target = match resolve_host_update_target(
+        context,
+        manifest,
+        reshade_sources,
+        record.game_id(),
+        recorded_channel,
+    ) {
+        Ok(target) => target?,
+        Err(error) => {
+            log::warn!(
+                "RenoDX host update check skipped for {}: {error}",
+                record.game_id()
+            );
+            return Some(UpdateStatus::Unknown);
+        }
+    };
     if target.conflict {
         return Some(UpdateStatus::Unknown);
     }
@@ -199,7 +231,8 @@ async fn check_proxy_host(
             // The recorded channel's upstream artifact does not match the installed
             // digest. Check whether the digest matches the other known channel — a
             // channel mismatch, not an update.
-            if let Some(other) = other_channel_source(manifest, recorded_channel, target.arch)
+            if let Some(other) =
+                other_channel_source(reshade_sources, recorded_channel, target.arch)
                 && let Ok(other_download) =
                     fetch_reshade_from_source(&other, target.arch, None).await
                 && other_download.digest == recorded_digest
@@ -225,7 +258,7 @@ async fn check_proxy_host(
 /// manifest supports it. Used for the cross-channel digest comparison that detects
 /// a channel mismatch.
 fn other_channel_source(
-    manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     recorded_channel: ReshadeChannel,
     arch: Architecture,
 ) -> Option<ReshadeSource> {
@@ -233,10 +266,10 @@ fn other_channel_source(
         ReshadeChannel::Stable => ReshadeChannel::Nightly,
         ReshadeChannel::Nightly => ReshadeChannel::Stable,
     };
-    if !manifest.reshade.supports_channel(other) {
+    if !reshade_sources.supports_channel(other) {
         return None;
     }
-    reshade_source(&manifest.reshade, other, arch)
+    reshade_source(reshade_sources, other, arch)
 }
 
 /// Update verdict for the DLSS-Fix companion add-on. Not installed (no DlssFix
@@ -273,7 +306,7 @@ async fn check_dlss_fix(record: &InstalledAddon) -> Option<UpdateStatus> {
 /// diagnostics) so callers can thread precise reasons into the update report.
 pub(crate) async fn check_layer_update(
     storage: &impl SharedArtifactRepository,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
 ) -> Option<LayerUpdateVerdict> {
     let report = vulkan::layer_report();
@@ -345,18 +378,47 @@ async fn compute_layer_verdict(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::addons::renodx::test_support::manifest;
+    use crate::Context;
+    use crate::addons::renodx::test_support::{manifest, reshade_sources};
+    use renderpilot_domain::{InstalledAddon, PathRef};
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn check_updates_skips_a_record_belonging_to_a_different_addon_kind() {
+        let db_dir = tempdir().expect("db dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let luma_record = InstalledAddon::new(
+            GameId::new("steam:1091500").expect("id"),
+            AddonKind::Luma,
+            PathRef::new(r"C:\Games\Test\Luma-Test.addon").expect("path"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&luma_record)
+            .expect("seed luma record");
+
+        let results = check_updates(&context, &manifest(Vec::new()), &reshade_sources())
+            .await
+            .expect("check_updates");
+
+        assert!(
+            results.is_empty(),
+            "a Luma record must never be reported as a RenoDX update result"
+        );
+    }
 
     #[test]
     fn other_channel_source_resolves_the_opposite_channel() {
-        let manifest = manifest(Vec::new());
-        let stable = other_channel_source(&manifest, ReshadeChannel::Nightly, Architecture::X64);
+        let reshade_sources = reshade_sources();
+        let stable =
+            other_channel_source(&reshade_sources, ReshadeChannel::Nightly, Architecture::X64);
         assert!(
             stable.is_some(),
             "stable should be resolvable as the other channel"
         );
 
-        let nightly = other_channel_source(&manifest, ReshadeChannel::Stable, Architecture::X64);
+        let nightly =
+            other_channel_source(&reshade_sources, ReshadeChannel::Stable, Architecture::X64);
         assert!(
             nightly.is_some(),
             "nightly should be resolvable as the other channel"
@@ -365,9 +427,10 @@ mod tests {
 
     #[test]
     fn other_channel_source_returns_none_when_other_channel_unsupported() {
-        let mut manifest = manifest(Vec::new());
-        manifest.reshade.stable = None;
-        let other = other_channel_source(&manifest, ReshadeChannel::Nightly, Architecture::X64);
+        let mut reshade_sources = reshade_sources();
+        reshade_sources.stable = None;
+        let other =
+            other_channel_source(&reshade_sources, ReshadeChannel::Nightly, Architecture::X64);
         assert!(other.is_none());
     }
 }

@@ -5,7 +5,7 @@ use renderpilot_domain::{AddonKind, InstalledAddon, TrackedSource, TrackedSource
 use crate::ServiceError;
 use crate::addons::engine::{self, InstallPlan};
 use crate::addons::record;
-use crate::addons::reshade::split_install::{InstallRoots, run_split_install};
+use crate::addons::reshade::split_install::{InstallRoots, PayloadRollback, run_split_install};
 
 use super::super::errors;
 use super::PreparedInstall;
@@ -24,7 +24,7 @@ use crate::addons::reshade::update::host_binary_source;
 pub(super) fn install_proxy(
     game_dir: &Path,
     prepared: &PreparedInstall,
-) -> Result<InstalledAddon, ServiceError> {
+) -> Result<(InstalledAddon, engine::PendingInstallCommit), ServiceError> {
     let host = host_policy::assess(game_dir, &prepared.proxy_dll_name);
     host.ensure_initial_installable(&prepared.proxy_dll_name)?;
     if host.initial_writes_host() && prepared.reshade_dll_bytes.is_empty() {
@@ -44,20 +44,22 @@ pub(super) fn install_proxy(
     let adopted_existing = host.initial_owned_existing_paths(paths.ini_path.as_deref());
 
     let roots = InstallRoots::resolve(game_dir, &host.target_path);
-    let receipt = run_split_install(
+    let success = run_split_install(
         &roots,
         AddonKind::RenoDx,
         combined_ops(game_dir, prepared, host.initial_writes_host()),
         vec![addon_op(prepared)],
         host_ops(game_dir, prepared, host.initial_writes_host()),
+        PayloadRollback::Flat,
     )?;
-    build_record(
+    let record = build_record(
         prepared,
         &paths.effective_addon_path,
         host.initial_writes_host(),
         &adopted_existing,
-        &receipt,
-    )
+        &success.receipt,
+    )?;
+    Ok((record, success.commit))
 }
 
 /// Assembles the [`InstalledAddon`] from the engine receipt and the upstream entries
@@ -128,7 +130,7 @@ pub(super) fn addon_tracked_source(prepared: &PreparedInstall) -> Option<Tracked
 pub(super) fn install_vulkan(
     game_dir: &Path,
     prepared: &PreparedInstall,
-) -> Result<InstalledAddon, ServiceError> {
+) -> Result<(InstalledAddon, engine::PendingInstallCommit), ServiceError> {
     let addon_path = game_dir.join(&prepared.addon_file_name);
     if addon_path.is_file() {
         return Err(errors::invalid(
@@ -137,16 +139,17 @@ pub(super) fn install_vulkan(
     }
 
     let plan = build_vulkan_plan(prepared, game_dir)?;
-    let receipt = engine::install(game_dir, &plan)?;
+    let pending = engine::install_pending(game_dir, &plan)?;
 
     let sources: Vec<TrackedSource> = addon_tracked_source(prepared).into_iter().collect();
-    record::build(
+    let record = record::build(
         prepared.game_id.clone(),
         AddonKind::RenoDx,
         &addon_path,
-        &receipt,
+        &pending.receipt,
         sources,
-    )
+    )?;
+    Ok((record, pending.commit))
 }
 
 /// Builds the per-game file operations for a Vulkan install: the add-on and the

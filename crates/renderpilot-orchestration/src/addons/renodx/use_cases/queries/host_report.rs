@@ -10,11 +10,10 @@ use crate::addons::renodx::vulkan;
 use crate::addons::reshade::host_policy;
 use crate::addons::reshade::proxy::HostKind;
 use crate::addons::reshade::report::{
-    apply_initial_lifecycle_actions, build_host_report_core, recorded_channel,
-    switch_channel_action,
+    AssembleHostReport, HostReportPolicy, assemble_host_report, missing_host_report_core,
+    recorded_channel, switch_channel_action,
 };
-use crate::addons::reshade::scan::{ReshadeHost, ReshadeHostAction};
-use crate::addons::reshade::types::ReshadeConfig;
+use crate::addons::reshade::types::ReshadeSourceCatalog;
 
 pub(super) struct ReshadeReport {
     pub(super) detection: HostDetection,
@@ -27,7 +26,7 @@ pub(super) fn reshade_report(
     analysis: &GameAnalysis,
     resolution: &RenoDxResolution,
     record: Option<&InstalledAddon>,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
 ) -> ReshadeReport {
     let Some(target_dir) = install_target_dir(analysis).ok() else {
         return missing_host_report(record, reshade_config);
@@ -54,25 +53,19 @@ pub(super) fn reshade_report(
     let addon = expected_addon_file_name(resolution)
         .map(|file_name| reshade::renodx_addon_state(&paths, &file_name));
     let detected_channel = recorded_channel(record);
-    let is_custom_build = assessment.is_known_custom_build();
     let proxy_initial = !matches!(host_kind, Some(HostKind::Vulkan));
-    let initial_conflict = proxy_initial && record.is_none() && assessment.initial_is_conflict();
-    let (detection, facts, mut actions) = build_host_report_core(
-        &assessment.host,
-        assessment.action,
-        if initial_conflict {
-            true
-        } else {
-            assessment.conflict
-        },
-        is_custom_build,
+    let (detection, facts, actions) = assemble_host_report(AssembleHostReport {
+        assessment: &assessment,
         record,
         reshade_config,
-        detected_channel.map(|channel| switch_channel_action(channel, reshade_config)),
-    );
-    if proxy_initial {
-        apply_initial_lifecycle_actions(&mut actions, assessment.lifecycle, record);
-    }
+        switch_channel: detected_channel
+            .map(|channel| switch_channel_action(channel, reshade_config)),
+        policy: if proxy_initial {
+            HostReportPolicy::PROXY_INITIAL
+        } else {
+            HostReportPolicy::VULKAN_MAINTENANCE
+        },
+    });
 
     ReshadeReport {
         detection,
@@ -100,17 +93,9 @@ pub(super) fn plan_host_kind(resolution: &RenoDxResolution) -> Option<HostKind> 
 /// carried through from the install record.
 fn missing_host_report(
     record: Option<&InstalledAddon>,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
 ) -> ReshadeReport {
-    let (detection, facts, _) = build_host_report_core(
-        &ReshadeHost::Absent,
-        ReshadeHostAction::Conflict,
-        false,
-        false,
-        record,
-        reshade_config,
-        None,
-    );
+    let (detection, facts, _) = missing_host_report_core(record, reshade_config);
     ReshadeReport {
         detection,
         facts,
@@ -142,10 +127,11 @@ mod tests {
     use crate::addons::reshade::types::ReshadeChannel;
 
     use super::*;
-    use crate::addons::renodx::matcher::MatchConfidence;
-    use crate::addons::renodx::test_support::manifest;
+    use crate::addons::matching::MatchConfidence;
+    use crate::addons::renodx::test_support::reshade_sources;
     use crate::addons::reshade::dto::ActionDisabledReason;
     use crate::addons::reshade::report::host_action_core;
+    use crate::addons::reshade::scan::{ReshadeHost, ReshadeHostAction};
     use renderpilot_domain::{
         AddonKind, Architecture, GameId, PathRef, TrackedSource, TrackedSourceRole,
     };
@@ -158,8 +144,8 @@ mod tests {
             arch: Architecture::X64,
             proxy_dll_name: "dxgi.dll".to_owned(),
             confidence: MatchConfidence::Verified,
-            notes_keys: Vec::new(),
             host_kind: HostKind::Proxy,
+            generic_profile: None,
         };
         let resolution = RenoDxResolution::Installable(Box::new(plan));
 
@@ -242,7 +228,7 @@ mod tests {
             None,
             Some(switch_channel_action(
                 ReshadeChannel::Stable,
-                &manifest(Vec::new()).reshade,
+                &reshade_sources(),
             )),
         );
         assert!(actions.use_existing.is_some());
@@ -273,7 +259,7 @@ mod tests {
             None,
             Some(switch_channel_action(
                 ReshadeChannel::Stable,
-                &manifest(Vec::new()).reshade,
+                &reshade_sources(),
             )),
         );
         assert!(actions.repair.is_some());
@@ -285,8 +271,8 @@ mod tests {
 
     #[test]
     fn switch_channel_to_unsupported_stable_is_disabled() {
-        let mut manifest = manifest(Vec::new());
-        manifest.reshade.stable = None;
+        let mut reshade_sources = reshade_sources();
+        reshade_sources.stable = None;
 
         let actions = host_action_core(
             &ReshadeHost::Absent,
@@ -296,7 +282,7 @@ mod tests {
             None,
             Some(switch_channel_action(
                 ReshadeChannel::Nightly,
-                &manifest.reshade,
+                &reshade_sources,
             )),
         );
         let switch = actions.switch_channel.expect("switch action");
@@ -349,7 +335,7 @@ mod tests {
             Some(&record),
             Some(switch_channel_action(
                 ReshadeChannel::Stable,
-                &manifest(Vec::new()).reshade,
+                &reshade_sources(),
             )),
         );
 
@@ -391,7 +377,7 @@ mod tests {
             Some(&record),
             Some(switch_channel_action(
                 ReshadeChannel::Stable,
-                &manifest(Vec::new()).reshade,
+                &reshade_sources(),
             )),
         );
 

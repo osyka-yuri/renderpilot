@@ -23,16 +23,6 @@ pub(super) fn install_state_from_record(record: &InstalledAddon) -> RenoDxInstal
     }
 }
 
-/// Transitional forwarding helpers retained while the command layer migrates
-/// to the shared tracking module.
-pub(super) fn rollback_host_path(record: &InstalledAddon) -> Option<PathBuf> {
-    tracking::host_proxy_path(record)
-}
-
-pub(super) fn owned_proxy_host_path(record: &InstalledAddon) -> Option<PathBuf> {
-    tracking::owned_proxy_host_path(record)
-}
-
 pub(super) fn required_rollback_host_path(
     record: &InstalledAddon,
 ) -> Result<PathBuf, ServiceError> {

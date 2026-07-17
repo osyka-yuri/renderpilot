@@ -1,6 +1,8 @@
 use renderpilot_domain::Architecture;
 
+use crate::addons::CatalogMessage;
 use crate::addons::matching::{IncompatibilityReason, MatchConfidence};
+use crate::addons::renodx::types::RenoDxGenericProfile;
 use crate::addons::reshade::proxy::HostKind;
 
 /// A matched, compatible game resolved to everything an install needs (owned).
@@ -21,8 +23,9 @@ pub struct ResolvedInstall {
     pub proxy_dll_name: String,
     /// Confidence shown to the user.
     pub confidence: MatchConfidence,
-    /// i18n note/requirement keys (a generic install carries its engine label here).
-    pub notes_keys: Vec<String>,
+    /// Present when this plan came from an engine-level generic profile rather
+    /// than a dedicated per-game title. The UI uses this for the generic badge.
+    pub generic_profile: Option<RenoDxGenericProfile>,
 }
 
 impl ResolvedInstall {
@@ -33,8 +36,8 @@ impl ResolvedInstall {
             arch: self.arch,
             proxy_dll_name: self.proxy_dll_name,
             confidence: self.confidence,
-            notes_keys: self.notes_keys,
             host_kind: self.host_kind,
+            generic_profile: self.generic_profile,
         }
     }
 }
@@ -50,11 +53,11 @@ pub struct ExternalInstall {
     pub proxy_dll_name: String,
     /// Confidence shown to the user.
     pub confidence: MatchConfidence,
-    /// i18n note/requirement keys.
-    pub notes_keys: Vec<String>,
     /// How RenoDX would hook into this game (proxy DLL or the shared Vulkan layer),
     /// so the file-install path drives the right one.
     pub host_kind: HostKind,
+    /// Engine generic this external file-install path came from, when applicable.
+    pub generic_profile: Option<RenoDxGenericProfile>,
 }
 
 /// Outcome of resolving a game against the manifest.
@@ -67,8 +70,8 @@ pub enum RenoDxResolution {
     External {
         /// Where to send the user (Discord/Nexus).
         url: String,
-        /// i18n label key for the link.
-        label_key: String,
+        /// Localizable link label supplied by the catalogue.
+        message: CatalogMessage,
         /// Present when the game is compatible, enabling "install from file".
         file_install: Option<Box<ExternalInstall>>,
     },
@@ -80,9 +83,9 @@ pub enum RenoDxResolution {
         reason: IncompatibilityReason,
     },
     /// The game is blacklisted / known-broken.
-    Unsupported {
-        /// i18n reason key, when the manifest gives one.
-        reason: Option<String>,
+    Blacklisted {
+        /// Localizable explanation supplied by the catalogue.
+        message: CatalogMessage,
     },
     /// Nothing matched the game.
     NoMatch,

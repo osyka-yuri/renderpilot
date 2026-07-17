@@ -1,5 +1,5 @@
 use crate::addons::matching::{IncompatibilityReason, MatchFacts};
-use crate::addons::renodx::types::Title;
+use crate::addons::renodx::types::RenoDxTitle;
 use crate::addons::reshade::proxy::{
     HostKind, api_supports_directx_addon, host_decision, primary_api, resolve_proxy_dll,
 };
@@ -20,7 +20,7 @@ use crate::addons::reshade::proxy::{
 /// `required_api`, enforced only when detection identified a supported API to check
 /// against.
 pub fn check_title_compatibility(
-    title: &Title,
+    title: &RenoDxTitle,
     facts: &MatchFacts,
 ) -> Result<(HostKind, String), IncompatibilityReason> {
     let detected = primary_api(&facts.graphics);

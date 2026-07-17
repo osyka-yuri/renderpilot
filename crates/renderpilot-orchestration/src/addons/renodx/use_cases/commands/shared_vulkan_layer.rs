@@ -4,17 +4,16 @@ use std::path::Path;
 
 use renderpilot_domain::{Architecture, SharedArtifactOrigin};
 
-use crate::addons::operation_lock;
 use crate::addons::renodx::dto::vulkan::VulkanLayerManagementReport;
 use crate::addons::renodx::errors;
 use crate::addons::renodx::matcher::ResolvedInstall;
 use crate::addons::renodx::platform::vulkan::validation::{LayerMutationGate, layer_mutation_gate};
-use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::vulkan::{self, VulkanLayerDetection};
 use crate::addons::reshade::fetch::fetch_reshade_from_source;
 use crate::addons::reshade::proxy::HostKind;
 use crate::addons::reshade::source::require_reshade_source;
-use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
+use crate::addons::vulkan_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
@@ -27,7 +26,7 @@ use super::update_reshade::UpdateReShadeCommand;
 pub(crate) async fn ensure_for_install(
     context: &Context,
     plan: &ResolvedInstall,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
     allow_shared_vulkan_layer_install: bool,
     exe_path: Option<&Path>,
@@ -41,7 +40,7 @@ pub(crate) async fn ensure_for_install(
             "cannot install RenoDX for this Vulkan game without a resolved executable".to_owned(),
         )
     })?;
-    let _shared_guard = operation_lock::shared_vulkan_lock().await;
+    let _shared_guard = vulkan_lock::shared_vulkan_lock().await;
     let report = vulkan::layer_report();
     match layer_mutation_gate(&report) {
         LayerMutationGate::ExternalReadOnly => {
@@ -141,17 +140,17 @@ pub fn remove_vulkan_layer(context: &Context) -> Result<(), ServiceError> {
 /// a fresh settings-facing management report.
 pub async fn apply_vulkan_layer(
     context: &Context,
-    manifest: &RenoDxManifest,
+    reshade_sources: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
     progress: Option<&ProgressObserver<'_>>,
 ) -> Result<VulkanLayerManagementReport, ServiceError> {
-    if !manifest.reshade.supports_channel(channel) {
+    if !reshade_sources.supports_channel(channel) {
         return Err(errors::channel_unavailable(channel));
     }
 
     UpdateReShadeCommand {
         context,
-        manifest,
+        reshade_sources,
         channel,
         progress,
     }
@@ -160,7 +159,8 @@ pub async fn apply_vulkan_layer(
 
     Ok(
         crate::addons::renodx::use_cases::queries::vulkan_layer::management_status(
-            context, manifest,
+            context,
+            reshade_sources,
         )
         .await,
     )
@@ -187,14 +187,14 @@ mod tests {
 
     #[test]
     fn apply_vulkan_layer_rejects_unsupported_channel_before_update() {
-        let mut manifest = test_support::manifest(Vec::new());
-        manifest.reshade.stable = None;
+        let mut reshade_sources = test_support::reshade_sources();
+        reshade_sources.stable = None;
         let dir = tempfile::tempdir().expect("tempdir");
         let context = Context::open_at(dir.path().join("catalog.sqlite")).expect("context");
 
         let error = poll_ready(apply_vulkan_layer(
             &context,
-            &manifest,
+            &reshade_sources,
             ReshadeChannel::Stable,
             None,
         ))

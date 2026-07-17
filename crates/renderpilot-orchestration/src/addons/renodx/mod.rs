@@ -21,6 +21,7 @@ mod game_context;
 pub(crate) mod install;
 pub mod manifest_store;
 pub(crate) mod matcher;
+pub(crate) mod mutation_targets;
 /// Platform infrastructure.
 pub mod platform;
 pub(crate) mod policy;
@@ -50,7 +51,7 @@ use renderpilot_domain::Architecture;
 
 use crate::ServiceError;
 
-use self::types::RenoDxManifest;
+use self::types::{RenoDxManifest, WireManifestV1};
 use super::UTF8_BOM;
 
 /// Parses and validates a RenoDX manifest document.
@@ -59,8 +60,9 @@ use super::UTF8_BOM;
 /// validation, so a returned manifest can be acted on without further checks.
 pub fn parse_manifest(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
     let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
-    let manifest: RenoDxManifest = serde_json::from_slice(bytes)
+    let wire: WireManifestV1 = serde_json::from_slice(bytes)
         .map_err(|error| errors::failed(format!("failed to parse RenoDX manifest: {error}")))?;
+    let manifest = RenoDxManifest::from_wire_v1(wire);
     validate::validate_manifest(&manifest)?;
     Ok(manifest)
 }
@@ -80,42 +82,24 @@ fn arch_from_addon_file(name: &str) -> Option<Architecture> {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::*;
 
     const SAMPLE: &str = r#"{
-        "schema_version": 3,
+        "schema_version": 1,
         "generated_at": "2026-06-15T00:00:00Z",
-        "reshade": {
-            "stable": {
-                "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe"
-            },
-            "nightly": {
-                "url64": "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip",
-                "url32": "https://nightly.link/crosire/reshade/workflows/build/main/x32.zip"
-            }
-        },
-        "generics": [
-            { "engine": "unity", "slug": "unityengine", "url64": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64", "url32": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32", "label_key": "renodx.generic.unity" },
-            { "engine": "unreal", "slug": "_univ", "label_key": "renodx.generic.universal" }
+        "engine_profiles": [
+            { "engine": "unity", "status": "working", "addon": { "slug": "unityengine", "sources": { "x64": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64", "x86": "https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon32" } }, "message": { "id": "renodx.generic.unity", "fallback_text": "Uses the shared Unity engine profile." } },
+            { "engine": "unreal", "status": "working", "addon": { "slug": "_univ" }, "message": { "id": "renodx.generic.universal", "fallback_text": "Uses the shared Unreal Engine profile." } }
         ],
-        "defaults": {
-            "min_app_version": "1.0.0",
-            "channel": "stable"
-        },
-        "titles": [
+        "games": [
             {
-                "id": "cyberpunk-2077", "name": "Cyberpunk 2077", "slug": "cp2077",
-                "arch": "X64", "status": "working",
+                "id": "cyberpunk-2077", "name": "Cyberpunk 2077", "architecture": "X64", "status": "working", "addon": { "slug": "cp2077" },
                 "match": [{ "kind": "steam_appid", "value": "1091500", "tier": 100 }],
-                "compatibility": { "conflicts": ["special_k"], "source": "https://example.test/conflict-report" },
-                "notes_keys": ["renodx.note.cp2077.hdr10"]
+                "constraints": { "conflicts": ["special_k"], "source": "https://example.test/conflict-report" }
             },
             {
-                "id": "nexus-game", "name": "Nexus Game", "slug": "nexusgame",
-                "arch": "X64", "status": "working",
-                "category": { "kind": "external", "url": "https://www.nexusmods.com/x", "label_key": "renodx.external.nexus" },
+                "id": "nexus-game", "name": "Nexus Game", "architecture": "X64", "status": "working", "addon": { "slug": "nexusgame" },
+                "availability": { "kind": "external", "url": "https://www.nexusmods.com/x", "message": { "id": "renodx.external.nexus", "fallback_text": "Get the add-on from Nexus Mods." } },
                 "match": [{ "kind": "steam_appid", "value": "424242", "tier": 100 }]
             }
         ]
@@ -127,9 +111,11 @@ mod tests {
         assert_eq!(manifest.titles.len(), 2);
         assert_eq!(manifest.titles[0].slug, "cp2077");
         assert_eq!(manifest.generics.len(), 2);
-        // The title omits `channel`/`min_app_version`; the parser fills them
-        // from the manifest's `defaults` via `#[serde(default)]`.
-        assert_eq!(manifest.titles[0].min_app_version, "1.0.0");
+        assert_eq!(manifest.generics[0].message.id, "renodx.generic.unity");
+        assert_eq!(
+            manifest.generics[0].message.fallback_text,
+            "Uses the shared Unity engine profile."
+        );
         assert_eq!(
             manifest.titles[0].compatibility.conflicts,
             vec!["special_k"]
@@ -140,24 +126,29 @@ mod tests {
         );
         // An installable title omits `category`, defaulting to `Installable`; a
         // categorized title carries its tagged payload.
-        assert_eq!(manifest.titles[0].category, types::Category::Installable);
-        assert_matches!(
-            manifest.titles[1].category,
-            types::Category::External { .. }
+        assert_eq!(
+            manifest.titles[0].category,
+            types::RenoDxCategory::Installable
         );
+        match &manifest.titles[1].category {
+            types::RenoDxCategory::External { message, .. } => {
+                assert_eq!(message.id, "renodx.external.nexus");
+                assert_eq!(message.fallback_text, "Get the add-on from Nexus Mods.");
+            }
+            other => panic!("expected external category, got {other:?}"),
+        }
     }
 
     #[test]
-    fn ignores_legacy_top_level_override_maps() {
-        // A manifest from before the unified catalogue still carries top-level
-        // `external`/`native_hdr`/`blacklist` keys; the parser ignores them (serde
-        // does not deny unknown fields) so an old cached manifest keeps loading.
-        let legacy = SAMPLE.replace(
-            "\"titles\": [",
-            "\"external\": { \"old\": { \"url\": \"https://x/y\", \"label_key\": \"k\" } }, \
-             \"native_hdr\": [\"old\"], \"blacklist\": { \"old\": \"why\" }, \"titles\": [",
+    fn rejects_schema_v3() {
+        assert!(
+            parse_manifest(
+                SAMPLE
+                    .replace("\"schema_version\": 1", "\"schema_version\": 3")
+                    .as_bytes()
+            )
+            .is_err()
         );
-        assert!(parse_manifest(legacy.as_bytes()).is_ok());
     }
 
     #[test]
@@ -170,5 +161,20 @@ mod tests {
     #[test]
     fn rejects_invalid_json() {
         assert!(parse_manifest(b"not json").is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_v1_fields() {
+        let sample = SAMPLE.replace(
+            r#""generated_at": "2026-06-15T00:00:00Z""#,
+            r#""generated_at": "2026-06-15T00:00:00Z", "unexpected": true"#,
+        );
+        assert!(parse_manifest(sample.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn rejects_a_blank_catalogue_fallback() {
+        let sample = SAMPLE.replace("Uses the shared Unity engine profile.", " ");
+        assert!(parse_manifest(sample.as_bytes()).is_err());
     }
 }

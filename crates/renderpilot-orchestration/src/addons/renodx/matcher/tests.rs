@@ -2,14 +2,19 @@ use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
 use std::assert_matches;
 
 use super::*;
+use crate::addons::matching::{IncompatibilityReason, MatchConfidence, MatchFacts};
 use crate::addons::renodx::source;
 use crate::addons::renodx::test_support::{manifest, rule, title};
 use crate::addons::renodx::types::{
-    Category, Engine, Generic, MatchKind, RenoDxManifest, Status, Title,
+    Engine, MatchKind, RenoDxCategory, RenoDxGeneric, RenoDxManifest, RenoDxTitle, Status,
 };
 
+fn message(id: &str) -> crate::addons::CatalogMessage {
+    crate::addons::CatalogMessage::new(id, "Reviewed catalogue fallback")
+}
+
 /// A title carrying a non-default category (external / native-HDR / blacklist).
-fn categorized(id: &str, category: Category) -> Title {
+fn categorized(id: &str, category: RenoDxCategory) -> RenoDxTitle {
     let mut t = title(
         id,
         id,
@@ -94,7 +99,7 @@ fn title_slug_matching_a_generic_uses_the_generics_explicit_url() {
         vec![rule(MatchKind::SteamAppid, "1091500", 100)],
     );
     let mut m = manifest(vec![t]);
-    m.generics.push(Generic {
+    m.generics.push(RenoDxGeneric {
         engine: crate::addons::renodx::types::Engine::Unity,
         status: Status::Working,
         slug: Some("unityengine".to_owned()),
@@ -103,7 +108,7 @@ fn title_slug_matching_a_generic_uses_the_generics_explicit_url() {
                 .to_owned(),
         ),
         url32: None,
-        label_key: None,
+        message: message("renodx.generic.unity"),
     });
 
     match resolve(&m, &facts()) {
@@ -129,13 +134,13 @@ fn title_download_url_still_wins_over_a_matching_generic() {
     );
     t.download_url = Some("https://example.com/renodx-unityengine.addon64".to_owned());
     let mut m = manifest(vec![t]);
-    m.generics.push(Generic {
+    m.generics.push(RenoDxGeneric {
         engine: crate::addons::renodx::types::Engine::Unity,
         status: Status::Working,
         slug: Some("unityengine".to_owned()),
         url64: Some("https://github.com/NotVoosh/renodx-unity/releases/download/snapshot/renodx-unityengine.addon64".to_owned()),
         url32: None,
-        label_key: None,
+        message: message("renodx.generic.unity"),
     });
 
     match resolve(&m, &facts()) {
@@ -336,13 +341,13 @@ fn engine_generic_fallback_is_untested() {
         Status::Working,
         vec![rule(MatchKind::SteamAppid, "42", 100)],
     )]);
-    m.generics = vec![Generic {
+    m.generics = vec![RenoDxGeneric {
         engine: Engine::Unreal,
         status: Status::Unknown,
         slug: Some("_univ".to_owned()),
         url64: None,
         url32: None,
-        label_key: Some("renodx.generic.universal".to_owned()),
+        message: message("renodx.generic.universal"),
     }];
     let mut facts = facts();
     facts.external_id = Some("999".to_owned());
@@ -351,6 +356,10 @@ fn engine_generic_fallback_is_untested() {
     match resolve(&m, &facts) {
         RenoDxResolution::Installable(plan) => {
             assert_eq!(plan.confidence, MatchConfidence::Untested);
+            assert_eq!(
+                plan.generic_profile.as_ref().map(|profile| profile.engine),
+                Some(Engine::Unreal)
+            );
             assert_eq!(
                 plan.addon_url,
                 source::addon_url("_univ", Architecture::X64)
@@ -363,13 +372,13 @@ fn engine_generic_fallback_is_untested() {
 #[test]
 fn engine_generic_uses_manifest_slug_for_local_identity_with_explicit_url() {
     let mut m = manifest(vec![]);
-    m.generics = vec![Generic {
+    m.generics = vec![RenoDxGeneric {
         engine: Engine::Unity,
         status: Status::Working,
         slug: Some("unityengine".to_owned()),
         url64: Some("https://example/renodx-unityengine.addon64".to_owned()),
         url32: Some("https://example/renodx-unityengine.addon32".to_owned()),
-        label_key: Some("renodx.generic.unity".to_owned()),
+        message: message("renodx.generic.unity"),
     }];
     let mut facts = facts();
     facts.external_id = Some("999".to_owned());
@@ -379,6 +388,10 @@ fn engine_generic_uses_manifest_slug_for_local_identity_with_explicit_url() {
         RenoDxResolution::Installable(plan) => {
             assert_eq!(plan.confidence, MatchConfidence::Verified);
             assert_eq!(plan.slug, "unityengine");
+            assert_eq!(
+                plan.generic_profile.as_ref().map(|profile| profile.engine),
+                Some(Engine::Unity)
+            );
             assert_eq!(plan.addon_url, "https://example/renodx-unityengine.addon64");
         }
         other => panic!("expected generic installable, got {other:?}"),
@@ -391,13 +404,13 @@ fn engine_generic_installs_on_inconclusive_detection() {
     // Direct3D loading) still gets the engine generic — the engine signal
     // implies a DirectX renderer on Windows. (The Tainted Grail / Unity case.)
     let mut m = manifest(vec![]);
-    m.generics = vec![Generic {
+    m.generics = vec![RenoDxGeneric {
         engine: Engine::Unreal,
         status: Status::Unknown,
         slug: Some("_univ".to_owned()),
         url64: None,
         url32: None,
-        label_key: Some("renodx.generic.universal".to_owned()),
+        message: message("renodx.generic.universal"),
     }];
     let mut facts = facts();
     facts.engine = Some(Engine::Unreal);
@@ -416,13 +429,13 @@ fn engine_generic_installs_vulkan_and_declines_opengl() {
     // An engine match with a confirmed Vulkan renderer now installs the generic
     // via the shared Vulkan layer; a confirmed OpenGL renderer is still declined.
     let mut m = manifest(vec![]);
-    m.generics = vec![Generic {
+    m.generics = vec![RenoDxGeneric {
         engine: Engine::Unreal,
         status: Status::Unknown,
         slug: Some("_univ".to_owned()),
         url64: None,
         url32: None,
-        label_key: Some("renodx.generic.universal".to_owned()),
+        message: message("renodx.generic.universal"),
     }];
     let mut facts = facts();
     facts.engine = Some(Engine::Unreal);
@@ -456,9 +469,9 @@ fn external_manifest() -> RenoDxManifest {
         Status::Working,
         vec![rule(MatchKind::SteamAppid, "1091500", 100)],
     );
-    t.category = Category::External {
+    t.category = RenoDxCategory::External {
         url: "https://discord.gg/example".to_owned(),
-        label_key: "renodx.external.discord".to_owned(),
+        message: message("renodx.external.discord"),
     };
     manifest(vec![t])
 }
@@ -591,9 +604,9 @@ fn external_title_is_link_only_on_required_api_mismatch() {
         Status::Working,
         vec![rule(MatchKind::SteamAppid, "1091500", 100)],
     );
-    t.category = Category::External {
+    t.category = RenoDxCategory::External {
         url: "https://discord.gg/example".to_owned(),
-        label_key: "renodx.external.discord".to_owned(),
+        message: message("renodx.external.discord"),
     };
     t.compatibility.required_api = vec![GraphicsApi::D3D12];
     let m = manifest(vec![t]);
@@ -623,13 +636,14 @@ fn resolve_external_install_rejects_non_external_title() {
 fn blacklist_category_yields_unsupported() {
     let m = manifest(vec![categorized(
         "blk",
-        Category::Blacklist {
-            reason: "renodx.reason.broken".to_owned(),
+        RenoDxCategory::Blacklist {
+            message: message("renodx.reason.broken"),
         },
     )]);
     match resolve(&m, &facts()) {
-        RenoDxResolution::Unsupported { reason } => {
-            assert_eq!(reason.as_deref(), Some("renodx.reason.broken"));
+        RenoDxResolution::Blacklisted { message } => {
+            assert_eq!(message.id, "renodx.reason.broken");
+            assert_eq!(message.fallback_text, "Reviewed catalogue fallback");
         }
         other => panic!("expected unsupported, got {other:?}"),
     }
@@ -639,7 +653,7 @@ fn blacklist_category_yields_unsupported() {
 
 #[test]
 fn native_hdr_category_yields_native_hdr() {
-    let m = manifest(vec![categorized("nh", Category::NativeHdr)]);
+    let m = manifest(vec![categorized("nh", RenoDxCategory::NativeHdr)]);
     assert_matches!(resolve(&m, &facts()), RenoDxResolution::NativeHdr);
     assert!(resolve_external_install(&m, &facts()).is_none());
 }

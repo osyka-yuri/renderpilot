@@ -33,6 +33,7 @@ pub struct MatchFacts {
 
 /// A single rule used to match an installed game to a manifest title.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct MatchRule {
     /// What the rule matches against.
     pub kind: MatchKind,
@@ -140,30 +141,12 @@ pub fn confidence_for_match(status: Status, kind: MatchKind) -> MatchConfidence 
     confidence_for_status(status)
 }
 
-/// Curation maturity of a manifest title — **not** a download/host channel (see
-/// e.g. `reshade::types::ReshadeChannel` for that). Used as a selection tie-break:
-/// when more than one title matches a game at the same rule tier, the more mature
-/// channel wins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Channel {
-    /// Verified, recommended for everyone.
-    #[default]
-    Stable,
-    /// Tested but not yet promoted.
-    Beta,
-    /// Bleeding-edge upstream snapshot.
-    Snapshot,
-}
-
-/// Tie-break rank for [`Channel`] in title selection: lower is more mature and
-/// wins a tie at the same rule tier.
-#[must_use]
-pub fn channel_rank(channel: Channel) -> u8 {
-    match channel {
-        Channel::Stable => 0,
-        Channel::Beta => 1,
-        Channel::Snapshot => 2,
+/// Tie-break rank for a title's curated status. `Construction` and `Unknown`
+/// intentionally remain equivalent, matching the old derived-channel policy.
+const fn status_rank(status: Status) -> u8 {
+    match status {
+        Status::Working => 0,
+        Status::Construction | Status::Unknown => 1,
     }
 }
 
@@ -204,19 +187,19 @@ pub(crate) fn parse_engine(value: &str) -> Option<Engine> {
 
 /// A manifest title that can compete in the shared best-match selection
 /// ([`select_title`]). Implemented by each tool's title type; the selection
-/// tie-break (rule tier, then channel maturity, then smallest id) is thereby
+/// tie-break (rule tier, then curated status, then smallest id) is thereby
 /// identical across tools by construction.
 pub trait SelectableTitle {
     /// Ordered match rules; selection prefers the highest [`MatchRule::tier`].
     fn match_rules(&self) -> &[MatchRule];
-    /// Curation-maturity channel, the first tie-break (see [`channel_rank`]).
-    fn channel(&self) -> Channel;
+    /// Curated test-map status, the first tie-break after rule tier.
+    fn status(&self) -> Status;
     /// Stable title id, the final lexicographic tie-break (smallest wins).
     fn id(&self) -> &str;
 }
 
 /// Selects the best `(title, matching-rule)` for the facts: highest rule tier,
-/// then more-mature channel, then lexicographically smallest title id.
+/// then more-mature status, then lexicographically smallest title id.
 #[must_use]
 pub fn select_title<'m, T: SelectableTitle>(
     titles: &'m [T],
@@ -234,7 +217,7 @@ fn selection_key<'a, T: SelectableTitle>(
     let (title, rule) = *candidate;
     (
         rule.tier,
-        std::cmp::Reverse(channel_rank(title.channel())),
+        std::cmp::Reverse(status_rank(title.status())),
         std::cmp::Reverse(title.id()),
     )
 }
@@ -344,7 +327,7 @@ mod tests {
 
     struct TestTitle {
         id: &'static str,
-        channel: Channel,
+        status: Status,
         rules: Vec<MatchRule>,
     }
 
@@ -353,8 +336,8 @@ mod tests {
             &self.rules
         }
 
-        fn channel(&self) -> Channel {
-            self.channel
+        fn status(&self) -> Status {
+            self.status
         }
 
         fn id(&self) -> &str {
@@ -385,12 +368,12 @@ mod tests {
     fn select_title_prefers_the_highest_rule_tier() {
         let low = TestTitle {
             id: "aaa",
-            channel: Channel::Stable,
+            status: Status::Working,
             rules: vec![generic_rule(70)],
         };
         let high = TestTitle {
             id: "bbb",
-            channel: Channel::Stable,
+            status: Status::Working,
             rules: vec![generic_rule(100)],
         };
         let titles = [low, high];
@@ -400,15 +383,15 @@ mod tests {
     }
 
     #[test]
-    fn select_title_breaks_a_tier_tie_by_the_more_mature_channel() {
+    fn select_title_breaks_a_tier_tie_by_the_more_mature_status() {
         let beta = TestTitle {
             id: "aaa",
-            channel: Channel::Beta,
+            status: Status::Construction,
             rules: vec![generic_rule(100)],
         };
         let stable = TestTitle {
             id: "bbb",
-            channel: Channel::Stable,
+            status: Status::Working,
             rules: vec![generic_rule(100)],
         };
         let titles = [beta, stable];
@@ -417,15 +400,15 @@ mod tests {
     }
 
     #[test]
-    fn select_title_breaks_a_tier_and_channel_tie_by_the_smallest_id() {
+    fn select_title_breaks_a_tier_and_status_tie_by_the_smallest_id() {
         let bbb = TestTitle {
             id: "bbb",
-            channel: Channel::Stable,
+            status: Status::Unknown,
             rules: vec![generic_rule(100)],
         };
         let aaa = TestTitle {
             id: "aaa",
-            channel: Channel::Stable,
+            status: Status::Construction,
             rules: vec![generic_rule(100)],
         };
         let titles = [bbb, aaa];
