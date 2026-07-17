@@ -25,6 +25,25 @@ const ADDON_API_EXPORTS: &[&str] = &[
 ];
 const REQUIRED_ADDON_API_QUORUM: usize = 3;
 
+/// Whether `path` is a ReShade host by PE evidence alone (export name or version
+/// resource strings). Used by torn-install recovery to remove half-written
+/// RenderPilot hosts without deleting unrecognized game DX wrappers.
+///
+/// Unreadable / non-PE files return `false` (leave them alone).
+#[must_use]
+pub(crate) fn is_reshade_proxy_file(path: &Path) -> bool {
+    let Some(inspection) = inspect_pe(path) else {
+        return false;
+    };
+    let has_reshade_export = inspection
+        .export_names
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case(RESHADE_VERSION_EXPORT));
+    has_reshade_export || version_strings_point_to_reshade(&inspection.identity)
+}
+
 /// Detects ReShade hosts in `game_dir`, marking `active_proxy_slot` as the slot
 /// the resolved executable should load when known.
 #[must_use]

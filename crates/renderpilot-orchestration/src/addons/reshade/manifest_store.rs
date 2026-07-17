@@ -1,17 +1,8 @@
-//! Fetching and caching the standalone, shared `reshade_manifest.json`, plus
-//! the shared skeleton every per-tool manifest store (`renodx`, `luma`) builds
-//! its own store on.
+//! Loading the shared ReShade source catalogue and raw per-tool catalogues.
 //!
-//! A thin adapter over the generic [`crate::cdn`] manifest cache (the same one
-//! RenoDX's and Luma's own manifests use): it pins this document's file name,
-//! CDN path, size cap, and 24-hour freshness window, and parses/validates it
-//! via [`super::manifest::parse_reshade_manifest`].
-//!
-//! Unlike the per-tool manifest stores, [`shared_config`] never propagates a
-//! failure: this document is a pure *overlay* on top of each tool's own fallback
-//! ReShade sources. A missing/unreachable/corrupt copy just means the caller
-//! keeps using its bundled or tool-manifest fallback. See [`super::manifest`]'s
-//! module doc for the full RenoDX compatibility story.
+//! ReShade download locations have one wire-v1 source: `addons/v1/reshade.json`.
+//! CDN/cache copies and the release-pinned bundled snapshot are parsed by the
+//! same parser. Tool catalogues never embed or overlay ReShade sources.
 
 use std::time::Duration;
 
@@ -19,88 +10,135 @@ use crate::ServiceError;
 use crate::cdn::{self, CdnManifestSpec};
 
 use super::manifest::parse_reshade_manifest;
-use super::types::ReshadeConfig;
+use super::types::ReshadeSourceCatalog;
 
-/// Cache file name beside the other manifests in the app data directory.
-const MANIFEST_FILE_NAME: &str = "reshade_manifest.json";
-/// Upper bound on the manifest document size — this document is tiny (a
-/// handful of URLs), so the cap is far smaller than a tool manifest's.
+const MANIFEST_FILE_NAME: &str = "reshade_manifest_v1.json";
+const MANIFEST_REMOTE_PATH: &str = "addons/v1/reshade.json";
 const MAX_MANIFEST_SIZE_BYTES: u64 = 64 * 1024;
-/// How long a cached manifest stays fresh before it is refreshed from the CDN.
 const MANIFEST_CACHE_TTL: Duration = Duration::from_hours(24);
+const BUNDLED_MANIFEST: &[u8] = include_bytes!("../../../assets/reshade-v1-fallback.json");
 
-/// The CDN cache spec for the shared ReShade manifest: a 24-hour TTL atop the
-/// generic stale-fallback/quarantine behavior in [`crate::cdn`].
+/// Where an operation obtained its complete ReShade source catalogue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReshadeCatalogOrigin {
+    /// A fresh or stale copy managed by the CDN cache.
+    CdnOrCache,
+    /// The release-pinned last-resort snapshot shipped with the application.
+    Bundled,
+}
+
+/// A complete source catalogue plus its provenance.
+#[derive(Debug, Clone)]
+pub struct ResolvedReshadeCatalog {
+    /// Complete sources selected for this operation.
+    pub sources: ReshadeSourceCatalog,
+    /// Resolver tier that supplied the complete document.
+    pub origin: ReshadeCatalogOrigin,
+}
+
+/// Per-command composition of a raw tool catalogue and shared ReShade sources.
+#[derive(Debug, Clone)]
+pub struct AddonCatalogBundle<M> {
+    /// Raw tool catalogue, without ReShade source overlays.
+    pub tool: M,
+    /// Independently resolved ReShade source catalogue.
+    pub reshade: ResolvedReshadeCatalog,
+}
+
 fn manifest_spec() -> CdnManifestSpec {
     CdnManifestSpec {
         file_name: MANIFEST_FILE_NAME,
-        url: cdn::cdn_url(MANIFEST_FILE_NAME),
+        url: cdn::cdn_url(MANIFEST_REMOTE_PATH),
         max_size_bytes: MAX_MANIFEST_SIZE_BYTES,
         ttl: Some(MANIFEST_CACHE_TTL),
     }
 }
 
-/// Returns the shared ReShade host sources, or `None` if the document could
-/// not be fetched/read/parsed — never an error. A caller that gets `None`
-/// simply keeps using its own fallback ReShade sources.
-pub(crate) async fn shared_config() -> Option<ReshadeConfig> {
-    match cdn::get_or_fetch(&manifest_spec(), parse_reshade_manifest).await {
-        Ok(manifest) => Some(manifest.into_config()),
+fn bundled_catalog() -> Result<ResolvedReshadeCatalog, ServiceError> {
+    Ok(ResolvedReshadeCatalog {
+        sources: parse_reshade_manifest(BUNDLED_MANIFEST)?.into_sources(),
+        origin: ReshadeCatalogOrigin::Bundled,
+    })
+}
+
+fn resolve_with_bundled_fallback(
+    cdn_or_cache: Result<super::manifest::ReshadeManifest, ServiceError>,
+) -> Result<ResolvedReshadeCatalog, ServiceError> {
+    match cdn_or_cache {
+        Ok(manifest) => Ok(ResolvedReshadeCatalog {
+            sources: manifest.into_sources(),
+            origin: ReshadeCatalogOrigin::CdnOrCache,
+        }),
         Err(error) => {
             log::warn!(
-                "shared ReShade manifest unavailable ({error}); falling back to the tool manifest's own embedded sources"
+                "shared ReShade manifest unavailable ({error}); using the bundled release snapshot"
             );
-            None
+            bundled_catalog()
         }
     }
 }
 
-/// Disk-only read of the shared ReShade cache (any age). Never touches the network.
-///
-/// Used after a failed force-fetch so tool overlays can still apply a previously
-/// cached document without retrying CDN.
-pub(crate) fn cached_shared_config() -> Option<ReshadeConfig> {
-    cdn::cached(&manifest_spec(), parse_reshade_manifest).map(|manifest| manifest.into_config())
+/// Resolves the shared catalogue in strict priority order: CDN/fresh cache,
+/// stale cache after a failed refresh, then the bundled snapshot.
+pub(crate) async fn get_or_fetch_catalog() -> Result<ResolvedReshadeCatalog, ServiceError> {
+    resolve_with_bundled_fallback(cdn::get_or_fetch(&manifest_spec(), parse_reshade_manifest).await)
 }
 
-/// Prefer an already-resolved config; otherwise load via [`shared_config`].
-pub(crate) async fn resolve_shared_config(
-    preferred: Option<ReshadeConfig>,
-) -> Option<ReshadeConfig> {
-    match preferred {
-        Some(config) => Some(config),
-        None => shared_config().await,
-    }
+/// Force-fetches the shared catalogue. This is intentionally strict: callers
+/// reporting refresh health must preserve a CDN failure even though ordinary
+/// operations can continue with [`get_or_fetch_catalog`]'s bundled fallback.
+pub(crate) async fn fetch_catalog() -> Result<ResolvedReshadeCatalog, ServiceError> {
+    cdn::fetch(&manifest_spec(), parse_reshade_manifest)
+        .await
+        .map(|manifest| ResolvedReshadeCatalog {
+            sources: manifest.into_sources(),
+            origin: ReshadeCatalogOrigin::CdnOrCache,
+        })
 }
 
-/// Force-fetches the shared ReShade manifest from the CDN (ignores TTL).
-///
-/// Soft-fails like [`shared_config`]: network/parse errors return `None` so
-/// callers can keep tool-embedded fallbacks. On success the disk cache is
-/// updated.
-pub(crate) async fn fetch_shared_config() -> Option<ReshadeConfig> {
-    match cdn::fetch(&manifest_spec(), parse_reshade_manifest).await {
-        Ok(manifest) => Some(manifest.into_config()),
-        Err(error) => {
-            log::warn!(
-                "shared ReShade manifest force-fetch failed ({error}); falling back to the tool manifest's own embedded sources"
-            );
-            None
-        }
-    }
-}
-
-/// Upper bound accepted for a tool's own manifest document — larger than the
-/// shared, ReShade-only document above, since a tool manifest carries a whole
-/// title catalog.
 pub(crate) const TOOL_MANIFEST_MAX_SIZE_BYTES: u64 = 4 * 1024 * 1024;
-/// How long a cached tool manifest stays fresh before it is refreshed from the CDN.
 pub(crate) const TOOL_MANIFEST_CACHE_TTL: Duration = Duration::from_hours(24);
 
-/// The standard CDN cache spec for a tool's own manifest document (4 MiB cap,
-/// 24-hour TTL) — every per-tool manifest store (`renodx`, `luma`) builds its
-/// spec from this instead of repeating the constants.
-fn tool_manifest_spec(file_name: &'static str) -> CdnManifestSpec {
+fn tool_manifest_spec(file_name: &'static str, remote_path: &'static str) -> CdnManifestSpec {
+    CdnManifestSpec {
+        file_name,
+        url: cdn::cdn_url(remote_path),
+        max_size_bytes: TOOL_MANIFEST_MAX_SIZE_BYTES,
+        ttl: Some(TOOL_MANIFEST_CACHE_TTL),
+    }
+}
+
+/// Loads a raw tool catalogue without consulting or mutating ReShade sources.
+pub(crate) async fn get_or_fetch_tool_catalog<M>(
+    file_name: &'static str,
+    remote_path: &'static str,
+    parse: impl Fn(&[u8]) -> Result<M, ServiceError>,
+) -> Result<M, ServiceError> {
+    cdn::get_or_fetch(&tool_manifest_spec(file_name, remote_path), parse).await
+}
+
+/// Force-fetches a raw tool catalogue without consulting ReShade sources.
+pub(crate) async fn fetch_tool_catalog<M>(
+    file_name: &'static str,
+    remote_path: &'static str,
+    parse: impl Fn(&[u8]) -> Result<M, ServiceError>,
+) -> Result<M, ServiceError> {
+    cdn::fetch(&tool_manifest_spec(file_name, remote_path), parse).await
+}
+
+
+// Compatibility bridge for the pre-bundle RenoDX callers. It is removed with
+// their migration to `AddonCatalogBundle`.
+fn legacy_shared_spec() -> CdnManifestSpec {
+    CdnManifestSpec {
+        file_name: "reshade_manifest.json",
+        url: cdn::cdn_url("reshade_manifest.json"),
+        max_size_bytes: MAX_MANIFEST_SIZE_BYTES,
+        ttl: Some(MANIFEST_CACHE_TTL),
+    }
+}
+
+fn legacy_tool_spec(file_name: &'static str) -> CdnManifestSpec {
     CdnManifestSpec {
         file_name,
         url: cdn::cdn_url(file_name),
@@ -109,63 +147,125 @@ fn tool_manifest_spec(file_name: &'static str) -> CdnManifestSpec {
     }
 }
 
-/// Shared skeleton for a tool manifest store: cached/CDN fetch via
-/// [`cdn::get_or_fetch`], then an in-memory overlay of the shared, standalone
-/// ReShade document (see the module doc) when it is reachable.
-/// `overlay_shared_reshade` mutates the parsed manifest's own ReShade source
-/// fields; the on-disk tool-manifest cache file is never rewritten.
+pub(crate) async fn shared_config() -> Option<super::types::ReshadeConfig> {
+    match cdn::get_or_fetch(&legacy_shared_spec(), parse_reshade_manifest).await {
+        Ok(manifest) => Some(manifest.into_sources()),
+        Err(error) => {
+            log::warn!("shared ReShade manifest unavailable ({error}); using tool fallback");
+            None
+        }
+    }
+}
+
+pub(crate) fn cached_shared_config() -> Option<super::types::ReshadeConfig> {
+    cdn::cached(&legacy_shared_spec(), parse_reshade_manifest).map(|manifest| manifest.into_sources())
+}
+
+pub(crate) async fn resolve_shared_config(
+    preferred: Option<super::types::ReshadeConfig>,
+) -> Option<super::types::ReshadeConfig> {
+    match preferred {
+        Some(config) => Some(config),
+        None => shared_config().await,
+    }
+}
+
+pub(crate) async fn fetch_shared_config() -> Option<super::types::ReshadeConfig> {
+    match cdn::fetch(&legacy_shared_spec(), parse_reshade_manifest).await {
+        Ok(manifest) => Some(manifest.into_sources()),
+        Err(error) => {
+            log::warn!("shared ReShade manifest force-fetch failed ({error}); using tool fallback");
+            None
+        }
+    }
+}
+
 pub(crate) async fn get_or_fetch_tool_manifest<M>(
     file_name: &'static str,
     parse: impl Fn(&[u8]) -> Result<M, ServiceError>,
-    overlay_shared_reshade: impl FnOnce(&mut M, ReshadeConfig),
+    overlay: impl FnOnce(&mut M, super::types::ReshadeConfig),
 ) -> Result<M, ServiceError> {
-    let mut manifest = cdn::get_or_fetch(&tool_manifest_spec(file_name), parse).await?;
-    if let Some(shared) = resolve_shared_config(None).await {
-        overlay_shared_reshade(&mut manifest, shared);
+    let mut manifest = cdn::get_or_fetch(&legacy_tool_spec(file_name), parse).await?;
+    if let Some(shared) = shared_config().await {
+        overlay(&mut manifest, shared);
     }
     Ok(manifest)
 }
 
-/// Force-fetch variant of [`get_or_fetch_tool_manifest`] (ignores TTL). When
-/// `shared_reshade` is `Some`, that config is used for the overlay instead of
-/// an extra ReShade CDN hit (see [`resolve_shared_config`]).
 pub(crate) async fn fetch_tool_manifest<M>(
     file_name: &'static str,
     parse: impl Fn(&[u8]) -> Result<M, ServiceError>,
-    shared_reshade: Option<ReshadeConfig>,
-    overlay_shared_reshade: impl FnOnce(&mut M, ReshadeConfig),
+    shared: Option<super::types::ReshadeConfig>,
+    overlay: impl FnOnce(&mut M, super::types::ReshadeConfig),
 ) -> Result<M, ServiceError> {
-    let mut manifest = cdn::fetch(&tool_manifest_spec(file_name), parse).await?;
-    if let Some(shared) = resolve_shared_config(shared_reshade).await {
-        overlay_shared_reshade(&mut manifest, shared);
+    let mut manifest = cdn::fetch(&legacy_tool_spec(file_name), parse).await?;
+    if let Some(shared) = resolve_shared_config(shared).await {
+        overlay(&mut manifest, shared);
     }
     Ok(manifest)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::addons::reshade::types::ReshadeChannel;
+
+    #[test]
+    fn bundled_snapshot_uses_the_wire_v1_parser_and_allowlist() {
+        let resolved = bundled_catalog().expect("bundled ReShade manifest");
+        assert_eq!(resolved.origin, ReshadeCatalogOrigin::Bundled);
+        assert!(resolved.sources.supports_channel(ReshadeChannel::Stable));
+        assert!(resolved.sources.supports_channel(ReshadeChannel::Nightly));
+    }
+
+    #[test]
+    fn valid_cdn_or_cache_document_replaces_the_snapshot_without_merging_stable() {
+        let remote_without_stable = parse_reshade_manifest(
+            br#"{
+                "schema_version": 1,
+                "generated_at": "2026-07-14T00:00:00Z",
+                "channels": {
+                    "nightly": {
+                        "url64": "https://nightly.link/crosire/reshade/workflows/build/main/remote64.zip",
+                        "url32": "https://nightly.link/crosire/reshade/workflows/build/main/remote32.zip"
+                    }
+                }
+            }"#,
+        )
+        .expect("valid remote");
+
+        let resolved = resolve_with_bundled_fallback(Ok(remote_without_stable)).expect("resolve");
+
+        assert_eq!(resolved.origin, ReshadeCatalogOrigin::CdnOrCache);
+        assert!(resolved.sources.stable.is_none());
+        assert!(resolved.sources.nightly.url64.ends_with("remote64.zip"));
+    }
+
+    #[test]
+    fn failed_cdn_and_cache_resolution_uses_the_bundled_snapshot() {
+        let resolved = resolve_with_bundled_fallback(Err(ServiceError::command_failed(
+            "network and cache unavailable",
+        )))
+        .expect("bundled fallback");
+
+        assert_eq!(resolved.origin, ReshadeCatalogOrigin::Bundled);
+        assert!(resolved.sources.supports_channel(ReshadeChannel::Stable));
+        assert!(resolved.sources.supports_channel(ReshadeChannel::Nightly));
+    }
 
     #[test]
     fn spec_is_pinned_to_the_cdn_host_with_a_day_long_ttl() {
         let spec = manifest_spec();
-        assert_eq!(spec.file_name, "reshade_manifest.json");
-        assert_eq!(spec.url, cdn::cdn_url("reshade_manifest.json"));
+        assert_eq!(spec.file_name, "reshade_manifest_v1.json");
+        assert_eq!(spec.url, cdn::cdn_url("addons/v1/reshade.json"));
         assert!(spec.url.starts_with("https://"));
         assert_eq!(spec.ttl, Some(MANIFEST_CACHE_TTL));
     }
 
     #[test]
-    fn cached_shared_config_is_none_without_on_disk_cache() {
-        // No app-data fixture in unit tests → absent cache is None (no panic).
-        let _ = cached_shared_config();
-    }
-
-    #[test]
     fn tool_manifest_spec_is_pinned_to_the_cdn_host_with_a_day_long_ttl() {
-        let spec = tool_manifest_spec("example_manifest.json");
-        assert_eq!(spec.file_name, "example_manifest.json");
-        assert_eq!(spec.url, cdn::cdn_url("example_manifest.json"));
+        let spec = tool_manifest_spec("example_manifest_v1.json", "addons/v1/example.json");
+        assert_eq!(spec.file_name, "example_manifest_v1.json");
+        assert_eq!(spec.url, cdn::cdn_url("addons/v1/example.json"));
         assert!(spec.url.starts_with("https://"));
         assert_eq!(spec.ttl, Some(TOOL_MANIFEST_CACHE_TTL));
     }

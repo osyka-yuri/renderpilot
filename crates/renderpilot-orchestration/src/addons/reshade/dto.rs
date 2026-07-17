@@ -43,17 +43,15 @@ pub enum HostUpdateStatus {
     RepairAvailable,
     /// The backend needs stronger validation before it can claim current/update.
     UnknownNeedsValidation,
-    /// The host matches a different known channel than the selected/effective one.
+    /// The host matches a different known channel than the selected one.
     ChannelMismatch,
 }
 
-/// Selected/effective/detected channel facts for a ReShade host.
+/// Selected and detected channel facts for a ReShade host.
 #[derive(Debug, Clone, Serialize)]
 pub struct HostChannelFacts {
     /// User-selected channel for new actions.
     pub selected: ReshadeChannel,
-    /// Effective channel after manifest fallback.
-    pub effective: ReshadeChannel,
     /// Channel detected from private install metadata, when available.
     pub detected: Option<ReshadeChannel>,
 }

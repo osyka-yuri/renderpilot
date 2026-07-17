@@ -13,9 +13,99 @@ use super::dto::{
     ActionDescriptor, ActionDisabledReason, HostActions, HostAddonSupport, HostChannelFacts,
     HostDetection, HostFacts, HostUpdateStatus,
 };
-use super::host_policy::HostLifecycle;
+use super::host_policy::{HostAssessment, HostLifecycle};
 use super::scan::{ReshadeAddonSupport, ReshadeHost, ReshadeHostAction, SlotActivity};
-use super::types::{ReshadeChannel, ReshadeConfig};
+use super::types::{ReshadeChannel, ReshadeSourceCatalog};
+
+/// How first-install conflict / lifecycle are applied for a host path.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HostReportPolicy {
+    /// When true and no install record exists, prefer
+    /// [`HostAssessment::initial_is_conflict`] over the raw assessment conflict.
+    pub apply_initial_conflict: bool,
+    /// When true, run [`apply_initial_lifecycle_actions`] after core actions.
+    pub apply_lifecycle: bool,
+}
+
+impl HostReportPolicy {
+    /// Proxy-host first install: initial conflict + lifecycle (Luma; RenoDX proxy).
+    pub(crate) const PROXY_INITIAL: Self = Self {
+        apply_initial_conflict: true,
+        apply_lifecycle: true,
+    };
+
+    /// Shared Vulkan layer path: maintenance conflict only, no proxy lifecycle.
+    pub(crate) const VULKAN_MAINTENANCE: Self = Self {
+        apply_initial_conflict: false,
+        apply_lifecycle: false,
+    };
+}
+
+/// Inputs for assembling shared host detection / facts / actions from an assessment.
+#[derive(Debug, Clone)]
+pub(crate) struct AssembleHostReport<'a> {
+    pub assessment: &'a HostAssessment,
+    pub record: Option<&'a InstalledAddon>,
+    pub reshade_config: &'a ReshadeSourceCatalog,
+    pub switch_channel: Option<ActionDescriptor>,
+    pub policy: HostReportPolicy,
+}
+
+/// Effective conflict flag for the host report (first-install vs maintenance).
+#[must_use]
+pub(crate) fn effective_host_conflict(
+    assessment: &HostAssessment,
+    record: Option<&InstalledAddon>,
+    apply_initial_conflict: bool,
+) -> bool {
+    if apply_initial_conflict && record.is_none() && assessment.initial_is_conflict() {
+        true
+    } else {
+        assessment.conflict
+    }
+}
+
+/// Builds detection, facts, and actions from a completed host assessment.
+/// Tools only supply assessment, channel-switch descriptor, and policy.
+pub(crate) fn assemble_host_report(
+    input: AssembleHostReport<'_>,
+) -> (HostDetection, HostFacts, HostActions) {
+    let conflict = effective_host_conflict(
+        input.assessment,
+        input.record,
+        input.policy.apply_initial_conflict,
+    );
+    let (detection, facts, mut actions) = build_host_report_core(
+        &input.assessment.host,
+        input.assessment.action,
+        conflict,
+        input.assessment.is_known_custom_build(),
+        input.record,
+        input.reshade_config,
+        input.switch_channel,
+    );
+    if input.policy.apply_lifecycle {
+        apply_initial_lifecycle_actions(&mut actions, input.assessment.lifecycle, input.record);
+    }
+    (detection, facts, actions)
+}
+
+/// Shared "no resolvable host slot / target" report: absent host, conflict action,
+/// empty actions (tools wrap with their default action type alias).
+pub(crate) fn missing_host_report_core(
+    record: Option<&InstalledAddon>,
+    reshade_config: &ReshadeSourceCatalog,
+) -> (HostDetection, HostFacts, HostActions) {
+    build_host_report_core(
+        &ReshadeHost::Absent,
+        ReshadeHostAction::Conflict,
+        false,
+        false,
+        record,
+        reshade_config,
+        None,
+    )
+}
 
 pub(crate) fn host_detection(host: &ReshadeHost, conflict: bool) -> HostDetection {
     if conflict {
@@ -34,11 +124,9 @@ pub(crate) fn host_facts(
     conflict: bool,
     is_custom_build: bool,
     detected_channel: Option<ReshadeChannel>,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
 ) -> HostFacts {
-    let selected = detected_channel
-        .unwrap_or_else(|| reshade_config.effective_install_channel(ReshadeChannel::Stable));
-    let effective = reshade_config.effective_install_channel(selected);
+    let selected = detected_channel.unwrap_or_else(|| reshade_config.default_install_channel());
     let present = host.as_present();
     HostFacts {
         slot: present.map(|host| host.slot.to_owned()),
@@ -54,10 +142,9 @@ pub(crate) fn host_facts(
             .unwrap_or(HostAddonSupport::Unknown),
         channel: HostChannelFacts {
             selected,
-            effective,
             detected: detected_channel,
         },
-        update_status: host_update_status(host, action, conflict, detected_channel, effective),
+        update_status: host_update_status(host, action, conflict, detected_channel, selected),
         is_custom_build,
     }
 }
@@ -67,7 +154,7 @@ pub(crate) fn host_update_status(
     action: ReshadeHostAction,
     conflict: bool,
     detected_channel: Option<ReshadeChannel>,
-    effective: ReshadeChannel,
+    selected: ReshadeChannel,
 ) -> HostUpdateStatus {
     if conflict || action == ReshadeHostAction::Conflict {
         return HostUpdateStatus::UnknownNeedsValidation;
@@ -84,7 +171,7 @@ pub(crate) fn host_update_status(
             }
         }
         ReshadeHostAction::UpToDate => match detected_channel {
-            Some(detected) if detected != effective => HostUpdateStatus::ChannelMismatch,
+            Some(detected) if detected != selected => HostUpdateStatus::ChannelMismatch,
             Some(_) => HostUpdateStatus::Current,
             None => HostUpdateStatus::UnknownNeedsValidation,
         },
@@ -112,7 +199,7 @@ pub(crate) fn has_advisory_host_source(record: Option<&InstalledAddon>) -> bool 
 /// target.
 pub(crate) fn switch_channel_action(
     current: ReshadeChannel,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
 ) -> ActionDescriptor {
     let target = match current {
         ReshadeChannel::Stable => ReshadeChannel::Nightly,
@@ -200,7 +287,7 @@ pub(crate) fn build_host_report_core(
     conflict: bool,
     is_custom_build: bool,
     record: Option<&InstalledAddon>,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     switch_channel: Option<ActionDescriptor>,
 ) -> (HostDetection, HostFacts, HostActions) {
     let detected_channel = recorded_channel(record);
@@ -271,7 +358,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn channel_mismatch_when_detected_channel_differs_from_effective() {
+    fn channel_mismatch_when_detected_channel_differs_from_selected() {
         let status = host_update_status(
             &ReshadeHost::Absent,
             ReshadeHostAction::UpToDate,
@@ -283,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn channel_match_when_detected_equals_effective() {
+    fn channel_match_when_detected_equals_selected() {
         let status = host_update_status(
             &ReshadeHost::Absent,
             ReshadeHostAction::UpToDate,
@@ -320,5 +407,37 @@ mod tests {
             actions.install.and_then(|action| action.disabled_reason),
             Some(ActionDisabledReason::BlockedByConflict)
         );
+    }
+
+    #[test]
+    fn effective_host_conflict_prefers_initial_only_when_untracked() {
+        // Absent host assessment: lifecycle InstallNew, conflict false.
+        let assessment = crate::addons::reshade::host_policy::assess(
+            std::path::Path::new("C:/missing-game"),
+            "dxgi.dll",
+        );
+        assert!(!assessment.conflict);
+        assert!(!assessment.initial_is_conflict());
+
+        // Without a real conflict lifecycle, both policies agree.
+        assert!(!effective_host_conflict(&assessment, None, true));
+        assert!(!effective_host_conflict(&assessment, None, false));
+    }
+
+    #[test]
+    fn missing_host_report_core_is_absent_without_actions() {
+        let sources = ReshadeSourceCatalog {
+            stable: None,
+            nightly: crate::addons::reshade::types::ReshadeNightly {
+                url64: "https://example.test/64.zip".to_owned(),
+                url32: "https://example.test/32.zip".to_owned(),
+            },
+        };
+        let (detection, facts, actions) = missing_host_report_core(None, &sources);
+        assert_eq!(detection, HostDetection::Absent);
+        assert!(facts.path.is_none());
+        // Conflict action maps to a disabled resolve/install path; tools that
+        // want empty chrome replace actions with `HostActions::default()`.
+        assert!(actions.resolve_conflict.is_some() || actions.install.is_some());
     }
 }

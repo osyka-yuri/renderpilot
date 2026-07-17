@@ -1,27 +1,18 @@
-//! Parsing and validation for the standalone, shared `reshade_manifest.json`.
+//! Parsing and validation for the standalone, shared ReShade v1 document.
 //!
-//! RenoDX and Luma each still embed their own `reshade` block (generated from
-//! the same upstream constants as this document — see
-//! `renderpilot-libraries/scripts/lib/reshade-sources.mjs`) so an app version
-//! that never fetches this document keeps working unchanged off that embedded
-//! block. A new-enough app additionally fetches this document
-//! ([`super::manifest_store::shared_config`]) and overlays it onto whichever
-//! tool-manifest it loaded, so a ReShade URL change becomes visible to both
-//! tools at once instead of waiting for each tool's own manifest cache to
-//! refresh independently.
+//! It is the only published source of ReShade channels. Tool manifests carry
+//! no host download URLs; when the shared document and its cache are
+//! unavailable, the app uses a bundled snapshot of this same wire format.
 //!
-//! The two structural checks below ([`ensure_stable_reshade_download`],
-//! [`ensure_allowed_nightly_download`]) are shared with each tool's own
-//! `validate_reshade` (`renodx::validate`, `luma::validate`), so the embedded
-//! blocks and this standalone document are held to the identical shape.
+//! The structural checks below validate every remote, cached, and bundled copy.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::ServiceError;
 
 use super::super::UTF8_BOM;
 use super::super::errors::failed;
-use super::types::{ReshadeConfig, ReshadeNightly, ReshadeStable};
+use super::types::{ReshadeNightly, ReshadeSourceCatalog, ReshadeStable};
 
 /// Schema version this build understands.
 const SUPPORTED_SCHEMA_VERSION: u32 = 1;
@@ -29,41 +20,81 @@ const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 /// Hosts the shared ReShade nightly build may be downloaded from.
 const NIGHTLY_HOST_ALLOWLIST: &[&str] = &["github.com", "nightly.link"];
 
-/// Parsed `reshade_manifest.json` document — the single published source of
+/// Parsed `addons/v1/reshade.json` document — the single published source of
 /// both tools' ReShade host URLs.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub(crate) struct ReshadeManifest {
     pub(crate) schema_version: u32,
     /// RFC 3339 timestamp recording when the document was generated. Carried
     /// for parity with the document rather than read by this build.
     pub(crate) generated_at: String,
     /// Manifest-current stable reshade.me add-on installer. `None` when no
-    /// stable build is currently published — mirrors [`ReshadeConfig::stable`].
-    #[serde(default)]
+    /// stable build is currently published — mirrors [`ReshadeSourceCatalog::stable`].
     pub(crate) stable: Option<ReshadeStable>,
     pub(crate) nightly: ReshadeNightly,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireManifestV1 {
+    schema_version: u32,
+    generated_at: String,
+    channels: WireChannels,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireChannels {
+    #[serde(default)]
+    stable: Option<WireStable>,
+    nightly: WireNightly,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireStable {
+    url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireNightly {
+    url64: String,
+    url32: String,
+}
+
 impl ReshadeManifest {
-    /// Converts the parsed document into the tool-facing [`ReshadeConfig`].
+    /// Converts the parsed document into the operation-facing source catalogue.
     #[must_use]
-    pub(crate) fn into_config(self) -> ReshadeConfig {
-        ReshadeConfig {
+    pub(crate) fn into_sources(self) -> ReshadeSourceCatalog {
+        ReshadeSourceCatalog {
             stable: self.stable,
             nightly: self.nightly,
         }
     }
 }
 
-/// Parses and validates a `reshade_manifest.json` document.
+/// Parses and validates the ReShade v1 document.
 ///
 /// Strips a leading UTF-8 BOM, deserializes, then runs structural validation,
-/// so a returned manifest can be converted to [`ReshadeConfig`] without
+/// so a returned manifest can be converted to [`ReshadeSourceCatalog`] without
 /// further checks.
 pub(crate) fn parse_reshade_manifest(bytes: &[u8]) -> Result<ReshadeManifest, ServiceError> {
     let bytes = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
-    let manifest: ReshadeManifest = serde_json::from_slice(bytes)
+    let wire: WireManifestV1 = serde_json::from_slice(bytes)
         .map_err(|error| failed(format!("failed to parse ReShade manifest: {error}")))?;
+    let manifest = ReshadeManifest {
+        schema_version: wire.schema_version,
+        generated_at: wire.generated_at,
+        stable: wire
+            .channels
+            .stable
+            .map(|stable| ReshadeStable { url: stable.url }),
+        nightly: ReshadeNightly {
+            url64: wire.channels.nightly.url64,
+            url32: wire.channels.nightly.url32,
+        },
+    };
     validate(&manifest)?;
     Ok(manifest)
 }
@@ -75,6 +106,10 @@ fn validate(manifest: &ReshadeManifest) -> Result<(), ServiceError> {
             manifest.schema_version
         )));
     }
+    crate::addons::manifest_validate::ensure_not_blank(
+        "reshade generated_at",
+        &manifest.generated_at,
+    )?;
     if let Some(stable) = &manifest.stable {
         ensure_stable_reshade_download("reshade stable url", &stable.url)?;
     }
@@ -85,9 +120,7 @@ fn validate(manifest: &ReshadeManifest) -> Result<(), ServiceError> {
 
 /// Asserts a stable ReShade URL is the official `reshade.me` add-on installer
 /// shape (`https://reshade.me/downloads/ReShade_Setup_<version>_Addon.exe`,
-/// no userinfo). Shared by this standalone manifest and RenoDX's own embedded
-/// `reshade.stable` block (`renodx::validate::validate_reshade`) — Luma has no
-/// stable field, so it never calls this.
+/// no userinfo).
 pub(crate) fn ensure_stable_reshade_download(field: &str, url: &str) -> Result<(), ServiceError> {
     let parsed = crate::net::parse_https_url(url, field)?;
     if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -106,8 +139,7 @@ pub(crate) fn ensure_stable_reshade_download(field: &str, url: &str) -> Result<(
 }
 
 /// Asserts a nightly ReShade URL is hosted on an allow-listed CI-proxy host.
-/// Shared by this standalone manifest and each tool's own embedded
-/// `reshade.nightly` block (`renodx::validate`, `luma::validate`).
+/// Applied identically to remote, cache, and bundled copies.
 pub(crate) fn ensure_allowed_nightly_download(field: &str, url: &str) -> Result<(), ServiceError> {
     let parsed = crate::net::parse_https_url(url, field)?;
     let host = parsed
@@ -126,10 +158,12 @@ mod tests {
     const SAMPLE: &str = r#"{
         "schema_version": 1,
         "generated_at": "2026-07-05T00:00:00Z",
-        "stable": { "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe" },
-        "nightly": {
-            "url64": "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip",
-            "url32": "https://nightly.link/crosire/reshade/workflows/build/main/x32.zip"
+        "channels": {
+          "stable": { "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe" },
+          "nightly": {
+              "url64": "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip",
+              "url32": "https://nightly.link/crosire/reshade/workflows/build/main/x32.zip"
+          }
         }
     }"#;
 
@@ -168,7 +202,16 @@ mod tests {
 
     #[test]
     fn rejects_an_unsupported_schema_version() {
-        let sample = SAMPLE.replace(r#""schema_version": 1"#, r#""schema_version": 2"#);
+        let sample = SAMPLE.replace(r#""schema_version": 1"#, r#""schema_version": 3"#);
+        assert!(parse_reshade_manifest(sample.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_v1_fields() {
+        let sample = SAMPLE.replace(
+            r#""generated_at": "2026-07-05T00:00:00Z""#,
+            r#""generated_at": "2026-07-05T00:00:00Z", "unexpected": true"#,
+        );
         assert!(parse_reshade_manifest(sample.as_bytes()).is_err());
     }
 
@@ -200,9 +243,9 @@ mod tests {
     }
 
     #[test]
-    fn into_config_carries_stable_and_nightly_through() {
+    fn into_sources_carries_stable_and_nightly_through() {
         let manifest = parse_reshade_manifest(SAMPLE.as_bytes()).expect("parse");
-        let config = manifest.into_config();
+        let config = manifest.into_sources();
         assert!(config.stable.is_some());
         assert_eq!(
             config.nightly.url64,

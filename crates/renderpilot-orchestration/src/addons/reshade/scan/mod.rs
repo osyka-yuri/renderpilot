@@ -23,6 +23,8 @@ pub(crate) use effects::{ReshadeContent, assess_reshade_content};
 pub use host_model::{
     ReshadeAddonSupport, ReshadeHost, ReshadeHostAction, ReshadeIdentity, ReshadeScan, SlotActivity,
 };
+pub(crate) use hosts::is_reshade_proxy_file;
+pub(crate) use crate::paths::same_path;
 pub use hosts::{host_action, scan_reshade_hosts};
 pub use identity::is_known_custom_build;
 pub(crate) use identity::{guess_advisory_channel, is_proxy_slot};
@@ -30,7 +32,7 @@ pub use paths::{
     RESHADE_INI_FILE_NAME, ReshadePaths, remove_reshade_logs_best_effort, reshade_ini_path,
     resolve_paths,
 };
-pub(crate) use paths::{load_ini, read_addon_config_state, same_path};
+pub(crate) use paths::{load_ini, read_addon_config_state};
 
 /// Test fixtures construct host present-states by hand (`reshade::host_policy`,
 /// `renodx` host_report tests). Production code only names these types inside

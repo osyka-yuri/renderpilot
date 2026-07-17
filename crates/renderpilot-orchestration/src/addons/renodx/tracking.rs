@@ -23,8 +23,8 @@ pub(super) fn install_state_from_record(record: &InstalledAddon) -> RenoDxInstal
     }
 }
 
-/// Delegates to the shared implementation so callers inside the renodx module
-/// keep using the familiar name.
+/// Transitional forwarding helpers retained while the command layer migrates
+/// to the shared tracking module.
 pub(super) fn rollback_host_path(record: &InstalledAddon) -> Option<PathBuf> {
     tracking::host_proxy_path(record)
 }
@@ -36,7 +36,7 @@ pub(super) fn owned_proxy_host_path(record: &InstalledAddon) -> Option<PathBuf> 
 pub(super) fn required_rollback_host_path(
     record: &InstalledAddon,
 ) -> Result<PathBuf, ServiceError> {
-    rollback_host_path(record).ok_or_else(|| {
+    tracking::host_proxy_path(record).ok_or_else(|| {
         errors::invalid("RenoDX install record does not identify a ReShade host path".to_owned())
     })
 }
@@ -127,6 +127,7 @@ fn rebuild_with_parts(
         tracking::RebuildParts {
             addon_file: record.addon_file().clone(),
             addon_version: tracking::AddonVersionUpdate::Keep,
+            managed_files: tracking::ManagedFilesUpdate::Keep,
             created_files,
             backed_up_files,
             tracked_sources,
@@ -192,7 +193,7 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(
-            rollback_host_path(&from_created).as_deref(),
+            tracking::host_proxy_path(&from_created).as_deref(),
             Some(Path::new("C:/Games/Test/dxgi.dll"))
         );
 

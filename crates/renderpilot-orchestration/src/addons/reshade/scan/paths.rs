@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::addons::canonicalize_best_effort;
 use crate::addons::ini::Ini;
 use crate::addons::reshade::ini_schema::{
     ADDON_PATH_KEY, ADDON_SECTION, BASE_PATH_KEY, DISABLED_ADDONS_KEY, INSTALL_SECTION,
@@ -173,16 +172,8 @@ pub(super) fn resolve_config_path(base: &Path, raw: &str) -> PathBuf {
     } else {
         base.join(candidate)
     };
-    canonicalize_best_effort(&path)
+    crate::paths::canonicalize_best_effort(&path)
 }
-
-/// Path equality after best-effort canonicalization, so `.`/relative forms and
-/// symlinks compare equal when the targets exist on disk.
-#[must_use]
-pub(crate) fn same_path(left: &Path, right: &Path) -> bool {
-    canonicalize_best_effort(left) == canonicalize_best_effort(right)
-}
-
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;

@@ -26,3 +26,4 @@ pub(crate) mod types;
 pub(crate) mod update;
 
 pub(crate) use split_install::InstallRoots;
+pub(crate) use scan::same_path;

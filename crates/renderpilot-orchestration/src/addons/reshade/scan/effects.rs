@@ -9,7 +9,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::paths::{resolve_config_path, resolve_paths, same_path, split_ini_list};
+use super::paths::{resolve_config_path, resolve_paths, split_ini_list};
+use crate::paths::same_path;
 
 const GENERAL_SECTION: &str = "GENERAL";
 const EFFECT_SEARCH_PATHS_KEY: &str = "EffectSearchPaths";

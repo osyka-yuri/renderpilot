@@ -2,7 +2,7 @@
 
 use renderpilot_domain::Architecture;
 
-use super::types::{ReshadeChannel, ReshadeConfig};
+use super::types::{ReshadeChannel, ReshadeSourceCatalog};
 use crate::ServiceError;
 
 /// A concrete ReShade host source for a channel.
@@ -15,7 +15,7 @@ pub(crate) struct ReshadeSource {
 /// The add-on-enabled ReShade host archive URL for a channel and architecture.
 #[must_use]
 pub(crate) fn reshade_source(
-    config: &ReshadeConfig,
+    config: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
     arch: Architecture,
 ) -> Option<ReshadeSource> {
@@ -37,7 +37,7 @@ pub(crate) fn reshade_source(
 /// Like [`reshade_source`], but rejects a channel absent from the manifest
 /// with the shared "channel not available" error instead of returning `None`.
 pub(crate) fn require_reshade_source(
-    config: &ReshadeConfig,
+    config: &ReshadeSourceCatalog,
     channel: ReshadeChannel,
     arch: Architecture,
 ) -> Result<ReshadeSource, ServiceError> {
@@ -47,7 +47,7 @@ pub(crate) fn require_reshade_source(
 /// The manifest has no ReShade source for the requested channel. Shared by every
 /// flow that resolves a channel to a downloadable source.
 pub(crate) fn channel_unavailable(channel: ReshadeChannel) -> ServiceError {
-    ServiceError::InvalidInput(format!(
+    ServiceError::invalid_input(format!(
         "ReShade channel `{}` is not available",
         channel.as_str()
     ))
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn stable_source_is_manifest_current_locator() {
-        let config = ReshadeConfig {
+        let config = ReshadeSourceCatalog {
             stable: Some(ReshadeStable {
                 url: "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned(),
             }),
@@ -78,12 +78,12 @@ mod tests {
             Some("https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe".to_owned())
         );
 
-        let without_stable = ReshadeConfig {
+        let without_stable = ReshadeSourceCatalog {
             stable: None,
             nightly: config.nightly,
         };
         assert_eq!(
-            without_stable.effective_install_channel(ReshadeChannel::Stable),
+            without_stable.default_install_channel(),
             ReshadeChannel::Nightly
         );
         assert!(
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn require_reshade_source_rejects_absent_channel_with_shared_message() {
-        let config = ReshadeConfig {
+        let config = ReshadeSourceCatalog {
             stable: None,
             nightly: ReshadeNightly {
                 url64: "https://nightly.link/crosire/reshade/workflows/build/main/x64.zip"

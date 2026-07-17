@@ -16,18 +16,17 @@ use serde::{Deserialize, Serialize};
 /// The host can be the manifest-current stable reshade.me add-on installer or the
 /// crosire CI build proxied by nightly.link.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ReshadeConfig {
+pub struct ReshadeSourceCatalog {
     /// Manifest-current stable ReShade add-on installer. This is a versioned
     /// reshade.me URL, not a latest alias; new stable builds become visible only
     /// when the manifest refreshes this URL. `None` when the tool ships
     /// nightly-only (e.g. Luma).
-    #[serde(default)]
     pub stable: Option<ReshadeStable>,
     /// Nightly ReShade build (a plain zip per architecture).
     pub nightly: ReshadeNightly,
 }
 
-impl ReshadeConfig {
+impl ReshadeSourceCatalog {
     /// Whether the manifest can provide a source for `channel`.
     #[must_use]
     pub fn supports_channel(&self, channel: ReshadeChannel) -> bool {
@@ -37,8 +36,21 @@ impl ReshadeConfig {
         }
     }
 
-    /// The effective channel used only by install paths. Stable is the default,
-    /// but a manifest without a stable URL gracefully falls back to nightly.
+    /// Default channel for a new selection. Explicit selections are never
+    /// remapped: callers must reject an unavailable requested channel.
+    #[must_use]
+    pub fn default_install_channel(&self) -> ReshadeChannel {
+        if self.stable.is_some() {
+            ReshadeChannel::Stable
+        } else {
+            ReshadeChannel::Nightly
+        }
+    }
+}
+
+impl ReshadeSourceCatalog {
+    /// Legacy selection helper retained while RenoDX command callers migrate
+    /// from embedded to shared source catalogues.
     #[must_use]
     pub fn effective_install_channel(&self, requested: ReshadeChannel) -> ReshadeChannel {
         if self.supports_channel(requested) {
@@ -48,6 +60,9 @@ impl ReshadeConfig {
         }
     }
 }
+
+/// Transitional name for callers still carrying embedded ReShade sources.
+pub type ReshadeConfig = ReshadeSourceCatalog;
 
 /// Manifest-current stable ReShade add-on installer URL.
 #[derive(Debug, Clone, Deserialize, Serialize)]
