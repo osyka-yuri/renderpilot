@@ -70,6 +70,7 @@ pub(crate) mod game_analysis;
 pub(crate) mod game_context;
 mod ini;
 pub(crate) mod install_guard;
+pub mod luma;
 pub(crate) mod manifest_validate;
 pub(crate) mod matching;
 pub(crate) mod mutation_features;
