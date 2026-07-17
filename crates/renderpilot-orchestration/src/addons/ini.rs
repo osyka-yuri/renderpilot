@@ -128,6 +128,24 @@ impl Ini {
             .any(|s| s.header.eq_ignore_ascii_case(section))
     }
 
+    /// Returns the raw lines before the first section header. This is a
+    /// deliberately read-only escape hatch for lifecycle classifiers that need
+    /// to prove a configuration contains no user-owned content.
+    #[must_use]
+    pub(crate) fn preamble_lines(&self) -> &[String] {
+        &self.preamble
+    }
+
+    /// Iterates section headers and their raw body lines in document order.
+    /// Mutation callers should continue using the focused `get`/`set` API;
+    /// exposing this view avoids a second, subtly different INI parser in a
+    /// lifecycle classifier.
+    pub(crate) fn raw_sections(&self) -> impl Iterator<Item = (&str, &[String])> {
+        self.sections
+            .iter()
+            .map(|section| (section.header.as_str(), section.lines.as_slice()))
+    }
+
     /// Renders the INI back to text, dropping trailing empty lines and terminating
     /// with a single CRLF. A blank line separates consecutive sections, so a
     /// freshly merged or created config is readable; an existing blank line

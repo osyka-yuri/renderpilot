@@ -19,7 +19,7 @@ pub enum UpdateStatus {
     Available,
     /// Could not determine (network failure, or no recorded source).
     Unknown,
-    /// The content matches a different known channel than the selected/effective
+    /// The content matches a different known channel than the selected
     /// one — a channel mismatch, not an update.
     ChannelMismatch,
     /// The backend needs stronger validation before it can claim current/update

@@ -1,11 +1,11 @@
 //! Manifest validation primitives shared by every add-on tool.
 //!
 //! Each tool's own `validate.rs` still owns its manifest's *shape* (which
-//! fields exist, which combinations are legal); the checks below —
+//! fields exist, which combinations are legal); the checks below --
 //! blank/semver/file-name/hash shape, schema-version gating, a full match-rule
 //! set (non-empty, positive tier, non-blank value, per-[`MatchKind`] value
 //! shape), a manifest's `defaults` against the Rust-side fallback, and
-//! title-id uniqueness — read identically across tools and live here once.
+//! title-id uniqueness -- read identically across tools and live here once.
 
 use std::collections::HashSet;
 
@@ -83,10 +83,7 @@ pub(crate) fn validate_match_rule_value(
     }
 }
 
-/// Asserts a manifest's parsed `defaults` match the Rust-side fallback used to
-/// fill omitted title fields — a drift between generator and parser would
-/// silently change install behaviour, so this is checked at load time rather
-/// than trusted.
+/// Compatibility assertion for the legacy RenoDX v3 defaults document.
 pub(crate) fn ensure_defaults_match<D: PartialEq>(
     tool: &str,
     actual: &D,
@@ -146,7 +143,7 @@ pub(crate) fn ensure_schema_version(
     Ok(())
 }
 
-/// Rejects a manifest whose titles reuse an id — installs and tracking index
+/// Rejects a manifest whose titles reuse an id -- installs and tracking index
 /// by title id, so a collision would silently shadow one title.
 pub(crate) fn ensure_unique_title_ids<'a>(
     ids: impl IntoIterator<Item = &'a str>,
@@ -173,10 +170,10 @@ mod tests {
 
     #[test]
     fn semver_requires_dotted_integer_parts() {
-        assert!(ensure_semver("manifest", "min_app_version", "1.2.3").is_ok());
-        assert!(ensure_semver("manifest", "min_app_version", "1.2").is_ok());
-        assert!(ensure_semver("manifest", "min_app_version", "").is_err());
-        assert!(ensure_semver("manifest", "min_app_version", "not-a-version").is_err());
+        assert!(ensure_semver("manifest", "version", "1.2.3").is_ok());
+        assert!(ensure_semver("manifest", "version", "1.2").is_ok());
+        assert!(ensure_semver("manifest", "version", "").is_err());
+        assert!(ensure_semver("manifest", "version", "not-a-version").is_err());
     }
 
     #[test]
@@ -208,12 +205,6 @@ mod tests {
         assert!(validate_match_rule_value("t", &rule(MatchKind::SteamAppid, "0")).is_err());
         assert!(validate_match_rule_value("t", &rule(MatchKind::EpicId, "abc")).is_ok());
         assert!(validate_match_rule_value("t", &rule(MatchKind::EpicId, "")).is_err());
-    }
-
-    #[test]
-    fn defaults_match_compares_by_value() {
-        assert!(ensure_defaults_match("Tool", &1, &1).is_ok());
-        assert!(ensure_defaults_match("Tool", &1, &2).is_err());
     }
 
     #[test]

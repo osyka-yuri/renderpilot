@@ -5,10 +5,11 @@
 //! upstream snapshot or an official redistributable already PE-sanity-checked on
 //! the way in, so nothing about the previous bytes is worth preserving for manual
 //! recovery. [`engine::replace_file`] (temp+rename) makes each individual write
-//! crash-safe on its own; no separate engine sentinel is needed for this in-place
-//! path. What *is* needed is a uniform way to put every touched file back if a
-//! *later* step in the same flow fails before the result is durably persisted —
-//! that's what [`apply_replacements`]/[`restore_originals`]/
+//! crash-safe on its own; this helper therefore never opens a sentinel. An outer
+//! multi-artifact transaction still owns one across all writes and persistence.
+//! This module gives that transaction a uniform way to put every touched file
+//! back if a *later* step fails before the result is durably persisted — that's
+//! what [`apply_replacements`]/[`restore_originals`]/
 //! [`restore_originals_best_effort`] provide.
 
 use std::path::PathBuf;
@@ -36,6 +37,13 @@ pub(crate) struct OriginalFile {
     pub(crate) bytes: Option<Vec<u8>>,
 }
 
+/// Replacement failure plus whether the helper restored every earlier write.
+#[derive(Debug)]
+pub(crate) struct ReplacementFailure {
+    pub(crate) error: ServiceError,
+    pub(crate) rollback_complete: bool,
+}
+
 /// Writes every `replacement` in place, capturing each file's pre-write state
 /// (existing bytes, or `None` if it didn't exist). On the first failure,
 /// everything written so far *by this call* is rolled back before the error is
@@ -45,6 +53,13 @@ pub(crate) struct OriginalFile {
 pub(crate) fn apply_replacements(
     replacements: Vec<Replacement>,
 ) -> Result<Vec<OriginalFile>, ServiceError> {
+    apply_replacements_with_outcome(replacements).map_err(|failure| failure.error)
+}
+
+/// Outcome-preserving replacement path for outer multi-step transactions.
+pub(crate) fn apply_replacements_with_outcome(
+    replacements: Vec<Replacement>,
+) -> Result<Vec<OriginalFile>, ReplacementFailure> {
     let mut originals = Vec::with_capacity(replacements.len());
 
     for replacement in replacements {
@@ -52,8 +67,11 @@ pub(crate) fn apply_replacements(
             match crate::fs::read_file(&replacement.path) {
                 Ok(bytes) => Some(bytes),
                 Err(error) => {
-                    restore_originals_best_effort(&originals);
-                    return Err(error);
+                    let rollback_complete = restore_originals(&originals).is_ok();
+                    return Err(ReplacementFailure {
+                        error,
+                        rollback_complete,
+                    });
                 }
             }
         } else {
@@ -61,8 +79,11 @@ pub(crate) fn apply_replacements(
         };
 
         if let Err(error) = engine::replace_file(&replacement.path, &replacement.bytes) {
-            restore_originals_best_effort(&originals);
-            return Err(error);
+            let rollback_complete = restore_originals(&originals).is_ok();
+            return Err(ReplacementFailure {
+                error,
+                rollback_complete,
+            });
         }
         crate::fs::stamp_mtime_best_effort(&replacement.path, replacement.mtime.as_deref(), None);
 

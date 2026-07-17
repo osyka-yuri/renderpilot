@@ -60,6 +60,7 @@
 pub(crate) mod anticheat;
 pub(crate) mod availability_pipeline;
 pub mod capabilities;
+mod catalog_message;
 pub(crate) mod durable;
 pub mod engine;
 pub(crate) mod errors;
@@ -83,9 +84,12 @@ pub(crate) mod reshade;
 pub(crate) mod tool;
 pub(crate) mod tracking;
 pub mod update;
+pub(crate) mod vulkan_lock;
 
 #[cfg(test)]
 pub(crate) mod test_support;
+
+pub use catalog_message::CatalogMessage;
 
 use std::path::{Path, PathBuf};
 
@@ -111,6 +115,12 @@ pub(crate) fn any_file_name_matches(dir: &Path, predicate: impl Fn(&str) -> bool
         entry.file_type().is_ok_and(|ft| ft.is_file())
             && predicate(&entry.file_name().to_string_lossy().to_ascii_lowercase())
     })
+}
+
+/// Converts a slice of [`renderpilot_domain::PathRef`]s into owned [`PathBuf`]s.
+#[must_use]
+pub(crate) fn path_bufs(paths: &[renderpilot_domain::PathRef]) -> Vec<PathBuf> {
+    paths.iter().map(|path| PathBuf::from(path.as_str())).collect()
 }
 
 #[cfg(test)]

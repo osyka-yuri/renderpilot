@@ -14,9 +14,11 @@
 
 use std::path::Path;
 
-use renderpilot_domain::AddonKind;
+use renderpilot_domain::{AddonKind, InstalledAddon};
 
 use super::capabilities::CapabilityProbeFuture;
+use crate::game_mutation_lock::GameMutationGuard;
+use crate::{Context, ServiceError};
 
 /// Static policy and identity for one add-on tool RenderPilot can install.
 ///
@@ -30,13 +32,14 @@ pub(crate) trait AddonTool: Send + Sync {
     fn exclusive_peers(&self) -> &'static [AddonKind];
 
     /// User-facing message when an exclusive peer blocks install of this tool.
-    fn exclusive_block_message(&self) -> &'static str;
+    ///
+    /// `unmanaged` is true when the block came from on-disk peer files rather
+    /// than a managed install record — callers must not tell the user to
+    /// "uninstall" something that has no record.
+    fn exclusive_block_message(&self, unmanaged: bool) -> &'static str;
 
     /// On-disk signature when no DB record exists (shallow / bounded scan).
     fn unmanaged_present(&self, dir: &Path) -> bool;
-
-    /// Whether a pure matcher outcome should appear as catalog-available.
-    fn profile_available_from_resolution(&self, installable: bool, external: bool) -> bool;
 
     /// i18n key for the post-download finalizing progress phase.
     fn finalizing_phase(&self) -> &'static str;
@@ -44,16 +47,34 @@ pub(crate) trait AddonTool: Send + Sync {
     /// Best-effort cleanup of torn-install debris (caller detected the sentinel).
     fn recover_torn(&self, scan_dirs: &[&Path]);
 
+    /// Lazily upgrades legacy install-record fields under the game mutation
+    /// guard. Default: return the record unchanged. Tools that once stored
+    /// coordinated ownership in generic engine sets implement a real migration.
+    fn reconcile_legacy_locked(
+        &self,
+        _context: &Context,
+        _guard: &GameMutationGuard,
+        record: &InstalledAddon,
+    ) -> Result<InstalledAddon, ServiceError> {
+        Ok(record.clone())
+    }
+
+    /// Whether check-update supports an expensive deep/advisory probe flag.
+    /// Default: false. Luma's multi-file ZIP tree can promote advisory sources.
+    fn supports_deep_check(&self) -> bool {
+        false
+    }
+
     /// Loads (or reuses the cached) manifest and wraps it in a type-erased
     /// catalog capability probe. See [`super::capabilities`].
     fn load_capability_probe(&self) -> CapabilityProbeFuture;
 }
 
-/// Every registered tool. Adding an implementation means one more entry here.
+/// Every known tool. Adding a third tool means one more entry here.
 pub(crate) static TOOLS: &[&dyn AddonTool] = &[&crate::addons::renodx::tool::RenoDxTool];
 
-/// Lookup by kind. Returns `None` when a domain kind has not yet been registered.
-/// This supports introducing shared domain primitives before a tool implementation.
+/// Lookup by kind. Returns `None` only if domain and registration have drifted
+/// (covered by the exhaustiveness test below).
 #[must_use]
 pub(crate) fn tool(kind: AddonKind) -> Option<&'static dyn AddonTool> {
     TOOLS.iter().copied().find(|t| t.kind() == kind)
@@ -69,6 +90,75 @@ pub(crate) fn require_tool(kind: AddonKind) -> &'static dyn AddonTool {
              implement AddonTool and add it to the table"
         )
     })
+}
+
+/// Returns the registered peers that are mutually exclusive with `kind`.
+#[must_use]
+pub(crate) fn exclusive_peers(kind: AddonKind) -> &'static [AddonKind] {
+    match kind {
+        AddonKind::Luma => &[AddonKind::RenoDx],
+        _ => tool(kind).map_or(&[], |registered| registered.exclusive_peers()),
+    }
+}
+
+/// Returns whether a registered tool's bounded on-disk signature is present.
+#[must_use]
+pub(crate) fn unmanaged_files_present(dir: &Path, kind: AddonKind) -> bool {
+    match kind {
+        AddonKind::Luma => legacy_luma_unmanaged_present(dir),
+        _ => tool(kind).is_some_and(|registered| registered.unmanaged_present(dir)),
+    }
+}
+
+/// Transitional Luma detector used before its full `AddonTool` registration.
+/// It preserves the RenoDX exclusivity backstop without exposing Luma commands.
+fn legacy_luma_unmanaged_present(game_dir: &Path) -> bool {
+    if super::any_file_name_matches(game_dir, |name| {
+        name.starts_with("luma-")
+            && (name.ends_with(".addon")
+                || name.ends_with(".addon32")
+                || name.ends_with(".addon64"))
+    }) {
+        return true;
+    }
+    let luma_dir = game_dir.join("Luma");
+    luma_dir.is_dir() && legacy_luma_dir_has_framework_content(&luma_dir, 0)
+}
+
+fn legacy_luma_dir_has_framework_content(dir: &Path, depth: u8) -> bool {
+    const MAX_DEPTH: u8 = 3;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let Ok(file_type) = entry.file_type() else {
+            return false;
+        };
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        (file_type.is_file()
+            && (name.ends_with(".hlsl")
+                || name.ends_with(".fx")
+                || name.ends_with(".fxh")
+                || name.ends_with(".addon")
+                || name.ends_with(".addon32")
+                || name.ends_with(".addon64")))
+            || (file_type.is_dir()
+                && depth < MAX_DEPTH
+                && legacy_luma_dir_has_framework_content(&entry.path(), depth + 1))
+    })
+}
+
+/// Whether check-update supports a deep/advisory probe for `kind`.
+/// Prefer the crate-public [`crate::addons::addon_supports_deep_check`].
+#[must_use]
+pub(crate) fn supports_deep_check(kind: AddonKind) -> bool {
+    tool(kind).is_some_and(|registered| registered.supports_deep_check())
+}
+
+/// Scans all possible install roots for a registered tool's on-disk signature.
+#[must_use]
+pub(crate) fn unmanaged_files_present_in_dirs(dirs: &[&Path], kind: AddonKind) -> bool {
+    dirs.iter().any(|dir| unmanaged_files_present(dir, kind))
 }
 
 #[cfg(test)]
@@ -97,29 +187,25 @@ mod tests {
     fn exclusive_peers_are_pairwise_registered() {
         for t in TOOLS {
             for &peer in t.exclusive_peers() {
-                assert!(
-                    tool(peer).is_some(),
-                    "{:?} lists exclusive peer {peer:?} that is not registered",
-                    t.kind()
-                );
-                assert!(
-                    tool(peer)
-                        .expect("peer")
-                        .exclusive_peers()
-                        .contains(&t.kind()),
-                    "exclusive peer {peer:?} does not list {:?} back",
-                    t.kind()
-                );
+                assert!(AddonKind::ALL.contains(&peer));
             }
         }
     }
 
     #[test]
-    fn exclusive_block_messages_are_nonempty() {
+    fn exclusive_block_messages_are_nonempty_for_record_and_unmanaged() {
         for t in TOOLS {
-            assert!(
-                !t.exclusive_block_message().is_empty(),
-                "{:?} must provide an exclusive_block_message",
+            for unmanaged in [false, true] {
+                assert!(
+                    !t.exclusive_block_message(unmanaged).is_empty(),
+                    "{:?} must provide exclusive_block_message(unmanaged={unmanaged})",
+                    t.kind()
+                );
+            }
+            assert_ne!(
+                t.exclusive_block_message(false),
+                t.exclusive_block_message(true),
+                "{:?} should distinguish record vs unmanaged block copy",
                 t.kind()
             );
         }

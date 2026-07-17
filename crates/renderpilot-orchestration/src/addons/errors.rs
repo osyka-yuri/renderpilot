@@ -16,12 +16,12 @@ use crate::ServiceError;
 
 /// An internal or integrity fault (manifest, serialization, verification).
 pub(crate) fn failed(message: impl Into<String>) -> ServiceError {
-    ServiceError::CommandFailed(message.into())
+    ServiceError::command_failed(message)
 }
 
 /// A user-actionable problem (unsupported game, needs confirmation, blocked).
 pub(crate) fn invalid(message: impl Into<String>) -> ServiceError {
-    ServiceError::InvalidInput(message.into())
+    ServiceError::invalid_input(message)
 }
 
 /// A filesystem operation failure, e.g. ``failed to back up '<path>': <error>``.

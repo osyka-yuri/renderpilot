@@ -15,9 +15,7 @@ pub fn recover_torn_install(scan_dirs: &[&Path]) {
                     continue;
                 }
                 let lower = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                if lower.starts_with("renodx-")
-                    && (lower.ends_with(".addon64") || lower.ends_with(".addon32"))
-                {
+                if crate::addons::renodx::tool::is_renodx_addon_file_name(&lower) {
                     let _ = fs::remove_file(entry.path());
                 }
             }
@@ -25,7 +23,7 @@ pub fn recover_torn_install(scan_dirs: &[&Path]) {
     }
 
     if let Some(game_dir) = scan_dirs.first()
-        && !crate::addons::registry::unmanaged_files_present_in_dirs(scan_dirs, AddonKind::RenoDx)
+        && !crate::addons::tool::unmanaged_files_present_in_dirs(scan_dirs, AddonKind::RenoDx)
     {
         engine::clear_torn_install_marker(game_dir, AddonKind::RenoDx);
     }

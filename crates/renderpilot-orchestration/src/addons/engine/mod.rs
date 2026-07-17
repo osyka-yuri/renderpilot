@@ -38,6 +38,7 @@ pub use types::{
     MergeStrategy,
 };
 
+#[cfg(test)]
 pub(crate) use sentinel::write_sentinel;
 pub(crate) use sentinel::{OperationSentinel, PendingInstallCommit, remove_sentinel, sentinel_path};
 

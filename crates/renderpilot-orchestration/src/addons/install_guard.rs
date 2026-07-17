@@ -1,6 +1,6 @@
 //! Shared install preflight: resolve scan roots and enforce exclusivity + torn recovery.
 //!
-//! Callers hold the per-game [`super::operation_lock`] before calling these helpers.
+//! Callers hold the per-game [`crate::game_mutation_lock`] before calling these helpers.
 
 use renderpilot_domain::{AddonKind, GameId};
 
@@ -32,13 +32,7 @@ pub(crate) fn guard_exclusivity_and_torn(
 ) -> Result<(), ServiceError> {
     let tool = require_tool(kind);
     let scan_dirs = roots.scan_dir_paths();
-    exclusivity::ensure_not_blocked(
-        context,
-        game_id,
-        kind,
-        Some(scan_dirs.as_slice()),
-        tool.exclusive_block_message(),
-    )?;
+    exclusivity::ensure_not_blocked(context, game_id, kind, Some(scan_dirs.as_slice()))?;
     if engine::is_install_torn(roots.sentinel_dir(), kind) {
         tool.recover_torn(scan_dirs.as_slice());
     }

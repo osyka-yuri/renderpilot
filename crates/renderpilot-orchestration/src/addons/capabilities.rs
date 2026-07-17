@@ -203,15 +203,32 @@ pub async fn load_capability_probes() -> LoadedCapabilityProbes {
 
 #[cfg(test)]
 mod tests {
+    use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
+
     use super::*;
+    use crate::addons::matching::MatchKind;
+    use crate::addons::renodx;
+
+    fn borderlands_facts() -> MatchFacts {
+        MatchFacts {
+            launcher: Launcher::Steam,
+            external_id: Some("49520".to_owned()),
+            exe_file_name: Some("Borderlands2.exe".to_owned()),
+            exe_sha256: None,
+            engine: None,
+            graphics: ExeGraphicsInfo::new(vec![GraphicsApi::D3D9], Some(Architecture::X86)),
+        }
+    }
 
     #[test]
-    fn clearing_a_kind_removes_its_snapshot_capabilities() {
+    fn missing_manifest_preserves_that_kind_in_snapshot() {
         let game_id = GameId::new("game:test").expect("game id");
         let mut snapshot = ProfileCapabilitySnapshot::default();
         snapshot.insert(game_id.clone(), AddonKind::RenoDx);
-        snapshot.clear_kind(AddonKind::RenoDx);
+        snapshot.insert(game_id.clone(), AddonKind::Luma);
 
-        assert!(snapshot.capabilities_for(&game_id).is_empty());
+        snapshot.clear_kind(AddonKind::Luma);
+
+        assert_eq!(snapshot.capabilities_for(&game_id), vec![AddonKind::RenoDx]);
     }
 }

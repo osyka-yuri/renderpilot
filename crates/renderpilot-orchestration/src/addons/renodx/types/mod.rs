@@ -24,6 +24,9 @@
 //! crate) needs them. This module owns the RenoDX-shaped wire model (manifest,
 //! title, generic, category) on top of all of them.
 
+mod catalog;
+mod wire_v1;
+
 use renderpilot_domain::{Architecture, GraphicsApi};
 use serde::{Deserialize, Serialize};
 

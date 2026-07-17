@@ -52,9 +52,9 @@ pub fn adopt_existing_paths(
 
 /// Builds an install record while leaving explicitly non-owned mutations out of
 /// the later uninstall receipt. This is for additive edits to a compatible
-/// user runtime: the engine still rolls the edit back if the *current*
-/// transaction fails, but a successful add-on uninstall must leave it in
-/// place.
+/// user runtime (for example Luma's manifest keys in an existing dgVoodoo
+/// config): the engine still rolls the edit back if the *current* transaction
+/// fails, but a successful add-on uninstall must leave it in place.
 pub fn build_ignoring_created(
     game_id: GameId,
     kind: AddonKind,
@@ -79,27 +79,21 @@ pub fn build_ignoring_created(
     Ok(record)
 }
 
-fn to_path_ref(path: &Path) -> Result<PathRef, ServiceError> {
+pub(crate) fn to_path_ref(path: &Path) -> Result<PathRef, ServiceError> {
     PathRef::new(path.to_string_lossy().into_owned())
-        .map_err(|error| ServiceError::CommandFailed(format!("invalid install path: {error}")))
+        .map_err(|error| ServiceError::command_failed(format!("invalid install path: {error}")))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::fs;
 
     use renderpilot_domain::TrackedSourceRole;
     use tempfile::tempdir;
 
     use super::*;
     use crate::addons::engine::{self, FileOp, IniSection, InstallPlan, MergeStrategy};
-
-    fn path_bufs(paths: &[PathRef]) -> Vec<PathBuf> {
-        paths
-            .iter()
-            .map(|path| PathBuf::from(path.as_str()))
-            .collect()
-    }
+    use crate::addons::path_bufs;
 
     /// The extensibility seam: a *second* tool with a different shape — an
     /// OptiScaler-style proxy DLL plus an `OptiScaler.ini` (a different section and
@@ -177,5 +171,64 @@ mod tests {
         );
         assert!(!game.join("OptiScaler.ini").exists());
         assert!(!game.join("optiscaler-marker.json").exists());
+    }
+
+    /// The seam proven above with a hypothetical shape, now exercised with the
+    /// real second `AddonKind` and its tree-shaped payload: a `CreateNested`
+    /// install round-trips through the exact same `build` + `uninstall_tree`
+    /// with no framework changes, and leaves a clean folder behind.
+    #[test]
+    fn a_real_second_kind_with_a_nested_payload_installs_records_and_reverses_cleanly() {
+        let dir = tempdir().expect("tempdir");
+        let game = dir.path();
+        fs::write(game.join("game.exe"), b"game").expect("write");
+
+        let plan = InstallPlan {
+            kind: AddonKind::Luma,
+            ops: vec![
+                FileOp::CreateNested {
+                    relative_path: "Luma-Game.addon".to_owned(),
+                    bytes: b"addon-bytes".to_vec(),
+                },
+                FileOp::CreateNested {
+                    relative_path: "Luma/Global/Copy_PS.hlsl".to_owned(),
+                    bytes: b"technique {}".to_vec(),
+                },
+                FileOp::CreateNested {
+                    relative_path: "Luma/Includes/Common.hlsl".to_owned(),
+                    bytes: b"// common".to_vec(),
+                },
+            ],
+        };
+
+        let receipt = engine::install(game, &plan).expect("install");
+
+        let addon = game.join("Luma-Game.addon");
+        let record = build(
+            GameId::new("steam:403640").expect("id"),
+            AddonKind::Luma,
+            &addon,
+            &receipt,
+            Vec::new(),
+        )
+        .expect("record");
+
+        assert_eq!(record.kind(), AddonKind::Luma);
+        assert_eq!(record.created_files().len(), 3);
+        assert!(record.backed_up_files().is_empty());
+
+        engine::uninstall_tree(
+            &path_bufs(record.created_files()),
+            &path_bufs(record.backed_up_files()),
+            game,
+        )
+        .expect("uninstall_tree");
+
+        // The whole tree — including the now-empty `Luma/Global` and
+        // `Luma/Includes` directories, and `Luma/` itself — is gone, and the
+        // pre-existing, unrelated file survives untouched.
+        assert!(!addon.exists());
+        assert!(!game.join("Luma").exists());
+        assert_eq!(fs::read(game.join("game.exe")).unwrap(), b"game");
     }
 }

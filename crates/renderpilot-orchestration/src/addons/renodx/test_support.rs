@@ -65,7 +65,7 @@ pub(crate) fn manifest(titles: Vec<Title>) -> RenoDxManifest {
 // Synthetic PE images are shared with ReShade fetch tests; re-exported from
 // [`crate::addons::test_support`] so RenoDX fixtures keep addressing them here.
 pub(crate) use crate::addons::test_support::{
-    MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports,
+    MACHINE_AMD64, PE32_PLUS_MAGIC, build_pe_with_exports, reshade_sources,
 };
 
 #[cfg(windows)]

@@ -19,6 +19,16 @@ pub(super) fn not_installed() -> ServiceError {
     invalid("RenoDX is not installed for this game".to_owned())
 }
 
+/// Install snapshot/revalidation drift while network prepare ran unlocked.
+pub(super) fn state_changed_retry_install() -> ServiceError {
+    invalid("RenoDX install state changed during preparation; retry the install".to_owned())
+}
+
+/// Update snapshot/revalidation drift while network prepare ran unlocked.
+pub(super) fn state_changed_retry_update() -> ServiceError {
+    invalid("RenoDX install state changed during update preparation; retry the update".to_owned())
+}
+
 /// The manifest has no ReShade source for the requested channel. Delegates to the
 /// shared constructor ([`crate::addons::reshade::source::channel_unavailable`]) so
 /// the message stays identical across tools.

@@ -33,9 +33,10 @@ pub(crate) fn is_renodx_addon_file_name(lower: &str) -> bool {
 pub(crate) fn capability_probe(manifest: RenoDxManifest) -> CapabilityProbe {
     CapabilityProbe::new(AddonKind::RenoDx, move |facts: &MatchFacts| {
         let resolution = matcher::resolve(&manifest, facts);
-        let installable = matches!(&resolution, RenoDxResolution::Installable(_));
-        let external = matches!(&resolution, RenoDxResolution::External { .. });
-        RenoDxTool.profile_available_from_resolution(installable, external)
+        matches!(
+            &resolution,
+            RenoDxResolution::Installable(_) | RenoDxResolution::External { .. }
+        )
     })
 }
 
@@ -49,19 +50,19 @@ impl AddonTool for RenoDxTool {
     }
 
     fn exclusive_peers(&self) -> &'static [AddonKind] {
-        &[]
+        &[AddonKind::Luma]
     }
 
-    fn exclusive_block_message(&self) -> &'static str {
-        "An incompatible add-on is installed for this game"
+    fn exclusive_block_message(&self, unmanaged: bool) -> &'static str {
+        if unmanaged {
+            "Luma Framework files are present for this game; remove them before installing RenoDX"
+        } else {
+            "Luma Framework is installed for this game; uninstall it before installing RenoDX"
+        }
     }
 
     fn unmanaged_present(&self, dir: &Path) -> bool {
         unmanaged_present(dir)
-    }
-
-    fn profile_available_from_resolution(&self, installable: bool, external: bool) -> bool {
-        installable || external
     }
 
     fn finalizing_phase(&self) -> &'static str {
