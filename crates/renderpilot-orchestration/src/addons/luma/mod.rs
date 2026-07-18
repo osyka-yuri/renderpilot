@@ -22,8 +22,12 @@
 //! ReShade host subsystem, the install engine) already lives in a common
 //! `addons::*` module both tools depend on instead.
 
+mod dgvoodoo;
+mod dlss;
 mod errors;
+mod fetch;
 pub(crate) mod matcher;
+mod source;
 pub mod types;
 mod validate;
 
