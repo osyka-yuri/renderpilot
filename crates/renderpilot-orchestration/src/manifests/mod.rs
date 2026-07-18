@@ -12,11 +12,13 @@
 
 mod gate;
 
+use std::future::Future;
+
 use serde::Serialize;
 
+use crate::addons::luma;
 use crate::addons::renodx;
 use crate::addons::reshade::manifest_store as reshade_manifest_store;
-use crate::addons::reshade::types::ReshadeConfig;
 use crate::libraries;
 
 pub use gate::{
@@ -74,15 +76,6 @@ impl ManifestKindStatus {
             },
         }
     }
-
-    fn from_soft_option<T>(value: &Option<T>) -> Self {
-        match value {
-            Some(_) => Self::Ok,
-            None => Self::Error {
-                message: "unavailable".to_owned(),
-            },
-        }
-    }
 }
 
 /// Per-kind results for a coordinated refresh.
@@ -92,6 +85,8 @@ pub struct ManifestKindResults {
     pub libraries: ManifestKindStatus,
     /// RenoDX tool catalogue.
     pub renodx: ManifestKindStatus,
+    /// Luma tool catalogue.
+    pub luma: ManifestKindStatus,
     /// Shared ReShade host sources.
     pub reshade: ManifestKindStatus,
 }
@@ -118,15 +113,17 @@ impl ManifestRefreshReport {
         mode: &str,
         libraries: &Result<impl Sized, E>,
         renodx: &Result<impl Sized, E>,
-        reshade: &Option<impl Sized>,
+        luma: &Result<impl Sized, E>,
+        reshade: &Result<impl Sized, E>,
     ) -> Self {
-        log_kind_failures(mode, libraries, renodx, reshade);
+        log_kind_failures(mode, libraries, renodx, luma, reshade);
         Self {
             outcome,
             kinds: ManifestKindResults {
                 libraries: ManifestKindStatus::from_result(libraries),
                 renodx: ManifestKindStatus::from_result(renodx),
-                reshade: ManifestKindStatus::from_soft_option(reshade),
+                luma: ManifestKindStatus::from_result(luma),
+                reshade: ManifestKindStatus::from_result(reshade),
             },
         }
     }
@@ -155,17 +152,20 @@ pub async fn refresh_remote_manifests(policy: ManifestRefreshPolicy) -> Manifest
 }
 
 async fn refresh_passive() -> ManifestRefreshReport {
-    let (libraries, renodx, reshade) = tokio::join!(
+    let (libraries, renodx, luma, reshade) = join_catalog_fetches(
         libraries::get_or_fetch_manifest(),
         renodx::manifest_store::get_or_fetch_manifest(),
-        async { reshade_manifest_store::shared_config().await },
-    );
+        luma::manifest_store::get_or_fetch_manifest(),
+        reshade_manifest_store::get_or_fetch_catalog(),
+    )
+    .await;
 
     ManifestRefreshReport::from_kind_fetches(
         ManifestRefreshOutcome::PassiveCompleted,
         "passive",
         &libraries,
         &renodx,
+        &luma,
         &reshade,
     )
 }
@@ -192,34 +192,39 @@ async fn refresh_forced(gate: &ForceRefreshGate) -> ManifestRefreshReport {
 }
 
 async fn force_fetch_all_kinds() -> ManifestRefreshReport {
-    // ReShade first so tool force overlays can reuse the resolved config
-    // without a second CDN round-trip.
-    let reshade = reshade_manifest_store::fetch_shared_config().await;
-    // On force-fetch failure, overlay tools from disk cache only — do not
-    // re-enter get_or_fetch (which may retry the network).
-    let shared_for_tools: Option<ReshadeConfig> = reshade
-        .clone()
-        .or_else(reshade_manifest_store::cached_shared_config);
-
-    let (libraries, renodx) = tokio::join!(
+    let (libraries, renodx, luma, reshade) = join_catalog_fetches(
         libraries::fetch_manifest(),
         renodx::manifest_store::fetch_manifest(),
-    );
+        luma::manifest_store::fetch_manifest(),
+        reshade_manifest_store::fetch_catalog(),
+    )
+    .await;
 
     ManifestRefreshReport::from_kind_fetches(
         ManifestRefreshOutcome::ForcedFetched,
         "forced",
         &libraries,
         &renodx,
+        &luma,
         &reshade,
     )
+}
+
+async fn join_catalog_fetches<L, R, U, S, E>(
+    libraries: impl Future<Output = Result<L, E>>,
+    renodx: impl Future<Output = Result<R, E>>,
+    luma: impl Future<Output = Result<U, E>>,
+    reshade: impl Future<Output = Result<S, E>>,
+) -> (Result<L, E>, Result<R, E>, Result<U, E>, Result<S, E>) {
+    tokio::join!(libraries, renodx, luma, reshade)
 }
 
 fn log_kind_failures<E: std::fmt::Display>(
     mode: &str,
     libraries: &Result<impl Sized, E>,
     renodx: &Result<impl Sized, E>,
-    reshade: &Option<impl Sized>,
+    luma: &Result<impl Sized, E>,
+    reshade: &Result<impl Sized, E>,
 ) {
     if let Err(error) = libraries {
         log::warn!("remote manifests ({mode}): libraries failed: {error}");
@@ -227,14 +232,18 @@ fn log_kind_failures<E: std::fmt::Display>(
     if let Err(error) = renodx {
         log::warn!("remote manifests ({mode}): renodx failed: {error}");
     }
-    if reshade.is_none() {
-        log::warn!("remote manifests ({mode}): reshade unavailable");
+    if let Err(error) = luma {
+        log::warn!("remote manifests ({mode}): luma failed: {error}");
+    }
+    if let Err(error) = reshade {
+        log::warn!("remote manifests ({mode}): reshade failed: {error}");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
     use std::time::Duration;
@@ -244,6 +253,7 @@ mod tests {
         let report = ManifestRefreshReport::skipped_all(ManifestRefreshOutcome::SkippedInFlight);
         assert_eq!(report.kinds.libraries, ManifestKindStatus::Skipped);
         assert_eq!(report.kinds.renodx, ManifestKindStatus::Skipped);
+        assert_eq!(report.kinds.luma, ManifestKindStatus::Skipped);
         assert_eq!(report.kinds.reshade, ManifestKindStatus::Skipped);
     }
 
@@ -259,16 +269,18 @@ mod tests {
     }
 
     #[test]
-    fn from_kind_fetches_builds_report_and_maps_soft_reshade() {
+    fn from_kind_fetches_builds_report_and_maps_reshade_error() {
         let libraries: Result<(), &str> = Ok(());
         let renodx: Result<(), &str> = Err("renodx down");
-        let reshade: Option<()> = None;
+        let luma: Result<(), &str> = Ok(());
+        let reshade: Result<(), &str> = Err("reshade down");
 
         let report = ManifestRefreshReport::from_kind_fetches(
             ManifestRefreshOutcome::ForcedFetched,
             "test",
             &libraries,
             &renodx,
+            &luma,
             &reshade,
         );
 
@@ -278,9 +290,10 @@ mod tests {
             report.kinds.renodx,
             ManifestKindStatus::Error { message } if message.contains("renodx down")
         );
+        assert_eq!(report.kinds.luma, ManifestKindStatus::Ok);
         assert_matches!(
             report.kinds.reshade,
-            ManifestKindStatus::Error { message } if message == "unavailable"
+            ManifestKindStatus::Error { message } if message.contains("reshade down")
         );
     }
 
@@ -300,5 +313,24 @@ mod tests {
             gate.try_begin(Duration::from_secs(90)),
             ForceRefreshPermit::SkippedCooldown { .. }
         );
+    }
+
+    #[tokio::test]
+    async fn coordinated_batch_resolves_the_shared_reshade_catalog_once() {
+        let reshade_calls = AtomicUsize::new(0);
+
+        let (_, _, _, reshade) = join_catalog_fetches(
+            async { Ok::<_, &'static str>(()) },
+            async { Ok::<_, &'static str>(()) },
+            async { Ok::<_, &'static str>(()) },
+            async {
+                reshade_calls.fetch_add(1, Ordering::Relaxed);
+                Ok::<_, &'static str>(())
+            },
+        )
+        .await;
+
+        assert!(reshade.is_ok());
+        assert_eq!(reshade_calls.load(Ordering::Relaxed), 1);
     }
 }

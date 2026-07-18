@@ -24,17 +24,24 @@
 
 mod dgvoodoo;
 mod dlss;
+/// DTOs
+pub mod dto;
 mod errors;
 mod fetch;
 mod game_context;
+pub mod manifest_store;
 pub(crate) mod install;
 pub(crate) mod matcher;
 pub(crate) mod mutation_targets;
+pub(crate) mod reconciliation;
 mod source;
 mod tool;
 mod tracking;
 pub mod types;
+/// Read-only availability use cases.
+pub mod use_cases;
 mod validate;
+mod vcredist;
 
 #[cfg(test)]
 pub(crate) mod test_support;
