@@ -35,6 +35,8 @@ pub(crate) mod plan;
 mod record;
 mod recovery;
 
+#[cfg(test)]
+mod tests;
 
 pub(crate) use record::build_record;
 
