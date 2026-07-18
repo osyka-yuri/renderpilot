@@ -26,8 +26,13 @@ mod dgvoodoo;
 mod dlss;
 mod errors;
 mod fetch;
+mod game_context;
+pub(crate) mod install;
 pub(crate) mod matcher;
+pub(crate) mod mutation_targets;
 mod source;
+mod tool;
+mod tracking;
 pub mod types;
 mod validate;
 

@@ -32,4 +32,5 @@
 pub(crate) mod digest;
 pub(crate) mod download;
 mod extract;
+pub(crate) mod prepare;
 pub(crate) mod types;
