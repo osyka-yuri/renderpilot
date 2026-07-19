@@ -1,12 +1,32 @@
 use renderpilot_orchestration::domain::GraphicsTechnology;
 use renderpilot_orchestration::domain::Swappability;
 
-use super::{CatalogFixture, args, sample_artifact, sample_component, sample_game};
+use std::path::PathBuf;
+
+use super::{
+    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_component,
+    sample_game,
+};
+
+fn game_with_target(
+    name: &str,
+    file_name: &str,
+    bytes: &[u8],
+) -> (TempGameFolder, PathBuf, String) {
+    let game_dir = TempGameFolder::new(name);
+    std::fs::create_dir_all(game_dir.path()).expect("game dir");
+    let target = game_dir.path().join(file_name);
+    std::fs::write(&target, bytes).expect("installed");
+    let install_path = path_string(game_dir.path());
+    (game_dir, target, install_path)
+}
 
 #[test]
 fn plan_swap_renders_operation_plan_json() {
     let fixture = CatalogFixture::new("plan-swap-valid");
-    let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
+    let (_game_dir, target, install_path) =
+        game_with_target("plan-swap-valid-game", "nvngx_dlss.dll", b"installed-dlss");
+    let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
     fixture.store_components(
@@ -16,7 +36,7 @@ fn plan_swap_renders_operation_plan_json() {
             game.id().as_str(),
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
-            "C:/Games/GameA/nvngx_dlss.dll",
+            &path_string(&target),
             Some("3.5.0"),
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
@@ -45,11 +65,14 @@ fn plan_swap_renders_operation_plan_json() {
 
     assert_eq!(json["game_id"], game.id().as_str());
     assert_eq!(json["operation_type"], "replace_component");
-    assert_eq!(json["target_path"], "C:/Games/GameA/nvngx_dlss.dll");
+    assert_eq!(json["target_path"], path_string(&target));
     assert_eq!(json["replacement_path"], "D:/Library/nvngx_dlss.dll");
-    assert_eq!(json["original_version"], "3.5.0");
+    assert!(
+        json["original_version"].is_null(),
+        "metadata follows the verified on-disk baseline, not stale component version text"
+    );
     assert_eq!(json["replacement_version"], "3.7.0");
-    assert_eq!(json["risk_level"], "low");
+    assert_eq!(json["risk_level"], "medium");
     assert_eq!(json["requires_elevation"], false);
     assert_eq!(json["artifact_id"], "artifact:dlss-3.7");
     assert!(
@@ -64,18 +87,23 @@ fn plan_swap_renders_operation_plan_json() {
             .expect("blockers array")
             .is_empty()
     );
-    assert!(
-        json["warnings"]
-            .as_array()
-            .expect("warnings array")
-            .is_empty()
+    assert_eq!(
+        json["warnings"].as_array().expect("warnings array"),
+        &[serde_json::Value::String(
+            "manual_version_comparison_required".to_owned()
+        )]
     );
 }
 
 #[test]
 fn plan_swap_blocks_invalid_artifact() {
     let fixture = CatalogFixture::new("plan-swap-invalid-artifact");
-    let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
+    let (_game_dir, target, install_path) = game_with_target(
+        "plan-swap-invalid-game",
+        "nvngx_dlss.dll",
+        b"installed-dlss",
+    );
+    let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
     fixture.store_components(
@@ -85,7 +113,7 @@ fn plan_swap_blocks_invalid_artifact() {
             game.id().as_str(),
             GraphicsTechnology::DlssSuperResolution,
             Swappability::Swappable,
-            "C:/Games/GameA/nvngx_dlss.dll",
+            &path_string(&target),
             Some("3.5.0"),
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],
@@ -119,7 +147,12 @@ fn plan_swap_blocks_invalid_artifact() {
 #[test]
 fn plan_swap_surfaces_streamline_confirmation_warning() {
     let fixture = CatalogFixture::new("plan-swap-streamline");
-    let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
+    let (_game_dir, target, install_path) = game_with_target(
+        "plan-swap-streamline-game",
+        "sl.interposer.dll",
+        b"installed-streamline",
+    );
+    let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
     fixture.store_components(
@@ -129,7 +162,7 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
             game.id().as_str(),
             GraphicsTechnology::NvidiaStreamline,
             Swappability::BundleOnly,
-            "C:/Games/GameA/sl.interposer.dll",
+            &path_string(&target),
             Some("2.4.0"),
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )],

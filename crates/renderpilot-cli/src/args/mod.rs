@@ -1,0 +1,55 @@
+//! CLI argument parsing.
+//!
+//! - [`command`] -- parsed `Command` enum
+//! - [`cursor`] -- raw argv cursor + identifier helpers
+//! - [`catalog`] -- scan/list/candidates/plan/apply/rollback
+//! - [`addon`] -- renodx/luma subcommands
+
+mod addon;
+mod catalog;
+pub(crate) mod command;
+mod cursor;
+
+use std::ffi::OsString;
+
+use crate::CliError;
+
+use self::addon::parse_renodx_command;
+use self::catalog::{
+    parse_apply_command, parse_candidates_command, parse_list_artifacts_command,
+    parse_list_operations_command, parse_plan_swap_command, parse_rollback_command,
+    parse_scan_folder_command,
+};
+pub(crate) use self::command::Command;
+use self::cursor::ArgCursor;
+
+pub(crate) fn parse_args(
+    args: impl IntoIterator<Item = OsString>,
+) -> Result<command::Command, CliError> {
+    let mut args = ArgCursor::new(args);
+    let Some(first) = args.next_keyword()? else {
+        return Ok(Command::Summary);
+    };
+
+    match first.as_str() {
+        "--help" | "-h" => parse_flag_command(Command::Help, &mut args),
+        "--version" | "-V" => parse_flag_command(Command::Version, &mut args),
+        "scan-folder" => parse_scan_folder_command(&mut args),
+        "list-artifacts" => parse_list_artifacts_command(&mut args),
+        "list-operations" => parse_list_operations_command(&mut args),
+        "candidates" => parse_candidates_command(&mut args),
+        "plan-swap" => parse_plan_swap_command(&mut args),
+        "apply" | "apply-operation" => parse_apply_command(&mut args),
+        "rollback" => parse_rollback_command(&mut args),
+        "renodx" => parse_renodx_command(&mut args),
+        _ => Err(CliError::UnknownArgument(first)),
+    }
+}
+
+fn parse_flag_command(
+    command: command::Command,
+    args: &mut ArgCursor,
+) -> Result<command::Command, CliError> {
+    args.finish()?;
+    Ok(command)
+}
