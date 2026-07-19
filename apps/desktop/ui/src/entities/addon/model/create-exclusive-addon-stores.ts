@@ -1,8 +1,8 @@
+import type { AddonMutationResult } from './busy-mutation';
+
 export type AddonStoreLike = {
   load(gameId: string): Promise<void>;
-  // Both tool stores resolve `update` with a success boolean; callers that
-  // only need to know a mutation ran (e.g. "update all") can ignore it.
-  update(gameId: string): Promise<unknown>;
+  update(gameId: string): Promise<AddonMutationResult>;
   busy: boolean;
   updateAvailable: boolean;
 };

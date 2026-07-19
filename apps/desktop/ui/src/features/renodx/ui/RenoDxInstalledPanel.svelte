@@ -1,19 +1,17 @@
 <script lang="ts">
-  import type { Component } from 'svelte';
-
   import {
+    AddonAttribution,
     AddonComponentRow,
     AddonInstalledPanel,
     createInstalledLabels,
-    type AddonBadgeStatus,
   } from '@entities/addon';
   import { t } from '@shared/i18n';
   import { Badge, Button } from '@shared/ui';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
-  import { DownloadProgressBar } from '@entities/library';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-  import type { ReshadeChannel } from '../model/types';
+  import { RENODX_ATTRIBUTION } from '../model/attribution';
+  import type { ReshadeChannel } from '@entities/addon';
   import {
     CHANNEL_LABEL,
     VULKAN_DIAGNOSTIC_LABEL,
@@ -21,9 +19,6 @@
     getAddonDescriptionKey,
   } from '../model/reshade-presenters';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
-  import RenoDxStatusBadgeRaw from './RenoDxStatusBadge.svelte';
-
-  const RenoDxStatusBadge: Component<{ status: AddonBadgeStatus }> = RenoDxStatusBadgeRaw;
 
   type Props = {
     gameId: string;
@@ -67,8 +62,6 @@
   );
   const dlssFixStatus = $derived(store.dlssFixInstalled ? store.dlssFixUpdate : undefined);
 
-  const progressIds = $derived([gameId]);
-
   function handleRepair(): void {
     void store.install(gameId, store.selectedReshadeChannel, false);
   }
@@ -103,7 +96,7 @@
   {store}
   {busy}
   labels={RENODX_INSTALLED_LABELS}
-  StatusBadge={RenoDxStatusBadge}
+  statusI18nPrefix="gameDetails.renodx"
   {reshadeDescription}
   {addonDescription}
   onRepair={handleRepair}
@@ -130,7 +123,7 @@
         description={dlssFixDescription}
         hint={t('gameDetails.renodx.component.dlssFixHint')}
         status={dlssFixStatus}
-        StatusBadge={RenoDxStatusBadge}
+        statusI18nPrefix="gameDetails.renodx"
       >
         {#snippet actions()}
           {#if store.dlssFixInstalled}
@@ -170,7 +163,7 @@
     {/if}
   {/snippet}
 
-  {#snippet downloadProgress()}
-    <DownloadProgressBar ids={progressIds} active={store.busy} />
+  {#snippet actionRowLeading()}
+    <AddonAttribution {...RENODX_ATTRIBUTION} />
   {/snippet}
 </AddonInstalledPanel>

@@ -16,7 +16,7 @@ export type CardViewSource = Pick<
 >;
 
 /** Views every tool's card can resolve to, before its own outcome-specific
- * views (for example RenoDX: `external` | `native-hdr`). */
+ * views (Luma: `unmanaged-present`; RenoDX: `external` | `native-hdr`). */
 export type BaseCardView =
   | 'loading'
   | 'load-error'
@@ -30,8 +30,9 @@ export type BaseCardView =
 
 /**
  * Resolves which top-level view an add-on card renders. Order is priority,
- * highest first: a load in progress or a load error always wins over any
- * availability outcome. `resolveOutcomeView` is consulted right after
+ * highest first: a retained load error wins while its retry is in progress;
+ * otherwise the initial load state wins over any availability outcome.
+ * `resolveOutcomeView` is consulted right after
  * `blocked-by-other-addon` and before `blacklisted`, for the tool-specific
  * outcome kinds every backend otherwise reports as mutually exclusive.
  */
@@ -39,11 +40,11 @@ export function getCardView<TOutcomeView extends string>(
   source: CardViewSource,
   resolveOutcomeView: () => TOutcomeView | null,
 ): BaseCardView | TOutcomeView {
-  if (source.loading && !source.loaded) {
-    return 'loading';
-  }
   if (source.loadError) {
     return 'load-error';
+  }
+  if (source.loading && !source.loaded) {
+    return 'loading';
   }
   if (source.isInstalled) {
     return 'installed';

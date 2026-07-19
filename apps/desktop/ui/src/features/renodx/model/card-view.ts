@@ -23,8 +23,9 @@ export type CardViewSource = Pick<
 
 /**
  * Resolves which top-level view the RenoDX card renders. Order is priority,
- * highest first: a load in progress or a load error always wins over any
- * availability outcome, and the outcome kinds are otherwise mutually
+ * highest first: a retained load error wins while its retry is in progress;
+ * otherwise the initial load state wins over any availability outcome. The
+ * outcome kinds are otherwise mutually
  * exclusive (the backend reports exactly one).
  */
 export function getCardView(store: CardViewSource): RenoDxCardView {

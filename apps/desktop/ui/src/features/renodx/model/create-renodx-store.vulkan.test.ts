@@ -1,15 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type * as EntitiesLibrary from '@entities/library';
-
 vi.mock('@shared/notifications', () => ({
   publishErrorNotification: vi.fn(),
 }));
-
-vi.mock('@entities/library', async (importOriginal) => {
-  const actual = await importOriginal<typeof EntitiesLibrary>();
-  return { ...actual, clearDownloadProgress: vi.fn() };
-});
 
 import { createRenoDxStore } from './create-renodx-store.svelte';
 import type { AvailabilityReport } from './types';
@@ -32,7 +25,7 @@ describe('createRenoDxStore', () => {
           severity: 'info',
           message_key: 'addon.risk.sp_safe',
         },
-        notes_keys: [],
+        generic_profile: null,
         host_kind: 'vulkan',
       },
       manual_install: null,

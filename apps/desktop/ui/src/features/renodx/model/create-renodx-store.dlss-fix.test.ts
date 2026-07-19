@@ -1,15 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type * as EntitiesLibrary from '@entities/library';
-
 vi.mock('@shared/notifications', () => ({
   publishErrorNotification: vi.fn(),
 }));
-
-vi.mock('@entities/library', async (importOriginal) => {
-  const actual = await importOriginal<typeof EntitiesLibrary>();
-  return { ...actual, clearDownloadProgress: vi.fn() };
-});
 
 import { createRenoDxStore } from './create-renodx-store.svelte';
 import type { RenoDxUpdateReport } from './types';
@@ -36,7 +29,7 @@ describe('createRenoDxStore', () => {
 
     const ok = await store.installDlssFix('steam:1091500');
 
-    expect(ok).toBe(false);
+    expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
     expect(store.dlssFixInstalled).toBe(false);
   });
@@ -62,7 +55,7 @@ describe('createRenoDxStore', () => {
 
     const ok = await store.uninstallDlssFix('steam:1091500');
 
-    expect(ok).toBe(false);
+    expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
     expect(store.dlssFixInstalled).toBe(true);
   });
@@ -110,7 +103,7 @@ describe('createRenoDxStore', () => {
 
     const ok = await store.installDlssFix('steam:1091500');
 
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     expect(api.installDlssFix).toHaveBeenCalledWith('steam:1091500');
     // After install, the backend reports a DlssFix tracked source, so the state
     // carries `dlss_fix_installed` and the companion reads as installed; it is no

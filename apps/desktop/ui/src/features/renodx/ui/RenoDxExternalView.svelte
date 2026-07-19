@@ -20,9 +20,11 @@
   const externalUrl = $derived(store.externalUrl);
 
   const externalLabel = $derived.by((): string => {
-    const fallback = t('gameDetails.renodx.actionOpenExternal');
+    const message = store.externalMessage;
 
-    return store.externalLabelKey ? translateKey(store.externalLabelKey, fallback) : fallback;
+    return message
+      ? translateKey(message.id, message.fallback_text)
+      : t('gameDetails.renodx.actionOpenExternal');
   });
 
   const externalLinkDisabled = $derived(busy || !externalUrl);

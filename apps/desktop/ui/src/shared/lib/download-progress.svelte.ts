@@ -45,8 +45,8 @@ function ensureListener(): void {
  * if none are present. "Freshest" is determined by the monotonic `seq` counter —
  * whichever id received a progress event most recently wins.
  *
- * Intentionally not exported from the entity index: only `DownloadProgressBar`
- * should call this.
+ * Prefer reading live progress through `DownloadProgressBar` (`@shared/ui`).
+ * Other call sites should only clear or aggregate via the helpers below.
  */
 export function latestDownloadProgress(ids: readonly string[]): DownloadProgress | null {
   ensureListener();

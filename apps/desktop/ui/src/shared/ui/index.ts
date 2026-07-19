@@ -58,7 +58,9 @@ export {
 export { Label } from './label';
 export { Popover, PopoverClose, PopoverContent, PopoverPortal, PopoverTrigger } from './popover';
 export { Progress } from './progress';
+export { DownloadProgressBar } from './download-progress-bar';
 export { ScrollArea, ScrollAreaScrollbar } from './scroll-area';
+
 export {
   Select,
   SelectContent,

@@ -1,11 +1,12 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
 
+import type { ReshadeChannel } from '@entities/addon';
+
 import type {
   AvailabilityReport,
   RenoDxInstallState,
   RenoDxUpdateReport,
-  ReshadeChannel,
   VulkanLayerManagementReport,
   VulkanLayerReport,
 } from '../model/types';

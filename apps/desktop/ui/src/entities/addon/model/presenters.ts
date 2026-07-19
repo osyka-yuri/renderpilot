@@ -11,7 +11,7 @@ import type {
 } from './types';
 
 /** i18n key prefix for tool-specific freshness / status copy. */
-export type ToolI18nPrefix = 'gameDetails.renodx';
+export type ToolI18nPrefix = 'gameDetails.luma' | 'gameDetails.renodx';
 
 export type AddonInstallableLabels = {
   installAction: MessageKey;
@@ -112,16 +112,12 @@ export function actionDisabledMessage(action: ActionDescriptor | undefined): str
     : undefined;
 }
 
-/** The tool-specific i18n keys {@link riskFallbackKey} chooses between. */
-export type RiskFallbackKeys = {
+/** Severity-based fallback keys when the backend risk `message_key` is missing. */
+type RiskFallbackKeys = {
   warn: MessageKey;
   safe: MessageKey;
 };
 
-/**
- * The severity-based fallback message key for an install risk, shown when the
- * backend's `message_key` is not present in the i18n catalog.
- */
 function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): MessageKey {
   switch (severity) {
     case 'warn':
@@ -132,11 +128,10 @@ function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): Messag
 }
 
 /**
- * Humanizes an i18n key for display when it is not in the catalog: drops the
- * dotted namespace and turns underscores into spaces (`a.b.foo_bar` → `foo bar`).
- * Used as the fallback for backend-provided note/requirement keys.
+ * Humanizes an action disabled-reason key when it is not in the catalog: drops
+ * the dotted namespace and turns underscores into spaces (`a.b.foo_bar` → `foo bar`).
  */
-export function humanizeMessageKey(key: string): string {
+function humanizeMessageKey(key: string): string {
   return key.replace(/^.*\./, '').replace(/_/g, ' ');
 }
 
@@ -147,7 +142,7 @@ function toolKey(prefix: ToolI18nPrefix, rest: string): MessageKey {
 
 /**
  * Shared host i18n key maps for a tool's `gameDetails.<tool>` prefix.
- * Tool presenters pass these into {@link getHostDescription} / {@link riskFallbackKey}.
+ * Tool presenters pass these into {@link getHostDescription}.
  */
 function createHostLabelMaps(prefix: ToolI18nPrefix): {
   addonSupportLabel: Record<'limited' | 'unknown', MessageKey>;
@@ -214,7 +209,6 @@ export function createReshadePresenters(
 ): {
   getReshadeDescription: (input: { detection: HostDetection; facts: HostFacts }) => HostDescription;
   describeHost: (input: { detection: HostDetection; facts: HostFacts }) => string;
-  riskFallbackKey: (severity: RiskSeverity) => MessageKey;
   riskMessage: (risk: RiskAssessment) => string;
 } {
   const hostLabels = createHostLabelMaps(prefix);
@@ -233,21 +227,17 @@ export function createReshadePresenters(
     });
   };
 
-  const toolRiskFallbackKey = (severity: RiskSeverity): MessageKey => {
-    return riskFallbackKey(severity, hostLabels.riskFallback);
-  };
-
   const describeHost = (input: { detection: HostDetection; facts: HostFacts }): string =>
     formatHostDescription(getReshadeDescription(input));
 
   const riskMessage = (risk: RiskAssessment): string => {
-    return translateKey(risk.message_key, t(toolRiskFallbackKey(risk.severity)), { addonName });
+    const fallback = riskFallbackKey(risk.severity, hostLabels.riskFallback);
+    return translateKey(risk.message_key, t(fallback), { addonName });
   };
 
   return {
     getReshadeDescription,
     describeHost,
-    riskFallbackKey: toolRiskFallbackKey,
     riskMessage,
   };
 }
@@ -277,5 +267,34 @@ export function createInstalledLabels(prefix: ToolI18nPrefix): AddonInstalledLab
     uninstallConfirmTitle: toolKey(prefix, 'uninstallConfirmTitle'),
     uninstallConfirmBody: toolKey(prefix, 'uninstallConfirmBody'),
     uninstallConfirmAction: toolKey(prefix, 'uninstallConfirmAction'),
+  };
+}
+
+/**
+ * Shared installable-view i18n keys for a tool's `gameDetails.<tool>` prefix.
+ * Confirm body/accept stay on the shared `gameDetails.addon.*` namespace.
+ */
+export function createInstallableLabels(prefix: ToolI18nPrefix): AddonInstallableLabels {
+  return {
+    installAction: toolKey(prefix, 'actionInstall'),
+    installing: toolKey(prefix, 'installing'),
+    confidenceLabel: toolKey(prefix, 'confidenceLabel'),
+    hostCustomBuild: toolKey(prefix, 'host.customBuild'),
+    hostConflictBlocksInstall: toolKey(prefix, 'host.conflictBlocksInstall'),
+    fullAddonWarning: 'gameDetails.addon.fullAddonWarning',
+    confirmTitle: toolKey(prefix, 'confirmTitle'),
+    confirmBody: 'gameDetails.addon.confirmBody',
+    confirmAccept: 'gameDetails.addon.confirmAccept',
+  };
+}
+
+/** Confidence badge labels for a tool's `gameDetails.<tool>` prefix. */
+export function createConfidenceLabelKeys(
+  prefix: ToolI18nPrefix,
+): Record<'verified' | 'experimental' | 'untested', MessageKey> {
+  return {
+    verified: toolKey(prefix, 'confidenceVerified'),
+    experimental: toolKey(prefix, 'confidenceExperimental'),
+    untested: toolKey(prefix, 'confidenceUntested'),
   };
 }

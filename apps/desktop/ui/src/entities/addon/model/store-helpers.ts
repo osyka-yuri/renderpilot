@@ -1,4 +1,43 @@
-import type { Freshness, HostFacts, ReshadeChannel, UpdateStatus } from './types';
+import type { Freshness, HostDetection, HostFacts, ReshadeChannel, UpdateStatus } from './types';
+
+/** Shared host fields every tool's availability wire report carries. */
+export type HostSnapshotWire = {
+  host_detection: HostDetection;
+  host_facts: HostFacts;
+  actions: unknown;
+};
+
+/** CamelCase host snapshot core shared by Luma/RenoDX store helpers. */
+export type HostSnapshotCore<TActions> = {
+  hostDetection: HostDetection;
+  hostFacts: HostFacts;
+  actions: TActions;
+};
+
+/** Maps shared host wire fields into the store snapshot core. */
+export function mapHostSnapshotCore<TActions>(
+  report: HostSnapshotWire & { actions: TActions },
+): HostSnapshotCore<TActions> {
+  return {
+    hostDetection: report.host_detection,
+    hostFacts: report.host_facts,
+    actions: report.actions,
+  };
+}
+
+/**
+ * Builds a tool availability snapshot from shared host fields plus tool-only
+ * extras. Keeps Luma/RenoDX store helpers as thin field maps.
+ */
+export function mapAvailabilitySnapshot<TActions, TExtra extends object>(
+  report: HostSnapshotWire & { actions: TActions },
+  extra: TExtra,
+): HostSnapshotCore<TActions> & TExtra {
+  return {
+    ...mapHostSnapshotCore(report),
+    ...extra,
+  };
+}
 
 /**
  * Minimal install-state shape every add-on tool shares.
@@ -16,11 +55,7 @@ export type AddonInstallStateBase =
       addon_dated: string | null;
       installed_at: number;
       updated_at: number;
-      addon_tracked: boolean | null;
     };
-
-/** The installed arm of the base (used for narrowing). */
-export type InstalledAddonInstallState = Extract<AddonInstallStateBase, { status: 'installed' }>;
 
 /** The minimal update-report shape {@link deriveFreshness} reads. Every tool's
  * own (larger) update-report type structurally satisfies this. */
@@ -36,9 +71,6 @@ export type FreshnessSource = {
  * - `not_installed` collapses to exactly `{ status: 'not_installed' }` (no stray
  *   timestamp keys), even if the value carried extra runtime properties.
  * - `installed` is returned as-is so tool-specific fields stay intact.
- *
- * Unlike {@link normalizeInstallState}, this does not go through `unknown` and
- * does not strip tool fields from the installed arm.
  *
  * The `as T` on the not_installed rebuild is the one intentional cast in this
  * module: pure `{ status: 'not_installed' }` is always a valid member of any
@@ -104,17 +136,34 @@ export function beginRequest<TState, TUpdateReport>(
   return { next: { ...core, requestId: token }, token };
 }
 
+/**
+ * Starts a load and invalidates every in-flight request (including mutations).
+ * Clears `busy` so navigation / reload owns the UI chrome: a discarded mutation
+ * cannot leave the spinner stuck after its token is superseded.
+ *
+ * Navigation loads (`preserveLoadError === false`) clear install chrome
+ * (`state` / `loaded`) so switching games cannot flash the previous game's
+ * installed panel while the new availability is in flight. Same-game retry
+ * (`preserveLoadError === true`) retains prior state/error so installed chrome
+ * stays honest under a load failure.
+ */
 export function withLoadBegin<TState, TUpdateReport>(
   core: AddonCoreSnapshot<TState, TUpdateReport>,
+  preserveLoadError = false,
 ): SnapshotTransition<TState, TUpdateReport> {
   const token = nextRequestId(core.requestId);
+  const retainChrome = preserveLoadError;
   return {
     token,
     next: {
       ...core,
       requestId: token,
       loading: true,
-      loadError: null,
+      busy: false,
+      // Navigation: drop previous game chrome. Retry: keep installed + error.
+      state: retainChrome ? core.state : null,
+      loaded: retainChrome ? core.loaded : false,
+      loadError: preserveLoadError ? core.loadError : null,
       updateReport: null,
       updateProbing: false,
       probeFailed: false,
@@ -131,6 +180,7 @@ export function withLoadSuccess<TState extends AddonInstallStateBase, TUpdateRep
     ...core,
     state: canonicalizeInstallState(nextState),
     loaded: true,
+    loadError: null,
   };
 }
 
@@ -153,6 +203,25 @@ export function withBusy<TState, TUpdateReport>(
   busy: boolean,
 ): AddonCoreSnapshot<TState, TUpdateReport> {
   return core.busy === busy ? core : { ...core, busy };
+}
+
+/** Starts a mutation and invalidates every in-flight load/probe. Stale
+ * requests can no longer overwrite the mutation, and their spinners are
+ * cleared because their `finally` blocks will intentionally be token-stale. */
+export function withMutationBegin<TState, TUpdateReport>(
+  core: AddonCoreSnapshot<TState, TUpdateReport>,
+): SnapshotTransition<TState, TUpdateReport> {
+  const token = nextRequestId(core.requestId);
+  return {
+    token,
+    next: {
+      ...core,
+      requestId: token,
+      busy: true,
+      loading: false,
+      updateProbing: false,
+    },
+  };
 }
 
 export function withProbeBegin<TState, TUpdateReport>(
@@ -234,47 +303,9 @@ export function withMutationCommit<TState extends AddonInstallStateBase, TUpdate
   };
 }
 
-/**
- * Converts untrusted/raw install state (unknown wire shape) into the strict
- * base type. Prefer {@link canonicalizeInstallState} for already-typed IO.
- *
- * - `not_installed` is always exactly `{ status: 'not_installed' }`.
- * - `installed` requires numeric `installed_at` and `updated_at` or throws.
- */
-export function normalizeInstallState(raw: unknown): AddonInstallStateBase {
-  if (!raw || typeof raw !== 'object') {
-    return { status: 'not_installed' };
-  }
-  const r = raw as Record<string, unknown>;
-  if (r.status === 'not_installed') {
-    return { status: 'not_installed' };
-  }
-  if (r.status === 'installed') {
-    const addon_dated = typeof r.addon_dated === 'string' ? r.addon_dated : null;
-    const installed_at = r.installed_at;
-    const updated_at = r.updated_at;
-    const addon_tracked = typeof r.addon_tracked === 'boolean' ? r.addon_tracked : null;
-
-    if (typeof installed_at !== 'number' || typeof updated_at !== 'number') {
-      throw new Error(
-        'normalizeInstallState: "installed" state must have numeric installed_at and updated_at (no legacy nulls allowed)',
-      );
-    }
-
-    return {
-      status: 'installed',
-      addon_dated,
-      installed_at,
-      updated_at,
-      addon_tracked,
-    };
-  }
-  return { status: 'not_installed' };
-}
-
 /** Default (nothing detected yet) host facts, before an availability report
  * has loaded. `defaultChannel` is the tool's own default ReShade channel
- * (for example RenoDX: `stable`). */
+ * (RenoDX: `stable`; Luma: always `nightly`, since it has no channel switch). */
 export function defaultHostFacts(defaultChannel: ReshadeChannel): HostFacts {
   return {
     slot: null,
@@ -284,7 +315,6 @@ export function defaultHostFacts(defaultChannel: ReshadeChannel): HostFacts {
     addon_support: 'unknown',
     channel: {
       selected: defaultChannel,
-      effective: defaultChannel,
       detected: null,
     },
     update_status: 'unknown_needs_validation',

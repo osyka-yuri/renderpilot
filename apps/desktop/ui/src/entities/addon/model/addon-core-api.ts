@@ -45,9 +45,6 @@ export function addonCoreApi<
     get addonDated() {
       return core.addonDated;
     },
-    get addonTracked() {
-      return core.addonTracked;
-    },
     get installedAt() {
       return core.installedAt;
     },

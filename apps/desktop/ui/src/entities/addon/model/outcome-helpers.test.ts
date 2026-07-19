@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveCommonOutcomeFields } from './outcome-helpers';
+import { deriveCommonOutcomeFields, isCommonAvailabilityOutcome } from './outcome-helpers';
 
 describe('deriveCommonOutcomeFields', () => {
   it('returns empty fields when outcome is null', () => {
@@ -14,8 +14,7 @@ describe('deriveCommonOutcomeFields', () => {
       otherAddonKind: null,
       otherAddonUnmanaged: false,
       confidence: null,
-      notesKeys: [],
-      blacklistReason: null,
+      blacklistMessage: null,
       risk: null,
       requiresConfirmation: false,
     });
@@ -26,13 +25,28 @@ describe('deriveCommonOutcomeFields', () => {
       kind: 'installable',
       confidence: 'verified',
       risk: { severity: 'warn', message_key: 'addon.risk.anticheat_detected' },
-      notes_keys: ['note.a'],
     });
 
     expect(fields.isInstallable).toBe(true);
     expect(fields.confidence).toBe('verified');
-    expect(fields.notesKeys).toEqual(['note.a']);
     expect(fields.requiresConfirmation).toBe(true);
+  });
+
+  it('accepts tool-specific installable extras without requiring shared notes', () => {
+    const lumaOutcome = {
+      kind: 'installable',
+      confidence: 'verified',
+      risk: { severity: 'info', message_key: 'addon.risk.none' },
+      features: { dlss_fsr: 'supported', hdr: 'unknown' },
+      guidance: [],
+      launch_args: ['-dx11'],
+    } as const;
+    const fields = deriveCommonOutcomeFields(lumaOutcome);
+
+    expect(fields.isInstallable).toBe(true);
+    expect(fields.confidence).toBe('verified');
+    expect(fields.requiresConfirmation).toBe(false);
+    expect(fields.risk).toEqual({ severity: 'info', message_key: 'addon.risk.none' });
   });
 
   it('maps blocked_by_other_addon outcomes', () => {
@@ -47,13 +61,19 @@ describe('deriveCommonOutcomeFields', () => {
     expect(fields.otherAddonUnmanaged).toBe(true);
   });
 
+  it('preserves the full catalogue message for blacklisted outcomes', () => {
+    const message = { id: 'addon.blocked.test', fallback_text: 'Known not to work.' };
+    const fields = deriveCommonOutcomeFields({ kind: 'blacklisted', message });
+
+    expect(fields.isBlacklisted).toBe(true);
+    expect(fields.blacklistMessage).toEqual(message);
+  });
+
   it('maps unmanaged_present outcomes', () => {
     expect(deriveCommonOutcomeFields({ kind: 'unmanaged_present' }).isUnmanagedPresent).toBe(true);
   });
 
   it('ignores tool-specific outcome kinds', () => {
-    expect(deriveCommonOutcomeFields({ kind: 'external', url: 'https://x' }).isInstallable).toBe(
-      false,
-    );
+    expect(isCommonAvailabilityOutcome({ kind: 'external' })).toBe(false);
   });
 });

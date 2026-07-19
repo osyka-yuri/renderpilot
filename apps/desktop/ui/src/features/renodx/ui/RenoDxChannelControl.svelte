@@ -3,7 +3,7 @@
   import RenoDxChannelControlBody from './RenoDxChannelControlBody.svelte';
   import { AddonFieldLabel } from '@entities/addon';
 
-  import type { ReshadeChannel } from '../model/types';
+  import type { ReshadeChannel } from '@entities/addon';
 
   type Props = {
     value: ReshadeChannel;

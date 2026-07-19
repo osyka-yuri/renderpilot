@@ -6,8 +6,6 @@
 
   import { ICON_BY_STATUS, TINT_BY_STATUS, type AddonBadgeStatus } from '../model/badge-status';
 
-  export type { AddonBadgeStatus } from '../model/badge-status';
-
   type Props = {
     status: AddonBadgeStatus;
     /** Already-translated label for this status. */

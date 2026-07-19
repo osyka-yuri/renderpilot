@@ -1,4 +1,4 @@
-import { deriveCommonOutcomeFields } from './outcome-helpers';
+import { deriveCommonOutcomeFields, isCommonAvailabilityOutcome } from './outcome-helpers';
 
 /**
  * Live getters for the outcome-derived fields every tool store forwards from
@@ -6,10 +6,13 @@ import { deriveCommonOutcomeFields } from './outcome-helpers';
  * internal `$derived` keeps tracking the store's own `$state` outcome —
  * mirrors how `addonCoreApi` stays live over `AddonStoreCore`.
  */
-export function commonOutcomeApi<O extends { kind: string } & Record<string, unknown>>(
-  outcome: () => O | null,
-) {
-  const common = $derived.by(() => deriveCommonOutcomeFields(outcome()));
+export function commonOutcomeApi<O extends { kind: string }>(outcome: () => O | null) {
+  const common = $derived.by(() => {
+    const current = outcome();
+    return deriveCommonOutcomeFields(
+      current && isCommonAvailabilityOutcome(current) ? current : null,
+    );
+  });
 
   return {
     get outcome(): O | null {
@@ -42,11 +45,8 @@ export function commonOutcomeApi<O extends { kind: string } & Record<string, unk
     get confidence() {
       return common.confidence;
     },
-    get notesKeys() {
-      return common.notesKeys;
-    },
-    get blacklistReason() {
-      return common.blacklistReason;
+    get blacklistMessage() {
+      return common.blacklistMessage;
     },
     get risk() {
       return common.risk;

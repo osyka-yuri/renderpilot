@@ -1,5 +1,5 @@
 /**
- * Wire-level DTOs genuinely shared by every add-on tool (for example RenoDX) —
+ * Wire-level DTOs genuinely shared by every add-on tool (RenoDX, Luma, …) —
  * backed by the same Rust types (`addons::matching`, `addons::anticheat`,
  * `addons::reshade::dto`, `addons::update`). Field names match the JSON keys
  * produced by serde exactly. Tool-specific shapes (actions, install state,
@@ -23,6 +23,17 @@ export type MatchConfidence = 'verified' | 'experimental' | 'untested';
 
 /** ReShade host download/build channel (`ReshadeChannel`). */
 export type ReshadeChannel = 'stable' | 'nightly';
+
+/** Narrows persisted or otherwise untrusted channel metadata to the public enum. */
+export function isReshadeChannel(value: unknown): value is ReshadeChannel {
+  return value === 'stable' || value === 'nightly';
+}
+
+/** Stable localization id plus the catalogue's reviewed English fallback. */
+export type CatalogMessage = {
+  id: string;
+  fallback_text: string;
+};
 
 // Import via the shared *segment* public API (not direct file, not root).
 // Re-assign to avoid "re-export from alias" lint rule while keeping the
@@ -62,7 +73,6 @@ export type HostUpdateStatus =
 
 export type HostChannelFacts = {
   selected: ReshadeChannel;
-  effective: ReshadeChannel;
   detected: ReshadeChannel | null;
 };
 

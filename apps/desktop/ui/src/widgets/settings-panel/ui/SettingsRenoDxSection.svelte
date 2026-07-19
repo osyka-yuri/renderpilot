@@ -7,12 +7,11 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
 
-  import { AddonComponentRow, AddonFieldLabel } from '@entities/addon';
-  import { DownloadProgressBar } from '@entities/library';
+  import { AddonComponentRow, AddonFieldLabel, AddonToolStatusBadge } from '@entities/addon';
+  import type { ReshadeChannel } from '@entities/addon';
   import {
     createVulkanLayerSettingsStore,
     RenoDxChannelControl,
-    RenoDxStatusBadge,
     VULKAN_LAYER_PROGRESS_ID,
     VULKAN_DIAGNOSTIC_LABEL,
     VULKAN_LAYER_PRIMARY_ACTION_LABEL,
@@ -22,13 +21,13 @@
     isManagedVulkanLayer,
     vulkanLayerHostDescription,
   } from '@features/renodx';
-  import type { ReshadeChannel } from '@features/renodx';
   import { t, type MessageKey } from '@shared/i18n';
   import {
     Badge,
     Button,
     Card,
     CardContent,
+    DownloadProgressBar,
     CardDescription,
     CardHeader,
     CardTitle,
@@ -167,7 +166,7 @@
 
         {#if showFreshness && updateStatus}
           <AddonFieldLabel label={t('gameDetails.renodx.fresh.label')} class="flex-nowrap gap-1.5">
-            <RenoDxStatusBadge status={updateStatus} />
+            <AddonToolStatusBadge status={updateStatus} i18nPrefix="gameDetails.renodx" />
           </AddonFieldLabel>
         {/if}
       </div>

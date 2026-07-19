@@ -1,14 +1,20 @@
 <script lang="ts">
-  import { AddonConfidenceBadge, AddonRiskConfirmDialog, AddonStateMessage } from '@entities/addon';
-  import { DownloadProgressBar } from '@entities/library';
+  import {
+    AddonAttribution,
+    AddonConfidenceBadge,
+    AddonRiskConfirmDialog,
+    AddonStateMessage,
+    createConfidenceLabelKeys,
+  } from '@entities/addon';
   import { openExternal } from '@shared/api';
-  import { t, translateKey, type MessageKey } from '@shared/i18n';
+  import { t, translateKey } from '@shared/i18n';
   import { publishErrorNotification, formatError } from '@shared/notifications';
   import { Button } from '@shared/ui';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-  import { humanizeMessageKey, riskMessage } from '../model/reshade-presenters';
-  import type { MatchConfidence, ReshadeChannel } from '../model/types';
+  import { RENODX_ATTRIBUTION } from '../model/attribution';
+  import { riskMessage } from '../model/reshade-presenters';
+  import type { ReshadeChannel } from '@entities/addon';
   import { createAddonDrop } from '../model/use-addon-drop.svelte';
   import { ADDON_EXTENSIONS, isAddonFile } from '../model/validate-addon';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
@@ -22,18 +28,12 @@
 
   const { gameId, store, busy }: Props = $props();
 
-  const CONFIDENCE_LABEL_KEY = {
-    verified: 'gameDetails.renodx.confidenceVerified',
-    experimental: 'gameDetails.renodx.confidenceExperimental',
-    untested: 'gameDetails.renodx.confidenceUntested',
-  } as const satisfies Record<MatchConfidence, MessageKey>;
+  const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.renodx');
 
   let externalDropEl = $state<HTMLElement | null>(null);
   let pendingFilePath = $state<string | null>(null);
 
   const drop = createAddonDrop(() => externalDropEl, handleDroppedPaths);
-
-  const progressIds = $derived([gameId]);
 
   const isActionBusy = $derived(busy || store.busy);
   const canPickFile = $derived(!isActionBusy);
@@ -48,16 +48,12 @@
   );
 
   const externalLabel = $derived(
-    store.externalLabelKey
-      ? translateKey(store.externalLabelKey, t('gameDetails.renodx.actionOpenExternal'))
+    store.externalMessage
+      ? translateKey(store.externalMessage.id, store.externalMessage.fallback_text)
       : t('gameDetails.renodx.actionOpenExternal'),
   );
 
   const externalRiskText = $derived(store.externalRisk ? riskMessage(store.externalRisk) : null);
-
-  const externalNotes = $derived.by(() =>
-    store.externalNotes.map((key) => translateKey(key, humanizeMessageKey(key))),
-  );
 
   const showHostChannelControl = $derived(
     store.externalFileInstallable &&
@@ -138,11 +134,7 @@
   }
 
   async function installFile(filePath: string, confirmedRisk: boolean): Promise<void> {
-    try {
-      await store.installFromFile(gameId, filePath, store.selectedReshadeChannel, confirmedRisk);
-    } catch (error) {
-      reportError(installFromFileLabel, error);
-    }
+    await store.installFromFile(gameId, filePath, store.selectedReshadeChannel, confirmedRisk);
   }
 
   function confirmFileInstall(): void {
@@ -201,37 +193,33 @@
     />
   {/if}
 
-  {#if externalNotes.length > 0}
-    <ul class="list-inside list-disc text-sm text-muted-foreground">
-      {#each externalNotes as note (note)}
-        <li>{note}</li>
-      {/each}
-    </ul>
-  {/if}
-
   <p class="text-sm text-muted-foreground">{dropHint}</p>
 
-  <div class="flex flex-wrap items-center gap-2">
-    {#if showHostChannelControl}
-      <RenoDxChannelControl
-        class="max-w-72"
-        value={store.selectedReshadeChannel}
-        stableSupported={store.reshadeStableSupported}
-        busy={isActionBusy}
-        label={t('gameDetails.renodx.channel.hostLabel')}
-        onChange={setChannel}
-      />
-    {/if}
+  <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+    <AddonAttribution {...RENODX_ATTRIBUTION} />
 
-    <Button size="sm" disabled={!canPickFile} onclick={pickFile}>
-      {fileInstallLabel}
-    </Button>
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      {#if showHostChannelControl}
+        <RenoDxChannelControl
+          class="max-w-72"
+          value={store.selectedReshadeChannel}
+          stableSupported={store.reshadeStableSupported}
+          busy={isActionBusy}
+          label={t('gameDetails.renodx.channel.hostLabel')}
+          onChange={setChannel}
+        />
+      {/if}
 
-    <Button variant="outline" size="sm" disabled={!canOpenExternal} onclick={openExternalLink}>
-      {externalLabel}
-    </Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!canPickFile} onclick={pickFile}>
+          {fileInstallLabel}
+        </Button>
 
-    <DownloadProgressBar ids={progressIds} active={store.busy} />
+        <Button variant="outline" size="sm" disabled={!canOpenExternal} onclick={openExternalLink}>
+          {externalLabel}
+        </Button>
+      </div>
+    </div>
   </div>
 </div>
 

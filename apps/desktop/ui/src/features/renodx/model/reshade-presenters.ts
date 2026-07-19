@@ -1,23 +1,16 @@
 import { t, type MessageKey } from '@shared/i18n';
 import { ADDON_DISPLAY_NAME } from '@shared/model';
 import {
-  actionDisabledMessage,
   createReshadePresenters,
-  humanizeMessageKey,
-} from '@entities/addon';
-import type {
-  HostDescription as ReshadeDescription,
-  HostDescriptionPart as ReshadeDescriptionPart,
-  RiskAssessment,
-  RiskSeverity,
+  type HostDetection,
+  type HostFacts,
+  type ReshadeChannel,
+  type RiskAssessment,
 } from '@entities/addon';
 
 import type {
-  HostDetection,
-  HostFacts,
   LayerDiagnosticReason,
   RenoDxAddonState,
-  ReshadeChannel,
   VulkanLayerDetection,
   VulkanLoaderVisibility,
 } from './types';
@@ -52,24 +45,7 @@ export const VULKAN_LOADER_VISIBILITY_NOTE = {
   ambiguous: 'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility',
 } satisfies Partial<Record<VulkanLoaderVisibility, MessageKey>>;
 
-export type { ReshadeDescription, ReshadeDescriptionPart };
-
 const presenters = createReshadePresenters('gameDetails.renodx', ADDON_DISPLAY_NAME.renodx);
-
-export function getReshadeDescription(input: {
-  detection: HostDetection;
-  facts: HostFacts;
-}): ReshadeDescription {
-  return presenters.getReshadeDescription(input);
-}
-
-/**
- * The severity-based fallback message key for an install risk, shown when the
- * backend's `message_key` is not present in the i18n catalog.
- */
-export function riskFallbackKey(severity: RiskSeverity): MessageKey {
-  return presenters.riskFallbackKey(severity);
-}
 
 /**
  * Renders an install-risk message: the backend's own `message_key` when it's
@@ -93,7 +69,7 @@ export function isManagedVulkanLayer(detection: VulkanLayerDetection | null | un
 /**
  * Host version label for the shared Vulkan layer settings card.
  * `null` when detection is not a managed install (no placeholder/spacer text).
- * Shares message keys with the version part of {@link getReshadeDescription}.
+ * Shares message keys with the host version part of {@link describeReshadeHost}.
  */
 export function vulkanLayerHostDescription(
   detection: VulkanLayerDetection | null | undefined,
@@ -116,8 +92,6 @@ export function canCheckVulkanLayerUpdates(
 ): boolean {
   return detection != null && detection !== 'not_installed' && detection !== 'unsupported';
 }
-
-export { actionDisabledMessage, humanizeMessageKey };
 
 export function getAddonDescriptionKey(
   addon: RenoDxAddonState | null,

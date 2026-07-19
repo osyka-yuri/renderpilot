@@ -2,7 +2,7 @@
   import { Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import RenoDxChannelToggleGroup from './RenoDxChannelToggleGroup.svelte';
 
-  import type { ReshadeChannel } from '../model/types';
+  import type { ReshadeChannel } from '@entities/addon';
 
   type Props = {
     value: ReshadeChannel;

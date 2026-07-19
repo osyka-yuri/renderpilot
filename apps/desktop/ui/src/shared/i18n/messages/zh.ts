@@ -1,7 +1,7 @@
 import type { MessageKey } from './en';
 import type { MessageValue } from './types';
 
-export const zh: Record<MessageKey, MessageValue> = {
+export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'nav.games': '游戏',
   'nav.libraries': '组件库',
   'nav.settings': '设置',

@@ -5,13 +5,16 @@ import {
   beginRequest,
   canonicalizeInstallState,
   createInitialAddonCoreSnapshot,
+  defaultHostFacts,
   deriveFreshness,
+  mapAvailabilitySnapshot,
+  mapHostSnapshotCore,
   materializeMutationCommit,
-  normalizeInstallState,
   withBusy,
   withLoadBegin,
   withLoadSuccess,
   withMutationCommit,
+  withMutationBegin,
   withProbeBegin,
   withProbeEnd,
   withProbeSuccess,
@@ -117,7 +120,7 @@ describe('canonicalizeInstallState', () => {
       addon_dated: string | null;
       installed_at: number;
       updated_at: number;
-      addon_tracked: boolean | null;
+      source_receipt: string;
       extra: string;
     };
     const installed: ToolState = {
@@ -125,7 +128,7 @@ describe('canonicalizeInstallState', () => {
       addon_dated: 'Wed, 01 Jan 2025',
       installed_at: 1_700_000_000_000,
       updated_at: 1_700_000_500_000,
-      addon_tracked: true,
+      source_receipt: 'receipt',
       extra: 'keep-me',
     };
     expect(canonicalizeInstallState(installed)).toBe(installed);
@@ -138,7 +141,6 @@ describe('materializeMutationCommit', () => {
     addon_dated: null,
     installed_at: 1_000,
     updated_at: 2_000,
-    addon_tracked: true,
   };
 
   it('commits installed state with a synthetic update report and lastCheckedAt', () => {
@@ -199,7 +201,6 @@ describe('AddonCoreSnapshot transitions', () => {
     addon_dated: null,
     installed_at: 1_000,
     updated_at: 2_000,
-    addon_tracked: true,
   };
 
   it('createInitialAddonCoreSnapshot starts empty', () => {
@@ -218,20 +219,65 @@ describe('AddonCoreSnapshot transitions', () => {
     });
   });
 
-  it('withLoadBegin bumps the token and clears probe fields without mutating prior', () => {
-    const prior = createInitialAddonCoreSnapshot();
+  it('withLoadBegin only retains an error for an explicit retry', () => {
+    const prior = { ...createInitialAddonCoreSnapshot(), loadError: 'previous failure' };
     const { next, token } = withLoadBegin(prior);
     expect(token).toBe(1);
     expect(next.requestId).toBe(1);
     expect(next.loading).toBe(true);
+    expect(next.loadError).toBeNull();
     expect(prior.requestId).toBe(0);
     expect(prior.loading).toBe(false);
+
+    const retry = withLoadBegin(prior, true);
+    expect(retry.next.loadError).toBe('previous failure');
   });
 
-  it('withLoadSuccess sets canonical state and loaded', () => {
-    const core = withLoadSuccess(createInitialAddonCoreSnapshot(), installed);
+  it('withLoadBegin clears install chrome on navigation load', () => {
+    const prior = {
+      ...createInitialAddonCoreSnapshot<AddonInstallStateBase, FreshnessSource>(),
+      state: installed,
+      loaded: true,
+      requestId: 2,
+    };
+    const { next } = withLoadBegin(prior);
+    expect(next.state).toBeNull();
+    expect(next.loaded).toBe(false);
+    expect(next.loading).toBe(true);
+    expect(next.requestId).toBe(3);
+  });
+
+  it('withLoadBegin retains install chrome on same-game retry', () => {
+    const prior = {
+      ...createInitialAddonCoreSnapshot<AddonInstallStateBase, FreshnessSource>(),
+      state: installed,
+      loaded: true,
+      loadError: 'offline',
+      requestId: 2,
+    };
+    const { next } = withLoadBegin(prior, true);
+    expect(next.state).toEqual(installed);
+    expect(next.loaded).toBe(true);
+    expect(next.loadError).toBe('offline');
+    expect(next.loading).toBe(true);
+  });
+
+  it('withLoadBegin clears busy so a superseded mutation cannot leave a stuck spinner', () => {
+    const prior = { ...createInitialAddonCoreSnapshot(), busy: true, requestId: 3 };
+    const { next } = withLoadBegin(prior);
+    expect(next.busy).toBe(false);
+    expect(next.loading).toBe(true);
+    expect(next.requestId).toBe(4);
+  });
+
+  it('withLoadSuccess sets canonical state, loaded, and clears a retained error', () => {
+    const core = withLoadSuccess(
+      { ...createInitialAddonCoreSnapshot(), loadError: 'previous failure' },
+      installed,
+    );
     expect(core.state).toEqual(installed);
     expect(core.loaded).toBe(true);
+    expect(core.loadError).toBeNull();
   });
 
   it('beginRequest only bumps the token', () => {
@@ -266,6 +312,22 @@ describe('AddonCoreSnapshot transitions', () => {
     expect(core.state?.status).toBe('installed');
   });
 
+  it('withMutationBegin invalidates requests and owns busy/loading state', () => {
+    const prior = {
+      ...createInitialAddonCoreSnapshot(),
+      loading: true,
+      updateProbing: true,
+    };
+
+    const { next, token } = withMutationBegin(prior);
+
+    expect(token).toBe(1);
+    expect(next.requestId).toBe(1);
+    expect(next.busy).toBe(true);
+    expect(next.loading).toBe(false);
+    expect(next.updateProbing).toBe(false);
+  });
+
   it('probe helpers replace fields immutably', () => {
     const started = withProbeBegin(createInitialAddonCoreSnapshot());
     expect(started.updateProbing).toBe(true);
@@ -281,51 +343,33 @@ describe('AddonCoreSnapshot transitions', () => {
   });
 });
 
-describe('normalizeInstallState', () => {
-  it('drops timestamps from not_installed (even if present in raw)', () => {
-    expect(normalizeInstallState({ status: 'not_installed' })).toEqual({ status: 'not_installed' });
-    expect(
-      normalizeInstallState({ status: 'not_installed', installed_at: 123, updated_at: 456 }),
-    ).toEqual({ status: 'not_installed' });
-    expect(
-      normalizeInstallState({ status: 'not_installed', installed_at: null, updated_at: null }),
-    ).toEqual({ status: 'not_installed' });
-  });
+describe('mapHostSnapshotCore / mapAvailabilitySnapshot', () => {
+  const wire = {
+    host_detection: 'absent' as const,
+    host_facts: defaultHostFacts('nightly'),
+    actions: { install: null, uninstall: null },
+  };
 
-  it('preserves numeric timestamps on installed', () => {
-    const raw = {
-      status: 'installed',
-      addon_dated: 'Wed, 01 Jan 2025',
-      installed_at: 1_700_000_000_000,
-      updated_at: 1_700_000_500_000,
-      addon_tracked: true,
-    };
-    expect(normalizeInstallState(raw)).toEqual({
-      status: 'installed',
-      addon_dated: 'Wed, 01 Jan 2025',
-      installed_at: 1_700_000_000_000,
-      updated_at: 1_700_000_500_000,
-      addon_tracked: true,
+  it('maps shared host wire fields into camelCase core', () => {
+    expect(mapHostSnapshotCore(wire)).toEqual({
+      hostDetection: 'absent',
+      hostFacts: wire.host_facts,
+      actions: wire.actions,
     });
   });
 
-  it('JSON roundtrip of normalized not_installed never contains timestamp keys', () => {
-    const clean = normalizeInstallState({
-      status: 'not_installed',
-      installed_at: 123,
-      updated_at: 456,
+  it('merges tool-specific extras without dropping the host core', () => {
+    expect(
+      mapAvailabilitySnapshot(wire, {
+        installTorn: true,
+        vcredistPresent: false,
+      }),
+    ).toEqual({
+      hostDetection: 'absent',
+      hostFacts: wire.host_facts,
+      actions: wire.actions,
+      installTorn: true,
+      vcredistPresent: false,
     });
-    expect(JSON.stringify(clean)).not.toContain('installed_at');
-    expect(JSON.stringify(clean)).not.toContain('updated_at');
-  });
-
-  it('throws on installed state with missing or non-numeric timestamps (strict, no legacy)', () => {
-    expect(() =>
-      normalizeInstallState({ status: 'installed', installed_at: null, updated_at: 123 }),
-    ).toThrow(/numeric installed_at and updated_at/);
-
-    expect(() =>
-      normalizeInstallState({ status: 'installed', installed_at: 123, updated_at: undefined }),
-    ).toThrow(/numeric installed_at and updated_at/);
   });
 });

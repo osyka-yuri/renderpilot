@@ -2,54 +2,21 @@
  * Wire-level DTOs mirroring the Rust backend (`renderpilot-orchestration::renodx`).
  * Field names match the JSON keys produced by serde exactly.
  *
- * Shapes genuinely shared with every add-on tool (`ActionDescriptor`, `HostFacts`,
- * `RiskAssessment`, `MatchConfidence`, `IncompatibilityReason`, `UpdateStatus`,
- * `ReshadeChannel`, …) are re-exported from `@entities/addon` rather than restated
- * here. Only RenoDX-specific shapes (actions, install state, the shared Vulkan
- * layer, update report, availability outcome) are defined in this file.
+ * Shared shapes come from `@entities/addon`. Only RenoDX-only shapes live here.
  */
 
 import type {
-  ActionConfirmationScope,
   ActionDescriptor,
-  ActionDisabledReason,
-  AddonKind,
-  Freshness,
-  GraphicsApi,
+  CatalogMessage,
+  CommonAvailabilityOutcome,
   HostActions,
-  HostAddonSupport,
-  HostChannelFacts,
   HostDetection,
   HostFacts,
-  HostUpdateStatus,
-  IncompatibilityReason,
   MatchConfidence,
   ReshadeChannel,
   RiskAssessment,
-  RiskSeverity,
   UpdateStatus,
 } from '@entities/addon';
-
-export type {
-  ActionConfirmationScope,
-  ActionDescriptor,
-  ActionDisabledReason,
-  AddonKind,
-  Freshness,
-  GraphicsApi,
-  HostActions,
-  HostAddonSupport,
-  HostChannelFacts,
-  HostDetection,
-  HostFacts,
-  HostUpdateStatus,
-  IncompatibilityReason,
-  MatchConfidence,
-  ReshadeChannel,
-  RiskAssessment,
-  RiskSeverity,
-  UpdateStatus,
-};
 
 /**
  * How RenoDX hooks into a game (`HostKind`): a per-game ReShade proxy DLL
@@ -186,18 +153,27 @@ export type RenoDxUpdateReport = {
   vulkan_diagnostics?: LayerDiagnosticReason[];
 };
 
+/** Detected / generic engine identity used for RenoDX engine-profile installs. */
+export type RenoDxEngine = 'unreal' | 'unreal_extended' | 'unity';
+
+/** User-facing identity of an engine-level generic catalogue match. */
+export type RenoDxGenericProfile = {
+  engine: RenoDxEngine;
+  message: CatalogMessage;
+};
+
 /** Installability verdict (`AvailabilityOutcome`, tag `kind`). */
 export type AvailabilityOutcome =
-  | {
+  | (Extract<CommonAvailabilityOutcome, { kind: 'installable' }> & {
       kind: 'installable';
       /** Honest confidence shown as a badge. */
       confidence: MatchConfidence;
       risk: RiskAssessment;
-      /** i18n note/requirement keys (a generic install carries its engine label here). */
-      notes_keys: string[];
+      /** Present when this install comes from an engine-level generic profile. */
+      generic_profile: RenoDxGenericProfile | null;
       /** Proxy DLL or the shared Vulkan layer. */
       host_kind: HostKind;
-    }
+    })
   /**
    * The add-on is distributed off-GitHub (Discord/Nexus): link the user out, and
    * — when `file_install` is present (the game is compatible) — also let them
@@ -206,28 +182,18 @@ export type AvailabilityOutcome =
   | {
       kind: 'external';
       url: string;
-      label_key: string;
+      message: CatalogMessage;
       file_install: {
         confidence: MatchConfidence;
         risk: RiskAssessment;
-        notes_keys: string[];
         /** Proxy DLL or the shared Vulkan layer. */
         host_kind: HostKind;
+        generic_profile: RenoDxGenericProfile | null;
       } | null;
     }
   /** The game already has native HDR; RenoDX is not offered. */
   | { kind: 'native_hdr' }
-  | { kind: 'incompatible'; reason: IncompatibilityReason }
-  /** Blacklisted / known-broken, with an optional i18n reason key. */
-  | { kind: 'blacklisted'; reason: string | null }
-  /** No RenoDX profile matched the game. */
-  | { kind: 'unsupported' }
-  /**
-   * Another mutually exclusive add-on is already installed - or unmanaged files
-   * belonging to it were found on disk - for this game. Uninstall the other
-   * add-on first.
-   */
-  | { kind: 'blocked_by_other_addon'; other_kind: AddonKind; unmanaged: boolean };
+  | Exclude<CommonAvailabilityOutcome, { kind: 'installable' | 'unmanaged_present' }>;
 
 /**
  * The manual "install ReShade host + your own add-on file" escape hatch, present

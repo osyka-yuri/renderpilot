@@ -24,7 +24,6 @@ export const en = {
   'settings.appearance.theme.title': 'Theme',
   'settings.appearance.theme.description': 'Choose a color theme for the application.',
   'settings.appearance.theme.triggerLabel': 'Theme',
-  'settings.appearance.theme.placeholder': 'Select theme',
   'settings.appearance.language.title': 'Language',
   'settings.appearance.language.description': 'Select the interface language.',
   'settings.appearance.language.triggerLabel': 'Language',
@@ -47,7 +46,6 @@ export const en = {
 
   // ── Settings: tabs ──
   'settings.tabs.general': 'General',
-  'settings.tabs.reshade': 'ReShade',
   'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'Catalog',
   'settings.tabs.nvidia': 'NVIDIA',
@@ -86,7 +84,6 @@ export const en = {
     one: '1 update available',
     other: '{count} updates available',
   },
-  'game.card.badge.hidden': 'Hidden',
   'game.card.menu.ariaLabel': 'Options for {title}',
   'game.card.menu.favorite.add': 'Add to favorites',
   'game.card.menu.favorite.remove': 'Remove from favorites',
@@ -98,7 +95,6 @@ export const en = {
   // ── Game cover ──
   'game.cover.alt': 'Cover',
   'game.cover.altWithTitle': 'Cover: {title}',
-  'game.cover.menu.ariaLabel': 'Cover options for {title}',
   'game.cover.menu.fetch': 'Download cover',
   'game.cover.menu.fetching': 'Downloading…',
   'game.cover.menu.fetchHint': 'Search for a cover online.',
@@ -111,10 +107,6 @@ export const en = {
   'game.dashboard.summary': 'Dashboard',
   'game.dashboard.games': { one: '{count} game', other: '{count} games' },
   'game.dashboard.updates': { one: '{count} update', other: '{count} updates' },
-  'game.dashboard.rollbacksReady': {
-    one: '{count} rollback available',
-    other: '{count} rollbacks available',
-  },
 
   // ── Elevation banner ──
   'elevation.title': 'Administrator privileges required',
@@ -172,7 +164,6 @@ export const en = {
   'settings.about.version.title': 'App version',
   'settings.about.version.loading': 'Loading...',
   'settings.about.checkForUpdates': 'Check for updates',
-  'settings.about.checkingForUpdates': 'Checking…',
   'settings.about.updateInProgress': 'Updating…',
   'settings.about.updateAvailable': 'Update available',
   'settings.about.upToDate': 'You are on the latest version',
@@ -221,9 +212,6 @@ export const en = {
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'No game selected',
   'gameDetails.noGameSelected.description': 'Select a game from the dashboard to view its details.',
-  'gameDetails.noComponents.title': 'No components found',
-  'gameDetails.noComponents.description':
-    'This game does not have any supported graphics components.',
 
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'No alternative versions',
@@ -252,6 +240,8 @@ export const en = {
   'gameDetails.updateAll.action': 'Update all to latest',
   'gameDetails.updateAll.actionCount': 'Update all to latest ({count})',
   'gameDetails.updateAll.upToDate': 'Everything is up to date',
+  'gameDetails.updateAll.partialFailure':
+    'Some updates failed ({count}). Check the details and try again.',
   'gameDetails.updateAll.tooltip': {
     one: 'Update 1 component to its latest version',
     other: 'Update {count} components to their latest versions',
@@ -414,8 +404,6 @@ export const en = {
   'nvidia.changeSettingFailed': 'Failed to apply settings',
   'nvidia.revertDefaultFailed': 'Failed to restore default settings',
   'nvidia.revertBaselineFailed': 'Failed to restore initial settings',
-  'nvidia.setExeFailed': 'Failed to configure the executable',
-  'nvidia.clearExeFailed': 'Failed to clear the executable configuration',
 
   // ── DLSS indicator context (toasts) ──
   'indicator.relaunchToToggle': 'Restart as administrator to toggle the DLSS indicator.',
@@ -459,11 +447,6 @@ export const en = {
   'user_message.invalid_component_reference': 'Component not found.',
   'user_message.invalid_artifact_reference': 'Item not found.',
   'user_message.invalid_operation_reference': 'Action not found.',
-  'user_message.missing_required_info': 'Missing required information.',
-  'user_message.unexpected_input': 'Unexpected input received.',
-  'user_message.unrecognized_option': 'Unknown option provided.',
-  'user_message.unsupported_technology_filter': 'Unsupported filter.',
-  'user_message.non_unicode_input': 'Text contains invalid characters.',
   'user_message.response_serialization_failed': 'Failed to process the request.',
   'user_message.plan_changed_rebuild': 'The task is outdated. Please try again.',
   'user_message.game_not_in_catalog': 'Game is not supported.',
@@ -493,8 +476,6 @@ export const en = {
   'suggested_action.refresh_candidates': 'Refresh the list and try again.',
   'suggested_action.rebuild_plan_or_reload_operations': 'Refresh the view and try again.',
   'suggested_action.retry_after_required_data': 'Please wait and try again later.',
-  'suggested_action.reload_desktop': 'Restart the app and try again.',
-  'suggested_action.normalize_text': 'Check your input and try again.',
   'suggested_action.inspect_logs': 'If the problem persists, try restarting the app.',
   'suggested_action.retry_or_restart': 'If the problem persists, try restarting the app.',
   'suggested_action.rebuild_operation_plan': 'Please restart the action.',
@@ -505,7 +486,6 @@ export const en = {
   'gameDetails.renodx.description':
     'Add HDR and tone-mapping to this game via the RenoDX ReShade add-on.',
   'gameDetails.renodx.loading': 'Checking availability…',
-  'gameDetails.renodx.loadFailed': 'Could not check RenoDX availability',
   'gameDetails.renodx.installError': 'RenoDX installation failed',
   'gameDetails.renodx.uninstallError': 'RenoDX removal failed',
   'gameDetails.renodx.switchError': 'ReShade channel switch failed',
@@ -580,14 +560,13 @@ export const en = {
   'gameDetails.renodx.reason.arch_unknown': 'unknown executable architecture',
   // ── Game details: RenoDX tab / states / version picker ──
   'gameDetails.otherTab': 'Other',
-  'gameDetails.renodx.retry': 'Retry',
   'gameDetails.renodx.unavailable': 'RenoDX is unavailable right now.',
   // ── Game details: RenoDX generic (engine-fallback) labels ──
   'renodx.generic.universal': 'Universal RenoDX',
-  'renodx.generic.unreal': 'Universal RenoDX (Unreal)',
-  'renodx.generic.unreal_extended': 'Universal RenoDX (Unreal Extended)',
   'renodx.generic.unity': 'Universal RenoDX (Unity)',
+  'gameDetails.renodx.generic.profileTooltip': 'A shared engine profile is being used.',
   'renodx.phase.finalizing': 'Finalizing…',
+  'luma.phase.finalizing': 'Finalizing…',
   // ── Game details: RenoDX confidence / external / native-HDR / update ──
   'gameDetails.renodx.confidenceLabel': 'RenoDX compatibility',
   'gameDetails.renodx.confidenceVerified': 'Works',
@@ -661,7 +640,9 @@ export const en = {
     'Available — prevents flickering with DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     "A general ReShade fix, not RenoDX-specific. It makes ReShade draw on the game's native frames instead of Frame-Generation frames, and hides DLSS upscaling from ReShade when the game implements Streamline correctly.",
-  // ── Game details: shared add-on copy ──
+  'gameDetails.renodx.attribution': 'RenoDX by clshortfuse.',
+  'gameDetails.renodx.attributionLink': 'View project',
+  // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.addon.riskSafe': 'No anti-cheat detected — safe to install.',
   'gameDetails.addon.riskWarn': 'Anti-cheat detected — installing may risk a ban.',
   'addon.risk.sp_safe':
@@ -677,6 +658,156 @@ export const en = {
     '{installedAddon} is installed for this game — uninstall it before installing {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     '{installedAddon} files were found on disk for this game — remove them before installing {blockedAddon}.',
+  'addon.availability.loadFailed': 'Could not check',
+  'addon.availability.retry': 'Retry',
+  'addon.availability.checking': 'Checking…',
+  // ── Game details: Luma ──
+  'gameDetails.luma.title': 'Luma Framework',
+  'gameDetails.luma.description': 'Luma features available for this game are listed below.',
+  'gameDetails.luma.loading': 'Checking availability…',
+  'gameDetails.luma.installError': 'Luma installation failed',
+  'gameDetails.luma.uninstallError': 'Luma removal failed',
+  'gameDetails.luma.updateError': 'Luma update failed',
+  'gameDetails.luma.repairError': 'Luma repair failed',
+  'gameDetails.luma.unsupported': 'No Luma profile is available for this game.',
+  'gameDetails.luma.incompatible': 'Luma cannot be installed: {reason}.',
+  'gameDetails.luma.blacklisted': 'Luma is not recommended for this game.',
+  'gameDetails.luma.unavailable': 'Luma is unavailable right now.',
+  'gameDetails.luma.unmanagedPresent':
+    'An existing Luma install was found on disk with no tracked record. Remove it manually, then reinstall.',
+  'gameDetails.luma.installTornWarning':
+    'A previous install did not finish cleanly. Installing again will clean it up and repair it.',
+  'gameDetails.luma.installTornWarningInstalled':
+    'The last operation did not finish cleanly. Use Repair (or Update if shown) to finish reconciling the install.',
+  'gameDetails.luma.status.label': 'Status',
+  'gameDetails.luma.statusInstalled': 'Installed',
+  'gameDetails.luma.actionInstall': 'Install',
+  'gameDetails.luma.installing': 'Installing…',
+  'gameDetails.luma.actionUninstall': 'Remove Luma',
+  'gameDetails.luma.actionRepair': 'Repair',
+  'gameDetails.luma.actionUpdate': 'Update',
+  'gameDetails.luma.updating': 'Updating…',
+  'gameDetails.luma.actionCheckUpdates': 'Check for updates',
+  'gameDetails.luma.uninstallConfirmTitle': 'Remove Luma from this game?',
+  'gameDetails.luma.uninstallConfirmBody':
+    'This removes Luma. If Luma owns the DLSS DLL, its Library Swap is rolled back and the exact pre-Luma baseline is restored. Reused DLLs and independent swaps stay unchanged.',
+  'gameDetails.luma.uninstallConfirmAction': 'Remove',
+  'gameDetails.luma.confirmTitle': 'Install Luma despite anti-cheat risk?',
+  'gameDetails.luma.vcredistWarning':
+    'A recent Visual C++ Redistributable may be missing on this system. If Luma fails to load, install the redistributable.',
+  'gameDetails.luma.vcredistLink': 'Download the redistributable',
+  'gameDetails.luma.dgvoodoo.managed':
+    'RenderPilot will install and configure dgVoodoo2 {version} for this Luma profile.',
+  // ── Game details: Luma confidence ──
+  'gameDetails.luma.confidenceLabel': 'Luma compatibility',
+  'gameDetails.luma.confidenceVerified': 'Works',
+  'gameDetails.luma.confidenceExperimental': 'In progress',
+  'gameDetails.luma.confidenceUntested': 'Unverified',
+  'gameDetails.luma.generic.engineUnreal': 'Unreal Engine',
+  'gameDetails.luma.generic.engineUnity': 'Unity',
+  'gameDetails.luma.generic.profileTooltip': 'A shared engine profile is being used.',
+  'gameDetails.luma.features.title': 'Features',
+  'gameDetails.luma.features.dlssFsr': 'DLSS / FSR',
+  'gameDetails.luma.features.hdr': 'HDR',
+  'gameDetails.luma.features.supported': 'Supported',
+  'gameDetails.luma.features.unsupported': 'Not supported',
+  'gameDetails.luma.features.experimental': 'Experimental',
+  'gameDetails.luma.features.unknown': 'Unknown',
+  'gameDetails.luma.guidance.gameSetting': 'In-game setting',
+  'gameDetails.luma.guidance.engineIni': 'Manual INI change',
+  'gameDetails.luma.guidance.launchArgument': 'Launch argument',
+  'gameDetails.luma.guidance.warning': 'Important',
+  'gameDetails.luma.guidance.compatibility': 'Compatibility note',
+  'gameDetails.luma.guidance.externalTool': 'Third-party tool',
+  'gameDetails.luma.guidance.copy': 'Copy',
+  'gameDetails.luma.guidance.copied': 'Copied',
+  'gameDetails.luma.guidance.copyFailed': 'Could not copy',
+  // ── Game details: Luma incompatibility reasons ──
+  'gameDetails.luma.reason.api_unsupported': 'unsupported graphics API',
+  'gameDetails.luma.reason.api_not_allowed': 'graphics API not allowed for this game',
+  'gameDetails.luma.reason.arch_unknown': 'unknown executable architecture',
+  'gameDetails.luma.reason.arch_mismatch': 'executable architecture does not match this add-on',
+  // ── Game details: Luma ReShade host ──
+  'gameDetails.luma.channel.stable': 'Stable',
+  'gameDetails.luma.channel.nightly': 'Nightly',
+  'gameDetails.luma.host.version': '{version}',
+  'gameDetails.luma.host.versionUnknown': 'Version unknown',
+  'gameDetails.luma.host.addons.none': 'add-ons not supported',
+  'gameDetails.luma.host.addons.unknown': 'add-on support unknown',
+  'gameDetails.luma.host.action.update_host': 'update available',
+  'gameDetails.luma.host.action.repair_host': 'Repair ReShade for Luma add-on support',
+  'gameDetails.luma.host.customBuild': 'Custom build (e.g. GShade) — you manage updates yourself',
+  'gameDetails.luma.host.conflictMultiple':
+    'Multiple ReShade hosts found — active slot needs review',
+  'gameDetails.luma.host.conflictBlocksInstall':
+    'An existing file occupies the ReShade slot this game uses, or ReShade is in another slot — resolve it before installing.',
+  // ── Game details: Luma freshness / timestamps ──
+  'gameDetails.luma.fresh.label': 'Version',
+  'gameDetails.luma.fresh.current': 'Latest',
+  'gameDetails.luma.fresh.available': 'Update available',
+  'gameDetails.luma.fresh.channelMismatch': 'Channel change available',
+  'gameDetails.luma.fresh.validationRequired': 'Validation required',
+  'gameDetails.luma.fresh.unknown': "Couldn't check",
+  'gameDetails.luma.fresh.checking': 'Checking…',
+  'gameDetails.luma.updatesNotTracked': 'Updates not tracked',
+  'gameDetails.luma.addonDated': 'Add-on dated {date}',
+  'gameDetails.luma.installedOn': 'Installed {date}',
+  'gameDetails.luma.lastChecked': 'Checked {time}',
+  'gameDetails.luma.lastCheckedNever': 'Not checked yet',
+  // ── Game details: Luma components ──
+  'gameDetails.luma.component.reshade': 'ReShade host',
+  'gameDetails.luma.component.addon': 'Luma add-on',
+  'gameDetails.luma.component.addonDesc': 'Luma features for this game',
+  'gameDetails.luma.component.dgvoodoo': 'dgVoodoo2 wrapper',
+  'gameDetails.luma.component.dgvoodooDesc': 'Managed D3D9 bridge, version {version}',
+  // ── Game details: Luma launch arguments ──
+  'gameDetails.luma.launchArgs.instructions.steam':
+    'If you start the game through Steam, add them there: right-click the game → Properties → General → Launch Options.',
+  'gameDetails.luma.launchArgs.instructions.gog':
+    'If you start the game through GOG Galaxy, add them there: game settings → Manage installation → Configure.',
+  'gameDetails.luma.launchArgs.instructions.epic':
+    'If you start the game through the Epic Games Launcher, add them there: right-click the game → Manage → Additional Command Line Arguments.',
+  'gameDetails.luma.launchArgs.instructions.ea':
+    'If you start the game through the EA app, add them there: select the game → Manage → View properties → Advanced launch options.',
+  'gameDetails.luma.launchArgs.instructions.ubisoft':
+    'If you start the game through Ubisoft Connect, add them there: select the game → Properties → Add launch arguments.',
+  'gameDetails.luma.launchArgs.instructions.other':
+    'Use the launch method that actually starts the game. Add the arguments to its launcher, shortcut target, batch file, or another loader.',
+  'gameDetails.luma.launchArgs.title': 'Launch arguments required',
+  'gameDetails.luma.launchArgs.dx11Title': 'This Luma profile requires DirectX 11',
+  'gameDetails.luma.launchArgs.copyStep': 'Copy the required launch arguments:',
+  'gameDetails.luma.launchArgs.copy': 'Copy arguments',
+  'gameDetails.luma.launchArgs.copied': 'Copied',
+  'gameDetails.luma.launchArgs.copyFailed': 'Could not copy the launch arguments',
+  // ── Game details: Luma attribution ──
+  'gameDetails.luma.attribution': 'Luma Framework by Filoppi.',
+  'gameDetails.luma.attributionLink': 'View project',
+  'settings.appearance.theme.placeholder': 'Select theme',
+  'settings.tabs.reshade': 'ReShade',
+  'game.card.badge.hidden': 'Hidden',
+  'game.cover.menu.ariaLabel': 'Cover options for {title}',
+  'game.dashboard.rollbacksReady': {
+    one: '{count} rollback available',
+    other: '{count} rollbacks available',
+  },
+  'settings.about.checkingForUpdates': 'Checking…',
+  'gameDetails.noComponents.title': 'No components found',
+  'gameDetails.noComponents.description':
+    'This game does not have any supported graphics components.',
+  'nvidia.setExeFailed': 'Failed to configure the executable',
+  'nvidia.clearExeFailed': 'Failed to clear the executable configuration',
+  'user_message.missing_required_info': 'Missing required information.',
+  'user_message.unexpected_input': 'Unexpected input received.',
+  'user_message.unrecognized_option': 'Unknown option provided.',
+  'user_message.unsupported_technology_filter': 'Unsupported filter.',
+  'user_message.non_unicode_input': 'Text contains invalid characters.',
+  'suggested_action.reload_desktop': 'Restart the app and try again.',
+  'suggested_action.normalize_text': 'Check your input and try again.',
+  'gameDetails.renodx.loadFailed': 'Could not check RenoDX availability',
+  'gameDetails.renodx.retry': 'Retry',
+  'renodx.generic.unreal': 'Universal RenoDX (Unreal)',
+  'renodx.generic.unreal_extended': 'Universal RenoDX (Unreal Extended)',
+  // ── Game details: shared add-on copy ──
 } satisfies MessageDictionary;
 
 export type MessageKey = keyof typeof en;

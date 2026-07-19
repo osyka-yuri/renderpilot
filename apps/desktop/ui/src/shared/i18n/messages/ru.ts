@@ -5,7 +5,7 @@ import type { MessageValue } from './types';
  * Russian catalog. Typed as `Record<MessageKey, MessageValue>` so a missing or
  * stray key is a compile-time error against the English source of truth.
  */
-export const ru: Record<MessageKey, MessageValue> = {
+export const ru: Partial<Record<MessageKey, MessageValue>> = {
   // ── App shell / navigation ──
   'nav.games': 'Игры',
   'nav.libraries': 'Библиотеки',

@@ -4,13 +4,13 @@
   import AddonConfidenceBadge from './AddonConfidenceBadge.svelte';
   import AddonRiskConfirmDialog from './AddonRiskConfirmDialog.svelte';
   import AddonStateMessage from './AddonStateMessage.svelte';
-  import { t, translateKey, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKey } from '@shared/i18n';
   import { Button, Spinner } from '@shared/ui';
   import DownloadIcon from '@lucide/svelte/icons/download';
 
   import type { MatchConfidence } from '../model/types';
   import type { AddonInstallableLabels } from '../model/presenters';
-  import { actionDisabledMessage, humanizeMessageKey } from '../model/presenters';
+  import { actionDisabledMessage } from '../model/presenters';
   import type { AddonStoreView } from '../model/store-view';
 
   type ViewStore = Pick<
@@ -19,13 +19,10 @@
     | 'isInstallable'
     | 'requiresConfirmation'
     | 'confidence'
-    | 'notesKeys'
     | 'hostDetection'
     | 'hostFacts'
     | 'hostActions'
   >;
-
-  type Note = { key: string; message: string };
 
   type Props = {
     gameId: string;
@@ -36,8 +33,9 @@
     onInstall: (gameId: string, force: boolean) => void;
     riskText: string;
     preConflictWarnings?: Snippet;
-    preNotesCallouts?: Snippet;
-    downloadProgress?: Snippet;
+    midCallouts?: Snippet;
+    actionRowLeading?: Snippet;
+    confidenceTrailing?: Snippet;
   };
 
   const {
@@ -49,8 +47,9 @@
     onInstall,
     riskText,
     preConflictWarnings,
-    preNotesCallouts,
-    downloadProgress,
+    midCallouts,
+    actionRowLeading,
+    confidenceTrailing,
   }: Props = $props();
 
   let confirmOpen = $state(false);
@@ -60,7 +59,21 @@
 
   const installAction = $derived(store.hostActions.install);
   const installDisabledByHost = $derived(installAction?.enabled === false);
-  const installDisabledMessage = $derived(actionDisabledMessage(installAction) ?? '');
+  // When the host-conflict banner already explains the block, do not also show
+  // the raw humanized `blocked_by_conflict` reason (duplicate warning).
+  const installDisabledMessage = $derived.by((): string => {
+    const message = actionDisabledMessage(installAction) ?? '';
+    if (!message) {
+      return '';
+    }
+    if (
+      store.hostDetection === 'conflict' &&
+      installAction?.disabled_reason === 'blocked_by_conflict'
+    ) {
+      return '';
+    }
+    return message;
+  });
 
   const installBlocked = $derived(installDisabledByHost || customBuild);
   const canStartInstall = $derived(store.isInstallable && !busy && !installBlocked);
@@ -77,13 +90,6 @@
   const showFullAddonWarning = $derived(
     store.requiresConfirmation &&
       (store.hostFacts.addon_support === 'full' || hasHostInstallOrMaintenanceAction),
-  );
-
-  const notes = $derived.by((): Note[] =>
-    store.notesKeys.map((key) => ({
-      key,
-      message: translateKey(key, humanizeMessageKey(key)),
-    })),
   );
 
   const installLabel = $derived(store.busy ? t(labels.installing) : t(labels.installAction));
@@ -121,11 +127,14 @@
 
 <div class="flex w-full flex-col gap-3">
   {#if store.confidence}
-    <AddonConfidenceBadge
-      confidence={store.confidence}
-      fieldLabel={t(labels.confidenceLabel)}
-      confidenceLabel={t(confidenceLabelKey[store.confidence])}
-    />
+    <div class="flex flex-wrap items-center gap-2">
+      <AddonConfidenceBadge
+        confidence={store.confidence}
+        fieldLabel={t(labels.confidenceLabel)}
+        confidenceLabel={t(confidenceLabelKey[store.confidence])}
+      />
+      {@render confidenceTrailing?.()}
+    </div>
   {/if}
 
   {@render preConflictWarnings?.()}
@@ -144,7 +153,7 @@
     {#if showRiskAsWarning}
       <AddonStateMessage tone="warning" icon="warning" message={riskText} />
     {:else}
-      <p class="text-sm text-muted-foreground">{riskText}</p>
+      <AddonStateMessage tone="default" icon="info" message={riskText} />
     {/if}
   {/if}
 
@@ -152,42 +161,32 @@
     <AddonStateMessage tone="warning" icon="warning" message={t(labels.fullAddonWarning)} />
   {/if}
 
-  {@render preNotesCallouts?.()}
-
-  {#if notes.length > 0}
-    <ul class="list-inside list-disc text-sm text-muted-foreground">
-      {#each notes as note (note.key)}
-        <li>{note.message}</li>
-      {/each}
-    </ul>
-  {/if}
+  {@render midCallouts?.()}
 
   {#if installDisabledMessage}
     <AddonStateMessage tone="warning" icon="warning" message={installDisabledMessage} />
   {/if}
 
-  <div class="flex flex-wrap items-center justify-end gap-2 px-1">
-    {#if downloadProgress}
-      <div class="mr-auto flex-1">
-        {@render downloadProgress()}
-      </div>
-    {/if}
+  <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+    {@render actionRowLeading?.()}
 
-    {#if installBlocked}
-      <Button type="button" size="sm" disabled>
-        {t(labels.installAction)}
-      </Button>
-    {:else}
-      <Button type="button" size="sm" disabled={busy} onclick={startInstall}>
-        {#if store.busy}
-          <Spinner class="size-4" />
-        {:else}
-          <DownloadIcon class="size-4" aria-hidden="true" />
-        {/if}
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      {#if installBlocked}
+        <Button type="button" size="sm" disabled>
+          {t(labels.installAction)}
+        </Button>
+      {:else}
+        <Button type="button" size="sm" disabled={busy} onclick={startInstall}>
+          {#if store.busy}
+            <Spinner class="size-4" />
+          {:else}
+            <DownloadIcon class="size-4" aria-hidden="true" />
+          {/if}
 
-        {installLabel}
-      </Button>
-    {/if}
+          {installLabel}
+        </Button>
+      {/if}
+    </div>
   </div>
 </div>
 

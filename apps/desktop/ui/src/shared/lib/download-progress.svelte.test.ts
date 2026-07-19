@@ -22,8 +22,7 @@ let handler: ProgressHandler | undefined;
 // in isolation (`it.only`).
 (listen as Mock).mockImplementation((_event: string, h: ProgressHandler) => {
   handler = h;
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  return Promise.resolve(() => {});
+  return Promise.resolve(() => undefined);
 });
 
 function emitProgress(payload: ProgressPayload): void {
@@ -63,11 +62,11 @@ describe('download-progress.svelte', () => {
       id: 'a',
       downloaded: 10,
       total: 100,
-      phase: 'Add-on framework payload',
+      phase: 'Luma Framework payload',
     });
 
     expect(latestDownloadProgress(['a'])).toEqual(
-      expect.objectContaining({ phase: 'Add-on framework payload' }),
+      expect.objectContaining({ phase: 'Luma Framework payload' }),
     );
   });
 

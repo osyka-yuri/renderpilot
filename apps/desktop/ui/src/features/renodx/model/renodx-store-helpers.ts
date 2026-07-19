@@ -1,13 +1,13 @@
-import { defaultHostFacts as sharedDefaultHostFacts, deriveFreshness } from '@entities/addon';
+import {
+  defaultHostFacts as sharedDefaultHostFacts,
+  isReshadeChannel,
+  mapAvailabilitySnapshot,
+  type HostDetection,
+  type HostFacts,
+  type ReshadeChannel,
+} from '@entities/addon';
 
-import type {
-  AvailabilityReport,
-  HostDetection,
-  HostFacts,
-  RenoDxActions,
-  RenoDxAddonState,
-  ReshadeChannel,
-} from './types';
+import type { AvailabilityReport, RenoDxActions, RenoDxAddonState } from './types';
 
 export type AvailabilitySnapshot = {
   hostDetection: HostDetection;
@@ -31,13 +31,10 @@ export function defaultHostFacts(): HostFacts {
 export function availabilitySnapshotFromReport(
   report: AvailabilitySnapshotSource,
 ): AvailabilitySnapshot {
-  return {
-    hostDetection: report.host_detection,
-    hostFacts: report.host_facts,
-    actions: report.actions,
+  return mapAvailabilitySnapshot(report, {
     reshadeStableSupported: report.reshade_stable_supported,
     renodxAddon: report.renodx_addon,
-  };
+  });
 }
 
 export function currentHostChannel(snapshot: AvailabilitySnapshot): ReshadeChannel | null {
@@ -45,29 +42,13 @@ export function currentHostChannel(snapshot: AvailabilitySnapshot): ReshadeChann
 }
 
 /**
- * Falls a channel back to nightly when it's `stable` but the manifest/report
- * doesn't offer a stable channel. Shared by every store that tracks a
- * user-selected ReShade channel.
- */
-export function degradeUnsupportedStableChannel(
-  channel: ReshadeChannel,
-  stableSupported: boolean,
-): ReshadeChannel {
-  return channel === 'stable' && !stableSupported ? 'nightly' : channel;
-}
-
-/**
- * Parses a possibly-invalid stored/wire channel value, falling back to
- * `fallback` when absent or unrecognized, then applies the same
- * stable-unsupported degrade as {@link degradeUnsupportedStableChannel}.
+ * Parses a possibly-invalid stored/wire channel value. Availability is not a
+ * normalization concern: an explicit unavailable channel must remain visible
+ * so callers can disable or reject the corresponding action.
  */
 export function normalizeReshadeChannel(
   value: string | null | undefined,
   fallback: ReshadeChannel,
-  stableSupported: boolean,
 ): ReshadeChannel {
-  const parsed = value === 'nightly' ? 'nightly' : value === 'stable' ? 'stable' : fallback;
-  return degradeUnsupportedStableChannel(parsed, stableSupported);
+  return isReshadeChannel(value) ? value : fallback;
 }
-
-export { deriveFreshness };

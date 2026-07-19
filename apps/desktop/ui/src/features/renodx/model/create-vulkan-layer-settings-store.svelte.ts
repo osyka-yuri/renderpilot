@@ -2,11 +2,13 @@ import { describeCommandErrorTechnical } from '@shared/api';
 import { t } from '@shared/i18n';
 import { publishErrorNotification } from '@shared/notifications';
 import { CATALOG_SETTING_KEYS, getCatalogSetting, setCatalogSetting } from '@entities/settings';
-import { clearDownloadProgress } from '@entities/library';
+import { clearDownloadProgress } from '@shared/lib';
 import { renodxApi, type RenoDxApi } from '../api/desktop';
 import { normalizeReshadeChannel } from './renodx-store-helpers';
 import type { VulkanLayerDisplayState } from './reshade-presenters';
-import type { ReshadeChannel, VulkanLayerManagementReport } from './types';
+import type { ReshadeChannel } from '@entities/addon';
+
+import type { VulkanLayerManagementReport } from './types';
 
 export const VULKAN_LAYER_PROGRESS_ID = 'renodx:vulkan_layer';
 
@@ -34,6 +36,7 @@ export function createVulkanLayerSettingsStore(
   const stableSupported = $derived(report?.reshade_stable_supported ?? true);
   const activeChannel = $derived(report?.recorded_channel ?? report?.default_channel ?? null);
   const updateStatus = $derived(report?.update_status ?? null);
+  const selectedChannelSupported = $derived(selectedChannel !== 'stable' || stableSupported);
   /**
    * The detection state as displayed: a conflict the backend already offers an
    * update action for reads as "needs repair" rather than a bare "conflict",
@@ -45,6 +48,9 @@ export function createVulkanLayerSettingsStore(
       : (layer?.layer_detection ?? null),
   );
   const primaryAction = $derived.by((): VulkanLayerPrimaryAction | null => {
+    if (!selectedChannelSupported) {
+      return null;
+    }
     const actions = layer?.actions;
     if (!actions) {
       return null;
@@ -76,7 +82,7 @@ export function createVulkanLayerSettingsStore(
     channel: string | null | undefined,
     fallback: ReshadeChannel,
   ): ReshadeChannel {
-    return normalizeReshadeChannel(channel, fallback, stableSupported);
+    return normalizeReshadeChannel(channel, fallback);
   }
 
   async function loadStoredChannel(fallback: ReshadeChannel): Promise<ReshadeChannel> {

@@ -1,7 +1,7 @@
 import type { MessageKey } from './en';
 import type { MessageValue } from './types';
 
-export const es: Record<MessageKey, MessageValue> = {
+export const es: Partial<Record<MessageKey, MessageValue>> = {
   'nav.games': 'Juegos',
   'nav.libraries': 'Bibliotecas',
   'nav.settings': 'Ajustes',

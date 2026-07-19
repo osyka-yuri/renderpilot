@@ -42,11 +42,11 @@ const cardViewCases = [
   { name: 'incompatible', flags: { isIncompatible: true }, expected: 'incompatible' },
   { name: 'installable', flags: { isInstallable: true }, expected: 'installable' },
   { name: 'unavailable fallback when nothing matches', flags: {}, expected: 'unavailable' },
-  // Priority: loading wins over every other flag, even once an outcome is known.
+  // A retained failure remains visible while its explicit retry is in progress.
   {
-    name: 'loading wins over a load error and installed',
+    name: 'load error wins over a retry loading flag and installed',
     flags: { loading: true, loaded: false, loadError: 'boom', isInstalled: true },
-    expected: 'loading',
+    expected: 'load-error',
   },
   // Priority: once loaded, a stale `loading=true` (e.g. a background refresh)
   // no longer forces the loading view.

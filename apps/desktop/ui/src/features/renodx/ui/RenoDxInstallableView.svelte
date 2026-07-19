@@ -1,11 +1,17 @@
 <script lang="ts">
-  import { AddonInstallableView } from '@entities/addon';
-  import type { AddonInstallableLabels } from '@entities/addon';
-  import { t, type MessageKey } from '@shared/i18n';
-  import { DownloadProgressBar } from '@entities/library';
+  import {
+    AddonAttribution,
+    AddonInstallableView,
+    createConfidenceLabelKeys,
+    createInstallableLabels,
+  } from '@entities/addon';
+  import { t, translateKey } from '@shared/i18n';
+  import { Badge, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
+  import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-  import type { MatchConfidence, ReshadeChannel } from '../model/types';
+  import { RENODX_ATTRIBUTION } from '../model/attribution';
+  import type { ReshadeChannel } from '@entities/addon';
   import { riskMessage } from '../model/reshade-presenters';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
 
@@ -17,23 +23,8 @@
 
   const { gameId, store, busy }: Props = $props();
 
-  const RENODX_INSTALLABLE_LABELS = {
-    installAction: 'gameDetails.renodx.actionInstall',
-    installing: 'gameDetails.renodx.installing',
-    confidenceLabel: 'gameDetails.renodx.confidenceLabel',
-    hostCustomBuild: 'gameDetails.renodx.host.customBuild',
-    hostConflictBlocksInstall: 'gameDetails.renodx.host.conflictBlocksInstall',
-    fullAddonWarning: 'gameDetails.addon.fullAddonWarning',
-    confirmTitle: 'gameDetails.renodx.confirmTitle',
-    confirmBody: 'gameDetails.addon.confirmBody',
-    confirmAccept: 'gameDetails.addon.confirmAccept',
-  } as const satisfies AddonInstallableLabels;
-
-  const CONFIDENCE_LABEL_KEY = {
-    verified: 'gameDetails.renodx.confidenceVerified',
-    experimental: 'gameDetails.renodx.confidenceExperimental',
-    untested: 'gameDetails.renodx.confidenceUntested',
-  } as const satisfies Record<MatchConfidence, MessageKey>;
+  const RENODX_INSTALLABLE_LABELS = createInstallableLabels('gameDetails.renodx');
+  const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.renodx');
 
   const riskText = $derived.by((): string => {
     const risk = store.risk;
@@ -45,7 +36,10 @@
     return riskMessage(risk);
   });
 
-  const progressIds = $derived([gameId]);
+  const genericProfileLabel = $derived.by((): string | null => {
+    const profile = store.genericProfile;
+    return profile ? translateKey(profile.message.id, profile.message.fallback_text) : null;
+  });
 
   function onInstall(gid: string, force: boolean): void {
     void store.install(gid, store.selectedReshadeChannel, force);
@@ -65,7 +59,24 @@
   {onInstall}
   {riskText}
 >
-  {#snippet preNotesCallouts()}
+  {#snippet confidenceTrailing()}
+    {#if genericProfileLabel}
+      <Tooltip>
+        <TooltipTrigger>
+          {#snippet child({ props })}
+            <Badge {...props} variant="outline">
+              {genericProfileLabel}
+              <CircleHelpIcon class="size-3" aria-hidden="true" />
+            </Badge>
+          {/snippet}
+        </TooltipTrigger>
+
+        <TooltipContent>{t('gameDetails.renodx.generic.profileTooltip')}</TooltipContent>
+      </Tooltip>
+    {/if}
+  {/snippet}
+
+  {#snippet midCallouts()}
     {#if (store.outcome?.kind === 'installable' ? store.outcome.host_kind : null) === 'proxy'}
       <RenoDxChannelControl
         class="max-w-72"
@@ -78,7 +89,7 @@
     {/if}
   {/snippet}
 
-  {#snippet downloadProgress()}
-    <DownloadProgressBar ids={progressIds} active={store.busy} />
+  {#snippet actionRowLeading()}
+    <AddonAttribution {...RENODX_ATTRIBUTION} />
   {/snippet}
 </AddonInstallableView>

@@ -1,8 +1,7 @@
 <script lang="ts">
   import { ToggleGroup, ToggleGroupItem } from '@shared/ui';
   import { t, type MessageKey } from '@shared/i18n';
-
-  import type { ReshadeChannel } from '../model/types';
+  import { isReshadeChannel, type ReshadeChannel } from '@entities/addon';
 
   type Props = {
     value: ReshadeChannel;
@@ -37,10 +36,6 @@
     describedBy,
     onChange,
   }: Props = $props();
-
-  function isReshadeChannel(next: unknown): next is ReshadeChannel {
-    return typeof next === 'string' && CHANNEL_OPTIONS.some((option) => option.value === next);
-  }
 
   function isChannelSupported(channel: ReshadeChannel): boolean {
     return channel !== 'stable' || stableSupported;

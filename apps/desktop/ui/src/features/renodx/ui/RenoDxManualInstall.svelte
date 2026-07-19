@@ -8,7 +8,9 @@
   import { riskMessage } from '../model/reshade-presenters';
   import { AddonStateMessage } from '@entities/addon';
 
-  import type { ManualFileInstall, ReshadeChannel } from '../model/types';
+  import type { ReshadeChannel } from '@entities/addon';
+
+  import type { ManualFileInstall } from '../model/types';
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
   import RenoDxChannelControl from './RenoDxChannelControl.svelte';
 

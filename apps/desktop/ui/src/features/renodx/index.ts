@@ -1,12 +1,10 @@
 export { default as RenoDxCard } from './ui/RenoDxCard.svelte';
 export { default as RenoDxChannelControl } from './ui/RenoDxChannelControl.svelte';
-export { default as RenoDxStatusBadge } from './ui/RenoDxStatusBadge.svelte';
 
-export { createRenoDxStore, type RenoDxStore } from './model/create-renodx-store.svelte';
+export { createRenoDxStore } from './model/create-renodx-store.svelte';
 export {
   createVulkanLayerSettingsStore,
   VULKAN_LAYER_PROGRESS_ID,
-  type VulkanLayerSettingsStore,
 } from './model/create-vulkan-layer-settings-store.svelte';
 export {
   VULKAN_DIAGNOSTIC_LABEL,
@@ -16,12 +14,4 @@ export {
   canCheckVulkanLayerUpdates,
   isManagedVulkanLayer,
   vulkanLayerHostDescription,
-  type VulkanLayerDisplayState,
 } from './model/reshade-presenters';
-
-export type {
-  RenoDxInstallState,
-  ReshadeChannel,
-  VulkanLayerDetection,
-  VulkanLoaderVisibility,
-} from './model/types';

@@ -30,7 +30,7 @@ describe('formatHostDescription', () => {
   it('uses the fallback translation when no parts are available', () => {
     const description = {
       kind: 'parts',
-      fallbackKey: 'gameDetails.renodx.host.versionUnknown',
+      fallbackKey: 'gameDetails.luma.host.versionUnknown',
       parts: [],
     } satisfies HostDescription;
 

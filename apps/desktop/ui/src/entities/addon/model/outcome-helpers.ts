@@ -1,4 +1,10 @@
-import type { AddonKind, IncompatibilityReason, MatchConfidence, RiskAssessment } from './types';
+import type {
+  AddonKind,
+  CatalogMessage,
+  IncompatibilityReason,
+  MatchConfidence,
+  RiskAssessment,
+} from './types';
 
 /** Outcome kinds shared by every add-on tool's availability preview. */
 export type CommonAvailabilityOutcome =
@@ -6,10 +12,9 @@ export type CommonAvailabilityOutcome =
       kind: 'installable';
       confidence: MatchConfidence;
       risk: RiskAssessment;
-      notes_keys: string[];
     }
   | { kind: 'incompatible'; reason: IncompatibilityReason }
-  | { kind: 'blacklisted'; reason: string | null }
+  | { kind: 'blacklisted'; message: CatalogMessage }
   | { kind: 'unsupported' }
   | { kind: 'blocked_by_other_addon'; other_kind: AddonKind; unmanaged: boolean }
   | { kind: 'unmanaged_present' };
@@ -24,8 +29,7 @@ export type CommonOutcomeFields = {
   otherAddonKind: AddonKind | null;
   otherAddonUnmanaged: boolean;
   confidence: MatchConfidence | null;
-  notesKeys: string[];
-  blacklistReason: string | null;
+  blacklistMessage: CatalogMessage | null;
   risk: RiskAssessment | null;
   requiresConfirmation: boolean;
 };
@@ -40,17 +44,31 @@ const EMPTY_COMMON_OUTCOME: CommonOutcomeFields = {
   otherAddonKind: null,
   otherAddonUnmanaged: false,
   confidence: null,
-  notesKeys: [],
-  blacklistReason: null,
+  blacklistMessage: null,
   risk: null,
   requiresConfirmation: false,
 };
 
-/** Maps a tool outcome (or a superset with extra kinds) to shared card fields. */
+/** Whether a tool-specific union member uses the shared outcome contract. */
+export function isCommonAvailabilityOutcome(outcome: {
+  kind: string;
+}): outcome is CommonAvailabilityOutcome {
+  switch (outcome.kind) {
+    case 'installable':
+    case 'incompatible':
+    case 'blacklisted':
+    case 'unsupported':
+    case 'blocked_by_other_addon':
+    case 'unmanaged_present':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Maps an already typed shared outcome to the common card fields. */
 export function deriveCommonOutcomeFields(
-  // Accept tool-specific supersets (extra fields like `confidence`, `url`, `other_kind`)
-  // without forcing casts at call sites. Excess property check is bypassed via intersection.
-  outcome: ({ kind: string } & Record<string, unknown>) | null | undefined,
+  outcome: CommonAvailabilityOutcome | null | undefined,
 ): CommonOutcomeFields {
   if (!outcome) {
     return EMPTY_COMMON_OUTCOME;
@@ -58,38 +76,31 @@ export function deriveCommonOutcomeFields(
 
   switch (outcome.kind) {
     case 'installable': {
-      const installable = outcome as Extract<CommonAvailabilityOutcome, { kind: 'installable' }>;
+      const risk = outcome.risk;
       return {
         ...EMPTY_COMMON_OUTCOME,
         isInstallable: true,
-        confidence: installable.confidence,
-        notesKeys: installable.notes_keys,
-        risk: installable.risk,
-        requiresConfirmation: installable.risk.severity === 'warn',
+        confidence: outcome.confidence,
+        risk,
+        requiresConfirmation: risk.severity === 'warn',
       };
     }
     case 'incompatible':
       return { ...EMPTY_COMMON_OUTCOME, isIncompatible: true };
-    case 'blacklisted': {
-      const blacklisted = outcome as Extract<CommonAvailabilityOutcome, { kind: 'blacklisted' }>;
+    case 'blacklisted':
       return {
         ...EMPTY_COMMON_OUTCOME,
         isBlacklisted: true,
-        blacklistReason: blacklisted.reason,
+        blacklistMessage: outcome.message,
       };
-    }
     case 'unsupported':
       return { ...EMPTY_COMMON_OUTCOME, isUnsupported: true };
     case 'blocked_by_other_addon': {
-      const blocked = outcome as Extract<
-        CommonAvailabilityOutcome,
-        { kind: 'blocked_by_other_addon' }
-      >;
       return {
         ...EMPTY_COMMON_OUTCOME,
         isBlockedByOtherAddon: true,
-        otherAddonKind: blocked.other_kind,
-        otherAddonUnmanaged: blocked.unmanaged,
+        otherAddonKind: outcome.other_kind,
+        otherAddonUnmanaged: outcome.unmanaged,
       };
     }
     case 'unmanaged_present':

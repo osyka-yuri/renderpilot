@@ -1,13 +1,18 @@
 import { describeCommandErrorTechnical } from '@shared/api';
 import { t, type MessageKey } from '@shared/i18n';
 import { publishErrorNotification } from '@shared/notifications';
-import { clearDownloadProgress } from '@shared/lib';
 
+import {
+  runBusyMutation as runBusyMutationImpl,
+  type BusyMutationContext,
+  type BusyMutationOptions,
+  type CheckUpdateKind,
+  type PostMutationProbe,
+} from './busy-mutation';
 import {
   beginRequest,
   createInitialAddonCoreSnapshot,
   deriveFreshness,
-  withBusy,
   withLoadBegin,
   withLoadError,
   withLoadSuccess,
@@ -28,7 +33,7 @@ export type AddonStoreApi<
   TAvailabilityReport extends { state: TState },
 > = {
   getAvailability: (gameId: string) => Promise<TAvailabilityReport>;
-  checkUpdate: (gameId: string) => Promise<TUpdateReport>;
+  checkUpdate: (gameId: string, kind: CheckUpdateKind) => Promise<TUpdateReport>;
 };
 
 export type AddonStoreMessages = {
@@ -47,10 +52,33 @@ export type CreateAddonStoreConfig<
   applyLoadReport: (report: TAvailabilityReport) => void;
   /** Tool-specific host snapshot refresh after a mutation (local scan). */
   applyHostRefresh: (report: TAvailabilityReport) => void;
+  /**
+   * Clears tool-owned chrome (outcome, host snapshot, ...) when a navigation load
+   * begins. Receives the game id being loaded so tools can retain same-game
+   * caches (e.g. Luma profile meta) while dropping cross-game state.
+   * Not called for same-game retry, which retains prior chrome.
+   */
+  resetToolChrome?: (gameId: string) => void;
   buildUpdateReportForInstall: (nextState: TState) => TUpdateReport | null;
   buildProbeFailureReport: () => TUpdateReport;
   /** Tool-specific tracked sources for the untracked freshness branch (e.g. dgvoodoo, dlssFix). */
   freshnessExtraSources?: (report: TUpdateReport) => readonly (UpdateStatus | null)[];
+  /**
+   * Optional merge of a probe result with the report already on the store
+   * (e.g. optimistic post-install "current"). Default: use the probe as-is.
+   */
+  coalesceUpdateReport?: (previous: TUpdateReport | null, probed: TUpdateReport) => TUpdateReport;
+  /**
+   * Default probe policy after a successful mutation when `probeUpdates` is
+   * omitted on the call. Defaults to `never`.
+   */
+  postMutationProbe?: PostMutationProbe;
+  /**
+   * Optional page/game-details side effect after every successful mutation
+   * (host refresh + optional probe + tool `afterCommit`). Token-guarded by the
+   * mutation flow; Luma uses this for cascade library invalidation.
+   */
+  onMutationSideEffect?: (gameId: string, token: number) => void | Promise<void>;
 };
 
 export type AddonStoreCore<
@@ -78,9 +106,13 @@ export function createAddonStore<
     onExclusivityChange,
     applyLoadReport,
     applyHostRefresh,
+    resetToolChrome,
     buildUpdateReportForInstall,
     buildProbeFailureReport,
     freshnessExtraSources,
+    coalesceUpdateReport,
+    postMutationProbe = 'never',
+    onMutationSideEffect,
   } = config;
 
   // `$state.raw`: whole-snapshot replace only (immutable reducers). Avoids deep
@@ -96,9 +128,6 @@ export function createAddonStore<
   const addonDated = $derived(core.state?.status === 'installed' ? core.state.addon_dated : null);
   const installedAt = $derived(core.state?.status === 'installed' ? core.state.installed_at : null);
   const updatedAt = $derived(core.state?.status === 'installed' ? core.state.updated_at : null);
-  const addonTracked = $derived(
-    core.state?.status === 'installed' ? core.state.addon_tracked : null,
-  );
   const freshness = $derived.by(() =>
     deriveFreshness(
       core.updateProbing,
@@ -116,9 +145,15 @@ export function createAddonStore<
     onExclusivityChange?.(gameId);
   }
 
-  async function load(gameId: string): Promise<void> {
-    const { next, token } = withLoadBegin(core);
+  async function loadAvailability(gameId: string, preserveLoadError: boolean): Promise<void> {
+    const { next, token } = withLoadBegin(core, preserveLoadError);
     core = next;
+    // Navigation loads clear tool chrome so outcome flags from the previous game
+    // cannot drive the card while the new game's availability is in flight.
+    if (!preserveLoadError) {
+      resetToolChrome?.(gameId);
+    }
+    let succeeded = false;
     try {
       const report = await api.getAvailability(gameId);
       if (token !== core.requestId) {
@@ -126,6 +161,7 @@ export function createAddonStore<
       }
       core = withLoadSuccess(core, report.state);
       applyLoadReport(report);
+      succeeded = true;
     } catch (error) {
       if (token !== core.requestId) {
         return;
@@ -139,17 +175,28 @@ export function createAddonStore<
       }
     }
 
-    await probeUpdateStatus(gameId, token);
+    if (!succeeded) {
+      return;
+    }
+    await probeUpdateStatus(gameId, token, 'passive');
+  }
+
+  async function load(gameId: string): Promise<void> {
+    await loadAvailability(gameId, false);
+  }
+
+  /** Keeps the previous failure visible while this explicit retry is in progress. */
+  async function retry(gameId: string): Promise<void> {
+    await loadAvailability(gameId, true);
   }
 
   /**
-   * Applies a successful mutation response: pure commit into the core snapshot
-   * + best-effort host re-scan. Returns the request token for tool `onSuccess` hooks.
+   * Applies a successful mutation response and returns the request token for
+   * the ordered post-commit sequence.
    */
-  function commitMutationResult(gameId: string, nextState: TState): number {
+  function commitMutationResult(nextState: TState): number {
     const { next, token } = withMutationCommit(core, nextState, buildUpdateReportForInstall);
     core = next;
-    void refreshHostInfo(gameId, token);
     return token;
   }
 
@@ -168,15 +215,25 @@ export function createAddonStore<
     }
   }
 
-  async function probeUpdateStatus(gameId: string, token: number): Promise<void> {
+  async function probeUpdateStatus(
+    gameId: string,
+    token: number,
+    kind: CheckUpdateKind,
+  ): Promise<void> {
     if (token !== core.requestId || core.state?.status !== 'installed') {
       return;
     }
-    core = withProbeBegin(core);
+    // Idempotent: post-mutation path may already have set updateProbing so
+    // freshness stays `checking` across refreshHostInfo.
+    if (!core.updateProbing) {
+      core = withProbeBegin(core);
+    }
     try {
-      const report = await api.checkUpdate(gameId);
+      const report = await api.checkUpdate(gameId, kind);
       if (token === core.requestId) {
-        core = withProbeSuccess(core, report);
+        const previous = core.updateReport;
+        const resolved = coalesceUpdateReport?.(previous, report) ?? report;
+        core = withProbeSuccess(core, resolved);
       }
     } catch {
       if (token === core.requestId) {
@@ -192,46 +249,29 @@ export function createAddonStore<
   async function checkForUpdates(gameId: string): Promise<void> {
     const { next, token } = beginRequest(core);
     core = next;
-    await probeUpdateStatus(gameId, token);
+    await probeUpdateStatus(gameId, token, 'user');
   }
 
-  type BusyMutationOptions = {
-    errorKey: MessageKey;
-    clearDownloadProgress?: boolean;
-    requireUpdateAvailable?: boolean;
-    onSuccess?: (token: number) => void | Promise<void>;
-    notifyExclusivity?: boolean;
+  const mutationCtx: BusyMutationContext<TState, TUpdateReport> = {
+    getCore: () => core,
+    setCore: (next) => {
+      core = next;
+    },
+    getUpdateAvailable: () => updateAvailable,
+    commitMutationResult,
+    refreshHostInfo,
+    probeUpdateStatus,
+    notifyExclusivityChange,
+    postMutationProbe,
+    onMutationSideEffect,
   };
 
   async function runBusyMutation(
     gameId: string,
     fn: () => Promise<TState>,
     options: BusyMutationOptions,
-  ): Promise<boolean> {
-    if (core.busy) {
-      return false;
-    }
-    if (options.requireUpdateAvailable && !updateAvailable) {
-      return false;
-    }
-    core = withBusy(core, true);
-    if (options.clearDownloadProgress !== false) {
-      clearDownloadProgress([gameId]);
-    }
-    try {
-      const nextState = await fn();
-      const token = commitMutationResult(gameId, nextState);
-      await options.onSuccess?.(token);
-      if (options.notifyExclusivity) {
-        notifyExclusivityChange(gameId);
-      }
-      return true;
-    } catch (error) {
-      publishErrorNotification(t(options.errorKey), describeCommandErrorTechnical(error));
-      return false;
-    } finally {
-      core = withBusy(core, false);
-    }
+  ) {
+    return runBusyMutationImpl(mutationCtx, gameId, fn, options);
   }
 
   return {
@@ -271,9 +311,6 @@ export function createAddonStore<
     get addonDated() {
       return addonDated;
     },
-    get addonTracked() {
-      return addonTracked;
-    },
     get installedAt() {
       return installedAt;
     },
@@ -293,6 +330,7 @@ export function createAddonStore<
       return core.requestId;
     },
     load,
+    retry,
     checkForUpdates,
     isCurrentRequest,
     runBusyMutation,

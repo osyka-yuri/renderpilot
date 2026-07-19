@@ -1,5 +1,5 @@
 /**
- * Date formatting shared by every add-on tool's card (for example RenoDX), keyed
+ * Date formatting shared by every add-on tool's card (RenoDX, Luma, …), keyed
  * to the active UI locale.
  *
  * Rolling-release add-ons carry no version number, so their cards anchor

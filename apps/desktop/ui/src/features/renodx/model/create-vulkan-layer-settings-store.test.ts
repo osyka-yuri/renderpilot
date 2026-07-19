@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type * as EntitiesLibrary from '@entities/library';
+import type { ReshadeChannel } from '@entities/addon';
 import { CATALOG_SETTING_KEYS } from '@entities/settings';
+import type * as SharedLib from '@shared/lib';
+
 import type { RenoDxApi } from '../api/desktop';
-import type {
-  ActionDescriptor,
-  ReshadeChannel,
-  VulkanLayerManagementReport,
-  VulkanLayerReport,
-} from './types';
+import { action } from './renodx-store-test-fixtures';
+import type { VulkanLayerManagementReport, VulkanLayerReport } from './types';
 import {
   createVulkanLayerSettingsStore,
   VULKAN_LAYER_PROGRESS_ID,
@@ -18,12 +16,12 @@ vi.mock('@shared/notifications', () => ({
   publishErrorNotification: vi.fn(),
 }));
 
-vi.mock('@entities/library', async (importOriginal) => {
-  const actual = await importOriginal<typeof EntitiesLibrary>();
+vi.mock('@shared/lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof SharedLib>();
   return { ...actual, clearDownloadProgress: vi.fn() };
 });
 
-import { clearDownloadProgress } from '@entities/library';
+import { clearDownloadProgress } from '@shared/lib';
 
 type SettingsApi = Pick<
   RenoDxApi,
@@ -31,17 +29,6 @@ type SettingsApi = Pick<
 >;
 
 type SettingsPersistence = NonNullable<Parameters<typeof createVulkanLayerSettingsStore>[1]>;
-
-function action(overrides: Partial<ActionDescriptor> = {}): ActionDescriptor {
-  return {
-    enabled: true,
-    requires_confirmation: false,
-    confirmation_scope: null,
-    disabled_reason: null,
-    target_channel: null,
-    ...overrides,
-  };
-}
 
 function installedLayer(overrides: Partial<VulkanLayerReport> = {}): VulkanLayerReport {
   return {
@@ -178,7 +165,7 @@ describe('createVulkanLayerSettingsStore', () => {
     expect(store.primaryAction).toBe('switch_channel');
   });
 
-  it('clamps Stable to Nightly when the manifest does not support Stable', async () => {
+  it('keeps an unavailable stored Stable selection and disables its action', async () => {
     const api = fakeApi({
       vulkanLayerManagementStatus: vi.fn<SettingsApi['vulkanLayerManagementStatus']>(() =>
         Promise.resolve(
@@ -196,7 +183,10 @@ describe('createVulkanLayerSettingsStore', () => {
     await store.load();
 
     expect(store.stableSupported).toBe(false);
-    expect(store.selectedChannel).toBe('nightly');
+    expect(store.selectedChannel).toBe('stable');
+    expect(store.primaryAction).toBeNull();
+    expect(await store.apply()).toBe(false);
+    expect(api.applyVulkanLayer).not.toHaveBeenCalled();
   });
 
   it('applies the shared Vulkan layer through the dedicated backend command', async () => {

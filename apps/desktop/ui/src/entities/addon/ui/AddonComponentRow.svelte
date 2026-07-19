@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Component, Snippet } from 'svelte';
+  import type { Snippet } from 'svelte';
   import {
     Item,
     ItemContent,
@@ -17,6 +17,8 @@
   import InfoIcon from '@lucide/svelte/icons/info';
 
   import type { UpdateStatus } from '../model/types';
+  import AddonToolStatusBadge from './AddonToolStatusBadge.svelte';
+  import type { AddonToolI18nPrefix } from './types';
 
   const ICON_BY_KIND = {
     reshade: ShieldCheckIcon,
@@ -31,9 +33,8 @@
     title: string;
     description?: string | null;
     status?: UpdateStatus | null;
-    /** The tool's own translated status-pill component (e.g. `RenoDxStatusBadge`).
-     * Only required when `status` is passed. */
-    StatusBadge?: Component<{ status: UpdateStatus }>;
+    /** Tool i18n prefix for freshness badges. Required when `status` is set. */
+    statusI18nPrefix?: AddonToolI18nPrefix;
     hint?: string | null;
     actions?: Snippet;
   };
@@ -43,7 +44,7 @@
     title,
     description = null,
     status = null,
-    StatusBadge,
+    statusI18nPrefix,
     hint = null,
     actions,
   }: Props = $props();
@@ -86,8 +87,8 @@
   </ItemContent>
 
   <ItemActions>
-    {#if status !== null && StatusBadge}
-      <StatusBadge {status} />
+    {#if status !== null && statusI18nPrefix}
+      <AddonToolStatusBadge {status} i18nPrefix={statusI18nPrefix} />
     {/if}
 
     {@render actions?.()}

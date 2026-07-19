@@ -1,15 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type * as EntitiesLibrary from '@entities/library';
-
 vi.mock('@shared/notifications', () => ({
   publishErrorNotification: vi.fn(),
 }));
-
-vi.mock('@entities/library', async (importOriginal) => {
-  const actual = await importOriginal<typeof EntitiesLibrary>();
-  return { ...actual, clearDownloadProgress: vi.fn() };
-});
 
 import { createRenoDxStore } from './create-renodx-store.svelte';
 import type { AvailabilityReport } from './types';
@@ -78,7 +71,38 @@ describe('createRenoDxStore', () => {
     expect(store.risk?.severity).toBe('info');
   });
 
-  it('falls back the selected ReShade channel when stable is unsupported', async () => {
+  it('preserves the complete generic catalogue profile', async () => {
+    const genericProfile = {
+      engine: 'unreal' as const,
+      message: {
+        id: 'renodx.generic.universal',
+        fallback_text: 'Uses the shared Unreal Engine profile.',
+      },
+    };
+    const report = availability({
+      state: { status: 'not_installed' },
+      outcome: {
+        kind: 'installable',
+        confidence: 'verified',
+        risk: {
+          severity: 'info',
+          message_key: 'addon.risk.sp_safe',
+        },
+        generic_profile: genericProfile,
+        host_kind: 'proxy',
+      },
+      manual_install: null,
+    });
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
+    });
+
+    await store.load('steam:1091500');
+
+    expect(store.genericProfile).toEqual(genericProfile);
+  });
+
+  it('does not silently remap an unavailable selected Stable channel', async () => {
     const withoutStable: AvailabilityReport = {
       ...NOT_INSTALLED_SAFE,
       reshade_stable_supported: false,
@@ -86,7 +110,6 @@ describe('createRenoDxStore', () => {
         ...DEFAULT_HOST_FACTS,
         channel: {
           selected: 'stable',
-          effective: 'nightly',
           detected: null,
         },
       },
@@ -98,7 +121,8 @@ describe('createRenoDxStore', () => {
     await store.load('steam:1091500');
 
     expect(store.reshadeStableSupported).toBe(false);
-    expect(store.selectedReshadeChannel).toBe('nightly');
+    expect(store.selectedReshadeChannel).toBe('stable');
+    expect(await store.install('steam:1091500', 'stable', false)).toBe('skipped');
   });
 
   it('applies the availability snapshot consistently on load', async () => {
@@ -109,7 +133,6 @@ describe('createRenoDxStore', () => {
         ...PRESENT_HOST_FACTS,
         channel: {
           selected: 'nightly',
-          effective: 'nightly',
           detected: 'nightly',
         },
       },
@@ -141,12 +164,12 @@ describe('createRenoDxStore', () => {
     expect(store.selectedReshadeChannel).toBe('nightly');
   });
 
-  it('uses the backend channel facts as the per-game card selection', async () => {
+  it('uses the backend selected channel rather than the detected channel', async () => {
     const detectedNightlyDx: AvailabilityReport = {
       ...NOT_INSTALLED_SAFE,
       host_facts: {
         ...DEFAULT_HOST_FACTS,
-        channel: { selected: 'stable', effective: 'stable', detected: 'nightly' },
+        channel: { selected: 'stable', detected: 'nightly' },
       },
     };
     const store = createRenoDxStore({
@@ -155,15 +178,15 @@ describe('createRenoDxStore', () => {
 
     await store.load('steam:1091500');
 
-    expect(store.selectedReshadeChannel).toBe('nightly');
+    expect(store.selectedReshadeChannel).toBe('stable');
   });
 
-  it('falls back to the backend effective channel when no host channel is detected', async () => {
+  it('uses the backend selected channel when no host channel is detected', async () => {
     const effectiveNightlyDx: AvailabilityReport = {
       ...NOT_INSTALLED_SAFE,
       host_facts: {
         ...DEFAULT_HOST_FACTS,
-        channel: { selected: 'stable', effective: 'nightly', detected: null },
+        channel: { selected: 'nightly', detected: null },
       },
     };
     const store = createRenoDxStore({
@@ -185,7 +208,7 @@ describe('createRenoDxStore', () => {
           severity: 'warn',
           message_key: 'addon.risk.anticheat_detected',
         },
-        notes_keys: [],
+        generic_profile: null,
         host_kind: 'proxy',
       },
       manual_install: null,

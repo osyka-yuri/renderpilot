@@ -1,18 +1,23 @@
 import { vi } from 'vitest';
 
+import {
+  defaultHostFacts,
+  type ActionDescriptor,
+  type HostFacts,
+  type ReshadeChannel,
+} from '@entities/addon';
+
 import type { RenoDxApi } from '../api/desktop';
 import type {
-  ActionDescriptor,
   AvailabilityReport,
-  HostFacts,
   HostKind,
   RenoDxInstallState,
   RenoDxUpdateReport,
-  ReshadeChannel,
   VulkanLayerManagementReport,
   VulkanLayerReport,
 } from './types';
 
+/** Test builder for an enabled action descriptor. */
 export function action(overrides: Partial<ActionDescriptor> = {}): ActionDescriptor {
   return {
     enabled: true,
@@ -24,20 +29,7 @@ export function action(overrides: Partial<ActionDescriptor> = {}): ActionDescrip
   };
 }
 
-export const DEFAULT_HOST_FACTS: HostFacts = {
-  slot: null,
-  active: false,
-  path: null,
-  version: null,
-  addon_support: 'unknown',
-  channel: {
-    selected: 'stable',
-    effective: 'stable',
-    detected: null,
-  },
-  update_status: 'unknown_needs_validation',
-  is_custom_build: false,
-};
+export const DEFAULT_HOST_FACTS = defaultHostFacts('stable');
 
 export const PRESENT_HOST_FACTS: HostFacts = {
   slot: 'dxgi.dll',
@@ -47,7 +39,6 @@ export const PRESENT_HOST_FACTS: HostFacts = {
   addon_support: 'full',
   channel: {
     selected: 'stable',
-    effective: 'stable',
     detected: 'stable',
   },
   update_status: 'current',
@@ -129,7 +120,7 @@ export const NOT_INSTALLED_SAFE: AvailabilityReport = availability({
       severity: 'info',
       message_key: 'addon.risk.sp_safe',
     },
-    notes_keys: [],
+    generic_profile: null,
     host_kind: 'proxy',
   },
   manual_install: null,
@@ -171,7 +162,6 @@ export function installedWithChannel(
       ...PRESENT_HOST_FACTS,
       channel: {
         selected: channel,
-        effective: channel,
         detected: channel,
       },
     },

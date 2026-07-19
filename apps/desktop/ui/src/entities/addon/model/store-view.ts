@@ -1,3 +1,4 @@
+import type { AddonMutationResult } from './busy-mutation';
 import type {
   Freshness,
   HostActions,
@@ -10,7 +11,7 @@ import type {
 /**
  * The shared, tool-agnostic slice of an add-on store that the shared UI
  * (card view, installable view, installed panel) reads. Every tool's
- * concrete store structurally satisfies this — the fields come from
+ * concrete store structurally satisfies this -- the fields come from
  * {@link addonCoreApi}, {@link commonOutcomeApi}, and {@link hostSnapshotApi}.
  * Each consuming component picks only the fields it needs.
  */
@@ -27,7 +28,6 @@ export type AddonStoreView = {
   isIncompatible: boolean;
   requiresConfirmation: boolean;
   confidence: MatchConfidence | null;
-  notesKeys: string[];
   freshness: Freshness;
   addonDated: string | null;
   installedAt: number | null;
@@ -38,7 +38,7 @@ export type AddonStoreView = {
   hostDetection: HostDetection;
   hostFacts: HostFacts;
   hostActions: HostActions;
-  checkForUpdates(gameId: string): Promise<unknown>;
-  update(gameId: string): Promise<unknown>;
-  uninstall(gameId: string): Promise<boolean | undefined>;
+  checkForUpdates(gameId: string): Promise<void>;
+  update(gameId: string): Promise<AddonMutationResult>;
+  uninstall(gameId: string): Promise<AddonMutationResult>;
 };
