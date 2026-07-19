@@ -38,4 +38,19 @@ pub(crate) enum Command {
     RenodxUninstall {
         game_id: GameId,
     },
+    RenodxCheckUpdate {
+        game_id: GameId,
+    },
+    RenodxCheckUpdates,
+    LumaStatus {
+        game_id: GameId,
+    },
+    LumaUninstall {
+        game_id: GameId,
+    },
+    LumaCheckUpdate {
+        game_id: GameId,
+        deep: bool,
+    },
+    LumaCheckUpdates,
 }

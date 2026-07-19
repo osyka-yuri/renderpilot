@@ -64,8 +64,9 @@ impl QueryGameCards {
         let selected_libraries =
             normalize_selected_libraries(req.selected_libraries, available_libraries);
         let selected_library_set = selected_libraries.iter().cloned().collect();
-        // Normalize first so all-unknown selections (e.g. a future/removed kind)
-        // become "no addon filter" instead of an always-false match set.
+        // Derive the filter flag after normalize so all-unknown selections
+        // become "no addon filter" (unknown tokens are dropped) rather than
+        // "filter active + empty match set" which blanks the catalog.
         let selected_addons = normalize_addon_names(req.selected_addons);
         let has_addon_filter = !selected_addons.is_empty();
         let selected_addon_set = selected_addons.iter().cloned().collect();

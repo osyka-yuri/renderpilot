@@ -29,8 +29,8 @@ pub mod dto;
 mod errors;
 mod fetch;
 mod game_context;
-pub mod manifest_store;
 pub(crate) mod install;
+pub mod manifest_store;
 pub(crate) mod matcher;
 pub(crate) mod mutation_targets;
 pub(crate) mod reconciliation;
@@ -38,7 +38,7 @@ mod source;
 pub(crate) mod tool;
 mod tracking;
 pub mod types;
-/// Read-only availability use cases.
+/// Use cases.
 pub mod use_cases;
 mod validate;
 mod vcredist;

@@ -48,6 +48,14 @@ mod rollback;
 #[cfg(test)]
 mod test_fixtures;
 
+#[cfg(test)]
+mod host_only_payload_guard_tests;
+#[cfg(test)]
+mod orchestration_tests;
+#[cfg(test)]
+mod snapshot_tests;
+#[cfg(test)]
+mod target_match_tests;
 
 use std::path::PathBuf;
 

@@ -206,6 +206,7 @@ mod tests {
     use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi, Launcher};
 
     use super::*;
+    use crate::addons::luma;
     use crate::addons::matching::MatchKind;
     use crate::addons::renodx;
 
@@ -218,6 +219,56 @@ mod tests {
             engine: None,
             graphics: ExeGraphicsInfo::new(vec![GraphicsApi::D3D9], Some(Architecture::X86)),
         }
+    }
+
+    #[test]
+    fn borderlands_style_facts_can_expose_both_profiles() {
+        let renodx_manifest = renodx::test_support::manifest(vec![renodx::test_support::title(
+            "borderlands-2",
+            "borderlands2",
+            Architecture::X86,
+            renodx::types::Status::Working,
+            vec![renodx::test_support::rule(
+                renodx::types::MatchKind::SteamAppid,
+                "49520",
+                100,
+            )],
+        )]);
+        let mut luma_title = luma::test_support::title(
+            "borderlands-2",
+            "Luma-Borderlands_2.zip",
+            Architecture::X86,
+            luma::types::Status::Working,
+            vec![luma::test_support::rule(
+                MatchKind::SteamAppid,
+                "49520",
+                100,
+            )],
+        );
+        luma_title.external_requirement = Some(luma::types::LumaExternalRequirement::Dgvoodoo2 {
+            version: "2.87.3".to_owned(),
+            accepted_detected_apis: vec![GraphicsApi::D3D9],
+            reshade_proxy_dll: "dxgi.dll".to_owned(),
+            source: luma::types::ManagedArchiveSource {
+                url: "https://example.com/dgVoodoo.zip".to_owned(),
+                sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_owned(),
+                size: 1,
+            },
+            install_map: Vec::new(),
+            config_file: "dgVoodoo.conf".to_owned(),
+            config: Vec::new(),
+        });
+        let luma_manifest = luma::test_support::manifest(vec![luma_title]);
+
+        let probes = [
+            renodx::tool::capability_probe(renodx_manifest),
+            luma::tool::capability_probe(luma_manifest),
+        ];
+        assert_eq!(
+            profile_capabilities_for_facts(&probes, &borderlands_facts()),
+            vec![AddonKind::RenoDx, AddonKind::Luma]
+        );
     }
 
     #[test]

@@ -1,4 +1,7 @@
 //! RenoDX HDR add-on Tauri command handlers.
+//!
+//! Desktop IPC is the card/settings surface only. CLI status / bulk check-updates
+//! stay on orchestration via the CLI crate.
 
 use std::sync::Arc;
 
@@ -10,16 +13,6 @@ use super::{
     JsonCommandResult, download_progress_emitter, require_game_context, run_desktop_async_command,
     run_desktop_command,
 };
-
-#[tauri::command]
-pub async fn renodx_status(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-
-    run_desktop_command(move || desktop::renodx_status(&context, game_id)).await
-}
 
 #[tauri::command]
 pub async fn renodx_availability(
@@ -198,14 +191,6 @@ pub async fn renodx_update(
         .await
     })
     .await
-}
-
-#[tauri::command]
-pub async fn renodx_check_updates(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-
-    run_desktop_async_command(move || async move { desktop::renodx_check_updates(&context).await })
-        .await
 }
 
 // Parameter order for the DLSS-fix family is historically `context` first

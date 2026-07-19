@@ -5,9 +5,10 @@ use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, Graphic
 use renderpilot_orchestration::{Context, ServiceError};
 
 use crate::{
-    args::Command,
+    args::command::Command,
     catalog,
     error::CliError,
+    luma,
     output::{
         render_candidates_output, render_help, render_list_artifacts_output,
         render_list_operations_output, render_plan_swap_output, render_scan_folder_batch_output,
@@ -72,6 +73,12 @@ fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
 
         Command::RenodxStatus { game_id } => renodx_status(context, &game_id),
         Command::RenodxUninstall { game_id } => renodx_uninstall(context, &game_id),
+        Command::RenodxCheckUpdate { game_id } => renodx_check_update(context, &game_id),
+        Command::RenodxCheckUpdates => renodx_check_updates(context),
+        Command::LumaStatus { game_id } => luma_status(context, &game_id),
+        Command::LumaUninstall { game_id } => luma_uninstall(context, &game_id),
+        Command::LumaCheckUpdate { game_id, deep } => luma_check_update(context, &game_id, deep),
+        Command::LumaCheckUpdates => luma_check_updates(context),
 
         _ => unreachable!("stateless commands are handled in render_command"),
     }
@@ -196,6 +203,98 @@ fn renodx_uninstall(context: &renderpilot_orchestration::Context, game_id: &Game
     let state = renodx::status(context, game_id)?;
 
     render_json(&state)
+}
+
+fn renodx_check_update(
+    context: &renderpilot_orchestration::Context,
+    game_id: &GameId,
+) -> CliOutput {
+    let report = block_on(async {
+        let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
+        renodx::check_update(context, &bundle.tool, &bundle.reshade.sources, game_id).await
+    })?;
+    render_json(&report)
+}
+
+fn renodx_check_updates(context: &renderpilot_orchestration::Context) -> CliOutput {
+    let statuses = block_on(async {
+        match renodx::manifest_store::get_or_fetch_bundle().await {
+            Ok(bundle) => {
+                renodx::check_updates(context, &bundle.tool, &bundle.reshade.sources).await
+            }
+            Err(_) => renodx::unknown_updates_for_installed(context),
+        }
+    })?;
+    render_json(&statuses_to_map(statuses))
+}
+
+fn luma_status(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    let manifest = block_on(luma::manifest_store::get_or_fetch_manifest()).ok();
+    let state = luma::status(context, manifest.as_ref(), game_id)?;
+    render_json(&state)
+}
+
+fn luma_uninstall(context: &renderpilot_orchestration::Context, game_id: &GameId) -> CliOutput {
+    luma::uninstall(context, game_id)?;
+    let state = luma::status(context, None, game_id)?;
+    render_json(&state)
+}
+
+fn luma_check_update(
+    context: &renderpilot_orchestration::Context,
+    game_id: &GameId,
+    deep: bool,
+) -> CliOutput {
+    let report = block_on(async {
+        let bundle = luma::manifest_store::get_or_fetch_bundle().await?;
+        luma::check_update(
+            context,
+            &bundle.tool,
+            &bundle.reshade.sources,
+            game_id,
+            deep,
+        )
+        .await
+    })?;
+    render_json(&report)
+}
+
+fn luma_check_updates(context: &renderpilot_orchestration::Context) -> CliOutput {
+    let statuses = block_on(async {
+        match luma::manifest_store::get_or_fetch_bundle().await {
+            Ok(bundle) => luma::check_updates(context, &bundle.tool, &bundle.reshade.sources).await,
+            Err(_) => luma::unknown_updates_for_installed(context),
+        }
+    })?;
+    render_json(&statuses_to_map(statuses))
+}
+
+fn statuses_to_map(
+    statuses: Vec<(
+        GameId,
+        renderpilot_orchestration::addons::update::UpdateStatus,
+    )>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut map = serde_json::Map::with_capacity(statuses.len());
+    for (game_id, status) in statuses {
+        if let Ok(value) = serde_json::to_value(status) {
+            map.insert(game_id.as_str().to_owned(), value);
+        }
+    }
+    map
+}
+
+fn block_on<F, T>(future: F) -> Result<T, ServiceError>
+where
+    F: std::future::Future<Output = Result<T, ServiceError>>,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| {
+            ServiceError::command_failed(format!("failed to start async runtime for CLI: {error}"))
+        })?
+        .block_on(future)
 }
 
 fn render_output<E>(output: Result<String, E>) -> CliOutput

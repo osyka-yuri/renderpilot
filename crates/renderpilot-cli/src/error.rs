@@ -241,7 +241,7 @@ mod tests {
     fn runtime_errors_use_general_failure_exit_code() {
         let errors = [
             CliError::OutputSerializationFailed("json failed".into()),
-            CliError::Service(ServiceError::CommandFailed("scan failed".into())),
+            CliError::Service(ServiceError::command_failed("scan failed")),
             CliError::Service(ServiceError::InvalidInput("bad input".into())),
             CliError::Service(ServiceError::StorageFailed("database locked".into())),
             CliError::Service(ServiceError::ProviderFailed("install failed".into())),
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn runtime_errors_do_not_include_help_hint() {
         let errors = [
-            CliError::Service(ServiceError::CommandFailed("scan failed".to_owned())),
+            CliError::Service(ServiceError::command_failed("scan failed")),
             CliError::Service(ServiceError::NvapiRequiresElevation),
         ];
 

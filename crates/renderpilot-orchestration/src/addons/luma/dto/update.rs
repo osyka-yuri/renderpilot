@@ -51,3 +51,39 @@ impl LumaUpdateReport {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::addons::update::UpdateStatus::{Available, Current, Unknown};
+
+    #[test]
+    fn report_assembly_recorded_host_entry() {
+        let report = LumaUpdateReport::new(Some(Current), Some(Available), None);
+        assert_eq!(report.overall, Available);
+
+        let report = LumaUpdateReport::new(Some(Current), Some(Current), None);
+        assert_eq!(report.overall, Current);
+    }
+
+    #[test]
+    fn report_assembly_without_a_host_entry() {
+        let report = LumaUpdateReport::new(Some(Current), None, None);
+        assert_eq!(report.overall, Current);
+
+        let report = LumaUpdateReport::new(Some(Available), None, None);
+        assert_eq!(report.overall, Available);
+    }
+
+    #[test]
+    fn report_assembly_without_anything_installed() {
+        let report = LumaUpdateReport::new(None, Some(Current), None);
+        assert_eq!(report.overall, Unknown);
+    }
+
+    #[test]
+    fn report_assembly_with_dgvoodoo_entry() {
+        let report = LumaUpdateReport::new(Some(Current), Some(Current), Some(Available));
+        assert_eq!(report.overall, Available);
+    }
+}

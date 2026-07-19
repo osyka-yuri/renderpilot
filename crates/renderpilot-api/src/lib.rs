@@ -29,6 +29,7 @@ pub(crate) mod catalog;
 pub(crate) mod covers;
 pub(crate) mod dlss_indicator;
 pub(crate) mod libraries;
+pub(crate) mod luma;
 pub(crate) mod manifests;
 pub(crate) mod nvapi;
 pub(crate) mod operations;
@@ -52,6 +53,9 @@ pub use self::libraries::{
     delete_library, download_artifact, download_library, fetch_libraries_manifest,
     get_libraries_manifest, get_library_states,
 };
+pub use self::luma::{
+    luma_availability, luma_check_update, luma_install, luma_uninstall, luma_update,
+};
 pub use self::manifests::refresh_remote_manifests_forced;
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
@@ -61,10 +65,10 @@ pub use self::nvapi::{
 };
 pub use self::operations::{apply_swap, rollback_component};
 pub use self::renodx::{
-    renodx_apply_vulkan_layer, renodx_availability, renodx_check_update, renodx_check_updates,
+    renodx_apply_vulkan_layer, renodx_availability, renodx_check_update,
     renodx_dlss_fix_availability, renodx_install, renodx_install_dlss_fix,
-    renodx_install_from_file, renodx_remove_vulkan_layer, renodx_status,
-    renodx_switch_reshade_channel, renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
+    renodx_install_from_file, renodx_remove_vulkan_layer, renodx_switch_reshade_channel,
+    renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
     renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
 pub use self::scan::{scan_auto_libraries, scan_manual_folder};

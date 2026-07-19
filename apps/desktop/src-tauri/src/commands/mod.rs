@@ -5,11 +5,13 @@
 
 pub(crate) mod addon_catalog;
 mod error;
+mod luma;
 mod query_game_cards;
 mod renodx;
 mod validation;
 
 pub use error::CommandError;
+pub use luma::*;
 pub use renodx::*;
 
 use std::sync::Arc;

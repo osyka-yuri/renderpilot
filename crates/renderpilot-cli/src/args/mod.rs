@@ -10,17 +10,21 @@ mod catalog;
 pub(crate) mod command;
 mod cursor;
 
+#[cfg(test)]
+mod tests;
+
 use std::ffi::OsString;
 
 use crate::CliError;
+use renderpilot_orchestration::domain::AddonKind;
 
-use self::addon::parse_renodx_command;
+use self::addon::parse_addon_command;
 use self::catalog::{
     parse_apply_command, parse_candidates_command, parse_list_artifacts_command,
     parse_list_operations_command, parse_plan_swap_command, parse_rollback_command,
     parse_scan_folder_command,
 };
-pub(crate) use self::command::Command;
+use self::command::Command;
 use self::cursor::ArgCursor;
 
 pub(crate) fn parse_args(
@@ -41,7 +45,8 @@ pub(crate) fn parse_args(
         "plan-swap" => parse_plan_swap_command(&mut args),
         "apply" | "apply-operation" => parse_apply_command(&mut args),
         "rollback" => parse_rollback_command(&mut args),
-        "renodx" => parse_renodx_command(&mut args),
+        "renodx" => parse_addon_command(&mut args, AddonKind::RenoDx),
+        "luma" => parse_addon_command(&mut args, AddonKind::Luma),
         _ => Err(CliError::UnknownArgument(first)),
     }
 }

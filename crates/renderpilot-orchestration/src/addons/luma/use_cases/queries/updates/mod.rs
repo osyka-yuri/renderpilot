@@ -13,6 +13,8 @@ use crate::addons::update::UpdateStatus;
 use crate::{Context, ServiceError};
 
 mod probe;
+#[cfg(test)]
+mod tests;
 
 use probe::{check_addon, check_dgvoodoo, check_host, elevate_addon_if_torn};
 

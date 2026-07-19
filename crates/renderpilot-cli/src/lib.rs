@@ -9,6 +9,7 @@ mod catalog;
 mod commands;
 mod error;
 mod hash;
+mod luma;
 mod output;
 mod renodx;
 

@@ -7,28 +7,28 @@
 
 use renderpilot_orchestration::Context;
 use renderpilot_orchestration::addons::renodx;
+use renderpilot_orchestration::addons::renodx::dto::update::RenoDxUpdateReport;
 use renderpilot_orchestration::addons::renodx::use_cases::commands::install::InstallRequest;
+use renderpilot_orchestration::addons::update::UpdateStatus;
 use renderpilot_orchestration::net::ProgressObserver;
 use renodx::types::ReshadeChannel;
 
 use crate::utils::{JsonResult, parse_game_id, to_json};
 
-/// Returns the current RenoDX install state for a game.
-pub fn renodx_status(context: &Context, game_id: impl Into<String>) -> JsonResult {
-    to_json(renodx::use_cases::queries::status::status(
-        context,
-        &parse_game_id(game_id)?,
-    )?)
-}
-
 /// Previews whether RenoDX can be installed for a game, with risk and a match
 /// explanation. Loads (and caches) the manifest as needed.
 pub async fn renodx_availability(context: &Context, game_id: impl Into<String>) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    to_json(renodx::use_cases::queries::availability::availability(
-        context, &manifest, &game_id,
-    )?)
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
+    to_json(
+        renodx::use_cases::queries::availability::load_availability(
+            context,
+            &bundle.tool,
+            &bundle.reshade.sources,
+            &game_id,
+        )
+        .await?,
+    )
 }
 
 /// Installs RenoDX into a game, reporting download progress, and returns the
@@ -44,10 +44,11 @@ pub async fn renodx_install(
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     renodx::use_cases::commands::install::install(InstallRequest {
         context,
-        manifest: &manifest,
+        manifest: &bundle.tool,
+        reshade_sources: &bundle.reshade.sources,
         game_id: &game_id,
         requested_channel: reshade_channel,
         confirm_anticheat,
@@ -76,11 +77,12 @@ pub async fn renodx_install_from_file(
     let game_id = parse_game_id(game_id)?;
     let file_path = file_path.into();
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     renodx::use_cases::commands::install::install_from_file(
         InstallRequest {
             context,
-            manifest: &manifest,
+            manifest: &bundle.tool,
+            reshade_sources: &bundle.reshade.sources,
             game_id: &game_id,
             requested_channel: reshade_channel,
             confirm_anticheat,
@@ -113,10 +115,11 @@ pub async fn renodx_switch_reshade_channel(
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     let state = renodx::use_cases::commands::switch_reshade_channel::switch_reshade_channel(
         context,
-        &manifest,
+        &bundle.tool,
+        &bundle.reshade.sources,
         &game_id,
         reshade_channel,
         progress,
@@ -134,8 +137,14 @@ pub fn renodx_vulkan_layer_status() -> JsonResult {
 
 /// Returns the settings-facing shared Vulkan layer management report.
 pub async fn renodx_vulkan_layer_management_status(context: &Context) -> JsonResult {
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    to_json(renodx::use_cases::queries::vulkan_layer::management_status(context, &manifest).await)
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
+    to_json(
+        renodx::use_cases::queries::vulkan_layer::management_status(
+            context,
+            &bundle.reshade.sources,
+        )
+        .await,
+    )
 }
 
 /// Applies the shared ReShade Vulkan layer for the selected settings channel and
@@ -146,11 +155,11 @@ pub async fn renodx_apply_vulkan_layer(
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let reshade_channel = parse_reshade_channel(reshade_channel)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
     to_json(
         renodx::use_cases::commands::shared_vulkan_layer::apply_vulkan_layer(
             context,
-            &manifest,
+            &bundle.reshade.sources,
             reshade_channel,
             progress,
         )
@@ -170,11 +179,29 @@ pub fn renodx_remove_vulkan_layer(context: &Context) -> JsonResult {
 ///
 /// RenoDX ships rolling snapshots, so this compares the recorded source against
 /// upstream (cheap `HEAD`/ETag first, digest fallback). Returns a per-source
-/// update report. Never errors on a network failure — it reports `unknown`.
+/// update report.
+///
+/// Catalogue/cache resolution and upstream HEAD/digest failures soft-fail to
+/// overall `unknown` — check never hard-fails on network. Install/update still
+/// hard-require a resolvable catalogue.
 pub async fn renodx_check_update(context: &Context, game_id: impl Into<String>) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    to_json(renodx::use_cases::queries::updates::check_update(context, &manifest, &game_id).await?)
+    let Ok(bundle) = renodx::manifest_store::get_or_fetch_bundle().await else {
+        return to_json(RenoDxUpdateReport::new(
+            Some(UpdateStatus::Unknown),
+            None,
+            None,
+        ));
+    };
+    to_json(
+        renodx::use_cases::queries::updates::check_update(
+            context,
+            &bundle.tool,
+            &bundle.reshade.sources,
+            &game_id,
+        )
+        .await?,
+    )
 }
 
 /// Applies an available RenoDX update for a game (re-fetch + atomic in-place
@@ -187,23 +214,18 @@ pub async fn renodx_update(
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    renodx::use_cases::commands::update::update(context, &manifest, &game_id, progress).await?;
+    let bundle = renodx::manifest_store::get_or_fetch_bundle().await?;
+    renodx::use_cases::commands::update::update(
+        context,
+        &bundle.tool,
+        &bundle.reshade.sources,
+        &game_id,
+        progress,
+    )
+    .await?;
     to_json(renodx::use_cases::queries::status::status(
         context, &game_id,
     )?)
-}
-
-/// Bulk-checks every installed RenoDX add-on for upstream updates, returning a map
-/// of game id to update status — the data behind an "Update all RenoDX" action.
-pub async fn renodx_check_updates(context: &Context) -> JsonResult {
-    let manifest = renodx::manifest_store::get_or_fetch_manifest().await?;
-    let statuses = renodx::use_cases::queries::updates::check_updates(context, &manifest).await?;
-    let mut map = serde_json::Map::with_capacity(statuses.len());
-    for (game_id, status) in statuses {
-        map.insert(game_id.as_str().to_owned(), to_json(status)?);
-    }
-    Ok(serde_json::Value::Object(map))
 }
 
 /// Installs the DLSS-Fix companion add-on for a game that already has RenoDX,
@@ -247,6 +269,6 @@ fn parse_reshade_channel(value: impl Into<String>) -> Result<ReshadeChannel, cra
     trimmed
         .parse()
         .map_err(|error: renodx::types::ReshadeChannelParseError| {
-            renderpilot_orchestration::ServiceError::InvalidInput(error.to_string()).into()
+            renderpilot_orchestration::ServiceError::invalid_input(error.to_string()).into()
         })
 }

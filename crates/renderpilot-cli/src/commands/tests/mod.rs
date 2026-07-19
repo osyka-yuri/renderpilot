@@ -6,6 +6,7 @@ pub(super) use super::test_support::{
 mod artifacts;
 mod candidates;
 mod general;
+mod luma;
 mod operations;
 mod plan_swap;
 mod renodx;

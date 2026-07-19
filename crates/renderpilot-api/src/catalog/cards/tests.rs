@@ -226,7 +226,7 @@ fn selected_addon_matches_only_cards_with_that_capability() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: Vec::new(),
-            selected_addons: vec![String::from("renodx")],
+            selected_addons: vec![String::from("luma")],
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -238,52 +238,66 @@ fn selected_addon_matches_only_cards_with_that_capability() {
         &[],
         &[String::from("Steam")],
     );
-    let mut addon_card = stub_card("Steam", &[]);
-    addon_card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+    let mut luma_card = stub_card("Steam", &[]);
+    luma_card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::Luma];
     let plain_card = stub_card("Steam", &[]);
 
-    assert!(query.matches(&addon_card));
+    assert!(query.matches(&luma_card));
     assert!(!query.matches(&plain_card));
 }
 
 #[test]
-fn unknown_selected_addons_are_ignored_rather_than_emptying_the_catalog() {
-    // All-unknown requests (including future/removed kind names)
-    // normalize to no addon filter, never an always-false match set.
-    for selected in [
-        vec![String::from("unknown")],
-        vec![String::from("future-addon")],
-        vec![String::from("unknown"), String::from("future-addon")],
-    ] {
-        let query = QueryGameCards::new(
-            QueryGameCardsRequest {
-                search_query: String::new(),
-                selected_libraries: Vec::new(),
-                selected_addons: selected,
-                selected_launchers: Vec::new(),
-                show_hidden: false,
-                favorites_only: false,
-                sort_field: String::from("title"),
-                sort_direction: String::from("asc"),
-                page_limit: 100,
-                page_offset: 0,
-            },
-            &[],
-            &[String::from("Steam")],
-        );
-        let mut card = stub_card("Steam", &[]);
-        card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
-        let plain = stub_card("Steam", &[]);
+fn unknown_selected_addons_do_not_empty_the_catalog() {
+    // Unknown tokens are dropped by normalize; an all-unknown selection must
+    // become "no addon filter", not "filter active + empty match set".
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: Vec::new(),
+            selected_addons: vec![String::from("unknown")],
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[],
+        &[String::from("Steam")],
+    );
+    let mut card = stub_card("Steam", &[]);
+    card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::Luma];
+    let plain = stub_card("Steam", &[]);
 
-        assert!(
-            query.matches(&card),
-            "unknown addon filter must not hide a renodx-capable card"
-        );
-        assert!(
-            query.matches(&plain),
-            "unknown addon filter must not empty the catalog"
-        );
-    }
+    assert!(query.matches(&card));
+    assert!(query.matches(&plain));
+}
+
+#[test]
+fn mixed_known_and_unknown_selected_addons_filter_by_known_only() {
+    let query = QueryGameCards::new(
+        QueryGameCardsRequest {
+            search_query: String::new(),
+            selected_libraries: Vec::new(),
+            selected_addons: vec![String::from("luma"), String::from("unknown")],
+            selected_launchers: Vec::new(),
+            show_hidden: false,
+            favorites_only: false,
+            sort_field: String::from("title"),
+            sort_direction: String::from("asc"),
+            page_limit: 100,
+            page_offset: 0,
+        },
+        &[],
+        &[String::from("Steam")],
+    );
+    let mut luma_card = stub_card("Steam", &[]);
+    luma_card.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::Luma];
+    let plain = stub_card("Steam", &[]);
+
+    assert!(query.matches(&luma_card));
+    assert!(!query.matches(&plain));
 }
 
 #[test]
@@ -292,7 +306,7 @@ fn library_and_addon_filters_are_combined_with_or() {
         QueryGameCardsRequest {
             search_query: String::new(),
             selected_libraries: vec![String::from("dlss_super_resolution")],
-            selected_addons: vec![String::from("renodx")],
+            selected_addons: vec![String::from("luma")],
             selected_launchers: Vec::new(),
             show_hidden: false,
             favorites_only: false,
@@ -305,10 +319,10 @@ fn library_and_addon_filters_are_combined_with_or() {
         &[String::from("Steam")],
     );
     let mut both = stub_card("Steam", &["dlss_super_resolution"]);
-    both.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+    both.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::Luma];
     let library_only = stub_card("Steam", &["dlss_super_resolution"]);
     let mut addon_only = stub_card("Steam", &[]);
-    addon_only.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::RenoDx];
+    addon_only.addon_capabilities = vec![renderpilot_orchestration::domain::AddonKind::Luma];
 
     assert!(query.matches(&both));
     assert!(query.matches(&library_only));
