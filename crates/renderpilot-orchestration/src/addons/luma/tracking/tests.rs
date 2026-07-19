@@ -1,11 +1,15 @@
+use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{
     AddonKind, GameId, InstalledAddon, InstalledAddonHostKind, PathRef, TrackedSource,
     TrackedSourceRole,
 };
+use tempfile::tempdir;
 
+use crate::Context;
 use crate::ServiceError;
 use crate::addons::luma::fetch::types::LumaPayload;
 use crate::addons::tracking;
+use crate::net::HttpValidators;
 
 use super::*;
 
@@ -34,6 +38,49 @@ fn test_payload(build_number: Option<u64>) -> LumaPayload {
         last_modified: None,
         build_number,
     }
+}
+
+fn non_advisory_payload(etag: Option<&str>, digest: &str) -> TrackedSource {
+    TrackedSource::new(
+        TrackedSourceRole::AddonPayload,
+        "https://example/Luma.zip",
+        etag.map(str::to_owned),
+        digest,
+    )
+}
+
+fn seed_payload_record(context: &Context, etag: &str, digest: &str) {
+    let record = InstalledAddon::from_parts(
+        game_id(),
+        AddonKind::Luma,
+        path(r"C:\Games\Test\Luma-Test.addon"),
+        None,
+        vec![path(r"C:\Games\Test\Luma-Test.addon")],
+        Vec::new(),
+        vec![non_advisory_payload(Some(etag), digest)],
+    )
+    .expect("record");
+    context
+        .storage()
+        .upsert_installed_addon(&record)
+        .expect("seed");
+}
+
+fn stored_payload_source(context: &Context) -> (InstalledAddon, TrackedSource) {
+    let stored = context
+        .storage()
+        .list_installed_addons()
+        .expect("list")
+        .into_iter()
+        .find(|r| r.game_id() == &game_id())
+        .expect("stored");
+    let source = stored
+        .tracked_sources()
+        .iter()
+        .find(|s| s.role() == TrackedSourceRole::AddonPayload)
+        .expect("payload")
+        .clone();
+    (stored, source)
 }
 
 #[test]
@@ -302,6 +349,91 @@ fn source_has_bind_mark_detects_validators_and_sentinel() {
         None,
         Some(ADVISORY_PAYLOAD_CHECKED_MARK.to_owned())
     )));
+}
+
+#[test]
+fn apply_payload_validators_refreshes_non_advisory_etag_keeps_digest() {
+    let mut sources = vec![
+        non_advisory_payload(Some("\"old-etag\""), "zip-digest")
+            .with_last_modified(Some("old-lm".to_owned())),
+        TrackedSource::new(
+            TrackedSourceRole::HostBinary,
+            "https://example/host.zip",
+            None,
+            "host",
+        ),
+    ];
+    apply_payload_validators(
+        &mut sources,
+        &HttpValidators {
+            etag: Some("\"new-etag\"".to_owned()),
+            last_modified: Some("new-lm".to_owned()),
+        },
+    );
+    let payload = sources
+        .iter()
+        .find(|s| s.role() == TrackedSourceRole::AddonPayload)
+        .expect("payload");
+    assert_eq!(payload.etag(), Some("\"new-etag\""));
+    assert_eq!(payload.last_modified(), Some("new-lm"));
+    assert_eq!(payload.digest(), "zip-digest");
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.role() == TrackedSourceRole::HostBinary),
+        "other roles preserved"
+    );
+}
+
+#[test]
+fn apply_payload_validators_skips_advisory_sources() {
+    let mut sources = vec![advisory_payload(None, None)];
+    apply_payload_validators(
+        &mut sources,
+        &HttpValidators {
+            etag: Some("\"e\"".to_owned()),
+            last_modified: None,
+        },
+    );
+    assert_eq!(sources[0].etag(), None);
+    assert!(sources[0].is_advisory());
+}
+
+#[tokio::test]
+async fn try_refresh_payload_validators_persists_new_etag() {
+    let db_dir = tempdir().expect("db dir");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    seed_payload_record(&context, "\"old\"", "zip-digest");
+
+    let mut payload = test_payload(Some(700));
+    payload.zip_digest = "zip-digest".to_owned();
+    payload.etag = Some("\"fresh\"".to_owned());
+    payload.last_modified = Some("Wed, 01 Jan 2025 00:00:00 GMT".to_owned());
+    try_refresh_payload_validators(&context, &game_id(), "zip-digest", &payload).await;
+
+    let (stored, source) = stored_payload_source(&context);
+    assert_eq!(source.etag(), Some("\"fresh\""));
+    assert_eq!(source.digest(), "zip-digest");
+    assert_eq!(stored.addon_version(), Some("Build 700"));
+}
+
+#[tokio::test]
+async fn try_refresh_payload_validators_skips_digest_mismatch() {
+    let db_dir = tempdir().expect("db dir");
+    let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+    seed_payload_record(&context, "\"old\"", "zip-digest");
+
+    let mut payload = test_payload(None);
+    payload.zip_digest = "other-digest".to_owned();
+    payload.etag = Some("\"fresh\"".to_owned());
+    try_refresh_payload_validators(&context, &game_id(), "other-digest", &payload).await;
+
+    let (_stored, source) = stored_payload_source(&context);
+    assert_eq!(
+        source.etag(),
+        Some("\"old\""),
+        "must not refresh when expected_digest does not match the record"
+    );
 }
 
 #[test]

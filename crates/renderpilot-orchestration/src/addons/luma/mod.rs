@@ -35,7 +35,7 @@ pub(crate) mod matcher;
 pub(crate) mod mutation_targets;
 pub(crate) mod reconciliation;
 mod source;
-mod tool;
+pub(crate) mod tool;
 mod tracking;
 pub mod types;
 /// Read-only availability use cases.

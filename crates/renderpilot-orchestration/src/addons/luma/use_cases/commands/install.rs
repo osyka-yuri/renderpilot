@@ -198,27 +198,7 @@ fn resolve_install_snapshot(
 
     ensure_not_already_installed(context, game_id)?;
     // Peer exclusivity + torn recovery share install scan roots with availability.
-    // Temporary pre-registration adapter: this path is made generic once the
-    // Luma update lifecycle is complete and Luma joins AddonTool::TOOLS.
-    {
-        let scan_dirs = roots.scan_dir_paths();
-        if let Some(block) = exclusivity::check_blocked(
-            context,
-            game_id,
-            AddonKind::Luma,
-            Some(scan_dirs.as_slice()),
-        )? {
-            let message = if block.kind == exclusivity::ExclusivityBlockKind::UnmanagedFiles {
-                "RenoDX files are present for this game; remove them before installing Luma Framework"
-            } else {
-                "RenoDX is installed for this game; uninstall it before installing Luma Framework"
-            };
-            return Err(errors::invalid(message.to_owned()));
-        }
-        if crate::addons::engine::is_install_torn(roots.sentinel_dir(), AddonKind::Luma) {
-            crate::addons::luma::install::recover_torn_install(scan_dirs.as_slice());
-        }
-    }
+    install_guard::guard_exclusivity_and_torn(context, game_id, AddonKind::Luma, &roots)?;
     // A crash mid-install left debris with no DB record -- peer check already
     // confirmed no other tool's claim; `ensure_not_unmanaged` is the real gate
     // if recover could not clean up all Luma-shaped files.

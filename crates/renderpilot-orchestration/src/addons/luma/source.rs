@@ -3,12 +3,13 @@
 //! Luma has no per-game upstream repository: every asset is a file on the
 //! single rolling GitHub Release of `Filoppi/Luma-Framework`, fetched through
 //! the `releases/latest/download/<asset>` alias so the client never needs to
-//! know the current tag. The tag redirect target *does* encode a build number
-//! (`releases/download/latest-<n>/<asset>`), which [`parse_build_number`]
-//! recovers from the final response URL for the "Build N" label shown in the UI
+//! know the current tag. An intermediate redirect hop encodes a build number
+//! (`releases/download/latest-<n>/<asset>`); [`parse_build_number_from_chain`]
+//! recovers it from the hop list for the "Build N" label shown in the UI
 //! (see [`build_label`]) — the only versioning signal Luma offers, since its
 //! `.addon` PE resources are unset (verified: `0.0.0.0`) and it publishes no
-//! per-file checksums.
+//! per-file checksums. The final CDN hop strips that segment, so callers must
+//! not parse the final URL alone.
 //!
 //! The add-on-enabled ReShade host source resolution is shared
 //! ([`crate::addons::reshade::source`]); Luma always requests the nightly
@@ -36,17 +37,21 @@ pub(super) fn asset_url(asset: &str) -> String {
     }
 }
 
-/// Recovers the rolling release's build number from the final URL a
-/// `releases/latest/download/<asset>` request redirected to
-/// (`releases/download/latest-<n>/<asset>`), if present. `None` when the
-/// redirect target does not carry a recognizable `latest-<digits>` tag segment
-/// — the caller records the install without a build-number label rather than
-/// failing (see the module's `LumaInstallState::version` doc).
+/// Recovers the rolling release's build number from a single URL hop when it
+/// carries a `latest-<n>` path segment (`releases/download/latest-<n>/<asset>`).
+/// `None` when that hop is not the tag URL (e.g. the bare `latest/download`
+/// alias or a CDN final URL after GitHub's asset redirect).
 #[must_use]
-pub(super) fn parse_build_number(final_url: &Url) -> Option<u64> {
-    final_url
-        .path_segments()?
+pub(super) fn parse_build_number(url: &Url) -> Option<u64> {
+    url.path_segments()?
         .find_map(|segment| segment.strip_prefix("latest-")?.parse::<u64>().ok())
+}
+
+/// Scans a redirect hop chain (start → … → final) for the first URL that
+/// encodes a rolling-release build number.
+#[must_use]
+pub(super) fn parse_build_number_from_chain(urls: &[Url]) -> Option<u64> {
+    urls.iter().find_map(parse_build_number)
 }
 
 /// Formats a build number recovered by [`parse_build_number`] into the UI-facing
@@ -103,6 +108,25 @@ mod tests {
         )
         .expect("valid url");
         assert_eq!(parse_build_number(&url), None);
+    }
+
+    #[test]
+    fn parse_build_number_from_chain_finds_tag_hop_before_cdn() {
+        let start = Url::parse(
+            "https://github.com/Filoppi/Luma-Framework/releases/latest/download/Luma-Dishonored_2.zip",
+        )
+        .expect("start");
+        let tag = Url::parse(
+            "https://github.com/Filoppi/Luma-Framework/releases/download/latest-536/Luma-Dishonored_2.zip",
+        )
+        .expect("tag");
+        let cdn = Url::parse(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1/abc",
+        )
+        .expect("cdn");
+        let chain = [start, tag, cdn];
+        assert_eq!(parse_build_number_from_chain(&chain), Some(536));
+        assert_eq!(parse_build_number(&chain[2]), None);
     }
 
     #[test]

@@ -24,7 +24,8 @@ pub(crate) struct LumaPayload {
     pub(crate) etag: Option<String>,
     /// Raw `Last-Modified` HTTP-date string, when the host sent one.
     pub(crate) last_modified: Option<String>,
-    /// Rolling-release build number recovered from the redirect target, when
-    /// the tag could be parsed (see [`super::super::source::parse_build_number`]).
+    /// Rolling-release build number recovered from the download redirect hop
+    /// chain when a `latest-<n>` segment is present (see
+    /// [`super::super::source::parse_build_number_from_chain`]).
     pub(crate) build_number: Option<u64>,
 }

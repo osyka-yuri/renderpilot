@@ -71,7 +71,10 @@ pub(crate) trait AddonTool: Send + Sync {
 }
 
 /// Every known tool. Adding a third tool means one more entry here.
-pub(crate) static TOOLS: &[&dyn AddonTool] = &[&crate::addons::renodx::tool::RenoDxTool];
+pub(crate) static TOOLS: &[&dyn AddonTool] = &[
+    &crate::addons::renodx::tool::RenoDxTool,
+    &crate::addons::luma::tool::LumaTool,
+];
 
 /// Lookup by kind. Returns `None` only if domain and registration have drifted
 /// (covered by the exhaustiveness test below).
@@ -95,57 +98,13 @@ pub(crate) fn require_tool(kind: AddonKind) -> &'static dyn AddonTool {
 /// Returns the registered peers that are mutually exclusive with `kind`.
 #[must_use]
 pub(crate) fn exclusive_peers(kind: AddonKind) -> &'static [AddonKind] {
-    match kind {
-        AddonKind::Luma => &[AddonKind::RenoDx],
-        _ => tool(kind).map_or(&[], |registered| registered.exclusive_peers()),
-    }
+    tool(kind).map_or(&[], |registered| registered.exclusive_peers())
 }
 
 /// Returns whether a registered tool's bounded on-disk signature is present.
 #[must_use]
 pub(crate) fn unmanaged_files_present(dir: &Path, kind: AddonKind) -> bool {
-    match kind {
-        AddonKind::Luma => legacy_luma_unmanaged_present(dir),
-        _ => tool(kind).is_some_and(|registered| registered.unmanaged_present(dir)),
-    }
-}
-
-/// Transitional Luma detector used before its full `AddonTool` registration.
-/// It preserves the RenoDX exclusivity backstop without exposing Luma commands.
-fn legacy_luma_unmanaged_present(game_dir: &Path) -> bool {
-    if super::any_file_name_matches(game_dir, |name| {
-        name.starts_with("luma-")
-            && (name.ends_with(".addon")
-                || name.ends_with(".addon32")
-                || name.ends_with(".addon64"))
-    }) {
-        return true;
-    }
-    let luma_dir = game_dir.join("Luma");
-    luma_dir.is_dir() && legacy_luma_dir_has_framework_content(&luma_dir, 0)
-}
-
-fn legacy_luma_dir_has_framework_content(dir: &Path, depth: u8) -> bool {
-    const MAX_DEPTH: u8 = 3;
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
-    };
-    entries.flatten().any(|entry| {
-        let Ok(file_type) = entry.file_type() else {
-            return false;
-        };
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        (file_type.is_file()
-            && (name.ends_with(".hlsl")
-                || name.ends_with(".fx")
-                || name.ends_with(".fxh")
-                || name.ends_with(".addon")
-                || name.ends_with(".addon32")
-                || name.ends_with(".addon64")))
-            || (file_type.is_dir()
-                && depth < MAX_DEPTH
-                && legacy_luma_dir_has_framework_content(&entry.path(), depth + 1))
-    })
+    tool(kind).is_some_and(|registered| registered.unmanaged_present(dir))
 }
 
 /// Whether check-update supports a deep/advisory probe for `kind`.
@@ -166,28 +125,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registered_tools_have_distinct_known_kinds() {
-        for (index, tool) in TOOLS.iter().enumerate() {
-            assert!(
-                AddonKind::ALL.contains(&tool.kind()),
-                "registered tool {:?} has no domain AddonKind",
-                tool.kind()
-            );
-            assert!(
-                TOOLS[..index]
-                    .iter()
-                    .all(|previous| previous.kind() != tool.kind()),
-                "AddonTool for {:?} is registered more than once",
-                tool.kind()
+    fn tools_cover_every_addon_kind_exactly_once() {
+        for kind in AddonKind::ALL {
+            let matches: Vec<_> = TOOLS.iter().filter(|t| t.kind() == *kind).collect();
+            assert_eq!(
+                matches.len(),
+                1,
+                "expected exactly one AddonTool for {kind:?}, found {}",
+                matches.len()
             );
         }
+        assert_eq!(TOOLS.len(), AddonKind::ALL.len());
     }
 
     #[test]
     fn exclusive_peers_are_pairwise_registered() {
         for t in TOOLS {
             for &peer in t.exclusive_peers() {
-                assert!(AddonKind::ALL.contains(&peer));
+                assert!(
+                    tool(peer).is_some(),
+                    "{:?} lists exclusive peer {peer:?} that is not registered",
+                    t.kind()
+                );
+                assert!(
+                    tool(peer)
+                        .expect("peer")
+                        .exclusive_peers()
+                        .contains(&t.kind()),
+                    "exclusive peer {peer:?} does not list {:?} back",
+                    t.kind()
+                );
             }
         }
     }

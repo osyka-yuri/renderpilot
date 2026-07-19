@@ -22,12 +22,15 @@ pub(crate) use paths::{
     payload_owned_paths,
 };
 pub(crate) use sources::{
-    payload_needs_provenance_bind, promote_advisory_payload_source, resolved_addon_version,
-    source_has_bind_mark, try_mark_advisory_payload_checked, try_promote_advisory_payload,
+    payload_needs_provenance_bind, promote_advisory_payload_source, refresh_addon_validators,
+    resolved_addon_version, source_has_bind_mark, try_mark_advisory_payload_checked,
+    try_promote_advisory_payload, try_refresh_payload_validators,
 };
 
 #[cfg(test)]
-pub(crate) use sources::{ADVISORY_PAYLOAD_CHECKED_MARK, mark_advisory_payload_source};
+pub(crate) use sources::{
+    ADVISORY_PAYLOAD_CHECKED_MARK, apply_payload_validators, mark_advisory_payload_source,
+};
 
 /// Rebuilds `record` from a fresh file/source list after an update's set-diff
 /// apply, preserving its persisted timestamps. `parts.addon_file` is supplied by

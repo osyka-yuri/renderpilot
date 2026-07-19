@@ -7,6 +7,7 @@ use crate::addons::luma::fetch::types::LumaPayload;
 use crate::addons::records::{self, source_with_role};
 use crate::addons::tracking;
 use crate::game_mutation_lock;
+use crate::net::{HttpValidators, head_validators};
 
 use super::rebuild;
 
@@ -76,6 +77,69 @@ pub(crate) fn mark_advisory_payload_source(
 fn replace_addon_payload(sources: &mut Vec<TrackedSource>, replacement: TrackedSource) {
     sources.retain(|source| source.role() != TrackedSourceRole::AddonPayload);
     sources.push(replacement);
+}
+
+/// Applies fresh HTTP cache validators onto a non-advisory AddonPayload entry,
+/// keeping its content digest. No-op when the payload source is missing or
+/// advisory (advisory heals go through promote/mark).
+pub(crate) fn apply_payload_validators(sources: &mut [TrackedSource], validators: &HttpValidators) {
+    let Some(index) = non_advisory_payload_index(sources) else {
+        return;
+    };
+    sources[index] = source_with_validators(&sources[index], validators);
+}
+
+fn non_advisory_payload_index(sources: &[TrackedSource]) -> Option<usize> {
+    sources.iter().position(|source| {
+        source.role() == TrackedSourceRole::AddonPayload && !source.is_advisory()
+    })
+}
+
+fn source_with_validators(source: &TrackedSource, validators: &HttpValidators) -> TrackedSource {
+    let mut refreshed = TrackedSource::new(
+        source.role(),
+        source.url().to_owned(),
+        validators.cache_validator(),
+        source.digest().to_owned(),
+    )
+    .with_last_modified(
+        validators
+            .last_modified
+            .clone()
+            .or_else(|| source.last_modified().map(str::to_owned)),
+    );
+    if let Some(channel) = source.channel() {
+        refreshed = refreshed.with_channel(channel);
+    }
+    refreshed
+}
+
+fn validators_from_payload(payload: &LumaPayload) -> HttpValidators {
+    HttpValidators {
+        etag: payload.etag.clone(),
+        last_modified: payload.last_modified.clone(),
+    }
+}
+
+/// True when `validators` would change the stored cache key or last-modified.
+/// Ignores empty validator sets so a bare response never clears a known ETag.
+fn payload_validators_changed(source: &TrackedSource, validators: &HttpValidators) -> bool {
+    let new_cache = validators.cache_validator();
+    new_cache.is_some()
+        && (new_cache.as_deref() != source.etag()
+            || validators.last_modified.as_deref() != source.last_modified())
+}
+
+/// HEAD-refreshes AddonPayload cache validators in place (update HostOnly path).
+/// Best-effort: network failures leave `sources` unchanged.
+pub(crate) async fn refresh_addon_validators(sources: &mut [TrackedSource]) {
+    let Some(index) = non_advisory_payload_index(sources) else {
+        return;
+    };
+    let url = sources[index].url().to_owned();
+    if let Ok(validators) = head_validators(&url, "Luma update check").await {
+        apply_payload_validators(sources, &validators);
+    }
 }
 
 /// Version label to persist after a validated payload is in hand.
@@ -174,18 +238,73 @@ pub(crate) async fn try_mark_advisory_payload_checked(
     );
 }
 
+/// After a deep non-advisory check proved ZIP digest `Current`, refresh stored
+/// HTTP validators (and bind `addon_version` when the download recovered a build
+/// number) so the next passive probe can use the ETag fast path instead of
+/// flashing overall `unknown` on every game-details open.
+///
+/// Only safe when content identity still matches `expected_digest`. Never call
+/// after `Available` — a new ETag with a stale digest would lie as `Current`.
+/// Failures are logged and ignored; the caller already returned `Current`.
+pub(crate) async fn try_refresh_payload_validators(
+    context: &Context,
+    game_id: &renderpilot_domain::GameId,
+    expected_digest: &str,
+    payload: &LumaPayload,
+) {
+    let _guard = game_mutation_lock::lock(game_id).await;
+    let Some(current) = load_luma_record(context, game_id, "payload validator refresh") else {
+        return;
+    };
+    let Some(current_source) = source_with_role(&current, TrackedSourceRole::AddonPayload) else {
+        return;
+    };
+    if current_source.is_advisory() || current_source.digest() != expected_digest {
+        return;
+    }
+
+    let validators = validators_from_payload(payload);
+    let version = resolved_addon_version(&current, payload);
+    let version_changed = version.as_deref() != current.addon_version();
+    let should_refresh_validators = payload_validators_changed(current_source, &validators);
+    if !should_refresh_validators && !version_changed {
+        return;
+    }
+
+    let mut sources = current.tracked_sources().to_vec();
+    if should_refresh_validators {
+        apply_payload_validators(&mut sources, &validators);
+    }
+    persist_rebuilt(
+        context,
+        game_id,
+        &current,
+        sources,
+        version,
+        "refreshed payload validators after current deep update check",
+    );
+}
+
+fn load_luma_record(
+    context: &Context,
+    game_id: &renderpilot_domain::GameId,
+    label: &str,
+) -> Option<InstalledAddon> {
+    match records::record_of_kind(context, game_id, AddonKind::Luma) {
+        Ok(record) => record,
+        Err(error) => {
+            log::warn!("Luma {label}: failed to re-load install for `{game_id}`: {error}");
+            None
+        }
+    }
+}
+
 fn reload_advisory_payload(
     context: &Context,
     game_id: &renderpilot_domain::GameId,
     advisory_digest: &str,
 ) -> Option<InstalledAddon> {
-    let current = match records::record_of_kind(context, game_id, AddonKind::Luma) {
-        Ok(record) => record?,
-        Err(error) => {
-            log::warn!("Luma advisory bind: failed to re-load install for `{game_id}`: {error}");
-            return None;
-        }
-    };
+    let current = load_luma_record(context, game_id, "advisory bind")?;
     let current_source = source_with_role(&current, TrackedSourceRole::AddonPayload)?;
     if !current_source.is_advisory() || current_source.digest() != advisory_digest {
         return None;
@@ -215,11 +334,11 @@ fn persist_rebuilt(
     ) {
         Ok(record) => record,
         Err(error) => {
-            log::warn!("Luma advisory bind: failed to rebuild record for `{game_id}`: {error}");
+            log::warn!("Luma {label}: failed to rebuild record for `{game_id}`: {error}");
             return;
         }
     };
     if let Err(error) = context.storage().upsert_installed_addon(&refreshed) {
-        log::warn!("Luma advisory bind: failed to persist for `{game_id}`: {error}");
+        log::warn!("Luma {label}: failed to persist for `{game_id}`: {error}");
     }
 }
