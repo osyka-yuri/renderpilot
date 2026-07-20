@@ -3010,7 +3010,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "renderpilot-api"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "http",
  "renderpilot-orchestration",
@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-application"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "hex",
  "rand",
@@ -3030,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-cli"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "hex",
  "renderpilot-orchestration",
@@ -3044,7 +3044,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-desktop"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "env_logger",
  "log",
@@ -3064,7 +3064,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-detection"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "hex",
  "log",
@@ -3078,7 +3078,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-domain"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3087,14 +3087,14 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-nvapi"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "libloading 0.9.0",
 ]
 
 [[package]]
 name = "renderpilot-orchestration"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "filetime",
  "futures-util",
@@ -3123,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-platform-windows"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "dirs",
  "renderpilot-application",
@@ -3136,7 +3136,7 @@ dependencies = [
 
 [[package]]
 name = "renderpilot-storage-sqlite"
-version = "1.5.2"
+version = "1.6.0"
 dependencies = [
  "log",
  "renderpilot-application",

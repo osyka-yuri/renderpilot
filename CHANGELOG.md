@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-07-20
+
+### Added
+- **Game Details → Luma Framework**: Install, update, repair, and remove Luma Framework for supported DirectX 11 games. Managed installs use the nightly ReShade host and can provide DLSS or FSR upscaling, HDR, and shader replacement according to each game's catalog profile.
+- **Luma guidance**: Game-specific cards show anti-cheat risk, required launch arguments, Visual C++ runtime guidance, and managed dgVoodoo2 dependencies. The complete experience is localized across all seven supported languages.
+- **CLI**: Inspect per-game Luma status, remove an installation, run passive or deep update checks, and audit updates across the catalog.
+
+### Changed
+- **Add-ons**: Luma and RenoDX are mutually exclusive for a game and now share coordinated ReShade host policy, catalog refresh, operation locking, progress, and recovery behavior.
+- **Bulk updates**: Game Details coordinates library, RenoDX, and Luma updates through one exclusive action so overlapping mutations cannot run against the same game.
+
+### Changed (Refactoring & Maintenance)
+- **Add-on engine**: Introduced a durable shared lifecycle for managed files, set-diff updates, repair, rollback, and recovery after interrupted mutations or lost tracking data.
+- **Storage**: Added the schema v10 migration for coordinated add-on files and crash-recoverable game-file mutations, including validation, additive upgrades, and a backup before destructive schema rebuilds.
+- **Desktop performance**: Split third-party frontend dependencies into a vendor chunk; current production JavaScript chunks stay below 500 kB.
+- **Documentation and tooling**: Updated the feature overview, architecture, runtime behavior, Rust/Tauri/Svelte dependencies, and internal module boundaries for Luma and the shared add-on platform.
+
 ## [1.5.2] - 2026-07-14
 
 ### Fixed
