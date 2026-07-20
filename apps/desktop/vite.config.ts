@@ -11,6 +11,7 @@ const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');
 
 const DEV_SERVER_PORT = 1420;
 const DEV_SERVER_HMR_PORT = 1421;
+const NODE_MODULES_PATH_PATTERN = /node_modules[\\/]/;
 
 const TAURI_SOURCE_GLOB = '**/src-tauri/**';
 const TEST_FILE_GLOB = 'ui/src/**/*.test.ts';
@@ -28,7 +29,7 @@ const LAYER_ALIAS_PATHS = {
 function readOptionalEnv(name: string): string | undefined {
   const value = process.env[name]?.trim();
 
-  return value ?? undefined;
+  return value || undefined;
 }
 
 function createLayerAliases(
@@ -70,6 +71,21 @@ export default defineConfig({
     hmr: hmrConfig,
     watch: {
       ignored: [TAURI_SOURCE_GLOB],
+    },
+  },
+
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor',
+              test: NODE_MODULES_PATH_PATTERN,
+            },
+          ],
+        },
+      },
     },
   },
 

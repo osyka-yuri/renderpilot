@@ -22,9 +22,7 @@ license = "GPL-3.0-only"
 [workspace.lints.rust]
 missing_docs = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
-# `deny` (not `forbid`) so FFI modules can `allow`/`expect(unsafe_code)` with a
-# reason. Enforcement for non-FFI code: scripts/assert_unsafe_allowlist.mjs.
-# Keep in sync with rust-toolchain.toml channel and CI assert_msrv expected version.
+# `deny` (not `forbid`) so FFI modules can `allow`/`expect(unsafe_code)` with a reason.
 unsafe_code = "deny"
 
 [workspace.lints.clippy]

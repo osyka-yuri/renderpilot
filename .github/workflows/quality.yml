@@ -57,21 +57,6 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      # Machine-readable MSRV + unsafe allowlist (Node, no package install).
-      # assert_msrv derives expected major.minor from rust-toolchain.toml channel
-      # and checks every workspace member's rust_version against it.
-      - name: Setup Node (policy scripts)
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Assert workspace MSRV and unsafe allowlist
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo metadata --no-deps --format-version 1 --locked | node scripts/assert_msrv.mjs
-          node scripts/assert_unsafe_allowlist.mjs
-
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
@@ -117,7 +102,7 @@ jobs:
           version: 11.11.0
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm

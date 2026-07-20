@@ -11,8 +11,8 @@
   </div>
 
   <div style="margin-top: 10px;">
-    <img src="https://img.shields.io/badge/Tauri-2.0-24c8db?style=for-the-badge&logo=tauri&logoColor=white&labelColor=1c1c1c" alt="Tauri" />
-    <img src="https://img.shields.io/badge/Svelte-5.0-ff3e00?style=for-the-badge&logo=svelte&logoColor=white&labelColor=1c1c1c" alt="Svelte" />
+    <img src="https://img.shields.io/badge/Tauri-2.11.5-24c8db?style=for-the-badge&logo=tauri&logoColor=white&labelColor=1c1c1c" alt="Tauri" />
+    <img src="https://img.shields.io/badge/Svelte-5.56.6-ff3e00?style=for-the-badge&logo=svelte&logoColor=white&labelColor=1c1c1c" alt="Svelte" />
     <img src="https://img.shields.io/badge/Rust-1.97-ce4a00?style=for-the-badge&logo=rust&logoColor=white&labelColor=1c1c1c" alt="Rust" />
     <img src="https://img.shields.io/badge/Platform-Windows-0078d4?style=for-the-badge&logo=windows&logoColor=white&labelColor=1c1c1c" alt="Windows" />
   </div>
@@ -24,19 +24,20 @@
   <img src="docs/screenshot.webp" alt="RenderPilot Screenshot" width="90%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" />
 </div>
 
-RenderPilot automatically scans your installed games, identifies which upscaler libraries they use, and lets you upgrade, downgrade, or swap them in one click — and can even add HDR to supported games through the RenoDX ReShade add-on. All processing happens locally — no telemetry, no cloud accounts required.
+RenderPilot automatically scans your installed games, identifies which upscaler libraries they use, and lets you upgrade, downgrade, or swap them in one click. It can also install supported rendering add-ons: RenoDX for HDR and Luma Framework for DirectX 11 upscaling, HDR, and shader replacement. All processing happens locally — no telemetry or cloud accounts required.
 
 ## ✨ Features
 
 - **🔍 Automatic Game Detection:** Scans your system (Steam, Epic, GOG, EA App, Ubisoft Connect, or any custom folder) and recognizes DLSS, FSR, XeSS, DirectStorage, and related libraries across all detected titles.
 - **🔄 One-Click Library Management:** Upgrade to the latest version or roll back to a previous one without touching game files manually.
-- **📦 Centralized Catalog:** Browse available library versions pulled from a continuously updated manifest.
-- **🛡️ Safe Rollback:** Original files are backed up before any modification — restore any game to its original state at any time.
-- **💾 Local-First:** Everything stored in a local SQLite database. Fast, private, and fully offline-capable.
-- **⚡ Native Performance:** Built on Tauri and Rust — tiny binary, instant startup, minimal memory footprint.
+- **📦 Centralized Catalog:** Browse available library versions and supported add-on profiles pulled from continuously updated manifests.
+- **🛡️ Safe Rollback:** Original files are backed up before a managed mutation, and the operation journal keeps rollback available for supported swaps and add-ons.
+- **💾 Local-First:** Game scans, installed state, and rollback records live in a local SQLite database. Refreshing remote manifests, downloading libraries or add-ons, fetching covers, and checking updates require a network connection.
+- **⚡ Native Desktop Shell:** A Tauri window fronts a Rust backend; file mutations, catalog state, and network work stay outside the webview.
 - **🎮 Game Covers & Artwork:** Automatically fetch game covers from SteamGridDB or set custom artwork from your files.
 - **🔧 NVIDIA Driver-Level Settings:** Manage the full range of DLSS Super Resolution, Frame Generation, and Ray Reconstruction driver settings (including presets) per game via NVAPI.
 - **🌈 One-Click HDR (RenoDX):** Add HDR to supported games through the RenoDX ReShade add-on. RenderPilot detects the game, installs the add-on (and an add-on-enabled ReShade host when one is missing), and can fully reverse the change. Each game shows a confidence badge and an anti-cheat risk note, with per-game update checks; add-ons distributed off-GitHub can be installed from a file you downloaded (file picker or drag-and-drop), and an optional DLSS Frame Generation fix stops ReShade drawing over generated frames.
+- **🌌 Luma Framework:** Install, update, and remove Luma Framework for supported DirectX 11 games. Luma provides DLSS/FSR upscaling, HDR, and shader replacement; new managed installs use the nightly ReShade host. The game-specific UI surfaces any required launch arguments, Visual C++ runtime, or dgVoodoo2 dependency. Luma and RenoDX are mutually exclusive for a game.
 - **📟 DLSS Indicator Overlay:** Toggle the built-in NVIDIA DLSS indicator to see which upscaler version is active in real-time.
 - **🏷️ Advanced Game Filtering:** Filter by library or launcher, search by name, mark favorites, hide games — organize your catalog your way.
 - **📋 Operation Journal:** Review every library swap and rollback in a detailed history log.
@@ -46,13 +47,13 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 
 ## 🛠️ Supported Technologies
 
-|                                                            Vendor                                                            | Technologies                                                                         |
-| :--------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------- |
-|     <img src="https://img.shields.io/badge/NVIDIA-76b900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA" />      | DLSS Super Resolution · Frame Generation · Ray Reconstruction · Streamline           |
-|          <img src="https://img.shields.io/badge/AMD-ed1c24?style=flat-square&logo=amd&logoColor=white" alt="AMD" />          | FSR (Upscaler, Loader, Radiance Cache) · FSR Frame Generation · FSR Ray Regeneration |
-|       <img src="https://img.shields.io/badge/Intel-0071c5?style=flat-square&logo=intel&logoColor=white" alt="Intel" />       | XeSS · XeFG · Xe Low Latency                                                         |
-| <img src="https://img.shields.io/badge/Microsoft-0078d4?style=flat-square&logo=microsoft&logoColor=white" alt="Microsoft" /> | DirectStorage                                                                        |
-|     <img src="https://img.shields.io/badge/ReShade-e8a33d?style=flat-square&logoColor=black" alt="ReShade" />      | RenoDX HDR add-on (one-click HDR) · DLSS Frame Generation fix                         |
+|                                                            Vendor                                                            | Technologies                                                                                            |
+| :--------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------ |
+|     <img src="https://img.shields.io/badge/NVIDIA-76b900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA" />      | DLSS Super Resolution · Frame Generation · Ray Reconstruction · Streamline                              |
+|          <img src="https://img.shields.io/badge/AMD-ed1c24?style=flat-square&logo=amd&logoColor=white" alt="AMD" />          | FSR (Upscaler, Loader, Radiance Cache) · FSR Frame Generation · FSR Ray Regeneration                    |
+|       <img src="https://img.shields.io/badge/Intel-0071c5?style=flat-square&logo=intel&logoColor=white" alt="Intel" />       | XeSS · XeFG · Xe Low Latency                                                                            |
+| <img src="https://img.shields.io/badge/Microsoft-0078d4?style=flat-square&logo=microsoft&logoColor=white" alt="Microsoft" /> | DirectStorage                                                                                           |
+|          <img src="https://img.shields.io/badge/ReShade-e8a33d?style=flat-square&logoColor=black" alt="ReShade" />           | RenoDX HDR add-on · Luma Framework (DX11 DLSS/FSR, HDR, shader replacement) · DLSS Frame Generation fix |
 
 **Supported Launchers:** Steam, Epic Games Store, GOG, EA App, Ubisoft Connect — plus any manual folder you choose.
 
@@ -61,8 +62,8 @@ RenderPilot automatically scans your installed games, identifies which upscaler 
 ### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (MSRV 1.97, pinned to the exact release in `rust-toolchain.toml`)
-- [Node.js](https://nodejs.org/) v20+
-- [pnpm](https://pnpm.io/installation)
+- [Node.js](https://nodejs.org/) 24 (the CI pin; Vite also requires Node 20.19+ or 22.12+)
+- [pnpm](https://pnpm.io/installation) 11 (CI uses 11.11.0)
 - Windows C++ Build Tools and WebView2 Runtime
 
 ### Build from Source
@@ -80,109 +81,75 @@ pnpm tauri dev
 
 ```bash
 cargo build -p renderpilot-cli
-./target/debug/renderpilot --help
+cargo run -p renderpilot-cli -- --help
 ```
+
+The CLI also exposes `scan-folder`, `list-artifacts`, `list-operations`,
+`candidates`, `plan-swap`, `apply`, `rollback`, and `renodx`/`luma` status,
+uninstall, and update-check commands. Run `renderpilot --help` for the exact
+argument grammar (or run `cargo run -p renderpilot-cli -- --help` from the repository root).
 
 ## 🏗️ Architecture
 
-RenderPilot follows a **hexagonal (ports & adapters) architecture** in Rust with a Svelte 5 frontend, organized as a Cargo workspace.
+RenderPilot follows a **hexagonal (ports & adapters) architecture** in Rust with a Svelte 5 frontend, organized as a Cargo workspace. The Rust core owns state and side effects; the webview and CLI are delivery mechanisms.
 
-> **Note on naming:** `renderpilot-api` is a **GUI presentation facade** (driving adapter), not the application layer. It converts typed orchestration results into JSON for the frontend. The actual **Application** layer is `renderpilot-application`, which defines port traits and use cases.
+> **Layering note:** `renderpilot-api` is a GUI presentation facade, not the application core: it converts typed orchestration results into JSON for Tauri commands. `renderpilot-application` owns dependency-inverted ports and pure shared application logic. End-to-end feature flows live in `renderpilot-orchestration`; its feature modules compose SQLite, detection, Windows, and NVAPI adapters around a shared `Context`.
 
 ```mermaid
 flowchart LR
+    subgraph ENTRY["Entry points"]
+        UI["Svelte UI"]
+        DESKTOP["renderpilot-desktop<br/>Tauri shell + bootstrap"]
+        CLI["renderpilot-cli"]
+        UI -->|"Tauri IPC"| DESKTOP
+    end
 
-%% =========================
-%% Presentation Layer
-%% =========================
-subgraph P["🖥️ Presentation Layer"]
-    direction TB
-    Desktop(["renderpilot-desktop"])
-    CLI(["renderpilot-cli"])
-    API(["renderpilot-api"])
-end
+    subgraph DELIVERY["Presentation"]
+        API["renderpilot-api<br/>typed GUI facade"]
+    end
 
-%% =========================
-%% Orchestration Layer
-%% =========================
-subgraph O["⚙️ Orchestration Layer"]
-    ORCH(["renderpilot-orchestration"])
-end
+    subgraph CORE["Core and use cases"]
+        ORCH["renderpilot-orchestration<br/>Context + feature flows"]
+        APP["renderpilot-application<br/>ports + pure logic"]
+        DOMAIN["renderpilot-domain<br/>stable domain types"]
+        ORCH --> APP --> DOMAIN
+    end
 
-%% =========================
-%% Application Layer
-%% =========================
-subgraph A["📋 Application Layer"]
-    APP(["renderpilot-application"])
-end
+    subgraph ADAPTERS["Driven adapters"]
+        DETECT["renderpilot-detection"]
+        SQLITE["renderpilot-storage-sqlite"]
+        WINDOWS["renderpilot-platform-windows"]
+        NVAPI["renderpilot-nvapi"]
+    end
 
-%% =========================
-%% Domain Layer
-%% =========================
-subgraph D["💎 Domain Layer"]
-    DOMAIN(["renderpilot-domain"])
-end
-
-%% =========================
-%% Infrastructure Layer
-%% =========================
-subgraph I["🔌 Infrastructure Adapters"]
-    direction TB
-    DETECT(["renderpilot-detection"])
-    SQLITE(["renderpilot-storage-sqlite"])
-    WINDOWS(["renderpilot-platform-windows"])
-    NVAPI(["renderpilot-nvapi"])
-end
-
-%% =========================
-%% Main flow (clean vertical logic)
-%% =========================
-Desktop --> ORCH
-CLI --> ORCH
-API --> ORCH
-
-ORCH --> APP
-ORCH --> DETECT
-ORCH --> SQLITE
-ORCH --> WINDOWS
-ORCH --> NVAPI
-
-DETECT --> APP
-SQLITE --> APP
-WINDOWS --> APP
-
-APP --> DOMAIN
-
-%% =========================
-%% Styling
-%% =========================
-classDef presentation fill:#3b82f6,color:#fff,stroke:#1d4ed8,stroke-width:2px;
-classDef orchestration fill:#8b5cf6,color:#fff,stroke:#6d28d9,stroke-width:2px;
-classDef application fill:#f59e0b,color:#fff,stroke:#b45309,stroke-width:2px;
-classDef domain fill:#ef4444,color:#fff,stroke:#b91c1c,stroke-width:2px;
-classDef infra fill:#10b981,color:#fff,stroke:#047857,stroke-width:2px;
-
-class Desktop,CLI,API presentation;
-class ORCH orchestration;
-class APP application;
-class DOMAIN domain;
-class DETECT,SQLITE,WINDOWS,NVAPI infra;
+    DESKTOP --> API --> ORCH
+    DESKTOP -. "owns shared Context" .-> ORCH
+    CLI --> ORCH
+    ORCH --> DETECT
+    ORCH --> SQLITE
+    ORCH --> WINDOWS
+    ORCH --> NVAPI
+    DETECT -. "implements application ports" .-> APP
+    SQLITE -. "implements application ports" .-> APP
+    WINDOWS -. "implements application ports" .-> APP
 ```
+
+Solid arrows show the primary runtime composition and dependency direction. Dashed arrows show an adapter implementing an application port or the desktop shell bootstrapping the shared `Context`; the diagram intentionally omits test-only dependencies and individual feature-module calls.
 
 ### Crates
 
-| Crate                                      | Layer                              | Purpose                                                                                                                                                                           |
-| :----------------------------------------- | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `renderpilot-domain`                       | **Core**                           | Pure domain types — enums (`GraphicsTechnology`, `ComponentKind`), validated IDs (`GameId`, `ComponentId`), value objects (`Version`, `PathRef`). Minimal deps (`serde`, `sha2`). |
-| `renderpilot-application`                  | **Application**                    | Use cases, port traits (`ComponentDetector`, `GameSourceProvider`, `*Repository`), persistence records, operation planning, candidate matching.                                   |
-| `renderpilot-detection`                    | **Adapter**                        | Filesystem scanner — PE version parsing, glob-based library pattern matching against a bundled JSON catalog. Implements `ComponentDetector`.                                      |
-| `renderpilot-storage-sqlite`               | **Adapter**                        | SQLite persistence — implements all `*Repository` traits. Atomic scan writes, WAL mode, schema migrations.                                                                        |
-| `renderpilot-platform-windows`             | **Adapter**                        | Windows platform — Steam install discovery, manual folder scanning, executable detection, Windows Registry helpers, DLSS indicator toggle. Implements `GameSourceProvider`.       |
-| `renderpilot-nvapi`                        | **Adapter**                        | NVAPI FFI bindings via runtime `libloading` — reads/writes NVIDIA Driver Settings (DRS profiles). Gracefully degrades on non-NVIDIA hardware.                                     |
-| `renderpilot-orchestration`                | **Orchestration**                  | Wires ports to adapters. Owns all heavyweight dependencies (`reqwest`, `zip`, `rusqlite`). Feature modules: catalog, covers, DLSS, libraries, NVAPI, add-ons (RenoDX).                              |
-| `renderpilot-api`                          | **Presentation** (driving adapter) | GUI facade for the desktop frontend — converts typed orchestration results to `serde_json::Value`. Also serves `rp-cover://` URIs for game cover images.                          |
-| `renderpilot-cli`                          | **Presentation**                   | Binary (`renderpilot`) — arg parsing, JSON/text output, manifest generation.                                                                                                      |
-| `renderpilot-desktop` (in `apps/desktop/`) | **Shell**                          | Tauri 2 desktop app — IPC command handlers, UAC elevation, portable mode, updater.                                                                                             |
+| Crate                                      | Layer                         | Purpose                                                                                                                                                                                                                                               |
+| :----------------------------------------- | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `renderpilot-domain`                       | **Core**                      | Pure domain types — enums (`GraphicsTechnology`, `ComponentKind`, `AddonKind`), validated IDs (`GameId`, `ComponentId`), value objects (`Version`, `PathRef`), plus addon/FSR/DLSS helpers. Minimal deps (`serde`, `sha2`).                          |
+| `renderpilot-application`                  | **Application core**          | Port traits (`ComponentDetector`, `GameSourceProvider`, `*Repository`), persistence records, candidate matching, and swap-plan building. Pure shared logic; no external I/O.                                                                          |
+| `renderpilot-detection`                    | **Adapter**                   | Filesystem scanner — PE/version inspection, anti-cheat evidence, and glob-based library pattern matching against a bundled JSON catalog. Implements `ComponentDetector`.                                                                        |
+| `renderpilot-storage-sqlite`               | **Adapter**                   | SQLite persistence — implements all `*Repository` traits. Atomic scan writes, WAL mode, schema migrations.                                                                                                                                            |
+| `renderpilot-platform-windows`             | **Adapter**                   | Windows platform — launcher install discovery (Steam, Epic, GOG, EA, Ubisoft), manual-folder scanning, executable detection, Registry helpers, DLSS indicator toggle, and Vulkan layer support for RenoDX. Implements the game-source port for manual scans. |
+| `renderpilot-nvapi`                        | **Adapter**                   | NVAPI FFI bindings via runtime `libloading` — reads/writes NVIDIA Driver Settings (DRS profiles). Gracefully degrades on non-NVIDIA hardware.                                                                                                         |
+| `renderpilot-orchestration`                | **Orchestration / use cases** | Composes application core with adapters and owns end-to-end feature flows, network/archive workflow dependencies (`reqwest`, `zip`), and typed results. Modules: catalog, covers, DLSS, libraries, NVAPI, and add-ons (shared ReShade, RenoDX, Luma). |
+| `renderpilot-api`                          | **Presentation facade**       | Converts typed orchestration results to `serde_json::Value` for Tauri command handlers and exposes the cover-response helper used by the desktop `rp-cover://` protocol.                                                                         |
+| `renderpilot-cli`                          | **Presentation**              | Binary (`renderpilot`) — argument parsing, JSON/text output, scans, candidate and operation queries, plan/apply/rollback swaps, and RenoDX/Luma status, uninstall, and update checks.                                                          |
+| `renderpilot-desktop` (in `apps/desktop/`) | **Shell**                     | Tauri 2 desktop app — constructs the shared context, exposes IPC command handlers, and owns UAC elevation, portable mode, and updater integration.                                                                                                    |
 
 ### Frontend
 
@@ -192,22 +159,24 @@ The Svelte 5 frontend lives in `apps/desktop/` with source under `ui/src/` and f
 ui/src/
   app/          — Shell, navigation, routes, global app model
   pages/        — Full screens: games catalog, game details, libraries, operations, settings
-  features/     — Use cases: scan, swap, covers, NVAPI settings, filters, updater
-  entities/     — Business entities: game, component, library, operation, settings
+  features/     — Use cases: scan, swap, covers (fetch/sync/custom), NVAPI settings, RenoDX/Luma add-ons, filters, SteamGridDB key, updater
+  entities/     — Business entities: game, component, library, operation, settings, addon, app
   widgets/      — Composable UI: games grid, header, notifications, settings panels
-  shared/       — UI primitives, i18n (7 locales: en, ru, es, fr, de, zh, ja), theme, validators
+  shared/       — UI primitives and segments: i18n (7 locales: en, ru, es, fr, de, zh, ja), theme, requests, paths, and validators
 ```
 
-Powered by Svelte 5 runes (`$state`, `$derived`, `$effect`), Tailwind CSS 4, bits-ui, Lucide icons, `@tanstack/svelte-virtual`, and `@tauri-apps/api` for IPC. Tested with Vitest.
+Powered by Svelte 5 runes (`$state`, `$derived`, `$effect`), Tailwind CSS 4, bits-ui, Lucide icons, `@tanstack/svelte-virtual`, `@tanstack/table-core`, and `@tauri-apps/api` for IPC. ESLint's boundary rules enforce public slice APIs and reject deep imports; the frontend is tested with Vitest and type-checked with `svelte-check`.
 
 ### Key Decisions
 
-- **Stable string enums** — `stable_enum!` macro generates synchronized `serde::Deserialize`/`Serialize`, `Display`, and `FromStr` for every enum.
+- **Stable string enums** — `stable_enum!` macro generates synchronized `serde::Deserialize`/`Serialize`, `Display`, and `FromStr` for wire-stable enums (`Launcher`, `ComponentKind`, `AddonKind`, …). A few domain enums (notably `GraphicsTechnology`) use equivalent hand-written serde renames instead.
 - **Validation at boundaries** — IDs, paths, and versions are validated on construction; invalid domain state is unrepresentable.
 - **Error propagation chain** — `AppError` → `ServiceError` → `ApiError` → `CommandError`, each layer adding context.
 - **Atomic scan writes** — game + components + artifacts persisted in a single SQLite transaction.
+- **Versioned add-on catalogues** — Luma, RenoDX, and shared ReShade data are loaded from `addons/v1/*.json` into versioned cache files. Catalogue text uses a stable localization `id`, while the reviewed English `fallback_text` remains mandatory and is the source of truth when no local override exists.
+- **Shared ReShade host, isolated add-ons** — RenoDX and Luma reuse shared ReShade-host and filesystem-install primitives but are mutually exclusive per game; managed Luma installs use the nightly ReShade host.
 - **Portable mode** — `RENDERPILOT_APP_DIR` env var + `portable` feature stores all data in `<exe_dir>/data/`.
-- **UAC elevation** — automatic self-relaunch with admin rights for NVAPI write access, with sentinel to prevent infinite loops.
+- **UAC elevation** — release builds may self-relaunch with admin rights for NVAPI writes; dev builds expose an in-app relaunch action, with a handoff sentinel to prevent loops.
 
 ## 📄 License
 
