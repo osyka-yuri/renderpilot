@@ -2,11 +2,11 @@
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
-  import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
+  import { Button, DownloadProgressBar, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
-  import { DownloadProgressBar, type LibraryManifestEntry } from '@entities/library';
+  import type { LibraryManifestEntry } from '@entities/library';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   type Props = {

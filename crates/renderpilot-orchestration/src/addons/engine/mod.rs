@@ -40,7 +40,7 @@ pub use types::{
 
 #[cfg(test)]
 pub(crate) use sentinel::write_sentinel;
-pub(crate) use sentinel::{OperationSentinel, PendingInstallCommit, remove_sentinel, sentinel_path};
+pub(crate) use sentinel::{OperationSentinel, PendingInstallCommit, sentinel_path};
 
 /// Engine failure plus whether its in-call rollback restored every mutation.
 pub(crate) struct InstallFailure {

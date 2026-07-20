@@ -191,6 +191,7 @@
         onRollback={gameDetailsModel.handleRollback}
         onBulkSwap={gameDetailsModel.handleBulkSwap}
         onBulkRollback={gameDetailsModel.handleBulkRollback}
+        onGameDetailsInvalidate={() => reloadSelectedGame('details')}
         onOpenRenoDxSettings={openRenoDxSettings}
         onOpenOperations={() => {
           model.handleNavigate('operations');

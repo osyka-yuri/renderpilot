@@ -52,8 +52,8 @@ struct ScanErrorOutput {
 #[cfg(not(windows))]
 pub fn scan_auto_libraries(_context: &renderpilot_orchestration::Context) -> JsonResult {
     Err(crate::ApiError::Service(
-        renderpilot_orchestration::ServiceError::CommandFailed(
-            "auto-scan is only supported on Windows".into(),
+        renderpilot_orchestration::ServiceError::command_failed(
+            "auto-scan is only supported on Windows",
         ),
     ))
 }

@@ -24,6 +24,8 @@ use super::host_report;
 
 mod candidate;
 mod reconcile;
+#[cfg(test)]
+mod tests;
 
 /// Reconciles recoverable local state under the same per-game lock used by
 /// install/update/uninstall, then returns a pure availability snapshot.
@@ -79,7 +81,7 @@ fn build_report(
         blocked,
         analysis,
         resolution,
-        ..
+        roots: _,
     } = preflight;
     let scan_dir = Path::new(game.install_path().as_str());
     let host_report =

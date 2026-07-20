@@ -15,6 +15,7 @@ export type ManifestRefreshReport = {
   kinds: {
     libraries: ManifestKindStatus;
     renodx: ManifestKindStatus;
+    luma: ManifestKindStatus;
     reshade: ManifestKindStatus;
   };
 };

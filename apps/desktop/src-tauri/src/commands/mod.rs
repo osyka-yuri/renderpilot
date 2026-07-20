@@ -4,14 +4,18 @@
 //! stalling the async runtime.
 
 pub(crate) mod addon_catalog;
+mod app;
 mod error;
 mod luma;
+mod nvapi;
 mod query_game_cards;
 mod renodx;
 mod validation;
 
+pub use app::*;
 pub use error::CommandError;
 pub use luma::*;
+pub use nvapi::*;
 pub use renodx::*;
 
 use std::sync::Arc;
@@ -19,7 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use renderpilot_api::{self as desktop, ApiError};
-use renderpilot_orchestration::{Context, ServiceError};
+use renderpilot_orchestration::Context;
 use serde_json::Value;
 use tauri::Emitter;
 
@@ -64,7 +68,7 @@ struct DownloadProgressEvent<'a> {
 ///   (downloaded >= total) always pass through regardless of the interval.
 /// * Intermediate emits are skipped when less than
 ///   `DOWNLOAD_PROGRESS_MIN_INTERVAL` has elapsed since the last one.
-/// * A race on `last_ms` can only cause an extra emit — never a missed final.
+/// * A race on `last_ms` can only cause an extra emit -- never a missed final.
 pub(crate) fn download_progress_emitter(
     app: tauri::AppHandle,
     id: String,
@@ -149,12 +153,12 @@ pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> Jso
     result
 }
 
-/// Force-refreshes remote CDN manifests (libraries, RenoDX, ReShade).
+/// Force-refreshes all remote CDN manifests (libraries, RenoDX, Luma, ReShade).
 ///
 /// Subject to a process-local cooldown / single-flight gate. Best-effort: the
 /// report encodes per-kind failures; the command itself succeeds so shell
 /// Refresh can still scan the disk. After a successful command result, rebuilds
-/// catalog add-on capability flags from the (possibly just-warmed) cache —
+/// catalog add-on capability flags from the (possibly just-warmed) cache --
 /// including cooldown skips, which still re-read local manifests.
 #[tauri::command]
 pub async fn refresh_remote_manifests(
@@ -390,229 +394,4 @@ pub async fn delete_library(
 #[tauri::command]
 pub async fn get_library_states() -> JsonCommandResult {
     run_desktop_async_command(desktop::get_library_states).await
-}
-
-// ---------------------------------------------------------------------------
-// NVAPI / DLSS preset commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn list_nvapi_supported_settings(game_id: String) -> JsonCommandResult {
-    let game_id = require_non_empty_string("game_id", game_id)?;
-    run_desktop_command(move || desktop::list_nvapi_supported_settings(game_id)).await
-}
-
-#[tauri::command]
-pub async fn list_nvapi_setting_states(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::list_nvapi_setting_states(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn list_game_executable_candidates(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::list_game_executable_candidates(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn resolve_game_executable(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::resolve_game_executable(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn set_game_executable_override(
-    game_id: String,
-    absolute_path: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
-    run_desktop_command(move || {
-        desktop::set_game_executable_override(&context, game_id, &absolute_path)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn clear_game_executable_override(
-    game_id: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::clear_game_executable_override(&context, game_id)).await
-}
-
-#[tauri::command]
-pub async fn get_nvapi_setting_state(
-    game_id: String,
-    setting_key: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    run_desktop_command(move || desktop::get_nvapi_setting_state(&context, game_id, &setting_key))
-        .await
-}
-
-#[tauri::command]
-pub async fn set_nvapi_setting_value(
-    game_id: String,
-    setting_key: String,
-    value: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    let value = require_non_empty_string("value", value)?;
-    run_desktop_command(move || {
-        desktop::set_nvapi_setting_value(&context, game_id, &setting_key, &value)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn revert_nvapi_setting(
-    game_id: String,
-    setting_key: String,
-    target: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    let target = require_non_empty_string("target", target)?;
-    run_desktop_command(move || {
-        desktop::revert_nvapi_setting(&context, game_id, &setting_key, &target)
-    })
-    .await
-}
-
-// ---------------------------------------------------------------------------
-// Global (base profile) NVAPI settings
-// ---------------------------------------------------------------------------
-
-/// Reads the live state of every supported NVAPI setting from NVIDIA's
-/// global/base driver profile.
-#[tauri::command]
-pub async fn list_global_nvapi_setting_states(
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-    run_desktop_command(move || desktop::list_global_nvapi_setting_states(&context)).await
-}
-
-/// Commits a new value for an NVAPI setting on the global/base driver profile.
-#[tauri::command]
-pub async fn set_global_nvapi_setting_value(
-    setting_key: String,
-    value: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    let value = require_non_empty_string("value", value)?;
-    let context = Arc::clone(&context);
-    run_desktop_command(move || {
-        desktop::set_global_nvapi_setting_value(&context, &setting_key, &value)
-    })
-    .await
-}
-
-/// Reverts an NVAPI setting on the global/base driver profile to the driver default.
-#[tauri::command]
-pub async fn revert_global_nvapi_setting(
-    setting_key: String,
-    target: String,
-    context: tauri::State<'_, Arc<Context>>,
-) -> JsonCommandResult {
-    let setting_key = require_non_empty_string("setting_key", setting_key)?;
-    let target = require_non_empty_string("target", target)?;
-    let context = Arc::clone(&context);
-    run_desktop_command(move || {
-        desktop::revert_global_nvapi_setting(&context, &setting_key, &target)
-    })
-    .await
-}
-
-// ---------------------------------------------------------------------------
-// DLSS indicator (system-wide overlay)
-// ---------------------------------------------------------------------------
-
-/// Reads whether the global NVIDIA DLSS indicator overlay is currently enabled.
-#[tauri::command]
-pub async fn get_dlss_indicator_state() -> JsonCommandResult {
-    run_desktop_command(renderpilot_api::get_dlss_indicator_state).await
-}
-
-/// Enables or disables the global NVIDIA DLSS indicator overlay (requires admin).
-#[tauri::command]
-pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
-    run_desktop_command(move || renderpilot_api::set_dlss_indicator_enabled(enabled)).await
-}
-
-/// Returns the `AppInitializationState` snapshot computed at startup.
-/// Synchronous: the state is already in managed memory, no I/O.
-// `tauri::command` requires `State` parameters by value.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects State by value in the generated command signature"
-)]
-#[tauri::command]
-pub fn get_app_initialization_state(
-    state: tauri::State<'_, crate::AppInitializationState>,
-) -> crate::AppInitializationState {
-    *state.inner()
-}
-
-/// Relaunches the app elevated via `ShellExecuteW(verb="runas")` and exits this process.
-/// Returns `CommandFailed` if the user declines the UAC prompt or policy blocks elevation;
-/// the frontend shows a non-fatal toast in that case.
-#[tauri::command]
-pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
-    #[cfg(windows)]
-    {
-        use crate::elevation::{
-            ElevationRelaunchTrigger, ElevationStartupDecision, attempt_self_relaunch_elevated,
-        };
-        match attempt_self_relaunch_elevated(ElevationRelaunchTrigger::UserRequest) {
-            ElevationStartupDecision::Relaunched => {
-                app.exit(0);
-                Ok(serde_json::json!({ "relaunched": true }))
-            }
-            ElevationStartupDecision::UserCancelled => Err(CommandError::from(ApiError::Service(
-                ServiceError::CommandFailed("UAC consent was declined".to_owned()),
-            ))),
-            ElevationStartupDecision::PolicyBlocked(code) => Err(CommandError::from(
-                ApiError::Service(ServiceError::CommandFailed(format!(
-                    "OS denied the elevation request (ShellExecute code {code})"
-                ))),
-            )),
-            // UserRequest never suppresses on a live handoff; keep exhaustiveness.
-            ElevationStartupDecision::SkippedRecentHandoff => {
-                debug_assert!(false, "UserRequest must not skip elevation handoff");
-                Err(CommandError::from(ApiError::Service(
-                    ServiceError::CommandFailed(
-                        "elevation relaunch was unexpectedly skipped".to_owned(),
-                    ),
-                )))
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = app;
-        Err(CommandError::from(ApiError::Service(
-            ServiceError::CommandFailed(
-                "administrator relaunch is only supported on Windows".to_owned(),
-            ),
-        )))
-    }
 }

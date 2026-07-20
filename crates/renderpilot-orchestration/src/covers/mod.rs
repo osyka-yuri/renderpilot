@@ -57,7 +57,7 @@ impl<'a> CoverCatalog<'a> {
     fn require_game(&self, game_id: &GameId) -> Result<GameInstallation, ServiceError> {
         self.sqlite
             .find_game(game_id)?
-            .ok_or_else(|| game_not_found(game_id))
+            .ok_or_else(|| crate::addons::records::game_not_found(game_id))
     }
 
     fn install_cover(
@@ -174,10 +174,6 @@ fn read_cover_source_file(source: &Path) -> Result<Vec<u8>, ServiceError> {
 
 fn cover_len_exceeds_limit(len: usize) -> bool {
     u64::try_from(len).map_or(true, |len| len > MAX_COVER_BYTES)
-}
-
-fn game_not_found(game_id: &GameId) -> ServiceError {
-    ServiceError::GameNotFound(game_id.as_str().to_owned())
 }
 
 fn cover_too_large() -> ServiceError {

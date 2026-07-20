@@ -23,7 +23,7 @@ pub use self::artifact_builder::manifest_entries_as_artifacts;
 pub use self::storage::local_preset_manifest_path;
 
 fn library_error(message: impl Into<String>) -> ServiceError {
-    ServiceError::CommandFailed(message.into())
+    ServiceError::command_failed(message)
 }
 
 // ---------------------------------------------------------------------------

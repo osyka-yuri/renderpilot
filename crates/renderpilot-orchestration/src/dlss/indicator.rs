@@ -31,7 +31,7 @@ pub fn get_dlss_indicator_state() -> Result<IndicatorState, ServiceError> {
     use renderpilot_platform_windows::dlss::read_dlss_indicator_enabled;
 
     let enabled = read_dlss_indicator_enabled().map_err(|error| {
-        ServiceError::CommandFailed(format!("could not read the DLSS indicator state: {error}"))
+        ServiceError::command_failed(format!("could not read the DLSS indicator state: {error}"))
     })?;
     // The indicator is an NGX feature; absence of nvapi64.dll means no NVIDIA driver
     // (hence no NGX), so report it unsupported and let the UI hide the toggle.
@@ -61,7 +61,7 @@ pub fn set_dlss_indicator_enabled(enabled: bool) -> Result<IndicatorState, Servi
         if error.raw_os_error() == Some(ERROR_ACCESS_DENIED) {
             ServiceError::NvapiRequiresElevation
         } else {
-            ServiceError::CommandFailed(format!("could not update the DLSS indicator: {error}"))
+            ServiceError::command_failed(format!("could not update the DLSS indicator: {error}"))
         }
     })?;
     Ok(IndicatorState {
@@ -73,7 +73,7 @@ pub fn set_dlss_indicator_enabled(enabled: bool) -> Result<IndicatorState, Servi
 /// Non-Windows stub: changing the DLSS indicator is unsupported.
 #[cfg(not(windows))]
 pub fn set_dlss_indicator_enabled(_enabled: bool) -> Result<IndicatorState, ServiceError> {
-    Err(ServiceError::CommandFailed(
-        "the DLSS indicator is only available on Windows".to_owned(),
+    Err(ServiceError::command_failed(
+        "the DLSS indicator is only available on Windows",
     ))
 }

@@ -366,8 +366,7 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // DLSS indicator (system-wide)
         commands::get_dlss_indicator_state,
         commands::set_dlss_indicator_enabled,
-        // RenoDX HDR add-on
-        commands::renodx_status,
+        // RenoDX HDR add-on (card/settings surface; CLI status/bulk stay off IPC)
         commands::renodx_availability,
         commands::renodx_install,
         commands::renodx_install_from_file,
@@ -379,15 +378,15 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::renodx_remove_vulkan_layer,
         commands::renodx_check_update,
         commands::renodx_update,
+        commands::renodx_install_dlss_fix,
+        commands::renodx_uninstall_dlss_fix,
+        commands::renodx_dlss_fix_availability,
+        // Luma Framework add-on (card surface; CLI status/bulk stay off IPC)
         commands::luma_availability,
         commands::luma_install,
         commands::luma_uninstall,
         commands::luma_check_update,
         commands::luma_update,
-        commands::renodx_check_updates,
-        commands::renodx_install_dlss_fix,
-        commands::renodx_uninstall_dlss_fix,
-        commands::renodx_dlss_fix_availability,
         // App initialization / elevation
         commands::get_app_initialization_state,
         commands::request_admin_relaunch,

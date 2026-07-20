@@ -2,17 +2,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::{
-    AppErrorKind, ArtifactRepository, ComponentRepository, GameRepository,
+    AppErrorKind, ArtifactRepository, ComponentRepository, GameRepository, InstalledAddonRepository,
 };
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher,
-    LibraryArtifact, PathRef, Platform, Sha256Hash, Swappability, Version,
+    AddonKind, ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+    GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology,
+    InstalledAddon, Launcher, LibraryArtifact, ManagedAddonFile, ManagedFileBaseline, PathRef,
+    Platform, Sha256Hash, Swappability, Version,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::Context;
-use crate::catalog::execute::apply_swap;
+use crate::catalog::execute::{apply_swap, rollback_component};
 
 use super::ensure_artifact_sources_usable;
 use super::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
@@ -400,6 +401,293 @@ fn sample_game_at(install: &Path) -> GameInstallation {
     )
 }
 
+fn dlss_artifact(path: &Path, version: &str) -> LibraryArtifact {
+    let sha = sha_of(path);
+    LibraryArtifact::new(
+        ArtifactId::for_bundle([&sha]),
+        GraphicsTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(path_as_ref(path))
+                .with_sha256(sha)
+                .with_version(Version::parse(version).expect("version")),
+        ],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact")
+    .with_source("test-library")
+    .expect("source")
+}
+
+/// Shared DLSS catalog-swap fixture: temp game + library dirs, live DLL, component, context.
+struct FreshDlssFixture {
+    _root: tempfile::TempDir,
+    library_dir: PathBuf,
+    live: PathBuf,
+    game: GameInstallation,
+    component_id: ComponentId,
+    context: Context,
+}
+
+fn fresh_dlss_fixture(component_suffix: &str, live_bytes: &[u8]) -> FreshDlssFixture {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game");
+    fs::create_dir_all(&library_dir).expect("library");
+    let live = game_dir.join("nvngx_dlss.dll");
+    write(&live, live_bytes);
+    let game = sample_game_at(&game_dir);
+    let component_id =
+        ComponentId::new(format!("component:{component_suffix}")).expect("component id");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(sha_of(&live)));
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("component");
+    let context = Context::from_storage(storage);
+    FreshDlssFixture {
+        _root: root,
+        library_dir,
+        live,
+        game,
+        component_id,
+        context,
+    }
+}
+
+fn write_library_dlss(library_dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+    let path = library_dir.join(name).join("nvngx_dlss.dll");
+    fs::create_dir_all(path.parent().unwrap()).expect("library subdir");
+    write(&path, bytes);
+    path
+}
+
+#[test]
+fn reswap_keeps_one_immutable_classic_baseline() {
+    let fx = fresh_dlss_fixture("dlss-reswap", b"original-a");
+    let original_hash = sha_of(&fx.live);
+    let source_b = write_library_dlss(&fx.library_dir, "b", b"replacement-b");
+    let source_c = write_library_dlss(&fx.library_dir, "c", b"replacement-c");
+    let b = dlss_artifact(&source_b, "3.5.0.0");
+    let c = dlss_artifact(&source_c, "3.7.0.0");
+    fx.context.storage().upsert_artifact(&b).expect("b");
+    fx.context.storage().upsert_artifact(&c).expect("c");
+
+    apply_swap(&fx.context, fx.game.id(), &fx.component_id, b.id()).expect("A to B");
+    let sidecar = bak_of(&fx.live);
+    assert_eq!(fs::read(&sidecar).unwrap(), b"original-a");
+    apply_swap(&fx.context, fx.game.id(), &fx.component_id, c.id()).expect("B to C");
+
+    assert_eq!(fs::read(&sidecar).unwrap(), b"original-a");
+    assert_eq!(sha_of(&sidecar), original_hash);
+    assert_eq!(
+        fx.context
+            .storage()
+            .get_component_backup(&fx.component_id)
+            .unwrap()
+            .expect("baseline")[0]
+            .sha256(),
+        Some(&original_hash)
+    );
+}
+
+#[test]
+fn catalog_apply_rejects_external_or_missing_live_state_before_mutation() {
+    let fx = fresh_dlss_fixture("fresh-live", b"scanned-original");
+    let source = write_library_dlss(&fx.library_dir, "lib", b"replacement");
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    fx.context
+        .storage()
+        .upsert_artifact(&artifact)
+        .expect("artifact");
+
+    write(&fx.live, b"external-replacement");
+    assert!(apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).is_err());
+    assert_eq!(fs::read(&fx.live).expect("live"), b"external-replacement");
+    assert!(!bak_of(&fx.live).exists());
+
+    fs::remove_file(&fx.live).expect("remove");
+    assert!(apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).is_err());
+    assert!(!fx.live.exists());
+    assert!(!bak_of(&fx.live).exists());
+}
+
+#[test]
+fn catalog_rollback_rejects_a_tampered_sidecar_without_changes() {
+    let fx = fresh_dlss_fixture("tampered-baseline", b"original");
+    let source = write_library_dlss(&fx.library_dir, "lib", b"overlay");
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    fx.context
+        .storage()
+        .upsert_artifact(&artifact)
+        .expect("artifact");
+    apply_swap(&fx.context, fx.game.id(), &fx.component_id, artifact.id()).expect("swap");
+
+    write(&bak_of(&fx.live), b"tampered");
+    assert!(rollback_component(&fx.context, fx.game.id(), &fx.component_id).is_err());
+    assert_eq!(fs::read(&fx.live).expect("live"), b"overlay");
+    assert_eq!(fs::read(bak_of(&fx.live)).expect("sidecar"), b"tampered");
+}
+
+#[test]
+fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game");
+    fs::create_dir_all(&library_dir).expect("library");
+    let live = game_dir.join("nvngx_dlss.dll");
+    let sidecar = bak_of(&live);
+    let addon = game_dir.join("Luma-Game.addon");
+    let source = library_dir.join("nvngx_dlss.dll");
+    write(&live, b"luma-overlay");
+    write(&sidecar, b"exact-original");
+    write(&addon, b"addon");
+    write(&source, b"library-overlay");
+    let original_hash = sha_of(&sidecar);
+    let luma_hash = sha_of(&live);
+    let game = sample_game_at(&game_dir);
+    let component_id = ComponentId::new("component:dlss-luma").expect("id");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(luma_hash.clone()));
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    let managed = ManagedAddonFile::owned(
+        path_as_ref(&live),
+        ManagedFileBaseline::Present {
+            sha256: original_hash.clone(),
+        },
+        luma_hash,
+    );
+    let record = InstalledAddon::new(game.id().clone(), AddonKind::Luma, path_as_ref(&addon))
+        .try_with_managed_files(vec![managed])
+        .expect("valid binding");
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    storage.upsert_installed_addon(&record).expect("record");
+    let context = Context::from_storage(storage);
+
+    apply_swap(&context, game.id(), &component_id, artifact.id()).expect("swap");
+
+    assert_eq!(fs::read(&sidecar).unwrap(), b"exact-original");
+    let baseline = context
+        .storage()
+        .get_component_backup(&component_id)
+        .unwrap()
+        .expect("baseline");
+    assert_eq!(baseline[0].sha256(), Some(&original_hash));
+
+    rollback_component(&context, game.id(), &component_id).expect("catalog rollback");
+    assert_eq!(fs::read(&live).unwrap(), b"exact-original");
+    assert!(!sidecar.exists());
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(game.id())
+            .unwrap()
+            .expect("Luma record")
+            .managed_files()
+            .is_empty()
+    );
+    crate::addons::luma::use_cases::commands::uninstall::uninstall(&context, game.id())
+        .expect("Luma uninstall after catalog rollback");
+    assert_eq!(fs::read(&live).unwrap(), b"exact-original");
+}
+
+#[test]
+fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game");
+    fs::create_dir_all(&library_dir).expect("library");
+    let live = game_dir.join("nvngx_dlss.dll");
+    let addon = game_dir.join("Luma-Game.addon");
+    let source = library_dir.join("nvngx_dlss.dll");
+    write(&live, b"luma-created-dlss");
+    write(&addon, b"addon");
+    write(&source, b"library-overlay");
+    let luma_hash = sha_of(&live);
+    let game = sample_game_at(&game_dir);
+    let component_id = ComponentId::new("component:dlss-luma-absent").expect("id");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(luma_hash.clone()));
+    let artifact = dlss_artifact(&source, "3.8.0.0");
+    let managed =
+        ManagedAddonFile::owned(path_as_ref(&live), ManagedFileBaseline::Absent, luma_hash);
+    let record = InstalledAddon::new(game.id().clone(), AddonKind::Luma, path_as_ref(&addon))
+        .try_with_managed_files(vec![managed])
+        .expect("valid binding");
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    storage.upsert_installed_addon(&record).expect("record");
+    let context = Context::from_storage(storage);
+
+    apply_swap(&context, game.id(), &component_id, artifact.id()).expect("swap");
+
+    assert_eq!(fs::read(&live).unwrap(), b"library-overlay");
+    assert!(!bak_of(&live).exists());
+    assert_eq!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .unwrap()
+            .expect("empty baseline"),
+        Vec::<ComponentFile>::new()
+    );
+
+    rollback_component(&context, game.id(), &component_id).expect("catalog rollback");
+    assert!(!live.exists());
+    assert!(
+        context
+            .storage()
+            .list_components_for_game(game.id())
+            .unwrap()
+            .iter()
+            .all(|component| component.id() != &component_id)
+    );
+    assert!(
+        context
+            .storage()
+            .get_installed_addon(game.id())
+            .unwrap()
+            .expect("Luma record")
+            .managed_files()
+            .is_empty()
+    );
+    crate::addons::luma::use_cases::commands::uninstall::uninstall(&context, game.id())
+        .expect("Luma uninstall after absent rollback");
+    assert!(!live.exists());
+}
+
 #[test]
 fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
     let root = tempfile::tempdir().expect("tempdir");
@@ -692,8 +980,8 @@ fn post_copy_hash_mismatch_uses_apply_recovery_boundary() {
 #[test]
 fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
     // Re-swap scenario: the live component was already cleaned by an earlier
-    // unified swap, but the revert-to-baseline that precedes the overlay
-    // restores the baseline's upscaling members — they must be removed again.
+    // unified swap, while the immutable baseline still contains the original
+    // upscaling members. The next desired set must continue to exclude them.
     let baseline = vec![
         comp_file_str("C:/game/amd_fidelityfx_dx12.dll"),
         comp_file_str("C:/game/amd_fidelityfx_upscaler_dx12.dll"),
@@ -724,6 +1012,36 @@ fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
             .collect::<Vec<_>>(),
         vec!["amd_fidelityfx_upscaler_dx12.dll"],
     );
+}
+
+#[test]
+fn public_catalog_apply_waits_at_the_game_mutation_boundary() {
+    let context = std::sync::Arc::new(crate::Context::from_storage(
+        SqliteStorage::in_memory().expect("storage"),
+    ));
+    let game_id = GameId::new(format!("manual:lock-{}", ulid::Ulid::generate())).expect("id");
+    let component_id = ComponentId::new("component:lock-test").expect("component");
+    let artifact_id = ArtifactId::new("artifact:lock-test").expect("artifact");
+    let held = crate::game_mutation_lock::blocking_lock(&game_id);
+    let (attempt_tx, attempt_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    crate::game_mutation_lock::set_lock_attempt_hook(&game_id, attempt_tx);
+
+    let worker_context = std::sync::Arc::clone(&context);
+    let worker_game = game_id;
+    let worker = std::thread::spawn(move || {
+        let result = super::apply_swap(&worker_context, &worker_game, &component_id, &artifact_id);
+        done_tx.send(result).expect("report result");
+    });
+
+    attempt_rx.recv().expect("entrypoint reached lock");
+    assert!(matches!(
+        done_rx.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+    drop(held);
+    assert!(done_rx.recv().expect("completed").is_err());
+    worker.join().expect("worker");
 }
 
 #[test]

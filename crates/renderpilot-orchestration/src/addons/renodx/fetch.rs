@@ -17,7 +17,7 @@ use super::matcher::ResolvedInstall;
 use super::source;
 use super::types::renodx_ini_defaults;
 use crate::addons::reshade::proxy::HostKind;
-use crate::addons::reshade::types::{ReshadeChannel, ReshadeConfig};
+use crate::addons::reshade::types::{ReshadeChannel, ReshadeSourceCatalog};
 
 use crate::addons::progress::sequential_stage_observer;
 use crate::addons::reshade::fetch::{Download, ensure_pe, fetch_reshade_from_source, sha256_hex};
@@ -33,7 +33,7 @@ const MAX_ADDON_BYTES: u64 = 64 * 1024 * 1024;
 /// [`PreparedInstall`] the engine lays down.
 pub(super) async fn prepare_install(
     resolved: &ResolvedInstall,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     game_id: GameId,
     channel: ReshadeChannel,
     writes_host: bool,
@@ -85,7 +85,7 @@ pub(super) async fn prepare_install(
 /// to track upstream.
 pub(super) async fn prepare_install_from_file(
     resolved: &ResolvedInstall,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     game_id: GameId,
     addon: LocalAddonSource,
     channel: ReshadeChannel,
@@ -130,7 +130,7 @@ struct AddonSource {
 /// [`PreparedInstall`].
 async fn build_prepared_install(
     resolved: &ResolvedInstall,
-    reshade_config: &ReshadeConfig,
+    reshade_config: &ReshadeSourceCatalog,
     game_id: GameId,
     source: AddonSource,
     channel: ReshadeChannel,
@@ -237,7 +237,7 @@ impl FetchedReshade {
 /// Fetches the requested-channel ReShade host only when policy says the active
 /// host slot needs one; otherwise returns [`FetchedReshade::none`].
 async fn fetch_reshade_host_if_needed(
-    config: &ReshadeConfig,
+    config: &ReshadeSourceCatalog,
     arch: Architecture,
     channel: ReshadeChannel,
     writes_host: bool,
@@ -253,7 +253,7 @@ async fn fetch_reshade_host_if_needed(
 /// Downloads the channel ReShade archive, extracts the host DLL, and records the
 /// upstream identity (URL + validator + DLL digest) for host update detection.
 async fn fetch_reshade_dll(
-    config: &ReshadeConfig,
+    config: &ReshadeSourceCatalog,
     arch: Architecture,
     channel: ReshadeChannel,
     progress: Option<&ProgressObserver<'_>>,

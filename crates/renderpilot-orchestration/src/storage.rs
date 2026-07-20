@@ -24,7 +24,7 @@ pub fn open_catalog_storage() -> Result<SqliteStorage, ServiceError> {
     ensure_catalog_directory(&path)?;
 
     SqliteStorage::open(&path).map_err(|error| {
-        ServiceError::CommandFailed(format!(
+        ServiceError::command_failed(format!(
             "failed to open catalog database `{}`: {error}",
             path.display()
         ))
@@ -49,7 +49,7 @@ fn catalog_db_path_from_env(
     // hard error `resolve_app_dir` returns.
     if let Some(value) = get_env(CATALOG_DB_PATH_ENV) {
         if value.as_os_str().is_empty() {
-            return Err(ServiceError::CommandFailed(format!(
+            return Err(ServiceError::command_failed(format!(
                 "{CATALOG_DB_PATH_ENV} is set but empty"
             )));
         }
@@ -65,26 +65,26 @@ fn catalog_db_path_from_env(
 
 fn validate_catalog_db_path(path: &Path) -> Result<(), ServiceError> {
     if path.as_os_str().is_empty() {
-        return Err(ServiceError::CommandFailed(
-            "catalog database path is empty".to_owned(),
+        return Err(ServiceError::command_failed(
+            "catalog database path is empty",
         ));
     }
 
     if !matches!(path.components().next_back(), Some(Component::Normal(_))) {
-        return Err(ServiceError::CommandFailed(format!(
+        return Err(ServiceError::command_failed(format!(
             "catalog database path must include a file name: `{}`",
             path.display()
         )));
     }
 
     match fs::metadata(path) {
-        Ok(metadata) if metadata.is_dir() => Err(ServiceError::CommandFailed(format!(
+        Ok(metadata) if metadata.is_dir() => Err(ServiceError::command_failed(format!(
             "catalog database path points to a directory: `{}`",
             path.display()
         ))),
         Ok(_) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(ServiceError::CommandFailed(format!(
+        Err(error) => Err(ServiceError::command_failed(format!(
             "failed to inspect catalog database path `{}`: {error}",
             path.display()
         ))),
@@ -97,7 +97,7 @@ fn ensure_catalog_directory(path: &Path) -> Result<(), ServiceError> {
     };
 
     fs::create_dir_all(parent).map_err(|error| {
-        ServiceError::CommandFailed(format!(
+        ServiceError::command_failed(format!(
             "failed to create catalog directory `{}` for database `{}`: {error}",
             parent.display(),
             path.display()

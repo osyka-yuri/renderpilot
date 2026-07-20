@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// The host can be the manifest-current stable reshade.me add-on installer or the
 /// crosire CI build proxied by nightly.link.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ReshadeSourceCatalog {
     /// Manifest-current stable ReShade add-on installer. This is a versioned
     /// reshade.me URL, not a latest alias; new stable builds become visible only
@@ -48,31 +48,15 @@ impl ReshadeSourceCatalog {
     }
 }
 
-impl ReshadeSourceCatalog {
-    /// Legacy selection helper retained while RenoDX command callers migrate
-    /// from embedded to shared source catalogues.
-    #[must_use]
-    pub fn effective_install_channel(&self, requested: ReshadeChannel) -> ReshadeChannel {
-        if self.supports_channel(requested) {
-            requested
-        } else {
-            ReshadeChannel::Nightly
-        }
-    }
-}
-
-/// Transitional name for callers still carrying embedded ReShade sources.
-pub type ReshadeConfig = ReshadeSourceCatalog;
-
 /// Manifest-current stable ReShade add-on installer URL.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ReshadeStable {
     /// Versioned `_Addon.exe` URL from reshade.me.
     pub url: String,
 }
 
 /// Nightly ReShade build URLs (zip artifacts containing `ReShade{64,32}.dll`).
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ReshadeNightly {
     /// 64-bit nightly artifact URL.
     pub url64: String,

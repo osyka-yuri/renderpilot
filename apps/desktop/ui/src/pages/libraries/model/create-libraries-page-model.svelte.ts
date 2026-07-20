@@ -12,6 +12,7 @@ import {
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
 import { runWithConcurrency } from '@shared/concurrency';
+import { clearDownloadProgress, sumDownloadFractions } from '@shared/lib';
 import { createDisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import {
@@ -22,8 +23,6 @@ import {
   getLibraryStates,
   downloadLibrary,
   deleteLibrary,
-  clearDownloadProgress,
-  sumDownloadFractions,
 } from '@entities/library';
 
 type EntryAction = 'download' | 'delete';

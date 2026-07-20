@@ -21,9 +21,9 @@
     Tooltip,
     TooltipContent,
     TooltipTrigger,
+    DownloadProgressBar,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import { DownloadProgressBar } from '@entities/library';
   import { buildStreamlineVersionModel, type BulkSwapItem } from '../model/streamline-versions';
 
   type Props = {

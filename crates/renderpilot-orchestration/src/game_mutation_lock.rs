@@ -76,6 +76,7 @@ pub(crate) fn enter_game_mutation_boundary(
 ) -> Result<GameMutationGuard, crate::ServiceError> {
     let guard = blocking_lock(game_id);
     crate::file_mutation::recover_pending(context, &guard)?;
+    crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
     Ok(guard)
 }
 
@@ -86,6 +87,7 @@ pub(crate) async fn enter_game_mutation_boundary_async(
 ) -> Result<GameMutationGuard, crate::ServiceError> {
     let guard = lock(game_id).await;
     crate::file_mutation::recover_pending(context, &guard)?;
+    crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
     Ok(guard)
 }
 

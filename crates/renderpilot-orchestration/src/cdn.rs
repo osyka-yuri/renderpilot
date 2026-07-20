@@ -1,8 +1,8 @@
 //! The public content-delivery host and a generic, host-pinned JSON-manifest cache.
 //!
 //! RenderPilot serves its manifests (the graphics-library catalogue, the RenoDX
-//! overrides document, …) from one anonymous CDN bucket. This module owns the
-//! single host literal — [`CDN_HOST`] — so URL construction ([`cdn_url`]) and the
+//! overrides document, ...) from one anonymous CDN bucket. This module owns the
+//! single host literal -- [`CDN_HOST`] -- so URL construction ([`cdn_url`]) and the
 //! host-pinning check in `libraries::validate` can never desync, and a generic
 //! [`get_or_fetch`] cache that every manifest reuses: download (HTTPS, size-capped),
 //! strip any UTF-8 BOM, parse + validate, and cache under the app data dir with an
@@ -25,12 +25,8 @@ pub(crate) fn cdn_url(path: &str) -> String {
     format!("https://{CDN_HOST}/{path}")
 }
 
-fn err(message: impl Into<String>) -> ServiceError {
-    ServiceError::CommandFailed(message.into())
-}
-
 /// Describes a cached CDN manifest: where it lives, where to fetch it, its size
-/// cap, and how long a cached copy stays fresh (`None` = never auto-expires —
+/// cap, and how long a cached copy stays fresh (`None` = never auto-expires --
 /// refresh only on an explicit [`fetch`]).
 pub(crate) struct CdnManifestSpec {
     /// Cache file name under the app data dir.
@@ -48,7 +44,7 @@ pub(crate) struct CdnManifestSpec {
 enum CachedManifest<T> {
     /// Present, parsed, and within the TTL.
     Fresh(T),
-    /// Present and parsed but past the TTL — usable as an offline fallback.
+    /// Present and parsed but past the TTL -- usable as an offline fallback.
     Stale(T),
     /// No cache on disk.
     Absent,
@@ -87,7 +83,7 @@ where
 }
 
 /// Returns a present, parseable cache (ignoring its TTL), or `None` if it is
-/// absent or corrupt — for callers that reuse any cache they have and run their
+/// absent or corrupt -- for callers that reuse any cache they have and run their
 /// own fetch (with extra side effects) on a miss.
 pub(crate) fn cached<T, F>(spec: &CdnManifestSpec, parse: F) -> Option<T>
 where
@@ -135,7 +131,7 @@ where
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(CachedManifest::Absent),
         Err(error) => {
-            return Err(err(format!(
+            return Err(crate::failed(format!(
                 "failed to stat manifest cache `{}`: {error}",
                 path.display()
             )));
@@ -176,7 +172,7 @@ fn quarantine_corrupt(file_name: &str) {
 }
 
 /// Renames the file at `path` to the first available append-sidecar
-/// (`manifest.json` → `manifest.json.corrupt` →
+/// (`manifest.json` -> `manifest.json.corrupt` ->
 /// `manifest.json.corrupt.1`). Best-effort.
 ///
 /// Existing diagnostics are retained rather than overwritten, while repeated
@@ -243,9 +239,9 @@ mod tests {
     /// containing `bad` (a corrupt cache) and otherwise echoes the trimmed text,
     /// so the BOM strip is observable in the returned value.
     fn parse_doc(bytes: &[u8]) -> Result<Doc, ServiceError> {
-        let text = std::str::from_utf8(bytes).map_err(|e| err(e.to_string()))?;
+        let text = std::str::from_utf8(bytes).map_err(|e| crate::failed(e.to_string()))?;
         if text.contains("bad") {
-            return Err(err("invalid doc"));
+            return Err(crate::failed("invalid doc"));
         }
         Ok(Doc(text.trim().to_owned()))
     }
@@ -280,7 +276,7 @@ mod tests {
 
     #[test]
     fn strips_a_utf8_bom() {
-        // `strip_utf8_bom` now lives in `crate::fs`; this test verifies the
+        // `strip_utf8_bom` lives in `crate::fs::io`; this test verifies the
         // import alias still resolves in the CDN module's scope.
         let mut bytes = b"\xEF\xBB\xBF".to_vec();
         bytes.extend_from_slice(b"{}");

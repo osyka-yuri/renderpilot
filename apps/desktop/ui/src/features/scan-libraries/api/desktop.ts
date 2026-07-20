@@ -14,7 +14,7 @@ export async function scanManualFolder(path: string): Promise<ScanManualFolderRe
 }
 
 /**
- * Force-refreshes all remote CDN manifests (libraries, RenoDX, ReShade).
+ * Force-refreshes all remote CDN manifests (libraries, RenoDX, Luma, ReShade).
  * Backend applies cooldown / single-flight; partial failures are encoded in the
  * report and do not throw for the overall command — shell Refresh always
  * proceeds to disk scan. Hard invoke failures (task crash, IPC) may still reject.

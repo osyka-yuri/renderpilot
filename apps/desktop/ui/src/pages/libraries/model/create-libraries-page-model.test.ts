@@ -6,6 +6,7 @@ import type {
   LibraryManifestEntry,
   LibraryState,
 } from '@entities/library';
+import type * as SharedLib from '@shared/lib';
 
 const mocks = vi.hoisted(() => ({
   getLibrariesManifest: vi.fn<() => Promise<LibraryManifest>>(),
@@ -17,7 +18,22 @@ const mocks = vi.hoisted(() => ({
   sumDownloadFractions: vi.fn<(ids: readonly string[]) => number>(),
 }));
 
-vi.mock('@entities/library', () => mocks);
+vi.mock('@entities/library', () => ({
+  getLibrariesManifest: mocks.getLibrariesManifest,
+  fetchLibrariesManifest: mocks.fetchLibrariesManifest,
+  getLibraryStates: mocks.getLibraryStates,
+  downloadLibrary: mocks.downloadLibrary,
+  deleteLibrary: mocks.deleteLibrary,
+}));
+
+vi.mock('@shared/lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof SharedLib>();
+  return {
+    ...actual,
+    clearDownloadProgress: mocks.clearDownloadProgress,
+    sumDownloadFractions: mocks.sumDownloadFractions,
+  };
+});
 
 import { createLibrariesPageModel } from './create-libraries-page-model.svelte';
 

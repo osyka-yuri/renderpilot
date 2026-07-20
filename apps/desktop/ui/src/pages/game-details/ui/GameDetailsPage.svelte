@@ -14,6 +14,7 @@
     CardContent,
     CardDescription,
     CardTitle,
+    Progress,
     ScrollArea,
     Button,
     Tooltip,
@@ -24,9 +25,12 @@
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { t } from '@shared/i18n';
-  import { sumDownloadFractions, BatchDownloadProgressBar } from '@entities/library';
+  import { describeCommandErrorTechnical } from '@shared/api';
+  import { sumDownloadFractions } from '@shared/lib';
+  import { publishErrorNotification } from '@shared/notifications';
   import type { SettingFamily } from '@features/nvapi-settings';
   import { RenoDxCard, createRenoDxStore } from '@features/renodx';
+  import { LumaCard, createLumaStore } from '@features/luma';
   import type {
     SwapHandler,
     RollbackHandler,
@@ -35,6 +39,7 @@
   } from '../model/create-game-details-page-model';
   import { createExclusiveAddonStores } from '@entities/addon';
   import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
+  import { runUpdateAll, UpdateAllError } from '../model/run-update-all';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
   import GameExecutablePopover from './GameExecutablePopover.svelte';
@@ -58,6 +63,7 @@
     onBulkRollback?: BulkRollbackHandler;
     onOpenOperations?: () => void;
     onOpenRenoDxSettings?: () => void;
+    onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
   };
 
   const {
@@ -70,27 +76,36 @@
     onBulkRollback = () => undefined,
     onOpenOperations,
     onOpenRenoDxSettings = () => undefined,
+    onGameDetailsInvalidate = () => undefined,
   }: Props = $props();
 
   const vendorTabs = $derived(createVendorTabs(details));
-  // The "Other" tab always hosts the RenoDX card for the selected
+  // The "Other" tab always hosts the RenoDX and Luma cards for the selected
   // game. We render them unconditionally so the full availability logic inside
   // each card can detect tracked installs, unmanaged files, orphans, etc.
   // (addon_capabilities from the list is used for badges/filters, not to hide
   // detail cards).
   const OTHER_TAB = 'other';
   const gameId = $derived(details?.game.identity.id ?? null);
-  // The store is created once;
+  // The game's launcher, for Luma's launcher-aware launch-args callout.
+  const launcher = $derived(details?.game.identity.launcher ?? '');
+
+  // RenoDX and Luma are mutually exclusive per game. Stores are created once;
   // the page loads every store for the selected game — not gated on
   // addon_capabilities from the list — so each card can detect tracked installs,
   // unmanaged files, orphans, and blocked_by_other_addon state. Successful
-  // install/uninstall mutations keep the page state synchronized.
+  // install/uninstall mutations reload peer stores via createExclusiveAddonStores.
+  //
+  // Add another tool by adding a factory entry here + placing its card in the
+  // OTHER_TAB template below.
   const {
-    stores: { renodx },
+    stores: { renodx, luma },
     list: addonStores,
   } = createExclusiveAddonStores(
     {
       renodx: ({ onExclusivityChange }) => createRenoDxStore({ onExclusivityChange }),
+      luma: ({ onExclusivityChange }) =>
+        createLumaStore({ onExclusivityChange, onGameDetailsInvalidate }),
     },
     { shouldReloadPeers: (id) => !!gameId && id === gameId },
   );
@@ -98,7 +113,7 @@
   // Update availability is read from the list of stores for bulk operations.
 
   // The single "update everything to its latest version" action. Spans every
-  // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle and RenoDX, not
+  // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle, RenoDX, and Luma, not
   // just the active tab, and reuses the existing bulk-swap path.
   const updatePlan = $derived(buildUpdateAllToLatestPlan(details));
   const totalUpdateCount = $derived(
@@ -106,51 +121,52 @@
   );
   const nothingToUpdate = $derived(totalUpdateCount === 0);
 
-  // "Update all" progress, shown only while a run initiated by THIS button is in
-  // flight. `busy` is global (any exclusive op), so gate on `updatingAll` too.
-  // Both reset once `busy` settles. The aggregate bar tracks only the artifacts
-  // that actually download (uncached), advancing monotonically 0→100% across the
-  // whole batch — like the libraries "Download all" button.
+  // This workflow owns its lifecycle through try/finally. The aggregate bar
+  // tracks only library artifacts that actually download; add-on-only runs keep
+  // the button spinner/aria-busy active without rendering an empty progress bar.
   let updatingAll = $state(false);
   let pendingDownloadIds = $state<string[]>([]);
-  $effect(() => {
-    const anyAddonBusy = addonStores.some((s) => s.busy);
-    if (!busy && !anyAddonBusy) {
-      updatingAll = false;
-      pendingDownloadIds = [];
-    }
-  });
-
-  const showProgress = $derived(updatingAll && busy);
+  const anyAddonBusy = $derived(addonStores.some((store) => store.busy));
+  // Shared exclusive gate for Luma/RenoDX cards (peer mutations + Update-all).
+  const exclusiveBusy = $derived(busy || anyAddonBusy || updatingAll);
+  const showProgress = $derived(updatingAll && pendingDownloadIds.length > 0);
   const downloadCount = $derived(pendingDownloadIds.length);
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
 
-  function handleUpdateAll() {
-    const anyAddonBusy = addonStores.some((s) => s.busy);
-    if (busy || anyAddonBusy || nothingToUpdate) {
+  async function handleUpdateAll() {
+    if (updatingAll || busy || anyAddonBusy || nothingToUpdate) {
       return;
     }
-    updatingAll = true;
-    pendingDownloadIds = updatePlan.items
-      .filter((item) => !item.isDownloaded)
-      .map((item) => item.artifactId);
-    void runUpdateAll();
-  }
 
-  // Library components run through the existing bulk-swap path; RenoDX updates
-  // through its store in the same single action.
-  async function runUpdateAll() {
-    if (updatePlan.items.length > 0) {
-      await onBulkSwap(updatePlan.items);
-    }
+    const items = [...updatePlan.items];
     const id = gameId;
-    if (!id) {
-      return;
-    }
-    for (const store of addonStores) {
-      if (store.updateAvailable) {
-        await store.update(id);
-      }
+    const eligibleAddonUpdates = [
+      { step: 'renodx' as const, store: renodx },
+      { step: 'luma' as const, store: luma },
+    ].filter(({ store }) => store.updateAvailable);
+    updatingAll = true;
+    pendingDownloadIds = items.filter((item) => !item.isDownloaded).map((item) => item.artifactId);
+
+    try {
+      await runUpdateAll({
+        items,
+        gameId: id,
+        addonUpdates: eligibleAddonUpdates,
+        onBulkSwap,
+      });
+    } catch (error) {
+      const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
+      const technical = describeCommandErrorTechnical(
+        error instanceof UpdateAllError ? error.failures[0].error : error,
+      );
+      publishErrorNotification(
+        t('gameDetails.updateAll.partialFailure', { count: failureCount }),
+        technical,
+      );
+      console.warn('Update-all workflow failed after attempting eligible updates', error);
+    } finally {
+      updatingAll = false;
+      pendingDownloadIds = [];
     }
   }
 
@@ -181,7 +197,7 @@
   // that vendor still has components, otherwise fall back to the first tab.
   let selectedVendor = $state('');
   $effect(() => {
-    // Vendor tabs come and go with the game's components. The Other tab (RenoDX)
+    // Vendor tabs come and go with the game's components. The Other tab (RenoDX + Luma)
     // is always present for the selected game.
     const keys = [...vendorTabs.map((tab) => tab.key as string), OTHER_TAB];
     untrack(() => {
@@ -270,126 +286,138 @@
   }
 </script>
 
-<ScrollArea class="h-full min-h-0">
-  <section class="grid gap-4 p-1">
-    {#if !details}
-      <Card>
-        <CardContent>
-          <CardTitle>{t('gameDetails.noGameSelected.title')}</CardTitle>
-          <CardDescription>
-            {t('gameDetails.noGameSelected.description')}
-          </CardDescription>
-        </CardContent>
-      </Card>
-    {:else if gameId}
-      <Tabs bind:value={selectedVendor}>
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            {#each vendorTabs as tab (tab.key)}
-              <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
-            {/each}
-            <TabsTrigger value={OTHER_TAB}>{t('gameDetails.otherTab')}</TabsTrigger>
-          </TabsList>
+<section class="flex h-full min-h-0 flex-col overflow-hidden">
+  {#if !details}
+    <Card>
+      <CardContent>
+        <CardTitle>{t('gameDetails.noGameSelected.title')}</CardTitle>
+        <CardDescription>
+          {t('gameDetails.noGameSelected.description')}
+        </CardDescription>
+      </CardContent>
+    </Card>
+  {:else if gameId}
+    <!-- Match Settings/Libraries: sticky tab chrome, scroll only inside TabsContent. -->
+    <Tabs bind:value={selectedVendor} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <TabsList>
+          {#each vendorTabs as tab (tab.key)}
+            <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
+          {/each}
+          <TabsTrigger value={OTHER_TAB}>{t('gameDetails.otherTab')}</TabsTrigger>
+        </TabsList>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <BatchDownloadProgressBar
-              value={downloadValue}
-              max={downloadCount}
-              active={showProgress}
-            />
-            <Tooltip>
-              <TooltipTrigger>
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={busy || addonStores.some((s) => s.busy) || nothingToUpdate}
-                  aria-busy={showProgress}
-                  onclick={handleUpdateAll}
-                >
-                  {#if showProgress}
-                    <Loader2Icon class="animate-spin" aria-hidden="true" />
-                  {:else}
-                    <ArrowUpToLineIcon aria-hidden="true" />
-                  {/if}
-                  {nothingToUpdate
-                    ? t('gameDetails.updateAll.action')
-                    : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {nothingToUpdate
-                  ? t('gameDetails.updateAll.upToDate')
-                  : t('gameDetails.updateAll.tooltip', { count: totalUpdateCount })}
-              </TooltipContent>
-            </Tooltip>
-
-            {#if onOpenOperations}
-              <Button variant="secondary" size="sm" onclick={onOpenOperations}>
-                <HistoryIcon aria-hidden="true" />
-                {t('operations.title')}
-              </Button>
-            {/if}
-
-            <GameExecutablePopover {gameId} exe={gameExe} />
-          </div>
-        </div>
-
-        {#each vendorTabs as tab (tab.key)}
-          <TabsContent value={tab.key} class="grid gap-3">
-            {#if tab.key === 'nvidia'}
-              {#if gameId && nvidia.nvapiAvailable}
-                <NvidiaProfileCard nvapi={nvidia} />
-              {/if}
-
-              {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
-              {@const streamline = tab.components.filter(isStreamline)}
-
-              {#each nonStreamline as component (component.id)}
-                {@const group = getCandidateGroup(component.id)}
-                {@const dlssCard = dlssFamilyCard(component)}
-                {#if dlssCard && gameId}
-                  <DlssComponentCard
-                    {gameId}
-                    {component}
-                    {group}
-                    family={dlssCard.family}
-                    title={dlssCard.title}
-                    {nvidia}
-                    nvapiAvailable={nvidia.nvapiAvailable}
-                    {busy}
-                    {onSwap}
-                    {onRollback}
-                  />
+        <div class="flex flex-wrap items-center gap-2">
+          {#if showProgress && downloadCount > 0}
+            <div class="w-16">
+              <Progress
+                value={downloadValue}
+                max={downloadCount}
+                aria-label={t('common.downloadProgress')}
+              />
+            </div>
+          {/if}
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                variant="default"
+                size="sm"
+                disabled={updatingAll || busy || anyAddonBusy || nothingToUpdate}
+                aria-busy={updatingAll}
+                onclick={handleUpdateAll}
+              >
+                {#if updatingAll}
+                  <Loader2Icon class="animate-spin" aria-hidden="true" />
                 {:else}
-                  <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
+                  <ArrowUpToLineIcon aria-hidden="true" />
                 {/if}
-              {/each}
+                {nothingToUpdate
+                  ? t('gameDetails.updateAll.action')
+                  : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {nothingToUpdate
+                ? t('gameDetails.updateAll.upToDate')
+                : t('gameDetails.updateAll.tooltip', { count: totalUpdateCount })}
+            </TooltipContent>
+          </Tooltip>
 
-              {#if streamline.length > 0}
-                {@const groupsById = Object.fromEntries(
-                  streamline.map((c) => [c.id, getCandidateGroup(c.id)] as const),
-                )}
-                <StreamlineComponentCard
-                  components={streamline}
-                  {groupsById}
-                  {busy}
-                  {onBulkSwap}
-                  {onBulkRollback}
-                />
+          {#if onOpenOperations}
+            <Button variant="secondary" size="sm" onclick={onOpenOperations}>
+              <HistoryIcon aria-hidden="true" />
+              {t('operations.title')}
+            </Button>
+          {/if}
+
+          <GameExecutablePopover {gameId} exe={gameExe} />
+        </div>
+      </div>
+
+      {#each vendorTabs as tab (tab.key)}
+        <TabsContent value={tab.key} class="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea class="h-full">
+            <div class="grid gap-3 p-1">
+              {#if tab.key === 'nvidia'}
+                {#if gameId && nvidia.nvapiAvailable}
+                  <NvidiaProfileCard nvapi={nvidia} />
+                {/if}
+
+                {@const nonStreamline = tab.components.filter((c) => !isStreamline(c))}
+                {@const streamline = tab.components.filter(isStreamline)}
+
+                {#each nonStreamline as component (component.id)}
+                  {@const group = getCandidateGroup(component.id)}
+                  {@const dlssCard = dlssFamilyCard(component)}
+                  {#if dlssCard && gameId}
+                    <DlssComponentCard
+                      {gameId}
+                      {component}
+                      {group}
+                      family={dlssCard.family}
+                      title={dlssCard.title}
+                      {nvidia}
+                      nvapiAvailable={nvidia.nvapiAvailable}
+                      {busy}
+                      {onSwap}
+                      {onRollback}
+                    />
+                  {:else}
+                    <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
+                  {/if}
+                {/each}
+
+                {#if streamline.length > 0}
+                  {@const groupsById = Object.fromEntries(
+                    streamline.map((c) => [c.id, getCandidateGroup(c.id)] as const),
+                  )}
+                  <StreamlineComponentCard
+                    components={streamline}
+                    {groupsById}
+                    {busy}
+                    {onBulkSwap}
+                    {onBulkRollback}
+                  />
+                {/if}
+              {:else}
+                {#each tab.components as component (component.id)}
+                  {@const group = getCandidateGroup(component.id)}
+                  <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
+                {/each}
               {/if}
-            {:else}
-              {#each tab.components as component (component.id)}
-                {@const group = getCandidateGroup(component.id)}
-                <VendorComponentCard {component} {group} {busy} {onSwap} {onRollback} />
-              {/each}
-            {/if}
-          </TabsContent>
-        {/each}
-
-        <TabsContent value={OTHER_TAB} class="grid gap-3">
-          <RenoDxCard {gameId} {busy} store={renodx} {onOpenRenoDxSettings} />
+            </div>
+          </ScrollArea>
         </TabsContent>
-      </Tabs>
-    {/if}
-  </section>
-</ScrollArea>
+      {/each}
+
+      <TabsContent value={OTHER_TAB} class="min-h-0 flex-1 overflow-hidden">
+        <ScrollArea class="h-full">
+          <div class="grid gap-3 p-1">
+            <RenoDxCard {gameId} busy={exclusiveBusy} store={renodx} {onOpenRenoDxSettings} />
+            <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
+          </div>
+        </ScrollArea>
+      </TabsContent>
+    </Tabs>
+  {/if}
+</section>

@@ -83,21 +83,6 @@ pub(crate) fn validate_match_rule_value(
     }
 }
 
-/// Compatibility assertion for the legacy RenoDX v3 defaults document.
-pub(crate) fn ensure_defaults_match<D: PartialEq>(
-    tool: &str,
-    actual: &D,
-    expected: &D,
-) -> Result<(), ServiceError> {
-    if actual != expected {
-        return Err(failed(format!(
-            "{tool} manifest `defaults` do not match the validator's expected defaults \
-             (min_app_version / channel drift between generator and parser)"
-        )));
-    }
-    Ok(())
-}
-
 /// Validates a slice of match rules: every rule must have a positive tier, a
 /// non-blank value unless it's a [`MatchKind::Generic`], and a per-kind valid
 /// value shape (delegated to [`validate_match_rule_value`]).

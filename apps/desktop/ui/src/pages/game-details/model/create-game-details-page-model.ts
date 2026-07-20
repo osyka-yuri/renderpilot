@@ -6,7 +6,7 @@ import {
 import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
 import { t, type MessageKey } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
-import { clearDownloadProgress } from '@entities/library';
+import { clearDownloadProgress } from '@shared/lib';
 
 import type { BulkSwapItem } from './streamline-versions';
 

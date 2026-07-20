@@ -24,7 +24,6 @@ pub use host_model::{
     ReshadeAddonSupport, ReshadeHost, ReshadeHostAction, ReshadeIdentity, ReshadeScan, SlotActivity,
 };
 pub(crate) use hosts::is_reshade_proxy_file;
-pub(crate) use crate::paths::same_path;
 pub use hosts::{host_action, scan_reshade_hosts};
 pub use identity::is_known_custom_build;
 pub(crate) use identity::{guess_advisory_channel, is_proxy_slot};

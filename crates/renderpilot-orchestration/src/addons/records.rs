@@ -134,19 +134,6 @@ pub(crate) fn ensure_no_record(
     }
     Ok(())
 }
-pub(crate) fn persist_record_or_revert(
-    context: &Context,
-    record: InstalledAddon,
-    revert: impl FnOnce(&InstalledAddon) -> Result<(), ServiceError>,
-) -> Result<InstalledAddon, ServiceError> {
-    if let Err(error) = context.storage().upsert_installed_addon(&record) {
-        if let Err(revert_error) = revert(&record) {
-            log::warn!("addon install: persistence failed and revert failed: {revert_error}");
-        }
-        return Err(error.into());
-    }
-    Ok(record)
-}
 
 #[cfg(test)]
 mod tests {

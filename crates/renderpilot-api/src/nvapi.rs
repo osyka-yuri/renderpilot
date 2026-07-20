@@ -34,7 +34,7 @@ use renderpilot_orchestration::nvapi::{NvapiSetting, SettingContext};
 /// error. Shared by every handler so the message stays identical.
 fn lookup_setting_or_err(setting_key: &str) -> Result<Box<dyn NvapiSetting>, ApiError> {
     lookup_setting(setting_key).ok_or_else(|| {
-        ApiError::Service(ServiceError::CommandFailed(format!(
+        ApiError::Service(ServiceError::command_failed(format!(
             "unknown nvapi setting: {setting_key}"
         )))
     })
@@ -161,7 +161,7 @@ pub fn set_nvapi_setting_value(
     let (game_id, ctx) = build_game_context(context, game_id)?;
 
     let dword = setting.parse_wire(value).ok_or_else(|| {
-        ApiError::Service(ServiceError::CommandFailed(format!(
+        ApiError::Service(ServiceError::command_failed(format!(
             "invalid value `{value}` for {}",
             setting.key()
         )))
@@ -231,7 +231,7 @@ pub fn set_global_nvapi_setting_value(
     let setting = lookup_setting_or_err(setting_key)?;
     let ctx = global_setting_context();
     let dword = setting.parse_wire(value).ok_or_else(|| {
-        ApiError::Service(ServiceError::CommandFailed(format!(
+        ApiError::Service(ServiceError::command_failed(format!(
             "invalid value `{value}` for {}",
             setting.key()
         )))

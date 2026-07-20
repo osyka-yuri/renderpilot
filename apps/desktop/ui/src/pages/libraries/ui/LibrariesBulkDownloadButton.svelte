@@ -1,8 +1,7 @@
 <script lang="ts">
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
-  import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
-  import { BatchDownloadProgressBar } from '@entities/library';
+  import { Button, Progress, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
@@ -59,12 +58,11 @@
 </script>
 
 <div class="flex items-center justify-end gap-2">
-  <BatchDownloadProgressBar
-    value={model.bulkProgressValue}
-    max={model.bulkTotal}
-    active={model.bulkDownloading}
-    ariaLabel={label}
-  />
+  {#if model.bulkDownloading && model.bulkTotal > 0}
+    <div class="w-16">
+      <Progress value={model.bulkProgressValue} max={model.bulkTotal} aria-label={label} />
+    </div>
+  {/if}
   <Tooltip>
     <TooltipTrigger>
       <Button

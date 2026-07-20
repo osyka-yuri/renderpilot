@@ -59,7 +59,7 @@ pub(super) fn read_sha256_cache(path: &Path) -> Result<Option<String>, ServiceEr
     }
 }
 
-/// Sidecar path for a library DLL's cached hash (`foo.dll` → `foo.dll.sha256`).
+/// Sidecar path for a library DLL's cached hash (`foo.dll` -> `foo.dll.sha256`).
 ///
 /// Library artifact paths always include a file name; missing one is reported
 /// rather than inventing a replace-style fallback that could collide.

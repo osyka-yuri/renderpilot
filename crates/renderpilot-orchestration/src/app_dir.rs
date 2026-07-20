@@ -2,8 +2,11 @@
 //!
 //! One source of truth for where the app keeps persistent data — the catalog
 //! database, downloaded library archives, and cached manifests all hang off it.
-//! Resolution order: `RENDERPILOT_APP_DIR` (the portable-mode override set by the
-//! launcher) → `LOCALAPPDATA\RenderPilot` → `APPDATA\RenderPilot`.
+//!
+//! Resolution order:
+//! 1. `RENDERPILOT_APP_DIR` (portable-mode override set by the launcher)
+//! 2. Windows: `%LOCALAPPDATA%\RenderPilot`, then `%APPDATA%\RenderPilot`
+//! 3. Unix: `$XDG_DATA_HOME/RenderPilot`, then `$HOME/.local/share/RenderPilot`
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -38,8 +41,23 @@ pub(crate) fn resolve_app_dir(
         return Ok(PathBuf::from(value).join(APP_DIR_NAME));
     }
 
-    Err(ServiceError::CommandFailed(
-        "could not find app data directory".to_owned(),
+    // Linux CI / WSL / portable CLI without Windows AppData vars.
+    if let Some(value) = get_env("XDG_DATA_HOME")
+        && !value.as_os_str().is_empty()
+    {
+        return Ok(PathBuf::from(value).join(APP_DIR_NAME));
+    }
+    if let Some(value) = get_env("HOME")
+        && !value.as_os_str().is_empty()
+    {
+        return Ok(PathBuf::from(value)
+            .join(".local")
+            .join("share")
+            .join(APP_DIR_NAME));
+    }
+
+    Err(ServiceError::command_failed(
+        "could not find app data directory",
     ))
 }
 
@@ -99,6 +117,42 @@ mod tests {
     fn falls_back_to_app_data_when_local_app_data_missing() {
         let dir = resolved_dir(&[("APPDATA", "C:\\roaming")]).expect("app dir should resolve");
         assert_eq!(dir, PathBuf::from("C:\\roaming").join(APP_DIR_NAME));
+    }
+
+    #[test]
+    fn uses_xdg_data_home_when_windows_app_data_missing() {
+        let dir = resolved_dir(&[("XDG_DATA_HOME", "/var/data")]).expect("app dir should resolve");
+        assert_eq!(dir, PathBuf::from("/var/data").join(APP_DIR_NAME));
+    }
+
+    #[test]
+    fn falls_back_to_home_local_share_when_xdg_missing() {
+        let dir = resolved_dir(&[("HOME", "/home/user")]).expect("app dir should resolve");
+        assert_eq!(
+            dir,
+            PathBuf::from("/home/user")
+                .join(".local")
+                .join("share")
+                .join(APP_DIR_NAME)
+        );
+    }
+
+    #[test]
+    fn xdg_takes_precedence_over_home() {
+        let dir = resolved_dir(&[("XDG_DATA_HOME", "/var/data"), ("HOME", "/home/user")])
+            .expect("app dir should resolve");
+        assert_eq!(dir, PathBuf::from("/var/data").join(APP_DIR_NAME));
+    }
+
+    #[test]
+    fn windows_app_data_takes_precedence_over_unix_fallbacks() {
+        let dir = resolved_dir(&[
+            ("LOCALAPPDATA", "C:\\local"),
+            ("XDG_DATA_HOME", "/var/data"),
+            ("HOME", "/home/user"),
+        ])
+        .expect("app dir should resolve");
+        assert_eq!(dir, PathBuf::from("C:\\local").join(APP_DIR_NAME));
     }
 
     #[test]

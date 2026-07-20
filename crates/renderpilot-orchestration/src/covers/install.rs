@@ -117,7 +117,7 @@ pub(super) fn install_cover(
 
     let record = sqlite
         .find_game_cover(game_id)?
-        .ok_or_else(|| ServiceError::CommandFailed("cover row missing after upsert".into()))?;
+        .ok_or_else(|| ServiceError::command_failed("cover row missing after upsert"))?;
 
     // Old files are removed via GC instead of direct deletion. This keeps cleanup
     // safe even if the storage model later allows cover files to be shared.
