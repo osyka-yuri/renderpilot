@@ -17,8 +17,8 @@ export type GameCardFilterContext = {
 
 /** Builds the filter context once per query so the card loop stays allocation-light. */
 export function buildGameCardFilterContext(query: GameCardsQuery): GameCardFilterContext {
-  // Normalize first so all-unknown selections become "no addon filter"
-  // (mirrors backend QueryGameCards — never an always-false match set).
+  // Mirror backend normalize_addon_names: drop unknown kinds so an all-unknown
+  // selection becomes "no addon filter" instead of matching nothing.
   const selectedAddons = normalizeAddonCapabilities(query.selectedAddons);
   return {
     searchQuery: query.searchQuery.trim().toLowerCase(),

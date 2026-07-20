@@ -4,26 +4,18 @@ import { createGameSummary } from '@entities/game';
 import { buildGameCardFilterContext, matchesGameCardFilters, sortGameCards } from './query-filters';
 
 function ctx(
-  overrides: Partial<Omit<Parameters<typeof buildGameCardFilterContext>[0], 'selectedAddons'>> & {
-    /** Accept unregistered names so filter normalization can be regression-tested. */
-    selectedAddons?: readonly string[];
-  } = {},
+  overrides: Partial<Parameters<typeof buildGameCardFilterContext>[0]> = {},
 ): ReturnType<typeof buildGameCardFilterContext> {
-  const { selectedAddons, ...rest } = overrides;
   return buildGameCardFilterContext({
     searchQuery: '',
     selectedLibraries: [],
+    selectedAddons: [],
     selectedLaunchers: [],
     showHidden: false,
     favoritesOnly: false,
     sort: { field: 'title', direction: 'asc' },
     page: { limit: 50, offset: 0 },
-    ...rest,
-    // Cast: production query type is AddonCapability[], but this helper
-    // intentionally accepts unregistered names for normalize regressions.
-    selectedAddons: (selectedAddons ?? []) as Parameters<
-      typeof buildGameCardFilterContext
-    >[0]['selectedAddons'],
+    ...overrides,
   });
 }
 
@@ -48,17 +40,37 @@ describe('matchesGameCardFilters', () => {
     });
     const addonOnly = createGameSummary({
       library_tags: [],
-      addon_capabilities: ['renodx'],
+      addon_capabilities: ['luma'],
     });
     const neither = createGameSummary({ library_tags: [], addon_capabilities: [] });
     const filter = ctx({
       selectedLibraries: ['dlss_super_resolution'],
-      selectedAddons: ['renodx'],
+      selectedAddons: ['luma'],
     });
 
     expect(matchesGameCardFilters(libraryOnly, filter)).toBe(true);
     expect(matchesGameCardFilters(addonOnly, filter)).toBe(true);
     expect(matchesGameCardFilters(neither, filter)).toBe(false);
+  });
+
+  it('ignores unknown selected addons so they do not empty the catalog', () => {
+    const card = createGameSummary({
+      library_tags: [],
+      addon_capabilities: ['luma'],
+    });
+    const unknownOnly = ctx({
+      // Simulate stale/corrupt filter input that bypassed stricter query typing.
+      selectedAddons: ['not-a-real-addon'] as never,
+    });
+    expect(unknownOnly.hasAddonFilter).toBe(false);
+    expect(matchesGameCardFilters(card, unknownOnly)).toBe(true);
+
+    const known = ctx({ selectedAddons: ['luma'] });
+    expect(known.hasAddonFilter).toBe(true);
+    expect(matchesGameCardFilters(card, known)).toBe(true);
+    expect(matchesGameCardFilters(createGameSummary({ addon_capabilities: [] }), known)).toBe(
+      false,
+    );
   });
 
   it('ANDs launcher with library when both are active', () => {
@@ -84,21 +96,6 @@ describe('matchesGameCardFilters', () => {
         }),
       ),
     ).toBe(true);
-  });
-  it('unknown selected addons do not empty the catalog', () => {
-    const card = createGameSummary({
-      library_tags: [],
-      addon_capabilities: ['renodx'],
-    });
-    const plain = createGameSummary({ library_tags: [], addon_capabilities: [] });
-    // Unregistered names (incl. a future/removed kind) are intentional: the
-    // filter path must normalize them away rather than empty the catalog.
-    const filter = ctx({
-      selectedAddons: ['luma', 'unknown'],
-    });
-
-    expect(matchesGameCardFilters(card, filter)).toBe(true);
-    expect(matchesGameCardFilters(plain, filter)).toBe(true);
   });
 });
 

@@ -30,6 +30,32 @@ export type DesktopCommandPayloadMap = {
   set_catalog_setting: { key: string; value: string };
   apply_swap: { gameId: string; componentId: string; artifactId: string };
   rollback_component: { gameId: string; componentId: string };
+  // Luma — preview stubs (see commands/addon-tools.ts)
+  luma_availability: { gameId: string };
+  luma_check_update: { gameId: string; deep?: boolean };
+  luma_install: { gameId: string; confirmAnticheat: boolean };
+  luma_uninstall: { gameId: string };
+  luma_update: { gameId: string; forceFull?: boolean };
+  // RenoDX — preview stubs
+  renodx_availability: { gameId: string };
+  renodx_check_update: { gameId: string };
+  renodx_install: { gameId: string; reshadeChannel: string; confirmAnticheat: boolean };
+  renodx_install_from_file: {
+    gameId: string;
+    filePath: string;
+    reshadeChannel: string;
+    confirmAnticheat: boolean;
+  };
+  renodx_uninstall: { gameId: string };
+  renodx_update: { gameId: string };
+  renodx_switch_reshade_channel: { gameId: string; reshadeChannel: string };
+  renodx_install_dlss_fix: { gameId: string };
+  renodx_uninstall_dlss_fix: { gameId: string };
+  renodx_dlss_fix_availability: { gameId: string };
+  renodx_vulkan_layer_status: undefined;
+  renodx_vulkan_layer_management_status: undefined;
+  renodx_apply_vulkan_layer: { reshadeChannel: string };
+  renodx_remove_vulkan_layer: undefined;
 };
 
 export type DesktopCommandResultMap = {
@@ -47,6 +73,27 @@ export type DesktopCommandResultMap = {
   set_catalog_setting: { saved: boolean };
   apply_swap: ApplySwapResult;
   rollback_component: RollbackComponentResult;
+  // Wire DTOs for Luma/RenoDX live in feature slices; mock results stay untyped
+  // so `app` does not import feature internals (FSD boundaries).
+  luma_availability: unknown;
+  luma_check_update: unknown;
+  luma_install: unknown;
+  luma_uninstall: unknown;
+  luma_update: unknown;
+  renodx_availability: unknown;
+  renodx_check_update: unknown;
+  renodx_install: unknown;
+  renodx_install_from_file: unknown;
+  renodx_uninstall: unknown;
+  renodx_update: unknown;
+  renodx_switch_reshade_channel: unknown;
+  renodx_install_dlss_fix: unknown;
+  renodx_uninstall_dlss_fix: unknown;
+  renodx_dlss_fix_availability: boolean;
+  renodx_vulkan_layer_status: unknown;
+  renodx_vulkan_layer_management_status: unknown;
+  renodx_apply_vulkan_layer: unknown;
+  renodx_remove_vulkan_layer: unknown;
 };
 
 export type DesktopCommand = keyof DesktopCommandPayloadMap & keyof DesktopCommandResultMap;
@@ -66,6 +113,25 @@ const ALL_DESKTOP_COMMANDS = [
   'set_catalog_setting',
   'apply_swap',
   'rollback_component',
+  'luma_availability',
+  'luma_check_update',
+  'luma_install',
+  'luma_uninstall',
+  'luma_update',
+  'renodx_availability',
+  'renodx_check_update',
+  'renodx_install',
+  'renodx_install_from_file',
+  'renodx_uninstall',
+  'renodx_update',
+  'renodx_switch_reshade_channel',
+  'renodx_install_dlss_fix',
+  'renodx_uninstall_dlss_fix',
+  'renodx_dlss_fix_availability',
+  'renodx_vulkan_layer_status',
+  'renodx_vulkan_layer_management_status',
+  'renodx_apply_vulkan_layer',
+  'renodx_remove_vulkan_layer',
 ] as const satisfies readonly DesktopCommand[];
 
 const DESKTOP_COMMAND_SET = new Set<string>(ALL_DESKTOP_COMMANDS);

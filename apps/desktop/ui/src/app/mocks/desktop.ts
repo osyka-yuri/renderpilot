@@ -8,6 +8,15 @@ import { mockApplySwap, mockRollbackComponent } from './commands/operations';
 import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
 import { mockState, createMockState } from './desktop-state';
 import {
+  mockAddonWriteUnsupported,
+  mockLumaUpdateReport,
+  mockRenoDxUpdateReport,
+  mockUnsupportedLumaAvailability,
+  mockUnsupportedRenoDxAvailability,
+  mockVulkanLayerManagementStatus,
+  mockVulkanLayerStatus,
+} from './commands/addon-tools';
+import {
   assertNever,
   isDesktopCommand,
   readObjectField,
@@ -35,6 +44,7 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         kinds: {
           libraries: { status: 'ok' },
           renodx: { status: 'ok' },
+          luma: { status: 'ok' },
           reshade: { status: 'ok' },
         },
       };
@@ -92,6 +102,48 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         readStringField(command, payload, 'gameId'),
         readStringField(command, payload, 'componentId'),
       );
+
+    case 'luma_availability':
+      readStringField(command, payload, 'gameId');
+      return mockUnsupportedLumaAvailability();
+
+    case 'luma_check_update':
+      readStringField(command, payload, 'gameId');
+      return mockLumaUpdateReport();
+
+    case 'luma_install':
+    case 'luma_uninstall':
+    case 'luma_update':
+      return mockAddonWriteUnsupported();
+
+    case 'renodx_availability':
+      readStringField(command, payload, 'gameId');
+      return mockUnsupportedRenoDxAvailability();
+
+    case 'renodx_check_update':
+      readStringField(command, payload, 'gameId');
+      return mockRenoDxUpdateReport();
+
+    case 'renodx_dlss_fix_availability':
+      readStringField(command, payload, 'gameId');
+      return false;
+
+    case 'renodx_vulkan_layer_status':
+      return mockVulkanLayerStatus();
+
+    case 'renodx_vulkan_layer_management_status':
+      return mockVulkanLayerManagementStatus();
+
+    case 'renodx_install':
+    case 'renodx_install_from_file':
+    case 'renodx_uninstall':
+    case 'renodx_update':
+    case 'renodx_switch_reshade_channel':
+    case 'renodx_install_dlss_fix':
+    case 'renodx_uninstall_dlss_fix':
+    case 'renodx_apply_vulkan_layer':
+    case 'renodx_remove_vulkan_layer':
+      return mockAddonWriteUnsupported();
 
     default:
       return assertNever(command);
