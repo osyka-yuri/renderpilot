@@ -782,32 +782,6 @@ export const en = {
   // ── Game details: Luma attribution ──
   'gameDetails.luma.attribution': 'Luma Framework by Filoppi.',
   'gameDetails.luma.attributionLink': 'View project',
-  'settings.appearance.theme.placeholder': 'Select theme',
-  'settings.tabs.reshade': 'ReShade',
-  'game.card.badge.hidden': 'Hidden',
-  'game.cover.menu.ariaLabel': 'Cover options for {title}',
-  'game.dashboard.rollbacksReady': {
-    one: '{count} rollback available',
-    other: '{count} rollbacks available',
-  },
-  'settings.about.checkingForUpdates': 'Checking…',
-  'gameDetails.noComponents.title': 'No components found',
-  'gameDetails.noComponents.description':
-    'This game does not have any supported graphics components.',
-  'nvidia.setExeFailed': 'Failed to configure the executable',
-  'nvidia.clearExeFailed': 'Failed to clear the executable configuration',
-  'user_message.missing_required_info': 'Missing required information.',
-  'user_message.unexpected_input': 'Unexpected input received.',
-  'user_message.unrecognized_option': 'Unknown option provided.',
-  'user_message.unsupported_technology_filter': 'Unsupported filter.',
-  'user_message.non_unicode_input': 'Text contains invalid characters.',
-  'suggested_action.reload_desktop': 'Restart the app and try again.',
-  'suggested_action.normalize_text': 'Check your input and try again.',
-  'gameDetails.renodx.loadFailed': 'Could not check RenoDX availability',
-  'gameDetails.renodx.retry': 'Retry',
-  'renodx.generic.unreal': 'Universal RenoDX (Unreal)',
-  'renodx.generic.unreal_extended': 'Universal RenoDX (Unreal Extended)',
-  // ── Game details: shared add-on copy ──
 } satisfies MessageDictionary;
 
 export type MessageKey = keyof typeof en;

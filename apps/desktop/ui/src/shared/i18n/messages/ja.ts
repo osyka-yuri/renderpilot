@@ -1,7 +1,7 @@
 import type { MessageKey } from './en';
 import type { MessageValue } from './types';
 
-export const ja: Partial<Record<MessageKey, MessageValue>> = {
+export const ja: Record<MessageKey, MessageValue> = {
   'nav.games': 'ゲーム',
   'nav.libraries': 'ライブラリ',
   'nav.settings': '設定',
@@ -16,7 +16,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'settings.appearance.theme.title': 'テーマ',
   'settings.appearance.theme.description': 'アプリケーションのカラーテーマを選択します。',
   'settings.appearance.theme.triggerLabel': 'テーマ',
-  'settings.appearance.theme.placeholder': 'テーマを選択',
   'settings.appearance.language.title': '言語',
   'settings.appearance.language.description': 'インターフェース言語を選択します。',
   'settings.appearance.language.triggerLabel': '言語',
@@ -36,7 +35,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'settings.language.ja': '日本語',
 
   'settings.tabs.general': '一般',
-  'settings.tabs.reshade': 'ReShade',
   'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'カタログ',
   'settings.tabs.nvidia': 'NVIDIA',
@@ -74,7 +72,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
     one: '1件のアップデートが利用可能',
     other: '{count}件のアップデートが利用可能',
   },
-  'game.card.badge.hidden': '非表示',
   'game.card.menu.ariaLabel': '{title} のオプション',
   'game.card.menu.favorite.add': 'お気に入りに追加',
   'game.card.menu.favorite.remove': 'お気に入りから削除',
@@ -85,7 +82,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
 
   'game.cover.alt': 'カバー画像',
   'game.cover.altWithTitle': 'カバー画像：{title}',
-  'game.cover.menu.ariaLabel': '{title} のカバー画像オプション',
   'game.cover.menu.fetch': 'カバー画像をダウンロード',
   'game.cover.menu.fetching': 'ダウンロード中…',
   'game.cover.menu.fetchHint': 'オンラインでカバー画像を検索します。',
@@ -97,10 +93,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'game.dashboard.summary': 'ダッシュボード',
   'game.dashboard.games': { one: '{count} 個のゲーム', other: '{count} 個のゲーム' },
   'game.dashboard.updates': { one: '{count} 件のアップデート', other: '{count} 件のアップデート' },
-  'game.dashboard.rollbacksReady': {
-    one: '{count} 件のロールバックが利用可能',
-    other: '{count} 件のロールバックが利用可能',
-  },
 
   'elevation.title': '管理者権限が必要です',
   'elevation.description': '一部の設定は管理者権限なしでは変更できません。',
@@ -155,9 +147,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.noGameSelected.title': 'ゲームが選択されていません',
   'gameDetails.noGameSelected.description':
     '詳細を表示するには、ダッシュボードからゲームを選択してください。',
-  'gameDetails.noComponents.title': 'コンポーネントが見つかりません',
-  'gameDetails.noComponents.description':
-    'このゲームにはサポートされているグラフィックコンポーネントがありません。',
 
   'gameDetails.version.noReplacements': '代替バージョンなし',
   'gameDetails.version.restoreOriginal': '元の {fileName} を復元',
@@ -183,6 +172,8 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.updateAll.action': 'すべて更新',
   'gameDetails.updateAll.actionCount': 'すべて更新 ({count})',
   'gameDetails.updateAll.upToDate': 'すべて最新です',
+  'gameDetails.updateAll.partialFailure':
+    '一部の更新に失敗しました（{count}）。詳細を確認して再試行してください。',
   'gameDetails.updateAll.tooltip': {
     one: '{count} 個のコンポーネントを最新バージョンに更新します',
     other: '{count} 個のコンポーネントを最新バージョンに更新します',
@@ -340,8 +331,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'nvidia.changeSettingFailed': '設定の適用に失敗しました',
   'nvidia.revertDefaultFailed': 'デフォルト設定への復元に失敗しました',
   'nvidia.revertBaselineFailed': '初期設定への復元に失敗しました',
-  'nvidia.setExeFailed': '実行可能ファイルの設定に失敗しました',
-  'nvidia.clearExeFailed': '実行可能ファイルの設定のクリアに失敗しました',
 
   'indicator.relaunchToToggle':
     'DLSS インジケーターを切り替えるには、管理者として再起動してください。',
@@ -385,11 +374,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'user_message.invalid_component_reference': 'コンポーネントが見つかりません。',
   'user_message.invalid_artifact_reference': 'アイテムが見つかりません。',
   'user_message.invalid_operation_reference': 'アクションが見つかりません。',
-  'user_message.missing_required_info': '必要な情報が不足しています。',
-  'user_message.unexpected_input': '予期しない入力を受け取りました。',
-  'user_message.unrecognized_option': '不明なオプションが提供されました。',
-  'user_message.unsupported_technology_filter': 'サポートされていないフィルターです。',
-  'user_message.non_unicode_input': 'テキストに無効な文字が含まれています。',
   'user_message.response_serialization_failed': 'リクエストの処理に失敗しました。',
   'user_message.plan_changed_rebuild': 'タスクが古くなっています。再試行してください。',
   'user_message.game_not_in_catalog': 'ゲームはサポートされていません。',
@@ -416,8 +400,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'suggested_action.refresh_candidates': 'リストを更新して再試行してください。',
   'suggested_action.rebuild_plan_or_reload_operations': '表示を更新して再試行してください。',
   'suggested_action.retry_after_required_data': 'しばらく待ってから再試行してください。',
-  'suggested_action.reload_desktop': 'アプリを再起動して再試行してください。',
-  'suggested_action.normalize_text': '入力を確認して再試行してください。',
   'suggested_action.inspect_logs': '問題が解決しない場合は、アプリを再起動してみてください。',
   'suggested_action.retry_or_restart': '問題が解決しない場合は、アプリを再起動してみてください。',
   'suggested_action.rebuild_operation_plan': 'アクションをやり直してください。',
@@ -431,7 +413,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'settings.about.version.title': 'アプリのバージョン',
   'settings.about.version.loading': '読み込み中...',
   'settings.about.checkForUpdates': 'アップデートを確認',
-  'settings.about.checkingForUpdates': '確認中…',
   'settings.about.updateInProgress': '更新中…',
   'settings.about.updateAvailable': 'アップデートがあります',
   'settings.about.upToDate': '最新バージョンです',
@@ -478,7 +459,6 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.description':
     'RenoDX の ReShade アドオンで、このゲームに HDR とトーンマッピングを追加します。',
   'gameDetails.renodx.loading': '利用可否を確認中…',
-  'gameDetails.renodx.loadFailed': 'RenoDX の利用可否を確認できませんでした',
   'gameDetails.renodx.installError': 'RenoDX のインストールに失敗しました',
   'gameDetails.renodx.uninstallError': 'RenoDX の削除に失敗しました',
   'gameDetails.renodx.switchError': 'ReShade チャンネルの切り替えに失敗しました',
@@ -554,13 +534,12 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.reason.api_not_allowed': 'このゲームでは許可されていないグラフィックス API',
   'gameDetails.renodx.reason.arch_unknown': '実行ファイルのアーキテクチャが不明',
   'gameDetails.otherTab': 'その他',
-  'gameDetails.renodx.retry': '再試行',
   'gameDetails.renodx.unavailable': '現在 RenoDX は利用できません。',
   'renodx.generic.universal': 'ユニバーサル RenoDX',
-  'renodx.generic.unreal': 'ユニバーサル RenoDX (Unreal)',
-  'renodx.generic.unreal_extended': 'ユニバーサル RenoDX (Unreal Extended)',
   'renodx.generic.unity': 'ユニバーサル RenoDX (Unity)',
+  'gameDetails.renodx.generic.profileTooltip': '共有エンジンプロファイルを使用しています。',
   'renodx.phase.finalizing': '完了処理中…',
+  'luma.phase.finalizing': '完了処理中…',
   'gameDetails.renodx.confidenceLabel': 'RenoDX 互換性',
   'gameDetails.renodx.confidenceVerified': '動作します',
   'gameDetails.renodx.confidenceExperimental': '対応中',
@@ -635,7 +614,9 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.component.dlssFixOffer': '利用可能 — DLSS Frame Generation のちらつきを防止',
   'gameDetails.renodx.component.dlssFixHint':
     'ReShade 全般で動作し、RenoDX 専用ではありません。ReShade をフレーム生成フレームではなくゲーム本来のフレームに描画させ、ゲームが Streamline を正しく実装している場合は DLSS（アップスケーリング）を ReShade から隠します。',
-  // ── Game details: shared add-on copy ──
+  'gameDetails.renodx.attribution': 'RenoDX by clshortfuse。',
+  'gameDetails.renodx.attributionLink': 'プロジェクトを見る',
+  // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.addon.riskSafe': 'アンチチートは検出されていません — 安全にインストールできます。',
   'gameDetails.addon.riskWarn':
     'アンチチートが検出されました — インストールするとBANされる可能性があります。',
@@ -652,4 +633,129 @@ export const ja: Partial<Record<MessageKey, MessageValue>> = {
     'このゲームには {installedAddon} がインストールされています — {blockedAddon} をインストールする前にアンインストールしてください。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     'このゲームのディスク上に {installedAddon} のファイルが見つかりました — {blockedAddon} をインストールする前に削除してください。',
+  'addon.availability.loadFailed': '確認できませんでした',
+  'addon.availability.retry': '再試行',
+  'addon.availability.checking': '確認中…',
+  // ── Game details: Luma ──
+  'gameDetails.luma.title': 'Luma Framework',
+  'gameDetails.luma.description': 'このゲームで利用可能な Luma の機能を以下に示します。',
+  'gameDetails.luma.loading': '利用可否を確認しています…',
+  'gameDetails.luma.installError': 'Luma のインストールに失敗しました',
+  'gameDetails.luma.uninstallError': 'Luma の削除に失敗しました',
+  'gameDetails.luma.updateError': 'Luma の更新に失敗しました',
+  'gameDetails.luma.repairError': 'Luma の修復に失敗しました',
+  'gameDetails.luma.unsupported': 'このゲームに対応する Luma プロファイルはありません。',
+  'gameDetails.luma.incompatible': 'Luma をインストールできません: {reason}。',
+  'gameDetails.luma.blacklisted': 'このゲームには Luma を推奨しません。',
+  'gameDetails.luma.unavailable': 'Luma は現在利用できません。',
+  'gameDetails.luma.unmanagedPresent':
+    '記録のない既存の Luma インストールがディスク上に見つかりました。手動で削除してから再インストールしてください。',
+  'gameDetails.luma.installTornWarning':
+    '前回のインストールが正常に完了しませんでした。再度インストールするとクリーンアップして修復されます。',
+  'gameDetails.luma.installTornWarningInstalled':
+    '前回の操作が正常に完了しませんでした。修復（または更新が表示されている場合は更新）でインストールを整合させてください。',
+  'gameDetails.luma.status.label': 'ステータス',
+  'gameDetails.luma.statusInstalled': 'インストール済み',
+  'gameDetails.luma.actionInstall': 'インストール',
+  'gameDetails.luma.installing': 'インストール中…',
+  'gameDetails.luma.actionUninstall': 'Luma を削除',
+  'gameDetails.luma.actionRepair': '修復',
+  'gameDetails.luma.actionUpdate': '更新',
+  'gameDetails.luma.updating': '更新中…',
+  'gameDetails.luma.actionCheckUpdates': '更新を確認',
+  'gameDetails.luma.uninstallConfirmTitle': 'このゲームから Luma を削除しますか？',
+  'gameDetails.luma.uninstallConfirmBody':
+    'Luma を削除します。Luma が DLSS DLL を管理している場合、その Library Swap を元に戻し、Luma 導入前の状態を正確に復元します。再利用された DLL と独立した Swap は変更しません。',
+  'gameDetails.luma.uninstallConfirmAction': '削除',
+  'gameDetails.luma.confirmTitle': 'アンチチートのリスクを承知の上で Luma をインストールしますか？',
+  'gameDetails.luma.vcredistWarning':
+    'このシステムに最新の Visual C++ Redistributable がない可能性があります。Luma が読み込まれない場合は Redistributable をインストールしてください。',
+  'gameDetails.luma.vcredistLink': 'Redistributable をダウンロード',
+  'gameDetails.luma.dgvoodoo.managed':
+    'RenderPilot がこの Luma プロファイル用に dgVoodoo2 {version} をインストールして設定します。',
+  // ── Game details: Luma confidence ──
+  'gameDetails.luma.confidenceLabel': 'Luma 互換性',
+  'gameDetails.luma.confidenceVerified': '動作確認済み',
+  'gameDetails.luma.confidenceExperimental': '対応中',
+  'gameDetails.luma.confidenceUntested': '未検証',
+  'gameDetails.luma.generic.engineUnreal': 'Unreal Engine',
+  'gameDetails.luma.generic.engineUnity': 'Unity',
+  'gameDetails.luma.generic.profileTooltip': '共有エンジンプロファイルを使用しています。',
+  'gameDetails.luma.features.title': '機能',
+  'gameDetails.luma.features.dlssFsr': 'DLSS / FSR',
+  'gameDetails.luma.features.hdr': 'HDR',
+  'gameDetails.luma.features.supported': '対応',
+  'gameDetails.luma.features.unsupported': '非対応',
+  'gameDetails.luma.features.experimental': '実験的',
+  'gameDetails.luma.features.unknown': '不明',
+  // ── Game details: Luma incompatibility reasons ──
+  'gameDetails.luma.reason.api_unsupported': '対応していないグラフィックスAPI',
+  'gameDetails.luma.reason.api_not_allowed': 'このゲームでは許可されていないグラフィックスAPI',
+  'gameDetails.luma.reason.arch_unknown': '実行ファイルのアーキテクチャが不明',
+  'gameDetails.luma.reason.arch_mismatch':
+    '実行ファイルのアーキテクチャがこのアドオンと一致しません',
+  // ── Game details: Luma ReShade host ──
+  'gameDetails.luma.channel.stable': 'Stable',
+  'gameDetails.luma.channel.nightly': 'Nightly',
+  'gameDetails.luma.host.version': '{version}',
+  'gameDetails.luma.host.versionUnknown': 'バージョン不明',
+  'gameDetails.luma.host.addons.none': 'アドオン非対応',
+  'gameDetails.luma.host.addons.unknown': 'アドオン対応状況不明',
+  'gameDetails.luma.host.action.update_host': '更新あり',
+  'gameDetails.luma.host.action.repair_host': 'Luma アドオン対応のため ReShade を修復',
+  'gameDetails.luma.host.customBuild': 'カスタムビルド（GShade など） — 更新は自己管理してください',
+  'gameDetails.luma.host.conflictMultiple':
+    '複数の ReShade ホストが見つかりました — アクティブなスロットを確認してください',
+  'gameDetails.luma.host.conflictBlocksInstall':
+    'このゲームが使用する ReShade スロットは既存のファイルに占有されているか、ReShade が別のスロットにあります — インストール前に解決してください。',
+  // ── Game details: Luma freshness / timestamps ──
+  'gameDetails.luma.fresh.label': 'バージョン',
+  'gameDetails.luma.fresh.current': '最新',
+  'gameDetails.luma.fresh.available': '更新あり',
+  'gameDetails.luma.fresh.channelMismatch': 'チャンネル変更が可能です',
+  'gameDetails.luma.fresh.validationRequired': '検証が必要です',
+  'gameDetails.luma.fresh.unknown': '確認できませんでした',
+  'gameDetails.luma.fresh.checking': '確認中…',
+  'gameDetails.luma.updatesNotTracked': '更新は追跡されていません',
+  'gameDetails.luma.addonDated': 'アドオンの日付: {date}',
+  'gameDetails.luma.installedOn': '{date} にインストール',
+  'gameDetails.luma.lastChecked': '{time}に確認',
+  'gameDetails.luma.lastCheckedNever': 'まだ確認されていません',
+  // ── Game details: Luma components ──
+  'gameDetails.luma.component.reshade': 'ReShade ホスト',
+  'gameDetails.luma.component.addon': 'Luma アドオン',
+  'gameDetails.luma.component.addonDesc': 'このゲーム用の Luma 機能',
+  'gameDetails.luma.component.dgvoodoo': 'dgVoodoo2 ラッパー',
+  'gameDetails.luma.component.dgvoodooDesc': '管理対象の D3D9 ブリッジ、バージョン {version}',
+  // ── Game details: Luma launch arguments ──
+  'gameDetails.luma.launchArgs.instructions.steam':
+    'Steam 経由でゲームを起動する場合は、ゲームを右クリック → プロパティ → 全般 → 起動オプションで追加してください。',
+  'gameDetails.luma.launchArgs.instructions.gog':
+    'GOG Galaxy 経由でゲームを起動する場合は、ゲーム設定 → インストールの管理 → 構成で追加してください。',
+  'gameDetails.luma.launchArgs.instructions.epic':
+    'Epic Games Launcher 経由でゲームを起動する場合は、ゲームを右クリック → 管理 → 追加のコマンドライン引数で追加してください。',
+  'gameDetails.luma.launchArgs.instructions.ea':
+    'EA app 経由でゲームを起動する場合は、ゲームを選択 → 管理 → プロパティを表示 → 詳細な起動オプションで追加してください。',
+  'gameDetails.luma.launchArgs.instructions.ubisoft':
+    'Ubisoft Connect 経由でゲームを起動する場合は、ゲームを選択 → プロパティ → 起動引数を追加で追加してください。',
+  'gameDetails.luma.launchArgs.instructions.other':
+    '実際にゲームを起動する方法に引数を追加してください。ランチャー、ショートカットのリンク先、バッチファイル、または別のローダーに設定します。',
+  'gameDetails.luma.launchArgs.title': '起動引数が必要です',
+  'gameDetails.luma.launchArgs.dx11Title': 'この Luma プロファイルには DirectX 11 が必要です',
+  'gameDetails.luma.launchArgs.copyStep': '必要な起動引数をコピーしてください:',
+  'gameDetails.luma.launchArgs.copy': '引数をコピー',
+  'gameDetails.luma.launchArgs.copied': 'コピーしました',
+  'gameDetails.luma.launchArgs.copyFailed': '起動引数をコピーできませんでした',
+  // ── Game details: Luma attribution ──
+  'gameDetails.luma.attribution': 'Luma Framework by Filoppi。',
+  'gameDetails.luma.attributionLink': 'プロジェクトを見る',
+  'gameDetails.luma.guidance.gameSetting': 'ゲーム内設定',
+  'gameDetails.luma.guidance.engineIni': '手動 INI 変更',
+  'gameDetails.luma.guidance.launchArgument': '起動引数',
+  'gameDetails.luma.guidance.warning': '重要',
+  'gameDetails.luma.guidance.compatibility': '互換性に関する注意',
+  'gameDetails.luma.guidance.externalTool': 'サードパーティーツール',
+  'gameDetails.luma.guidance.copy': 'コピー',
+  'gameDetails.luma.guidance.copied': 'コピーしました',
+  'gameDetails.luma.guidance.copyFailed': 'コピーできませんでした',
 };

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { getLocale, setLanguageMode, t, translateKey } from './index';
+import { lookupLocalizedMessage } from './lookup';
 import { resolveLocale } from './locale';
 
 // The shared test setup pins the locale to 'en'; restore it after each case so
@@ -93,6 +94,20 @@ describe('i18n', () => {
       );
     });
 
+    it('uses the Luma guidance override in every translated locale and the manifest fallback in English', () => {
+      const key = 'luma.cod-black-ops-3.bundled_dlss';
+      const fallback =
+        "Luma reserves the game's bundled DLSS library and restores it when removed.";
+
+      for (const locale of ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const) {
+        setLanguageMode(locale);
+        expect(translateKey(key, fallback)).not.toBe(fallback);
+      }
+
+      setLanguageMode('en');
+      expect(translateKey(key, fallback)).toBe(fallback);
+    });
+
     it('returns the fallback for an unknown key', () => {
       setLanguageMode('en');
       expect(translateKey('does.not.exist', 'Fallback text')).toBe('Fallback text');
@@ -102,6 +117,32 @@ describe('i18n', () => {
       setLanguageMode('en');
       expect(translateKey('missing.key', '{action} failed', { action: 'Save' })).toBe(
         'Save failed',
+      );
+    });
+  });
+
+  describe('catalog precedence', () => {
+    it('checks localized dynamic catalogs before the English static fallback', () => {
+      const staticMessages = {
+        en: { collision: 'English static' },
+        ru: {},
+      };
+      const dynamicCatalogs = [{ ru: { collision: 'Русский dynamic' } }];
+
+      expect(lookupLocalizedMessage('collision', 'ru', staticMessages, dynamicCatalogs)).toBe(
+        'Русский dynamic',
+      );
+    });
+
+    it('keeps the current locale static catalog authoritative', () => {
+      const staticMessages = {
+        en: { collision: 'English static' },
+        ru: { collision: 'Русский static' },
+      };
+      const dynamicCatalogs = [{ ru: { collision: 'Русский dynamic' } }];
+
+      expect(lookupLocalizedMessage('collision', 'ru', staticMessages, dynamicCatalogs)).toBe(
+        'Русский static',
       );
     });
   });

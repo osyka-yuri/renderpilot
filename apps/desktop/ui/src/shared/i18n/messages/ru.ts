@@ -5,7 +5,7 @@ import type { MessageValue } from './types';
  * Russian catalog. Typed as `Record<MessageKey, MessageValue>` so a missing or
  * stray key is a compile-time error against the English source of truth.
  */
-export const ru: Partial<Record<MessageKey, MessageValue>> = {
+export const ru: Record<MessageKey, MessageValue> = {
   // ── App shell / navigation ──
   'nav.games': 'Игры',
   'nav.libraries': 'Библиотеки',
@@ -22,7 +22,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'settings.appearance.theme.title': 'Тема',
   'settings.appearance.theme.description': 'Выберите цветовую тему приложения.',
   'settings.appearance.theme.triggerLabel': 'Тема',
-  'settings.appearance.theme.placeholder': 'Выберите тему',
   'settings.appearance.language.title': 'Язык',
   'settings.appearance.language.description': 'Выберите язык интерфейса.',
   'settings.appearance.language.triggerLabel': 'Язык',
@@ -45,7 +44,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
 
   // ── Settings: tabs ──
   'settings.tabs.general': 'Общие',
-  'settings.tabs.reshade': 'ReShade',
   'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': 'Каталог',
   'settings.tabs.nvidia': 'NVIDIA',
@@ -85,7 +83,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
     many: 'Доступно {count} обновлений',
     other: 'Доступно {count} обновлений',
   },
-  'game.card.badge.hidden': 'Скрыто',
   'game.card.menu.ariaLabel': 'Параметры для {title}',
   'game.card.menu.favorite.add': 'Добавить в избранное',
   'game.card.menu.favorite.remove': 'Убрать из избранного',
@@ -97,7 +94,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   // ── Game cover ──
   'game.cover.alt': 'Обложка',
   'game.cover.altWithTitle': 'Обложка: {title}',
-  'game.cover.menu.ariaLabel': 'Параметры обложки для {title}',
   'game.cover.menu.fetch': 'Скачать обложку',
   'game.cover.menu.fetching': 'Скачивание…',
   'game.cover.menu.fetchHint': 'Найти и скачать обложку из интернета.',
@@ -119,12 +115,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
     few: '{count} обновления',
     many: '{count} обновлений',
     other: '{count} обновлений',
-  },
-  'game.dashboard.rollbacksReady': {
-    one: '{count} откат доступен',
-    few: '{count} отката доступно',
-    many: '{count} откатов доступно',
-    other: '{count} откатов доступно',
   },
 
   // ── Elevation banner ──
@@ -182,7 +172,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'settings.about.version.title': 'Версия приложения',
   'settings.about.version.loading': 'Определение...',
   'settings.about.checkForUpdates': 'Проверить обновления',
-  'settings.about.checkingForUpdates': 'Проверка…',
   'settings.about.updateInProgress': 'Обновление…',
   'settings.about.updateAvailable': 'Доступно обновление',
   'settings.about.upToDate': 'У вас установлена последняя версия',
@@ -231,8 +220,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   // ── Game details: empty states ──
   'gameDetails.noGameSelected.title': 'Игра не выбрана',
   'gameDetails.noGameSelected.description': 'Выберите игру из списка для просмотра деталей.',
-  'gameDetails.noComponents.title': 'Компоненты не найдены',
-  'gameDetails.noComponents.description': 'У этой игры нет поддерживаемых графических компонентов.',
 
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'Нет альтернативных версий',
@@ -262,6 +249,8 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.updateAll.action': 'Обновить всё',
   'gameDetails.updateAll.actionCount': 'Обновить всё ({count})',
   'gameDetails.updateAll.upToDate': 'Всё актуально',
+  'gameDetails.updateAll.partialFailure':
+    'Часть обновлений не удалась ({count}). Проверьте детали и повторите.',
   'gameDetails.updateAll.tooltip': {
     one: 'Обновить {count} компонент до последней версии',
     few: 'Обновить {count} компонента до последней версии',
@@ -443,8 +432,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'nvidia.changeSettingFailed': 'Не удалось применить настройки',
   'nvidia.revertDefaultFailed': 'Не удалось сбросить настройки',
   'nvidia.revertBaselineFailed': 'Не удалось восстановить исходные настройки',
-  'nvidia.setExeFailed': 'Не удалось настроить исполняемый файл',
-  'nvidia.clearExeFailed': 'Не удалось сбросить настройки файла',
 
   // ── DLSS indicator context (toasts) ──
   'indicator.relaunchToToggle':
@@ -489,11 +476,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'user_message.invalid_component_reference': 'Компонент не найден.',
   'user_message.invalid_artifact_reference': 'Объект не найден.',
   'user_message.invalid_operation_reference': 'Действие не найдено.',
-  'user_message.missing_required_info': 'Не хватает данных для выполнения.',
-  'user_message.unexpected_input': 'Получены неожиданные данные.',
-  'user_message.unrecognized_option': 'Указан неизвестный параметр.',
-  'user_message.unsupported_technology_filter': 'Этот фильтр не поддерживается.',
-  'user_message.non_unicode_input': 'Текст содержит недопустимые символы.',
   'user_message.response_serialization_failed': 'Не удалось обработать запрос.',
   'user_message.plan_changed_rebuild': 'Задача устарела. Попробуйте снова.',
   'user_message.game_not_in_catalog': 'Игра не поддерживается.',
@@ -522,8 +504,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'suggested_action.refresh_candidates': 'Обновите список и попробуйте снова.',
   'suggested_action.rebuild_plan_or_reload_operations': 'Обновите страницу и попробуйте снова.',
   'suggested_action.retry_after_required_data': 'Подождите немного и попробуйте снова.',
-  'suggested_action.reload_desktop': 'Перезапустите приложение и попробуйте снова.',
-  'suggested_action.normalize_text': 'Проверьте введённые данные и попробуйте снова.',
   'suggested_action.inspect_logs':
     'Если проблема сохраняется, попробуйте перезапустить приложение.',
   'suggested_action.retry_or_restart':
@@ -536,7 +516,6 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': 'Добавьте HDR и тон-маппинг в игру через ReShade-аддон RenoDX.',
   'gameDetails.renodx.loading': 'Проверка доступности…',
-  'gameDetails.renodx.loadFailed': 'Не удалось проверить доступность RenoDX',
   'gameDetails.renodx.installError': 'Не удалось установить RenoDX',
   'gameDetails.renodx.uninstallError': 'Не удалось удалить RenoDX',
   'gameDetails.renodx.switchError': 'Не удалось переключить канал ReShade',
@@ -610,13 +589,12 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.reason.api_not_allowed': 'графический API не разрешён для этой игры',
   'gameDetails.renodx.reason.arch_unknown': 'неизвестная разрядность исполняемого файла',
   'gameDetails.otherTab': 'Другое',
-  'gameDetails.renodx.retry': 'Повторить',
   'gameDetails.renodx.unavailable': 'RenoDX сейчас недоступен.',
   'renodx.generic.universal': 'Универсальный RenoDX',
-  'renodx.generic.unreal': 'Универсальный RenoDX (Unreal)',
-  'renodx.generic.unreal_extended': 'Универсальный RenoDX (Unreal Extended)',
   'renodx.generic.unity': 'Универсальный RenoDX (Unity)',
+  'gameDetails.renodx.generic.profileTooltip': 'Используется общий профиль движка.',
   'renodx.phase.finalizing': 'Завершение…',
+  'luma.phase.finalizing': 'Завершение…',
   'gameDetails.renodx.confidenceLabel': 'Совместимость RenoDX',
   'gameDetails.renodx.confidenceVerified': 'Работает',
   'gameDetails.renodx.confidenceExperimental': 'В работе',
@@ -690,7 +668,9 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
     'Доступно — убирает мерцание при DLSS Frame Generation',
   'gameDetails.renodx.component.dlssFixHint':
     'Это общее исправление для ReShade, не специфичное для RenoDX. Оно заставляет ReShade рисовать по нативным кадрам игры, а не по кадрам Frame Generation, и скрывает DLSS-апскейлинг от ReShade, если игра корректно реализует Streamline.',
-  // ── Game details: shared add-on copy ──
+  'gameDetails.renodx.attribution': 'RenoDX от clshortfuse.',
+  'gameDetails.renodx.attributionLink': 'Открыть проект',
+  // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.addon.riskSafe': 'Античит не обнаружен — установка безопасна.',
   'gameDetails.addon.riskWarn': 'Обнаружен античит — установка может привести к бану.',
   'addon.risk.sp_safe':
@@ -706,4 +686,129 @@ export const ru: Partial<Record<MessageKey, MessageValue>> = {
     'Для этой игры установлен {installedAddon} — удалите его перед установкой {blockedAddon}.',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     'На диске найдены файлы {installedAddon} для этой игры — удалите их перед установкой {blockedAddon}.',
+  'addon.availability.loadFailed': 'Не удалось проверить',
+  'addon.availability.retry': 'Повторить',
+  'addon.availability.checking': 'Проверка…',
+  // ── Game details: Luma ──
+  'gameDetails.luma.title': 'Luma Framework',
+  'gameDetails.luma.description': 'Возможности Luma для этой игры указаны ниже.',
+  'gameDetails.luma.loading': 'Проверка доступности…',
+  'gameDetails.luma.installError': 'Не удалось установить Luma',
+  'gameDetails.luma.uninstallError': 'Не удалось удалить Luma',
+  'gameDetails.luma.updateError': 'Не удалось обновить Luma',
+  'gameDetails.luma.repairError': 'Не удалось восстановить Luma',
+  'gameDetails.luma.unsupported': 'Для этой игры нет профиля Luma.',
+  'gameDetails.luma.incompatible': 'Luma нельзя установить: {reason}.',
+  'gameDetails.luma.blacklisted': 'Luma не рекомендуется для этой игры.',
+  'gameDetails.luma.unavailable': 'Luma сейчас недоступна.',
+  'gameDetails.luma.unmanagedPresent':
+    'На диске найдена установка Luma без отслеживаемой записи. Удалите её вручную, затем переустановите.',
+  'gameDetails.luma.installTornWarning':
+    'Предыдущая установка завершилась некорректно. Повторная установка очистит и восстановит её.',
+  'gameDetails.luma.installTornWarningInstalled':
+    'Последняя операция завершилась некорректно. Используйте «Восстановить» (или «Обновить», если доступно), чтобы завершить согласование установки.',
+  'gameDetails.luma.status.label': 'Статус',
+  'gameDetails.luma.statusInstalled': 'Установлена',
+  'gameDetails.luma.actionInstall': 'Установить',
+  'gameDetails.luma.installing': 'Установка…',
+  'gameDetails.luma.actionUninstall': 'Удалить Luma',
+  'gameDetails.luma.actionRepair': 'Восстановить',
+  'gameDetails.luma.actionUpdate': 'Обновить',
+  'gameDetails.luma.updating': 'Обновление…',
+  'gameDetails.luma.actionCheckUpdates': 'Проверить обновления',
+  'gameDetails.luma.uninstallConfirmTitle': 'Удалить Luma из этой игры?',
+  'gameDetails.luma.uninstallConfirmBody':
+    'Luma будет удалена. Если DLSS DLL принадлежит Luma, её Library Swap будет отменён с восстановлением точного состояния до Luma. Переиспользованные DLL и независимые swap-операции останутся без изменений.',
+  'gameDetails.luma.uninstallConfirmAction': 'Удалить',
+  'gameDetails.luma.confirmTitle': 'Установить Luma несмотря на риск из-за античита?',
+  'gameDetails.luma.vcredistWarning':
+    'На системе может отсутствовать актуальный Visual C++ Redistributable. Если Luma не загружается, установите redistributable.',
+  'gameDetails.luma.vcredistLink': 'Скачать redistributable',
+  'gameDetails.luma.dgvoodoo.managed':
+    'RenderPilot установит и настроит dgVoodoo2 {version} для этого профиля Luma.',
+  // ── Game details: Luma confidence ──
+  'gameDetails.luma.confidenceLabel': 'Совместимость Luma',
+  'gameDetails.luma.confidenceVerified': 'Работает',
+  'gameDetails.luma.confidenceExperimental': 'В работе',
+  'gameDetails.luma.confidenceUntested': 'Не проверено',
+  'gameDetails.luma.generic.engineUnreal': 'Unreal Engine',
+  'gameDetails.luma.generic.engineUnity': 'Unity',
+  'gameDetails.luma.generic.profileTooltip': 'Используется общий профиль движка.',
+  'gameDetails.luma.features.title': 'Возможности',
+  'gameDetails.luma.features.dlssFsr': 'DLSS / FSR',
+  'gameDetails.luma.features.hdr': 'HDR',
+  'gameDetails.luma.features.supported': 'Поддерживается',
+  'gameDetails.luma.features.unsupported': 'Не поддерживается',
+  'gameDetails.luma.features.experimental': 'Экспериментально',
+  'gameDetails.luma.features.unknown': 'Неизвестно',
+  'gameDetails.luma.guidance.gameSetting': 'Настройка в игре',
+  'gameDetails.luma.guidance.engineIni': 'Ручное изменение INI',
+  'gameDetails.luma.guidance.launchArgument': 'Аргумент запуска',
+  'gameDetails.luma.guidance.warning': 'Важно',
+  'gameDetails.luma.guidance.compatibility': 'Примечание о совместимости',
+  'gameDetails.luma.guidance.externalTool': 'Сторонний инструмент',
+  'gameDetails.luma.guidance.copy': 'Копировать',
+  'gameDetails.luma.guidance.copied': 'Скопировано',
+  'gameDetails.luma.guidance.copyFailed': 'Не удалось скопировать',
+  // ── Game details: Luma incompatibility reasons ──
+  'gameDetails.luma.reason.api_unsupported': 'неподдерживаемый графический API',
+  'gameDetails.luma.reason.api_not_allowed': 'графический API не разрешён для этой игры',
+  'gameDetails.luma.reason.arch_unknown': 'неизвестная разрядность исполняемого файла',
+  'gameDetails.luma.reason.arch_mismatch': 'разрядность исполняемого файла не подходит для аддона',
+  // ── Game details: Luma ReShade host ──
+  'gameDetails.luma.channel.stable': 'Stable',
+  'gameDetails.luma.channel.nightly': 'Nightly',
+  'gameDetails.luma.host.version': '{version}',
+  'gameDetails.luma.host.versionUnknown': 'Версия неизвестна',
+  'gameDetails.luma.host.addons.none': 'аддоны не поддерживаются',
+  'gameDetails.luma.host.addons.unknown': 'поддержка аддонов неизвестна',
+  'gameDetails.luma.host.action.update_host': 'доступно обновление',
+  'gameDetails.luma.host.action.repair_host': 'Восстановить ReShade для поддержки аддона Luma',
+  'gameDetails.luma.host.customBuild':
+    'Кастомная сборка (например, GShade) — вы обновляете её сами',
+  'gameDetails.luma.host.conflictMultiple':
+    'Найдено несколько хостов ReShade — проверьте активный слот',
+  'gameDetails.luma.host.conflictBlocksInstall':
+    'Слот ReShade, который использует игра, занят другим файлом, или ReShade установлен в другом слоте — решите это перед установкой.',
+  // ── Game details: Luma freshness / timestamps ──
+  'gameDetails.luma.fresh.label': 'Версия',
+  'gameDetails.luma.fresh.current': 'Последняя',
+  'gameDetails.luma.fresh.available': 'Доступно обновление',
+  'gameDetails.luma.fresh.channelMismatch': 'Доступна смена канала',
+  'gameDetails.luma.fresh.validationRequired': 'Требуется проверка',
+  'gameDetails.luma.fresh.unknown': 'Не удалось проверить',
+  'gameDetails.luma.fresh.checking': 'Проверка…',
+  'gameDetails.luma.updatesNotTracked': 'Обновления не отслеживаются',
+  'gameDetails.luma.addonDated': 'Аддон от {date}',
+  'gameDetails.luma.installedOn': 'Установлено {date}',
+  'gameDetails.luma.lastChecked': 'Проверено {time}',
+  'gameDetails.luma.lastCheckedNever': 'Ещё не проверялось',
+  // ── Game details: Luma components ──
+  'gameDetails.luma.component.reshade': 'Хост ReShade',
+  'gameDetails.luma.component.addon': 'Аддон Luma',
+  'gameDetails.luma.component.addonDesc': 'Возможности Luma для этой игры',
+  'gameDetails.luma.component.dgvoodoo': 'Wrapper dgVoodoo2',
+  'gameDetails.luma.component.dgvoodooDesc': 'Управляемый D3D9-мост, версия {version}',
+  // ── Game details: Luma launch arguments ──
+  'gameDetails.luma.launchArgs.instructions.steam':
+    'Если запускаете игру через Steam, добавьте их там: правой кнопкой по игре → Свойства → Общие → Параметры запуска.',
+  'gameDetails.luma.launchArgs.instructions.gog':
+    'Если запускаете игру через GOG Galaxy, добавьте их там: настройки игры → Управление установкой → Настроить.',
+  'gameDetails.luma.launchArgs.instructions.epic':
+    'Если запускаете игру через Epic Games Launcher, добавьте их там: правой кнопкой по игре → Управление → Дополнительные аргументы командной строки.',
+  'gameDetails.luma.launchArgs.instructions.ea':
+    'Если запускаете игру через EA app, добавьте их там: выберите игру → Управление → Просмотреть свойства → Расширенные параметры запуска.',
+  'gameDetails.luma.launchArgs.instructions.ubisoft':
+    'Если запускаете игру через Ubisoft Connect, добавьте их там: выберите игру → Свойства → Добавить аргументы запуска.',
+  'gameDetails.luma.launchArgs.instructions.other':
+    'Используйте способ запуска, которым игра действительно запускается. Добавьте аргументы в лаунчер, цель ярлыка, bat-файл или другой загрузчик.',
+  'gameDetails.luma.launchArgs.title': 'Требуются параметры запуска',
+  'gameDetails.luma.launchArgs.dx11Title': 'Для этого профиля Luma требуется DirectX 11',
+  'gameDetails.luma.launchArgs.copyStep': 'Скопируйте требуемые параметры запуска:',
+  'gameDetails.luma.launchArgs.copy': 'Скопировать аргументы',
+  'gameDetails.luma.launchArgs.copied': 'Скопировано',
+  'gameDetails.luma.launchArgs.copyFailed': 'Не удалось скопировать аргументы запуска',
+  // ── Game details: Luma attribution ──
+  'gameDetails.luma.attribution': 'Luma Framework от Filoppi.',
+  'gameDetails.luma.attributionLink': 'Открыть проект',
 };

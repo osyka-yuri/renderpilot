@@ -1,7 +1,7 @@
 import type { MessageKey } from './en';
 import type { MessageValue } from './types';
 
-export const zh: Partial<Record<MessageKey, MessageValue>> = {
+export const zh: Record<MessageKey, MessageValue> = {
   'nav.games': '游戏',
   'nav.libraries': '组件库',
   'nav.settings': '设置',
@@ -16,7 +16,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'settings.appearance.theme.title': '主题',
   'settings.appearance.theme.description': '选择应用程序的颜色主题。',
   'settings.appearance.theme.triggerLabel': '主题',
-  'settings.appearance.theme.placeholder': '选择主题',
   'settings.appearance.language.title': '语言',
   'settings.appearance.language.description': '选择界面语言。',
   'settings.appearance.language.triggerLabel': '语言',
@@ -36,7 +35,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'settings.language.ja': '日本語',
 
   'settings.tabs.general': '常规',
-  'settings.tabs.reshade': 'ReShade',
   'settings.tabs.renodx': 'RenoDX',
   'settings.tabs.catalog': '目录',
   'settings.tabs.nvidia': 'NVIDIA',
@@ -70,7 +68,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
     one: '有 1 个可用更新',
     other: '有 {count} 个可用更新',
   },
-  'game.card.badge.hidden': '已隐藏',
   'game.card.menu.ariaLabel': '{title} 的选项',
   'game.card.menu.favorite.add': '添加到收藏',
   'game.card.menu.favorite.remove': '从收藏中移除',
@@ -81,7 +78,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
 
   'game.cover.alt': '封面',
   'game.cover.altWithTitle': '封面：{title}',
-  'game.cover.menu.ariaLabel': '{title} 的封面选项',
   'game.cover.menu.fetch': '下载封面',
   'game.cover.menu.fetching': '正在下载…',
   'game.cover.menu.fetchHint': '在线搜索封面。',
@@ -93,10 +89,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'game.dashboard.summary': '仪表板',
   'game.dashboard.games': { one: '{count} 个游戏', other: '{count} 个游戏' },
   'game.dashboard.updates': { one: '{count} 个更新', other: '{count} 个更新' },
-  'game.dashboard.rollbacksReady': {
-    one: '有 {count} 个可用回滚',
-    other: '有 {count} 个可用回滚',
-  },
 
   'elevation.title': '需要管理员权限',
   'elevation.description': '需要管理员权限才能更改某些设置。',
@@ -146,8 +138,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
 
   'gameDetails.noGameSelected.title': '未选择游戏',
   'gameDetails.noGameSelected.description': '从仪表板中选择一个游戏以查看其详情。',
-  'gameDetails.noComponents.title': '未找到组件',
-  'gameDetails.noComponents.description': '此游戏没有任何受支持的图形组件。',
 
   'gameDetails.version.noReplacements': '没有替代版本',
   'gameDetails.version.restoreOriginal': '恢复原始的 {fileName}',
@@ -172,6 +162,7 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.updateAll.action': '全部更新',
   'gameDetails.updateAll.actionCount': '全部更新 ({count})',
   'gameDetails.updateAll.upToDate': '一切均为最新',
+  'gameDetails.updateAll.partialFailure': '部分更新失败（{count}）。请查看详情后重试。',
   'gameDetails.updateAll.tooltip': {
     one: '将 {count} 个组件更新到最新版本',
     other: '将 {count} 个组件更新到最新版本',
@@ -321,8 +312,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'nvidia.changeSettingFailed': '无法应用设置',
   'nvidia.revertDefaultFailed': '无法恢复默认设置',
   'nvidia.revertBaselineFailed': '无法恢复初始设置',
-  'nvidia.setExeFailed': '配置可执行文件失败',
-  'nvidia.clearExeFailed': '清除可执行文件配置失败',
 
   'indicator.relaunchToToggle': '以管理员身份重新启动以切换 DLSS 指示器。',
   'indicator.changeFailed': '无法切换 DLSS 指示器',
@@ -361,11 +350,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'user_message.invalid_component_reference': '未找到组件。',
   'user_message.invalid_artifact_reference': '未找到项目。',
   'user_message.invalid_operation_reference': '未找到操作。',
-  'user_message.missing_required_info': '缺少必需的信息。',
-  'user_message.unexpected_input': '收到意外的输入。',
-  'user_message.unrecognized_option': '提供了未知选项。',
-  'user_message.unsupported_technology_filter': '不支持的过滤器。',
-  'user_message.non_unicode_input': '文本包含无效字符。',
   'user_message.response_serialization_failed': '处理请求失败。',
   'user_message.plan_changed_rebuild': '任务已过期。请重试。',
   'user_message.game_not_in_catalog': '不支持此游戏。',
@@ -392,8 +376,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'suggested_action.refresh_candidates': '刷新列表并重试。',
   'suggested_action.rebuild_plan_or_reload_operations': '刷新视图并重试。',
   'suggested_action.retry_after_required_data': '请稍候再试。',
-  'suggested_action.reload_desktop': '重新启动应用程序并重试。',
-  'suggested_action.normalize_text': '检查您的输入并重试。',
   'suggested_action.inspect_logs': '如果问题仍然存在，请尝试重新启动应用程序。',
   'suggested_action.retry_or_restart': '如果问题仍然存在，请尝试重新启动应用程序。',
   'suggested_action.rebuild_operation_plan': '请重新开始操作。',
@@ -405,7 +387,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'settings.about.version.title': '应用版本',
   'settings.about.version.loading': '加载中...',
   'settings.about.checkForUpdates': '检查更新',
-  'settings.about.checkingForUpdates': '正在检查…',
   'settings.about.updateInProgress': '正在更新…',
   'settings.about.updateAvailable': '有可用更新',
   'settings.about.upToDate': '已是最新版本',
@@ -448,7 +429,6 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': '通过 RenoDX 的 ReShade 插件为本游戏添加 HDR 与色调映射。',
   'gameDetails.renodx.loading': '正在检查可用性…',
-  'gameDetails.renodx.loadFailed': '无法检查 RenoDX 可用性',
   'gameDetails.renodx.installError': 'RenoDX 安装失败',
   'gameDetails.renodx.uninstallError': 'RenoDX 卸载失败',
   'gameDetails.renodx.switchError': 'ReShade 通道切换失败',
@@ -516,13 +496,12 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.reason.api_not_allowed': '此游戏不允许该图形 API',
   'gameDetails.renodx.reason.arch_unknown': '无法确定可执行文件架构',
   'gameDetails.otherTab': '其他',
-  'gameDetails.renodx.retry': '重试',
   'gameDetails.renodx.unavailable': 'RenoDX 当前不可用。',
   'renodx.generic.universal': '通用 RenoDX',
-  'renodx.generic.unreal': '通用 RenoDX (Unreal)',
-  'renodx.generic.unreal_extended': '通用 RenoDX (Unreal Extended)',
   'renodx.generic.unity': '通用 RenoDX (Unity)',
+  'gameDetails.renodx.generic.profileTooltip': '正在使用共享的引擎配置。',
   'renodx.phase.finalizing': '完成中…',
+  'luma.phase.finalizing': '完成中…',
   'gameDetails.renodx.confidenceLabel': 'RenoDX 兼容性',
   'gameDetails.renodx.confidenceVerified': '可用',
   'gameDetails.renodx.confidenceExperimental': '进行中',
@@ -589,7 +568,9 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
   'gameDetails.renodx.component.dlssFixOffer': '可用 — 防止 DLSS Frame Generation 闪烁',
   'gameDetails.renodx.component.dlssFixHint':
     '这是通用的 ReShade 修复，并非 RenoDX 专用。它让 ReShade 在游戏的原生帧上绘制，而不是帧生成帧，并在游戏正确实现 Streamline 时对 ReShade 隐藏 DLSS（超分辨率）。',
-  // ── Game details: shared add-on copy ──
+  'gameDetails.renodx.attribution': 'RenoDX 由 clshortfuse 开发。',
+  'gameDetails.renodx.attributionLink': '查看项目',
+  // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.addon.riskSafe': '未检测到反作弊 — 安装是安全的。',
   'gameDetails.addon.riskWarn': '检测到反作弊 — 安装可能导致封号。',
   'addon.risk.sp_safe': '未发现已知的反作弊签名——安装 {addonName} 可能是安全的，但无法保证。',
@@ -603,4 +584,126 @@ export const zh: Partial<Record<MessageKey, MessageValue>> = {
     '此游戏已安装 {installedAddon} — 请先卸载它，再安装 {blockedAddon}。',
   'gameDetails.addon.blockedByOtherAddon.unmanaged':
     '在磁盘上发现此游戏的 {installedAddon} 文件 — 请先删除它们，再安装 {blockedAddon}。',
+  'addon.availability.loadFailed': '无法检查',
+  'addon.availability.retry': '重试',
+  'addon.availability.checking': '正在检查…',
+  // ── Game details: Luma ──
+  'gameDetails.luma.title': 'Luma Framework',
+  'gameDetails.luma.description': '下方列出了此游戏可用的 Luma 功能。',
+  'gameDetails.luma.loading': '正在检查可用性…',
+  'gameDetails.luma.installError': 'Luma 安装失败',
+  'gameDetails.luma.uninstallError': 'Luma 卸载失败',
+  'gameDetails.luma.updateError': 'Luma 更新失败',
+  'gameDetails.luma.repairError': 'Luma 修复失败',
+  'gameDetails.luma.unsupported': '此游戏没有可用的 Luma 配置。',
+  'gameDetails.luma.incompatible': '无法安装 Luma：{reason}。',
+  'gameDetails.luma.blacklisted': '不建议为此游戏安装 Luma。',
+  'gameDetails.luma.unavailable': 'Luma 当前不可用。',
+  'gameDetails.luma.unmanagedPresent':
+    '在磁盘上发现现有的 Luma 安装，但没有对应的跟踪记录。请手动删除后重新安装。',
+  'gameDetails.luma.installTornWarning': '之前的安装未正常完成。重新安装将清理并修复它。',
+  'gameDetails.luma.installTornWarningInstalled':
+    '上次操作未正常完成。请使用“修复”（或在显示时使用“更新”）以完成安装协调。',
+  'gameDetails.luma.status.label': '状态',
+  'gameDetails.luma.statusInstalled': '已安装',
+  'gameDetails.luma.actionInstall': '安装',
+  'gameDetails.luma.installing': '正在安装…',
+  'gameDetails.luma.actionUninstall': '移除 Luma',
+  'gameDetails.luma.actionRepair': '修复',
+  'gameDetails.luma.actionUpdate': '更新',
+  'gameDetails.luma.updating': '正在更新…',
+  'gameDetails.luma.actionCheckUpdates': '检查更新',
+  'gameDetails.luma.uninstallConfirmTitle': '要从此游戏中移除 Luma 吗？',
+  'gameDetails.luma.uninstallConfirmBody':
+    '这将移除 Luma。如果 DLSS DLL 由 Luma 管理，其 Library Swap 会被回滚并精确恢复到安装 Luma 前的状态。复用的 DLL 和独立的 Swap 不会更改。',
+  'gameDetails.luma.uninstallConfirmAction': '移除',
+  'gameDetails.luma.confirmTitle': '是否在存在反作弊风险的情况下仍安装 Luma？',
+  'gameDetails.luma.vcredistWarning':
+    '系统上可能缺少较新的 Visual C++ Redistributable。如果 Luma 无法加载，请安装该运行库。',
+  'gameDetails.luma.vcredistLink': '下载 Redistributable',
+  'gameDetails.luma.dgvoodoo.managed':
+    'RenderPilot 将为此 Luma 配置文件安装并配置 dgVoodoo2 {version}。',
+  // ── Game details: Luma confidence ──
+  'gameDetails.luma.confidenceLabel': 'Luma 兼容性',
+  'gameDetails.luma.confidenceVerified': '可用',
+  'gameDetails.luma.confidenceExperimental': '完善中',
+  'gameDetails.luma.confidenceUntested': '未验证',
+  'gameDetails.luma.generic.engineUnreal': 'Unreal Engine',
+  'gameDetails.luma.generic.engineUnity': 'Unity',
+  'gameDetails.luma.generic.profileTooltip': '正在使用共享的引擎配置。',
+  'gameDetails.luma.features.title': '功能',
+  'gameDetails.luma.features.dlssFsr': 'DLSS / FSR',
+  'gameDetails.luma.features.hdr': 'HDR',
+  'gameDetails.luma.features.supported': '支持',
+  'gameDetails.luma.features.unsupported': '不支持',
+  'gameDetails.luma.features.experimental': '实验性',
+  'gameDetails.luma.features.unknown': '未知',
+  // ── Game details: Luma incompatibility reasons ──
+  'gameDetails.luma.reason.api_unsupported': '不支持的图形 API',
+  'gameDetails.luma.reason.api_not_allowed': '此游戏不允许使用该图形 API',
+  'gameDetails.luma.reason.arch_unknown': '可执行文件架构未知',
+  'gameDetails.luma.reason.arch_mismatch': '可执行文件架构与此插件不匹配',
+  // ── Game details: Luma ReShade host ──
+  'gameDetails.luma.channel.stable': 'Stable',
+  'gameDetails.luma.channel.nightly': 'Nightly',
+  'gameDetails.luma.host.version': '{version}',
+  'gameDetails.luma.host.versionUnknown': '版本未知',
+  'gameDetails.luma.host.addons.none': '不支持插件',
+  'gameDetails.luma.host.addons.unknown': '插件支持情况未知',
+  'gameDetails.luma.host.action.update_host': '有可用更新',
+  'gameDetails.luma.host.action.repair_host': '修复 ReShade 以支持 Luma 插件',
+  'gameDetails.luma.host.customBuild': '自定义版本（如 GShade）— 更新需自行管理',
+  'gameDetails.luma.host.conflictMultiple': '发现多个 ReShade 宿主 — 需要检查当前激活的插槽',
+  'gameDetails.luma.host.conflictBlocksInstall':
+    '此游戏使用的 ReShade 插槽已被现有文件占用，或 ReShade 位于其他插槽 — 请先解决该问题再安装。',
+  // ── Game details: Luma freshness / timestamps ──
+  'gameDetails.luma.fresh.label': '版本',
+  'gameDetails.luma.fresh.current': '最新',
+  'gameDetails.luma.fresh.available': '有可用更新',
+  'gameDetails.luma.fresh.channelMismatch': '可切换渠道',
+  'gameDetails.luma.fresh.validationRequired': '需要验证',
+  'gameDetails.luma.fresh.unknown': '无法检查',
+  'gameDetails.luma.fresh.checking': '正在检查…',
+  'gameDetails.luma.updatesNotTracked': '未跟踪更新',
+  'gameDetails.luma.addonDated': '插件日期：{date}',
+  'gameDetails.luma.installedOn': '安装于 {date}',
+  'gameDetails.luma.lastChecked': '检查于 {time}',
+  'gameDetails.luma.lastCheckedNever': '尚未检查',
+  // ── Game details: Luma components ──
+  'gameDetails.luma.component.reshade': 'ReShade 宿主',
+  'gameDetails.luma.component.addon': 'Luma 插件',
+  'gameDetails.luma.component.addonDesc': '此游戏的 Luma 功能',
+  'gameDetails.luma.component.dgvoodoo': 'dgVoodoo2 包装器',
+  'gameDetails.luma.component.dgvoodooDesc': '托管的 D3D9 桥接，版本 {version}',
+  // ── Game details: Luma launch arguments ──
+  'gameDetails.luma.launchArgs.instructions.steam':
+    '如果通过 Steam 启动游戏，请在此添加：右键点击游戏 → 属性 → 常规 → 启动选项。',
+  'gameDetails.luma.launchArgs.instructions.gog':
+    '如果通过 GOG Galaxy 启动游戏，请在此添加：游戏设置 → 管理安装 → 配置。',
+  'gameDetails.luma.launchArgs.instructions.epic':
+    '如果通过 Epic Games Launcher 启动游戏，请在此添加：右键点击游戏 → 管理 → 附加命令行参数。',
+  'gameDetails.luma.launchArgs.instructions.ea':
+    '如果通过 EA app 启动游戏，请在此添加：选择游戏 → 管理 → 查看属性 → 高级启动选项。',
+  'gameDetails.luma.launchArgs.instructions.ubisoft':
+    '如果通过 Ubisoft Connect 启动游戏，请在此添加：选择游戏 → 属性 → 添加启动参数。',
+  'gameDetails.luma.launchArgs.instructions.other':
+    '请使用实际启动游戏的方式添加参数：启动器、快捷方式目标、批处理文件或其他加载器。',
+  'gameDetails.luma.launchArgs.title': '需要启动参数',
+  'gameDetails.luma.launchArgs.dx11Title': '此 Luma 配置文件需要 DirectX 11',
+  'gameDetails.luma.launchArgs.copyStep': '复制所需的启动参数：',
+  'gameDetails.luma.launchArgs.copy': '复制参数',
+  'gameDetails.luma.launchArgs.copied': '已复制',
+  'gameDetails.luma.launchArgs.copyFailed': '无法复制启动参数',
+  // ── Game details: Luma attribution ──
+  'gameDetails.luma.attribution': 'Luma Framework 由 Filoppi 开发。',
+  'gameDetails.luma.attributionLink': '查看项目',
+  'gameDetails.luma.guidance.gameSetting': '游戏内设置',
+  'gameDetails.luma.guidance.engineIni': '手动修改 INI',
+  'gameDetails.luma.guidance.launchArgument': '启动参数',
+  'gameDetails.luma.guidance.warning': '重要',
+  'gameDetails.luma.guidance.compatibility': '兼容性说明',
+  'gameDetails.luma.guidance.externalTool': '第三方工具',
+  'gameDetails.luma.guidance.copy': '复制',
+  'gameDetails.luma.guidance.copied': '已复制',
+  'gameDetails.luma.guidance.copyFailed': '无法复制',
 };
