@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use renderpilot_domain::{ArtifactId, RuntimeCompatibility, Sha256Hash, Version};
+use renderpilot_domain::{ArtifactId, RuntimeCompatibility, Sha256Hash, Version, openvr};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -19,11 +19,54 @@ pub(super) const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 pub(super) const MAX_INDEX_SIZE: u64 = 256 * 1024;
 pub(super) const MAX_VENDOR_SNAPSHOT_SIZE: u64 = 2 * 1024 * 1024;
 
-const SUPPORTED_VENDORS: &[&str] = &["amd", "intel", "microsoft", "nvidia"];
+struct VendorPolicy {
+    id: &'static str,
+    supported: bool,
+    required_in_v1_cache: bool,
+}
+
+// Valve is supported by this client, but remains optional so an older
+// last-known-good cache can still be used offline.
+const VENDOR_POLICIES: &[VendorPolicy] = &[
+    VendorPolicy {
+        id: "amd",
+        supported: true,
+        required_in_v1_cache: true,
+    },
+    VendorPolicy {
+        id: "intel",
+        supported: true,
+        required_in_v1_cache: true,
+    },
+    VendorPolicy {
+        id: "microsoft",
+        supported: true,
+        required_in_v1_cache: true,
+    },
+    VendorPolicy {
+        id: "nvidia",
+        supported: true,
+        required_in_v1_cache: true,
+    },
+    VendorPolicy {
+        id: "valve",
+        supported: true,
+        required_in_v1_cache: false,
+    },
+];
 const PACKAGE_REVISION_SCHEMA_VERSION: u32 = 1;
 
 pub(super) fn is_supported_vendor(vendor_id: &str) -> bool {
-    SUPPORTED_VENDORS.contains(&vendor_id)
+    VENDOR_POLICIES
+        .iter()
+        .any(|policy| policy.id == vendor_id && policy.supported)
+}
+
+fn required_vendor_ids() -> impl Iterator<Item = &'static str> {
+    VENDOR_POLICIES
+        .iter()
+        .filter(|policy| policy.supported && policy.required_in_v1_cache)
+        .map(|policy| policy.id)
 }
 
 pub(super) fn validate_index(index: &LibraryIndex) -> Result<(), ServiceError> {
@@ -40,7 +83,7 @@ pub(super) fn validate_index(index: &LibraryIndex) -> Result<(), ServiceError> {
             )));
         }
     }
-    for required in SUPPORTED_VENDORS {
+    for required in required_vendor_ids() {
         if !ids.contains(required) {
             return Err(library_error(format!(
                 "library index is missing supported vendor `{required}`"
@@ -167,7 +210,7 @@ pub(super) fn validate_catalog(catalog: &LibraryCatalog) -> Result<CatalogIndex,
             });
         }
     }
-    for required in SUPPORTED_VENDORS {
+    for required in required_vendor_ids() {
         if !vendors.contains(required) {
             return Err(library_error(format!(
                 "cached catalog is missing supported vendor `{required}`"
@@ -235,7 +278,9 @@ fn validate_vendor_contents(
 fn validate_artifact(artifact: &LibraryArtifactRecord) -> Result<(), ServiceError> {
     ensure_id("library id", &artifact.library_id)?;
     ensure_dll_name("artifact file name", &artifact.file_name)?;
-    ensure_numeric_version("artifact file version", &artifact.file_version)?;
+    if let Some(version) = &artifact.file_version {
+        ensure_numeric_version("artifact file version", version)?;
+    }
     ensure_sha256("artifact DLL sha256", &artifact.dll.sha256)?;
     if artifact.artifact_id != format!("sha256:{}", artifact.dll.sha256) {
         return Err(library_error(format!(
@@ -289,6 +334,9 @@ fn validate_package(
     ensure_id("package variant", &package.variant)?;
     ensure_not_blank("package display name", &package.display_name)?;
     ensure_numeric_version("package release version", &package.release.version)?;
+    if let Some(label) = &package.release.label {
+        ensure_not_blank("package release label", label)?;
+    }
     if package.target.os != "windows" {
         return Err(library_error(format!(
             "unsupported target OS for package `{}`: {}",
@@ -342,6 +390,14 @@ fn validate_package(
             )));
         }
     }
+    if let Some(LibraryProvenance::GithubRelease {
+        repository,
+        tag,
+        commit_sha,
+    }) = &package.provenance
+    {
+        validate_github_release_provenance(&package.package_id, repository, tag, commit_sha)?;
+    }
     if let Some(expected_package_id) = expected_microsoft_package_id(&package.technology) {
         let valid = matches!(
             &package.provenance,
@@ -351,6 +407,19 @@ fn validate_package(
         if !valid {
             return Err(library_error(format!(
                 "package `{}` Microsoft runtime provenance is missing or inconsistent",
+                package.package_id
+            )));
+        }
+    }
+    if package.technology == "openvr" {
+        let valid_provenance = matches!(
+            &package.provenance,
+            Some(LibraryProvenance::GithubRelease { repository, .. })
+                if repository == openvr::UPSTREAM_REPOSITORY
+        );
+        if !valid_provenance || package.members.len() != 1 {
+            return Err(library_error(format!(
+                "package `{}` is not a canonical OpenVR SDK package",
                 package.package_id
             )));
         }
@@ -408,9 +477,50 @@ fn validate_package(
                 package.package_id
             )));
         }
+        if package.technology == "openvr"
+            && (member.install_as != openvr::DLL_NAME
+                || artifact.file_name != openvr::DLL_NAME
+                || artifact.pe_named_exports.is_none())
+        {
+            return Err(library_error(format!(
+                "package `{}` has an invalid OpenVR member contract",
+                package.package_id
+            )));
+        }
         resolved_members.push(artifact_index);
     }
     Ok(resolved_members)
+}
+
+fn validate_github_release_provenance(
+    package_id: &str,
+    repository: &str,
+    tag: &str,
+    commit_sha: &str,
+) -> Result<(), ServiceError> {
+    let mut repository_parts = repository.split('/');
+    let owner = repository_parts.next().unwrap_or_default();
+    let name = repository_parts.next().unwrap_or_default();
+    let valid_repository_part = |part: &str| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    };
+    if !valid_repository_part(owner)
+        || !valid_repository_part(name)
+        || repository_parts.next().is_some()
+        || tag.trim().is_empty()
+        || commit_sha.len() != 40
+        || !commit_sha
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(library_error(format!(
+            "package `{package_id}` has invalid GitHub release provenance"
+        )));
+    }
+    Ok(())
 }
 
 fn expected_microsoft_package_id(technology: &str) -> Option<&'static str> {

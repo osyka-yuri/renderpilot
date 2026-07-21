@@ -1,6 +1,6 @@
 //! Package provenance and runtime compatibility metadata for library artifacts.
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Architecture, Version, text::normalize_required_text};
 
@@ -68,9 +68,15 @@ pub enum UpstreamPackageProvider {
     /// NuGet.org package registry.
     #[serde(rename = "nuget")]
     NuGet,
+    /// GitHub release in an upstream repository.
+    #[serde(rename = "github")]
+    GitHub,
 }
 
 /// Runtime constraints carried by an artifact as a whole.
+///
+/// Architecture is interpreted by the technology policy: executable-context
+/// runtimes target the selected EXE, while OpenVR targets the installed loader.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeTarget {
     architecture: Architecture,
@@ -95,7 +101,7 @@ impl RuntimeTarget {
         self
     }
 
-    /// Returns the target executable architecture.
+    /// Returns the architecture interpreted by the technology policy.
     pub const fn architecture(&self) -> Architecture {
         self.architecture
     }
@@ -106,7 +112,7 @@ impl RuntimeTarget {
     }
 }
 
-/// Technology-specific ABI constraint for a runtime artifact.
+/// Technology-specific runtime compatibility constraint for an artifact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RuntimeCompatibility {
@@ -127,21 +133,60 @@ impl RuntimeCompatibility {
     }
 }
 
+/// Atomic package release identity and optional presentation annotation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseMetadata {
+    version: Version,
+    label: Option<String>,
+}
+
+impl ReleaseMetadata {
+    /// Creates release metadata with an optional normalized annotation.
+    pub fn new(version: Version, label: Option<String>) -> Result<Self, ComponentError> {
+        Ok(Self {
+            version,
+            label: label
+                .map(|value| normalize_required_text("release_label", value))
+                .transpose()?,
+        })
+    }
+
+    /// Returns the canonical release version.
+    pub const fn version(&self) -> &Version {
+        &self.version
+    }
+
+    /// Returns the optional supplemental release annotation.
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+}
+
 /// Optional package provenance and runtime constraints for an artifact.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ArtifactMetadata {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    release_version: Option<Version>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    release: Option<ReleaseMetadata>,
     upstream_package: Option<UpstreamPackage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     runtime_target: Option<RuntimeTarget>,
 }
 
 impl ArtifactMetadata {
+    /// Returns the atomic release version and annotation, when declared.
+    pub const fn release(&self) -> Option<&ReleaseMetadata> {
+        self.release.as_ref()
+    }
+
     /// Returns the release version declared by the curated package.
     pub const fn release_version(&self) -> Option<&Version> {
-        self.release_version.as_ref()
+        match self.release() {
+            Some(release) => Some(release.version()),
+            None => None,
+        }
+    }
+
+    /// Returns the optional supplemental release annotation.
+    pub fn release_label(&self) -> Option<&str> {
+        self.release.as_ref().and_then(ReleaseMetadata::label)
     }
 
     /// Returns upstream package provenance, when known.
@@ -164,8 +209,21 @@ impl ArtifactMetadata {
     /// Sets the release version declared by the curated package.
     #[must_use]
     pub fn with_release_version(mut self, version: Version) -> Self {
-        self.release_version = Some(version);
+        self.release = Some(ReleaseMetadata {
+            version,
+            label: None,
+        });
         self
+    }
+
+    /// Sets an atomic release version and optional supplemental annotation.
+    pub fn with_release(
+        mut self,
+        version: Version,
+        label: Option<String>,
+    ) -> Result<Self, ComponentError> {
+        self.release = Some(ReleaseMetadata::new(version, label)?);
+        Ok(self)
     }
 
     /// Sets runtime target constraints.
@@ -173,6 +231,70 @@ impl ArtifactMetadata {
     pub fn with_runtime_target(mut self, target: RuntimeTarget) -> Self {
         self.runtime_target = Some(target);
         self
+    }
+}
+
+impl Serialize for ArtifactMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        struct WireMetadata<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            release_version: Option<&'a Version>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            release_label: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            upstream_package: Option<&'a UpstreamPackage>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            runtime_target: Option<&'a RuntimeTarget>,
+        }
+
+        WireMetadata {
+            release_version: self.release_version(),
+            release_label: self.release_label(),
+            upstream_package: self.upstream_package(),
+            runtime_target: self.runtime_target(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ArtifactMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct WireMetadata {
+            #[serde(default)]
+            release_version: Option<Version>,
+            #[serde(default)]
+            release_label: Option<String>,
+            #[serde(default)]
+            upstream_package: Option<UpstreamPackage>,
+            #[serde(default)]
+            runtime_target: Option<RuntimeTarget>,
+        }
+
+        let wire = WireMetadata::deserialize(deserializer)?;
+        let release = match (wire.release_version, wire.release_label) {
+            (Some(version), label) => {
+                Some(ReleaseMetadata::new(version, label).map_err(serde::de::Error::custom)?)
+            }
+            (None, None) => None,
+            (None, Some(_)) => {
+                return Err(serde::de::Error::custom(
+                    "release_label requires release_version",
+                ));
+            }
+        };
+        Ok(Self {
+            release,
+            upstream_package: wire.upstream_package,
+            runtime_target: wire.runtime_target,
+        })
     }
 }
 
@@ -250,5 +372,24 @@ mod tests {
             Some("4.1.1.2740")
         );
         assert!(restored.upstream_package().is_none());
+    }
+
+    #[test]
+    fn release_metadata_preserves_flat_wire_shape_and_rejects_orphan_label() {
+        let metadata = ArtifactMetadata::default()
+            .with_release(
+                Version::parse("1.1.3").expect("version"),
+                Some("revision b".to_owned()),
+            )
+            .expect("release");
+        let json = serde_json::to_value(&metadata).expect("serialize");
+        assert_eq!(json["release_version"], "1.1.3");
+        assert_eq!(json["release_label"], "revision b");
+
+        let error = serde_json::from_value::<ArtifactMetadata>(serde_json::json!({
+            "release_label": "revision b"
+        }))
+        .expect_err("orphan label");
+        assert!(error.to_string().contains("requires release_version"));
     }
 }

@@ -266,16 +266,21 @@ pub(crate) fn try_read_detected_file_metadata(
     path: &Path,
     path_ref: &PathRef,
     hash_cache: Option<&FileHashCache>,
+    observed_version: Option<Option<Version>>,
 ) -> AppResult<Option<DetectedFileMetadata>> {
     let Some(stat) = FileStat::try_read(path)? else {
         return Ok(None);
     };
 
-    if let Some(metadata) = try_read_cached_metadata(path_ref, stat, hash_cache) {
+    if let Some(mut metadata) = try_read_cached_metadata(path_ref, stat, hash_cache) {
+        if let Some(version) = observed_version {
+            metadata.version = version;
+            metadata.status = VersionDetectionStatus::from_version(metadata.version.as_ref());
+        }
         return Ok(Some(metadata));
     }
 
-    read_uncached_metadata(path, path_ref, stat).map(Some)
+    read_uncached_metadata(path, path_ref, stat, observed_version).map(Some)
 }
 
 fn try_read_cached_metadata(
@@ -292,9 +297,10 @@ fn read_uncached_metadata(
     path: &Path,
     path_ref: &PathRef,
     stat: FileStat,
+    observed_version: Option<Option<Version>>,
 ) -> AppResult<DetectedFileMetadata> {
     let sha256 = sha256_file(path)?;
-    let version = read_windows_file_version(path);
+    let version = observed_version.unwrap_or_else(|| read_windows_file_version(path));
 
     Ok(DetectedFileMetadata::from_parts(
         path_ref, stat, sha256, version,

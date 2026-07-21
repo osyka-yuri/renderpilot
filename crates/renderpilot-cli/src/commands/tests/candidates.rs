@@ -1,7 +1,8 @@
 use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
 
 use super::{
-    CatalogFixture, args, sample_artifact, sample_bundle_component, sample_component, sample_game,
+    CatalogFixture, args, sample_artifact, sample_bundle_artifact, sample_bundle_component,
+    sample_component, sample_game,
 };
 
 #[test]
@@ -154,12 +155,21 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
             ),
         ],
     );
-    fixture.store_artifact(&sample_artifact(
+    fixture.store_artifact(&sample_bundle_artifact(
         "artifact:streamline-2.5",
         GraphicsTechnology::NvidiaStreamline,
-        "C:/Games/GameB/sl.common.dll",
-        Some("2.5.0"),
-        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        &[
+            (
+                "C:/Games/GameB/sl.common.dll",
+                Some("2.5.0"),
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            ),
+            (
+                "C:/Games/GameB/sl.interposer.dll",
+                Some("2.5.0"),
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+        ],
         Some(library.id().as_str()),
     ));
     fixture.store_artifact(&sample_artifact(

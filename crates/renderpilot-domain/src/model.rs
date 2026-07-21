@@ -287,6 +287,10 @@ pub enum GraphicsTechnology {
     #[serde(rename = "d3d12_agility")]
     D3D12Agility,
 
+    /// Valve OpenVR SDK loader.
+    #[serde(rename = "openvr")]
+    OpenVr,
+
     /// Technology is present but not classified yet.
     #[default]
     #[serde(rename = "unknown")]
@@ -313,6 +317,7 @@ impl GraphicsTechnology {
         Self::DirectStorage,
         Self::MicrosoftDxc,
         Self::D3D12Agility,
+        Self::OpenVr,
         Self::Unknown,
     ];
 
@@ -337,6 +342,7 @@ impl GraphicsTechnology {
             Self::DirectStorage => "direct_storage",
             Self::MicrosoftDxc => "microsoft_dxc",
             Self::D3D12Agility => "d3d12_agility",
+            Self::OpenVr => "openvr",
             Self::Unknown => "unknown",
         }
     }

@@ -1,13 +1,16 @@
 mod hash;
 mod metadata;
+mod pe_compatibility;
 mod version_report;
 
 #[cfg(test)]
 mod tests;
 
 pub use metadata::{
-    ArtifactMetadata, RuntimeCompatibility, RuntimeTarget, UpstreamPackage, UpstreamPackageProvider,
+    ArtifactMetadata, ReleaseMetadata, RuntimeCompatibility, RuntimeTarget, UpstreamPackage,
+    UpstreamPackageProvider,
 };
+pub use pe_compatibility::{PeCompatibilityProfile, PeExportSet, PeExportSetError};
 pub use version_report::{ComponentVersionReport, component_version_report};
 
 use std::{error::Error, fmt};
@@ -118,6 +121,9 @@ pub struct ComponentFile {
     /// loader DLL is installed as `amd_fidelityfx_dx12.dll`. `None` = own name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     install_as: Option<String>,
+    /// Atomic PE export-surface compatibility facts observed from this file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pe_compatibility: Option<PeCompatibilityProfile>,
 }
 
 impl ComponentFile {
@@ -128,6 +134,7 @@ impl ComponentFile {
             version: None,
             sha256: None,
             install_as: None,
+            pe_compatibility: None,
         }
     }
 
@@ -152,6 +159,11 @@ impl ComponentFile {
         self.install_as.as_deref()
     }
 
+    /// Returns the atomic PE export-surface compatibility profile.
+    pub const fn pe_compatibility(&self) -> Option<&PeCompatibilityProfile> {
+        self.pe_compatibility.as_ref()
+    }
+
     /// Sets a file version and returns the updated file.
     pub fn with_version(mut self, version: Version) -> Self {
         self.version = Some(version);
@@ -167,6 +179,13 @@ impl ComponentFile {
     /// Sets the install-as target basename and returns the updated file.
     pub fn with_install_as(mut self, install_as: impl Into<String>) -> Self {
         self.install_as = Some(install_as.into());
+        self
+    }
+
+    /// Attaches a complete PE export-surface compatibility profile.
+    #[must_use]
+    pub fn with_pe_compatibility(mut self, profile: PeCompatibilityProfile) -> Self {
+        self.pe_compatibility = Some(profile);
         self
     }
 }

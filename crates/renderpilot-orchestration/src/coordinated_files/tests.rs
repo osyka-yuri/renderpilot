@@ -1,8 +1,9 @@
 use std::fs;
 
 use renderpilot_domain::{
-    ComponentFile, ComponentId, ComponentKind, GameId, GraphicsComponent, GraphicsTechnology,
-    ManagedAddonFile, ManagedFileBaseline, PathRef, Swappability,
+    Architecture, ComponentFile, ComponentId, ComponentKind, GameId, GraphicsComponent,
+    GraphicsTechnology, ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile,
+    PeExportSet, Swappability,
 };
 
 use super::*;
@@ -14,7 +15,7 @@ fn adopts_a_valid_unrecorded_classic_sidecar() {
     fs::write(&live, b"overlay").expect("live");
     fs::write(root.path().join("nvngx_dlss.dll.bak"), b"original").expect("bak");
 
-    let resolved = BaselineResolver::new(root.path(), &[])
+    let resolved = BaselineResolver::new(root.path(), &[], GraphicsTechnology::DlssSuperResolution)
         .resolve(&live, None)
         .expect("valid sidecar");
 
@@ -32,7 +33,8 @@ fn rejects_an_empty_unrecorded_sidecar() {
     fs::write(root.path().join("nvngx_dlss.dll.bak"), b"").expect("bak");
 
     assert!(matches!(
-        BaselineResolver::new(root.path(), &[]).resolve(&live, None),
+        BaselineResolver::new(root.path(), &[], GraphicsTechnology::DlssSuperResolution,)
+            .resolve(&live, None),
         Err(BaselineConflict::Empty(_))
     ));
 }
@@ -112,9 +114,13 @@ fn owned_absent_binding_wins_over_the_current_live_overlay() {
         renderpilot_detection::sha256_file(&live).expect("hash"),
     );
 
-    let resolved = BaselineResolver::new(root.path(), &[binding])
-        .resolve(&live, None)
-        .expect("owned binding");
+    let resolved = BaselineResolver::new(
+        root.path(),
+        &[binding],
+        GraphicsTechnology::DlssSuperResolution,
+    )
+    .resolve(&live, None)
+    .expect("owned binding");
 
     assert_eq!(resolved, ResolvedBaseline::AddonOwnedAbsent);
 }
@@ -147,6 +153,44 @@ fn current_snapshot_rejects_external_replacement_and_missing_members() {
         current_component_snapshot(&component, &[]),
         Err(BaselineConflict::MissingActiveFile(_))
     ));
+}
+
+#[test]
+fn openvr_snapshot_and_recorded_baseline_discard_stale_pe_metadata() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("openvr_api.dll");
+    fs::write(&live, b"not-a-pe").expect("live");
+    let hash = renderpilot_detection::sha256_file(&live).expect("hash");
+    let stale =
+        ComponentFile::new(PathRef::new(live.to_string_lossy().into_owned()).expect("path"))
+            .with_sha256(hash)
+            .with_pe_compatibility(PeCompatibilityProfile::new(
+                Architecture::X64,
+                PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports"),
+            ));
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:openvr-freshness").expect("component"),
+        GameId::new("manual:openvr-freshness").expect("game"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::OpenVr,
+        Swappability::Swappable,
+    )
+    .with_file(stale);
+
+    let current = current_component_snapshot(&component, &[])
+        .expect("snapshot")
+        .into_component();
+    assert_eq!(current.files()[0].pe_compatibility(), None);
+
+    let baseline = resolve_component_baseline(
+        root.path(),
+        GraphicsTechnology::OpenVr,
+        component.files(),
+        Some(component.files()),
+        &[],
+    )
+    .expect("baseline");
+    assert_eq!(baseline[0].pe_compatibility(), None);
 }
 
 #[test]

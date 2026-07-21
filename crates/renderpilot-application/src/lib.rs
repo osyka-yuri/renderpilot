@@ -15,13 +15,15 @@ mod info;
 mod operation_plan;
 mod persistence;
 mod ports;
+mod transition;
 
 pub use candidates::{
-    CandidateComparison, CandidateContext, ComponentReplacementCandidates, ReplacementCandidate,
-    find_replacement_candidates,
+    CandidateComparison, CandidateContext, ComponentReplacementCandidates, InstalledReleaseState,
+    ReplacementCandidate, find_replacement_candidates,
 };
 pub use compatibility::{
-    SwapCompatibilityError, SwapTargetProfile, ensure_swap_compatible, validate_runtime_artifact,
+    SwapCompatibilityError, SwapTargetProfile, ensure_replacement_compatible,
+    ensure_swap_compatible, validate_runtime_artifact,
 };
 pub use error::{AppError, AppErrorKind, AppResult, invalid_operation_state_display_message};
 pub use info::{AppInfo, app_info};
@@ -39,3 +41,4 @@ pub use ports::{
     ArtifactRepository, ComponentDetector, ComponentRepository, GameRepository, GameSourceProvider,
     InstalledAddonRepository, OperationRepository, SharedArtifactRepository,
 };
+pub use transition::{resolve_transition_members, resolve_transition_removals};

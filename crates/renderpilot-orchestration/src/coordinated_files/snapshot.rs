@@ -55,12 +55,10 @@ pub(crate) fn current_component_snapshot(
         }
 
         let mut current = ComponentFile::new(persisted.path().clone()).with_sha256(actual);
-        if let Some(version) = renderpilot_detection::read_windows_file_version(path) {
-            current = current.with_version(version);
-        }
         if let Some(install_as) = persisted.install_as() {
             current = current.with_install_as(install_as);
         }
+        current = super::with_observed_metadata(current, component.technology(), path);
         files.push(current);
     }
 

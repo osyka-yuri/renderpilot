@@ -66,14 +66,15 @@ async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
     let index = parse_index(&index_bytes)?;
     let mut vendors = Vec::new();
 
-    for reference in &index.vendors {
-        if !validate::is_supported_vendor(&reference.vendor_id) {
-            log::warn!(
-                "library index vendor `{}` is not supported by this client; skipping it",
-                reference.vendor_id
-            );
-            continue;
-        }
+    let (supported, unsupported) =
+        partition_vendor_references(&index, validate::is_supported_vendor);
+    for reference in unsupported {
+        log::warn!(
+            "library index vendor `{}` is not supported by this client; skipping it",
+            reference.vendor_id
+        );
+    }
+    for reference in supported {
         let bytes = crate::net::download_exact_bytes(
             &cdn::cdn_url(&reference.snapshot_key),
             reference.snapshot_size_bytes,
@@ -96,6 +97,22 @@ async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
         vendors,
     };
     ValidatedCatalog::new(catalog)
+}
+
+pub(super) fn partition_vendor_references<F>(
+    index: &LibraryIndex,
+    mut is_supported: F,
+) -> (
+    Vec<&super::types::LibraryVendorReference>,
+    Vec<&super::types::LibraryVendorReference>,
+)
+where
+    F: FnMut(&str) -> bool,
+{
+    index
+        .vendors
+        .iter()
+        .partition(|reference| is_supported(&reference.vendor_id))
 }
 
 pub(super) fn save_catalog(

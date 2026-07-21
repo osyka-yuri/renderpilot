@@ -46,14 +46,6 @@ pub struct RollbackResult {
     pub restored_file_count: usize,
 }
 
-/// Component, artifact and baseline loaded before an apply is planned.
-pub(super) struct LoadedApplySwap {
-    pub(super) component: GraphicsComponent,
-    pub(super) artifact: LibraryArtifact,
-    pub(super) baseline: Vec<ComponentFile>,
-    pub(super) first_swap: bool,
-}
-
 /// Fully prepared apply state, ready for the filesystem and storage steps.
 ///
 /// Component rows written to the catalog are rebuilt after the FS overlay so

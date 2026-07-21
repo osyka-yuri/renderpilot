@@ -170,6 +170,36 @@ fn component_detector_trait_maps_detected_files_to_domain_components() {
     );
 }
 
+#[test]
+fn openvr_dlls_in_different_subfolders_stay_independent_and_fail_closed() {
+    let root = tempfile::tempdir().expect("root");
+    let x86 = root.path().join("bin").join("win32");
+    let x64 = root.path().join("bin").join("win64");
+    fs::create_dir_all(&x86).expect("x86 dir");
+    fs::create_dir_all(&x64).expect("x64 dir");
+    fs::write(x86.join("openvr_api.dll"), b"malformed-x86").expect("x86 DLL");
+    fs::write(x64.join("openvr_api.dll"), b"malformed-x64").expect("x64 DLL");
+
+    let detector = LibraryPatternComponentDetector::windows_default().expect("patterns");
+    let game = game_installation(root.path());
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("OpenVR detection");
+    let components = group_into_components(&game, &libraries).expect("grouping");
+    let openvr = components
+        .iter()
+        .filter(|component| component.technology() == GraphicsTechnology::OpenVr)
+        .collect::<Vec<_>>();
+
+    assert_eq!(openvr.len(), 2);
+    assert!(openvr.iter().all(|component| component.files().len() == 1));
+    assert!(
+        openvr
+            .iter()
+            .all(|component| { component.files()[0].pe_compatibility().is_none() })
+    );
+}
+
 fn assert_detects(
     libraries: &[DetectedLibraryFile],
     file_name: &str,

@@ -5,10 +5,14 @@
 //! * [`dto`] — the data types the algorithm produces for presentation layers.
 
 mod dto;
+mod identity;
 mod matcher;
 
 #[cfg(test)]
 mod tests;
 
-pub use dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
+pub use dto::{
+    CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState,
+    ReplacementCandidate,
+};
 pub use matcher::{CandidateContext, find_replacement_candidates};

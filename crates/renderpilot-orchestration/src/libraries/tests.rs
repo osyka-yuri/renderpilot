@@ -2,14 +2,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use renderpilot_application::ArtifactRepository;
-use renderpilot_domain::Architecture;
+use renderpilot_domain::{Architecture, PeExportSet};
 use sha2::{Digest, Sha256};
 
 use super::artifact_builder::build_catalog_artifact;
 use super::types::{
     LibraryArtifactRecord, LibraryCatalog, LibraryContent, LibraryPackage, LibraryPackageMember,
-    LibraryRelease, LibraryReleaseChannel, LibraryTarget, LibraryTransport, LibraryVendor,
-    LibraryVendorCatalog, LibraryVendorReference, LibraryVendorSnapshot, SignatureInfo,
+    LibraryProvenance, LibraryRelease, LibraryReleaseChannel, LibraryTarget, LibraryTransport,
+    LibraryVendor, LibraryVendorCatalog, LibraryVendorReference, LibraryVendorSnapshot,
+    SignatureInfo,
 };
 
 fn physical_artifact(digest: char, file_name: &str) -> LibraryArtifactRecord {
@@ -18,7 +19,8 @@ fn physical_artifact(digest: char, file_name: &str) -> LibraryArtifactRecord {
         artifact_id: format!("sha256:{sha256}"),
         library_id: file_name.trim_end_matches(".dll").replace('.', "_"),
         file_name: file_name.to_owned(),
-        file_version: "1.2.3.4".to_owned(),
+        file_version: Some("1.2.3.4".to_owned()),
+        pe_named_exports: None,
         architecture: Architecture::X64,
         dll: LibraryContent {
             sha256,
@@ -127,8 +129,64 @@ fn catalog_with_nvidia(nvidia: LibraryVendorCatalog) -> LibraryCatalog {
             empty_vendor("intel", "Intel"),
             empty_vendor("microsoft", "Microsoft"),
             nvidia,
+            empty_vendor("valve", "Valve"),
         ],
     }
+}
+
+fn openvr_catalog(repository: &str) -> LibraryCatalog {
+    let dll_bytes = b"openvr-api-fixture";
+    let dll_sha256 = hex::encode(Sha256::digest(dll_bytes));
+    let mut artifact = physical_artifact('d', renderpilot_domain::openvr::DLL_NAME);
+    artifact.artifact_id = format!("sha256:{dll_sha256}");
+    artifact.dll.sha256 = dll_sha256;
+    artifact.dll.size_bytes = dll_bytes.len() as u64;
+    artifact.file_version = None;
+    artifact.pe_named_exports = Some(
+        PeExportSet::from_canonical_names(vec!["VR Init".to_owned(), "VR_InitInternal".to_owned()])
+            .expect("exports"),
+    );
+
+    let mut openvr_package = LibraryPackage {
+        package_id: "openvr.1.1.3b.x64".to_owned(),
+        revision_sha256: String::new(),
+        technology: "openvr".to_owned(),
+        variant: "runtime".to_owned(),
+        display_name: "OpenVR SDK".to_owned(),
+        release: LibraryRelease {
+            version: "1.1.3".to_owned(),
+            channel: LibraryReleaseChannel::Stable,
+            label: Some("revision b".to_owned()),
+        },
+        target: LibraryTarget {
+            os: "windows".to_owned(),
+            architecture: Architecture::X64,
+            compatibility: None,
+        },
+        provenance: Some(LibraryProvenance::GithubRelease {
+            repository: repository.to_owned(),
+            tag: "v1.1.3b".to_owned(),
+            commit_sha: "e".repeat(40),
+        }),
+        members: vec![LibraryPackageMember {
+            artifact_id: artifact.artifact_id.clone(),
+            role: "primary".to_owned(),
+            install_as: renderpilot_domain::openvr::DLL_NAME.to_owned(),
+        }],
+        extensions: None,
+    };
+    openvr_package.revision_sha256 =
+        super::validate::package_revision_sha256(&openvr_package).expect("revision");
+
+    let mut catalog = complete_catalog(package("nvidia_streamline"));
+    let valve = catalog
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "valve")
+        .expect("valve");
+    valve.artifacts = vec![artifact];
+    valve.packages = vec![openvr_package];
+    catalog
 }
 
 #[test]
@@ -146,6 +204,69 @@ fn explicit_package_contract_builds_one_domain_artifact() {
     assert_eq!(artifact.files()[0].install_as(), Some("primary.dll"));
     assert_eq!(artifact.files()[1].install_as(), Some("support.dll"));
     assert_eq!(artifact.release_version().unwrap().as_str(), "1.2.3");
+}
+
+#[test]
+fn openvr_catalog_builds_nullable_version_exports_provenance_and_label() {
+    let catalog = openvr_catalog(renderpilot_domain::openvr::UPSTREAM_REPOSITORY);
+
+    let wire = serde_json::to_value(&catalog).expect("catalog json");
+    let valve_wire = wire["vendors"]
+        .as_array()
+        .expect("vendors")
+        .iter()
+        .find(|vendor| vendor["vendor"]["id"] == "valve")
+        .expect("valve wire");
+    assert!(valve_wire["artifacts"][0]["file_version"].is_null());
+    assert_eq!(
+        valve_wire["artifacts"][0]["pe_named_exports"],
+        serde_json::json!(["VR Init", "VR_InitInternal"])
+    );
+    assert_eq!(valve_wire["packages"][0]["release"]["label"], "revision b");
+    assert_eq!(
+        valve_wire["packages"][0]["provenance"]["repository"],
+        renderpilot_domain::openvr::UPSTREAM_REPOSITORY
+    );
+
+    let round_tripped = serde_json::from_value::<LibraryCatalog>(wire).expect("catalog round trip");
+    let catalog = super::resolved::ValidatedCatalog::new(round_tripped).expect("catalog");
+    let resolved = catalog
+        .packages()
+        .find(|resolved| resolved.package().technology == "openvr")
+        .expect("OpenVR package");
+    let built = build_catalog_artifact(&resolved, None)
+        .expect("adapter")
+        .expect("known technology");
+
+    assert_eq!(
+        built.technology(),
+        renderpilot_domain::GraphicsTechnology::OpenVr
+    );
+    assert_eq!(built.files()[0].version(), None);
+    assert_eq!(
+        built.files()[0]
+            .pe_compatibility()
+            .expect("profile")
+            .architecture(),
+        Architecture::X64
+    );
+    assert_eq!(
+        built.files()[0]
+            .pe_compatibility()
+            .expect("profile")
+            .named_exports()
+            .names(),
+        &["VR Init".to_owned(), "VR_InitInternal".to_owned()]
+    );
+    assert_eq!(built.metadata().release_label(), Some("revision b"));
+    assert_eq!(
+        built
+            .metadata()
+            .upstream_package()
+            .expect("provenance")
+            .provider(),
+        renderpilot_domain::UpstreamPackageProvider::GitHub
+    );
 }
 
 #[test]
@@ -200,6 +321,116 @@ fn validated_catalog_keeps_unknown_future_technology_structurally_valid() {
             .expect("future technology is a runtime policy concern");
 
     assert_eq!(catalog.packages().len(), 1);
+}
+
+#[test]
+fn pre_openvr_catalog_cache_remains_valid_for_offline_upgrade() {
+    let mut legacy = complete_catalog(package("nvidia_streamline"));
+    legacy
+        .vendors
+        .retain(|vendor| vendor.vendor.id.as_str() != "valve");
+
+    assert!(
+        super::resolved::ValidatedCatalog::new(legacy).is_ok(),
+        "adding a supported vendor must not invalidate a v1 last-known-good cache"
+    );
+}
+
+#[test]
+fn pre_openvr_client_filters_valve_before_snapshot_fetch_selection() {
+    let reference = |vendor_id: &str| LibraryVendorReference {
+        vendor_id: vendor_id.to_owned(),
+        display_name: vendor_id.to_owned(),
+        snapshot_key: format!("libraries/v1/vendors/{vendor_id}/{}.json", "a".repeat(64)),
+        snapshot_sha256: "a".repeat(64),
+        snapshot_size_bytes: 1,
+    };
+    let index = super::types::LibraryIndex {
+        schema_version: 1,
+        generated_at: "2026-07-23T00:00:00Z".to_owned(),
+        vendors: ["amd", "intel", "microsoft", "nvidia", "valve"]
+            .map(reference)
+            .into(),
+    };
+    let old_supported = ["amd", "intel", "microsoft", "nvidia"];
+    let (selected, skipped) = super::catalog::partition_vendor_references(&index, |vendor| {
+        old_supported.contains(&vendor)
+    });
+
+    assert_eq!(selected.len(), 4);
+    assert_eq!(
+        skipped
+            .iter()
+            .map(|reference| reference.vendor_id.as_str())
+            .collect::<Vec<_>>(),
+        ["valve"]
+    );
+}
+
+#[test]
+fn current_client_filters_unknown_vendor_before_snapshot_fetch_selection() {
+    let reference = |vendor_id: &str| LibraryVendorReference {
+        vendor_id: vendor_id.to_owned(),
+        display_name: vendor_id.to_owned(),
+        snapshot_key: format!("libraries/v1/vendors/{vendor_id}/{}.json", "a".repeat(64)),
+        snapshot_sha256: "a".repeat(64),
+        snapshot_size_bytes: 1,
+    };
+    let index = super::types::LibraryIndex {
+        schema_version: 1,
+        generated_at: "2026-07-23T00:00:00Z".to_owned(),
+        vendors: ["amd", "intel", "microsoft", "nvidia", "valve", "future"]
+            .map(reference)
+            .into(),
+    };
+    let (selected, skipped) =
+        super::catalog::partition_vendor_references(&index, super::validate::is_supported_vendor);
+
+    assert_eq!(
+        selected
+            .iter()
+            .map(|reference| reference.vendor_id.as_str())
+            .collect::<Vec<_>>(),
+        ["amd", "intel", "microsoft", "nvidia", "valve"]
+    );
+    assert_eq!(
+        skipped
+            .iter()
+            .map(|reference| reference.vendor_id.as_str())
+            .collect::<Vec<_>>(),
+        ["future"]
+    );
+}
+
+#[test]
+fn github_provenance_syntax_is_generic_but_openvr_repository_is_exact() {
+    let mut generic = package("nvidia_streamline");
+    generic.provenance = Some(LibraryProvenance::GithubRelease {
+        repository: "example/runtime".to_owned(),
+        tag: "v1.2.3".to_owned(),
+        commit_sha: "d".repeat(40),
+    });
+    generic.revision_sha256 = super::validate::package_revision_sha256(&generic).expect("revision");
+    assert!(
+        super::resolved::ValidatedCatalog::new(complete_catalog(generic)).is_ok(),
+        "generic GitHub provenance must not be coupled to OpenVR"
+    );
+
+    assert!(super::resolved::ValidatedCatalog::new(openvr_catalog("example/openvr")).is_err());
+}
+
+#[test]
+fn catalog_rejects_a_blank_release_label() {
+    let mut catalog = openvr_catalog(renderpilot_domain::openvr::UPSTREAM_REPOSITORY);
+    let package = &mut catalog
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "valve")
+        .expect("Valve vendor")
+        .packages[0];
+    package.release.label = Some("  ".to_owned());
+
+    assert!(super::resolved::ValidatedCatalog::new(catalog).is_err());
 }
 
 #[test]

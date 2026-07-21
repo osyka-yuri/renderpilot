@@ -142,6 +142,7 @@ export type GameCandidate = {
   file_name: string;
   file_path: string | null;
   version?: string | null;
+  release_label: string | null;
   source_game_id?: string | null;
   comparison: string;
   catalog_package_id?: Nullable<string>;
@@ -151,8 +152,8 @@ export type GameCandidate = {
 };
 
 /** Honest installed-version state emitted by the Rust candidate DTO. */
-export type ComponentVersionReport =
-  | { kind: 'known'; version: string }
+export type InstalledReleaseState =
+  | { kind: 'known'; version: string; release_label: string | null }
   | { kind: 'mixed'; min_version: string; max_version: string }
   | { kind: 'unknown' };
 
@@ -160,7 +161,7 @@ export type GameCandidateGroup = {
   component_id: string;
   technology: string;
   file_path: string;
-  version_report: ComponentVersionReport;
+  version_report: InstalledReleaseState;
   candidates: GameCandidate[];
 };
 

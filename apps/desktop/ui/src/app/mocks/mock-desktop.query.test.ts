@@ -160,13 +160,14 @@ describe('createGameSummaryFromDetails', () => {
       component_id: 'manual:preview:test:unknown',
       technology: 'unknown',
       file_path: 'C:/Games/Preview Test/mystery.dll',
-      version_report: { kind: 'known', version: '1.0.0' },
+      version_report: { kind: 'known', version: '1.0.0', release_label: null },
       candidates: [
         {
           artifact_id: 'artifact:preview:unknown',
           file_name: 'mystery.dll',
           file_path: 'C:/RenderPilot/Library/mystery.dll',
           version: '2.0.0',
+          release_label: null,
           source_game_id: null,
           comparison: 'newer_version',
           is_downloaded: true,

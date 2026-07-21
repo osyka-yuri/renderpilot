@@ -3,6 +3,8 @@ use renderpilot_orchestration::domain::Swappability;
 
 use std::path::PathBuf;
 
+use crate::hash::sha256_hex;
+
 use super::{
     CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_component,
     sample_game,
@@ -21,11 +23,24 @@ fn game_with_target(
     (game_dir, target, install_path)
 }
 
+fn artifact_source(name: &str, file_name: &str, bytes: &[u8]) -> (TempGameFolder, PathBuf) {
+    let directory = TempGameFolder::new(name);
+    std::fs::create_dir_all(directory.path()).expect("artifact dir");
+    let path = directory.path().join(file_name);
+    std::fs::write(&path, bytes).expect("artifact source");
+    (directory, path)
+}
+
 #[test]
 fn plan_swap_renders_operation_plan_json() {
     let fixture = CatalogFixture::new("plan-swap-valid");
     let (_game_dir, target, install_path) =
         game_with_target("plan-swap-valid-game", "nvngx_dlss.dll", b"installed-dlss");
+    let (_artifact_dir, artifact_path) = artifact_source(
+        "plan-swap-valid-artifact",
+        "nvngx_dlss.dll",
+        b"candidate-dlss",
+    );
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
@@ -38,15 +53,15 @@ fn plan_swap_renders_operation_plan_json() {
             Swappability::Swappable,
             &path_string(&target),
             Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            &sha256_hex(b"installed-dlss"),
         )],
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss.dll",
+        &path_string(&artifact_path),
         Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        &sha256_hex(b"candidate-dlss"),
         None,
     ));
 
@@ -66,7 +81,7 @@ fn plan_swap_renders_operation_plan_json() {
     assert_eq!(json["game_id"], game.id().as_str());
     assert_eq!(json["operation_type"], "replace_component");
     assert_eq!(json["target_path"], path_string(&target));
-    assert_eq!(json["replacement_path"], "D:/Library/nvngx_dlss.dll");
+    assert_eq!(json["replacement_path"], path_string(&artifact_path));
     assert!(
         json["original_version"].is_null(),
         "metadata follows the verified on-disk baseline, not stale component version text"
@@ -103,6 +118,11 @@ fn plan_swap_blocks_invalid_artifact() {
         "nvngx_dlss.dll",
         b"installed-dlss",
     );
+    let (_artifact_dir, artifact_path) = artifact_source(
+        "plan-swap-invalid-artifact-source",
+        "nvngx_dlssg.dll",
+        b"candidate-frame-generation",
+    );
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
@@ -115,15 +135,15 @@ fn plan_swap_blocks_invalid_artifact() {
             Swappability::Swappable,
             &path_string(&target),
             Some("3.5.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            &sha256_hex(b"installed-dlss"),
         )],
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
         GraphicsTechnology::DlssFrameGeneration,
-        "D:/Library/nvngx_dlssg.dll",
+        &path_string(&artifact_path),
         Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        &sha256_hex(b"candidate-frame-generation"),
         None,
     ));
 
@@ -152,6 +172,11 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
         "sl.interposer.dll",
         b"installed-streamline",
     );
+    let (_artifact_dir, artifact_path) = artifact_source(
+        "plan-swap-streamline-artifact",
+        "sl.interposer.dll",
+        b"candidate-streamline",
+    );
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
@@ -164,15 +189,15 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
             Swappability::BundleOnly,
             &path_string(&target),
             Some("2.4.0"),
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            &sha256_hex(b"installed-streamline"),
         )],
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
         GraphicsTechnology::NvidiaStreamline,
-        "D:/Library/sl.interposer.dll",
+        &path_string(&artifact_path),
         Some("2.5.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        &sha256_hex(b"candidate-streamline"),
         None,
     ));
 

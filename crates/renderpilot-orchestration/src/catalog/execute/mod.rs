@@ -17,7 +17,6 @@ mod journal;
 mod planning;
 mod prepare;
 mod source_integrity;
-mod streamline_install;
 mod types;
 
 #[cfg(test)]
@@ -31,13 +30,50 @@ pub(crate) use self::journal::{
     JournalEntryItem, JournalEntryParams, record_operation_journal_entry,
 };
 use self::planning::rebuild_component_set_after_overlay;
-use self::prepare::{load_apply_swap, prepare_apply_swap};
-use self::source_integrity::{
-    ArtifactSourceCheck, rebind_planned_files_from_disk, validate_artifact_sources,
-};
+use self::prepare::prepare_apply_swap;
+use self::source_integrity::rebind_planned_files_for_technology;
 
 /// Label written to the journal when rolling back to the pre-swap baseline.
 pub(crate) const ROLLBACK_TARGET_LABEL: &str = "Original";
+
+#[cfg(test)]
+thread_local! {
+    static BEFORE_COPY_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(super) struct BeforeCopyHookGuard;
+
+#[cfg(test)]
+impl Drop for BeforeCopyHookGuard {
+    fn drop(&mut self) {
+        BEFORE_COPY_HOOK.with(|slot| {
+            slot.borrow_mut().take();
+        });
+    }
+}
+
+#[cfg(test)]
+pub(super) fn set_before_copy_hook(hook: impl FnOnce() + 'static) -> BeforeCopyHookGuard {
+    BEFORE_COPY_HOOK.with(|slot| {
+        let previous = slot.replace(Some(Box::new(hook)));
+        assert!(
+            previous.is_none(),
+            "before-copy test hook already installed"
+        );
+    });
+    BeforeCopyHookGuard
+}
+
+#[cfg(test)]
+fn run_before_copy_hook() {
+    BEFORE_COPY_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().take() {
+            hook();
+        }
+    });
+}
 
 /// Installs an artifact package over a component as an **additive overlay**.
 pub fn apply_swap(
@@ -48,18 +84,17 @@ pub fn apply_swap(
 ) -> Result<SwapResult, ServiceError> {
     let guard = crate::game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
     let storage = context.storage();
-    let game = storage.require_game(game_id)?;
-    let game_root = std::path::Path::new(game.install_path().as_str());
-    let loaded = load_apply_swap(storage, game_id, component_id, artifact_id)?;
-    ensure_artifact_sources_usable(storage, &loaded.artifact)?;
-    super::runtime_compatibility::ensure_artifact_compatible(
-        context,
-        &game,
-        &loaded.artifact,
-        true,
-    )?;
-    let mut prepared = prepare_apply_swap(game_id, component_id, loaded)?;
-    let scope = crate::file_mutation::MutationScope::single(game_root)?;
+    let preflight =
+        match super::swap::load_swap_preflight(context, game_id, component_id, artifact_id)? {
+            super::swap::SwapPreflight::Ready(preflight) => *preflight,
+            super::swap::SwapPreflight::UnusableSource { artifact_id, issue } => {
+                invalidate_stale_artifact(storage, &artifact_id, &issue.to_string());
+                return Err(AppError::stale_replacement_source().into());
+            }
+        };
+    let game_root = std::path::PathBuf::from(preflight.game.install_path().as_str());
+    let mut prepared = prepare_apply_swap(game_id, component_id, preflight)?;
+    let scope = crate::file_mutation::MutationScope::single(&game_root)?;
     crate::file_mutation::run_durable_mutation(
         crate::file_mutation::DurableMutation {
             context,
@@ -70,6 +105,9 @@ pub fn apply_swap(
             paths: apply_mutation_paths(&prepared),
         },
         |mutation_id| -> AppResult<SwapResult> {
+            #[cfg(test)]
+            run_before_copy_hook();
+
             perform_apply_fs(
                 &prepared.component,
                 &prepared.baseline,
@@ -77,12 +115,15 @@ pub fn apply_swap(
                 &prepared.removed,
             )?;
 
-            if let Err(error) = rebind_planned_files_from_disk(&mut prepared.planned) {
+            if let Err(error) = rebind_planned_files_for_technology(
+                &mut prepared.planned,
+                prepared.component.technology(),
+            ) {
                 if matches!(error.kind(), AppErrorKind::StaleReplacementSource) {
                     invalidate_stale_artifact(
                         storage,
                         prepared.artifact.id(),
-                        "installed target hash mismatch",
+                        "installed target content or PE metadata mismatch",
                     );
                 }
                 return Err(error);
@@ -184,6 +225,7 @@ pub fn rollback_component(
             .into_component();
     let baseline = crate::coordinated_files::resolve_component_baseline(
         game_root,
+        component.technology(),
         component.files(),
         Some(&baseline),
         &managed_files,
@@ -331,24 +373,6 @@ fn addon_after_catalog_rollback(
         return Ok(None);
     };
     crate::coordinated_files::record_after_component_rollback(&record, component, baseline)
-}
-
-/// Performs read-only source validation and owns best-effort stale-row recovery.
-///
-/// The planning module never mutates the catalog. Once apply proves that a
-/// source is unusable, this boundary removes the stale row so a details reload
-/// can offer a healthy downloaded or re-scanned candidate.
-fn ensure_artifact_sources_usable(
-    storage: &SqliteStorage,
-    artifact: &renderpilot_domain::LibraryArtifact,
-) -> AppResult<()> {
-    match validate_artifact_sources(artifact)? {
-        ArtifactSourceCheck::Ok => Ok(()),
-        ArtifactSourceCheck::Unusable(issue) => {
-            invalidate_stale_artifact(storage, artifact.id(), &issue.to_string());
-            Err(AppError::stale_replacement_source())
-        }
-    }
 }
 
 fn invalidate_stale_artifact(storage: &SqliteStorage, artifact_id: &ArtifactId, reason: &str) {

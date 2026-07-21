@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
-    ComponentKind, GameInstallation, GraphicsComponent, GraphicsTechnology, PathRef,
-    RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, Version,
+    ComponentFile, ComponentKind, GameInstallation, GraphicsComponent, GraphicsTechnology, PathRef,
+    PeCompatibilityProfile, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, Version,
 };
 use serde::Serialize;
 
@@ -47,6 +47,8 @@ pub struct DetectedLibraryFile {
     cache_key: FileCacheKey,
     #[serde(skip)]
     runtime_target: Option<RuntimeTarget>,
+    #[serde(skip)]
+    pe_compatibility: Option<PeCompatibilityProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +78,7 @@ impl DetectedLibraryFile {
         classification: LibraryFileClassification,
         metadata: DetectedFileMetadata,
         runtime_target: Option<RuntimeTarget>,
+        pe_compatibility: Option<PeCompatibilityProfile>,
     ) -> Self {
         Self {
             file_name,
@@ -89,6 +92,7 @@ impl DetectedLibraryFile {
             sha256: metadata.sha256,
             cache_key: metadata.cache_key,
             runtime_target,
+            pe_compatibility,
         }
     }
 
@@ -145,6 +149,18 @@ impl DetectedLibraryFile {
     /// Returns runtime facts extracted while the file was detected.
     pub(crate) fn runtime_target(&self) -> Option<&RuntimeTarget> {
         self.runtime_target.as_ref()
+    }
+
+    /// Converts this detection into its domain file representation.
+    pub(crate) fn component_file(&self) -> ComponentFile {
+        let mut file = ComponentFile::new(self.file_path.clone()).with_sha256(self.sha256.clone());
+        if let Some(version) = &self.version {
+            file = file.with_version(version.clone());
+        }
+        if let Some(profile) = &self.pe_compatibility {
+            file = file.with_pe_compatibility(profile.clone());
+        }
+        file
     }
 }
 
@@ -327,11 +343,28 @@ impl LibraryPatternComponentDetector {
         };
 
         let file_path = path_ref_from_path(file)?;
-        let Some(metadata) = try_read_detected_file_metadata(file, &file_path, cache)? else {
+        let inspection = matches!(
+            classification.technology,
+            GraphicsTechnology::MicrosoftDxc
+                | GraphicsTechnology::D3D12Agility
+                | GraphicsTechnology::OpenVr
+        )
+        .then(|| crate::inspect_pe(file))
+        .flatten();
+        let observed_version = inspection
+            .as_ref()
+            .map(|inspection| inspection.version.clone());
+        let Some(metadata) =
+            try_read_detected_file_metadata(file, &file_path, cache, observed_version)?
+        else {
             return Ok(None);
         };
 
-        let runtime_target = runtime_target_for_file(classification.technology, file);
+        let runtime_target =
+            runtime_target_from_inspection(classification.technology, inspection.as_ref());
+        let pe_compatibility = (classification.technology == GraphicsTechnology::OpenVr)
+            .then(|| inspection.as_ref()?.compatibility_profile())
+            .flatten();
 
         Ok(Some(DetectedLibraryFile::from_parts(
             file_name.to_owned(),
@@ -339,6 +372,7 @@ impl LibraryPatternComponentDetector {
             classification,
             metadata,
             runtime_target,
+            pe_compatibility,
         )))
     }
 
@@ -354,7 +388,10 @@ impl LibraryPatternComponentDetector {
     }
 }
 
-fn runtime_target_for_file(technology: GraphicsTechnology, path: &Path) -> Option<RuntimeTarget> {
+fn runtime_target_from_inspection(
+    technology: GraphicsTechnology,
+    inspection: Option<&crate::PeInspection>,
+) -> Option<RuntimeTarget> {
     if !matches!(
         technology,
         GraphicsTechnology::MicrosoftDxc | GraphicsTechnology::D3D12Agility
@@ -362,7 +399,7 @@ fn runtime_target_for_file(technology: GraphicsTechnology, path: &Path) -> Optio
         return None;
     }
 
-    let inspection = crate::inspect_pe(path)?;
+    let inspection = inspection?;
     let architecture = inspection.architecture?;
     let mut target = RuntimeTarget::new(architecture);
     if technology == GraphicsTechnology::D3D12Agility {

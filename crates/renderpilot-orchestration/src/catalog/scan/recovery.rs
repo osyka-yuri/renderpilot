@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use renderpilot_application::{AppResult, GameRepository, InstalledAddonRepository};
-use renderpilot_detection::{read_windows_file_version, sha256_file};
+use renderpilot_detection::sha256_file;
 use renderpilot_domain::{
     ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
 };
@@ -22,6 +22,7 @@ pub(super) fn recover_orphaned_backups(
             crate::coordinated_files::ComponentBackupAvailability::Available(baseline) => {
                 crate::coordinated_files::resolve_component_baseline(
                     game_root,
+                    component.technology(),
                     component.files(),
                     Some(&baseline),
                     crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
@@ -64,7 +65,9 @@ pub(super) fn recover_orphaned_backups(
                 log::warn!("recovery: cannot derive backup path for {original_path}, skipping");
                 continue;
             };
-            if let Some(recovered_file) = recover_bak_file(&bak_path, original_path)? {
+            if let Some(recovered_file) =
+                recover_bak_file_for_technology(&bak_path, original_path, component.technology())?
+            {
                 recovered_baseline.push(recovered_file);
             }
         }
@@ -93,9 +96,10 @@ pub(super) fn recover_orphaned_backups(
 /// Returns `None` only when the backup does not exist. Once a classic sidecar
 /// exists it is a baseline claim: invalid, empty or unreadable bytes block the
 /// scan instead of being silently ignored and later overwritten by a mutator.
-fn recover_bak_file(
+fn recover_bak_file_for_technology(
     bak_path: &std::path::Path,
     original_path: &str,
+    technology: GraphicsTechnology,
 ) -> AppResult<Option<ComponentFile>> {
     match std::fs::metadata(bak_path) {
         Ok(meta) if !meta.is_file() || meta.len() == 0 => {
@@ -130,10 +134,9 @@ fn recover_bak_file(
 
     let mut component_file = ComponentFile::new(path_ref).with_sha256(sha256);
 
-    // Best-effort: read the PE file version from the backup (non-PE backups have none).
-    if let Some(version) = read_windows_file_version(bak_path) {
-        component_file = component_file.with_version(version);
-    }
+    // Best-effort: observe version and technology-specific PE metadata.
+    component_file =
+        crate::coordinated_files::with_observed_metadata(component_file, technology, bak_path);
 
     Ok(Some(component_file))
 }
@@ -186,7 +189,11 @@ fn recover_orphaned_fsr_split_members(
             continue;
         }
 
-        if let Some(recovered_file) = recover_bak_file(&bak_path, original_path.as_ref())? {
+        if let Some(recovered_file) = recover_bak_file_for_technology(
+            &bak_path,
+            original_path.as_ref(),
+            GraphicsTechnology::AmdFsr,
+        )? {
             recovered_baseline.push(recovered_file);
         }
     }
@@ -208,8 +215,12 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let bak = dir.path().join("nvngx_dlss.dll.bak");
         let original = dir.path().join("nvngx_dlss.dll");
-        let recovered =
-            recover_bak_file(&bak, original.to_string_lossy().as_ref()).expect("no error");
+        let recovered = recover_bak_file_for_technology(
+            &bak,
+            original.to_string_lossy().as_ref(),
+            GraphicsTechnology::DlssSuperResolution,
+        )
+        .expect("no error");
         assert!(recovered.is_none());
     }
 
@@ -219,8 +230,12 @@ mod tests {
         let bak = dir.path().join("nvngx_dlss.dll.bak");
         write(&bak, b"");
         let original = dir.path().join("nvngx_dlss.dll");
-        let error = recover_bak_file(&bak, original.to_string_lossy().as_ref())
-            .expect_err("invalid sidecar must block");
+        let error = recover_bak_file_for_technology(
+            &bak,
+            original.to_string_lossy().as_ref(),
+            GraphicsTechnology::DlssSuperResolution,
+        )
+        .expect_err("invalid sidecar must block");
         assert!(error.message().contains("non-empty"));
     }
 
@@ -230,9 +245,13 @@ mod tests {
         let bak = dir.path().join("nvngx_dlss.dll.bak");
         write(&bak, b"original-bytes");
         let original = dir.path().join("nvngx_dlss.dll");
-        let recovered = recover_bak_file(&bak, original.to_string_lossy().as_ref())
-            .expect("no error")
-            .expect("a readable backup should be recovered");
+        let recovered = recover_bak_file_for_technology(
+            &bak,
+            original.to_string_lossy().as_ref(),
+            GraphicsTechnology::DlssSuperResolution,
+        )
+        .expect("no error")
+        .expect("a readable backup should be recovered");
         assert!(
             recovered.path().as_str().ends_with("nvngx_dlss.dll"),
             "recovered file points at the live path, not the .bak"

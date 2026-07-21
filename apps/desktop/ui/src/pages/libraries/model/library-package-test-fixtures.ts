@@ -2,7 +2,7 @@ import type { LibraryPackageSummary, ReleaseChannel, Signature } from '@entities
 
 export type PackageFixture = Readonly<{
   id: string;
-  vendor?: 'nvidia' | 'amd' | 'intel' | 'microsoft';
+  vendor?: LibraryPackageSummary['vendor'];
   technology?: string;
   variant?: string;
   version?: string;

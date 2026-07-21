@@ -4,30 +4,29 @@
 //! boundary. This module remains a catalog/planning step once loaded inputs are
 //! supplied.
 
-use renderpilot_application::{
-    AppError, AppResult, GameRepository, InstalledAddonRepository, build_swap_operation_plan,
-};
-use renderpilot_domain::{ArtifactId, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
-use renderpilot_storage_sqlite::SqliteStorage;
+use renderpilot_application::{AppError, AppResult, OperationPlan};
+use renderpilot_domain::{ComponentId, GameId};
 
-use crate::catalog::swap::{require_artifact, require_component_for_game};
+use crate::catalog::swap::ReadySwapPreflight;
 
 use super::planning::{fsr_members_to_remove, planned_target_files, resolve_target_dir};
-use super::types::{LoadedApplySwap, PreparedApplySwap};
+use super::types::PreparedApplySwap;
 
 pub(super) fn prepare_apply_swap(
     game_id: &GameId,
     component_id: &ComponentId,
-    loaded: LoadedApplySwap,
+    preflight: ReadySwapPreflight,
 ) -> AppResult<PreparedApplySwap> {
-    let LoadedApplySwap {
+    let ReadySwapPreflight {
+        game: _,
         component,
         artifact,
         baseline,
         first_swap,
-    } = loaded;
+        operation_plan,
+    } = preflight;
 
-    validate_apply_is_allowed(&component, &artifact)?;
+    validate_apply_is_allowed(&operation_plan)?;
 
     let target_dir = resolve_target_dir(&component)?;
     let planned = planned_target_files(&artifact, &target_dir, &component)?;
@@ -49,12 +48,7 @@ pub(super) fn prepare_apply_swap(
     })
 }
 
-fn validate_apply_is_allowed(
-    component: &GraphicsComponent,
-    artifact: &LibraryArtifact,
-) -> AppResult<()> {
-    let plan = build_swap_operation_plan(component, artifact)?;
-
+fn validate_apply_is_allowed(plan: &OperationPlan) -> AppResult<()> {
     if plan.blockers().is_empty() {
         return Ok(());
     }
@@ -69,52 +63,4 @@ fn validate_apply_is_allowed(
     Err(AppError::invalid_input(format!(
         "cannot apply blocked swap: {blockers}"
     )))
-}
-
-pub(super) fn load_apply_swap(
-    storage: &SqliteStorage,
-    game_id: &GameId,
-    component_id: &ComponentId,
-    artifact_id: &ArtifactId,
-) -> AppResult<LoadedApplySwap> {
-    let game = storage.require_game(game_id)?;
-    let component = require_component_for_game(storage, game_id, component_id)?;
-    let artifact = require_artifact(storage, artifact_id)?;
-
-    let recorded_baseline =
-        crate::coordinated_files::load_component_backup_availability(storage, &component)?
-            .into_available();
-    // A stale row without usable bytes is rebased from the current on-disk
-    // component by the normal first-swap path. The successful atomic commit
-    // then replaces the stale identity row with the new honest baseline.
-    let first_swap = recorded_baseline.is_none();
-    let installed_addon = storage.get_installed_addon(game_id)?;
-    let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
-    let component = crate::coordinated_files::current_component_snapshot(&component, managed_files)
-        .map_err(|error| {
-            AppError::invalid_input(format!(
-                "component {} changed on disk since it was scanned: {error}",
-                component_id.as_str()
-            ))
-        })?
-        .into_component();
-    let baseline = crate::coordinated_files::resolve_component_baseline(
-        std::path::Path::new(game.install_path().as_str()),
-        component.files(),
-        recorded_baseline.as_deref(),
-        managed_files,
-    )
-    .map_err(|error| {
-        AppError::invalid_input(format!(
-            "cannot resolve an immutable baseline for component {}: {error}",
-            component_id.as_str()
-        ))
-    })?;
-
-    Ok(LoadedApplySwap {
-        component,
-        artifact,
-        baseline,
-        first_swap,
-    })
 }

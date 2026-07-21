@@ -1,6 +1,6 @@
 pub(super) use super::test_support::{
-    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_bundle_component,
-    sample_component, sample_game,
+    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_bundle_artifact,
+    sample_bundle_component, sample_component, sample_game,
 };
 
 mod artifacts;

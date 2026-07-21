@@ -13,7 +13,6 @@ use renderpilot_domain::{
 use crate::error::detection_error;
 
 use super::DetectedLibraryFile;
-use super::classification::component_file_from_detection;
 
 /// Groups detected library files into one [`GraphicsComponent`] per
 /// `(directory, grouping technology)`.
@@ -96,11 +95,7 @@ fn build_grouped_component(
     );
 
     for file in &ordered {
-        component = component.with_file(component_file_from_detection(
-            file.file_path().clone(),
-            file.sha256().clone(),
-            file.version().cloned(),
-        ));
+        component = component.with_file(file.component_file());
     }
 
     Ok(component)
@@ -113,16 +108,7 @@ fn build_grouped_artifact(
     let ordered = order_with_primary_first(&group.files);
     let artifact_id = ArtifactId::for_bundle(ordered.iter().map(|file| file.sha256()));
 
-    let files: Vec<ComponentFile> = ordered
-        .iter()
-        .map(|file| {
-            component_file_from_detection(
-                file.file_path().clone(),
-                file.sha256().clone(),
-                file.version().cloned(),
-            )
-        })
-        .collect();
+    let files: Vec<ComponentFile> = ordered.iter().map(|file| file.component_file()).collect();
 
     let metadata = runtime_metadata(group.technology, &ordered);
     LibraryArtifact::new(

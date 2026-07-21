@@ -6,8 +6,8 @@ use std::path::Path;
 use renderpilot_application::validate_runtime_artifact;
 use renderpilot_domain::{
     ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, GraphicsTechnology,
-    LibraryArtifact, PathRef, RuntimeTarget, Sha256Hash, UpstreamPackage, UpstreamPackageProvider,
-    Version,
+    LibraryArtifact, PathRef, PeCompatibilityProfile, RuntimeTarget, Sha256Hash, UpstreamPackage,
+    UpstreamPackageProvider, Version,
 };
 
 use crate::ServiceError;
@@ -195,36 +195,59 @@ fn build_component_file(
     artifact: &LibraryArtifactRecord,
     install_as: &str,
 ) -> Result<ComponentFile, ServiceError> {
-    let version = Version::parse(&artifact.file_version)
-        .map_err(|error| library_error(format!("invalid artifact file version: {error}")))?;
     let sha256 = Sha256Hash::new(&artifact.dll.sha256)
         .map_err(|error| library_error(format!("invalid artifact digest: {error}")))?;
-    Ok(ComponentFile::new(path)
-        .with_version(version)
+    let mut file = ComponentFile::new(path)
         .with_sha256(sha256)
-        .with_install_as(install_as))
+        .with_install_as(install_as);
+    if let Some(version) = &artifact.file_version {
+        file =
+            file.with_version(Version::parse(version).map_err(|error| {
+                library_error(format!("invalid artifact file version: {error}"))
+            })?);
+    }
+    if let Some(exports) = &artifact.pe_named_exports {
+        file = file.with_pe_compatibility(PeCompatibilityProfile::new(
+            artifact.architecture,
+            exports.clone(),
+        ));
+    }
+    Ok(file)
 }
 
 fn package_metadata(package: &LibraryPackage) -> Result<ArtifactMetadata, ServiceError> {
     let release = Version::parse(&package.release.version)
         .map_err(|error| library_error(format!("invalid package release version: {error}")))?;
     let mut metadata = ArtifactMetadata::default()
-        .with_release_version(release)
+        .with_release(release, package.release.label.clone())
+        .map_err(|error| library_error(format!("invalid release metadata: {error}")))?
         .with_runtime_target(match &package.target.compatibility {
             Some(compatibility) => RuntimeTarget::new(package.target.architecture)
                 .with_compatibility(compatibility.clone()),
             None => RuntimeTarget::new(package.target.architecture),
         });
-    if let Some(LibraryProvenance::Nuget {
-        package_id,
-        version,
-        ..
-    }) = &package.provenance
-    {
-        metadata = metadata.with_upstream_package(
-            UpstreamPackage::new(UpstreamPackageProvider::NuGet, package_id, version)
-                .map_err(|error| library_error(format!("invalid NuGet provenance: {error}")))?,
-        );
+    match &package.provenance {
+        Some(LibraryProvenance::Nuget {
+            package_id,
+            version,
+            ..
+        }) => {
+            metadata = metadata.with_upstream_package(
+                UpstreamPackage::new(UpstreamPackageProvider::NuGet, package_id, version)
+                    .map_err(|error| library_error(format!("invalid NuGet provenance: {error}")))?,
+            );
+        }
+        Some(LibraryProvenance::GithubRelease { repository, .. }) => {
+            metadata = metadata.with_upstream_package(
+                UpstreamPackage::new(
+                    UpstreamPackageProvider::GitHub,
+                    repository,
+                    &package.release.version,
+                )
+                .map_err(|error| library_error(format!("invalid GitHub provenance: {error}")))?,
+            );
+        }
+        None => {}
     }
     Ok(metadata)
 }

@@ -97,6 +97,7 @@ pub(crate) fn cascade_rollback_specs(
                     .into_component();
             let baseline = crate::coordinated_files::resolve_component_baseline(
                 &game_root,
+                component.technology(),
                 component.files(),
                 Some(&baseline),
                 &managed_files,

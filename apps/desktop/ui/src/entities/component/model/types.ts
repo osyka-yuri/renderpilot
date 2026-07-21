@@ -29,6 +29,7 @@ export type Candidate = {
   file_name: string;
   file_path: FilePath | null;
   version?: Nullable<Version>;
+  release_label: Nullable<string>;
   source_game_id?: Nullable<GameId>;
   comparison: CandidateComparison;
   warning?: Nullable<string>;
@@ -38,8 +39,8 @@ export type Candidate = {
   sha256: string;
 };
 
-export type ComponentVersionReport =
-  | { kind: 'known'; version: Version }
+export type InstalledReleaseState =
+  | { kind: 'known'; version: Version; release_label: Nullable<string> }
   | { kind: 'mixed'; min_version: Version; max_version: Version }
   | { kind: 'unknown' };
 
@@ -47,7 +48,7 @@ export type CandidateGroup = {
   component_id: ComponentId;
   technology: Technology;
   file_path: FilePath;
-  version_report: ComponentVersionReport;
+  version_report: InstalledReleaseState;
   candidates: Candidate[];
 };
 

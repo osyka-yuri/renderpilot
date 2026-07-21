@@ -1,103 +1,14 @@
-//! Filesystem integrity for swap sources and post-install metadata rebind.
+//! Post-install hash verification and metadata rebind.
 //!
-//! Pure plan math lives in [`super::planning`]. This module intentionally
-//! touches disk so apply never trusts a stale catalog path or snapshot.
-
-use std::path::Path;
+//! Pure plan math lives in [`super::planning`]. The read-only source assessment
+//! belongs to the shared catalog preflight; this module closes the later
+//! preflight-to-copy race against the bytes actually installed.
 
 use renderpilot_application::{AppError, AppResult};
-use renderpilot_detection::{read_windows_file_version, sha256_file};
-use renderpilot_domain::{ComponentFile, LibraryArtifact};
+use renderpilot_detection::{inspect_pe_bytes, sha256_bytes};
+use renderpilot_domain::{ComponentFile, GraphicsTechnology};
 
 use super::types::PlannedFile;
-
-/// Why an artifact source failed integrity checks.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum ArtifactSourceIssue {
-    /// Path is gone (deleted game files, moved install, …).
-    Missing { path: String },
-    /// Path exists but is not a regular file that can be copied as a DLL.
-    NotRegularFile { path: String },
-    /// The catalog row has no digest to verify against.
-    MissingExpectedHash { path: String },
-    /// Path exists but bytes no longer match the catalog snapshot.
-    ContentMismatch { path: String },
-}
-
-impl std::fmt::Display for ArtifactSourceIssue {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Missing { path } => write!(formatter, "missing path {path}"),
-            Self::NotRegularFile { path } => write!(formatter, "not a regular file at {path}"),
-            Self::MissingExpectedHash { path } => {
-                write!(formatter, "missing expected content hash for {path}")
-            }
-            Self::ContentMismatch { path } => {
-                write!(formatter, "content hash mismatch at {path}")
-            }
-        }
-    }
-}
-
-/// Outcome of pre-apply source integrity checks (single layer — not nested Result).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum ArtifactSourceCheck {
-    Ok,
-    Unusable(ArtifactSourceIssue),
-}
-
-/// Ensures every artifact source path exists and still matches its declared
-/// content hash.
-///
-/// Returns [`ArtifactSourceCheck::Unusable`] when the catalog snapshot is
-/// unusable so the caller can delete the row and surface
-/// [`AppError::stale_replacement_source`]. Transient hash I/O failures stay as
-/// [`AppError`] (not treated as "stale entry").
-pub(super) fn validate_artifact_sources(
-    artifact: &LibraryArtifact,
-) -> AppResult<ArtifactSourceCheck> {
-    for file in artifact.files() {
-        let path = Path::new(file.path().as_str());
-        if !path.exists() {
-            return Ok(ArtifactSourceCheck::Unusable(
-                ArtifactSourceIssue::Missing {
-                    path: file.path().as_str().to_owned(),
-                },
-            ));
-        }
-        if !path.is_file() {
-            return Ok(ArtifactSourceCheck::Unusable(
-                ArtifactSourceIssue::NotRegularFile {
-                    path: file.path().as_str().to_owned(),
-                },
-            ));
-        }
-
-        let Some(expected) = file.sha256() else {
-            return Ok(ArtifactSourceCheck::Unusable(
-                ArtifactSourceIssue::MissingExpectedHash {
-                    path: file.path().as_str().to_owned(),
-                },
-            ));
-        };
-
-        let actual = sha256_file(path).map_err(|error| {
-            AppError::provider_failed(format!(
-                "failed to hash artifact source {}: {error}",
-                file.path().as_str()
-            ))
-        })?;
-
-        if actual.as_str() != expected.as_str() {
-            return Ok(ArtifactSourceCheck::Unusable(
-                ArtifactSourceIssue::ContentMismatch {
-                    path: file.path().as_str().to_owned(),
-                },
-            ));
-        }
-    }
-    Ok(ArtifactSourceCheck::Ok)
-}
 
 /// Verifies each installed target still matches the planned artifact bytes,
 /// then re-reads PE metadata for persistence.
@@ -108,31 +19,49 @@ pub(super) fn validate_artifact_sources(
 /// A source can change after preflight but before `copy`; hashing the target
 /// closes that TOCTOU window. Unreadable PE metadata stays unknown instead of
 /// inheriting a manifest label that was never observed on the installed file.
-pub(super) fn rebind_planned_files_from_disk(planned: &mut [PlannedFile]) -> AppResult<()> {
-    planned.iter_mut().try_for_each(rebind_planned_file)
+pub(super) fn rebind_planned_files_for_technology(
+    planned: &mut [PlannedFile],
+    technology: GraphicsTechnology,
+) -> AppResult<()> {
+    planned
+        .iter_mut()
+        .try_for_each(|plan| rebind_planned_file(plan, technology))
 }
 
-fn rebind_planned_file(plan: &mut PlannedFile) -> AppResult<()> {
+fn rebind_planned_file(plan: &mut PlannedFile, technology: GraphicsTechnology) -> AppResult<()> {
     let target = plan.target();
     let Some(expected) = plan.file.sha256() else {
         return Err(AppError::stale_replacement_source());
     };
-    let sha256 = sha256_file(&target).map_err(|error| {
+    let bytes = std::fs::read(&target).map_err(|error| {
         AppError::provider_failed(format!(
-            "failed to hash installed file {}: {error}",
+            "failed to read installed file {}: {error}",
             target.display()
         ))
     })?;
+    let sha256 = sha256_bytes(&bytes)?;
     if sha256 != *expected {
         return Err(AppError::stale_replacement_source());
+    }
+
+    let inspection = inspect_pe_bytes(&bytes);
+    if technology == GraphicsTechnology::OpenVr {
+        let expected_profile = plan
+            .file
+            .pe_compatibility()
+            .ok_or_else(AppError::stale_replacement_source)?;
+        let observed_profile = inspection
+            .compatibility_profile()
+            .ok_or_else(AppError::stale_replacement_source)?;
+        if &observed_profile != expected_profile {
+            return Err(AppError::stale_replacement_source());
+        }
     }
 
     // Fresh ComponentFile keeps the install path and drops any planned version
     // unless PE metadata can be read from the installed bytes.
     let mut file = ComponentFile::new(plan.file.path().clone()).with_sha256(sha256);
-    if let Some(version) = read_windows_file_version(&target) {
-        file = file.with_version(version);
-    }
+    file = crate::coordinated_files::with_observed_inspection(file, technology, &inspection);
     plan.file = file;
     Ok(())
 }
@@ -142,15 +71,16 @@ mod tests {
     use std::fs;
 
     use renderpilot_domain::{
-        ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact,
-        PathRef, Sha256Hash, Version,
+        Architecture, ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology,
+        LibraryArtifact, PathRef, PeCompatibilityProfile, PeExportSet, Sha256Hash, Version,
     };
 
-    use super::{
-        ArtifactSourceCheck, ArtifactSourceIssue, rebind_planned_files_from_disk,
-        validate_artifact_sources,
-    };
+    use super::rebind_planned_files_for_technology;
     use crate::catalog::execute::types::PlannedFile;
+    use crate::catalog::source_assessment::{
+        ArtifactSourceAssessment, ArtifactSourceIssue, assess_artifact_runtime_metadata,
+        assess_artifact_sources,
+    };
 
     const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -179,8 +109,8 @@ mod tests {
         .expect("artifact");
 
         assert_eq!(
-            validate_artifact_sources(&artifact).expect("hash ok"),
-            ArtifactSourceCheck::Ok
+            assess_artifact_sources(&artifact),
+            ArtifactSourceAssessment::Usable
         );
     }
 
@@ -203,8 +133,8 @@ mod tests {
         )
         .expect("artifact");
 
-        match validate_artifact_sources(&artifact).expect("validation ran") {
-            ArtifactSourceCheck::Unusable(ArtifactSourceIssue::ContentMismatch { .. }) => {}
+        match assess_artifact_sources(&artifact) {
+            ArtifactSourceAssessment::Unusable(ArtifactSourceIssue::ContentMismatch { .. }) => {}
             other => panic!("expected content mismatch, got {other:?}"),
         }
     }
@@ -223,8 +153,8 @@ mod tests {
         )
         .expect("artifact");
 
-        match validate_artifact_sources(&artifact).expect("validation ran") {
-            ArtifactSourceCheck::Unusable(ArtifactSourceIssue::Missing { .. }) => {}
+        match assess_artifact_sources(&artifact) {
+            ArtifactSourceAssessment::Unusable(ArtifactSourceIssue::Missing { .. }) => {}
             other => panic!("expected missing path, got {other:?}"),
         }
     }
@@ -247,8 +177,37 @@ mod tests {
         .expect("artifact");
 
         assert!(matches!(
-            validate_artifact_sources(&artifact).expect("validation ran"),
-            ArtifactSourceCheck::Unusable(ArtifactSourceIssue::NotRegularFile { .. })
+            assess_artifact_sources(&artifact),
+            ArtifactSourceAssessment::Unusable(ArtifactSourceIssue::NotRegularFile { .. })
+        ));
+    }
+
+    #[test]
+    fn reports_runtime_pe_mismatch_as_a_typed_source_issue() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let source = dir.path().join("runtime.dll");
+        write(&source, b"not-a-pe-image");
+        let sha = renderpilot_detection::sha256_file(&source).expect("hash");
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:runtime-metadata-mismatch").expect("id"),
+            GraphicsTechnology::DlssSuperResolution,
+            "runtime.dll",
+            vec![
+                ComponentFile::new(PathRef::new(source.to_string_lossy().as_ref()).expect("path"))
+                    .with_sha256(sha),
+            ],
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("artifact")
+        .with_metadata(
+            renderpilot_domain::ArtifactMetadata::default().with_runtime_target(
+                renderpilot_domain::RuntimeTarget::new(renderpilot_domain::Architecture::X64),
+            ),
+        );
+
+        assert!(matches!(
+            assess_artifact_runtime_metadata(&artifact),
+            ArtifactSourceAssessment::Unusable(ArtifactSourceIssue::RuntimeMetadataMismatch { .. })
         ));
     }
 
@@ -268,7 +227,8 @@ mod tests {
                 .with_version(Version::parse("310.7.0.0").expect("version")),
         }];
 
-        rebind_planned_files_from_disk(&mut planned).expect("matching target rebinds");
+        rebind_planned_files_for_technology(&mut planned, GraphicsTechnology::DlssSuperResolution)
+            .expect("matching target rebinds");
         assert_eq!(planned[0].file.sha256(), Some(&expected));
         assert_eq!(
             planned[0].file.version(),
@@ -290,8 +250,36 @@ mod tests {
             source: target,
             file: ComponentFile::new(target_ref).with_sha256(expected),
         }];
-        let error =
-            rebind_planned_files_from_disk(&mut planned).expect_err("changed target is stale");
+        let error = rebind_planned_files_for_technology(
+            &mut planned,
+            GraphicsTechnology::DlssSuperResolution,
+        )
+        .expect_err("changed target is stale");
+        assert_eq!(
+            error.kind(),
+            &renderpilot_application::AppErrorKind::StaleReplacementSource
+        );
+    }
+
+    #[test]
+    fn openvr_rebind_rejects_matching_non_pe_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target = dir.path().join("openvr_api.dll");
+        write(&target, b"matching-hash-but-not-a-pe");
+        let target_ref = PathRef::new(target.to_string_lossy().as_ref()).expect("path");
+        let expected = renderpilot_detection::sha256_file(&target).expect("hash");
+        let exports =
+            PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports");
+        let profile = PeCompatibilityProfile::new(Architecture::X64, exports);
+        let mut planned = [PlannedFile {
+            source: target,
+            file: ComponentFile::new(target_ref)
+                .with_sha256(expected)
+                .with_pe_compatibility(profile),
+        }];
+
+        let error = rebind_planned_files_for_technology(&mut planned, GraphicsTechnology::OpenVr)
+            .expect_err("OpenVR requires an observed profile");
         assert_eq!(
             error.kind(),
             &renderpilot_application::AppErrorKind::StaleReplacementSource

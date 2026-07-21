@@ -1,7 +1,16 @@
 import { humanizeToken } from '@shared/text';
 import { fileNameFromPath, sharedParentPath } from '@shared/path';
 
-export type LibraryVendorKey = 'nvidia' | 'amd' | 'intel' | 'microsoft' | 'other';
+export const libraryVendorBlueprints = [
+  { key: 'nvidia', label: 'NVIDIA' },
+  { key: 'amd', label: 'AMD' },
+  { key: 'intel', label: 'Intel' },
+  { key: 'microsoft', label: 'Microsoft' },
+  { key: 'valve', label: 'Valve' },
+  { key: 'other', label: 'Additional' },
+] as const;
+
+export type LibraryVendorKey = (typeof libraryVendorBlueprints)[number]['key'];
 
 export type PresentedLibrary = {
   tag: string;
@@ -21,13 +30,9 @@ export type PresentedLibraryFiles = Readonly<{
   locations: readonly string[];
 }>;
 
-export const libraryVendorOrder: readonly LibraryVendorKey[] = [
-  'nvidia',
-  'amd',
-  'intel',
-  'microsoft',
-  'other',
-];
+export const libraryVendorOrder: readonly LibraryVendorKey[] = libraryVendorBlueprints.map(
+  ({ key }) => key,
+);
 
 const LIBRARY_UPPERCASE_WORDS = new Set([
   'AMD',
@@ -39,6 +44,7 @@ const LIBRARY_UPPERCASE_WORDS = new Set([
   'XEFG',
   'XELL',
   'XESS',
+  'VR',
 ]);
 
 const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
@@ -59,6 +65,7 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   direct_storage: 'Microsoft DirectStorage',
   microsoft_dxc: 'Microsoft DXC',
   d3d12_agility: 'Microsoft D3D12 Agility',
+  openvr: 'Valve OpenVR',
 };
 
 /** Sub-tags that are internal to AMD FSR and expanded from the top-level `amd_fsr` alias. */
@@ -87,23 +94,13 @@ const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'Microsoft DirectStorage': 'DirectStorage',
   'Microsoft DXC': 'DXC',
   'Microsoft D3D12 Agility': 'D3D12 Agility',
+  'Valve OpenVR': 'OpenVR',
 };
 
 const AMD_FSR_TECHNOLOGY = 'amd_fsr';
 const AMD_FSR_ENTRY_POINT_FILE = 'amd_fidelityfx_dx12.dll';
 const MICROSOFT_DXC_TECHNOLOGY = 'microsoft_dxc';
 const MICROSOFT_DXC_FILES = ['dxcompiler.dll', 'dxil.dll'] as const;
-
-const VENDOR_BLUEPRINTS: readonly {
-  key: LibraryVendorKey;
-  label: string;
-}[] = [
-  { key: libraryVendorOrder[0], label: 'NVIDIA' },
-  { key: libraryVendorOrder[1], label: 'AMD' },
-  { key: libraryVendorOrder[2], label: 'Intel' },
-  { key: libraryVendorOrder[3], label: 'Microsoft' },
-  { key: libraryVendorOrder[4], label: 'Additional' },
-];
 
 export function formatCanonicalLibraryLabel(value?: string | null): string {
   if (!value) {
@@ -152,11 +149,15 @@ export function libraryVendorKey(value?: string | null): LibraryVendorKey {
     return 'microsoft';
   }
 
+  if (normalized.startsWith('valve') || normalized.startsWith('openvr')) {
+    return 'valve';
+  }
+
   return 'other';
 }
 
 export function vendorLabelForLibraryVendorKey(value: LibraryVendorKey): string {
-  return VENDOR_BLUEPRINTS.find((vendor) => vendor.key === value)?.label ?? 'Additional';
+  return libraryVendorBlueprints.find((vendor) => vendor.key === value)?.label ?? 'Additional';
 }
 
 export function comparePresentedLibraries(

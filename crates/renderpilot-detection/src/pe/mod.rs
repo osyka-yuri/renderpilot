@@ -15,7 +15,7 @@ mod version_info;
 
 use std::{fs, path::Path};
 
-use renderpilot_domain::{Architecture, Version};
+use renderpilot_domain::{Architecture, PeCompatibilityProfile, PeExportSet, Version};
 
 pub use self::graphics::{analyze_executable, analyze_executable_bytes};
 pub use self::version_info::VersionIdentityStrings;
@@ -25,8 +25,8 @@ use self::{
     version_info::VersionInfo,
 };
 
-/// All PE facts RenoDX host detection needs, read from a single in-memory buffer
-/// so a candidate DLL is read from disk only once (rather than once per field).
+/// PE facts observed from one in-memory image, allowing callers to derive file
+/// version and compatibility data without reading the DLL once per field.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PeInspection {
     /// COFF architecture of the image, when supported.
@@ -39,17 +39,39 @@ pub struct PeInspection {
     pub export_names: Option<Vec<String>>,
 }
 
+impl PeInspection {
+    /// Builds a complete export-surface compatibility profile.
+    ///
+    /// A readable architecture with missing, empty, duplicate, or malformed
+    /// named exports is intentionally treated as no profile.
+    #[must_use]
+    pub fn compatibility_profile(&self) -> Option<PeCompatibilityProfile> {
+        let architecture = self.architecture?;
+        let exports = PeExportSet::from_observed_names(self.export_names.clone()?).ok()?;
+        Some(PeCompatibilityProfile::new(architecture, exports))
+    }
+}
+
 /// Reads [`PeInspection`] from a PE on disk in a single read. Returns `None` only
 /// when the file cannot be read; a readable non-PE yields a default inspection.
 #[must_use]
 pub fn inspect_pe(path: &Path) -> Option<PeInspection> {
     let bytes = fs::read(path).ok()?;
-    Some(PeInspection {
-        architecture: read_pe_architecture_from_bytes(&bytes),
-        version: read_windows_file_version_from_bytes(&bytes),
-        identity: read_windows_version_strings_from_bytes(&bytes).unwrap_or_default(),
-        export_names: read_pe_export_names_from_bytes(&bytes),
-    })
+    Some(inspect_pe_bytes(&bytes))
+}
+
+/// Inspects one immutable in-memory PE image.
+///
+/// A readable non-PE image yields a default inspection. Keeping this operation
+/// byte-based lets mutation boundaries hash and inspect the exact same snapshot.
+#[must_use]
+pub fn inspect_pe_bytes(bytes: &[u8]) -> PeInspection {
+    PeInspection {
+        architecture: read_pe_architecture_from_bytes(bytes),
+        version: read_windows_file_version_from_bytes(bytes),
+        identity: read_windows_version_strings_from_bytes(bytes).unwrap_or_default(),
+        export_names: read_pe_export_names_from_bytes(bytes),
+    }
 }
 
 /// Reads a unique named PE DATA export containing an inline `u32`.

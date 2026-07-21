@@ -92,6 +92,7 @@ export const typeOptionsByVendor = {
     { value: 'dxc', label: 'DXC', technology: 'microsoft_dxc' },
     { value: 'd3d12_agility', label: 'D3D12 Agility', technology: 'd3d12_agility' },
   ],
+  valve: [{ value: 'openvr', label: 'OpenVR', technology: 'openvr' }],
 } as const satisfies Record<Vendor, readonly LibraryTypeOption[]>;
 
 const vendorValues = new Set<Vendor>(vendorOptions.map(({ value }) => value));

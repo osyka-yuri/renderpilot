@@ -1,8 +1,8 @@
 use renderpilot_domain::{
     Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
-    ComponentKind, ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology,
-    LibraryArtifact, PathRef, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability,
-    UpstreamPackage, UpstreamPackageProvider, Version,
+    ComponentKind, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
+    PeCompatibilityProfile, PeExportSet, RuntimeCompatibility, RuntimeTarget, Sha256Hash,
+    Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     dxc::{COMPILER_FILE_NAME, VALIDATOR_FILE_NAME},
 };
 
-use super::dto::{CandidateComparison, ComponentReplacementCandidates};
+use super::dto::{CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState};
 use super::matcher::{CandidateContext, find_replacement_candidates};
 
 #[test]
@@ -393,11 +393,7 @@ fn download_state_does_not_reorder_distinct_versions() {
 }
 
 #[test]
-fn downloaded_twin_survives_deduplication() {
-    // Two distinct artifacts share (file_name, version, build type) — e.g. a
-    // downloaded library copy and its manifest twin. Exactly one row survives,
-    // and it must be the downloaded one even when the sha tie-break alone
-    // would have put the other first.
+fn distinct_payloads_with_the_same_version_are_not_deduplicated() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
@@ -431,13 +427,13 @@ fn downloaded_twin_survives_deduplication() {
     );
     let groups = find_replacement_candidates(&[component], &[manifest_twin, downloaded], &context);
 
-    assert_eq!(groups[0].candidates().len(), 1, "twins collapse to one row");
-    assert_eq!(
-        groups[0].candidates()[0].artifact_id().as_str(),
-        "artifact:downloaded",
-        "the downloaded twin survives deduplication"
+    assert_eq!(groups[0].candidates().len(), 2);
+    assert!(
+        groups[0]
+            .candidates()
+            .iter()
+            .any(|candidate| candidate.is_downloaded())
     );
-    assert!(groups[0].candidates()[0].is_downloaded());
 }
 
 #[test]
@@ -483,10 +479,10 @@ fn mixed_streamline_reports_range_and_comparisons_are_unknown() {
     let groups = find_test_candidates(&[component], &[package]);
     assert_eq!(groups.len(), 1);
     assert_eq!(
-        groups[0].version_report(),
-        &ComponentVersionReport::Mixed {
-            min: Version::parse("2.4.0").expect("version"),
-            max: Version::parse("2.9.0").expect("version"),
+        groups[0].installed_release(),
+        &InstalledReleaseState::Mixed {
+            min_version: Version::parse("2.4.0").expect("version"),
+            max_version: Version::parse("2.9.0").expect("version"),
         }
     );
     assert_eq!(
@@ -508,7 +504,7 @@ fn uniform_streamline_compares_against_shared_version() {
     assert_eq!(groups.len(), 1);
     assert_eq!(
         groups[0]
-            .version_report()
+            .installed_release()
             .known_version()
             .map(Version::as_str),
         Some("2.4.0")
@@ -533,7 +529,7 @@ fn pe_trailing_zeros_match_manifest_label_for_streamline_baseline() {
     assert_eq!(groups.len(), 1);
     assert_eq!(
         groups[0]
-            .version_report()
+            .installed_release()
             .known_version()
             .map(Version::as_str),
         Some("2.9.0.0")
@@ -546,43 +542,32 @@ fn pe_trailing_zeros_match_manifest_label_for_streamline_baseline() {
 }
 
 #[test]
-fn multi_file_streamline_package_sorts_ahead_of_single_file_twin() {
+fn distinct_streamline_payloads_with_the_same_version_remain_visible() {
     let component = streamline_component(&[
         ("sl.common.dll", Some("2.4.0")),
-        ("sl.dlss.dll", Some("2.4.0")),
+        ("sl.interposer.dll", Some("2.4.0")),
     ]);
-    let single = sample_artifact(
-        "artifact:sl-common-only",
-        GraphicsTechnology::NvidiaStreamline,
-        Some("2.9.0"),
-        &"c".repeat(64),
-        "C:/Lib/sl.common.dll",
-        None,
+    let alternate = streamline_artifact_with_members(
+        "artifact:sl-alternate-payload",
+        "2.9.0",
+        &[("sl.common.dll", 'e'), ("sl.interposer.dll", 'f')],
     );
-    // Force CatalogDownloaded so trust alone does not explain package winning.
-    let single = LibraryArtifact::new(
-        single.id().clone(),
-        GraphicsTechnology::NvidiaStreamline,
-        "sl.common.dll",
-        single.files().to_vec(),
-        ArtifactTrustLevel::CatalogDownloaded,
-    )
-    .expect("single");
     let package = streamline_package_artifact("artifact:sl-pkg-2.9", "2.9.0", 2);
 
-    let groups = find_test_candidates(&[component], &[single, package.clone()]);
+    let groups = find_test_candidates(&[component], &[alternate, package.clone()]);
     assert_eq!(groups.len(), 1);
-    // Same version + file_name collapse: package (higher file_count) must win.
-    assert_eq!(groups[0].candidates().len(), 1);
-    assert_eq!(
-        groups[0].candidates()[0].artifact_id(),
-        package.id(),
-        "multi-file package must beat single-file twin at the same version"
+    assert_eq!(groups[0].candidates().len(), 2);
+    assert!(
+        groups[0]
+            .candidates()
+            .iter()
+            .any(|candidate| candidate.artifact_id() == package.id()),
+        "distinct complete payloads remain independently selectable"
     );
 }
 
 #[test]
-fn catalog_downloaded_outranks_local_observed_for_same_version_key() {
+fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
@@ -615,19 +600,18 @@ fn catalog_downloaded_outranks_local_observed_for_same_version_key() {
 
     let groups = find_test_candidates(&[component], &[local, manifest.clone()]);
     assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(groups[0].candidates().len(), 2);
     assert_eq!(
         groups[0].candidates()[0].artifact_id(),
         manifest.id(),
-        "CatalogDownloaded must outrank LocalObserved when version keys collide"
+        "CatalogDownloaded still sorts before LocalObserved"
     );
 }
 
 #[test]
-fn matches_same_family_artifacts_across_file_names() {
-    // A Streamline component and a Streamline artifact with different file
-    // names are a valid bundle swap now (the engine swaps the whole bundle),
-    // so the candidate is offered instead of skipped on a name mismatch.
+fn streamline_candidate_without_an_installed_target_is_rejected() {
+    // A package that cannot write any installed plugin is not a transition,
+    // even though its technology matches the component.
     let component = sample_component(
         "component:game-a:streamline",
         "game:a",
@@ -648,8 +632,7 @@ fn matches_same_family_artifacts_across_file_names() {
 
     let groups = find_test_candidates(&[component], &[artifact]);
 
-    assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0].candidates().len(), 1);
+    assert!(groups.is_empty());
 }
 
 #[test]
@@ -690,7 +673,7 @@ fn deduplicates_identical_candidates_observed_in_multiple_games() {
 }
 
 #[test]
-fn identical_sha256_is_returned_as_candidate() {
+fn content_identical_to_the_installed_component_is_not_a_candidate() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
@@ -711,27 +694,26 @@ fn identical_sha256_is_returned_as_candidate() {
 
     let groups = find_test_candidates(&[component], &[artifact]);
 
-    assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0].candidates().len(), 1);
+    assert!(groups.is_empty());
 }
 
 #[test]
 fn package_backed_candidate_exposes_the_release_version_not_pe_file_version() {
     let component = sample_component(
-        "component:game-a:dlss",
+        "component:game-a:xess",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        GraphicsTechnology::IntelXeSs,
         Swappability::Swappable,
         Some("3.5.0"),
         &"a".repeat(64),
-        "C:/Games/GameA/nvngx_dlss.dll",
+        "C:/Games/GameA/libxess.dll",
     );
     let artifact = sample_artifact(
         "artifact:package-version",
-        GraphicsTechnology::DlssSuperResolution,
+        GraphicsTechnology::IntelXeSs,
         Some("101.7.2207.20"),
         &"b".repeat(64),
-        "C:/Library/dxil.dll",
+        "C:/Library/libxess.dll",
         None,
     )
     .with_metadata(
@@ -751,6 +733,220 @@ fn package_backed_candidate_exposes_the_release_version_not_pe_file_version() {
         groups[0].candidates()[0].version().map(Version::as_str),
         Some("1.7.2207.7")
     );
+    assert_eq!(
+        groups[0].candidates()[0].comparison(),
+        CandidateComparison::OlderVersion,
+        "comparison must use the same package release version that the UI presents"
+    );
+}
+
+#[test]
+fn openvr_installed_release_is_resolved_by_full_catalog_content() {
+    let installed_file = ComponentFile::new(PathRef::new("C:/Game/openvr_api.dll").unwrap())
+        .with_sha256(Sha256Hash::new("a".repeat(64)).unwrap())
+        .with_pe_compatibility(PeCompatibilityProfile::new(
+            Architecture::X64,
+            PeExportSet::from_canonical_names(vec!["A".into()]).unwrap(),
+        ));
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:openvr").unwrap(),
+        GameId::new("game:openvr").unwrap(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::OpenVr,
+        Swappability::Swappable,
+    )
+    .with_file(installed_file);
+    let old = openvr_catalog_artifact("artifact:openvr-old", "1.0.0", "a", None);
+    let canonical = openvr_catalog_artifact(
+        "artifact:openvr-canonical",
+        "1.1.0",
+        "a",
+        Some("revision b"),
+    );
+    let candidate = openvr_catalog_artifact("artifact:openvr-new", "2.0.0", "b", None);
+    let package_ids = [
+        (old.id().clone(), "openvr-x64-1.0.0".to_owned()),
+        (
+            canonical.id().clone(),
+            "openvr-x64-1.1.0-revision-b".to_owned(),
+        ),
+        (candidate.id().clone(), "openvr-x64-2.0.0".to_owned()),
+    ]
+    .into_iter()
+    .collect();
+    let context = CandidateContext::new(
+        std::collections::HashSet::new(),
+        package_ids,
+        std::collections::HashSet::new(),
+    );
+
+    let groups = find_replacement_candidates(&[component], &[old, canonical, candidate], &context);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0]
+            .installed_release()
+            .known_version()
+            .map(Version::as_str),
+        Some("1.1.0")
+    );
+    assert_eq!(
+        groups[0].installed_release(),
+        &InstalledReleaseState::Known {
+            version: Version::parse("1.1.0").expect("version"),
+            release_label: Some("revision b".to_owned()),
+        }
+    );
+    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(
+        groups[0].candidates()[0].version().map(Version::as_str),
+        Some("2.0.0")
+    );
+}
+
+#[test]
+fn installed_catalog_release_resolution_is_not_openvr_specific() {
+    let component = sample_component(
+        "component:fsr-catalog-release",
+        "game:a",
+        GraphicsTechnology::AmdFsr,
+        Swappability::Swappable,
+        Some("1.0.1.41314"),
+        &"a".repeat(64),
+        "C:/Game/amd_fidelityfx_dx12.dll",
+    )
+    .with_file(
+        ComponentFile::new(PathRef::new("C:/Game/amd_fidelityfx_denoiser_dx12.dll").expect("path"))
+            .with_sha256(Sha256Hash::new("c".repeat(64)).expect("hash"))
+            .with_version(Version::parse("1.1.0").expect("version")),
+    );
+    let installed = sample_artifact(
+        "artifact:fsr-installed",
+        GraphicsTechnology::AmdFsr,
+        Some("1.0.1.41314"),
+        &"a".repeat(64),
+        "catalog://amd/amd_fidelityfx_dx12.dll",
+        None,
+    )
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_release(
+                Version::parse("4.1.1.2740").expect("release"),
+                Some("FSR 3.1.4".to_owned()),
+            )
+            .expect("metadata"),
+    );
+    let candidate = sample_artifact(
+        "artifact:fsr-candidate",
+        GraphicsTechnology::AmdFsr,
+        Some("1.0.2.0"),
+        &"b".repeat(64),
+        "catalog://amd/amd_fidelityfx_dx12.dll",
+        None,
+    );
+    let context = CandidateContext::new(
+        std::collections::HashSet::new(),
+        [(installed.id().clone(), "fsr-installed-package".to_owned())]
+            .into_iter()
+            .collect(),
+        std::collections::HashSet::new(),
+    );
+
+    let groups = find_replacement_candidates(&[component], &[installed, candidate], &context);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0].installed_release(),
+        &InstalledReleaseState::Known {
+            version: Version::parse("4.1.1.2740").expect("release"),
+            release_label: Some("FSR 3.1.4".to_owned()),
+        },
+        "catalog release matching must ignore component files outside this transition"
+    );
+}
+
+#[test]
+fn streamline_identity_uses_only_members_written_by_the_transition() {
+    let component = streamline_component(&[
+        ("sl.common.dll", Some("2.4.0")),
+        ("sl.interposer.dll", Some("2.4.0")),
+    ]);
+    let installed_with_ignored_extra = streamline_artifact_with_members(
+        "artifact:streamline-installed-with-extra",
+        "2.9.0",
+        &[
+            ("sl.common.dll", 'a'),
+            ("sl.interposer.dll", 'b'),
+            ("sl.dlss.dll", 'c'),
+        ],
+    );
+    assert!(
+        find_test_candidates(
+            std::slice::from_ref(&component),
+            &[installed_with_ignored_extra]
+        )
+        .is_empty(),
+        "a package whose written members already match the component is a no-op"
+    );
+
+    let first = streamline_artifact_with_members(
+        "artifact:streamline-transition-a",
+        "2.9.0",
+        &[
+            ("sl.common.dll", 'c'),
+            ("sl.interposer.dll", 'd'),
+            ("sl.dlss.dll", 'e'),
+        ],
+    );
+    let second = streamline_artifact_with_members(
+        "artifact:streamline-transition-b",
+        "2.9.0",
+        &[
+            ("sl.common.dll", 'c'),
+            ("sl.interposer.dll", 'd'),
+            ("sl.reflex.dll", 'f'),
+        ],
+    );
+    let groups = find_test_candidates(&[component], &[first, second]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0].candidates().len(),
+        1,
+        "packages that write the same targets and hashes are one transition"
+    );
+}
+
+fn openvr_catalog_artifact(
+    id: &str,
+    release: &str,
+    hash: &str,
+    label: Option<&str>,
+) -> LibraryArtifact {
+    let file = ComponentFile::new(PathRef::new("catalog://valve/openvr_api.dll").unwrap())
+        .with_sha256(Sha256Hash::new(hash.repeat(64)).unwrap())
+        .with_pe_compatibility(PeCompatibilityProfile::new(
+            Architecture::X64,
+            PeExportSet::from_canonical_names(vec!["A".into(), "B".into()]).unwrap(),
+        ));
+    let metadata = ArtifactMetadata::default()
+        .with_release(Version::parse(release).unwrap(), label.map(str::to_owned))
+        .unwrap()
+        .with_runtime_target(RuntimeTarget::new(Architecture::X64))
+        .with_upstream_package(
+            UpstreamPackage::new(
+                UpstreamPackageProvider::GitHub,
+                "ValveSoftware/openvr",
+                release,
+            )
+            .unwrap(),
+        );
+    LibraryArtifact::new(
+        ArtifactId::new(id).unwrap(),
+        GraphicsTechnology::OpenVr,
+        "openvr_api.dll",
+        vec![file],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .unwrap()
+    .with_metadata(metadata)
 }
 
 fn find_test_candidates(
@@ -893,11 +1089,11 @@ fn streamline_package_artifact(
     version: &str,
     member_count: usize,
 ) -> LibraryArtifact {
-    let names = ["sl.common.dll", "sl.dlss.dll", "sl.interposer.dll"];
+    let names = ["sl.common.dll", "sl.interposer.dll", "sl.dlss.dll"];
     let files: Vec<_> = (0..member_count)
         .map(|index| {
             let name = names[index % names.len()];
-            let sha = char::from(b'a' + index as u8).to_string().repeat(64);
+            let sha = char::from(b'c' + index as u8).to_string().repeat(64);
             ComponentFile::new(PathRef::new(format!("manifest://{name}")).expect("path"))
                 .with_sha256(Sha256Hash::new(sha).expect("sha"))
                 .with_version(Version::parse(version).expect("version"))
@@ -911,6 +1107,29 @@ fn streamline_package_artifact(
         ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("streamline package")
+}
+
+fn streamline_artifact_with_members(
+    artifact_id: &str,
+    version: &str,
+    members: &[(&str, char)],
+) -> LibraryArtifact {
+    let files = members
+        .iter()
+        .map(|(name, hash)| {
+            ComponentFile::new(PathRef::new(format!("manifest://{name}")).expect("path"))
+                .with_sha256(Sha256Hash::new(hash.to_string().repeat(64)).expect("member hash"))
+                .with_version(Version::parse(version).expect("version"))
+        })
+        .collect();
+    LibraryArtifact::new(
+        ArtifactId::new(artifact_id).expect("artifact id"),
+        GraphicsTechnology::NvidiaStreamline,
+        members[0].0,
+        files,
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("streamline artifact")
 }
 
 /// Builds a multi-file (split) FSR package artifact with virtual `manifest://`
@@ -1027,7 +1246,7 @@ fn cohesive_fsr_candidate_group_uses_entry_point_as_display_path() {
     );
     assert_eq!(
         groups[0]
-            .version_report()
+            .installed_release()
             .known_version()
             .map(|version| version.as_str()),
         Some("4.0.3")
@@ -1076,7 +1295,7 @@ fn mixed_fsr_component_reports_the_entry_points_version() {
     );
     assert_eq!(
         groups[0]
-            .version_report()
+            .installed_release()
             .known_version()
             .map(|version| version.as_str()),
         Some("1.0.1.41314"),
@@ -1166,6 +1385,31 @@ fn dx12_lineage_fsr4_is_offered_a_unified_fsr3_downgrade() {
         "a dx12-lineage FSR 4 set can pick a unified FSR 3.1 again"
     );
     assert_eq!(groups[0].candidates().len(), 1);
+}
+
+#[test]
+fn unified_fsr_cleanup_remains_visible_when_the_entry_point_hash_already_matches() {
+    let upgraded = fsr_component(&[
+        "amd_fidelityfx_upscaler_dx12.dll",
+        "amd_fidelityfx_dx12.dll",
+        "amd_fidelityfx_framegeneration_dx12.dll",
+    ]);
+    let cleanup = sample_artifact(
+        "artifact:fsr-cleanup",
+        GraphicsTechnology::AmdFsr,
+        Some("3.1.4"),
+        &"b".repeat(64),
+        "C:/Lib/amd_fidelityfx_dx12.dll",
+        None,
+    );
+
+    let groups = find_test_candidates(&[upgraded], &[cleanup]);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(
+        groups[0].candidates().len(),
+        1,
+        "stale split members make an otherwise byte-identical unified transition actionable"
+    );
 }
 
 #[test]

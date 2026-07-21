@@ -21,6 +21,8 @@
     DownloadProgressBar,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { formatReleaseVersionLabel } from '../model/release-version-label';
+  import { installedSelectionValue } from '../model/version-selection';
 
   type Props = {
     component: GameGraphicsComponent;
@@ -38,30 +40,34 @@
   const fileLocations = $derived(filePresentation?.locations ?? []);
   const candidates = $derived(group?.candidates ?? []);
 
-  const currentHash = $derived(component.files[0]?.sha256);
   const currentVersion = $derived(
     group?.version_report.kind === 'known' ? group.version_report.version : undefined,
   );
 
-  const currentCandidate = $derived(
-    candidates.find((c) => currentHash && c.sha256 === currentHash),
-  );
   const currentValue = $derived(
-    currentCandidate?.artifact_id ?? currentHash ?? currentVersion ?? 'current',
+    installedSelectionValue(
+      component.id,
+      candidates.map((candidate) => candidate.artifact_id),
+    ),
   );
-  const isCurrentDebug = $derived(currentCandidate?.is_debug ?? false);
 
   const currentLabel = $derived(
-    currentVersion ? `v${currentVersion}${isCurrentDebug ? ' (Debug)' : ''}` : t('common.unknown'),
+    formatReleaseVersionLabel({
+      version: currentVersion,
+      releaseLabel:
+        group?.version_report.kind === 'known' ? group.version_report.release_label : null,
+      isDebug: false,
+      unknownLabel: t('common.unknown'),
+    }),
   );
 
   // Track which artifact id the user actually clicked to download so the
   // progress bar appears only on the initiating control.
   let pendingArtifactId = $state<string | null>(null);
 
-  // The dropdown always marks the installed version as selected. Its value is the
-  // installed file's content id, so after a swap/rollback the highlight follows the
-  // new current version automatically — no stale pick lingers.
+  // The dropdown always marks the backend-reported installed state as selected.
+  // Its sentinel cannot collide with an artifact id, including a candidate that
+  // happens to share the primary file hash with the installed bundle.
 
   // Bound selection, re-pinned to the installed version whenever an operation
   // settles (`busy` → false). This keeps the highlight correct even when a swap
@@ -126,15 +132,15 @@
           <span class="truncate">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
-          <!-- Installed version: only render if it's not a known candidate to avoid duplication -->
-          {#if !currentCandidate}
-            <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
-          {/if}
+          <SelectItem value={currentValue} label={currentLabel}>{currentLabel}</SelectItem>
           {#each candidates as candidate (candidate.artifact_id)}
             {@const isDebug = candidate.is_debug}
-            {@const versionLabel = candidate.version
-              ? `v${candidate.version}${isDebug ? ' (Debug)' : ''}`
-              : t('common.unknown')}
+            {@const versionLabel = formatReleaseVersionLabel({
+              version: candidate.version,
+              releaseLabel: candidate.release_label,
+              isDebug,
+              unknownLabel: t('common.unknown'),
+            })}
             <SelectItem value={candidate.artifact_id} label={versionLabel}>
               {#snippet children(snippetProps: { selected: boolean })}
                 <span class="truncate pr-6">{versionLabel}</span>

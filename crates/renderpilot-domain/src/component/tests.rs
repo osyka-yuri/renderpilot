@@ -58,6 +58,19 @@ fn component_file_keeps_version_and_hash() {
 }
 
 #[test]
+fn legacy_component_file_json_defaults_new_pe_metadata() {
+    let file: ComponentFile = serde_json::from_value(serde_json::json!({
+        "path": "C:/Games/Game/openvr_api.dll",
+        "version": null,
+        "sha256": null,
+        "install_as": null
+    }))
+    .expect("legacy component file");
+
+    assert_eq!(file.pe_compatibility(), None);
+}
+
+#[test]
 fn graphics_component_collects_component_files() {
     let component = GraphicsComponent::new(
         ComponentId::new("component:dlss").expect("valid component id"),

@@ -147,7 +147,9 @@ export function updateCandidateGroupCurrentVersion(
   );
 
   if (candidateGroup) {
-    candidateGroup.version_report = version ? { kind: 'known', version } : { kind: 'unknown' };
+    candidateGroup.version_report = version
+      ? { kind: 'known', version, release_label: null }
+      : { kind: 'unknown' };
   }
 }
 

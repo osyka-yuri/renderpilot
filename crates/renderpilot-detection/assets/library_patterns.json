@@ -155,6 +155,12 @@
       "kind": "exact",
       "platform": "windows",
       "technology": "d3d12_agility"
+    },
+    {
+      "pattern": "openvr_api.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "openvr"
     }
   ]
 }

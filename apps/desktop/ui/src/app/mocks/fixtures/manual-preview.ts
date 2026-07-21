@@ -44,13 +44,14 @@ export function createManualPreviewDetails(
         component_id: `${gameId}:dlss`,
         technology: 'dlss_super_resolution',
         file_path: dlssPath,
-        version_report: { kind: 'known', version: '3.5.10' },
+        version_report: { kind: 'known', version: '3.5.10', release_label: null },
         candidates: [
           {
             artifact_id: `artifact:${gameId}:dlss-preview`,
             file_name: 'nvngx_dlss.dll',
             file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlss_preview.dll`,
             version: '3.7.20',
+            release_label: null,
             source_game_id: null,
             comparison: 'newer_version',
             is_downloaded: true,

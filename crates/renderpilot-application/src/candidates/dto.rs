@@ -10,9 +10,63 @@ use renderpilot_domain::{
     GraphicsTechnology, LibraryArtifact, PathRef, Version, component_version_report, fsr,
 };
 
+use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
+
 /// Version state used for both the DTO and matcher comparison baseline.
 pub(super) fn component_version_state(component: &GraphicsComponent) -> ComponentVersionReport {
     component_version_report(component.files(), component.technology())
+}
+
+/// Installed release information prepared for catalog presentation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstalledReleaseState {
+    /// One trustworthy release is installed.
+    Known {
+        /// Canonical release version.
+        version: Version,
+        /// Optional supplemental catalog annotation.
+        release_label: Option<String>,
+    },
+    /// Installed members prove more than one version is present.
+    Mixed {
+        /// Lowest known member version.
+        min_version: Version,
+        /// Highest known member version.
+        max_version: Version,
+    },
+    /// No trustworthy installed release can be established.
+    Unknown,
+}
+
+impl InstalledReleaseState {
+    pub(super) fn from_version_report(report: ComponentVersionReport) -> Self {
+        match report {
+            ComponentVersionReport::Known(version) => Self::Known {
+                version,
+                release_label: None,
+            },
+            ComponentVersionReport::Mixed { min, max } => Self::Mixed {
+                min_version: min,
+                max_version: max,
+            },
+            ComponentVersionReport::Unknown => Self::Unknown,
+        }
+    }
+
+    pub(super) fn known(version: Version, release_label: Option<String>) -> Self {
+        Self::Known {
+            version,
+            release_label,
+        }
+    }
+
+    /// Returns the installed version when the state is known.
+    pub const fn known_version(&self) -> Option<&Version> {
+        match self {
+            Self::Known { version, .. } => Some(version),
+            Self::Mixed { .. } | Self::Unknown => None,
+        }
+    }
 }
 
 /// Replacement candidates applicable to one detected component (bundle).
@@ -22,7 +76,7 @@ pub struct ComponentReplacementCandidates {
     game_id: GameId,
     technology: GraphicsTechnology,
     file_path: PathRef,
-    version_report: ComponentVersionReport,
+    installed_release: InstalledReleaseState,
     candidates: Vec<ReplacementCandidate>,
 }
 
@@ -34,7 +88,7 @@ impl ComponentReplacementCandidates {
     /// (dx12 entry point for FSR, name-min for Streamline).
     pub fn new(
         component: &GraphicsComponent,
-        version_report: ComponentVersionReport,
+        installed_release: InstalledReleaseState,
         candidates: Vec<ReplacementCandidate>,
     ) -> Self {
         let display = fsr::display_component_file(component.files())
@@ -45,7 +99,7 @@ impl ComponentReplacementCandidates {
             game_id: component.game_id().clone(),
             technology: component.technology(),
             file_path: display.path().clone(),
-            version_report,
+            installed_release,
             candidates,
         }
     }
@@ -78,9 +132,9 @@ impl ComponentReplacementCandidates {
         &self.file_path
     }
 
-    /// Returns the honest installed-version state for this component.
-    pub fn version_report(&self) -> &ComponentVersionReport {
-        &self.version_report
+    /// Returns the honest installed-release state for this component.
+    pub const fn installed_release(&self) -> &InstalledReleaseState {
+        &self.installed_release
     }
 
     /// Returns replacement candidates in stable presentation order.
@@ -91,8 +145,10 @@ impl ComponentReplacementCandidates {
     /// 3. file name (lexical);
     /// 4. release before debug;
     /// 5. preferred trust level (CDN/cache ahead of game-folder observations);
-    /// 6. downloaded twin last among identity ties (so the local copy wins
-    ///    deduplication while remaining a single visible row).
+    /// 6. downloaded twin first among identity ties (so the local copy wins
+    ///    deduplication while remaining a single visible row);
+    /// 7. intrinsic package identity, then component-resolved transition
+    ///    identity as stable content tie-breaks.
     pub fn candidates(&self) -> &[ReplacementCandidate] {
         &self.candidates
     }
@@ -105,6 +161,7 @@ pub struct ReplacementCandidate {
     file_name: String,
     file_path: Option<PathRef>,
     version: Option<Version>,
+    release_label: Option<String>,
     sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
@@ -115,6 +172,10 @@ pub struct ReplacementCandidate {
     trust_level: ArtifactTrustLevel,
     /// Sort-only: multi-file packages sort ahead of single-file twins.
     file_count: usize,
+    /// Context-free package identity used for deterministic ordering and deduplication.
+    intrinsic_identity: Option<IntrinsicPackageIdentity>,
+    /// Actual transition identity after component-aware target resolution.
+    resolved_identity: Option<ResolvedTransitionIdentity>,
 }
 
 /// Named sort key for [`ReplacementCandidate`] ordering — every field is named
@@ -138,8 +199,12 @@ pub(super) struct CandidateSortKey<'a> {
     /// Downloaded twins sort before their non-downloaded counterpart so the
     /// downloaded copy survives deduplication.
     downloaded: std::cmp::Reverse<bool>,
-    /// Content-identity tie-break that never changes.
-    sha256: &'a str,
+    /// Context-free package-content tie-break.
+    intrinsic_identity: Option<&'a IntrinsicPackageIdentity>,
+    /// Component-aware transition tie-break.
+    resolved_identity: Option<&'a ResolvedTransitionIdentity>,
+    /// Final stable tie-break for incomplete identities.
+    artifact_id: &'a str,
 }
 
 impl ReplacementCandidate {
@@ -152,6 +217,8 @@ impl ReplacementCandidate {
         is_downloaded: bool,
         catalog_package_id: Option<String>,
         is_debug: bool,
+        intrinsic_identity: Option<IntrinsicPackageIdentity>,
+        resolved_identity: Option<ResolvedTransitionIdentity>,
     ) -> Self {
         Self {
             artifact_id: artifact.id().clone(),
@@ -167,6 +234,7 @@ impl ReplacementCandidate {
             // members whose PE versions differ from the package version
             // (notably historical DXIL builds).
             version: artifact.release_version().cloned(),
+            release_label: artifact.metadata().release_label().map(str::to_owned),
             sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
@@ -176,6 +244,8 @@ impl ReplacementCandidate {
             trust_level: artifact.trust_level(),
             // Domain forbids empty file lists; len is the package size for sort.
             file_count: artifact.files().len(),
+            intrinsic_identity,
+            resolved_identity,
         }
     }
 
@@ -187,8 +257,9 @@ impl ReplacementCandidate {
     ///
     /// Deliberately excluded: comparison verdict (shifts whenever the installed
     /// version changes) and local path (appears after download). Trust and
-    /// `is_downloaded` sit after identity-distinguishing fields so the preferred
-    /// twin survives deduplication without reordering distinct candidates.
+    /// `is_downloaded` precede the identity tie-breaks so the preferred twin
+    /// survives deduplication; identities then make distinct payload ordering
+    /// deterministic.
     pub(super) fn ordering_key(&self) -> CandidateSortKey<'_> {
         CandidateSortKey {
             version: std::cmp::Reverse(self.version.as_ref()),
@@ -197,7 +268,9 @@ impl ReplacementCandidate {
             is_debug: self.is_debug,
             trust_rank: self.trust_level.candidate_preference_rank(),
             downloaded: std::cmp::Reverse(self.is_downloaded),
-            sha256: self.sha256.as_str(),
+            intrinsic_identity: self.intrinsic_identity.as_ref(),
+            resolved_identity: self.resolved_identity.as_ref(),
+            artifact_id: self.artifact_id.as_str(),
         }
     }
 
@@ -239,6 +312,11 @@ impl ReplacementCandidate {
         self.version.as_ref()
     }
 
+    /// Returns the supplemental upstream release label.
+    pub fn release_label(&self) -> Option<&str> {
+        self.release_label.as_deref()
+    }
+
     /// Returns the source game where the candidate was observed, when known.
     pub fn source_game_id(&self) -> Option<&GameId> {
         self.source_game_id.as_ref()
@@ -252,6 +330,14 @@ impl ReplacementCandidate {
     /// Returns the catalog package id if this candidate is curated remotely.
     pub fn catalog_package_id(&self) -> Option<&str> {
         self.catalog_package_id.as_deref()
+    }
+
+    pub(super) const fn intrinsic_identity(&self) -> Option<&IntrinsicPackageIdentity> {
+        self.intrinsic_identity.as_ref()
+    }
+
+    pub(super) const fn resolved_identity(&self) -> Option<&ResolvedTransitionIdentity> {
+        self.resolved_identity.as_ref()
     }
 }
 

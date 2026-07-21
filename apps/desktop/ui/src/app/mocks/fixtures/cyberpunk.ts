@@ -54,13 +54,14 @@ export function createCyberpunkDetails(): GameDetails {
       component_id: 'component:cp2077:dlss',
       technology: 'dlss_super_resolution',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlss.dll',
-      version_report: { kind: 'known', version: '3.5.10' },
+      version_report: { kind: 'known', version: '3.5.10', release_label: null },
       candidates: [
         {
           artifact_id: 'artifact:dlss:3.7.20',
           file_name: 'nvngx_dlss.dll',
           file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlss_3.7.20.dll`,
           version: '3.7.20',
+          release_label: null,
           source_game_id: 'steam:1245620',
           comparison: 'newer_version',
           is_downloaded: true,
@@ -73,13 +74,14 @@ export function createCyberpunkDetails(): GameDetails {
       component_id: 'component:cp2077:dlssg',
       technology: 'dlss_frame_generation',
       file_path: 'C:/Games/Cyberpunk 2077/bin/x64/nvngx_dlssg.dll',
-      version_report: { kind: 'known', version: '3.5.0' },
+      version_report: { kind: 'known', version: '3.5.0', release_label: null },
       candidates: [
         {
           artifact_id: 'artifact:dlssg:3.7.10',
           file_name: 'nvngx_dlssg.dll',
           file_path: `${RENDERPILOT_LIBRARY_PATH}/nvngx_dlssg_3.7.10.dll`,
           version: '3.7.10',
+          release_label: null,
           source_game_id: 'steam:1716740',
           comparison: 'newer_version',
           is_downloaded: true,

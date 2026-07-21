@@ -43,8 +43,11 @@ const PE32_DATA_DIRECTORY_OFFSET: usize = 96;
 const PE32_PLUS_DATA_DIRECTORY_OFFSET: usize = 112;
 const EXPORT_DIRECTORY_INDEX: usize = 0;
 const EXPORT_DIRECTORY_LEN: usize = 40;
+const EXPORT_NUMBER_OF_FUNCTIONS_OFFSET: usize = 20;
 const EXPORT_NUMBER_OF_NAMES_OFFSET: usize = 24;
+const EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET: usize = 28;
 const EXPORT_ADDRESS_OF_NAMES_OFFSET: usize = 32;
+const EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET: usize = 36;
 const RESOURCE_DIRECTORY_INDEX: usize = 2;
 
 /// Builds a minimal but well-formed PE image for tests: the given COFF `machine`
@@ -85,8 +88,12 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
     let section_raw_ptr = align_up(headers_end as u32, 0x200);
 
     let mut section_body = vec![0u8; EXPORT_DIRECTORY_LEN];
+    let functions_table_offset = section_body.len();
+    section_body.resize(functions_table_offset + exports.len() * 4, 0);
     let names_table_offset = section_body.len();
     section_body.resize(names_table_offset + exports.len() * 4, 0);
+    let ordinals_table_offset = section_body.len();
+    section_body.resize(ordinals_table_offset + exports.len() * 2, 0);
 
     let mut name_rvas = Vec::new();
     for name in exports {
@@ -99,10 +106,27 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
         let offset = names_table_offset + index * 4;
         section_body[offset..offset + 4].copy_from_slice(&name_rva.to_le_bytes());
     }
+    let function_stub_rva = section_rva + section_body.len() as u32;
+    section_body.push(0xc3);
+    for index in 0..exports.len() {
+        let function_offset = functions_table_offset + index * 4;
+        section_body[function_offset..function_offset + 4]
+            .copy_from_slice(&function_stub_rva.to_le_bytes());
+        let ordinal_offset = ordinals_table_offset + index * 2;
+        section_body[ordinal_offset..ordinal_offset + 2]
+            .copy_from_slice(&(index as u16).to_le_bytes());
+    }
+    section_body[EXPORT_NUMBER_OF_FUNCTIONS_OFFSET..EXPORT_NUMBER_OF_FUNCTIONS_OFFSET + 4]
+        .copy_from_slice(&(exports.len() as u32).to_le_bytes());
     section_body[EXPORT_NUMBER_OF_NAMES_OFFSET..EXPORT_NUMBER_OF_NAMES_OFFSET + 4]
         .copy_from_slice(&(exports.len() as u32).to_le_bytes());
+    section_body[EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET..EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET + 4]
+        .copy_from_slice(&(section_rva + functions_table_offset as u32).to_le_bytes());
     section_body[EXPORT_ADDRESS_OF_NAMES_OFFSET..EXPORT_ADDRESS_OF_NAMES_OFFSET + 4]
         .copy_from_slice(&(section_rva + names_table_offset as u32).to_le_bytes());
+    section_body
+        [EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET..EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET + 4]
+        .copy_from_slice(&(section_rva + ordinals_table_offset as u32).to_le_bytes());
 
     let total_len = section_raw_ptr as usize + section_body.len();
     let mut bytes = vec![0u8; total_len];
@@ -117,7 +141,7 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
         + EXPORT_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
     bytes[export_entry..export_entry + 4].copy_from_slice(&section_rva.to_le_bytes());
     bytes[export_entry + 4..export_entry + 8]
-        .copy_from_slice(&(section_body.len() as u32).to_le_bytes());
+        .copy_from_slice(&(EXPORT_DIRECTORY_LEN as u32).to_le_bytes());
 
     bytes[section_table_offset..section_table_offset + 8].copy_from_slice(b".edata\0\0");
     bytes[section_table_offset + 8..section_table_offset + 12]

@@ -1,6 +1,6 @@
 //! Versioned contracts for the graphics-library catalog.
 
-use renderpilot_domain::{Architecture, RuntimeCompatibility};
+use renderpilot_domain::{Architecture, PeExportSet, RuntimeCompatibility};
 use serde::{Deserialize, Serialize};
 
 /// Complete, validated catalog snapshot exposed to callers.
@@ -50,7 +50,10 @@ pub struct LibraryArtifactRecord {
     /// Original DLL file name.
     pub file_name: String,
     /// PE file version.
-    pub file_version: String,
+    pub file_version: Option<String>,
+    /// Sorted, unique named PE exports when the package contract relies on them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pe_named_exports: Option<PeExportSet>,
     /// DLL architecture.
     pub architecture: Architecture,
     /// Uncompressed DLL content metadata.
@@ -146,9 +149,9 @@ pub enum LibraryReleaseChannel {
 pub struct LibraryTarget {
     /// Operating system identifier (v1 supports `windows`).
     pub os: String,
-    /// Required executable architecture.
+    /// Architecture interpreted by the package's technology policy.
     pub architecture: Architecture,
-    /// Optional ABI compatibility requirement.
+    /// Optional technology-specific runtime compatibility requirement.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<RuntimeCompatibility>,
 }
@@ -165,6 +168,15 @@ pub enum LibraryProvenance {
         version: String,
         /// Base64-encoded SHA-512 supplied by NuGet registration metadata.
         package_sha512: String,
+    },
+    /// GitHub release identity pinned to an immutable commit.
+    GithubRelease {
+        /// GitHub repository in `owner/name` form.
+        repository: String,
+        /// Exact release tag.
+        tag: String,
+        /// Lowercase immutable Git commit SHA.
+        commit_sha: String,
     },
 }
 

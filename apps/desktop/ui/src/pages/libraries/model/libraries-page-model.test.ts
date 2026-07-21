@@ -9,10 +9,24 @@ import {
   formatVersionLabel,
   selectLatestStablePackages,
   shouldShowPackageDisplayName,
+  typeOptionsByVendor,
 } from './libraries-page-model';
 import { packagesOf } from './library-package-test-fixtures';
 
 describe('library package presentation', () => {
+  it('exposes OpenVR as Valve catalog data without UI-side inference', () => {
+    expect(typeOptionsByVendor.valve).toEqual([
+      { value: 'openvr', label: 'OpenVR', technology: 'openvr' },
+    ]);
+    const rows = packagesOf([
+      { id: 'openvr.x64', vendor: 'valve', technology: 'openvr', variant: 'runtime' },
+      { id: 'other', vendor: 'nvidia', technology: 'nvidia_dlss_sr', variant: 'runtime' },
+    ]);
+    expect(filterPackageRows(rows, 'valve', 'openvr').map((row) => row.package_id)).toEqual([
+      'openvr.x64',
+    ]);
+  });
+
   it('filters backend summaries by vendor, technology, and explicit variant', () => {
     const rows = packagesOf([
       { id: 'fsr.dx12', vendor: 'amd', technology: 'amd_fsr', variant: 'dx12_runtime' },

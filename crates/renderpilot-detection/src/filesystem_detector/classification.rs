@@ -1,9 +1,7 @@
 //! Maps a matched library pattern to the UI-facing classification fields:
 //! component kind, detection confidence, and swappability.
 
-use renderpilot_domain::{
-    ComponentFile, ComponentKind, GraphicsTechnology, PathRef, Sha256Hash, Swappability, Version,
-};
+use renderpilot_domain::{ComponentKind, GraphicsTechnology, Swappability};
 
 use crate::PatternKind;
 
@@ -25,19 +23,6 @@ impl LibraryFileClassification {
             confidence: confidence_for(pattern_kind, technology),
             swappability: swappability_for(technology),
         }
-    }
-}
-
-pub(super) fn component_file_from_detection(
-    file_path: PathRef,
-    sha256: Sha256Hash,
-    version: Option<Version>,
-) -> ComponentFile {
-    let file = ComponentFile::new(file_path).with_sha256(sha256);
-
-    match version {
-        Some(version) => file.with_version(version),
-        None => file,
     }
 }
 

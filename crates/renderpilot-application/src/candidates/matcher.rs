@@ -11,8 +11,12 @@ use renderpilot_domain::{
     ArtifactId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version, fsr,
 };
 
-use super::dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
-use crate::{SwapTargetProfile, ensure_swap_compatible};
+use super::dto::{
+    CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState,
+    ReplacementCandidate,
+};
+use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
+use crate::{SwapTargetProfile, ensure_replacement_compatible};
 
 /// Context for candidate lookup that carries source metadata for artifacts.
 #[derive(Debug, Clone)]
@@ -86,11 +90,12 @@ pub fn find_replacement_candidates(
             continue;
         };
 
-        let version_report = super::dto::component_version_state(component);
-        let current_version = version_report.known_version();
+        let installed_release = installed_release_state(component, component_artifacts, context);
+        let current_version = installed_release.known_version();
         let candidates = component_artifacts
             .iter()
-            .filter_map(|artifact| {
+            .filter_map(|indexed| {
+                let artifact = indexed.artifact;
                 // Ignore artifacts scanned from the exact same game.
                 // Such artifacts represent the game's own mutable file paths.
                 // If the game was modified (e.g. rolled back), the artifact's
@@ -99,7 +104,17 @@ pub fn find_replacement_candidates(
                     return None;
                 }
 
-                ensure_swap_compatible(artifact, &context.target_profile).ok()?;
+                ensure_replacement_compatible(component, artifact, &context.target_profile).ok()?;
+                let resolved_identity =
+                    ResolvedTransitionIdentity::for_replacement(component, artifact).ok()?;
+                if resolved_identity
+                    .as_ref()
+                    .and_then(|identity| identity.installed_projection(component))
+                    .as_ref()
+                    == resolved_identity.as_ref()
+                {
+                    return None;
+                }
                 let comparison = candidate_comparison(component, artifact, current_version)?;
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
                 let package_id = context.catalog_package_ids.get(artifact.id()).cloned();
@@ -112,6 +127,8 @@ pub fn find_replacement_candidates(
                     is_downloaded,
                     package_id,
                     is_debug,
+                    indexed.intrinsic_identity.clone(),
+                    resolved_identity,
                 ))
             })
             .collect::<Vec<_>>();
@@ -123,7 +140,7 @@ pub fn find_replacement_candidates(
         let candidates = sort_and_deduplicate_candidates(candidates);
         groups.push(ComponentReplacementCandidates::new(
             component,
-            version_report,
+            installed_release,
             candidates,
         ));
     }
@@ -132,17 +149,68 @@ pub fn find_replacement_candidates(
     groups
 }
 
+fn installed_release_state(
+    component: &GraphicsComponent,
+    artifacts: &[IndexedArtifact<'_>],
+    context: &CandidateContext,
+) -> InstalledReleaseState {
+    if let Some(release) = installed_catalog_release(component, artifacts, context) {
+        return release;
+    }
+    if component.technology() == GraphicsTechnology::OpenVr {
+        return InstalledReleaseState::Unknown;
+    }
+    InstalledReleaseState::from_version_report(super::dto::component_version_state(component))
+}
+
+fn installed_catalog_release(
+    component: &GraphicsComponent,
+    artifacts: &[IndexedArtifact<'_>],
+    context: &CandidateContext,
+) -> Option<InstalledReleaseState> {
+    let matched = artifacts
+        .iter()
+        .map(|indexed| indexed.artifact)
+        .filter(|artifact| context.catalog_package_ids.contains_key(artifact.id()))
+        .filter(|artifact| {
+            let Ok(Some(identity)) =
+                ResolvedTransitionIdentity::for_replacement(component, artifact)
+            else {
+                return false;
+            };
+            identity.installed_projection(component).as_ref() == Some(&identity)
+        })
+        .filter_map(|artifact| {
+            Some((
+                artifact.release_version()?.clone(),
+                context.catalog_package_ids.get(artifact.id())?,
+                artifact.metadata().release_label().map(str::to_owned),
+            ))
+        })
+        .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(left.1)));
+    matched.map(|(version, _, label)| InstalledReleaseState::known(version, label))
+}
+
+#[derive(Debug, Clone)]
+struct IndexedArtifact<'a> {
+    artifact: &'a LibraryArtifact,
+    intrinsic_identity: Option<IntrinsicPackageIdentity>,
+}
+
 /// Groups artifacts by their exact technology.
 fn group_artifacts_by_technology(
     artifacts: &[LibraryArtifact],
-) -> HashMap<GraphicsTechnology, Vec<&LibraryArtifact>> {
-    let mut grouped = HashMap::<GraphicsTechnology, Vec<&LibraryArtifact>>::new();
+) -> HashMap<GraphicsTechnology, Vec<IndexedArtifact<'_>>> {
+    let mut grouped = HashMap::<GraphicsTechnology, Vec<IndexedArtifact<'_>>>::new();
 
     for artifact in artifacts {
         grouped
             .entry(artifact.technology())
             .or_default()
-            .push(artifact);
+            .push(IndexedArtifact {
+                artifact,
+                intrinsic_identity: IntrinsicPackageIdentity::for_artifact(artifact),
+            });
     }
 
     grouped
@@ -165,37 +233,38 @@ fn compare_versions(
 /// Sorts candidates into their stable presentation order (the
 /// `ordering_key`), then collapses duplicates — first occurrence wins.
 ///
-/// Two candidates are duplicates when they are the same artifact (the artifact
-/// id is the bundle's content identity, `ArtifactId::for_bundle` — distinct
-/// bundles that merely share a primary DLL keep their separate entries), or
-/// when a catalog package's DLL is byte-identical to a scanned artifact (same
-/// file name + version + build type). Sorting first places the downloaded twin
-/// of such a pair ahead of its non-downloaded counterpart, so the downloaded
-/// copy is the one that survives. That contract is pinned by a test.
+/// Two candidates are duplicates only when either their artifact id or their
+/// complete install-target + member-digest identity is equal. Releases that
+/// merely share a version remain independently selectable.
 fn sort_and_deduplicate_candidates(
     mut candidates: Vec<ReplacementCandidate>,
 ) -> Vec<ReplacementCandidate> {
     candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
 
     let mut seen_ids = HashSet::<ArtifactId>::new();
-    let mut seen_version_keys = HashSet::<(String, Version, bool)>::new();
+    let mut seen_intrinsic = HashSet::<IntrinsicPackageIdentity>::new();
+    let mut seen_resolved = HashSet::<ResolvedTransitionIdentity>::new();
     let mut deduplicated = Vec::with_capacity(candidates.len());
 
     for candidate in candidates {
-        if !seen_ids.insert(candidate.artifact_id().clone()) {
+        let duplicate = seen_ids.contains(candidate.artifact_id())
+            || candidate
+                .intrinsic_identity()
+                .is_some_and(|identity| seen_intrinsic.contains(identity))
+            || candidate
+                .resolved_identity()
+                .is_some_and(|identity| seen_resolved.contains(identity));
+        if duplicate {
             continue;
         }
-        let version_is_new = match candidate.version() {
-            Some(version) => seen_version_keys.insert((
-                candidate.file_name().to_owned(),
-                version.clone(),
-                candidate.is_debug(),
-            )),
-            None => true,
-        };
-        if version_is_new {
-            deduplicated.push(candidate);
+        seen_ids.insert(candidate.artifact_id().clone());
+        if let Some(identity) = candidate.intrinsic_identity() {
+            seen_intrinsic.insert(identity.clone());
         }
+        if let Some(identity) = candidate.resolved_identity() {
+            seen_resolved.insert(identity.clone());
+        }
+        deduplicated.push(candidate);
     }
 
     deduplicated
@@ -243,9 +312,13 @@ fn candidate_comparison(
 ) -> Option<CandidateComparison> {
     require_not_split_downgrade(component, artifact)?;
     require_compatible_graphics_api(component, artifact)?;
-    require_version_compatible(component.technology(), current_version, artifact.version())?;
+    require_version_compatible(
+        component.technology(),
+        current_version,
+        artifact.release_version(),
+    )?;
 
-    compare_versions(current_version, artifact.version())
+    compare_versions(current_version, artifact.release_version())
 }
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).

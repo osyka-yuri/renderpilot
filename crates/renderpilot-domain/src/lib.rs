@@ -12,6 +12,7 @@ mod game;
 mod ids;
 mod model;
 pub mod mutation_features;
+pub mod openvr;
 mod path;
 mod text;
 mod version;
@@ -24,8 +25,9 @@ pub use addon::{
 };
 pub use component::{
     ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentVersionReport,
-    GraphicsComponent, LibraryArtifact, RuntimeCompatibility, RuntimeTarget, Sha256Digest,
-    Sha256Hash, UpstreamPackage, UpstreamPackageProvider, component_version_report,
+    GraphicsComponent, LibraryArtifact, PeCompatibilityProfile, PeExportSet, PeExportSetError,
+    ReleaseMetadata, RuntimeCompatibility, RuntimeTarget, Sha256Digest, Sha256Hash,
+    UpstreamPackage, UpstreamPackageProvider, component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
 pub use game::{GameIdentity, GameInstallation, GameModelError};

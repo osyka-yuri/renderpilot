@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_domain::{
-    ComponentFile, ComponentId, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    PathRef, component_version_report, fsr,
+    ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact, PathRef,
+    component_version_report, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -65,27 +65,18 @@ pub(super) fn fsr_members_to_remove(
     artifact: &LibraryArtifact,
     planned: &[PlannedFile],
 ) -> Vec<ComponentFile> {
-    let target_is_unified_fsr = artifact.technology().family() == GraphicsTechnology::AmdFsr
-        && !fsr::is_split_marker(artifact.file_name());
-    if !target_is_unified_fsr || !fsr::has_entry_point(baseline) {
-        return Vec::new();
-    }
-
-    let planned_names: HashSet<String> = planned
+    let planned_names: Vec<&str> = planned
         .iter()
-        .filter_map(|plan| plan.file.path().file_name().map(str::to_ascii_lowercase))
+        .filter_map(|plan| plan.file.path().file_name())
         .collect();
-
-    baseline
-        .iter()
-        .filter(|file| {
-            file.path().file_name().is_some_and(|name| {
-                fsr::is_upscaling_member(name)
-                    && !planned_names.contains(&name.to_ascii_lowercase())
-            })
-        })
-        .cloned()
-        .collect()
+    renderpilot_application::resolve_transition_removals(
+        baseline,
+        artifact,
+        planned_names.iter().copied(),
+    )
+    .into_iter()
+    .cloned()
+    .collect()
 }
 
 pub(super) fn resolve_target_dir(component: &GraphicsComponent) -> AppResult<PathBuf> {
@@ -109,8 +100,7 @@ pub(super) fn planned_target_files(
     target_dir: &Path,
     component: &GraphicsComponent,
 ) -> AppResult<Vec<PlannedFile>> {
-    let artifact_files =
-        super::streamline_install::installable_artifact_files(artifact, component)?;
+    let artifact_files = renderpilot_application::resolve_transition_members(component, artifact)?;
 
     let planned: AppResult<Vec<PlannedFile>> = artifact_files
         .iter()
@@ -130,6 +120,9 @@ pub(super) fn planned_target_files(
             if let Some(version) = artifact_file.version() {
                 file = file.with_version(version.clone());
             }
+            if let Some(profile) = artifact_file.pe_compatibility() {
+                file = file.with_pe_compatibility(profile.clone());
+            }
 
             Ok(PlannedFile {
                 source: PathBuf::from(artifact_file.path().as_str()),
@@ -138,28 +131,7 @@ pub(super) fn planned_target_files(
         })
         .collect();
 
-    let planned = planned?;
-    if planned.is_empty() {
-        return Err(AppError::invalid_input(
-            "artifact has no installable files for this component",
-        ));
-    }
-    ensure_unique_install_targets(&planned)?;
-    Ok(planned)
-}
-
-fn ensure_unique_install_targets(planned: &[PlannedFile]) -> AppResult<()> {
-    let mut seen = HashSet::with_capacity(planned.len());
-    for plan in planned {
-        let target = plan.file.path().as_str().to_ascii_lowercase();
-        if seen.contains(&target) {
-            return Err(AppError::invalid_input(format!(
-                "artifact resolves multiple members to install target: {target}"
-            )));
-        }
-        seen.insert(target);
-    }
-    Ok(())
+    planned
 }
 
 /// Returns the game's full component set with `rebuilt` substituted in. An

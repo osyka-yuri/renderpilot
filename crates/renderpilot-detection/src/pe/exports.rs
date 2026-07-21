@@ -6,6 +6,7 @@
 
 use super::binary::{checked_range, read_u16, read_u32};
 use super::header::{PeHeaders, data_rva_to_offset, rva_range_to_offset};
+use renderpilot_domain::PeExportSet;
 
 const EXPORT_DIRECTORY_INDEX: usize = 0;
 const EXPORT_DIRECTORY_LEN: usize = 40;
@@ -14,8 +15,6 @@ const EXPORT_NUMBER_OF_FUNCTIONS_OFFSET: usize = 20;
 const EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET: usize = 28;
 const EXPORT_ADDRESS_OF_NAMES_OFFSET: usize = 32;
 const EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET: usize = 36;
-const MAX_EXPORT_NAMES: usize = 16_384;
-const MAX_EXPORT_NAME_LEN: usize = 256;
 
 /// Bounds-checked view over one PE export directory.
 ///
@@ -56,7 +55,7 @@ impl<'a> ExportTable<'a> {
         let function_count =
             Self::read_count(bytes, directory_offset, EXPORT_NUMBER_OF_FUNCTIONS_OFFSET)?;
         let name_count = Self::read_count(bytes, directory_offset, EXPORT_NUMBER_OF_NAMES_OFFSET)?;
-        if function_count > MAX_EXPORT_NAMES || name_count > MAX_EXPORT_NAMES {
+        if function_count > PeExportSet::MAX_NAMES || name_count > PeExportSet::MAX_NAMES {
             return None;
         }
 
@@ -89,27 +88,23 @@ impl<'a> ExportTable<'a> {
 
     fn named_exports(&self) -> Option<Vec<(usize, String)>> {
         let names_offset = self.array_offset(EXPORT_ADDRESS_OF_NAMES_OFFSET, self.name_count, 4)?;
-        let ordinals_offset = if self.function_count == 0 {
-            None
-        } else {
-            Some(self.array_offset(EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET, self.name_count, 2)?)
-        };
+        let ordinals_offset =
+            self.array_offset(EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET, self.name_count, 2)?;
 
         let mut names = Vec::with_capacity(self.name_count);
         for index in 0..self.name_count {
             let name_rva = read_u32(self.bytes, names_offset.checked_add(index.checked_mul(4)?)?)?;
-            let Some(name) =
-                read_ascii_null_terminated_rva(self.bytes, self.headers.sections(), name_rva)
-            else {
-                continue;
-            };
-            let ordinal = match ordinals_offset {
-                Some(offset) => usize::from(read_u16(
-                    self.bytes,
-                    offset.checked_add(index.checked_mul(2)?)?,
-                )?),
-                None => index,
-            };
+            let name =
+                read_ascii_null_terminated_rva(self.bytes, self.headers.sections(), name_rva)?;
+            let ordinal = usize::from(read_u16(
+                self.bytes,
+                ordinals_offset.checked_add(index.checked_mul(2)?)?,
+            )?);
+            if ordinal >= self.function_count
+                || !self.valid_function_target(self.function_rva(ordinal)?)?
+            {
+                return None;
+            }
             names.push((ordinal, name));
         }
         Some(names)
@@ -130,6 +125,26 @@ impl<'a> ExportTable<'a> {
     fn is_forwarder(&self, rva: u32) -> Option<bool> {
         let end = self.directory_rva.checked_add(self.directory_size)?;
         Some((self.directory_rva..end).contains(&rva))
+    }
+
+    fn valid_function_target(&self, rva: u32) -> Option<bool> {
+        if rva == 0 {
+            return Some(false);
+        }
+        if self.is_forwarder(rva)? {
+            let forwarder =
+                read_ascii_null_terminated_rva(self.bytes, self.headers.sections(), rva)?;
+            let encoded_len = u32::try_from(forwarder.len().checked_add(1)?).ok()?;
+            let forwarder_end = rva.checked_add(encoded_len)?;
+            let directory_end = self.directory_rva.checked_add(self.directory_size)?;
+            return Some(forwarder_end <= directory_end);
+        }
+
+        Some(
+            rva_range_to_offset(self.headers.sections(), rva, 1)
+                .and_then(|offset| self.bytes.get(offset))
+                .is_some(),
+        )
     }
 }
 
@@ -183,14 +198,14 @@ fn read_ascii_null_terminated_rva(
     rva: u32,
 ) -> Option<String> {
     let mut name = String::new();
-    for index in 0..MAX_EXPORT_NAME_LEN {
+    for index in 0..=PeExportSet::MAX_NAME_BYTES {
         let current_rva = rva.checked_add(u32::try_from(index).ok()?)?;
         let offset = rva_range_to_offset(sections, current_rva, 1)?;
         let byte = *bytes.get(offset)?;
         if byte == 0 {
             return (!name.is_empty()).then_some(name);
         }
-        if !byte.is_ascii() {
+        if !(0x20..=0x7e).contains(&byte) {
             return None;
         }
         name.push(byte as char);
@@ -232,6 +247,26 @@ mod tests {
         assert!(names.contains(&"ReShadeVersion".to_owned()));
         assert!(names.contains(&"ReShadeRegisterAddon".to_owned()));
         assert!(names.contains(&"ReShadeUnregisterAddon".to_owned()));
+    }
+
+    #[test]
+    fn named_export_surface_is_strict_and_honors_the_256_byte_limit() {
+        let maximum = "A".repeat(PeExportSet::MAX_NAME_BYTES);
+        let pe = build_export_pe(&[maximum.as_str()]);
+        assert_eq!(export_names_from_bytes(&pe), Some(vec![maximum]));
+
+        let too_long = "B".repeat(PeExportSet::MAX_NAME_BYTES + 1);
+        assert_eq!(
+            export_names_from_bytes(&build_export_pe(&[&too_long])),
+            None
+        );
+
+        let malformed = build_export_pe(&["Valid", "Invalid\u{1}Name"]);
+        assert_eq!(
+            export_names_from_bytes(&malformed),
+            None,
+            "one malformed entry must reject the complete compatibility surface"
+        );
     }
 
     #[test]
@@ -301,6 +336,80 @@ mod tests {
         assert_eq!(
             exported_u32_from_bytes(&overlapping, "D3D12SDKVersion"),
             None
+        );
+    }
+
+    #[test]
+    fn readable_architecture_with_a_damaged_export_table_has_no_profile() {
+        let mut damaged = build_export_pe(&["VR_InitInternal"]);
+        let optional_header_offset = 0x80 + 4 + COFF_HEADER_LEN;
+        let export_size_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET + 4;
+        damaged[export_size_offset..export_size_offset + 4]
+            .copy_from_slice(&((EXPORT_DIRECTORY_LEN - 1) as u32).to_le_bytes());
+
+        let architecture = super::super::read_pe_architecture_from_bytes(&damaged);
+        assert_eq!(architecture, Some(renderpilot_domain::Architecture::X64));
+        let inspection = super::super::PeInspection {
+            architecture,
+            export_names: export_names_from_bytes(&damaged),
+            ..Default::default()
+        };
+        assert!(
+            inspection.compatibility_profile().is_none(),
+            "a partial architecture-only profile must never escape inspection"
+        );
+    }
+
+    #[test]
+    fn malformed_name_ordinals_reject_the_complete_export_surface() {
+        let mut invalid_ordinal = build_export_pe(&["VR_InitInternal"]);
+        let section_raw_ptr = export_section_raw_pointer(&invalid_ordinal);
+        let ordinals_offset = section_raw_ptr + EXPORT_DIRECTORY_LEN + 4 + 4;
+        invalid_ordinal[ordinals_offset..ordinals_offset + 2].copy_from_slice(&1u16.to_le_bytes());
+        assert_eq!(export_names_from_bytes(&invalid_ordinal), None);
+
+        let architecture = super::super::read_pe_architecture_from_bytes(&invalid_ordinal);
+        let inspection = super::super::PeInspection {
+            architecture,
+            export_names: export_names_from_bytes(&invalid_ordinal),
+            ..Default::default()
+        };
+        assert!(
+            inspection.compatibility_profile().is_none(),
+            "an out-of-range name ordinal must invalidate the complete profile"
+        );
+
+        let mut names_without_functions = build_export_pe(&["VR_InitInternal"]);
+        let directory = export_section_raw_pointer(&names_without_functions);
+        names_without_functions[directory + EXPORT_NUMBER_OF_FUNCTIONS_OFFSET
+            ..directory + EXPORT_NUMBER_OF_FUNCTIONS_OFFSET + 4]
+            .copy_from_slice(&0u32.to_le_bytes());
+        assert_eq!(export_names_from_bytes(&names_without_functions), None);
+    }
+
+    #[test]
+    fn invalid_function_rvas_reject_the_complete_export_surface() {
+        let mut unmapped_target = build_export_pe(&["VR_InitInternal"]);
+        let functions = export_section_raw_pointer(&unmapped_target) + EXPORT_DIRECTORY_LEN;
+        unmapped_target[functions..functions + 4].copy_from_slice(&0xffff_0000u32.to_le_bytes());
+        assert_eq!(export_names_from_bytes(&unmapped_target), None);
+        let inspection = super::super::inspect_pe_bytes(&unmapped_target);
+        assert_eq!(
+            inspection.architecture,
+            Some(renderpilot_domain::Architecture::X64)
+        );
+        assert!(
+            inspection.compatibility_profile().is_none(),
+            "an unmapped EAT target must invalidate the atomic profile"
+        );
+
+        let mut malformed_forwarder = build_export_pe(&["VR_InitInternal"]);
+        let functions = export_section_raw_pointer(&malformed_forwarder) + EXPORT_DIRECTORY_LEN;
+        malformed_forwarder[functions..functions + 4].copy_from_slice(&0x1000u32.to_le_bytes());
+        assert_eq!(
+            export_names_from_bytes(&malformed_forwarder),
+            None,
+            "a forwarder RVA must name a valid printable ASCII string"
         );
     }
 
@@ -408,8 +517,12 @@ mod tests {
 
         if !export_names.is_empty() {
             section_body.resize(EXPORT_DIRECTORY_LEN, 0);
+            let functions_table_offset = section_body.len();
+            section_body.resize(functions_table_offset + export_names.len() * 4, 0);
             let names_table_offset = section_body.len();
             section_body.resize(names_table_offset + export_names.len() * 4, 0);
+            let ordinals_table_offset = section_body.len();
+            section_body.resize(ordinals_table_offset + export_names.len() * 2, 0);
 
             let mut name_rvas = Vec::new();
             for name in export_names {
@@ -424,10 +537,29 @@ mod tests {
                 section_body[offset..offset + 4].copy_from_slice(&name_rva.to_le_bytes());
             }
 
+            let function_stub_rva = section_rva + section_body.len() as u32;
+            section_body.push(0xc3);
+            for index in 0..export_names.len() {
+                let function_offset = functions_table_offset + index * 4;
+                section_body[function_offset..function_offset + 4]
+                    .copy_from_slice(&function_stub_rva.to_le_bytes());
+                let ordinal_offset = ordinals_table_offset + index * 2;
+                section_body[ordinal_offset..ordinal_offset + 2]
+                    .copy_from_slice(&(index as u16).to_le_bytes());
+            }
+
+            section_body[EXPORT_NUMBER_OF_FUNCTIONS_OFFSET..EXPORT_NUMBER_OF_FUNCTIONS_OFFSET + 4]
+                .copy_from_slice(&(export_names.len() as u32).to_le_bytes());
             section_body[EXPORT_NUMBER_OF_NAMES_OFFSET..EXPORT_NUMBER_OF_NAMES_OFFSET + 4]
                 .copy_from_slice(&(export_names.len() as u32).to_le_bytes());
+            section_body
+                [EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET..EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET + 4]
+                .copy_from_slice(&(section_rva + functions_table_offset as u32).to_le_bytes());
             section_body[EXPORT_ADDRESS_OF_NAMES_OFFSET..EXPORT_ADDRESS_OF_NAMES_OFFSET + 4]
                 .copy_from_slice(&(section_rva + names_table_offset as u32).to_le_bytes());
+            section_body[EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET
+                ..EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET + 4]
+                .copy_from_slice(&(section_rva + ordinals_table_offset as u32).to_le_bytes());
         }
 
         let total_len = section_raw_ptr as usize + section_body.len().max(1);
@@ -450,7 +582,7 @@ mod tests {
             let export_entry = data_dir_offset + EXPORT_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
             bytes[export_entry..export_entry + 4].copy_from_slice(&section_rva.to_le_bytes());
             bytes[export_entry + 4..export_entry + 8]
-                .copy_from_slice(&(section_body.len() as u32).to_le_bytes());
+                .copy_from_slice(&(EXPORT_DIRECTORY_LEN as u32).to_le_bytes());
         }
 
         let section_offset = section_table_offset;
@@ -468,6 +600,15 @@ mod tests {
                 .copy_from_slice(&section_body);
         }
         bytes
+    }
+
+    fn export_section_raw_pointer(bytes: &[u8]) -> usize {
+        let section_offset = 0x80 + 4 + COFF_HEADER_LEN + 0xF0;
+        u32::from_le_bytes(
+            bytes[section_offset + 20..section_offset + 24]
+                .try_into()
+                .expect("section raw pointer"),
+        ) as usize
     }
 
     fn align_up(value: u32, alignment: u32) -> u32 {

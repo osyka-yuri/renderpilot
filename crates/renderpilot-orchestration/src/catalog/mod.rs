@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 use renderpilot_application::{
     AppError, AppResult, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
-    GameRepository, OperationPlan, OperationRecord, find_replacement_candidates,
+    GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
+    find_replacement_candidates,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
@@ -41,6 +42,7 @@ pub mod output;
 mod runtime_compatibility;
 /// Auto-discovery and scanning.
 pub mod scan;
+mod source_assessment;
 mod swap;
 
 #[cfg(windows)]
@@ -212,8 +214,12 @@ pub(crate) fn get_game_details_with_universe(
         .candidate_context
         .clone()
         .with_target_profile(runtime_compatibility::target_profile(context, &game));
-    let candidate_groups =
-        find_replacement_candidates(&components, &universe.artifacts, &candidate_context);
+    let matching_components = components_for_candidate_matching(context, game_id, &components)?;
+    let candidate_groups = find_replacement_candidates(
+        &matching_components,
+        &universe.artifacts,
+        &candidate_context,
+    );
 
     let operations = list_operations(context, game_id)?;
 
@@ -223,6 +229,48 @@ pub(crate) fn get_game_details_with_universe(
         candidate_groups,
         operations,
     })
+}
+
+/// Refreshes byte-derived state required for safe candidate presentation.
+///
+/// OpenVR compatibility depends on the currently installed DLL's architecture
+/// and complete named-export surface, so persisted scan metadata is not
+/// sufficient for a live dropdown. A component that cannot be refreshed is
+/// omitted fail-closed. Other technologies retain their existing executable-
+/// context policy and avoid an unnecessary per-query file hash.
+pub(crate) fn components_for_candidate_matching(
+    context: &crate::Context,
+    game_id: &GameId,
+    components: &[GraphicsComponent],
+) -> Result<Vec<GraphicsComponent>, ServiceError> {
+    if !components
+        .iter()
+        .any(|component| component.technology() == GraphicsTechnology::OpenVr)
+    {
+        return Ok(components.to_vec());
+    }
+
+    let installed_addon = context.storage().get_installed_addon(game_id)?;
+    let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
+
+    Ok(components
+        .iter()
+        .filter_map(|component| {
+            if component.technology() != GraphicsTechnology::OpenVr {
+                return Some(component.clone());
+            }
+            match crate::coordinated_files::current_component_snapshot(component, managed_files) {
+                Ok(snapshot) => Some(snapshot.into_component()),
+                Err(error) => {
+                    log::warn!(
+                        "omitting stale OpenVR component {} from replacement candidates: {error}",
+                        component.id().as_str()
+                    );
+                    None
+                }
+            }
+        })
+        .collect())
 }
 
 /// Returns full game details including components, candidates, and operations.
@@ -349,8 +397,12 @@ fn filter_artifacts_by_technology(
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_application::InstalledAddonRepository;
-    use renderpilot_domain::{InstalledAddon, PathRef};
+    use renderpilot_domain::{
+        Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
+        ComponentKind, InstalledAddon, LibraryArtifact, PathRef, PeCompatibilityProfile,
+        PeExportSet, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
+        UpstreamPackageProvider, Version,
+    };
     use tempfile::tempdir;
 
     use super::*;
@@ -394,6 +446,82 @@ mod tests {
             addon_capabilities(&context, &game_id)
                 .expect("capabilities")
                 .contains(&AddonKind::RenoDx)
+        );
+    }
+
+    #[test]
+    fn candidate_matching_refreshes_openvr_profile_from_current_bytes() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context =
+            crate::Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("game:openvr-freshness").expect("game id");
+        let dll = game_dir.path().join(renderpilot_domain::openvr::DLL_NAME);
+        std::fs::write(&dll, b"current-but-not-a-pe").expect("write DLL");
+        let hash = renderpilot_detection::sha256_file(&dll).expect("hash");
+        let profile = PeCompatibilityProfile::new(
+            Architecture::X64,
+            PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports"),
+        );
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:openvr-freshness").expect("component id"),
+            game_id.clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::OpenVr,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(PathRef::new(dll.to_string_lossy()).expect("path"))
+                .with_sha256(hash)
+                .with_pe_compatibility(profile),
+        );
+
+        let refreshed =
+            components_for_candidate_matching(&context, &game_id, &[component]).expect("refresh");
+        assert_eq!(refreshed.len(), 1);
+        assert_eq!(refreshed[0].files()[0].pe_compatibility(), None);
+
+        let candidate_file =
+            ComponentFile::new(PathRef::new("catalog://valve/openvr_api.dll").expect("path"))
+                .with_sha256(Sha256Hash::new("b".repeat(64)).expect("hash"))
+                .with_pe_compatibility(PeCompatibilityProfile::new(
+                    Architecture::X64,
+                    PeExportSet::from_canonical_names(vec![
+                        "VR_InitInternal".into(),
+                        "VR_ShutdownInternal".into(),
+                    ])
+                    .expect("exports"),
+                ));
+        let metadata = ArtifactMetadata::default()
+            .with_release(Version::parse("2.0.0").expect("version"), None)
+            .expect("release")
+            .with_runtime_target(RuntimeTarget::new(Architecture::X64))
+            .with_upstream_package(
+                UpstreamPackage::new(
+                    UpstreamPackageProvider::GitHub,
+                    renderpilot_domain::openvr::UPSTREAM_REPOSITORY,
+                    "2.0.0",
+                )
+                .expect("provenance"),
+            );
+        let candidate = LibraryArtifact::new(
+            ArtifactId::new("artifact:openvr-freshness").expect("artifact id"),
+            GraphicsTechnology::OpenVr,
+            renderpilot_domain::openvr::DLL_NAME,
+            vec![candidate_file],
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("artifact")
+        .with_metadata(metadata);
+
+        assert!(
+            find_replacement_candidates(
+                &refreshed,
+                &[candidate],
+                &renderpilot_application::CandidateContext::empty(),
+            )
+            .is_empty(),
+            "an OpenVR DLL without a freshly observed profile must have no dropdown candidates"
         );
     }
 }

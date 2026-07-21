@@ -266,3 +266,46 @@ pub(super) fn sample_artifact(
         None => artifact,
     }
 }
+
+pub(super) fn sample_bundle_artifact(
+    artifact_id: &str,
+    technology: GraphicsTechnology,
+    files: &[(&str, Option<&str>, &str)],
+    source_game_id: Option<&str>,
+) -> LibraryArtifact {
+    let component_files = files
+        .iter()
+        .map(|(path, version, sha256)| {
+            let mut file =
+                ComponentFile::new(PathRef::new(*path).expect("artifact path should be valid"))
+                    .with_sha256(Sha256Hash::new(*sha256).expect("sha256 should be valid"));
+            if let Some(version) = version {
+                file =
+                    file.with_version(Version::parse(*version).expect("version should be valid"));
+            }
+            file
+        })
+        .collect::<Vec<_>>();
+    let primary_path = files.first().expect("bundle artifact must have files").0;
+    let primary_name = Path::new(primary_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("artifact path should contain a file name");
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new(artifact_id).expect("artifact id should be valid"),
+        technology,
+        primary_name,
+        component_files,
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact should be valid")
+    .with_source("scan-folder")
+    .expect("source should be valid");
+
+    match source_game_id {
+        Some(source_game_id) => artifact.with_source_game_id(
+            GameId::new(source_game_id).expect("source game id should be valid"),
+        ),
+        None => artifact,
+    }
+}

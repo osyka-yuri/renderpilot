@@ -4,8 +4,9 @@
 //! are stable across releases. Both `renderpilot-cli` and the future
 //! `renderpilot-api` crate use them so the wire format stays consistent.
 
-use renderpilot_application::{ComponentReplacementCandidates, ReplacementCandidate};
-use renderpilot_domain::ComponentVersionReport;
+use renderpilot_application::{
+    ComponentReplacementCandidates, InstalledReleaseState, ReplacementCandidate,
+};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -25,7 +26,7 @@ pub struct ComponentCandidateOutput {
     /// Installed file path of the component.
     pub file_path: String,
     /// Honest installed-version state for this component.
-    pub version_report: ComponentVersionReportOutput,
+    pub version_report: InstalledReleaseStateOutput,
     /// Available replacement candidates for this component.
     pub candidates: Vec<CandidateOutput>,
 }
@@ -33,11 +34,13 @@ pub struct ComponentCandidateOutput {
 /// JSON-safe representation of the installed component version state.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ComponentVersionReportOutput {
+pub enum InstalledReleaseStateOutput {
     /// All relevant installed files resolve to one version.
     Known {
         /// Display version.
         version: String,
+        /// Supplemental catalog release annotation.
+        release_label: Option<String>,
     },
     /// Known installed files prove the component is on multiple releases.
     Mixed {
@@ -50,17 +53,24 @@ pub enum ComponentVersionReportOutput {
     Unknown,
 }
 
-impl From<&ComponentVersionReport> for ComponentVersionReportOutput {
-    fn from(report: &ComponentVersionReport) -> Self {
+impl From<&InstalledReleaseState> for InstalledReleaseStateOutput {
+    fn from(report: &InstalledReleaseState) -> Self {
         match report {
-            ComponentVersionReport::Known(version) => Self::Known {
+            InstalledReleaseState::Known {
+                version,
+                release_label,
+            } => Self::Known {
                 version: version.as_str().to_owned(),
+                release_label: release_label.clone(),
             },
-            ComponentVersionReport::Mixed { min, max } => Self::Mixed {
-                min_version: min.as_str().to_owned(),
-                max_version: max.as_str().to_owned(),
+            InstalledReleaseState::Mixed {
+                min_version,
+                max_version,
+            } => Self::Mixed {
+                min_version: min_version.as_str().to_owned(),
+                max_version: max_version.as_str().to_owned(),
             },
-            ComponentVersionReport::Unknown => Self::Unknown,
+            InstalledReleaseState::Unknown => Self::Unknown,
         }
     }
 }
@@ -76,6 +86,8 @@ pub struct CandidateOutput {
     pub file_path: Option<String>,
     /// Artifact version string, if available.
     pub version: Option<String>,
+    /// Supplemental catalog release label.
+    pub release_label: Option<String>,
     /// Game id the artifact was extracted from, if any.
     pub source_game_id: Option<String>,
     /// Comparison result against the currently installed version.
@@ -101,7 +113,7 @@ impl From<ComponentReplacementCandidates> for ComponentCandidateOutput {
             component_id: group.component_id().as_str().to_owned(),
             technology: group.technology().as_slug().to_owned(),
             file_path: group.file_path().as_str().to_owned(),
-            version_report: ComponentVersionReportOutput::from(group.version_report()),
+            version_report: InstalledReleaseStateOutput::from(group.installed_release()),
             candidates,
         }
     }
@@ -116,6 +128,7 @@ impl From<&ReplacementCandidate> for CandidateOutput {
             version: candidate
                 .version()
                 .map(|version| version.as_str().to_owned()),
+            release_label: candidate.release_label().map(str::to_owned),
             source_game_id: candidate
                 .source_game_id()
                 .map(|game_id| game_id.as_str().to_owned()),
@@ -200,23 +213,42 @@ pub fn operation_summary_outputs(
 
 #[cfg(test)]
 mod tests {
-    use super::ComponentVersionReportOutput;
-    use renderpilot_domain::{ComponentVersionReport, Version};
+    use super::InstalledReleaseStateOutput;
+    use renderpilot_application::InstalledReleaseState;
+    use renderpilot_domain::Version;
     use serde_json::json;
 
     #[test]
-    fn version_report_domain_variants_serialize_to_stable_wire_shapes() {
-        // Domain → output → JSON in one path: both the From mapping and the
+    fn installed_release_variants_serialize_to_stable_wire_shapes() {
+        // Application state → output → JSON in one path: both the From mapping and the
         // wire contract must stay locked together.
         let cases = [
             (
-                ComponentVersionReport::Known(Version::parse("2.9.0").expect("version")),
-                json!({ "kind": "known", "version": "2.9.0" }),
+                InstalledReleaseState::Known {
+                    version: Version::parse("2.9.0").expect("version"),
+                    release_label: Some("revision b".to_owned()),
+                },
+                json!({
+                    "kind": "known",
+                    "version": "2.9.0",
+                    "release_label": "revision b",
+                }),
             ),
             (
-                ComponentVersionReport::Mixed {
-                    min: Version::parse("2.4.0").expect("version"),
-                    max: Version::parse("2.9.0").expect("version"),
+                InstalledReleaseState::Known {
+                    version: Version::parse("2.8.0").expect("version"),
+                    release_label: None,
+                },
+                json!({
+                    "kind": "known",
+                    "version": "2.8.0",
+                    "release_label": null,
+                }),
+            ),
+            (
+                InstalledReleaseState::Mixed {
+                    min_version: Version::parse("2.4.0").expect("version"),
+                    max_version: Version::parse("2.9.0").expect("version"),
                 },
                 json!({
                     "kind": "mixed",
@@ -224,15 +256,12 @@ mod tests {
                     "max_version": "2.9.0",
                 }),
             ),
-            (
-                ComponentVersionReport::Unknown,
-                json!({ "kind": "unknown" }),
-            ),
+            (InstalledReleaseState::Unknown, json!({ "kind": "unknown" })),
         ];
 
         for (domain, expected_wire) in cases {
             let wire =
-                serde_json::to_value(ComponentVersionReportOutput::from(&domain)).expect("json");
+                serde_json::to_value(InstalledReleaseStateOutput::from(&domain)).expect("json");
             assert_eq!(wire, expected_wire);
         }
     }

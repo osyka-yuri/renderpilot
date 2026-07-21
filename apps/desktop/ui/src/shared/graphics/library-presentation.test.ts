@@ -11,6 +11,7 @@ describe('library-presentation', () => {
   it('returns compact labels for canonical slug values', () => {
     expect(formatCompactLibraryLabel('intel_xell')).toBe('XeLL');
     expect(formatCompactLibraryLabel('nvidia_streamline')).toBe('Streamline');
+    expect(formatCompactLibraryLabel('openvr')).toBe('OpenVR');
   });
 
   it('trims, deduplicates, filters unknown values, and sorts by vendor', () => {
@@ -44,10 +45,15 @@ describe('library-presentation', () => {
 
   it('keeps vendor ordering shared across consumers', () => {
     expect(
-      createPresentedLibraries(['steam', 'amd_fsr', 'intel_xell', 'dlss_super_resolution']).map(
-        (library) => library.vendorKey,
-      ),
-    ).toEqual(['nvidia', 'amd', 'intel', 'other']);
+      createPresentedLibraries([
+        'steam',
+        'openvr',
+        'amd_fsr',
+        'intel_xell',
+        'direct_storage',
+        'dlss_super_resolution',
+      ]).map((library) => library.vendorKey),
+    ).toEqual(['nvidia', 'amd', 'intel', 'microsoft', 'valve', 'other']);
   });
 
   it('prefers the dx12 entry point when presenting cohesive AMD FSR files', () => {

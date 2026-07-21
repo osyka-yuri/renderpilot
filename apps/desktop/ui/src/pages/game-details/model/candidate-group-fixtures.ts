@@ -26,6 +26,7 @@ export function candidate(version: string | null, overrides: Partial<Candidate> 
     file_name: 'lib.dll',
     file_path: null,
     version,
+    release_label: overrides.release_label ?? null,
     source_game_id: null,
     comparison: overrides.comparison ?? 'newer_version',
     catalog_package_id: overrides.catalog_package_id ?? null,
@@ -46,7 +47,9 @@ export function group(
     component_id: componentId,
     technology,
     file_path: `C:/Game/${componentId}.dll`,
-    version_report: current ? { kind: 'known', version: current } : { kind: 'unknown' },
+    version_report: current
+      ? { kind: 'known', version: current, release_label: null }
+      : { kind: 'unknown' },
     candidates,
   };
 }

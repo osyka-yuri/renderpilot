@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::AppError;
 use renderpilot_domain::{
-    ComponentFile, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode, PathRef, Sha256Hash,
+    ComponentFile, GraphicsTechnology, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode,
+    PathRef, Sha256Hash,
 };
 
 /// The trustworthy source selected for one pre-mutation file.
@@ -150,13 +151,19 @@ impl From<BaselineConflict> for AppError {
 pub(crate) struct BaselineResolver<'a> {
     game_root: &'a Path,
     managed_files: &'a [ManagedAddonFile],
+    technology: GraphicsTechnology,
 }
 
 impl<'a> BaselineResolver<'a> {
-    pub(crate) fn new(game_root: &'a Path, managed_files: &'a [ManagedAddonFile]) -> Self {
+    pub(crate) fn new(
+        game_root: &'a Path,
+        managed_files: &'a [ManagedAddonFile],
+        technology: GraphicsTechnology,
+    ) -> Self {
         Self {
             game_root,
             managed_files,
+            technology,
         }
     }
 
@@ -183,10 +190,10 @@ impl<'a> BaselineResolver<'a> {
         }) {
             Ok(ResolvedBaseline::AddonOwnedAbsent)
         } else if sidecar.exists() {
-            let file = component_file_from_disk(&sidecar, live_path)?;
+            let file = component_file_from_disk(&sidecar, live_path, self.technology)?;
             Ok(ResolvedBaseline::ExistingSidecarBaseline(file))
         } else {
-            let file = component_file_from_disk(live_path, live_path)?;
+            let file = component_file_from_disk(live_path, live_path, self.technology)?;
             Ok(ResolvedBaseline::FreshLiveBaseline(file))
         }
     }
@@ -224,7 +231,13 @@ impl<'a> BaselineResolver<'a> {
             });
         }
 
-        Ok(ResolvedBaseline::RecordedBaseline(recorded.clone()))
+        let mut refreshed = ComponentFile::new(recorded.path().clone()).with_sha256(actual);
+        if let Some(install_as) = recorded.install_as() {
+            refreshed = refreshed.with_install_as(install_as);
+        }
+        Ok(ResolvedBaseline::RecordedBaseline(
+            super::with_observed_metadata(refreshed, self.technology, bytes_path),
+        ))
     }
 
     fn validate_binding_sidecar(
@@ -283,16 +296,24 @@ impl<'a> BaselineResolver<'a> {
 /// Resolves the complete immutable baseline for a component.
 pub(crate) fn resolve_component_baseline(
     game_root: &Path,
+    technology: GraphicsTechnology,
     current: &[ComponentFile],
     recorded: Option<&[ComponentFile]>,
     managed_files: &[ManagedAddonFile],
 ) -> Result<Vec<ComponentFile>, BaselineConflict> {
-    let resolver = BaselineResolver::new(game_root, managed_files);
+    let resolver = BaselineResolver::new(game_root, managed_files, technology);
     if let Some(recorded) = recorded {
-        for file in recorded {
-            resolver.resolve(Path::new(file.path().as_str()), Some(file))?;
-        }
-        return Ok(recorded.to_vec());
+        return recorded
+            .iter()
+            .map(|file| {
+                let path = Path::new(file.path().as_str());
+                resolver
+                    .resolve(path, Some(file))?
+                    .file()
+                    .cloned()
+                    .ok_or_else(|| BaselineConflict::MissingRecordedBytes(path.to_path_buf()))
+            })
+            .collect();
     }
 
     current
@@ -310,15 +331,13 @@ pub(crate) fn resolve_component_baseline(
 fn component_file_from_disk(
     bytes_path: &Path,
     live_path: &Path,
+    technology: GraphicsTechnology,
 ) -> Result<ComponentFile, BaselineConflict> {
     let sha256 = verified_hash(bytes_path)?;
     let path = PathRef::new(live_path.to_string_lossy().as_ref())
         .map_err(|error| BaselineConflict::InvalidPath(error.to_string()))?;
-    let mut file = ComponentFile::new(path).with_sha256(sha256);
-    if let Some(version) = renderpilot_detection::read_windows_file_version(bytes_path) {
-        file = file.with_version(version);
-    }
-    Ok(file)
+    let file = ComponentFile::new(path).with_sha256(sha256);
+    Ok(super::with_observed_metadata(file, technology, bytes_path))
 }
 
 /// Maps [`crate::fs::sha256_of_non_empty_file`] into [`BaselineConflict`] vocabulary.
