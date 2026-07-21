@@ -32,7 +32,7 @@ export type Candidate = {
   source_game_id?: Nullable<GameId>;
   comparison: CandidateComparison;
   warning?: Nullable<string>;
-  manifest_entry_id?: Nullable<string>;
+  catalog_package_id?: Nullable<string>;
   is_downloaded: boolean;
   is_debug: boolean;
   sha256: string;

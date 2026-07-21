@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
+    ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind,
+    GameId, GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
     Swappability, fsr,
 };
 
@@ -124,6 +124,7 @@ fn build_grouped_artifact(
         })
         .collect();
 
+    let metadata = runtime_metadata(group.technology, &ordered);
     LibraryArtifact::new(
         artifact_id,
         group.technology,
@@ -132,9 +133,36 @@ fn build_grouped_artifact(
         ArtifactTrustLevel::LocalObserved,
     )
     .map_err(detection_error)?
+    .with_metadata(metadata)
     .with_source("scan-folder")
     .map_err(detection_error)
     .map(|artifact| artifact.with_source_game_id(game_id.clone()))
+}
+
+fn runtime_metadata(
+    technology: GraphicsTechnology,
+    files: &[&DetectedLibraryFile],
+) -> ArtifactMetadata {
+    if !matches!(
+        technology,
+        GraphicsTechnology::MicrosoftDxc | GraphicsTechnology::D3D12Agility
+    ) {
+        return ArtifactMetadata::default();
+    }
+    let targets = files
+        .iter()
+        .filter_map(|file| file.runtime_target())
+        .collect::<Vec<_>>();
+    if targets.len() != files.len() {
+        return ArtifactMetadata::default();
+    }
+    let Some(first) = targets.first() else {
+        return ArtifactMetadata::default();
+    };
+    if targets.iter().any(|target| *target != *first) {
+        return ArtifactMetadata::default();
+    }
+    ArtifactMetadata::default().with_runtime_target((**first).clone())
 }
 
 /// Orders a group's files so the representative comes first, then alphabetically

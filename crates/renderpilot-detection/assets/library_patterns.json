@@ -137,6 +137,24 @@
       "kind": "exact",
       "platform": "windows",
       "technology": "direct_storage"
+    },
+    {
+      "pattern": "dxcompiler.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "microsoft_dxc"
+    },
+    {
+      "pattern": "dxil.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "microsoft_dxc"
+    },
+    {
+      "pattern": "d3d12core.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "d3d12_agility"
     }
   ]
 }

@@ -3,13 +3,13 @@
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
-  import type { LibraryManifestEntry } from '@entities/library';
+  import type { LibraryPackageRow } from '../model/libraries-page-model';
 
   type CopyStatus = 'idle' | 'copied' | 'failed';
 
-  let { entry }: { entry: LibraryManifestEntry } = $props();
+  let { row }: { row: LibraryPackageRow } = $props();
 
-  const dllSha256Hash = $derived(entry.files.dll.hashes.sha256);
+  const dllSha256Hash = $derived(row.primary_sha256);
 
   let copyStatus = $state<CopyStatus>('idle');
   let resetTimer: ReturnType<typeof setTimeout> | undefined;

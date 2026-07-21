@@ -231,6 +231,7 @@ struct ArtifactRow {
     technology: String,
     file_name: String,
     files_json: String,
+    metadata_json: String,
     source: Option<String>,
     source_game_id: Option<String>,
     trust_level: String,
@@ -247,6 +248,7 @@ impl DomainRow for ArtifactRow {
             technology: row.read(a::TECHNOLOGY)?,
             file_name: row.read(a::FILE_NAME)?,
             files_json: row.read(a::FILES_JSON)?,
+            metadata_json: row.read(a::METADATA_JSON)?,
             source: row.read(a::SOURCE)?,
             source_game_id: row.read(a::SOURCE_GAME_ID)?,
             trust_level: row.read(a::TRUST_LEVEL)?,
@@ -259,12 +261,15 @@ impl DomainRow for ArtifactRow {
             technology,
             file_name,
             files_json,
+            metadata_json,
             source,
             source_game_id,
             trust_level,
         } = self;
 
         let files = mapping::component_files(&files_json)?;
+        let metadata: renderpilot_domain::ArtifactMetadata =
+            mapping::deserialize_json(&metadata_json).map_err(invalid_row)?;
         let artifact = LibraryArtifact::new(
             mapping::artifact_id(id)?,
             mapping::graphics_technology(technology)?,
@@ -272,7 +277,8 @@ impl DomainRow for ArtifactRow {
             files,
             mapping::artifact_trust_level(trust_level)?,
         )
-        .map_err(invalid_row)?;
+        .map_err(invalid_row)?
+        .with_metadata(metadata);
 
         let artifact = with_optional(artifact, source, |artifact, source| {
             artifact.with_source(source).map_err(invalid_row)

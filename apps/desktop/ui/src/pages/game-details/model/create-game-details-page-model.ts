@@ -30,10 +30,10 @@ export type GameDetailsPageModelDeps = {
 };
 
 type BatchOutcome = {
-  succeeded: number;
-  failed: number;
-  hasFirstError: boolean;
-  firstError: unknown;
+  successfulItems: number;
+  completedFileCount: number;
+  failedItems: number;
+  firstFailure: { error: unknown } | null;
 };
 
 type BatchFailureMessages = {
@@ -87,42 +87,41 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     });
 
     if (result !== null) {
-      publishApplyCompletedNotification(1);
+      publishApplyCompletedNotification(result.updated_file_count);
     }
   }
 
   /** Exclusive multi-item run: isolate failures, reload once, keep first error. */
   async function runBatch<T>(
     items: readonly T[],
-    perItem: (gameId: string, item: T, signal: AbortSignal) => Promise<boolean>,
+    perItem: (gameId: string, item: T, signal: AbortSignal) => Promise<number | null>,
   ): Promise<BatchOutcome | null> {
     if (items.length === 0) {
       return null;
     }
 
     return runForSelectedGameWithSignal(async (gameId, signal) => {
-      let succeeded = 0;
-      let failed = 0;
-      let hasFirstError = false;
-      let firstError: unknown;
+      let successfulItems = 0;
+      let completedFileCount = 0;
+      let failedItems = 0;
+      let firstFailure: BatchOutcome['firstFailure'] = null;
 
       for (const item of items) {
         try {
-          if (await perItem(gameId, item, signal)) {
-            succeeded += 1;
+          const completedFiles = await perItem(gameId, item, signal);
+          if (completedFiles !== null) {
+            successfulItems += 1;
+            completedFileCount += completedFiles;
           }
         } catch (error) {
-          failed += 1;
-          if (!hasFirstError) {
-            hasFirstError = true;
-            firstError = error;
-          }
+          failedItems += 1;
+          firstFailure ??= { error };
         }
       }
 
       await deps.reloadGameDetails();
 
-      return { succeeded, failed, hasFirstError, firstError };
+      return { successfulItems, completedFileCount, failedItems, firstFailure };
     });
   }
 
@@ -131,24 +130,22 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
    * aggregate count toast.
    */
   function publishBatchFailures(
-    failed: number,
+    outcome: BatchOutcome,
     total: number,
-    hasFirstError: boolean,
-    firstError: unknown,
     aggregate: BatchFailureMessages,
   ): void {
-    if (failed <= 0) {
+    if (outcome.failedItems <= 0) {
       return;
     }
 
-    if (hasFirstError) {
-      publishCommandErrorNotification(firstError);
+    if (outcome.firstFailure !== null) {
+      publishCommandErrorNotification(outcome.firstFailure.error);
     }
 
-    if (failed > 1 || !hasFirstError) {
+    if (outcome.failedItems > 1 || outcome.firstFailure === null) {
       publishErrorNotification(
         t(aggregate.titleKey),
-        t(aggregate.descriptionKey, { failed, total }),
+        t(aggregate.descriptionKey, { failed: outcome.failedItems, total }),
       );
     }
   }
@@ -164,18 +161,18 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
         isDownloaded: item.isDownloaded,
         signal,
       });
-      return appliedOperation !== null;
+      return appliedOperation?.updated_file_count ?? null;
     });
 
     if (outcome === null) {
       return;
     }
 
-    if (outcome.succeeded > 0) {
-      publishApplyCompletedNotification(outcome.succeeded);
+    if (outcome.successfulItems > 0) {
+      publishApplyCompletedNotification(outcome.completedFileCount);
     }
 
-    publishBatchFailures(outcome.failed, items.length, outcome.hasFirstError, outcome.firstError, {
+    publishBatchFailures(outcome, items.length, {
       titleKey: 'notify.swapBatchFailed.title',
       descriptionKey: 'notify.swapBatchFailed.description',
     });
@@ -189,35 +186,29 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     });
 
     if (result !== null) {
-      publishRollbackCompletedNotification(1);
+      publishRollbackCompletedNotification(result.restored_file_count);
     }
   }
 
   /** Bulk restore to pre-RenderPilot `.bak` originals. */
   async function handleBulkRollback(componentIds: string[]): Promise<void> {
     const outcome = await runBatch(componentIds, async (gameId, componentId) => {
-      await rollbackComponent(gameId, componentId);
-      return true;
+      const rollbackResult = await rollbackComponent(gameId, componentId);
+      return rollbackResult.restored_file_count;
     });
 
     if (outcome === null) {
       return;
     }
 
-    if (outcome.succeeded > 0) {
-      publishRollbackCompletedNotification(outcome.succeeded);
+    if (outcome.successfulItems > 0) {
+      publishRollbackCompletedNotification(outcome.completedFileCount);
     }
 
-    publishBatchFailures(
-      outcome.failed,
-      componentIds.length,
-      outcome.hasFirstError,
-      outcome.firstError,
-      {
-        titleKey: 'notify.rollbackBatchFailed.title',
-        descriptionKey: 'notify.rollbackBatchFailed.description',
-      },
-    );
+    publishBatchFailures(outcome, componentIds.length, {
+      titleKey: 'notify.rollbackBatchFailed.title',
+      descriptionKey: 'notify.rollbackBatchFailed.description',
+    });
   }
 
   return {

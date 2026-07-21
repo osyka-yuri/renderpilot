@@ -9,12 +9,12 @@ import {
   type SortingState,
 } from '@tanstack/table-core';
 import { createSvelteTable } from '@shared/ui';
-import type { LibraryManifestEntry } from '@entities/library';
+import type { LibraryPackageRow } from './libraries-page-model';
 import { resetVirtualizerAfterLayout } from '../ui/virtualizer-helpers';
 
 const DEFAULT_SORTING: SortingState = [{ id: 'version', desc: true }];
-const ROW_ESTIMATE_SIZE_SINGLE = 40;
-const ROW_ESTIMATE_SIZE_MULTI = 52;
+const ROW_ESTIMATE_SIZE_SINGLE_LINE = 40;
+const ROW_ESTIMATE_SIZE_WITH_NAME = 52;
 const ROW_OVERSCAN = 12;
 
 const COLUMN_IDS = ['version', 'hash', 'signed', 'size', 'actions'] as const;
@@ -33,11 +33,11 @@ export function getColumnClass(columnId: string): string {
 }
 
 type LibrariesTableModelProps = {
-  getEntries: () => LibraryManifestEntry[];
-  getColumns: () => ColumnDef<LibraryManifestEntry>[];
+  getEntries: () => LibraryPackageRow[];
+  getColumns: () => ColumnDef<LibraryPackageRow>[];
   getActiveVendor: () => string | undefined;
   getActiveType: () => string | undefined;
-  getShowFileName: () => boolean;
+  getShowPackageDisplayName: () => boolean;
 };
 
 /**
@@ -50,7 +50,7 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
   let virtualizerResetId = 0;
 
   function getVirtualizerResetKey(): string {
-    return `${props.getActiveVendor()}:${props.getActiveType()}:${tableRows.length}`;
+    return `${props.getActiveVendor()}:${props.getActiveType()}:${props.getShowPackageDisplayName()}:${tableRows.length}`;
   }
 
   function scheduleVirtualizerReset(resetKey: string): void {
@@ -92,21 +92,22 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
   const rowVirtualizer = $derived.by(() => {
     const scrollElement = scrollViewportRef;
     const rows = tableRows;
+    const showPackageDisplayName = props.getShowPackageDisplayName();
 
     return createVirtualizer<HTMLElement, HTMLTableRowElement>({
       count: rows.length,
       getScrollElement: () => scrollElement,
       estimateSize: () =>
-        props.getShowFileName() ? ROW_ESTIMATE_SIZE_MULTI : ROW_ESTIMATE_SIZE_SINGLE,
+        showPackageDisplayName ? ROW_ESTIMATE_SIZE_WITH_NAME : ROW_ESTIMATE_SIZE_SINGLE_LINE,
       overscan: ROW_OVERSCAN,
-      getItemKey: (index) => getRowByIndex(rows, index)?.original.entry_id ?? index,
+      getItemKey: (index) => getRowByIndex(rows, index)?.original.package_id ?? index,
     });
   });
 
   function getRowByIndex(
-    rows: Row<LibraryManifestEntry>[],
+    rows: Row<LibraryPackageRow>[],
     index: number,
-  ): Row<LibraryManifestEntry> | undefined {
+  ): Row<LibraryPackageRow> | undefined {
     if (index < 0 || index >= rows.length) {
       return undefined;
     }

@@ -18,7 +18,7 @@
 
 mod names;
 
-pub(crate) use names::{is_safe_file_name, sanitize_path_component};
+pub(crate) use names::is_safe_file_name;
 
 use std::path::{Path, PathBuf};
 

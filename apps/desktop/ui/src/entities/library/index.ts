@@ -1,16 +1,16 @@
 export type {
-  BuildType,
+  ReleaseChannel,
+  RuntimeCompatibility,
+  LibraryTarget,
   Signature,
-  LibraryManifest,
-  LibraryManifestEntry,
-  LibraryState,
+  LibraryRelease,
+  LibraryPackageSummary,
+  LibraryPackageState,
 } from './model/types';
 
 export {
-  fetchLibrariesManifest,
-  getLibrariesManifest,
-  downloadLibrary,
+  listLibraryPackages,
+  downloadLibraryPackage,
   downloadArtifact,
-  deleteLibrary,
-  getLibraryStates,
+  deleteLibraryPackage,
 } from './api/desktop';

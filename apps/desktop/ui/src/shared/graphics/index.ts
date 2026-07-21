@@ -1,4 +1,8 @@
-export type { LibraryVendorKey, PresentedLibrary } from './library-presentation';
+export type {
+  LibraryVendorKey,
+  PresentedLibrary,
+  PresentedLibraryFiles,
+} from './library-presentation';
 
 export {
   ALL_KNOWN_LIBRARIES,
@@ -7,6 +11,7 @@ export {
   createPresentedLibraries,
   createPresentedLibrary,
   displayLibraryFilePath,
+  presentLibraryFiles,
   formatCanonicalLibraryLabel,
   formatCompactLibraryLabel,
   isKnownLibrary,

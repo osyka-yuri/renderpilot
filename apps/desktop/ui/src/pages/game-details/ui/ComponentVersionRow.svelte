@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
-  import { displayComponentFilePath } from '@entities/component';
-  import { fileNameFromPath } from '@shared/path';
+  import { presentComponentFiles } from '@entities/component';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
   import {
+    Badge,
     Button,
     Item,
     ItemActions,
@@ -32,8 +32,10 @@
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();
 
-  const filePath = $derived(displayComponentFilePath(component) ?? t('common.unknown'));
-  const fileName = $derived(fileNameFromPath(filePath));
+  const filePresentation = $derived(presentComponentFiles(component));
+  const fileName = $derived(filePresentation?.label ?? t('common.unknown'));
+  const fileCount = $derived(filePresentation?.fileCount ?? 0);
+  const fileLocations = $derived(filePresentation?.locations ?? []);
   const candidates = $derived(group?.candidates ?? []);
 
   const currentHash = $derived(component.files[0]?.sha256);
@@ -96,9 +98,22 @@
 
 <Item size="sm">
   <ItemContent>
-    <ItemTitle>{fileName}</ItemTitle>
+    <ItemTitle>
+      <span>{fileName}</span>
+      {#if fileCount > 1}
+        <Badge variant="outline" class="font-normal text-muted-foreground">
+          {t('gameDetails.version.fileCount', { count: fileCount })}
+        </Badge>
+      {/if}
+    </ItemTitle>
     <ItemDescription>
-      <span class="break-all">{filePath}</span>
+      {#if fileLocations.length === 0}
+        <span>{t('common.unknown')}</span>
+      {:else}
+        {#each fileLocations as location (location)}
+          <span class="block break-all">{location}</span>
+        {/each}
+      {/if}
     </ItemDescription>
   </ItemContent>
   <ItemActions>

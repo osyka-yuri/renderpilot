@@ -6,33 +6,27 @@
 
 use crate::utils::{JsonResult, to_json};
 
-pub use renderpilot_orchestration::libraries::{
-    LibraryManifest, LibraryManifestEntry, LibraryState,
-};
+pub use renderpilot_orchestration::libraries::{LibraryPackageState, LibraryPackageSummary};
 pub use renderpilot_orchestration::net::{DownloadProgress, ProgressObserver};
 
 // ---------------------------------------------------------------------------
 // Public JSON facade
 // ---------------------------------------------------------------------------
 
-/// Fetches the remote manifest from the configured URL and stores it locally.
-pub async fn fetch_libraries_manifest() -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::fetch_manifest().await?)
+/// Fetches and atomically activates the remote catalog snapshot.
+pub async fn fetch_libraries_catalog() -> JsonResult {
+    to_json(renderpilot_orchestration::libraries::fetch_catalog().await?)
 }
 
-/// Returns the local manifest if available, otherwise fetches it from remote.
-pub async fn get_libraries_manifest() -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::get_or_fetch_manifest().await?)
-}
-
-/// Downloads a library entry by its ID from the local manifest.
-pub async fn download_library(
+/// Downloads an explicit library package by its catalog ID.
+pub async fn download_library_package(
     context: &renderpilot_orchestration::Context,
-    entry_id: String,
+    package_id: String,
     progress: Option<&ProgressObserver<'_>>,
 ) -> JsonResult {
     to_json(
-        renderpilot_orchestration::libraries::download_library(context, entry_id, progress).await?,
+        renderpilot_orchestration::libraries::download_package(context, package_id, progress)
+            .await?,
     )
 }
 
@@ -48,15 +42,15 @@ pub async fn download_artifact(
     )
 }
 
-/// Deletes a locally downloaded library by its ID.
-pub async fn delete_library(
+/// Deletes a locally downloaded package by its catalog ID.
+pub async fn delete_library_package(
     context: &renderpilot_orchestration::Context,
-    entry_id: String,
+    package_id: String,
 ) -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::delete_library(context, entry_id).await?)
+    to_json(renderpilot_orchestration::libraries::delete_package(context, package_id).await?)
 }
 
-/// Returns the download state for all entries in the local manifest.
-pub async fn get_library_states() -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::get_library_states()?)
+/// Returns the resolved package projection used by desktop clients.
+pub async fn list_library_packages(context: &renderpilot_orchestration::Context) -> JsonResult {
+    to_json(renderpilot_orchestration::libraries::list_packages(context).await?)
 }

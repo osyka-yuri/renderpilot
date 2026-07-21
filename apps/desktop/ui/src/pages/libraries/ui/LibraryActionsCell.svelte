@@ -6,47 +6,47 @@
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
-  import type { LibraryManifestEntry } from '@entities/library';
+  import type { LibraryPackageRow } from '../model/libraries-page-model';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   type Props = {
-    entry: LibraryManifestEntry;
+    row: LibraryPackageRow;
     pendingActions: LibrariesPageModel['pendingActions'];
-    downloadedEntryIds: LibrariesPageModel['downloadedEntryIds'];
+    actionsDisabled: () => boolean;
     onDownload: (id: string) => Promise<boolean>;
     onDelete: (id: string) => Promise<boolean>;
   };
 
-  let { entry, pendingActions, downloadedEntryIds, onDownload, onDelete }: Props = $props();
+  let { row, pendingActions, actionsDisabled, onDownload, onDelete }: Props = $props();
 
-  const entryId = $derived(entry.entry_id);
-  const pendingAction = $derived(pendingActions.get(entryId) ?? null);
-  const isBusy = $derived(pendingAction !== null);
+  const packageId = $derived(row.package_id);
+  const pendingAction = $derived(pendingActions.get(packageId) ?? null);
+  const isActionDisabled = $derived(pendingAction !== null || actionsDisabled());
   const isDownloading = $derived(pendingAction === 'download');
-  const isDownloaded = $derived(downloadedEntryIds.has(entryId));
+  const isDownloaded = $derived(row.is_downloaded);
 
   const actionLabel = $derived(
     isDownloaded ? t('libraries.actions.delete') : t('libraries.actions.download'),
   );
 
   async function handleActionClick() {
-    if (isBusy) {
+    if (isActionDisabled) {
       return;
     }
 
-    // The model returns `false` when it ignored the action (e.g. a manifest
+    // The model returns `false` when it ignored the action (e.g. a catalog
     // load/refresh is running) — never report success for an action that
     // never ran.
     try {
       if (isDownloaded) {
-        if (await onDelete(entryId)) {
-          toast.success(t('libraries.actions.deletedToast', { version: entry.version.value }));
+        if (await onDelete(packageId)) {
+          toast.success(t('libraries.actions.deletedToast', { version: row.release.version }));
         }
         return;
       }
 
-      if (await onDownload(entryId)) {
-        toast.success(t('libraries.actions.downloadedToast', { version: entry.version.value }));
+      if (await onDownload(packageId)) {
+        toast.success(t('libraries.actions.downloadedToast', { version: row.release.version }));
       }
     } catch (error) {
       toast.error(
@@ -60,17 +60,17 @@
 </script>
 
 <div class="flex items-center justify-end gap-2">
-  <DownloadProgressBar ids={[entryId]} active={isDownloading} />
+  <DownloadProgressBar ids={[packageId]} active={isDownloading} />
   <Tooltip>
     <TooltipTrigger>
       <Button
         variant="ghost"
         size="icon"
-        disabled={isBusy}
+        disabled={isActionDisabled}
         onclick={handleActionClick}
         aria-label={actionLabel}
       >
-        {#if isBusy}
+        {#if pendingAction !== null}
           <Loader2Icon class="animate-spin" aria-hidden="true" />
         {:else if isDownloaded}
           <Trash2Icon aria-hidden="true" />

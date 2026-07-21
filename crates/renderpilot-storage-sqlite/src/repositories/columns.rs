@@ -31,6 +31,7 @@ pub mod projection {
         pub const TECHNOLOGY: &str = "artifact_technology";
         pub const FILE_NAME: &str = "artifact_file_name";
         pub const FILES_JSON: &str = "artifact_files_json";
+        pub const METADATA_JSON: &str = "artifact_metadata_json";
         pub const SOURCE: &str = "artifact_source";
         pub const SOURCE_GAME_ID: &str = "artifact_source_game_id";
         pub const TRUST_LEVEL: &str = "artifact_trust_level";

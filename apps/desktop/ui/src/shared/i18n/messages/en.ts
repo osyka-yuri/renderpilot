@@ -216,6 +216,7 @@ export const en = {
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'No alternative versions',
   'gameDetails.version.restoreOriginal': 'Restore original {fileName}',
+  'gameDetails.version.fileCount': { one: '1 file', other: '{count} files' },
 
   // ── Game details: vendor component card ──
   'gameDetails.vendor.description': 'Change the component version.',

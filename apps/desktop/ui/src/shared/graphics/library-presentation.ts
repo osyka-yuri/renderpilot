@@ -1,5 +1,5 @@
 import { humanizeToken } from '@shared/text';
-import { fileNameFromPath } from '@shared/path';
+import { fileNameFromPath, sharedParentPath } from '@shared/path';
 
 export type LibraryVendorKey = 'nvidia' | 'amd' | 'intel' | 'microsoft' | 'other';
 
@@ -12,6 +12,14 @@ export type PresentedLibrary = {
 type LibraryFilePathLike = {
   path: string;
 };
+
+export type PresentedLibraryFiles = Readonly<{
+  label: string;
+  /** Number of physical files represented by the row. */
+  fileCount: number;
+  /** Compact locations to render without repeating a shared directory. */
+  locations: readonly string[];
+}>;
 
 export const libraryVendorOrder: readonly LibraryVendorKey[] = [
   'nvidia',
@@ -49,6 +57,8 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   amd_fsr_loader: 'AMD FSR Loader',
   amd_fsr_radiance_cache: 'AMD FSR Radiance Cache',
   direct_storage: 'Microsoft DirectStorage',
+  microsoft_dxc: 'Microsoft DXC',
+  d3d12_agility: 'Microsoft D3D12 Agility',
 };
 
 /** Sub-tags that are internal to AMD FSR and expanded from the top-level `amd_fsr` alias. */
@@ -75,10 +85,14 @@ const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'AMD FSR Frame Generation': 'FSR FG',
   'AMD FSR Ray Regeneration': 'FSR RR',
   'Microsoft DirectStorage': 'DirectStorage',
+  'Microsoft DXC': 'DXC',
+  'Microsoft D3D12 Agility': 'D3D12 Agility',
 };
 
 const AMD_FSR_TECHNOLOGY = 'amd_fsr';
 const AMD_FSR_ENTRY_POINT_FILE = 'amd_fidelityfx_dx12.dll';
+const MICROSOFT_DXC_TECHNOLOGY = 'microsoft_dxc';
+const MICROSOFT_DXC_FILES = ['dxcompiler.dll', 'dxil.dll'] as const;
 
 const VENDOR_BLUEPRINTS: readonly {
   key: LibraryVendorKey;
@@ -130,7 +144,11 @@ export function libraryVendorKey(value?: string | null): LibraryVendorKey {
     return 'intel';
   }
 
-  if (normalized.startsWith('microsoft') || normalized.startsWith('directstorage')) {
+  if (
+    normalized.startsWith('microsoft') ||
+    normalized.startsWith('directstorage') ||
+    normalized.startsWith('d3d12')
+  ) {
     return 'microsoft';
   }
 
@@ -209,10 +227,52 @@ export function displayLibraryFilePath(
   return files[0]?.path ?? null;
 }
 
+/**
+ * Presents the physical files represented by one component row.
+ *
+ * Most components expose one entry-point DLL. DXC is deliberately different:
+ * a proven `dxcompiler.dll` + `dxil.dll` pair is one atomic install unit and is
+ * presented compactly. A standalone observed file remains literal instead of
+ * implying that another package member is installed.
+ */
+export function presentLibraryFiles(
+  technology: string | null | undefined,
+  files: readonly LibraryFilePathLike[],
+): PresentedLibraryFiles | null {
+  if (technology === MICROSOFT_DXC_TECHNOLOGY && files.length === MICROSOFT_DXC_FILES.length) {
+    const filesByName = new Map<string, LibraryFilePathLike>();
+    for (const file of files) {
+      const name = fileNameFromPath(file.path).toLowerCase();
+      if (!filesByName.has(name)) {
+        filesByName.set(name, file);
+      }
+    }
+
+    const packageFiles = MICROSOFT_DXC_FILES.map((name) => filesByName.get(name));
+    if (packageFiles.every((file): file is LibraryFilePathLike => file !== undefined)) {
+      const paths = packageFiles.map((file) => file.path);
+      return presentPaths(MICROSOFT_DXC_FILES.join(' + '), paths);
+    }
+  }
+
+  const path = displayLibraryFilePath(technology, files);
+  return path === null ? null : presentPaths(fileNameFromPath(path), [path]);
+}
+
 function normalizeVendorValue(value?: string | null): string {
   return formatCanonicalLibraryLabel(value).toLowerCase().replace(/[_\s]/g, '');
 }
 
 function vendorIndex(value: LibraryVendorKey): number {
   return libraryVendorOrder.indexOf(value);
+}
+
+function presentPaths(label: string, paths: readonly string[]): PresentedLibraryFiles {
+  const sharedDirectory = paths.length > 1 ? sharedParentPath(paths) : null;
+
+  return {
+    label,
+    fileCount: paths.length,
+    locations: sharedDirectory === null ? paths : [sharedDirectory],
+  };
 }

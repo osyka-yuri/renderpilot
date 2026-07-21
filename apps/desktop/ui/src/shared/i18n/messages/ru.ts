@@ -224,6 +224,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'Нет альтернативных версий',
   'gameDetails.version.restoreOriginal': 'Восстановить исходный {fileName}',
+  'gameDetails.version.fileCount': {
+    one: '1 файл',
+    few: '{count} файла',
+    many: '{count} файлов',
+    other: '{count} файла',
+  },
 
   // ── Game details: vendor component card ──
   'gameDetails.vendor.description': 'Изменить версию компонента.',

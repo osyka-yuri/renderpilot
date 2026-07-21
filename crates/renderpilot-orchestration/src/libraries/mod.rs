@@ -1,155 +1,116 @@
-//! Download and management of graphics DLL libraries.
+//! Download and lifecycle management for explicit graphics-library packages.
 
 #[cfg(test)]
 mod tests;
 
 mod artifact_builder;
-mod composed_package;
+mod catalog;
 mod compression;
-mod fsr_packages;
-mod local_library;
-mod manifest;
+mod locks;
+mod packages;
+mod resolved;
 mod storage;
-mod streamline_packages;
 mod types;
 mod validate;
 
 use crate::ServiceError;
 use crate::net::ProgressObserver;
 
-pub use self::types::{LibraryManifest, LibraryManifestEntry, LibraryState};
+pub(crate) use self::artifact_builder::catalog_packages_as_artifacts;
+pub use self::storage::local_dlss_document_path;
+pub use self::types::{
+    LibraryPackageState, LibraryPackageSummary, LibraryRelease, LibraryReleaseChannel,
+    LibraryTarget, SignatureInfo,
+};
 
-pub use self::artifact_builder::manifest_entries_as_artifacts;
-pub use self::storage::local_preset_manifest_path;
+pub(super) const CATALOG_SOURCE: &str = "catalog-v1";
 
 fn library_error(message: impl Into<String>) -> ServiceError {
     ServiceError::command_failed(message)
 }
 
-// ---------------------------------------------------------------------------
-// Public orchestration entry points — CLI/API facade wraps these with to_json
-// ---------------------------------------------------------------------------
-
-/// Fetches the remote manifest and saves it locally. Returns the manifest.
-pub async fn fetch_manifest() -> Result<LibraryManifest, ServiceError> {
-    manifest::fetch_manifest().await
+/// Fetches and atomically activates a complete catalog snapshot.
+pub async fn fetch_catalog() -> Result<(), ServiceError> {
+    catalog::fetch_validated_catalog().await.map(drop)
 }
 
-/// Returns the local manifest if available, otherwise fetches and saves it.
-pub async fn get_or_fetch_manifest() -> Result<LibraryManifest, ServiceError> {
-    manifest::get_or_fetch_manifest().await
+/// Returns the active local snapshot, fetching one when absent.
+pub async fn get_or_fetch_catalog() -> Result<(), ServiceError> {
+    catalog::get_or_fetch_validated_catalog().await.map(drop)
 }
 
-/// Downloads a library entry by its manifest entry ID.
-pub async fn download_library(
+/// Downloads and registers one explicit catalog package.
+pub async fn download_package(
     context: &crate::Context,
-    entry_id: String,
+    package_id: String,
     progress: Option<&ProgressObserver<'_>>,
-) -> Result<LibraryState, ServiceError> {
-    let entry = manifest::require_local_manifest_entry(&entry_id)?;
-    let downloaded =
-        local_library::ensure_downloaded_and_registered(context, &entry, progress).await?;
-
-    Ok(local_library::library_state(
-        &entry,
-        true,
-        Some(&downloaded.dll_path),
-        Some(downloaded.artifact_id),
+) -> Result<LibraryPackageState, ServiceError> {
+    let catalog = catalog::require_local_catalog()?;
+    let package = catalog::require_package(&catalog, &package_id)?;
+    let _lock = locks::acquire(format!(
+        "package-revision:{}",
+        package.package().revision_sha256
     ))
+    .await;
+    packages::ensure_package_downloaded(context, &package, progress).await
 }
 
-/// Materializes a swap artifact by its artifact id.
-///
-/// Handles single manifest DLL entries and composed multi-file packages (FSR
-/// and Streamline). Returns a [`LibraryState`] whose `artifact_id` is the
-/// downloaded artifact.
+/// Downloads a catalog package by its domain artifact id.
 pub async fn download_artifact(
     context: &crate::Context,
     artifact_id: String,
     progress: Option<&ProgressObserver<'_>>,
-) -> Result<LibraryState, ServiceError> {
-    let target_id = renderpilot_domain::ArtifactId::new(artifact_id.clone())
+) -> Result<LibraryPackageState, ServiceError> {
+    let artifact_id = renderpilot_domain::ArtifactId::new(artifact_id)
         .map_err(|error| library_error(format!("invalid artifact id: {error}")))?;
-    let manifest = manifest::require_local_manifest()?;
-
-    let index = artifact_builder::manifest_artifact_index(&manifest)?;
-
-    if let Some(entry_id) = index.single_entry_id(&target_id) {
-        let entry = manifest::require_entry(&manifest, entry_id)?.clone();
-        let downloaded =
-            local_library::ensure_downloaded_and_registered(context, &entry, progress).await?;
-        return Ok(local_library::library_state(
-            &entry,
-            true,
-            Some(&downloaded.dll_path),
-            Some(downloaded.artifact_id),
-        ));
-    }
-
-    if let Some((package_artifact, member_entry_ids)) = index.package(&target_id) {
-        let registered = local_library::ensure_package_downloaded(
-            context,
-            &manifest,
-            package_artifact,
-            member_entry_ids,
-            progress,
-        )
-        .await?;
-        return Ok(composed_package_state(package_artifact, registered));
-    }
-
-    Err(library_error(format!("unknown artifact id: {artifact_id}")))
+    let catalog = catalog::require_local_catalog()?;
+    let package = catalog::require_package_by_artifact_id(&catalog, &artifact_id)?;
+    let _lock = locks::acquire(format!(
+        "package-revision:{}",
+        package.package().revision_sha256
+    ))
+    .await;
+    packages::ensure_package_downloaded(context, &package, progress).await
 }
 
-/// Composed multi-file packages from the manifest (FSR, then Streamline).
-pub(in crate::libraries) fn compose_all_packages(
-    entries: &[types::LibraryManifestEntry],
-) -> Result<Vec<composed_package::ComposedPackage>, ServiceError> {
-    let mut packages = fsr_packages::compose_fsr_packages(entries)?;
-    packages.extend(streamline_packages::compose_streamline_packages(entries)?);
-    Ok(packages)
-}
-
-/// Deletes a locally downloaded library by its manifest entry ID.
-pub async fn delete_library(
+/// Unregisters a downloaded package while retaining shared content blobs.
+pub async fn delete_package(
     context: &crate::Context,
-    entry_id: String,
-) -> Result<LibraryState, ServiceError> {
-    let entry = manifest::require_local_manifest_entry(&entry_id)?;
-
-    if let Err(error) = local_library::delete_local_library(context, &entry) {
-        log::error!(
-            "Failed to delete local library for entry {}: {}",
-            entry_id,
-            error
-        );
-    }
-
-    Ok(local_library::library_state(&entry, false, None, None))
+    package_id: String,
+) -> Result<LibraryPackageState, ServiceError> {
+    let catalog = catalog::require_local_catalog()?;
+    let package = catalog::require_package(&catalog, &package_id)?;
+    let _lock = locks::acquire(format!(
+        "package-revision:{}",
+        package.package().revision_sha256
+    ))
+    .await;
+    packages::delete_package(context, &package)
 }
 
-/// Returns the download state for all entries in the local manifest.
-pub fn get_library_states() -> Result<Vec<LibraryState>, ServiceError> {
-    let entries = match manifest::load_local_manifest_entries() {
-        Ok(Some(entries)) => entries,
-        Ok(None) | Err(_) => return Ok(Vec::new()),
-    };
-
-    local_library::library_states(&entries)
-}
-
-fn composed_package_state(
-    artifact: &renderpilot_domain::LibraryArtifact,
-    artifact_id: String,
-) -> LibraryState {
-    LibraryState {
-        id: artifact_id.clone(),
-        version: artifact
-            .version()
-            .map(|version| version.as_str().to_owned())
-            .unwrap_or_default(),
-        is_downloaded: true,
-        local_path: None,
-        artifact_id: Some(artifact_id),
+/// Returns the resolved package projection used by desktop clients.
+pub async fn list_packages(
+    context: &crate::Context,
+) -> Result<Vec<LibraryPackageSummary>, ServiceError> {
+    let catalog = catalog::get_or_fetch_validated_catalog().await?;
+    let states = packages::package_states(context, &catalog)?;
+    let states: std::collections::HashMap<_, _> = states
+        .into_iter()
+        .map(|state| (state.package_id.clone(), state))
+        .collect();
+    let mut summaries = Vec::new();
+    for package in catalog.packages() {
+        let Some(artifact) = artifact_builder::build_catalog_artifact(&package, None)? else {
+            continue;
+        };
+        let is_downloaded = states
+            .get(&package.package().package_id)
+            .is_some_and(|state| state.is_downloaded);
+        summaries.push(artifact_builder::package_summary(
+            &package,
+            &artifact,
+            is_downloaded,
+        )?);
     }
+    Ok(summaries)
 }

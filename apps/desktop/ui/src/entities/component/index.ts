@@ -3,6 +3,7 @@ export {
   formatLibrary,
   formatCompactLibraryLabel,
   displayComponentFilePath,
+  presentComponentFiles,
 } from './model/presenters';
 
 export type {

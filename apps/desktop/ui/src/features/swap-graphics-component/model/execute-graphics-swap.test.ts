@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LibraryState } from '@entities/library';
+import type { LibraryPackageState } from '@entities/library';
 
 import { executeGraphicsSwap } from './execute-graphics-swap';
 
@@ -8,12 +8,11 @@ describe('executeGraphicsSwap', () => {
   it('downloads the artifact before applying when it is not yet downloaded', async () => {
     const downloadArtifact = vi.fn(() =>
       Promise.resolve({
-        id: 'artifact:original',
+        package_id: 'package:original',
         version: '3.7.0',
         is_downloaded: true,
-        local_path: '/local/path',
         artifact_id: 'artifact:downloaded',
-      } satisfies LibraryState),
+      } satisfies LibraryPackageState),
     );
     const applySwap = vi.fn(() =>
       Promise.resolve({
@@ -21,6 +20,7 @@ describe('executeGraphicsSwap', () => {
         component_id: 'component-1',
         applied_path: 'C:/game/file.dll',
         replacement_path: 'C:/repo/file.dll',
+        updated_file_count: 1,
       }),
     );
 
@@ -50,6 +50,7 @@ describe('executeGraphicsSwap', () => {
         component_id: 'component-1',
         applied_path: 'C:/game/file.dll',
         replacement_path: 'C:/repo/file.dll',
+        updated_file_count: 1,
       }),
     );
 

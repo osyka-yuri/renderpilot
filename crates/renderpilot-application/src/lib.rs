@@ -8,6 +8,8 @@
 //! network APIs, or UI frameworks.
 
 mod candidates;
+mod compatibility;
+mod dxc;
 mod error;
 mod info;
 mod operation_plan;
@@ -17,6 +19,9 @@ mod ports;
 pub use candidates::{
     CandidateComparison, CandidateContext, ComponentReplacementCandidates, ReplacementCandidate,
     find_replacement_candidates,
+};
+pub use compatibility::{
+    SwapCompatibilityError, SwapTargetProfile, ensure_swap_compatible, validate_runtime_artifact,
 };
 pub use error::{AppError, AppErrorKind, AppResult, invalid_operation_state_display_message};
 pub use info::{AppInfo, app_info};

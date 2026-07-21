@@ -17,6 +17,7 @@ pub(super) const SECTION_HEADER_LEN: usize = 40;
 pub(super) const SECTION_VIRTUAL_ADDRESS_OFFSET: usize = 12;
 pub(super) const SECTION_RAW_DATA_SIZE_OFFSET: usize = 16;
 pub(super) const SECTION_RAW_DATA_POINTER_OFFSET: usize = 20;
+pub(super) const SECTION_CHARACTERISTICS_OFFSET: usize = 36;
 pub(super) const DATA_DIRECTORY_ENTRY_LEN: usize = 8;
 pub(super) const PE32_MAGIC: u16 = 0x10b;
 pub(super) const PE32_PLUS_MAGIC: u16 = 0x20b;
@@ -34,6 +35,7 @@ pub(super) struct SectionHeader {
     virtual_address: u32,
     raw_data_size: u32,
     raw_data_pointer: u32,
+    characteristics: u32,
 }
 
 /// The shared header fields both PE consumers need: the COFF machine type, the
@@ -99,6 +101,10 @@ impl<'a> PeHeaders<'a> {
                     bytes,
                     section_offset.checked_add(SECTION_RAW_DATA_POINTER_OFFSET)?,
                 )?,
+                characteristics: read_u32(
+                    bytes,
+                    section_offset.checked_add(SECTION_CHARACTERISTICS_OFFSET)?,
+                )?,
             });
         }
 
@@ -142,22 +148,59 @@ impl<'a> PeHeaders<'a> {
     }
 }
 
+/// Resolves an RVA-sized range only when it belongs unambiguously to a
+/// file-backed, non-executable section. Named DATA exports must never be read
+/// from code bytes.
+pub(super) fn data_rva_to_offset(sections: &[SectionHeader], rva: u32, size: u32) -> Option<usize> {
+    const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
+    unique_section_mapping(sections, rva, size, |section| {
+        section.characteristics & IMAGE_SCN_MEM_EXECUTE == 0
+    })
+}
+
 /// Resolves a relative virtual address to a file offset using the section table.
 ///
 /// For file-backed reads the bound is `raw_data_size`. `virtual_size` can be
 /// larger than the bytes stored on disk (zero-initialized BSS), so an RVA that
 /// falls in that tail has no file offset and returns `None`.
 pub(super) fn rva_to_offset(sections: &[SectionHeader], rva: u32) -> Option<usize> {
+    rva_range_to_offset(sections, rva, 1)
+}
+
+/// Resolves an entire file-backed RVA range and rejects overlapping section
+/// mappings. Ambiguous section tables are malformed and must never be resolved
+/// by whichever header happens to appear first.
+pub(super) fn rva_range_to_offset(
+    sections: &[SectionHeader],
+    rva: u32,
+    size: u32,
+) -> Option<usize> {
+    unique_section_mapping(sections, rva, size, |_| true)
+}
+
+fn unique_section_mapping(
+    sections: &[SectionHeader],
+    rva: u32,
+    size: u32,
+    accepts: impl Fn(&SectionHeader) -> bool,
+) -> Option<usize> {
+    if size == 0 {
+        return None;
+    }
+    let mut resolved = None;
     for section in sections {
         let Some(offset_in_section) = rva.checked_sub(section.virtual_address) else {
             continue;
         };
-        if offset_in_section >= section.raw_data_size {
+        let end = offset_in_section.checked_add(size)?;
+        if end > section.raw_data_size {
             continue;
         }
+        if !accepts(section) || resolved.is_some() {
+            return None;
+        }
         let file_offset = section.raw_data_pointer.checked_add(offset_in_section)?;
-        return usize::try_from(file_offset).ok();
+        resolved = Some(usize::try_from(file_offset).ok()?);
     }
-
-    None
+    resolved
 }

@@ -49,9 +49,9 @@ pub use self::catalog::{
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
 pub use self::libraries::{
-    DownloadProgress, LibraryManifest, LibraryManifestEntry, LibraryState, ProgressObserver,
-    delete_library, download_artifact, download_library, fetch_libraries_manifest,
-    get_libraries_manifest, get_library_states,
+    DownloadProgress, LibraryPackageState, LibraryPackageSummary, ProgressObserver,
+    delete_library_package, download_artifact, download_library_package, fetch_libraries_catalog,
+    list_library_packages,
 };
 pub use self::luma::{
     luma_availability, luma_check_update, luma_install, luma_uninstall, luma_update,

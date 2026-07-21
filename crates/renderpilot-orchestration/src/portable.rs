@@ -8,7 +8,7 @@
 ///
 /// When set, all persistent data is stored under this path:
 /// - catalog database  → `$RENDERPILOT_APP_DIR/catalog.db`
-/// - library manifests → `$RENDERPILOT_APP_DIR/libraries_manifest.json`
+/// - active library catalog → `$RENDERPILOT_APP_DIR/libraries/v1/catalog.json`
 /// - library archives  → `$RENDERPILOT_APP_DIR/libraries/…`
 /// - cover images      → `$RENDERPILOT_APP_DIR/covers/…` (relative to catalog)
 pub const APP_DIR_ENV: &str = "RENDERPILOT_APP_DIR";

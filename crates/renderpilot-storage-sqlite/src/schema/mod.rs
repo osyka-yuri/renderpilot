@@ -47,7 +47,8 @@ use self::version::database_has_user_schema;
 //   8 → 9: advisory shared artifact provenance + nullable RenoDX host metadata.
 //   9 → 10: coordinated add-on files + crash-recoverable game-file mutations
 //          (`pending_file_mutations` must accept state `preparing`).
-const CURRENT_SCHEMA_VERSION: i32 = 10;
+//   10 → 11: typed artifact package/runtime metadata persisted as JSON.
+const CURRENT_SCHEMA_VERSION: i32 = 11;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,
@@ -86,10 +87,14 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
             version::write(tx, CURRENT_SCHEMA_VERSION)?;
             validate_catalog_schema(tx)
         }),
-        Plan::Upgrade { from } => apply_with_transaction(connection, |tx| {
-            steps::run_from(tx, from)?;
-            validate_catalog_schema(tx)
-        }),
+        Plan::Upgrade { from } => {
+            apply_with_transaction(connection, |tx| steps::run_from(tx, from))?;
+            // A version upgrade can coexist with an older malformed physical
+            // shape (for example a pre-release v10 CHECK constraint). Reuse the
+            // current-schema validation, targeted healing, and rebuild policy
+            // after the additive migration commits.
+            apply_keep(connection)
+        }
         Plan::Rebuild => {
             backup::backup_before_rebuild(connection)?;
             apply_with_transaction(connection, reset_catalog_schema)
@@ -102,7 +107,7 @@ fn apply_keep(connection: &mut Connection) -> AppResult<()> {
         return Ok(());
     }
 
-    // Soft-heal WIP catalogs that stamped v10 with a CHECK that rejects
+    // Soft-heal WIP catalogs originating from v10 with a CHECK that rejects
     // `preparing`, without wiping the rest of the catalog.
     apply_with_transaction(connection, |tx| {
         pending_file_mutations::ensure_correct_shape(tx)

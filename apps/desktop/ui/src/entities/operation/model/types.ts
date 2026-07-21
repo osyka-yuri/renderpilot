@@ -11,12 +11,14 @@ export type ApplySwapResult = {
   component_id: string;
   applied_path: string;
   replacement_path: string;
+  updated_file_count: number;
 };
 
 export type RollbackComponentResult = {
   game_id: string;
   component_id: string;
   restored_path: string;
+  restored_file_count: number;
 };
 
 export type KnownOperationStatus =

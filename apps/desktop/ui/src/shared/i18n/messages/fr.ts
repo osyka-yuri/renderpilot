@@ -151,6 +151,7 @@ export const fr: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': 'Aucune version alternative',
   'gameDetails.version.restoreOriginal': 'Restaurer {fileName} original',
+  'gameDetails.version.fileCount': { one: '1 fichier', other: '{count} fichiers' },
 
   'gameDetails.vendor.description': 'Modifier la version du composant.',
 

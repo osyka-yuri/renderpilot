@@ -4,13 +4,13 @@
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
   import type { Column } from '@tanstack/table-core';
-  import type { LibraryManifestEntry } from '@entities/library';
+  import type { LibraryPackageRow } from '../model/libraries-page-model';
 
   type SortState = false | 'asc' | 'desc';
 
   type Props = {
     label: string;
-    column: Column<LibraryManifestEntry>;
+    column: Column<LibraryPackageRow>;
     class?: string;
   };
 

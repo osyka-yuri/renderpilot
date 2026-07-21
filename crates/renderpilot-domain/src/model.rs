@@ -279,6 +279,14 @@ pub enum GraphicsTechnology {
     #[serde(rename = "direct_storage")]
     DirectStorage,
 
+    /// Microsoft DirectX Shader Compiler runtime.
+    #[serde(rename = "microsoft_dxc")]
+    MicrosoftDxc,
+
+    /// Microsoft DirectX 12 Agility SDK runtime.
+    #[serde(rename = "d3d12_agility")]
+    D3D12Agility,
+
     /// Technology is present but not classified yet.
     #[default]
     #[serde(rename = "unknown")]
@@ -303,6 +311,8 @@ impl GraphicsTechnology {
         Self::AmdFsrLoader,
         Self::AmdFsrRadianceCache,
         Self::DirectStorage,
+        Self::MicrosoftDxc,
+        Self::D3D12Agility,
         Self::Unknown,
     ];
 
@@ -325,6 +335,8 @@ impl GraphicsTechnology {
             Self::AmdFsrLoader => "amd_fsr_loader",
             Self::AmdFsrRadianceCache => "amd_fsr_radiance_cache",
             Self::DirectStorage => "direct_storage",
+            Self::MicrosoftDxc => "microsoft_dxc",
+            Self::D3D12Agility => "d3d12_agility",
             Self::Unknown => "unknown",
         }
     }

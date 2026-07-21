@@ -1,5 +1,5 @@
 import { applySwap, type ApplySwapResult } from '@entities/operation';
-import { downloadArtifact, type LibraryState } from '@entities/library';
+import { downloadArtifact, type LibraryPackageState } from '@entities/library';
 
 export type ExecuteGraphicsSwapInput = {
   gameId: string;
@@ -12,7 +12,7 @@ export type ExecuteGraphicsSwapInput = {
 
 export type ExecuteGraphicsSwapDeps = {
   applySwap?: typeof applySwap;
-  downloadArtifact?: (artifactId: string) => Promise<LibraryState>;
+  downloadArtifact?: (artifactId: string) => Promise<LibraryPackageState>;
 };
 
 export async function executeGraphicsSwap(
@@ -41,7 +41,7 @@ export async function executeGraphicsSwap(
 async function ensureArtifactDownloaded(
   artifactId: string,
   isDownloaded: boolean,
-  downloadArtifact: (artifactId: string) => Promise<LibraryState>,
+  downloadArtifact: (artifactId: string) => Promise<LibraryPackageState>,
 ): Promise<string> {
   if (isDownloaded) {
     return artifactId;

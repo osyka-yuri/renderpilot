@@ -52,6 +52,12 @@ pub fn apply_swap(
     let game_root = std::path::Path::new(game.install_path().as_str());
     let loaded = load_apply_swap(storage, game_id, component_id, artifact_id)?;
     ensure_artifact_sources_usable(storage, &loaded.artifact)?;
+    super::runtime_compatibility::ensure_artifact_compatible(
+        context,
+        &game,
+        &loaded.artifact,
+        true,
+    )?;
     let mut prepared = prepare_apply_swap(game_id, component_id, loaded)?;
     let scope = crate::file_mutation::MutationScope::single(game_root)?;
     crate::file_mutation::run_durable_mutation(
@@ -133,6 +139,7 @@ pub fn apply_swap(
                 component_id: prepared.component_id.as_str().to_owned(),
                 applied_path: prepared.applied_path(),
                 replacement_path: prepared.replacement_path(),
+                updated_file_count: prepared.planned.len(),
             })
         },
         |_| {},
@@ -246,6 +253,7 @@ pub fn rollback_component(
                 game_id: game_id.as_str().to_owned(),
                 component_id: component_id.as_str().to_owned(),
                 restored_path,
+                restored_file_count: baseline.len(),
             })
         },
         |_| {},

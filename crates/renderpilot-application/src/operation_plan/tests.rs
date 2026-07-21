@@ -455,6 +455,55 @@ fn entry_point_component_with_separate_loader_stack_targets_entry_point_in_plan(
 }
 
 #[test]
+fn standalone_dxc_plan_replaces_only_dxcompiler() {
+    let component = sample_bundle_component(
+        "component:game-a:dxc",
+        "game:a",
+        GraphicsTechnology::MicrosoftDxc,
+        Swappability::Swappable,
+        &[(
+            "C:/Games/GameA/dxcompiler.dll",
+            Some("1.5.0"),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+        )],
+    );
+    let artifact = sample_bundle_artifact(
+        "artifact:dxc-1.8",
+        GraphicsTechnology::MicrosoftDxc,
+        &[
+            (
+                "D:/Library/dxcompiler.dll",
+                Some("1.8.0"),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                None,
+            ),
+            (
+                "D:/Library/dxil.dll",
+                Some("1.8.0"),
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                None,
+            ),
+        ],
+    );
+
+    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
+
+    assert_eq!(plan.files().len(), 1);
+    assert_eq!(plan.files()[0].action(), OperationPlanFileAction::Replace);
+    assert_eq!(
+        plan.files()[0].target_path().as_str(),
+        "C:/Games/GameA/dxcompiler.dll"
+    );
+    assert!(
+        plan.files()
+            .iter()
+            .all(|file| !file.target_path().as_str().ends_with("dxil.dll")),
+        "the operation must preserve the game's standalone DXC layout"
+    );
+}
+
+#[test]
 fn protected_windows_paths_require_elevation() {
     let component = sample_component(
         "component:game-a:dlss",

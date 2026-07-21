@@ -89,7 +89,7 @@ pub(crate) fn component_files(value: &str) -> AppResult<Vec<ComponentFile>> {
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::GraphicsTechnology;
+    use renderpilot_domain::{ArtifactTrustLevel, GraphicsTechnology};
 
     use super::{enum_from_text, enum_to_text, graphics_technology};
 
@@ -141,5 +141,24 @@ mod tests {
         let parsed = enum_from_text::<GraphicsTechnology>("IntelXeLl");
 
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn artifact_trust_level_writes_snake_case_and_reads_legacy_values() {
+        let serialized = enum_to_text(&ArtifactTrustLevel::CatalogDownloaded)
+            .expect("trust level should serialize");
+        assert_eq!(serialized, "catalog_downloaded");
+
+        for (legacy, expected) in [
+            ("LocalObserved", ArtifactTrustLevel::LocalObserved),
+            ("UserImported", ArtifactTrustLevel::UserImported),
+            ("ManifestDownloaded", ArtifactTrustLevel::CatalogDownloaded),
+            ("CatalogDownloaded", ArtifactTrustLevel::CatalogDownloaded),
+            ("Unknown", ArtifactTrustLevel::Unknown),
+        ] {
+            let parsed: ArtifactTrustLevel =
+                enum_from_text(legacy).expect("legacy trust level should remain readable");
+            assert_eq!(parsed, expected);
+        }
     }
 }

@@ -12,26 +12,29 @@ use renderpilot_domain::{
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates, ReplacementCandidate};
+use crate::{SwapTargetProfile, ensure_swap_compatible};
 
 /// Context for candidate lookup that carries source metadata for artifacts.
 #[derive(Debug, Clone)]
 pub struct CandidateContext {
     downloaded_ids: HashSet<ArtifactId>,
-    manifest_entry_ids: HashMap<ArtifactId, String>,
-    debug_entry_ids: HashSet<String>,
+    catalog_package_ids: HashMap<ArtifactId, String>,
+    debug_package_ids: HashSet<String>,
+    target_profile: SwapTargetProfile,
 }
 
 impl CandidateContext {
     /// Creates a new candidate context from the given lookup tables.
     pub fn new(
         downloaded_ids: HashSet<ArtifactId>,
-        manifest_entry_ids: HashMap<ArtifactId, String>,
-        debug_entry_ids: HashSet<String>,
+        catalog_package_ids: HashMap<ArtifactId, String>,
+        debug_package_ids: HashSet<String>,
     ) -> Self {
         Self {
             downloaded_ids,
-            manifest_entry_ids,
-            debug_entry_ids,
+            catalog_package_ids,
+            debug_package_ids,
+            target_profile: SwapTargetProfile::default(),
         }
     }
 
@@ -39,14 +42,22 @@ impl CandidateContext {
     pub fn empty() -> Self {
         Self {
             downloaded_ids: HashSet::new(),
-            manifest_entry_ids: HashMap::new(),
-            debug_entry_ids: HashSet::new(),
+            catalog_package_ids: HashMap::new(),
+            debug_package_ids: HashSet::new(),
+            target_profile: SwapTargetProfile::default(),
         }
     }
 
-    /// Returns true if the given manifest entry id belongs to a debug build.
-    pub fn is_debug_entry(&self, entry_id: &str) -> bool {
-        self.debug_entry_ids.contains(entry_id)
+    /// Attaches fresh executable facts used by Microsoft runtime policies.
+    #[must_use]
+    pub fn with_target_profile(mut self, profile: SwapTargetProfile) -> Self {
+        self.target_profile = profile;
+        self
+    }
+
+    /// Returns true if the given catalog package belongs to a debug build.
+    pub fn is_debug_package(&self, package_id: &str) -> bool {
+        self.debug_package_ids.contains(package_id)
     }
 }
 
@@ -88,17 +99,18 @@ pub fn find_replacement_candidates(
                     return None;
                 }
 
+                ensure_swap_compatible(artifact, &context.target_profile).ok()?;
                 let comparison = candidate_comparison(component, artifact, current_version)?;
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
-                let entry_id = context.manifest_entry_ids.get(artifact.id()).cloned();
-                let is_debug = entry_id
+                let package_id = context.catalog_package_ids.get(artifact.id()).cloned();
+                let is_debug = package_id
                     .as_ref()
-                    .is_some_and(|id| context.is_debug_entry(id));
+                    .is_some_and(|id| context.is_debug_package(id));
                 Some(ReplacementCandidate::new(
                     artifact,
                     comparison,
                     is_downloaded,
-                    entry_id,
+                    package_id,
                     is_debug,
                 ))
             })
@@ -156,7 +168,7 @@ fn compare_versions(
 /// Two candidates are duplicates when they are the same artifact (the artifact
 /// id is the bundle's content identity, `ArtifactId::for_bundle` — distinct
 /// bundles that merely share a primary DLL keep their separate entries), or
-/// when a manifest entry's DLL is byte-identical to a scanned artifact (same
+/// when a catalog package's DLL is byte-identical to a scanned artifact (same
 /// file name + version + build type). Sorting first places the downloaded twin
 /// of such a pair ahead of its non-downloaded counterpart, so the downloaded
 /// copy is the one that survives. That contract is pinned by a test.

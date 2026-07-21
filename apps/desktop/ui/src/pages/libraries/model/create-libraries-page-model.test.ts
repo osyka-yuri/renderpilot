@@ -1,29 +1,20 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  BuildType,
-  LibraryManifest,
-  LibraryManifestEntry,
-  LibraryState,
-} from '@entities/library';
+import type { LibraryPackageState, LibraryPackageSummary, ReleaseChannel } from '@entities/library';
 import type * as SharedLib from '@shared/lib';
 
 const mocks = vi.hoisted(() => ({
-  getLibrariesManifest: vi.fn<() => Promise<LibraryManifest>>(),
-  fetchLibrariesManifest: vi.fn<() => Promise<LibraryManifest>>(),
-  getLibraryStates: vi.fn<() => Promise<LibraryState[]>>(),
-  downloadLibrary: vi.fn<(entryId: string) => Promise<LibraryState>>(),
-  deleteLibrary: vi.fn<(entryId: string) => Promise<LibraryState>>(),
+  listLibraryPackages: vi.fn<() => Promise<LibraryPackageSummary[]>>(),
+  downloadLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageState>>(),
+  deleteLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageState>>(),
   clearDownloadProgress: vi.fn<(ids: readonly string[]) => void>(),
   sumDownloadFractions: vi.fn<(ids: readonly string[]) => number>(),
 }));
 
 vi.mock('@entities/library', () => ({
-  getLibrariesManifest: mocks.getLibrariesManifest,
-  fetchLibrariesManifest: mocks.fetchLibrariesManifest,
-  getLibraryStates: mocks.getLibraryStates,
-  downloadLibrary: mocks.downloadLibrary,
-  deleteLibrary: mocks.deleteLibrary,
+  listLibraryPackages: mocks.listLibraryPackages,
+  downloadLibraryPackage: mocks.downloadLibraryPackage,
+  deleteLibraryPackage: mocks.deleteLibraryPackage,
 }));
 
 vi.mock('@shared/lib', async (importOriginal) => {
@@ -36,150 +27,242 @@ vi.mock('@shared/lib', async (importOriginal) => {
 });
 
 import { createLibrariesPageModel } from './create-libraries-page-model.svelte';
+import { packagesOf, type PackageFixture } from './library-package-test-fixtures';
 
-function entry(options: {
+function packageFixture(options: {
   id: string;
   lib: string;
-  sort: string;
-  build?: BuildType;
-}): LibraryManifestEntry {
+  version: string;
+  build?: ReleaseChannel;
+  isDownloaded?: boolean;
+}): PackageFixture {
+  const isIntel = options.lib.startsWith('libxess');
   return {
-    entry_id: options.id,
-    library: { id: options.lib, file_name: `${options.lib}.dll` },
-    version: { value: options.sort, sort_key: options.sort },
-    build: { type: options.build ?? 'stable', label: null },
-    files: {
-      dll: { size_bytes: 1, hashes: { sha256: '0'.repeat(64) } },
-      zip: { size_bytes: 1, download_url: 'https://example.com/file.zip' },
-    },
-    signature: { status: 'unsigned' },
+    id: options.id,
+    vendor: isIntel ? 'intel' : 'nvidia',
+    technology: isIntel
+      ? 'intel_xess'
+      : options.lib === 'nvngx_dlss'
+        ? 'dlss_super_resolution'
+        : options.lib === 'nvngx_dlssg'
+          ? 'dlss_frame_generation'
+          : options.lib,
+    variant: isIntel ? 'dx12_runtime' : 'runtime',
+    version: options.version,
+    channel: options.build ?? 'stable',
+    isDownloaded: options.isDownloaded,
   };
 }
 
-function manifestOf(entries: LibraryManifestEntry[]): LibraryManifest {
-  return { schema_version: 1, generated_at: '2024-01-01T00:00:00Z', entries };
+function state(packageId: string, isDownloaded: boolean): LibraryPackageState {
+  return {
+    package_id: packageId,
+    version: '',
+    is_downloaded: isDownloaded,
+    artifact_id: isDownloaded ? `catalog:${packageId}` : null,
+  };
 }
 
-function state(id: string, isDownloaded: boolean): LibraryState {
-  return { id, version: '', is_downloaded: isDownloaded, local_path: null, artifact_id: null };
-}
-
-describe('createLibrariesPageModel.downloadAllLatest', () => {
+describe('createLibrariesPageModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.downloadLibrary.mockResolvedValue(state('x', true));
+    mocks.downloadLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, true)));
+    mocks.deleteLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, false)));
     mocks.clearDownloadProgress.mockReturnValue(undefined);
     mocks.sumDownloadFractions.mockReturnValue(0);
   });
 
-  async function loadedModel(entries: LibraryManifestEntry[], states: LibraryState[] = []) {
-    mocks.getLibrariesManifest.mockResolvedValue(manifestOf(entries));
-    mocks.getLibraryStates.mockResolvedValue(states);
-
+  async function loadedModel(specs: PackageFixture[]) {
+    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
     const model = createLibrariesPageModel();
     model.init();
     await model.loadInitialLibraries();
     return model;
   }
 
-  it('downloads every pending latest entry and reports the count', async () => {
+  it('applies a successful mutation response without a fallible state refresh', async () => {
     const model = await loadedModel([
-      entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' }),
-      entry({ id: 'xess-1', lib: 'libxess', sort: '001' }),
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
+    ]);
+
+    await expect(model.handleDownload('dlss-1')).resolves.toBe(true);
+
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
+    expect(model.packages[0].is_downloaded).toBe(true);
+    expect(model.errorMessage).toBeNull();
+  });
+
+  it('applies delete state directly to the matching row', async () => {
+    const model = await loadedModel([
+      packageFixture({
+        id: 'dlss-1',
+        lib: 'nvngx_dlss',
+        version: '1',
+        isDownloaded: true,
+      }),
+    ]);
+
+    await expect(model.handleDelete('dlss-1')).resolves.toBe(true);
+    expect(model.packages[0].is_downloaded).toBe(false);
+  });
+
+  it('downloads every pending latest package and reports the count', async () => {
+    const model = await loadedModel([
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
+      packageFixture({ id: 'xess-1', lib: 'libxess', version: '1' }),
     ]);
 
     const result = await model.downloadAllLatest();
 
     expect(result).toEqual({ succeeded: 2, failed: 0, skipped: 0 });
-    expect(mocks.downloadLibrary).toHaveBeenCalledTimes(2);
-    expect(mocks.downloadLibrary.mock.calls.map((c) => c[0]).sort()).toEqual(['dlss-1', 'xess-1']);
+    expect(mocks.downloadLibraryPackage.mock.calls.map((call) => call[0]).sort()).toEqual([
+      'dlss-1',
+      'xess-1',
+    ]);
     expect(model.bulkDownloading).toBe(false);
   });
 
-  it('skips entries that are already downloaded', async () => {
-    const model = await loadedModel(
-      [
-        entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' }),
-        entry({ id: 'xess-1', lib: 'libxess', sort: '001' }),
-      ],
-      [state('dlss-1', true)],
+  it('blocks user actions while bulk workers own the mutation queue', async () => {
+    const model = await loadedModel([
+      packageFixture({ id: 'a', lib: 'technology_a', version: '1' }),
+      packageFixture({ id: 'b', lib: 'technology_b', version: '1' }),
+      packageFixture({ id: 'c', lib: 'technology_c', version: '1' }),
+      packageFixture({ id: 'd', lib: 'technology_d', version: '1' }),
+    ]);
+    const resolvers: Record<string, (value: LibraryPackageState) => void> = {};
+    mocks.downloadLibraryPackage.mockImplementation(
+      (id) =>
+        new Promise<LibraryPackageState>((resolve) => {
+          resolvers[id] = resolve;
+        }),
     );
 
-    const result = await model.downloadAllLatest();
+    const bulk = model.downloadAllLatest();
 
-    expect(result).toEqual({ succeeded: 1, failed: 0, skipped: 0 });
-    expect(mocks.downloadLibrary).toHaveBeenCalledTimes(1);
-    expect(mocks.downloadLibrary).toHaveBeenCalledWith('xess-1');
+    expect(mocks.downloadLibraryPackage).toHaveBeenCalledTimes(3);
+    await expect(model.handleDownload('d')).resolves.toBe(false);
+    expect(mocks.downloadLibraryPackage.mock.calls.flat()).not.toContain('d');
+
+    for (const id of ['a', 'b', 'c']) {
+      resolvers[id](state(id, true));
+    }
+    await vi.waitFor(() => {
+      expect(resolvers.d).toBeTypeOf('function');
+    });
+    resolvers.d(state('d', true));
+
+    await expect(bulk).resolves.toEqual({ succeeded: 4, failed: 0, skipped: 0 });
+    expect(mocks.downloadLibraryPackage.mock.calls.map(([id]) => id).sort()).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
   });
 
-  it('counts a failed entry without aborting the rest of the batch', async () => {
-    mocks.downloadLibrary.mockImplementation((id: string) =>
-      id === 'xess-1' ? Promise.reject(new Error('boom')) : Promise.resolve(state(id, true)),
-    );
-
+  it('skips packages that are already downloaded', async () => {
     const model = await loadedModel([
-      entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' }),
-      entry({ id: 'xess-1', lib: 'libxess', sort: '001' }),
+      packageFixture({
+        id: 'dlss-1',
+        lib: 'nvngx_dlss',
+        version: '1',
+        isDownloaded: true,
+      }),
+      packageFixture({ id: 'xess-1', lib: 'libxess', version: '1' }),
     ]);
 
     const result = await model.downloadAllLatest();
 
-    expect(result.succeeded).toBe(1);
-    expect(result.failed).toBe(1);
-    expect(mocks.downloadLibrary).toHaveBeenCalledTimes(2);
-    expect(model.bulkDownloading).toBe(false);
-    // Bulk failures are reported via a single summary toast, not the page-level
-    // error banner.
-    expect(model.errorMessage).toBeNull();
+    expect(result).toEqual({ succeeded: 1, failed: 0, skipped: 0 });
+    expect(mocks.downloadLibraryPackage).toHaveBeenCalledWith('xess-1');
   });
 
-  it('returns zeros and downloads nothing when everything is up to date', async () => {
-    const model = await loadedModel(
-      [entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' })],
-      [state('dlss-1', true)],
+  it('counts a failed package without aborting the rest of the batch', async () => {
+    mocks.downloadLibraryPackage.mockImplementation((id) =>
+      id === 'xess-1' ? Promise.reject(new Error('boom')) : Promise.resolve(state(id, true)),
     );
+    const model = await loadedModel([
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
+      packageFixture({ id: 'xess-1', lib: 'libxess', version: '1' }),
+    ]);
 
     const result = await model.downloadAllLatest();
 
-    expect(result).toEqual({ succeeded: 0, failed: 0, skipped: 0 });
-    expect(mocks.downloadLibrary).not.toHaveBeenCalled();
+    expect(result).toEqual({ succeeded: 1, failed: 1, skipped: 0 });
+    expect(mocks.downloadLibraryPackage).toHaveBeenCalledTimes(2);
+    expect(model.errorMessage).toBeNull();
   });
 
-  it('drops a manifest load that resolves after the model is disposed', async () => {
-    let resolveManifest!: (manifest: LibraryManifest) => void;
-    mocks.getLibrariesManifest.mockReturnValue(
-      new Promise<LibraryManifest>((resolve) => {
-        resolveManifest = resolve;
+  it('returns zeros when every latest package is already downloaded', async () => {
+    const model = await loadedModel([
+      packageFixture({
+        id: 'dlss-1',
+        lib: 'nvngx_dlss',
+        version: '1',
+        isDownloaded: true,
+      }),
+    ]);
+
+    await expect(model.downloadAllLatest()).resolves.toEqual({
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+    });
+    expect(mocks.downloadLibraryPackage).not.toHaveBeenCalled();
+  });
+
+  it('drops a package list that resolves after the model is disposed', async () => {
+    let resolvePackages!: (packages: LibraryPackageSummary[]) => void;
+    mocks.listLibraryPackages.mockReturnValue(
+      new Promise<LibraryPackageSummary[]>((resolve) => {
+        resolvePackages = resolve;
       }),
     );
-    mocks.getLibraryStates.mockResolvedValue([]);
-
     const model = createLibrariesPageModel();
     model.init();
     const loading = model.loadInitialLibraries();
 
-    // Tear the page down while the load is still in flight, then let it resolve.
     model.dispose();
-    resolveManifest(manifestOf([entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' })]));
+    resolvePackages(
+      packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })]),
+    );
     await loading;
 
-    // The stale result must not be applied to a disposed model.
-    expect(model.manifest).toBeNull();
+    expect(model.packages).toEqual([]);
   });
 
-  it('aggregates progress as finished count plus in-flight byte fractions', async () => {
-    const model = await loadedModel(
-      [entry({ id: 'a', lib: 'a', sort: '001' }), entry({ id: 'b', lib: 'b', sort: '001' })],
-      [state('a', false), state('b', false)],
-    );
+  it('does not let an older package request overwrite a newer result', async () => {
+    let resolveFirst!: (packages: LibraryPackageSummary[]) => void;
+    mocks.listLibraryPackages
+      .mockReturnValueOnce(
+        new Promise<LibraryPackageSummary[]>((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(
+        packagesOf([packageFixture({ id: 'new', lib: 'nvngx_dlss', version: '2' })]),
+      );
+    const model = createLibrariesPageModel();
+    model.init();
 
-    // Hold both downloads in-flight so progress can be sampled mid-batch. The
-    // pool starts every worker synchronously up to the first `await`, so the
-    // in-flight state is observable right after the call without any ticks.
-    const resolvers: Record<string, (s: LibraryState) => void> = {};
-    mocks.downloadLibrary.mockImplementation(
+    const older = model.loadInitialLibraries();
+    const newer = model.loadInitialLibraries();
+    await newer;
+    resolveFirst(packagesOf([packageFixture({ id: 'old', lib: 'nvngx_dlss', version: '1' })]));
+    await older;
+
+    expect(model.packages.map((row) => row.package_id)).toEqual(['new']);
+  });
+
+  it('aggregates finished packages and in-flight byte fractions', async () => {
+    const model = await loadedModel([
+      packageFixture({ id: 'a', lib: 'nvngx_dlss', version: '1' }),
+      packageFixture({ id: 'b', lib: 'nvngx_dlssg', version: '1' }),
+    ]);
+    const resolvers: Record<string, (value: LibraryPackageState) => void> = {};
+    mocks.downloadLibraryPackage.mockImplementation(
       (id) =>
-        new Promise<LibraryState>((resolve) => {
+        new Promise<LibraryPackageState>((resolve) => {
           resolvers[id] = resolve;
         }),
     );
@@ -187,7 +270,6 @@ describe('createLibrariesPageModel.downloadAllLatest', () => {
 
     const done = model.downloadAllLatest();
 
-    // Both in-flight, none finished yet: 0 completed + the mocked 0.5 fraction.
     expect(model.bulkDownloading).toBe(true);
     expect(model.bulkTotal).toBe(2);
     expect(model.bulkProgressValue).toBeCloseTo(0.5);
@@ -196,34 +278,90 @@ describe('createLibrariesPageModel.downloadAllLatest', () => {
     resolvers.a(state('a', true));
     resolvers.b(state('b', true));
     await done;
-
-    // The bar is hidden once the batch ends.
-    expect(model.bulkDownloading).toBe(false);
     expect(model.bulkProgressValue).toBe(0);
   });
-});
 
-describe('createLibrariesPageModel.refreshManifest', () => {
-  beforeEach(() => {
+  it('re-reads the compact package projection on refresh', async () => {
+    const specs = [packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })];
+    const model = await loadedModel(specs);
     vi.clearAllMocks();
+    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
+
+    await model.refreshCatalog();
+
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
   });
 
-  it('re-reads the local/cache path and never force-fetches the CDN', async () => {
-    const entries = [entry({ id: 'dlss-1', lib: 'nvngx_dlss', sort: '001' })];
-    mocks.getLibrariesManifest.mockResolvedValue(manifestOf(entries));
-    mocks.getLibraryStates.mockResolvedValue([]);
+  it('derives package-name visibility from the active filtered list', async () => {
+    const model = await loadedModel([
+      {
+        id: 'dlss-old',
+        vendor: 'nvidia',
+        technology: 'dlss_super_resolution',
+        variant: 'runtime',
+        displayName: 'NVIDIA DLSS Super Resolution',
+      },
+      {
+        id: 'dlss-new',
+        vendor: 'nvidia',
+        technology: 'dlss_super_resolution',
+        variant: 'runtime',
+        displayName: 'NVIDIA DLSS Super Resolution',
+      },
+      {
+        id: 'fsr-runtime',
+        vendor: 'amd',
+        technology: 'amd_fsr',
+        variant: 'dx12_runtime',
+        displayName: 'AMD FidelityFX Super Resolution',
+      },
+      {
+        id: 'fsr-sdk',
+        vendor: 'amd',
+        technology: 'amd_fsr',
+        variant: 'sdk_bundle',
+        displayName: 'AMD FidelityFX SDK DirectX 12',
+      },
+    ]);
 
-    const model = createLibrariesPageModel();
-    model.init();
-    await model.loadInitialLibraries();
-    vi.clearAllMocks();
+    expect(model.showPackageDisplayName).toBe(false);
 
-    mocks.getLibrariesManifest.mockResolvedValue(manifestOf(entries));
-    mocks.getLibraryStates.mockResolvedValue([]);
+    model.handleVendorChange('amd');
 
-    await model.refreshManifest();
+    expect(model.activeType).toBe('fsr');
+    expect(model.showPackageDisplayName).toBe(true);
+  });
 
-    expect(mocks.getLibrariesManifest).toHaveBeenCalledTimes(1);
-    expect(mocks.fetchLibrariesManifest).not.toHaveBeenCalled();
+  it('deduplicates refresh generations and runs a queued refresh after a mutation', async () => {
+    const specs = [packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })];
+    const model = await loadedModel(specs);
+    let resolveDownload!: (value: LibraryPackageState) => void;
+    mocks.downloadLibraryPackage.mockReturnValue(
+      new Promise<LibraryPackageState>((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+    mocks.listLibraryPackages.mockClear();
+    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
+
+    const download = model.handleDownload('dlss-1');
+    model.requestCatalogRefresh(1);
+    model.requestCatalogRefresh(1);
+    expect(mocks.listLibraryPackages).not.toHaveBeenCalled();
+
+    resolveDownload(state('dlss-1', true));
+    await download;
+    await vi.waitFor(() => {
+      expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
+    });
+
+    model.requestCatalogRefresh(1);
+    await Promise.resolve();
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
+
+    model.requestCatalogRefresh(2);
+    await vi.waitFor(() => {
+      expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(2);
+    });
   });
 });

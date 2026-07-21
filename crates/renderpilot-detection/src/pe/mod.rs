@@ -19,12 +19,18 @@ use renderpilot_domain::{Architecture, Version};
 
 pub use self::graphics::{analyze_executable, analyze_executable_bytes};
 pub use self::version_info::VersionIdentityStrings;
-use self::{exports::export_names_from_bytes, image::PeResourceImage, version_info::VersionInfo};
+use self::{
+    exports::{export_names_from_bytes, exported_u32_from_bytes},
+    image::PeResourceImage,
+    version_info::VersionInfo,
+};
 
 /// All PE facts RenoDX host detection needs, read from a single in-memory buffer
 /// so a candidate DLL is read from disk only once (rather than once per field).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PeInspection {
+    /// COFF architecture of the image, when supported.
+    pub architecture: Option<Architecture>,
     /// File version from the version resource, when present.
     pub version: Option<Version>,
     /// Identity strings from the version resource.
@@ -39,10 +45,17 @@ pub struct PeInspection {
 pub fn inspect_pe(path: &Path) -> Option<PeInspection> {
     let bytes = fs::read(path).ok()?;
     Some(PeInspection {
+        architecture: read_pe_architecture_from_bytes(&bytes),
         version: read_windows_file_version_from_bytes(&bytes),
         identity: read_windows_version_strings_from_bytes(&bytes).unwrap_or_default(),
         export_names: read_pe_export_names_from_bytes(&bytes),
     })
+}
+
+/// Reads a unique named PE DATA export containing an inline `u32`.
+pub fn read_pe_exported_u32(path: &Path, name: &str) -> Option<u32> {
+    let bytes = fs::read(path).ok()?;
+    exported_u32_from_bytes(&bytes, name)
 }
 
 /// Reads the Windows file version from the PE resource table at the given path.

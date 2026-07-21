@@ -52,7 +52,7 @@ fn load_manifest_from_disk_or_fallback(
     bundled_json: &str,
     kind: DlssDllKind,
 ) -> DlssPresetManifest {
-    let from_disk = crate::libraries::local_preset_manifest_path(file_name)
+    let from_disk = crate::libraries::local_dlss_document_path(file_name)
         .ok()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|json| parse_manifest_json(&json, kind).ok());

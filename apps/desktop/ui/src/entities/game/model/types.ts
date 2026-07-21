@@ -144,7 +144,7 @@ export type GameCandidate = {
   version?: string | null;
   source_game_id?: string | null;
   comparison: string;
-  manifest_entry_id?: Nullable<string>;
+  catalog_package_id?: Nullable<string>;
   is_downloaded: boolean;
   is_debug: boolean;
   sha256: string;

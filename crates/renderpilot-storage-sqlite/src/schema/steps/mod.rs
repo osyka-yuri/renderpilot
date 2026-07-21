@@ -4,6 +4,7 @@
 //! `user_version == CURRENT_SCHEMA_VERSION`, then validates once.
 
 mod util;
+mod v10_to_v11;
 mod v8_to_v9;
 mod v9_to_v10;
 
@@ -17,7 +18,11 @@ use super::version;
 type StepFn = fn(&Connection) -> AppResult<()>;
 
 /// Ordered upgrade edges: `(from_version, to_version, apply)`.
-const STEPS: &[(i32, i32, StepFn)] = &[(8, 9, v8_to_v9::apply), (9, 10, v9_to_v10::apply)];
+const STEPS: &[(i32, i32, StepFn)] = &[
+    (8, 9, v8_to_v9::apply),
+    (9, 10, v9_to_v10::apply),
+    (10, 11, v10_to_v11::apply),
+];
 
 /// Runs every step from the live `user_version` until CURRENT is reached.
 pub(super) fn run_from(connection: &Connection, from: i32) -> AppResult<()> {

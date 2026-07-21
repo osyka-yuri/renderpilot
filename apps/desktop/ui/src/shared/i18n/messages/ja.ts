@@ -150,6 +150,7 @@ export const ja: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': '代替バージョンなし',
   'gameDetails.version.restoreOriginal': '元の {fileName} を復元',
+  'gameDetails.version.fileCount': { one: '1 個のファイル', other: '{count} 個のファイル' },
 
   'gameDetails.vendor.description': 'コンポーネントのバージョンを変更します。',
 

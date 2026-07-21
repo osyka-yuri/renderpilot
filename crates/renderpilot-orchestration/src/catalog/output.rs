@@ -80,8 +80,8 @@ pub struct CandidateOutput {
     pub source_game_id: Option<String>,
     /// Comparison result against the currently installed version.
     pub comparison: String,
-    /// Library manifest entry id the artifact came from, if any.
-    pub manifest_entry_id: Option<String>,
+    /// Curated catalog package id the artifact came from, if any.
+    pub catalog_package_id: Option<String>,
     /// Whether the artifact has been downloaded locally.
     pub is_downloaded: bool,
     /// Whether the artifact is a debug build.
@@ -120,7 +120,7 @@ impl From<&ReplacementCandidate> for CandidateOutput {
                 .source_game_id()
                 .map(|game_id| game_id.as_str().to_owned()),
             comparison: candidate.comparison().as_str().to_owned(),
-            manifest_entry_id: candidate.manifest_entry_id().map(String::from),
+            catalog_package_id: candidate.catalog_package_id().map(String::from),
             is_downloaded: candidate.is_downloaded(),
             is_debug: candidate.is_debug(),
             sha256: candidate.sha256().to_owned(),

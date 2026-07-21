@@ -65,6 +65,7 @@ pub mod library_artifacts {
     pub const LIBRARY: &str = "library";
     pub const FILE_NAME: &str = "file_name";
     pub const FILES_JSON: &str = "files_json";
+    pub const METADATA_JSON: &str = "metadata_json";
     pub const SOURCE: &str = "source";
     pub const SOURCE_GAME_ID: &str = "source_game_id";
     pub const TRUST_LEVEL: &str = "trust_level";
@@ -76,6 +77,7 @@ pub mod library_artifacts {
         LIBRARY,
         FILE_NAME,
         FILES_JSON,
+        METADATA_JSON,
         SOURCE,
         SOURCE_GAME_ID,
         TRUST_LEVEL,

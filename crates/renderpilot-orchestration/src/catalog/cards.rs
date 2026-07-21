@@ -56,7 +56,7 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
     let profile_capabilities = context.profile_capability_snapshot();
 
     // Loaded once and reused for every game: the artifacts table and the
-    // libraries manifest are identical across games, so re-reading the table
+    // Library package records are identical across games, so re-reading the table
     // and re-parsing the manifest per game (as the old `get_game_details` did)
     // was pure O(N) waste on the dashboard.
     let universe = load_replacement_universe(context)?;

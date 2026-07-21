@@ -41,6 +41,7 @@ export function mockApplySwap(
     }
 
     const sourceFile = requireFirstComponentFile(sourceComponent);
+    const updatedFileCount = sourceComponent.files.length;
     const now = Date.now();
 
     sourceFile.version = candidate.version ?? sourceFile.version;
@@ -54,7 +55,7 @@ export function mockApplySwap(
       status: 'completed',
       created_at: now,
       completed_at: now,
-      item_count: 1,
+      item_count: updatedFileCount,
       component_id: normalizedComponentId,
     });
 
@@ -67,6 +68,7 @@ export function mockApplySwap(
       component_id: normalizedComponentId,
       applied_path: candidateGroup.file_path,
       replacement_path: candidate.file_path ?? '',
+      updated_file_count: updatedFileCount,
     };
 
     return clone(result);
@@ -84,6 +86,7 @@ export function mockRollbackComponent(
     const details = requireGameDetails(normalizedGameId);
     const component = requireComponent(details, normalizedComponentId);
     const sourceFile = requireFirstComponentFile(component);
+    const restoredFileCount = component.files.length;
     const now = Date.now();
 
     sourceFile.version = 'original-version';
@@ -97,7 +100,7 @@ export function mockRollbackComponent(
       status: 'rolled_back',
       created_at: now,
       completed_at: now,
-      item_count: 1,
+      item_count: restoredFileCount,
       component_id: normalizedComponentId,
     });
 
@@ -109,6 +112,7 @@ export function mockRollbackComponent(
       game_id: normalizedGameId,
       component_id: normalizedComponentId,
       restored_path: sourceFile.path,
+      restored_file_count: restoredFileCount,
     };
 
     return clone(result);

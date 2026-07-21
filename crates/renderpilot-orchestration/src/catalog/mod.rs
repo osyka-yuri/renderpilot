@@ -39,6 +39,7 @@ pub(crate) mod cascade;
 pub mod execute;
 mod operations;
 pub mod output;
+mod runtime_compatibility;
 /// Auto-discovery and scanning.
 pub mod scan;
 mod swap;
@@ -146,20 +147,19 @@ pub fn list_games(context: &crate::Context) -> Result<Vec<GameInstallation>, Ser
 }
 
 /// The per-query-constant inputs for replacement-candidate matching: the local +
-/// manifest artifact universe and the candidate context.
+/// catalog artifact universe and the candidate context.
 ///
 /// Loading these is independent of the game, so a multi-game caller (the
 /// dashboard's [`game_cards`]) builds this **once** and reuses it for every game
-/// instead of re-reading the artifacts table and re-parsing the libraries
-/// manifest per game.
+/// instead of re-reading the artifacts table and catalog snapshot per game.
 pub(crate) struct ReplacementUniverse {
     artifacts: Vec<LibraryArtifact>,
     candidate_context: renderpilot_application::CandidateContext,
 }
 
-/// Loads the artifact universe (local artifacts + manifest entries) and the
-/// candidate context once. A missing/unparseable manifest degrades to
-/// local-only artifacts — identical to the previous per-game behavior.
+/// Loads the artifact universe (local artifacts + catalog packages) and the
+/// candidate context once. A missing or invalid catalog degrades to local-only
+/// artifacts.
 pub(crate) fn load_replacement_universe(
     context: &crate::Context,
 ) -> Result<ReplacementUniverse, ServiceError> {
@@ -167,23 +167,28 @@ pub(crate) fn load_replacement_universe(
 
     let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();
     let mut artifacts = local_artifacts;
-    let (manifest_entry_ids, debug_entry_ids) =
-        match crate::libraries::manifest_entries_as_artifacts() {
-            Ok((manifest_artifacts, entry_ids, debug_ids)) => {
+    let (catalog_package_ids, debug_package_ids) =
+        match crate::libraries::catalog_packages_as_artifacts() {
+            Ok(catalog_artifacts) => {
+                let (catalog_artifacts, package_ids, debug_package_ids) =
+                    catalog_artifacts.into_parts();
                 artifacts.extend(
-                    manifest_artifacts
+                    catalog_artifacts
                         .into_iter()
                         .filter(|a| !downloaded_ids.contains(a.id())),
                 );
-                (entry_ids, debug_ids)
+                (package_ids, debug_package_ids)
             }
-            Err(_) => (HashMap::new(), HashSet::new()),
+            Err(error) => {
+                log::warn!("could not load catalog replacement artifacts: {error}");
+                (HashMap::new(), HashSet::new())
+            }
         };
 
     let candidate_context = renderpilot_application::CandidateContext::new(
         downloaded_ids,
-        manifest_entry_ids,
-        debug_entry_ids,
+        catalog_package_ids,
+        debug_package_ids,
     );
 
     Ok(ReplacementUniverse {
@@ -206,11 +211,12 @@ pub(crate) fn get_game_details_with_universe(
     let game = storage.require_game(game_id)?;
     let components = storage.list_components_for_game(game_id)?;
 
-    let candidate_groups = find_replacement_candidates(
-        &components,
-        &universe.artifacts,
-        &universe.candidate_context,
-    );
+    let candidate_context = universe
+        .candidate_context
+        .clone()
+        .with_target_profile(runtime_compatibility::target_profile(context, &game));
+    let candidate_groups =
+        find_replacement_candidates(&components, &universe.artifacts, &candidate_context);
 
     let operations = list_operations(context, game_id)?;
 

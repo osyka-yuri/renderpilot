@@ -3,8 +3,11 @@ import type { ColumnDef } from '@tanstack/table-core';
 import { renderComponent } from '@shared/ui';
 import { formatBytes } from '@shared/format';
 import { t } from '@shared/i18n';
-import type { LibraryManifestEntry } from '@entities/library';
-import { formatSignedDate } from '../model/libraries-page-model';
+import {
+  compareReleaseVersions,
+  formatSignedDate,
+  type LibraryPackageRow,
+} from '../model/libraries-page-model';
 import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 import LibraryActionsCell from './LibraryActionsCell.svelte';
 import LibraryHashCell from './LibraryHashCell.svelte';
@@ -27,42 +30,45 @@ function renderTableCell<TComponent extends Component<any, any, any>>(
  */
 export function createLibraryColumns(
   pendingActions: LibrariesPageModel['pendingActions'],
-  downloadedEntryIds: LibrariesPageModel['downloadedEntryIds'],
-  onDownload: (entryId: string) => Promise<boolean>,
-  onDelete: (entryId: string) => Promise<boolean>,
-  getShowFileName: () => boolean,
-): ColumnDef<LibraryManifestEntry>[] {
+  actionsDisabled: () => boolean,
+  onDownload: (packageId: string) => Promise<boolean>,
+  onDelete: (packageId: string) => Promise<boolean>,
+  showPackageDisplayName: () => boolean,
+): ColumnDef<LibraryPackageRow>[] {
   return [
     {
       id: 'version',
-      accessorFn: (row) => row.version.sort_key,
+      accessorFn: (row) => row.release.version,
+      sortingFn: (left, right) =>
+        compareReleaseVersions(left.original.release.version, right.original.release.version),
       header: ({ column }) =>
         renderTableCell(SortHeader, { label: t('libraries.column.version'), column }),
       cell: ({ row }) =>
         renderTableCell(LibraryVersionCell, {
-          entry: row.original,
-          showFileName: getShowFileName(),
+          row: row.original,
+          showPackageDisplayName,
         }),
     },
     {
       id: 'hash',
       header: () => t('libraries.column.hash'),
       enableSorting: false,
-      cell: ({ row }) => renderTableCell(LibraryHashCell, { entry: row.original }),
+      cell: ({ row }) => renderTableCell(LibraryHashCell, { row: row.original }),
     },
     {
       id: 'signed',
-      accessorFn: (row) => (row.signature.status === 'signed' ? row.signature.signed_at : ''),
+      accessorFn: (row) =>
+        row.primary_signature.status === 'signed' ? row.primary_signature.signed_at : '',
       header: ({ column }) =>
         renderTableCell(SortHeader, { label: t('libraries.column.signed'), column }),
-      cell: ({ row }) => formatSignedDate(row.original.signature),
+      cell: ({ row }) => formatSignedDate(row.original.primary_signature),
     },
     {
       id: 'size',
-      accessorFn: (row) => row.files.dll.size_bytes,
+      accessorFn: (row) => row.size_bytes,
       header: ({ column }) =>
         renderTableCell(SortHeader, { label: t('libraries.column.size'), column }),
-      cell: ({ row }) => formatBytes(row.original.files.dll.size_bytes),
+      cell: ({ row }) => formatBytes(row.original.size_bytes),
     },
     {
       id: 'actions',
@@ -70,9 +76,9 @@ export function createLibraryColumns(
       enableSorting: false,
       cell: ({ row }) =>
         renderTableCell(LibraryActionsCell, {
-          entry: row.original,
+          row: row.original,
           pendingActions,
-          downloadedEntryIds,
+          actionsDisabled,
           onDownload,
           onDelete,
         }),

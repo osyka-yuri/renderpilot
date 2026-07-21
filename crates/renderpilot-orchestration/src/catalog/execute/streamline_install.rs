@@ -145,7 +145,7 @@ mod tests {
             GraphicsTechnology::NvidiaStreamline,
             names[0],
             files,
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         )
         .expect("package")
     }
@@ -219,7 +219,7 @@ mod tests {
             GraphicsTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![file("C:/Lib/nvngx_dlss.dll", "3.7.0")],
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         )
         .expect("artifact");
         let installable = installable_artifact_files(&artifact, &component).expect("ok");

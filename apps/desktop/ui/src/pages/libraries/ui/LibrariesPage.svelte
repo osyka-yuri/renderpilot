@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     Alert,
     AlertDescription,
@@ -20,11 +21,7 @@
   } from '@shared/ui';
   import { t } from '@shared/i18n';
 
-  import {
-    isMultiLibraryGroup,
-    typeOptionsByVendor,
-    vendorOptions,
-  } from '../model/libraries-page-model';
+  import { typeOptionsByVendor, vendorOptions } from '../model/libraries-page-model';
   import { createLibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   import { createLibraryColumns } from './library-columns';
@@ -45,31 +42,27 @@
   const model = createLibrariesPageModel();
 
   $effect(() => {
-    if (refreshKey > 0) {
-      void model.refreshManifest();
-    }
+    const requestedRefreshKey = refreshKey;
+    untrack(() => {
+      model.requestCatalogRefresh(requestedRefreshKey);
+    });
   });
-
-  // Streamline bundles several sl_* DLLs that share a version, so the file name
-  // disambiguates them. Other groups map to a single DLL — version alone suffices.
-  const showFileName = $derived(isMultiLibraryGroup(model.activeGroupKey));
-  const getShowFileName = () => showFileName;
 
   // Static column defs over stable reactive containers — see createLibraryColumns.
   const columns = createLibraryColumns(
     model.pendingActions,
-    model.downloadedEntryIds,
+    () => model.loading || model.refreshing || model.bulkDownloading,
     model.handleDownload,
     model.handleDelete,
-    getShowFileName,
+    () => model.showPackageDisplayName,
   );
 
   const tableModel = createLibrariesTableModel({
-    getEntries: () => model.filteredEntries,
+    getEntries: () => model.filteredPackages,
     getColumns: () => columns,
     getActiveVendor: () => model.activeVendor,
     getActiveType: () => model.activeType,
-    getShowFileName,
+    getShowPackageDisplayName: () => model.showPackageDisplayName,
   });
 
   const rowVirtualizer = $derived(tableModel.rowVirtualizer);

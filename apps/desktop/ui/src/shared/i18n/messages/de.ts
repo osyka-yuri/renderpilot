@@ -151,6 +151,7 @@ export const de: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': 'Keine alternativen Versionen',
   'gameDetails.version.restoreOriginal': 'Original {fileName} wiederherstellen',
+  'gameDetails.version.fileCount': { one: '1 Datei', other: '{count} Dateien' },
 
   'gameDetails.vendor.description': 'Ändern Sie die Komponentenversion.',
 

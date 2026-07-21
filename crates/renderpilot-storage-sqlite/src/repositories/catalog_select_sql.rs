@@ -21,7 +21,7 @@ macro_rules! projection_component_sql {
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::artifact`].
 macro_rules! projection_artifact_sql {
     () => {
-        "library_artifacts.id AS artifact_id,\n        library_artifacts.library AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.files_json AS artifact_files_json,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
+        "library_artifacts.id AS artifact_id,\n        library_artifacts.library AS artifact_technology,\n        library_artifacts.file_name AS artifact_file_name,\n        library_artifacts.files_json AS artifact_files_json,\n        library_artifacts.metadata_json AS artifact_metadata_json,\n        library_artifacts.source AS artifact_source,\n        library_artifacts.source_game_id AS artifact_source_game_id,\n        library_artifacts.trust_level AS artifact_trust_level"
     };
 }
 

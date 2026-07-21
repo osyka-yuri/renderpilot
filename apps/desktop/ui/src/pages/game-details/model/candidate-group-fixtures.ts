@@ -28,7 +28,7 @@ export function candidate(version: string | null, overrides: Partial<Candidate> 
     version,
     source_game_id: null,
     comparison: overrides.comparison ?? 'newer_version',
-    manifest_entry_id: overrides.manifest_entry_id ?? null,
+    catalog_package_id: overrides.catalog_package_id ?? null,
     is_downloaded: overrides.is_downloaded ?? true,
     is_debug: overrides.is_debug ?? false,
     sha256: overrides.sha256 ?? 'fake_hash',

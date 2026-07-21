@@ -291,6 +291,131 @@ fn apply_migrates_v9_to_current_additively_and_preserves_addon_rows() {
 }
 
 #[test]
+fn v10_migration_preserves_artifact_rows_with_empty_metadata() {
+    let connection = open_test_connection();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE library_artifacts (id TEXT PRIMARY KEY NOT NULL) STRICT;
+            INSERT INTO library_artifacts (id) VALUES ('artifact:legacy');
+            PRAGMA user_version = 10;
+            "#,
+        )
+        .expect("v10 artifact row should be seeded");
+
+    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
+    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+
+    let metadata: String = connection
+        .query_row(
+            "SELECT metadata_json FROM library_artifacts WHERE id = 'artifact:legacy'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("legacy artifact should survive migration");
+    assert_eq!(metadata, "{}");
+}
+
+#[test]
+fn v10_migration_normalizes_legacy_trust_levels_without_losing_unknown_values() {
+    let connection = open_test_connection();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE library_artifacts (
+                id TEXT PRIMARY KEY NOT NULL,
+                trust_level TEXT NOT NULL
+            ) STRICT;
+            INSERT INTO library_artifacts (id, trust_level) VALUES
+                ('a', 'LocalObserved'),
+                ('b', 'UserImported'),
+                ('c', 'ManifestDownloaded'),
+                ('d', 'CatalogDownloaded'),
+                ('e', 'Unknown'),
+                ('f', 'FutureTrusted');
+            PRAGMA user_version = 10;
+            "#,
+        )
+        .expect("v10 trust levels should be seeded");
+
+    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
+    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+
+    let values: Vec<(String, String)> = connection
+        .prepare("SELECT id, trust_level FROM library_artifacts ORDER BY id")
+        .expect("trust query")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("trust rows")
+        .collect::<Result<_, _>>()
+        .expect("trust rows should decode");
+    assert_eq!(
+        values,
+        vec![
+            ("a".to_owned(), "local_observed".to_owned()),
+            ("b".to_owned(), "user_imported".to_owned()),
+            ("c".to_owned(), "catalog_downloaded".to_owned()),
+            ("d".to_owned(), "catalog_downloaded".to_owned()),
+            ("e".to_owned(), "unknown".to_owned()),
+            ("f".to_owned(), "FutureTrusted".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn v10_migration_removes_only_legacy_manifest_registrations() {
+    let connection = open_test_connection();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE library_artifacts (
+                id TEXT PRIMARY KEY NOT NULL,
+                trust_level TEXT NOT NULL,
+                source TEXT
+            ) STRICT;
+            INSERT INTO library_artifacts (id, trust_level, source) VALUES
+                ('legacy-manifest', 'ManifestDownloaded', 'manifest-v0'),
+                ('legacy-without-source', 'ManifestDownloaded', NULL),
+                ('catalog-v1', 'CatalogDownloaded', 'catalog-v1'),
+                ('local', 'LocalObserved', 'game-scan'),
+                ('future', 'FutureTrusted', 'future-source');
+            PRAGMA user_version = 10;
+            "#,
+        )
+        .expect("v10 artifact rows should be seeded");
+
+    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
+    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+
+    let values: Vec<(String, String, Option<String>)> = connection
+        .prepare("SELECT id, trust_level, source FROM library_artifacts ORDER BY id")
+        .expect("artifact query")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .expect("artifact rows")
+        .collect::<Result<_, _>>()
+        .expect("artifact rows should decode");
+    assert_eq!(
+        values,
+        vec![
+            (
+                "catalog-v1".to_owned(),
+                "catalog_downloaded".to_owned(),
+                Some("catalog-v1".to_owned()),
+            ),
+            (
+                "future".to_owned(),
+                "FutureTrusted".to_owned(),
+                Some("future-source".to_owned()),
+            ),
+            (
+                "local".to_owned(),
+                "local_observed".to_owned(),
+                Some("game-scan".to_owned()),
+            ),
+        ]
+    );
+}
+
+#[test]
 fn apply_heals_v10_pending_mutations_that_reject_preparing_without_wipe() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration should succeed");

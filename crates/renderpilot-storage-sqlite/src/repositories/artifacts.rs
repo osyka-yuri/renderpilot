@@ -17,6 +17,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             library,
             file_name,
             files_json,
+            metadata_json,
             source,
             source_game_id,
             trust_level,
@@ -29,6 +30,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             :technology,
             :file_name,
             :files_json,
+            :metadata_json,
             :source,
             :source_game_id,
             :trust_level,
@@ -39,12 +41,13 @@ const UPSERT_ARTIFACT_SQL: &str = "
         library        = excluded.library,
         file_name      = excluded.file_name,
         files_json     = excluded.files_json,
+        metadata_json  = excluded.metadata_json,
         source         = excluded.source,
         source_game_id = excluded.source_game_id,
         trust_level    = excluded.trust_level,
         updated_at     = excluded.updated_at
-    WHERE library_artifacts.trust_level != 'ManifestDownloaded'
-       OR excluded.trust_level = 'ManifestDownloaded'
+    WHERE library_artifacts.trust_level != 'catalog_downloaded'
+       OR excluded.trust_level = 'catalog_downloaded'
 ";
 
 impl ArtifactRepository for SqliteStorage {
@@ -120,6 +123,7 @@ fn upsert_artifact_with_statement(
             ":technology": row.technology,
             ":file_name": row.file_name,
             ":files_json": row.files_json,
+            ":metadata_json": row.metadata_json,
             ":source": row.source,
             ":source_game_id": row.source_game_id,
             ":trust_level": row.trust_level,
@@ -138,7 +142,7 @@ fn upsert_artifact_with_statement(
 /// path with outdated version/hash snapshots; pruning on rescan keeps the
 /// replacement pool honest. The retained-id check runs in Rust rather than a
 /// variable-length `NOT IN` clause, so a large scan cannot hit SQLite's bind
-/// parameter limit. ManifestDownloaded / UserImported rows are never removed.
+/// parameter limit. Catalog-downloaded and user-imported rows are never removed.
 pub(super) fn prune_stale_local_observed_for_game_within_transaction(
     transaction: &Transaction<'_>,
     game_id: &GameId,
@@ -186,6 +190,7 @@ struct ArtifactSqlRow<'a> {
     technology: String,
     file_name: &'a str,
     files_json: String,
+    metadata_json: String,
     source: Option<&'a str>,
     source_game_id: Option<&'a str>,
     trust_level: String,
@@ -198,6 +203,7 @@ impl<'a> ArtifactSqlRow<'a> {
             technology: mapping::enum_to_text(&artifact.technology())?,
             file_name: artifact.file_name(),
             files_json: mapping::serialize_json(artifact.files())?,
+            metadata_json: mapping::serialize_json(artifact.metadata())?,
             source: artifact.source(),
             source_game_id: artifact.source_game_id().map(|game_id| game_id.as_str()),
             trust_level: mapping::enum_to_text(&artifact.trust_level())?,
@@ -209,9 +215,10 @@ impl<'a> ArtifactSqlRow<'a> {
 mod tests {
     use renderpilot_application::{ArtifactRepository, GameRepository};
     use renderpilot_domain::{
-        ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-        GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology,
-        Launcher, LibraryArtifact, PathRef, Platform, Sha256Hash, Swappability,
+        Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
+        ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime, GraphicsComponent,
+        GraphicsTechnology, Launcher, LibraryArtifact, PathRef, Platform, RuntimeCompatibility,
+        RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider,
     };
 
     use super::SqliteStorage;
@@ -231,6 +238,21 @@ mod tests {
             "nvngx_dlss.dll",
             HASH_A,
         )
+        .with_metadata(
+            ArtifactMetadata::default()
+                .with_upstream_package(
+                    UpstreamPackage::new(
+                        UpstreamPackageProvider::NuGet,
+                        "Microsoft.Direct3D.D3D12",
+                        "1.618.5",
+                    )
+                    .expect("package metadata"),
+                )
+                .with_runtime_target(
+                    RuntimeTarget::new(Architecture::X64)
+                        .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
+                ),
+        )
         .with_source_game_id(game.id().clone());
 
         storage.upsert_game(&game).expect("game should be stored");
@@ -242,6 +264,38 @@ mod tests {
         let artifacts = storage.list_artifacts().expect("artifacts should load");
 
         assert_eq!(artifacts, vec![artifact]);
+    }
+
+    #[test]
+    fn list_artifacts_rejects_malformed_metadata_json() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let artifact = sample_artifact(
+            "artifact:malformed-metadata",
+            "C:/Games/GameA/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_A,
+        );
+        storage
+            .upsert_artifact(&artifact)
+            .expect("artifact should be stored");
+
+        {
+            let connection = storage.connection().expect("sqlite connection should lock");
+            connection
+                .execute_batch(
+                    "PRAGMA ignore_check_constraints = ON;
+                     UPDATE library_artifacts
+                     SET metadata_json = '{broken'
+                     WHERE id = 'artifact:malformed-metadata';
+                     PRAGMA ignore_check_constraints = OFF;",
+                )
+                .expect("corrupt metadata fixture");
+        }
+
+        let error = storage
+            .list_artifacts()
+            .expect_err("malformed metadata must fail closed");
+        assert!(error.to_string().contains("invalid sqlite row"));
     }
 
     #[test]
@@ -412,28 +466,28 @@ mod tests {
         )
         .expect("artifact should be valid")
         .with_source(match trust_level {
-            ArtifactTrustLevel::ManifestDownloaded => "manifest-download",
+            ArtifactTrustLevel::CatalogDownloaded => "catalog-v1",
             _ => "scan-folder",
         })
         .expect("source should be valid")
     }
 
     #[test]
-    fn upsert_local_observed_does_not_overwrite_manifest_downloaded() {
+    fn upsert_local_observed_does_not_overwrite_catalog_downloaded() {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
 
-        // Manifest-download artifact pointing to cache path.
+        // Catalog artifact pointing to the managed content store.
         let cache = sample_artifact_with_trust(
             "artifact:bundle",
             "C:/AppData/RenderPilot/libraries/fsr_upscaler_dx12/v1/amd_fidelityfx_upscaler_dx12.dll",
             "amd_fidelityfx_upscaler_dx12.dll",
             HASH_A,
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         );
 
         storage
             .upsert_artifact(&cache)
-            .expect("manifest-download artifact should be stored");
+            .expect("catalog artifact should be stored");
 
         // Scan finds the same bytes in the game folder after a swap and tries to
         // register a local-observed artifact with the same content-based id.
@@ -451,16 +505,16 @@ mod tests {
 
         let artifacts = storage.list_artifacts().expect("artifacts should load");
         assert_eq!(artifacts.len(), 1);
-        // The manifest-download record must be preserved — its path points to the
-        // managed cache and must not be replaced with the game-folder copy.
+        // The catalog record must be preserved — its path points to the managed
+        // content store and must not be replaced with the game-folder copy.
         assert_eq!(
             artifacts[0].path().as_str(),
             "C:/AppData/RenderPilot/libraries/fsr_upscaler_dx12/v1/amd_fidelityfx_upscaler_dx12.dll",
-            "local-observed scan must not overwrite a manifest-downloaded artifact's cache path"
+            "local-observed scan must not overwrite a catalog artifact's managed path"
         );
         assert_eq!(
             artifacts[0].trust_level(),
-            ArtifactTrustLevel::ManifestDownloaded
+            ArtifactTrustLevel::CatalogDownloaded
         );
     }
 
@@ -498,7 +552,7 @@ mod tests {
             "C:/AppData/cache/nvngx_dlss.dll",
             "nvngx_dlss.dll",
             "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         );
 
         for artifact in [&stale_a, &current_a, &other_b, &cached] {
@@ -543,7 +597,7 @@ mod tests {
         );
         assert!(
             ids.iter().any(|id| id == "artifact:cached"),
-            "ManifestDownloaded must never be pruned by game scan"
+            "CatalogDownloaded must never be pruned by game scan"
         );
     }
 
@@ -631,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn upsert_manifest_downloaded_overwrites_manifest_downloaded() {
+    fn upsert_catalog_downloaded_overwrites_catalog_downloaded() {
         let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
 
         let first = sample_artifact_with_trust(
@@ -639,7 +693,7 @@ mod tests {
             "C:/AppData/old/amd_fidelityfx_upscaler_dx12.dll",
             "amd_fidelityfx_upscaler_dx12.dll",
             HASH_A,
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         );
 
         storage
@@ -651,19 +705,19 @@ mod tests {
             "C:/AppData/new/amd_fidelityfx_upscaler_dx12.dll",
             "amd_fidelityfx_upscaler_dx12.dll",
             HASH_A,
-            ArtifactTrustLevel::ManifestDownloaded,
+            ArtifactTrustLevel::CatalogDownloaded,
         );
 
         storage
             .upsert_artifact(&second)
-            .expect("second manifest-download artifact should be stored");
+            .expect("second catalog artifact should be stored");
 
         let artifacts = storage.list_artifacts().expect("artifacts should load");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(
             artifacts[0].path().as_str(),
             "C:/AppData/new/amd_fidelityfx_upscaler_dx12.dll",
-            "a manifest-downloaded artifact can be updated by another manifest-downloaded one"
+            "a catalog artifact can be updated by another catalog artifact"
         );
     }
 }

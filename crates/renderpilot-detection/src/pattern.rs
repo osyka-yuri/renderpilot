@@ -543,12 +543,24 @@ mod tests {
     }
 
     #[test]
-    fn detects_direct_storage_runtimes() {
+    fn detects_microsoft_runtimes() {
         let patterns = pattern_set();
 
         assert_eq!(
             patterns.match_file_name("dstorage.dll"),
             Some(GraphicsTechnology::DirectStorage)
+        );
+        assert_eq!(
+            patterns.match_file_name("dxcompiler.dll"),
+            Some(GraphicsTechnology::MicrosoftDxc)
+        );
+        assert_eq!(
+            patterns.match_file_name("dxil.dll"),
+            Some(GraphicsTechnology::MicrosoftDxc)
+        );
+        assert_eq!(
+            patterns.match_file_name("D3D12Core.dll"),
+            Some(GraphicsTechnology::D3D12Agility)
         );
     }
 

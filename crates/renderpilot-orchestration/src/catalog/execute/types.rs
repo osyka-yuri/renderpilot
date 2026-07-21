@@ -1,6 +1,6 @@
 //! Data types shared across the swap-execution submodules.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use renderpilot_domain::{ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact};
 use serde::Serialize;
@@ -29,6 +29,8 @@ pub struct SwapResult {
     pub applied_path: String,
     /// Source path of the artifact package that was installed.
     pub replacement_path: String,
+    /// Number of live component files updated by the operation.
+    pub updated_file_count: usize,
 }
 
 /// Result of a successfully applied rollback.
@@ -40,6 +42,8 @@ pub struct RollbackResult {
     pub component_id: String,
     /// Path of the first restored baseline file.
     pub restored_path: String,
+    /// Number of baseline files restored by the operation.
+    pub restored_file_count: usize,
 }
 
 /// Component, artifact and baseline loaded before an apply is planned.
@@ -69,20 +73,21 @@ pub(super) struct PreparedApplySwap {
 
 impl PreparedApplySwap {
     pub(super) fn applied_path(&self) -> String {
-        self.artifact
+        for artifact_file in self
+            .artifact
             .files()
             .iter()
-            .zip(&self.planned)
-            .find_map(|(artifact_file, plan)| {
-                artifact_file
-                    .install_as()
-                    .map(|_| plan.file.path().as_str().to_owned())
-            })
-            .or_else(|| {
-                self.planned
-                    .first()
-                    .map(|plan| plan.file.path().as_str().to_owned())
-            })
+            .filter(|file| file.install_as().is_some())
+        {
+            let source = Path::new(artifact_file.path().as_str());
+            if let Some(plan) = self.planned.iter().find(|plan| plan.source == source) {
+                return plan.file.path().as_str().to_owned();
+            }
+        }
+
+        self.planned
+            .first()
+            .map(|plan| plan.file.path().as_str().to_owned())
             .unwrap_or_default()
     }
 

@@ -4,6 +4,7 @@ import {
   createPresentedLibraries,
   displayLibraryFilePath,
   formatCompactLibraryLabel,
+  presentLibraryFiles,
 } from './library-presentation';
 
 describe('library-presentation', () => {
@@ -62,5 +63,56 @@ describe('library-presentation', () => {
         { path: 'C:/Game/amd_fidelityfx_upscaler_dx12.dll' },
       ]),
     ).toBe('C:/Game/amd_fidelityfx_upscaler_dx12.dll');
+  });
+
+  it('presents the complete DXC package as one ordered install unit', () => {
+    expect(
+      presentLibraryFiles('microsoft_dxc', [
+        { path: 'C:/Game/dxil.dll' },
+        { path: 'C:/Game/dxcompiler.dll' },
+      ]),
+    ).toEqual({
+      label: 'dxcompiler.dll + dxil.dll',
+      fileCount: 2,
+      locations: ['C:/Game'],
+    });
+  });
+
+  it('keeps a standalone installed DXC compiler literal', () => {
+    expect(presentLibraryFiles('microsoft_dxc', [{ path: 'C:/Game/dxcompiler.dll' }])).toEqual({
+      label: 'dxcompiler.dll',
+      fileCount: 1,
+      locations: ['C:/Game/dxcompiler.dll'],
+    });
+  });
+
+  it('keeps a complete DXC package readable when Windows separators are used', () => {
+    expect(
+      presentLibraryFiles('microsoft_dxc', [
+        { path: 'D:\\Game\\dxcompiler.dll' },
+        { path: 'D:\\Game\\dxil.dll' },
+      ]),
+    ).toEqual({
+      label: 'dxcompiler.dll + dxil.dll',
+      fileCount: 2,
+      locations: ['D:\\Game'],
+    });
+  });
+
+  it('shows both exact paths when DXC package members are in different directories', () => {
+    expect(
+      presentLibraryFiles('microsoft_dxc', [
+        { path: 'C:/Compiler/dxcompiler.dll' },
+        { path: 'D:/Validator/dxil.dll' },
+      ]),
+    ).toEqual({
+      label: 'dxcompiler.dll + dxil.dll',
+      fileCount: 2,
+      locations: ['C:/Compiler/dxcompiler.dll', 'D:/Validator/dxil.dll'],
+    });
+  });
+
+  it('returns null when no component files are available', () => {
+    expect(presentLibraryFiles('microsoft_dxc', [])).toBeNull();
   });
 });

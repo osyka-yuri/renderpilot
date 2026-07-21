@@ -326,29 +326,26 @@ pub async fn rollback_component(
 }
 
 #[tauri::command]
-pub async fn fetch_libraries_manifest() -> JsonCommandResult {
-    run_desktop_async_command(desktop::fetch_libraries_manifest).await
+pub async fn list_library_packages(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
+    let context = Arc::clone(&context);
+    run_desktop_async_command(move || async move { desktop::list_library_packages(&context).await })
+        .await
 }
 
 #[tauri::command]
-pub async fn get_libraries_manifest() -> JsonCommandResult {
-    run_desktop_async_command(desktop::get_libraries_manifest).await
-}
-
-#[tauri::command]
-pub async fn download_library(
+pub async fn download_library_package(
     app: tauri::AppHandle,
-    entry_id: String,
+    package_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let entry_id = require_non_empty_string("entry_id", entry_id)?;
+    let package_id = require_non_empty_string("package_id", package_id)?;
     let context = Arc::clone(&context);
 
     run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, entry_id.clone());
-        desktop::download_library(
+        let emit = download_progress_emitter(app, package_id.clone());
+        desktop::download_library_package(
             &context,
-            entry_id,
+            package_id,
             Some(&emit as &desktop::ProgressObserver<'_>),
         )
         .await
@@ -378,20 +375,15 @@ pub async fn download_artifact(
 }
 
 #[tauri::command]
-pub async fn delete_library(
-    entry_id: String,
+pub async fn delete_library_package(
+    package_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let entry_id = require_non_empty_string("entry_id", entry_id)?;
+    let package_id = require_non_empty_string("package_id", package_id)?;
     let context = Arc::clone(&context);
 
-    run_desktop_async_command(
-        move || async move { desktop::delete_library(&context, entry_id).await },
-    )
+    run_desktop_async_command(move || async move {
+        desktop::delete_library_package(&context, package_id).await
+    })
     .await
-}
-
-#[tauri::command]
-pub async fn get_library_states() -> JsonCommandResult {
-    run_desktop_async_command(desktop::get_library_states).await
 }

@@ -82,19 +82,6 @@ where
     }
 }
 
-/// Returns a present, parseable cache (ignoring its TTL), or `None` if it is
-/// absent or corrupt -- for callers that reuse any cache they have and run their
-/// own fetch (with extra side effects) on a miss.
-pub(crate) fn cached<T, F>(spec: &CdnManifestSpec, parse: F) -> Option<T>
-where
-    F: Fn(&[u8]) -> Result<T, ServiceError>,
-{
-    match read_cached(spec, &parse) {
-        Ok(CachedManifest::Fresh(manifest) | CachedManifest::Stale(manifest)) => Some(manifest),
-        Ok(CachedManifest::Absent) | Err(_) => None,
-    }
-}
-
 /// Downloads, validates, and caches the manifest, returning the parsed value.
 pub(crate) async fn fetch<T, F>(spec: &CdnManifestSpec, parse: F) -> Result<T, ServiceError>
 where
@@ -178,7 +165,7 @@ fn quarantine_corrupt(file_name: &str) {
 /// Existing diagnostics are retained rather than overwritten, while repeated
 /// corrupt downloads are still removed from the cache path before the next
 /// fetch attempt.
-fn quarantine_at(path: &Path) {
+pub(crate) fn quarantine_at(path: &Path) {
     let Ok(Some(quarantined)) = next_quarantine_path(path) else {
         log::debug!(
             "cdn cache quarantine: cannot derive an available sidecar path for `{}`",

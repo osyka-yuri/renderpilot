@@ -1,52 +1,52 @@
-export type BuildType = 'stable' | 'beta' | 'debug';
+export type ReleaseChannel = 'stable' | 'beta' | 'debug';
 
-export type Signature = Readonly<{ status: 'signed'; signed_at: string } | { status: 'unsigned' }>;
+export type RuntimeCompatibility = Readonly<{ kind: 'd3d12_sdk'; version: number }>;
 
-export type LibraryManifest = Readonly<{
-  schema_version: number;
-  generated_at: string;
-  entries: readonly LibraryManifestEntry[];
+export type LibraryTarget = Readonly<{
+  os: string;
+  architecture: 'X86' | 'X64';
+  compatibility?: RuntimeCompatibility;
 }>;
 
-export type LibraryManifestEntry = Readonly<{
-  entry_id: string;
+export type Signature = Readonly<
+  | {
+      status: 'signed';
+      subject?: string;
+      thumbprint?: string;
+      signed_at: string | null;
+    }
+  | { status: 'unsigned' }
+>;
 
-  library: Readonly<{
-    id: string;
-    file_name: string;
-  }>;
-
-  version: Readonly<{
-    value: string;
-    sort_key: string;
-  }>;
-
-  build: Readonly<{
-    type: BuildType;
-    label: string | null;
-  }>;
-
-  files: Readonly<{
-    dll: Readonly<{
-      size_bytes: number;
-      hashes: Readonly<{
-        sha256: string;
-      }>;
-    }>;
-
-    zip: Readonly<{
-      size_bytes: number;
-      download_url: string;
-    }>;
-  }>;
-
-  signature: Signature;
+export type LibraryRelease = Readonly<{
+  /** Canonical package version used for presentation, ordering, and selection. */
+  version: string;
+  channel: ReleaseChannel;
+  /** Optional supplemental annotation displayed verbatim after the version. */
+  label: string | null;
 }>;
 
-export type LibraryState = Readonly<{
-  id: string;
+/** Fully resolved package projection returned by the desktop API. */
+export type LibraryPackageSummary = Readonly<{
+  package_id: string;
+  artifact_id: string;
+  vendor: string;
+  technology: string;
+  variant: string;
+  display_name: string;
+  release: LibraryRelease;
+  target: LibraryTarget;
+  revision_sha256: string;
+  primary_file_name: string;
+  primary_sha256: string;
+  primary_signature: Signature;
+  size_bytes: number;
+  is_downloaded: boolean;
+}>;
+
+export type LibraryPackageState = Readonly<{
+  package_id: string;
   version: string;
   is_downloaded: boolean;
-  local_path: string | null;
   artifact_id: string | null;
 }>;

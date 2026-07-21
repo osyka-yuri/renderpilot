@@ -14,7 +14,7 @@ pub fn find_candidates(
     game_id: &GameId,
 ) -> Result<CandidateCatalogResult, ServiceError> {
     let storage = context.storage();
-    let _ = storage.require_game(game_id)?;
+    let game = storage.require_game(game_id)?;
 
     let components = storage.list_components_for_game(game_id)?;
     let artifacts = storage.list_artifacts()?;
@@ -24,7 +24,8 @@ pub fn find_candidates(
         groups: find_replacement_candidates(
             &components,
             &artifacts,
-            &renderpilot_application::CandidateContext::empty(),
+            &renderpilot_application::CandidateContext::empty()
+                .with_target_profile(super::runtime_compatibility::target_profile(context, &game)),
         ),
     })
 }
@@ -51,6 +52,8 @@ pub fn build_swap_plan(
     )
     .map_err(AppError::from)?;
     let component_for_plan = component.rebuild_with_files(baseline);
+
+    super::runtime_compatibility::ensure_artifact_compatible(context, &game, &artifact, true)?;
 
     let plan = build_swap_operation_plan(&component_for_plan, &artifact)?;
 

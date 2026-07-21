@@ -18,33 +18,6 @@ pub(crate) fn is_safe_file_name(value: &str) -> bool {
     !is_windows_reserved_name(stem)
 }
 
-/// Sanitizes an arbitrary string into a safe bare path component (used to derive
-/// storage directory names from untrusted identifiers).
-pub(crate) fn sanitize_path_component(value: &str) -> String {
-    let sanitized: String = value
-        .chars()
-        .map(|character| match character {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => character,
-            _ => '_',
-        })
-        .collect();
-
-    let sanitized = sanitized
-        .trim_matches(|c| c == '.' || c == ' ' || c == '_')
-        .to_owned();
-
-    if sanitized.is_empty() {
-        return "unknown".to_owned();
-    }
-
-    let stem = sanitized.split('.').next().unwrap_or_default();
-    if is_windows_reserved_name(stem) {
-        format!("_{sanitized}")
-    } else {
-        sanitized
-    }
-}
-
 fn is_windows_reserved_name(value: &str) -> bool {
     matches!(
         value.to_ascii_uppercase().as_str(),

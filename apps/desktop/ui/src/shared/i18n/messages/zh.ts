@@ -141,6 +141,7 @@ export const zh: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': '没有替代版本',
   'gameDetails.version.restoreOriginal': '恢复原始的 {fileName}',
+  'gameDetails.version.fileCount': { one: '1 个文件', other: '{count} 个文件' },
 
   'gameDetails.vendor.description': '更改组件版本。',
 

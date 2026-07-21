@@ -2,7 +2,9 @@ import {
   displayLibraryFilePath,
   formatCanonicalLibraryLabel,
   formatCompactLibraryLabel as formatSharedCompactLibraryLabel,
+  presentLibraryFiles,
 } from '@shared/graphics';
+import type { PresentedLibraryFiles } from '@shared/graphics';
 
 import type { GraphicsComponent } from './types';
 
@@ -26,4 +28,10 @@ export function displayComponentFilePath(
   component: Pick<GraphicsComponent, 'technology' | 'files'>,
 ): string | null {
   return displayLibraryFilePath(component.technology, component.files);
+}
+
+export function presentComponentFiles(
+  component: Pick<GraphicsComponent, 'technology' | 'files'>,
+): PresentedLibraryFiles | null {
+  return presentLibraryFiles(component.technology, component.files);
 }

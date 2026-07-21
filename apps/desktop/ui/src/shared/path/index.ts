@@ -1,1 +1,1 @@
-export { fileNameFromPath } from './path';
+export { fileNameFromPath, parentPath, sharedParentPath } from './path';

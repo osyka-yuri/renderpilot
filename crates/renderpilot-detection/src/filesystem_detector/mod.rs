@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
-    ComponentKind, GameInstallation, GraphicsComponent, GraphicsTechnology, PathRef, Sha256Hash,
-    Swappability, Version,
+    ComponentKind, GameInstallation, GraphicsComponent, GraphicsTechnology, PathRef,
+    RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, Version,
 };
 use serde::Serialize;
 
@@ -45,6 +45,8 @@ pub struct DetectedLibraryFile {
     status: VersionDetectionStatus,
     sha256: Sha256Hash,
     cache_key: FileCacheKey,
+    #[serde(skip)]
+    runtime_target: Option<RuntimeTarget>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +75,7 @@ impl DetectedLibraryFile {
         file_path: PathRef,
         classification: LibraryFileClassification,
         metadata: DetectedFileMetadata,
+        runtime_target: Option<RuntimeTarget>,
     ) -> Self {
         Self {
             file_name,
@@ -85,6 +88,7 @@ impl DetectedLibraryFile {
             status: metadata.status,
             sha256: metadata.sha256,
             cache_key: metadata.cache_key,
+            runtime_target,
         }
     }
 
@@ -136,6 +140,11 @@ impl DetectedLibraryFile {
     /// Returns the cache key derived from path, size, modification time, and hash.
     pub fn cache_key(&self) -> &FileCacheKey {
         &self.cache_key
+    }
+
+    /// Returns runtime facts extracted while the file was detected.
+    pub(crate) fn runtime_target(&self) -> Option<&RuntimeTarget> {
+        self.runtime_target.as_ref()
     }
 }
 
@@ -322,11 +331,14 @@ impl LibraryPatternComponentDetector {
             return Ok(None);
         };
 
+        let runtime_target = runtime_target_for_file(classification.technology, file);
+
         Ok(Some(DetectedLibraryFile::from_parts(
             file_name.to_owned(),
             file_path,
             classification,
             metadata,
+            runtime_target,
         )))
     }
 
@@ -340,6 +352,30 @@ impl LibraryPatternComponentDetector {
             matched.kind(),
         ))
     }
+}
+
+fn runtime_target_for_file(technology: GraphicsTechnology, path: &Path) -> Option<RuntimeTarget> {
+    if !matches!(
+        technology,
+        GraphicsTechnology::MicrosoftDxc | GraphicsTechnology::D3D12Agility
+    ) {
+        return None;
+    }
+
+    let inspection = crate::inspect_pe(path)?;
+    let architecture = inspection.architecture?;
+    let mut target = RuntimeTarget::new(architecture);
+    if technology == GraphicsTechnology::D3D12Agility {
+        let sdk_version = inspection
+            .version
+            .as_ref()
+            .and_then(|version| version.segments().get(1))
+            .and_then(|segment| u32::try_from(*segment).ok())?;
+        target = target.with_compatibility(RuntimeCompatibility::D3d12Sdk {
+            version: sdk_version,
+        });
+    }
+    Some(target)
 }
 
 impl ComponentDetector for LibraryPatternComponentDetector {

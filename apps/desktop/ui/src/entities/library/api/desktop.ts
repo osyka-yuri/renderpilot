@@ -1,38 +1,29 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
-import type { LibraryManifest, LibraryState } from '../model/types';
+import type { LibraryPackageState, LibraryPackageSummary } from '../model/types';
 
-export async function fetchLibrariesManifest(): Promise<LibraryManifest> {
-  return invokeDesktop<LibraryManifest>('fetch_libraries_manifest');
+export async function listLibraryPackages(): Promise<LibraryPackageSummary[]> {
+  return invokeDesktop<LibraryPackageSummary[]>('list_library_packages');
 }
 
-export async function getLibrariesManifest(): Promise<LibraryManifest> {
-  return invokeDesktop<LibraryManifest>('get_libraries_manifest');
-}
-
-export async function downloadLibrary(entryId: string): Promise<LibraryState> {
-  return invokeDesktop<LibraryState>('download_library', {
-    entryId: requireNonBlankString(entryId, 'entryId'),
+export async function downloadLibraryPackage(packageId: string): Promise<LibraryPackageState> {
+  return invokeDesktop<LibraryPackageState>('download_library_package', {
+    packageId: requireNonBlankString(packageId, 'packageId'),
   });
 }
 
 /**
- * Materializes a swap artifact by its id, downloading whatever it needs — a
- * single manifest DLL or every member of a composed FSR release package — and
- * returns the registered artifact ready to apply.
+ * Materializes a swap artifact by its id, downloading every member declared
+ * by its catalog package, and returns the registered artifact ready to apply.
  */
-export async function downloadArtifact(artifactId: string): Promise<LibraryState> {
-  return invokeDesktop<LibraryState>('download_artifact', {
+export async function downloadArtifact(artifactId: string): Promise<LibraryPackageState> {
+  return invokeDesktop<LibraryPackageState>('download_artifact', {
     artifactId: requireNonBlankString(artifactId, 'artifactId'),
   });
 }
 
-export async function deleteLibrary(entryId: string): Promise<LibraryState> {
-  return invokeDesktop<LibraryState>('delete_library', {
-    entryId: requireNonBlankString(entryId, 'entryId'),
+export async function deleteLibraryPackage(packageId: string): Promise<LibraryPackageState> {
+  return invokeDesktop<LibraryPackageState>('delete_library_package', {
+    packageId: requireNonBlankString(packageId, 'packageId'),
   });
-}
-
-export async function getLibraryStates(): Promise<LibraryState[]> {
-  return invokeDesktop<LibraryState[]>('get_library_states');
 }

@@ -1,331 +1,235 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
+//! Direct adapter from explicit catalog packages to domain artifacts.
 
-use renderpilot_detection::LibraryPatternSet;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+
+use renderpilot_application::validate_runtime_artifact;
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
-    Sha256Hash, Version,
+    ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, GraphicsTechnology,
+    LibraryArtifact, PathRef, RuntimeTarget, Sha256Hash, UpstreamPackage, UpstreamPackageProvider,
+    Version,
 };
 
 use crate::ServiceError;
 
-use super::{
-    library_error,
-    manifest::load_local_manifest,
-    types::{LibraryManifest, LibraryManifestEntry},
+use super::resolved::{ResolvedPackage, ValidatedCatalog};
+use super::types::{
+    LibraryArtifactRecord, LibraryPackage, LibraryPackageSummary, LibraryProvenance,
 };
+use super::{CATALOG_SOURCE, catalog, library_error};
 
-const MANIFEST_DOWNLOAD_SOURCE: &str = "manifest-download";
-
-static BUNDLED_PATTERNS: LazyLock<LibraryPatternSet> = LazyLock::new(|| {
-    crate::util::load_bundled_asset_or_default(
-        LibraryPatternSet::bundled_defaults,
-        LibraryPatternSet::empty,
-        "library pattern set",
-    )
-});
-
-/// Builds a `LibraryArtifact` instance representing a locally cached library file
-/// backed by a downloaded manifest entry.
-///
-/// This resolves the library pattern technology using the known file name and
-/// constructs an artifact definition that can be used for swap operations.
-pub(super) fn build_manifest_artifact(
-    entry: &LibraryManifestEntry,
-    dll_path: &std::path::Path,
-    sha256: &str,
-) -> Result<LibraryArtifact, ServiceError> {
-    let patterns = load_library_patterns();
-
-    build_entry_artifact(entry, &dll_path.to_string_lossy(), sha256, patterns, None)
+/// Domain artifacts plus their catalog package ids and debug-package ids.
+pub(crate) struct CatalogArtifactSet {
+    pub(super) artifacts: Vec<LibraryArtifact>,
+    pub(super) package_ids: HashMap<ArtifactId, String>,
+    pub(super) debug_package_ids: HashSet<String>,
 }
 
-/// Reads the local library manifest and converts all successfully parsed entries
-/// into abstract `LibraryArtifact` instances without checking local file presence.
-///
-/// Returns a tuple containing:
-/// - The parsed list of `LibraryArtifact`s.
-/// - A mapping between the generated `ArtifactId` and the raw manifest `entry_id`.
-/// - A set of `entry_id`s whose build type is `"debug"`.
-///
-/// Return type of [`manifest_entries_as_artifacts`].
-pub type ManifestArtifactsResult = (
-    Vec<LibraryArtifact>,
-    HashMap<ArtifactId, String>,
-    HashSet<String>,
-);
-
-/// Single authoritative index for catalog listing and artifact download.
-///
-/// Built in one pass so single-file rows and composed packages always come from
-/// the same composition result. Each [`LibraryArtifact`] is owned once in
-/// [`Self::artifacts`]; packages point at an index into that vec rather than
-/// holding a second copy.
-#[derive(Debug)]
-pub(super) struct ManifestArtifactIndex {
-    artifacts: Vec<LibraryArtifact>,
-    /// Single-file artifact id → manifest entry id.
-    entry_ids: HashMap<ArtifactId, String>,
-    debug_entry_ids: HashSet<String>,
-    /// Composed package id → slot in `artifacts` + member entry ids (file order).
-    packages: HashMap<ArtifactId, IndexedPackage>,
-}
-
-/// Package metadata that does not duplicate the artifact body.
-#[derive(Debug)]
-struct IndexedPackage {
-    artifact_index: usize,
-    member_entry_ids: Vec<String>,
-}
-
-impl ManifestArtifactIndex {
-    /// Catalog listing parts (drops package member metadata).
-    pub(super) fn into_catalog_parts(self) -> ManifestArtifactsResult {
-        (self.artifacts, self.entry_ids, self.debug_entry_ids)
-    }
-
-    /// Manifest entry id for a single-file catalog artifact.
-    pub(super) fn single_entry_id(&self, artifact_id: &ArtifactId) -> Option<&str> {
-        self.entry_ids.get(artifact_id).map(String::as_str)
-    }
-
-    /// Virtual multi-file package: the same artifact the catalog lists, plus
-    /// member entry ids in artifact file order.
-    pub(super) fn package(
-        &self,
-        artifact_id: &ArtifactId,
-    ) -> Option<(&LibraryArtifact, &[String])> {
-        let package = self.packages.get(artifact_id)?;
-        Some((
-            &self.artifacts[package.artifact_index],
-            package.member_entry_ids.as_slice(),
-        ))
-    }
-
-    /// Ids of composed multi-file packages (tests / diagnostics).
-    #[cfg(test)]
-    fn package_ids(&self) -> impl Iterator<Item = &ArtifactId> {
-        self.packages.keys()
+impl CatalogArtifactSet {
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        Vec<LibraryArtifact>,
+        HashMap<ArtifactId, String>,
+        HashSet<String>,
+    ) {
+        (self.artifacts, self.package_ids, self.debug_package_ids)
     }
 }
 
-/// Reads the local library manifest and converts all entries into [`LibraryArtifact`]s.
-pub fn manifest_entries_as_artifacts() -> Result<ManifestArtifactsResult, ServiceError> {
-    let Some(manifest) = load_local_manifest()? else {
-        return Ok((Vec::new(), HashMap::new(), HashSet::new()));
+/// Converts every supported explicit package in the active catalog.
+pub(crate) fn catalog_packages_as_artifacts() -> Result<CatalogArtifactSet, ServiceError> {
+    let Some(catalog) = catalog::load_local_catalog()? else {
+        return Ok(CatalogArtifactSet {
+            artifacts: Vec::new(),
+            package_ids: HashMap::new(),
+            debug_package_ids: HashSet::new(),
+        });
     };
-    Ok(manifest_artifact_index(&manifest)?.into_catalog_parts())
+    catalog_as_artifacts(&catalog)
 }
 
-/// Builds every single-file artifact and every strict composed package from an
-/// already-loaded manifest. Package construction errors are intentionally
-/// propagated: a malformed multi-file package must not be hidden as a partial
-/// single-file catalog entry.
-pub(super) fn manifest_artifact_index(
-    manifest: &LibraryManifest,
-) -> Result<ManifestArtifactIndex, ServiceError> {
-    let patterns = load_library_patterns();
-    let packages = super::compose_all_packages(&manifest.entries)?;
+fn catalog_as_artifacts(catalog: &ValidatedCatalog) -> Result<CatalogArtifactSet, ServiceError> {
+    let package_count = catalog.packages().len();
+    let mut artifacts = Vec::with_capacity(package_count);
+    let mut package_ids = HashMap::with_capacity(package_count);
+    let mut debug_package_ids = HashSet::new();
 
-    let mut artifacts = Vec::with_capacity(manifest.entries.len() + packages.len());
-    let mut entry_ids = HashMap::with_capacity(manifest.entries.len());
-    let mut debug_entry_ids = HashSet::new();
-
-    for entry in &manifest.entries {
-        let artifact = match build_manifest_index_artifact(entry, patterns) {
-            Ok(artifact) => artifact,
+    for resolved in catalog.packages() {
+        let package = resolved.package();
+        let artifact = match build_catalog_artifact(&resolved, None) {
+            Ok(Some(artifact)) => artifact,
+            Ok(None) => {
+                log::warn!(
+                    "catalog package `{}` uses unknown technology `{}`; skipping it",
+                    package.package_id,
+                    package.technology
+                );
+                continue;
+            }
             Err(error) => {
-                log_manifest_entry_skip(entry, &error);
+                log::warn!(
+                    "catalog package `{}` cannot be represented by this client: {error}; skipping it",
+                    package.package_id
+                );
                 continue;
             }
         };
-
-        if entry.build.build_type == "debug" {
-            debug_entry_ids.insert(entry.entry_id.clone());
+        if package.release.channel == super::types::LibraryReleaseChannel::Debug {
+            debug_package_ids.insert(package.package_id.clone());
         }
-        entry_ids.insert(artifact.id().clone(), entry.entry_id.clone());
+        package_ids.insert(artifact.id().clone(), package.package_id.clone());
         artifacts.push(artifact);
     }
 
-    let mut packages_index = HashMap::with_capacity(packages.len());
-    for package in packages {
-        let package_id = package.artifact.id().clone();
-        let artifact_index = artifacts.len();
-        packages_index.insert(
-            package_id,
-            IndexedPackage {
-                artifact_index,
-                member_entry_ids: package.member_entry_ids,
-            },
-        );
-        artifacts.push(package.artifact);
-    }
-
-    Ok(ManifestArtifactIndex {
+    Ok(CatalogArtifactSet {
         artifacts,
-        entry_ids,
-        debug_entry_ids,
-        packages: packages_index,
+        package_ids,
+        debug_package_ids,
     })
 }
 
-fn load_library_patterns() -> &'static LibraryPatternSet {
-    &BUNDLED_PATTERNS
-}
-
-fn build_manifest_index_artifact(
-    entry: &LibraryManifestEntry,
-    patterns: &LibraryPatternSet,
-) -> Result<LibraryArtifact, ServiceError> {
-    let artifact = build_entry_artifact(
-        entry,
-        &format!("manifest://{}", entry.entry_id),
-        &entry.files.dll.hashes.sha256,
-        patterns,
-        Some(MANIFEST_DOWNLOAD_SOURCE),
-    )?;
-
-    Ok(artifact)
-}
-
-fn build_entry_artifact(
-    entry: &LibraryManifestEntry,
-    artifact_path: &str,
-    sha256: &str,
-    patterns: &LibraryPatternSet,
-    source: Option<&str>,
-) -> Result<LibraryArtifact, ServiceError> {
-    let technology = patterns
-        .match_file_name(&entry.library.file_name)
-        .unwrap_or(GraphicsTechnology::Unknown);
-    let path = PathRef::new(artifact_path)
-        .map_err(|error| library_error(format!("invalid artifact path: {error}")))?;
-    let sha256_hash = Sha256Hash::new(sha256)
-        .map_err(|error| library_error(format!("invalid sha256: {error}")))?;
-    let version = Version::parse(&entry.version.value)
-        .map_err(|error| library_error(format!("invalid version: {error}")))?;
-
-    // Manifest entries are single-file (bundle support for downloads is a
-    // follow-up), but the id uses the same bundle scheme as locally-scanned
-    // artifacts so the same DLL from a scan and from the manifest dedupes.
-    let artifact_id = ArtifactId::for_bundle([&sha256_hash]);
-    let file = ComponentFile::new(path)
-        .with_sha256(sha256_hash)
-        .with_version(version);
-    let artifact = LibraryArtifact::new(
-        artifact_id,
-        technology,
-        &entry.library.file_name,
-        vec![file],
-        ArtifactTrustLevel::ManifestDownloaded,
-    )
-    .map_err(|error| library_error(format!("failed to build artifact: {error}")))?;
-
-    match source {
-        Some(source) => artifact
-            .with_source(source)
-            .map_err(|error| library_error(format!("failed to attach artifact source: {error}"))),
-        None => Ok(artifact),
-    }
-}
-
-fn log_manifest_entry_skip(entry: &LibraryManifestEntry, error: &ServiceError) {
-    log::warn!(
-        "manifest_entries_as_artifacts: skipping entry {}: {error}",
-        entry.entry_id
-    );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::libraries::types::{
-        BuildInfo, DllFileInfo, FilesInfo, HashesInfo, LibraryInfo, SignatureInfo, VersionInfo,
-        ZstFileInfo,
+/// Builds a virtual catalog artifact or its materialized local counterpart.
+/// `local_paths`, when present, must follow package-member order.
+pub(super) fn build_catalog_artifact(
+    resolved: &ResolvedPackage<'_>,
+    local_paths: Option<&[std::path::PathBuf]>,
+) -> Result<Option<LibraryArtifact>, ServiceError> {
+    let vendor = resolved.vendor();
+    let package = resolved.package();
+    let Some(technology) = package_technology(package) else {
+        return Ok(None);
     };
-
-    fn streamline_entry(entry_id: &str, file_name: &str, sha256: &str) -> LibraryManifestEntry {
-        LibraryManifestEntry {
-            entry_id: entry_id.to_owned(),
-            library: LibraryInfo {
-                id: entry_id.to_owned(),
-                file_name: file_name.to_owned(),
-            },
-            version: VersionInfo {
-                value: "2.9.0.0".to_owned(),
-                sort_key: "0002.0009.0000.0000".to_owned(),
-            },
-            build: BuildInfo {
-                build_type: "release".to_owned(),
-                label: None,
-            },
-            files: FilesInfo {
-                dll: DllFileInfo {
-                    size_bytes: 1,
-                    hashes: HashesInfo {
-                        sha256: sha256.to_owned(),
-                    },
-                },
-                zst: ZstFileInfo {
-                    size_bytes: 1,
-                    download_url: "https://example.test/library.dll.zst".to_owned(),
-                },
-            },
-            signature: SignatureInfo::Unsigned,
-        }
+    if local_paths.is_some_and(|paths| paths.len() != package.members.len()) {
+        return Err(library_error(format!(
+            "local member paths are out of sync for package `{}`",
+            package.package_id
+        )));
     }
 
-    fn manifest(entries: Vec<LibraryManifestEntry>) -> LibraryManifest {
-        LibraryManifest {
-            schema_version: 1,
-            generated_at: "2026-07-14T00:00:00Z".to_owned(),
-            entries,
-        }
+    let mut files = Vec::with_capacity(package.members.len());
+    for (index, (member, artifact)) in package.members.iter().zip(resolved.members()).enumerate() {
+        let path = match local_paths {
+            Some(paths) => path_ref(&paths[index])?,
+            None => PathRef::new(format!(
+                "catalog://{}/{}/{}",
+                vendor.vendor.id, package.package_id, member.install_as
+            ))
+            .map_err(|error| library_error(format!("invalid virtual catalog path: {error}")))?,
+        };
+        files.push(build_component_file(path, artifact, &member.install_as)?);
     }
 
-    #[test]
-    fn index_exposes_the_composed_package_used_by_artifact_download() {
-        let index = manifest_artifact_index(&manifest(vec![
-            streamline_entry("sl_common", "sl.common.dll", &"a".repeat(64)),
-            streamline_entry("sl_interposer", "sl.interposer.dll", &"b".repeat(64)),
-        ]))
-        .expect("valid composed package");
+    let primary_name = package
+        .members
+        .first()
+        .ok_or_else(|| library_error(format!("package `{}` has no members", package.package_id)))?
+        .install_as
+        .as_str();
+    let artifact = LibraryArtifact::new(
+        resolved.artifact_id().clone(),
+        technology,
+        primary_name,
+        files,
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .map_err(|error| library_error(format!("failed to build catalog artifact: {error}")))?
+    .with_metadata(package_metadata(package)?)
+    .with_source(CATALOG_SOURCE)
+    .map_err(|error| library_error(format!("failed to attach catalog source: {error}")))?;
+    validate_runtime_artifact(&artifact)
+        .map_err(|error| library_error(format!("invalid runtime package contract: {error}")))?;
+    Ok(Some(artifact))
+}
 
-        let package_ids: Vec<_> = index.package_ids().cloned().collect();
-        assert_eq!(package_ids.len(), 1);
-        let package_id = &package_ids[0];
+/// Builds the compact package projection consumed by desktop clients.
+pub(super) fn package_summary(
+    resolved: &ResolvedPackage<'_>,
+    artifact: &LibraryArtifact,
+    is_downloaded: bool,
+) -> Result<LibraryPackageSummary, ServiceError> {
+    let package = resolved.package();
+    let primary = resolved
+        .members()
+        .next()
+        .ok_or_else(|| library_error(format!("package `{}` has no members", package.package_id)))?;
+    let primary_sha256 = primary.dll.sha256.clone();
+    let size_bytes = resolved.members().try_fold(0_u64, |total, member| {
+        total.checked_add(member.dll.size_bytes).ok_or_else(|| {
+            library_error(format!(
+                "package `{}` member size overflows",
+                package.package_id
+            ))
+        })
+    })?;
 
-        let (package_artifact, member_ids) = index
-            .package(package_id)
-            .expect("download resolves the package");
-        assert_eq!(package_artifact.id(), package_id);
-        assert_eq!(member_ids, ["sl_common", "sl_interposer"]);
-        assert!(
-            index.single_entry_id(package_id).is_none(),
-            "package ids are not single-file entry ids"
+    Ok(LibraryPackageSummary {
+        package_id: package.package_id.clone(),
+        artifact_id: artifact.id().as_str().to_owned(),
+        vendor: resolved.vendor().vendor.id.clone(),
+        technology: package.technology.clone(),
+        variant: package.variant.clone(),
+        display_name: package.display_name.clone(),
+        release: package.release.clone(),
+        target: package.target.clone(),
+        revision_sha256: package.revision_sha256.clone(),
+        primary_file_name: primary.file_name.clone(),
+        primary_sha256,
+        primary_signature: primary.signature.clone(),
+        size_bytes,
+        is_downloaded,
+    })
+}
+
+pub(super) fn package_is_supported(package: &LibraryPackage) -> bool {
+    package_technology(package).is_some()
+}
+
+fn package_technology(package: &LibraryPackage) -> Option<GraphicsTechnology> {
+    GraphicsTechnology::from_slug(&package.technology)
+        .filter(|technology| *technology != GraphicsTechnology::Unknown)
+}
+
+fn build_component_file(
+    path: PathRef,
+    artifact: &LibraryArtifactRecord,
+    install_as: &str,
+) -> Result<ComponentFile, ServiceError> {
+    let version = Version::parse(&artifact.file_version)
+        .map_err(|error| library_error(format!("invalid artifact file version: {error}")))?;
+    let sha256 = Sha256Hash::new(&artifact.dll.sha256)
+        .map_err(|error| library_error(format!("invalid artifact digest: {error}")))?;
+    Ok(ComponentFile::new(path)
+        .with_version(version)
+        .with_sha256(sha256)
+        .with_install_as(install_as))
+}
+
+fn package_metadata(package: &LibraryPackage) -> Result<ArtifactMetadata, ServiceError> {
+    let release = Version::parse(&package.release.version)
+        .map_err(|error| library_error(format!("invalid package release version: {error}")))?;
+    let mut metadata = ArtifactMetadata::default()
+        .with_release_version(release)
+        .with_runtime_target(match &package.target.compatibility {
+            Some(compatibility) => RuntimeTarget::new(package.target.architecture)
+                .with_compatibility(compatibility.clone()),
+            None => RuntimeTarget::new(package.target.architecture),
+        });
+    if let Some(LibraryProvenance::Nuget {
+        package_id,
+        version,
+        ..
+    }) = &package.provenance
+    {
+        metadata = metadata.with_upstream_package(
+            UpstreamPackage::new(UpstreamPackageProvider::NuGet, package_id, version)
+                .map_err(|error| library_error(format!("invalid NuGet provenance: {error}")))?,
         );
-
-        let (artifacts, entry_ids, _) = index.into_catalog_parts();
-        assert_eq!(entry_ids.len(), 2);
-        assert_eq!(artifacts.len(), 3, "two singles + one package");
-        assert!(
-            artifacts.iter().any(|artifact| artifact.id() == package_id),
-            "catalog listing includes the package artifact download materializes"
-        );
     }
+    Ok(metadata)
+}
 
-    #[test]
-    fn index_propagates_invalid_composed_package_instead_of_skipping_it() {
-        let error = manifest_artifact_index(&manifest(vec![
-            streamline_entry("sl_common_lower", "sl.common.dll", &"a".repeat(64)),
-            streamline_entry("sl_common_upper", "SL.COMMON.dll", &"b".repeat(64)),
-        ]))
-        .expect_err("duplicate package target must reject the whole manifest index");
-
-        assert!(
-            error
-                .to_string()
-                .contains("duplicate composed package install target")
-        );
-    }
+fn path_ref(path: &Path) -> Result<PathRef, ServiceError> {
+    PathRef::new(path.to_string_lossy().as_ref())
+        .map_err(|error| library_error(format!("invalid local artifact path: {error}")))
 }

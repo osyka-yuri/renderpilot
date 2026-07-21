@@ -56,6 +56,24 @@ describe('createGameDetailsPageModel', () => {
     expect(publishApplyCompletedNotification).toHaveBeenCalledWith(1);
   });
 
+  it('reports the backend file count for an atomic bundle swap', async () => {
+    vi.mocked(applySwap).mockResolvedValue(createApplySwapResult(2));
+    const { model } = createModel();
+
+    await model.handleSwap('component-dxc', 'artifact-dxc', true);
+
+    expect(publishApplyCompletedNotification).toHaveBeenCalledWith(2);
+  });
+
+  it('reports the backend file count for a bundle rollback', async () => {
+    vi.mocked(rollbackComponent).mockResolvedValue(createRollbackResult(3));
+    const { model } = createModel();
+
+    await model.handleRollback('component-fsr');
+
+    expect(publishRollbackCompletedNotification).toHaveBeenCalledWith(3);
+  });
+
   it('does not notify when runExclusive returns null', async () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult());
     const { model } = createModel({ runExclusive: () => Promise.resolve(null) });
@@ -99,6 +117,17 @@ describe('createGameDetailsPageModel', () => {
       expect(reloadGameDetails).toHaveBeenCalledTimes(1);
       expect(publishApplyCompletedNotification).toHaveBeenCalledWith(2);
       expect(publishErrorNotification).not.toHaveBeenCalled();
+    });
+
+    it('sums physical files across successful bundle operations', async () => {
+      vi.mocked(applySwap)
+        .mockResolvedValueOnce(createApplySwapResult(2))
+        .mockResolvedValueOnce(createApplySwapResult(1));
+      const { model } = createModel();
+
+      await model.handleBulkSwap(items);
+
+      expect(publishApplyCompletedNotification).toHaveBeenCalledWith(3);
     });
 
     it('isolates a failed plugin: notifies applied count and surfaces the typed error', async () => {
@@ -161,6 +190,17 @@ describe('createGameDetailsPageModel', () => {
       expect(publishErrorNotification).not.toHaveBeenCalled();
     });
 
+    it('sums physical files across successful bundle rollbacks', async () => {
+      vi.mocked(rollbackComponent)
+        .mockResolvedValueOnce(createRollbackResult(3))
+        .mockResolvedValueOnce(createRollbackResult(1));
+      const { model } = createModel();
+
+      await model.handleBulkRollback(['c1', 'c2']);
+
+      expect(publishRollbackCompletedNotification).toHaveBeenCalledWith(4);
+    });
+
     it('isolates a failed plugin: notifies restored count and surfaces the typed error', async () => {
       const commandError = new Error('rollback failed');
       vi.mocked(rollbackComponent)
@@ -188,19 +228,21 @@ describe('createGameDetailsPageModel', () => {
   });
 });
 
-function createApplySwapResult(): ApplySwapResult {
+function createApplySwapResult(updatedFileCount = 1): ApplySwapResult {
   return {
     game_id: ACTIVE_GAME_ID,
     component_id: 'component-1',
     applied_path: '/game/file.dll',
     replacement_path: '/catalog/file.dll',
+    updated_file_count: updatedFileCount,
   };
 }
 
-function createRollbackResult(): RollbackComponentResult {
+function createRollbackResult(restoredFileCount = 1): RollbackComponentResult {
   return {
     game_id: ACTIVE_GAME_ID,
     component_id: 'component-1',
     restored_path: '/game/file.dll',
+    restored_file_count: restoredFileCount,
   };
 }

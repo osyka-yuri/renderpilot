@@ -70,6 +70,14 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
         .map(|json| {
             assert_eq!(json["component_id"], "component:fsr");
             assert_eq!(json["applied_path"], path_string(&original_path));
+            assert_eq!(
+                json["updated_file_count"], 3,
+                "one replacement plus two additions affect three live files"
+            );
+            assert!(
+                json.get("affected_file_count").is_none(),
+                "the generic pre-refactor counter must not remain in the public contract"
+            );
         })
         .expect("apply should succeed");
 
@@ -119,6 +127,19 @@ fn apply_then_rollback_fsr_upgrade_replaces_entrypoint_and_adds_members() {
             "--component",
             "component:fsr",
         ]))
+        .map(|output| {
+            serde_json::from_str::<serde_json::Value>(&output).expect("valid rollback json")
+        })
+        .map(|json| {
+            assert_eq!(
+                json["restored_file_count"], 1,
+                "the single baseline file is restored while overlay-only files are removed"
+            );
+            assert!(
+                json.get("affected_file_count").is_none(),
+                "the generic pre-refactor counter must not remain in the public contract"
+            );
+        })
         .expect("rollback should succeed");
 
     assert_eq!(

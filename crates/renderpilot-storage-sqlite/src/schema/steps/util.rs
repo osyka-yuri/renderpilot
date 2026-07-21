@@ -5,21 +5,23 @@ use rusqlite::Connection;
 
 use crate::error::storage_context;
 
-pub(super) fn ensure_installed_addons_column(
+pub(super) fn ensure_column(
     connection: &Connection,
+    table_name: &str,
     column_name: &str,
     alter_sql: &str,
 ) -> AppResult<()> {
-    if table_has_column(connection, "installed_addons", column_name)? {
+    if table_has_column(connection, table_name, column_name)? {
         return Ok(());
     }
 
-    connection
-        .execute_batch(alter_sql)
-        .map_err(|error| storage_context("could not add installed_addons metadata column", error))
+    connection.execute_batch(alter_sql).map_err(|error| {
+        let context = format!("could not add {table_name}.{column_name} column");
+        storage_context(&context, error)
+    })
 }
 
-fn table_has_column(
+pub(super) fn table_has_column(
     connection: &Connection,
     table_name: &str,
     column_name: &str,

@@ -28,11 +28,11 @@ pub fn build_swap_operation_plan(
     ))
 }
 
-/// Describes every write the additive swap performs, keyed by each artifact
-/// file's **install target** name (its `install_as`, e.g. the FSR 4 loader →
-/// `amd_fidelityfx_dx12.dll`, or its own name): a target already present in the
-/// component is a replace, a new target is an add. The swap never removes the
-/// game's other files, so there is no remove entry.
+/// Describes every resolved transition write, keyed by each artifact file's
+/// **install target** name (its `install_as`, e.g. the FSR 4 loader →
+/// `amd_fidelityfx_dx12.dll`, or its own name). Component-aware package
+/// projections such as standalone DXC and Streamline are applied before plan
+/// actions are classified.
 fn build_plan_files(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
@@ -49,9 +49,10 @@ fn build_plan_files(
         .map(|file| (file_name_key(file.path()), file))
         .collect();
 
-    let mut files = Vec::with_capacity(artifact.files().len());
+    let transition_members = resolve_plan_members(component, artifact)?;
+    let mut files = Vec::with_capacity(transition_members.len());
 
-    for artifact_file in artifact.files() {
+    for artifact_file in transition_members {
         let install_name = fsr::resolve_artifact_install_target(artifact_file, component.files());
         match current_by_name.get(&install_name.to_ascii_lowercase()) {
             Some(current) => files.push(OperationPlanFile::replace(current, artifact_file)),
@@ -63,6 +64,19 @@ fn build_plan_files(
     }
 
     Ok(files)
+}
+
+fn resolve_plan_members<'a>(
+    component: &GraphicsComponent,
+    artifact: &'a LibraryArtifact,
+) -> AppResult<Vec<&'a ComponentFile>> {
+    if component.technology() == artifact.technology() {
+        crate::resolve_transition_members(component, artifact)
+    } else {
+        // Keep the plan inspectable so assessment can expose the explicit
+        // TechnologyMismatch blocker instead of failing DTO construction.
+        Ok(artifact.files().iter().collect())
+    }
 }
 
 fn file_name_key(path: &PathRef) -> String {

@@ -1,7 +1,13 @@
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind,
-    ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
-    PathRef, Sha256Hash, Swappability, Version,
+    Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
+    ComponentKind, ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology,
+    LibraryArtifact, PathRef, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability,
+    UpstreamPackage, UpstreamPackageProvider, Version,
+};
+
+use crate::{
+    SwapTargetProfile,
+    dxc::{COMPILER_FILE_NAME, VALIDATOR_FILE_NAME},
 };
 
 use super::dto::{CandidateComparison, ComponentReplacementCandidates};
@@ -56,6 +62,74 @@ fn selects_only_same_technology_candidates() {
         groups[0].candidates()[0].comparison(),
         CandidateComparison::NewerVersion
     );
+}
+
+#[test]
+fn d3d12_candidates_require_the_exact_executable_sdk_line() {
+    let component = sample_component(
+        "component:game-a:d3d12",
+        "game:a",
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+        Some("1.618.3"),
+        &"a".repeat(64),
+        "C:/Games/GameA/D3D12Core.dll",
+    );
+    let artifact = sample_artifact(
+        "artifact:d3d12-618-5",
+        GraphicsTechnology::D3D12Agility,
+        Some("1.618.5"),
+        &"b".repeat(64),
+        "C:/Library/D3D12Core.dll",
+        None,
+    )
+    .with_metadata(
+        ArtifactMetadata::default().with_runtime_target(
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
+        ),
+    );
+
+    let blocked = find_replacement_candidates(
+        std::slice::from_ref(&component),
+        std::slice::from_ref(&artifact),
+        &CandidateContext::empty()
+            .with_target_profile(SwapTargetProfile::new(Some(Architecture::X64), Some(619))),
+    );
+    assert!(blocked.is_empty());
+
+    let allowed = find_replacement_candidates(
+        &[component],
+        &[artifact],
+        &CandidateContext::empty()
+            .with_target_profile(SwapTargetProfile::new(Some(Architecture::X64), Some(618))),
+    );
+    assert_eq!(allowed.len(), 1);
+    assert_eq!(allowed[0].candidates().len(), 1);
+}
+
+#[test]
+fn dxc_candidates_allow_a_standalone_installed_compiler() {
+    let component = sample_component(
+        "component:game-a:dxc",
+        "game:a",
+        GraphicsTechnology::MicrosoftDxc,
+        Swappability::Swappable,
+        Some("1.5.0"),
+        &"a".repeat(64),
+        &format!("C:/Games/GameA/{COMPILER_FILE_NAME}"),
+    );
+    let artifact = dxc_package_artifact();
+
+    let groups = find_replacement_candidates(
+        &[component],
+        &[artifact],
+        &CandidateContext::empty()
+            .with_target_profile(SwapTargetProfile::new(Some(Architecture::X64), None)),
+    );
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
 }
 
 #[test]
@@ -485,13 +559,13 @@ fn multi_file_streamline_package_sorts_ahead_of_single_file_twin() {
         "C:/Lib/sl.common.dll",
         None,
     );
-    // Force ManifestDownloaded so trust alone does not explain package winning.
+    // Force CatalogDownloaded so trust alone does not explain package winning.
     let single = LibraryArtifact::new(
         single.id().clone(),
         GraphicsTechnology::NvidiaStreamline,
         "sl.common.dll",
         single.files().to_vec(),
-        ArtifactTrustLevel::ManifestDownloaded,
+        ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("single");
     let package = streamline_package_artifact("artifact:sl-pkg-2.9", "2.9.0", 2);
@@ -508,7 +582,7 @@ fn multi_file_streamline_package_sorts_ahead_of_single_file_twin() {
 }
 
 #[test]
-fn manifest_downloaded_outranks_local_observed_for_same_version_key() {
+fn catalog_downloaded_outranks_local_observed_for_same_version_key() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
@@ -535,7 +609,7 @@ fn manifest_downloaded_outranks_local_observed_for_same_version_key() {
                 .with_sha256(Sha256Hash::new("c".repeat(64)).expect("sha"))
                 .with_version(Version::parse("3.7.0").expect("version")),
         ],
-        ArtifactTrustLevel::ManifestDownloaded,
+        ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("manifest artifact");
 
@@ -545,7 +619,7 @@ fn manifest_downloaded_outranks_local_observed_for_same_version_key() {
     assert_eq!(
         groups[0].candidates()[0].artifact_id(),
         manifest.id(),
-        "ManifestDownloaded must outrank LocalObserved when version keys collide"
+        "CatalogDownloaded must outrank LocalObserved when version keys collide"
     );
 }
 
@@ -641,6 +715,44 @@ fn identical_sha256_is_returned_as_candidate() {
     assert_eq!(groups[0].candidates().len(), 1);
 }
 
+#[test]
+fn package_backed_candidate_exposes_the_release_version_not_pe_file_version() {
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let artifact = sample_artifact(
+        "artifact:package-version",
+        GraphicsTechnology::DlssSuperResolution,
+        Some("101.7.2207.20"),
+        &"b".repeat(64),
+        "C:/Library/dxil.dll",
+        None,
+    )
+    .with_metadata(
+        ArtifactMetadata::default().with_upstream_package(
+            UpstreamPackage::new(
+                UpstreamPackageProvider::NuGet,
+                "Microsoft.Direct3D.DXC",
+                "1.7.2207.7",
+            )
+            .expect("package"),
+        ),
+    );
+
+    let groups = find_test_candidates(&[component], &[artifact]);
+
+    assert_eq!(
+        groups[0].candidates()[0].version().map(Version::as_str),
+        Some("1.7.2207.7")
+    );
+}
+
 fn find_test_candidates(
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
@@ -712,6 +824,48 @@ fn sample_artifact(
     }
 }
 
+fn dxc_package_artifact() -> LibraryArtifact {
+    const VERSION: &str = "1.8.2505.28";
+
+    let compiler = ComponentFile::new(
+        PathRef::new(format!("C:/Library/{COMPILER_FILE_NAME}")).expect("compiler path"),
+    )
+    .with_sha256(Sha256Hash::new("b".repeat(64)).expect("compiler hash"))
+    .with_version(Version::parse(VERSION).expect("compiler version"));
+    let validator = ComponentFile::new(
+        PathRef::new(format!("C:/Library/{VALIDATOR_FILE_NAME}")).expect("validator path"),
+    )
+    .with_sha256(Sha256Hash::new("c".repeat(64)).expect("validator hash"))
+    .with_version(Version::parse(VERSION).expect("validator version"));
+
+    LibraryArtifact::new(
+        ArtifactId::for_bundle(
+            [&compiler, &validator]
+                .into_iter()
+                .filter_map(ComponentFile::sha256),
+        ),
+        GraphicsTechnology::MicrosoftDxc,
+        COMPILER_FILE_NAME,
+        vec![compiler, validator],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("DXC artifact")
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_release(Version::parse(VERSION).expect("release version"), None)
+            .expect("release metadata")
+            .with_runtime_target(RuntimeTarget::new(Architecture::X64))
+            .with_upstream_package(
+                UpstreamPackage::new(
+                    UpstreamPackageProvider::NuGet,
+                    "Microsoft.Direct3D.DXC",
+                    VERSION,
+                )
+                .expect("upstream package"),
+            ),
+    )
+}
+
 /// Multi-file Streamline component with optional per-file PE versions.
 fn streamline_component(files: &[(&str, Option<&str>)]) -> GraphicsComponent {
     let mut component = GraphicsComponent::new(
@@ -754,7 +908,7 @@ fn streamline_package_artifact(
         GraphicsTechnology::NvidiaStreamline,
         "sl.common.dll",
         files,
-        ArtifactTrustLevel::ManifestDownloaded,
+        ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("streamline package")
 }
@@ -774,7 +928,7 @@ fn split_package_artifact(artifact_id: &str, version: &str) -> LibraryArtifact {
         GraphicsTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
         vec![upscaler, loader],
-        ArtifactTrustLevel::ManifestDownloaded,
+        ArtifactTrustLevel::CatalogDownloaded,
     )
     .expect("split package artifact should be valid")
 }

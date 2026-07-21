@@ -149,6 +149,7 @@ export const es: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': 'Sin versiones alternativas',
   'gameDetails.version.restoreOriginal': 'Restaurar {fileName} original',
+  'gameDetails.version.fileCount': { one: '1 archivo', other: '{count} archivos' },
 
   'gameDetails.vendor.description': 'Cambiar la versión del componente.',
 

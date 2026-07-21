@@ -1,14 +1,15 @@
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { SvelteMap } from 'svelte/reactivity';
 import {
   vendorOptions,
   typeOptionsByVendor,
-  groupKeyForType,
-  libraryIdToGroupKey,
-  selectLatestStableEntries,
+  filterPackageRows,
+  selectLatestStablePackages,
   getDefaultTypeForVendor,
   isVendor,
   type Vendor,
   type LibraryTypeValue,
+  type LibraryPackageRow,
+  shouldShowPackageDisplayName,
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
 import { runWithConcurrency } from '@shared/concurrency';
@@ -16,32 +17,28 @@ import { clearDownloadProgress, sumDownloadFractions } from '@shared/lib';
 import { createDisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import {
-  type LibraryManifest,
-  type LibraryManifestEntry,
-  type LibraryState,
-  getLibrariesManifest,
-  getLibraryStates,
-  downloadLibrary,
-  deleteLibrary,
+  type LibraryPackageState,
+  type LibraryPackageSummary,
+  listLibraryPackages,
+  downloadLibraryPackage,
+  deleteLibraryPackage,
 } from '@entities/library';
 
-type EntryAction = 'download' | 'delete';
-type ManifestLoader = () => Promise<LibraryManifest>;
+type PackageAction = 'download' | 'delete';
+type PackageActionOrigin = 'user' | 'bulk';
 
 type LoadLibrariesOptions = {
   mode: 'initial' | 'refresh';
-  loadManifest: ManifestLoader;
   failureContext: string;
 };
 
-type RunEntryActionOptions = {
-  entryId: string;
-  action: EntryAction;
+type RunPackageActionOptions = {
+  packageId: string;
+  action: PackageAction;
+  origin: PackageActionOrigin;
   failureContext: string;
-  refreshFailureContext: string;
-  execute: (entryId: string) => Promise<unknown>;
-  // When true, a failure is logged but not surfaced in the page-level error
-  // banner. Bulk runs report a single summary toast instead of N banner errors.
+  execute: (packageId: string) => Promise<LibraryPackageState>;
+  // Bulk runs report one summary toast instead of N page-level errors.
   suppressErrorBanner?: boolean;
 };
 
@@ -53,7 +50,6 @@ const DEFAULT_TYPE_BY_VENDOR = Object.freeze(
   ),
 ) as Readonly<Record<Vendor, LibraryTypeValue>>;
 
-/** Outcome of a "download all latest" run, aggregated across every target. */
 export type BulkDownloadResult = Readonly<{
   succeeded: number;
   failed: number;
@@ -61,71 +57,40 @@ export type BulkDownloadResult = Readonly<{
 }>;
 
 const EMPTY_BULK_RESULT: BulkDownloadResult = { succeeded: 0, failed: 0, skipped: 0 };
-
-// Download a few entries at once: faster than serial without saturating the
-// connection. Each entry still streams its own per-row progress.
 const BULK_DOWNLOAD_CONCURRENCY = 3;
 
 export type LibrariesPageModel = ReturnType<typeof createLibrariesPageModel>;
 
 export function createLibrariesPageModel() {
-  // ---------------------------------------------------------------------------
-  // State
-  // ---------------------------------------------------------------------------
-
-  let manifest = $state<LibraryManifest | null>(null);
-  let states = $state<LibraryState[]>([]);
+  let packages = $state<LibraryPackageSummary[]>([]);
+  let hasLoaded = $state(false);
   let loading = $state(true);
   let refreshing = $state(false);
   let errorMessage = $state<string | null>(null);
-  // One in-flight action per entry; actions on different entries run concurrently.
-  const pendingActions = new SvelteMap<string, EntryAction>();
-  // Stable reactive set (synced from `states`) so the static table columns can
-  // read per-row membership without ever being recreated.
-  const downloadedEntryIds = new SvelteSet<string>();
+  const pendingActions = new SvelteMap<string, PackageAction>();
   let activeVendor = $state<Vendor>(DEFAULT_VENDOR);
   let activeType = $state<LibraryTypeValue>(DEFAULT_TYPE_BY_VENDOR[DEFAULT_VENDOR]);
   const lastTypeByVendor = $state<Record<Vendor, LibraryTypeValue>>({ ...DEFAULT_TYPE_BY_VENDOR });
-  // "Download all latest" progress; meaningful only while `bulkDownloading`.
   let bulkDownloading = $state(false);
   let bulkTotal = $state(0);
   let bulkCompleted = $state(0);
-  // Snapshot of the batch's entry ids, taken at start: `targets` would otherwise
-  // shrink mid-run as `downloadedEntryIds` updates. Used to aggregate progress.
   let bulkTargetIds = $state<readonly string[]>([]);
 
-  // ---------------------------------------------------------------------------
-  // Internal
-  // ---------------------------------------------------------------------------
-
   let mounted = false;
-  // Stale-result guards: a slower, older manifest load or states snapshot can
-  // never overwrite a fresher one, and nothing applies once disposed.
+  let lastRequestedRefreshKey = 0;
+  let refreshQueued = false;
   const loadRequests = createDisposableRequestChannel(() => !mounted);
-  const stateRequests = createDisposableRequestChannel(() => !mounted);
-
-  // ---------------------------------------------------------------------------
-  // Derived
-  // ---------------------------------------------------------------------------
 
   const isBusy = $derived(loading || refreshing || pendingActions.size > 0 || bulkDownloading);
-  const activeGroupKey = $derived(groupKeyForType(activeType));
-  const filteredEntries = $derived(filterEntriesByGroup(manifest, activeGroupKey));
+  const filteredPackages = $derived(filterPackageRows(packages, activeVendor, activeType));
+  const showPackageDisplayName = $derived(shouldShowPackageDisplayName(filteredPackages));
   const emptyMessage = $derived(
-    getEmptyMessage(loading, manifest, errorMessage, filteredEntries.length),
+    getEmptyMessage(loading, hasLoaded, errorMessage, filteredPackages.length),
   );
-  // Newest stable build of every library (Streamline bundle handled as a set),
-  // and how many of those still need downloading.
-  const latestStableEntries = $derived(selectLatestStableEntries(manifest));
+  const latestStablePackages = $derived(selectLatestStablePackages(packages));
   const latestStablePendingCount = $derived(
-    latestStableEntries.filter((entry) => !downloadedEntryIds.has(entry.entry_id)).length,
+    latestStablePackages.filter((row) => !row.is_downloaded).length,
   );
-  // Smooth aggregate for the bulk bar: finished entries count as 1, in-flight
-  // ones add their own byte fraction, so the bar advances even within a single
-  // large download. In-flight entries are identified via `pendingActions`,
-  // intersected with the batch snapshot so a stray single-row download can't
-  // leak into the sum; finished entries are already covered by `bulkCompleted`,
-  // so there is no double counting.
   const bulkProgressValue = $derived.by(() => {
     if (!bulkDownloading) {
       return 0;
@@ -134,71 +99,54 @@ export function createLibrariesPageModel() {
     return bulkCompleted + sumDownloadFractions(inFlight);
   });
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
-
   async function loadInitialLibraries(): Promise<void> {
-    await loadLibraries({
-      mode: 'initial',
-      loadManifest: getLibrariesManifest,
-      failureContext: t('libraries.error.loadFailed'),
-    });
+    await loadLibraries({ mode: 'initial', failureContext: t('libraries.error.loadFailed') });
   }
 
-  /**
-   * Reloads the libraries list from the local/cache path.
-   *
-   * Shell Refresh owns the Forced CDN fetch (`refresh_remote_manifests`); this
-   * path only re-reads the already-updated disk cache so we do not double-hit
-   * the CDN after a global refresh.
-   */
-  async function refreshManifest(): Promise<void> {
+  /** Re-reads the already activated catalog projection after a shell refresh. */
+  async function refreshCatalog(): Promise<void> {
     if (isBusy) {
+      refreshQueued = true;
       return;
     }
+    refreshQueued = false;
+    await loadLibraries({ mode: 'refresh', failureContext: t('libraries.error.refreshFailed') });
+  }
 
-    await loadLibraries({
-      mode: 'refresh',
-      loadManifest: getLibrariesManifest,
-      failureContext: t('libraries.error.refreshFailed'),
-    });
+  /** Consumes each shell refresh generation at most once. */
+  function requestCatalogRefresh(refreshKey: number): void {
+    if (refreshKey <= lastRequestedRefreshKey) {
+      return;
+    }
+    lastRequestedRefreshKey = refreshKey;
+    void refreshCatalog();
   }
 
   async function loadLibraries(options: LoadLibrariesOptions): Promise<void> {
     const requestId = loadRequests.begin();
     const isInitialLoad = options.mode === 'initial';
-
     if (isInitialLoad) {
       loading = true;
     } else {
       refreshing = true;
     }
-
     errorMessage = null;
 
     try {
-      const [nextManifest, nextStates] = await Promise.all([
-        options.loadManifest(),
-        getLibraryStates(),
-      ]);
-
+      const nextPackages = await listLibraryPackages();
       if (!isCurrentLoadRequest(requestId)) {
         return;
       }
-
-      manifest = nextManifest;
-      setStates(nextStates);
+      packages = nextPackages;
+      hasLoaded = true;
     } catch (error) {
       if (!isCurrentLoadRequest(requestId)) {
         return;
       }
-
       if (isInitialLoad) {
-        manifest = null;
-        setStates([]);
+        packages = [];
+        hasLoaded = false;
       }
-
       setError(options.failureContext, error);
     } finally {
       if (isCurrentLoadRequest(requestId)) {
@@ -207,6 +155,7 @@ export function createLibrariesPageModel() {
           refreshing = false;
         }
       }
+      scheduleQueuedRefresh();
     }
   }
 
@@ -214,7 +163,6 @@ export function createLibrariesPageModel() {
     if (typeof value !== 'string' || !isVendor(value)) {
       return;
     }
-
     activeVendor = value;
     activeType = getLastValidTypeForVendor(value);
   }
@@ -223,45 +171,35 @@ export function createLibrariesPageModel() {
     if (typeof value !== 'string' || !isLibraryTypeForVendor(activeVendor, value)) {
       return;
     }
-
     activeType = value;
     lastTypeByVendor[activeVendor] = value;
   }
 
-  async function handleDownload(entryId: string): Promise<boolean> {
-    return runEntryAction({
-      entryId,
+  async function handleDownload(packageId: string): Promise<boolean> {
+    return runPackageAction({
+      packageId,
       action: 'download',
+      origin: 'user',
       failureContext: t('libraries.error.downloadFailed'),
-      refreshFailureContext: t('libraries.error.downloadedRefreshFailed'),
-      execute: downloadLibrary,
+      execute: downloadLibraryPackage,
     });
   }
 
-  async function handleDelete(entryId: string): Promise<boolean> {
-    return runEntryAction({
-      entryId,
+  async function handleDelete(packageId: string): Promise<boolean> {
+    return runPackageAction({
+      packageId,
       action: 'delete',
+      origin: 'user',
       failureContext: t('libraries.error.deleteFailed'),
-      refreshFailureContext: t('libraries.error.deletedRefreshFailed'),
-      execute: deleteLibrary,
+      execute: deleteLibraryPackage,
     });
   }
 
-  /**
-   * Downloads the newest stable build of every library that isn't downloaded
-   * yet (see {@link selectLatestStableEntries}). Reuses the per-entry pipeline,
-   * so each affected row lights up its own spinner/progress; this returns an
-   * aggregate the caller turns into a single summary toast.
-   *
-   * A failing entry never aborts the rest — failures are counted, not thrown.
-   */
   async function downloadAllLatest(): Promise<BulkDownloadResult> {
     if (isBusy) {
       return EMPTY_BULK_RESULT;
     }
-
-    const targets = latestStableEntries.filter((entry) => !downloadedEntryIds.has(entry.entry_id));
+    const targets = latestStablePackages.filter((row) => !row.is_downloaded);
     if (targets.length === 0) {
       return EMPTY_BULK_RESULT;
     }
@@ -269,24 +207,21 @@ export function createLibrariesPageModel() {
     bulkDownloading = true;
     bulkTotal = targets.length;
     bulkCompleted = 0;
-    bulkTargetIds = targets.map((entry) => entry.entry_id);
+    bulkTargetIds = targets.map((row) => row.package_id);
     errorMessage = null;
 
     let succeeded = 0;
     let failed = 0;
     let skipped = 0;
-
     try {
-      await runWithConcurrency(targets, BULK_DOWNLOAD_CONCURRENCY, async (entry) => {
+      await runWithConcurrency(targets, BULK_DOWNLOAD_CONCURRENCY, async (row) => {
         try {
-          const ran = await runEntryAction({
-            entryId: entry.entry_id,
+          const ran = await runPackageAction({
+            packageId: row.package_id,
             action: 'download',
+            origin: 'bulk',
             failureContext: t('libraries.error.downloadFailed'),
-            refreshFailureContext: t('libraries.error.downloadedRefreshFailed'),
-            execute: downloadLibrary,
-            // The batch reports a single summary toast; per-entry failures must
-            // not also pile up in (and flicker) the page-level error banner.
+            execute: downloadLibraryPackage,
             suppressErrorBanner: true,
           });
           if (ran) {
@@ -295,8 +230,6 @@ export function createLibrariesPageModel() {
             skipped += 1;
           }
         } catch {
-          // Already logged by `runEntryAction`; keep going so one bad entry
-          // can't strand the rest of the batch.
           failed += 1;
         } finally {
           bulkCompleted += 1;
@@ -307,39 +240,32 @@ export function createLibrariesPageModel() {
       bulkTotal = 0;
       bulkCompleted = 0;
       bulkTargetIds = [];
+      scheduleQueuedRefresh();
     }
-
     return { succeeded, failed, skipped };
   }
 
-  /**
-   * Runs a download/delete for one entry. Entries are independent: actions on
-   * different entries run concurrently, while a second action on the same
-   * entry (or any action during a manifest load/refresh) is ignored.
-   *
-   * Signals its outcome two ways, by design:
-   * - Returns `true` when the action ran, `false` when it was ignored — callers
-   *   must not report success on `false`.
-   * - On failure it re-throws (after logging/surfacing) so the caller receives
-   *   the original error and can render it (e.g. the row's failure toast uses
-   *   `describeCommandError`); the bulk runner instead counts it as failed.
-   */
-  async function runEntryAction(options: RunEntryActionOptions): Promise<boolean> {
-    if (loading || refreshing || pendingActions.has(options.entryId)) {
+  /** Applies the mutation response directly so successful work stays successful. */
+  async function runPackageAction(options: RunPackageActionOptions): Promise<boolean> {
+    if (
+      loading ||
+      refreshing ||
+      pendingActions.has(options.packageId) ||
+      (bulkDownloading && options.origin === 'user')
+    ) {
       return false;
     }
 
-    pendingActions.set(options.entryId, options.action);
+    pendingActions.set(options.packageId, options.action);
     if (options.action === 'download') {
-      clearDownloadProgress([options.entryId]);
+      clearDownloadProgress([options.packageId]);
     }
     errorMessage = null;
 
     try {
-      await options.execute(options.entryId);
-
+      const state = await options.execute(options.packageId);
       if (mounted) {
-        await refreshLibraryStates(options.refreshFailureContext);
+        applyPackageState(state);
       }
       return true;
     } catch (error) {
@@ -352,87 +278,35 @@ export function createLibrariesPageModel() {
       }
       throw error;
     } finally {
-      pendingActions.delete(options.entryId);
+      pendingActions.delete(options.packageId);
+      scheduleQueuedRefresh();
     }
   }
 
-  async function refreshLibraryStates(errorContext: string): Promise<void> {
-    // Concurrent downloads finish independently; the request channel makes sure
-    // a slower, older snapshot can never overwrite a fresher one.
-    const requestId = stateRequests.begin();
-
-    try {
-      const nextStates = await getLibraryStates();
-
-      if (stateRequests.isActive(requestId) && !stateRequests.isDisposed()) {
-        setStates(nextStates);
-      }
-    } catch (error) {
-      if (mounted) {
-        setError(errorContext, error);
-      }
+  function scheduleQueuedRefresh(): void {
+    if (mounted && refreshQueued && !isBusy) {
+      void refreshCatalog();
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Lifecycle
-  // ---------------------------------------------------------------------------
+  function applyPackageState(state: LibraryPackageState): void {
+    packages = packages.map((row) =>
+      row.package_id === state.package_id ? { ...row, is_downloaded: state.is_downloaded } : row,
+    );
+  }
 
   function init(): void {
     mounted = true;
+    scheduleQueuedRefresh();
   }
 
   function dispose(): void {
     mounted = false;
-    // Invalidate any in-flight loads/refreshes so their results are dropped.
     loadRequests.invalidate();
-    stateRequests.invalidate();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Pure helpers
-  // ---------------------------------------------------------------------------
-
-  function filterEntriesByGroup(
-    currentManifest: LibraryManifest | null,
-    groupKey: ReturnType<typeof groupKeyForType>,
-  ): LibraryManifestEntry[] {
-    return (
-      currentManifest?.entries.filter(
-        (entry) => libraryIdToGroupKey(entry.library.id) === groupKey,
-      ) ?? []
-    );
-  }
-
-  function setStates(nextStates: LibraryState[]): void {
-    states = nextStates;
-    syncDownloadedEntryIds(nextStates);
-  }
-
-  /**
-   * Mirrors `states` into the stable `downloadedEntryIds` set with a minimal
-   * diff, so only rows whose download status actually changed re-render.
-   */
-  function syncDownloadedEntryIds(currentStates: LibraryState[]): void {
-    const nextIds = currentStates.filter((state) => state.is_downloaded).map((state) => state.id);
-
-    for (const id of downloadedEntryIds) {
-      if (!nextIds.includes(id)) {
-        downloadedEntryIds.delete(id);
-      }
-    }
-
-    for (const id of nextIds) {
-      downloadedEntryIds.add(id);
-    }
   }
 
   function getLastValidTypeForVendor(vendor: Vendor): LibraryTypeValue {
     const storedType = lastTypeByVendor[vendor];
-
-    // `lastTypeByVendor` only ever holds validated values (seeded from the
-    // defaults, written by `handleTypeChange`), so this is a pure lookup; the
-    // default is a defensive fallback rather than a repair path.
     return isLibraryTypeForVendor(vendor, storedType)
       ? storedType
       : getDefaultTypeForVendor(vendor);
@@ -444,20 +318,19 @@ export function createLibrariesPageModel() {
 
   function getEmptyMessage(
     isLoading: boolean,
-    currentManifest: LibraryManifest | null,
+    isAvailable: boolean,
     currentError: string | null,
-    entryCount: number,
+    packageCount: number,
   ): string | null {
     if (isLoading) {
       return t('libraries.empty.loading');
     }
-    if (currentManifest === null && currentError !== null) {
+    if (!isAvailable && currentError !== null) {
       return t('libraries.empty.unavailable');
     }
-    if (entryCount === 0) {
+    if (packageCount === 0) {
       return t('libraries.empty.none');
     }
-
     return null;
   }
 
@@ -470,17 +343,9 @@ export function createLibrariesPageModel() {
     console.error(`${context}:`, error);
   }
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
-
   return {
-    // State (read-only)
-    get manifest() {
-      return manifest;
-    },
-    get states() {
-      return states;
+    get packages() {
+      return packages;
     },
     get loading() {
       return loading;
@@ -492,10 +357,7 @@ export function createLibrariesPageModel() {
       return errorMessage;
     },
     get pendingActions() {
-      return pendingActions as ReadonlyMap<string, EntryAction>;
-    },
-    get downloadedEntryIds() {
-      return downloadedEntryIds as ReadonlySet<string>;
+      return pendingActions as ReadonlyMap<string, PackageAction>;
     },
     get activeVendor() {
       return activeVendor;
@@ -515,16 +377,14 @@ export function createLibrariesPageModel() {
     get bulkProgressValue() {
       return bulkProgressValue;
     },
-
-    // Derived
     get isBusy() {
       return isBusy;
     },
-    get activeGroupKey() {
-      return activeGroupKey;
+    get filteredPackages(): LibraryPackageRow[] {
+      return filteredPackages;
     },
-    get filteredEntries() {
-      return filteredEntries;
+    get showPackageDisplayName() {
+      return showPackageDisplayName;
     },
     get emptyMessage() {
       return emptyMessage;
@@ -532,17 +392,14 @@ export function createLibrariesPageModel() {
     get latestStablePendingCount() {
       return latestStablePendingCount;
     },
-
-    // Actions
     loadInitialLibraries,
-    refreshManifest,
+    refreshCatalog,
+    requestCatalogRefresh,
     handleVendorChange,
     handleTypeChange,
     handleDownload,
     handleDelete,
     downloadAllLatest,
-
-    // Lifecycle
     init,
     dispose,
   };

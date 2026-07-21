@@ -1,9 +1,13 @@
 mod hash;
+mod metadata;
 mod version_report;
 
 #[cfg(test)]
 mod tests;
 
+pub use metadata::{
+    ArtifactMetadata, RuntimeCompatibility, RuntimeTarget, UpstreamPackage, UpstreamPackageProvider,
+};
 pub use version_report::{ComponentVersionReport, component_version_report};
 
 use std::{error::Error, fmt};
@@ -12,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ArtifactId, ComponentId, ComponentKind, GameId, GraphicsTechnology, PathRef, Swappability,
-    Version,
+    Version, VersionParseError,
     text::{RequiredTextError, normalize_required_text},
 };
 
@@ -182,6 +186,8 @@ pub struct LibraryArtifact {
     source: Option<String>,
     source_game_id: Option<GameId>,
     trust_level: ArtifactTrustLevel,
+    #[serde(default)]
+    metadata: ArtifactMetadata,
 }
 
 impl LibraryArtifact {
@@ -212,6 +218,7 @@ impl LibraryArtifact {
             source: None,
             source_game_id: None,
             trust_level,
+            metadata: ArtifactMetadata::default(),
         })
     }
 
@@ -252,6 +259,21 @@ impl LibraryArtifact {
         self.primary_file().version()
     }
 
+    /// Returns the user-facing release version.
+    ///
+    /// Package-backed artifacts use the upstream release because individual PE
+    /// members may deliberately carry a different technical file version.
+    pub fn release_version(&self) -> Option<&Version> {
+        self.metadata
+            .release_version()
+            .or_else(|| {
+                self.metadata
+                    .upstream_package()
+                    .map(UpstreamPackage::version)
+            })
+            .or_else(|| self.version())
+    }
+
     /// Returns the required primary artifact SHA-256 hash.
     pub fn sha256(&self) -> &Sha256Hash {
         self.primary_file()
@@ -274,6 +296,11 @@ impl LibraryArtifact {
         self.trust_level
     }
 
+    /// Returns package provenance and runtime constraints.
+    pub const fn metadata(&self) -> &ArtifactMetadata {
+        &self.metadata
+    }
+
     /// Sets a normalized artifact source.
     pub fn with_source(mut self, source: impl Into<String>) -> Result<Self, ComponentError> {
         self.source = Some(normalize_required_text("artifact_source", source)?);
@@ -285,18 +312,33 @@ impl LibraryArtifact {
         self.source_game_id = Some(source_game_id);
         self
     }
+
+    /// Attaches package provenance and runtime constraints.
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: ArtifactMetadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
 }
 
 /// Trust level assigned to an artifact in the local replacement library.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ArtifactTrustLevel {
     /// Artifact was observed during a local game scan.
+    #[serde(rename = "local_observed", alias = "LocalObserved")]
     LocalObserved,
     /// Artifact was imported directly by the user.
+    #[serde(rename = "user_imported", alias = "UserImported")]
     UserImported,
-    /// Artifact was downloaded from the remote manifest.
-    ManifestDownloaded,
+    /// Artifact was materialized from the validated remote catalog.
+    #[serde(
+        rename = "catalog_downloaded",
+        alias = "ManifestDownloaded",
+        alias = "CatalogDownloaded"
+    )]
+    CatalogDownloaded,
     /// Trust level is not known yet.
+    #[serde(rename = "unknown", alias = "Unknown")]
     Unknown,
 }
 
@@ -306,19 +348,19 @@ impl ArtifactTrustLevel {
         match self {
             Self::LocalObserved => "local_observed",
             Self::UserImported => "user_imported",
-            Self::ManifestDownloaded => "manifest_downloaded",
+            Self::CatalogDownloaded => "catalog_downloaded",
             Self::Unknown => "unknown",
         }
     }
 
     /// Lower rank wins when ranking replacement candidates of the same version.
     ///
-    /// Prefers CDN/manifest cache over user imports over game-folder
+    /// Prefers the validated catalog cache over user imports over game-folder
     /// observations so the preferred twin survives candidate deduplication.
     #[must_use]
     pub const fn candidate_preference_rank(self) -> u8 {
         match self {
-            Self::ManifestDownloaded => 0,
+            Self::CatalogDownloaded => 0,
             Self::UserImported => 1,
             Self::LocalObserved => 2,
             Self::Unknown => 3,
@@ -331,6 +373,8 @@ impl ArtifactTrustLevel {
 pub enum ComponentError {
     /// A required text field is empty after trimming whitespace.
     EmptyText(&'static str),
+    /// An upstream package release is not a dotted numeric version.
+    InvalidUpstreamPackageVersion(VersionParseError),
     /// A SHA-256 hash is not a 64-character hexadecimal string.
     InvalidSha256Hash,
     /// A library artifact was created without a required SHA-256 hash.
@@ -343,6 +387,9 @@ impl fmt::Display for ComponentError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyText(field) => write!(formatter, "{field} cannot be empty"),
+            Self::InvalidUpstreamPackageVersion(error) => {
+                write!(formatter, "invalid upstream package version: {error}")
+            }
             Self::InvalidSha256Hash => {
                 formatter.write_str("sha256 must be a 64-character hexadecimal string")
             }

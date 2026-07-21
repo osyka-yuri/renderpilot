@@ -108,7 +108,7 @@ pub struct ReplacementCandidate {
     sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
-    manifest_entry_id: Option<String>,
+    catalog_package_id: Option<String>,
     is_downloaded: bool,
     is_debug: bool,
     /// Sort-only: prefer CDN/cache over game-folder observations.
@@ -150,7 +150,7 @@ impl ReplacementCandidate {
         artifact: &LibraryArtifact,
         comparison: CandidateComparison,
         is_downloaded: bool,
-        manifest_entry_id: Option<String>,
+        catalog_package_id: Option<String>,
         is_debug: bool,
     ) -> Self {
         Self {
@@ -161,11 +161,16 @@ impl ReplacementCandidate {
             } else {
                 None
             },
-            version: artifact.version().cloned(),
+            // PE FileVersion remains the artifact's technical version, while
+            // Microsoft NuGet runtimes are presented and ordered by their
+            // actual release version. Some packages intentionally contain
+            // members whose PE versions differ from the package version
+            // (notably historical DXIL builds).
+            version: artifact.release_version().cloned(),
             sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
-            manifest_entry_id,
+            catalog_package_id,
             is_downloaded,
             is_debug,
             trust_level: artifact.trust_level(),
@@ -226,7 +231,10 @@ impl ReplacementCandidate {
         &self.sha256
     }
 
-    /// Returns the candidate version, when known.
+    /// Returns the user-facing release version, when known.
+    ///
+    /// For package-backed artifacts this is the upstream package version;
+    /// otherwise it falls back to the primary file's PE version.
     pub fn version(&self) -> Option<&Version> {
         self.version.as_ref()
     }
@@ -241,9 +249,9 @@ impl ReplacementCandidate {
         self.comparison
     }
 
-    /// Returns the manifest entry id if this candidate is from a manifest entry.
-    pub fn manifest_entry_id(&self) -> Option<&str> {
-        self.manifest_entry_id.as_deref()
+    /// Returns the catalog package id if this candidate is curated remotely.
+    pub fn catalog_package_id(&self) -> Option<&str> {
+        self.catalog_package_id.as_deref()
     }
 }
 

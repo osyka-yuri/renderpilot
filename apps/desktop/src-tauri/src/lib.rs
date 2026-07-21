@@ -259,17 +259,17 @@ fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder 
                 init_state.elevation_attempted
             );
             renderpilot_api::gc_cover_orphans_on_startup(&context);
-            refresh_libraries_manifest_in_background();
+            refresh_libraries_catalog_in_background();
             refresh_catalog_addon_capabilities_in_background(context);
             Ok(())
         },
     )
 }
 
-fn refresh_libraries_manifest_in_background() {
+fn refresh_libraries_catalog_in_background() {
     tauri::async_runtime::spawn(async {
-        if let Err(error) = renderpilot_api::fetch_libraries_manifest().await {
-            log::warn!("Failed to refresh libraries manifest on startup: {error}");
+        if let Err(error) = renderpilot_api::fetch_libraries_catalog().await {
+            log::warn!("Failed to refresh libraries catalog on startup: {error}");
         }
     });
 }
@@ -343,12 +343,10 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::apply_swap,
         commands::rollback_component,
         // Libraries
-        commands::fetch_libraries_manifest,
-        commands::get_libraries_manifest,
-        commands::download_library,
+        commands::list_library_packages,
+        commands::download_library_package,
         commands::download_artifact,
-        commands::delete_library,
-        commands::get_library_states,
+        commands::delete_library_package,
         // NVAPI / DLSS presets
         commands::list_nvapi_supported_settings,
         commands::list_nvapi_setting_states,

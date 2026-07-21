@@ -84,6 +84,16 @@ define_identifier!(
 );
 
 impl ArtifactId {
+    /// Derives the identity of a curated package from its canonical revision.
+    ///
+    /// Unlike a raw content bundle id, this includes the package contract in
+    /// the identity (member order, roles, and install targets are covered by the
+    /// revision published by the catalog producer).
+    #[must_use]
+    pub fn for_package_revision(revision: &Sha256Hash) -> Self {
+        Self(format!("package:{}", revision.as_str()))
+    }
+
     /// Derives a stable artifact identifier for a bundle of files.
     ///
     /// The identifier is the SHA-256 of the alphabetically sorted, concatenated

@@ -153,7 +153,7 @@ pub async fn refresh_remote_manifests(policy: ManifestRefreshPolicy) -> Manifest
 
 async fn refresh_passive() -> ManifestRefreshReport {
     let (libraries, renodx, luma, reshade) = join_catalog_fetches(
-        libraries::get_or_fetch_manifest(),
+        libraries::get_or_fetch_catalog(),
         renodx::manifest_store::get_or_fetch_manifest(),
         luma::manifest_store::get_or_fetch_manifest(),
         reshade_manifest_store::get_or_fetch_catalog(),
@@ -193,7 +193,7 @@ async fn refresh_forced(gate: &ForceRefreshGate) -> ManifestRefreshReport {
 
 async fn force_fetch_all_kinds() -> ManifestRefreshReport {
     let (libraries, renodx, luma, reshade) = join_catalog_fetches(
-        libraries::fetch_manifest(),
+        libraries::fetch_catalog(),
         renodx::manifest_store::fetch_manifest(),
         luma::manifest_store::fetch_manifest(),
         reshade_manifest_store::fetch_catalog(),

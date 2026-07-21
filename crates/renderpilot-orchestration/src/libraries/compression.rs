@@ -3,10 +3,10 @@ use std::io::{Cursor, Read};
 use crate::ServiceError;
 
 use super::library_error;
-use super::types::LibraryManifestEntry;
+use super::types::LibraryArtifactRecord;
 
 /// Hard upper bound for any single decompressed DLL (500 MiB).
-/// Prevents runaway allocation from a crafted or corrupted manifest.
+/// Prevents runaway allocation from a crafted or corrupted catalog.
 pub(crate) const MAX_DLL_SIZE: u64 = 500 * 1024 * 1024;
 
 /// Hard upper bound for a compressed archive (.zst).
@@ -15,10 +15,10 @@ pub(crate) const MAX_DLL_SIZE: u64 = 500 * 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_SIZE: u64 = MAX_DLL_SIZE;
 
 pub(super) fn decompress_library(
-    entry: &LibraryManifestEntry,
+    artifact: &LibraryArtifactRecord,
     payload: &[u8],
 ) -> Result<Vec<u8>, ServiceError> {
-    decompress_zstd(payload, entry.files.dll.size_bytes, &entry.entry_id)
+    decompress_zstd(payload, artifact.dll.size_bytes, &artifact.artifact_id)
 }
 
 /// Decompresses a zstd `payload` to exactly `expected_size` bytes, guarding
@@ -54,34 +54,34 @@ pub(crate) fn decompress_zstd(
 
 /// Validates that a declared DLL size is non-zero and within [`MAX_DLL_SIZE`].
 ///
-/// Shared by manifest validation and decompression so both report identical
+/// Shared by catalog validation and decompression so both report identical
 /// errors for out-of-range sizes.
-pub(super) fn validate_size_constraints(entry_id: &str, size: u64) -> Result<(), ServiceError> {
+pub(super) fn validate_size_constraints(label: &str, size: u64) -> Result<(), ServiceError> {
     if size == 0 {
         return Err(library_error(format!(
-            "DLL size for `{entry_id}` must be greater than zero"
+            "DLL size for `{label}` must be greater than zero"
         )));
     }
 
     if size > MAX_DLL_SIZE {
         return Err(library_error(format!(
-            "DLL size for `{entry_id}` exceeds maximum allowed ({MAX_DLL_SIZE})"
+            "DLL size for `{label}` exceeds maximum allowed ({MAX_DLL_SIZE})"
         )));
     }
 
     Ok(())
 }
 
-fn ensure_exact_size(entry_id: &str, expected: u64, actual: usize) -> Result<(), ServiceError> {
+fn ensure_exact_size(label: &str, expected: u64, actual: usize) -> Result<(), ServiceError> {
     if expected != actual as u64 {
         return Err(library_error(format!(
-            "decompressed size mismatch for `{entry_id}`: expected {expected} bytes, got {actual} bytes"
+            "decompressed size mismatch for `{label}`: expected {expected} bytes, got {actual} bytes"
         )));
     }
 
     Ok(())
 }
 
-fn decode_error(entry_id: &str, err: impl std::fmt::Display) -> ServiceError {
-    library_error(format!("zstd decode failed for `{entry_id}`: {err}"))
+fn decode_error(label: &str, err: impl std::fmt::Display) -> ServiceError {
+    library_error(format!("zstd decode failed for `{label}`: {err}"))
 }
