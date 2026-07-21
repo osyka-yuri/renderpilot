@@ -8,7 +8,7 @@
 //! method wraps in a fresh transaction; the `pub(super)` variant accepts an
 //! existing one for composition in `game_mutations.rs`.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{ComponentFile, ComponentId, GameId};
@@ -22,6 +22,12 @@ const SELECT_BACKUP_SQL: &str = "
     SELECT files_json
     FROM component_backups
     WHERE component_id = :component_id
+";
+
+const SELECT_BACKUPS_FOR_GAME_SQL: &str = "
+    SELECT component_id, files_json
+    FROM component_backups
+    WHERE game_id = :game_id
 ";
 
 const UPSERT_BACKUP_SQL: &str = "
@@ -43,8 +49,8 @@ const DELETE_BACKUP_SQL: &str = "
 impl SqliteStorage {
     /// Returns the recorded pre-swap baseline files for a component, if any.
     ///
-    /// `Some` means the component currently has an applied swap whose original
-    /// files can be restored; `None` means there is nothing to roll back.
+    /// `Some` only means the identity row exists. Orchestration must still
+    /// confirm that the corresponding sidecars or unchanged live bytes exist.
     pub fn get_component_backup(
         &self,
         component_id: &ComponentId,
@@ -69,27 +75,31 @@ impl SqliteStorage {
         })
     }
 
-    /// Returns the ids of components in a game that currently have a swap baseline
-    /// (i.e. can be rolled back). One query per game.
-    pub fn component_backup_ids_for_game(&self, game_id: &GameId) -> AppResult<HashSet<String>> {
+    /// Returns every persisted component baseline for a game in one query.
+    pub fn component_backups_for_game(
+        &self,
+        game_id: &GameId,
+    ) -> AppResult<HashMap<ComponentId, Vec<ComponentFile>>> {
         self.with_connection(|connection| {
             let mut statement = connection
-                .prepare_cached(
-                    "SELECT component_id FROM component_backups WHERE game_id = :game_id",
-                )
+                .prepare_cached(SELECT_BACKUPS_FOR_GAME_SQL)
                 .map_err(storage_error)?;
 
             let rows = statement
                 .query_map(named_params! { ":game_id": game_id.as_str() }, |row| {
-                    row.get::<_, String>(0)
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })
                 .map_err(storage_error)?;
 
-            let mut ids = HashSet::new();
+            let mut backups = HashMap::new();
             for row in rows {
-                ids.insert(row.map_err(storage_error)?);
+                let (component_id, files_json) = row.map_err(storage_error)?;
+                backups.insert(
+                    mapping::component_id(component_id)?,
+                    mapping::component_files(&files_json)?,
+                );
             }
-            Ok(ids)
+            Ok(backups)
         })
     }
 
@@ -141,4 +151,66 @@ pub(super) fn delete_component_backup_within_transaction(
         .map_err(storage_error)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_application::GameRepository;
+    use renderpilot_domain::{
+        GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    };
+
+    use super::*;
+
+    #[test]
+    fn component_backups_for_game_returns_complete_rows_for_only_that_game() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_a = game("steam:1");
+        let game_b = game("steam:2");
+        storage.upsert_game(&game_a).expect("game a");
+        storage.upsert_game(&game_b).expect("game b");
+
+        let component_a = ComponentId::new("component:a").expect("component a");
+        let component_b = ComponentId::new("component:b").expect("component b");
+        let other_component = ComponentId::new("component:other").expect("other component");
+        let baseline_a = baseline("C:/Games/Test/a.dll");
+        let baseline_b = baseline("C:/Games/Test/b.dll");
+        storage
+            .recover_component_backup(game_a.id(), &component_a, &baseline_a)
+            .expect("baseline a");
+        storage
+            .recover_component_backup(game_a.id(), &component_b, &baseline_b)
+            .expect("baseline b");
+        storage
+            .recover_component_backup(game_b.id(), &other_component, &baseline("D:/other.dll"))
+            .expect("other baseline");
+
+        let backups = storage
+            .component_backups_for_game(game_a.id())
+            .expect("game backups");
+        assert_eq!(backups.len(), 2);
+        assert_eq!(backups.get(&component_a), Some(&baseline_a));
+        assert_eq!(backups.get(&component_b), Some(&baseline_b));
+        assert!(!backups.contains_key(&other_component));
+    }
+
+    fn game(id: &str) -> GameInstallation {
+        GameInstallation::new(
+            GameIdentity::new(
+                GameId::new(id).expect("game id"),
+                format!("Game {id}"),
+                Launcher::Manual,
+            )
+            .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(format!("C:/Games/{id}")).expect("install path"),
+        )
+    }
+
+    fn baseline(path: &str) -> Vec<ComponentFile> {
+        vec![ComponentFile::new(
+            PathRef::new(path).expect("component path"),
+        )]
+    }
 }

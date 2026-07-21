@@ -50,7 +50,9 @@ pub(crate) fn reconcile_orphaned_install_locked(
     if records::foreign_record(context, &candidate.game_id, AddonKind::RenoDx)?.is_some() {
         return Ok(None);
     }
-    if let Some(record) = records::record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)? {
+    if let Some(record) =
+        records::active_record_of_kind(context, &candidate.game_id, AddonKind::RenoDx)?
+    {
         return Ok(Some(record));
     }
 

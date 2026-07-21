@@ -1,6 +1,5 @@
 //! Update detection for installed Luma add-ons.
 
-use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{AddonKind, GameId, InstalledAddon, TrackedSourceRole};
 
 use crate::addons::luma::dto::update::LumaUpdateReport;
@@ -39,9 +38,8 @@ pub async fn check_update(
     }
 }
 
-/// Bulk update check over every installed Luma add-on. Filters
-/// `list_installed_addons()` to Luma records — a RenoDX record must never be
-/// update-checked (or reported) as if it were Luma's.
+/// Bulk update check over every active Luma record. The shared records layer
+/// applies kind and tool-presence policy before anything is update-checked.
 ///
 /// Passive path: hosts stay cheap; unbound advisory payloads still one-shot
 /// bind ZIP provenance per game.
@@ -73,11 +71,7 @@ pub fn unknown_updates_for_installed(
 fn installed_luma_records(
     context: &Context,
 ) -> Result<impl Iterator<Item = InstalledAddon>, ServiceError> {
-    Ok(context
-        .storage()
-        .list_installed_addons()?
-        .into_iter()
-        .filter(|record| record.kind() == AddonKind::Luma))
+    records::active_records_of_kind(context, AddonKind::Luma)
 }
 
 async fn check_record(

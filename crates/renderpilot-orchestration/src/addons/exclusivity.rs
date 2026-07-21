@@ -4,12 +4,14 @@
 //! module is the single place either tool asks "is the *other* one already here?"
 //!
 //! Two signals, checked in order:
-//! 1. **DB record** (`records::foreign_record`) — authoritative. A record for
-//!    the other kind means that tool is genuinely managing this game.
+//! 1. **Foreign DB record** (`records::foreign_record`) — authoritative for
+//!    cross-tool ownership. Even when a primary payload was removed manually,
+//!    the row may still own host/config files and SQLite intentionally refuses
+//!    to overwrite it with another add-on kind.
 //! 2. **On-disk unmanaged presence** (`unmanaged_files_present`) — checked only
-//!    when there is no record for *either* kind, so a hand-dropped install (or a
-//!    record lost to a wiped database) still blocks the other tool rather than
-//!    letting it install on top and corrupt the folder.
+//!    when there is no active record for *either* kind, so a hand-dropped install
+//!    (or a record lost to a wiped database) still blocks the other tool rather
+//!    than letting it install on top and corrupt the folder.
 //!
 //! Callers hold the per-game `game_mutation_lock` across the check and the
 //! subsequent write, so a concurrent install of the other tool can't race between
@@ -28,7 +30,7 @@ use super::tool;
 /// Why [`check_blocked`] found the other tool already present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExclusivityBlockKind {
-    /// An `installed_addons` record for the other kind exists.
+    /// An `installed_addons` ownership record for the other kind exists.
     Record,
     /// No record for either kind, but the other tool's files are on disk.
     UnmanagedFiles,
@@ -57,10 +59,10 @@ pub(crate) fn check_blocked(
             kind: ExclusivityBlockKind::Record,
         }));
     }
-    // Unmanaged peer scan only when neither kind is tracked (see module docs).
-    // A requesting record means this tool already owns the install; leftover
-    // peer-shaped files must not contradict `state: installed`.
-    if records::record_of_kind(context, game_id, requesting)?.is_some() {
+    // Unmanaged peer scan only when neither kind is active (see module docs).
+    // An active requesting record means this tool already owns the install;
+    // leftover peer-shaped files must not contradict `state: installed`.
+    if records::active_record_of_kind(context, game_id, requesting)?.is_some() {
         return Ok(None);
     }
     let Some(dirs) = scan_dirs else {
@@ -172,10 +174,13 @@ mod tests {
         let db_dir = tempdir().expect("tempdir");
         let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
         let game_id = GameId::new("steam:1").expect("game id");
+        let managed_dir = tempdir().expect("managed dir");
+        let managed_addon = managed_dir.path().join("renodx-game.addon64");
+        std::fs::write(&managed_addon, b"managed").expect("write managed payload");
         seed_record(
             &context,
             AddonKind::RenoDx,
-            r"C:\games\x\renodx-game.addon64",
+            managed_addon.to_string_lossy().as_ref(),
         );
 
         let dir = tempdir().expect("game dir");
@@ -187,6 +192,58 @@ mod tests {
             .expect("must block");
         assert_eq!(block.other, AddonKind::RenoDx);
         assert_eq!(block.kind, ExclusivityBlockKind::Record);
+    }
+
+    #[test]
+    fn stale_foreign_record_still_blocks_an_unsafe_cross_kind_overwrite() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:1").expect("game id");
+        let removed_addon = game_dir.path().join("renodx-game.addon64");
+        seed_record(
+            &context,
+            AddonKind::RenoDx,
+            removed_addon.to_string_lossy().as_ref(),
+        );
+        let dirs = [game_dir.path()];
+
+        let block = check_blocked(&context, &game_id, AddonKind::Luma, Some(&dirs))
+            .expect("query")
+            .expect("stored ownership must block");
+        assert_eq!(block.other, AddonKind::RenoDx);
+        assert_eq!(block.kind, ExclusivityBlockKind::Record);
+    }
+
+    #[test]
+    fn stale_own_record_does_not_suppress_the_unmanaged_peer_scan() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:1").expect("game id");
+        let removed_addon = game_dir.path().join("renodx-game.addon64");
+        seed_record(
+            &context,
+            AddonKind::RenoDx,
+            removed_addon.to_string_lossy().as_ref(),
+        );
+        let unmanaged_peer = game_dir.path().join("Luma-Game.addon64");
+        std::fs::write(&unmanaged_peer, b"luma").expect("write unmanaged peer");
+        let dirs = [game_dir.path()];
+
+        let block = check_blocked(&context, &game_id, AddonKind::RenoDx, Some(&dirs))
+            .expect("query")
+            .expect("stale ownership must not hide an unmanaged peer");
+        assert_eq!(block.other, AddonKind::Luma);
+        assert_eq!(block.kind, ExclusivityBlockKind::UnmanagedFiles);
+
+        std::fs::remove_file(unmanaged_peer).expect("remove unmanaged peer");
+        assert!(
+            check_blocked(&context, &game_id, AddonKind::RenoDx, Some(&dirs))
+                .expect("query")
+                .is_none(),
+            "without peer files, a stale own record must allow reinstall"
+        );
     }
 
     #[test]

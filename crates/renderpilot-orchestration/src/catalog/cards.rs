@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{AddonKind, GameInstallation};
 
 use crate::ServiceError;
@@ -48,9 +47,7 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
             (game_id, row)
         })
         .collect();
-    let installed_addons: HashMap<_, _> = storage
-        .list_installed_addons()?
-        .into_iter()
+    let installed_addons: HashMap<_, _> = crate::addons::records::active_records(context)?
         .map(|addon| (addon.game_id().clone(), addon.kind()))
         .collect();
     let profile_capabilities = context.profile_capability_snapshot();
@@ -68,7 +65,12 @@ pub fn game_cards(context: &crate::Context) -> Result<Vec<GameCardData>, Service
             let cover_updated_at_ms = covers_by_game
                 .get(game.id())
                 .map(|record| record.updated_at_ms);
-            let rollback_available = !storage.component_backup_ids_for_game(game.id())?.is_empty();
+            let rollback_available = !crate::coordinated_files::available_component_backup_ids(
+                storage,
+                game.id(),
+                &details.components,
+            )?
+            .is_empty();
 
             let ui_state = ui_states.get(game.id().as_str());
             let is_favorite = ui_state.is_some_and(|state| state.is_favorite);

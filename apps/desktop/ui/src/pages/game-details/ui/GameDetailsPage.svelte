@@ -412,7 +412,7 @@
 
       <TabsContent value={OTHER_TAB} class="min-h-0 flex-1 overflow-hidden">
         <ScrollArea class="h-full">
-          <div class="grid gap-3 p-1">
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3 p-1">
             <RenoDxCard {gameId} busy={exclusiveBusy} store={renodx} {onOpenRenoDxSettings} />
             <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
           </div>

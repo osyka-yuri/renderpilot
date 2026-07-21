@@ -81,7 +81,12 @@ pub(super) fn load_apply_swap(
     let component = require_component_for_game(storage, game_id, component_id)?;
     let artifact = require_artifact(storage, artifact_id)?;
 
-    let recorded_baseline = storage.get_component_backup(component_id)?;
+    let recorded_baseline =
+        crate::coordinated_files::load_component_backup_availability(storage, &component)?
+            .into_available();
+    // A stale row without usable bytes is rebased from the current on-disk
+    // component by the normal first-swap path. The successful atomic commit
+    // then replaces the stale identity row with the new honest baseline.
     let first_swap = recorded_baseline.is_none();
     let installed_addon = storage.get_installed_addon(game_id)?;
     let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());

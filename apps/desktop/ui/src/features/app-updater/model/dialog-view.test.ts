@@ -65,13 +65,13 @@ describe('dialog-view', () => {
     ];
 
     expect(
-      Object.fromEntries(phases.map((phase) => [phase, dialogFooter(dialog(phase)).kind])),
+      Object.fromEntries(phases.map((phase) => [phase, dialogFooter(dialog(phase))?.kind ?? null])),
     ).toEqual({
       available: 'install',
-      downloading: 'busy',
-      verifying: 'busy',
-      installing: 'busy',
-      restarting: 'busy',
+      downloading: null,
+      verifying: null,
+      installing: null,
+      restarting: null,
       'prepare-failed': 'retry-download',
       'install-failed': 'retry-install',
       'restart-required': 'restart',

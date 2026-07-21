@@ -118,21 +118,10 @@ fn payload_tracked_paths(record: &InstalledAddon) -> Vec<PathBuf> {
 /// release ZIP.
 #[must_use]
 pub(crate) fn payload_disk_intact(record: &InstalledAddon) -> bool {
-    if !path_is_readable_file(Path::new(record.addon_file().as_str())) {
+    if !crate::fs::is_readable_file(Path::new(record.addon_file().as_str())) {
         return false;
     }
     payload_tracked_paths(record)
         .into_iter()
-        .all(|path| path_is_readable_file(&path))
-}
-
-/// True when `path` is a regular file that can be opened for read (presence alone
-/// is not enough: a directory at the expected path, or a sharing violation, must
-/// force reconverge rather than report "current").
-#[must_use]
-fn path_is_readable_file(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    std::fs::File::open(path).is_ok()
+        .all(|path| crate::fs::is_readable_file(&path))
 }

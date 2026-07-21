@@ -1,6 +1,6 @@
 //! Update detection for installed RenoDX add-ons and shared ReShade Vulkan layer.
 
-use renderpilot_application::{InstalledAddonRepository, SharedArtifactRepository};
+use renderpilot_application::SharedArtifactRepository;
 use renderpilot_domain::{
     AddonKind, Architecture, GameId, InstalledAddon, InstalledAddonHostKind, TrackedSourceRole,
 };
@@ -32,15 +32,14 @@ pub async fn check_update(
     reshade_sources: &ReshadeSourceCatalog,
     game_id: &GameId,
 ) -> Result<RenoDxUpdateReport, ServiceError> {
-    match records::record_of_kind(context, game_id, AddonKind::RenoDx)? {
+    match records::active_record_of_kind(context, game_id, AddonKind::RenoDx)? {
         Some(record) => Ok(check_record(context, manifest, reshade_sources, &record).await),
         None => Ok(RenoDxUpdateReport::new(None, None, None)),
     }
 }
 
-/// Bulk update check over every installed RenoDX add-on. Filters
-/// `list_installed_addons()` to RenoDX records — a Luma record must never be
-/// update-checked (or reported) as if it were RenoDX's.
+/// Bulk update check over every active RenoDX record. The shared records layer
+/// applies kind and tool-presence policy before anything is update-checked.
 pub async fn check_updates(
     context: &Context,
     manifest: &RenoDxManifest,
@@ -69,11 +68,7 @@ pub fn unknown_updates_for_installed(
 fn installed_renodx_records(
     context: &Context,
 ) -> Result<impl Iterator<Item = InstalledAddon>, ServiceError> {
-    Ok(context
-        .storage()
-        .list_installed_addons()?
-        .into_iter()
-        .filter(|record| record.kind() == AddonKind::RenoDx))
+    records::active_records_of_kind(context, AddonKind::RenoDx)
 }
 
 async fn check_record(
@@ -380,6 +375,7 @@ mod tests {
     use super::*;
     use crate::Context;
     use crate::addons::renodx::test_support::{manifest, reshade_sources};
+    use renderpilot_application::InstalledAddonRepository;
     use renderpilot_domain::{InstalledAddon, PathRef};
     use tempfile::tempdir;
 
@@ -432,5 +428,34 @@ mod tests {
         let other =
             other_channel_source(&reshade_sources, ReshadeChannel::Nightly, Architecture::X64);
         assert!(other.is_none());
+    }
+
+    #[test]
+    fn bulk_update_candidates_skip_a_record_whose_addon_was_removed() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:1091501").expect("game id");
+        let addon = game_dir.path().join("renodx-test.addon64");
+        let record = InstalledAddon::new(
+            game_id,
+            AddonKind::RenoDx,
+            PathRef::new(addon.to_string_lossy()).expect("path"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&record)
+            .expect("seed renodx record");
+
+        assert_eq!(
+            installed_renodx_records(&context).expect("records").count(),
+            0
+        );
+
+        std::fs::write(addon, b"addon").expect("write addon");
+        assert_eq!(
+            installed_renodx_records(&context).expect("records").count(),
+            1
+        );
     }
 }

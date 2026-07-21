@@ -44,6 +44,27 @@ impl From<NonEmptyFileError> for ServiceError {
     }
 }
 
+/// Returns whether `path` is a regular file that can be opened for reading.
+///
+/// This is the shared cheap presence probe for status and preflight surfaces.
+/// Mutation boundaries must still read or hash the file before acting on it.
+#[must_use]
+pub(crate) fn is_readable_file(path: &Path) -> bool {
+    matches!(fs::metadata(path), Ok(metadata) if metadata.is_file()) && fs::File::open(path).is_ok()
+}
+
+/// Returns whether `path` is a readable, non-empty regular file.
+///
+/// Use this for payloads and rollback sources where an empty file cannot
+/// represent an active or recoverable installation.
+#[must_use]
+pub(crate) fn is_readable_non_empty_file(path: &Path) -> bool {
+    matches!(
+        fs::metadata(path),
+        Ok(metadata) if metadata.is_file() && metadata.len() > 0
+    ) && fs::File::open(path).is_ok()
+}
+
 /// Verifies that `path` is a non-empty regular file and returns its SHA-256 hash.
 ///
 /// This is the single hashing entry point for non-empty file verification.
@@ -64,4 +85,29 @@ pub(crate) fn sha256_of_non_empty_file(path: &Path) -> Result<Sha256Hash, NonEmp
     }
     renderpilot_detection::sha256_file(path)
         .map_err(|error| NonEmptyFileError::HashFailed(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn readable_file_probes_distinguish_missing_directory_empty_and_non_empty_paths() {
+        let root = tempfile::tempdir().expect("root");
+        let missing = root.path().join("missing.dll");
+        let empty = root.path().join("empty.dll");
+        let payload = root.path().join("payload.dll");
+        fs::write(&empty, b"").expect("empty");
+        fs::write(&payload, b"payload").expect("payload");
+
+        assert!(!is_readable_file(&missing));
+        assert!(!is_readable_file(root.path()));
+        assert!(is_readable_file(&empty));
+        assert!(is_readable_file(&payload));
+
+        assert!(!is_readable_non_empty_file(&missing));
+        assert!(!is_readable_non_empty_file(root.path()));
+        assert!(!is_readable_non_empty_file(&empty));
+        assert!(is_readable_non_empty_file(&payload));
+    }
 }

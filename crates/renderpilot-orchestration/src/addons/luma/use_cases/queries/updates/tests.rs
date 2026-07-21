@@ -15,6 +15,7 @@ use crate::addons::luma::use_cases::update_target::{
     ResolvedUpdateTarget, host_status_from_digests,
 };
 use crate::addons::reshade::fetch::sha256_hex;
+use renderpilot_application::InstalledAddonRepository;
 use renderpilot_domain::{Architecture, PathRef, TrackedSource};
 use tempfile::tempdir;
 

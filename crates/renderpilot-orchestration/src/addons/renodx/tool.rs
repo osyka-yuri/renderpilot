@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use renderpilot_domain::AddonKind;
+use renderpilot_domain::{AddonKind, InstalledAddon};
 
 use crate::addons::capabilities::{CapabilityProbe, CapabilityProbeFuture};
 use crate::addons::matching::MatchFacts;
@@ -63,6 +63,10 @@ impl AddonTool for RenoDxTool {
 
     fn unmanaged_present(&self, dir: &Path) -> bool {
         unmanaged_present(dir)
+    }
+
+    fn record_is_active(&self, record: &InstalledAddon) -> bool {
+        crate::fs::is_readable_non_empty_file(Path::new(record.addon_file().as_str()))
     }
 
     fn finalizing_phase(&self) -> &'static str {

@@ -159,7 +159,10 @@ pub fn rollback_component(
     let game_root = std::path::Path::new(game.install_path().as_str());
     let component = require_component_for_game(storage, game_id, component_id)?;
 
-    let Some(baseline) = storage.get_component_backup(component_id)? else {
+    let Some(baseline) =
+        crate::coordinated_files::load_component_backup_availability(storage, &component)?
+            .into_available()
+    else {
         return Err(AppError::invalid_input(format!(
             "no swap to roll back for component {}",
             component_id.as_str()

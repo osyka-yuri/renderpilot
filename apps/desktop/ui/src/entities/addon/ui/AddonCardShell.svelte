@@ -95,7 +95,7 @@
   </CardContent>
 
   {#if showAttribution}
-    <CardFooter>
+    <CardFooter class="mt-auto">
       <AddonAttribution {...attribution} />
     </CardFooter>
   {/if}

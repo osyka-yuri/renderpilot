@@ -33,7 +33,7 @@ pub(crate) fn blocked_outcome(block: ExclusivityBlock) -> BlockedOutcome {
 /// Everything the tool-specific availability query needs after the shared
 /// preflight steps: record lookup, game load, exclusivity check, and resolution.
 pub(crate) struct AvailabilityPreflight<R> {
-    /// This tool's install record for the game, when one exists.
+    /// This tool's active install record for the game, when one exists.
     pub(crate) record: Option<InstalledAddon>,
     /// The game's installation row.
     pub(crate) game: GameInstallation,
@@ -64,7 +64,7 @@ pub(crate) fn preflight<M, R, F>(
 where
     F: FnOnce(&GameInstallation, &M, Option<&std::path::Path>) -> (GameAnalysis, R),
 {
-    let record = records::record_of_kind(context, game_id, kind)?;
+    let record = records::active_record_of_kind(context, game_id, kind)?;
     let game = require_game(context, game_id)?;
     let override_path = executable_override(context, game_id);
     let (analysis, resolution) = analyze_and_resolve(&game, manifest, override_path.as_deref());

@@ -73,7 +73,10 @@ pub(crate) fn cascade_rollback_specs(
         .collect();
     let mut specs = Vec::new();
     for component in storage.list_components_for_game(game_id)? {
-        let Some(baseline) = storage.get_component_backup(component.id())? else {
+        let Some(baseline) =
+            crate::coordinated_files::load_component_backup_availability(storage, &component)?
+                .into_available()
+        else {
             continue;
         };
         let intersects = component

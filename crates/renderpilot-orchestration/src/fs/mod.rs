@@ -9,7 +9,7 @@
 //! - [`atomic`] -- content-durable write/copy via temp + rename
 //! - [`io`] -- read, remove, BOM strip
 //! - [`mtime`] -- HTTP-date parse/format and best-effort mtime stamping
-//! - [`hash`] -- non-empty regular-file SHA-256
+//! - [`hash`] -- readable-file probes and non-empty regular-file SHA-256
 //! - [`sidecar`] -- classic `.bak` path naming and verify/create/restore
 //!
 //! Call sites use the flat `crate::fs::*` surface re-exported below. Internal
@@ -43,7 +43,9 @@ mod sidecar;
 
 pub(crate) use atomic::{copy_file_atomically, write_file_atomically};
 pub(crate) use durability::{sync_directory_best_effort, sync_parent_directory_best_effort};
-pub(crate) use hash::{NonEmptyFileError, sha256_of_non_empty_file};
+pub(crate) use hash::{
+    NonEmptyFileError, is_readable_file, is_readable_non_empty_file, sha256_of_non_empty_file,
+};
 pub(crate) use io::{read_file, remove_file_if_exists, strip_utf8_bom};
 pub(crate) use mtime::{format_http_date, is_reasonable_file_mtime, stamp_mtime_best_effort};
 pub(crate) use sidecar::naming::{

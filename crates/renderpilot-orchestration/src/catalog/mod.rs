@@ -5,8 +5,7 @@ use std::path::PathBuf;
 
 use renderpilot_application::{
     AppError, AppResult, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
-    GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
-    find_replacement_candidates,
+    GameRepository, OperationPlan, OperationRecord, find_replacement_candidates,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
@@ -101,7 +100,7 @@ pub struct OperationListCatalogEntry {
 
 /// Computes the add-on capabilities (RenoDX / Luma) for a single game using the
 /// same rules as the catalog cards list: profile snapshot (from manifests) union
-/// any currently recorded installed add-on for the game.
+/// any currently active installed add-on for the game.
 pub fn addon_capabilities(
     context: &crate::Context,
     game_id: &GameId,
@@ -109,19 +108,17 @@ pub fn addon_capabilities(
     let profile = context
         .profile_capability_snapshot()
         .capabilities_for(game_id);
-    let installed = context
-        .storage()
-        .get_installed_addon(game_id)?
-        .map(|record| record.kind());
+    let installed =
+        crate::addons::records::active_record(context, game_id)?.map(|record| record.kind());
     Ok(merge_addon_capabilities(&profile, installed))
 }
 
 /// Merge profile-derived capabilities (from manifest matchers in the snapshot)
-/// with any currently tracked installed add-on for the game.
+/// with any currently active installed add-on for the game.
 ///
 /// A game appears to "support" an add-on (and therefore gets a card / badge /
 /// filter option) if *either* the profile snapshot says the manifest matches
-/// *or* the game has a record in `installed_addons`.
+/// *or* the game has an active record in `installed_addons`.
 pub(crate) fn merge_addon_capabilities(
     profile_capabilities: &[AddonKind],
     installed: Option<AddonKind>,
@@ -273,9 +270,9 @@ pub fn backup_component_ids(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<HashSet<String>, ServiceError> {
-    context
-        .storage()
-        .component_backup_ids_for_game(game_id)
+    let storage = context.storage();
+    let components = storage.list_components_for_game(game_id)?;
+    crate::coordinated_files::available_component_backup_ids(storage, game_id, &components)
         .map_err(Into::into)
 }
 
@@ -352,6 +349,10 @@ fn filter_artifacts_by_technology(
 
 #[cfg(test)]
 mod tests {
+    use renderpilot_application::InstalledAddonRepository;
+    use renderpilot_domain::{InstalledAddon, PathRef};
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -361,6 +362,38 @@ mod tests {
         assert_eq!(
             merge_addon_capabilities(&[AddonKind::Luma], Some(AddonKind::RenoDx)),
             vec![AddonKind::RenoDx, AddonKind::Luma]
+        );
+    }
+
+    #[test]
+    fn addon_capabilities_ignore_a_stale_renodx_record() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context =
+            crate::Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:42").expect("game id");
+        let addon = game_dir.path().join("renodx-test.addon64");
+        let record = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            PathRef::new(addon.to_string_lossy()).expect("addon path"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&record)
+            .expect("seed record");
+
+        assert!(
+            !addon_capabilities(&context, &game_id)
+                .expect("capabilities")
+                .contains(&AddonKind::RenoDx)
+        );
+
+        std::fs::write(addon, b"addon").expect("write payload");
+        assert!(
+            addon_capabilities(&context, &game_id)
+                .expect("capabilities")
+                .contains(&AddonKind::RenoDx)
         );
     }
 }

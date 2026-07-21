@@ -41,6 +41,17 @@ pub(crate) trait AddonTool: Send + Sync {
     /// On-disk signature when no DB record exists (shallow / bounded scan).
     fn unmanaged_present(&self, dir: &Path) -> bool;
 
+    /// Whether a persisted install record still represents an active install.
+    ///
+    /// The default preserves the historical record-authoritative policy. Tools
+    /// whose primary payload can be removed independently may tighten it using
+    /// an inexpensive on-disk check. Mutation and cleanup flows still use the
+    /// persisted record directly; this policy is for status, availability, and
+    /// mutual-exclusion decisions.
+    fn record_is_active(&self, _record: &InstalledAddon) -> bool {
+        true
+    }
+
     /// i18n key for the post-download finalizing progress phase.
     fn finalizing_phase(&self) -> &'static str;
 
@@ -105,6 +116,13 @@ pub(crate) fn exclusive_peers(kind: AddonKind) -> &'static [AddonKind] {
 #[must_use]
 pub(crate) fn unmanaged_files_present(dir: &Path, kind: AddonKind) -> bool {
     tool(kind).is_some_and(|registered| registered.unmanaged_present(dir))
+}
+
+/// Returns whether `record` still represents an active install according to
+/// the owning tool's policy.
+#[must_use]
+pub(crate) fn record_is_active(record: &InstalledAddon) -> bool {
+    require_tool(record.kind()).record_is_active(record)
 }
 
 /// Whether check-update supports a deep/advisory probe for `kind`.

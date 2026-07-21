@@ -170,7 +170,9 @@ pub(crate) fn reconcile_orphaned_install_locked(
     if records::foreign_record(context, &candidate.game_id, AddonKind::Luma)?.is_some() {
         return Ok(None);
     }
-    if let Some(record) = records::record_of_kind(context, &candidate.game_id, AddonKind::Luma)? {
+    if let Some(record) =
+        records::active_record_of_kind(context, &candidate.game_id, AddonKind::Luma)?
+    {
         return Ok(Some(record));
     }
 

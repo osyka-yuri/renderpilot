@@ -41,7 +41,9 @@ pub fn build_swap_plan(
     let storage = context.storage();
     let (component, artifact) = require_swap_inputs(storage, game_id, component_id, artifact_id)?;
     let game = storage.require_game(game_id)?;
-    let recorded = storage.get_component_backup(component_id)?;
+    let recorded =
+        crate::coordinated_files::load_component_backup_availability(storage, &component)?
+            .into_available();
     let installed_addon = storage.get_installed_addon(game_id)?;
     let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
     let baseline = crate::coordinated_files::resolve_component_baseline(

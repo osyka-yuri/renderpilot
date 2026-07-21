@@ -38,6 +38,70 @@ fn rejects_an_empty_unrecorded_sidecar() {
 }
 
 #[test]
+fn recorded_baseline_availability_follows_the_physical_sidecar() {
+    let root = tempfile::tempdir().expect("root");
+    let live = root.path().join("nvngx_dlss.dll");
+    let backup = root.path().join("nvngx_dlss.dll.bak");
+    fs::write(&live, b"original").expect("live");
+    let original_hash = renderpilot_detection::sha256_file(&live).expect("hash");
+    let recorded = vec![
+        ComponentFile::new(PathRef::new(live.to_string_lossy().into_owned()).expect("path"))
+            .with_sha256(original_hash.clone()),
+    ];
+    fs::write(&live, b"overlay").expect("overlay");
+    let overlay = vec![
+        ComponentFile::new(PathRef::new(live.to_string_lossy().into_owned()).expect("path"))
+            .with_sha256(renderpilot_detection::sha256_file(&live).expect("overlay hash")),
+    ];
+
+    assert!(!super::backup::baseline_sources_appear_available(
+        &recorded, &overlay
+    ));
+
+    fs::write(&backup, b"").expect("empty backup");
+    assert!(!super::backup::baseline_sources_appear_available(
+        &recorded, &overlay
+    ));
+
+    fs::write(&backup, b"original").expect("backup");
+    assert!(super::backup::baseline_sources_appear_available(
+        &recorded, &overlay
+    ));
+
+    fs::remove_file(&backup).expect("remove backup");
+    assert!(!super::backup::baseline_sources_appear_available(
+        &recorded, &overlay
+    ));
+    fs::create_dir(&backup).expect("directory at backup path");
+    assert!(!super::backup::baseline_sources_appear_available(
+        &recorded, &overlay
+    ));
+    fs::remove_dir(&backup).expect("remove backup directory");
+
+    let missing_hash = vec![ComponentFile::new(
+        PathRef::new(live.to_string_lossy().into_owned()).expect("path"),
+    )];
+    assert!(!super::backup::baseline_sources_appear_available(
+        &missing_hash,
+        &overlay
+    ));
+
+    fs::write(&live, b"original").expect("unchanged live baseline");
+    let unchanged = vec![
+        ComponentFile::new(PathRef::new(live.to_string_lossy().into_owned()).expect("path"))
+            .with_sha256(original_hash),
+    ];
+    assert!(
+        super::backup::baseline_sources_appear_available(&recorded, &unchanged),
+        "an untouched live member does not require a sidecar"
+    );
+    assert!(
+        super::backup::baseline_sources_appear_available(&[], &[]),
+        "an empty baseline rolls back by removing overlay-created files"
+    );
+}
+
+#[test]
 fn owned_absent_binding_wins_over_the_current_live_overlay() {
     let root = tempfile::tempdir().expect("root");
     let live = root.path().join("nvngx_dlss.dll");

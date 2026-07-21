@@ -8,6 +8,8 @@ use renderpilot_domain::{
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
+use super::load_component_backup_availability;
+
 /// Catalog facts for one coordinated path, normalized independently of any
 /// concrete add-on implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +63,9 @@ pub(crate) fn catalog_path_claim(
             active_hashes.push(active_hash);
         }
 
-        if let Some(baseline) = storage.get_component_backup(component.id())? {
+        if let Some(baseline) =
+            load_component_backup_availability(storage, &component)?.into_available()
+        {
             let claim = baseline
                 .iter()
                 .find(|file| crate::paths::normalized_key(Path::new(file.path().as_str())) == key)

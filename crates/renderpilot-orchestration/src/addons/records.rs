@@ -3,9 +3,16 @@
 //! `InstalledAddonRepository::get_installed_addon` returns whichever record is on
 //! file for a game with **no kind filter** — a caller that assumes any record it
 //! gets back is "its own" tool's would misread a foreign-tool record (or a stale
-//! test fixture) as its own install. Every addon tool must read through
-//! [`record_of_kind`] (or [`foreign_record`] when it specifically wants the
-//! opposite) rather than calling the repository directly.
+//! test fixture) as its own install. Add-on-facing reads must use this module's
+//! persisted or active selectors rather than calling the repository directly;
+//! [`foreign_record`] is the explicit cross-kind ownership view.
+//!
+//! Persisted ownership and active installation are deliberately separate:
+//! mutation/cleanup paths use [`record_of_kind`] so manually removed files do
+//! not strand the metadata needed for repair or uninstall, while presentation,
+//! availability, and same-tool reinstall decisions use
+//! [`active_record_of_kind`]. Cross-tool ownership remains record-authoritative:
+//! storage deliberately refuses to overwrite a different add-on kind.
 
 use std::path::PathBuf;
 
@@ -69,6 +76,47 @@ pub(crate) fn record_of_kind(
         .storage()
         .get_installed_addon(game_id)?
         .filter(|record| record.kind() == kind))
+}
+
+/// The persisted record for `game_id` only while the owning tool considers the
+/// installation active on disk.
+pub(crate) fn active_record(
+    context: &Context,
+    game_id: &GameId,
+) -> Result<Option<InstalledAddon>, ServiceError> {
+    Ok(context
+        .storage()
+        .get_installed_addon(game_id)?
+        .filter(crate::addons::tool::record_is_active))
+}
+
+/// The requested kind's persisted record only while the owning tool still
+/// considers the installation active on disk.
+pub(crate) fn active_record_of_kind(
+    context: &Context,
+    game_id: &GameId,
+    kind: AddonKind,
+) -> Result<Option<InstalledAddon>, ServiceError> {
+    Ok(active_record(context, game_id)?.filter(|record| record.kind() == kind))
+}
+
+/// Every persisted add-on record that still represents an active installation.
+pub(crate) fn active_records(
+    context: &Context,
+) -> Result<impl Iterator<Item = InstalledAddon>, ServiceError> {
+    Ok(context
+        .storage()
+        .list_installed_addons()?
+        .into_iter()
+        .filter(crate::addons::tool::record_is_active))
+}
+
+/// Every active install record belonging to `kind`.
+pub(crate) fn active_records_of_kind(
+    context: &Context,
+    kind: AddonKind,
+) -> Result<impl Iterator<Item = InstalledAddon>, ServiceError> {
+    Ok(active_records(context)?.filter(move |record| record.kind() == kind))
 }
 
 /// The installed-addon record for `game_id`, if one exists and belongs to a
@@ -230,6 +278,58 @@ mod tests {
             foreign_record(&context, &game_id, AddonKind::RenoDx)
                 .expect("query")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn active_views_follow_the_renodx_payload_without_discarding_ownership_metadata() {
+        let db_dir = tempdir().expect("db dir");
+        let game_dir = tempdir().expect("game dir");
+        let context = Context::open_at(db_dir.path().join("catalog.sqlite")).expect("context");
+        let game_id = GameId::new("steam:1").expect("game id");
+        let addon = game_dir.path().join("renodx-test.addon64");
+        let record = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::RenoDx,
+            PathRef::new(addon.to_string_lossy()).expect("path"),
+        );
+        context
+            .storage()
+            .upsert_installed_addon(&record)
+            .expect("seed record");
+
+        assert!(
+            record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("stored query")
+                .is_some(),
+            "cleanup metadata must survive manual payload removal"
+        );
+        assert!(
+            active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("active query")
+                .is_none()
+        );
+        std::fs::create_dir(&addon).expect("create payload-shaped directory");
+        assert!(
+            active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("active query")
+                .is_none(),
+            "a directory at the payload path is not an active installation"
+        );
+        std::fs::remove_dir(&addon).expect("remove payload-shaped directory");
+        std::fs::write(&addon, b"").expect("write empty payload");
+        assert!(
+            active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("active query")
+                .is_none(),
+            "an empty DLL is not an active installation"
+        );
+
+        std::fs::write(&addon, b"addon").expect("write payload");
+        assert!(
+            active_record_of_kind(&context, &game_id, AddonKind::RenoDx)
+                .expect("active query")
+                .is_some()
         );
     }
 

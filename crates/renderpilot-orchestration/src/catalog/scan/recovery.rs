@@ -18,14 +18,24 @@ pub(super) fn recover_orphaned_backups(
     for component in components {
         // A recorded rollback claim must still match the immutable sidecars on
         // disk. Merely having a DB row is not enough to skip validation.
-        if let Some(baseline) = storage.get_component_backup(component.id())? {
-            crate::coordinated_files::resolve_component_baseline(
-                game_root,
-                component.files(),
-                Some(&baseline),
-                crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
-            )?;
-            continue;
+        match crate::coordinated_files::load_component_backup_availability(storage, component)? {
+            crate::coordinated_files::ComponentBackupAvailability::Available(baseline) => {
+                crate::coordinated_files::resolve_component_baseline(
+                    game_root,
+                    component.files(),
+                    Some(&baseline),
+                    crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
+                )?;
+                continue;
+            }
+            crate::coordinated_files::ComponentBackupAvailability::Unavailable => {
+                log::info!(
+                    "recovery: recorded backup for {} is no longer available on disk",
+                    component.id()
+                );
+                continue;
+            }
+            crate::coordinated_files::ComponentBackupAvailability::NotRecorded => {}
         }
 
         let mut recovered_baseline = Vec::new();

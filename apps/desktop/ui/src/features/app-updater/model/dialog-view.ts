@@ -8,11 +8,9 @@ export type UpdateFailureKind = 'prepare-failed' | 'install-failed' | 'restart-r
 
 export type UpdateDialogFooter =
   | { kind: 'install' }
-  | { kind: 'busy'; phase: UpdateProgressPhase }
   | { kind: 'retry-download' }
   | { kind: 'retry-install' }
-  | { kind: 'restart' }
-  | { kind: 'none' };
+  | { kind: 'restart' };
 
 const PHASE_STATUS_KEY: Record<UpdateProgressPhase, MessageKey> = {
   downloading: 'settings.about.updateDialog.downloading',
@@ -77,7 +75,7 @@ export function failureDescriptionKey(kind: UpdateFailureKind): MessageKey {
   return FAILURE_DESCRIPTION_KEY[kind];
 }
 
-export function dialogFooter(state: AppUpdateDialogState | null): UpdateDialogFooter {
+export function dialogFooter(state: AppUpdateDialogState | null): UpdateDialogFooter | null {
   switch (state?.phase) {
     case 'available':
       return { kind: 'install' };
@@ -85,7 +83,7 @@ export function dialogFooter(state: AppUpdateDialogState | null): UpdateDialogFo
     case 'verifying':
     case 'installing':
     case 'restarting':
-      return { kind: 'busy', phase: state.phase };
+      return null;
     case 'prepare-failed':
       return { kind: 'retry-download' };
     case 'install-failed':
@@ -93,6 +91,6 @@ export function dialogFooter(state: AppUpdateDialogState | null): UpdateDialogFo
     case 'restart-required':
       return { kind: 'restart' };
     default:
-      return { kind: 'none' };
+      return null;
   }
 }

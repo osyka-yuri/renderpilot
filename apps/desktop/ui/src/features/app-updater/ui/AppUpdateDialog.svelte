@@ -104,8 +104,10 @@
       {/if}
     </div>
 
-    <DialogFooter>
-      <UpdateDialogActions {footer} {onInstall} {onRetry} {onDismiss} {onRestart} />
-    </DialogFooter>
+    {#if footer}
+      <DialogFooter>
+        <UpdateDialogActions {footer} {onInstall} {onRetry} {onDismiss} {onRestart} />
+      </DialogFooter>
+    {/if}
   </DialogContent>
 </Dialog>

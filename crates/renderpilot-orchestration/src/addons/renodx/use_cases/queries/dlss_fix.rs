@@ -7,11 +7,11 @@ use crate::{Context, ServiceError};
 
 /// Returns whether DLSS-Fix can be installed for this game.
 ///
-/// Reads the record through `records::record_of_kind` rather than the raw
-/// repository. A record for another add-on kind (such as Luma) is treated as
-/// absent, matching the install flow's kind-scoped read before acting.
+/// Reads the active record rather than the raw repository. A record for another
+/// add-on kind, or a stale RenoDX row whose primary payload was removed, is
+/// treated as absent.
 pub fn availability(context: &Context, game_id: &GameId) -> Result<bool, ServiceError> {
-    let Some(record) = records::record_of_kind(context, game_id, AddonKind::RenoDx)? else {
+    let Some(record) = records::active_record_of_kind(context, game_id, AddonKind::RenoDx)? else {
         return Ok(false);
     };
     if record.has_dlss_fix() {
