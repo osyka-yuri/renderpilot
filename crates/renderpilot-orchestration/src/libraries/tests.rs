@@ -7,11 +7,14 @@ use sha2::{Digest, Sha256};
 
 use super::artifact_builder::build_catalog_artifact;
 use super::types::{
-    LibraryArtifactRecord, LibraryCatalog, LibraryContent, LibraryPackage, LibraryPackageMember,
+    LibraryArtifactRecord, LibraryCatalog, LibraryContent, LibraryLegalDocument,
+    LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryPackage, LibraryPackageMember,
     LibraryProvenance, LibraryRelease, LibraryReleaseChannel, LibraryTarget, LibraryTransport,
     LibraryVendor, LibraryVendorCatalog, LibraryVendorReference, LibraryVendorSnapshot,
     SignatureInfo,
 };
+
+mod legal;
 
 fn physical_artifact(digest: char, file_name: &str) -> LibraryArtifactRecord {
     let sha256 = digest.to_string().repeat(64);
@@ -72,6 +75,7 @@ fn package(technology: &str) -> LibraryPackage {
             compatibility: None,
         },
         provenance: None,
+        legal_document_ids: Vec::new(),
         members: vec![
             LibraryPackageMember {
                 artifact_id: format!("sha256:{}", "a".repeat(64)),
@@ -88,6 +92,10 @@ fn package(technology: &str) -> LibraryPackage {
     }
 }
 
+fn package_revision(package: &LibraryPackage) -> String {
+    super::revision::package_revision_sha256(package).expect("canonical package revision")
+}
+
 fn vendor() -> LibraryVendorCatalog {
     LibraryVendorCatalog {
         vendor: LibraryVendor {
@@ -95,6 +103,7 @@ fn vendor() -> LibraryVendorCatalog {
             display_name: "NVIDIA".to_owned(),
         },
         generated_at: "2026-07-22T00:00:00Z".to_owned(),
+        legal_documents: Vec::new(),
         artifacts: vec![
             physical_artifact('a', "primary.dll"),
             physical_artifact('b', "support.dll"),
@@ -104,8 +113,7 @@ fn vendor() -> LibraryVendorCatalog {
 }
 
 fn complete_catalog(mut package: LibraryPackage) -> LibraryCatalog {
-    package.revision_sha256 =
-        super::validate::package_revision_sha256(&package).expect("canonical package revision");
+    package.revision_sha256 = package_revision(&package);
     let mut nvidia = vendor();
     nvidia.packages = vec![package];
     catalog_with_nvidia(nvidia)
@@ -118,6 +126,7 @@ fn catalog_with_nvidia(nvidia: LibraryVendorCatalog) -> LibraryCatalog {
             display_name: display_name.to_owned(),
         },
         generated_at: "2026-07-22T00:00:00Z".to_owned(),
+        legal_documents: Vec::new(),
         artifacts: Vec::new(),
         packages: Vec::new(),
     };
@@ -134,7 +143,7 @@ fn catalog_with_nvidia(nvidia: LibraryVendorCatalog) -> LibraryCatalog {
     }
 }
 
-fn openvr_catalog(repository: &str) -> LibraryCatalog {
+pub(super) fn openvr_catalog(repository: &str) -> LibraryCatalog {
     let dll_bytes = b"openvr-api-fixture";
     let dll_sha256 = hex::encode(Sha256::digest(dll_bytes));
     let mut artifact = physical_artifact('d', renderpilot_domain::openvr::DLL_NAME);
@@ -146,6 +155,20 @@ fn openvr_catalog(repository: &str) -> LibraryCatalog {
         PeExportSet::from_canonical_names(vec!["VR Init".to_owned(), "VR_InitInternal".to_owned()])
             .expect("exports"),
     );
+    let legal_sha256 = "f".repeat(64);
+    let legal_document_id = format!("license.{legal_sha256}");
+    let legal_document = LibraryLegalDocument {
+        legal_document_id: legal_document_id.clone(),
+        kind: LibraryLegalDocumentKind::License,
+        title: "OpenVR SDK License".to_owned(),
+        format: LibraryLegalDocumentFormat::Text,
+        file_name: "LICENSE.txt".to_owned(),
+        content: LibraryContent {
+            sha256: legal_sha256.clone(),
+            size_bytes: 42,
+        },
+        object_key: format!("libraries/legal/sha256/{legal_sha256}.txt"),
+    };
 
     let mut openvr_package = LibraryPackage {
         package_id: "openvr.1.1.3b.x64".to_owned(),
@@ -168,6 +191,7 @@ fn openvr_catalog(repository: &str) -> LibraryCatalog {
             tag: "v1.1.3b".to_owned(),
             commit_sha: "e".repeat(40),
         }),
+        legal_document_ids: vec![legal_document_id],
         members: vec![LibraryPackageMember {
             artifact_id: artifact.artifact_id.clone(),
             role: "primary".to_owned(),
@@ -175,8 +199,7 @@ fn openvr_catalog(repository: &str) -> LibraryCatalog {
         }],
         extensions: None,
     };
-    openvr_package.revision_sha256 =
-        super::validate::package_revision_sha256(&openvr_package).expect("revision");
+    openvr_package.revision_sha256 = package_revision(&openvr_package);
 
     let mut catalog = complete_catalog(package("nvidia_streamline"));
     let valve = catalog
@@ -184,6 +207,7 @@ fn openvr_catalog(repository: &str) -> LibraryCatalog {
         .iter_mut()
         .find(|vendor| vendor.vendor.id == "valve")
         .expect("valve");
+    valve.legal_documents = vec![legal_document];
     valve.artifacts = vec![artifact];
     valve.packages = vec![openvr_package];
     catalog
@@ -223,6 +247,10 @@ fn openvr_catalog_builds_nullable_version_exports_provenance_and_label() {
         serde_json::json!(["VR Init", "VR_InitInternal"])
     );
     assert_eq!(valve_wire["packages"][0]["release"]["label"], "revision b");
+    assert_eq!(
+        valve_wire["packages"][0]["legal_document_ids"][0],
+        valve_wire["legal_documents"][0]["legal_document_id"]
+    );
     assert_eq!(
         valve_wire["packages"][0]["provenance"]["repository"],
         renderpilot_domain::openvr::UPSTREAM_REPOSITORY
@@ -384,7 +412,7 @@ fn current_client_filters_unknown_vendor_before_snapshot_fetch_selection() {
             .into(),
     };
     let (selected, skipped) =
-        super::catalog::partition_vendor_references(&index, super::validate::is_supported_vendor);
+        super::catalog::partition_vendor_references(&index, super::validation::is_supported_vendor);
 
     assert_eq!(
         selected
@@ -410,7 +438,7 @@ fn github_provenance_syntax_is_generic_but_openvr_repository_is_exact() {
         tag: "v1.2.3".to_owned(),
         commit_sha: "d".repeat(40),
     });
-    generic.revision_sha256 = super::validate::package_revision_sha256(&generic).expect("revision");
+    generic.revision_sha256 = package_revision(&generic);
     assert!(
         super::resolved::ValidatedCatalog::new(complete_catalog(generic)).is_ok(),
         "generic GitHub provenance must not be coupled to OpenVR"
@@ -558,8 +586,7 @@ fn vendor_validation_rejects_duplicate_broken_and_orphan_artifacts() {
 
     let mut broken_package = package("nvidia_streamline");
     broken_package.members[1].artifact_id = format!("sha256:{}", "d".repeat(64));
-    broken_package.revision_sha256 = super::validate::package_revision_sha256(&broken_package)
-        .expect("canonical broken package revision");
+    broken_package.revision_sha256 = package_revision(&broken_package);
     let mut broken = vendor();
     broken.packages = vec![broken_package];
     assert!(
@@ -574,8 +601,7 @@ fn vendor_validation_rejects_duplicate_broken_and_orphan_artifacts() {
         .artifacts
         .push(physical_artifact('c', "orphan.dll"));
     let mut valid_package = package("nvidia_streamline");
-    valid_package.revision_sha256 = super::validate::package_revision_sha256(&valid_package)
-        .expect("canonical package revision");
+    valid_package.revision_sha256 = package_revision(&valid_package);
     orphan_vendor.packages = vec![valid_package];
     assert!(
         super::resolved::ValidatedCatalog::new(catalog_with_nvidia(orphan_vendor))
@@ -589,8 +615,7 @@ fn vendor_validation_rejects_duplicate_broken_and_orphan_artifacts() {
 fn vendor_validation_rejects_package_member_architecture_drift() {
     let mut package = package("nvidia_streamline");
     package.target.architecture = Architecture::X86;
-    package.revision_sha256 =
-        super::validate::package_revision_sha256(&package).expect("canonical package revision");
+    package.revision_sha256 = package_revision(&package);
     let mut vendor_catalog = vendor();
     vendor_catalog.packages = vec![package];
 
@@ -602,8 +627,7 @@ fn vendor_validation_rejects_package_member_architecture_drift() {
 #[test]
 fn vendor_validation_binds_microsoft_runtime_semantics() {
     let mut dxc = package("microsoft_dxc");
-    dxc.revision_sha256 =
-        super::validate::package_revision_sha256(&dxc).expect("canonical package revision");
+    dxc.revision_sha256 = package_revision(&dxc);
     let mut dxc_vendor = vendor();
     dxc_vendor.packages = vec![dxc];
 
@@ -614,8 +638,7 @@ fn vendor_validation_binds_microsoft_runtime_semantics() {
     let mut generic = package("nvidia_streamline");
     generic.target.compatibility =
         Some(renderpilot_domain::RuntimeCompatibility::D3d12Sdk { version: 2 });
-    generic.revision_sha256 =
-        super::validate::package_revision_sha256(&generic).expect("canonical package revision");
+    generic.revision_sha256 = package_revision(&generic);
     let mut generic_vendor = vendor();
     generic_vendor.packages = vec![generic];
     let error = super::resolved::ValidatedCatalog::new(catalog_with_nvidia(generic_vendor))
@@ -637,15 +660,16 @@ fn vendor_snapshot_envelope_binds_the_index_identity() {
         schema_version: 1,
         vendor: vendor_catalog.vendor,
         generated_at: vendor_catalog.generated_at,
+        legal_documents: vendor_catalog.legal_documents,
         artifacts: vendor_catalog.artifacts,
         packages: Vec::new(),
     };
 
-    super::validate::validate_vendor_snapshot_envelope(&snapshot, &reference)
+    super::validation::validate_vendor_snapshot_envelope(&snapshot, &reference)
         .expect("matching snapshot envelope");
     snapshot.vendor.display_name = "Different".to_owned();
     assert!(
-        super::validate::validate_vendor_snapshot_envelope(&snapshot, &reference)
+        super::validation::validate_vendor_snapshot_envelope(&snapshot, &reference)
             .expect_err("snapshot identity drift")
             .to_string()
             .contains("identity")
@@ -672,27 +696,22 @@ fn package_revision_matches_the_producer_canonical_json_contract() {
     )
     .expect("producer package fixture");
 
-    assert_eq!(
-        super::validate::package_revision_sha256(&package).expect("canonical revision"),
-        package.revision_sha256
-    );
+    assert_eq!(package_revision(&package), package.revision_sha256);
 }
 
 #[test]
 fn package_revision_ignores_presentation_metadata_but_binds_channel() {
     let mut package = package("nvidia_streamline");
     package.release.label = Some("Original annotation".to_owned());
-    let original =
-        super::validate::package_revision_sha256(&package).expect("original package revision");
+    let original = package_revision(&package);
 
     package.display_name = "Renamed package".to_owned();
     package.release.label = Some("Updated annotation".to_owned());
-    let reworded =
-        super::validate::package_revision_sha256(&package).expect("reworded package revision");
+    let reworded = package_revision(&package);
     assert_eq!(original, reworded);
 
     package.release.channel = LibraryReleaseChannel::Beta;
-    let beta = super::validate::package_revision_sha256(&package).expect("beta package revision");
+    let beta = package_revision(&package);
     assert_ne!(original, beta);
 }
 
@@ -722,10 +741,7 @@ fn nuget_package_revision_matches_the_producer_contract() {
     )
     .expect("producer NuGet package fixture");
 
-    assert_eq!(
-        super::validate::package_revision_sha256(&package).expect("canonical revision"),
-        package.revision_sha256
-    );
+    assert_eq!(package_revision(&package), package.revision_sha256);
 }
 
 #[test]
@@ -733,11 +749,10 @@ fn transport_hash_and_compression_round_trip_exact_bytes() {
     let dll = b"exact graphics runtime bytes";
     let (artifact, payload) = compressed_artifact(dll);
 
-    super::validate::validate_transport(&artifact, &payload).expect("valid transport");
+    super::validation::validate_transport(&artifact, &payload).expect("valid transport");
     let decoded =
         super::compression::decompress_library(&artifact, &payload).expect("valid compressed DLL");
-    super::validate::validate_dll_hash(&artifact.artifact_id, &artifact.dll.sha256, &decoded)
-        .expect("valid DLL digest");
+    super::validation::validate_dll_hash(&artifact, &decoded).expect("valid DLL digest");
     assert_eq!(decoded, dll);
 }
 
@@ -746,7 +761,7 @@ fn transport_rejects_size_and_sha256_mismatches() {
     let (mut artifact, payload) = compressed_artifact(b"transport bytes");
     artifact.transport.size_bytes += 1;
     assert!(
-        super::validate::validate_transport(&artifact, &payload)
+        super::validation::validate_transport(&artifact, &payload)
             .expect_err("wrong size")
             .to_string()
             .contains("size mismatch")
@@ -755,7 +770,7 @@ fn transport_rejects_size_and_sha256_mismatches() {
     artifact.transport.size_bytes = payload.len() as u64;
     artifact.transport.sha256 = "0".repeat(64);
     assert!(
-        super::validate::validate_transport(&artifact, &payload)
+        super::validation::validate_transport(&artifact, &payload)
             .expect_err("wrong digest")
             .to_string()
             .contains("hash mismatch")
@@ -819,8 +834,7 @@ fn sqlite_registration_is_the_commit_point_and_delete_retains_shared_content() {
     nvidia.artifacts = vec![primary.clone(), support.clone()];
     let mut second_package = nvidia.packages[0].clone();
     second_package.package_id = "test_package.1.2.3.shared".to_owned();
-    second_package.revision_sha256 =
-        super::validate::package_revision_sha256(&second_package).expect("second package revision");
+    second_package.revision_sha256 = package_revision(&second_package);
     nvidia.packages.push(second_package);
 
     let catalog = super::resolved::ValidatedCatalog::new(raw_catalog).expect("validated catalog");

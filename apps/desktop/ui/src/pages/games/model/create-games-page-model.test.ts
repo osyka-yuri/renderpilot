@@ -22,6 +22,20 @@ describe('createGamesPageModel', () => {
     expect(model.gameItems).toEqual([]);
   });
 
+  it('pre-populates gameItems from the initial games input', () => {
+    const initialGames = [createStubGame('1', 'First Game'), createStubGame('2', 'Second Game')];
+    const model = createGamesPageModel(
+      createInput({
+        getGames: () => initialGames,
+      }),
+    );
+
+    expect(model.gameItems.map(({ id, title }) => ({ id, title }))).toEqual([
+      { id: '1', title: 'First Game' },
+      { id: '2', title: 'Second Game' },
+    ]);
+  });
+
   it('returns all known libraries for grouped library filter options', () => {
     const model = createGamesPageModel(createInput());
 

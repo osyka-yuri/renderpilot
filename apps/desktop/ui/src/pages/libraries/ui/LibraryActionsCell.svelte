@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="flex items-center justify-end gap-2">
+<div class="flex items-center justify-center gap-2">
   <DownloadProgressBar ids={[packageId]} active={isDownloading} />
   <Tooltip>
     <TooltipTrigger>

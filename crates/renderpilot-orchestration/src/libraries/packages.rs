@@ -13,7 +13,7 @@ use crate::net::{DownloadProgress, ProgressObserver};
 use super::resolved::{ResolvedPackage, ValidatedCatalog};
 use super::storage::LibraryStorage;
 use super::types::{LibraryArtifactRecord, LibraryPackage, LibraryPackageState};
-use super::{artifact_builder, compression, library_error, validate};
+use super::{artifact_builder, compression, library_error};
 
 pub(super) async fn ensure_package_downloaded(
     context: &crate::Context,
@@ -134,7 +134,7 @@ where
         None => {
             crate::fs::remove_file_if_exists(&archive_path)?;
             let bytes = download().await?;
-            validate::validate_transport(artifact, &bytes)?;
+            super::validation::validate_transport(artifact, &bytes)?;
             crate::fs::write_file_atomically(&archive_path, &bytes)?;
             bytes
         }
@@ -142,7 +142,7 @@ where
     drop(transport_lock);
 
     let dll_bytes = compression::decompress_library(artifact, &payload)?;
-    validate::validate_dll_hash(&artifact.artifact_id, &artifact.dll.sha256, &dll_bytes)?;
+    super::validation::validate_dll_hash(artifact, &dll_bytes)?;
     crate::fs::write_file_atomically(&dll_path, &dll_bytes)?;
     Ok(dll_path)
 }
@@ -155,7 +155,7 @@ pub(super) fn read_valid_archive(
         return Ok(None);
     }
     let bytes = crate::fs::read_file(path)?;
-    match validate::validate_transport(artifact, &bytes) {
+    match super::validation::validate_transport(artifact, &bytes) {
         Ok(()) => Ok(Some(bytes)),
         Err(error) => {
             log::warn!(

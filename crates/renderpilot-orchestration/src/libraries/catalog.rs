@@ -5,10 +5,10 @@ use renderpilot_domain::ArtifactId;
 use crate::ServiceError;
 use crate::cdn;
 
+use super::library_error;
 use super::resolved::{ResolvedPackage, ValidatedCatalog};
 use super::storage::LibraryStorage;
 use super::types::{LibraryCatalog, LibraryIndex, LibraryVendorCatalog, LibraryVendorSnapshot};
-use super::{library_error, validate};
 
 const INDEX_KEY: &str = "libraries/v1/index.json";
 const MAX_PRESET_SIZE: u64 = 2 * 1024 * 1024;
@@ -24,7 +24,7 @@ fn preset_urls() -> [String; 3] {
 fn parse_index(bytes: &[u8]) -> Result<LibraryIndex, ServiceError> {
     let index = serde_json::from_slice::<LibraryIndex>(crate::fs::strip_utf8_bom(bytes))
         .map_err(|error| library_error(format!("failed to parse library index: {error}")))?;
-    validate::validate_index(&index)?;
+    super::validation::validate_index(&index)?;
     Ok(index)
 }
 
@@ -32,7 +32,7 @@ fn parse_vendor_snapshot(
     bytes: &[u8],
     reference: &super::types::LibraryVendorReference,
 ) -> Result<LibraryVendorSnapshot, ServiceError> {
-    validate::validate_exact_document(
+    super::validation::validate_exact_document(
         &format!("vendor snapshot `{}`", reference.vendor_id),
         reference.snapshot_size_bytes,
         &reference.snapshot_sha256,
@@ -44,7 +44,7 @@ fn parse_vendor_snapshot(
             reference.vendor_id
         ))
     })?;
-    validate::validate_vendor_snapshot_envelope(&snapshot, reference)?;
+    super::validation::validate_vendor_snapshot_envelope(&snapshot, reference)?;
     Ok(snapshot)
 }
 
@@ -59,7 +59,7 @@ pub(super) fn parse_catalog(bytes: &[u8]) -> Result<ValidatedCatalog, ServiceErr
 async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
     let index_bytes = crate::net::download_limited_bytes(
         &cdn::cdn_url(INDEX_KEY),
-        validate::MAX_INDEX_SIZE,
+        super::validation::MAX_INDEX_SIZE,
         "library index fetch",
     )
     .await?;
@@ -67,7 +67,7 @@ async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
     let mut vendors = Vec::new();
 
     let (supported, unsupported) =
-        partition_vendor_references(&index, validate::is_supported_vendor);
+        partition_vendor_references(&index, super::validation::is_supported_vendor);
     for reference in unsupported {
         log::warn!(
             "library index vendor `{}` is not supported by this client; skipping it",
@@ -86,6 +86,7 @@ async fn fetch_remote_catalog() -> Result<ValidatedCatalog, ServiceError> {
         vendors.push(LibraryVendorCatalog {
             vendor: snapshot.vendor,
             generated_at: snapshot.generated_at,
+            legal_documents: snapshot.legal_documents,
             artifacts: snapshot.artifacts,
             packages: snapshot.packages,
         });

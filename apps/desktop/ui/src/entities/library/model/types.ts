@@ -26,6 +26,15 @@ export type LibraryRelease = Readonly<{
   label: string | null;
 }>;
 
+export type LibraryLegalDocumentLink = Readonly<{
+  legal_document_id: string;
+  kind: 'license' | 'notice';
+  title: string;
+  format: 'text' | 'pdf';
+  file_name: string;
+  content_url: string;
+}>;
+
 /** Fully resolved package projection returned by the desktop API. */
 export type LibraryPackageSummary = Readonly<{
   package_id: string;
@@ -40,6 +49,7 @@ export type LibraryPackageSummary = Readonly<{
   primary_file_name: string;
   primary_sha256: string;
   primary_signature: Signature;
+  legal_documents: readonly LibraryLegalDocumentLink[];
   size_bytes: number;
   is_downloaded: boolean;
 }>;

@@ -4,6 +4,7 @@ export type {
   LibraryTarget,
   Signature,
   LibraryRelease,
+  LibraryLegalDocumentLink,
   LibraryPackageSummary,
   LibraryPackageState,
 } from './model/types';

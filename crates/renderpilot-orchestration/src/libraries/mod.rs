@@ -9,9 +9,10 @@ mod compression;
 mod locks;
 mod packages;
 mod resolved;
+mod revision;
 mod storage;
 mod types;
-mod validate;
+mod validation;
 
 use crate::ServiceError;
 use crate::net::ProgressObserver;
@@ -19,6 +20,7 @@ use crate::net::ProgressObserver;
 pub(crate) use self::artifact_builder::catalog_packages_as_artifacts;
 pub use self::storage::local_dlss_document_path;
 pub use self::types::{
+    LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryLegalDocumentLink,
     LibraryPackageState, LibraryPackageSummary, LibraryRelease, LibraryReleaseChannel,
     LibraryTarget, SignatureInfo,
 };

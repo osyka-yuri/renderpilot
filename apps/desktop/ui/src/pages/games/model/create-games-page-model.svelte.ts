@@ -34,7 +34,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
   let menuOpenFor = $state<string | null>(null);
   let actionMenuRefs = $state<Record<string, GameCardMenuHandle | undefined>>({});
 
-  let queriedGames = $state<GameSummary[]>([]);
+  let queriedGames = $state<readonly GameSummary[]>(input.getGames());
   let hiddenCount = $state<number>(0);
   const scheduler = createGamesPageQueryScheduler();
 

@@ -115,6 +115,16 @@ export function filterPackageRows(
   );
 }
 
+export function findPackageRow(
+  rows: readonly LibraryPackageRow[],
+  packageId: string | null,
+): LibraryPackageRow | null {
+  if (packageId === null) {
+    return null;
+  }
+  return rows.find((row) => row.package_id === packageId) ?? null;
+}
+
 /**
  * A package name only earns a separate line when the active list contains
  * genuinely different package families. The catalog remains fully descriptive;

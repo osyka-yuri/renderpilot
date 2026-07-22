@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { t } from '@shared/i18n';
 import {
   compareReleaseVersions,
+  findPackageRow,
   filterPackageRows,
   formatArchitectureLabel,
   formatSignedDate,
@@ -11,9 +12,27 @@ import {
   shouldShowPackageDisplayName,
   typeOptionsByVendor,
 } from './libraries-page-model';
-import { packagesOf } from './library-package-test-fixtures';
+import { legalDocumentLink, packagesOf } from './library-package-test-fixtures';
 
 describe('library package presentation', () => {
+  it('resolves a selected package against the latest snapshot', () => {
+    const initial = packagesOf([
+      { id: 'openvr', vendor: 'valve', technology: 'openvr', legalDocuments: [] },
+    ]);
+    const refreshed = packagesOf([
+      {
+        id: 'openvr',
+        vendor: 'valve',
+        technology: 'openvr',
+        legalDocuments: [legalDocumentLink()],
+      },
+    ]);
+
+    expect(findPackageRow(initial, 'openvr')?.legal_documents).toEqual([]);
+    expect(findPackageRow(refreshed, 'openvr')?.legal_documents).toEqual([legalDocumentLink()]);
+    expect(findPackageRow(refreshed, 'missing')).toBeNull();
+  });
+
   it('exposes OpenVR as Valve catalog data without UI-side inference', () => {
     expect(typeOptionsByVendor.valve).toEqual([
       { value: 'openvr', label: 'OpenVR', technology: 'openvr' },

@@ -83,7 +83,7 @@
   );
 </script>
 
-<div class="flex flex-1 flex-col">
+<div class="flex min-h-full flex-1 flex-col">
   {#if hasGames}
     <div class="flex flex-col gap-6" aria-busy={busy}>
       {#each launcherGroups as group (group.launcher)}

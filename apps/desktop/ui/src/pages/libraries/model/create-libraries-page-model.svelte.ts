@@ -23,6 +23,7 @@ import {
   downloadLibraryPackage,
   deleteLibraryPackage,
 } from '@entities/library';
+import { sharedLibraryPackagesCache, type LibraryPackagesCache } from './library-packages-cache';
 
 type PackageAction = 'download' | 'delete';
 type PackageActionOrigin = 'user' | 'bulk';
@@ -61,10 +62,16 @@ const BULK_DOWNLOAD_CONCURRENCY = 3;
 
 export type LibrariesPageModel = ReturnType<typeof createLibrariesPageModel>;
 
-export function createLibrariesPageModel() {
-  let packages = $state<LibraryPackageSummary[]>([]);
-  let hasLoaded = $state(false);
-  let loading = $state(true);
+type LibrariesPageModelOptions = Readonly<{
+  cache?: LibraryPackagesCache;
+}>;
+
+export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}) {
+  const cache = options.cache ?? sharedLibraryPackagesCache;
+  const initialCached = cache.get();
+  let packages = $state<readonly LibraryPackageSummary[]>(initialCached ?? []);
+  let hasLoaded = $state(initialCached !== null);
+  let loading = $state(initialCached === null);
   let refreshing = $state(false);
   let errorMessage = $state<string | null>(null);
   const pendingActions = new SvelteMap<string, PackageAction>();
@@ -76,10 +83,12 @@ export function createLibrariesPageModel() {
   let bulkCompleted = $state(0);
   let bulkTargetIds = $state<readonly string[]>([]);
 
-  let mounted = false;
+  let active = false;
+  let disposed = false;
+  let startPromise: Promise<void> | null = null;
   let lastRequestedRefreshKey = 0;
   let refreshQueued = false;
-  const loadRequests = createDisposableRequestChannel(() => !mounted);
+  const loadRequests = createDisposableRequestChannel(() => disposed);
 
   const isBusy = $derived(loading || refreshing || pendingActions.size > 0 || bulkDownloading);
   const filteredPackages = $derived(filterPackageRows(packages, activeVendor, activeType));
@@ -99,12 +108,35 @@ export function createLibrariesPageModel() {
     return bulkCompleted + sumDownloadFractions(inFlight);
   });
 
-  async function loadInitialLibraries(): Promise<void> {
-    await loadLibraries({ mode: 'initial', failureContext: t('libraries.error.loadFailed') });
+  function start(): Promise<void> {
+    if (startPromise !== null) {
+      return startPromise;
+    }
+    if (disposed) {
+      return Promise.resolve();
+    }
+    active = true;
+    startPromise = loadOnStart();
+    return startPromise;
+  }
+
+  async function loadOnStart(): Promise<void> {
+    // A refresh requested before start is satisfied by this first load.
+    refreshQueued = false;
+    const isWarmStart = hasLoaded;
+    await loadLibraries({
+      mode: isWarmStart ? 'refresh' : 'initial',
+      failureContext: t(
+        isWarmStart ? 'libraries.error.refreshFailed' : 'libraries.error.loadFailed',
+      ),
+    });
   }
 
   /** Re-reads the already activated catalog projection after a shell refresh. */
   async function refreshCatalog(): Promise<void> {
+    if (!active) {
+      return;
+    }
     if (isBusy) {
       refreshQueued = true;
       return;
@@ -115,10 +147,15 @@ export function createLibrariesPageModel() {
 
   /** Consumes each shell refresh generation at most once. */
   function requestCatalogRefresh(refreshKey: number): void {
-    if (refreshKey <= lastRequestedRefreshKey) {
+    if (disposed || refreshKey <= lastRequestedRefreshKey) {
       return;
     }
     lastRequestedRefreshKey = refreshKey;
+
+    if (startPromise === null) {
+      refreshQueued = true;
+      return;
+    }
     void refreshCatalog();
   }
 
@@ -137,8 +174,7 @@ export function createLibrariesPageModel() {
       if (!isCurrentLoadRequest(requestId)) {
         return;
       }
-      packages = nextPackages;
-      hasLoaded = true;
+      commitPackages(nextPackages);
     } catch (error) {
       if (!isCurrentLoadRequest(requestId)) {
         return;
@@ -196,7 +232,7 @@ export function createLibrariesPageModel() {
   }
 
   async function downloadAllLatest(): Promise<BulkDownloadResult> {
-    if (isBusy) {
+    if (!active || isBusy) {
       return EMPTY_BULK_RESULT;
     }
     const targets = latestStablePackages.filter((row) => !row.is_downloaded);
@@ -248,6 +284,7 @@ export function createLibrariesPageModel() {
   /** Applies the mutation response directly so successful work stays successful. */
   async function runPackageAction(options: RunPackageActionOptions): Promise<boolean> {
     if (
+      !active ||
       loading ||
       refreshing ||
       pendingActions.has(options.packageId) ||
@@ -264,12 +301,12 @@ export function createLibrariesPageModel() {
 
     try {
       const state = await options.execute(options.packageId);
-      if (mounted) {
+      if (isModelActive()) {
         applyPackageState(state);
       }
       return true;
     } catch (error) {
-      if (mounted) {
+      if (isModelActive()) {
         if (options.suppressErrorBanner) {
           console.error(`${options.failureContext}:`, error);
         } else {
@@ -284,24 +321,31 @@ export function createLibrariesPageModel() {
   }
 
   function scheduleQueuedRefresh(): void {
-    if (mounted && refreshQueued && !isBusy) {
+    if (active && refreshQueued && !isBusy) {
       void refreshCatalog();
     }
   }
 
   function applyPackageState(state: LibraryPackageState): void {
-    packages = packages.map((row) =>
-      row.package_id === state.package_id ? { ...row, is_downloaded: state.is_downloaded } : row,
+    commitPackages(
+      packages.map((row) =>
+        row.package_id === state.package_id ? { ...row, is_downloaded: state.is_downloaded } : row,
+      ),
     );
   }
 
-  function init(): void {
-    mounted = true;
-    scheduleQueuedRefresh();
+  function commitPackages(nextPackages: readonly LibraryPackageSummary[]): void {
+    packages = nextPackages;
+    cache.set(nextPackages);
+    hasLoaded = true;
   }
 
   function dispose(): void {
-    mounted = false;
+    if (disposed) {
+      return;
+    }
+    active = false;
+    disposed = true;
     loadRequests.invalidate();
   }
 
@@ -336,6 +380,10 @@ export function createLibrariesPageModel() {
 
   function isCurrentLoadRequest(requestId: number): boolean {
     return loadRequests.isActive(requestId) && !loadRequests.isDisposed();
+  }
+
+  function isModelActive(): boolean {
+    return active && !disposed;
   }
 
   function setError(context: string, error: unknown): void {
@@ -392,7 +440,7 @@ export function createLibrariesPageModel() {
     get latestStablePendingCount() {
       return latestStablePendingCount;
     },
-    loadInitialLibraries,
+    start,
     refreshCatalog,
     requestCatalogRefresh,
     handleVendorChange,
@@ -400,7 +448,6 @@ export function createLibrariesPageModel() {
     handleDownload,
     handleDelete,
     downloadAllLatest,
-    init,
     dispose,
   };
 }

@@ -17,21 +17,6 @@ const ROW_ESTIMATE_SIZE_SINGLE_LINE = 40;
 const ROW_ESTIMATE_SIZE_WITH_NAME = 52;
 const ROW_OVERSCAN = 12;
 
-const COLUMN_IDS = ['version', 'hash', 'signed', 'size', 'actions'] as const;
-export const COLUMN_COUNT = COLUMN_IDS.length;
-
-const COLUMN_CLASS_BY_ID = {
-  version: 'w-56',
-  hash: 'w-64',
-  signed: 'w-40',
-  size: 'w-24',
-  actions: 'w-24 text-end',
-} satisfies Readonly<Record<(typeof COLUMN_IDS)[number], string>>;
-
-export function getColumnClass(columnId: string): string {
-  return COLUMN_CLASS_BY_ID[columnId as keyof typeof COLUMN_CLASS_BY_ID];
-}
-
 type LibrariesTableModelProps = {
   getEntries: () => LibraryPackageRow[];
   getColumns: () => ColumnDef<LibraryPackageRow>[];

@@ -27,6 +27,7 @@ vi.mock('@shared/lib', async (importOriginal) => {
 });
 
 import { createLibrariesPageModel } from './create-libraries-page-model.svelte';
+import { createLibraryPackagesCache, type LibraryPackagesCache } from './library-packages-cache';
 import { packagesOf, type PackageFixture } from './library-package-test-fixtures';
 
 function packageFixture(options: {
@@ -64,8 +65,11 @@ function state(packageId: string, isDownloaded: boolean): LibraryPackageState {
 }
 
 describe('createLibrariesPageModel', () => {
+  let cache: LibraryPackagesCache;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    cache = createLibraryPackagesCache();
     mocks.downloadLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, true)));
     mocks.deleteLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, false)));
     mocks.clearDownloadProgress.mockReturnValue(undefined);
@@ -74,11 +78,92 @@ describe('createLibrariesPageModel', () => {
 
   async function loadedModel(specs: PackageFixture[]) {
     mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
-    const model = createLibrariesPageModel();
-    model.init();
-    await model.loadInitialLibraries();
+    const model = createLibrariesPageModel({ cache });
+    await model.start();
     return model;
   }
+
+  it('uses cached packages immediately and refreshes them in the background on a new mount', async () => {
+    const initialPackages = packagesOf([
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
+    ]);
+    const refreshedPackages = packagesOf([
+      packageFixture({ id: 'dlss-2', lib: 'nvngx_dlss', version: '2' }),
+    ]);
+    mocks.listLibraryPackages
+      .mockResolvedValueOnce(initialPackages)
+      .mockResolvedValueOnce(refreshedPackages);
+
+    const firstModel = createLibrariesPageModel({ cache });
+    await firstModel.start();
+
+    const secondModel = createLibrariesPageModel({ cache });
+    expect(secondModel.loading).toBe(false);
+    expect(secondModel.filteredPackages.length).toBe(1);
+    expect(secondModel.packages[0].package_id).toBe('dlss-1');
+
+    const refresh = secondModel.start();
+    expect(secondModel.refreshing).toBe(true);
+    await refresh;
+
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(2);
+    expect(secondModel.packages[0].package_id).toBe('dlss-2');
+  });
+
+  it('coalesces a pre-mount refresh request with the mount load', async () => {
+    mocks.listLibraryPackages.mockResolvedValue(
+      packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })]),
+    );
+    const model = createLibrariesPageModel({ cache });
+
+    model.requestCatalogRefresh(1);
+    await model.start();
+
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one in-flight promise across repeated start calls', async () => {
+    let resolvePackages!: (packages: LibraryPackageSummary[]) => void;
+    mocks.listLibraryPackages.mockReturnValue(
+      new Promise<LibraryPackageSummary[]>((resolve) => {
+        resolvePackages = resolve;
+      }),
+    );
+    const model = createLibrariesPageModel({ cache });
+
+    const firstStart = model.start();
+    const secondStart = model.start();
+
+    expect(secondStart).toBe(firstStart);
+    expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
+
+    resolvePackages([]);
+    await firstStart;
+  });
+
+  it('keeps cached packages available when a background refresh fails', async () => {
+    const initialPackages = packagesOf([
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
+    ]);
+    mocks.listLibraryPackages
+      .mockResolvedValueOnce(initialPackages)
+      .mockRejectedValueOnce(new Error('offline'));
+
+    const firstModel = createLibrariesPageModel({ cache });
+    await firstModel.start();
+    const secondModel = createLibrariesPageModel({ cache });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      await secondModel.start();
+
+      expect(secondModel.packages).toEqual(initialPackages);
+      expect(secondModel.errorMessage).not.toBeNull();
+      expect(cache.get()).toEqual(initialPackages);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 
   it('applies a successful mutation response without a fallible state refresh', async () => {
     const model = await loadedModel([
@@ -90,6 +175,9 @@ describe('createLibrariesPageModel', () => {
     expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
     expect(model.packages[0].is_downloaded).toBe(true);
     expect(model.errorMessage).toBeNull();
+
+    const nextModel = createLibrariesPageModel({ cache });
+    expect(nextModel.packages[0].is_downloaded).toBe(true);
   });
 
   it('applies delete state directly to the matching row', async () => {
@@ -218,9 +306,8 @@ describe('createLibrariesPageModel', () => {
         resolvePackages = resolve;
       }),
     );
-    const model = createLibrariesPageModel();
-    model.init();
-    const loading = model.loadInitialLibraries();
+    const model = createLibrariesPageModel({ cache });
+    const loading = model.start();
 
     model.dispose();
     resolvePackages(
@@ -229,6 +316,23 @@ describe('createLibrariesPageModel', () => {
     await loading;
 
     expect(model.packages).toEqual([]);
+    expect(cache.get()).toBeNull();
+  });
+
+  it('treats dispose as terminal and does not restart loading', async () => {
+    const model = createLibrariesPageModel({ cache });
+
+    model.dispose();
+    await model.start();
+    await expect(model.handleDownload('ignored')).resolves.toBe(false);
+    await expect(model.downloadAllLatest()).resolves.toEqual({
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(mocks.listLibraryPackages).not.toHaveBeenCalled();
+    expect(mocks.downloadLibraryPackage).not.toHaveBeenCalled();
   });
 
   it('does not let an older package request overwrite a newer result', async () => {
@@ -242,16 +346,15 @@ describe('createLibrariesPageModel', () => {
       .mockResolvedValueOnce(
         packagesOf([packageFixture({ id: 'new', lib: 'nvngx_dlss', version: '2' })]),
       );
-    const model = createLibrariesPageModel();
-    model.init();
+    const model = createLibrariesPageModel({ cache });
 
-    const older = model.loadInitialLibraries();
-    const newer = model.loadInitialLibraries();
-    await newer;
+    const older = model.start();
+    model.requestCatalogRefresh(1);
     resolveFirst(packagesOf([packageFixture({ id: 'old', lib: 'nvngx_dlss', version: '1' })]));
     await older;
-
-    expect(model.packages.map((row) => row.package_id)).toEqual(['new']);
+    await vi.waitFor(() => {
+      expect(model.packages.map((row) => row.package_id)).toEqual(['new']);
+    });
   });
 
   it('aggregates finished packages and in-flight byte fractions', async () => {

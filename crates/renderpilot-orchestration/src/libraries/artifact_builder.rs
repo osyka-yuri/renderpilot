@@ -14,7 +14,8 @@ use crate::ServiceError;
 
 use super::resolved::{ResolvedPackage, ValidatedCatalog};
 use super::types::{
-    LibraryArtifactRecord, LibraryPackage, LibraryPackageSummary, LibraryProvenance,
+    LibraryArtifactRecord, LibraryLegalDocumentLink, LibraryPackage, LibraryPackageSummary,
+    LibraryProvenance,
 };
 use super::{CATALOG_SOURCE, catalog, library_error};
 
@@ -162,6 +163,17 @@ pub(super) fn package_summary(
             ))
         })
     })?;
+    let legal_documents = resolved
+        .legal_documents()
+        .map(|document| LibraryLegalDocumentLink {
+            legal_document_id: document.legal_document_id.clone(),
+            kind: document.kind,
+            title: document.title.clone(),
+            format: document.format,
+            file_name: document.file_name.clone(),
+            content_url: crate::cdn::cdn_url(&document.object_key),
+        })
+        .collect();
 
     Ok(LibraryPackageSummary {
         package_id: package.package_id.clone(),
@@ -176,6 +188,7 @@ pub(super) fn package_summary(
         primary_file_name: primary.file_name.clone(),
         primary_sha256,
         primary_signature: primary.signature.clone(),
+        legal_documents,
         size_bytes,
         is_downloaded,
     })

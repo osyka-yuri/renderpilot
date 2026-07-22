@@ -21,17 +21,22 @@
   } from '@shared/ui';
   import { t } from '@shared/i18n';
 
-  import { typeOptionsByVendor, vendorOptions } from '../model/libraries-page-model';
+  import {
+    findPackageRow,
+    typeOptionsByVendor,
+    vendorOptions,
+  } from '../model/libraries-page-model';
   import { createLibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
-  import { createLibraryColumns } from './library-columns';
   import {
-    createLibrariesTableModel,
-    COLUMN_COUNT,
-    getColumnClass,
-  } from '../model/create-libraries-table-model.svelte';
+    createLibraryColumns,
+    LIBRARY_COLUMN_COUNT,
+    getLibraryColumnClass,
+  } from './library-columns';
+  import { createLibrariesTableModel } from '../model/create-libraries-table-model.svelte';
   import { getBottomVirtualPadding, getTopVirtualPadding } from './virtualizer-helpers';
   import LibrariesBulkDownloadButton from './LibrariesBulkDownloadButton.svelte';
+  import LibraryLegalDocumentsSheet from './LibraryLegalDocumentsSheet.svelte';
 
   type Props = {
     refreshKey?: number;
@@ -40,6 +45,8 @@
   const { refreshKey = 0 }: Props = $props();
 
   const model = createLibrariesPageModel();
+  let legalDocumentsPackageId = $state<string | null>(null);
+  const legalDocumentsRow = $derived(findPackageRow(model.packages, legalDocumentsPackageId));
 
   $effect(() => {
     const requestedRefreshKey = refreshKey;
@@ -55,6 +62,9 @@
     model.handleDownload,
     model.handleDelete,
     () => model.showPackageDisplayName,
+    (row) => {
+      legalDocumentsPackageId = row.package_id;
+    },
   );
 
   const tableModel = createLibrariesTableModel({
@@ -73,13 +83,18 @@
   );
 
   $effect(() => {
-    model.init();
-    void model.loadInitialLibraries();
+    void model.start();
 
     return () => {
       model.dispose();
       tableModel.dispose();
     };
+  });
+
+  $effect(() => {
+    if (legalDocumentsPackageId !== null && !model.loading && legalDocumentsRow === null) {
+      legalDocumentsPackageId = null;
+    }
   });
 </script>
 
@@ -136,7 +151,7 @@
                 {#each tableModel.table.getHeaderGroups() as headerGroup (headerGroup.id)}
                   <TableRow>
                     {#each headerGroup.headers as header (header.id)}
-                      <TableHead class={getColumnClass(header.column.id)}>
+                      <TableHead class={getLibraryColumnClass(header.column.id)}>
                         {#if !header.isPlaceholder}
                           <FlexRender
                             content={header.column.columnDef.header}
@@ -153,7 +168,7 @@
                 {#if model.emptyMessage}
                   <TableRow>
                     <TableCell
-                      colspan={COLUMN_COUNT}
+                      colspan={LIBRARY_COLUMN_COUNT}
                       class="h-24 text-center text-muted-foreground"
                     >
                       {model.emptyMessage}
@@ -163,7 +178,7 @@
                   {#if topVirtualPadding > 0}
                     <TableRow aria-hidden="true">
                       <TableCell
-                        colspan={COLUMN_COUNT}
+                        colspan={LIBRARY_COLUMN_COUNT}
                         style="height: {topVirtualPadding}px; padding: 0; border: 0;"
                       />
                     </TableRow>
@@ -175,7 +190,7 @@
                     {#if row}
                       <TableRow>
                         {#each row.getVisibleCells() as cell (cell.id)}
-                          <TableCell class={getColumnClass(cell.column.id)}>
+                          <TableCell class={getLibraryColumnClass(cell.column.id)}>
                             <FlexRender
                               content={cell.column.columnDef.cell}
                               context={cell.getContext()}
@@ -189,7 +204,7 @@
                   {#if bottomVirtualPadding > 0}
                     <TableRow aria-hidden="true">
                       <TableCell
-                        colspan={COLUMN_COUNT}
+                        colspan={LIBRARY_COLUMN_COUNT}
                         style="height: {bottomVirtualPadding}px; padding: 0; border: 0;"
                       />
                     </TableRow>
@@ -203,3 +218,10 @@
     {/each}
   </Tabs>
 </section>
+
+<LibraryLegalDocumentsSheet
+  row={legalDocumentsRow}
+  onClose={() => {
+    legalDocumentsPackageId = null;
+  }}
+/>

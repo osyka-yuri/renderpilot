@@ -6,7 +6,10 @@
 
 use crate::utils::{JsonResult, to_json};
 
-pub use renderpilot_orchestration::libraries::{LibraryPackageState, LibraryPackageSummary};
+pub use renderpilot_orchestration::libraries::{
+    LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryLegalDocumentLink,
+    LibraryPackageState, LibraryPackageSummary,
+};
 pub use renderpilot_orchestration::net::{DownloadProgress, ProgressObserver};
 
 // ---------------------------------------------------------------------------

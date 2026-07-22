@@ -1,4 +1,9 @@
-import type { LibraryPackageSummary, ReleaseChannel, Signature } from '@entities/library';
+import type {
+  LibraryLegalDocumentLink,
+  LibraryPackageSummary,
+  ReleaseChannel,
+  Signature,
+} from '@entities/library';
 
 export type PackageFixture = Readonly<{
   id: string;
@@ -12,6 +17,7 @@ export type PackageFixture = Readonly<{
   label?: string | null;
   displayName?: string;
   signature?: Signature;
+  legalDocuments?: LibraryPackageSummary['legal_documents'];
   sizeBytes?: number;
   isDownloaded?: boolean;
 }>;
@@ -51,7 +57,23 @@ export function packageSummary(spec: PackageFixture, index = 0): LibraryPackageS
     primary_file_name: `${spec.id}.dll`,
     primary_sha256: digest,
     primary_signature: spec.signature ?? { status: 'unsigned' },
+    legal_documents: spec.legalDocuments ?? [],
     size_bytes: spec.sizeBytes ?? 1,
     is_downloaded: spec.isDownloaded ?? false,
+  };
+}
+
+export function legalDocumentLink(
+  overrides: Partial<LibraryLegalDocumentLink> = {},
+): LibraryLegalDocumentLink {
+  const sha256 = 'a'.repeat(64);
+  return {
+    legal_document_id: `license.${sha256}`,
+    kind: 'license',
+    title: 'SDK License',
+    format: 'text',
+    file_name: 'LICENSE.txt',
+    content_url: `https://cdn.example.test/libraries/legal/sha256/${sha256}.txt`,
+    ...overrides,
   };
 }

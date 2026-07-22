@@ -1,43 +1,7 @@
-//! Versioned contracts for the graphics-library catalog.
-
 use renderpilot_domain::{Architecture, PeExportSet, RuntimeCompatibility};
 use serde::{Deserialize, Serialize};
 
-/// Complete, validated catalog snapshot exposed to callers.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct LibraryCatalog {
-    /// Catalog schema version.
-    pub schema_version: u32,
-    /// Generation timestamp of the activating index.
-    pub generated_at: String,
-    /// Supported vendor snapshots activated by the index.
-    pub vendors: Vec<LibraryVendorCatalog>,
-}
-
-/// One vendor's immutable catalog snapshot.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct LibraryVendorCatalog {
-    /// Vendor identity and display metadata.
-    pub vendor: LibraryVendor,
-    /// Generation timestamp of this immutable vendor snapshot.
-    pub generated_at: String,
-    /// Physical DLL artifacts addressable by package members.
-    pub artifacts: Vec<LibraryArtifactRecord>,
-    /// Explicit install units. Consumers never infer packages from artifacts.
-    pub packages: Vec<LibraryPackage>,
-}
-
-/// Catalog vendor metadata.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct LibraryVendor {
-    /// Stable vendor identifier.
-    pub id: String,
-    /// User-facing vendor name.
-    pub display_name: String,
-}
+use super::LibraryLegalDocumentLink;
 
 /// Physical DLL and its transport object.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -112,6 +76,9 @@ pub struct LibraryPackage {
     /// Optional upstream registry provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<LibraryProvenance>,
+    /// Applicable legal documents resolved within the vendor snapshot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legal_document_ids: Vec<String>,
     /// Ordered package members; the primary member must be first.
     pub members: Vec<LibraryPackageMember>,
     /// Forward-compatible vendor metadata ignored by core behavior.
@@ -252,36 +219,10 @@ pub struct LibraryPackageSummary {
     pub primary_sha256: String,
     /// Primary member signature.
     pub primary_signature: SignatureInfo,
+    /// Applicable legal documents with validated public links.
+    pub legal_documents: Vec<LibraryLegalDocumentLink>,
     /// Sum of all member DLL sizes.
     pub size_bytes: u64,
     /// Whether the verified package is materialized locally.
     pub is_downloaded: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct LibraryIndex {
-    pub(super) schema_version: u32,
-    pub(super) generated_at: String,
-    pub(super) vendors: Vec<LibraryVendorReference>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct LibraryVendorReference {
-    pub(super) vendor_id: String,
-    pub(super) display_name: String,
-    pub(super) snapshot_key: String,
-    pub(super) snapshot_sha256: String,
-    pub(super) snapshot_size_bytes: u64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct LibraryVendorSnapshot {
-    pub(super) schema_version: u32,
-    pub(super) vendor: LibraryVendor,
-    pub(super) generated_at: String,
-    pub(super) artifacts: Vec<LibraryArtifactRecord>,
-    pub(super) packages: Vec<LibraryPackage>,
 }
