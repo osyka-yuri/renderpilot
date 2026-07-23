@@ -30,3 +30,9 @@ all = { level = "warn", priority = -1 }
 needless_pass_by_value = "warn"
 redundant_clone = "warn"
 unnecessary_to_owned = "warn"
+
+# D3D12 mutation preflight hashes large game executables. Keep the crypto
+# primitive optimized in development builds so safety checks do not make the
+# desktop UI appear frozen under `tauri dev`.
+[profile.dev.package.sha2]
+opt-level = 3
