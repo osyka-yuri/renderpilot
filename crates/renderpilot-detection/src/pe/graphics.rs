@@ -15,16 +15,13 @@
 //! of the set.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi};
 
-use super::binary::{read_u16, read_u32};
-use super::header::{
-    COFF_HEADER_LEN, DOS_PE_POINTER_OFFSET, MAX_SECTIONS, PeHeaders, SECTION_HEADER_LEN,
-    rva_to_offset,
-};
+use super::binary::read_u32;
+use super::header::{PeHeaders, rva_to_offset};
+use super::source::{ByteSource, read_header_region};
 
 const IMPORT_DESCRIPTOR_LEN: usize = 20;
 const IMPORT_DESCRIPTOR_NAME_OFFSET: usize = 12;
@@ -133,102 +130,6 @@ fn collect_graphics_apis<S: ByteSource>(
     (apis, dlls)
 }
 
-/// Reads just the PE header region (DOS stub + PE/COFF + optional header +
-/// section table) from `file`, returning a buffer spanning `[0, header_end)`.
-/// Returns `None` for anything that is not a well-formed PE or is truncated.
-///
-/// Two small probes (DOS header, then PE+COFF) establish the sizes; a third
-/// read pulls exactly the header region. Total bytes read is a few KB for any
-/// real executable regardless of its on-disk size.
-fn read_header_region(file: &mut File) -> Option<Vec<u8>> {
-    // DOS header: need at least the PE offset at 0x3c.
-    let dos = file.read_exact_at(0, DOS_HEADER_PROBE_LEN)?;
-    if &dos[..2] != b"MZ" {
-        return None;
-    }
-    let pe_offset = usize::try_from(read_u32(&dos, DOS_PE_POINTER_OFFSET)?).ok()?;
-
-    // PE signature + COFF header (4 + 20 bytes) at `pe_offset`.
-    let coff_region_len = 4 + COFF_HEADER_LEN;
-    let coff = file.read_exact_at(pe_offset, coff_region_len)?;
-    if &coff[..4] != b"PE\0\0" {
-        return None;
-    }
-    let section_count = usize::from(read_u16(&coff, 4 + 2)?);
-    if section_count > MAX_SECTIONS {
-        return None;
-    }
-    let optional_header_size = usize::from(read_u16(&coff, 4 + 16)?);
-    let optional_header_offset = pe_offset + 4 + COFF_HEADER_LEN;
-    let header_end = optional_header_offset
-        .checked_add(optional_header_size)?
-        .checked_add(section_count.checked_mul(SECTION_HEADER_LEN)?)?;
-
-    file.read_exact_at(0, header_end)
-}
-
-/// A random-access byte source for the import-directory walk. Implemented for an
-/// in-memory slice and a [`File`] so the descriptor/name reads are written once
-/// and shared by the streaming ([`analyze_executable`]) and slice
-/// ([`analyze_executable_bytes`]) entry points.
-trait ByteSource {
-    /// Reads exactly `len` bytes at `offset`, or `None` on an I/O error or a
-    /// short read (truncated/EOF). A short read is treated as malformed rather
-    /// than silently partial so callers never reason about a truncated region.
-    fn read_exact_at(&mut self, offset: usize, len: usize) -> Option<Vec<u8>>;
-    /// Reads up to `len` bytes at `offset`, returning whatever is available
-    /// (possibly fewer, including empty at EOF). `None` only on an I/O error.
-    /// Used for import name strings, which terminate at a NUL and may sit near
-    /// the end where a strict full read would fail.
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>>;
-}
-
-impl ByteSource for File {
-    fn read_exact_at(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let start = u64::try_from(offset).ok()?;
-        self.seek(SeekFrom::Start(start)).ok()?;
-        let mut buf = vec![0u8; len];
-        let mut filled = 0;
-        while filled < len {
-            let n = self.read(&mut buf[filled..]).ok()?;
-            if n == 0 {
-                return None;
-            }
-            filled += n;
-        }
-        Some(buf)
-    }
-
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let start = u64::try_from(offset).ok()?;
-        self.seek(SeekFrom::Start(start)).ok()?;
-        let mut buf = vec![0u8; len];
-        let mut filled = 0;
-        while filled < len {
-            let n = self.read(&mut buf[filled..]).ok()?;
-            if n == 0 {
-                break;
-            }
-            filled += n;
-        }
-        buf.truncate(filled);
-        Some(buf)
-    }
-}
-
-impl ByteSource for &[u8] {
-    fn read_exact_at(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let end = offset.checked_add(len)?;
-        self.get(offset..end).map(<[u8]>::to_vec)
-    }
-
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let start = offset.min(self.len());
-        let end = start.saturating_add(len).min(self.len());
-        Some(self[start..end].to_vec())
-    }
-}
-
 /// Walks one import directory (static or delay-load) from `source` on demand,
 /// invoking `f` with each imported DLL name. Reads only the descriptor table and
 /// each name string via targeted reads, so a file source never loads the body
@@ -298,10 +199,6 @@ pub(super) fn architecture_from_machine(machine: u16) -> Option<Architecture> {
         _ => None,
     }
 }
-
-/// Bytes read for the initial DOS header probe: enough to cover `MZ` and the
-/// PE offset at `0x3c` for any standard PE.
-const DOS_HEADER_PROBE_LEN: usize = 64;
 
 /// Analyzes raw executable `bytes`, returning the detected graphics API set and
 /// architecture on a best-effort basis. Never fails: anything unparseable

@@ -333,9 +333,10 @@ pub fn sha256_file(path: &Path) -> AppResult<Sha256Hash> {
 /// Computes the SHA-256 hash of in-memory bytes, using the same hex encoding
 /// and [`Sha256Hash`] validation as [`sha256_file`].
 pub fn sha256_bytes(bytes: &[u8]) -> AppResult<Sha256Hash> {
-    let hash = sha256_reader_hex(bytes).map_err(|error| {
-        detection_context_error(format_args!("could not hash in-memory bytes"), error)
-    })?;
+    // `bytes` is already contiguous memory. Feeding it through `Read` copied
+    // every chunk into a second buffer before hashing, which was especially
+    // costly for large game executables during D3D12 preflight and rollback.
+    let hash = hex::encode(Sha256::digest(bytes));
     Sha256Hash::new(hash).map_err(detection_error)
 }
 
@@ -432,7 +433,10 @@ mod tests {
 
     use renderpilot_domain::{Sha256Hash, Version};
 
-    use super::{FileHashCache, FileStat, VersionDetectionStatus, sha256_file, sha256_reader_hex};
+    use super::{
+        FileHashCache, FileStat, VersionDetectionStatus, sha256_bytes, sha256_file,
+        sha256_reader_hex,
+    };
 
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
@@ -443,6 +447,13 @@ mod tests {
         fs::write(file.path(), b"abc").expect("test file should be written");
 
         let hash = sha256_file(file.path()).expect("hashing should succeed");
+
+        assert_eq!(hash.as_str(), ABC_SHA256);
+    }
+
+    #[test]
+    fn sha256_bytes_hashes_known_content_without_a_reader_copy() {
+        let hash = sha256_bytes(b"abc").expect("in-memory hashing should succeed");
 
         assert_eq!(hash.as_str(), ABC_SHA256);
     }

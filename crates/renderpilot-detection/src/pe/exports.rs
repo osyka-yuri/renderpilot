@@ -4,8 +4,13 @@
 //! Reading the export name table gives the orchestration layer a much stronger
 //! identity signal than file names or neighbouring config files.
 
-use super::binary::{checked_range, read_u16, read_u32};
+use super::PeExportedU32;
+use std::fs::File;
+use std::path::Path;
+
+use super::binary::{read_u16, read_u32};
 use super::header::{PeHeaders, data_rva_to_offset, rva_range_to_offset};
+use super::source::{ByteSource, read_header_region};
 use renderpilot_domain::PeExportSet;
 
 const EXPORT_DIRECTORY_INDEX: usize = 0;
@@ -20,9 +25,9 @@ const EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET: usize = 36;
 ///
 /// Header parsing and directory validation live here so name enumeration and
 /// typed DATA-export lookup cannot drift apart.
-struct ExportTable<'a> {
-    bytes: &'a [u8],
-    headers: PeHeaders<'a>,
+struct ExportTable<'headers, 'bytes, 'source, Source> {
+    headers: &'headers PeHeaders<'bytes>,
+    source: &'source mut Source,
     directory_rva: u32,
     directory_size: u32,
     directory_offset: usize,
@@ -30,10 +35,12 @@ struct ExportTable<'a> {
     name_count: usize,
 }
 
-impl<'a> ExportTable<'a> {
+impl<'headers, 'bytes, 'source, Source: ByteSource> ExportTable<'headers, 'bytes, 'source, Source> {
     /// Returns `Some(None)` for a valid image without exports.
-    fn parse(bytes: &'a [u8]) -> Option<Option<Self>> {
-        let headers = PeHeaders::parse(bytes)?;
+    fn parse(
+        headers: &'headers PeHeaders<'bytes>,
+        source: &'source mut Source,
+    ) -> Option<Option<Self>> {
         let Some((directory_rva, directory_size)) = headers.data_directory(EXPORT_DIRECTORY_INDEX)
         else {
             return Some(None);
@@ -50,18 +57,17 @@ impl<'a> ExportTable<'a> {
             directory_rva,
             EXPORT_DIRECTORY_LEN as u32,
         )?;
-        checked_range(bytes, directory_offset, EXPORT_DIRECTORY_LEN)?;
+        let directory = source.read_exact_at(directory_offset, EXPORT_DIRECTORY_LEN)?;
 
-        let function_count =
-            Self::read_count(bytes, directory_offset, EXPORT_NUMBER_OF_FUNCTIONS_OFFSET)?;
-        let name_count = Self::read_count(bytes, directory_offset, EXPORT_NUMBER_OF_NAMES_OFFSET)?;
+        let function_count = Self::read_count(&directory, EXPORT_NUMBER_OF_FUNCTIONS_OFFSET)?;
+        let name_count = Self::read_count(&directory, EXPORT_NUMBER_OF_NAMES_OFFSET)?;
         if function_count > PeExportSet::MAX_NAMES || name_count > PeExportSet::MAX_NAMES {
             return None;
         }
 
         Some(Some(Self {
-            bytes,
             headers,
+            source,
             directory_rva,
             directory_size,
             directory_offset,
@@ -70,15 +76,22 @@ impl<'a> ExportTable<'a> {
         }))
     }
 
-    fn read_count(bytes: &[u8], directory_offset: usize, field: usize) -> Option<usize> {
-        usize::try_from(read_u32(bytes, directory_offset.checked_add(field)?)?).ok()
+    fn read_count(directory: &[u8], field: usize) -> Option<usize> {
+        usize::try_from(read_u32(directory, field)?).ok()
     }
 
-    fn array_offset(&self, field: usize, count: usize, element_size: usize) -> Option<usize> {
+    fn directory_u32(&mut self, field: usize) -> Option<u32> {
+        let bytes = self
+            .source
+            .read_exact_at(self.directory_offset.checked_add(field)?, 4)?;
+        read_u32(&bytes, 0)
+    }
+
+    fn array_offset(&mut self, field: usize, count: usize, element_size: usize) -> Option<usize> {
         if count == 0 {
             return Some(0);
         }
-        let rva = read_u32(self.bytes, self.directory_offset.checked_add(field)?)?;
+        let rva = self.directory_u32(field)?;
         if rva == 0 {
             return None;
         }
@@ -86,23 +99,25 @@ impl<'a> ExportTable<'a> {
         rva_range_to_offset(self.headers.sections(), rva, size)
     }
 
-    fn named_exports(&self) -> Option<Vec<(usize, String)>> {
+    fn named_exports(&mut self) -> Option<Vec<(usize, String)>> {
         let names_offset = self.array_offset(EXPORT_ADDRESS_OF_NAMES_OFFSET, self.name_count, 4)?;
         let ordinals_offset =
             self.array_offset(EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET, self.name_count, 2)?;
 
         let mut names = Vec::with_capacity(self.name_count);
         for index in 0..self.name_count {
-            let name_rva = read_u32(self.bytes, names_offset.checked_add(index.checked_mul(4)?)?)?;
+            let name_pointer = self
+                .source
+                .read_exact_at(names_offset.checked_add(index.checked_mul(4)?)?, 4)?;
+            let name_rva = read_u32(&name_pointer, 0)?;
             let name =
-                read_ascii_null_terminated_rva(self.bytes, self.headers.sections(), name_rva)?;
-            let ordinal = usize::from(read_u16(
-                self.bytes,
-                ordinals_offset.checked_add(index.checked_mul(2)?)?,
-            )?);
-            if ordinal >= self.function_count
-                || !self.valid_function_target(self.function_rva(ordinal)?)?
-            {
+                read_ascii_null_terminated_rva(self.source, self.headers.sections(), name_rva)?;
+            let ordinal_bytes = self
+                .source
+                .read_exact_at(ordinals_offset.checked_add(index.checked_mul(2)?)?, 2)?;
+            let ordinal = usize::from(read_u16(&ordinal_bytes, 0)?);
+            let function_rva = self.function_rva(ordinal)?;
+            if ordinal >= self.function_count || !self.valid_function_target(function_rva)? {
                 return None;
             }
             names.push((ordinal, name));
@@ -110,16 +125,16 @@ impl<'a> ExportTable<'a> {
         Some(names)
     }
 
-    fn function_rva(&self, ordinal: usize) -> Option<u32> {
+    fn function_rva(&mut self, ordinal: usize) -> Option<u32> {
         if ordinal >= self.function_count {
             return None;
         }
         let functions_offset =
             self.array_offset(EXPORT_ADDRESS_OF_FUNCTIONS_OFFSET, self.function_count, 4)?;
-        read_u32(
-            self.bytes,
-            functions_offset.checked_add(ordinal.checked_mul(4)?)?,
-        )
+        let function = self
+            .source
+            .read_exact_at(functions_offset.checked_add(ordinal.checked_mul(4)?)?, 4)?;
+        read_u32(&function, 0)
     }
 
     fn is_forwarder(&self, rva: u32) -> Option<bool> {
@@ -127,13 +142,13 @@ impl<'a> ExportTable<'a> {
         Some((self.directory_rva..end).contains(&rva))
     }
 
-    fn valid_function_target(&self, rva: u32) -> Option<bool> {
+    fn valid_function_target(&mut self, rva: u32) -> Option<bool> {
         if rva == 0 {
             return Some(false);
         }
         if self.is_forwarder(rva)? {
             let forwarder =
-                read_ascii_null_terminated_rva(self.bytes, self.headers.sections(), rva)?;
+                read_ascii_null_terminated_rva(self.source, self.headers.sections(), rva)?;
             let encoded_len = u32::try_from(forwarder.len().checked_add(1)?).ok()?;
             let forwarder_end = rva.checked_add(encoded_len)?;
             let directory_end = self.directory_rva.checked_add(self.directory_size)?;
@@ -142,7 +157,7 @@ impl<'a> ExportTable<'a> {
 
         Some(
             rva_range_to_offset(self.headers.sections(), rva, 1)
-                .and_then(|offset| self.bytes.get(offset))
+                .and_then(|offset| self.source.read_exact_at(offset, 1))
                 .is_some(),
         )
     }
@@ -153,7 +168,9 @@ impl<'a> ExportTable<'a> {
 /// Returns `Some(vec![])` for a valid PE without an export directory and `None`
 /// for bytes that are not a parseable PE image.
 pub(crate) fn export_names_from_bytes(bytes: &[u8]) -> Option<Vec<String>> {
-    let Some(table) = ExportTable::parse(bytes)? else {
+    let headers = PeHeaders::parse(bytes)?;
+    let mut source = bytes;
+    let Some(mut table) = ExportTable::parse(&headers, &mut source)? else {
         return Some(Vec::new());
     };
     table
@@ -166,12 +183,33 @@ pub(crate) fn export_names_from_bytes(bytes: &[u8]) -> Option<Vec<String>> {
 /// Function/forwarder exports, duplicate names, missing symbols, and malformed
 /// tables all return `None`. The routine deliberately resolves the name ordinal
 /// through `AddressOfFunctions`; a name-table index is not a function index.
-pub(crate) fn exported_u32_from_bytes(bytes: &[u8], target: &str) -> Option<u32> {
+pub(crate) fn exported_u32_location_from_bytes(
+    bytes: &[u8],
+    target: &str,
+) -> Option<PeExportedU32> {
+    let headers = PeHeaders::parse(bytes)?;
+    let mut source = bytes;
+    exported_u32_location(&headers, &mut source, target)
+}
+
+/// Locates a unique inline `u32` DATA export without reading the whole image.
+pub(crate) fn exported_u32_location_from_path(path: &Path, target: &str) -> Option<PeExportedU32> {
+    let mut file = File::open(path).ok()?;
+    let header_bytes = read_header_region(&mut file)?;
+    let headers = PeHeaders::parse(&header_bytes)?;
+    exported_u32_location(&headers, &mut file, target)
+}
+
+fn exported_u32_location(
+    headers: &PeHeaders<'_>,
+    source: &mut impl ByteSource,
+    target: &str,
+) -> Option<PeExportedU32> {
     if target.is_empty() || !target.is_ascii() {
         return None;
     }
 
-    let table = ExportTable::parse(bytes)??;
+    let mut table = ExportTable::parse(headers, source)??;
 
     let mut matching_rva = None;
     for (ordinal, name) in table.named_exports()? {
@@ -189,19 +227,22 @@ pub(crate) fn exported_u32_from_bytes(bytes: &[u8], target: &str) -> Option<u32>
         return None;
     }
     let value_offset = data_rva_to_offset(table.headers.sections(), value_rva, 4)?;
-    read_u32(bytes, value_offset)
+    let value_bytes = table.source.read_exact_at(value_offset, 4)?;
+    Some(PeExportedU32 {
+        value: read_u32(&value_bytes, 0)?,
+        file_offset: value_offset,
+    })
 }
 
 fn read_ascii_null_terminated_rva(
-    bytes: &[u8],
+    source: &mut impl ByteSource,
     sections: &[super::header::SectionHeader],
     rva: u32,
 ) -> Option<String> {
+    let offset = rva_range_to_offset(sections, rva, 1)?;
+    let bytes = source.read_at_most(offset, PeExportSet::MAX_NAME_BYTES.checked_add(1)?)?;
     let mut name = String::new();
-    for index in 0..=PeExportSet::MAX_NAME_BYTES {
-        let current_rva = rva.checked_add(u32::try_from(index).ok()?)?;
-        let offset = rva_range_to_offset(sections, current_rva, 1)?;
-        let byte = *bytes.get(offset)?;
+    for byte in bytes {
         if byte == 0 {
             return (!name.is_empty()).then_some(name);
         }
@@ -276,21 +317,77 @@ mod tests {
             (MACHINE_AMD64, PE32_PLUS_MAGIC),
         ] {
             let pe = build_u32_export_pe(machine, magic, 618, false, false);
-            assert_eq!(exported_u32_from_bytes(&pe, "D3D12SDKVersion"), Some(618));
+            assert_eq!(
+                exported_u32_location_from_bytes(&pe, "D3D12SDKVersion").map(|export| export.value),
+                Some(618)
+            );
         }
+    }
+
+    #[test]
+    fn bounded_file_reader_matches_in_memory_export_validation() {
+        for (machine, magic) in [
+            (MACHINE_I386, super::super::header::PE32_MAGIC),
+            (MACHINE_AMD64, PE32_PLUS_MAGIC),
+        ] {
+            let pe = build_u32_export_pe(machine, magic, 619, false, false);
+            let file = tempfile::NamedTempFile::new().expect("temp PE");
+            std::fs::write(file.path(), &pe).expect("write PE");
+
+            assert_eq!(
+                exported_u32_location_from_path(file.path(), "D3D12SDKVersion"),
+                exported_u32_location_from_bytes(&pe, "D3D12SDKVersion"),
+            );
+        }
+
+        let malformed = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 619, true, false);
+        let file = tempfile::NamedTempFile::new().expect("temp malformed PE");
+        std::fs::write(file.path(), &malformed).expect("write malformed PE");
+        assert_eq!(
+            exported_u32_location_from_path(file.path(), "D3D12SDKVersion"),
+            None
+        );
+    }
+
+    #[test]
+    fn replacing_named_u32_changes_exactly_four_export_bytes() {
+        let mut pe = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 606, false, false);
+        let before = pe.clone();
+        let export =
+            super::super::replace_pe_exported_u32_in_bytes(&mut pe, "D3D12SDKVersion", 606, 619)
+                .expect("replace export");
+
+        assert_eq!(
+            &pe[export.file_offset..export.file_offset + 4],
+            &619u32.to_le_bytes()
+        );
+        assert_eq!(&pe[..export.file_offset], &before[..export.file_offset]);
+        assert_eq!(
+            &pe[export.file_offset + 4..],
+            &before[export.file_offset + 4..]
+        );
     }
 
     #[test]
     fn rejects_forwarded_duplicate_and_out_of_bounds_data_exports() {
         let forwarded = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, true, false);
-        assert_eq!(exported_u32_from_bytes(&forwarded, "D3D12SDKVersion"), None);
+        assert_eq!(
+            exported_u32_location_from_bytes(&forwarded, "D3D12SDKVersion"),
+            None
+        );
 
         let duplicate = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, false, true);
-        assert_eq!(exported_u32_from_bytes(&duplicate, "D3D12SDKVersion"), None);
+        assert_eq!(
+            exported_u32_location_from_bytes(&duplicate, "D3D12SDKVersion"),
+            None
+        );
 
         let mut truncated = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, false, false);
         truncated.truncate(truncated.len() - 2);
-        assert_eq!(exported_u32_from_bytes(&truncated, "D3D12SDKVersion"), None);
+        assert_eq!(
+            exported_u32_location_from_bytes(&truncated, "D3D12SDKVersion"),
+            None
+        );
 
         let mut invalid_ordinal =
             build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, false, false);
@@ -303,7 +400,7 @@ mod tests {
         let ordinal_offset = section_raw_ptr + EXPORT_DIRECTORY_LEN + 4 + 4;
         invalid_ordinal[ordinal_offset..ordinal_offset + 2].copy_from_slice(&1u16.to_le_bytes());
         assert_eq!(
-            exported_u32_from_bytes(&invalid_ordinal, "D3D12SDKVersion"),
+            exported_u32_location_from_bytes(&invalid_ordinal, "D3D12SDKVersion"),
             None
         );
 
@@ -312,7 +409,10 @@ mod tests {
         function[section_offset + super::super::header::SECTION_CHARACTERISTICS_OFFSET
             ..section_offset + super::super::header::SECTION_CHARACTERISTICS_OFFSET + 4]
             .copy_from_slice(&0x2000_0000u32.to_le_bytes());
-        assert_eq!(exported_u32_from_bytes(&function, "D3D12SDKVersion"), None);
+        assert_eq!(
+            exported_u32_location_from_bytes(&function, "D3D12SDKVersion"),
+            None
+        );
     }
 
     #[test]
@@ -322,7 +422,10 @@ mod tests {
         let export_size_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET + 4;
         short[export_size_offset..export_size_offset + 4]
             .copy_from_slice(&((EXPORT_DIRECTORY_LEN - 1) as u32).to_le_bytes());
-        assert_eq!(exported_u32_from_bytes(&short, "D3D12SDKVersion"), None);
+        assert_eq!(
+            exported_u32_location_from_bytes(&short, "D3D12SDKVersion"),
+            None
+        );
 
         let mut overlapping =
             build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, false, false);
@@ -334,7 +437,7 @@ mod tests {
         overlapping[second_section..second_section + SECTION_HEADER_LEN]
             .copy_from_slice(&first_header);
         assert_eq!(
-            exported_u32_from_bytes(&overlapping, "D3D12SDKVersion"),
+            exported_u32_location_from_bytes(&overlapping, "D3D12SDKVersion"),
             None
         );
     }

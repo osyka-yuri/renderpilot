@@ -9,6 +9,7 @@ mod exports;
 mod graphics;
 mod header;
 mod image;
+mod source;
 #[cfg(test)]
 mod tests;
 mod version_info;
@@ -20,10 +21,21 @@ use renderpilot_domain::{Architecture, PeCompatibilityProfile, PeExportSet, Vers
 pub use self::graphics::{analyze_executable, analyze_executable_bytes};
 pub use self::version_info::VersionIdentityStrings;
 use self::{
-    exports::{export_names_from_bytes, exported_u32_from_bytes},
+    exports::{
+        export_names_from_bytes, exported_u32_location_from_bytes, exported_u32_location_from_path,
+    },
     image::PeResourceImage,
     version_info::VersionInfo,
 };
+
+/// A unique named PE DATA export containing an inline little-endian `u32`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeExportedU32 {
+    /// Value observed in the image.
+    pub value: u32,
+    /// Byte offset of the four-byte value in the PE file.
+    pub file_offset: usize,
+}
 
 /// PE facts observed from one in-memory image, allowing callers to derive file
 /// version and compatibility data without reading the DLL once per field.
@@ -76,8 +88,39 @@ pub fn inspect_pe_bytes(bytes: &[u8]) -> PeInspection {
 
 /// Reads a unique named PE DATA export containing an inline `u32`.
 pub fn read_pe_exported_u32(path: &Path, name: &str) -> Option<u32> {
-    let bytes = fs::read(path).ok()?;
-    exported_u32_from_bytes(&bytes, name)
+    exported_u32_location_from_path(path, name).map(|export| export.value)
+}
+
+/// Locates a unique named PE DATA export containing an inline `u32`.
+///
+/// Function/forwarder exports, duplicate names, and malformed PE images return
+/// `None`. The returned file offset is suitable for a narrowly scoped byte
+/// patch after the caller has independently validated the source image.
+#[must_use]
+pub fn pe_exported_u32_from_bytes(bytes: &[u8], name: &str) -> Option<PeExportedU32> {
+    exported_u32_location_from_bytes(bytes, name)
+}
+
+/// Replaces one unique inline `u32` PE DATA export in memory.
+///
+/// The mutation is performed only when the currently observed value equals
+/// `expected`. The returned location describes the value before replacement.
+/// No filesystem writes are performed by this helper.
+pub fn replace_pe_exported_u32_in_bytes(
+    bytes: &mut [u8],
+    name: &str,
+    expected: u32,
+    replacement: u32,
+) -> Option<PeExportedU32> {
+    let export = pe_exported_u32_from_bytes(bytes, name)?;
+    if export.value != expected {
+        return None;
+    }
+    let end = export.file_offset.checked_add(std::mem::size_of::<u32>())?;
+    bytes
+        .get_mut(export.file_offset..end)?
+        .copy_from_slice(&replacement.to_le_bytes());
+    (pe_exported_u32_from_bytes(bytes, name)?.value == replacement).then_some(export)
 }
 
 /// Reads the Windows file version from the PE resource table at the given path.
