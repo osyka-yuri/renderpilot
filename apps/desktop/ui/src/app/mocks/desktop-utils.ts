@@ -9,6 +9,7 @@ import type {
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
+import type { LibraryPackageState, LibraryPackageSummary } from '@entities/library';
 import type { ManifestRefreshReport } from '@features/scan-libraries';
 import { fileNameFromPath } from '@shared/path';
 import { isRecord, isString, requireNonBlankString } from '@shared/validation';
@@ -30,6 +31,10 @@ export type DesktopCommandPayloadMap = {
   set_catalog_setting: { key: string; value: string };
   apply_swap: { gameId: string; componentId: string; artifactId: string };
   rollback_component: { gameId: string; componentId: string };
+  list_library_packages: undefined;
+  download_library_package: { packageId: string };
+  download_artifact: { artifactId: string };
+  delete_library_package: { packageId: string };
   // Luma — preview stubs (see commands/addon-tools.ts)
   luma_availability: { gameId: string };
   luma_check_update: { gameId: string; deep?: boolean };
@@ -73,6 +78,10 @@ export type DesktopCommandResultMap = {
   set_catalog_setting: { saved: boolean };
   apply_swap: ApplySwapResult;
   rollback_component: RollbackComponentResult;
+  list_library_packages: LibraryPackageSummary[];
+  download_library_package: LibraryPackageState;
+  download_artifact: LibraryPackageState;
+  delete_library_package: LibraryPackageState;
   // Wire DTOs for Luma/RenoDX live in feature slices; mock results stay untyped
   // so `app` does not import feature internals (FSD boundaries).
   luma_availability: unknown;
@@ -113,6 +122,10 @@ const ALL_DESKTOP_COMMANDS = [
   'set_catalog_setting',
   'apply_swap',
   'rollback_component',
+  'list_library_packages',
+  'download_library_package',
+  'download_artifact',
+  'delete_library_package',
   'luma_availability',
   'luma_check_update',
   'luma_install',

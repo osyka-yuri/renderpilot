@@ -59,25 +59,28 @@
   }
 </script>
 
-<div class="flex items-center justify-center gap-2">
+<div class="flex items-center justify-end gap-2">
   <DownloadProgressBar ids={[packageId]} active={isDownloading} />
   <Tooltip>
     <TooltipTrigger>
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={isActionDisabled}
-        onclick={handleActionClick}
-        aria-label={actionLabel}
-      >
-        {#if pendingAction !== null}
-          <Loader2Icon class="animate-spin" aria-hidden="true" />
-        {:else if isDownloaded}
-          <Trash2Icon aria-hidden="true" />
-        {:else}
-          <DownloadIcon aria-hidden="true" />
-        {/if}
-      </Button>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="ghost"
+          size="icon"
+          disabled={isActionDisabled}
+          onclick={handleActionClick}
+          aria-label={actionLabel}
+        >
+          {#if pendingAction !== null}
+            <Loader2Icon class="animate-spin" aria-hidden="true" />
+          {:else if isDownloaded}
+            <Trash2Icon aria-hidden="true" />
+          {:else}
+            <DownloadIcon aria-hidden="true" />
+          {/if}
+        </Button>
+      {/snippet}
     </TooltipTrigger>
     <TooltipContent>
       {actionLabel}

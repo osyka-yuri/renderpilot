@@ -122,15 +122,18 @@
 
     <Tooltip>
       <TooltipTrigger>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={disabled || !canReset}
-          onclick={onRevertPredefined}
-          aria-label={t('gameDetails.nvapi.resetDefault')}
-        >
-          <Undo2Icon class="size-4" aria-hidden="true" />
-        </Button>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="ghost"
+            size="icon-sm"
+            disabled={disabled || !canReset}
+            onclick={onRevertPredefined}
+            aria-label={t('gameDetails.nvapi.resetDefault')}
+          >
+            <Undo2Icon class="size-4" aria-hidden="true" />
+          </Button>
+        {/snippet}
       </TooltipTrigger>
       <TooltipContent>
         {canReset ? t('gameDetails.nvapi.resetDefault') : t('gameDetails.nvapi.alreadyDefault')}
@@ -139,15 +142,18 @@
 
     <Tooltip>
       <TooltipTrigger>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={disabled || !canRestore}
-          onclick={onRevertBaseline}
-          aria-label={t('gameDetails.nvapi.restoreBaselineAria')}
-        >
-          <HistoryIcon class="size-4" aria-hidden="true" />
-        </Button>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="ghost"
+            size="icon-sm"
+            disabled={disabled || !canRestore}
+            onclick={onRevertBaseline}
+            aria-label={t('gameDetails.nvapi.restoreBaselineAria')}
+          >
+            <HistoryIcon class="size-4" aria-hidden="true" />
+          </Button>
+        {/snippet}
       </TooltipTrigger>
       <TooltipContent>
         {#if canRestore}

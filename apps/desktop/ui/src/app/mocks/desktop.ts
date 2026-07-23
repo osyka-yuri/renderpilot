@@ -5,6 +5,12 @@ import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
 import { mockApplySwap, mockRollbackComponent } from './commands/operations';
+import {
+  mockDeleteLibraryPackage,
+  mockDownloadArtifact,
+  mockDownloadLibraryPackage,
+  mockListLibraryPackages,
+} from './commands/libraries';
 import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
 import { mockState, createMockState } from './desktop-state';
 import {
@@ -103,6 +109,18 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         readStringField(command, payload, 'componentId'),
       );
 
+    case 'list_library_packages':
+      return mockListLibraryPackages();
+
+    case 'download_library_package':
+      return mockDownloadLibraryPackage(readStringField(command, payload, 'packageId'));
+
+    case 'download_artifact':
+      return mockDownloadArtifact(readStringField(command, payload, 'artifactId'));
+
+    case 'delete_library_package':
+      return mockDeleteLibraryPackage(readStringField(command, payload, 'packageId'));
+
     case 'luma_availability':
       readStringField(command, payload, 'gameId');
       return mockUnsupportedLumaAvailability();
@@ -192,4 +210,8 @@ export {
   mockSetCatalogSetting,
   mockApplySwap,
   mockRollbackComponent,
+  mockListLibraryPackages,
+  mockDownloadLibraryPackage,
+  mockDownloadArtifact,
+  mockDeleteLibraryPackage,
 };

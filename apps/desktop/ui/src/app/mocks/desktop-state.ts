@@ -4,10 +4,15 @@ import type {
   GameGraphicsComponent,
   GameSummary,
 } from '@entities/game';
+import type { LibraryPackageSummary } from '@entities/library';
 
 import { createGameSummaryFromDetails, getLatestOperationStatus } from './build-game-summary';
 import { createInstallPathKey } from './desktop-utils';
-import { createAlanWakeDetails, createCyberpunkDetails } from './fixtures';
+import {
+  createAlanWakeDetails,
+  createCyberpunkDetails,
+  createMockLibraryPackages,
+} from './fixtures';
 
 export type GameSummaryPatch = Partial<
   Pick<
@@ -28,6 +33,7 @@ export type MockState = {
   manualGameIdByInstallPath: Map<string, string>;
   manualCounter: number;
   catalogSettings: Map<string, string>;
+  libraryPackages: LibraryPackageSummary[];
 };
 
 type ComponentFile = GameGraphicsComponent['files'][number];
@@ -66,6 +72,7 @@ export function createMockState(): MockState {
     manualGameIdByInstallPath: new Map(),
     manualCounter: 0,
     catalogSettings: new Map(),
+    libraryPackages: createMockLibraryPackages(),
   };
 }
 

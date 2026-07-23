@@ -72,15 +72,18 @@
 
   <Tooltip>
     <TooltipTrigger>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="size-6"
-        onclick={copyHashToClipboard}
-        aria-label={copyButtonLabel}
-      >
-        <CopyIcon class="size-3" />
-      </Button>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="ghost"
+          size="icon"
+          class="size-6"
+          onclick={copyHashToClipboard}
+          aria-label={copyButtonLabel}
+        >
+          <CopyIcon class="size-3" />
+        </Button>
+      {/snippet}
     </TooltipTrigger>
     <TooltipContent>{t('libraries.hash.copy')}</TooltipContent>
   </Tooltip>

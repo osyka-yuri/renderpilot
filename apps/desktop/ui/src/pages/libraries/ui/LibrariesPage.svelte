@@ -83,7 +83,11 @@
   );
 
   $effect(() => {
-    void model.start();
+    // The initial load updates model state. Tracking it here would rerun this
+    // effect and dispose the still-mounted page model.
+    untrack(() => {
+      void model.start();
+    });
 
     return () => {
       model.dispose();

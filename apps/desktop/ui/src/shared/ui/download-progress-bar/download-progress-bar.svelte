@@ -18,30 +18,21 @@
 
   const progress = $derived(active && ids.length > 0 ? latestDownloadProgress(ids) : null);
 
-  // A phase may be a raw label ("RenoDX add-on …") or an i18n key
-  // ("renodx.phase.finalizing"). `translateKey` falls back to the raw text when
-  // the key is not in the catalog, so existing raw labels render unchanged.
+  // Indeterminate finalization keeps its phase text beside the spinner; byte-tracked
+  // downloads intentionally render only the compact progress bar.
   const phaseLabel = $derived(progress?.phase ? translateKey(progress.phase, progress.phase) : '');
 </script>
 
 {#if progress && progress.total > 0}
-  <div class={cn('flex items-center gap-2', className)}>
-    {#if phaseLabel}
-      <span class="max-w-[120px] truncate text-xs whitespace-nowrap text-muted-foreground"
-        >{phaseLabel}</span
-      >
-    {/if}
-    <div class="w-16">
-      <Progress
-        value={progress.downloaded}
-        max={progress.total}
-        aria-label={t('common.downloadProgress')}
-      />
-    </div>
+  <div class={cn('w-16', className)}>
+    <Progress
+      value={progress.downloaded}
+      max={progress.total}
+      aria-label={t('common.downloadProgress')}
+    />
   </div>
 {:else if progress?.total === 0 && phaseLabel}
-  <!-- Indeterminate phase (e.g. disk I/O / record persistence after a download
-  finishes): no byte total to fill a bar against, so show a spinner + label. -->
+  <!-- Disk I/O / record persistence after a download: no byte total means a spinner. -->
   <div class={cn('flex items-center gap-2', className)}>
     <Spinner class="size-4" />
     <span class="max-w-[160px] truncate text-xs whitespace-nowrap text-muted-foreground"

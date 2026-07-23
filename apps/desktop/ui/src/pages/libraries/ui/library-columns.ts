@@ -21,7 +21,7 @@ const LIBRARY_COLUMN_LAYOUT = [
   { id: 'signed', className: 'w-36 text-center' },
   { id: 'size', className: 'w-24 text-center' },
   { id: 'documents', className: 'w-24 text-center' },
-  { id: 'actions', className: 'w-24 text-center' },
+  { id: 'actions', className: 'w-24 text-right' },
 ] as const;
 
 type LibraryColumnId = (typeof LIBRARY_COLUMN_LAYOUT)[number]['id'];

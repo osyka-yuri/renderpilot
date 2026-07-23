@@ -65,20 +65,23 @@
   {/if}
   <Tooltip>
     <TooltipTrigger>
-      <Button
-        variant="default"
-        size="sm"
-        {disabled}
-        aria-busy={model.bulkDownloading}
-        onclick={handleClick}
-      >
-        {#if model.bulkDownloading}
-          <Loader2Icon class="animate-spin" aria-hidden="true" />
-        {:else}
-          <ArrowUpToLineIcon aria-hidden="true" />
-        {/if}
-        {label}
-      </Button>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="default"
+          size="sm"
+          {disabled}
+          aria-busy={model.bulkDownloading}
+          onclick={handleClick}
+        >
+          {#if model.bulkDownloading}
+            <Loader2Icon class="animate-spin" aria-hidden="true" />
+          {:else}
+            <ArrowUpToLineIcon aria-hidden="true" />
+          {/if}
+          {label}
+        </Button>
+      {/snippet}
     </TooltipTrigger>
     <TooltipContent>{tooltip}</TooltipContent>
   </Tooltip>
