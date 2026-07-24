@@ -56,8 +56,7 @@ pub(crate) fn run_install_mutation(
             context.storage().commit_game_mutation(GameMutationCommit {
                 game_id: record.game_id(),
                 component_set: None,
-                baseline_inserts: &[],
-                baseline_deletes: &[],
+                baseline_mutations: &[],
                 addon: InstalledAddonMutation::Upsert(&record),
                 mutation_id: Some(mutation_id),
             })?;

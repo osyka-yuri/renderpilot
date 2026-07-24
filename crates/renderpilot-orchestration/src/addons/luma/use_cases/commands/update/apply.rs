@@ -352,14 +352,21 @@ fn persist_set_diff_result(input: PersistSetDiff<'_>) -> Result<(), UpdateFailur
         .iter()
         .map(|spec| spec.component_id().clone())
         .collect();
+    let baseline_mutations = rolled_back_ids
+        .iter()
+        .map(
+            |component_id| renderpilot_storage_sqlite::ComponentBaselineMutation::Delete {
+                component_id,
+            },
+        )
+        .collect::<Vec<_>>();
     if let Err(error) =
         context
             .storage()
             .commit_game_mutation(renderpilot_storage_sqlite::GameMutationCommit {
                 game_id: record.game_id(),
                 component_set: next_components,
-                baseline_inserts: &[],
-                baseline_deletes: &rolled_back_ids,
+                baseline_mutations: &baseline_mutations,
                 addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&refreshed),
                 mutation_id: Some(mutation_id),
             })

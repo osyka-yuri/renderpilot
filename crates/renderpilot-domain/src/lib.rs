@@ -24,10 +24,11 @@ pub use addon::{
     SharedArtifactSource, TrackedSource, TrackedSourceRole,
 };
 pub use component::{
-    ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentVersionReport,
-    GraphicsComponent, LibraryArtifact, PeCompatibilityProfile, PeExportSet, PeExportSetError,
-    ReleaseMetadata, RuntimeCompatibility, RuntimeTarget, Sha256Digest, Sha256Hash,
-    UpstreamPackage, UpstreamPackageProvider, component_version_report,
+    ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentRollbackBaseline,
+    ComponentVersionReport, D3d12ExecutableBaseline, D3d12ExecutableIdentity, GraphicsComponent,
+    LibraryArtifact, PeCompatibilityProfile, PeExportSet, PeExportSetError, ReleaseMetadata,
+    RuntimeCompatibility, RuntimeTarget, Sha256Digest, Sha256Hash, UpstreamPackage,
+    UpstreamPackageProvider, component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
 pub use game::{GameIdentity, GameInstallation, GameModelError};

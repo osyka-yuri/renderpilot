@@ -1,12 +1,12 @@
 use renderpilot_domain::{
     Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
-    ComponentKind, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef,
-    PeCompatibilityProfile, PeExportSet, RuntimeCompatibility, RuntimeTarget, Sha256Hash,
-    Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
+    ComponentKind, D3d12ExecutableIdentity, GameId, GraphicsComponent, GraphicsTechnology,
+    LibraryArtifact, PathRef, PeCompatibilityProfile, PeExportSet, RuntimeCompatibility,
+    RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
 use crate::{
-    SwapTargetProfile,
+    D3d12ExecutableActionKind, D3d12ExecutableProfile, D3d12ExecutableSnapshot, SwapTargetProfile,
     dxc::{COMPILER_FILE_NAME, VALIDATOR_FILE_NAME},
 };
 
@@ -65,7 +65,7 @@ fn selects_only_same_technology_candidates() {
 }
 
 #[test]
-fn d3d12_candidates_require_the_exact_executable_sdk_line() {
+fn legacy_d3d12_candidates_require_the_exact_executable_sdk_line() {
     let component = sample_component(
         "component:game-a:d3d12",
         "game:a",
@@ -106,6 +106,113 @@ fn d3d12_candidates_require_the_exact_executable_sdk_line() {
     );
     assert_eq!(allowed.len(), 1);
     assert_eq!(allowed[0].candidates().len(), 1);
+}
+
+#[test]
+fn managed_d3d12_candidates_allow_newer_lines_and_hide_original_downgrades() {
+    let component = sample_component(
+        "component:game-a:d3d12-managed",
+        "game:a",
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+        Some("1.606.4"),
+        &"a".repeat(64),
+        "C:/Games/GameA/D3D12Core.dll",
+    );
+    let artifact = |id: &str, line: u32, hash: char| {
+        sample_artifact(
+            id,
+            GraphicsTechnology::D3D12Agility,
+            Some(&format!("1.{line}.1")),
+            &hash.to_string().repeat(64),
+            &format!("C:/Library/{id}/D3D12Core.dll"),
+            None,
+        )
+        .with_metadata(
+            ArtifactMetadata::default().with_runtime_target(
+                RuntimeTarget::new(Architecture::X64)
+                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: line }),
+            ),
+        )
+    };
+    let newer = artifact("artifact:d3d12-619", 619, 'b');
+    let older = artifact("artifact:d3d12-605", 605, 'c');
+    let original_hash = Sha256Hash::new("d".repeat(64)).expect("original hash");
+    let current_hash = Sha256Hash::new("e".repeat(64)).expect("current hash");
+    let profile = SwapTargetProfile::new(Some(Architecture::X64), Some(606))
+        .with_d3d12_executable_snapshot(D3d12ExecutableSnapshot::new(
+            PathRef::new("C:/Games/GameA/game.exe").expect("exe"),
+            PathRef::new("C:/Games/GameA/game.exe.bak").expect("backup"),
+            D3d12ExecutableIdentity::new(606, original_hash),
+            D3d12ExecutableIdentity::new(606, current_hash),
+            false,
+            false,
+        ));
+
+    let groups = find_replacement_candidates(
+        &[component],
+        &[older, newer.clone()],
+        &CandidateContext::empty().with_target_profile(profile),
+    );
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
+    let candidate = &groups[0].candidates()[0];
+    assert_eq!(candidate.artifact_id(), newer.id());
+    let action = candidate
+        .d3d12_executable_action()
+        .expect("executable action");
+    assert_eq!(action.kind(), D3d12ExecutableActionKind::Patch);
+    assert_eq!(action.target_sdk_version(), 619);
+    assert!(action.requires_confirmation());
+}
+
+#[test]
+fn presentation_d3d12_candidates_explain_actions_without_minting_tokens() {
+    let component = sample_component(
+        "component:game-a:d3d12-presentation",
+        "game:a",
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+        Some("1.606.1"),
+        &"a".repeat(64),
+        "C:/Games/GameA/D3D12Core.dll",
+    );
+    let artifact = sample_artifact(
+        "artifact:d3d12-presentation-619",
+        GraphicsTechnology::D3D12Agility,
+        Some("1.619.1"),
+        &"b".repeat(64),
+        "catalog://microsoft/D3D12Core.dll",
+        None,
+    )
+    .with_metadata(
+        ArtifactMetadata::default().with_runtime_target(
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
+        ),
+    );
+    let profile = SwapTargetProfile::new(Some(Architecture::X64), Some(606))
+        .with_d3d12_executable_profile(D3d12ExecutableProfile::new(
+            PathRef::new("C:/Games/GameA/game.exe").expect("exe"),
+            PathRef::new("C:/Games/GameA/game.exe.bak").expect("backup"),
+            606,
+            606,
+            false,
+            false,
+        ));
+
+    let groups = find_replacement_candidates(
+        &[component],
+        &[artifact],
+        &CandidateContext::empty().with_target_profile(profile),
+    );
+    let action = groups[0].candidates()[0]
+        .d3d12_executable_action()
+        .expect("presentation action");
+
+    assert_eq!(action.kind(), D3d12ExecutableActionKind::Patch);
+    assert!(action.requires_confirmation());
 }
 
 #[test]

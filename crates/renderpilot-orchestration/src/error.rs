@@ -28,7 +28,7 @@ pub enum ServiceError {
     ProviderFailed(String),
     /// A graphics-component detector failed.
     DetectionFailed(String),
-    /// A one-time confirmation token did not match.
+    /// A state-bound confirmation token did not match.
     ConfirmationTokenMismatch,
     /// The operation is in an invalid state for the requested action.
     InvalidOperationState {

@@ -1,42 +1,21 @@
 //! Pure compatibility rules shared by candidate listing and mutation boundaries.
 
+mod d3d12;
 mod microsoft;
 mod openvr;
 
 use renderpilot_domain::{Architecture, GraphicsComponent, GraphicsTechnology, LibraryArtifact};
 
+pub use d3d12::{
+    D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,
+    D3d12ExecutableSnapshot, SwapTargetProfile, d3d12_confirmation_token,
+    replacement_executable_action,
+};
+
 #[cfg(test)]
 use microsoft::{D3D12_PACKAGE_ID, DXC_PACKAGE_ID};
 #[cfg(test)]
 use renderpilot_domain::openvr::UPSTREAM_REPOSITORY as OPENVR_REPOSITORY;
-
-/// Fresh facts read from the selected game executable.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SwapTargetProfile {
-    architecture: Option<Architecture>,
-    d3d12_sdk_version: Option<u32>,
-}
-
-impl SwapTargetProfile {
-    /// Creates a profile from independently observable executable facts.
-    #[must_use]
-    pub const fn new(architecture: Option<Architecture>, d3d12_sdk_version: Option<u32>) -> Self {
-        Self {
-            architecture,
-            d3d12_sdk_version,
-        }
-    }
-
-    /// Returns the executable architecture.
-    pub const fn architecture(&self) -> Option<Architecture> {
-        self.architecture
-    }
-
-    /// Returns the exact Agility SDK line requested by the executable.
-    pub const fn d3d12_sdk_version(&self) -> Option<u32> {
-        self.d3d12_sdk_version
-    }
-}
 
 /// Why a Microsoft runtime artifact cannot target the selected executable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +42,15 @@ pub enum SwapCompatibilityError {
         /// SDK line exported by the executable.
         executable: u32,
     },
+    /// Candidate requests an SDK line older than the immutable original EXE.
+    D3d12SdkDowngrade {
+        /// SDK line declared by the artifact.
+        artifact: u32,
+        /// SDK line captured from the original executable.
+        original: u32,
+    },
+    /// The executable changed outside the one managed SDK export field.
+    D3d12ExecutableRepairRequired,
     /// Installed OpenVR DLL lacks freshly observed PE compatibility facts.
     MissingInstalledPeMetadata,
     /// Candidate OpenVR DLL architecture differs from the installed DLL.
@@ -108,6 +96,15 @@ impl std::fmt::Display for SwapCompatibilityError {
                     formatter,
                     "D3D12 Agility SDK line {artifact} does not match D3D12SDKVersion {executable}"
                 );
+            }
+            Self::D3d12SdkDowngrade { artifact, original } => {
+                return write!(
+                    formatter,
+                    "D3D12 Agility SDK line {artifact} is older than original line {original}"
+                );
+            }
+            Self::D3d12ExecutableRepairRequired => {
+                "D3D12 executable differs from its backup outside D3D12SDKVersion"
             }
             Self::MissingInstalledPeMetadata => {
                 "installed OpenVR DLL architecture or named exports could not be determined"
@@ -171,7 +168,15 @@ pub fn ensure_replacement_compatible(
     validate_runtime_artifact(artifact)?;
     match artifact.technology() {
         GraphicsTechnology::OpenVr => openvr::ensure_transition_compatible(component, artifact),
-        _ => microsoft::ensure_executable_compatible(artifact, profile),
+        _ => {
+            microsoft::ensure_executable_compatible(artifact, profile)?;
+            if replacement_executable_action(artifact, profile)?
+                .is_some_and(|action| action.kind() == D3d12ExecutableActionKind::RepairRequired)
+            {
+                return Err(SwapCompatibilityError::D3d12ExecutableRepairRequired);
+            }
+            Ok(())
+        }
     }
 }
 
@@ -201,7 +206,7 @@ mod tests {
         ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
         ComponentKind, GameId, GraphicsComponent, PathRef, PeCompatibilityProfile, PeExportSet,
         RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
-        UpstreamPackageProvider,
+        UpstreamPackageProvider, Version,
     };
 
     use super::*;
@@ -548,5 +553,232 @@ mod tests {
             Err(SwapCompatibilityError::ComponentContextRequired),
             "legacy validation must never expose a context-free OpenVR path"
         );
+    }
+
+    fn d3d12_context(original: u32, current: u32, repair_required: bool) -> D3d12ExecutableProfile {
+        D3d12ExecutableProfile::new(
+            PathRef::new("C:/Game/game.exe").expect("path"),
+            PathRef::new("C:/Game/game.exe.bak").expect("path"),
+            original,
+            current,
+            current != original,
+            repair_required,
+        )
+    }
+
+    #[test]
+    fn d3d12_executable_policy_covers_none_patch_restore_and_repair() {
+        let original = d3d12_context(606, 606, false);
+        assert_eq!(
+            D3d12ExecutableAction::for_swap(&original, 606)
+                .expect("none")
+                .kind(),
+            D3d12ExecutableActionKind::None
+        );
+        let first_patch = D3d12ExecutableAction::for_swap(&original, 619).expect("patch");
+        assert_eq!(first_patch.kind(), D3d12ExecutableActionKind::Patch);
+        assert!(!first_patch.backup_exists());
+        assert!(first_patch.requires_confirmation());
+
+        let patched = d3d12_context(606, 619, false);
+        let repatch = D3d12ExecutableAction::for_swap(&patched, 618).expect("repatch");
+        assert!(repatch.backup_exists());
+        assert!(!repatch.requires_confirmation());
+        let restore = D3d12ExecutableAction::for_swap(&patched, 606).expect("restore");
+        assert_eq!(restore.kind(), D3d12ExecutableActionKind::Restore);
+        assert!(restore.requires_confirmation());
+        assert_eq!(
+            D3d12ExecutableAction::for_swap(&d3d12_context(606, 619, true), 619)
+                .expect("repair state")
+                .kind(),
+            D3d12ExecutableActionKind::RepairRequired
+        );
+    }
+
+    #[test]
+    fn d3d12_executable_policy_rejects_sdk_lines_below_original() {
+        assert_eq!(
+            D3d12ExecutableAction::for_swap(&d3d12_context(606, 619, false), 605),
+            Err(SwapCompatibilityError::D3d12SdkDowngrade {
+                artifact: 605,
+                original: 606,
+            })
+        );
+    }
+
+    #[test]
+    fn d3d12_confirmation_fingerprint_changes_with_active_executable_hash() {
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:d3d12-token").expect("component"),
+            GameId::new("game:d3d12-token").expect("game"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(file("D3D12Core.dll", '7'));
+        let artifact = artifact(
+            GraphicsTechnology::D3D12Agility,
+            vec![file("D3D12Core.dll", '8')],
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
+        );
+        let profile = |active_hash: char| {
+            SwapTargetProfile::new(Some(Architecture::X64), Some(606))
+                .with_d3d12_executable_snapshot(D3d12ExecutableSnapshot::new(
+                    PathRef::new("C:/Game/game.exe").expect("exe"),
+                    PathRef::new("C:/Game/game.exe.bak").expect("backup"),
+                    renderpilot_domain::D3d12ExecutableIdentity::new(
+                        606,
+                        Sha256Hash::new("a".repeat(64)).expect("original hash"),
+                    ),
+                    renderpilot_domain::D3d12ExecutableIdentity::new(
+                        606,
+                        Sha256Hash::new(active_hash.to_string().repeat(64)).expect("active hash"),
+                    ),
+                    false,
+                    false,
+                ))
+        };
+        let first_profile = profile('b');
+        let first_action = replacement_executable_action(&artifact, &first_profile)
+            .expect("policy")
+            .expect("action");
+        let first = d3d12_confirmation_token(&component, &artifact, &first_profile, &first_action)
+            .expect("token");
+        let changed_profile = profile('c');
+        let changed_action = replacement_executable_action(&artifact, &changed_profile)
+            .expect("policy")
+            .expect("action");
+        let changed =
+            d3d12_confirmation_token(&component, &artifact, &changed_profile, &changed_action)
+                .expect("token");
+
+        assert_ne!(first, changed);
+        assert_eq!(first.len(), 64);
+        assert_eq!(changed.len(), 64);
+    }
+
+    #[test]
+    fn d3d12_confirmation_fingerprint_uses_unambiguous_file_fields() {
+        let component = |path: &str, version: &str| {
+            GraphicsComponent::new(
+                ComponentId::new("component:d3d12-token-fields").expect("component"),
+                GameId::new("game:d3d12-token-fields").expect("game"),
+                ComponentKind::NativeLibrary,
+                GraphicsTechnology::D3D12Agility,
+                Swappability::Swappable,
+            )
+            .with_file(
+                ComponentFile::new(PathRef::new(path).expect("path"))
+                    .with_version(Version::parse(version).expect("version")),
+            )
+        };
+        let artifact = artifact(
+            GraphicsTechnology::D3D12Agility,
+            vec![file("D3D12Core.dll", '8')],
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
+        );
+        let profile = SwapTargetProfile::new(Some(Architecture::X64), Some(606))
+            .with_d3d12_executable_snapshot(D3d12ExecutableSnapshot::new(
+                PathRef::new("C:/Game/game.exe").expect("exe"),
+                PathRef::new("C:/Game/game.exe.bak").expect("backup"),
+                renderpilot_domain::D3d12ExecutableIdentity::new(
+                    606,
+                    Sha256Hash::new("a".repeat(64)).expect("original hash"),
+                ),
+                renderpilot_domain::D3d12ExecutableIdentity::new(
+                    606,
+                    Sha256Hash::new("b".repeat(64)).expect("active hash"),
+                ),
+                false,
+                false,
+            ));
+        let action = replacement_executable_action(&artifact, &profile)
+            .expect("policy")
+            .expect("action");
+
+        // The old concatenation encoded both records as `c:/runtime/a12`.
+        let first = d3d12_confirmation_token(
+            &component("C:/runtime/a", "12"),
+            &artifact,
+            &profile,
+            &action,
+        )
+        .expect("first token");
+        let second = d3d12_confirmation_token(
+            &component("C:/runtime/a1", "2"),
+            &artifact,
+            &profile,
+            &action,
+        )
+        .expect("second token");
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn d3d12_confirmation_fingerprint_changes_with_backup_presence() {
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:d3d12-token-backup").expect("component"),
+            GameId::new("game:d3d12-token-backup").expect("game"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(file("D3D12Core.dll", '7'));
+        let artifact = artifact(
+            GraphicsTechnology::D3D12Agility,
+            vec![file("D3D12Core.dll", '8')],
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
+        );
+        let profile = |backup_exists| {
+            SwapTargetProfile::new(Some(Architecture::X64), Some(606))
+                .with_d3d12_executable_snapshot(D3d12ExecutableSnapshot::new(
+                    PathRef::new("C:/Game/game.exe").expect("exe"),
+                    PathRef::new("C:/Game/game.exe.bak").expect("backup"),
+                    renderpilot_domain::D3d12ExecutableIdentity::new(
+                        606,
+                        Sha256Hash::new("a".repeat(64)).expect("original hash"),
+                    ),
+                    renderpilot_domain::D3d12ExecutableIdentity::new(
+                        606,
+                        Sha256Hash::new("b".repeat(64)).expect("active hash"),
+                    ),
+                    backup_exists,
+                    false,
+                ))
+        };
+        let without_backup = profile(false);
+        let without_backup_action = replacement_executable_action(&artifact, &without_backup)
+            .expect("policy")
+            .expect("action");
+        let with_backup = profile(true);
+        let with_backup_action = replacement_executable_action(&artifact, &with_backup)
+            .expect("policy")
+            .expect("action");
+
+        assert_ne!(
+            d3d12_confirmation_token(
+                &component,
+                &artifact,
+                &without_backup,
+                &without_backup_action,
+            ),
+            d3d12_confirmation_token(&component, &artifact, &with_backup, &with_backup_action),
+        );
+    }
+
+    #[test]
+    fn managed_rollback_restore_does_not_require_confirmation() {
+        let context = d3d12_context(606, 619, false);
+        let action = D3d12ExecutableAction::for_swap(&context, 606).expect("restore action");
+
+        assert!(action.requires_confirmation());
+        let rollback =
+            D3d12ExecutableAction::for_managed_rollback(&context).expect("rollback action");
+        assert_eq!(rollback.kind(), D3d12ExecutableActionKind::Restore);
+        assert!(!rollback.requires_confirmation());
     }
 }

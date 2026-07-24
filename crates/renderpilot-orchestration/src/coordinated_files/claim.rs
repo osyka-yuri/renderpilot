@@ -67,6 +67,7 @@ pub(crate) fn catalog_path_claim(
             load_component_backup_availability(storage, &component)?.into_available()
         {
             let claim = baseline
+                .files()
                 .iter()
                 .find(|file| crate::paths::normalized_key(Path::new(file.path().as_str())) == key)
                 .map(|file| {

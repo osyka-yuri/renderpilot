@@ -8,6 +8,7 @@ use super::{
     OperationPlanBlocker, OperationPlanFileAction, OperationPlanRiskLevel, OperationPlanWarning,
     build_swap_operation_plan,
 };
+use crate::{D3d12ExecutableAction, D3d12ExecutableProfile};
 
 #[test]
 fn builds_valid_swap_plan_for_swappable_component() {
@@ -622,6 +623,111 @@ fn non_windows_paths_do_not_require_elevation() {
     let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
 
     assert!(!plan.requires_elevation());
+}
+
+#[test]
+fn only_the_first_executable_patch_surfaces_the_integrity_warning() {
+    let component = sample_component(
+        "component:game-a:d3d12",
+        "game:a",
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+        "C:/Games/GameA/D3D12Core.dll",
+        Some("1.606.4"),
+        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    );
+    let artifact = sample_artifact(
+        "artifact:d3d12-618",
+        GraphicsTechnology::D3D12Agility,
+        "D:/Library/D3D12Core.dll",
+        Some("1.618.5"),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    );
+    let original_hash = Sha256Hash::new("c".repeat(64)).expect("original EXE hash should be valid");
+    let patched_hash = Sha256Hash::new("d".repeat(64)).expect("patched EXE hash should be valid");
+    let target_hash = Sha256Hash::new("e".repeat(64)).expect("target EXE hash should be valid");
+
+    let first_patch = D3d12ExecutableAction::for_swap(
+        &d3d12_executable_context(
+            606,
+            606,
+            original_hash.clone(),
+            original_hash.clone(),
+            false,
+        ),
+        618,
+    )
+    .expect("first patch should be assessed");
+    let first_plan = build_swap_operation_plan(&component, &artifact)
+        .expect("first plan should build")
+        .with_d3d12_executable_action(
+            first_patch,
+            "first-token".to_owned(),
+            original_hash.clone(),
+            Some(target_hash.clone()),
+        );
+
+    assert!(
+        first_plan
+            .warnings()
+            .contains(&OperationPlanWarning::ExecutableSignatureMayBecomeInvalid)
+    );
+    assert!(
+        first_plan
+            .d3d12_executable_action()
+            .expect("first action")
+            .requires_confirmation()
+    );
+
+    let repeated_patch = D3d12ExecutableAction::for_swap(
+        &d3d12_executable_context(606, 619, original_hash, patched_hash.clone(), true),
+        618,
+    )
+    .expect("repeated patch should be assessed");
+    let repeated_plan = build_swap_operation_plan(&component, &artifact)
+        .expect("repeated plan should build")
+        .with_d3d12_executable_action(
+            repeated_patch,
+            "repeated-token".to_owned(),
+            patched_hash,
+            Some(target_hash),
+        );
+
+    assert!(
+        !repeated_plan
+            .warnings()
+            .contains(&OperationPlanWarning::ExecutableSignatureMayBecomeInvalid)
+    );
+    assert!(
+        !repeated_plan
+            .d3d12_executable_action()
+            .expect("repeated action")
+            .requires_confirmation()
+    );
+    assert!(
+        repeated_plan
+            .files()
+            .iter()
+            .any(|file| file.action() == OperationPlanFileAction::PatchExecutable),
+        "a silent repeated patch must remain an explicit file mutation in the plan"
+    );
+}
+
+fn d3d12_executable_context(
+    original_sdk: u32,
+    current_sdk: u32,
+    _original_hash: Sha256Hash,
+    _current_hash: Sha256Hash,
+    backup_exists: bool,
+) -> D3d12ExecutableProfile {
+    D3d12ExecutableProfile::new(
+        PathRef::new("C:/Games/GameA/game.exe").expect("EXE path should be valid"),
+        PathRef::new("C:/Games/GameA/game.exe.bak").expect("backup path should be valid"),
+        original_sdk,
+        current_sdk,
+        backup_exists,
+        false,
+    )
 }
 
 fn sample_component(

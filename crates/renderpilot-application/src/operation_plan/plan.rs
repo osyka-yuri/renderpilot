@@ -1,9 +1,9 @@
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, GameId, GraphicsComponent, LibraryArtifact, OperationId, PathRef,
-    Sha256Hash, Version,
+    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact,
+    OperationId, PathRef, Sha256Hash, Version,
 };
 
-use crate::OperationKind;
+use crate::{D3d12ExecutableAction, D3d12ExecutableActionKind, OperationKind};
 
 use super::{
     OperationPlanAssessment, OperationPlanBlocker, OperationPlanIdentity, OperationPlanRiskLevel,
@@ -16,6 +16,7 @@ pub struct OperationPlan {
     operation_id: OperationId,
     confirmation_token: String,
     game_id: GameId,
+    component_id: ComponentId,
     operation_type: OperationKind,
     target_path: PathRef,
     replacement_path: PathRef,
@@ -29,6 +30,7 @@ pub struct OperationPlan {
     blockers: Vec<OperationPlanBlocker>,
     warnings: Vec<OperationPlanWarning>,
     files: Vec<OperationPlanFile>,
+    d3d12_executable_action: Option<D3d12ExecutableAction>,
 }
 
 impl OperationPlan {
@@ -55,6 +57,7 @@ impl OperationPlan {
             operation_id,
             confirmation_token,
             game_id: component.game_id().clone(),
+            component_id: component.id().clone(),
             operation_type: OperationKind::ReplaceComponent,
             target_path: target_file.path().clone(),
             replacement_path: artifact.path().clone(),
@@ -68,7 +71,47 @@ impl OperationPlan {
             blockers,
             warnings,
             files,
+            d3d12_executable_action: None,
         }
+    }
+
+    /// Attaches the fresh D3D12 executable assessment and canonical fingerprint.
+    #[must_use]
+    pub fn with_d3d12_executable_action(
+        mut self,
+        action: D3d12ExecutableAction,
+        confirmation_token: String,
+        current_sha256: Sha256Hash,
+        target_sha256: Option<Sha256Hash>,
+    ) -> Self {
+        self.confirmation_token = confirmation_token;
+        match action.kind() {
+            D3d12ExecutableActionKind::Patch | D3d12ExecutableActionKind::Restore => {
+                self.files.push(OperationPlanFile::executable(
+                    &action,
+                    current_sha256,
+                    target_sha256,
+                ));
+                if action.kind() == D3d12ExecutableActionKind::Patch
+                    && action.current_sdk_version() == action.original_sdk_version()
+                {
+                    self.warnings
+                        .push(OperationPlanWarning::ExecutableSignatureMayBecomeInvalid);
+                }
+            }
+            D3d12ExecutableActionKind::RepairRequired => {
+                self.blockers
+                    .push(OperationPlanBlocker::D3d12ExecutableRepairRequired);
+            }
+            D3d12ExecutableActionKind::None => {}
+        }
+        self.risk_level = OperationPlanRiskLevel::from_findings(
+            &self.blockers,
+            &self.warnings,
+            self.requires_elevation,
+        );
+        self.d3d12_executable_action = Some(action);
+        self
     }
 
     /// Returns the generated operation identifier.
@@ -76,7 +119,7 @@ impl OperationPlan {
         &self.operation_id
     }
 
-    /// Returns the one-time confirmation token.
+    /// Returns the fresh confirmation token bound to the planned state.
     pub fn confirmation_token(&self) -> &str {
         &self.confirmation_token
     }
@@ -84,6 +127,11 @@ impl OperationPlan {
     /// Returns the affected game identifier.
     pub fn game_id(&self) -> &GameId {
         &self.game_id
+    }
+
+    /// Returns the affected component identifier.
+    pub fn component_id(&self) -> &ComponentId {
+        &self.component_id
     }
 
     /// Returns the planned operation type.
@@ -154,6 +202,11 @@ impl OperationPlan {
     pub fn files(&self) -> &[OperationPlanFile] {
         &self.files
     }
+
+    /// Returns the D3D12 executable action included in this operation.
+    pub const fn d3d12_executable_action(&self) -> Option<&D3d12ExecutableAction> {
+        self.d3d12_executable_action.as_ref()
+    }
 }
 
 /// What a swap will do to one file in the package.
@@ -163,6 +216,10 @@ pub enum OperationPlanFileAction {
     Replace,
     /// A new file is added at an install target the component did not have.
     Add,
+    /// Patch the inline `D3D12SDKVersion` value in the main EXE.
+    PatchExecutable,
+    /// Restore the original main EXE from its immutable backup.
+    RestoreExecutable,
 }
 
 impl OperationPlanFileAction {
@@ -171,6 +228,8 @@ impl OperationPlanFileAction {
         match self {
             Self::Replace => "replace",
             Self::Add => "add",
+            Self::PatchExecutable => "patch_executable",
+            Self::RestoreExecutable => "restore_executable",
         }
     }
 }
@@ -211,6 +270,29 @@ impl OperationPlanFile {
             replacement_version: artifact_file.version().cloned(),
             original_sha256: None,
             replacement_sha256: artifact_file.sha256().cloned(),
+        }
+    }
+
+    fn executable(
+        action: &D3d12ExecutableAction,
+        current_sha256: Sha256Hash,
+        target_sha256: Option<Sha256Hash>,
+    ) -> Self {
+        let file_action = match action.kind() {
+            D3d12ExecutableActionKind::Patch => OperationPlanFileAction::PatchExecutable,
+            D3d12ExecutableActionKind::Restore => OperationPlanFileAction::RestoreExecutable,
+            D3d12ExecutableActionKind::None | D3d12ExecutableActionKind::RepairRequired => {
+                unreachable!("only EXE-changing actions produce an operation-plan file")
+            }
+        };
+        Self {
+            action: file_action,
+            target_path: action.executable_path().clone(),
+            replacement_path: Some(action.backup_path().clone()),
+            original_version: None,
+            replacement_version: None,
+            original_sha256: Some(current_sha256),
+            replacement_sha256: target_sha256,
         }
     }
 

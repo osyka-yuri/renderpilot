@@ -36,13 +36,21 @@ pub(super) fn execute_uninstall_body(
         }
         uninstall_engine_files(&apply.record)?;
     }
+    let baseline_mutations = apply
+        .rolled_back_ids
+        .iter()
+        .map(
+            |component_id| renderpilot_storage_sqlite::ComponentBaselineMutation::Delete {
+                component_id,
+            },
+        )
+        .collect::<Vec<_>>();
     context
         .storage()
         .commit_game_mutation(renderpilot_storage_sqlite::GameMutationCommit {
             game_id,
             component_set: Some(&apply.next_components),
-            baseline_inserts: &[],
-            baseline_deletes: &apply.rolled_back_ids,
+            baseline_mutations: &baseline_mutations,
             addon: renderpilot_storage_sqlite::InstalledAddonMutation::Delete(AddonKind::Luma),
             mutation_id,
         })?;

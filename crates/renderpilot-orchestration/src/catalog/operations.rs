@@ -19,9 +19,10 @@ pub fn list_operations(
         .map(|entry| {
             let (operation, items) = entry.into_parts();
             OperationListCatalogEntry {
-                item_count: items.len(),
+                item_count: super::execute::component_file_item_count(&items),
                 component_ids: items
                     .iter()
+                    .filter(|item| super::execute::journal_item_is_component_file(item))
                     .map(|item| item.component_id.as_str().to_owned())
                     .collect(),
                 operation,

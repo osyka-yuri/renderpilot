@@ -104,6 +104,11 @@ pub(super) fn ensure_executable_compatible(
     let requested = profile
         .d3d12_sdk_version()
         .ok_or(SwapCompatibilityError::MissingD3d12SdkVersion)?;
+    if profile.d3d12_executable().is_some() {
+        // Managed D3D12 transitions are governed by the original-line policy
+        // and explicit executable assessment in the shared compatibility layer.
+        return Ok(());
+    }
     if version == requested {
         Ok(())
     } else {

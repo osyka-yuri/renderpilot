@@ -25,7 +25,7 @@ use rusqlite::{Connection, Params, Transaction};
 
 use crate::error::storage_error;
 
-pub use game_mutations::{ComponentBaselineInsert, GameMutationCommit, InstalledAddonMutation};
+pub use game_mutations::{ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation};
 pub use pending_file_mutations::{PendingFileMutationRow, PendingFileMutationState};
 
 /// SQLite-backed storage adapter implementing application repository ports.

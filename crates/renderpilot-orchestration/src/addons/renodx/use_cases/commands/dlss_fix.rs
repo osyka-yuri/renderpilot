@@ -147,8 +147,7 @@ pub async fn install_dlss_fix(
                 renderpilot_storage_sqlite::GameMutationCommit {
                     game_id,
                     component_set: None,
-                    baseline_inserts: &[],
-                    baseline_deletes: &[],
+                    baseline_mutations: &[],
                     addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&updated),
                     mutation_id: Some(mutation_id),
                 },
@@ -301,8 +300,7 @@ pub fn uninstall_dlss_fix(
                 renderpilot_storage_sqlite::GameMutationCommit {
                     game_id,
                     component_set: None,
-                    baseline_inserts: &[],
-                    baseline_deletes: &[],
+                    baseline_mutations: &[],
                     addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&updated),
                     mutation_id: Some(mutation_id),
                 },

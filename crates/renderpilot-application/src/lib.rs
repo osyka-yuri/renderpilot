@@ -22,8 +22,10 @@ pub use candidates::{
     ReplacementCandidate, find_replacement_candidates,
 };
 pub use compatibility::{
-    SwapCompatibilityError, SwapTargetProfile, ensure_replacement_compatible,
-    ensure_swap_compatible, validate_runtime_artifact,
+    D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,
+    D3d12ExecutableSnapshot, SwapCompatibilityError, SwapTargetProfile, d3d12_confirmation_token,
+    ensure_replacement_compatible, ensure_swap_compatible, replacement_executable_action,
+    validate_runtime_artifact,
 };
 pub use error::{AppError, AppErrorKind, AppResult, invalid_operation_state_display_message};
 pub use info::{AppInfo, app_info};

@@ -5,6 +5,7 @@
 
 mod util;
 mod v10_to_v11;
+mod v11_to_v12;
 mod v8_to_v9;
 mod v9_to_v10;
 
@@ -22,6 +23,7 @@ const STEPS: &[(i32, i32, StepFn)] = &[
     (8, 9, v8_to_v9::apply),
     (9, 10, v9_to_v10::apply),
     (10, 11, v10_to_v11::apply),
+    (11, 12, v11_to_v12::apply),
 ];
 
 /// Runs every step from the live `user_version` until CURRENT is reached.
@@ -70,6 +72,7 @@ mod tests {
     fn can_upgrade_from_known_released_versions() {
         assert!(can_upgrade_from(8));
         assert!(can_upgrade_from(9));
+        assert!(can_upgrade_from(11));
     }
 
     #[test]

@@ -119,8 +119,7 @@ pub async fn update(
                 renderpilot_storage_sqlite::GameMutationCommit {
                     game_id,
                     component_set: None,
-                    baseline_inserts: &[],
-                    baseline_deletes: &[],
+                    baseline_mutations: &[],
                     addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&refreshed),
                     mutation_id: Some(mutation_id),
                 },

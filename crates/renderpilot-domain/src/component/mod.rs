@@ -1,6 +1,7 @@
 mod hash;
 mod metadata;
 mod pe_compatibility;
+mod rollback_baseline;
 mod version_report;
 
 #[cfg(test)]
@@ -11,6 +12,9 @@ pub use metadata::{
     UpstreamPackageProvider,
 };
 pub use pe_compatibility::{PeCompatibilityProfile, PeExportSet, PeExportSetError};
+pub use rollback_baseline::{
+    ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity,
+};
 pub use version_report::{ComponentVersionReport, component_version_report};
 
 use std::{error::Error, fmt};

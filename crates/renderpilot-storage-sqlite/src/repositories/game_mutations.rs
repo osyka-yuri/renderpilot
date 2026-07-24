@@ -2,20 +2,43 @@
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{
-    AddonKind, ComponentFile, ComponentId, GameId, GraphicsComponent, InstalledAddon,
+    AddonKind, ComponentId, ComponentRollbackBaseline, D3d12ExecutableBaseline,
+    D3d12ExecutableIdentity, GameId, GraphicsComponent, InstalledAddon,
 };
 
 use super::{
     SqliteStorage, component_backups, components, installed_addons, pending_file_mutations,
 };
 
-/// Immutable baseline row inserted with a coordinated feature commit.
+/// Typed mutation of the component rollback aggregate.
 #[derive(Debug, Clone, Copy)]
-pub struct ComponentBaselineInsert<'a> {
-    /// Component receiving the baseline.
-    pub component_id: &'a ComponentId,
-    /// Exact pre-first-overlay file identities.
-    pub files: &'a [ComponentFile],
+pub enum ComponentBaselineMutation<'a> {
+    /// Capture immutable original DLL/EXE identities once.
+    Capture {
+        /// Component receiving the baseline.
+        component_id: &'a ComponentId,
+        /// Exact pre-first-overlay rollback aggregate.
+        baseline: &'a ComponentRollbackBaseline,
+    },
+    /// Capture the D3D12 executable original identity once for a DLL-only aggregate.
+    CaptureD3d12Executable {
+        /// Component receiving its first auxiliary baseline.
+        component_id: &'a ComponentId,
+        /// Immutable original and initial active executable identity.
+        baseline: &'a D3d12ExecutableBaseline,
+    },
+    /// Change only the expected active D3D12 executable identity.
+    UpdateD3d12ExecutableState {
+        /// Component whose auxiliary state changed.
+        component_id: &'a ComponentId,
+        /// New active state; original path and identity remain storage-owned.
+        expected_active: &'a D3d12ExecutableIdentity,
+    },
+    /// Delete the aggregate after a fully verified rollback.
+    Delete {
+        /// Component whose rollback aggregate was consumed.
+        component_id: &'a ComponentId,
+    },
 }
 
 /// Optional installed-add-on row change in the same transaction.
@@ -37,10 +60,8 @@ pub struct GameMutationCommit<'a> {
     pub game_id: &'a GameId,
     /// Optional full component-set replacement.
     pub component_set: Option<&'a [GraphicsComponent]>,
-    /// Baselines created by a first catalog overlay.
-    pub baseline_inserts: &'a [ComponentBaselineInsert<'a>],
-    /// Baselines consumed by catalog rollback.
-    pub baseline_deletes: &'a [ComponentId],
+    /// Typed rollback aggregate mutations.
+    pub baseline_mutations: &'a [ComponentBaselineMutation<'a>],
     /// Optional installed-add-on mutation.
     pub addon: InstalledAddonMutation<'a>,
     /// Durable filesystem mutation row to mark committed with the feature rows.
@@ -62,19 +83,44 @@ impl SqliteStorage {
                     component_set,
                 )?;
             }
-            for insert in commit.baseline_inserts {
-                component_backups::set_component_backup_within_transaction(
-                    transaction,
-                    commit.game_id,
-                    insert.component_id,
-                    insert.files,
-                )?;
-            }
-            for component_id in commit.baseline_deletes {
-                component_backups::delete_component_backup_within_transaction(
-                    transaction,
-                    component_id,
-                )?;
+            for mutation in commit.baseline_mutations {
+                match mutation {
+                    ComponentBaselineMutation::Capture {
+                        component_id,
+                        baseline,
+                    } => component_backups::capture_component_backup_within_transaction(
+                        transaction,
+                        commit.game_id,
+                        component_id,
+                        baseline,
+                    )?,
+                    ComponentBaselineMutation::UpdateD3d12ExecutableState {
+                        component_id,
+                        expected_active,
+                    } => {
+                        component_backups::update_component_d3d12_executable_state_within_transaction(
+                            transaction,
+                            component_id,
+                            expected_active,
+                        )?
+                    }
+                    ComponentBaselineMutation::CaptureD3d12Executable {
+                        component_id,
+                        baseline,
+                    } => {
+                        component_backups::capture_component_d3d12_executable_within_transaction(
+                            transaction,
+                            component_id,
+                            baseline,
+                        )?
+                    }
+                    ComponentBaselineMutation::Delete { component_id } => {
+                        component_backups::delete_component_backup_within_transaction(
+                            transaction,
+                            component_id,
+                        )?;
+                    }
+                }
             }
             match commit.addon {
                 InstalledAddonMutation::Keep => {}
@@ -118,8 +164,7 @@ mod tests {
             .commit_game_mutation(GameMutationCommit {
                 game_id: &game_id,
                 component_set: None,
-                baseline_inserts: &[],
-                baseline_deletes: &[],
+                baseline_mutations: &[],
                 addon: InstalledAddonMutation::Upsert(&addon),
                 mutation_id: Some("missing-tx"),
             })
@@ -158,8 +203,7 @@ mod tests {
             .commit_game_mutation(GameMutationCommit {
                 game_id: &game_id,
                 component_set: None,
-                baseline_inserts: &[],
-                baseline_deletes: &[],
+                baseline_mutations: &[],
                 addon: InstalledAddonMutation::Upsert(&addon),
                 mutation_id: Some("tx-ok"),
             })

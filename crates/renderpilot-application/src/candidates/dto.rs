@@ -5,6 +5,7 @@
 //! precomputed [`CandidateComparison`] so this module carries no matching logic
 //! (that lives in [`super::matcher`]).
 
+use crate::D3d12ExecutableAction;
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentId, ComponentVersionReport, GameId, GraphicsComponent,
     GraphicsTechnology, LibraryArtifact, PathRef, Version, component_version_report, fsr,
@@ -176,6 +177,7 @@ pub struct ReplacementCandidate {
     intrinsic_identity: Option<IntrinsicPackageIdentity>,
     /// Actual transition identity after component-aware target resolution.
     resolved_identity: Option<ResolvedTransitionIdentity>,
+    d3d12_executable_action: Option<D3d12ExecutableAction>,
 }
 
 /// Named sort key for [`ReplacementCandidate`] ordering — every field is named
@@ -246,7 +248,18 @@ impl ReplacementCandidate {
             file_count: artifact.files().len(),
             intrinsic_identity,
             resolved_identity,
+            d3d12_executable_action: None,
         }
+    }
+
+    /// Attaches the shared D3D12 executable assessment computed by the matcher.
+    #[must_use]
+    pub(super) fn with_d3d12_executable_action(
+        mut self,
+        action: Option<D3d12ExecutableAction>,
+    ) -> Self {
+        self.d3d12_executable_action = action;
+        self
     }
 
     /// Stable presentation / dedup order used by the matcher.
@@ -330,6 +343,11 @@ impl ReplacementCandidate {
     /// Returns the catalog package id if this candidate is curated remotely.
     pub fn catalog_package_id(&self) -> Option<&str> {
         self.catalog_package_id.as_deref()
+    }
+
+    /// Returns the executable action required by this D3D12 candidate.
+    pub const fn d3d12_executable_action(&self) -> Option<&D3d12ExecutableAction> {
+        self.d3d12_executable_action.as_ref()
     }
 
     pub(super) const fn intrinsic_identity(&self) -> Option<&IntrinsicPackageIdentity> {

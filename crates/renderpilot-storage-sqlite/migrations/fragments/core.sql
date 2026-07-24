@@ -156,6 +156,9 @@ CREATE TABLE IF NOT EXISTS component_backups (
     component_id TEXT    PRIMARY KEY NOT NULL,
     game_id      TEXT    NOT NULL,
     files_json   TEXT    NOT NULL,
+    auxiliary_json TEXT  NOT NULL DEFAULT '[]'
+        CHECK (json_valid(auxiliary_json))
+        CHECK (json_type(auxiliary_json) = 'array'),
     created_at   INTEGER NOT NULL DEFAULT (
         CAST(unixepoch('subsec') * 1000 AS INTEGER)
     ),

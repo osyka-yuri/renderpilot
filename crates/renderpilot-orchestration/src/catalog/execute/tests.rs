@@ -2,11 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use renderpilot_application::{
-    ArtifactRepository, ComponentRepository, GameRepository, InstalledAddonRepository,
+    ArtifactRepository, ComponentRepository, D3d12ExecutableAction, D3d12ExecutableProfile,
+    GameRepository, InstalledAddonRepository,
 };
 use renderpilot_domain::{
     AddonKind, Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile,
-    ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
+    ComponentId, ComponentKind, ComponentRollbackBaseline, D3d12ExecutableBaseline,
+    D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation, GameRuntime,
     GraphicsComponent, GraphicsTechnology, InstalledAddon, Launcher, LibraryArtifact,
     ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile, PeExportSet, Platform,
     RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
@@ -19,7 +21,7 @@ use crate::catalog::execute::{apply_swap, rollback_component};
 
 use super::fs_ops::{perform_apply_fs, revert_to_baseline_fs};
 use super::planning::{fsr_members_to_remove, planned_target_files};
-use super::types::{PlannedFile, PreparedApplySwap};
+use super::types::{PlannedFile, PreparedApplySwap, PreparedD3d12Execution};
 
 const HEX64: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -349,12 +351,119 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
         component,
         artifact,
         baseline: Vec::new(),
+        rollback_baseline: None,
         planned: vec![planned_copy(selected_path, target_path)],
         removed: Vec::new(),
         first_swap: true,
+        d3d12: None,
     };
 
     assert_eq!(prepared.applied_path(), target_path.to_string_lossy());
+}
+
+#[test]
+fn silent_d3d12_repatch_snapshots_only_the_mutated_executable() {
+    let (prepared, executable, backup) = prepared_d3d12_path_swap(619, 618, true);
+
+    let action = &prepared.d3d12.as_ref().expect("D3D12 action").action;
+    assert!(action.changes_executable());
+    assert!(!action.requires_confirmation());
+
+    let paths = super::apply_mutation_paths(&prepared);
+    assert!(paths.contains(&executable));
+    assert!(
+        !paths.contains(&backup),
+        "an existing immutable backup is read-only during apply"
+    );
+}
+
+#[test]
+fn first_d3d12_patch_tracks_the_backup_path_created_by_the_transaction() {
+    let (prepared, executable, backup) = prepared_d3d12_path_swap(606, 619, false);
+
+    let action = &prepared.d3d12.as_ref().expect("D3D12 action").action;
+    assert!(action.changes_executable());
+    assert!(action.requires_confirmation());
+
+    let paths = super::apply_mutation_paths(&prepared);
+    assert!(paths.contains(&executable));
+    assert!(
+        paths.contains(&backup),
+        "recovery must remove a sidecar created by the first patch"
+    );
+}
+
+fn prepared_d3d12_path_swap(
+    current_sdk_version: u32,
+    target_sdk_version: u32,
+    backup_exists: bool,
+) -> (PreparedApplySwap, PathBuf, PathBuf) {
+    let executable = PathBuf::from("C:/game/game.exe");
+    let backup = PathBuf::from("C:/game/game.exe.bak");
+    let original_hash = Sha256Hash::new("a".repeat(64)).expect("original hash");
+    let current_hash = if current_sdk_version == 606 {
+        original_hash.clone()
+    } else {
+        Sha256Hash::new("b".repeat(64)).expect("current hash")
+    };
+    let action = D3d12ExecutableAction::for_swap(
+        &D3d12ExecutableProfile::new(
+            path_as_ref(&executable),
+            path_as_ref(&backup),
+            606,
+            current_sdk_version,
+            backup_exists,
+            false,
+        ),
+        target_sdk_version,
+    )
+    .expect("D3D12 action");
+
+    let component = GraphicsComponent::new(
+        ComponentId::new("component:d3d12-paths").expect("component id"),
+        GameId::new("manual:C:/game").expect("game id"),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    );
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:d3d12-paths").expect("artifact id"),
+        GraphicsTechnology::D3D12Agility,
+        "D3D12Core.dll",
+        vec![
+            comp_file_str("C:/library/D3D12Core.dll")
+                .with_sha256(Sha256Hash::new("c".repeat(64)).expect("artifact hash")),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("artifact");
+    let prepared = PreparedApplySwap {
+        game_id: component.game_id().clone(),
+        component_id: component.id().clone(),
+        component,
+        artifact,
+        baseline: Vec::new(),
+        rollback_baseline: None,
+        planned: Vec::new(),
+        removed: Vec::new(),
+        first_swap: !backup_exists,
+        d3d12: Some(PreparedD3d12Execution {
+            state: crate::catalog::runtime_compatibility::D3d12ExecutableState {
+                executable_path: executable.clone(),
+                backup_path: backup.clone(),
+                original_sha256: original_hash,
+                current_sha256: current_hash,
+                original_sdk_version: 606,
+                current_sdk_version,
+                backup_exists,
+                repair_required: false,
+            },
+            action,
+            confirmation_token: "test-token".to_owned(),
+        }),
+    };
+
+    (prepared, executable, backup)
 }
 
 #[test]
@@ -446,6 +555,40 @@ fn sample_game_at(install: &Path) -> GameInstallation {
         Platform::Windows,
         GameRuntime::NativeWindows,
         path_as_ref(install),
+    )
+}
+
+fn d3d12_artifact_at(source: &Path, sdk_line: u32) -> LibraryArtifact {
+    let source_hash = sha_of(source);
+    let package_version = format!("1.{sdk_line}.1");
+    LibraryArtifact::new(
+        ArtifactId::for_bundle([&source_hash]),
+        GraphicsTechnology::D3D12Agility,
+        "D3D12Core.dll",
+        vec![
+            ComponentFile::new(path_as_ref(source))
+                .with_sha256(source_hash)
+                .with_version(Version::parse(&package_version).expect("version")),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("D3D12 artifact")
+    .with_source("test-library")
+    .expect("source")
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_upstream_package(
+                UpstreamPackage::new(
+                    UpstreamPackageProvider::NuGet,
+                    "Microsoft.Direct3D.D3D12",
+                    &package_version,
+                )
+                .expect("package"),
+            )
+            .with_runtime_target(
+                RuntimeTarget::new(Architecture::X64)
+                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: sdk_line }),
+            ),
     )
 }
 
@@ -672,6 +815,571 @@ fn d3d12_missing_executable_facts_are_blocked_at_plan_and_apply_boundaries() {
 }
 
 #[test]
+fn patched_executable_backup_without_dll_backup_is_never_captured_as_a_mixed_baseline() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&library_dir).expect("library dir");
+
+    let executable = game_dir.join("game.exe");
+    let executable_backup = bak_of(&executable);
+    let live_dll = game_dir.join("D3D12Core.dll");
+    let source_dll = library_dir.join("D3D12Core.dll");
+    let original_executable =
+        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+    let patched_executable = crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
+    write(&executable, &patched_executable);
+    write(&executable_backup, &original_executable);
+    write(&live_dll, b"manually-installed-sdk-619-runtime");
+    write(
+        &source_dll,
+        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(620),
+    );
+
+    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+    let component_id = ComponentId::new("component:d3d12-orphan-exe").expect("component id");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&live_dll))
+            .with_version(Version::parse("1.619.1").expect("version")),
+    );
+    let artifact = d3d12_artifact_at(&source_dll, 620);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), &[component])
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    let context = Context::from_storage(storage);
+
+    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
+        .expect("repair plan");
+    assert!(
+        plan.plan
+            .blockers()
+            .iter()
+            .any(|blocker| blocker.as_str() == "d3d12_executable_repair_required")
+    );
+
+    let error = apply_swap(&context, game.id(), &component_id, artifact.id())
+        .expect_err("mixed baseline must be blocked");
+    assert!(matches!(error, crate::ServiceError::InvalidInput(_)));
+    assert_eq!(fs::read(&executable).expect("live EXE"), patched_executable);
+    assert_eq!(
+        fs::read(&executable_backup).expect("EXE backup"),
+        original_executable
+    );
+    assert_eq!(
+        fs::read(&live_dll).expect("live DLL"),
+        b"manually-installed-sdk-619-runtime"
+    );
+    assert!(
+        !bak_of(&live_dll).exists(),
+        "a rejected operation must not manufacture a DLL backup"
+    );
+    assert!(
+        context
+            .storage()
+            .get_component_backup(&component_id)
+            .expect("baseline lookup")
+            .is_none(),
+        "a rejected operation must not persist a mixed rollback aggregate"
+    );
+}
+
+#[test]
+fn confirmed_d3d12_apply_reports_token_mismatch_when_the_live_dll_changes() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&library_dir).expect("library dir");
+
+    let executable = game_dir.join("game.exe");
+    let live_dll = game_dir.join("D3D12Core.dll");
+    let source_dll = library_dir.join("D3D12Core.dll");
+    let original_executable =
+        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+    write(&executable, &original_executable);
+    write(&live_dll, b"scanned-sdk-606-runtime");
+    write(
+        &source_dll,
+        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619),
+    );
+
+    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+    let component_id = ComponentId::new("component:d3d12-stale-apply").expect("component");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&live_dll))
+            .with_version(Version::parse("1.606.1").expect("version")),
+    );
+    let artifact = d3d12_artifact_at(&source_dll, 619);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    let context = Context::from_storage(storage);
+    let target =
+        crate::catalog::runtime_compatibility::target_profile(&context, &game, Some(&component))
+            .expect("target profile");
+    let action = renderpilot_application::replacement_executable_action(&artifact, &target.profile)
+        .expect("policy")
+        .expect("action");
+    let token = renderpilot_application::d3d12_confirmation_token(
+        &component,
+        &artifact,
+        &target.profile,
+        &action,
+    )
+    .expect("token");
+
+    write(&live_dll, b"externally-changed-runtime");
+    let error = crate::catalog::apply_swap_confirmed(
+        &context,
+        game.id(),
+        &component_id,
+        artifact.id(),
+        Some(&token),
+    )
+    .expect_err("stale confirmation must fail");
+
+    assert!(matches!(
+        error,
+        crate::ServiceError::ConfirmationTokenMismatch
+    ));
+    assert_eq!(
+        fs::read(&executable).expect("unchanged EXE"),
+        original_executable
+    );
+    assert!(!bak_of(&executable).exists());
+    assert!(!bak_of(&live_dll).exists());
+}
+
+#[test]
+fn confirmed_first_d3d12_apply_reports_token_mismatch_when_the_executable_changes_or_disappears() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&library_dir).expect("library dir");
+
+    let executable = game_dir.join("game.exe");
+    let live_dll = game_dir.join("D3D12Core.dll");
+    let source_dll = library_dir.join("D3D12Core.dll");
+    write(
+        &executable,
+        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606),
+    );
+    write(&live_dll, b"scanned-sdk-606-runtime");
+    write(
+        &source_dll,
+        &crate::addons::test_support::build_nvidia_dlss_pe([1, 619, 1, 0]),
+    );
+
+    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+    let component_id = ComponentId::new("component:d3d12-missing-after-plan").expect("component");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&live_dll))
+            .with_version(Version::parse("1.606.1").expect("version")),
+    );
+    let artifact = d3d12_artifact_at(&source_dll, 619);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+    let context = Context::from_storage(storage);
+    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
+        .expect("plan");
+    let token = plan.plan.confirmation_token().to_owned();
+
+    write(
+        &executable,
+        &crate::catalog::runtime_compatibility::synthetic_d3d12_executable(620),
+    );
+    let error = crate::catalog::apply_swap_confirmed(
+        &context,
+        game.id(),
+        &component_id,
+        artifact.id(),
+        Some(&token),
+    )
+    .expect_err("an incompatible executable change must reject the confirmation");
+    assert!(matches!(
+        error,
+        crate::ServiceError::ConfirmationTokenMismatch
+    ));
+    assert_eq!(
+        fs::read(&live_dll).expect("unchanged DLL"),
+        b"scanned-sdk-606-runtime"
+    );
+    assert!(!bak_of(&live_dll).exists());
+    assert!(!bak_of(&executable).exists());
+
+    fs::remove_file(&executable).expect("remove executable after planning");
+    let error = crate::catalog::apply_swap_confirmed(
+        &context,
+        game.id(),
+        &component_id,
+        artifact.id(),
+        Some(&token),
+    )
+    .expect_err("stale executable state must reject the confirmation");
+
+    assert!(matches!(
+        error,
+        crate::ServiceError::ConfirmationTokenMismatch
+    ));
+    assert_eq!(
+        fs::read(&live_dll).expect("unchanged DLL"),
+        b"scanned-sdk-606-runtime"
+    );
+    assert!(!bak_of(&live_dll).exists());
+}
+
+#[test]
+fn every_d3d12_apply_stage_rolls_back_dll_exe_sidecars_and_database_together() {
+    use super::{D3d12ApplyFailurePoint, set_d3d12_apply_failure_point};
+
+    let failure_points = [
+        D3d12ApplyFailurePoint::AfterExecutableBackup,
+        D3d12ApplyFailurePoint::AfterDllMutation,
+        D3d12ApplyFailurePoint::AfterExecutableMutation,
+        D3d12ApplyFailurePoint::BeforeDatabaseCommit,
+    ];
+
+    for (index, failure_point) in failure_points.into_iter().enumerate() {
+        let root = tempfile::tempdir().expect("root");
+        let game_dir = root.path().join("game");
+        let library_dir = root.path().join("library");
+        fs::create_dir_all(&game_dir).expect("game dir");
+        fs::create_dir_all(&library_dir).expect("library dir");
+
+        let executable = game_dir.join("game.exe");
+        let live_dll = game_dir.join("D3D12Core.dll");
+        let source_dll = library_dir.join("D3D12Core.dll");
+        let original_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+        let original_dll = b"original-sdk-606-runtime";
+        write(&executable, &original_executable);
+        write(&live_dll, original_dll);
+        write(
+            &source_dll,
+            &crate::addons::test_support::build_nvidia_dlss_pe([1, 619, 1, 0]),
+        );
+
+        let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+        let component_id =
+            ComponentId::new(format!("component:d3d12-failure-{index}")).expect("component");
+        let original_component = GraphicsComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(path_as_ref(&live_dll))
+                .with_sha256(sha_of(&live_dll))
+                .with_version(Version::parse("1.606.1").expect("version")),
+        );
+        let artifact = d3d12_artifact_at(&source_dll, 619);
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&original_component))
+            .expect("component");
+        storage.upsert_artifact(&artifact).expect("artifact");
+        let context = Context::from_storage(storage);
+        let plan =
+            crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
+                .expect("plan");
+        let token = plan.plan.confirmation_token().to_owned();
+
+        let _failure = set_d3d12_apply_failure_point(failure_point);
+        crate::catalog::apply_swap_confirmed(
+            &context,
+            game.id(),
+            &component_id,
+            artifact.id(),
+            Some(&token),
+        )
+        .expect_err("injected failure must abort the entire durable mutation");
+
+        assert_eq!(
+            fs::read(&live_dll).expect("live DLL"),
+            original_dll,
+            "DLL bytes were not restored after {failure_point:?}"
+        );
+        assert_eq!(
+            fs::read(&executable).expect("live EXE"),
+            original_executable,
+            "EXE bytes were not restored after {failure_point:?}"
+        );
+        assert!(
+            !bak_of(&live_dll).exists(),
+            "DLL backup created by a failed first swap survived {failure_point:?}"
+        );
+        assert!(
+            !bak_of(&executable).exists(),
+            "EXE backup created by a failed first swap survived {failure_point:?}"
+        );
+        assert!(
+            context
+                .storage()
+                .get_component_backup(&component_id)
+                .expect("baseline lookup")
+                .is_none(),
+            "rollback aggregate was persisted after {failure_point:?}"
+        );
+        assert_eq!(
+            context
+                .storage()
+                .list_components_for_game(game.id())
+                .expect("stored components"),
+            vec![original_component],
+            "component catalog changed after {failure_point:?}"
+        );
+    }
+}
+
+#[test]
+fn every_d3d12_rollback_stage_restores_the_active_state_and_keeps_retry_sidecars() {
+    use super::{D3d12RollbackFailurePoint, set_d3d12_rollback_failure_point};
+
+    let failure_points = [
+        D3d12RollbackFailurePoint::AfterDllRestore,
+        D3d12RollbackFailurePoint::AfterExecutableRestore,
+        D3d12RollbackFailurePoint::AfterDllSidecarRelease,
+        D3d12RollbackFailurePoint::AfterExecutableSidecarRelease,
+        D3d12RollbackFailurePoint::BeforeDatabaseCommit,
+    ];
+
+    for (index, failure_point) in failure_points.into_iter().enumerate() {
+        let root = tempfile::tempdir().expect("root");
+        let game_dir = root.path().join("game");
+        fs::create_dir_all(&game_dir).expect("game dir");
+        let executable = game_dir.join("game.exe");
+        let live_dll = game_dir.join("D3D12Core.dll");
+        let executable_backup = bak_of(&executable);
+        let dll_backup = bak_of(&live_dll);
+        let original_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+        let active_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
+        let original_dll = b"original-sdk-606-runtime";
+        let active_dll = b"active-sdk-619-runtime";
+        write(&executable, &active_executable);
+        write(&executable_backup, &original_executable);
+        write(&live_dll, active_dll);
+        write(&dll_backup, original_dll);
+
+        let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+        let component_id = ComponentId::new(format!("component:d3d12-rollback-failure-{index}"))
+            .expect("component");
+        let active_component = GraphicsComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(path_as_ref(&live_dll))
+                .with_sha256(sha_of(&live_dll))
+                .with_version(Version::parse("1.619.1").expect("version")),
+        );
+        let rollback_baseline = ComponentRollbackBaseline::new(vec![
+            ComponentFile::new(path_as_ref(&live_dll))
+                .with_sha256(sha_of(&dll_backup))
+                .with_version(Version::parse("1.606.1").expect("version")),
+        ])
+        .with_d3d12_executable(D3d12ExecutableBaseline::new(
+            path_as_ref(&executable),
+            D3d12ExecutableIdentity::new(
+                606,
+                renderpilot_detection::sha256_bytes(&original_executable)
+                    .expect("original EXE hash"),
+            ),
+            D3d12ExecutableIdentity::new(
+                619,
+                renderpilot_detection::sha256_bytes(&active_executable).expect("active EXE hash"),
+            ),
+        ));
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&active_component))
+            .expect("component");
+        storage
+            .recover_component_rollback_baseline(game.id(), &component_id, &rollback_baseline)
+            .expect("rollback aggregate");
+        let context = Context::from_storage(storage);
+        let plan = crate::catalog::build_rollback_plan(&context, game.id(), &component_id)
+            .expect("rollback plan");
+        let action = plan.d3d12_executable_action().expect("EXE restore");
+        assert!(!action.requires_confirmation());
+
+        let _failure = set_d3d12_rollback_failure_point(failure_point);
+        crate::catalog::rollback_component(&context, game.id(), &component_id)
+            .expect_err("injected failure must abort the entire durable rollback");
+
+        assert_eq!(
+            fs::read(&live_dll).expect("live DLL"),
+            active_dll,
+            "active DLL bytes were not restored after {failure_point:?}"
+        );
+        assert_eq!(
+            fs::read(&executable).expect("live EXE"),
+            active_executable,
+            "active EXE bytes were not restored after {failure_point:?}"
+        );
+        assert_eq!(
+            fs::read(&dll_backup).expect("DLL backup"),
+            original_dll,
+            "retryable DLL sidecar was lost after {failure_point:?}"
+        );
+        assert_eq!(
+            fs::read(&executable_backup).expect("EXE backup"),
+            original_executable,
+            "retryable EXE sidecar was lost after {failure_point:?}"
+        );
+        assert_eq!(
+            context
+                .storage()
+                .get_component_backup(&component_id)
+                .expect("baseline lookup"),
+            Some(rollback_baseline),
+            "rollback aggregate changed after {failure_point:?}"
+        );
+        assert_eq!(
+            context
+                .storage()
+                .list_components_for_game(game.id())
+                .expect("stored components"),
+            vec![active_component],
+            "component catalog changed after {failure_point:?}"
+        );
+    }
+}
+
+#[test]
+fn d3d12_rollback_revalidates_live_dll_without_user_confirmation() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    let executable = game_dir.join("game.exe");
+    let live_dll = game_dir.join("D3D12Core.dll");
+    let original_executable =
+        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+    let active_executable = crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
+    write(&executable, &active_executable);
+    write(&bak_of(&executable), &original_executable);
+    write(&live_dll, b"active-sdk-619-runtime");
+    write(&bak_of(&live_dll), b"original-sdk-606-runtime");
+
+    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+    let component_id = ComponentId::new("component:d3d12-stale-rollback").expect("component");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&live_dll))
+            .with_version(Version::parse("1.619.1").expect("version")),
+    );
+    let rollback_baseline = ComponentRollbackBaseline::new(vec![
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&bak_of(&live_dll)))
+            .with_version(Version::parse("1.606.1").expect("version")),
+    ])
+    .with_d3d12_executable(D3d12ExecutableBaseline::new(
+        path_as_ref(&executable),
+        D3d12ExecutableIdentity::new(
+            606,
+            renderpilot_detection::sha256_bytes(&original_executable).expect("original EXE hash"),
+        ),
+        D3d12ExecutableIdentity::new(
+            619,
+            renderpilot_detection::sha256_bytes(&active_executable).expect("active EXE hash"),
+        ),
+    ));
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage
+        .recover_component_rollback_baseline(game.id(), &component_id, &rollback_baseline)
+        .expect("rollback aggregate");
+    let context = Context::from_storage(storage);
+    let plan = crate::catalog::build_rollback_plan(&context, game.id(), &component_id)
+        .expect("rollback plan");
+    let affected = plan
+        .affected_files()
+        .iter()
+        .map(PathRef::as_str)
+        .collect::<Vec<_>>();
+    assert!(
+        affected
+            .iter()
+            .any(|path| crate::paths::same_path(Path::new(path), &bak_of(&live_dll))),
+        "DLL sidecar is missing from {affected:?}"
+    );
+    assert!(
+        affected
+            .iter()
+            .any(|path| crate::paths::same_path(Path::new(path), &bak_of(&executable))),
+        "EXE sidecar is missing from {affected:?}"
+    );
+    let action = plan.d3d12_executable_action().expect("EXE restore");
+    assert!(!action.requires_confirmation());
+
+    write(&live_dll, b"externally-changed-after-plan");
+    crate::catalog::rollback_component(&context, game.id(), &component_id)
+        .expect_err("changed live DLL must fail fresh rollback validation");
+    assert_eq!(
+        fs::read(&executable).expect("unchanged active EXE"),
+        active_executable
+    );
+    assert_eq!(
+        fs::read(bak_of(&executable)).expect("unchanged EXE backup"),
+        original_executable
+    );
+}
+
+#[test]
 fn openvr_apply_reinspects_installed_dll_and_fails_before_mutation() {
     let root = tempfile::tempdir().expect("root");
     let game_dir = root.path().join("game");
@@ -853,15 +1561,17 @@ fn reswap_keeps_one_immutable_classic_baseline() {
             .storage()
             .get_component_backup(&fx.component_id)
             .unwrap()
-            .expect("baseline")[0]
+            .expect("baseline")
+            .files()[0]
             .sha256(),
         Some(&original_hash)
     );
 }
 
 #[test]
-fn reswap_rebases_a_record_whose_classic_sidecar_was_removed() {
+fn reswap_does_not_rebase_a_record_whose_classic_sidecar_was_removed() {
     let fx = fresh_dlss_fixture("dlss-missing-sidecar", b"original-a");
+    let original_hash = sha_of(&fx.live);
     let source_b = write_library_dlss(&fx.library_dir, "b", b"replacement-b");
     let source_c = write_library_dlss(&fx.library_dir, "c", b"replacement-c");
     let b = dlss_artifact(&source_b, "3.5.0.0");
@@ -888,12 +1598,16 @@ fn reswap_rebases_a_record_whose_classic_sidecar_was_removed() {
         b"replacement-b"
     );
 
-    apply_swap(&fx.context, fx.game.id(), &fx.component_id, c.id())
-        .expect("B to C must rebase safely");
-
-    let b_hash = sha_of(&sidecar);
+    assert!(
+        apply_swap(&fx.context, fx.game.id(), &fx.component_id, c.id()).is_err(),
+        "a missing immutable baseline must block the reswap"
+    );
+    assert!(
+        !sidecar.exists(),
+        "the missing sidecar must not be recreated"
+    );
     assert_eq!(
-        fs::read(&sidecar).expect("rebased sidecar"),
+        fs::read(&fx.live).expect("B remains live"),
         b"replacement-b"
     );
     assert_eq!(
@@ -901,28 +1615,16 @@ fn reswap_rebases_a_record_whose_classic_sidecar_was_removed() {
             .storage()
             .get_component_backup(&fx.component_id)
             .expect("backup query")
-            .expect("rebased row")[0]
+            .expect("original row")
+            .files()[0]
             .sha256(),
-        Some(&b_hash)
+        Some(&original_hash)
     );
     assert!(
         crate::catalog::backup_component_ids(&fx.context, fx.game.id())
             .expect("backup availability")
-            .contains(fx.component_id.as_str())
-    );
-
-    rollback_component(&fx.context, fx.game.id(), &fx.component_id).expect("C back to B");
-    assert_eq!(
-        fs::read(&fx.live).expect("rolled back live"),
-        b"replacement-b"
-    );
-    assert!(!sidecar.exists());
-    assert!(
-        fx.context
-            .storage()
-            .get_component_backup(&fx.component_id)
-            .expect("backup query")
-            .is_none()
+            .is_empty(),
+        "rollback must remain unavailable without physical baseline bytes"
     );
 }
 
@@ -1019,7 +1721,7 @@ fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() 
         .get_component_backup(&component_id)
         .unwrap()
         .expect("baseline");
-    assert_eq!(baseline[0].sha256(), Some(&original_hash));
+    assert_eq!(baseline.files()[0].sha256(), Some(&original_hash));
 
     rollback_component(&context, game.id(), &component_id).expect("catalog rollback");
     assert_eq!(fs::read(&live).unwrap(), b"exact-original");
@@ -1087,7 +1789,7 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
             .get_component_backup(&component_id)
             .unwrap()
             .expect("empty baseline"),
-        Vec::<ComponentFile>::new()
+        ComponentRollbackBaseline::new(Vec::<ComponentFile>::new())
     );
 
     rollback_component(&context, game.id(), &component_id).expect("catalog rollback");

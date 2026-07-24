@@ -148,8 +148,7 @@ pub async fn switch_reshade_channel(
                         renderpilot_storage_sqlite::GameMutationCommit {
                             game_id,
                             component_set: None,
-                            baseline_inserts: &[],
-                            baseline_deletes: &[],
+                            baseline_mutations: &[],
                             addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(
                                 &updated,
                             ),

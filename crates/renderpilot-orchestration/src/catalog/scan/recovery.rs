@@ -1,9 +1,11 @@
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, GameRepository, InstalledAddonRepository};
 use renderpilot_detection::sha256_file;
 use renderpilot_domain::{
-    ComponentFile, GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
+    ComponentFile, ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity,
+    GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -24,12 +26,31 @@ pub(super) fn recover_orphaned_backups(
                     game_root,
                     component.technology(),
                     component.files(),
-                    Some(&baseline),
+                    Some(baseline.files()),
                     crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
                 )?;
+                if component.technology() == GraphicsTechnology::D3D12Agility
+                    && baseline.d3d12_executable().is_none()
+                    && let Some(executable) =
+                        recover_unique_d3d12_executable_baseline(storage, &game)?
+                {
+                    let executable_is_original =
+                        executable.original() == executable.expected_active();
+                    if executable_is_original || baseline_has_complete_sidecars(baseline.files()) {
+                        storage.recover_component_d3d12_executable_baseline(
+                            component.id(),
+                            &executable,
+                        )?;
+                    } else {
+                        log::info!(
+                            "recovery: refusing to pair a patched executable with a DLL baseline that has no immutable sidecars for {}",
+                            component.id()
+                        );
+                    }
+                }
                 continue;
             }
-            crate::coordinated_files::ComponentBackupAvailability::Unavailable => {
+            crate::coordinated_files::ComponentBackupAvailability::Unavailable(_) => {
                 log::info!(
                     "recovery: recorded backup for {} is no longer available on disk",
                     component.id()
@@ -83,11 +104,107 @@ pub(super) fn recover_orphaned_backups(
         }
 
         if !recovered_baseline.is_empty() {
-            storage.recover_component_backup(game_id, component.id(), &recovered_baseline)?;
+            let mut rollback_baseline = ComponentRollbackBaseline::new(recovered_baseline);
+            if component.technology() == GraphicsTechnology::D3D12Agility
+                && let Some(executable) = recover_unique_d3d12_executable_baseline(storage, &game)?
+            {
+                rollback_baseline = rollback_baseline.with_d3d12_executable(executable);
+            }
+            storage.recover_component_rollback_baseline(
+                game_id,
+                component.id(),
+                &rollback_baseline,
+            )?;
         }
     }
 
     Ok(())
+}
+
+fn baseline_has_complete_sidecars(files: &[ComponentFile]) -> bool {
+    !files.is_empty()
+        && files.iter().all(|file| {
+            crate::fs::backup_path(Path::new(file.path().as_str()))
+                .is_ok_and(|path| crate::fs::is_readable_non_empty_file(&path))
+        })
+}
+
+fn recover_unique_d3d12_executable_baseline(
+    storage: &SqliteStorage,
+    game: &renderpilot_domain::GameInstallation,
+) -> AppResult<Option<D3d12ExecutableBaseline>> {
+    let override_path = storage
+        .get_nvapi_executable_override(game.id().as_str())?
+        .map(|row| PathBuf::from(row.selected_path));
+    let resolved = crate::game_executable::resolve_primary_executable(
+        Path::new(game.install_path().as_str()),
+        override_path.as_deref(),
+        true,
+    );
+    let mut candidates = Vec::new();
+    if let Some(resolved) = resolved {
+        candidates.push(PathBuf::from(resolved.path.as_str()));
+    }
+    candidates.extend(
+        game.executable_candidates()
+            .iter()
+            .map(|path| PathBuf::from(path.as_str())),
+    );
+    let mut seen = HashSet::new();
+    let recovered = candidates
+        .into_iter()
+        .filter(|path| seen.insert(crate::paths::normalized_key(path)))
+        .filter_map(|path| recover_d3d12_executable_pair(&path).transpose())
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok((recovered.len() == 1).then(|| recovered[0].clone()))
+}
+
+fn recover_d3d12_executable_pair(live_path: &Path) -> AppResult<Option<D3d12ExecutableBaseline>> {
+    let backup_path = crate::fs::backup_path(live_path)
+        .map_err(|error| renderpilot_application::AppError::invalid_input(error.to_string()))?;
+    if !live_path.is_file() || !backup_path.is_file() {
+        return Ok(None);
+    }
+    let live = std::fs::read(live_path).map_err(|error| {
+        renderpilot_application::AppError::provider_failed(format!(
+            "cannot read executable {} during backup recovery: {error}",
+            live_path.display()
+        ))
+    })?;
+    let original = std::fs::read(&backup_path).map_err(|error| {
+        renderpilot_application::AppError::provider_failed(format!(
+            "cannot read executable backup {} during recovery: {error}",
+            backup_path.display()
+        ))
+    })?;
+    if !crate::catalog::runtime_compatibility::differs_only_at_sdk_export(&original, &live) {
+        return Ok(None);
+    }
+    let Some(original_export) = renderpilot_detection::pe_exported_u32_from_bytes(
+        &original,
+        crate::catalog::runtime_compatibility::D3D12_SDK_VERSION_EXPORT,
+    ) else {
+        return Ok(None);
+    };
+    let Some(current_export) = renderpilot_detection::pe_exported_u32_from_bytes(
+        &live,
+        crate::catalog::runtime_compatibility::D3D12_SDK_VERSION_EXPORT,
+    ) else {
+        return Ok(None);
+    };
+    let executable_path = PathRef::new(live_path.to_string_lossy().into_owned())
+        .map_err(|error| renderpilot_application::AppError::invalid_input(error.to_string()))?;
+    Ok(Some(D3d12ExecutableBaseline::new(
+        executable_path,
+        D3d12ExecutableIdentity::new(
+            original_export.value,
+            renderpilot_detection::sha256_bytes(&original)?,
+        ),
+        D3d12ExecutableIdentity::new(
+            current_export.value,
+            renderpilot_detection::sha256_bytes(&live)?,
+        ),
+    )))
 }
 
 /// Recovers a `.bak` file as a `ComponentFile` referencing `original_path` (the
@@ -204,6 +321,11 @@ fn recover_orphaned_fsr_split_members(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use renderpilot_application::ComponentRepository;
+    use renderpilot_domain::{
+        ComponentId, ComponentKind, GameIdentity, GameInstallation, GameRuntime, Launcher,
+        Platform, Swappability,
+    };
     use std::fs;
 
     fn write(path: &std::path::Path, bytes: &[u8]) {
@@ -263,6 +385,155 @@ mod tests {
     }
 
     #[test]
+    fn d3d12_executable_pair_recovers_only_a_single_field_transition() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let live_path = dir.path().join("game.exe");
+        let backup_path = dir.path().join("game.exe.bak");
+        let original = crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+        let mut live = original.clone();
+        renderpilot_detection::replace_pe_exported_u32_in_bytes(
+            &mut live,
+            crate::catalog::runtime_compatibility::D3D12_SDK_VERSION_EXPORT,
+            606,
+            619,
+        )
+        .expect("patch fixture");
+        write(&live_path, &live);
+        write(&backup_path, &original);
+
+        let recovered = recover_d3d12_executable_pair(&live_path)
+            .expect("recovery")
+            .expect("valid pair");
+        assert_eq!(recovered.original().sdk_version(), 606);
+        assert_eq!(recovered.expected_active().sdk_version(), 619);
+
+        live[2] ^= 1;
+        write(&live_path, &live);
+        assert!(
+            recover_d3d12_executable_pair(&live_path)
+                .expect("external-change assessment")
+                .is_none(),
+            "a change outside the SDK export must never be adopted"
+        );
+
+        write(&live_path, &original);
+        write(&backup_path, b"not a PE");
+        assert!(
+            recover_d3d12_executable_pair(&live_path)
+                .expect("corrupt-backup assessment")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn recovery_enriches_a_dll_baseline_only_when_the_pair_is_coherent() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let live_dll = dir.path().join("D3D12Core.dll");
+        let backup_dll = dir.path().join("D3D12Core.dll.bak");
+        let executable = dir.path().join("game.exe");
+        let executable_backup = dir.path().join("game.exe.bak");
+        write(&live_dll, b"active-sdk-619");
+        write(&backup_dll, b"original-sdk-606");
+        let original_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+        let active_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
+        write(&executable, &active_executable);
+        write(&executable_backup, &original_executable);
+
+        let game = recovery_game(dir.path(), &executable, "coherent");
+        let component_id = ComponentId::new("component:recovery-coherent").expect("component");
+        let component = GraphicsComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(path_ref(&live_dll))
+                .with_sha256(renderpilot_detection::sha256_file(&live_dll).expect("live hash")),
+        );
+        let original_file = ComponentFile::new(path_ref(&live_dll))
+            .with_sha256(renderpilot_detection::sha256_file(&backup_dll).expect("backup hash"));
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+            .expect("component");
+        storage
+            .recover_component_rollback_baseline(
+                game.id(),
+                &component_id,
+                &ComponentRollbackBaseline::new(vec![original_file]),
+            )
+            .expect("DLL-only baseline");
+
+        recover_orphaned_backups(&storage, game.id(), &[component]).expect("recovery");
+
+        let recovered = storage
+            .get_component_backup(&component_id)
+            .expect("query")
+            .expect("baseline");
+        let executable = recovered
+            .d3d12_executable()
+            .expect("EXE baseline must be attached");
+        assert_eq!(executable.original().sdk_version(), 606);
+        assert_eq!(executable.expected_active().sdk_version(), 619);
+    }
+
+    #[test]
+    fn recovery_does_not_pair_a_patched_executable_without_immutable_dll_bytes() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let live_dll = dir.path().join("D3D12Core.dll");
+        let executable = dir.path().join("game.exe");
+        write(&live_dll, b"unbacked-live-runtime");
+        let original_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+        let active_executable =
+            crate::catalog::runtime_compatibility::synthetic_d3d12_executable(619);
+        write(&executable, &active_executable);
+        write(&dir.path().join("game.exe.bak"), &original_executable);
+
+        let game = recovery_game(dir.path(), &executable, "unpaired");
+        let component_id = ComponentId::new("component:recovery-unpaired").expect("component");
+        let live_file = ComponentFile::new(path_ref(&live_dll))
+            .with_sha256(renderpilot_detection::sha256_file(&live_dll).expect("live hash"));
+        let component = GraphicsComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(live_file.clone());
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+            .expect("component");
+        storage
+            .recover_component_rollback_baseline(
+                game.id(),
+                &component_id,
+                &ComponentRollbackBaseline::new(vec![live_file]),
+            )
+            .expect("DLL-only baseline");
+
+        recover_orphaned_backups(&storage, game.id(), &[component]).expect("recovery");
+
+        assert!(
+            storage
+                .get_component_backup(&component_id)
+                .expect("query")
+                .expect("baseline")
+                .d3d12_executable()
+                .is_none(),
+            "a patched EXE must not be paired with mutable DLL bytes"
+        );
+    }
+
+    #[test]
     fn orphaned_split_member_baks_are_recovered_and_others_ignored() {
         let dir = tempfile::tempdir().expect("temp dir");
         write(
@@ -286,5 +557,24 @@ mod tests {
             .filter_map(|file| file.path().file_name().map(str::to_owned))
             .collect();
         assert_eq!(names, vec!["amd_fidelityfx_upscaler_dx12.dll"]);
+    }
+
+    fn path_ref(path: &Path) -> PathRef {
+        PathRef::new(path.to_string_lossy().into_owned()).expect("path")
+    }
+
+    fn recovery_game(root: &Path, executable: &Path, suffix: &str) -> GameInstallation {
+        GameInstallation::new(
+            GameIdentity::new(
+                GameId::new(format!("manual:recovery-{suffix}")).expect("game id"),
+                format!("Recovery {suffix}"),
+                Launcher::Manual,
+            )
+            .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            path_ref(root),
+        )
+        .with_executable_candidate(path_ref(executable))
     }
 }

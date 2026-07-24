@@ -291,6 +291,41 @@ fn apply_migrates_v9_to_current_additively_and_preserves_addon_rows() {
 }
 
 #[test]
+fn apply_migrates_v11_component_backups_with_empty_auxiliary_array() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            INSERT INTO games
+                (id, title, launcher, platform, runtime, install_path,
+                 executable_candidates_json)
+            VALUES
+                ('steam:v11', 'Legacy', 'Steam', 'Windows', 'NativeWindows', 'C:/Game', '[]');
+            INSERT INTO component_backups
+                (component_id, game_id, files_json)
+            VALUES
+                ('component:v11', 'steam:v11', '[]');
+            ALTER TABLE component_backups DROP COLUMN auxiliary_json;
+            PRAGMA user_version = 11;
+            ",
+        )
+        .expect("reduce to v11");
+
+    apply(&mut connection).expect("v11 migration");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    let auxiliary: String = connection
+        .query_row(
+            "SELECT auxiliary_json FROM component_backups WHERE component_id = 'component:v11'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("auxiliary json");
+    assert_eq!(auxiliary, "[]");
+}
+
+#[test]
 fn v10_migration_preserves_artifact_rows_with_empty_metadata() {
     let connection = open_test_connection();
     connection

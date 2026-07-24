@@ -229,8 +229,7 @@ pub(super) fn persist_host_only_result(
         .commit_game_mutation(renderpilot_storage_sqlite::GameMutationCommit {
             game_id: record.game_id(),
             component_set: None,
-            baseline_inserts: &[],
-            baseline_deletes: &[],
+            baseline_mutations: &[],
             addon: renderpilot_storage_sqlite::InstalledAddonMutation::Upsert(&refreshed),
             mutation_id: Some(mutation_id),
         })?;

@@ -48,7 +48,8 @@ use self::version::database_has_user_schema;
 //   9 → 10: coordinated add-on files + crash-recoverable game-file mutations
 //          (`pending_file_mutations` must accept state `preparing`).
 //   10 → 11: typed artifact package/runtime metadata persisted as JSON.
-const CURRENT_SCHEMA_VERSION: i32 = 11;
+//   11 → 12: typed auxiliary rollback baselines (including managed D3D12 EXEs).
+const CURRENT_SCHEMA_VERSION: i32 = 12;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,

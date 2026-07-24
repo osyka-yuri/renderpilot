@@ -90,10 +90,18 @@ pub mod component_backups {
     pub const COMPONENT_ID: &str = "component_id";
     pub const GAME_ID: &str = "game_id";
     pub const FILES_JSON: &str = "files_json";
+    pub const AUXILIARY_JSON: &str = "auxiliary_json";
     pub const CREATED_AT: &str = "created_at";
     pub const UPDATED_AT: &str = "updated_at";
 
-    pub const ALL: &[&str] = &[COMPONENT_ID, GAME_ID, FILES_JSON, CREATED_AT, UPDATED_AT];
+    pub const ALL: &[&str] = &[
+        COMPONENT_ID,
+        GAME_ID,
+        FILES_JSON,
+        AUXILIARY_JSON,
+        CREATED_AT,
+        UPDATED_AT,
+    ];
 }
 
 pub mod operations {

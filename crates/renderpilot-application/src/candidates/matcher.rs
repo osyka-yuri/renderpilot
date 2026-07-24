@@ -16,7 +16,10 @@ use super::dto::{
     ReplacementCandidate,
 };
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
-use crate::{SwapTargetProfile, ensure_replacement_compatible};
+use crate::{
+    SwapCompatibilityError, SwapTargetProfile, ensure_replacement_compatible,
+    replacement_executable_action,
+};
 
 /// Context for candidate lookup that carries source metadata for artifacts.
 #[derive(Debug, Clone)]
@@ -104,7 +107,12 @@ pub fn find_replacement_candidates(
                     return None;
                 }
 
-                ensure_replacement_compatible(component, artifact, &context.target_profile).ok()?;
+                match ensure_replacement_compatible(component, artifact, &context.target_profile) {
+                    Ok(()) | Err(SwapCompatibilityError::D3d12ExecutableRepairRequired) => {}
+                    Err(_) => return None,
+                }
+                let d3d12_executable_action =
+                    replacement_executable_action(artifact, &context.target_profile).ok()?;
                 let resolved_identity =
                     ResolvedTransitionIdentity::for_replacement(component, artifact).ok()?;
                 if resolved_identity
@@ -121,15 +129,18 @@ pub fn find_replacement_candidates(
                 let is_debug = package_id
                     .as_ref()
                     .is_some_and(|id| context.is_debug_package(id));
-                Some(ReplacementCandidate::new(
-                    artifact,
-                    comparison,
-                    is_downloaded,
-                    package_id,
-                    is_debug,
-                    indexed.intrinsic_identity.clone(),
-                    resolved_identity,
-                ))
+                Some(
+                    ReplacementCandidate::new(
+                        artifact,
+                        comparison,
+                        is_downloaded,
+                        package_id,
+                        is_debug,
+                        indexed.intrinsic_identity.clone(),
+                        resolved_identity,
+                    )
+                    .with_d3d12_executable_action(d3d12_executable_action),
+                )
             })
             .collect::<Vec<_>>();
 

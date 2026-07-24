@@ -60,6 +60,8 @@ pub enum OperationPlanBlocker {
     ComponentUnsafe,
     /// Selected artifact matches the currently installed file hash.
     ArtifactMatchesCurrentFile,
+    /// D3D12 executable changed outside the managed SDK export.
+    D3d12ExecutableRepairRequired,
 }
 
 impl OperationPlanBlocker {
@@ -71,6 +73,7 @@ impl OperationPlanBlocker {
             Self::ComponentIntegratedIntoEngine => "component_integrated_into_engine",
             Self::ComponentUnsafe => "component_unsafe",
             Self::ArtifactMatchesCurrentFile => "artifact_matches_current_file",
+            Self::D3d12ExecutableRepairRequired => "d3d12_executable_repair_required",
         }
     }
 }
@@ -82,6 +85,8 @@ pub enum OperationPlanWarning {
     ConfirmationRequiredForSwappability,
     /// One or both versions are unknown and the user must compare manually.
     ManualVersionComparisonRequired,
+    /// Patching or restoring the main executable may invalidate its signature.
+    ExecutableSignatureMayBecomeInvalid,
 }
 
 impl OperationPlanWarning {
@@ -90,10 +95,14 @@ impl OperationPlanWarning {
         match self {
             Self::ConfirmationRequiredForSwappability => "confirmation_required_for_swappability",
             Self::ManualVersionComparisonRequired => "manual_version_comparison_required",
+            Self::ExecutableSignatureMayBecomeInvalid => "executable_signature_may_become_invalid",
         }
     }
 
     pub(crate) const fn raises_risk_to_high(self) -> bool {
-        matches!(self, Self::ConfirmationRequiredForSwappability)
+        matches!(
+            self,
+            Self::ConfirmationRequiredForSwappability | Self::ExecutableSignatureMayBecomeInvalid
+        )
     }
 }

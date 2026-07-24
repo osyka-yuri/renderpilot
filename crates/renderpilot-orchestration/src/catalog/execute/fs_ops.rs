@@ -134,6 +134,15 @@ pub(crate) fn revert_to_baseline_fs(
     current: &[ComponentFile],
     baseline: &[ComponentFile],
 ) -> AppResult<()> {
+    restore_baseline_preserving_sidecars(current, baseline)?;
+    release_baseline_sidecars(current, baseline)
+}
+
+/// Restores and verifies every DLL while retaining all baseline sidecars.
+pub(super) fn restore_baseline_preserving_sidecars(
+    current: &[ComponentFile],
+    baseline: &[ComponentFile],
+) -> AppResult<()> {
     let baseline_paths: HashSet<String> = baseline
         .iter()
         .map(|file| crate::paths::normalized_key(&real_path(file)))
@@ -149,8 +158,7 @@ pub(crate) fn revert_to_baseline_fs(
         .collect();
     execute_file_plans(&removes).map_err(map_service_error)?;
 
-    // 2–3. Restore every baseline while retaining sidecars, then release.
-    // [`execute_restore_batch`] enforces restore-before-release ordering.
+    // 2. Restore every baseline while retaining sidecars.
     let mut restores = Vec::with_capacity(baseline.len());
     for file in baseline {
         restores.push(CoordinatedFilePlan::RestorePreservingSidecar {
@@ -158,18 +166,28 @@ pub(crate) fn revert_to_baseline_fs(
             baseline_sha256: require_baseline_hash(file)?,
         });
     }
+    let _log: FilePlanBatchLog =
+        execute_restore_batch(restores, Vec::new()).map_err(map_service_error)?;
+
+    // Flush restored copies before auxiliary-file verification.
+    sync_component_file_dirs(current.iter().chain(baseline));
+
+    Ok(())
+}
+
+/// Releases DLL sidecars only after every component/auxiliary restore verified.
+pub(super) fn release_baseline_sidecars(
+    current: &[ComponentFile],
+    baseline: &[ComponentFile],
+) -> AppResult<()> {
     let releases: Vec<_> = baseline
         .iter()
         .map(|file| CoordinatedFilePlan::ReleaseSidecar {
             path: real_path(file),
         })
         .collect();
-    let _log: FilePlanBatchLog =
-        execute_restore_batch(restores, releases).map_err(map_service_error)?;
-
-    // Flush the restored copies and sidecar deletes before the DB commit.
+    execute_file_plans(&releases).map_err(map_service_error)?;
     sync_component_file_dirs(current.iter().chain(baseline));
-
     Ok(())
 }
 

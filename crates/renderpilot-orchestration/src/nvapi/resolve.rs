@@ -37,7 +37,13 @@ pub fn set_executable_override(
     game_id: &str,
     absolute_path: &str,
 ) -> Result<(), ServiceError> {
-    let game = load_game_with_context(context, game_id)?;
+    let parsed =
+        GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
+    let _guard = crate::game_mutation_lock::blocking_lock(&parsed);
+    let game = context
+        .storage()
+        .find_game(&parsed)?
+        .ok_or_else(|| ServiceError::GameNotFound(game_id.to_owned()))?;
     let install_dir = Path::new(game.install_path().as_str());
     let exe_path = Path::new(absolute_path);
 
@@ -65,6 +71,7 @@ pub fn set_executable_override(
         .ok_or_else(|| ServiceError::command_failed("executable path has no file name"))?;
 
     let normalized = canonical_exe.to_string_lossy().replace('\\', "/");
+    require_d3d12_executable_binding(context, game.id(), Some(&normalized))?;
     context
         .storage()
         .upsert_nvapi_executable_override(game_id, &normalized, file_name)?;
@@ -76,11 +83,47 @@ pub fn clear_executable_override(
     context: &crate::Context,
     game_id: &str,
 ) -> Result<(), ServiceError> {
-    let _game = load_game_with_context(context, game_id)?;
+    let parsed =
+        GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
+    let _guard = crate::game_mutation_lock::blocking_lock(&parsed);
+    context
+        .storage()
+        .find_game(&parsed)?
+        .ok_or_else(|| ServiceError::GameNotFound(game_id.to_owned()))?;
+    require_d3d12_executable_binding(context, &parsed, None)?;
     context
         .storage()
         .delete_nvapi_executable_override(game_id)?;
     Ok(())
+}
+
+fn require_d3d12_executable_binding(
+    context: &crate::Context,
+    game_id: &GameId,
+    requested_path: Option<&str>,
+) -> Result<(), ServiceError> {
+    let bound = context
+        .storage()
+        .component_backups_for_game(game_id)?
+        .into_values()
+        .find_map(|baseline| {
+            baseline
+                .d3d12_executable()
+                .map(|executable| executable.executable_path().clone())
+        });
+    let Some(bound) = bound else {
+        return Ok(());
+    };
+    if requested_path.is_some_and(|path| {
+        renderpilot_domain::normalized_path_key(path)
+            == renderpilot_domain::normalized_path_key(bound.as_str())
+    }) {
+        return Ok(());
+    }
+    Err(ServiceError::command_failed(format!(
+        "executable selection is locked to {} until the D3D12 component is fully rolled back",
+        bound.as_str()
+    )))
 }
 
 /// The user's pinned executable override for `game_id` as an absolute path, or
@@ -227,7 +270,15 @@ pub fn resolve_effective_executable(
 
 #[cfg(test)]
 mod tests {
-    use super::global_setting_context;
+    use std::sync::{Arc, mpsc};
+
+    use renderpilot_application::GameRepository;
+    use renderpilot_domain::{
+        GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    };
+    use renderpilot_storage_sqlite::SqliteStorage;
+
+    use super::{global_setting_context, set_executable_override};
 
     #[test]
     fn global_context_has_no_game_dll_or_exe() {
@@ -237,5 +288,70 @@ mod tests {
         assert!(ctx.dlls.is_empty());
         assert!(ctx.effective_exe.is_none());
         assert_eq!(ctx.game_install_dir.as_os_str().len(), 0);
+    }
+
+    #[test]
+    fn executable_override_waits_for_the_game_mutation_boundary() {
+        let directory = tempfile::tempdir().expect("temporary game directory");
+        let executable = directory.path().join("game.exe");
+        std::fs::write(&executable, b"test executable").expect("executable fixture");
+        let game_id =
+            GameId::new(format!("manual:override-lock-{}", ulid::Ulid::generate())).expect("id");
+        let identity = GameIdentity::new(game_id.clone(), "Override Lock", Launcher::Manual)
+            .expect("identity");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(directory.path().to_string_lossy().into_owned()).expect("install path"),
+        );
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("persist game");
+        let context = Arc::new(crate::Context::from_storage(storage));
+
+        let held = crate::game_mutation_lock::blocking_lock(&game_id);
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        crate::game_mutation_lock::set_lock_attempt_hook(&game_id, attempt_tx);
+
+        let worker_context = Arc::clone(&context);
+        let worker_game_id = game_id.as_str().to_owned();
+        let worker_executable = executable.to_string_lossy().into_owned();
+        let worker = std::thread::spawn(move || {
+            done_tx
+                .send(set_executable_override(
+                    &worker_context,
+                    &worker_game_id,
+                    &worker_executable,
+                ))
+                .expect("report result");
+        });
+
+        attempt_rx
+            .recv()
+            .expect("override reached mutation boundary");
+        assert!(matches!(done_rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(
+            context
+                .storage()
+                .get_nvapi_executable_override(game_id.as_str())
+                .expect("read override")
+                .is_none(),
+            "override must not be persisted before the game boundary is acquired"
+        );
+
+        drop(held);
+        done_rx
+            .recv()
+            .expect("worker result")
+            .expect("set override");
+        worker.join().expect("worker");
+        assert!(
+            context
+                .storage()
+                .get_nvapi_executable_override(game_id.as_str())
+                .expect("read override")
+                .is_some()
+        );
     }
 }

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use renderpilot_application::AppResult;
-use renderpilot_domain::{ComponentFile, GameId, GraphicsComponent};
+use renderpilot_domain::{ComponentFile, ComponentRollbackBaseline, GameId, GraphicsComponent};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 /// Cheap rollback availability for one persisted component baseline.
@@ -16,18 +16,18 @@ pub(crate) enum ComponentBackupAvailability {
     /// No baseline row is persisted for the component.
     NotRecorded,
     /// Every recorded member has a readable sidecar or unchanged live source.
-    Available(Vec<ComponentFile>),
+    Available(ComponentRollbackBaseline),
     /// A baseline row exists, but at least one required byte source is unavailable.
-    Unavailable,
+    Unavailable(ComponentRollbackBaseline),
 }
 
 impl ComponentBackupAvailability {
     /// Consumes this projection and returns the usable recorded baseline.
     #[must_use]
-    pub(crate) fn into_available(self) -> Option<Vec<ComponentFile>> {
+    pub(crate) fn into_available(self) -> Option<ComponentRollbackBaseline> {
         match self {
             Self::Available(baseline) => Some(baseline),
-            Self::NotRecorded | Self::Unavailable => None,
+            Self::NotRecorded | Self::Unavailable(_) => None,
         }
     }
 
@@ -68,16 +68,16 @@ pub(crate) fn available_component_backup_ids(
 }
 
 fn classify_component_backup(
-    recorded: Option<Vec<ComponentFile>>,
+    recorded: Option<ComponentRollbackBaseline>,
     current: &[ComponentFile],
 ) -> ComponentBackupAvailability {
     let Some(recorded) = recorded else {
         return ComponentBackupAvailability::NotRecorded;
     };
-    if baseline_sources_appear_available(&recorded, current) {
+    if baseline_sources_appear_available(recorded.files(), current) {
         ComponentBackupAvailability::Available(recorded)
     } else {
-        ComponentBackupAvailability::Unavailable
+        ComponentBackupAvailability::Unavailable(recorded)
     }
 }
 

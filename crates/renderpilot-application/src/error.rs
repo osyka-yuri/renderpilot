@@ -29,7 +29,7 @@ pub enum AppErrorKind {
     /// A storage adapter failed.
     StorageFailed,
 
-    /// A one-time confirmation token did not match the expected value.
+    /// A state-bound confirmation token did not match the expected value.
     ConfirmationTokenMismatch,
 
     /// The requested game was not found.

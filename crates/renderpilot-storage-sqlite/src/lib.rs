@@ -14,7 +14,7 @@ pub use repositories::file_hash_cache::FileHashCacheRow;
 pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
 pub use repositories::game_ui_state::GameUiStateRow;
 pub use repositories::{
-    ComponentBaselineInsert, GameMutationCommit, InstalledAddonMutation, PendingFileMutationRow,
+    ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation, PendingFileMutationRow,
     PendingFileMutationState,
 };
 pub use repositories::{ScanWriteReport, ScanWriteUnit, SqliteStorage};

@@ -61,8 +61,7 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
                 renderpilot_storage_sqlite::GameMutationCommit {
                     game_id,
                     component_set: None,
-                    baseline_inserts: &[],
-                    baseline_deletes: &[],
+                    baseline_mutations: &[],
                     addon: renderpilot_storage_sqlite::InstalledAddonMutation::Delete(
                         AddonKind::RenoDx,
                     ),

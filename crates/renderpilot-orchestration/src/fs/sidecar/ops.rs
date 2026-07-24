@@ -1,7 +1,8 @@
 //! Sidecar verify / create / restore against the live filesystem.
 
 use std::fmt;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use renderpilot_domain::Sha256Hash;
@@ -91,15 +92,56 @@ pub(crate) fn verify_sidecar(path: &Path, expected: &Sha256Hash) -> Result<(), S
     Ok(())
 }
 
-/// Creates a baseline sidecar by crash-atomically copying `live` onto
-/// `sidecar`.
+/// Creates a baseline sidecar without ever replacing an existing path.
 ///
-/// Thin named alias for [`copy_file_atomically`] so call sites declare the
-/// intent ("create a `.bak`") at the call site rather than via a comment.
-/// Pre- and post-conditions (live-hash verification, sidecar-absence checks,
-/// post-copy re-hash) stay with each engine.
+/// `create_new` makes path ownership atomic and fails when `sidecar` already
+/// exists, enforcing the immutable capture-once contract even if another
+/// process creates the path after preflight. Callers execute inside the durable
+/// file transaction, whose absent-path snapshot removes an interrupted partial
+/// creation during recovery.
 pub(crate) fn create_sidecar(live: &Path, sidecar: &Path) -> Result<(), ServiceError> {
-    copy_file_atomically(live, sidecar)
+    sidecar.parent().ok_or_else(|| {
+        crate::failed(format!(
+            "cannot create sidecar `{}` because it has no parent directory",
+            sidecar.display()
+        ))
+    })?;
+    let mut source = fs::File::open(live).map_err(|error| {
+        crate::failed(format!(
+            "failed to open sidecar source `{}`: {error}",
+            live.display()
+        ))
+    })?;
+    let mut destination = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(sidecar)
+        .map_err(|error| {
+            crate::failed(format!(
+                "failed to create immutable sidecar `{}`: {error}",
+                sidecar.display()
+            ))
+        })?;
+    let result = io::copy(&mut source, &mut destination)
+        .and_then(|_| destination.sync_all())
+        .map_err(|error| {
+            crate::failed(format!(
+                "failed to persist immutable sidecar `{}`: {error}",
+                sidecar.display()
+            ))
+        });
+    drop(destination);
+    if result.is_ok() {
+        crate::fs::sync_parent_directory_best_effort(sidecar);
+    } else if let Err(error) = fs::remove_file(sidecar)
+        && error.kind() != io::ErrorKind::NotFound
+    {
+        log::warn!(
+            "failed to remove partial sidecar {}: {error}",
+            sidecar.display()
+        );
+    }
+    result
 }
 
 /// Restores `live` from `sidecar` crash-atomically, then removes the sidecar.
@@ -117,4 +159,30 @@ pub(crate) fn restore_from_sidecar(live: &Path, sidecar: &Path) -> Result<(), Se
         ))
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_capture_is_complete_and_never_replaces_an_existing_backup() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let live = directory.path().join("runtime.dll");
+        let sidecar = directory.path().join("runtime.dll.bak");
+        fs::write(&live, b"original-runtime").expect("live");
+
+        create_sidecar(&live, &sidecar).expect("first capture");
+        assert_eq!(fs::read(&sidecar).expect("sidecar"), b"original-runtime");
+
+        fs::write(&live, b"later-runtime").expect("changed live");
+        assert!(
+            create_sidecar(&live, &sidecar).is_err(),
+            "capture-once must reject an existing path"
+        );
+        assert_eq!(
+            fs::read(&sidecar).expect("immutable sidecar"),
+            b"original-runtime"
+        );
+    }
 }

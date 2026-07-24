@@ -72,8 +72,59 @@ pub struct GameDetailsCatalogResult {
     pub components: Vec<GraphicsComponent>,
     /// Replacement candidate groups across all components.
     pub candidate_groups: Vec<ComponentReplacementCandidates>,
+    /// Fresh active D3D12 executable status, independent of candidate availability.
+    pub d3d12_executable_status: Option<D3d12ExecutableStatus>,
     /// Operation history for this game.
     pub operations: OperationListCatalogResult,
+}
+
+/// Fresh read-only D3D12 executable status for the game details view.
+#[derive(Debug, Clone)]
+pub struct D3d12ExecutableStatus {
+    component_id: renderpilot_domain::ComponentId,
+    executable_path: renderpilot_domain::PathRef,
+    backup_path: renderpilot_domain::PathRef,
+    original_sdk_version: u32,
+    current_sdk_version: u32,
+    repair_required: bool,
+    selection_locked: bool,
+}
+
+impl D3d12ExecutableStatus {
+    /// Component whose D3D12 runtime owns this executable assessment.
+    pub const fn component_id(&self) -> &renderpilot_domain::ComponentId {
+        &self.component_id
+    }
+
+    /// Active executable path.
+    pub const fn executable_path(&self) -> &renderpilot_domain::PathRef {
+        &self.executable_path
+    }
+
+    /// Immutable sidecar path.
+    pub const fn backup_path(&self) -> &renderpilot_domain::PathRef {
+        &self.backup_path
+    }
+
+    /// SDK line from the immutable original.
+    pub const fn original_sdk_version(&self) -> u32 {
+        self.original_sdk_version
+    }
+
+    /// SDK line currently active.
+    pub const fn current_sdk_version(&self) -> u32 {
+        self.current_sdk_version
+    }
+
+    /// Whether an external executable change requires repair.
+    pub const fn repair_required(&self) -> bool {
+        self.repair_required
+    }
+
+    /// Whether an aggregate permanently binds executable selection.
+    pub const fn selection_locked(&self) -> bool {
+        self.selection_locked
+    }
 }
 
 /// Resolved swap operation plan ready for execution.
@@ -156,6 +207,15 @@ pub(crate) struct ReplacementUniverse {
     candidate_context: renderpilot_application::CandidateContext,
 }
 
+struct D3d12StatusFacts {
+    executable_path: PathBuf,
+    backup_path: PathBuf,
+    original_sdk_version: u32,
+    current_sdk_version: u32,
+    repair_required: bool,
+    selection_locked: bool,
+}
+
 /// Loads the artifact universe (local artifacts + catalog packages) and the
 /// candidate context once. A missing or invalid catalog degrades to local-only
 /// artifacts.
@@ -210,10 +270,32 @@ pub(crate) fn get_game_details_with_universe(
     let game = storage.require_game(game_id)?;
     let components = storage.list_components_for_game(game_id)?;
 
+    let d3d12_component = components
+        .iter()
+        .find(|component| component.technology() == GraphicsTechnology::D3D12Agility);
+    // Game details are a presentation read model. Reading and hashing complete
+    // EXE/backup images here made ordinary navigation scale with executable
+    // size. Swap preview/apply and rollback retain their independent,
+    // authoritative assessment under the per-game mutation lock.
+    let target =
+        runtime_compatibility::presentation_target_profile(context, &game, d3d12_component)?;
+    let target_profile = target.profile;
+    let d3d12_status_facts = target.d3d12.map(|state| D3d12StatusFacts {
+        executable_path: state.executable_path,
+        backup_path: state.backup_path,
+        original_sdk_version: state.original_sdk_version,
+        current_sdk_version: state.current_sdk_version,
+        repair_required: state.repair_required,
+        selection_locked: state.selection_locked,
+    });
+    let d3d12_executable_status = d3d12_component
+        .zip(d3d12_status_facts)
+        .map(|(component, facts)| build_d3d12_status(component, &facts))
+        .transpose()?;
     let candidate_context = universe
         .candidate_context
         .clone()
-        .with_target_profile(runtime_compatibility::target_profile(context, &game));
+        .with_target_profile(target_profile);
     let matching_components = components_for_candidate_matching(context, game_id, &components)?;
     let candidate_groups = find_replacement_candidates(
         &matching_components,
@@ -227,7 +309,29 @@ pub(crate) fn get_game_details_with_universe(
         game,
         components,
         candidate_groups,
+        d3d12_executable_status,
         operations,
+    })
+}
+
+fn build_d3d12_status(
+    component: &GraphicsComponent,
+    facts: &D3d12StatusFacts,
+) -> AppResult<D3d12ExecutableStatus> {
+    Ok(D3d12ExecutableStatus {
+        component_id: component.id().clone(),
+        executable_path: renderpilot_domain::PathRef::new(
+            facts.executable_path.to_string_lossy().into_owned(),
+        )
+        .map_err(|error| AppError::invalid_input(error.to_string()))?,
+        backup_path: renderpilot_domain::PathRef::new(
+            facts.backup_path.to_string_lossy().into_owned(),
+        )
+        .map_err(|error| AppError::invalid_input(error.to_string()))?,
+        original_sdk_version: facts.original_sdk_version,
+        current_sdk_version: facts.current_sdk_version,
+        repair_required: facts.repair_required,
+        selection_locked: facts.selection_locked,
     })
 }
 
@@ -293,7 +397,10 @@ pub fn list_artifacts(
 
 // Re-export core operations from sub-modules directly.
 pub use cards::{GameCardData, game_cards};
-pub use execute::{apply_swap, rollback_component};
+pub use execute::{
+    D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, RollbackPlan, apply_swap,
+    apply_swap_confirmed, build_rollback_plan, rollback_component,
+};
 pub use operations::list_operations;
 pub use swap::{build_swap_plan, find_candidates};
 
