@@ -17,6 +17,7 @@ export function component(id: string, technology = 'nvidia_streamline'): GameGra
     swappability: technology === 'nvidia_streamline' ? 'bundle_only' : 'swappable',
     files: [{ path: `C:/Game/${id}.dll` }],
     rollback_available: false,
+    d3d12_executable_status: null,
   };
 }
 
@@ -34,6 +35,7 @@ export function candidate(version: string | null, overrides: Partial<Candidate> 
     is_debug: overrides.is_debug ?? false,
     sha256: overrides.sha256 ?? 'fake_hash',
     ...overrides,
+    d3d12_executable_action: overrides.d3d12_executable_action ?? null,
   };
 }
 

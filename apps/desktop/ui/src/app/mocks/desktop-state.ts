@@ -29,9 +29,11 @@ export type GameSummaryPatch = Partial<
 export type MockState = {
   games: GameSummary[];
   detailsByGameId: Map<string, GameDetails>;
+  componentBaselinesByGameId: Map<string, Map<string, ComponentFile[]>>;
   autoGameIds: Set<string>;
   manualGameIdByInstallPath: Map<string, string>;
   manualCounter: number;
+  operationSequence: number;
   catalogSettings: Map<string, string>;
   libraryPackages: LibraryPackageSummary[];
 };
@@ -68,9 +70,11 @@ export function createMockState(): MockState {
     detailsByGameId: new Map(
       seedGames.map(({ details }) => [details.game.identity.id, details] as const),
     ),
+    componentBaselinesByGameId: new Map(),
     autoGameIds: new Set(seedGames.map(({ details }) => details.game.identity.id)),
     manualGameIdByInstallPath: new Map(),
     manualCounter: 0,
+    operationSequence: 0,
     catalogSettings: new Map(),
     libraryPackages: createMockLibraryPackages(),
   };
@@ -142,6 +146,43 @@ export function requireFirstComponentFile(component: GameGraphicsComponent): Com
   }
 
   return component.files[0];
+}
+
+export function captureComponentBaseline(gameId: string, component: GameGraphicsComponent): void {
+  let baselines = mockState.componentBaselinesByGameId.get(gameId);
+  if (!baselines) {
+    baselines = new Map();
+    mockState.componentBaselinesByGameId.set(gameId, baselines);
+  }
+  if (!baselines.has(component.id)) {
+    baselines.set(
+      component.id,
+      component.files.map((file) => ({ ...file })),
+    );
+  }
+}
+
+export function hasComponentBaseline(gameId: string, componentId: string): boolean {
+  return mockState.componentBaselinesByGameId.get(gameId)?.has(componentId) ?? false;
+}
+
+export function consumeComponentBaseline(gameId: string, componentId: string): ComponentFile[] {
+  const baselines = mockState.componentBaselinesByGameId.get(gameId);
+  const baseline = baselines?.get(componentId);
+  if (!baseline) {
+    throw new Error(`Mock preview has no rollback baseline for component ${componentId}.`);
+  }
+
+  baselines?.delete(componentId);
+  if (baselines?.size === 0) {
+    mockState.componentBaselinesByGameId.delete(gameId);
+  }
+  return baseline.map((file) => ({ ...file }));
+}
+
+export function nextMockOperationId(kind: string): string {
+  mockState.operationSequence += 1;
+  return `mock-op:${kind}:${mockState.operationSequence}`;
 }
 
 export function updateCandidateGroupCurrentVersion(

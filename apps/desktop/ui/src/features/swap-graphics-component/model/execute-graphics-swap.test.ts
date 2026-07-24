@@ -21,6 +21,7 @@ describe('executeGraphicsSwap', () => {
         applied_path: 'C:/game/file.dll',
         replacement_path: 'C:/repo/file.dll',
         updated_file_count: 1,
+        d3d12_executable_action: null,
       }),
     );
 
@@ -51,6 +52,7 @@ describe('executeGraphicsSwap', () => {
         applied_path: 'C:/game/file.dll',
         replacement_path: 'C:/repo/file.dll',
         updated_file_count: 1,
+        d3d12_executable_action: null,
       }),
     );
 
@@ -70,6 +72,35 @@ describe('executeGraphicsSwap', () => {
     expect(downloadArtifact).not.toHaveBeenCalled();
     expect(applySwap).toHaveBeenCalledWith('game-1', 'component-1', 'artifact:ready');
     expect(result?.game_id).toBe('game-1');
+  });
+
+  it('passes the preflight fingerprint when the executable will change', async () => {
+    const applySwap = vi.fn(() =>
+      Promise.resolve({
+        game_id: 'game-1',
+        component_id: 'd3d12',
+        applied_path: 'C:/game/D3D12Core.dll',
+        replacement_path: 'C:/repo/D3D12Core.dll',
+        updated_file_count: 1,
+        d3d12_executable_action: null,
+      }),
+    );
+
+    await executeGraphicsSwap(
+      {
+        gameId: 'game-1',
+        componentId: 'd3d12',
+        artifactId: 'artifact:619',
+        isDownloaded: true,
+        confirmationToken: 'fresh-fingerprint',
+      },
+      {
+        applySwap,
+        downloadArtifact: vi.fn(),
+      },
+    );
+
+    expect(applySwap).toHaveBeenCalledWith('game-1', 'd3d12', 'artifact:619', 'fresh-fingerprint');
   });
 
   it('stops before apply when signal is aborted', async () => {

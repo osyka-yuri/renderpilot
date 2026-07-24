@@ -1,22 +1,21 @@
-import type { AddonKind } from '@shared/model';
+import type { AddonKind, D3d12ExecutableAction, OperationMetadata } from '@shared/model';
 import type { FilePath, Nullable } from '@shared/types';
 
 /**
  * Encapsulates the summary of a historical operation, natively embedded within `GameDetails`.
  *
- * Structurally, this mirrors `OperationSummary` from the `entities/operation` slice
- * (representing an identical underlying Rust type). It is deliberately duplicated here
- * to operate within a distinct Tauri command context and strictly prevent architectural
- * cross-slice dependencies between entities.
+ * This local summary wrapper mirrors `OperationSummary` because it belongs to a distinct
+ * Tauri command context; its nested wire metadata is shared to prevent schema drift.
  */
 export type GameOperationSummary = {
   operation_id: string;
   kind: string;
   status: string;
   created_at: number;
-  completed_at?: number | null;
+  completed_at: number | null;
   item_count: number;
-  component_id?: string;
+  component_id: string;
+  metadata: OperationMetadata | null;
 };
 
 export type GameId = string;
@@ -134,21 +133,32 @@ export type GameGraphicsComponent = {
     version?: string | null;
     sha256?: string | null;
   }[];
-  rollback_available?: boolean;
+  rollback_available: boolean;
+  d3d12_executable_status: D3d12ExecutableStatus | null;
+};
+
+export type D3d12ExecutableStatus = {
+  status: 'original' | 'patched' | 'repair_required';
+  selection_locked: boolean;
+  executable_path: string;
+  backup_path: string;
+  original_sdk_version: number;
+  current_sdk_version: number;
 };
 
 export type GameCandidate = {
   artifact_id: string;
   file_name: string;
   file_path: string | null;
-  version?: string | null;
+  version: string | null;
   release_label: string | null;
-  source_game_id?: string | null;
+  source_game_id: string | null;
   comparison: string;
-  catalog_package_id?: Nullable<string>;
+  catalog_package_id: Nullable<string>;
   is_downloaded: boolean;
   is_debug: boolean;
   sha256: string;
+  d3d12_executable_action: D3d12ExecutableAction | null;
 };
 
 /** Honest installed-version state emitted by the Rust candidate DTO. */

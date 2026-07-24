@@ -8,7 +8,12 @@ import type {
   GameSummary,
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
-import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
+import type {
+  ApplySwapResult,
+  RollbackComponentResult,
+  RollbackPlan,
+  SwapPlan,
+} from '@entities/operation';
 import type { LibraryPackageState, LibraryPackageSummary } from '@entities/library';
 import type { ManifestRefreshReport } from '@features/scan-libraries';
 import { fileNameFromPath } from '@shared/path';
@@ -29,7 +34,14 @@ export type DesktopCommandPayloadMap = {
   set_game_hidden: { gameId: string; isHidden: boolean };
   get_catalog_setting: { key: string };
   set_catalog_setting: { key: string; value: string };
-  apply_swap: { gameId: string; componentId: string; artifactId: string };
+  plan_swap: { gameId: string; componentId: string; artifactId: string };
+  apply_swap: {
+    gameId: string;
+    componentId: string;
+    artifactId: string;
+    confirmationToken?: string | null;
+  };
+  plan_rollback: { gameId: string; componentId: string };
   rollback_component: { gameId: string; componentId: string };
   list_library_packages: undefined;
   download_library_package: { packageId: string };
@@ -76,7 +88,9 @@ export type DesktopCommandResultMap = {
   set_game_hidden: { saved: boolean };
   get_catalog_setting: CatalogSettingPayload;
   set_catalog_setting: { saved: boolean };
+  plan_swap: SwapPlan;
   apply_swap: ApplySwapResult;
+  plan_rollback: RollbackPlan;
   rollback_component: RollbackComponentResult;
   list_library_packages: LibraryPackageSummary[];
   download_library_package: LibraryPackageState;
@@ -120,7 +134,9 @@ const ALL_DESKTOP_COMMANDS = [
   'set_game_hidden',
   'get_catalog_setting',
   'set_catalog_setting',
+  'plan_swap',
   'apply_swap',
+  'plan_rollback',
   'rollback_component',
   'list_library_packages',
   'download_library_package',
@@ -175,6 +191,18 @@ export function readStringField(
   options?: { allowEmpty?: boolean },
 ): string {
   return readStringFieldFromRecord(command, readPayloadRecord(command, payload), field, options);
+}
+
+export function readOptionalStringField(
+  command: DesktopCommand,
+  payload: unknown,
+  field: string,
+): string | null {
+  const record = readPayloadRecord(command, payload);
+  if (!Object.prototype.hasOwnProperty.call(record, field) || record[field] === null) {
+    return null;
+  }
+  return readStringFieldFromRecord(command, record, field);
 }
 
 export function readObjectField(

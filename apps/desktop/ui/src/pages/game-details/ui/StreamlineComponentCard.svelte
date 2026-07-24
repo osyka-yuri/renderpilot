@@ -171,15 +171,18 @@
         {#if rollbackIds.length > 0}
           <Tooltip>
             <TooltipTrigger>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                disabled={busy}
-                onclick={handleRestoreAll}
-                aria-label={t('gameDetails.streamline.restoreAllAria')}
-              >
-                <Undo2Icon class="size-4" aria-hidden="true" />
-              </Button>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={busy}
+                  onclick={handleRestoreAll}
+                  aria-label={t('gameDetails.streamline.restoreAllAria')}
+                >
+                  <Undo2Icon class="size-4" aria-hidden="true" />
+                </Button>
+              {/snippet}
             </TooltipTrigger>
             <TooltipContent>{t('gameDetails.streamline.restoreAllTooltip')}</TooltipContent>
           </Tooltip>

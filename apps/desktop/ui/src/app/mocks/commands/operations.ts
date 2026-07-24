@@ -1,5 +1,16 @@
-import type { ApplySwapResult, RollbackComponentResult } from '@entities/operation';
+import type {
+  ApplySwapResult,
+  RollbackComponentResult,
+  RollbackPlan,
+  SwapPlan,
+} from '@entities/operation';
+import { DesktopCommandError } from '@shared/api';
+import type { D3d12ExecutableAction } from '@shared/model';
 import {
+  captureComponentBaseline,
+  consumeComponentBaseline,
+  hasComponentBaseline,
+  nextMockOperationId,
   recordOperation,
   requireCandidateGroup,
   requireComponent,
@@ -10,17 +21,11 @@ import {
 } from '../desktop-state';
 import { clone, requireNonEmptyText, resolveMock } from '../desktop-utils';
 
-let operationSequence = 0;
-
-function nextOperationId(kind: string): string {
-  operationSequence += 1;
-  return `mock-op:${kind}:${operationSequence}`;
-}
-
 export function mockApplySwap(
   gameId: string,
   componentId: string,
   artifactId: string,
+  confirmationToken: string | null,
 ): Promise<ApplySwapResult> {
   return resolveMock(() => {
     const normalizedGameId = requireNonEmptyText(gameId, 'game id');
@@ -39,24 +44,39 @@ export function mockApplySwap(
         `Mock preview could not find artifact ${normalizedArtifactId} for component ${normalizedComponentId}.`,
       );
     }
+    const executableAction = candidate.d3d12_executable_action;
+    validateMockSwapConfirmation(
+      normalizedGameId,
+      normalizedComponentId,
+      normalizedArtifactId,
+      executableAction,
+      confirmationToken,
+    );
 
     const sourceFile = requireFirstComponentFile(sourceComponent);
     const updatedFileCount = sourceComponent.files.length;
     const now = Date.now();
+    const executedAction = executableActionResult(executableAction);
 
+    captureComponentBaseline(normalizedGameId, sourceComponent);
     sourceFile.version = candidate.version ?? sourceFile.version;
     sourceFile.sha256 = candidate.sha256 || sourceFile.sha256;
+    sourceComponent.rollback_available = true;
 
     updateCandidateGroupCurrentVersion(details, normalizedComponentId, sourceFile.version ?? null);
+    if (executableAction?.kind === 'patch' || executableAction?.kind === 'restore') {
+      applyMockExecutableAction(details, sourceComponent, executableAction);
+    }
 
     recordOperation(details, {
-      operation_id: nextOperationId('replace_component'),
+      operation_id: nextMockOperationId('replace_component'),
       kind: 'replace_component',
       status: 'completed',
       created_at: now,
       completed_at: now,
       item_count: updatedFileCount,
       component_id: normalizedComponentId,
+      metadata: null,
     });
 
     updateGameSummary(normalizedGameId, {
@@ -69,9 +89,64 @@ export function mockApplySwap(
       applied_path: candidateGroup.file_path,
       replacement_path: candidate.file_path ?? '',
       updated_file_count: updatedFileCount,
+      d3d12_executable_action: executedAction,
     };
 
     return clone(result);
+  });
+}
+
+export function mockPlanSwap(
+  gameId: string,
+  componentId: string,
+  artifactId: string,
+): Promise<SwapPlan> {
+  return resolveMock(() => {
+    const normalizedGameId = requireNonEmptyText(gameId, 'game id');
+    const normalizedComponentId = requireNonEmptyText(componentId, 'component id');
+    const normalizedArtifactId = requireNonEmptyText(artifactId, 'artifact id');
+    const details = requireGameDetails(normalizedGameId);
+    const group = requireCandidateGroup(details, normalizedComponentId);
+    const candidate = group.candidates.find((item) => item.artifact_id === normalizedArtifactId);
+    if (!candidate) {
+      throw new Error(
+        `Mock preview could not find artifact ${normalizedArtifactId} for component ${normalizedComponentId}.`,
+      );
+    }
+    const action = candidate.d3d12_executable_action;
+    const token = action?.requires_confirmation
+      ? mockConfirmationToken(normalizedGameId, normalizedComponentId, normalizedArtifactId, action)
+      : `mock-plan:${normalizedComponentId}:${normalizedArtifactId}`;
+    return clone({
+      operation_id: `mock-plan:${normalizedComponentId}:${normalizedArtifactId}`,
+      confirmation_token: token,
+      game_id: normalizedGameId,
+      component_id: normalizedComponentId,
+      operation_type: 'replace_component',
+      artifact_id: normalizedArtifactId,
+      target_path: group.file_path,
+      replacement_path: candidate.file_path ?? '',
+      original_version: group.version_report.kind === 'known' ? group.version_report.version : null,
+      replacement_version: candidate.version,
+      original_sha256: null,
+      replacement_sha256: candidate.sha256,
+      risk_level: action?.kind === 'repair_required' ? 'blocked' : 'low',
+      requires_elevation: false,
+      blockers: action?.kind === 'repair_required' ? ['d3d12_executable_repair_required'] : [],
+      warnings: [],
+      files: [
+        {
+          action: 'replace',
+          target_path: group.file_path,
+          replacement_path: candidate.file_path,
+          original_version: null,
+          replacement_version: candidate.version,
+          original_sha256: null,
+          replacement_sha256: candidate.sha256,
+        },
+      ],
+      d3d12_executable_action: action,
+    } satisfies SwapPlan);
   });
 }
 
@@ -85,36 +160,233 @@ export function mockRollbackComponent(
 
     const details = requireGameDetails(normalizedGameId);
     const component = requireComponent(details, normalizedComponentId);
-    const sourceFile = requireFirstComponentFile(component);
-    const restoredFileCount = component.files.length;
+    requireMockRollbackBaseline(normalizedGameId, component);
+    const baseline = consumeComponentBaseline(normalizedGameId, normalizedComponentId);
+    const restoredFileCount = baseline.length;
     const now = Date.now();
+    const executableAction = mockManagedRollbackAction(component);
+    const executedAction = executableActionResult(executableAction);
 
-    sourceFile.version = 'original-version';
-    sourceFile.sha256 = 'original-sha256';
+    component.files = baseline;
+    component.rollback_available = false;
 
-    updateCandidateGroupCurrentVersion(details, normalizedComponentId, 'original-version');
+    const restoredFile = requireFirstComponentFile(component);
+    updateCandidateGroupCurrentVersion(
+      details,
+      normalizedComponentId,
+      restoredFile.version ?? null,
+    );
+    if (component.d3d12_executable_status) {
+      const status = component.d3d12_executable_status;
+      component.d3d12_executable_status = {
+        ...status,
+        status: 'original',
+        selection_locked: false,
+        current_sdk_version: status.original_sdk_version,
+      };
+      refreshMockExecutableActions(
+        details,
+        normalizedComponentId,
+        status.original_sdk_version,
+        false,
+      );
+    }
 
     recordOperation(details, {
-      operation_id: nextOperationId('rollback_component'),
+      operation_id: nextMockOperationId('rollback_component'),
       kind: 'rollback_component',
       status: 'rolled_back',
       created_at: now,
       completed_at: now,
       item_count: restoredFileCount,
       component_id: normalizedComponentId,
+      metadata: null,
     });
 
     updateGameSummary(normalizedGameId, {
-      rollback_available: false,
+      rollback_available: details.components.some((item) => item.rollback_available),
     });
 
     const result: RollbackComponentResult = {
       game_id: normalizedGameId,
       component_id: normalizedComponentId,
-      restored_path: sourceFile.path,
+      restored_path: restoredFile.path,
       restored_file_count: restoredFileCount,
+      d3d12_executable_action: executedAction,
     };
 
     return clone(result);
+  });
+}
+
+export function mockPlanRollback(gameId: string, componentId: string): Promise<RollbackPlan> {
+  return resolveMock(() => {
+    const normalizedGameId = requireNonEmptyText(gameId, 'game id');
+    const normalizedComponentId = requireNonEmptyText(componentId, 'component id');
+    const details = requireGameDetails(normalizedGameId);
+    const component = requireComponent(details, normalizedComponentId);
+    requireMockRollbackBaseline(normalizedGameId, component);
+    const affectedFiles = component.files.flatMap((file) => [file.path, `${file.path}.bak`]);
+    const executableAction = mockManagedRollbackAction(component);
+    if (executableAction) {
+      affectedFiles.push(executableAction.executable_path, executableAction.backup_path);
+    }
+    return clone({
+      game_id: normalizedGameId,
+      component_id: normalizedComponentId,
+      affected_files: [...new Set(affectedFiles)].sort(),
+      d3d12_executable_action: executableAction,
+    } satisfies RollbackPlan);
+  });
+}
+
+function requireMockRollbackBaseline(
+  gameId: string,
+  component: ReturnType<typeof requireComponent>,
+): void {
+  if (!component.rollback_available || !hasComponentBaseline(gameId, component.id)) {
+    throw mockCommandError(
+      'rollback_not_available',
+      `No rollback baseline exists for mock component ${component.id}.`,
+    );
+  }
+}
+
+function validateMockSwapConfirmation(
+  gameId: string,
+  componentId: string,
+  artifactId: string,
+  action: D3d12ExecutableAction | null,
+  confirmationToken: string | null,
+): void {
+  if (action?.kind === 'repair_required') {
+    throw mockCommandError(
+      'd3d12_executable_repair_required',
+      'The mock D3D12 executable state requires repair.',
+    );
+  }
+  if (
+    action?.requires_confirmation &&
+    confirmationToken !== mockConfirmationToken(gameId, componentId, artifactId, action)
+  ) {
+    throw mockCommandError(
+      'confirmation_token_mismatch',
+      'The mock D3D12 confirmation token is missing or stale.',
+      'notify.stalePlan',
+    );
+  }
+}
+
+function mockConfirmationToken(
+  gameId: string,
+  componentId: string,
+  artifactId: string,
+  action: D3d12ExecutableAction,
+): string {
+  return [
+    'mock-confirm',
+    gameId,
+    componentId,
+    artifactId,
+    action.kind,
+    action.current_sdk_version,
+    action.target_sdk_version,
+    Number(action.backup_exists),
+  ].join(':');
+}
+
+function executableActionResult(
+  action: D3d12ExecutableAction | null,
+): ApplySwapResult['d3d12_executable_action'] {
+  if (action?.kind !== 'patch' && action?.kind !== 'restore') {
+    return null;
+  }
+  return {
+    kind: action.kind,
+    executable_path: action.executable_path,
+    from_sdk_version: action.current_sdk_version,
+    to_sdk_version: action.target_sdk_version,
+    original_sdk_version: action.original_sdk_version,
+  };
+}
+
+function applyMockExecutableAction(
+  details: ReturnType<typeof requireGameDetails>,
+  component: ReturnType<typeof requireComponent>,
+  action: D3d12ExecutableAction,
+): void {
+  const status = component.d3d12_executable_status;
+  if (!status || (action.kind !== 'patch' && action.kind !== 'restore')) {
+    throw mockCommandError(
+      'd3d12_execution_context_incomplete',
+      'The mock D3D12 executable status is unavailable.',
+    );
+  }
+  component.d3d12_executable_status = {
+    ...status,
+    status: action.target_sdk_version === action.original_sdk_version ? 'original' : 'patched',
+    selection_locked: true,
+    current_sdk_version: action.target_sdk_version,
+  };
+  refreshMockExecutableActions(details, component.id, action.target_sdk_version, true);
+}
+
+function refreshMockExecutableActions(
+  details: ReturnType<typeof requireGameDetails>,
+  componentId: string,
+  currentSdkVersion: number,
+  backupExists: boolean,
+): void {
+  const group = requireCandidateGroup(details, componentId);
+  for (const candidate of group.candidates) {
+    const action = candidate.d3d12_executable_action;
+    if (!action) {
+      continue;
+    }
+    const kind =
+      action.target_sdk_version === currentSdkVersion
+        ? 'none'
+        : action.target_sdk_version === action.original_sdk_version
+          ? 'restore'
+          : 'patch';
+    candidate.d3d12_executable_action = {
+      ...action,
+      kind,
+      backup_exists: backupExists,
+      current_sdk_version: currentSdkVersion,
+      requires_confirmation:
+        kind === 'restore' ||
+        (kind === 'patch' && currentSdkVersion === action.original_sdk_version),
+    };
+  }
+}
+
+function mockManagedRollbackAction(
+  component: ReturnType<typeof requireComponent>,
+): D3d12ExecutableAction | null {
+  const status = component.d3d12_executable_status;
+  if (!status || !component.rollback_available) {
+    return null;
+  }
+  return {
+    kind:
+      status.current_sdk_version === status.original_sdk_version ? 'none' : ('restore' as const),
+    executable_path: status.executable_path,
+    backup_path: status.backup_path,
+    backup_exists: true,
+    original_sdk_version: status.original_sdk_version,
+    current_sdk_version: status.current_sdk_version,
+    target_sdk_version: status.original_sdk_version,
+    requires_confirmation: false,
+  };
+}
+
+function mockCommandError(code: string, details: string, messageKey = 'errors.command_failed') {
+  return new DesktopCommandError({
+    code,
+    severity: 'error',
+    messageKey,
+    details,
+    suggestedActions: [],
   });
 }

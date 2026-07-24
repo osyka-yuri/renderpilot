@@ -30,6 +30,8 @@ export function createManualPreviewDetails(
         kind: 'NativeLibrary',
         technology: 'dlss_super_resolution',
         swappability: 'Swappable',
+        rollback_available: false,
+        d3d12_executable_status: null,
         files: [
           {
             path: dlssPath,
@@ -54,9 +56,11 @@ export function createManualPreviewDetails(
             release_label: null,
             source_game_id: null,
             comparison: 'newer_version',
+            catalog_package_id: null,
             is_downloaded: true,
             is_debug: false,
             sha256: 'mock-sha256-manual-dlss-preview',
+            d3d12_executable_action: null,
           },
         ],
       },

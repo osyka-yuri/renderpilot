@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OperationSummary } from '@entities/operation';
+import type { OperationMetadata, OperationSummary } from '@entities/operation';
 
 import { createOperationViewModel } from './operations-page-presenter';
 
@@ -12,6 +12,18 @@ function operation(overrides: Partial<OperationSummary> = {}): OperationSummary 
     created_at: 1_700_000_000_000,
     completed_at: 1_700_000_010_000,
     item_count: 2,
+    component_id: 'component-1',
+    metadata: null,
+    ...overrides,
+  };
+}
+
+function metadata(overrides: Partial<OperationMetadata> = {}): OperationMetadata {
+  return {
+    game_name: 'Test Game',
+    library: 'dlss_super_resolution',
+    from_version: null,
+    to_version: 'unknown',
     ...overrides,
   };
 }
@@ -33,7 +45,7 @@ describe('createOperationViewModel', () => {
 
   it('uses metadata.library for the library type when present', () => {
     const vm = createOperationViewModel(
-      operation({ metadata: { library: 'dlss_super_resolution' } }),
+      operation({ metadata: metadata({ library: 'dlss_super_resolution' }) }),
     );
 
     // metadata.library is routed through formatLabel (canonical library label).
@@ -66,7 +78,8 @@ describe('createOperationViewModel', () => {
 
   it('resolves the game name from metadata, otherwise a dash', () => {
     expect(
-      createOperationViewModel(operation({ metadata: { game_name: 'Elden Ring' } })).gameName,
+      createOperationViewModel(operation({ metadata: metadata({ game_name: 'Elden Ring' }) }))
+        .gameName,
     ).toBe('Elden Ring');
 
     expect(createOperationViewModel(operation({ metadata: null })).gameName).toBe('-');
@@ -74,7 +87,7 @@ describe('createOperationViewModel', () => {
 
   it('exposes from/to versions from metadata', () => {
     const vm = createOperationViewModel(
-      operation({ metadata: { from_version: '3.5', to_version: '3.7' } }),
+      operation({ metadata: metadata({ from_version: '3.5', to_version: '3.7' }) }),
     );
     expect(vm.fromVersion).toBe('3.5');
     expect(vm.toVersion).toBe('3.7');

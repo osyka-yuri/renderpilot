@@ -43,6 +43,8 @@ export type {
   GameDetails,
   GameGraphicsComponent,
   GameCandidateGroup,
+  GameCandidate,
+  D3d12ExecutableStatus,
   ScanError,
   AutoScanResponse,
   ScanManualFolderResult,

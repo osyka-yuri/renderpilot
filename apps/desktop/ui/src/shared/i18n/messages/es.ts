@@ -179,6 +179,36 @@ export const es: Record<MessageKey, MessageValue> = {
     other: 'Actualizar {count} componentes a sus últimas versiones',
   },
   'gameDetails.executable.title': 'Ejecutable del juego',
+  'gameDetails.d3d12.status.original': 'EXE original',
+  'gameDetails.d3d12.status.patched': 'EXE parcheado: {from} → {to}',
+  'gameDetails.d3d12.status.repair': 'Reparación necesaria',
+  'gameDetails.d3d12.repairGuidance':
+    'Verifica los archivos del juego y vuelve a escanear. RenderPilot no sobrescribirá este EXE.',
+  'gameDetails.d3d12.action.patch': 'Parchear EXE: {from} → {to}',
+  'gameDetails.d3d12.action.restore': 'Restaurar EXE: {from} → {to}',
+  'gameDetails.d3d12.action.repair': 'Primero hay que reparar el EXE',
+  'gameDetails.d3d12.action.blocked':
+    'Esta versión de D3D12 no se puede aplicar en el estado actual.',
+  'gameDetails.d3d12.action.planPatch': 'Se aplicará un parche: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': 'Se restaurará el EXE original: SDK {from} → {to}',
+  'gameDetails.d3d12.select.compatible': 'Compatible con el EXE actual',
+  'gameDetails.d3d12.select.changesExecutable': 'Requiere cambiar el EXE',
+  'gameDetails.d3d12.select.unavailable': 'No disponible',
+  'gameDetails.d3d12.confirm.title': 'Confirmar cambio del EXE',
+  'gameDetails.d3d12.confirm.description':
+    'RenderPilot cambiará la exportación D3D12SDKVersion del ejecutable.',
+  'gameDetails.d3d12.confirm.updateAllDescription':
+    'Estas actualizaciones requieren cambiar la línea SDK de D3D12 de los ejecutables indicados. No se descargará ni cambiará nada hasta que confirmes.',
+  'gameDetails.d3d12.confirm.backup': 'Ruta de la copia: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate':
+    'Antes del cambio se creará una copia de seguridad del EXE original en: {path}',
+  'gameDetails.d3d12.confirm.backupExists':
+    'El EXE original ya está guardado en: {path}. Esta copia no se sobrescribirá.',
+  'gameDetails.d3d12.confirm.signatureWarning':
+    'Después del cambio, la firma digital del EXE puede considerarse no válida y las comprobaciones de integridad pueden detectar que el archivo fue modificado. Al revertir D3D12 por completo, RenderPilot restaurará el EXE original.',
+  'gameDetails.d3d12.confirm.accept': 'Cambiar',
+  'gameDetails.d3d12.executableLocked':
+    'La selección del EXE está bloqueada hasta completar la reversión de D3D12.',
   'gameDetails.executable.description':
     'El ejecutable del juego: el perfil de NVIDIA se aplica a él y RenoDX se instala en su carpeta.',
   'gameDetails.executable.detectedGroup': 'Ejecutables del juego detectados',

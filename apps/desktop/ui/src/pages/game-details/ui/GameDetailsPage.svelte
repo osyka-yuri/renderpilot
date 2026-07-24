@@ -39,13 +39,15 @@
   } from '../model/create-game-details-page-model';
   import { createExclusiveAddonStores } from '@entities/addon';
   import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
-  import { runUpdateAll, UpdateAllError } from '../model/run-update-all';
+  import { UpdateAllError } from '../model/run-update-all';
+  import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
   import GameExecutablePopover from './GameExecutablePopover.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
   import DlssComponentCard from './DlssComponentCard.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
+  import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
   import { untrack } from 'svelte';
 
@@ -87,6 +89,11 @@
   // detail cards).
   const OTHER_TAB = 'other';
   const gameId = $derived(details?.game.identity.id ?? null);
+  const executableSelectionLocked = $derived(
+    details?.components.some(
+      (component) => component.d3d12_executable_status?.selection_locked === true,
+    ) ?? false,
+  );
   // The game's launcher, for Luma's launcher-aware launch-args callout.
   const launcher = $derived(details?.game.identity.launcher ?? '');
 
@@ -121,53 +128,45 @@
   );
   const nothingToUpdate = $derived(totalUpdateCount === 0);
 
-  // This workflow owns its lifecycle through try/finally. The aggregate bar
-  // tracks only library artifacts that actually download; add-on-only runs keep
-  // the button spinner/aria-busy active without rendering an empty progress bar.
-  let updatingAll = $state(false);
-  let pendingDownloadIds = $state<string[]>([]);
   const anyAddonBusy = $derived(addonStores.some((store) => store.busy));
+  const updateAllWorkflow = createUpdateAllWorkflow({
+    getGameId: () => gameId,
+    getPlan: () => updatePlan,
+    getAddonUpdates: () =>
+      [
+        { step: 'renodx' as const, store: renodx },
+        { step: 'luma' as const, store: luma },
+      ].filter(({ store }) => store.updateAvailable),
+    hasUpdates: () => !nothingToUpdate,
+    isBusy: () => busy || anyAddonBusy,
+    onBulkSwap: (items) => onBulkSwap(items),
+    onError: reportUpdateAllError,
+  });
+  const updatingAll = $derived(updateAllWorkflow.updating);
+  const planningUpdateAll = $derived(updateAllWorkflow.planning);
+  const updateConfirmOpen = $derived(updateAllWorkflow.confirmationOpen);
+  const preparedUpdateExecutableActions = $derived(updateAllWorkflow.confirmationActions);
+  const pendingDownloadIds = $derived(updateAllWorkflow.pendingDownloadIds);
   // Shared exclusive gate for Luma/RenoDX cards (peer mutations + Update-all).
-  const exclusiveBusy = $derived(busy || anyAddonBusy || updatingAll);
+  const exclusiveBusy = $derived(busy || anyAddonBusy || updatingAll || planningUpdateAll);
   const showProgress = $derived(updatingAll && pendingDownloadIds.length > 0);
   const downloadCount = $derived(pendingDownloadIds.length);
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
 
-  async function handleUpdateAll() {
-    if (updatingAll || busy || anyAddonBusy || nothingToUpdate) {
-      return;
-    }
+  function handleUpdateAll(): void {
+    void updateAllWorkflow.start();
+  }
 
-    const items = [...updatePlan.items];
-    const id = gameId;
-    const eligibleAddonUpdates = [
-      { step: 'renodx' as const, store: renodx },
-      { step: 'luma' as const, store: luma },
-    ].filter(({ store }) => store.updateAvailable);
-    updatingAll = true;
-    pendingDownloadIds = items.filter((item) => !item.isDownloaded).map((item) => item.artifactId);
-
-    try {
-      await runUpdateAll({
-        items,
-        gameId: id,
-        addonUpdates: eligibleAddonUpdates,
-        onBulkSwap,
-      });
-    } catch (error) {
-      const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
-      const technical = describeCommandErrorTechnical(
-        error instanceof UpdateAllError ? error.failures[0].error : error,
-      );
-      publishErrorNotification(
-        t('gameDetails.updateAll.partialFailure', { count: failureCount }),
-        technical,
-      );
-      console.warn('Update-all workflow failed after attempting eligible updates', error);
-    } finally {
-      updatingAll = false;
-      pendingDownloadIds = [];
-    }
+  function reportUpdateAllError(error: unknown): void {
+    const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
+    const technical = describeCommandErrorTechnical(
+      error instanceof UpdateAllError ? error.failures[0].error : error,
+    );
+    publishErrorNotification(
+      t('gameDetails.updateAll.partialFailure', { count: failureCount }),
+      technical,
+    );
+    console.warn('Update-all workflow failed after attempting eligible updates', error);
   }
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
@@ -319,22 +318,29 @@
           {/if}
           <Tooltip>
             <TooltipTrigger>
-              <Button
-                variant="default"
-                size="sm"
-                disabled={updatingAll || busy || anyAddonBusy || nothingToUpdate}
-                aria-busy={updatingAll}
-                onclick={handleUpdateAll}
-              >
-                {#if updatingAll}
-                  <Loader2Icon class="animate-spin" aria-hidden="true" />
-                {:else}
-                  <ArrowUpToLineIcon aria-hidden="true" />
-                {/if}
-                {nothingToUpdate
-                  ? t('gameDetails.updateAll.action')
-                  : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
-              </Button>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="default"
+                  size="sm"
+                  disabled={updatingAll ||
+                    planningUpdateAll ||
+                    busy ||
+                    anyAddonBusy ||
+                    nothingToUpdate}
+                  aria-busy={updatingAll || planningUpdateAll}
+                  onclick={handleUpdateAll}
+                >
+                  {#if updatingAll || planningUpdateAll}
+                    <Loader2Icon class="animate-spin" aria-hidden="true" />
+                  {:else}
+                    <ArrowUpToLineIcon aria-hidden="true" />
+                  {/if}
+                  {nothingToUpdate
+                    ? t('gameDetails.updateAll.action')
+                    : t('gameDetails.updateAll.actionCount', { count: totalUpdateCount })}
+                </Button>
+              {/snippet}
             </TooltipTrigger>
             <TooltipContent>
               {nothingToUpdate
@@ -350,7 +356,7 @@
             </Button>
           {/if}
 
-          <GameExecutablePopover {gameId} exe={gameExe} />
+          <GameExecutablePopover {gameId} exe={gameExe} locked={executableSelectionLocked} />
         </div>
       </div>
 
@@ -421,3 +427,14 @@
     </Tabs>
   {/if}
 </section>
+
+<D3d12ExecutableConfirmDialog
+  open={updateConfirmOpen}
+  busy={updatingAll}
+  actions={preparedUpdateExecutableActions}
+  reason="update_all"
+  onOpenChange={(open: boolean) => {
+    updateAllWorkflow.setConfirmationOpen(open);
+  }}
+  onConfirm={() => void updateAllWorkflow.confirm()}
+/>

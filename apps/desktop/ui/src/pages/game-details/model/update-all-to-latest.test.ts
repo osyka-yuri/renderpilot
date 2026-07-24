@@ -26,6 +26,7 @@ describe('buildUpdateAllToLatestPlan', () => {
       componentId: 'sr',
       artifactId: 'sr-370',
       isDownloaded: false,
+      d3d12ExecutableAction: null,
     });
   });
 
@@ -55,6 +56,33 @@ describe('buildUpdateAllToLatestPlan', () => {
           group('sr', 'nvidia_dlss_sr', '3.7.0', [
             candidate('3.6.0', { artifact_id: 'sr-360', comparison: 'older_version' }),
             candidate(null, { artifact_id: 'sr-unknown', comparison: 'unknown_version' }),
+          ]),
+        ],
+      ),
+    );
+
+    expect(plan).toEqual({ items: [], updateCount: 0 });
+  });
+
+  it('excludes a D3D12 candidate while its executable requires repair', () => {
+    const plan = buildUpdateAllToLatestPlan(
+      details(
+        [component('d3d12', 'd3d12_agility')],
+        [
+          group('d3d12', 'd3d12_agility', '1.606.4', [
+            candidate('1.619.1', {
+              artifact_id: 'd3d12-619',
+              d3d12_executable_action: {
+                kind: 'repair_required',
+                executable_path: 'C:/Game/game.exe',
+                backup_path: 'C:/Game/game.exe.bak',
+                backup_exists: false,
+                original_sdk_version: 606,
+                current_sdk_version: 619,
+                target_sdk_version: 619,
+                requires_confirmation: false,
+              },
+            }),
           ]),
         ],
       ),

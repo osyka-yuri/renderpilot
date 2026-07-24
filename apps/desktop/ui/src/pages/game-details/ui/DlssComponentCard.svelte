@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
   import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
+  import type { RollbackHandler, SwapHandler } from '../model/create-game-details-page-model';
   import {
     NvapiSettingGroup,
     type SettingFamily,
@@ -21,8 +22,8 @@
     nvidia: NvidiaDriverContext;
     nvapiAvailable: boolean;
     busy: boolean;
-    onSwap: (componentId: string, artifactId: string, isDownloaded: boolean) => void;
-    onRollback: (componentId: string) => void;
+    onSwap: SwapHandler;
+    onRollback: RollbackHandler;
   };
 
   const {

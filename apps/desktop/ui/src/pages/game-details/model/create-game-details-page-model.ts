@@ -9,12 +9,9 @@ import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { clearDownloadProgress } from '@shared/lib';
 
 import type { BulkSwapItem } from './streamline-versions';
+import type { SwapRequest } from './swap-request';
 
-export type SwapHandler = (
-  componentId: string,
-  artifactId: string,
-  isDownloaded: boolean,
-) => Promise<void> | void;
+export type SwapHandler = (request: SwapRequest) => Promise<void> | void;
 
 export type RollbackHandler = (componentId: string) => Promise<void> | void;
 
@@ -65,19 +62,16 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     });
   }
 
-  async function handleSwap(
-    componentId: string,
-    artifactId: string,
-    isDownloaded: boolean,
-  ): Promise<void> {
-    clearDownloadProgress([artifactId]);
+  async function handleSwap(request: SwapRequest): Promise<void> {
+    clearDownloadProgress([request.artifactId]);
     const result = await runForSelectedGameWithSignal(async (gameId, signal) => {
       try {
         return await executeGraphicsSwap({
           gameId,
-          componentId,
-          artifactId,
-          isDownloaded,
+          componentId: request.componentId,
+          artifactId: request.artifactId,
+          isDownloaded: request.isDownloaded,
+          confirmationToken: request.confirmationToken,
           signal,
         });
       } finally {
@@ -87,7 +81,14 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
     });
 
     if (result !== null) {
-      publishApplyCompletedNotification(result.updated_file_count);
+      if (result.d3d12_executable_action) {
+        publishApplyCompletedNotification(
+          result.updated_file_count,
+          result.d3d12_executable_action,
+        );
+      } else {
+        publishApplyCompletedNotification(result.updated_file_count);
+      }
     }
   }
 
@@ -159,6 +160,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
         componentId: item.componentId,
         artifactId: item.artifactId,
         isDownloaded: item.isDownloaded,
+        confirmationToken: item.confirmationToken,
         signal,
       });
       return appliedOperation?.updated_file_count ?? null;

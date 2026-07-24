@@ -7,6 +7,7 @@ export type ExecuteGraphicsSwapInput = {
   artifactId: string;
   /** Whether the artifact is already downloaded locally; if not, it is fetched first. */
   isDownloaded: boolean;
+  confirmationToken?: string | null;
   signal?: AbortSignal;
 };
 
@@ -28,6 +29,15 @@ export async function executeGraphicsSwap(
 
   if (input.signal?.aborted) {
     return null;
+  }
+
+  if (input.confirmationToken) {
+    return resolvedDeps.applySwap(
+      input.gameId,
+      input.componentId,
+      artifactId,
+      input.confirmationToken,
+    );
   }
 
   return resolvedDeps.applySwap(input.gameId, input.componentId, artifactId);

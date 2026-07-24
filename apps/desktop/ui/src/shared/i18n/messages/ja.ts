@@ -180,6 +180,35 @@ export const ja: Record<MessageKey, MessageValue> = {
     other: '{count} 個のコンポーネントを最新バージョンに更新します',
   },
   'gameDetails.executable.title': 'ゲームの実行ファイル',
+  'gameDetails.d3d12.status.original': '元の EXE',
+  'gameDetails.d3d12.status.patched': 'EXE パッチ済み: {from} → {to}',
+  'gameDetails.d3d12.status.repair': '修復が必要です',
+  'gameDetails.d3d12.repairGuidance':
+    'ゲームファイルを確認して再スキャンしてください。RenderPilot はこの EXE を上書きしません。',
+  'gameDetails.d3d12.action.patch': 'EXE をパッチ: {from} → {to}',
+  'gameDetails.d3d12.action.restore': 'EXE を復元: {from} → {to}',
+  'gameDetails.d3d12.action.repair': '先に EXE の修復が必要です',
+  'gameDetails.d3d12.action.blocked': '現在の状態では、この D3D12 バージョンを適用できません。',
+  'gameDetails.d3d12.action.planPatch': 'パッチを適用します: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': '元の EXE を復元します: SDK {from} → {to}',
+  'gameDetails.d3d12.select.compatible': '現在の EXE と互換',
+  'gameDetails.d3d12.select.changesExecutable': 'EXE の変更が必要',
+  'gameDetails.d3d12.select.unavailable': '利用不可',
+  'gameDetails.d3d12.confirm.title': 'EXE の変更を確認',
+  'gameDetails.d3d12.confirm.description':
+    'RenderPilot は実行ファイルの D3D12SDKVersion エクスポートを変更します。',
+  'gameDetails.d3d12.confirm.updateAllDescription':
+    'これらの更新では、表示されたゲーム EXE の D3D12 SDK ラインを切り替える必要があります。確認するまでダウンロードも変更も行いません。',
+  'gameDetails.d3d12.confirm.backup': 'バックアップ先: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate':
+    '変更前に元の EXE のバックアップを次の場所へ作成します: {path}',
+  'gameDetails.d3d12.confirm.backupExists':
+    '元の EXE はすでに次の場所へ保存されています: {path}。このコピーは上書きされません。',
+  'gameDetails.d3d12.confirm.signatureWarning':
+    '変更後は EXE のデジタル署名が無効と判断され、整合性チェックでファイルの変更が検出される場合があります。D3D12 を完全にロールバックすると、RenderPilot が元の EXE を復元します。',
+  'gameDetails.d3d12.confirm.accept': '変更',
+  'gameDetails.d3d12.executableLocked':
+    'D3D12 を完全にロールバックするまで EXE の選択はロックされます。',
   'gameDetails.executable.description':
     'ゲームの実行ファイル — NVIDIA プロファイルが適用され、RenoDX はそのフォルダーにインストールされます。',
   'gameDetails.executable.detectedGroup': '検出されたゲーム実行ファイル',

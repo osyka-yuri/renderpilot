@@ -4,7 +4,12 @@ import { mockScanManualFolder, mockScanAutoLibraries } from './commands/scan';
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
-import { mockApplySwap, mockRollbackComponent } from './commands/operations';
+import {
+  mockApplySwap,
+  mockPlanRollback,
+  mockPlanSwap,
+  mockRollbackComponent,
+} from './commands/operations';
 import {
   mockDeleteLibraryPackage,
   mockDownloadArtifact,
@@ -26,6 +31,7 @@ import {
   assertNever,
   isDesktopCommand,
   readObjectField,
+  readOptionalStringField,
   readPayloadRecord,
   readStringField,
   type DesktopCommand,
@@ -96,11 +102,25 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         readStringField(command, payload, 'value', { allowEmpty: true }),
       );
 
+    case 'plan_swap':
+      return mockPlanSwap(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'componentId'),
+        readStringField(command, payload, 'artifactId'),
+      );
+
     case 'apply_swap':
       return mockApplySwap(
         readStringField(command, payload, 'gameId'),
         readStringField(command, payload, 'componentId'),
         readStringField(command, payload, 'artifactId'),
+        readOptionalStringField(command, payload, 'confirmationToken'),
+      );
+
+    case 'plan_rollback':
+      return mockPlanRollback(
+        readStringField(command, payload, 'gameId'),
+        readStringField(command, payload, 'componentId'),
       );
 
     case 'rollback_component':
@@ -209,6 +229,8 @@ export {
   mockGetCatalogSetting,
   mockSetCatalogSetting,
   mockApplySwap,
+  mockPlanSwap,
+  mockPlanRollback,
   mockRollbackComponent,
   mockListLibraryPackages,
   mockDownloadLibraryPackage,

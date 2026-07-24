@@ -11,6 +11,8 @@ export function createAlanWakeDetails(): GameDetails {
       kind: 'StreamlineComponent',
       technology: 'nvidia_streamline',
       swappability: 'BundleOnly',
+      rollback_available: false,
+      d3d12_executable_status: null,
       files: [
         {
           path: 'D:/Epic Games/Alan Wake 2/sl.common.dll',
@@ -30,6 +32,8 @@ export function createAlanWakeDetails(): GameDetails {
       kind: 'NativeLibrary',
       technology: 'dlss_frame_generation',
       swappability: 'ReadOnly',
+      rollback_available: false,
+      d3d12_executable_status: null,
       files: [
         {
           path: 'D:/Epic Games/Alan Wake 2/nvngx_dlssg.dll',
@@ -70,9 +74,11 @@ export function createAlanWakeDetails(): GameDetails {
             release_label: null,
             source_game_id: null,
             comparison: 'newer_version',
+            catalog_package_id: null,
             is_downloaded: true,
             is_debug: false,
             sha256: 'mock-sha256-streamline-251-package',
+            d3d12_executable_action: null,
           },
         ],
       },

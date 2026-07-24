@@ -16,13 +16,16 @@ export {
   publishRollbackCompletedNotification,
 } from './model/notifications';
 
-export { applySwap, rollbackComponent } from './api/desktop';
+export { applySwap, planRollback, planSwap, rollbackComponent } from './api/desktop';
 
 export type { OperationBadgeVariant } from './model/presenters';
 
 export type {
   SwapPlan,
+  RollbackPlan,
   ApplySwapResult,
   RollbackComponentResult,
+  ExecutedD3d12ExecutableAction,
+  OperationMetadata,
   OperationSummary,
 } from './model/types';

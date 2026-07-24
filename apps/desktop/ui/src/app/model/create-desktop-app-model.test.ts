@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameDetails } from '@entities/game';
 import { createGameDetails } from '@entities/game';
+import type { SwapPlan } from '@entities/operation';
 import * as notificationsModule from '@shared/notifications';
 import { createDesktopAppModel } from './create-desktop-app-model.svelte';
 import * as appNotificationsModule from './notifications';
@@ -46,13 +47,13 @@ describe('createDesktopAppModel', () => {
 
   it('routes plan state through the workspace submodel', () => {
     const model = createDesktopAppModel();
-    const plan = {
+    const plan = swapPlan({
       game_id: 'game-1',
       artifact_id: 'art-1',
       component_id: 'comp-1',
       target_path: '/a',
       replacement_path: '/b',
-    };
+    });
 
     model.workspace.setCurrentPlan(plan);
     expect(model.workspace.getCurrentPlan('game-2')).toBeNull();
@@ -78,13 +79,15 @@ describe('createDesktopAppModel', () => {
 
   it('clearSelection resets selected game and plan via workspace', () => {
     const model = createDesktopAppModel();
-    model.workspace.setCurrentPlan({
-      game_id: 'game-1',
-      artifact_id: 'art-1',
-      component_id: 'comp-1',
-      target_path: '/a',
-      replacement_path: '/b',
-    });
+    model.workspace.setCurrentPlan(
+      swapPlan({
+        game_id: 'game-1',
+        artifact_id: 'art-1',
+        component_id: 'comp-1',
+        target_path: '/a',
+        replacement_path: '/b',
+      }),
+    );
 
     model.clearSelection();
     expect(model.selectedGameId).toBeNull();
@@ -188,6 +191,30 @@ describe('createDesktopAppModel', () => {
     publishCommandErrorNotificationSpy.mockRestore();
   });
 });
+
+function swapPlan(overrides: Partial<SwapPlan> = {}): SwapPlan {
+  return {
+    operation_id: 'operation:test',
+    confirmation_token: 'token:test',
+    game_id: 'game-1',
+    component_id: 'component-1',
+    operation_type: 'replace_component',
+    artifact_id: 'artifact-1',
+    target_path: '/target',
+    replacement_path: '/replacement',
+    original_version: null,
+    replacement_version: null,
+    original_sha256: null,
+    replacement_sha256: null,
+    risk_level: 'low',
+    requires_elevation: false,
+    blockers: [],
+    warnings: [],
+    files: [],
+    d3d12_executable_action: null,
+    ...overrides,
+  };
+}
 
 function createStubDetails(gameId: string): GameDetails {
   return createGameDetails({

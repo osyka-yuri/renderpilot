@@ -265,6 +265,35 @@ export const ru: Record<MessageKey, MessageValue> = {
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
+  'gameDetails.d3d12.status.original': 'Оригинальный EXE',
+  'gameDetails.d3d12.status.patched': 'EXE пропатчен: {from} → {to}',
+  'gameDetails.d3d12.status.repair': 'Требуется восстановление',
+  'gameDetails.d3d12.repairGuidance':
+    'Проверьте файлы игры в лаунчере и запустите сканирование повторно. RenderPilot не будет перезаписывать этот EXE.',
+  'gameDetails.d3d12.action.patch': 'Патч EXE: {from} → {to}',
+  'gameDetails.d3d12.action.restore': 'Восстановление EXE: {from} → {to}',
+  'gameDetails.d3d12.action.repair': 'Сначала требуется восстановить EXE',
+  'gameDetails.d3d12.action.blocked': 'Эту версию D3D12 нельзя применить в текущем состоянии.',
+  'gameDetails.d3d12.action.planPatch': 'Будет применён патч: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': 'Будет восстановлен оригинальный EXE: SDK {from} → {to}',
+  'gameDetails.d3d12.select.compatible': 'Совместимо с текущим EXE',
+  'gameDetails.d3d12.select.changesExecutable': 'Требуется изменение EXE',
+  'gameDetails.d3d12.select.unavailable': 'Недоступно',
+  'gameDetails.d3d12.confirm.title': 'Подтвердите изменение EXE',
+  'gameDetails.d3d12.confirm.description':
+    'RenderPilot изменит экспорт D3D12SDKVersion в исполняемом файле игры.',
+  'gameDetails.d3d12.confirm.updateAllDescription':
+    'Для этих обновлений перечисленные EXE должны переключиться на другие SDK-линии D3D12. До подтверждения ничего не будет загружено или изменено.',
+  'gameDetails.d3d12.confirm.backup': 'Путь резервной копии: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate':
+    'Перед изменением будет создана резервная копия оригинального EXE: {path}',
+  'gameDetails.d3d12.confirm.backupExists':
+    'Исходный EXE уже сохранён: {path}. Эта копия не будет перезаписана.',
+  'gameDetails.d3d12.confirm.signatureWarning':
+    'После изменения цифровая подпись EXE может стать недействительной, а проверка целостности может сообщить, что файл изменён. При полном откате D3D12 RenderPilot восстановит исходный EXE.',
+  'gameDetails.d3d12.confirm.accept': 'Изменить',
+  'gameDetails.d3d12.executableLocked':
+    'Выбор EXE заблокирован до полного отката компонента D3D12.',
   'gameDetails.executable.description':
     'Исполняемый файл игры — к нему применяется профиль NVIDIA, а RenoDX устанавливается в его папку.',
   'gameDetails.executable.detectedGroup': 'Найденные игровые файлы',

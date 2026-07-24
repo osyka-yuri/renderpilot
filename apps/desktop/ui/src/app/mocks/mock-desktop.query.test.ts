@@ -148,6 +148,8 @@ describe('createGameSummaryFromDetails', () => {
       kind: 'NativeLibrary',
       technology: 'unknown',
       swappability: 'ReadOnly',
+      rollback_available: false,
+      d3d12_executable_status: null,
       files: [
         {
           path: 'C:/Games/Preview Test/mystery.dll',
@@ -170,9 +172,11 @@ describe('createGameSummaryFromDetails', () => {
           release_label: null,
           source_game_id: null,
           comparison: 'newer_version',
+          catalog_package_id: null,
           is_downloaded: true,
           is_debug: false,
           sha256: 'mock-sha256',
+          d3d12_executable_action: null,
         },
       ],
     });

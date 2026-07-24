@@ -4,13 +4,14 @@
   import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
   import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
+  import type { RollbackHandler, SwapHandler } from '../model/create-game-details-page-model';
 
   type Props = {
     component: GameGraphicsComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
-    onSwap: (componentId: string, artifactId: string, isDownloaded: boolean) => void;
-    onRollback: (componentId: string) => void;
+    onSwap: SwapHandler;
+    onRollback: RollbackHandler;
   };
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();

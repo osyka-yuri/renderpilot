@@ -249,6 +249,35 @@ export const en = {
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
+  'gameDetails.d3d12.status.original': 'Original EXE',
+  'gameDetails.d3d12.status.patched': 'EXE patched: {from} → {to}',
+  'gameDetails.d3d12.status.repair': 'Repair required',
+  'gameDetails.d3d12.repairGuidance':
+    'Verify the game files in the launcher, then scan the game again. RenderPilot will not overwrite this EXE.',
+  'gameDetails.d3d12.action.patch': 'Patch EXE: {from} → {to}',
+  'gameDetails.d3d12.action.restore': 'Restore EXE: {from} → {to}',
+  'gameDetails.d3d12.action.repair': 'EXE must be repaired first',
+  'gameDetails.d3d12.action.blocked': 'This D3D12 version cannot be applied in the current state.',
+  'gameDetails.d3d12.action.planPatch': 'A patch will be applied: SDK {from} → {to}',
+  'gameDetails.d3d12.action.planRestore': 'The original EXE will be restored: SDK {from} → {to}',
+  'gameDetails.d3d12.select.compatible': 'Compatible with the current EXE',
+  'gameDetails.d3d12.select.changesExecutable': 'Requires an EXE change',
+  'gameDetails.d3d12.select.unavailable': 'Unavailable',
+  'gameDetails.d3d12.confirm.title': 'Confirm executable change',
+  'gameDetails.d3d12.confirm.description':
+    'RenderPilot will change the D3D12SDKVersion exported by the game executable.',
+  'gameDetails.d3d12.confirm.updateAllDescription':
+    'These updates require the listed game executables to switch D3D12 SDK lines. Nothing will be downloaded or changed until you confirm.',
+  'gameDetails.d3d12.confirm.backup': 'Backup path: {path}',
+  'gameDetails.d3d12.confirm.backupWillCreate':
+    'Before the change, a backup of the original EXE will be created at: {path}',
+  'gameDetails.d3d12.confirm.backupExists':
+    'The original EXE is already saved at: {path}. This copy will not be overwritten.',
+  'gameDetails.d3d12.confirm.signatureWarning':
+    "After the change, the EXE's digital signature may be considered invalid and integrity checks may report that the file was modified. When you fully roll back D3D12, RenderPilot will restore the original EXE.",
+  'gameDetails.d3d12.confirm.accept': 'Change',
+  'gameDetails.d3d12.executableLocked':
+    'Executable selection is locked until the D3D12 component is fully rolled back.',
   'gameDetails.executable.description':
     'The game executable — the NVIDIA profile applies to it, and RenoDX installs into its folder.',
   'gameDetails.executable.detectedGroup': 'Detected game executables',

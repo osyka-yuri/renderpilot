@@ -19,9 +19,10 @@
   type Props = {
     gameId: string;
     exe: GameExecutableContext;
+    locked?: boolean;
   };
 
-  const { gameId, exe }: Props = $props();
+  const { gameId, exe, locked = false }: Props = $props();
 
   let open = $state(false);
   // Reset discards a manual choice, so it steps through an inline confirm.
@@ -31,9 +32,11 @@
 
   const triggerLabel = $derived(exe.effectiveExe ?? t('gameDetails.profile.noExe'));
   const triggerTitle = $derived(
-    isOverride
-      ? t('gameDetails.executable.tooltipCustom')
-      : t('gameDetails.executable.tooltipAuto'),
+    locked
+      ? t('gameDetails.d3d12.executableLocked')
+      : isOverride
+        ? t('gameDetails.executable.tooltipCustom')
+        : t('gameDetails.executable.tooltipAuto'),
   );
   const sourceLabel = $derived(
     !exe.effectiveExe
@@ -67,6 +70,7 @@
     class={buttonVariants({ variant: 'ghost', size: 'sm' })}
     title={triggerTitle}
     aria-label={triggerTitle}
+    disabled={locked}
   >
     <AppWindowIcon class="size-4 opacity-70" aria-hidden="true" />
     <span class="max-w-40 truncate">{triggerLabel}</span>

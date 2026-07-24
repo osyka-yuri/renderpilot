@@ -49,7 +49,11 @@ describe('createGameDetailsPageModel', () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult());
     const { model, reloadGameDetails } = createModel();
 
-    await model.handleSwap('component-1', 'artifact-1', true);
+    await model.handleSwap({
+      componentId: 'component-1',
+      artifactId: 'artifact-1',
+      isDownloaded: true,
+    });
 
     expect(applySwap).toHaveBeenCalledWith(ACTIVE_GAME_ID, 'component-1', 'artifact-1');
     expect(reloadGameDetails).toHaveBeenCalledTimes(1);
@@ -60,9 +64,37 @@ describe('createGameDetailsPageModel', () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult(2));
     const { model } = createModel();
 
-    await model.handleSwap('component-dxc', 'artifact-dxc', true);
+    await model.handleSwap({
+      componentId: 'component-dxc',
+      artifactId: 'artifact-dxc',
+      isDownloaded: true,
+    });
 
     expect(publishApplyCompletedNotification).toHaveBeenCalledWith(2);
+  });
+
+  it('publishes one combined completion notification when the swap changes the EXE', async () => {
+    const executableAction = {
+      kind: 'patch' as const,
+      executable_path: 'C:/Games/Test/game.exe',
+      original_sdk_version: 606,
+      from_sdk_version: 606,
+      to_sdk_version: 619,
+    };
+    vi.mocked(applySwap).mockResolvedValue({
+      ...createApplySwapResult(2),
+      d3d12_executable_action: executableAction,
+    });
+    const { model } = createModel();
+
+    await model.handleSwap({
+      componentId: 'component:d3d12',
+      artifactId: 'artifact:d3d12:619',
+      isDownloaded: true,
+    });
+
+    expect(publishApplyCompletedNotification).toHaveBeenCalledOnce();
+    expect(publishApplyCompletedNotification).toHaveBeenCalledWith(2, executableAction);
   });
 
   it('reports the backend file count for a bundle rollback', async () => {
@@ -74,11 +106,33 @@ describe('createGameDetailsPageModel', () => {
     expect(publishRollbackCompletedNotification).toHaveBeenCalledWith(3);
   });
 
+  it('does not publish a separate executable notification after a managed rollback', async () => {
+    vi.mocked(rollbackComponent).mockResolvedValue({
+      ...createRollbackResult(),
+      d3d12_executable_action: {
+        kind: 'restore',
+        executable_path: 'C:/Games/Test/game.exe',
+        original_sdk_version: 606,
+        from_sdk_version: 619,
+        to_sdk_version: 606,
+      },
+    });
+    const { model } = createModel();
+
+    await model.handleRollback('component:d3d12');
+
+    expect(publishRollbackCompletedNotification).toHaveBeenCalledOnce();
+  });
+
   it('does not notify when runExclusive returns null', async () => {
     vi.mocked(applySwap).mockResolvedValue(createApplySwapResult());
     const { model } = createModel({ runExclusive: () => Promise.resolve(null) });
 
-    await model.handleSwap('component-1', 'artifact-1', true);
+    await model.handleSwap({
+      componentId: 'component-1',
+      artifactId: 'artifact-1',
+      isDownloaded: true,
+    });
 
     expect(publishApplyCompletedNotification).not.toHaveBeenCalled();
   });
@@ -95,7 +149,13 @@ describe('createGameDetailsPageModel', () => {
     vi.mocked(applySwap).mockRejectedValue(commandError);
     const { model, reloadGameDetails } = createModel();
 
-    await expect(model.handleSwap('component-1', 'artifact-1', true)).rejects.toBe(commandError);
+    await expect(
+      model.handleSwap({
+        componentId: 'component-1',
+        artifactId: 'artifact-1',
+        isDownloaded: true,
+      }),
+    ).rejects.toBe(commandError);
     expect(reloadGameDetails).toHaveBeenCalledTimes(1);
     expect(publishApplyCompletedNotification).not.toHaveBeenCalled();
     // Typed toast is owned by createExclusiveTaskRunner.onError → showError at app shell.
@@ -128,6 +188,27 @@ describe('createGameDetailsPageModel', () => {
       await model.handleBulkSwap(items);
 
       expect(publishApplyCompletedNotification).toHaveBeenCalledWith(3);
+    });
+
+    it('publishes only the aggregate completion notification when a batch patches the EXE', async () => {
+      vi.mocked(applySwap)
+        .mockResolvedValueOnce({
+          ...createApplySwapResult(),
+          d3d12_executable_action: {
+            kind: 'patch',
+            executable_path: 'C:/Games/Test/game.exe',
+            original_sdk_version: 606,
+            from_sdk_version: 606,
+            to_sdk_version: 619,
+          },
+        })
+        .mockResolvedValueOnce(createApplySwapResult());
+      const { model } = createModel();
+
+      await model.handleBulkSwap(items);
+
+      expect(publishApplyCompletedNotification).toHaveBeenCalledOnce();
+      expect(publishApplyCompletedNotification).toHaveBeenCalledWith(2);
     });
 
     it('isolates a failed plugin: notifies applied count and surfaces the typed error', async () => {
@@ -235,6 +316,7 @@ function createApplySwapResult(updatedFileCount = 1): ApplySwapResult {
     applied_path: '/game/file.dll',
     replacement_path: '/catalog/file.dll',
     updated_file_count: updatedFileCount,
+    d3d12_executable_action: null,
   };
 }
 
@@ -244,5 +326,6 @@ function createRollbackResult(restoredFileCount = 1): RollbackComponentResult {
     component_id: 'component-1',
     restored_path: '/game/file.dll',
     restored_file_count: restoredFileCount,
+    d3d12_executable_action: null,
   };
 }

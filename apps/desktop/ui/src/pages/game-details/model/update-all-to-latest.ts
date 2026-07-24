@@ -61,6 +61,7 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
         componentId: component.id,
         artifactId: candidate.artifact_id,
         isDownloaded: candidate.is_downloaded,
+        d3d12ExecutableAction: candidate.d3d12_executable_action,
       });
     }
   }
@@ -91,7 +92,9 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
  */
 function latestUpgrade(group: GameCandidateGroup | null | undefined): GameCandidate | null {
   const upgrades = (group?.candidates ?? []).filter(
-    (candidate) => candidate.comparison === NEWER_VERSION,
+    (candidate) =>
+      candidate.comparison === NEWER_VERSION &&
+      candidate.d3d12_executable_action?.kind !== 'repair_required',
   );
 
   let best: GameCandidate | null = null;
