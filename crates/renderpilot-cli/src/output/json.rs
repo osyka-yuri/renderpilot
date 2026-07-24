@@ -1,15 +1,14 @@
 use std::collections::BTreeMap;
 
-use renderpilot_orchestration::application::{
-    ComponentReplacementCandidates, OperationPlan, OperationPlanFile,
-};
+use renderpilot_orchestration::application::{ComponentReplacementCandidates, OperationPlan};
 use renderpilot_orchestration::detection::DetectedLibraryFile;
 use renderpilot_orchestration::domain::{GameId, GameInstallation, LibraryArtifact};
 use serde::Serialize;
 
 use crate::catalog::OperationListCatalogResult;
 use renderpilot_orchestration::catalog::output::{
-    ComponentCandidateOutput, component_candidate_outputs, operation_summary_outputs,
+    ComponentCandidateOutput, RollbackPlanOutput, SwapPlanOutput, component_candidate_outputs,
+    operation_summary_outputs,
 };
 
 type JsonResult<T> = Result<T, serde_json::Error>;
@@ -50,6 +49,12 @@ pub(crate) fn render_list_operations_output(
 
 pub(crate) fn render_plan_swap_output(plan: &OperationPlan) -> JsonResult<String> {
     render_pretty_json(SwapPlanOutput::from(plan))
+}
+
+pub(crate) fn render_plan_rollback_output(
+    plan: &crate::catalog::RollbackPlan,
+) -> JsonResult<String> {
+    render_pretty_json(RollbackPlanOutput::from(plan))
 }
 
 fn render_pretty_json<T>(value: T) -> JsonResult<String>
@@ -223,99 +228,6 @@ impl From<&OperationListCatalogResult> for OperationListOutput {
         Self {
             game_id: result.game_id.as_str().to_owned(),
             operations: operation_summary_outputs(result),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Swap plan output
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct SwapPlanOutput {
-    operation_id: String,
-    game_id: String,
-    operation_type: String,
-    target_path: String,
-    replacement_path: String,
-    original_version: Option<String>,
-    replacement_version: Option<String>,
-    original_sha256: Option<String>,
-    replacement_sha256: Option<String>,
-    risk_level: String,
-    requires_elevation: bool,
-    artifact_id: String,
-    blockers: Vec<String>,
-    warnings: Vec<String>,
-    files: Vec<SwapPlanFileOutput>,
-}
-
-/// One file in a bundle swap plan. `target_path`/`replacement_path` at the plan
-/// level remain the primary file for backward compatibility; this enumerates the
-/// whole bundle so a client can show "1 replaced, 2 added".
-#[derive(Debug, Serialize)]
-struct SwapPlanFileOutput {
-    action: String,
-    target_path: String,
-    replacement_path: Option<String>,
-    original_version: Option<String>,
-    replacement_version: Option<String>,
-    original_sha256: Option<String>,
-    replacement_sha256: Option<String>,
-}
-
-impl From<&OperationPlanFile> for SwapPlanFileOutput {
-    fn from(file: &OperationPlanFile) -> Self {
-        Self {
-            action: file.action().as_str().to_owned(),
-            target_path: file.target_path().as_str().to_owned(),
-            replacement_path: file.replacement_path().map(|path| path.as_str().to_owned()),
-            original_version: file
-                .original_version()
-                .map(|version| version.as_str().to_owned()),
-            replacement_version: file
-                .replacement_version()
-                .map(|version| version.as_str().to_owned()),
-            original_sha256: file.original_sha256().map(|hash| hash.as_str().to_owned()),
-            replacement_sha256: file
-                .replacement_sha256()
-                .map(|hash| hash.as_str().to_owned()),
-        }
-    }
-}
-
-impl From<&OperationPlan> for SwapPlanOutput {
-    fn from(plan: &OperationPlan) -> Self {
-        Self {
-            operation_id: plan.operation_id().as_str().to_owned(),
-            game_id: plan.game_id().as_str().to_owned(),
-            operation_type: plan.operation_type().as_str().to_owned(),
-            target_path: plan.target_path().as_str().to_owned(),
-            replacement_path: plan.replacement_path().as_str().to_owned(),
-            original_version: plan
-                .original_version()
-                .map(|version| version.as_str().to_owned()),
-            replacement_version: plan
-                .replacement_version()
-                .map(|version| version.as_str().to_owned()),
-            original_sha256: plan.original_sha256().map(|hash| hash.as_str().to_owned()),
-            replacement_sha256: plan
-                .replacement_sha256()
-                .map(|hash| hash.as_str().to_owned()),
-            risk_level: plan.risk_level().as_str().to_owned(),
-            requires_elevation: plan.requires_elevation(),
-            artifact_id: plan.artifact_id().as_str().to_owned(),
-            blockers: plan
-                .blockers()
-                .iter()
-                .map(|blocker| blocker.as_str().to_owned())
-                .collect(),
-            warnings: plan
-                .warnings()
-                .iter()
-                .map(|warning| warning.as_str().to_owned())
-                .collect(),
-            files: plan.files().iter().map(SwapPlanFileOutput::from).collect(),
         }
     }
 }

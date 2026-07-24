@@ -303,13 +303,36 @@ pub async fn apply_swap(
     game_id: String,
     component_id: String,
     artifact_id: String,
+    confirmation_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let (game_id, context) = require_game_context(game_id, &context)?;
     let component_id = require_non_empty_string("component_id", component_id)?;
     let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
 
-    run_desktop_command(move || desktop::apply_swap(&context, game_id, component_id, artifact_id))
+    run_desktop_command(move || {
+        desktop::apply_swap(
+            &context,
+            game_id,
+            component_id,
+            artifact_id,
+            confirmation_token.as_deref(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn plan_swap(
+    game_id: String,
+    component_id: String,
+    artifact_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let (game_id, context) = require_game_context(game_id, &context)?;
+    let component_id = require_non_empty_string("component_id", component_id)?;
+    let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+    run_desktop_command(move || desktop::plan_swap(&context, game_id, component_id, artifact_id))
         .await
 }
 
@@ -323,6 +346,17 @@ pub async fn rollback_component(
     let component_id = require_non_empty_string("component_id", component_id)?;
 
     run_desktop_command(move || desktop::rollback_component(&context, game_id, component_id)).await
+}
+
+#[tauri::command]
+pub async fn plan_rollback(
+    game_id: String,
+    component_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let (game_id, context) = require_game_context(game_id, &context)?;
+    let component_id = require_non_empty_string("component_id", component_id)?;
+    run_desktop_command(move || desktop::plan_rollback(&context, game_id, component_id)).await
 }
 
 #[tauri::command]

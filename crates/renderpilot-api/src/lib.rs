@@ -64,7 +64,7 @@ pub use self::nvapi::{
     resolve_game_executable, revert_global_nvapi_setting, revert_nvapi_setting,
     set_game_executable_override, set_global_nvapi_setting_value, set_nvapi_setting_value,
 };
-pub use self::operations::{apply_swap, rollback_component};
+pub use self::operations::{apply_swap, plan_rollback, plan_swap, rollback_component};
 pub use self::renodx::{
     renodx_apply_vulkan_layer, renodx_availability, renodx_check_update,
     renodx_dlss_fix_availability, renodx_install, renodx_install_dlss_fix,

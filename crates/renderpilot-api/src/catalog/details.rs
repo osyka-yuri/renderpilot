@@ -6,7 +6,6 @@ use renderpilot_orchestration::catalog as orch_catalog;
 use renderpilot_orchestration::catalog::output as catalog_output;
 use renderpilot_orchestration::domain::{AddonKind, GameId, GraphicsComponent};
 use serde::Serialize;
-use serde_json::Value;
 use std::collections::BTreeSet;
 
 use super::{is_component_visible, visible_component_ids};
@@ -27,14 +26,15 @@ pub(crate) struct GameComponentOutput {
     #[serde(flatten)]
     component: GraphicsComponent,
     rollback_available: bool,
+    d3d12_executable_status: Option<catalog_output::D3d12ExecutableStatusOutput>,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct GameDetailsOutput {
     game: renderpilot_orchestration::domain::GameInstallation,
     components: Vec<GameComponentOutput>,
-    candidate_groups: Value,
-    operations: Value,
+    candidate_groups: Vec<catalog_output::ComponentCandidateOutput>,
+    operations: Vec<catalog_output::OperationSummaryOutput>,
     addon_capabilities: Vec<AddonKind>,
 }
 
@@ -45,18 +45,19 @@ impl GameDetailsOutput {
     ) -> Result<Self, ApiError> {
         let backup_ids = orch_catalog::backup_component_ids(context, game_id)?;
         let details = orch_catalog::get_game_details(context, game_id)?;
+        let d3d12_executable_status = details.d3d12_executable_status.as_ref().map(|status| {
+            (
+                status.component_id().as_str().to_owned(),
+                catalog_output::D3d12ExecutableStatusOutput::from(status),
+            )
+        });
         let visible_components = filter_visible_components(details.components);
         let visible_component_ids = visible_component_ids(&visible_components);
         let visible_candidate_groups =
             filter_visible_candidate_groups(details.candidate_groups, &visible_component_ids);
-        let candidate_groups = serde_json::to_value(catalog_output::component_candidate_outputs(
-            visible_candidate_groups,
-        ))
-        .map_err(ApiError::from)?;
-        let operations = serde_json::to_value(catalog_output::operation_summary_outputs(
-            &details.operations,
-        ))
-        .map_err(ApiError::from)?;
+        let candidate_groups =
+            catalog_output::component_candidate_outputs(visible_candidate_groups);
+        let operations = catalog_output::operation_summary_outputs(&details.operations);
 
         let addon_capabilities =
             orch_catalog::addon_capabilities(context, game_id).map_err(ApiError::from)?;
@@ -65,7 +66,12 @@ impl GameDetailsOutput {
             .into_iter()
             .map(|component| {
                 let rollback_available = backup_ids.contains(component.id().as_str());
+                let component_d3d12_status = d3d12_executable_status
+                    .as_ref()
+                    .filter(|(component_id, _)| component_id == component.id().as_str())
+                    .map(|(_, status)| status.clone());
                 GameComponentOutput {
+                    d3d12_executable_status: component_d3d12_status,
                     component,
                     rollback_available,
                 }

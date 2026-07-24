@@ -82,6 +82,7 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
     let mut game_id = None;
     let mut component_id = None;
     let mut artifact_id = None;
+    let mut confirmation_token = None;
 
     while let Some(argument) = args.next_keyword()? {
         match argument.as_str() {
@@ -106,6 +107,9 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
                     CliError::InvalidArtifactId,
                 )?);
             }
+            "--confirmation-token" => {
+                confirmation_token = Some(args.next_required_keyword("<confirmation_token>")?);
+            }
             _ => return Err(CliError::UnexpectedArgument(argument)),
         }
     }
@@ -114,10 +118,35 @@ pub(super) fn parse_apply_command(args: &mut ArgCursor) -> Result<Command, CliEr
         game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
         component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
         artifact_id: artifact_id.ok_or(CliError::MissingArgument("<artifact_id>"))?,
+        confirmation_token,
+    })
+}
+
+pub(super) fn parse_plan_rollback_command(args: &mut ArgCursor) -> Result<Command, CliError> {
+    let (game_id, component_id) = parse_rollback_arguments(args)?;
+    Ok(Command::PlanRollback {
+        game_id,
+        component_id,
     })
 }
 
 pub(super) fn parse_rollback_command(args: &mut ArgCursor) -> Result<Command, CliError> {
+    let (game_id, component_id) = parse_rollback_arguments(args)?;
+    Ok(Command::RollbackOperation {
+        game_id,
+        component_id,
+    })
+}
+
+fn parse_rollback_arguments(
+    args: &mut ArgCursor,
+) -> Result<
+    (
+        renderpilot_orchestration::domain::GameId,
+        renderpilot_orchestration::domain::ComponentId,
+    ),
+    CliError,
+> {
     let mut game_id = None;
     let mut component_id = None;
 
@@ -141,8 +170,8 @@ pub(super) fn parse_rollback_command(args: &mut ArgCursor) -> Result<Command, Cl
         }
     }
 
-    Ok(Command::RollbackOperation {
-        game_id: game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
-        component_id: component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
-    })
+    Ok((
+        game_id.ok_or(CliError::MissingArgument("<game_id>"))?,
+        component_id.ok_or(CliError::MissingArgument("<component_id>"))?,
+    ))
 }

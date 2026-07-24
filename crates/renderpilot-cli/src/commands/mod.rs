@@ -11,8 +11,8 @@ use crate::{
     luma,
     output::{
         render_candidates_output, render_help, render_list_artifacts_output,
-        render_list_operations_output, render_plan_swap_output, render_scan_folder_batch_output,
-        render_scan_folder_output, render_summary, render_version,
+        render_list_operations_output, render_plan_rollback_output, render_plan_swap_output,
+        render_scan_folder_batch_output, render_scan_folder_output, render_summary, render_version,
     },
     renodx,
 };
@@ -65,7 +65,18 @@ fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
             game_id,
             component_id,
             artifact_id,
-        } => apply_swap(context, &game_id, &component_id, &artifact_id),
+            confirmation_token,
+        } => apply_swap(
+            context,
+            &game_id,
+            &component_id,
+            &artifact_id,
+            confirmation_token.as_deref(),
+        ),
+        Command::PlanRollback {
+            game_id,
+            component_id,
+        } => plan_rollback(context, &game_id, &component_id),
         Command::RollbackOperation {
             game_id,
             component_id,
@@ -175,10 +186,26 @@ fn apply_swap(
     game_id: &GameId,
     component_id: &ComponentId,
     artifact_id: &ArtifactId,
+    confirmation_token: Option<&str>,
 ) -> CliOutput {
-    let result = catalog::apply_swap(context, game_id, component_id, artifact_id)?;
+    let result = catalog::apply_swap_confirmed(
+        context,
+        game_id,
+        component_id,
+        artifact_id,
+        confirmation_token,
+    )?;
 
     render_json(&result)
+}
+
+fn plan_rollback(
+    context: &renderpilot_orchestration::Context,
+    game_id: &GameId,
+    component_id: &ComponentId,
+) -> CliOutput {
+    let plan = catalog::build_rollback_plan(context, game_id, component_id)?;
+    render_output(render_plan_rollback_output(&plan))
 }
 
 fn rollback_component(

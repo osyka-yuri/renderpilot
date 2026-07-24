@@ -183,6 +183,31 @@ fn apply_parses_all_identifiers() {
             component_id: ComponentId::new("component:game-a:dlss")
                 .expect("component id should parse"),
             artifact_id: ArtifactId::new("artifact:dlss-3.7").expect("artifact id should parse"),
+            confirmation_token: None,
+        }
+    );
+}
+
+#[test]
+fn apply_parses_executable_confirmation_token() {
+    assert_eq!(
+        parse_args(args(&[
+            "apply",
+            "--game",
+            "manual:C:/Games/GameA",
+            "--component",
+            "component:game-a:d3d12",
+            "--artifact",
+            "artifact:d3d12-619",
+            "--confirmation-token",
+            "fresh-preflight-fingerprint",
+        ]))
+        .expect("valid args"),
+        Command::ApplyOperation {
+            game_id: GameId::new("manual:C:/Games/GameA").expect("game id"),
+            component_id: ComponentId::new("component:game-a:d3d12").expect("component id"),
+            artifact_id: ArtifactId::new("artifact:d3d12-619").expect("artifact id"),
+            confirmation_token: Some("fresh-preflight-fingerprint".to_owned()),
         }
     );
 }
@@ -204,6 +229,7 @@ fn apply_operation_alias_parses_all_identifiers() {
             game_id: GameId::new("manual:C:/Games/GameA").expect("game id should parse"),
             component_id: ComponentId::new("component:game-a:dlss")
                 .expect("component id should parse"),
+            confirmation_token: None,
             artifact_id: ArtifactId::new("artifact:dlss-3.7").expect("artifact id should parse"),
         }
     );
@@ -232,6 +258,54 @@ fn rollback_parses_game_and_component() {
             component_id: ComponentId::new("component:game-a:dlss")
                 .expect("component id should parse"),
         }
+    );
+}
+
+#[test]
+fn plan_rollback_parses_game_and_component_without_a_confirmation_token() {
+    assert_eq!(
+        parse_args(args(&[
+            "plan-rollback",
+            "--game",
+            "manual:C:/Games/GameA",
+            "--component",
+            "component:game-a:d3d12",
+        ]))
+        .expect("valid args"),
+        Command::PlanRollback {
+            game_id: GameId::new("manual:C:/Games/GameA").expect("game id"),
+            component_id: ComponentId::new("component:game-a:d3d12").expect("component id"),
+        }
+    );
+    assert_eq!(
+        parse_args(args(&[
+            "plan-rollback",
+            "--game",
+            "manual:C:/Games/GameA",
+            "--component",
+            "component:game-a:d3d12",
+            "--confirmation-token",
+            "not-valid-for-a-plan",
+        ]))
+        .expect_err("a read-only plan never accepts confirmation"),
+        CliError::UnexpectedArgument("--confirmation-token".to_owned())
+    );
+}
+
+#[test]
+fn rollback_rejects_obsolete_executable_confirmation_token() {
+    assert_eq!(
+        parse_args(args(&[
+            "rollback",
+            "--game",
+            "manual:C:/Games/GameA",
+            "--component",
+            "component:game-a:d3d12",
+            "--confirmation-token",
+            "fresh-rollback-fingerprint",
+        ]))
+        .expect_err("safe rollback never accepts confirmation"),
+        CliError::UnexpectedArgument("--confirmation-token".to_owned())
     );
 }
 

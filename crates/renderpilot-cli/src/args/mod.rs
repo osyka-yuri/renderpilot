@@ -21,8 +21,8 @@ use renderpilot_orchestration::domain::AddonKind;
 use self::addon::parse_addon_command;
 use self::catalog::{
     parse_apply_command, parse_candidates_command, parse_list_artifacts_command,
-    parse_list_operations_command, parse_plan_swap_command, parse_rollback_command,
-    parse_scan_folder_command,
+    parse_list_operations_command, parse_plan_rollback_command, parse_plan_swap_command,
+    parse_rollback_command, parse_scan_folder_command,
 };
 use self::command::Command;
 use self::cursor::ArgCursor;
@@ -43,6 +43,7 @@ pub(crate) fn parse_args(
         "list-operations" => parse_list_operations_command(&mut args),
         "candidates" => parse_candidates_command(&mut args),
         "plan-swap" => parse_plan_swap_command(&mut args),
+        "plan-rollback" => parse_plan_rollback_command(&mut args),
         "apply" | "apply-operation" => parse_apply_command(&mut args),
         "rollback" => parse_rollback_command(&mut args),
         "renodx" => parse_addon_command(&mut args, AddonKind::RenoDx),

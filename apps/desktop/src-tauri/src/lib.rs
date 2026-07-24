@@ -341,7 +341,9 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::set_catalog_setting,
         // Operations
         commands::apply_swap,
+        commands::plan_swap,
         commands::rollback_component,
+        commands::plan_rollback,
         // Libraries
         commands::list_library_packages,
         commands::download_library_package,
