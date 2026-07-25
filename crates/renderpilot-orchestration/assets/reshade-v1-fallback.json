@@ -2,7 +2,9 @@
   "schema_version": 1,
   "generated_at": "2026-07-13T00:00:00Z",
   "channels": {
-    "stable": { "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe" },
+    "stable": {
+      "url": "https://reshade.me/downloads/ReShade_Setup_6.7.3_Addon.exe"
+    },
     "nightly": {
       "url64": "https://nightly.link/crosire/reshade/workflows/build/main/ReShade%20(64-bit).zip",
       "url32": "https://nightly.link/crosire/reshade/workflows/build/main/ReShade%20(32-bit).zip"

@@ -9,7 +9,11 @@
       "dll_kind": "sr",
       "description": "Forces a specific DLSS Super Resolution preset. Some games may require 'Forced Model Preset Profile' to apply custom presets.",
       "values": [
-        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        {
+          "label": "Off (game default)",
+          "wire": "default",
+          "dword": "0x00000000"
+        },
         { "label": "Preset A (CNN)", "wire": "a", "dword": "0x00000001" },
         { "label": "Preset B (CNN)", "wire": "b", "dword": "0x00000002" },
         { "label": "Preset C (CNN)", "wire": "c", "dword": "0x00000003" },
@@ -19,10 +23,26 @@
         { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
         { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
         { "label": "Preset I (unused)", "wire": "i", "dword": "0x00000009" },
-        { "label": "Preset J (Transformer Gen 1)", "wire": "j", "dword": "0x0000000A" },
-        { "label": "Preset K (Transformer Gen 1)", "wire": "k", "dword": "0x0000000B" },
-        { "label": "Preset L (Transformer Gen 2)", "wire": "l", "dword": "0x0000000C" },
-        { "label": "Preset M (Transformer Gen 2)", "wire": "m", "dword": "0x0000000D" },
+        {
+          "label": "Preset J (Transformer Gen 1)",
+          "wire": "j",
+          "dword": "0x0000000A"
+        },
+        {
+          "label": "Preset K (Transformer Gen 1)",
+          "wire": "k",
+          "dword": "0x0000000B"
+        },
+        {
+          "label": "Preset L (Transformer Gen 2)",
+          "wire": "l",
+          "dword": "0x0000000C"
+        },
+        {
+          "label": "Preset M (Transformer Gen 2)",
+          "wire": "m",
+          "dword": "0x0000000D"
+        },
         { "label": "Preset N (unused)", "wire": "n", "dword": "0x0000000E" },
         { "label": "Preset O (unused)", "wire": "o", "dword": "0x0000000F" },
         { "label": "Recommended", "wire": "recommended", "dword": "0x00FFFFFF" }
@@ -36,12 +56,20 @@
       "description": "Overrides the in-game DLSS Super Resolution quality selection.",
       "default": "0x00000003",
       "values": [
-        { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
+        {
+          "label": "Performance",
+          "wire": "performance",
+          "dword": "0x00000000"
+        },
         { "label": "Balanced", "wire": "balanced", "dword": "0x00000001" },
         { "label": "Quality", "wire": "quality", "dword": "0x00000002" },
         { "label": "N/A", "wire": "na", "dword": "0x00000003" },
         { "label": "DLAA", "wire": "dlaa", "dword": "0x00000004" },
-        { "label": "Ultra Performance", "wire": "ultra_performance", "dword": "0x00000005" },
+        {
+          "label": "Ultra Performance",
+          "wire": "ultra_performance",
+          "dword": "0x00000005"
+        },
         { "label": "Custom", "wire": "custom", "dword": "0x00000006" }
       ]
     },
@@ -54,7 +82,11 @@
       "description": "Sets a custom render-resolution ratio. Requires 'Forced Quality Level' to be set to Custom.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
-        { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
+        {
+          "label": "33% (Ultra Performance)",
+          "wire": "33",
+          "dword": "0x00000021"
+        },
         { "label": "40%", "wire": "40", "dword": "0x00000028" },
         { "label": "45%", "wire": "45", "dword": "0x0000002D" },
         { "label": "50% (Performance)", "wire": "50", "dword": "0x00000032" },
@@ -76,7 +108,11 @@
       "description": "Forces the game to use the latest DLSS-SR version installed system-wide. Supported by most DLSS 2+ titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
-        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+        {
+          "label": "On (use latest installed)",
+          "wire": "on",
+          "dword": "0x00000001"
+        }
       ]
     },
     {
@@ -87,7 +123,11 @@
       "description": "Allows applying a custom preset in games where 'Render Preset' has no effect by default.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
-        { "label": "Recommended", "wire": "recommended", "dword": "0x00000001" },
+        {
+          "label": "Recommended",
+          "wire": "recommended",
+          "dword": "0x00000001"
+        },
         { "label": "Custom", "wire": "custom", "dword": "0x00000002" }
       ]
     },
@@ -121,7 +161,11 @@
       "dll_kind": "fg",
       "description": "Forces a specific DLSS Frame Generation preset.",
       "values": [
-        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        {
+          "label": "Off (game default)",
+          "wire": "default",
+          "dword": "0x00000000"
+        },
         { "label": "Preset A", "wire": "a", "dword": "0x00000001" },
         { "label": "Preset B", "wire": "b", "dword": "0x00000002" },
         { "label": "Preset C (unused)", "wire": "c", "dword": "0x00000003" },
@@ -160,7 +204,11 @@
       "description": "Forces the game to use the latest DLSS-FG version installed system-wide. Supported by most DLSS 3 titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
-        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+        {
+          "label": "On (use latest installed)",
+          "wire": "on",
+          "dword": "0x00000001"
+        }
       ]
     },
     {
@@ -203,7 +251,11 @@
       "description": "Sets the target frame rate that Dynamic Frame Generation aims to maintain.",
       "values": [
         { "label": "N/A", "wire": "na", "dword": "0x00000000" },
-        { "label": "Max Refresh Rate", "wire": "max_refresh", "dword": "0x01000000" },
+        {
+          "label": "Max Refresh Rate",
+          "wire": "max_refresh",
+          "dword": "0x01000000"
+        },
         { "label": "60 FPS", "wire": "60", "dword": "0x0000003C" },
         { "label": "72 FPS", "wire": "72", "dword": "0x00000048" },
         { "label": "90 FPS", "wire": "90", "dword": "0x0000005A" },
@@ -229,12 +281,24 @@
       "dll_kind": "rr",
       "description": "Forces a specific DLSS Ray Reconstruction preset.",
       "values": [
-        { "label": "Off (game default)", "wire": "default", "dword": "0x00000000" },
+        {
+          "label": "Off (game default)",
+          "wire": "default",
+          "dword": "0x00000000"
+        },
         { "label": "Preset A (CNN)", "wire": "a", "dword": "0x00000001" },
         { "label": "Preset B (CNN)", "wire": "b", "dword": "0x00000002" },
         { "label": "Preset C (CNN)", "wire": "c", "dword": "0x00000003" },
-        { "label": "Preset D (Transformer Gen 1)", "wire": "d", "dword": "0x00000004" },
-        { "label": "Preset E (Transformer Gen 1)", "wire": "e", "dword": "0x00000005" },
+        {
+          "label": "Preset D (Transformer Gen 1)",
+          "wire": "d",
+          "dword": "0x00000004"
+        },
+        {
+          "label": "Preset E (Transformer Gen 1)",
+          "wire": "e",
+          "dword": "0x00000005"
+        },
         { "label": "Preset F (unused)", "wire": "f", "dword": "0x00000006" },
         { "label": "Preset G (unused)", "wire": "g", "dword": "0x00000007" },
         { "label": "Preset H (unused)", "wire": "h", "dword": "0x00000008" },
@@ -256,12 +320,20 @@
       "description": "Overrides the in-game DLSS Ray Reconstruction quality selection.",
       "default": "0x00000003",
       "values": [
-        { "label": "Performance", "wire": "performance", "dword": "0x00000000" },
+        {
+          "label": "Performance",
+          "wire": "performance",
+          "dword": "0x00000000"
+        },
         { "label": "Balanced", "wire": "balanced", "dword": "0x00000001" },
         { "label": "Quality", "wire": "quality", "dword": "0x00000002" },
         { "label": "N/A", "wire": "na", "dword": "0x00000003" },
         { "label": "DLAA", "wire": "dlaa", "dword": "0x00000004" },
-        { "label": "Ultra Performance", "wire": "ultra_performance", "dword": "0x00000005" },
+        {
+          "label": "Ultra Performance",
+          "wire": "ultra_performance",
+          "dword": "0x00000005"
+        },
         { "label": "Custom", "wire": "custom", "dword": "0x00000006" }
       ]
     },
@@ -274,7 +346,11 @@
       "description": "Sets a custom render-resolution ratio. Requires 'Forced Quality Level' to be set to Custom.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
-        { "label": "33% (Ultra Performance)", "wire": "33", "dword": "0x00000021" },
+        {
+          "label": "33% (Ultra Performance)",
+          "wire": "33",
+          "dword": "0x00000021"
+        },
         { "label": "40%", "wire": "40", "dword": "0x00000028" },
         { "label": "45%", "wire": "45", "dword": "0x0000002D" },
         { "label": "50% (Performance)", "wire": "50", "dword": "0x00000032" },
@@ -296,7 +372,11 @@
       "description": "Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.",
       "values": [
         { "label": "Off", "wire": "off", "dword": "0x00000000" },
-        { "label": "On (use latest installed)", "wire": "on", "dword": "0x00000001" }
+        {
+          "label": "On (use latest installed)",
+          "wire": "on",
+          "dword": "0x00000001"
+        }
       ]
     }
   ]

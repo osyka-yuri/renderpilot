@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -81,7 +81,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: v__VERSION__
-          releaseName: 'RenderPilot v__VERSION__'
+          releaseName: "RenderPilot v__VERSION__"
           releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: true
           prerelease: false

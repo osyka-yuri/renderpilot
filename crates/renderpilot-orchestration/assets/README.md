@@ -14,11 +14,11 @@ refresh between releases.
 Before shipping an application release, confirm these remote documents are
 published and fetchable (CDN + cache warm path):
 
-| Catalogue | Remote path | Bundled fallback |
-|-----------|-------------|------------------|
-| Shared ReShade sources | `addons/v1/reshade.json` | `reshade-v1-fallback.json` (last resort) |
-| Luma tool catalogue | `addons/v1/luma.json` | **none** — install/update hard-fail if unresolved |
-| RenoDX tool catalogue | tool path under `addons/v1/` (see RenoDX manifest store) | **none** |
+| Catalogue              | Remote path                                              | Bundled fallback                                  |
+| ---------------------- | -------------------------------------------------------- | ------------------------------------------------- |
+| Shared ReShade sources | `addons/v1/reshade.json`                                 | `reshade-v1-fallback.json` (last resort)          |
+| Luma tool catalogue    | `addons/v1/luma.json`                                    | **none** — install/update hard-fail if unresolved |
+| RenoDX tool catalogue  | tool path under `addons/v1/` (see RenoDX manifest store) | **none**                                          |
 
 Tool catalogues intentionally have no offline fallback: a stale or invented
 profile set is worse than a clear fetch failure. Keep `luma.json` / RenoDX tool
