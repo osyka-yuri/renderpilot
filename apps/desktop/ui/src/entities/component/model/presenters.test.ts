@@ -6,7 +6,7 @@ describe('presenters', () => {
   describe('formatLibrary', () => {
     it('keeps canonical long-form labels for known graphics technologies', () => {
       expect(formatLibrary('dlss_super_resolution')).toBe('DLSS Super Resolution');
-      expect(formatLibrary('nvidia_reflex')).toBe('NVIDIA Reflex');
+      expect(formatLibrary('nvidia_streamline')).toBe('NVIDIA Streamline');
       expect(formatLibrary('intel_xell')).toBe('Intel Xe Low Latency');
       expect(formatLibrary('amd_fsr_ray_regeneration')).toBe('AMD FSR Ray Regeneration');
     });

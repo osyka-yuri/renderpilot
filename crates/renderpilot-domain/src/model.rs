@@ -235,10 +235,6 @@ pub enum GraphicsTechnology {
     #[serde(rename = "nvidia_streamline")]
     NvidiaStreamline,
 
-    /// NVIDIA Reflex.
-    #[serde(rename = "nvidia_reflex")]
-    NvidiaReflex,
-
     /// Intel XeSS Super Resolution.
     #[serde(rename = "intel_xess")]
     IntelXeSs,
@@ -304,7 +300,6 @@ impl GraphicsTechnology {
         Self::DlssFrameGeneration,
         Self::DlssRayReconstruction,
         Self::NvidiaStreamline,
-        Self::NvidiaReflex,
         Self::IntelXeSs,
         Self::IntelXeFg,
         Self::IntelXeLl,
@@ -329,7 +324,6 @@ impl GraphicsTechnology {
             Self::DlssFrameGeneration => "dlss_frame_generation",
             Self::DlssRayReconstruction => "dlss_ray_reconstruction",
             Self::NvidiaStreamline => "nvidia_streamline",
-            Self::NvidiaReflex => "nvidia_reflex",
             Self::IntelXeSs => "intel_xess",
             Self::IntelXeFg => "intel_xefg",
             Self::IntelXeLl => "intel_xell",

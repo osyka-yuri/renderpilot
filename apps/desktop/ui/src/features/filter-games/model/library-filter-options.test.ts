@@ -70,7 +70,7 @@ describe('library-filter-options', () => {
         'intel_xell',
         'dlss_super_resolution',
         'steam',
-        'nvidia_reflex',
+        'nvidia_streamline',
       ]);
 
       expect(groupLibraryFilterOptions(options)).toEqual([
@@ -85,8 +85,8 @@ describe('library-filter-options', () => {
               vendorLabel: 'NVIDIA',
             },
             {
-              value: 'nvidia_reflex',
-              label: 'Reflex',
+              value: 'nvidia_streamline',
+              label: 'Streamline',
               vendorKey: 'nvidia',
               vendorLabel: 'NVIDIA',
             },
@@ -124,26 +124,26 @@ describe('library-filter-options', () => {
     it('returns selected libraries for a vendor only', () => {
       const options = buildLibraryFilterOptions([
         'dlss_super_resolution',
-        'nvidia_reflex',
+        'nvidia_streamline',
         'amd_fsr',
       ]);
       const nvidiaOptions = options.filter((option) => option.vendorKey === 'nvidia');
 
-      expect(selectedLibrariesForVendor(['amd_fsr', 'nvidia_reflex'], nvidiaOptions)).toEqual([
-        'nvidia_reflex',
+      expect(selectedLibrariesForVendor(['amd_fsr', 'nvidia_streamline'], nvidiaOptions)).toEqual([
+        'nvidia_streamline',
       ]);
     });
 
     it('replaces only the active vendor slice while preserving other selections', () => {
       const options = buildLibraryFilterOptions([
         'dlss_super_resolution',
-        'nvidia_reflex',
+        'nvidia_streamline',
         'amd_fsr',
       ]);
       const nvidiaOptions = options.filter((option) => option.vendorKey === 'nvidia');
 
       expect(
-        mergeVendorDraftLibraries(['amd_fsr', 'nvidia_reflex'], nvidiaOptions, [
+        mergeVendorDraftLibraries(['amd_fsr', 'nvidia_streamline'], nvidiaOptions, [
           'dlss_super_resolution',
         ]),
       ).toEqual(['amd_fsr', 'dlss_super_resolution']);
