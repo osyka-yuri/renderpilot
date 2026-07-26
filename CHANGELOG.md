@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1] - 2026-07-26
+
+### Fixed
+
+- **D3D12 executable detection**: Games such as Cyberpunk 2077 and Split Fiction no longer show a false repair-required state when RenderPilot has never managed their executable. The scanner now chooses the unique executable that exports `D3D12SDKVersion` and accepts a valid target export even when unrelated PE data exports live only in virtual memory.
+- **D3D12 recovery status**: The Game Details recovery warning shows the immutable backup path only when that backup actually exists, so a planned sidecar is never presented as recoverable data.
+
 ## [1.7.0] - 2026-07-25
 
 ### Added
