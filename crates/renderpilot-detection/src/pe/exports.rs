@@ -100,6 +100,24 @@ impl<'headers, 'bytes, 'source, Source: ByteSource> ExportTable<'headers, 'bytes
     }
 
     fn named_exports(&mut self) -> Option<Vec<(usize, String)>> {
+        let exports = self.named_export_ordinals()?;
+        for (ordinal, _) in &exports {
+            let function_rva = self.function_rva(*ordinal)?;
+            if !self.valid_function_target(function_rva)? {
+                return None;
+            }
+        }
+        Some(exports)
+    }
+
+    /// Reads the name/ordinal table without requiring every unrelated EAT
+    /// target to have file-backed bytes.
+    ///
+    /// A valid PE DATA export may point into a section's zero-initialized
+    /// virtual tail. That target is irrelevant when locating a different,
+    /// file-backed DATA export such as `D3D12SDKVersion`, so typed lookup
+    /// validates only the matching target after resolving its name ordinal.
+    fn named_export_ordinals(&mut self) -> Option<Vec<(usize, String)>> {
         let names_offset = self.array_offset(EXPORT_ADDRESS_OF_NAMES_OFFSET, self.name_count, 4)?;
         let ordinals_offset =
             self.array_offset(EXPORT_ADDRESS_OF_NAME_ORDINALS_OFFSET, self.name_count, 2)?;
@@ -116,13 +134,26 @@ impl<'headers, 'bytes, 'source, Source: ByteSource> ExportTable<'headers, 'bytes
                 .source
                 .read_exact_at(ordinals_offset.checked_add(index.checked_mul(2)?)?, 2)?;
             let ordinal = usize::from(read_u16(&ordinal_bytes, 0)?);
-            let function_rva = self.function_rva(ordinal)?;
-            if ordinal >= self.function_count || !self.valid_function_target(function_rva)? {
+            if ordinal >= self.function_count {
                 return None;
             }
             names.push((ordinal, name));
         }
         Some(names)
+    }
+
+    fn unique_named_export_rva(&mut self, target: &str) -> Option<u32> {
+        let mut matching_rva = None;
+        for (ordinal, name) in self.named_export_ordinals()? {
+            if name != target {
+                continue;
+            }
+            if matching_rva.is_some() {
+                return None;
+            }
+            matching_rva = Some(self.function_rva(ordinal)?);
+        }
+        matching_rva
     }
 
     fn function_rva(&mut self, ordinal: usize) -> Option<u32> {
@@ -211,18 +242,7 @@ fn exported_u32_location(
 
     let mut table = ExportTable::parse(headers, source)??;
 
-    let mut matching_rva = None;
-    for (ordinal, name) in table.named_exports()? {
-        if name != target {
-            continue;
-        }
-        if matching_rva.is_some() {
-            return None;
-        }
-        matching_rva = Some(table.function_rva(ordinal)?);
-    }
-
-    let value_rva = matching_rva?;
+    let value_rva = table.unique_named_export_rva(target)?;
     if table.is_forwarder(value_rva)? {
         return None;
     }
@@ -416,6 +436,39 @@ mod tests {
     }
 
     #[test]
+    fn typed_lookup_ignores_an_unrelated_non_file_backed_export_target() {
+        let pe = build_u32_export_with_unrelated_unmapped_target(618);
+
+        assert_eq!(
+            export_names_from_bytes(&pe),
+            None,
+            "complete export-surface inspection remains fail-closed"
+        );
+        assert_eq!(
+            exported_u32_location_from_bytes(&pe, "D3D12SDKVersion").map(|export| export.value),
+            Some(618),
+            "a valid matching DATA export must not depend on unrelated EAT targets"
+        );
+
+        let file = tempfile::NamedTempFile::new().expect("temp PE");
+        std::fs::write(file.path(), &pe).expect("write PE");
+        assert_eq!(
+            super::super::read_pe_exported_u32(file.path(), "D3D12SDKVersion"),
+            Some(618),
+            "the bounded file reader must use the same target-specific validation"
+        );
+
+        let mut patched = pe;
+        super::super::replace_pe_exported_u32_in_bytes(&mut patched, "D3D12SDKVersion", 618, 619)
+            .expect("patch target export");
+        assert_eq!(
+            exported_u32_location_from_bytes(&patched, "D3D12SDKVersion")
+                .map(|export| export.value),
+            Some(619)
+        );
+    }
+
+    #[test]
     fn rejects_short_export_directory_and_overlapping_sections() {
         let mut short = build_u32_export_pe(MACHINE_AMD64, PE32_PLUS_MAGIC, 618, false, false);
         let optional_header_offset = 0x80 + 4 + COFF_HEADER_LEN;
@@ -514,6 +567,25 @@ mod tests {
             None,
             "a forwarder RVA must name a valid printable ASCII string"
         );
+    }
+
+    fn build_u32_export_with_unrelated_unmapped_target(value: u32) -> Vec<u8> {
+        let mut pe = build_export_pe(&["D3D12SDKVersion", "UnrelatedData"]);
+        let section_header = 0x80 + 4 + COFF_HEADER_LEN + 0xF0;
+        let section_raw_pointer = export_section_raw_pointer(&pe);
+        let functions = section_raw_pointer + EXPORT_DIRECTORY_LEN;
+        let value_rva = read_u32(&pe, functions).expect("value RVA");
+        let section_rva = read_u32(&pe, section_header + 12).expect("section RVA");
+        let value_offset =
+            section_raw_pointer + usize::try_from(value_rva - section_rva).expect("value offset");
+
+        pe.extend_from_slice(&[0; 3]);
+        let expanded_size = u32::try_from(pe.len() - section_raw_pointer).expect("section size");
+        pe[section_header + 8..section_header + 12].copy_from_slice(&expanded_size.to_le_bytes());
+        pe[section_header + 16..section_header + 20].copy_from_slice(&expanded_size.to_le_bytes());
+        pe[value_offset..value_offset + 4].copy_from_slice(&value.to_le_bytes());
+        pe[functions + 4..functions + 8].copy_from_slice(&0xffff_0000u32.to_le_bytes());
+        pe
     }
 
     fn build_u32_export_pe(

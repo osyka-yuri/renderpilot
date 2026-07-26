@@ -142,6 +142,7 @@ export type D3d12ExecutableStatus = {
   selection_locked: boolean;
   executable_path: string;
   backup_path: string;
+  backup_exists: boolean;
   original_sdk_version: number;
   current_sdk_version: number;
 };

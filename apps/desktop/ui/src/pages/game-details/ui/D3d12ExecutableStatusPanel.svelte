@@ -20,9 +20,11 @@
       <span class="font-medium">{t('gameDetails.d3d12.status.repair')}</span>
       <span>{t('gameDetails.d3d12.repairGuidance')}</span>
       <span class="break-all text-foreground">{status.executable_path}</span>
-      <span class="break-all text-muted-foreground">
-        {t('gameDetails.d3d12.confirm.backup', { path: status.backup_path })}
-      </span>
+      {#if status.backup_exists}
+        <span class="break-all text-muted-foreground">
+          {t('gameDetails.d3d12.confirm.backup', { path: status.backup_path })}
+        </span>
+      {/if}
     </div>
   </div>
 {:else}

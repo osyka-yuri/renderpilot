@@ -79,6 +79,24 @@ describe('D3D12 executable state UI', () => {
     expect(callout?.textContent).toContain('C:/Games/Test/game.exe.bak');
   });
 
+  it('does not present a planned backup path as an existing backup', () => {
+    component = mount(ComponentVersionRowTestHost, {
+      target,
+      props: {
+        component: repairComponent(false),
+        group: null,
+        busy: false,
+        onSwap: vi.fn(),
+        onRollback: vi.fn(),
+      },
+    });
+    flushSync();
+
+    const callout = target.querySelector<HTMLElement>('[role="alert"]');
+    expect(callout?.textContent).toContain('C:/Games/Test/game.exe');
+    expect(callout?.textContent).not.toContain('C:/Games/Test/game.exe.bak');
+  });
+
   it('disables executable selection and explains the rollback lock', () => {
     component = mount(GameExecutablePopover, {
       target,
@@ -192,7 +210,7 @@ async function settleOverlays(): Promise<void> {
   await tick();
 }
 
-function repairComponent(): GameGraphicsComponent {
+function repairComponent(backupExists = true): GameGraphicsComponent {
   return {
     id: 'component:d3d12',
     game_id: 'steam:123',
@@ -206,6 +224,7 @@ function repairComponent(): GameGraphicsComponent {
       selection_locked: true,
       executable_path: 'C:/Games/Test/game.exe',
       backup_path: 'C:/Games/Test/game.exe.bak',
+      backup_exists: backupExists,
       original_sdk_version: 606,
       current_sdk_version: 619,
     },
@@ -221,6 +240,7 @@ function patchedComponent(): GameGraphicsComponent {
       selection_locked: true,
       executable_path: 'C:/Games/Test/game.exe',
       backup_path: 'C:/Games/Test/game.exe.bak',
+      backup_exists: true,
       original_sdk_version: 606,
       current_sdk_version: 619,
     },

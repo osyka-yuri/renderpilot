@@ -152,8 +152,10 @@ pub struct D3d12ExecutableStatusOutput {
     pub selection_locked: bool,
     /// Main executable path.
     pub executable_path: String,
-    /// Immutable backup path.
+    /// Expected immutable backup path, whether or not it currently exists.
     pub backup_path: String,
+    /// Whether the immutable backup currently exists.
+    pub backup_exists: bool,
     /// Original SDK line.
     pub original_sdk_version: u32,
     /// Currently active SDK line.
@@ -174,6 +176,7 @@ impl From<&D3d12ExecutableStatus> for D3d12ExecutableStatusOutput {
             selection_locked: status.selection_locked(),
             executable_path: status.executable_path().as_str().to_owned(),
             backup_path: status.backup_path().as_str().to_owned(),
+            backup_exists: status.backup_exists(),
             original_sdk_version: status.original_sdk_version(),
             current_sdk_version: status.current_sdk_version(),
         }
@@ -445,15 +448,18 @@ pub fn operation_summary_outputs(
 
 #[cfg(test)]
 mod tests {
-    use super::{D3d12ExecutableActionOutput, InstalledReleaseStateOutput, OperationSummaryOutput};
+    use super::{
+        D3d12ExecutableActionOutput, D3d12ExecutableStatusOutput, InstalledReleaseStateOutput,
+        OperationSummaryOutput,
+    };
     use renderpilot_application::{
         D3d12ExecutableAction, D3d12ExecutableProfile, InstalledReleaseState, MetadataJson,
         OperationKind, OperationRecord, OperationStatus, UnixTimestampMillis,
     };
-    use renderpilot_domain::{GameId, OperationId, PathRef, Version};
+    use renderpilot_domain::{ComponentId, GameId, OperationId, PathRef, Version};
     use serde_json::json;
 
-    use crate::catalog::OperationListCatalogEntry;
+    use crate::catalog::{D3d12ExecutableStatus, OperationListCatalogEntry};
 
     #[test]
     fn installed_release_variants_serialize_to_stable_wire_shapes() {
@@ -531,6 +537,35 @@ mod tests {
             })
         );
         assert!(wire.get("confirmation_token").is_none());
+    }
+
+    #[test]
+    fn executable_status_wire_reports_whether_the_backup_really_exists() {
+        let status = D3d12ExecutableStatus {
+            component_id: ComponentId::new("component:d3d12").expect("component"),
+            executable_path: PathRef::new("C:/Game/game.exe").expect("executable"),
+            backup_path: PathRef::new("C:/Game/game.exe.bak").expect("backup"),
+            original_sdk_version: 606,
+            current_sdk_version: 606,
+            backup_exists: false,
+            repair_required: false,
+            selection_locked: false,
+        };
+
+        let wire = serde_json::to_value(D3d12ExecutableStatusOutput::from(&status)).expect("json");
+
+        assert_eq!(
+            wire,
+            json!({
+                "status": "original",
+                "selection_locked": false,
+                "executable_path": "C:/Game/game.exe",
+                "backup_path": "C:/Game/game.exe.bak",
+                "backup_exists": false,
+                "original_sdk_version": 606,
+                "current_sdk_version": 606,
+            })
+        );
     }
 
     #[test]

@@ -86,6 +86,7 @@ pub struct D3d12ExecutableStatus {
     backup_path: renderpilot_domain::PathRef,
     original_sdk_version: u32,
     current_sdk_version: u32,
+    backup_exists: bool,
     repair_required: bool,
     selection_locked: bool,
 }
@@ -101,7 +102,7 @@ impl D3d12ExecutableStatus {
         &self.executable_path
     }
 
-    /// Immutable sidecar path.
+    /// Expected immutable sidecar path, whether or not it currently exists.
     pub const fn backup_path(&self) -> &renderpilot_domain::PathRef {
         &self.backup_path
     }
@@ -114,6 +115,11 @@ impl D3d12ExecutableStatus {
     /// SDK line currently active.
     pub const fn current_sdk_version(&self) -> u32 {
         self.current_sdk_version
+    }
+
+    /// Whether the immutable original sidecar currently exists.
+    pub const fn backup_exists(&self) -> bool {
+        self.backup_exists
     }
 
     /// Whether an external executable change requires repair.
@@ -207,15 +213,6 @@ pub(crate) struct ReplacementUniverse {
     candidate_context: renderpilot_application::CandidateContext,
 }
 
-struct D3d12StatusFacts {
-    executable_path: PathBuf,
-    backup_path: PathBuf,
-    original_sdk_version: u32,
-    current_sdk_version: u32,
-    repair_required: bool,
-    selection_locked: bool,
-}
-
 /// Loads the artifact universe (local artifacts + catalog packages) and the
 /// candidate context once. A missing or invalid catalog degrades to local-only
 /// artifacts.
@@ -277,20 +274,13 @@ pub(crate) fn get_game_details_with_universe(
     // EXE/backup images here made ordinary navigation scale with executable
     // size. Swap preview/apply and rollback retain their independent,
     // authoritative assessment under the per-game mutation lock.
-    let target =
-        runtime_compatibility::presentation_target_profile(context, &game, d3d12_component)?;
-    let target_profile = target.profile;
-    let d3d12_status_facts = target.d3d12.map(|state| D3d12StatusFacts {
-        executable_path: state.executable_path,
-        backup_path: state.backup_path,
-        original_sdk_version: state.original_sdk_version,
-        current_sdk_version: state.current_sdk_version,
-        repair_required: state.repair_required,
-        selection_locked: state.selection_locked,
-    });
+    let runtime_compatibility::PresentationTargetProfileAssessment {
+        profile: target_profile,
+        d3d12: d3d12_state,
+    } = runtime_compatibility::presentation_target_profile(context, &game, d3d12_component)?;
     let d3d12_executable_status = d3d12_component
-        .zip(d3d12_status_facts)
-        .map(|(component, facts)| build_d3d12_status(component, &facts))
+        .zip(d3d12_state.as_ref())
+        .map(|(component, state)| build_d3d12_status(component, state))
         .transpose()?;
     let candidate_context = universe
         .candidate_context
@@ -316,22 +306,23 @@ pub(crate) fn get_game_details_with_universe(
 
 fn build_d3d12_status(
     component: &GraphicsComponent,
-    facts: &D3d12StatusFacts,
+    state: &runtime_compatibility::D3d12ExecutablePresentationState,
 ) -> AppResult<D3d12ExecutableStatus> {
     Ok(D3d12ExecutableStatus {
         component_id: component.id().clone(),
         executable_path: renderpilot_domain::PathRef::new(
-            facts.executable_path.to_string_lossy().into_owned(),
+            state.executable_path.to_string_lossy().into_owned(),
         )
         .map_err(|error| AppError::invalid_input(error.to_string()))?,
         backup_path: renderpilot_domain::PathRef::new(
-            facts.backup_path.to_string_lossy().into_owned(),
+            state.backup_path.to_string_lossy().into_owned(),
         )
         .map_err(|error| AppError::invalid_input(error.to_string()))?,
-        original_sdk_version: facts.original_sdk_version,
-        current_sdk_version: facts.current_sdk_version,
-        repair_required: facts.repair_required,
-        selection_locked: facts.selection_locked,
+        original_sdk_version: state.original_sdk_version,
+        current_sdk_version: state.current_sdk_version,
+        backup_exists: state.backup_exists,
+        repair_required: state.repair_required,
+        selection_locked: state.selection_locked,
     })
 }
 

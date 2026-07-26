@@ -9,8 +9,8 @@ use renderpilot_application::{
     ensure_replacement_compatible,
 };
 use renderpilot_domain::{
-    ComponentRollbackBaseline, D3d12ExecutableIdentity, GameInstallation, GraphicsComponent,
-    LibraryArtifact, PathRef, Sha256Hash,
+    ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameInstallation,
+    GraphicsComponent, LibraryArtifact, PathRef, Sha256Hash,
 };
 
 use crate::Context;
@@ -22,6 +22,15 @@ pub(super) const D3D12_SDK_VERSION_EXPORT: &str = "D3D12SDKVersion";
 pub(super) struct TargetProfileAssessment {
     pub(super) profile: SwapTargetProfile,
     pub(super) d3d12: Option<D3d12ExecutableState>,
+}
+
+impl TargetProfileAssessment {
+    fn without_d3d12(architecture: Option<renderpilot_domain::Architecture>) -> Self {
+        Self {
+            profile: SwapTargetProfile::new(architecture, None),
+            d3d12: None,
+        }
+    }
 }
 
 /// Read-only state of the executable and its immutable sidecar.
@@ -47,6 +56,7 @@ pub(super) struct D3d12ExecutablePresentationState {
     pub(super) backup_path: PathBuf,
     pub(super) original_sdk_version: u32,
     pub(super) current_sdk_version: u32,
+    pub(super) backup_exists: bool,
     pub(super) repair_required: bool,
     pub(super) selection_locked: bool,
 }
@@ -58,11 +68,48 @@ pub(super) struct PresentationTargetProfileAssessment {
     pub(super) d3d12: Option<D3d12ExecutablePresentationState>,
 }
 
+impl PresentationTargetProfileAssessment {
+    fn without_d3d12(architecture: Option<renderpilot_domain::Architecture>) -> Self {
+        Self {
+            profile: SwapTargetProfile::new(architecture, None),
+            d3d12: None,
+        }
+    }
+}
+
 struct ResolvedExecutableTarget {
     recorded: Option<ComponentRollbackBaseline>,
     aggregate_unavailable: bool,
+    executable_candidates: Vec<PathBuf>,
     executable_path: Option<PathBuf>,
     architecture: Option<renderpilot_domain::Architecture>,
+}
+
+struct D3d12ExecutableProbe {
+    backup_path: PathBuf,
+    current_sdk: Option<u32>,
+    backup_claim_exists: bool,
+    backup_exists: bool,
+}
+
+impl D3d12ExecutableProbe {
+    fn read(executable_path: &Path) -> AppResult<Self> {
+        let backup_path = crate::fs::backup_path(executable_path)
+            .map_err(|error| AppError::invalid_input(error.to_string()))?;
+        Ok(Self {
+            current_sdk: renderpilot_detection::read_pe_exported_u32(
+                executable_path,
+                D3D12_SDK_VERSION_EXPORT,
+            ),
+            backup_claim_exists: backup_path.exists(),
+            backup_exists: backup_path.is_file(),
+            backup_path,
+        })
+    }
+
+    fn is_unmanaged(&self, recorded: Option<&D3d12ExecutableBaseline>) -> bool {
+        recorded.is_none() && !self.backup_claim_exists && self.current_sdk.is_none()
+    }
 }
 
 /// Resolves the selected executable once and, for D3D12, derives original/current facts.
@@ -75,35 +122,32 @@ pub(super) fn target_profile(
     let ResolvedExecutableTarget {
         recorded,
         aggregate_unavailable,
+        executable_candidates,
         executable_path,
         architecture,
     } = resolved_target;
 
     let Some(component) = d3d12_component else {
-        return Ok(TargetProfileAssessment {
-            profile: SwapTargetProfile::new(architecture, None),
-            d3d12: None,
-        });
+        return Ok(TargetProfileAssessment::without_d3d12(architecture));
     };
     let Some(executable_path) = executable_path else {
-        return Ok(TargetProfileAssessment {
-            profile: SwapTargetProfile::new(architecture, None),
-            d3d12: None,
-        });
+        return Ok(TargetProfileAssessment::without_d3d12(architecture));
     };
 
     let recorded_executable = recorded
         .as_ref()
         .and_then(ComponentRollbackBaseline::d3d12_executable);
+    let probe = D3d12ExecutableProbe::read(&executable_path)?;
+    if probe.is_unmanaged(recorded_executable) {
+        return Ok(TargetProfileAssessment::without_d3d12(architecture));
+    }
     let mut state = assess_d3d12_executable(&executable_path, recorded.as_ref())?;
     state.repair_required |= aggregate_unavailable;
     state.repair_required |= recorded_executable.is_none()
         && state.backup_exists
         && !is_unique_valid_executable_pair(
             &executable_path,
-            game.executable_candidates()
-                .iter()
-                .map(|path| Path::new(path.as_str())),
+            executable_candidates.iter().map(PathBuf::as_path),
         );
     state.repair_required |= recorded_executable.is_none()
         && state.backup_exists
@@ -137,85 +181,84 @@ pub(super) fn presentation_target_profile(
     let ResolvedExecutableTarget {
         recorded,
         aggregate_unavailable,
+        executable_candidates,
         executable_path,
         architecture,
     } = resolve_executable_target(context, game, d3d12_component)?;
 
     let Some(component) = d3d12_component else {
-        return Ok(PresentationTargetProfileAssessment {
-            profile: SwapTargetProfile::new(architecture, None),
-            d3d12: None,
-        });
+        return Ok(PresentationTargetProfileAssessment::without_d3d12(
+            architecture,
+        ));
     };
     let Some(executable_path) = executable_path else {
-        return Ok(PresentationTargetProfileAssessment {
-            profile: SwapTargetProfile::new(architecture, None),
-            d3d12: None,
-        });
+        return Ok(PresentationTargetProfileAssessment::without_d3d12(
+            architecture,
+        ));
     };
 
-    let backup_path = crate::fs::backup_path(&executable_path)
-        .map_err(|error| AppError::invalid_input(error.to_string()))?;
     let recorded_executable = recorded
         .as_ref()
         .and_then(ComponentRollbackBaseline::d3d12_executable);
-    let current_sdk =
-        renderpilot_detection::read_pe_exported_u32(&executable_path, D3D12_SDK_VERSION_EXPORT);
-    let original_sdk = if backup_path.is_file() {
-        renderpilot_detection::read_pe_exported_u32(&backup_path, D3D12_SDK_VERSION_EXPORT)
+    let probe = D3d12ExecutableProbe::read(&executable_path)?;
+    if probe.is_unmanaged(recorded_executable) {
+        return Ok(PresentationTargetProfileAssessment::without_d3d12(
+            architecture,
+        ));
+    }
+    let original_sdk = if probe.backup_exists {
+        renderpilot_detection::read_pe_exported_u32(&probe.backup_path, D3D12_SDK_VERSION_EXPORT)
     } else {
         None
     };
     let original_sdk_version = recorded_executable
         .map(|baseline| baseline.original().sdk_version())
         .or(original_sdk)
-        .or(current_sdk)
+        .or(probe.current_sdk)
         .unwrap_or_default();
-    let current_sdk_version = current_sdk
+    let current_sdk_version = probe
+        .current_sdk
         .or_else(|| recorded_executable.map(|baseline| baseline.expected_active().sdk_version()))
         .unwrap_or(original_sdk_version);
-    let backup_claim_exists = backup_path.exists();
-    let backup_exists = backup_path.is_file();
     let file_sizes_match = fs::metadata(&executable_path)
-        .and_then(|live| fs::metadata(&backup_path).map(|backup| live.len() == backup.len()))
-        .unwrap_or(!backup_claim_exists);
+        .and_then(|live| fs::metadata(&probe.backup_path).map(|backup| live.len() == backup.len()))
+        .unwrap_or(!probe.backup_claim_exists);
 
-    let mut repair_required = aggregate_unavailable || current_sdk.is_none();
-    repair_required |=
-        backup_claim_exists && (!backup_exists || original_sdk.is_none() || !file_sizes_match);
+    let mut repair_required = aggregate_unavailable || probe.current_sdk.is_none();
+    repair_required |= probe.backup_claim_exists
+        && (!probe.backup_exists || original_sdk.is_none() || !file_sizes_match);
     if let Some(baseline) = recorded_executable {
         repair_required |= !crate::paths::same_path(
             Path::new(baseline.executable_path().as_str()),
             &executable_path,
         );
-        repair_required |= !backup_exists;
+        repair_required |= !probe.backup_exists;
         repair_required |= original_sdk != Some(baseline.original().sdk_version());
-        repair_required |= current_sdk != Some(baseline.expected_active().sdk_version());
-    } else if backup_exists {
+        repair_required |= probe.current_sdk != Some(baseline.expected_active().sdk_version());
+    } else if probe.backup_exists {
         repair_required |= !is_unique_valid_executable_pair_for_presentation(
             &executable_path,
-            game.executable_candidates()
-                .iter()
-                .map(|path| Path::new(path.as_str())),
+            executable_candidates.iter().map(PathBuf::as_path),
         );
-        repair_required |= current_sdk != original_sdk
+        repair_required |= probe.current_sdk != original_sdk
             && !has_complete_d3d12_dll_sidecars(component, recorded.as_ref());
     }
 
     let presentation = D3d12ExecutablePresentationState {
         executable_path: executable_path.clone(),
-        backup_path: backup_path.clone(),
+        backup_path: probe.backup_path.clone(),
         original_sdk_version,
         current_sdk_version,
+        backup_exists: probe.backup_exists,
         repair_required,
         selection_locked: recorded_executable.is_some(),
     };
     let managed = D3d12ExecutableProfile::new(
         path_ref(&executable_path, "executable")?,
-        path_ref(&backup_path, "backup")?,
+        path_ref(&probe.backup_path, "backup")?,
         original_sdk_version,
         current_sdk_version,
-        backup_exists,
+        probe.backup_exists,
         repair_required,
     );
     let profile = SwapTargetProfile::new(architecture, Some(current_sdk_version))
@@ -264,22 +307,74 @@ fn resolve_executable_target(
         pinned_path.as_deref(),
         true,
     );
-    let executable_path = pinned_path
-        .or_else(|| {
-            resolved
-                .as_ref()
-                .map(|executable| PathBuf::from(executable.path.as_str()))
-        })
-        .or_else(|| unique_known_executable_candidate(game.executable_candidates()));
+    let resolved_path = resolved
+        .as_ref()
+        .map(|executable| PathBuf::from(executable.path.as_str()));
+    let executable_candidates = executable_candidate_paths(game);
+    let executable_path = match pinned_path {
+        Some(path) => Some(path),
+        None if d3d12_component.is_some() => {
+            preferred_d3d12_executable(resolved_path, &executable_candidates)
+        }
+        None => resolved_path.or_else(|| unique_known_executable_candidate(&executable_candidates)),
+    };
     let architecture = executable_path
         .as_deref()
         .and_then(|path| renderpilot_detection::analyze_executable(path).architecture());
     Ok(ResolvedExecutableTarget {
         recorded,
         aggregate_unavailable,
+        executable_candidates,
         executable_path,
         architecture,
     })
+}
+
+fn preferred_d3d12_executable(
+    resolved_path: Option<PathBuf>,
+    executable_candidates: &[PathBuf],
+) -> Option<PathBuf> {
+    let mut candidates = resolved_path
+        .iter()
+        .cloned()
+        .chain(executable_candidates.iter().cloned())
+        .collect::<Vec<_>>();
+    let mut seen = HashSet::new();
+    candidates.retain(|path| seen.insert(crate::paths::normalized_key(path)));
+
+    let exporting = candidates
+        .iter()
+        .filter(|path| {
+            renderpilot_detection::read_pe_exported_u32(path, D3D12_SDK_VERSION_EXPORT).is_some()
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match exporting.as_slice() {
+        [] => resolved_path.or_else(|| unique_known_executable_candidate(&candidates)),
+        [only] => Some(only.clone()),
+        many => resolved_path.filter(|resolved| {
+            many.iter()
+                .any(|candidate| crate::paths::same_path(candidate, resolved))
+        }),
+    }
+}
+
+fn executable_candidate_paths(game: &GameInstallation) -> Vec<PathBuf> {
+    let install_root = Path::new(game.install_path().as_str());
+    let mut seen = HashSet::new();
+    game.executable_candidates()
+        .iter()
+        .map(|candidate| {
+            let path = PathBuf::from(candidate.as_str());
+            if path.is_absolute() {
+                path
+            } else {
+                install_root.join(path)
+            }
+        })
+        .filter(|path| seen.insert(crate::paths::normalized_key(path)))
+        .collect()
 }
 
 /// Fail-closed fallback for persisted scans when native executable discovery is
@@ -288,9 +383,9 @@ fn resolve_executable_target(
 /// A single readable PE with a known architecture is unambiguous. Multiple
 /// candidates remain unresolved rather than guessing which executable owns the
 /// runtime.
-fn unique_known_executable_candidate(candidates: &[PathRef]) -> Option<PathBuf> {
+fn unique_known_executable_candidate(candidates: &[PathBuf]) -> Option<PathBuf> {
     let mut known = candidates.iter().filter_map(|candidate| {
-        let path = PathBuf::from(candidate.as_str());
+        let path = candidate.clone();
         renderpilot_detection::analyze_executable(&path)
             .architecture()
             .is_some()
@@ -583,12 +678,16 @@ pub(super) fn synthetic_d3d12_executable(sdk_version: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use renderpilot_domain::{
-        ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity, PathRef,
+        ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
+        D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation,
+        GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform,
+        Swappability,
     };
 
     use super::{
-        D3D12_SDK_VERSION_EXPORT, assess_d3d12_executable, differs_only_at_sdk_export,
-        is_unique_valid_executable_pair, synthetic_d3d12_executable,
+        D3D12_SDK_VERSION_EXPORT, D3d12ExecutableProbe, assess_d3d12_executable,
+        differs_only_at_sdk_export, executable_candidate_paths, is_unique_valid_executable_pair,
+        preferred_d3d12_executable, presentation_target_profile, synthetic_d3d12_executable,
         unique_known_executable_candidate,
     };
 
@@ -687,21 +786,146 @@ mod tests {
         let invalid = dir.path().join("invalid.exe");
         std::fs::write(&first, synthetic_d3d12_executable(606)).expect("first executable");
         std::fs::write(&invalid, b"not a PE").expect("invalid executable");
-        let candidate = |path: &std::path::Path| {
-            PathRef::new(path.to_string_lossy().into_owned()).expect("candidate path")
-        };
-
         assert_eq!(
-            unique_known_executable_candidate(&[candidate(&invalid), candidate(&first)]),
+            unique_known_executable_candidate(&[invalid, first.clone()]),
             Some(first.clone()),
             "invalid persisted paths do not make the one valid PE ambiguous"
         );
 
         std::fs::write(&second, synthetic_d3d12_executable(619)).expect("second executable");
         assert_eq!(
-            unique_known_executable_candidate(&[candidate(&first), candidate(&second)]),
+            unique_known_executable_candidate(&[first, second]),
             None,
             "multiple readable PEs must remain unresolved"
         );
+    }
+
+    #[test]
+    fn untouched_executable_without_sdk_export_is_not_a_repair_state() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let executable = dir.path().join("game.exe");
+        std::fs::write(&executable, b"no SDK export").expect("executable");
+
+        let untouched = D3d12ExecutableProbe::read(&executable).expect("untouched probe");
+        assert!(untouched.is_unmanaged(None));
+
+        std::fs::write(&executable, synthetic_d3d12_executable(606)).expect("SDK executable");
+        let exporting = D3d12ExecutableProbe::read(&executable).expect("exporting probe");
+        assert!(!exporting.is_unmanaged(None));
+
+        std::fs::write(&executable, b"no SDK export").expect("executable");
+        std::fs::write(dir.path().join("game.exe.bak"), []).expect("backup claim");
+        let claimed = D3d12ExecutableProbe::read(&executable).expect("claimed probe");
+        assert!(!claimed.is_unmanaged(None));
+    }
+
+    #[test]
+    fn untouched_game_without_sdk_export_has_no_managed_executable_status() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let executable = dir.path().join("game.exe");
+        let runtime = dir.path().join("D3D12Core.dll");
+        let mut executable_bytes = synthetic_d3d12_executable(606);
+        let export_directory = 0x80 + 4 + 20 + 0x70;
+        executable_bytes[export_directory..export_directory + 8].fill(0);
+        std::fs::write(&executable, executable_bytes).expect("executable");
+        std::fs::write(&runtime, b"untouched runtime").expect("runtime");
+
+        let (game, component) = d3d12_test_game(dir.path(), &["game.exe"]);
+        let context = crate::Context::open_at(dir.path().join("catalog.db")).expect("test context");
+
+        let assessment =
+            presentation_target_profile(&context, &game, Some(&component)).expect("assessment");
+
+        assert!(assessment.d3d12.is_none());
+        assert_eq!(assessment.profile.d3d12_sdk_version(), None);
+        assert!(assessment.profile.d3d12_executable().is_none());
+
+        std::fs::write(dir.path().join("game.exe.bak"), []).expect("backup claim");
+        let claimed =
+            presentation_target_profile(&context, &game, Some(&component)).expect("assessment");
+        let state = claimed.d3d12.expect("claimed backup is managed state");
+        assert!(state.backup_exists);
+        assert!(state.repair_required);
+    }
+
+    #[test]
+    fn d3d12_resolution_prefers_the_unique_sdk_exporting_candidate() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let launcher = dir.path().join("launcher.exe");
+        let renderer = dir.path().join("bin").join("renderer.exe");
+        std::fs::create_dir_all(renderer.parent().expect("renderer parent"))
+            .expect("renderer directory");
+        std::fs::write(&launcher, b"not the D3D12 owner").expect("launcher");
+        std::fs::write(&renderer, synthetic_d3d12_executable(606)).expect("renderer");
+
+        let (game, _) = d3d12_test_game(dir.path(), &["launcher.exe", "bin/renderer.exe"]);
+        let candidates = executable_candidate_paths(&game);
+
+        assert_eq!(
+            preferred_d3d12_executable(Some(launcher), &candidates),
+            Some(renderer)
+        );
+    }
+
+    #[test]
+    fn d3d12_resolution_uses_the_primary_executable_only_to_break_an_exporter_tie() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let primary = dir.path().join("primary.exe");
+        let alternate = dir.path().join("alternate.exe");
+        let launcher = dir.path().join("launcher.exe");
+        std::fs::write(&primary, synthetic_d3d12_executable(606)).expect("primary");
+        std::fs::write(&alternate, synthetic_d3d12_executable(619)).expect("alternate");
+        std::fs::write(&launcher, b"not the D3D12 owner").expect("launcher");
+        let candidates = vec![primary.clone(), alternate];
+
+        assert_eq!(
+            preferred_d3d12_executable(Some(primary.clone()), &candidates),
+            Some(primary)
+        );
+        assert_eq!(
+            preferred_d3d12_executable(Some(launcher), &candidates),
+            None,
+            "an unrelated primary executable must not resolve multiple D3D12 owners"
+        );
+    }
+
+    fn d3d12_test_game(
+        install_root: &std::path::Path,
+        executable_candidates: &[&str],
+    ) -> (GameInstallation, GraphicsComponent) {
+        let identity = GameIdentity::new(
+            GameId::new("manual:d3d12-test").expect("game id"),
+            "D3D12 test",
+            Launcher::Manual,
+        )
+        .expect("identity");
+        let mut game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(install_root.to_string_lossy().into_owned()).expect("install path"),
+        );
+        for candidate in executable_candidates {
+            game = game.with_executable_candidate(
+                PathRef::new((*candidate).to_owned()).expect("executable path"),
+            );
+        }
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:d3d12-test").expect("component id"),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(ComponentFile::new(
+            PathRef::new(
+                install_root
+                    .join("D3D12Core.dll")
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .expect("runtime path"),
+        ));
+        (game, component)
     }
 }

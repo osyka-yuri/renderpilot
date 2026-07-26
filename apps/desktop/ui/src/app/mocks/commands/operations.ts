@@ -182,6 +182,7 @@ export function mockRollbackComponent(
         ...status,
         status: 'original',
         selection_locked: false,
+        backup_exists: false,
         current_sdk_version: status.original_sdk_version,
       };
       refreshMockExecutableActions(
@@ -326,6 +327,7 @@ function applyMockExecutableAction(
     ...status,
     status: action.target_sdk_version === action.original_sdk_version ? 'original' : 'patched',
     selection_locked: true,
+    backup_exists: true,
     current_sdk_version: action.target_sdk_version,
   };
   refreshMockExecutableActions(details, component.id, action.target_sdk_version, true);

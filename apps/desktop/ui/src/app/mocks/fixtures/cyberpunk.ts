@@ -65,6 +65,7 @@ export function createCyberpunkDetails(): GameDetails {
         selection_locked: false,
         executable_path: 'C:/Games/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe',
         backup_path: 'C:/Games/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe.bak',
+        backup_exists: false,
         original_sdk_version: 606,
         current_sdk_version: 606,
       },
