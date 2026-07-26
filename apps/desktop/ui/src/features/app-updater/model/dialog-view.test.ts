@@ -18,20 +18,34 @@ const offer: AppUpdateOffer = {
   releaseNotes: { blocks: [], truncated: false },
 };
 
+const dialogByPhase = {
+  available: { phase: 'available', offer },
+  downloading: {
+    phase: 'downloading',
+    offer,
+    progress: { percent: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
+  },
+  'retrying-download': { phase: 'retrying-download', offer },
+  verifying: {
+    phase: 'verifying',
+    offer,
+    progress: { percent: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
+  },
+  installing: { phase: 'installing', offer },
+  restarting: { phase: 'restarting', offer },
+  'prepare-failed': { phase: 'prepare-failed', offer },
+  'install-failed': { phase: 'install-failed', offer },
+  'restart-required': { phase: 'restart-required', offer },
+} as const satisfies Record<AppUpdateDialogState['phase'], AppUpdateDialogState>;
+
 function dialog(phase: AppUpdateDialogState['phase']): AppUpdateDialogState {
-  if (phase === 'downloading' || phase === 'verifying') {
-    return {
-      phase,
-      offer,
-      progress: { percent: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
-    };
-  }
-  return { phase, offer };
+  return dialogByPhase[phase];
 }
 
 describe('dialog-view', () => {
   it('maps progress phases only for active dialog phases', () => {
     expect(progressPhase(dialog('downloading'))).toBe('downloading');
+    expect(progressPhase(dialog('retrying-download'))).toBe('retrying-download');
     expect(progressPhase(dialog('verifying'))).toBe('verifying');
     expect(progressPhase(dialog('installing'))).toBe('installing');
     expect(progressPhase(dialog('restarting'))).toBe('restarting');
@@ -56,6 +70,7 @@ describe('dialog-view', () => {
     const phases: AppUpdateDialogState['phase'][] = [
       'available',
       'downloading',
+      'retrying-download',
       'verifying',
       'installing',
       'restarting',
@@ -69,6 +84,7 @@ describe('dialog-view', () => {
     ).toEqual({
       available: 'install',
       downloading: null,
+      'retrying-download': null,
       verifying: null,
       installing: null,
       restarting: null,

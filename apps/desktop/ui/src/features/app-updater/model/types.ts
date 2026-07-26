@@ -37,6 +37,11 @@ export type AppUpdateDialogState =
       progress: DownloadProgressView;
     }
   | {
+      /** Backoff between automatic attempts; stale download progress is hidden. */
+      phase: 'retrying-download';
+      offer: AppUpdateOffer;
+    }
+  | {
       phase: 'verifying';
       offer: AppUpdateOffer;
       progress: DownloadProgressView;

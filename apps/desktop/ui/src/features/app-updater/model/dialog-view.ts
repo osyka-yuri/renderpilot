@@ -2,7 +2,8 @@ import type { MessageKey } from '@shared/i18n';
 
 import type { AppUpdateDialogState } from './types';
 
-export type UpdateProgressPhase = 'downloading' | 'verifying' | 'installing' | 'restarting';
+export type UpdateProgressPhase =
+  'downloading' | 'retrying-download' | 'verifying' | 'installing' | 'restarting';
 
 export type UpdateFailureKind = 'prepare-failed' | 'install-failed' | 'restart-required';
 
@@ -12,8 +13,73 @@ export type UpdateDialogFooter =
   | { kind: 'retry-install' }
   | { kind: 'restart' };
 
+type DialogProjection = {
+  dismissible: boolean;
+  progress: UpdateProgressPhase | null;
+  failure: UpdateFailureKind | null;
+  footer: UpdateDialogFooter | null;
+};
+
+const DIALOG_PROJECTION = {
+  available: {
+    dismissible: true,
+    progress: null,
+    failure: null,
+    footer: { kind: 'install' },
+  },
+  downloading: {
+    dismissible: false,
+    progress: 'downloading',
+    failure: null,
+    footer: null,
+  },
+  'retrying-download': {
+    dismissible: false,
+    progress: 'retrying-download',
+    failure: null,
+    footer: null,
+  },
+  verifying: {
+    dismissible: false,
+    progress: 'verifying',
+    failure: null,
+    footer: null,
+  },
+  installing: {
+    dismissible: false,
+    progress: 'installing',
+    failure: null,
+    footer: null,
+  },
+  restarting: {
+    dismissible: false,
+    progress: 'restarting',
+    failure: null,
+    footer: null,
+  },
+  'prepare-failed': {
+    dismissible: true,
+    progress: null,
+    failure: 'prepare-failed',
+    footer: { kind: 'retry-download' },
+  },
+  'install-failed': {
+    dismissible: true,
+    progress: null,
+    failure: 'install-failed',
+    footer: { kind: 'retry-install' },
+  },
+  'restart-required': {
+    dismissible: true,
+    progress: null,
+    failure: 'restart-required',
+    footer: { kind: 'restart' },
+  },
+} as const satisfies Record<AppUpdateDialogState['phase'], DialogProjection>;
+
 const PHASE_STATUS_KEY: Record<UpdateProgressPhase, MessageKey> = {
   downloading: 'settings.about.updateDialog.downloading',
+  'retrying-download': 'settings.about.updateDialog.downloading',
   verifying: 'settings.about.updateDialog.verifying',
   installing: 'settings.about.updateDialog.installing',
   restarting: 'settings.about.updateDialog.restarting',
@@ -32,24 +98,11 @@ const FAILURE_DESCRIPTION_KEY: Record<UpdateFailureKind, MessageKey> = {
 };
 
 export function canDismissDialog(state: AppUpdateDialogState | null): boolean {
-  return (
-    state?.phase === 'available' ||
-    state?.phase === 'prepare-failed' ||
-    state?.phase === 'install-failed' ||
-    state?.phase === 'restart-required'
-  );
+  return state === null ? false : DIALOG_PROJECTION[state.phase].dismissible;
 }
 
 export function progressPhase(state: AppUpdateDialogState | null): UpdateProgressPhase | null {
-  switch (state?.phase) {
-    case 'downloading':
-    case 'verifying':
-    case 'installing':
-    case 'restarting':
-      return state.phase;
-    default:
-      return null;
-  }
+  return state === null ? null : DIALOG_PROJECTION[state.phase].progress;
 }
 
 export function phaseStatusKey(phase: UpdateProgressPhase): MessageKey {
@@ -57,14 +110,7 @@ export function phaseStatusKey(phase: UpdateProgressPhase): MessageKey {
 }
 
 export function failureKind(state: AppUpdateDialogState | null): UpdateFailureKind | null {
-  switch (state?.phase) {
-    case 'prepare-failed':
-    case 'install-failed':
-    case 'restart-required':
-      return state.phase;
-    default:
-      return null;
-  }
+  return state === null ? null : DIALOG_PROJECTION[state.phase].failure;
 }
 
 export function failureTitleKey(kind: UpdateFailureKind): MessageKey {
@@ -76,21 +122,5 @@ export function failureDescriptionKey(kind: UpdateFailureKind): MessageKey {
 }
 
 export function dialogFooter(state: AppUpdateDialogState | null): UpdateDialogFooter | null {
-  switch (state?.phase) {
-    case 'available':
-      return { kind: 'install' };
-    case 'downloading':
-    case 'verifying':
-    case 'installing':
-    case 'restarting':
-      return null;
-    case 'prepare-failed':
-      return { kind: 'retry-download' };
-    case 'install-failed':
-      return { kind: 'retry-install' };
-    case 'restart-required':
-      return { kind: 'restart' };
-    default:
-      return null;
-  }
+  return state === null ? null : DIALOG_PROJECTION[state.phase].footer;
 }

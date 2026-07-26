@@ -5,15 +5,14 @@ import { createDisposableRequestChannel } from '@shared/requests';
 
 import type { AppUpdateHandle, AppUpdaterGateway } from '../api/app-updater-gateway';
 import { canDismissDialog } from './dialog-view';
+import {
+  downloadWithRetries,
+  waitForDownloadRetry,
+  type DownloadRetryFailure,
+} from './download-retry';
 import { settleUiBeforeInstallExit as defaultSettleUiBeforeInstallExit } from './install-exit-settle';
 import { toOffer } from './offer';
-import {
-  applyDownloadEvent,
-  EMPTY_PROGRESS,
-  toCompletedProgressView,
-  toProgressView,
-  type DownloadProgressState,
-} from './progress';
+import { toCompletedProgressView, toProgressView, type DownloadProgressState } from './progress';
 import type {
   AppUpdateDialogState,
   AppUpdateNotice,
@@ -33,6 +32,8 @@ export type CreateAppUpdaterModelOptions = {
    * tests inject a no-op.
    */
   settleUiBeforeInstallExit?: () => Promise<void>;
+  /** Overrides the automatic download-retry delay in tests. */
+  waitBeforeDownloadRetry?: (delayMs: number) => Promise<void>;
 };
 
 export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): AppUpdaterModel {
@@ -41,6 +42,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
   const notifyError = options.notifyError ?? ((message: string) => toast.error(message));
   const settleUiBeforeInstallExit =
     options.settleUiBeforeInstallExit ?? defaultSettleUiBeforeInstallExit;
+  const waitBeforeDownloadRetry = options.waitBeforeDownloadRetry ?? waitForDownloadRetry;
 
   let appVersion = $state<string | null>(null);
   let notice = $state<AppUpdateNotice | null>(null);
@@ -268,44 +270,70 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     await relaunchOrRequireRestart(id, offer);
   }
 
+  function showDownloadProgress(offer: AppUpdateOffer, progress: DownloadProgressState): void {
+    dialog = {
+      phase: progress.networkFinished ? 'verifying' : 'downloading',
+      offer,
+      progress: toProgressView(progress),
+    };
+  }
+
+  function showDownloadFailure(offer: AppUpdateOffer, failure: DownloadRetryFailure): void {
+    const message =
+      failure.reason === 'download'
+        ? `Failed to download or verify update after ${failure.attempts} attempts:`
+        : `Failed to wait before retrying update download after attempt ${failure.attempts}:`;
+    console.error(message, failure.error);
+    dialog = { phase: 'prepare-failed', offer };
+  }
+
+  function showDownloadRetry(
+    offer: AppUpdateOffer,
+    failedAttempt: number,
+    totalAttempts: number,
+    error: unknown,
+  ): void {
+    console.warn(
+      `Update download attempt ${failedAttempt} of ${totalAttempts} failed; retrying.`,
+      error,
+    );
+    dialog = { phase: 'retrying-download', offer };
+  }
+
   async function runDownloadAndInstall(id: number, offer: AppUpdateOffer): Promise<void> {
     const handle = pendingUpdate;
     if (!handle || !isCurrentOperation(id)) {
       return;
     }
 
-    let progressState: DownloadProgressState = { ...EMPTY_PROGRESS };
-    dialog = { phase: 'downloading', offer, progress: toProgressView(progressState) };
+    const result = await downloadWithRetries({
+      download: (onEvent) => handle.download(onEvent),
+      isActive: () => isCurrentOperation(id),
+      waitBeforeRetry: waitBeforeDownloadRetry,
+      onProgress: (progress) => {
+        showDownloadProgress(offer, progress);
+      },
+      onRetryScheduled: ({ failedAttempt, totalAttempts, error }) => {
+        showDownloadRetry(offer, failedAttempt, totalAttempts, error);
+      },
+    });
 
-    try {
-      await handle.download((event) => {
-        if (!isCurrentOperation(id)) {
-          return;
-        }
-
-        progressState = applyDownloadEvent(progressState, event);
-        dialog = {
-          phase: progressState.networkFinished ? 'verifying' : 'downloading',
-          offer,
-          progress: toProgressView(progressState),
-        };
-      });
-
-      if (!isCurrentOperation(id)) {
-        return;
-      }
-
-      if (!(await paintCompletedDownloadThenInstalling(id, offer, progressState))) {
-        return;
-      }
-
-      await performInstall(id, handle, offer);
-    } catch (error) {
-      console.error('Failed to download or verify update:', error);
-      if (isCurrentOperation(id)) {
-        dialog = { phase: 'prepare-failed', offer };
-      }
+    if (result.status === 'cancelled') {
+      return;
     }
+
+    if (result.status === 'failed') {
+      if (isCurrentOperation(id)) {
+        showDownloadFailure(offer, result);
+      }
+      return;
+    }
+
+    if (!(await paintCompletedDownloadThenInstalling(id, offer, result.progress))) {
+      return;
+    }
+
+    await performInstall(id, handle, offer);
   }
 
   async function runInstallOnly(id: number, offer: AppUpdateOffer): Promise<void> {

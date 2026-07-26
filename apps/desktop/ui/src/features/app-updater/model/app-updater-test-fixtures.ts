@@ -75,20 +75,27 @@ export function createGateway(overrides: Partial<AppUpdaterGateway> = {}): AppUp
   };
 }
 
+function resolveImmediately(): Promise<void> {
+  return Promise.resolve();
+}
+
 export function createModel(
   gateway: AppUpdaterGateway,
   options: Partial<Omit<CreateAppUpdaterModelOptions, 'gateway'>> = {},
 ) {
-  const notifySuccess = options.notifySuccess ?? vi.fn();
-  const notifyError = options.notifyError ?? vi.fn();
-  // Skip production paint delay so tests stay fast and deterministic.
-  const settleUiBeforeInstallExit = options.settleUiBeforeInstallExit ?? (() => Promise.resolve());
+  const {
+    notifySuccess = vi.fn(),
+    notifyError = vi.fn(),
+    settleUiBeforeInstallExit = resolveImmediately,
+    waitBeforeDownloadRetry = resolveImmediately,
+  } = options;
 
   const model = createAppUpdaterModel({
     gateway,
     notifySuccess,
     notifyError,
     settleUiBeforeInstallExit,
+    waitBeforeDownloadRetry,
   });
   return { model, notifySuccess, notifyError };
 }

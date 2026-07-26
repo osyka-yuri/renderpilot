@@ -319,7 +319,7 @@ describe('createAppUpdaterModel', () => {
       expect(handle.install).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the dialog open after download failure and retries the download', async () => {
+    it('automatically retries a failed download and installs after recovery', async () => {
       let attempts = 0;
       const handle = createHandle({
         downloadImpl: (onEvent) => {
@@ -336,15 +336,91 @@ describe('createAppUpdaterModel', () => {
       const { model } = createModel(
         createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
       );
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       await model.checkForUpdates();
 
       await model.installAvailableUpdate();
-      expect(model.dialog?.phase).toBe('prepare-failed');
-
-      await model.retry();
 
       expect(attempts).toBe(2);
       expect(handle.install).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
+    it('shows a manual retry only after every automatic download attempt fails', async () => {
+      const handle = createHandle({
+        downloadImpl: () => Promise.reject(new Error('network')),
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+      );
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      await model.checkForUpdates();
+
+      await model.installAvailableUpdate();
+
+      expect(handle.download).toHaveBeenCalledTimes(3);
+      expect(model.dialog?.phase).toBe('prepare-failed');
+      expect(handle.install).not.toHaveBeenCalled();
+
+      await model.retry();
+
+      expect(handle.download).toHaveBeenCalledTimes(6);
+      expect(warn).toHaveBeenCalledTimes(4);
+      expect(error).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    it('shows a preparation failure when scheduling an automatic retry fails', async () => {
+      const waitError = new Error('timer unavailable');
+      const handle = createHandle({
+        downloadImpl: () => Promise.reject(new Error('network')),
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+        { waitBeforeDownloadRetry: () => Promise.reject(waitError) },
+      );
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      await model.checkForUpdates();
+
+      await model.installAvailableUpdate();
+
+      expect(handle.download).toHaveBeenCalledTimes(1);
+      expect(handle.install).not.toHaveBeenCalled();
+      expect(model.dialog?.phase).toBe('prepare-failed');
+      expect(error).toHaveBeenCalledWith(
+        'Failed to wait before retrying update download after attempt 1:',
+        waitError,
+      );
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    it('does not start another download after disposal during a retry delay', async () => {
+      const retryWait = deferred<undefined>();
+      const handle = createHandle({
+        downloadImpl: () => Promise.reject(new Error('network')),
+      });
+      const { model } = createModel(
+        createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
+        { waitBeforeDownloadRetry: () => retryWait.promise },
+      );
+      await model.checkForUpdates();
+
+      const installation = model.installAvailableUpdate();
+      await vi.waitFor(() => {
+        expect(model.dialog?.phase).toBe('retrying-download');
+      });
+      await model.dispose();
+      retryWait.resolve(undefined);
+      await installation;
+
+      expect(handle.download).toHaveBeenCalledTimes(1);
+      expect(handle.install).not.toHaveBeenCalled();
+      expect(model.dialog).toBeNull();
     });
 
     it('retries installation without downloading again', async () => {
