@@ -207,10 +207,14 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.d3d12.confirm.signatureWarning':
     'Después del cambio, la firma digital del EXE puede considerarse no válida y las comprobaciones de integridad pueden detectar que el archivo fue modificado. Al revertir D3D12 por completo, RenderPilot restaurará el EXE original.',
   'gameDetails.d3d12.confirm.accept': 'Cambiar',
+  'gameDetails.d3d12.executableLockedTitle': 'Selección de EXE bloqueada',
   'gameDetails.d3d12.executableLocked':
-    'La selección del EXE está bloqueada hasta completar la reversión de D3D12.',
+    'Para seleccionar otro EXE, revierte por completo el componente D3D12.',
+  'gameDetails.d3d12.executableRepairLocked':
+    'Sigue las instrucciones de recuperación de la tarjeta D3D12 y vuelve a analizar el juego.',
   'gameDetails.executable.description':
     'El ejecutable del juego: el perfil de NVIDIA se aplica a él y RenoDX se instala en su carpeta.',
+  'gameDetails.executable.triggerAria': 'Ejecutable del juego: {fileName}',
   'gameDetails.executable.detectedGroup': 'Ejecutables del juego detectados',
   'gameDetails.executable.otherGroup': 'Otros (lanzadores, instaladores, herramientas)',
   'gameDetails.executable.customBadge': 'Manual',

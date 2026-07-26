@@ -193,9 +193,13 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.d3d12.confirm.signatureWarning':
     '更改后，EXE 的数字签名可能被视为无效，完整性检查也可能报告文件已被修改。完全回滚 D3D12 时，RenderPilot 将恢复原始 EXE。',
   'gameDetails.d3d12.confirm.accept': '更改',
-  'gameDetails.d3d12.executableLocked': '完全回滚 D3D12 组件之前，EXE 选择将保持锁定。',
+  'gameDetails.d3d12.executableLockedTitle': 'EXE 选择已锁定',
+  'gameDetails.d3d12.executableLocked': '如需选择其他 EXE，请完全回滚 D3D12 组件。',
+  'gameDetails.d3d12.executableRepairLocked':
+    '请按照 D3D12 卡片中的步骤完成恢复，然后重新扫描游戏。',
   'gameDetails.executable.description':
     '游戏可执行文件 — NVIDIA 配置文件应用于它，RenoDX 安装到它所在的文件夹。',
+  'gameDetails.executable.triggerAria': '游戏可执行文件：{fileName}',
   'gameDetails.executable.detectedGroup': '检测到的游戏可执行文件',
   'gameDetails.executable.otherGroup': '其他（启动器、安装程序、工具）',
   'gameDetails.executable.customBadge': '手动',

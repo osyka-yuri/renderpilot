@@ -43,6 +43,7 @@
   import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
+  import { resolveExecutableLockReason } from '../model/game-executable-lock';
   import GameExecutablePopover from './GameExecutablePopover.svelte';
   import NvidiaProfileCard from './NvidiaProfileCard.svelte';
   import DlssComponentCard from './DlssComponentCard.svelte';
@@ -89,11 +90,7 @@
   // detail cards).
   const OTHER_TAB = 'other';
   const gameId = $derived(details?.game.identity.id ?? null);
-  const executableSelectionLocked = $derived(
-    details?.components.some(
-      (component) => component.d3d12_executable_status?.selection_locked === true,
-    ) ?? false,
-  );
+  const executableLockReason = $derived(resolveExecutableLockReason(details?.components ?? []));
   // The game's launcher, for Luma's launcher-aware launch-args callout.
   const launcher = $derived(details?.game.identity.launcher ?? '');
 
@@ -356,7 +353,7 @@
             </Button>
           {/if}
 
-          <GameExecutablePopover {gameId} exe={gameExe} locked={executableSelectionLocked} />
+          <GameExecutablePopover {gameId} exe={gameExe} lockReason={executableLockReason} />
         </div>
       </div>
 

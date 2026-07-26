@@ -36,9 +36,4 @@
           to: status.current_sdk_version,
         })}
   </span>
-  {#if status.selection_locked}
-    <span class="block text-xs text-muted-foreground">
-      {t('gameDetails.d3d12.executableLocked')}
-    </span>
-  {/if}
 {/if}

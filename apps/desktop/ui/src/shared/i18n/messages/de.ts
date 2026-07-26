@@ -211,10 +211,14 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.d3d12.confirm.signatureWarning':
     'Nach der Änderung kann die digitale Signatur der EXE als ungültig gelten und eine Integritätsprüfung die Datei als geändert melden. Bei einem vollständigen Rollback von D3D12 stellt RenderPilot die ursprüngliche EXE wieder her.',
   'gameDetails.d3d12.confirm.accept': 'Ändern',
+  'gameDetails.d3d12.executableLockedTitle': 'EXE-Auswahl gesperrt',
   'gameDetails.d3d12.executableLocked':
-    'Die EXE-Auswahl ist bis zum vollständigen D3D12-Rollback gesperrt.',
+    'Um eine andere EXE auszuwählen, setzen Sie die D3D12-Komponente vollständig zurück.',
+  'gameDetails.d3d12.executableRepairLocked':
+    'Führen Sie die Wiederherstellung gemäß den Anweisungen in der D3D12-Karte durch und scannen Sie das Spiel anschließend erneut.',
   'gameDetails.executable.description':
     'Die Programmdatei des Spiels — das NVIDIA-Profil gilt für sie, und RenoDX wird in ihren Ordner installiert.',
+  'gameDetails.executable.triggerAria': 'Ausführbare Spieldatei: {fileName}',
   'gameDetails.executable.detectedGroup': 'Erkannte Spieldateien',
   'gameDetails.executable.otherGroup': 'Sonstige (Launcher, Installer, Tools)',
   'gameDetails.executable.customBadge': 'Manuell',

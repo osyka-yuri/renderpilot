@@ -276,10 +276,14 @@ export const en = {
   'gameDetails.d3d12.confirm.signatureWarning':
     "After the change, the EXE's digital signature may be considered invalid and integrity checks may report that the file was modified. When you fully roll back D3D12, RenderPilot will restore the original EXE.",
   'gameDetails.d3d12.confirm.accept': 'Change',
+  'gameDetails.d3d12.executableLockedTitle': 'Executable selection is locked',
   'gameDetails.d3d12.executableLocked':
-    'Executable selection is locked until the D3D12 component is fully rolled back.',
+    'To choose a different EXE, fully roll back the D3D12 component.',
+  'gameDetails.d3d12.executableRepairLocked':
+    'Follow the recovery steps in the D3D12 card, then scan the game again.',
   'gameDetails.executable.description':
     'The game executable — the NVIDIA profile applies to it, and RenoDX installs into its folder.',
+  'gameDetails.executable.triggerAria': 'Game executable: {fileName}',
   'gameDetails.executable.detectedGroup': 'Detected game executables',
   'gameDetails.executable.otherGroup': 'Other (launchers, installers, tools)',
   'gameDetails.executable.customBadge': 'Custom',

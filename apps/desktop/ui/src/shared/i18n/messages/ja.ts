@@ -207,10 +207,14 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.d3d12.confirm.signatureWarning':
     '変更後は EXE のデジタル署名が無効と判断され、整合性チェックでファイルの変更が検出される場合があります。D3D12 を完全にロールバックすると、RenderPilot が元の EXE を復元します。',
   'gameDetails.d3d12.confirm.accept': '変更',
+  'gameDetails.d3d12.executableLockedTitle': 'EXE の選択はロックされています',
   'gameDetails.d3d12.executableLocked':
-    'D3D12 を完全にロールバックするまで EXE の選択はロックされます。',
+    '別の EXE を選択するには、D3D12 コンポーネントを完全にロールバックしてください。',
+  'gameDetails.d3d12.executableRepairLocked':
+    'D3D12 カードの手順に従って復旧してから、ゲームを再スキャンしてください。',
   'gameDetails.executable.description':
     'ゲームの実行ファイル — NVIDIA プロファイルが適用され、RenoDX はそのフォルダーにインストールされます。',
+  'gameDetails.executable.triggerAria': 'ゲーム実行ファイル: {fileName}',
   'gameDetails.executable.detectedGroup': '検出されたゲーム実行ファイル',
   'gameDetails.executable.otherGroup': 'その他（ランチャー・インストーラー・ツール）',
   'gameDetails.executable.customBadge': '手動',

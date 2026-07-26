@@ -10,9 +10,7 @@ import { setLanguageMode } from '@shared/i18n';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 import { candidate, group } from '../model/candidate-group-fixtures';
-import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
 import ComponentVersionRowTestHost from './ComponentVersionRow.test-host.svelte';
-import GameExecutablePopover from './GameExecutablePopover.svelte';
 
 describe('D3D12 executable state UI', () => {
   let target: HTMLDivElement;
@@ -97,22 +95,21 @@ describe('D3D12 executable state UI', () => {
     expect(callout?.textContent).not.toContain('C:/Games/Test/game.exe.bak');
   });
 
-  it('disables executable selection and explains the rollback lock', () => {
-    component = mount(GameExecutablePopover, {
+  it('does not repeat managed selection guidance in the D3D12 row', () => {
+    component = mount(ComponentVersionRowTestHost, {
       target,
       props: {
-        gameId: 'steam:123',
-        exe: executableContext(),
-        locked: true,
+        component: patchedComponent(),
+        group: null,
+        busy: false,
+        onSwap: vi.fn(),
+        onRollback: vi.fn(),
       },
     });
     flushSync();
 
-    const trigger = target.querySelector<HTMLButtonElement>('button');
-    expect(trigger?.disabled).toBe(true);
-    expect(trigger?.getAttribute('aria-label')).toBe(
-      'Executable selection is locked until the D3D12 component is fully rolled back.',
-    );
+    expect(target.textContent).toContain('EXE patched: 606 → 619');
+    expect(target.textContent).not.toContain('Executable selection is locked');
   });
 
   it('starts a managed rollback immediately without an executable confirmation', () => {
@@ -261,19 +258,4 @@ function executableAction(
     target_sdk_version: targetSdk,
     requires_confirmation: kind === 'restore',
   };
-}
-
-function executableContext(): GameExecutableContext {
-  return {
-    busy: false,
-    loadError: null,
-    effectiveExe: 'game.exe',
-    effectiveExeSource: 'auto',
-    supportedCandidates: [],
-    filteredOutCandidates: [],
-    reload: vi.fn(),
-    clear: vi.fn(),
-    setOverride: vi.fn(),
-    clearOverride: vi.fn(),
-  } as unknown as GameExecutableContext;
 }

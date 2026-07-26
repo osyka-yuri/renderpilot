@@ -292,10 +292,14 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.d3d12.confirm.signatureWarning':
     'После изменения цифровая подпись EXE может стать недействительной, а проверка целостности может сообщить, что файл изменён. При полном откате D3D12 RenderPilot восстановит исходный EXE.',
   'gameDetails.d3d12.confirm.accept': 'Изменить',
+  'gameDetails.d3d12.executableLockedTitle': 'Выбор EXE заблокирован',
   'gameDetails.d3d12.executableLocked':
-    'Выбор EXE заблокирован до полного отката компонента D3D12.',
+    'Чтобы выбрать другой EXE, полностью откатите компонент D3D12.',
+  'gameDetails.d3d12.executableRepairLocked':
+    'Выполните восстановление по инструкции в карточке D3D12, затем повторите сканирование.',
   'gameDetails.executable.description':
     'Исполняемый файл игры — к нему применяется профиль NVIDIA, а RenoDX устанавливается в его папку.',
+  'gameDetails.executable.triggerAria': 'Исполняемый файл игры: {fileName}',
   'gameDetails.executable.detectedGroup': 'Найденные игровые файлы',
   'gameDetails.executable.otherGroup': 'Прочее (лаунчеры, установщики, утилиты)',
   'gameDetails.executable.customBadge': 'Вручную',
