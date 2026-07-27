@@ -137,10 +137,10 @@ describe('GameExecutablePopover', () => {
 
     expect(setOverride).toHaveBeenCalledOnce();
     expect(setOverride).toHaveBeenCalledWith('steam:123', 'C:/Games/Test/bin/alternate.exe');
-    expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('confirms reset-to-auto and supports cancellation', async () => {
+  it('resets a manual executable directly', async () => {
     const clearOverride = vi.fn(() => Promise.resolve());
     const exe = executableContext({
       effectiveExe: 'custom.exe',
@@ -150,24 +150,15 @@ describe('GameExecutablePopover', () => {
     const trigger = render({ exe });
 
     await openPopover(trigger);
-    let content = popoverContent();
-    findButton(content, 'Reset to auto-detect').click();
-    flushSync();
-    expect(content.textContent).toContain('Discard your manual choice and use auto-detection?');
+    const content = popoverContent();
+    const resetButton = findButton(content, 'Reset to auto-detect');
 
-    findButton(content, 'Cancel').click();
-    flushSync();
-    expect(content.textContent).not.toContain('Discard your manual choice and use auto-detection?');
-
-    findButton(content, 'Reset to auto-detect').click();
-    flushSync();
-    content = popoverContent();
-    findButton(content, 'Reset to auto-detect').click();
+    resetButton.click();
     flushSync();
 
     expect(clearOverride).toHaveBeenCalledOnce();
     expect(clearOverride).toHaveBeenCalledWith('steam:123');
-    expect(document.body.querySelector(openPopoverSelector)).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
   function render({
@@ -207,7 +198,7 @@ async function openPopover(trigger: HTMLButtonElement): Promise<void> {
   });
 }
 
-const openPopoverSelector = '[data-slot="popover-content"][data-state="open"]';
+const openPopoverSelector = '[role="dialog"]';
 
 function popoverContent(): HTMLElement {
   const content = document.body.querySelector<HTMLElement>(openPopoverSelector);

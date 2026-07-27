@@ -204,7 +204,6 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.executable.otherGroup': '其他（启动器、安装程序、工具）',
   'gameDetails.executable.customBadge': '手动',
   'gameDetails.executable.reset': '重置为自动检测',
-  'gameDetails.executable.resetConfirm': '放弃手动选择并使用自动检测？',
   'gameDetails.executable.tooltipAuto':
     '游戏可执行文件：自动检测。由 NVIDIA 配置文件和 RenoDX 使用。',
   'gameDetails.executable.tooltipCustom':

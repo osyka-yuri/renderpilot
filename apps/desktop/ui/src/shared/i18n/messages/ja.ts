@@ -219,7 +219,6 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.executable.otherGroup': 'その他（ランチャー・インストーラー・ツール）',
   'gameDetails.executable.customBadge': '手動',
   'gameDetails.executable.reset': '自動検出に戻す',
-  'gameDetails.executable.resetConfirm': '手動の選択を破棄して自動検出を使用しますか？',
   'gameDetails.executable.tooltipAuto':
     'ゲームの実行ファイル：自動検出。NVIDIA プロファイルと RenoDX で使用されます。',
   'gameDetails.executable.tooltipCustom':

@@ -288,7 +288,6 @@ export const en = {
   'gameDetails.executable.otherGroup': 'Other (launchers, installers, tools)',
   'gameDetails.executable.customBadge': 'Custom',
   'gameDetails.executable.reset': 'Reset to auto-detect',
-  'gameDetails.executable.resetConfirm': 'Discard your manual choice and use auto-detection?',
   'gameDetails.executable.tooltipAuto':
     'Game executable: auto-detected. Used by the NVIDIA profile and RenoDX.',
   'gameDetails.executable.tooltipCustom':

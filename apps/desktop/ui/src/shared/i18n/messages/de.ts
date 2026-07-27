@@ -223,8 +223,6 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.executable.otherGroup': 'Sonstige (Launcher, Installer, Tools)',
   'gameDetails.executable.customBadge': 'Manuell',
   'gameDetails.executable.reset': 'Auf automatische Erkennung zurücksetzen',
-  'gameDetails.executable.resetConfirm':
-    'Manuelle Auswahl verwerfen und automatische Erkennung verwenden?',
   'gameDetails.executable.tooltipAuto':
     'Spiel-Programmdatei: automatisch erkannt. Wird vom NVIDIA-Profil und RenoDX verwendet.',
   'gameDetails.executable.tooltipCustom':

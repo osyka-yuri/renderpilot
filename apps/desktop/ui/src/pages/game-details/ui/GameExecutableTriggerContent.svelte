@@ -17,9 +17,7 @@
 <AppWindowIcon class="size-4 opacity-70" aria-hidden="true" />
 <span class="max-w-40 truncate">{label}</span>
 {#if isOverride}
-  <Badge variant="secondary" class="px-1.5 py-0 text-[10px]">
-    {t('gameDetails.executable.customBadge')}
-  </Badge>
+  <Badge variant="secondary">{t('gameDetails.executable.customBadge')}</Badge>
 {/if}
 {#if locked}
   <LockKeyholeIcon class="size-3.5 opacity-60" aria-hidden="true" />

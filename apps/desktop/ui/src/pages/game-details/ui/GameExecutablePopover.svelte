@@ -30,10 +30,10 @@
   };
 
   const { gameId, exe, lockReason = null }: Props = $props();
+  const componentId = $props.id();
+  const dialogTitleId = `${componentId}-title`;
 
   let open = $state(false);
-  // Reset discards a manual choice, so it steps through an inline confirm.
-  let confirmingReset = $state(false);
 
   const locked = $derived(lockReason !== null);
   const isOverride = $derived(exe.effectiveExeSource === 'override');
@@ -78,25 +78,13 @@
 
   function resetToAuto(): void {
     void exe.clearOverride(gameId);
-    confirmingReset = false;
     open = false;
   }
 
-  function requestReset(): void {
-    confirmingReset = true;
-  }
-
-  function cancelReset(): void {
-    confirmingReset = false;
-  }
-
-  // A newly applied lock closes the selector; every close clears inline confirmation.
+  // A newly applied lock closes the selector.
   $effect(() => {
     if (locked) {
       open = false;
-    }
-    if (!open) {
-      confirmingReset = false;
     }
   });
 </script>
@@ -131,35 +119,21 @@
         {/snippet}
       </TooltipTrigger>
 
-      <PopoverContent align="end" class="w-80 p-0">
+      <PopoverContent role="dialog" aria-labelledby={dialogTitleId} align="end" class="w-80 p-0">
         <div class="grid gap-1 p-3">
-          <p class="text-sm font-medium">{t('gameDetails.executable.title')}</p>
+          <p id={dialogTitleId} class="text-sm font-medium">
+            {t('gameDetails.executable.title')}
+          </p>
           <p class="text-xs text-muted-foreground">{t('gameDetails.executable.description')}</p>
-          <div class="mt-1 flex items-center justify-between gap-2">
+          <div class="mt-1 grid gap-2">
             <span class="text-xs text-muted-foreground">{sourceLabel}</span>
             {#if isOverride}
-              {#if confirmingReset}
-                <div class="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onclick={cancelReset}>
-                    {t('gameDetails.renodx.cancel')}
-                  </Button>
-                  <Button variant="secondary" size="sm" onclick={resetToAuto}>
-                    {t('gameDetails.executable.reset')}
-                  </Button>
-                </div>
-              {:else}
-                <Button variant="ghost" size="sm" onclick={requestReset}>
-                  <RotateCcwIcon class="size-3.5" aria-hidden="true" />
-                  {t('gameDetails.executable.reset')}
-                </Button>
-              {/if}
+              <Button variant="ghost" size="sm" class="justify-start w-fit" onclick={resetToAuto}>
+                <RotateCcwIcon class="size-3.5" aria-hidden="true" />
+                {t('gameDetails.executable.reset')}
+              </Button>
             {/if}
           </div>
-          {#if confirmingReset}
-            <p class="text-xs text-muted-foreground" aria-live="polite">
-              {t('gameDetails.executable.resetConfirm')}
-            </p>
-          {/if}
         </div>
 
         <Separator />

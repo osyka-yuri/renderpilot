@@ -304,7 +304,6 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.executable.otherGroup': 'Прочее (лаунчеры, установщики, утилиты)',
   'gameDetails.executable.customBadge': 'Вручную',
   'gameDetails.executable.reset': 'Сбросить на автоопределение',
-  'gameDetails.executable.resetConfirm': 'Отменить ручной выбор и использовать автоопределение?',
   'gameDetails.executable.tooltipAuto':
     'Исполняемый файл игры: определён автоматически. Используется профилем NVIDIA и RenoDX.',
   'gameDetails.executable.tooltipCustom':

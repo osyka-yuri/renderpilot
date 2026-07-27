@@ -219,8 +219,6 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.executable.otherGroup': 'Otros (lanzadores, instaladores, herramientas)',
   'gameDetails.executable.customBadge': 'Manual',
   'gameDetails.executable.reset': 'Restablecer a detección automática',
-  'gameDetails.executable.resetConfirm':
-    '¿Descartar tu elección manual y usar la detección automática?',
   'gameDetails.executable.tooltipAuto':
     'Ejecutable del juego: detectado automáticamente. Usado por el perfil de NVIDIA y RenoDX.',
   'gameDetails.executable.tooltipCustom':
