@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.2] - 2026-07-27
+
+### Added
+
+- **Preview library releases**: Preview versions are now available in Libraries and compatible replacement selectors. They remain manual choices and are never included in automatic updates.
+- **Local library releases**: Downloaded versions remain visible and manageable if they are no longer available in the active catalog.
+
+### Changed
+
+- **Library versions**: RenderPilot now preserves complete package versions, making preview and stable releases easier to identify and manage reliably.
+- **Executable selection**: Unavailable executable selectors now remain visible with a clear explanation. Candidate grouping and switching back to automatic detection are also clearer.
+
+### Fixed
+
+- **App updates**: Failed update downloads are retried automatically, with reliable progress reporting and cancellation.
+
 ## [1.7.1] - 2026-07-26
 
 ### Fixed
