@@ -254,14 +254,14 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'Восстановить исходные',
   'gameDetails.updateAll.action': 'Обновить всё',
   'gameDetails.updateAll.actionCount': 'Обновить всё ({count})',
-  'gameDetails.updateAll.upToDate': 'Всё актуально',
+  'gameDetails.updateAll.upToDate': 'Все стабильные версии актуальны',
   'gameDetails.updateAll.partialFailure':
     'Часть обновлений не удалась ({count}). Проверьте детали и повторите.',
   'gameDetails.updateAll.tooltip': {
-    one: 'Обновить {count} компонент до последней версии',
-    few: 'Обновить {count} компонента до последней версии',
-    many: 'Обновить {count} компонентов до последней версии',
-    other: 'Обновить {count} компонентов до последней версии',
+    one: 'Обновить {count} компонент до последней стабильной версии',
+    few: 'Обновить {count} компонента до последней стабильной версии',
+    many: 'Обновить {count} компонентов до последней стабильной версии',
+    other: 'Обновить {count} компонентов до последней стабильной версии',
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
@@ -348,6 +348,13 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Libraries page ──
   'libraries.error': 'Ошибка',
+  'libraries.catalogFallback.title': 'Каталог недоступен',
+  'libraries.catalogFallback.description':
+    'Показаны только локально зарегистрированные пакеты. Это неполный каталог.',
+  'libraries.state.localOnly': 'Только локально',
+  'libraries.state.downloaded': 'Загружено',
+  'libraries.state.missing': 'Файлы отсутствуют',
+  'libraries.state.corrupt': 'Файлы повреждены',
   'libraries.hash.copy': 'Скопировать хеш',
   'libraries.hash.copied': 'Скопировано',
   'libraries.hash.failed': 'Не удалось скопировать',

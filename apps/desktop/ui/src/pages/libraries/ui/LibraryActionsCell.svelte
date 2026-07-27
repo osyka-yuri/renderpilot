@@ -6,7 +6,10 @@
   import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
-  import type { LibraryPackageRow } from '../model/libraries-page-model';
+  import {
+    shouldDeleteLibraryPackage,
+    type LibraryPackageRow,
+  } from '../model/libraries-page-model';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
 
   type Props = {
@@ -23,10 +26,10 @@
   const pendingAction = $derived(pendingActions.get(packageId) ?? null);
   const isActionDisabled = $derived(pendingAction !== null || actionsDisabled());
   const isDownloading = $derived(pendingAction === 'download');
-  const isDownloaded = $derived(row.is_downloaded);
+  const shouldDelete = $derived(shouldDeleteLibraryPackage(row));
 
   const actionLabel = $derived(
-    isDownloaded ? t('libraries.actions.delete') : t('libraries.actions.download'),
+    shouldDelete ? t('libraries.actions.delete') : t('libraries.actions.download'),
   );
 
   async function handleActionClick() {
@@ -38,7 +41,7 @@
     // load/refresh is running) — never report success for an action that
     // never ran.
     try {
-      if (isDownloaded) {
+      if (shouldDelete) {
         if (await onDelete(packageId)) {
           toast.success(t('libraries.actions.deletedToast', { version: row.release.version }));
         }
@@ -74,7 +77,7 @@
         >
           {#if pendingAction !== null}
             <Loader2Icon class="animate-spin" aria-hidden="true" />
-          {:else if isDownloaded}
+          {:else if shouldDelete}
             <Trash2Icon aria-hidden="true" />
           {:else}
             <DownloadIcon aria-hidden="true" />

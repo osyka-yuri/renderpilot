@@ -173,12 +173,12 @@ export const fr: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'Tout restaurer à l’original',
   'gameDetails.updateAll.action': 'Tout mettre à jour',
   'gameDetails.updateAll.actionCount': 'Tout mettre à jour ({count})',
-  'gameDetails.updateAll.upToDate': 'Tout est à jour',
+  'gameDetails.updateAll.upToDate': 'Toutes les versions stables sont à jour',
   'gameDetails.updateAll.partialFailure':
     'Certaines mises à jour ont échoué ({count}). Vérifiez les détails et réessayez.',
   'gameDetails.updateAll.tooltip': {
-    one: 'Mettre à jour 1 composant vers sa dernière version',
-    other: 'Mettre à jour {count} composants vers leur dernière version',
+    one: 'Mettre à jour 1 composant vers sa dernière version stable',
+    other: 'Mettre à jour {count} composants vers leur dernière version stable',
   },
   'gameDetails.executable.title': 'Exécutable du jeu',
   'gameDetails.d3d12.status.original': 'EXE original',
@@ -262,6 +262,13 @@ export const fr: Record<MessageKey, MessageValue> = {
   'operations.version': 'Version',
 
   'libraries.error': 'Erreur',
+  'libraries.catalogFallback.title': 'Catalogue indisponible',
+  'libraries.catalogFallback.description':
+    "Seuls les paquets enregistrés localement sont affichés. Il ne s'agit pas du catalogue complet.",
+  'libraries.state.localOnly': 'Local uniquement',
+  'libraries.state.downloaded': 'Téléchargé',
+  'libraries.state.missing': 'Fichiers manquants',
+  'libraries.state.corrupt': 'Fichiers corrompus',
   'libraries.hash.copy': 'Copier le hash',
   'libraries.hash.copied': 'Copié',
   'libraries.hash.failed': 'Échec de la copie',

@@ -1,0 +1,28 @@
+{
+  "parse": [
+    { "input": "1", "canonical": "1.0.0" },
+    { "input": "1.0", "canonical": "1.0.0" },
+    { "input": "01.0721.002-PREVIEW", "canonical": "1.721.2-preview" },
+    { "input": "1.8.2404.55-mesh-nodes-preview", "canonical": "1.8.2404.55-mesh-nodes-preview" },
+    { "input": "1.4.0-preview2-2606.904", "canonical": "1.4.0-preview2-2606.904" }
+  ],
+  "rejected": [
+    { "input": "" },
+    { "input": "1.2.3.4.5" },
+    { "input": "1.2.3-preview..1" },
+    { "input": "1.2.3-preview.01" },
+    { "input": "1.18446744073709551616" },
+    { "input": "1.2.3+" },
+    { "input": "1.2.3+build.7" },
+    { "input": "1.2.3-preview+build.sha" }
+  ],
+  "order": [
+    { "lower": "1.0.0-preview.2", "higher": "1.0.0-preview.10" },
+    { "lower": "1.4.0-preview1-2603.504", "higher": "1.4.0-preview2-2606.904" },
+    { "lower": "1.4.0-preview2-2606.904", "higher": "1.4.0" },
+    {
+      "lower": "1.0.0-preview.99999999999999999999",
+      "higher": "1.0.0-preview.100000000000000000000"
+    }
+  ]
+}

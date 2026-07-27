@@ -26,17 +26,29 @@ export function candidate(version: string | null, overrides: Partial<Candidate> 
     artifact_id: overrides.artifact_id ?? `artifact:${version}`,
     file_name: 'lib.dll',
     file_path: null,
-    version,
+    technical_version: version,
     release_label: overrides.release_label ?? null,
     source_game_id: null,
     comparison: overrides.comparison ?? 'newer_version',
-    catalog_package_id: overrides.catalog_package_id ?? null,
     is_downloaded: overrides.is_downloaded ?? true,
     is_debug: overrides.is_debug ?? false,
     sha256: overrides.sha256 ?? 'fake_hash',
     ...overrides,
+    catalog_package: overrides.catalog_package ?? null,
     d3d12_executable_action: overrides.d3d12_executable_action ?? null,
   };
+}
+
+export function catalogCandidate(version: string, overrides: Partial<Candidate> = {}): Candidate {
+  return candidate(version, {
+    catalog_package: {
+      package_id: `catalog:${version}`,
+      release: { version, channel: 'stable', label: null },
+      availability: 'available',
+      automatic_selection_allowed: true,
+    },
+    ...overrides,
+  });
 }
 
 export function group(
@@ -50,7 +62,12 @@ export function group(
     technology,
     file_path: `C:/Game/${componentId}.dll`,
     version_report: current
-      ? { kind: 'known', version: current, release_label: null }
+      ? {
+          kind: 'known',
+          technical_version: current,
+          release_label: null,
+          catalog_release: null,
+        }
       : { kind: 'unknown' },
     candidates,
   };

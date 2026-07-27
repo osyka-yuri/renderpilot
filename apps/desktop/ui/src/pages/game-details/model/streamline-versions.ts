@@ -1,4 +1,9 @@
-import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+import {
+  isAutomaticCatalogCandidate,
+  type GameCandidate,
+  type GameCandidateGroup,
+  type GameGraphicsComponent,
+} from '@entities/game';
 import type { D3d12ExecutableAction } from '@shared/model';
 import type { SwapRequest } from './swap-request';
 
@@ -47,6 +52,8 @@ export type StreamlineVersionModel = {
   totalCount: number;
 };
 
+export type CandidateSelectionMode = 'manual' | 'automatic';
+
 /**
  * Builds the bulk-version model from backend-owned `version_report` values.
  * The UI never re-derives Streamline state from raw PE file metadata: the
@@ -55,6 +62,7 @@ export type StreamlineVersionModel = {
 export function buildStreamlineVersionModel(
   components: GameGraphicsComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
+  selectionMode: CandidateSelectionMode = 'manual',
 ): StreamlineVersionModel {
   const reports = components.map((component) => groupsById[component.id]?.version_report);
   const installed = summarizeInstalledVersions(reports);
@@ -62,15 +70,17 @@ export function buildStreamlineVersionModel(
 
   for (const component of components) {
     for (const candidate of groupsById[component.id]?.candidates ?? []) {
-      if (candidate.version) {
-        versions.add(candidate.version);
+      const presentationVersion =
+        candidate.catalog_package?.release.version ?? candidate.technical_version;
+      if (presentationVersion && candidateMatchesMode(candidate, selectionMode)) {
+        versions.add(presentationVersion);
       }
     }
   }
 
   const options = collapseEquivalentVersions([...versions])
     .sort(compareVersionDesc)
-    .map((version) => buildOption(version, components, groupsById));
+    .map((version) => buildOption(version, components, groupsById, selectionMode));
 
   return {
     options,
@@ -102,13 +112,18 @@ function summarizeInstalledVersions(
       continue;
     }
     if (report.kind === 'known') {
-      knownVersions.push(report.version);
-      rangeVersions.push(report.version);
+      const presentationVersion = report.catalog_release?.version ?? report.technical_version;
+      if (presentationVersion === null) {
+        hasUnknownReport = true;
+        continue;
+      }
+      knownVersions.push(presentationVersion);
+      rangeVersions.push(presentationVersion);
       continue;
     }
 
     hasMixedReport = true;
-    rangeVersions.push(report.min_version, report.max_version);
+    rangeVersions.push(report.min_technical_version, report.max_technical_version);
   }
 
   const distinctKnown = collapseEquivalentVersions(knownVersions);
@@ -133,6 +148,7 @@ function buildOption(
   version: string,
   components: GameGraphicsComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
+  selectionMode: CandidateSelectionMode,
 ): StreamlineVersionOption {
   const items: BulkSwapItem[] = [];
   let missingCount = 0;
@@ -147,7 +163,13 @@ function buildOption(
     }
 
     const candidate = (group?.candidates ?? []).find(
-      (entry) => entry.version !== null && versionsEqual(entry.version, version),
+      (entry) =>
+        (entry.catalog_package?.release.version ?? entry.technical_version) !== null &&
+        versionsEqual(
+          entry.catalog_package?.release.version ?? entry.technical_version ?? '',
+          version,
+        ) &&
+        candidateMatchesMode(entry, selectionMode),
     );
     if (!candidate) {
       missingCount += 1;
@@ -177,10 +199,24 @@ function buildOption(
   };
 }
 
+function candidateMatchesMode(
+  candidate: GameCandidate,
+  selectionMode: CandidateSelectionMode,
+): boolean {
+  return (
+    selectionMode === 'manual' ||
+    (candidate.comparison === 'newer_version' && isAutomaticCatalogCandidate(candidate))
+  );
+}
+
 function componentFullyOnVersion(
   group: GameCandidateGroup | null | undefined,
   version: string,
 ): boolean {
   const report = group?.version_report;
-  return report?.kind === 'known' && versionsEqual(report.version, version);
+  return (
+    report?.kind === 'known' &&
+    (report.catalog_release?.version ?? report.technical_version) !== null &&
+    versionsEqual(report.catalog_release?.version ?? report.technical_version ?? '', version)
+  );
 }

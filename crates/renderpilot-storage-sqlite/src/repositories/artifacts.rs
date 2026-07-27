@@ -52,8 +52,50 @@ const UPSERT_ARTIFACT_SQL: &str = "
 
 impl ArtifactRepository for SqliteStorage {
     fn upsert_artifact(&self, artifact: &LibraryArtifact) -> AppResult<()> {
+        self.upsert_artifacts(std::slice::from_ref(artifact))
+    }
+
+    fn upsert_artifacts(&self, artifacts: &[LibraryArtifact]) -> AppResult<()> {
         self.with_transaction(|transaction| {
-            upsert_artifact_within_transaction(transaction, artifact)
+            upsert_artifacts_within_transaction(transaction, artifacts)
+        })
+    }
+
+    fn replace_catalog_package_artifact(
+        &self,
+        package_id: &str,
+        artifact: &LibraryArtifact,
+    ) -> AppResult<()> {
+        self.with_transaction(|transaction| {
+            validate_catalog_package_replacement(package_id, artifact)?;
+            transaction
+                .execute(
+                    "DELETE FROM library_artifacts
+                     WHERE id != ?1
+                       AND json_extract(
+                           metadata_json,
+                           '$.catalog_package_receipt.package_id'
+                       ) = ?2",
+                    rusqlite::params![artifact.id().as_str(), package_id],
+                )
+                .map_err(storage_error)?;
+            upsert_artifacts_within_transaction(transaction, std::slice::from_ref(artifact))
+        })
+    }
+
+    fn delete_catalog_package_artifacts(&self, package_id: &str) -> AppResult<()> {
+        self.with_connection(|connection| {
+            connection
+                .execute(
+                    "DELETE FROM library_artifacts
+                     WHERE json_extract(
+                         metadata_json,
+                         '$.catalog_package_receipt.package_id'
+                     ) = ?1",
+                    [package_id],
+                )
+                .map_err(storage_error)?;
+            Ok(())
         })
     }
 
@@ -72,16 +114,6 @@ impl ArtifactRepository for SqliteStorage {
             Ok(())
         })
     }
-}
-
-/// Upserts one artifact row within a transaction.
-///
-/// This function requires an active `Transaction` object.
-pub(super) fn upsert_artifact_within_transaction(
-    transaction: &Transaction<'_>,
-    artifact: &LibraryArtifact,
-) -> AppResult<()> {
-    upsert_artifacts_within_transaction(transaction, std::slice::from_ref(artifact))
 }
 
 /// Upserts artifact rows within a transaction.
@@ -115,6 +147,7 @@ fn upsert_artifact_with_statement(
     artifact: &LibraryArtifact,
     stamp_ms: i64,
 ) -> AppResult<()> {
+    validate_catalog_receipt_identity(artifact)?;
     let row = ArtifactSqlRow::from_artifact(artifact)?;
 
     statement
@@ -133,6 +166,37 @@ fn upsert_artifact_with_statement(
         .map_err(storage_error)?;
 
     Ok(())
+}
+
+fn validate_catalog_receipt_identity(artifact: &LibraryArtifact) -> AppResult<()> {
+    let Some(receipt) = artifact.metadata().catalog_package_receipt() else {
+        return Ok(());
+    };
+    let expected = receipt.artifact_id();
+    if artifact.id() != &expected {
+        return Err(storage_error(format!(
+            "catalog receipt revision requires artifact id `{expected}`, got `{}`",
+            artifact.id()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_catalog_package_replacement(
+    package_id: &str,
+    artifact: &LibraryArtifact,
+) -> AppResult<()> {
+    let receipt = artifact
+        .metadata()
+        .catalog_package_receipt()
+        .ok_or_else(|| storage_error("catalog package replacement requires a receipt"))?;
+    if receipt.package_id != package_id {
+        return Err(storage_error(format!(
+            "catalog package replacement expected package `{package_id}`, got `{}`",
+            receipt.package_id
+        )));
+    }
+    validate_catalog_receipt_identity(artifact)
 }
 
 /// Drops LocalObserved artifacts previously sourced from `game_id` that are no
@@ -215,10 +279,12 @@ impl<'a> ArtifactSqlRow<'a> {
 mod tests {
     use renderpilot_application::{ArtifactRepository, GameRepository};
     use renderpilot_domain::{
-        Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
-        ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime, GraphicsComponent,
-        GraphicsTechnology, Launcher, LibraryArtifact, PathRef, Platform, RuntimeCompatibility,
-        RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider,
+        Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
+        CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
+        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
+        GraphicsComponent, GraphicsTechnology, Launcher, LibraryArtifact, PackageRelease,
+        PackageVersion, PathRef, Platform, ReleaseChannel, RuntimeCompatibility, RuntimeTarget,
+        Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider,
     };
 
     use super::SqliteStorage;
@@ -264,6 +330,132 @@ mod tests {
         let artifacts = storage.list_artifacts().expect("artifacts should load");
 
         assert_eq!(artifacts, vec![artifact]);
+    }
+
+    #[test]
+    fn catalog_receipt_round_trips_with_revision_derived_artifact_id() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let artifact = catalog_artifact(HASH_A);
+
+        storage
+            .upsert_artifact(&artifact)
+            .expect("catalog receipt should store");
+
+        assert_eq!(
+            storage.list_artifacts().expect("artifact should load"),
+            vec![artifact]
+        );
+    }
+
+    #[test]
+    fn catalog_receipt_rejects_an_artifact_id_not_derived_from_its_revision() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let artifact = catalog_artifact(HASH_A);
+        let mismatched = LibraryArtifact::new(
+            ArtifactId::for_package_revision(&Sha256Hash::new(HASH_B).expect("different revision")),
+            artifact.technology(),
+            artifact.file_name(),
+            artifact.files().to_vec(),
+            artifact.trust_level(),
+        )
+        .expect("artifact")
+        .with_metadata(artifact.metadata().clone());
+
+        let error = storage
+            .upsert_artifact(&mismatched)
+            .expect_err("identity mismatch must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("catalog receipt revision requires artifact id")
+        );
+    }
+
+    #[test]
+    fn catalog_package_replacement_keeps_only_the_latest_registration() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let first = catalog_artifact(HASH_A);
+        let second = catalog_artifact(HASH_B);
+
+        storage
+            .replace_catalog_package_artifact("nvidia.dlss", &first)
+            .expect("first package registration");
+        storage
+            .replace_catalog_package_artifact("nvidia.dlss", &second)
+            .expect("replacement package registration");
+
+        assert_eq!(
+            storage.list_artifacts().expect("artifact list"),
+            vec![second],
+            "one logical package must have one current registration"
+        );
+    }
+
+    #[test]
+    fn invalid_catalog_package_replacement_leaves_previous_registration_untouched() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let first = catalog_artifact(HASH_A);
+        let second = catalog_artifact(HASH_B);
+
+        storage
+            .replace_catalog_package_artifact("nvidia.dlss", &first)
+            .expect("first package registration");
+        storage
+            .replace_catalog_package_artifact("different.package", &second)
+            .expect_err("package mismatch must fail");
+
+        assert_eq!(
+            storage.list_artifacts().expect("artifact list"),
+            vec![first],
+            "failed replacement must roll back its delete"
+        );
+    }
+
+    #[test]
+    fn deleting_a_catalog_package_removes_only_its_registrations() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let first = catalog_artifact_for("nvidia.dlss", HASH_A);
+        let stale = catalog_artifact_for("nvidia.dlss", HASH_B);
+        let unrelated = catalog_artifact_for(
+            "intel.xess",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        );
+
+        storage
+            .upsert_artifacts(&[first, stale, unrelated.clone()])
+            .expect("catalog registrations");
+        storage
+            .delete_catalog_package_artifacts("nvidia.dlss")
+            .expect("delete logical package");
+
+        assert_eq!(
+            storage.list_artifacts().expect("artifact list"),
+            vec![unrelated]
+        );
+    }
+
+    #[test]
+    fn artifact_batch_rolls_back_every_row_when_one_receipt_is_invalid() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let first = sample_artifact("artifact:first", "C:/cache/first.dll", "first.dll", HASH_A);
+        let valid = catalog_artifact(HASH_B);
+        let invalid = LibraryArtifact::new(
+            ArtifactId::new("package:not-the-revision").expect("artifact id"),
+            valid.technology(),
+            valid.file_name(),
+            valid.files().to_vec(),
+            valid.trust_level(),
+        )
+        .expect("artifact")
+        .with_metadata(valid.metadata().clone());
+
+        storage
+            .upsert_artifacts(&[first, invalid])
+            .expect_err("whole batch must fail");
+        assert!(
+            storage.list_artifacts().expect("artifact list").is_empty(),
+            "the first row must be rolled back with the invalid second row"
+        );
     }
 
     #[test]
@@ -470,6 +662,47 @@ mod tests {
             _ => "scan-folder",
         })
         .expect("source should be valid")
+    }
+
+    fn catalog_artifact(revision: &str) -> LibraryArtifact {
+        catalog_artifact_for("nvidia.dlss", revision)
+    }
+
+    fn catalog_artifact_for(package_id: &str, revision: &str) -> LibraryArtifact {
+        let revision = Sha256Hash::new(revision).expect("revision");
+        let receipt = CatalogPackageReceiptV1 {
+            schema_version: CatalogReceiptSchemaV1,
+            package_id: package_id.to_owned(),
+            vendor: "nvidia".to_owned(),
+            technology: "dlss_super_resolution".to_owned(),
+            variant: "runtime".to_owned(),
+            display_name: "NVIDIA DLSS".to_owned(),
+            release: PackageRelease {
+                version: PackageVersion::parse("3.10.0").expect("package version"),
+                channel: ReleaseChannel::Stable,
+                label: None,
+            },
+            target: CatalogTargetReceipt {
+                os: "windows".to_owned(),
+                architecture: Architecture::X64,
+                compatibility: None,
+            },
+            provenance: None,
+            revision_sha256: revision.clone(),
+            primary_file_name: "nvngx_dlss.dll".to_owned(),
+            primary_sha256: Sha256Hash::new(HASH_A).expect("member digest"),
+            primary_signature: CatalogSignatureReceipt::Unsigned,
+            legal_documents: Vec::new(),
+            size_bytes: 1,
+        };
+        sample_artifact_with_trust(
+            ArtifactId::for_package_revision(&revision).as_str(),
+            "C:/cache/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_A,
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(receipt))
     }
 
     #[test]

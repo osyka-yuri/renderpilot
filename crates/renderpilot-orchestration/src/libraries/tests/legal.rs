@@ -1,4 +1,5 @@
-use super::super::artifact_builder::{build_catalog_artifact, package_summary};
+use super::super::artifact_builder::build_catalog_artifact;
+use super::super::projection::package_summary;
 use super::super::resolved::ValidatedCatalog;
 use super::super::types::{
     LibraryCatalog, LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryVendorCatalog,
@@ -44,7 +45,13 @@ fn package_summary_resolves_legal_documents_to_validated_content_links() {
         .expect("adapter")
         .expect("known technology");
 
-    let summary = package_summary(&resolved, &artifact, false).expect("package summary");
+    let entry = super::super::inventory::InventoryEntry {
+        package_id: resolved.package().package_id.clone(),
+        active: Some(artifact),
+        local: None,
+        local_state: super::super::types::LibraryLocalState::Absent,
+    };
+    let summary = package_summary(&entry).expect("package summary");
     let document = summary.legal_documents.first().expect("license");
     assert_eq!(document.kind, LibraryLegalDocumentKind::License);
     assert_eq!(document.title, "OpenVR SDK License");

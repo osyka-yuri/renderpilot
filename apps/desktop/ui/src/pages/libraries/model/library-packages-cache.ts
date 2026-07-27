@@ -1,17 +1,17 @@
-import type { LibraryPackageSummary } from '@entities/library';
+import type { LibraryPackagesOutput } from '@entities/library';
 
 export type LibraryPackagesCache = Readonly<{
-  get(): readonly LibraryPackageSummary[] | null;
-  set(packages: readonly LibraryPackageSummary[]): void;
+  get(): LibraryPackagesOutput | null;
+  set(output: LibraryPackagesOutput): void;
 }>;
 
 export function createLibraryPackagesCache(): LibraryPackagesCache {
-  let packages: readonly LibraryPackageSummary[] | null = null;
+  let output: LibraryPackagesOutput | null = null;
 
   return {
-    get: () => packages,
-    set: (nextPackages) => {
-      packages = nextPackages;
+    get: () => output,
+    set: (nextOutput) => {
+      output = nextOutput;
     },
   };
 }

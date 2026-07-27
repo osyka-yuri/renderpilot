@@ -171,12 +171,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'Restaurar todo a su estado original',
   'gameDetails.updateAll.action': 'Actualizar todo',
   'gameDetails.updateAll.actionCount': 'Actualizar todo ({count})',
-  'gameDetails.updateAll.upToDate': 'Todo está actualizado',
+  'gameDetails.updateAll.upToDate': 'Todas las versiones estables están actualizadas',
   'gameDetails.updateAll.partialFailure':
     'Algunas actualizaciones fallaron ({count}). Revisa los detalles e inténtalo de nuevo.',
   'gameDetails.updateAll.tooltip': {
-    one: 'Actualizar 1 componente a su última versión',
-    other: 'Actualizar {count} componentes a sus últimas versiones',
+    one: 'Actualizar 1 componente a su última versión estable',
+    other: 'Actualizar {count} componentes a sus últimas versiones estables',
   },
   'gameDetails.executable.title': 'Ejecutable del juego',
   'gameDetails.d3d12.status.original': 'EXE original',
@@ -262,6 +262,13 @@ export const es: Record<MessageKey, MessageValue> = {
   'operations.version': 'Versión',
 
   'libraries.error': 'Error',
+  'libraries.catalogFallback.title': 'Catálogo no disponible',
+  'libraries.catalogFallback.description':
+    'Solo se muestran los paquetes registrados localmente. Este no es el catálogo completo.',
+  'libraries.state.localOnly': 'Solo local',
+  'libraries.state.downloaded': 'Descargado',
+  'libraries.state.missing': 'Faltan archivos',
+  'libraries.state.corrupt': 'Archivos dañados',
   'libraries.hash.copy': 'Copiar hash',
   'libraries.hash.copied': 'Copiado',
   'libraries.hash.failed': 'Error al copiar',

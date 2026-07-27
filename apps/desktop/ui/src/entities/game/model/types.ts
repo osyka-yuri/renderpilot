@@ -1,4 +1,10 @@
-import type { AddonKind, D3d12ExecutableAction, OperationMetadata } from '@shared/model';
+import type {
+  AddonKind,
+  CatalogCandidatePackage,
+  CatalogRelease,
+  D3d12ExecutableAction,
+  OperationMetadata,
+} from '@shared/model';
 import type { FilePath, Nullable } from '@shared/types';
 
 /**
@@ -151,11 +157,11 @@ export type GameCandidate = {
   artifact_id: string;
   file_name: string;
   file_path: string | null;
-  version: string | null;
+  technical_version: string | null;
   release_label: string | null;
   source_game_id: string | null;
   comparison: string;
-  catalog_package_id: Nullable<string>;
+  catalog_package: CatalogCandidatePackage | null;
   is_downloaded: boolean;
   is_debug: boolean;
   sha256: string;
@@ -164,8 +170,17 @@ export type GameCandidate = {
 
 /** Honest installed-version state emitted by the Rust candidate DTO. */
 export type InstalledReleaseState =
-  | { kind: 'known'; version: string; release_label: string | null }
-  | { kind: 'mixed'; min_version: string; max_version: string }
+  | {
+      kind: 'known';
+      technical_version: string | null;
+      release_label: string | null;
+      catalog_release: CatalogRelease | null;
+    }
+  | {
+      kind: 'mixed';
+      min_technical_version: string;
+      max_technical_version: string;
+    }
   | { kind: 'unknown' };
 
 export type GameCandidateGroup = {

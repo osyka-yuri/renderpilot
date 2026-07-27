@@ -295,8 +295,6 @@ fn require_preview_artifact(
         return Ok((artifact, true));
     }
     crate::libraries::catalog_packages_as_artifacts()?
-        .into_parts()
-        .0
         .into_iter()
         .find(|artifact| artifact.id() == artifact_id)
         .map(|artifact| (artifact, false))

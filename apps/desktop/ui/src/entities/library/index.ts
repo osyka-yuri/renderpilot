@@ -1,5 +1,4 @@
 export type {
-  ReleaseChannel,
   RuntimeCompatibility,
   LibraryTarget,
   Signature,
@@ -7,6 +6,8 @@ export type {
   LibraryLegalDocumentLink,
   LibraryPackageSummary,
   LibraryPackageState,
+  LibraryPackagesOutput,
+  LibraryPackageMutation,
 } from './model/types';
 
 export {

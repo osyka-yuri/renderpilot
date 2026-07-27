@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{Architecture, Version, text::normalize_required_text};
+use crate::{
+    Architecture, CatalogPackageReceiptV1, PackageVersion, Version, text::normalize_required_text,
+};
 
 use super::ComponentError;
 
@@ -11,7 +13,7 @@ use super::ComponentError;
 pub struct UpstreamPackage {
     provider: UpstreamPackageProvider,
     id: String,
-    version: Version,
+    version: PackageVersion,
 }
 
 impl<'de> Deserialize<'de> for UpstreamPackage {
@@ -41,7 +43,7 @@ impl UpstreamPackage {
         Ok(Self {
             provider,
             id: normalize_required_text("upstream_package_id", id)?,
-            version: Version::parse(version)
+            version: PackageVersion::parse(version)
                 .map_err(ComponentError::InvalidUpstreamPackageVersion)?,
         })
     }
@@ -57,7 +59,7 @@ impl UpstreamPackage {
     }
 
     /// Returns the validated upstream package release version.
-    pub const fn version(&self) -> &Version {
+    pub const fn version(&self) -> &PackageVersion {
         &self.version
     }
 }
@@ -168,6 +170,7 @@ pub struct ArtifactMetadata {
     release: Option<ReleaseMetadata>,
     upstream_package: Option<UpstreamPackage>,
     runtime_target: Option<RuntimeTarget>,
+    catalog_package_receipt: Option<CatalogPackageReceiptV1>,
 }
 
 impl ArtifactMetadata {
@@ -197,6 +200,11 @@ impl ArtifactMetadata {
     /// Returns runtime target constraints, when known.
     pub const fn runtime_target(&self) -> Option<&RuntimeTarget> {
         self.runtime_target.as_ref()
+    }
+
+    /// Returns the immutable catalog receipt attached at download time.
+    pub const fn catalog_package_receipt(&self) -> Option<&CatalogPackageReceiptV1> {
+        self.catalog_package_receipt.as_ref()
     }
 
     /// Sets upstream package provenance.
@@ -232,6 +240,13 @@ impl ArtifactMetadata {
         self.runtime_target = Some(target);
         self
     }
+
+    /// Attaches the immutable catalog receipt used for local package lifecycle.
+    #[must_use]
+    pub fn with_catalog_package_receipt(mut self, receipt: CatalogPackageReceiptV1) -> Self {
+        self.catalog_package_receipt = Some(receipt);
+        self
+    }
 }
 
 impl Serialize for ArtifactMetadata {
@@ -249,6 +264,8 @@ impl Serialize for ArtifactMetadata {
             upstream_package: Option<&'a UpstreamPackage>,
             #[serde(skip_serializing_if = "Option::is_none")]
             runtime_target: Option<&'a RuntimeTarget>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            catalog_package_receipt: Option<&'a CatalogPackageReceiptV1>,
         }
 
         WireMetadata {
@@ -256,6 +273,7 @@ impl Serialize for ArtifactMetadata {
             release_label: self.release_label(),
             upstream_package: self.upstream_package(),
             runtime_target: self.runtime_target(),
+            catalog_package_receipt: self.catalog_package_receipt(),
         }
         .serialize(serializer)
     }
@@ -276,6 +294,8 @@ impl<'de> Deserialize<'de> for ArtifactMetadata {
             upstream_package: Option<UpstreamPackage>,
             #[serde(default)]
             runtime_target: Option<RuntimeTarget>,
+            #[serde(default)]
+            catalog_package_receipt: Option<CatalogPackageReceiptV1>,
         }
 
         let wire = WireMetadata::deserialize(deserializer)?;
@@ -294,6 +314,7 @@ impl<'de> Deserialize<'de> for ArtifactMetadata {
             release,
             upstream_package: wire.upstream_package,
             runtime_target: wire.runtime_target,
+            catalog_package_receipt: wire.catalog_package_receipt,
         })
     }
 }
@@ -301,7 +322,7 @@ impl<'de> Deserialize<'de> for ArtifactMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::VersionParseError;
+    use crate::{CatalogReceiptSchemaV1, PackageVersionParseError, VersionParseError};
 
     #[test]
     fn upstream_package_normalizes_and_round_trips_as_string_json() {
@@ -334,7 +355,9 @@ mod tests {
 
         assert_eq!(
             error,
-            ComponentError::InvalidUpstreamPackageVersion(VersionParseError::InvalidSegment)
+            ComponentError::InvalidUpstreamPackageVersion(
+                PackageVersionParseError::InvalidNumericCore(VersionParseError::InvalidSegment)
+            )
         );
     }
 
@@ -357,6 +380,24 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&ArtifactMetadata::default()).expect("serialize metadata"),
             "{}"
+        );
+    }
+
+    #[test]
+    fn catalog_receipt_schema_is_a_closed_v1_wire_type() {
+        assert_eq!(
+            serde_json::from_str::<CatalogReceiptSchemaV1>("1").expect("v1"),
+            CatalogReceiptSchemaV1
+        );
+        let error = serde_json::from_str::<CatalogReceiptSchemaV1>("2").expect_err("future schema");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported catalog package receipt schema 2")
+        );
+        assert_eq!(
+            serde_json::to_string(&CatalogReceiptSchemaV1).expect("serialize v1"),
+            "1"
         );
     }
 

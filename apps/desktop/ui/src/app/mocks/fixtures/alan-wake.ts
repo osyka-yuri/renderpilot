@@ -63,18 +63,28 @@ export function createAlanWakeDetails(): GameDetails {
         component_id: 'component:aw2:streamline',
         technology: 'nvidia_streamline',
         file_path: 'D:/Epic Games/Alan Wake 2/sl.common.dll',
-        version_report: { kind: 'known', version: '2.4.0', release_label: null },
+        version_report: {
+          kind: 'known',
+          technical_version: '2.4.0',
+          release_label: null,
+          catalog_release: null,
+        },
         candidates: [
           // Multi-file package candidate (matched Streamline release).
           {
             artifact_id: 'artifact:streamline:2.5.1',
             file_name: 'sl.common.dll',
             file_path: `${RENDERPILOT_LIBRARY_PATH}/sl.common_2.5.1.dll`,
-            version: '2.5.1',
+            technical_version: '2.5.1',
             release_label: null,
             source_game_id: null,
             comparison: 'newer_version',
-            catalog_package_id: null,
+            catalog_package: {
+              package_id: 'nvidia-streamline-2.5.1',
+              release: { version: '2.5.1', channel: 'stable', label: null },
+              availability: 'available',
+              automatic_selection_allowed: true,
+            },
             is_downloaded: true,
             is_debug: false,
             sha256: 'mock-sha256-streamline-251-package',

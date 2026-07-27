@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use renderpilot_domain::{CatalogLegalDocumentFormat, CatalogLegalDocumentKind};
+
 use super::LibraryContent;
 
 /// Immutable legal document applicable to one or more catalog packages.
@@ -23,24 +25,10 @@ pub struct LibraryLegalDocument {
 }
 
 /// Legal document role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LibraryLegalDocumentKind {
-    /// Primary license terms for the package.
-    License,
-    /// Attribution or supplemental third-party terms.
-    Notice,
-}
+pub type LibraryLegalDocumentKind = CatalogLegalDocumentKind;
 
 /// Legal document representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LibraryLegalDocumentFormat {
-    /// UTF-8-compatible text or Markdown served as plain text.
-    Text,
-    /// Portable Document Format.
-    Pdf,
-}
+pub type LibraryLegalDocumentFormat = CatalogLegalDocumentFormat;
 
 /// UI-facing metadata and validated link for a legal document.
 #[derive(Debug, Clone, Serialize)]

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use renderpilot_domain::{RuntimeCompatibility, Version, openvr};
+use renderpilot_domain::{PackageVersion, ReleaseChannel, RuntimeCompatibility, openvr};
 
 use crate::ServiceError;
 
@@ -8,9 +8,7 @@ use super::super::library_error;
 use super::super::resolved::PackageReferences;
 use super::super::revision::package_revision_sha256;
 use super::super::types::{LibraryArtifactRecord, LibraryPackage, LibraryProvenance};
-use super::fields::{
-    ensure_dll_name, ensure_id, ensure_not_blank, ensure_numeric_version, ensure_sha256,
-};
+use super::fields::{ensure_dll_name, ensure_id, ensure_not_blank, ensure_sha256};
 use super::legal::LegalDocumentLookup;
 
 pub(super) type ArtifactLookup<'a> = HashMap<&'a str, (usize, &'a LibraryArtifactRecord)>;
@@ -45,7 +43,6 @@ fn validate_identity_and_release(package: &LibraryPackage) -> Result<(), Service
     ensure_id("package technology", &package.technology)?;
     ensure_id("package variant", &package.variant)?;
     ensure_not_blank("package display name", &package.display_name)?;
-    ensure_numeric_version("package release version", &package.release.version)?;
     if let Some(label) = &package.release.label {
         ensure_not_blank("package release label", label)?;
     }
@@ -64,9 +61,13 @@ fn validate_target(package: &LibraryPackage) -> Result<(), ServiceError> {
     match (&package.technology[..], &package.target.compatibility) {
         ("d3d12_agility", Some(RuntimeCompatibility::D3d12Sdk { version }))
             if *version > 0
-                && Version::parse(&package.release.version)
-                    .ok()
-                    .and_then(|release| release.segments().get(1).copied())
+                && package
+                    .release
+                    .version
+                    .numeric_core()
+                    .segments()
+                    .get(1)
+                    .copied()
                     == Some(u64::from(*version)) => {}
         ("d3d12_agility", _) => {
             return Err(library_error(format!(
@@ -135,16 +136,28 @@ fn validate_provenance(package: &LibraryPackage) -> Result<(), ServiceError> {
 fn validate_nuget_provenance(
     package: &LibraryPackage,
     package_id: &str,
-    version: &str,
+    version: &PackageVersion,
     package_sha512: &str,
 ) -> Result<(), ServiceError> {
     ensure_not_blank("NuGet package id", package_id)?;
-    ensure_numeric_version("NuGet package version", version)?;
-    if version != package.release.version {
+    if version != &package.release.version {
         return Err(library_error(format!(
             "package `{}` NuGet version does not match its release",
             package.package_id
         )));
+    }
+    if expected_microsoft_package_id(&package.technology).is_some() {
+        let expected_channel = if version.is_prerelease() {
+            ReleaseChannel::Preview
+        } else {
+            ReleaseChannel::Stable
+        };
+        if package.release.channel != expected_channel {
+            return Err(library_error(format!(
+                "package `{}` Microsoft NuGet channel does not match its version",
+                package.package_id
+            )));
+        }
     }
     if package_sha512.len() != 88
         || !package_sha512.ends_with("==")

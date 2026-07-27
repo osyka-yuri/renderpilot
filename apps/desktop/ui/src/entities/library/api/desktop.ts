@@ -1,13 +1,17 @@
 import { invokeDesktop } from '@shared/api';
 import { requireNonBlankString } from '@shared/validation';
-import type { LibraryPackageState, LibraryPackageSummary } from '../model/types';
+import type {
+  LibraryPackageMutation,
+  LibraryPackageState,
+  LibraryPackagesOutput,
+} from '../model/types';
 
-export async function listLibraryPackages(): Promise<LibraryPackageSummary[]> {
-  return invokeDesktop<LibraryPackageSummary[]>('list_library_packages');
+export async function listLibraryPackages(): Promise<LibraryPackagesOutput> {
+  return invokeDesktop<LibraryPackagesOutput>('list_library_packages');
 }
 
-export async function downloadLibraryPackage(packageId: string): Promise<LibraryPackageState> {
-  return invokeDesktop<LibraryPackageState>('download_library_package', {
+export async function downloadLibraryPackage(packageId: string): Promise<LibraryPackageMutation> {
+  return invokeDesktop<LibraryPackageMutation>('download_library_package', {
     packageId: requireNonBlankString(packageId, 'packageId'),
   });
 }
@@ -22,8 +26,8 @@ export async function downloadArtifact(artifactId: string): Promise<LibraryPacka
   });
 }
 
-export async function deleteLibraryPackage(packageId: string): Promise<LibraryPackageState> {
-  return invokeDesktop<LibraryPackageState>('delete_library_package', {
+export async function deleteLibraryPackage(packageId: string): Promise<LibraryPackageMutation> {
+  return invokeDesktop<LibraryPackageMutation>('delete_library_package', {
     packageId: requireNonBlankString(packageId, 'packageId'),
   });
 }

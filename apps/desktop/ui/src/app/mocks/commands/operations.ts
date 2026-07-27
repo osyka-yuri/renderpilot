@@ -59,7 +59,7 @@ export function mockApplySwap(
     const executedAction = executableActionResult(executableAction);
 
     captureComponentBaseline(normalizedGameId, sourceComponent);
-    sourceFile.version = candidate.version ?? sourceFile.version;
+    sourceFile.version = candidate.technical_version ?? sourceFile.version;
     sourceFile.sha256 = candidate.sha256 || sourceFile.sha256;
     sourceComponent.rollback_available = true;
 
@@ -126,8 +126,9 @@ export function mockPlanSwap(
       artifact_id: normalizedArtifactId,
       target_path: group.file_path,
       replacement_path: candidate.file_path ?? '',
-      original_version: group.version_report.kind === 'known' ? group.version_report.version : null,
-      replacement_version: candidate.version,
+      original_version:
+        group.version_report.kind === 'known' ? group.version_report.technical_version : null,
+      replacement_version: candidate.technical_version,
       original_sha256: null,
       replacement_sha256: candidate.sha256,
       risk_level: action?.kind === 'repair_required' ? 'blocked' : 'low',
@@ -140,7 +141,7 @@ export function mockPlanSwap(
           target_path: group.file_path,
           replacement_path: candidate.file_path,
           original_version: null,
-          replacement_version: candidate.version,
+          replacement_version: candidate.technical_version,
           original_sha256: null,
           replacement_sha256: candidate.sha256,
         },

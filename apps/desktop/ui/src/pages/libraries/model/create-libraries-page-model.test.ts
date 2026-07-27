@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { LibraryPackageState, LibraryPackageSummary, ReleaseChannel } from '@entities/library';
+import type { LibraryPackageMutation, LibraryPackagesOutput } from '@entities/library';
 import type * as SharedLib from '@shared/lib';
+import type { ReleaseChannel } from '@shared/model';
 
 const mocks = vi.hoisted(() => ({
-  listLibraryPackages: vi.fn<() => Promise<LibraryPackageSummary[]>>(),
-  downloadLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageState>>(),
-  deleteLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageState>>(),
+  listLibraryPackages: vi.fn<() => Promise<LibraryPackagesOutput>>(),
+  downloadLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageMutation>>(),
+  deleteLibraryPackage: vi.fn<(packageId: string) => Promise<LibraryPackageMutation>>(),
   clearDownloadProgress: vi.fn<(ids: readonly string[]) => void>(),
   sumDownloadFractions: vi.fn<(ids: readonly string[]) => number>(),
 }));
@@ -55,12 +56,18 @@ function packageFixture(options: {
   };
 }
 
-function state(packageId: string, isDownloaded: boolean): LibraryPackageState {
+function output(
+  packages: LibraryPackagesOutput['packages'],
+  catalogStatus: LibraryPackagesOutput['catalog_status'] = 'active',
+): LibraryPackagesOutput {
+  return { packages, catalog_status: catalogStatus };
+}
+
+function mutation(packageId: string, isDownloaded: boolean): LibraryPackageMutation {
+  const [packageSummary] = packagesOf([{ id: packageId, version: '1', isDownloaded }]);
   return {
     package_id: packageId,
-    version: '',
-    is_downloaded: isDownloaded,
-    artifact_id: isDownloaded ? `catalog:${packageId}` : null,
+    package: packageSummary,
   };
 }
 
@@ -70,14 +77,14 @@ describe('createLibrariesPageModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     cache = createLibraryPackagesCache();
-    mocks.downloadLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, true)));
-    mocks.deleteLibraryPackage.mockImplementation((id) => Promise.resolve(state(id, false)));
+    mocks.downloadLibraryPackage.mockImplementation((id) => Promise.resolve(mutation(id, true)));
+    mocks.deleteLibraryPackage.mockImplementation((id) => Promise.resolve(mutation(id, false)));
     mocks.clearDownloadProgress.mockReturnValue(undefined);
     mocks.sumDownloadFractions.mockReturnValue(0);
   });
 
   async function loadedModel(specs: PackageFixture[]) {
-    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
+    mocks.listLibraryPackages.mockResolvedValue(output(packagesOf(specs)));
     const model = createLibrariesPageModel({ cache });
     await model.start();
     return model;
@@ -91,8 +98,8 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'dlss-2', lib: 'nvngx_dlss', version: '2' }),
     ]);
     mocks.listLibraryPackages
-      .mockResolvedValueOnce(initialPackages)
-      .mockResolvedValueOnce(refreshedPackages);
+      .mockResolvedValueOnce(output(initialPackages))
+      .mockResolvedValueOnce(output(refreshedPackages));
 
     const firstModel = createLibrariesPageModel({ cache });
     await firstModel.start();
@@ -112,7 +119,7 @@ describe('createLibrariesPageModel', () => {
 
   it('coalesces a pre-mount refresh request with the mount load', async () => {
     mocks.listLibraryPackages.mockResolvedValue(
-      packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })]),
+      output(packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })])),
     );
     const model = createLibrariesPageModel({ cache });
 
@@ -123,9 +130,9 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('shares one in-flight promise across repeated start calls', async () => {
-    let resolvePackages!: (packages: LibraryPackageSummary[]) => void;
+    let resolvePackages!: (packages: LibraryPackagesOutput) => void;
     mocks.listLibraryPackages.mockReturnValue(
-      new Promise<LibraryPackageSummary[]>((resolve) => {
+      new Promise<LibraryPackagesOutput>((resolve) => {
         resolvePackages = resolve;
       }),
     );
@@ -137,7 +144,7 @@ describe('createLibrariesPageModel', () => {
     expect(secondStart).toBe(firstStart);
     expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
 
-    resolvePackages([]);
+    resolvePackages(output([]));
     await firstStart;
   });
 
@@ -146,7 +153,7 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
     ]);
     mocks.listLibraryPackages
-      .mockResolvedValueOnce(initialPackages)
+      .mockResolvedValueOnce(output(initialPackages))
       .mockRejectedValueOnce(new Error('offline'));
 
     const firstModel = createLibrariesPageModel({ cache });
@@ -159,10 +166,29 @@ describe('createLibrariesPageModel', () => {
 
       expect(secondModel.packages).toEqual(initialPackages);
       expect(secondModel.errorMessage).not.toBeNull();
-      expect(cache.get()).toEqual(initialPackages);
+      expect(cache.get()).toEqual(output(initialPackages));
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it('caches and exposes an explicit local fallback status', async () => {
+    const packages = packagesOf([
+      {
+        id: 'withdrawn',
+        availability: 'local_only',
+        localState: 'verified',
+      },
+    ]);
+    mocks.listLibraryPackages.mockResolvedValue(output(packages, 'local_fallback'));
+    const model = createLibrariesPageModel({ cache });
+
+    await model.start();
+
+    expect(model.catalogStatus).toBe('local_fallback');
+    expect(cache.get()).toEqual(output(packages, 'local_fallback'));
+    const nextModel = createLibrariesPageModel({ cache });
+    expect(nextModel.catalogStatus).toBe('local_fallback');
   });
 
   it('applies a successful mutation response without a fallible state refresh', async () => {
@@ -173,11 +199,11 @@ describe('createLibrariesPageModel', () => {
     await expect(model.handleDownload('dlss-1')).resolves.toBe(true);
 
     expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
-    expect(model.packages[0].is_downloaded).toBe(true);
+    expect(model.packages[0].local_state).toBe('verified');
     expect(model.errorMessage).toBeNull();
 
     const nextModel = createLibrariesPageModel({ cache });
-    expect(nextModel.packages[0].is_downloaded).toBe(true);
+    expect(nextModel.packages[0].local_state).toBe('verified');
   });
 
   it('applies delete state directly to the matching row', async () => {
@@ -191,7 +217,20 @@ describe('createLibrariesPageModel', () => {
     ]);
 
     await expect(model.handleDelete('dlss-1')).resolves.toBe(true);
-    expect(model.packages[0].is_downloaded).toBe(false);
+    expect(model.packages[0].local_state).toBe('absent');
+  });
+
+  it('deletes a registration by logical package id', async () => {
+    const model = await loadedModel([
+      {
+        id: 'dlss-downloaded',
+        isDownloaded: true,
+      },
+    ]);
+    await model.handleDelete('dlss-downloaded');
+
+    expect(mocks.deleteLibraryPackage).toHaveBeenCalledWith('dlss-downloaded');
+    expect(model.packages[0].local_state).toBe('absent');
   });
 
   it('downloads every pending latest package and reports the count', async () => {
@@ -217,10 +256,10 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'c', lib: 'technology_c', version: '1' }),
       packageFixture({ id: 'd', lib: 'technology_d', version: '1' }),
     ]);
-    const resolvers: Record<string, (value: LibraryPackageState) => void> = {};
+    const resolvers: Record<string, (value: LibraryPackageMutation) => void> = {};
     mocks.downloadLibraryPackage.mockImplementation(
       (id) =>
-        new Promise<LibraryPackageState>((resolve) => {
+        new Promise<LibraryPackageMutation>((resolve) => {
           resolvers[id] = resolve;
         }),
     );
@@ -232,12 +271,12 @@ describe('createLibrariesPageModel', () => {
     expect(mocks.downloadLibraryPackage.mock.calls.flat()).not.toContain('d');
 
     for (const id of ['a', 'b', 'c']) {
-      resolvers[id](state(id, true));
+      resolvers[id](mutation(id, true));
     }
     await vi.waitFor(() => {
       expect(resolvers.d).toBeTypeOf('function');
     });
-    resolvers.d(state('d', true));
+    resolvers.d(mutation('d', true));
 
     await expect(bulk).resolves.toEqual({ succeeded: 4, failed: 0, skipped: 0 });
     expect(mocks.downloadLibraryPackage.mock.calls.map(([id]) => id).sort()).toEqual([
@@ -267,7 +306,7 @@ describe('createLibrariesPageModel', () => {
 
   it('counts a failed package without aborting the rest of the batch', async () => {
     mocks.downloadLibraryPackage.mockImplementation((id) =>
-      id === 'xess-1' ? Promise.reject(new Error('boom')) : Promise.resolve(state(id, true)),
+      id === 'xess-1' ? Promise.reject(new Error('boom')) : Promise.resolve(mutation(id, true)),
     );
     const model = await loadedModel([
       packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' }),
@@ -300,9 +339,9 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('drops a package list that resolves after the model is disposed', async () => {
-    let resolvePackages!: (packages: LibraryPackageSummary[]) => void;
+    let resolvePackages!: (packages: LibraryPackagesOutput) => void;
     mocks.listLibraryPackages.mockReturnValue(
-      new Promise<LibraryPackageSummary[]>((resolve) => {
+      new Promise<LibraryPackagesOutput>((resolve) => {
         resolvePackages = resolve;
       }),
     );
@@ -311,7 +350,7 @@ describe('createLibrariesPageModel', () => {
 
     model.dispose();
     resolvePackages(
-      packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })]),
+      output(packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })])),
     );
     await loading;
 
@@ -336,21 +375,23 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('does not let an older package request overwrite a newer result', async () => {
-    let resolveFirst!: (packages: LibraryPackageSummary[]) => void;
+    let resolveFirst!: (packages: LibraryPackagesOutput) => void;
     mocks.listLibraryPackages
       .mockReturnValueOnce(
-        new Promise<LibraryPackageSummary[]>((resolve) => {
+        new Promise<LibraryPackagesOutput>((resolve) => {
           resolveFirst = resolve;
         }),
       )
       .mockResolvedValueOnce(
-        packagesOf([packageFixture({ id: 'new', lib: 'nvngx_dlss', version: '2' })]),
+        output(packagesOf([packageFixture({ id: 'new', lib: 'nvngx_dlss', version: '2' })])),
       );
     const model = createLibrariesPageModel({ cache });
 
     const older = model.start();
     model.requestCatalogRefresh(1);
-    resolveFirst(packagesOf([packageFixture({ id: 'old', lib: 'nvngx_dlss', version: '1' })]));
+    resolveFirst(
+      output(packagesOf([packageFixture({ id: 'old', lib: 'nvngx_dlss', version: '1' })])),
+    );
     await older;
     await vi.waitFor(() => {
       expect(model.packages.map((row) => row.package_id)).toEqual(['new']);
@@ -362,10 +403,10 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'a', lib: 'nvngx_dlss', version: '1' }),
       packageFixture({ id: 'b', lib: 'nvngx_dlssg', version: '1' }),
     ]);
-    const resolvers: Record<string, (value: LibraryPackageState) => void> = {};
+    const resolvers: Record<string, (value: LibraryPackageMutation) => void> = {};
     mocks.downloadLibraryPackage.mockImplementation(
       (id) =>
-        new Promise<LibraryPackageState>((resolve) => {
+        new Promise<LibraryPackageMutation>((resolve) => {
           resolvers[id] = resolve;
         }),
     );
@@ -378,8 +419,8 @@ describe('createLibrariesPageModel', () => {
     expect(model.bulkProgressValue).toBeCloseTo(0.5);
     expect(mocks.sumDownloadFractions).toHaveBeenCalledWith(['a', 'b']);
 
-    resolvers.a(state('a', true));
-    resolvers.b(state('b', true));
+    resolvers.a(mutation('a', true));
+    resolvers.b(mutation('b', true));
     await done;
     expect(model.bulkProgressValue).toBe(0);
   });
@@ -388,7 +429,7 @@ describe('createLibrariesPageModel', () => {
     const specs = [packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })];
     const model = await loadedModel(specs);
     vi.clearAllMocks();
-    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
+    mocks.listLibraryPackages.mockResolvedValue(output(packagesOf(specs)));
 
     await model.refreshCatalog();
 
@@ -438,21 +479,21 @@ describe('createLibrariesPageModel', () => {
   it('deduplicates refresh generations and runs a queued refresh after a mutation', async () => {
     const specs = [packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })];
     const model = await loadedModel(specs);
-    let resolveDownload!: (value: LibraryPackageState) => void;
+    let resolveDownload!: (value: LibraryPackageMutation) => void;
     mocks.downloadLibraryPackage.mockReturnValue(
-      new Promise<LibraryPackageState>((resolve) => {
+      new Promise<LibraryPackageMutation>((resolve) => {
         resolveDownload = resolve;
       }),
     );
     mocks.listLibraryPackages.mockClear();
-    mocks.listLibraryPackages.mockResolvedValue(packagesOf(specs));
+    mocks.listLibraryPackages.mockResolvedValue(output(packagesOf(specs)));
 
     const download = model.handleDownload('dlss-1');
     model.requestCatalogRefresh(1);
     model.requestCatalogRefresh(1);
     expect(mocks.listLibraryPackages).not.toHaveBeenCalled();
 
-    resolveDownload(state('dlss-1', true));
+    resolveDownload(mutation('dlss-1', true));
     await download;
     await vi.waitFor(() => {
       expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);

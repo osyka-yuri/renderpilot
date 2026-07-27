@@ -1,5 +1,6 @@
 import { trimToEmpty } from '@shared/text';
 import { t, getLocale } from '@shared/i18n';
+import { comparePackageVersions } from '@shared/model';
 import type { LibraryPackageSummary, Signature } from '@entities/library';
 import {
   libraryVendorOrder,
@@ -141,7 +142,7 @@ export function selectLatestStablePackages(
 ): LibraryPackageRow[] {
   const latest = new Map<string, LibraryPackageRow>();
   for (const row of rows) {
-    if (row.release.channel !== 'stable') {
+    if (!isDownloadLatestCandidate(row)) {
       continue;
     }
     const identity = [
@@ -160,41 +161,38 @@ export function selectLatestStablePackages(
   return [...latest.values()];
 }
 
+/** Shared policy for package-level automatic/bulk download selection. */
+export function isDownloadLatestCandidate(row: LibraryPackageRow): boolean {
+  return row.automatic_selection_allowed;
+}
+
+export function shouldDeleteLibraryPackage(row: LibraryPackageRow): boolean {
+  return row.availability === 'local_only' || row.local_state === 'verified';
+}
+
+export function libraryPackageStateLabel(row: LibraryPackageRow): string | null {
+  switch (row.local_state) {
+    case 'corrupt':
+      return t('libraries.state.corrupt');
+    case 'missing':
+      return t('libraries.state.missing');
+    case 'verified':
+      return row.availability === 'local_only'
+        ? t('libraries.state.localOnly')
+        : t('libraries.state.downloaded');
+    case 'absent':
+      return row.availability === 'local_only' ? t('libraries.state.localOnly') : null;
+  }
+}
+
 function runtimeCompatibilityKey(row: LibraryPackageRow): string {
   const compatibility = row.target.compatibility;
   return compatibility ? `${compatibility.kind}:${compatibility.version}` : '';
 }
 
-/**
- * Orders dotted numeric versions without losing u64 precision. Non-numeric
- * versions fall back to locale-independent string ordering.
- */
+/** Orders canonical NuGet/SemVer2 package versions without precision loss. */
 export function compareReleaseVersions(left: string, right: string): number {
-  const leftVersion = parseNumericVersion(left);
-  const rightVersion = parseNumericVersion(right);
-  if (leftVersion && rightVersion) {
-    const length = Math.max(leftVersion.length, rightVersion.length);
-    for (let index = 0; index < length; index += 1) {
-      const leftSegment = leftVersion[index] ?? 0n;
-      const rightSegment = rightVersion[index] ?? 0n;
-      if (leftSegment !== rightSegment) {
-        return leftSegment < rightSegment ? -1 : 1;
-      }
-    }
-    return 0;
-  }
-  return left.localeCompare(right, 'en');
-}
-
-function parseNumericVersion(value: string): bigint[] | null {
-  if (!/^\d+(?:\.\d+)*$/.test(value)) {
-    return null;
-  }
-  try {
-    return value.split('.').map(BigInt);
-  } catch {
-    return null;
-  }
+  return comparePackageVersions(left, right);
 }
 
 export function getDefaultTypeForVendor(vendor: Vendor): LibraryTypeValue {

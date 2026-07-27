@@ -14,7 +14,11 @@ import type {
   RollbackPlan,
   SwapPlan,
 } from '@entities/operation';
-import type { LibraryPackageState, LibraryPackageSummary } from '@entities/library';
+import type {
+  LibraryPackageMutation,
+  LibraryPackageState,
+  LibraryPackagesOutput,
+} from '@entities/library';
 import type { ManifestRefreshReport } from '@features/scan-libraries';
 import { fileNameFromPath } from '@shared/path';
 import { isRecord, isString, requireNonBlankString } from '@shared/validation';
@@ -92,10 +96,10 @@ export type DesktopCommandResultMap = {
   apply_swap: ApplySwapResult;
   plan_rollback: RollbackPlan;
   rollback_component: RollbackComponentResult;
-  list_library_packages: LibraryPackageSummary[];
-  download_library_package: LibraryPackageState;
+  list_library_packages: LibraryPackagesOutput;
+  download_library_package: LibraryPackageMutation;
   download_artifact: LibraryPackageState;
-  delete_library_package: LibraryPackageState;
+  delete_library_package: LibraryPackageMutation;
   // Wire DTOs for Luma/RenoDX live in feature slices; mock results stay untyped
   // so `app` does not import feature internals (FSD boundaries).
   luma_availability: unknown;

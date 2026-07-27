@@ -238,14 +238,14 @@ export const en = {
   'gameDetails.streamline.updatesSummary': '{updates} updates · {missing} missing',
   'gameDetails.streamline.restoreAllAria': 'Restore all plugins to original',
   'gameDetails.streamline.restoreAllTooltip': 'Restore all to original',
-  'gameDetails.updateAll.action': 'Update all to latest',
-  'gameDetails.updateAll.actionCount': 'Update all to latest ({count})',
-  'gameDetails.updateAll.upToDate': 'Everything is up to date',
+  'gameDetails.updateAll.action': 'Update all',
+  'gameDetails.updateAll.actionCount': 'Update all ({count})',
+  'gameDetails.updateAll.upToDate': 'All stable versions are up to date',
   'gameDetails.updateAll.partialFailure':
     'Some updates failed ({count}). Check the details and try again.',
   'gameDetails.updateAll.tooltip': {
-    one: 'Update 1 component to its latest version',
-    other: 'Update {count} components to their latest versions',
+    one: 'Update 1 component to its latest stable version',
+    other: 'Update {count} components to their latest stable versions',
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
@@ -332,6 +332,13 @@ export const en = {
 
   // ── Libraries page ──
   'libraries.error': 'Error',
+  'libraries.catalogFallback.title': 'Catalog unavailable',
+  'libraries.catalogFallback.description':
+    'Only locally registered packages are shown. This is not the complete catalog.',
+  'libraries.state.localOnly': 'Local only',
+  'libraries.state.downloaded': 'Downloaded',
+  'libraries.state.missing': 'Missing files',
+  'libraries.state.corrupt': 'Corrupt files',
   'libraries.hash.copy': 'Copy Hash',
   'libraries.hash.copied': 'Copied',
   'libraries.hash.failed': 'Failed to copy',

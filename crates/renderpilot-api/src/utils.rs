@@ -44,6 +44,9 @@ pub(crate) fn available_update_count<'a>(
             group.candidates().iter().any(|candidate| {
                 candidate.comparison()
                     == renderpilot_orchestration::application::CandidateComparison::NewerVersion
+                    && renderpilot_orchestration::application::is_automatic_catalog_candidate(
+                        candidate,
+                    )
             })
         })
         .count()

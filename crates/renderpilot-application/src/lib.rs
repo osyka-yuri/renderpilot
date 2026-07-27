@@ -18,8 +18,9 @@ mod ports;
 mod transition;
 
 pub use candidates::{
-    CandidateComparison, CandidateContext, ComponentReplacementCandidates, InstalledReleaseState,
-    ReplacementCandidate, find_replacement_candidates,
+    ActiveCatalogPackage, CandidateComparison, CandidateContext, ComponentReplacementCandidates,
+    InstalledReleaseState, ReplacementCandidate, find_replacement_candidates,
+    is_automatic_catalog_candidate,
 };
 pub use compatibility::{
     D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,

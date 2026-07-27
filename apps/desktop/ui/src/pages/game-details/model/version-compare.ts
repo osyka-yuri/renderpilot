@@ -1,9 +1,11 @@
+import { canonicalizePackageVersion, comparePackageVersions } from '@shared/model';
+
 /**
- * Trailing-zero-insensitive dotted version compare for the game-details UI.
+ * Presentation-version comparison for the game-details UI.
  *
- * Mirrors backend `Version` equality/ordering: PE `2.9.0.0` and manifest
- * `2.9.0` are the same release. Used by Streamline bulk versions and
- * "update all to latest".
+ * Canonical package versions use the shared NuGet/SemVer precedence rules.
+ * Invalid package identities fall back to backend-compatible PE FileVersion
+ * ordering, preserving arbitrary technical-version segment counts.
  */
 
 /** Semantic equality: trailing zero segments do not distinguish releases. */
@@ -13,6 +15,13 @@ export function versionsEqual(left: string, right: string): boolean {
 
 /** Orders dotted version strings oldest-first, with a lexical fallback per segment. */
 export function compareVersionAsc(left: string, right: string): number {
+  if (canonicalizePackageVersion(left) !== null && canonicalizePackageVersion(right) !== null) {
+    return comparePackageVersions(left, right);
+  }
+  return compareTechnicalVersionAsc(left, right);
+}
+
+function compareTechnicalVersionAsc(left: string, right: string): number {
   const leftParts = left.split('.');
   const rightParts = right.split('.');
   const length = Math.max(leftParts.length, rightParts.length);

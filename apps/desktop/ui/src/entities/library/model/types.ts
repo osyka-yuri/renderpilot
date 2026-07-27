@@ -1,4 +1,4 @@
-export type ReleaseChannel = 'stable' | 'beta' | 'debug';
+import type { CatalogPackageAvailability, CatalogRelease } from '@shared/model';
 
 export type RuntimeCompatibility = Readonly<{ kind: 'd3d12_sdk'; version: number }>;
 
@@ -18,13 +18,8 @@ export type Signature = Readonly<
   | { status: 'unsigned' }
 >;
 
-export type LibraryRelease = Readonly<{
-  /** Canonical package version used for presentation, ordering, and selection. */
-  version: string;
-  channel: ReleaseChannel;
-  /** Optional supplemental annotation displayed verbatim after the version. */
-  label: string | null;
-}>;
+/** Canonical package release used for presentation, ordering, and selection. */
+export type LibraryRelease = CatalogRelease;
 
 export type LibraryLegalDocumentLink = Readonly<{
   legal_document_id: string;
@@ -38,20 +33,30 @@ export type LibraryLegalDocumentLink = Readonly<{
 /** Fully resolved package projection returned by the desktop API. */
 export type LibraryPackageSummary = Readonly<{
   package_id: string;
-  artifact_id: string;
   vendor: string;
   technology: string;
   variant: string;
   display_name: string;
   release: LibraryRelease;
   target: LibraryTarget;
-  revision_sha256: string;
   primary_file_name: string;
   primary_sha256: string;
   primary_signature: Signature;
   legal_documents: readonly LibraryLegalDocumentLink[];
   size_bytes: number;
-  is_downloaded: boolean;
+  availability: CatalogPackageAvailability;
+  local_state: 'absent' | 'verified' | 'missing' | 'corrupt';
+  automatic_selection_allowed: boolean;
+}>;
+
+export type LibraryPackagesOutput = Readonly<{
+  packages: readonly LibraryPackageSummary[];
+  catalog_status: 'active' | 'local_fallback';
+}>;
+
+export type LibraryPackageMutation = Readonly<{
+  package_id: string;
+  package: LibraryPackageSummary | null;
 }>;
 
 export type LibraryPackageState = Readonly<{

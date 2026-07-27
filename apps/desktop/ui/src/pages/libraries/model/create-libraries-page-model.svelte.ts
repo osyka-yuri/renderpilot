@@ -10,6 +10,7 @@ import {
   type LibraryTypeValue,
   type LibraryPackageRow,
   shouldShowPackageDisplayName,
+  shouldDeleteLibraryPackage,
 } from './libraries-page-model';
 import { describeCommandError } from '@shared/api';
 import { runWithConcurrency } from '@shared/concurrency';
@@ -17,8 +18,9 @@ import { clearDownloadProgress, sumDownloadFractions } from '@shared/lib';
 import { createDisposableRequestChannel } from '@shared/requests';
 import { t } from '@shared/i18n';
 import {
-  type LibraryPackageState,
+  type LibraryPackageMutation,
   type LibraryPackageSummary,
+  type LibraryPackagesOutput,
   listLibraryPackages,
   downloadLibraryPackage,
   deleteLibraryPackage,
@@ -38,7 +40,7 @@ type RunPackageActionOptions = {
   action: PackageAction;
   origin: PackageActionOrigin;
   failureContext: string;
-  execute: (packageId: string) => Promise<LibraryPackageState>;
+  execute: () => Promise<LibraryPackageMutation>;
   // Bulk runs report one summary toast instead of N page-level errors.
   suppressErrorBanner?: boolean;
 };
@@ -69,7 +71,10 @@ type LibrariesPageModelOptions = Readonly<{
 export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}) {
   const cache = options.cache ?? sharedLibraryPackagesCache;
   const initialCached = cache.get();
-  let packages = $state<readonly LibraryPackageSummary[]>(initialCached ?? []);
+  let packages = $state<readonly LibraryPackageSummary[]>(initialCached?.packages ?? []);
+  let catalogStatus = $state<LibraryPackagesOutput['catalog_status']>(
+    initialCached?.catalog_status ?? 'active',
+  );
   let hasLoaded = $state(initialCached !== null);
   let loading = $state(initialCached === null);
   let refreshing = $state(false);
@@ -98,7 +103,7 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
   );
   const latestStablePackages = $derived(selectLatestStablePackages(packages));
   const latestStablePendingCount = $derived(
-    latestStablePackages.filter((row) => !row.is_downloaded).length,
+    latestStablePackages.filter((row) => row.local_state !== 'verified').length,
   );
   const bulkProgressValue = $derived.by(() => {
     if (!bulkDownloading) {
@@ -170,11 +175,11 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     errorMessage = null;
 
     try {
-      const nextPackages = await listLibraryPackages();
+      const output = await listLibraryPackages();
       if (!isCurrentLoadRequest(requestId)) {
         return;
       }
-      commitPackages(nextPackages);
+      commitOutput(output);
     } catch (error) {
       if (!isCurrentLoadRequest(requestId)) {
         return;
@@ -217,17 +222,21 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
       action: 'download',
       origin: 'user',
       failureContext: t('libraries.error.downloadFailed'),
-      execute: downloadLibraryPackage,
+      execute: () => downloadLibraryPackage(packageId),
     });
   }
 
   async function handleDelete(packageId: string): Promise<boolean> {
+    const row = packages.find((candidate) => candidate.package_id === packageId);
+    if (!row || !shouldDeleteLibraryPackage(row)) {
+      return false;
+    }
     return runPackageAction({
       packageId,
       action: 'delete',
       origin: 'user',
       failureContext: t('libraries.error.deleteFailed'),
-      execute: deleteLibraryPackage,
+      execute: () => deleteLibraryPackage(packageId),
     });
   }
 
@@ -235,7 +244,7 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     if (!active || isBusy) {
       return EMPTY_BULK_RESULT;
     }
-    const targets = latestStablePackages.filter((row) => !row.is_downloaded);
+    const targets = latestStablePackages.filter((row) => row.local_state !== 'verified');
     if (targets.length === 0) {
       return EMPTY_BULK_RESULT;
     }
@@ -257,7 +266,7 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
             action: 'download',
             origin: 'bulk',
             failureContext: t('libraries.error.downloadFailed'),
-            execute: downloadLibraryPackage,
+            execute: () => downloadLibraryPackage(row.package_id),
             suppressErrorBanner: true,
           });
           if (ran) {
@@ -300,9 +309,9 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     errorMessage = null;
 
     try {
-      const state = await options.execute(options.packageId);
+      const mutation = await options.execute();
       if (isModelActive()) {
-        applyPackageState(state);
+        applyPackageMutation(mutation);
       }
       return true;
     } catch (error) {
@@ -326,17 +335,30 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     }
   }
 
-  function applyPackageState(state: LibraryPackageState): void {
-    commitPackages(
-      packages.map((row) =>
-        row.package_id === state.package_id ? { ...row, is_downloaded: state.is_downloaded } : row,
-      ),
-    );
+  function applyPackageMutation(mutation: LibraryPackageMutation): void {
+    const previousIndex = packages.findIndex((row) => row.package_id === mutation.package_id);
+    if (mutation.package === null) {
+      commitPackages(packages.filter((_, index) => index !== previousIndex));
+      return;
+    }
+    const replacement = mutation.package;
+    if (previousIndex < 0) {
+      commitPackages([...packages, replacement]);
+      return;
+    }
+    commitPackages(packages.map((row, index) => (index === previousIndex ? replacement : row)));
   }
 
   function commitPackages(nextPackages: readonly LibraryPackageSummary[]): void {
     packages = nextPackages;
-    cache.set(nextPackages);
+    cache.set({ packages: nextPackages, catalog_status: catalogStatus });
+    hasLoaded = true;
+  }
+
+  function commitOutput(output: LibraryPackagesOutput): void {
+    catalogStatus = output.catalog_status;
+    packages = output.packages;
+    cache.set(output);
     hasLoaded = true;
   }
 
@@ -403,6 +425,9 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     },
     get errorMessage() {
       return errorMessage;
+    },
+    get catalogStatus() {
+      return catalogStatus;
     },
     get pendingActions() {
       return pendingActions as ReadonlyMap<string, PackageAction>;

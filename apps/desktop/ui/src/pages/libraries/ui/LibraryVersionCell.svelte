@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { Badge } from '@shared/ui';
+
   import {
     formatArchitectureLabel,
     formatVersionLabel,
+    libraryPackageStateLabel,
     type LibraryPackageRow,
   } from '../model/libraries-page-model';
 
@@ -15,6 +18,7 @@
 
   const versionLabel = $derived(formatVersionLabel(row));
   const architectureLabel = $derived(formatArchitectureLabel(row));
+  const stateLabel = $derived(libraryPackageStateLabel(row));
   const displayNameVisible = $derived(showPackageDisplayName());
 </script>
 
@@ -22,9 +26,10 @@
   <span class="flex items-center gap-2">
     <span>{versionLabel}</span>
     {#if architectureLabel}
-      <span class="rounded-sm border px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase">
-        {architectureLabel}
-      </span>
+      <Badge variant="outline">{architectureLabel}</Badge>
+    {/if}
+    {#if stateLabel}
+      <Badge variant="outline">{stateLabel}</Badge>
     {/if}
   </span>
   {#if displayNameVisible}

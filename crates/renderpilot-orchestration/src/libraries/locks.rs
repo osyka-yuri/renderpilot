@@ -1,7 +1,7 @@
 //! Keyed async locks for content-addressed library operations.
 //!
-//! A package revision is the lifecycle identity while an artifact digest is
-//! the physical content identity.  Keeping both lock domains lets unrelated
+//! A logical package id is the lifecycle identity while an artifact digest is
+//! the physical content identity. Keeping both lock domains lets unrelated
 //! packages proceed concurrently while preventing duplicate downloads or
 //! partial writes for shared content.
 
@@ -35,9 +35,9 @@ mod tests {
 
     #[tokio::test]
     async fn same_key_is_serialized_but_other_keys_progress() {
-        let first = acquire("revision:a").await;
-        let waiting = tokio::spawn(async { acquire("revision:a").await });
-        let other = tokio::spawn(async { acquire("revision:b").await });
+        let first = acquire("package-id:a").await;
+        let waiting = tokio::spawn(async { acquire("package-id:a").await });
+        let other = tokio::spawn(async { acquire("package-id:b").await });
         tokio::task::yield_now().await;
         assert!(other.is_finished());
         assert!(!waiting.is_finished());

@@ -1,13 +1,18 @@
 use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
 
+use crate::hash::sha256_hex;
+
 use super::{
-    CatalogFixture, args, sample_artifact, sample_bundle_artifact, sample_bundle_component,
-    sample_component, sample_game,
+    CatalogFixture, TempGameFolder, args, path_string, sample_artifact, sample_bundle_artifact,
+    sample_bundle_component, sample_component, sample_game,
 };
 
 #[test]
 fn candidates_show_newer_update_for_same_technology_only() {
     let fixture = CatalogFixture::new("candidates-same-tech");
+    let library_folder = TempGameFolder::new("candidates-same-tech-library");
+    let dlss_path = write_candidate_file(&library_folder, "nvngx_dlss.dll", b"dlss-3.7");
+    let fg_path = write_candidate_file(&library_folder, "nvngx_dlssg.dll", b"fg-3.7");
     let game_a = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
     let game_b = sample_game("manual:C:/Games/GameB", "Game B", "C:/Games/GameB");
 
@@ -28,17 +33,17 @@ fn candidates_show_newer_update_for_same_technology_only() {
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
-        "C:/Games/GameB/nvngx_dlss.dll",
+        &dlss_path,
         Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        &sha256_hex(b"dlss-3.7"),
         Some(game_b.id().as_str()),
     ));
     fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
         GraphicsTechnology::DlssFrameGeneration,
-        "C:/Games/GameB/nvngx_dlssg.dll",
+        &fg_path,
         Some("3.7.0"),
-        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        &sha256_hex(b"fg-3.7"),
         Some(game_b.id().as_str()),
     ));
 
@@ -52,7 +57,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0]["technology"], "dlss_super_resolution");
     assert_eq!(groups[0]["version_report"]["kind"], "known");
-    assert_eq!(groups[0]["version_report"]["version"], "3.5.0");
+    assert_eq!(groups[0]["version_report"]["technical_version"], "3.5.0");
     assert_eq!(
         groups[0]["candidates"]
             .as_array()
@@ -66,11 +71,15 @@ fn candidates_show_newer_update_for_same_technology_only() {
         game_b.id().as_str()
     );
     assert_eq!(groups[0]["candidates"][0]["file_name"], "nvngx_dlss.dll");
+    assert_eq!(groups[0]["candidates"][0]["technical_version"], "3.7.0");
 }
 
 #[test]
 fn candidates_offer_streamline_bundle_swap() {
     let fixture = CatalogFixture::new("candidates-streamline");
+    let library_folder = TempGameFolder::new("candidates-streamline-library");
+    let streamline_path =
+        write_candidate_file(&library_folder, "sl.interposer.dll", b"streamline-2.5");
     let game_a = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
     let game_b = sample_game("manual:C:/Games/GameB", "Game B", "C:/Games/GameB");
 
@@ -91,9 +100,9 @@ fn candidates_offer_streamline_bundle_swap() {
     fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
         GraphicsTechnology::NvidiaStreamline,
-        "C:/Games/GameB/sl.interposer.dll",
+        &streamline_path,
         Some("2.5.0"),
-        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        &sha256_hex(b"streamline-2.5"),
         Some(game_b.id().as_str()),
     ));
 
@@ -118,6 +127,15 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
     // Groups are only emitted when at least one foreign artifact matches, so the
     // library rows below exist solely to surface the version_report payload.
     let fixture = CatalogFixture::new("candidates-version-report-states");
+    let library_folder = TempGameFolder::new("candidates-version-report-library");
+    let common_path =
+        write_candidate_file(&library_folder, "sl.common.dll", b"streamline-common-2.5");
+    let interposer_path = write_candidate_file(
+        &library_folder,
+        "sl.interposer.dll",
+        b"streamline-interposer-2.5",
+    );
+    let dlss_path = write_candidate_file(&library_folder, "nvngx_dlss.dll", b"dlss-3.7");
     let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
     let library = sample_game("manual:C:/Games/GameB", "Game B", "C:/Games/GameB");
 
@@ -160,14 +178,14 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
         GraphicsTechnology::NvidiaStreamline,
         &[
             (
-                "C:/Games/GameB/sl.common.dll",
+                common_path.as_str(),
                 Some("2.5.0"),
-                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                sha256_hex(b"streamline-common-2.5").as_str(),
             ),
             (
-                "C:/Games/GameB/sl.interposer.dll",
+                interposer_path.as_str(),
                 Some("2.5.0"),
-                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                sha256_hex(b"streamline-interposer-2.5").as_str(),
             ),
         ],
         Some(library.id().as_str()),
@@ -175,9 +193,9 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
         GraphicsTechnology::DlssSuperResolution,
-        "C:/Games/GameB/nvngx_dlss.dll",
+        &dlss_path,
         Some("3.7.0"),
-        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        &sha256_hex(b"dlss-3.7"),
         Some(library.id().as_str()),
     ));
 
@@ -200,8 +218,8 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
         mixed["version_report"],
         serde_json::json!({
             "kind": "mixed",
-            "min_version": "2.4.0",
-            "max_version": "2.9.0",
+            "min_technical_version": "2.4.0",
+            "max_technical_version": "2.9.0",
         })
     );
     assert_eq!(
@@ -218,4 +236,11 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
         serde_json::json!({ "kind": "unknown" })
     );
     assert_eq!(unknown["candidates"][0]["comparison"], "unknown_version");
+}
+
+fn write_candidate_file(folder: &TempGameFolder, file_name: &str, bytes: &[u8]) -> String {
+    std::fs::create_dir_all(folder.path()).expect("candidate folder should be created");
+    let path = folder.path().join(file_name);
+    std::fs::write(&path, bytes).expect("candidate file should be written");
+    path_string(&path)
 }

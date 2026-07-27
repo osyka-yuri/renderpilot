@@ -12,7 +12,7 @@ mod matcher;
 mod tests;
 
 pub use dto::{
-    CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState,
-    ReplacementCandidate,
+    ActiveCatalogPackage, CandidateComparison, ComponentReplacementCandidates,
+    InstalledReleaseState, ReplacementCandidate, is_automatic_catalog_candidate,
 };
 pub use matcher::{CandidateContext, find_replacement_candidates};

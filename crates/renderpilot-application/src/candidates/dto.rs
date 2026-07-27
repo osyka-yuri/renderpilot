@@ -7,11 +7,95 @@
 
 use crate::D3d12ExecutableAction;
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentId, ComponentVersionReport, GameId, GraphicsComponent,
-    GraphicsTechnology, LibraryArtifact, PathRef, Version, component_version_report, fsr,
+    ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, ComponentId,
+    ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    PackageRelease, PathRef, ReleaseChannel, Version, component_version_report, fsr,
 };
 
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
+
+/// Active catalog identity used to enrich replacement candidates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveCatalogPackage {
+    package_id: String,
+    release: PackageRelease,
+    automatic_selection_allowed: bool,
+}
+
+impl ActiveCatalogPackage {
+    /// Creates an active package descriptor.
+    pub fn new(
+        package_id: impl Into<String>,
+        release: PackageRelease,
+        automatic_selection_allowed: bool,
+    ) -> Self {
+        Self {
+            package_id: package_id.into(),
+            automatic_selection_allowed,
+            release,
+        }
+    }
+
+    /// Returns the stable catalog package identifier.
+    pub fn package_id(&self) -> &str {
+        &self.package_id
+    }
+
+    /// Returns the exact package release.
+    pub const fn release(&self) -> &PackageRelease {
+        &self.release
+    }
+
+    /// Returns whether unattended selection is allowed for this active package.
+    pub const fn automatic_selection_allowed(&self) -> bool {
+        self.automatic_selection_allowed
+    }
+}
+
+/// Catalog identity and availability attached to a replacement candidate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogCandidatePackage {
+    package_id: String,
+    release: PackageRelease,
+    availability: CatalogPackageAvailability,
+    automatic_selection_allowed: bool,
+}
+
+impl CatalogCandidatePackage {
+    pub(super) fn new(
+        package_id: impl Into<String>,
+        release: PackageRelease,
+        availability: CatalogPackageAvailability,
+        automatic_selection_allowed: bool,
+    ) -> Self {
+        Self {
+            package_id: package_id.into(),
+            release,
+            availability,
+            automatic_selection_allowed,
+        }
+    }
+
+    /// Returns the stable catalog package identifier.
+    pub fn package_id(&self) -> &str {
+        &self.package_id
+    }
+
+    /// Returns the exact package release.
+    pub const fn release(&self) -> &PackageRelease {
+        &self.release
+    }
+
+    /// Returns whether the package is active or local-only.
+    pub const fn availability(&self) -> CatalogPackageAvailability {
+        self.availability
+    }
+
+    /// Returns the backend-computed unattended-selection capability.
+    pub const fn automatic_selection_allowed(&self) -> bool {
+        self.automatic_selection_allowed
+    }
+}
 
 /// Version state used for both the DTO and matcher comparison baseline.
 pub(super) fn component_version_state(component: &GraphicsComponent) -> ComponentVersionReport {
@@ -23,17 +107,19 @@ pub(super) fn component_version_state(component: &GraphicsComponent) -> Componen
 pub enum InstalledReleaseState {
     /// One trustworthy release is installed.
     Known {
-        /// Canonical release version.
-        version: Version,
+        /// Canonical technical PE FileVersion, when the binary exposes one.
+        technical_version: Option<Version>,
         /// Optional supplemental catalog annotation.
         release_label: Option<String>,
+        /// Exact catalog release when installed content matches a known package.
+        catalog_release: Option<PackageRelease>,
     },
     /// Installed members prove more than one version is present.
     Mixed {
-        /// Lowest known member version.
-        min_version: Version,
-        /// Highest known member version.
-        max_version: Version,
+        /// Lowest known member technical version.
+        min_technical_version: Version,
+        /// Highest known member technical version.
+        max_technical_version: Version,
     },
     /// No trustworthy installed release can be established.
     Unknown,
@@ -43,28 +129,35 @@ impl InstalledReleaseState {
     pub(super) fn from_version_report(report: ComponentVersionReport) -> Self {
         match report {
             ComponentVersionReport::Known(version) => Self::Known {
-                version,
+                technical_version: Some(version),
                 release_label: None,
+                catalog_release: None,
             },
             ComponentVersionReport::Mixed { min, max } => Self::Mixed {
-                min_version: min,
-                max_version: max,
+                min_technical_version: min,
+                max_technical_version: max,
             },
             ComponentVersionReport::Unknown => Self::Unknown,
         }
     }
 
-    pub(super) fn known(version: Version, release_label: Option<String>) -> Self {
+    pub(super) fn known_catalog(
+        technical_version: Option<Version>,
+        release: PackageRelease,
+    ) -> Self {
         Self::Known {
-            version,
-            release_label,
+            technical_version,
+            release_label: release.label.clone(),
+            catalog_release: Some(release),
         }
     }
 
     /// Returns the installed version when the state is known.
     pub const fn known_version(&self) -> Option<&Version> {
         match self {
-            Self::Known { version, .. } => Some(version),
+            Self::Known {
+                technical_version, ..
+            } => technical_version.as_ref(),
             Self::Mixed { .. } | Self::Unknown => None,
         }
     }
@@ -161,12 +254,12 @@ pub struct ReplacementCandidate {
     artifact_id: ArtifactId,
     file_name: String,
     file_path: Option<PathRef>,
-    version: Option<Version>,
+    technical_version: Option<Version>,
     release_label: Option<String>,
     sha256: String,
     source_game_id: Option<GameId>,
     comparison: CandidateComparison,
-    catalog_package_id: Option<String>,
+    catalog_package: Option<CatalogCandidatePackage>,
     is_downloaded: bool,
     is_debug: bool,
     /// Sort-only: prefer CDN/cache over game-folder observations.
@@ -180,35 +273,6 @@ pub struct ReplacementCandidate {
     d3d12_executable_action: Option<D3d12ExecutableAction>,
 }
 
-/// Named sort key for [`ReplacementCandidate`] ordering — every field is named
-/// so the sort semantics are obvious at the call site instead of requiring the
-/// reader to decode a positional tuple. Field order IS the sort order.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct CandidateSortKey<'a> {
-    /// Version descending: `Reverse` makes `Some(3.0)` sort before `Some(2.0)`,
-    /// and `Reverse(None)` sorts after every `Some(..)` — unknown versions last.
-    version: std::cmp::Reverse<Option<&'a Version>>,
-    /// Multi-file packages (FSR / Streamline) sort ahead of single-file twins of
-    /// the same version so bulk swaps pick the full set.
-    file_count: std::cmp::Reverse<usize>,
-    /// Secondary key: file name in lexical order.
-    file_name: &'a str,
-    /// Release builds before debug builds at the same version.
-    is_debug: bool,
-    /// Prefer CDN/cache artifacts over game-folder observations when both
-    /// survive as candidates for the same version key.
-    trust_rank: u8,
-    /// Downloaded twins sort before their non-downloaded counterpart so the
-    /// downloaded copy survives deduplication.
-    downloaded: std::cmp::Reverse<bool>,
-    /// Context-free package-content tie-break.
-    intrinsic_identity: Option<&'a IntrinsicPackageIdentity>,
-    /// Component-aware transition tie-break.
-    resolved_identity: Option<&'a ResolvedTransitionIdentity>,
-    /// Final stable tie-break for incomplete identities.
-    artifact_id: &'a str,
-}
-
 impl ReplacementCandidate {
     /// Builds a candidate from an artifact and the already-computed comparison
     /// verdict. The matcher computes [`CandidateComparison`] (and rejects an
@@ -217,11 +281,13 @@ impl ReplacementCandidate {
         artifact: &LibraryArtifact,
         comparison: CandidateComparison,
         is_downloaded: bool,
-        catalog_package_id: Option<String>,
-        is_debug: bool,
+        catalog_package: Option<CatalogCandidatePackage>,
         intrinsic_identity: Option<IntrinsicPackageIdentity>,
         resolved_identity: Option<ResolvedTransitionIdentity>,
     ) -> Self {
+        let is_debug = catalog_package
+            .as_ref()
+            .is_some_and(|package| package.release().channel == ReleaseChannel::Debug);
         Self {
             artifact_id: artifact.id().clone(),
             file_name: artifact.file_name().to_owned(),
@@ -230,17 +296,14 @@ impl ReplacementCandidate {
             } else {
                 None
             },
-            // PE FileVersion remains the artifact's technical version, while
-            // Microsoft NuGet runtimes are presented and ordered by their
-            // actual release version. Some packages intentionally contain
-            // members whose PE versions differ from the package version
-            // (notably historical DXIL builds).
-            version: artifact.release_version().cloned(),
+            // Technical comparison is strictly PE FileVersion. Exact package
+            // identity is carried independently in `catalog_package`.
+            technical_version: artifact.version().cloned(),
             release_label: artifact.metadata().release_label().map(str::to_owned),
             sha256: artifact.sha256().as_str().to_owned(),
             source_game_id: artifact.source_game_id().cloned(),
             comparison,
-            catalog_package_id,
+            catalog_package,
             is_downloaded,
             is_debug,
             trust_level: artifact.trust_level(),
@@ -260,31 +323,6 @@ impl ReplacementCandidate {
     ) -> Self {
         self.d3d12_executable_action = action;
         self
-    }
-
-    /// Stable presentation / dedup order used by the matcher.
-    ///
-    /// Field order of [`CandidateSortKey`] *is* the sort order and must stay
-    /// aligned with the public description on
-    /// [`ComponentReplacementCandidates::candidates`].
-    ///
-    /// Deliberately excluded: comparison verdict (shifts whenever the installed
-    /// version changes) and local path (appears after download). Trust and
-    /// `is_downloaded` precede the identity tie-breaks so the preferred twin
-    /// survives deduplication; identities then make distinct payload ordering
-    /// deterministic.
-    pub(super) fn ordering_key(&self) -> CandidateSortKey<'_> {
-        CandidateSortKey {
-            version: std::cmp::Reverse(self.version.as_ref()),
-            file_count: std::cmp::Reverse(self.file_count),
-            file_name: self.file_name.as_str(),
-            is_debug: self.is_debug,
-            trust_rank: self.trust_level.candidate_preference_rank(),
-            downloaded: std::cmp::Reverse(self.is_downloaded),
-            intrinsic_identity: self.intrinsic_identity.as_ref(),
-            resolved_identity: self.resolved_identity.as_ref(),
-            artifact_id: self.artifact_id.as_str(),
-        }
     }
 
     /// Returns the candidate artifact identifier.
@@ -317,12 +355,9 @@ impl ReplacementCandidate {
         &self.sha256
     }
 
-    /// Returns the user-facing release version, when known.
-    ///
-    /// For package-backed artifacts this is the upstream package version;
-    /// otherwise it falls back to the primary file's PE version.
-    pub fn version(&self) -> Option<&Version> {
-        self.version.as_ref()
+    /// Returns the primary DLL's technical PE FileVersion, when known.
+    pub fn technical_version(&self) -> Option<&Version> {
+        self.technical_version.as_ref()
     }
 
     /// Returns the supplemental upstream release label.
@@ -340,9 +375,17 @@ impl ReplacementCandidate {
         self.comparison
     }
 
-    /// Returns the catalog package id if this candidate is curated remotely.
-    pub fn catalog_package_id(&self) -> Option<&str> {
-        self.catalog_package_id.as_deref()
+    /// Returns the internally consistent catalog package projection.
+    pub const fn catalog_package(&self) -> Option<&CatalogCandidatePackage> {
+        self.catalog_package.as_ref()
+    }
+
+    pub(super) const fn trust_level(&self) -> ArtifactTrustLevel {
+        self.trust_level
+    }
+
+    pub(super) const fn file_count(&self) -> usize {
+        self.file_count
     }
 
     /// Returns the executable action required by this D3D12 candidate.
@@ -357,6 +400,16 @@ impl ReplacementCandidate {
     pub(super) const fn resolved_identity(&self) -> Option<&ResolvedTransitionIdentity> {
         self.resolved_identity.as_ref()
     }
+}
+
+/// Returns whether a candidate may be selected by unattended update paths.
+///
+/// Manual selectors deliberately expose a broader set. This predicate is the
+/// single application-layer policy for dashboards, counters, and bulk plans.
+pub fn is_automatic_catalog_candidate(candidate: &ReplacementCandidate) -> bool {
+    candidate
+        .catalog_package()
+        .is_some_and(CatalogCandidatePackage::automatic_selection_allowed)
 }
 
 /// Result of comparing a candidate artifact to the currently installed component file.

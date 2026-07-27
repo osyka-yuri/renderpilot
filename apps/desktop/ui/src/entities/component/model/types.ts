@@ -22,34 +22,4 @@ export type GraphicsComponent = {
   files: ComponentFile[];
 };
 
-export type CandidateComparison = string;
-
-export type Candidate = {
-  artifact_id: ArtifactId;
-  file_name: string;
-  file_path: FilePath | null;
-  version?: Nullable<Version>;
-  release_label: Nullable<string>;
-  source_game_id?: Nullable<GameId>;
-  comparison: CandidateComparison;
-  warning?: Nullable<string>;
-  catalog_package_id?: Nullable<string>;
-  is_downloaded: boolean;
-  is_debug: boolean;
-  sha256: string;
-};
-
-export type InstalledReleaseState =
-  | { kind: 'known'; version: Version; release_label: Nullable<string> }
-  | { kind: 'mixed'; min_version: Version; max_version: Version }
-  | { kind: 'unknown' };
-
-export type CandidateGroup = {
-  component_id: ComponentId;
-  technology: Technology;
-  file_path: FilePath;
-  version_report: InstalledReleaseState;
-  candidates: Candidate[];
-};
-
 export type BuildPlanHandler = (componentId: ComponentId, artifactId: ArtifactId) => void;

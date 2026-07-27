@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildUpdateAllToLatestPlan } from './update-all-to-latest';
-import { candidate, component, details, group } from './candidate-group-fixtures';
+import { candidate, catalogCandidate, component, details, group } from './candidate-group-fixtures';
 
 describe('buildUpdateAllToLatestPlan', () => {
   it('returns an empty plan when there are no details', () => {
@@ -14,8 +14,8 @@ describe('buildUpdateAllToLatestPlan', () => {
         [component('sr', 'nvidia_dlss_sr')],
         [
           group('sr', 'nvidia_dlss_sr', '3.5.0', [
-            candidate('3.7.0', { artifact_id: 'sr-370', is_downloaded: false }),
-            candidate('3.6.0', { artifact_id: 'sr-360' }),
+            catalogCandidate('3.7.0', { artifact_id: 'sr-370', is_downloaded: false }),
+            catalogCandidate('3.6.0', { artifact_id: 'sr-360' }),
           ]),
         ],
       ),
@@ -36,9 +36,9 @@ describe('buildUpdateAllToLatestPlan', () => {
         [component('sr', 'nvidia_dlss_sr')],
         [
           group('sr', 'nvidia_dlss_sr', '3.5.0', [
-            candidate('3.6.0', { artifact_id: 'sr-360' }),
-            candidate('3.10.0', { artifact_id: 'sr-3100' }),
-            candidate('3.7.0', { artifact_id: 'sr-370' }),
+            catalogCandidate('3.6.0', { artifact_id: 'sr-360' }),
+            catalogCandidate('3.10.0', { artifact_id: 'sr-3100' }),
+            catalogCandidate('3.7.0', { artifact_id: 'sr-370' }),
           ]),
         ],
       ),
@@ -48,13 +48,93 @@ describe('buildUpdateAllToLatestPlan', () => {
     expect(plan.items[0]?.artifactId).toBe('sr-3100');
   });
 
+  it('uses the full catalog release when technical PE versions are equal', () => {
+    const plan = buildUpdateAllToLatestPlan(
+      details(
+        [component('dxc', 'microsoft_dxc')],
+        [
+          group('dxc', 'microsoft_dxc', '10.0.0', [
+            catalogCandidate('10.1.0', {
+              artifact_id: 'dxc-older-package',
+              catalog_package: {
+                package_id: 'dxc-older-package',
+                release: {
+                  version: '1.9.2602.16',
+                  channel: 'stable',
+                  label: null,
+                },
+                availability: 'available',
+                automatic_selection_allowed: true,
+              },
+            }),
+            catalogCandidate('10.1.0', {
+              artifact_id: 'dxc-newer-package',
+              catalog_package: {
+                package_id: 'dxc-newer-package',
+                release: {
+                  version: '1.9.2602.17',
+                  channel: 'stable',
+                  label: null,
+                },
+                availability: 'available',
+                automatic_selection_allowed: true,
+              },
+            }),
+          ]),
+        ],
+      ),
+    );
+
+    expect(plan.items[0]?.artifactId).toBe('dxc-newer-package');
+  });
+
+  it('never selects preview or local-only candidates automatically', () => {
+    const plan = buildUpdateAllToLatestPlan(
+      details(
+        [component('sr', 'nvidia_dlss_sr')],
+        [
+          group('sr', 'nvidia_dlss_sr', '3.5.0', [
+            catalogCandidate('9.0.0', {
+              artifact_id: 'preview',
+              catalog_package: {
+                package_id: 'preview',
+                release: {
+                  version: '9.0.0-preview',
+                  channel: 'preview',
+                  label: null,
+                },
+                availability: 'available',
+                automatic_selection_allowed: false,
+              },
+            }),
+            catalogCandidate('8.0.0', {
+              artifact_id: 'local-only',
+              catalog_package: {
+                package_id: 'local-only',
+                release: { version: '8.0.0', channel: 'stable', label: null },
+                availability: 'local_only',
+                automatic_selection_allowed: false,
+              },
+            }),
+            catalogCandidate('3.7.0', { artifact_id: 'stable-active' }),
+          ]),
+        ],
+      ),
+    );
+
+    expect(plan.items.map((item) => item.artifactId)).toEqual(['stable-active']);
+  });
+
   it('skips components whose only candidates are not upgrades', () => {
     const plan = buildUpdateAllToLatestPlan(
       details(
         [component('sr', 'nvidia_dlss_sr')],
         [
           group('sr', 'nvidia_dlss_sr', '3.7.0', [
-            candidate('3.6.0', { artifact_id: 'sr-360', comparison: 'older_version' }),
+            catalogCandidate('3.6.0', {
+              artifact_id: 'sr-360',
+              comparison: 'older_version',
+            }),
             candidate(null, { artifact_id: 'sr-unknown', comparison: 'unknown_version' }),
           ]),
         ],
@@ -70,7 +150,7 @@ describe('buildUpdateAllToLatestPlan', () => {
         [component('d3d12', 'd3d12_agility')],
         [
           group('d3d12', 'd3d12_agility', '1.606.4', [
-            candidate('1.619.1', {
+            catalogCandidate('1.619.1', {
               artifact_id: 'd3d12-619',
               d3d12_executable_action: {
                 kind: 'repair_required',
@@ -100,13 +180,15 @@ describe('buildUpdateAllToLatestPlan', () => {
           component('sl-b', 'nvidia_streamline'),
         ],
         [
-          group('sr', 'nvidia_dlss_sr', '3.5.0', [candidate('3.7.0', { artifact_id: 'sr-370' })]),
+          group('sr', 'nvidia_dlss_sr', '3.5.0', [
+            catalogCandidate('3.7.0', { artifact_id: 'sr-370' }),
+          ]),
           group('sl-a', 'nvidia_streamline', '2.3.0', [
-            candidate('2.4.0', { artifact_id: 'a-240' }),
-            candidate('2.2.0', { artifact_id: 'a-220' }),
+            catalogCandidate('2.4.0', { artifact_id: 'a-240' }),
+            catalogCandidate('2.2.0', { artifact_id: 'a-220' }),
           ]),
           group('sl-b', 'nvidia_streamline', '2.3.0', [
-            candidate('2.4.0', { artifact_id: 'b-240' }),
+            catalogCandidate('2.4.0', { artifact_id: 'b-240' }),
           ]),
         ],
       ),
@@ -123,11 +205,11 @@ describe('buildUpdateAllToLatestPlan', () => {
         [
           // Only sl-a can reach 2.5.0 → incomplete; both can reach 2.4.0 → complete.
           group('sl-a', 'nvidia_streamline', '2.3.0', [
-            candidate('2.5.0', { artifact_id: 'a-250' }),
-            candidate('2.4.0', { artifact_id: 'a-240' }),
+            catalogCandidate('2.5.0', { artifact_id: 'a-250' }),
+            catalogCandidate('2.4.0', { artifact_id: 'a-240' }),
           ]),
           group('sl-b', 'nvidia_streamline', '2.3.0', [
-            candidate('2.4.0', { artifact_id: 'b-240' }),
+            catalogCandidate('2.4.0', { artifact_id: 'b-240' }),
           ]),
         ],
       ),
@@ -146,10 +228,12 @@ describe('buildUpdateAllToLatestPlan', () => {
           component('sl-b', 'nvidia_streamline'),
         ],
         [
-          group('sr', 'nvidia_dlss_sr', '3.5.0', [candidate('3.7.0', { artifact_id: 'sr-370' })]),
+          group('sr', 'nvidia_dlss_sr', '3.5.0', [
+            catalogCandidate('3.7.0', { artifact_id: 'sr-370' }),
+          ]),
           // Only sl-a has any candidate → every Streamline version is incomplete.
           group('sl-a', 'nvidia_streamline', '2.3.0', [
-            candidate('2.5.0', { artifact_id: 'a-250' }),
+            catalogCandidate('2.5.0', { artifact_id: 'a-250' }),
           ]),
           group('sl-b', 'nvidia_streamline', '2.3.0', []),
         ],

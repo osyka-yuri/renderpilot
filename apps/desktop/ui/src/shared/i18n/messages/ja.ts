@@ -172,12 +172,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'すべて元の状態に復元',
   'gameDetails.updateAll.action': 'すべて更新',
   'gameDetails.updateAll.actionCount': 'すべて更新 ({count})',
-  'gameDetails.updateAll.upToDate': 'すべて最新です',
+  'gameDetails.updateAll.upToDate': 'すべての安定版は最新です',
   'gameDetails.updateAll.partialFailure':
     '一部の更新に失敗しました（{count}）。詳細を確認して再試行してください。',
   'gameDetails.updateAll.tooltip': {
-    one: '{count} 個のコンポーネントを最新バージョンに更新します',
-    other: '{count} 個のコンポーネントを最新バージョンに更新します',
+    one: '{count} 個のコンポーネントを最新の安定版に更新します',
+    other: '{count} 個のコンポーネントを最新の安定版に更新します',
   },
   'gameDetails.executable.title': 'ゲームの実行ファイル',
   'gameDetails.d3d12.status.original': '元の EXE',
@@ -259,6 +259,13 @@ export const ja: Record<MessageKey, MessageValue> = {
   'operations.version': 'バージョン',
 
   'libraries.error': 'エラー',
+  'libraries.catalogFallback.title': 'カタログを利用できません',
+  'libraries.catalogFallback.description':
+    'ローカルに登録されたパッケージのみを表示しています。完全なカタログではありません。',
+  'libraries.state.localOnly': 'ローカルのみ',
+  'libraries.state.downloaded': 'ダウンロード済み',
+  'libraries.state.missing': 'ファイルがありません',
+  'libraries.state.corrupt': 'ファイルが破損しています',
   'libraries.hash.copy': 'ハッシュをコピー',
   'libraries.hash.copied': 'コピーしました',
   'libraries.hash.failed': 'コピーに失敗しました',

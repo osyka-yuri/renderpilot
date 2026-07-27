@@ -128,7 +128,7 @@
           <div class="mt-1 grid gap-2">
             <span class="text-xs text-muted-foreground">{sourceLabel}</span>
             {#if isOverride}
-              <Button variant="ghost" size="sm" class="justify-start w-fit" onclick={resetToAuto}>
+              <Button variant="ghost" size="sm" class="w-fit justify-start" onclick={resetToAuto}>
                 <RotateCcwIcon class="size-3.5" aria-hidden="true" />
                 {t('gameDetails.executable.reset')}
               </Button>

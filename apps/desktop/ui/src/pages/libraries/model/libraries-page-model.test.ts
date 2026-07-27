@@ -9,6 +9,7 @@ import {
   formatSignedDate,
   formatVersionLabel,
   selectLatestStablePackages,
+  shouldDeleteLibraryPackage,
   shouldShowPackageDisplayName,
   typeOptionsByVendor,
 } from './libraries-page-model';
@@ -92,6 +93,58 @@ describe('library package presentation', () => {
     expect(compareReleaseVersions('4.0.10', '4.0.9')).toBeGreaterThan(0);
   });
 
+  it('never selects a withdrawn local-only stable package for bulk download', () => {
+    const rows = packagesOf([
+      {
+        id: 'dxc.available',
+        vendor: 'microsoft',
+        technology: 'dxc',
+        version: '1.9.0',
+        availability: 'available',
+      },
+      {
+        id: 'dxc.withdrawn',
+        vendor: 'microsoft',
+        technology: 'dxc',
+        version: '2.0.0',
+        availability: 'local_only',
+      },
+    ]);
+
+    expect(selectLatestStablePackages(rows).map((row) => row.package_id)).toEqual([
+      'dxc.available',
+    ]);
+  });
+
+  it('keeps a missing withdrawn package removable from Libraries', () => {
+    const [withdrawn, active] = packagesOf([
+      { id: 'withdrawn', availability: 'local_only', isDownloaded: false },
+      { id: 'active', availability: 'available', isDownloaded: false },
+    ]);
+
+    expect(shouldDeleteLibraryPackage(withdrawn)).toBe(true);
+    expect(shouldDeleteLibraryPackage(active)).toBe(false);
+  });
+
+  it('repairs active damaged packages by download and keeps withdrawn ones removable', () => {
+    const [withdrawnCorrupt, activeCorrupt] = packagesOf([
+      {
+        id: 'withdrawn-corrupt',
+        availability: 'local_only',
+        localState: 'corrupt',
+      },
+      {
+        id: 'active-corrupt',
+        availability: 'available',
+        localState: 'corrupt',
+      },
+    ]);
+
+    expect(shouldDeleteLibraryPackage(withdrawnCorrupt)).toBe(true);
+    expect(shouldDeleteLibraryPackage(activeCorrupt)).toBe(false);
+    expect(selectLatestStablePackages([withdrawnCorrupt, activeCorrupt])).toEqual([activeCorrupt]);
+  });
+
   it('keeps distinct runtime compatibility targets in the latest selection', () => {
     const selected = selectLatestStablePackages(
       packagesOf([
@@ -128,6 +181,19 @@ describe('library package presentation', () => {
   it('orders every version segment with u64 precision', () => {
     expect(
       compareReleaseVersions('1.18446744073709551615', '1.18446744073709551614'),
+    ).toBeGreaterThan(0);
+  });
+
+  it('orders Microsoft prereleases with NuGet precedence', () => {
+    expect(
+      compareReleaseVersions('1.4.0-preview2-2606.904', '1.4.0-preview1-2603.504'),
+    ).toBeGreaterThan(0);
+    expect(compareReleaseVersions('1.721.2', '1.721.2-preview')).toBeGreaterThan(0);
+    expect(
+      compareReleaseVersions(
+        '1.0.0-preview.18446744073709551615',
+        '1.0.0-preview.9999999999999999999',
+      ),
     ).toBeGreaterThan(0);
   });
 

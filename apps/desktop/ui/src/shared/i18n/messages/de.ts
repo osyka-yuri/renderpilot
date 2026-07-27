@@ -174,12 +174,12 @@ export const de: Record<MessageKey, MessageValue> = {
   'gameDetails.streamline.restoreAllTooltip': 'Alle auf Original wiederherstellen',
   'gameDetails.updateAll.action': 'Alle aktualisieren',
   'gameDetails.updateAll.actionCount': 'Alle aktualisieren ({count})',
-  'gameDetails.updateAll.upToDate': 'Alles ist auf dem neuesten Stand',
+  'gameDetails.updateAll.upToDate': 'Alle stabilen Versionen sind aktuell',
   'gameDetails.updateAll.partialFailure':
     'Einige Updates sind fehlgeschlagen ({count}). Details prüfen und erneut versuchen.',
   'gameDetails.updateAll.tooltip': {
-    one: '1 Komponente auf die neueste Version aktualisieren',
-    other: '{count} Komponenten auf die neueste Version aktualisieren',
+    one: '1 Komponente auf die neueste stabile Version aktualisieren',
+    other: '{count} Komponenten jeweils auf die neueste stabile Version aktualisieren',
   },
   'gameDetails.executable.title': 'Spiel-Programmdatei',
   'gameDetails.d3d12.status.original': 'Originale EXE',
@@ -266,6 +266,13 @@ export const de: Record<MessageKey, MessageValue> = {
   'operations.version': 'Version',
 
   'libraries.error': 'Fehler',
+  'libraries.catalogFallback.title': 'Katalog nicht verfügbar',
+  'libraries.catalogFallback.description':
+    'Es werden nur lokal registrierte Pakete angezeigt. Dies ist nicht der vollständige Katalog.',
+  'libraries.state.localOnly': 'Nur lokal',
+  'libraries.state.downloaded': 'Heruntergeladen',
+  'libraries.state.missing': 'Dateien fehlen',
+  'libraries.state.corrupt': 'Beschädigte Dateien',
   'libraries.hash.copy': 'Hash kopieren',
   'libraries.hash.copied': 'Kopiert',
   'libraries.hash.failed': 'Fehler beim Kopieren',

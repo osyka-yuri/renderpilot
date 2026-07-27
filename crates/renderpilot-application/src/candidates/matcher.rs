@@ -8,12 +8,13 @@
 use std::collections::{HashMap, HashSet};
 
 use renderpilot_domain::{
-    ArtifactId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, Version, fsr,
+    ArtifactId, CatalogPackageAvailability, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    PackageVersion, Version, fsr,
 };
 
 use super::dto::{
-    CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState,
-    ReplacementCandidate,
+    ActiveCatalogPackage, CandidateComparison, CatalogCandidatePackage,
+    ComponentReplacementCandidates, InstalledReleaseState, ReplacementCandidate,
 };
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
 use crate::{
@@ -25,8 +26,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct CandidateContext {
     downloaded_ids: HashSet<ArtifactId>,
-    catalog_package_ids: HashMap<ArtifactId, String>,
-    debug_package_ids: HashSet<String>,
+    active_catalog: HashMap<ArtifactId, ActiveCatalogPackage>,
     target_profile: SwapTargetProfile,
 }
 
@@ -34,13 +34,11 @@ impl CandidateContext {
     /// Creates a new candidate context from the given lookup tables.
     pub fn new(
         downloaded_ids: HashSet<ArtifactId>,
-        catalog_package_ids: HashMap<ArtifactId, String>,
-        debug_package_ids: HashSet<String>,
+        active_catalog: HashMap<ArtifactId, ActiveCatalogPackage>,
     ) -> Self {
         Self {
             downloaded_ids,
-            catalog_package_ids,
-            debug_package_ids,
+            active_catalog,
             target_profile: SwapTargetProfile::default(),
         }
     }
@@ -49,8 +47,7 @@ impl CandidateContext {
     pub fn empty() -> Self {
         Self {
             downloaded_ids: HashSet::new(),
-            catalog_package_ids: HashMap::new(),
-            debug_package_ids: HashSet::new(),
+            active_catalog: HashMap::new(),
             target_profile: SwapTargetProfile::default(),
         }
     }
@@ -62,9 +59,22 @@ impl CandidateContext {
         self
     }
 
-    /// Returns true if the given catalog package belongs to a debug build.
-    pub fn is_debug_package(&self, package_id: &str) -> bool {
-        self.debug_package_ids.contains(package_id)
+    fn catalog_package(&self, artifact: &LibraryArtifact) -> Option<CatalogCandidatePackage> {
+        if let Some(active) = self.active_catalog.get(artifact.id()) {
+            return Some(CatalogCandidatePackage::new(
+                active.package_id(),
+                active.release().clone(),
+                CatalogPackageAvailability::Available,
+                active.automatic_selection_allowed(),
+            ));
+        }
+        let receipt = artifact.metadata().catalog_package_receipt()?;
+        Some(CatalogCandidatePackage::new(
+            receipt.package_id.clone(),
+            receipt.release.clone(),
+            CatalogPackageAvailability::LocalOnly,
+            false,
+        ))
     }
 }
 
@@ -125,17 +135,12 @@ pub fn find_replacement_candidates(
                 }
                 let comparison = candidate_comparison(component, artifact, current_version)?;
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
-                let package_id = context.catalog_package_ids.get(artifact.id()).cloned();
-                let is_debug = package_id
-                    .as_ref()
-                    .is_some_and(|id| context.is_debug_package(id));
                 Some(
                     ReplacementCandidate::new(
                         artifact,
                         comparison,
                         is_downloaded,
-                        package_id,
-                        is_debug,
+                        context.catalog_package(artifact),
                         indexed.intrinsic_identity.clone(),
                         resolved_identity,
                     )
@@ -182,24 +187,33 @@ fn installed_catalog_release(
     let matched = artifacts
         .iter()
         .map(|indexed| indexed.artifact)
-        .filter(|artifact| context.catalog_package_ids.contains_key(artifact.id()))
+        .filter_map(|artifact| {
+            let catalog_package = context.catalog_package(artifact)?;
+            Some((artifact, catalog_package))
+        })
         .filter(|artifact| {
             let Ok(Some(identity)) =
-                ResolvedTransitionIdentity::for_replacement(component, artifact)
+                ResolvedTransitionIdentity::for_replacement(component, artifact.0)
             else {
                 return false;
             };
             identity.installed_projection(component).as_ref() == Some(&identity)
         })
-        .filter_map(|artifact| {
-            Some((
-                artifact.release_version()?.clone(),
-                context.catalog_package_ids.get(artifact.id())?,
-                artifact.metadata().release_label().map(str::to_owned),
-            ))
+        .map(|(artifact, catalog_package)| {
+            (
+                catalog_package.release().version.clone(),
+                artifact.version().cloned(),
+                catalog_package.package_id().to_owned(),
+                catalog_package.release().clone(),
+            )
         })
-        .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(left.1)));
-    matched.map(|(version, _, label)| InstalledReleaseState::known(version, label))
+        .max_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.cmp(&right.1))
+                .then_with(|| right.2.cmp(&left.2))
+        });
+    matched.map(|(_, version, _, release)| InstalledReleaseState::known_catalog(version, release))
 }
 
 #[derive(Debug, Clone)]
@@ -250,7 +264,7 @@ fn compare_versions(
 fn sort_and_deduplicate_candidates(
     mut candidates: Vec<ReplacementCandidate>,
 ) -> Vec<ReplacementCandidate> {
-    candidates.sort_by(|left, right| left.ordering_key().cmp(&right.ordering_key()));
+    candidates.sort_by(|left, right| candidate_sort_key(left).cmp(&candidate_sort_key(right)));
 
     let mut seen_ids = HashSet::<ArtifactId>::new();
     let mut seen_intrinsic = HashSet::<IntrinsicPackageIdentity>::new();
@@ -279,6 +293,99 @@ fn sort_and_deduplicate_candidates(
     }
 
     deduplicated
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct CandidateSortKey<'a> {
+    presentation_version: std::cmp::Reverse<Option<CandidatePresentationVersion<'a>>>,
+    technical_version: std::cmp::Reverse<Option<&'a Version>>,
+    file_count: std::cmp::Reverse<usize>,
+    file_name: &'a str,
+    is_debug: bool,
+    trust_rank: u8,
+    downloaded: std::cmp::Reverse<bool>,
+    intrinsic_identity: Option<&'a IntrinsicPackageIdentity>,
+    resolved_identity: Option<&'a ResolvedTransitionIdentity>,
+    artifact_id: &'a str,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CandidatePresentationVersion<'a> {
+    Package(&'a PackageVersion),
+    Technical(&'a Version),
+}
+
+impl PartialEq for CandidatePresentationVersion<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl Eq for CandidatePresentationVersion<'_> {}
+
+impl Ord for CandidatePresentationVersion<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let numeric = self.numeric_core().cmp(other.numeric_core());
+        if numeric != std::cmp::Ordering::Equal {
+            return numeric;
+        }
+        match (self, other) {
+            (Self::Package(left), Self::Package(right)) => left.cmp(right),
+            (Self::Technical(left), Self::Technical(right)) => left.cmp(right),
+            (Self::Package(package), Self::Technical(_)) => {
+                if package.is_prerelease() {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            (Self::Technical(_), Self::Package(package)) => {
+                if package.is_prerelease() {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+        }
+    }
+}
+
+impl PartialOrd for CandidatePresentationVersion<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> CandidatePresentationVersion<'a> {
+    fn numeric_core(self) -> &'a Version {
+        match self {
+            Self::Package(version) => version.numeric_core(),
+            Self::Technical(version) => version,
+        }
+    }
+}
+
+fn candidate_sort_key(candidate: &ReplacementCandidate) -> CandidateSortKey<'_> {
+    let presentation_version = candidate
+        .catalog_package()
+        .map(|package| CandidatePresentationVersion::Package(&package.release().version))
+        .or_else(|| {
+            candidate
+                .technical_version()
+                .map(CandidatePresentationVersion::Technical)
+        });
+    CandidateSortKey {
+        presentation_version: std::cmp::Reverse(presentation_version),
+        technical_version: std::cmp::Reverse(candidate.technical_version()),
+        file_count: std::cmp::Reverse(candidate.file_count()),
+        file_name: candidate.file_name(),
+        is_debug: candidate.is_debug(),
+        trust_rank: candidate.trust_level().candidate_preference_rank(),
+        downloaded: std::cmp::Reverse(candidate.is_downloaded()),
+        intrinsic_identity: candidate.intrinsic_identity(),
+        resolved_identity: candidate.resolved_identity(),
+        artifact_id: candidate.artifact_id().as_str(),
+    }
 }
 
 /// Policy that determines whether a candidate artifact can replace a component file
@@ -323,13 +430,9 @@ fn candidate_comparison(
 ) -> Option<CandidateComparison> {
     require_not_split_downgrade(component, artifact)?;
     require_compatible_graphics_api(component, artifact)?;
-    require_version_compatible(
-        component.technology(),
-        current_version,
-        artifact.release_version(),
-    )?;
+    require_version_compatible(component.technology(), current_version, artifact.version())?;
 
-    compare_versions(current_version, artifact.release_version())
+    compare_versions(current_version, artifact.version())
 }
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).

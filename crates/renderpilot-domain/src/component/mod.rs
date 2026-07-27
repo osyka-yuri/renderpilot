@@ -22,8 +22,8 @@ use std::{error::Error, fmt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ArtifactId, ComponentId, ComponentKind, GameId, GraphicsTechnology, PathRef, Swappability,
-    Version, VersionParseError,
+    ArtifactId, ComponentId, ComponentKind, GameId, GraphicsTechnology, PackageVersionParseError,
+    PathRef, Swappability, Version,
     text::{RequiredTextError, normalize_required_text},
 };
 
@@ -293,6 +293,7 @@ impl LibraryArtifact {
                 self.metadata
                     .upstream_package()
                     .map(UpstreamPackage::version)
+                    .map(crate::PackageVersion::numeric_core)
             })
             .or_else(|| self.version())
     }
@@ -396,8 +397,8 @@ impl ArtifactTrustLevel {
 pub enum ComponentError {
     /// A required text field is empty after trimming whitespace.
     EmptyText(&'static str),
-    /// An upstream package release is not a dotted numeric version.
-    InvalidUpstreamPackageVersion(VersionParseError),
+    /// An upstream package release is not a valid package version.
+    InvalidUpstreamPackageVersion(PackageVersionParseError),
     /// A SHA-256 hash is not a 64-character hexadecimal string.
     InvalidSha256Hash,
     /// A library artifact was created without a required SHA-256 hash.

@@ -1,9 +1,5 @@
-import type {
-  LibraryLegalDocumentLink,
-  LibraryPackageSummary,
-  ReleaseChannel,
-  Signature,
-} from '@entities/library';
+import type { LibraryLegalDocumentLink, LibraryPackageSummary, Signature } from '@entities/library';
+import type { ReleaseChannel } from '@shared/model';
 
 export type PackageFixture = Readonly<{
   id: string;
@@ -20,6 +16,9 @@ export type PackageFixture = Readonly<{
   legalDocuments?: LibraryPackageSummary['legal_documents'];
   sizeBytes?: number;
   isDownloaded?: boolean;
+  availability?: LibraryPackageSummary['availability'];
+  localState?: LibraryPackageSummary['local_state'];
+  automaticSelectionAllowed?: boolean;
 }>;
 
 export function packagesOf(specs: readonly PackageFixture[]): LibraryPackageSummary[] {
@@ -29,9 +28,13 @@ export function packagesOf(specs: readonly PackageFixture[]): LibraryPackageSumm
 export function packageSummary(spec: PackageFixture, index = 0): LibraryPackageSummary {
   const digest = (index + 1).toString(16).padStart(64, '0');
   const vendorId = spec.vendor ?? 'nvidia';
+  const isDownloaded = spec.isDownloaded ?? false;
+  const availability = spec.availability ?? 'available';
+  const localState =
+    spec.localState ??
+    (isDownloaded ? 'verified' : availability === 'local_only' ? 'missing' : 'absent');
   return {
     package_id: spec.id,
-    artifact_id: `catalog:package-revision:${digest}`,
     vendor: vendorId,
     technology: spec.technology ?? 'dlss_super_resolution',
     variant: spec.variant ?? 'runtime',
@@ -53,13 +56,16 @@ export function packageSummary(spec: PackageFixture, index = 0): LibraryPackageS
             },
           }),
     },
-    revision_sha256: digest,
     primary_file_name: `${spec.id}.dll`,
     primary_sha256: digest,
     primary_signature: spec.signature ?? { status: 'unsigned' },
     legal_documents: spec.legalDocuments ?? [],
     size_bytes: spec.sizeBytes ?? 1,
-    is_downloaded: spec.isDownloaded ?? false,
+    availability,
+    local_state: localState,
+    automatic_selection_allowed:
+      spec.automaticSelectionAllowed ??
+      (availability === 'available' && (spec.channel ?? 'stable') === 'stable'),
   };
 }
 

@@ -62,7 +62,9 @@
   const candidatePartition = $derived(partitionD3d12Candidates(candidates));
 
   const currentVersion = $derived(
-    group?.version_report.kind === 'known' ? group.version_report.version : undefined,
+    group?.version_report.kind === 'known'
+      ? (group.version_report.catalog_release?.version ?? group.version_report.technical_version)
+      : undefined,
   );
 
   const currentValue = $derived(
@@ -76,7 +78,9 @@
     formatReleaseVersionLabel({
       version: currentVersion,
       releaseLabel:
-        group?.version_report.kind === 'known' ? group.version_report.release_label : null,
+        group?.version_report.kind === 'known'
+          ? (group.version_report.catalog_release?.label ?? group.version_report.release_label)
+          : null,
       isDebug: false,
       unknownLabel: t('common.unknown'),
     }),

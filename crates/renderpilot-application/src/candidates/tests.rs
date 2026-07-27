@@ -1,8 +1,10 @@
 use renderpilot_domain::{
-    Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
-    ComponentKind, D3d12ExecutableIdentity, GameId, GraphicsComponent, GraphicsTechnology,
-    LibraryArtifact, PathRef, PeCompatibilityProfile, PeExportSet, RuntimeCompatibility,
-    RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
+    Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
+    CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
+    ComponentId, ComponentKind, D3d12ExecutableIdentity, GameId, GraphicsComponent,
+    GraphicsTechnology, LibraryArtifact, PackageRelease, PackageVersion, PathRef,
+    PeCompatibilityProfile, PeExportSet, ReleaseChannel, RuntimeCompatibility, RuntimeTarget,
+    Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
 use crate::{
@@ -10,7 +12,10 @@ use crate::{
     dxc::{COMPILER_FILE_NAME, VALIDATOR_FILE_NAME},
 };
 
-use super::dto::{CandidateComparison, ComponentReplacementCandidates, InstalledReleaseState};
+use super::dto::{
+    ActiveCatalogPackage, CandidateComparison, ComponentReplacementCandidates,
+    InstalledReleaseState, is_automatic_catalog_candidate,
+};
 use super::matcher::{CandidateContext, find_replacement_candidates};
 
 #[test]
@@ -487,7 +492,6 @@ fn download_state_does_not_reorder_distinct_versions() {
     let context = CandidateContext::new(
         [older_downloaded.id().clone()].into_iter().collect(),
         std::collections::HashMap::new(),
-        std::collections::HashSet::new(),
     );
     let groups = find_replacement_candidates(&[component], &[newer, older_downloaded], &context);
 
@@ -530,7 +534,6 @@ fn distinct_payloads_with_the_same_version_are_not_deduplicated() {
     let context = CandidateContext::new(
         [downloaded.id().clone()].into_iter().collect(),
         std::collections::HashMap::new(),
-        std::collections::HashSet::new(),
     );
     let groups = find_replacement_candidates(&[component], &[manifest_twin, downloaded], &context);
 
@@ -588,8 +591,8 @@ fn mixed_streamline_reports_range_and_comparisons_are_unknown() {
     assert_eq!(
         groups[0].installed_release(),
         &InstalledReleaseState::Mixed {
-            min_version: Version::parse("2.4.0").expect("version"),
-            max_version: Version::parse("2.9.0").expect("version"),
+            min_technical_version: Version::parse("2.4.0").expect("version"),
+            max_technical_version: Version::parse("2.9.0").expect("version"),
         }
     );
     assert_eq!(
@@ -805,7 +808,7 @@ fn content_identical_to_the_installed_component_is_not_a_candidate() {
 }
 
 #[test]
-fn package_backed_candidate_exposes_the_release_version_not_pe_file_version() {
+fn package_backed_candidate_keeps_technical_version_separate_from_package_release() {
     let component = sample_component(
         "component:game-a:xess",
         "game:a",
@@ -837,14 +840,150 @@ fn package_backed_candidate_exposes_the_release_version_not_pe_file_version() {
     let groups = find_test_candidates(&[component], &[artifact]);
 
     assert_eq!(
-        groups[0].candidates()[0].version().map(Version::as_str),
-        Some("1.7.2207.7")
+        groups[0].candidates()[0]
+            .technical_version()
+            .map(Version::as_str),
+        Some("101.7.2207.20")
     );
     assert_eq!(
         groups[0].candidates()[0].comparison(),
-        CandidateComparison::OlderVersion,
-        "comparison must use the same package release version that the UI presents"
+        CandidateComparison::NewerVersion,
+        "comparison must use the technical PE version rather than NuGet identity"
     );
+}
+
+#[test]
+fn catalog_candidates_sort_by_full_package_release_before_pe_file_version() {
+    let component = sample_component(
+        "component:package-order",
+        "game:a",
+        GraphicsTechnology::IntelXeSs,
+        Swappability::Swappable,
+        Some("0.5.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/libxess.dll",
+    );
+    let catalog_artifact = |id: &str, package_version: &str, pe_version: &str, hash: char| {
+        let mut receipt = test_catalog_receipt(id, "intel_xess", package_version, None);
+        receipt.release.channel = ReleaseChannel::Preview;
+        sample_artifact(
+            id,
+            GraphicsTechnology::IntelXeSs,
+            Some(pe_version),
+            &hash.to_string().repeat(64),
+            &format!("C:/Library/{id}.dll"),
+            None,
+        )
+        .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(receipt))
+    };
+    let package_newer = catalog_artifact("artifact:package-newer", "2.0.0-preview", "1.0.0", 'b');
+    let pe_newer = catalog_artifact("artifact:pe-newer", "1.0.0-preview", "9.0.0", 'c');
+
+    let groups = find_test_candidates(&[component], &[pe_newer, package_newer.clone()]);
+
+    assert_eq!(
+        groups[0].candidates()[0].artifact_id(),
+        package_newer.id(),
+        "candidate presentation order must follow the displayed package release"
+    );
+}
+
+#[test]
+fn automatic_policy_accepts_only_active_stable_catalog_candidates() {
+    let component = sample_component(
+        "component:automatic-policy",
+        "game:a",
+        GraphicsTechnology::IntelXeSs,
+        Swappability::Swappable,
+        Some("1.0.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/libxess.dll",
+    );
+    let catalog_artifact = |id: &str, hash: char, channel| {
+        let release = if channel == ReleaseChannel::Preview {
+            "9.0.0-preview"
+        } else {
+            "9.0.0"
+        };
+        let mut receipt = test_catalog_receipt(id, "intel_xess", release, None);
+        receipt.release.channel = channel;
+        sample_artifact(
+            id,
+            GraphicsTechnology::IntelXeSs,
+            Some("9.0.0"),
+            &hash.to_string().repeat(64),
+            &format!("C:/Library/{id}.dll"),
+            None,
+        )
+        .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(receipt))
+    };
+    let stable = catalog_artifact("artifact:stable", 'b', ReleaseChannel::Stable);
+    let preview = catalog_artifact("artifact:preview", 'c', ReleaseChannel::Preview);
+    let active_catalog = active_catalog_for(&[stable.clone(), preview.clone()]);
+    let active = find_replacement_candidates(
+        std::slice::from_ref(&component),
+        &[stable.clone(), preview],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+    let stable_candidate = active[0]
+        .candidates()
+        .iter()
+        .find(|candidate| candidate.artifact_id() == stable.id())
+        .expect("stable candidate");
+    assert!(is_automatic_catalog_candidate(stable_candidate));
+    assert!(
+        active[0]
+            .candidates()
+            .iter()
+            .filter(|candidate| candidate.artifact_id() != stable.id())
+            .all(|candidate| !is_automatic_catalog_candidate(candidate))
+    );
+
+    let local_only =
+        find_replacement_candidates(&[component], &[stable], &CandidateContext::empty());
+    assert!(!is_automatic_catalog_candidate(
+        &local_only[0].candidates()[0]
+    ));
+}
+
+#[test]
+fn active_descriptor_enriches_a_legacy_download_without_a_receipt() {
+    let component = sample_component(
+        "component:legacy-catalog",
+        "game:a",
+        GraphicsTechnology::IntelXeSs,
+        Swappability::Swappable,
+        Some("1.0.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/libxess.dll",
+    );
+    let active = sample_artifact(
+        "artifact:legacy-catalog",
+        GraphicsTechnology::IntelXeSs,
+        Some("2.0.0"),
+        &"b".repeat(64),
+        "catalog://intel/libxess.dll",
+        None,
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt("intel-xess-2.0.0", "intel_xess", "2.0.0", None),
+    ));
+    let active_catalog = active_catalog_for(std::slice::from_ref(&active));
+    let legacy_download = active.clone().with_metadata(ArtifactMetadata::default());
+    let groups = find_replacement_candidates(
+        &[component],
+        &[legacy_download],
+        &CandidateContext::new([active.id().clone()].into_iter().collect(), active_catalog),
+    );
+
+    let candidate = &groups[0].candidates()[0];
+    let package = candidate.catalog_package().expect("catalog package");
+    assert_eq!(package.package_id(), "intel-xess-2.0.0");
+    assert_eq!(
+        package.availability(),
+        renderpilot_domain::CatalogPackageAvailability::Available
+    );
+    assert!(is_automatic_catalog_candidate(candidate));
 }
 
 #[test]
@@ -871,21 +1010,8 @@ fn openvr_installed_release_is_resolved_by_full_catalog_content() {
         Some("revision b"),
     );
     let candidate = openvr_catalog_artifact("artifact:openvr-new", "2.0.0", "b", None);
-    let package_ids = [
-        (old.id().clone(), "openvr-x64-1.0.0".to_owned()),
-        (
-            canonical.id().clone(),
-            "openvr-x64-1.1.0-revision-b".to_owned(),
-        ),
-        (candidate.id().clone(), "openvr-x64-2.0.0".to_owned()),
-    ]
-    .into_iter()
-    .collect();
-    let context = CandidateContext::new(
-        std::collections::HashSet::new(),
-        package_ids,
-        std::collections::HashSet::new(),
-    );
+    let active_catalog = active_catalog_for(&[old.clone(), canonical.clone(), candidate.clone()]);
+    let context = CandidateContext::new(std::collections::HashSet::new(), active_catalog);
 
     let groups = find_replacement_candidates(&[component], &[old, canonical, candidate], &context);
     assert_eq!(groups.len(), 1);
@@ -894,18 +1020,32 @@ fn openvr_installed_release_is_resolved_by_full_catalog_content() {
             .installed_release()
             .known_version()
             .map(Version::as_str),
-        Some("1.1.0")
+        None
     );
     assert_eq!(
         groups[0].installed_release(),
         &InstalledReleaseState::Known {
-            version: Version::parse("1.1.0").expect("version"),
+            technical_version: None,
             release_label: Some("revision b".to_owned()),
+            catalog_release: Some(PackageRelease {
+                version: PackageVersion::parse("1.1.0").expect("package version"),
+                channel: ReleaseChannel::Stable,
+                label: Some("revision b".to_owned()),
+            }),
         }
     );
     assert_eq!(groups[0].candidates().len(), 1);
     assert_eq!(
-        groups[0].candidates()[0].version().map(Version::as_str),
+        groups[0].candidates()[0]
+            .technical_version()
+            .map(Version::as_str),
+        None,
+        "a package release must not be presented as a technical PE FileVersion"
+    );
+    assert_eq!(
+        groups[0].candidates()[0]
+            .catalog_package()
+            .map(|package| package.release().version.as_str()),
         Some("2.0.0")
     );
 }
@@ -940,7 +1080,39 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
                 Version::parse("4.1.1.2740").expect("release"),
                 Some("FSR 3.1.4".to_owned()),
             )
-            .expect("metadata"),
+            .expect("metadata")
+            .with_catalog_package_receipt(test_catalog_receipt(
+                "fsr-installed-package",
+                "amd_fsr",
+                "4.1.1.2740",
+                Some("FSR 3.1.4"),
+            )),
+    );
+    let installed_preview = sample_artifact(
+        "artifact:fsr-installed-preview",
+        GraphicsTechnology::AmdFsr,
+        Some("1.0.1.41314"),
+        &"a".repeat(64),
+        "catalog://amd/amd_fidelityfx_dx12.dll",
+        None,
+    )
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_release(
+                Version::parse("4.1.1.2740").expect("release"),
+                Some("FSR preview".to_owned()),
+            )
+            .expect("metadata")
+            .with_catalog_package_receipt({
+                let mut receipt = test_catalog_receipt(
+                    "fsr-installed-preview-package",
+                    "amd_fsr",
+                    "4.1.1.2740-preview",
+                    Some("FSR preview"),
+                );
+                receipt.release.channel = ReleaseChannel::Preview;
+                receipt
+            }),
     );
     let candidate = sample_artifact(
         "artifact:fsr-candidate",
@@ -952,21 +1124,27 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
     );
     let context = CandidateContext::new(
         std::collections::HashSet::new(),
-        [(installed.id().clone(), "fsr-installed-package".to_owned())]
-            .into_iter()
-            .collect(),
-        std::collections::HashSet::new(),
+        active_catalog_for(&[installed.clone(), installed_preview.clone()]),
     );
 
-    let groups = find_replacement_candidates(&[component], &[installed, candidate], &context);
+    let groups = find_replacement_candidates(
+        &[component],
+        &[installed, installed_preview, candidate],
+        &context,
+    );
     assert_eq!(groups.len(), 1);
     assert_eq!(
         groups[0].installed_release(),
         &InstalledReleaseState::Known {
-            version: Version::parse("4.1.1.2740").expect("release"),
+            technical_version: Some(Version::parse("1.0.1.41314").expect("technical version")),
             release_label: Some("FSR 3.1.4".to_owned()),
+            catalog_release: Some(PackageRelease {
+                version: PackageVersion::parse("4.1.1.2740").expect("package version"),
+                channel: ReleaseChannel::Stable,
+                label: Some("FSR 3.1.4".to_owned()),
+            }),
         },
-        "catalog release matching must ignore component files outside this transition"
+        "stable package identity must win over a preview with the same technical version"
     );
 }
 
@@ -1044,7 +1222,13 @@ fn openvr_catalog_artifact(
                 release,
             )
             .unwrap(),
-        );
+        )
+        .with_catalog_package_receipt(test_catalog_receipt(
+            &format!("openvr-x64-{release}"),
+            "openvr",
+            release,
+            label,
+        ));
     LibraryArtifact::new(
         ArtifactId::new(id).unwrap(),
         GraphicsTechnology::OpenVr,
@@ -1056,11 +1240,63 @@ fn openvr_catalog_artifact(
     .with_metadata(metadata)
 }
 
+fn test_catalog_receipt(
+    package_id: &str,
+    technology: &str,
+    release: &str,
+    label: Option<&str>,
+) -> CatalogPackageReceiptV1 {
+    CatalogPackageReceiptV1 {
+        schema_version: CatalogReceiptSchemaV1,
+        package_id: package_id.to_owned(),
+        vendor: "test-vendor".to_owned(),
+        technology: technology.to_owned(),
+        variant: "runtime".to_owned(),
+        display_name: package_id.to_owned(),
+        release: PackageRelease {
+            version: PackageVersion::parse(release).expect("package version"),
+            channel: ReleaseChannel::Stable,
+            label: label.map(str::to_owned),
+        },
+        target: CatalogTargetReceipt {
+            os: "windows".to_owned(),
+            architecture: Architecture::X64,
+            compatibility: None,
+        },
+        provenance: None,
+        revision_sha256: Sha256Hash::new("e".repeat(64)).expect("hash"),
+        primary_file_name: "runtime.dll".to_owned(),
+        primary_sha256: Sha256Hash::new("a".repeat(64)).expect("hash"),
+        primary_signature: CatalogSignatureReceipt::Unsigned,
+        legal_documents: Vec::new(),
+        size_bytes: 1,
+    }
+}
+
 fn find_test_candidates(
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
 ) -> Vec<ComponentReplacementCandidates> {
     find_replacement_candidates(components, artifacts, &CandidateContext::empty())
+}
+
+fn active_catalog_for(
+    artifacts: &[LibraryArtifact],
+) -> std::collections::HashMap<ArtifactId, ActiveCatalogPackage> {
+    artifacts
+        .iter()
+        .filter_map(|artifact| {
+            let receipt = artifact.metadata().catalog_package_receipt()?;
+            Some((
+                artifact.id().clone(),
+                ActiveCatalogPackage::new(
+                    receipt.package_id.clone(),
+                    receipt.release.clone(),
+                    receipt.release.channel == ReleaseChannel::Stable,
+                ),
+            ))
+        })
+        .collect()
 }
 
 fn sample_component(

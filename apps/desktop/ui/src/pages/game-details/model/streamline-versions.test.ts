@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { buildStreamlineVersionModel } from './streamline-versions';
 import { compareVersionAsc, versionsEqual } from './version-compare';
-import { candidate, component, group as makeGroup } from './candidate-group-fixtures';
+import {
+  candidate,
+  catalogCandidate,
+  component,
+  group as makeGroup,
+} from './candidate-group-fixtures';
 
 const STREAMLINE = 'nvidia_streamline';
 
@@ -148,7 +153,11 @@ describe('buildStreamlineVersionModel', () => {
           candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
           candidate('2.4.0', { artifact_id: 'pkg-240', file_name: 'sl.common.dll' }),
         ]),
-        version_report: { kind: 'mixed' as const, min_version: '2.4.0', max_version: '2.9.0' },
+        version_report: {
+          kind: 'mixed' as const,
+          min_technical_version: '2.4.0',
+          max_technical_version: '2.9.0',
+        },
       },
     };
 
@@ -202,6 +211,71 @@ describe('buildStreamlineVersionModel', () => {
     const v290 = findOption(model, '2.9.0');
     expect(v290.isCurrent).toBe(false);
     expect(v290.updateCount).toBe(1);
+  });
+
+  it('uses an explicit automatic mode while manual mode keeps every candidate', () => {
+    const bundle = component('streamline');
+    const groupsById = {
+      streamline: group('streamline', '2.0.0', [
+        candidate('2.1.0', { artifact_id: 'local' }),
+        catalogCandidate('2.2.0-preview', {
+          artifact_id: 'preview',
+          catalog_package: {
+            package_id: 'preview',
+            release: { version: '2.2.0-preview', channel: 'preview', label: null },
+            availability: 'available',
+            automatic_selection_allowed: false,
+          },
+        }),
+        catalogCandidate('2.3.0', {
+          artifact_id: 'withdrawn',
+          catalog_package: {
+            package_id: 'withdrawn',
+            release: { version: '2.3.0', channel: 'stable', label: null },
+            availability: 'local_only',
+            automatic_selection_allowed: false,
+          },
+        }),
+        catalogCandidate('1.9.0', {
+          artifact_id: 'older-stable',
+          comparison: 'older_version',
+        }),
+        catalogCandidate('2.4.0', { artifact_id: 'stable' }),
+      ]),
+    };
+
+    const manual = buildStreamlineVersionModel([bundle], groupsById, 'manual');
+    expect(manual.options.map((option) => option.version)).toEqual([
+      '2.4.0',
+      '2.3.0',
+      '2.2.0-preview',
+      '2.1.0',
+      '2.0.0',
+      '1.9.0',
+    ]);
+
+    const automatic = buildStreamlineVersionModel([bundle], groupsById, 'automatic');
+    expect(automatic.options.map((option) => option.version)).toEqual(['2.4.0', '2.0.0']);
+    expect(automatic.options[0]?.items[0]?.artifactId).toBe('stable');
+  });
+
+  it('orders package prereleases below stable releases using package precedence', () => {
+    const bundle = component('streamline');
+    const groupsById = {
+      streamline: group('streamline', null, [
+        catalogCandidate('1.0.0-preview.2'),
+        catalogCandidate('1.0.0'),
+        catalogCandidate('1.0.0-preview.10'),
+      ]),
+    };
+
+    const model = buildStreamlineVersionModel([bundle], groupsById);
+
+    expect(model.options.map((option) => option.version)).toEqual([
+      '1.0.0',
+      '1.0.0-preview.10',
+      '1.0.0-preview.2',
+    ]);
   });
 });
 

@@ -5,3 +5,10 @@ export {
   type D3d12ExecutableMutationAction,
 } from './d3d12-executable-action';
 export type { ExecutedD3d12ExecutableAction, OperationMetadata } from './operation-metadata';
+export { canonicalizePackageVersion, comparePackageVersions } from './package-version';
+export {
+  type CatalogCandidatePackage,
+  type CatalogPackageAvailability,
+  type CatalogRelease,
+  type ReleaseChannel,
+} from './catalog-package';

@@ -279,6 +279,15 @@ impl DomainRow for ArtifactRow {
         )
         .map_err(invalid_row)?
         .with_metadata(metadata);
+        if let Some(receipt) = artifact.metadata().catalog_package_receipt() {
+            let expected = receipt.artifact_id();
+            if artifact.id() != &expected {
+                return Err(invalid_row(format!(
+                    "catalog receipt revision requires artifact id `{expected}`, got `{}`",
+                    artifact.id()
+                )));
+            }
+        }
 
         let artifact = with_optional(artifact, source, |artifact, source| {
             artifact.with_source(source).map_err(invalid_row)

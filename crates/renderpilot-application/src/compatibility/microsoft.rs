@@ -52,6 +52,7 @@ pub(super) fn validate_d3d12_artifact(
     if let Some(package) = artifact.metadata().upstream_package() {
         let package_line = package
             .version()
+            .numeric_core()
             .segments()
             .get(1)
             .copied()

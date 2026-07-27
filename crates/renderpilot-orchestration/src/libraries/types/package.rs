@@ -1,5 +1,8 @@
-use renderpilot_domain::{Architecture, PeExportSet, RuntimeCompatibility};
-use serde::{Deserialize, Serialize};
+use renderpilot_domain::{
+    Architecture, CatalogPackageAvailability, CatalogSignatureReceipt, PackageRelease,
+    PackageVersion, PeExportSet, ReleaseChannel, RuntimeCompatibility,
+};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::LibraryLegalDocumentLink;
 
@@ -87,28 +90,97 @@ pub struct LibraryPackage {
 }
 
 /// User-facing package release metadata.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+///
+/// `revision_version` is retained only for authenticating legacy catalog
+/// revisions whose producer emitted an equivalent four-segment version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LibraryRelease {
-    /// Canonical package version used for presentation, ordering, and selection.
-    pub version: String,
+    /// Canonical package version used by application code and UI.
+    pub version: PackageVersion,
     /// Release stability channel.
-    pub channel: LibraryReleaseChannel,
-    /// Optional supplemental annotation displayed verbatim after the version.
+    pub channel: ReleaseChannel,
+    /// Optional supplemental annotation.
     pub label: Option<String>,
+    #[serde(skip)]
+    pub(crate) revision_version: String,
+}
+
+impl LibraryRelease {
+    /// Creates a release with canonical revision spelling.
+    pub fn new(version: PackageVersion, channel: ReleaseChannel, label: Option<String>) -> Self {
+        Self {
+            revision_version: version.as_str().to_owned(),
+            version,
+            channel,
+            label,
+        }
+    }
+
+    /// Returns the exact version spelling used by the catalog revision.
+    pub(crate) fn revision_version(&self) -> &str {
+        &self.revision_version
+    }
+
+    /// Converts the orchestration release to its domain presentation value.
+    pub(crate) fn to_package_release(&self) -> PackageRelease {
+        PackageRelease {
+            version: self.version.clone(),
+            channel: self.channel,
+            label: self.label.clone(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LibraryRelease {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct WireRelease {
+            version: String,
+            channel: ReleaseChannel,
+            label: Option<String>,
+        }
+
+        let wire = WireRelease::deserialize(deserializer)?;
+        let version = PackageVersion::parse(&wire.version).map_err(serde::de::Error::custom)?;
+        if wire.version != version.as_str() && !is_supported_legacy_spelling(&wire.version) {
+            return Err(serde::de::Error::custom(
+                "catalog package version must use its canonical spelling",
+            ));
+        }
+        Ok(Self {
+            version,
+            channel: wire.channel,
+            label: wire.label,
+            revision_version: wire.version,
+        })
+    }
+}
+
+impl From<PackageRelease> for LibraryRelease {
+    fn from(release: PackageRelease) -> Self {
+        Self::new(release.version, release.channel, release.label)
+    }
+}
+
+fn is_supported_legacy_spelling(value: &str) -> bool {
+    let segments = value.split('.').collect::<Vec<_>>();
+    let legacy_shape =
+        (segments.len() < 3) || (segments.len() == 4 && segments.last() == Some(&"0"));
+    legacy_shape
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && segment.bytes().all(|byte| byte.is_ascii_digit())
+                && (segment == &"0" || !segment.starts_with('0'))
+        })
 }
 
 /// Release stability channel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LibraryReleaseChannel {
-    /// Production release.
-    Stable,
-    /// Preview release.
-    Beta,
-    /// Debug build.
-    Debug,
-}
+pub type LibraryReleaseChannel = ReleaseChannel;
 
 /// Windows runtime target for a package.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -132,7 +204,7 @@ pub enum LibraryProvenance {
         /// NuGet package identifier.
         package_id: String,
         /// NuGet package version.
-        version: String,
+        version: PackageVersion,
         /// Base64-encoded SHA-512 supplied by NuGet registration metadata.
         package_sha512: String,
     },
@@ -178,6 +250,38 @@ pub enum SignatureInfo {
     Unsigned,
 }
 
+impl SignatureInfo {
+    pub(crate) fn to_receipt(&self) -> CatalogSignatureReceipt {
+        match self {
+            Self::Signed {
+                subject,
+                thumbprint,
+                signed_at,
+            } => CatalogSignatureReceipt::Signed {
+                subject: subject.clone(),
+                thumbprint: thumbprint.clone(),
+                signed_at: signed_at.clone(),
+            },
+            Self::Unsigned => CatalogSignatureReceipt::Unsigned,
+        }
+    }
+
+    pub(crate) fn from_receipt(receipt: &CatalogSignatureReceipt) -> Self {
+        match receipt {
+            CatalogSignatureReceipt::Signed {
+                subject,
+                thumbprint,
+                signed_at,
+            } => Self::Signed {
+                subject: subject.clone(),
+                thumbprint: thumbprint.clone(),
+                signed_at: signed_at.clone(),
+            },
+            CatalogSignatureReceipt::Unsigned => Self::Unsigned,
+        }
+    }
+}
+
 /// Local download state of a package.
 #[derive(Debug, Clone, Serialize)]
 pub struct LibraryPackageState {
@@ -197,8 +301,6 @@ pub struct LibraryPackageState {
 pub struct LibraryPackageSummary {
     /// Stable package identifier.
     pub package_id: String,
-    /// Domain artifact identity derived from the package revision.
-    pub artifact_id: String,
     /// Stable vendor identifier.
     pub vendor: String,
     /// Graphics technology slug.
@@ -211,8 +313,6 @@ pub struct LibraryPackageSummary {
     pub release: LibraryRelease,
     /// Runtime target metadata.
     pub target: LibraryTarget,
-    /// Canonical package revision digest.
-    pub revision_sha256: String,
     /// Primary member installation name.
     pub primary_file_name: String,
     /// Primary member's uncompressed SHA-256 digest.
@@ -223,6 +323,55 @@ pub struct LibraryPackageSummary {
     pub legal_documents: Vec<LibraryLegalDocumentLink>,
     /// Sum of all member DLL sizes.
     pub size_bytes: u64,
-    /// Whether the verified package is materialized locally.
-    pub is_downloaded: bool,
+    /// Whether the package remains present in the active remote catalog.
+    pub availability: LibraryPackageAvailability,
+    /// Integrity state of local package content, independent of availability.
+    pub local_state: LibraryLocalState,
+    /// Backend capability used by unattended selection; never persisted.
+    pub automatic_selection_allowed: bool,
+}
+
+/// Availability of a package shown in the Libraries page.
+pub type LibraryPackageAvailability = CatalogPackageAvailability;
+
+/// Integrity state of a locally registered package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibraryLocalState {
+    /// No local receipt is registered.
+    Absent,
+    /// Every registered member exists and matches its digest.
+    Verified,
+    /// At least one registered member is absent.
+    Missing,
+    /// A member exists but cannot be read or does not match its digest.
+    Corrupt,
+}
+
+/// Whether a complete active catalog was available for a Libraries query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibraryCatalogStatus {
+    /// A validated active or last-known-good catalog was projected.
+    Active,
+    /// Only receipt-backed local registrations could be returned.
+    LocalFallback,
+}
+
+/// Envelope that prevents a receipt-only fallback from masquerading as a full catalog.
+#[derive(Debug, Clone, Serialize)]
+pub struct LibraryPackagesOutput {
+    /// Reconciled package rows.
+    pub packages: Vec<LibraryPackageSummary>,
+    /// Completeness of the catalog portion of this response.
+    pub catalog_status: LibraryCatalogStatus,
+}
+
+/// Atomic row replacement returned by Libraries mutations.
+#[derive(Debug, Clone, Serialize)]
+pub struct LibraryPackageMutation {
+    /// Logical package identity affected by the mutation.
+    pub package_id: String,
+    /// Current row, or `None` when no active or local registration remains.
+    pub package: Option<LibraryPackageSummary>,
 }

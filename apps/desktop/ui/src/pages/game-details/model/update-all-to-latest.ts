@@ -1,8 +1,12 @@
-import type { GameCandidateGroup, GameDetails } from '@entities/game';
+import {
+  isAutomaticCatalogCandidate,
+  type GameCandidateGroup,
+  type GameDetails,
+} from '@entities/game';
+import { comparePackageVersions } from '@shared/model';
 
 import { NVIDIA_STREAMLINE_TECHNOLOGY } from './game-details-tabs';
 import { buildStreamlineVersionModel, type BulkSwapItem } from './streamline-versions';
-import { compareVersionDesc } from './version-compare';
 
 type GameCandidate = GameCandidateGroup['candidates'][number];
 
@@ -52,8 +56,8 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
 
   const items: BulkSwapItem[] = [];
 
-  // Independent components: pick the newest genuine upgrade, choosing explicitly
-  // by version rather than trusting the candidates' arrival order.
+  // Independent components: pick the newest genuine upgrade by its full catalogue
+  // package version rather than trusting the candidates' arrival order.
   for (const component of otherComponents) {
     const candidate = latestUpgrade(groupsById[component.id]);
     if (candidate) {
@@ -72,7 +76,7 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
   // incomplete versions avoids leaving the bundle in a mixed state; the user can
   // still pick one manually from the Streamline dropdown.
   if (streamlineComponents.length > 0) {
-    const model = buildStreamlineVersionModel(streamlineComponents, groupsById);
+    const model = buildStreamlineVersionModel(streamlineComponents, groupsById, 'automatic');
     const latestComplete = model.options.find((option) => option.isComplete);
     if (latestComplete) {
       items.push(...latestComplete.items);
@@ -85,15 +89,15 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
 /**
  * The newest genuine upgrade for one component, or `null` when none exists.
  *
- * Considers only `newer_version` candidates and picks the highest `version`
- * explicitly (reusing the Streamline version comparator) so the result never
- * depends on the order the backend happened to return candidates in. Candidates
- * without a parseable version fall back to their relative arrival order.
+ * Considers only automatically eligible `newer_version` candidates and picks the
+ * highest full `catalog_package.release.version`, so the result never depends on backend
+ * arrival order. Automatic eligibility guarantees that this identity is present.
  */
 function latestUpgrade(group: GameCandidateGroup | null | undefined): GameCandidate | null {
   const upgrades = (group?.candidates ?? []).filter(
     (candidate) =>
       candidate.comparison === NEWER_VERSION &&
+      isAutomaticCatalogCandidate(candidate) &&
       candidate.d3d12_executable_action?.kind !== 'repair_required',
   );
 
@@ -109,10 +113,10 @@ function latestUpgrade(group: GameCandidateGroup | null | undefined): GameCandid
 
 /** Whether `candidate` is a strictly newer version than the current `best`. */
 function isNewer(candidate: GameCandidate, best: GameCandidate): boolean {
-  if (!candidate.version || !best.version) {
+  const candidateVersion = candidate.catalog_package?.release.version;
+  const bestVersion = best.catalog_package?.release.version;
+  if (!candidateVersion || !bestVersion) {
     return false;
   }
-  // `compareVersionDesc` orders newest-first, so a negative result means
-  // `candidate` sorts ahead of (is newer than) `best`.
-  return compareVersionDesc(candidate.version, best.version) < 0;
+  return comparePackageVersions(candidateVersion, bestVersion) > 0;
 }

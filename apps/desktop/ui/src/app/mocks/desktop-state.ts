@@ -196,7 +196,7 @@ export function updateCandidateGroupCurrentVersion(
 
   if (candidateGroup) {
     candidateGroup.version_report = version
-      ? { kind: 'known', version, release_label: null }
+      ? { kind: 'known', technical_version: version, release_label: null, catalog_release: null }
       : { kind: 'unknown' };
   }
 }

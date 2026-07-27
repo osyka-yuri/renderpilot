@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use renderpilot_application::ArtifactRepository;
-use renderpilot_domain::{Architecture, PeExportSet};
+use renderpilot_domain::{Architecture, ArtifactMetadata, PackageVersion, PeExportSet};
 use sha2::{Digest, Sha256};
 
-use super::artifact_builder::build_catalog_artifact;
+use super::artifact_builder::{build_catalog_artifact, package_is_supported};
 use super::types::{
     LibraryArtifactRecord, LibraryCatalog, LibraryContent, LibraryLegalDocument,
     LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryPackage, LibraryPackageMember,
@@ -64,11 +64,11 @@ fn package(technology: &str) -> LibraryPackage {
         technology: technology.to_owned(),
         variant: "runtime_bundle".to_owned(),
         display_name: "Test Package".to_owned(),
-        release: LibraryRelease {
-            version: "1.2.3".to_owned(),
-            channel: LibraryReleaseChannel::Stable,
-            label: None,
-        },
+        release: LibraryRelease::new(
+            PackageVersion::parse("1.2.3").expect("package version"),
+            LibraryReleaseChannel::Stable,
+            None,
+        ),
         target: LibraryTarget {
             os: "windows".to_owned(),
             architecture: Architecture::X64,
@@ -176,11 +176,11 @@ pub(super) fn openvr_catalog(repository: &str) -> LibraryCatalog {
         technology: "openvr".to_owned(),
         variant: "runtime".to_owned(),
         display_name: "OpenVR SDK".to_owned(),
-        release: LibraryRelease {
-            version: "1.1.3".to_owned(),
-            channel: LibraryReleaseChannel::Stable,
-            label: Some("revision b".to_owned()),
-        },
+        release: LibraryRelease::new(
+            PackageVersion::parse("1.1.3").expect("package version"),
+            LibraryReleaseChannel::Stable,
+            Some("revision b".to_owned()),
+        ),
         target: LibraryTarget {
             os: "windows".to_owned(),
             architecture: Architecture::X64,
@@ -332,14 +332,70 @@ fn package_summary_uses_primary_integrity_and_total_member_size() {
         .expect("valid adapter")
         .expect("known technology");
 
-    let summary = super::artifact_builder::package_summary(&resolved, &artifact, false)
-        .expect("package summary");
+    let entry = super::inventory::InventoryEntry {
+        package_id: resolved.package().package_id.clone(),
+        active: Some(artifact),
+        local: None,
+        local_state: super::types::LibraryLocalState::Absent,
+    };
+    let summary = super::projection::package_summary(&entry).expect("package summary");
 
     assert_eq!(summary.primary_file_name, "primary.dll");
     assert_eq!(summary.primary_sha256, "a".repeat(64));
     assert_eq!(summary.size_bytes, 32);
-    assert_eq!(summary.artifact_id, artifact.id().as_str());
-    assert!(!summary.is_downloaded);
+    assert_eq!(summary.local_state, super::types::LibraryLocalState::Absent);
+}
+
+#[test]
+fn active_catalog_backfills_a_legacy_download_without_a_receipt() {
+    let catalog =
+        super::resolved::ValidatedCatalog::new(complete_catalog(package("nvidia_streamline")))
+            .expect("validated catalog");
+    let resolved = catalog.packages().next().expect("resolved package");
+    let active = build_catalog_artifact(&resolved, None)
+        .expect("valid adapter")
+        .expect("known technology");
+    let mut legacy_metadata = ArtifactMetadata::default();
+    if let Some(release) = active.metadata().release() {
+        legacy_metadata = legacy_metadata
+            .with_release(
+                release.version().clone(),
+                release.label().map(str::to_owned),
+            )
+            .expect("legacy release metadata");
+    }
+    if let Some(upstream) = active.metadata().upstream_package() {
+        legacy_metadata = legacy_metadata.with_upstream_package(upstream.clone());
+    }
+    if let Some(target) = active.metadata().runtime_target() {
+        legacy_metadata = legacy_metadata.with_runtime_target(target.clone());
+    }
+    let legacy = active.with_metadata(legacy_metadata);
+    let context = crate::Context::from_storage(
+        renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("storage"),
+    );
+    context
+        .storage()
+        .upsert_artifact(&legacy)
+        .expect("legacy registration");
+
+    super::inventory::Inventory::load(
+        &context,
+        Some(&catalog),
+        super::types::LibraryCatalogStatus::Active,
+    )
+    .expect("inventory reconciliation");
+
+    let stored = context
+        .storage()
+        .list_artifacts()
+        .expect("stored artifacts");
+    let receipt = stored[0]
+        .metadata()
+        .catalog_package_receipt()
+        .expect("receipt was backfilled");
+    assert_eq!(receipt.package_id, resolved.package().package_id);
+    assert_eq!(receipt.release.version, resolved.package().release.version);
 }
 
 #[test]
@@ -647,6 +703,16 @@ fn vendor_validation_binds_microsoft_runtime_semantics() {
 }
 
 #[test]
+fn unsupported_dxc_package_is_not_exposed_as_a_catalog_artifact() {
+    let mut dxc = package("microsoft_dxc");
+    assert!(!package_is_supported(&dxc));
+
+    dxc.members[0].install_as = "dxcompiler.dll".to_owned();
+    dxc.members[1].install_as = "dxil.dll".to_owned();
+    assert!(package_is_supported(&dxc));
+}
+
+#[test]
 fn vendor_snapshot_envelope_binds_the_index_identity() {
     let reference = LibraryVendorReference {
         vendor_id: "nvidia".to_owned(),
@@ -741,6 +807,48 @@ fn nuget_package_revision_matches_the_producer_contract() {
     )
     .expect("producer NuGet package fixture");
 
+    assert_eq!(package_revision(&package), package.revision_sha256);
+}
+
+#[test]
+fn microsoft_preview_package_preserves_exact_identity_and_sdk_line() {
+    let package: LibraryPackage = serde_json::from_str(
+        r#"{
+          "package_id":"d3d12_agility.1.721.2-preview.x64",
+          "revision_sha256":"b998fa89635f393cb58534a12a1c70edc9739b304d8c4a3cd64d112bd6e36a87",
+          "technology":"d3d12_agility",
+          "variant":"runtime",
+          "display_name":"Microsoft D3D12 Agility SDK",
+          "release":{"version":"1.721.2-preview","channel":"preview","label":null},
+          "target":{"os":"windows","architecture":"X64","compatibility":{"kind":"d3d12_sdk","version":721}},
+          "provenance":{
+            "kind":"nuget",
+            "package_id":"Microsoft.Direct3D.D3D12",
+            "version":"1.721.2-preview",
+            "package_sha512":"p3O3y+3WsciKgZ9MCqi3je/e+i0f0Vo/zx4T+1cdbmr4ph7XsWFRMP5f73fEVdhdorlA2ZQFouxmIfc9DoIw7w=="
+          },
+          "legal_document_ids":["license.b79425b6d54d8dc63971f2b2291441bcbcba75d878d8bdd4fd1d43046c05e0c0"],
+          "members":[{
+            "artifact_id":"sha256:8eef346be7f070cdc5804316acd3395151c6567d03be8aeca971171271e82d8e",
+            "role":"primary",
+            "install_as":"D3D12Core.dll"
+          }]
+        }"#,
+    )
+    .expect("generated Microsoft preview package");
+
+    assert_eq!(package.release.version.as_str(), "1.721.2-preview");
+    assert_eq!(package.release.version.numeric_core().as_str(), "1.721.2");
+    assert_eq!(package.release.channel, LibraryReleaseChannel::Preview);
+    assert_eq!(
+        package.target.compatibility,
+        Some(renderpilot_domain::RuntimeCompatibility::D3d12Sdk { version: 721 })
+    );
+    assert!(matches!(
+        &package.provenance,
+        Some(LibraryProvenance::Nuget { version, .. })
+            if version.as_str() == "1.721.2-preview"
+    ));
     assert_eq!(package_revision(&package), package.revision_sha256);
 }
 
@@ -880,11 +988,41 @@ fn sqlite_registration_is_the_commit_point_and_delete_retains_shared_content() {
         context.storage().list_artifacts().expect("artifacts").len(),
         2
     );
+    let local_entry = super::inventory::InventoryEntry {
+        package_id: resolved[0].package().package_id.clone(),
+        active: None,
+        local: Some(first_artifact.clone()),
+        local_state: super::types::LibraryLocalState::Verified,
+    };
+    let local_only = super::projection::package_summary(&local_entry).expect("catalog receipt");
+    assert_eq!(
+        local_only.availability,
+        super::types::LibraryPackageAvailability::LocalOnly
+    );
+    assert_eq!(local_only.release.version.as_str(), "1.2.3");
 
-    let deleted =
-        super::packages::unregister_package(&context, resolved[0].package(), first_artifact.id())
-            .expect("unregister");
-    assert!(!deleted.is_downloaded);
+    let mut verifier = super::local_verifier::LocalArtifactVerifier::default();
+    assert_eq!(
+        verifier.artifact_state(&first_artifact),
+        super::types::LibraryLocalState::Verified
+    );
+    assert_eq!(
+        verifier.artifact_state(&second_artifact),
+        super::types::LibraryLocalState::Verified
+    );
+    std::fs::write(&local_paths[0], b"corrupt").expect("corrupt local cache fixture");
+    let mut verifier = super::local_verifier::LocalArtifactVerifier::default();
+    assert_eq!(
+        verifier.artifact_state(&first_artifact),
+        super::types::LibraryLocalState::Corrupt,
+        "a stale database registration must be classified as corrupt"
+    );
+    std::fs::write(&local_paths[0], primary_bytes).expect("restore shared content");
+
+    context
+        .storage()
+        .delete_catalog_package_artifacts(&resolved[0].package().package_id)
+        .expect("delete local-only package");
     let remaining = context.storage().list_artifacts().expect("artifacts");
     assert_eq!(remaining.len(), 1);
     assert_eq!(

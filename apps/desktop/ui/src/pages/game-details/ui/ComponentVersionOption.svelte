@@ -9,8 +9,8 @@
 
   const versionLabel = $derived(
     formatReleaseVersionLabel({
-      version: candidate.version,
-      releaseLabel: candidate.release_label,
+      version: candidate.catalog_package?.release.version ?? candidate.technical_version,
+      releaseLabel: candidate.catalog_package?.release.label ?? candidate.release_label,
       isDebug: candidate.is_debug,
       unknownLabel: t('common.unknown'),
     }),

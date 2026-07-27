@@ -1,6 +1,6 @@
 //! Catalog orchestration: scan, query, and library management.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use renderpilot_application::{
@@ -219,33 +219,10 @@ pub(crate) struct ReplacementUniverse {
 pub(crate) fn load_replacement_universe(
     context: &crate::Context,
 ) -> Result<ReplacementUniverse, ServiceError> {
-    let local_artifacts = context.storage().list_artifacts()?;
-
-    let downloaded_ids: HashSet<_> = local_artifacts.iter().map(|a| a.id().clone()).collect();
-    let mut artifacts = local_artifacts;
-    let (catalog_package_ids, debug_package_ids) =
-        match crate::libraries::catalog_packages_as_artifacts() {
-            Ok(catalog_artifacts) => {
-                let (catalog_artifacts, package_ids, debug_package_ids) =
-                    catalog_artifacts.into_parts();
-                artifacts.extend(
-                    catalog_artifacts
-                        .into_iter()
-                        .filter(|a| !downloaded_ids.contains(a.id())),
-                );
-                (package_ids, debug_package_ids)
-            }
-            Err(error) => {
-                log::warn!("could not load catalog replacement artifacts: {error}");
-                (HashMap::new(), HashSet::new())
-            }
-        };
-
-    let candidate_context = renderpilot_application::CandidateContext::new(
-        downloaded_ids,
-        catalog_package_ids,
-        debug_package_ids,
-    );
+    let (artifacts, downloaded_ids, active_catalog) =
+        crate::libraries::replacement_artifacts(context)?;
+    let candidate_context =
+        renderpilot_application::CandidateContext::new(downloaded_ids, active_catalog);
 
     Ok(ReplacementUniverse {
         artifacts,

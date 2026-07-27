@@ -38,7 +38,7 @@ pub(super) fn package_revision_sha256(package: &LibraryPackage) -> Result<String
         technology: &package.technology,
         variant: &package.variant,
         release: RevisionRelease {
-            version: &package.release.version,
+            version: package.release.revision_version(),
             channel: &package.release.channel,
         },
         target: &package.target,
@@ -77,5 +77,43 @@ fn canonical_json(value: &serde_json::Value) -> Result<String, ServiceError> {
         }
         scalar => serde_json::to_string(scalar)
             .map_err(|error| library_error(format!("failed to encode package revision: {error}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_v1_wire_version_authenticates_without_leaking_into_new_output() {
+        let legacy: LibraryPackage = serde_json::from_value(serde_json::json!({
+            "package_id": "legacy.package",
+            "revision_sha256": "0".repeat(64),
+            "technology": "test",
+            "variant": "runtime",
+            "display_name": "Legacy",
+            "release": {
+                "version": "1.2.3.0",
+                "channel": "stable",
+                "label": null
+            },
+            "target": {
+                "os": "windows",
+                "architecture": "X64"
+            },
+            "members": []
+        }))
+        .expect("legacy package");
+        assert_eq!(legacy.release.version.as_str(), "1.2.3");
+        assert_eq!(legacy.release.revision_version(), "1.2.3.0");
+
+        let canonical: LibraryPackage =
+            serde_json::from_value(serde_json::to_value(&legacy).expect("serialize"))
+                .expect("canonical package");
+        assert_eq!(canonical.release.revision_version(), "1.2.3");
+        assert_ne!(
+            package_revision_sha256(&legacy).unwrap(),
+            package_revision_sha256(&canonical).unwrap()
+        );
     }
 }

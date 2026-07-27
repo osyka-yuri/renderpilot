@@ -112,6 +112,12 @@
       <AlertDescription>{model.errorMessage}</AlertDescription>
     </Alert>
   {/if}
+  {#if model.catalogStatus === 'local_fallback'}
+    <Alert class="shrink-0">
+      <AlertTitle>{t('libraries.catalogFallback.title')}</AlertTitle>
+      <AlertDescription>{t('libraries.catalogFallback.description')}</AlertDescription>
+    </Alert>
+  {/if}
 
   <Tabs
     class="flex min-h-0 flex-1 flex-col overflow-hidden"

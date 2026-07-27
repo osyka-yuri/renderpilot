@@ -6,10 +6,4 @@ export {
   presentComponentFiles,
 } from './model/presenters';
 
-export type {
-  ComponentFile,
-  GraphicsComponent,
-  Candidate,
-  CandidateGroup,
-  BuildPlanHandler,
-} from './model/types';
+export type { ComponentFile, GraphicsComponent, BuildPlanHandler } from './model/types';

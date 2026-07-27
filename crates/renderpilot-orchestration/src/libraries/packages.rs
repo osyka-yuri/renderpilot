@@ -1,6 +1,5 @@
 //! Materialization and lifecycle of explicit catalog packages.
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
@@ -10,7 +9,7 @@ use renderpilot_domain::{ArtifactId, LibraryArtifact};
 use crate::ServiceError;
 use crate::net::{DownloadProgress, ProgressObserver};
 
-use super::resolved::{ResolvedPackage, ValidatedCatalog};
+use super::resolved::ResolvedPackage;
 use super::storage::LibraryStorage;
 use super::types::{LibraryArtifactRecord, LibraryPackage, LibraryPackageState};
 use super::{artifact_builder, compression, library_error};
@@ -201,85 +200,9 @@ pub(super) fn register_and_commit(
 ) -> Result<LibraryPackageState, ServiceError> {
     context
         .storage()
-        .upsert_artifact(artifact)
+        .replace_catalog_package_artifact(&package.package_id, artifact)
         .map_err(ServiceError::from)?;
     Ok(package_state(package, true, Some(artifact.id())))
-}
-
-pub(super) fn delete_package(
-    context: &crate::Context,
-    resolved: &ResolvedPackage<'_>,
-) -> Result<LibraryPackageState, ServiceError> {
-    let package = resolved.package();
-    let artifact_id = resolved.artifact_id();
-    unregister_package(context, package, artifact_id)
-}
-
-pub(super) fn unregister_package(
-    context: &crate::Context,
-    package: &LibraryPackage,
-    artifact_id: &ArtifactId,
-) -> Result<LibraryPackageState, ServiceError> {
-    context
-        .storage()
-        .delete_artifact(artifact_id)
-        .map_err(ServiceError::from)?;
-    // Content-addressed DLLs and archives may be shared. They are intentionally
-    // left for a future explicit orphan-GC pass.
-    Ok(package_state(package, false, None))
-}
-
-pub(super) fn package_states(
-    context: &crate::Context,
-    catalog: &ValidatedCatalog,
-) -> Result<Vec<LibraryPackageState>, ServiceError> {
-    let storage = LibraryStorage::discover()?;
-    let registered_ids: std::collections::HashSet<_> = context
-        .storage()
-        .list_artifacts()
-        .map_err(ServiceError::from)?
-        .into_iter()
-        .map(|artifact| artifact.id().clone())
-        .collect();
-    let mut verified_content = HashMap::new();
-    let mut states = Vec::new();
-    for resolved in catalog.packages() {
-        let package = resolved.package();
-        if !artifact_builder::package_is_supported(package) {
-            log::warn!(
-                "catalog package `{}` uses unknown technology `{}`; skipping its state",
-                package.package_id,
-                package.technology
-            );
-            continue;
-        }
-        let artifact_id = resolved.artifact_id();
-        let mut downloaded = registered_ids.contains(artifact_id);
-        if downloaded {
-            for artifact in resolved.members() {
-                let path = storage.local_dll_path(&artifact.dll.sha256, &artifact.file_name);
-                let has_content = match verified_content.get(&path) {
-                    Some(result) => *result,
-                    None => {
-                        let result =
-                            file_has_content(&path, artifact.dll.size_bytes, &artifact.dll.sha256)?;
-                        verified_content.insert(path, result);
-                        result
-                    }
-                };
-                if !has_content {
-                    downloaded = false;
-                    break;
-                }
-            }
-        }
-        states.push(package_state(
-            package,
-            downloaded,
-            downloaded.then_some(artifact_id),
-        ));
-    }
-    Ok(states)
 }
 
 fn package_state(
@@ -289,7 +212,7 @@ fn package_state(
 ) -> LibraryPackageState {
     LibraryPackageState {
         package_id: package.package_id.clone(),
-        version: package.release.version.clone(),
+        version: package.release.version.as_str().to_owned(),
         is_downloaded,
         artifact_id: artifact_id.map(|id| id.as_str().to_owned()),
     }

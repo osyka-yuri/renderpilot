@@ -12,8 +12,9 @@ pub(crate) use package::{
     LibraryArtifactRecord, LibraryContent, LibraryPackage, LibraryPackageMember, LibraryProvenance,
 };
 pub use package::{
-    LibraryPackageState, LibraryPackageSummary, LibraryRelease, LibraryReleaseChannel,
-    LibraryTarget, SignatureInfo,
+    LibraryCatalogStatus, LibraryLocalState, LibraryPackageAvailability, LibraryPackageMutation,
+    LibraryPackageState, LibraryPackageSummary, LibraryPackagesOutput, LibraryRelease,
+    LibraryReleaseChannel, LibraryTarget, SignatureInfo,
 };
 
 #[cfg(test)]

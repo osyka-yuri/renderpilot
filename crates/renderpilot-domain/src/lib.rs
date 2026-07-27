@@ -4,6 +4,7 @@
 //! operating-system APIs, and detection implementation details.
 
 mod addon;
+mod catalog_package;
 mod component;
 pub mod dlss;
 mod exe_graphics;
@@ -13,6 +14,7 @@ mod ids;
 mod model;
 pub mod mutation_features;
 pub mod openvr;
+mod package_version;
 mod path;
 mod text;
 mod version;
@@ -22,6 +24,12 @@ pub use addon::{
     LumaInstallState, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode, RenoDxHostKind,
     RenoDxInstallState, SharedArtifactKind, SharedArtifactOrigin, SharedArtifactRecord,
     SharedArtifactSource, TrackedSource, TrackedSourceRole,
+};
+pub use catalog_package::{
+    CatalogLegalDocumentFormat, CatalogLegalDocumentKind, CatalogLegalDocumentReceipt,
+    CatalogPackageAvailability, CatalogPackageReceiptV1, CatalogProvenanceReceipt,
+    CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, PackageRelease,
+    ReleaseChannel,
 };
 pub use component::{
     ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentRollbackBaseline,
@@ -37,6 +45,7 @@ pub use model::{
     AddonKind, Architecture, ComponentKind, GameRuntime, GraphicsApi, GraphicsTechnology, Launcher,
     Platform, Swappability,
 };
+pub use package_version::{PackageVersion, PackageVersionParseError};
 pub use path::{PathRef, PathRefError, normalized_path_key};
 pub use version::{Version, VersionParseError};
 

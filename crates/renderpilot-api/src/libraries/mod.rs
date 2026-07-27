@@ -7,8 +7,9 @@
 use crate::utils::{JsonResult, to_json};
 
 pub use renderpilot_orchestration::libraries::{
-    LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryLegalDocumentLink,
-    LibraryPackageState, LibraryPackageSummary,
+    LibraryCatalogStatus, LibraryLegalDocumentFormat, LibraryLegalDocumentKind,
+    LibraryLegalDocumentLink, LibraryLocalState, LibraryPackageMutation, LibraryPackageState,
+    LibraryPackageSummary, LibraryPackagesOutput,
 };
 pub use renderpilot_orchestration::net::{DownloadProgress, ProgressObserver};
 
@@ -45,7 +46,7 @@ pub async fn download_artifact(
     )
 }
 
-/// Deletes a locally downloaded package by its catalog ID.
+/// Deletes the local registration for one logical package.
 pub async fn delete_library_package(
     context: &renderpilot_orchestration::Context,
     package_id: String,

@@ -8,6 +8,7 @@ use renderpilot_application::{
     ComponentReplacementCandidates, D3d12ExecutableAction, InstalledReleaseState, OperationPlan,
     OperationPlanFile, ReplacementCandidate,
 };
+use renderpilot_domain::{CatalogPackageAvailability, PackageRelease};
 use serde::Serialize;
 
 use super::{
@@ -40,17 +41,19 @@ pub struct ComponentCandidateOutput {
 pub enum InstalledReleaseStateOutput {
     /// All relevant installed files resolve to one version.
     Known {
-        /// Display version.
-        version: String,
+        /// Technical PE FileVersion used for compatibility, when present.
+        technical_version: Option<String>,
         /// Supplemental catalog release annotation.
         release_label: Option<String>,
+        /// Exact catalog release when installed content matches a known package.
+        catalog_release: Option<PackageRelease>,
     },
     /// Known installed files prove the component is on multiple releases.
     Mixed {
-        /// Lowest known version.
-        min_version: String,
-        /// Highest known version.
-        max_version: String,
+        /// Lowest known technical PE FileVersion.
+        min_technical_version: String,
+        /// Highest known technical PE FileVersion.
+        max_technical_version: String,
     },
     /// Metadata cannot establish a trustworthy installed version.
     Unknown,
@@ -60,18 +63,22 @@ impl From<&InstalledReleaseState> for InstalledReleaseStateOutput {
     fn from(report: &InstalledReleaseState) -> Self {
         match report {
             InstalledReleaseState::Known {
-                version,
+                technical_version,
                 release_label,
+                catalog_release,
             } => Self::Known {
-                version: version.as_str().to_owned(),
+                technical_version: technical_version
+                    .as_ref()
+                    .map(|version| version.as_str().to_owned()),
                 release_label: release_label.clone(),
+                catalog_release: catalog_release.clone(),
             },
             InstalledReleaseState::Mixed {
-                min_version,
-                max_version,
+                min_technical_version,
+                max_technical_version,
             } => Self::Mixed {
-                min_version: min_version.as_str().to_owned(),
-                max_version: max_version.as_str().to_owned(),
+                min_technical_version: min_technical_version.as_str().to_owned(),
+                max_technical_version: max_technical_version.as_str().to_owned(),
             },
             InstalledReleaseState::Unknown => Self::Unknown,
         }
@@ -87,16 +94,16 @@ pub struct CandidateOutput {
     pub file_name: String,
     /// Absolute path to the locally cached artifact, if downloaded.
     pub file_path: Option<String>,
-    /// Artifact version string, if available.
-    pub version: Option<String>,
+    /// Technical PE FileVersion, if available.
+    pub technical_version: Option<String>,
     /// Supplemental catalog release label.
     pub release_label: Option<String>,
     /// Game id the artifact was extracted from, if any.
     pub source_game_id: Option<String>,
     /// Comparison result against the currently installed version.
     pub comparison: String,
-    /// Curated catalog package id the artifact came from, if any.
-    pub catalog_package_id: Option<String>,
+    /// Curated package identity, release, availability, and selection capability.
+    pub catalog_package: Option<CatalogCandidateOutput>,
     /// Whether the artifact has been downloaded locally.
     pub is_downloaded: bool,
     /// Whether the artifact is a debug build.
@@ -105,6 +112,19 @@ pub struct CandidateOutput {
     pub sha256: String,
     /// Required action for the main executable, for D3D12 candidates.
     pub d3d12_executable_action: Option<D3d12ExecutableActionOutput>,
+}
+
+/// Nested catalog-package metadata attached to a candidate.
+#[derive(Debug, Serialize)]
+pub struct CatalogCandidateOutput {
+    /// Stable logical package identity.
+    pub package_id: String,
+    /// Exact package release used for presentation and sorting.
+    pub release: PackageRelease,
+    /// Whether the package remains active or exists only as a local receipt.
+    pub availability: CatalogPackageAvailability,
+    /// Whether unattended selection is permitted.
+    pub automatic_selection_allowed: bool,
 }
 
 /// Stable wire shape for D3D12 executable assessment.
@@ -357,15 +377,22 @@ impl From<&ReplacementCandidate> for CandidateOutput {
             artifact_id: candidate.artifact_id().as_str().to_owned(),
             file_name: candidate.file_name().to_owned(),
             file_path: candidate.file_path().map(|path| path.as_str().to_owned()),
-            version: candidate
-                .version()
+            technical_version: candidate
+                .technical_version()
                 .map(|version| version.as_str().to_owned()),
             release_label: candidate.release_label().map(str::to_owned),
             source_game_id: candidate
                 .source_game_id()
                 .map(|game_id| game_id.as_str().to_owned()),
             comparison: candidate.comparison().as_str().to_owned(),
-            catalog_package_id: candidate.catalog_package_id().map(String::from),
+            catalog_package: candidate
+                .catalog_package()
+                .map(|package| CatalogCandidateOutput {
+                    package_id: package.package_id().to_owned(),
+                    release: package.release().clone(),
+                    availability: package.availability(),
+                    automatic_selection_allowed: package.automatic_selection_allowed(),
+                }),
             is_downloaded: candidate.is_downloaded(),
             is_debug: candidate.is_debug(),
             sha256: candidate.sha256().to_owned(),
@@ -449,17 +476,76 @@ pub fn operation_summary_outputs(
 #[cfg(test)]
 mod tests {
     use super::{
-        D3d12ExecutableActionOutput, D3d12ExecutableStatusOutput, InstalledReleaseStateOutput,
-        OperationSummaryOutput,
+        CandidateOutput, CatalogCandidateOutput, D3d12ExecutableActionOutput,
+        D3d12ExecutableStatusOutput, InstalledReleaseStateOutput, OperationSummaryOutput,
     };
     use renderpilot_application::{
         D3d12ExecutableAction, D3d12ExecutableProfile, InstalledReleaseState, MetadataJson,
         OperationKind, OperationRecord, OperationStatus, UnixTimestampMillis,
     };
-    use renderpilot_domain::{ComponentId, GameId, OperationId, PathRef, Version};
+    use renderpilot_domain::{
+        CatalogPackageAvailability, ComponentId, GameId, OperationId, PackageRelease,
+        PackageVersion, PathRef, ReleaseChannel, Version,
+    };
     use serde_json::json;
 
     use crate::catalog::{D3d12ExecutableStatus, OperationListCatalogEntry};
+
+    #[test]
+    fn candidate_wire_nests_catalog_identity_and_keeps_technical_version_explicit() {
+        let output = CandidateOutput {
+            artifact_id: "artifact-1".to_owned(),
+            file_name: "d3d12.dll".to_owned(),
+            file_path: Some("C:/Game/d3d12.dll".to_owned()),
+            technical_version: Some("10.1.0".to_owned()),
+            release_label: Some("SDK".to_owned()),
+            source_game_id: None,
+            comparison: "newer_version".to_owned(),
+            catalog_package: Some(CatalogCandidateOutput {
+                package_id: "microsoft.dxc".to_owned(),
+                release: PackageRelease {
+                    version: PackageVersion::parse("1.9.2602.17").expect("package version"),
+                    channel: ReleaseChannel::Stable,
+                    label: Some("SDK".to_owned()),
+                },
+                availability: CatalogPackageAvailability::Available,
+                automatic_selection_allowed: true,
+            }),
+            is_downloaded: false,
+            is_debug: false,
+            sha256: "sha256".to_owned(),
+            d3d12_executable_action: None,
+        };
+
+        let wire = serde_json::to_value(output).expect("candidate json");
+        assert_eq!(
+            wire,
+            json!({
+                "artifact_id": "artifact-1",
+                "file_name": "d3d12.dll",
+                "file_path": "C:/Game/d3d12.dll",
+                "technical_version": "10.1.0",
+                "release_label": "SDK",
+                "source_game_id": null,
+                "comparison": "newer_version",
+                "catalog_package": {
+                    "package_id": "microsoft.dxc",
+                    "release": {
+                        "version": "1.9.2602.17",
+                        "channel": "stable",
+                        "label": "SDK",
+                    },
+                    "availability": "available",
+                    "automatic_selection_allowed": true,
+                },
+                "is_downloaded": false,
+                "is_debug": false,
+                "sha256": "sha256",
+                "d3d12_executable_action": null,
+            })
+        );
+        assert!(wire.get("catalog_package_id").is_none());
+    }
 
     #[test]
     fn installed_release_variants_serialize_to_stable_wire_shapes() {
@@ -468,35 +554,60 @@ mod tests {
         let cases = [
             (
                 InstalledReleaseState::Known {
-                    version: Version::parse("2.9.0").expect("version"),
+                    technical_version: Some(Version::parse("2.9.0").expect("version")),
                     release_label: Some("revision b".to_owned()),
+                    catalog_release: None,
                 },
                 json!({
                     "kind": "known",
-                    "version": "2.9.0",
+                    "technical_version": "2.9.0",
                     "release_label": "revision b",
+                    "catalog_release": null,
                 }),
             ),
             (
                 InstalledReleaseState::Known {
-                    version: Version::parse("2.8.0").expect("version"),
+                    technical_version: Some(Version::parse("2.8.0").expect("version")),
                     release_label: None,
+                    catalog_release: None,
                 },
                 json!({
                     "kind": "known",
-                    "version": "2.8.0",
+                    "technical_version": "2.8.0",
                     "release_label": null,
+                    "catalog_release": null,
+                }),
+            ),
+            (
+                InstalledReleaseState::Known {
+                    technical_version: None,
+                    release_label: Some("SDK".to_owned()),
+                    catalog_release: Some(PackageRelease {
+                        version: PackageVersion::parse("1.721.2-preview").expect("package version"),
+                        channel: ReleaseChannel::Preview,
+                        label: Some("SDK".to_owned()),
+                    }),
+                },
+                json!({
+                    "kind": "known",
+                    "technical_version": null,
+                    "release_label": "SDK",
+                    "catalog_release": {
+                        "version": "1.721.2-preview",
+                        "channel": "preview",
+                        "label": "SDK",
+                    },
                 }),
             ),
             (
                 InstalledReleaseState::Mixed {
-                    min_version: Version::parse("2.4.0").expect("version"),
-                    max_version: Version::parse("2.9.0").expect("version"),
+                    min_technical_version: Version::parse("2.4.0").expect("version"),
+                    max_technical_version: Version::parse("2.9.0").expect("version"),
                 },
                 json!({
                     "kind": "mixed",
-                    "min_version": "2.4.0",
-                    "max_version": "2.9.0",
+                    "min_technical_version": "2.4.0",
+                    "max_technical_version": "2.9.0",
                 }),
             ),
             (InstalledReleaseState::Unknown, json!({ "kind": "unknown" })),
