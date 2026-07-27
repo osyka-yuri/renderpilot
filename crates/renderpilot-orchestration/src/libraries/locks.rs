@@ -6,7 +6,7 @@
 //! partial writes for shared content.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
@@ -17,7 +17,7 @@ pub(crate) async fn acquire(key: impl Into<String>) -> OwnedMutexGuard<()> {
     let key = key.into();
     let lock = {
         let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut locks = locks.lock().expect("library lock map poisoned");
+        let mut locks = locks.lock().unwrap_or_else(PoisonError::into_inner);
         if locks.len() >= LOCK_MAP_EVICT_AT {
             locks.retain(|_, lock| Arc::strong_count(lock) > 1);
         }

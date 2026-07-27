@@ -40,6 +40,14 @@ export type {
   CoverArtworkResult,
   GameCardsQuery,
   GameCardsResult,
+  EffectiveGamesFilters,
+  CatalogDelta,
+  CatalogDeltaReason,
+  CatalogRevision,
+  CatalogSyncState,
+  GamesCatalogScrollAnchor,
+  GameCardFocusTarget,
+  GamesCatalogBootstrap,
   GameSelectionHandler,
   GameDetails,
   GameGraphicsComponent,
@@ -69,6 +77,7 @@ export {
 
 export {
   queryGameCards,
+  bootstrapGamesCatalog,
   fetchGameCover,
   clearGameCover,
   setGameCover,

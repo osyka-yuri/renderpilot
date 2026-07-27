@@ -191,17 +191,15 @@ pub fn apply_swap_confirmed(
                         component_id: &prepared.component_id,
                         baseline: &rollback_baseline,
                     }]
-                } else if prepared
-                    .rollback_baseline
-                    .as_ref()
-                    .is_some_and(|baseline| baseline.d3d12_executable().is_none())
-                    && executable_baseline.is_some()
-                {
+                } else if let Some(baseline) = executable_baseline.as_ref().filter(|_| {
+                    prepared
+                        .rollback_baseline
+                        .as_ref()
+                        .is_some_and(|baseline| baseline.d3d12_executable().is_none())
+                }) {
                     vec![ComponentBaselineMutation::CaptureD3d12Executable {
                         component_id: &prepared.component_id,
-                        baseline: executable_baseline
-                            .as_ref()
-                            .expect("checked executable baseline"),
+                        baseline,
                     }]
                 } else if let Some(expected_active) = expected_active.as_ref() {
                     vec![ComponentBaselineMutation::UpdateD3d12ExecutableState {

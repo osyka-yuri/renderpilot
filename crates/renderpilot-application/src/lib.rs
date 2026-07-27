@@ -18,8 +18,9 @@ mod ports;
 mod transition;
 
 pub use candidates::{
-    ActiveCatalogPackage, CandidateComparison, CandidateContext, ComponentReplacementCandidates,
-    InstalledReleaseState, ReplacementCandidate, find_replacement_candidates,
+    ActiveCatalogPackage, CandidateArtifactIndex, CandidateComparison, CandidateContext,
+    ComponentReplacementCandidates, InstalledReleaseState, ReplacementCandidate,
+    find_replacement_candidates, find_replacement_candidates_indexed,
     is_automatic_catalog_candidate,
 };
 pub use compatibility::{

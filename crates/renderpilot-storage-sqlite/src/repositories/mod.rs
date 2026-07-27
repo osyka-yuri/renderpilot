@@ -13,11 +13,14 @@ mod installed_addons;
 pub mod nvapi;
 mod operations;
 mod pending_file_mutations;
+mod profile_addon_capabilities;
 mod row_mapping;
+mod scan_source_checkpoints;
 mod settings;
 mod shared_artifacts;
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use renderpilot_application::AppResult;
 use renderpilot_domain::{GameInstallation, GraphicsComponent, LibraryArtifact};
@@ -32,6 +35,7 @@ pub use pending_file_mutations::{PendingFileMutationRow, PendingFileMutationStat
 #[derive(Debug)]
 pub struct SqliteStorage {
     pub(crate) connection: Mutex<Connection>,
+    pub(crate) catalog_generation: Arc<AtomicU64>,
 }
 
 /// Atomic scan write payload stored as one transaction.
@@ -71,6 +75,19 @@ impl ScanWriteReport {
 }
 
 impl SqliteStorage {
+    /// Process-local generation of tables that contribute to catalog cards.
+    /// Settings and filesystem hash-cache writes intentionally do not advance it.
+    #[must_use]
+    pub fn catalog_generation(&self) -> u64 {
+        self.catalog_generation.load(Ordering::Acquire)
+    }
+
+    /// Explicitly invalidates the projection for authoritative facts outside
+    /// SQLite, such as an atomically activated remote library catalog file.
+    pub fn invalidate_catalog_projection(&self) {
+        self.catalog_generation.fetch_add(1, Ordering::AcqRel);
+    }
+
     /// Stores a complete scan result atomically in one database transaction.
     ///
     /// The scan result is persisted as one unit:
@@ -182,6 +199,26 @@ mod tests {
 
     const OPERATION_EXISTING: &str = "operation:existing";
     const OPERATION_NEW: &str = "operation:new";
+
+    #[test]
+    fn catalog_generation_ignores_preferences_but_tracks_card_facts() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let initial = storage.catalog_generation();
+
+        storage
+            .set_setting("games_filters_v3", r#"{"searchQuery":"doom"}"#)
+            .expect("preference write");
+        assert_eq!(
+            storage.catalog_generation(),
+            initial,
+            "search preference writes must not rebuild the catalog snapshot"
+        );
+
+        storage
+            .upsert_game(&sample_game("game:generation"))
+            .expect("game write");
+        assert!(storage.catalog_generation() > initial);
+    }
 
     #[test]
     fn save_scan_result_rolls_back_game_and_components_when_artifact_insert_fails() {

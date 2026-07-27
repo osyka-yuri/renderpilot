@@ -35,14 +35,15 @@ use super::paths;
 ///
 /// All inputs are expected as PathRef-style normalized strings (forward
 /// slashes). Comparison is case-insensitive (ASCII) and ignores trailing
-/// separators. Returns the number of rows removed.
+/// separators. Returns the exact game ids removed.
 pub fn prune_auto_scan_orphans(
     storage: &SqliteStorage,
     library_roots: &[String],
+    authoritative_library_roots: &[String],
     retained_install_paths: &[String],
-) -> Result<usize, ServiceError> {
+) -> Result<Vec<renderpilot_domain::GameId>, ServiceError> {
     if library_roots.is_empty() {
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     let library_root_keys: HashSet<String> = library_roots
@@ -53,6 +54,10 @@ pub fn prune_auto_scan_orphans(
         .iter()
         .map(|path| paths::install_path_match_key(path))
         .collect();
+    let authoritative_root_keys: HashSet<String> = authoritative_library_roots
+        .iter()
+        .map(|root| paths::install_path_match_key(root))
+        .collect();
 
     let games = storage.list_games().map_err(ServiceError::from)?;
     let mut stale_ids = Vec::new();
@@ -60,20 +65,25 @@ pub fn prune_auto_scan_orphans(
     for game in games {
         let install_key = paths::install_path_match_key(game.install_path().as_str());
 
-        if is_auto_scan_orphan(&install_key, &library_root_keys, &retained_install_keys) {
+        if is_auto_scan_orphan(
+            &install_key,
+            &library_root_keys,
+            &authoritative_root_keys,
+            &retained_install_keys,
+        ) {
             stale_ids.push(game.id().clone());
         }
     }
 
-    let removed = stale_ids.len();
-    super::delete_games(storage, stale_ids)?;
+    super::delete_games(storage, &stale_ids)?;
 
-    Ok(removed)
+    Ok(stale_ids)
 }
 
 fn is_auto_scan_orphan(
     install_key: &str,
     library_root_keys: &HashSet<String>,
+    authoritative_root_keys: &HashSet<String>,
     retained_install_keys: &HashSet<String>,
 ) -> bool {
     if library_root_keys.contains(install_key) {
@@ -84,7 +94,7 @@ fn is_auto_scan_orphan(
         return false;
     };
 
-    if !library_root_keys.contains(parent_key) {
+    if !authoritative_root_keys.contains(parent_key) {
         return false;
     }
 
@@ -107,4 +117,36 @@ fn parent_install_path_key(install_key: &str) -> Option<&str> {
     }
 
     Some(parent)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::is_auto_scan_orphan;
+
+    #[test]
+    fn missing_children_are_pruned_only_after_authoritative_enumeration() {
+        let library_roots = HashSet::from([String::from("c:/games")]);
+        let retained = HashSet::new();
+
+        assert!(!is_auto_scan_orphan(
+            "c:/games/installed",
+            &library_roots,
+            &HashSet::new(),
+            &retained,
+        ));
+        assert!(is_auto_scan_orphan(
+            "c:/games/installed",
+            &library_roots,
+            &library_roots,
+            &retained,
+        ));
+        assert!(is_auto_scan_orphan(
+            "c:/games",
+            &library_roots,
+            &HashSet::new(),
+            &retained,
+        ));
+    }
 }

@@ -43,33 +43,41 @@ impl GameDetailsOutput {
         context: &renderpilot_orchestration::Context,
         game_id: &GameId,
     ) -> Result<Self, ApiError> {
-        let backup_ids = orch_catalog::backup_component_ids(context, game_id)?;
-        let details = orch_catalog::get_game_details(context, game_id)?;
-        let d3d12_executable_status = details.d3d12_executable_status.as_ref().map(|status| {
+        let orch_catalog::GameDetailsCatalogResult {
+            game,
+            components,
+            backup_component_ids,
+            candidate_groups,
+            d3d12_executable_status,
+            operations,
+            addon_capabilities,
+        } = orch_catalog::CatalogReadService::new(context).game_details(game_id)?;
+        let mut d3d12_executable_status = d3d12_executable_status.as_ref().map(|status| {
             (
                 status.component_id().as_str().to_owned(),
                 catalog_output::D3d12ExecutableStatusOutput::from(status),
             )
         });
-        let visible_components = filter_visible_components(details.components);
+        let visible_components = filter_visible_components(components);
         let visible_component_ids = visible_component_ids(&visible_components);
         let visible_candidate_groups =
-            filter_visible_candidate_groups(details.candidate_groups, &visible_component_ids);
+            filter_visible_candidate_groups(candidate_groups, &visible_component_ids);
         let candidate_groups =
             catalog_output::component_candidate_outputs(visible_candidate_groups);
-        let operations = catalog_output::operation_summary_outputs(&details.operations);
-
-        let addon_capabilities =
-            orch_catalog::addon_capabilities(context, game_id).map_err(ApiError::from)?;
+        let operations = catalog_output::operation_summary_outputs(&operations);
 
         let components = visible_components
             .into_iter()
             .map(|component| {
-                let rollback_available = backup_ids.contains(component.id().as_str());
-                let component_d3d12_status = d3d12_executable_status
+                let rollback_available = backup_component_ids.contains(component.id().as_str());
+                let component_d3d12_status = if d3d12_executable_status
                     .as_ref()
-                    .filter(|(component_id, _)| component_id == component.id().as_str())
-                    .map(|(_, status)| status.clone());
+                    .is_some_and(|(component_id, _)| component_id == component.id().as_str())
+                {
+                    d3d12_executable_status.take().map(|(_, status)| status)
+                } else {
+                    None
+                };
                 GameComponentOutput {
                     d3d12_executable_status: component_d3d12_status,
                     component,
@@ -79,7 +87,7 @@ impl GameDetailsOutput {
             .collect();
 
         Ok(Self {
-            game: details.game,
+            game,
             components,
             candidate_groups,
             operations,

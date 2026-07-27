@@ -17,9 +17,25 @@ export function setupGamesFiltersSync(
   options: GamesFiltersSyncOptions,
 ) {
   let availabilityPersistSnapshot = '';
+  let prevSearchQuery = store.state.searchQuery;
+  let prevAppliedLibraries = store.state.appliedLibraries;
+  let prevAppliedAddons = store.state.appliedAddons;
+  let prevAppliedLaunchers = store.state.appliedLaunchers;
+  let prevAppliedLauncherOrder = store.state.appliedLauncherOrder;
+  let prevShowHidden = store.state.appliedShowHidden;
+  let prevFavoritesOnly = store.state.appliedFavoritesOnly;
 
-  // Effect 1: Availability & Hydration Sync
-  $effect(() => {
+  function rememberUserState(state: typeof store.state): void {
+    prevSearchQuery = state.searchQuery;
+    prevAppliedLibraries = state.appliedLibraries;
+    prevAppliedAddons = state.appliedAddons;
+    prevAppliedLaunchers = state.appliedLaunchers;
+    prevAppliedLauncherOrder = state.appliedLauncherOrder;
+    prevShowHidden = state.appliedShowHidden;
+    prevFavoritesOnly = state.appliedFavoritesOnly;
+  }
+
+  function synchronizeAvailability(): void {
     const syncResult = syncGamesFilterState(
       store.state,
       options.getPreferenceLoaded(),
@@ -30,6 +46,10 @@ export function setupGamesFiltersSync(
     );
 
     if (syncResult.state !== store.state) {
+      // Hydration and availability reconciliation are system transitions, not
+      // user actions. Advance the user-action baseline before publishing the
+      // state so the second effect does not write the same preferences back.
+      rememberUserState(syncResult.state);
       store.setState(syncResult.state);
     }
 
@@ -64,17 +84,12 @@ export function setupGamesFiltersSync(
           availabilityPersistSnapshot = '';
         }
       });
-  });
+  }
+
+  // Effect 1: Availability & Hydration Sync
+  $effect(synchronizeAvailability);
 
   // Effect 2: User Action Sync
-  let prevSearchQuery = store.state.searchQuery;
-  let prevAppliedLibraries = store.state.appliedLibraries;
-  let prevAppliedAddons = store.state.appliedAddons;
-  let prevAppliedLaunchers = store.state.appliedLaunchers;
-  let prevAppliedLauncherOrder = store.state.appliedLauncherOrder;
-  let prevShowHidden = store.state.appliedShowHidden;
-  let prevFavoritesOnly = store.state.appliedFavoritesOnly;
-
   $effect(() => {
     const s = store.state;
 
@@ -112,6 +127,7 @@ export function setupGamesFiltersSync(
   });
 
   return {
+    synchronizeAvailability,
     flushSearchPersist() {
       persistence.flushQueuedSearchPersist({
         getState: () => store.state,

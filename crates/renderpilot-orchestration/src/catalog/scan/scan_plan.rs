@@ -2,14 +2,6 @@
 pub(super) enum DetectionMode {
     /// Full filesystem pass, but reuse cached hashes where possible.
     FullCached,
-
-    /// Prefer fast cached detection, but fall back to a full cached pass when
-    /// the fast path cannot produce a useful result.
-    ///
-    /// Windows auto-scan only (`scan/auto.rs`). Folder scan on every host uses
-    /// [`Self::FullCached`].
-    #[cfg(windows)]
-    FastCachedWithFullFallback,
 }
 
 /// Controls how the scan derives game install roots from a scan target.
@@ -52,60 +44,4 @@ pub(super) fn folder_scan_install_root_strategy(
     } else {
         InstallRootStrategy::SingleInstall
     }
-}
-
-/// Fast-path fallback decision for Windows auto-scan. Compiled on non-Windows
-/// only under `cfg(test)` so the pure decision table stays unit-tested everywhere.
-#[cfg(any(windows, test))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum FastScanFallbackReason {
-    EmptyFastResult,
-    IncompleteFastResult,
-    DegradedComparedToCatalog,
-}
-
-#[cfg(any(windows, test))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct FastScanDecision {
-    pub(super) fallback_reason: Option<FastScanFallbackReason>,
-}
-
-#[cfg(any(windows, test))]
-impl FastScanDecision {
-    fn with_reason(reason: FastScanFallbackReason) -> Self {
-        Self {
-            fallback_reason: Some(reason),
-        }
-    }
-
-    fn keep_fast_result() -> Self {
-        Self {
-            fallback_reason: None,
-        }
-    }
-
-    pub(super) fn should_fallback(self) -> bool {
-        self.fallback_reason.is_some()
-    }
-}
-
-#[cfg(any(windows, test))]
-pub(super) fn decide_fast_scan_fallback(
-    fast_count: usize,
-    expected_detectable_count: usize,
-    existing_component_count: usize,
-) -> FastScanDecision {
-    if fast_count == 0 {
-        return FastScanDecision::with_reason(FastScanFallbackReason::EmptyFastResult);
-    }
-
-    if fast_count < expected_detectable_count {
-        return FastScanDecision::with_reason(FastScanFallbackReason::IncompleteFastResult);
-    }
-
-    if existing_component_count > 0 && fast_count < existing_component_count {
-        return FastScanDecision::with_reason(FastScanFallbackReason::DegradedComparedToCatalog);
-    }
-
-    FastScanDecision::keep_fast_result()
 }

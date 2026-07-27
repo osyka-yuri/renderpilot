@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rand::Rng;
 use renderpilot_domain::{GraphicsComponent, LibraryArtifact, OperationId};
 
-use crate::OperationKind;
+use crate::{AppError, AppResult, OperationKind};
 
 pub(crate) const CONFIRMATION_TOKEN_BYTES: usize = 32;
 pub(crate) const OPERATION_ID_NONCE_BYTES: usize = 8;
@@ -17,14 +17,17 @@ pub(crate) struct OperationPlanIdentity {
 pub(crate) fn generate_operation_plan_identity(
     component: &GraphicsComponent,
     artifact: &LibraryArtifact,
-) -> OperationPlanIdentity {
-    OperationPlanIdentity {
-        operation_id: generate_operation_id(component, artifact),
+) -> AppResult<OperationPlanIdentity> {
+    Ok(OperationPlanIdentity {
+        operation_id: generate_operation_id(component, artifact)?,
         confirmation_token: generate_confirmation_token(),
-    }
+    })
 }
 
-fn generate_operation_id(component: &GraphicsComponent, artifact: &LibraryArtifact) -> OperationId {
+fn generate_operation_id(
+    component: &GraphicsComponent,
+    artifact: &LibraryArtifact,
+) -> AppResult<OperationId> {
     let timestamp = current_epoch_nanos();
     let nonce = random_hex::<OPERATION_ID_NONCE_BYTES>();
 
@@ -43,7 +46,7 @@ fn generate_operation_id(component: &GraphicsComponent, artifact: &LibraryArtifa
             nonce,
         ))
     })
-    .expect("generated operation id should be valid")
+    .map_err(|error| AppError::invalid_input(format!("cannot generate operation id: {error}")))
 }
 
 fn generate_confirmation_token() -> String {

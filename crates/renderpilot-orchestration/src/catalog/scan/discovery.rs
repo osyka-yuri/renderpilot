@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{
         Mutex,
@@ -61,20 +62,36 @@ const AUTO_SCAN_MAX_WORKERS: usize = 4;
 /// migrations, per-game `SELECT FROM file_hash_cache`, and per-game
 /// pattern-detector construction.
 pub fn scan_auto_libraries(context: &crate::Context) -> AutoScanDiscoveryResult {
-    let (library_root_keys, install_path_keys, install_paths) =
-        discover_normalized_auto_scan_inputs();
+    scan_auto_libraries_with_checkpoints(context, false)
+}
+
+/// Background variant that may skip Steam installs whose authoritative
+/// appmanifest fingerprint is unchanged. All other sources remain full scans.
+pub fn scan_auto_libraries_background(context: &crate::Context) -> AutoScanDiscoveryResult {
+    scan_auto_libraries_with_checkpoints(context, true)
+}
+
+fn scan_auto_libraries_with_checkpoints(
+    context: &crate::Context,
+    allow_checkpoint_skip: bool,
+) -> AutoScanDiscoveryResult {
+    let _scan_guard = context.catalog_scan_guard();
+    let (library_root_keys, authoritative_root_keys, install_path_keys, installs) =
+        discover_normalized_auto_scan_inputs(allow_checkpoint_skip);
 
     let mut scan = AutoScanAccumulator::default();
 
-    if let Err(error) = crate::catalog::prune_auto_scan_orphans(
+    match crate::catalog::prune_auto_scan_orphans(
         context.storage(),
         &library_root_keys,
+        &authoritative_root_keys,
         &install_path_keys,
     ) {
-        scan.push_global_error(GlobalErrorLabel::Prune, &error);
+        Ok(removed) => scan.delta.removed_game_ids = removed,
+        Err(error) => scan.push_global_error(GlobalErrorLabel::Prune, &error),
     }
 
-    let batch = match open_auto_scan_batch() {
+    let batch = match open_auto_scan_batch(context) {
         Ok(batch) => batch,
         Err(error) => {
             scan.push_global_error(GlobalErrorLabel::OpenBatch, &error);
@@ -82,18 +99,29 @@ pub fn scan_auto_libraries(context: &crate::Context) -> AutoScanDiscoveryResult 
         }
     };
 
-    let outcome = scan_install_paths_in_parallel(&batch, &install_paths);
+    let outcome = scan_install_paths_in_parallel(&batch, &installs);
     scan.merge(outcome);
 
     scan.into_output()
 }
 
-fn discover_normalized_auto_scan_inputs() -> (Vec<String>, Vec<String>, Vec<PathBuf>) {
+#[derive(Debug)]
+struct AutoScanInstall {
+    path: PathBuf,
+    source: Option<renderpilot_platform_windows::game_libraries::DiscoveredScanSource>,
+    allow_checkpoint_skip: bool,
+}
+
+fn discover_normalized_auto_scan_inputs(
+    use_checkpoints: bool,
+) -> (Vec<String>, Vec<String>, Vec<String>, Vec<AutoScanInstall>) {
     use renderpilot_platform_windows::game_libraries::DiscoveredGameSources;
 
     let DiscoveredGameSources {
         install_paths,
         library_roots,
+        authoritative_library_roots,
+        scan_sources,
     } = renderpilot_platform_windows::game_libraries::discover_game_sources();
 
     let library_root_keys = library_roots
@@ -104,8 +132,29 @@ fn discover_normalized_auto_scan_inputs() -> (Vec<String>, Vec<String>, Vec<Path
         .iter()
         .map(normalized_path_string)
         .collect::<Vec<_>>();
+    let authoritative_root_keys = authoritative_library_roots
+        .iter()
+        .map(normalized_path_string)
+        .collect::<Vec<_>>();
+    let mut discovered_sources = scan_sources
+        .into_iter()
+        .map(|source| (normalized_path_key(&source.install_path), source))
+        .collect::<HashMap<_, _>>();
+    let installs = install_paths
+        .into_iter()
+        .map(|path| AutoScanInstall {
+            source: discovered_sources.remove(&normalized_path_key(&path)),
+            allow_checkpoint_skip: use_checkpoints,
+            path,
+        })
+        .collect();
 
-    (library_root_keys, install_path_keys, install_paths)
+    (
+        library_root_keys,
+        authoritative_root_keys,
+        install_path_keys,
+        installs,
+    )
 }
 
 /// Drives one auto-scan batch across multiple install directories in parallel.
@@ -118,28 +167,33 @@ fn discover_normalized_auto_scan_inputs() -> (Vec<String>, Vec<String>, Vec<Path
 /// `save_file_hash_cache`, and (2) the result accumulator, both held briefly
 /// per scan.
 fn scan_install_paths_in_parallel(
-    batch: &AutoScanBatch,
-    install_paths: &[PathBuf],
+    batch: &AutoScanBatch<'_>,
+    installs: &[AutoScanInstall],
 ) -> AutoScanAccumulator {
-    if install_paths.is_empty() {
+    if installs.is_empty() {
         return AutoScanAccumulator::default();
     }
 
-    let worker_count = effective_worker_count(install_paths.len());
+    let worker_count = effective_worker_count(installs.len());
     let next_index = AtomicUsize::new(0);
     let accumulator = Mutex::new(AutoScanAccumulator::default());
-    let paths: &[PathBuf] = install_paths;
+    let installs: &[AutoScanInstall] = installs;
 
     thread::scope(|scope| {
         for _ in 0..worker_count {
             scope.spawn(|| {
                 loop {
                     let index = next_index.fetch_add(1, Ordering::Relaxed);
-                    let Some(path) = paths.get(index) else {
+                    let Some(install) = installs.get(index) else {
                         break;
                     };
 
-                    let outcome = scan_auto_in_batch(batch, path);
+                    let outcome = scan_auto_in_batch(
+                        batch,
+                        &install.path,
+                        install.source.as_ref(),
+                        install.allow_checkpoint_skip,
+                    );
 
                     // Held only for the few microseconds it takes to record
                     // the per-scan outcome. The heavy work (file walk,
@@ -153,7 +207,7 @@ fn scan_install_paths_in_parallel(
                         // here; for a best-effort bulk scan we prefer partial
                         // results over total failure.
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    guard.record_scan_outcome(path, outcome);
+                    guard.record_scan_outcome(&install.path, outcome);
                 }
             });
         }
@@ -183,7 +237,7 @@ fn effective_worker_count_with_cpu(install_path_count: usize, cpu_workers: usize
 
 #[derive(Debug, Default)]
 struct AutoScanAccumulator {
-    games: Vec<GameId>,
+    delta: crate::catalog::CatalogScanDelta,
     errors: Vec<ScanErrorOutput>,
 }
 
@@ -196,7 +250,15 @@ impl AutoScanAccumulator {
         match outcome {
             Ok(results) => {
                 for result in results {
-                    self.games.push(result.game.id().clone());
+                    match result.change {
+                        crate::catalog::CatalogScanChange::Unchanged => {}
+                        crate::catalog::CatalogScanChange::Added => {
+                            self.delta.added_game_ids.push(result.game.id().clone());
+                        }
+                        crate::catalog::CatalogScanChange::Updated => {
+                            self.delta.updated_game_ids.push(result.game.id().clone());
+                        }
+                    }
                 }
             }
             Err(error) => self.push_error(root, &error),
@@ -204,7 +266,13 @@ impl AutoScanAccumulator {
     }
 
     fn merge(&mut self, other: AutoScanAccumulator) {
-        self.games.extend(other.games);
+        self.delta.added_game_ids.extend(other.delta.added_game_ids);
+        self.delta
+            .updated_game_ids
+            .extend(other.delta.updated_game_ids);
+        self.delta
+            .removed_game_ids
+            .extend(other.delta.removed_game_ids);
         self.errors.extend(other.errors);
     }
 
@@ -220,18 +288,28 @@ impl AutoScanAccumulator {
         self.errors.push(ScanErrorOutput::with_label(label, error));
     }
 
-    fn into_output(self) -> AutoScanDiscoveryResult {
+    fn into_output(mut self) -> AutoScanDiscoveryResult {
+        sort_and_dedup_game_ids(&mut self.delta.added_game_ids);
+        sort_and_dedup_game_ids(&mut self.delta.updated_game_ids);
+        sort_and_dedup_game_ids(&mut self.delta.removed_game_ids);
+        self.errors
+            .sort_by(|left, right| (&left.root, &left.message).cmp(&(&right.root, &right.message)));
         AutoScanDiscoveryResult {
-            games: self.games,
+            delta: self.delta,
             errors: self.errors,
         }
     }
 }
 
+fn sort_and_dedup_game_ids(game_ids: &mut Vec<GameId>) {
+    game_ids.sort();
+    game_ids.dedup();
+}
+
 /// Result of auto-discovery.
 pub struct AutoScanDiscoveryResult {
-    /// Discovered games.
-    pub games: Vec<GameId>,
+    /// Stable added/updated/removed identity delta.
+    pub delta: crate::catalog::CatalogScanDelta,
     /// Errors encountered.
     pub errors: Vec<ScanErrorOutput>,
 }
@@ -265,9 +343,17 @@ fn normalized_path_string(path: impl AsRef<Path>) -> String {
     path.as_ref().to_string_lossy().replace('\\', "/")
 }
 
+fn normalized_path_key(path: impl AsRef<Path>) -> String {
+    normalized_path_string(path).to_ascii_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AUTO_SCAN_MAX_WORKERS, effective_worker_count_with_cpu};
+    use super::{
+        AUTO_SCAN_MAX_WORKERS, AutoScanAccumulator, ScanErrorOutput,
+        effective_worker_count_with_cpu,
+    };
+    use renderpilot_domain::GameId;
 
     #[test]
     fn worker_count_is_bounded_by_install_count_cpu_and_cap() {
@@ -290,6 +376,43 @@ mod tests {
         assert_send_sync::<crate::Context>();
         assert_send_sync::<renderpilot_detection::FileHashCache>();
         assert_send_sync::<renderpilot_detection::LibraryPatternComponentDetector>();
-        assert_send_sync::<crate::catalog::auto_scan::AutoScanBatch>();
+        assert_send_sync::<crate::catalog::auto_scan::AutoScanBatch<'_>>();
+    }
+
+    #[test]
+    fn accumulated_delta_and_partial_errors_have_deterministic_order() {
+        let game_a = GameId::new("manual:a").expect("game id");
+        let game_b = GameId::new("manual:b").expect("game id");
+        let output = AutoScanAccumulator {
+            delta: crate::catalog::CatalogScanDelta {
+                added_game_ids: vec![game_b.clone(), game_a.clone(), game_b],
+                updated_game_ids: vec![game_a.clone(), game_a],
+                removed_game_ids: Vec::new(),
+            },
+            errors: vec![
+                ScanErrorOutput {
+                    root: "z".to_owned(),
+                    message: "second".to_owned(),
+                },
+                ScanErrorOutput {
+                    root: "a".to_owned(),
+                    message: "first".to_owned(),
+                },
+            ],
+        }
+        .into_output();
+
+        assert_eq!(
+            output
+                .delta
+                .added_game_ids
+                .iter()
+                .map(GameId::as_str)
+                .collect::<Vec<_>>(),
+            vec!["manual:a", "manual:b"]
+        );
+        assert_eq!(output.delta.updated_game_ids.len(), 1);
+        assert_eq!(output.errors[0].root, "a");
+        assert_eq!(output.errors[1].root, "z");
     }
 }

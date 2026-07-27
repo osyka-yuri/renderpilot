@@ -47,6 +47,9 @@ pub fn install_layer(dll_bytes: &[u8]) -> Result<(), ServiceError> {
             LayerInstallError::Io(error) => {
                 format!("failed to install the shared Vulkan layer: {error}")
             }
+            LayerInstallError::ManifestSerialization(error) => {
+                format!("failed to build the shared Vulkan layer manifest: {error}")
+            }
         };
         errors::failed(msg)
     })

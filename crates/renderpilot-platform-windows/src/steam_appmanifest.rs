@@ -1,7 +1,13 @@
 //! Match a folder under `steamapps/common/<installdir>` to Steam `appmanifest_*.acf`.
 
+#[cfg(any(windows, test))]
+use sha2::{Digest, Sha256};
+#[cfg(any(windows, test))]
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::OsStr;
+#[cfg(any(windows, test))]
+use std::fmt::Write;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -12,6 +18,24 @@ pub struct SteamInstallDetails {
     pub app_id: String,
     /// `name` field from the manifest when present.
     pub display_name: Option<String>,
+}
+
+/// Durable source fingerprint for a Steam installation. Steam's appmanifest is
+/// the authoritative adapter-owned update marker; manual scans deliberately do
+/// not use it so local file edits are still discoverable on demand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SteamScanSourceFingerprint {
+    /// Stable launcher-owned source identity.
+    pub source_key: String,
+    /// SHA-256 of the authoritative appmanifest bytes.
+    pub fingerprint: String,
+}
+
+#[cfg(any(windows, test))]
+#[derive(Debug, Clone)]
+pub(crate) struct SteamManifestIndexEntry {
+    pub(crate) details: SteamInstallDetails,
+    pub(crate) checkpoint: SteamScanSourceFingerprint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,28 +82,73 @@ pub fn steam_install_details(game_install_root: &Path) -> Option<SteamInstallDet
 /// Returns an empty set when `steamapps_dir` cannot be enumerated, when
 /// no manifest is found, or when manifests cannot be parsed.
 pub fn steam_install_dirs_in_steamapps(steamapps_dir: &Path) -> HashSet<String> {
-    let Ok(entries) = fs::read_dir(steamapps_dir) else {
-        return HashSet::new();
-    };
-
-    entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| game_installdir_from_manifest_entry(&entry))
-        .map(|installdir| installdir.to_ascii_lowercase())
-        .collect()
+    try_steam_install_dirs_in_steamapps(steamapps_dir).unwrap_or_default()
 }
 
-fn game_installdir_from_manifest_entry(entry: &fs::DirEntry) -> Option<String> {
-    let app_id = app_id_from_manifest_file_name(&entry.file_name())?;
+/// Reads the complete appmanifest directory. `None` means the result is not
+/// authoritative and must not be used to prune a durable catalog.
+pub fn try_steam_install_dirs_in_steamapps(steamapps_dir: &Path) -> Option<HashSet<String>> {
+    let mut installs = HashSet::new();
+    try_for_each_playable_manifest(steamapps_dir, |_app_id, manifest, _content| {
+        installs.insert(manifest.installdir.to_ascii_lowercase());
+        Some(())
+    })?;
+    Some(installs)
+}
 
-    let content = fs::read_to_string(entry.path()).ok()?;
-    let manifest = parse_app_manifest(&content)?;
+/// Parses each Steam appmanifest once and indexes playable installs by their
+/// lower-cased `installdir`.
+#[cfg(any(windows, test))]
+pub(crate) fn try_steam_manifest_index(
+    steamapps_dir: &Path,
+) -> Option<HashMap<String, SteamManifestIndexEntry>> {
+    let mut installs = HashMap::new();
+    try_for_each_playable_manifest(steamapps_dir, |app_id, manifest, content| {
+        installs.insert(
+            manifest.installdir.to_ascii_lowercase(),
+            SteamManifestIndexEntry {
+                details: SteamInstallDetails {
+                    app_id: app_id.clone(),
+                    display_name: manifest.display_name,
+                },
+                checkpoint: SteamScanSourceFingerprint {
+                    source_key: format!("steam:{app_id}"),
+                    fingerprint: sha256_hex(content)?,
+                },
+            },
+        );
+        Some(())
+    })?;
+    Some(installs)
+}
 
-    if is_steam_tool_app(&app_id, &manifest.installdir) {
-        return None;
+fn try_for_each_playable_manifest(
+    steamapps_dir: &Path,
+    mut visit: impl FnMut(String, AppManifest, &[u8]) -> Option<()>,
+) -> Option<()> {
+    let entries = fs::read_dir(steamapps_dir).ok()?;
+    for entry in entries {
+        let entry = entry.ok()?;
+        let Some(app_id) = app_id_from_manifest_file_name(&entry.file_name()) else {
+            continue;
+        };
+        let content = fs::read(entry.path()).ok()?;
+        let manifest = parse_app_manifest(std::str::from_utf8(&content).ok()?)?;
+        if !is_steam_tool_app(&app_id, &manifest.installdir) {
+            visit(app_id, manifest, &content)?;
+        }
     }
+    Some(())
+}
 
-    Some(manifest.installdir)
+#[cfg(any(windows, test))]
+fn sha256_hex(content: &[u8]) -> Option<String> {
+    let digest = Sha256::digest(content);
+    let mut fingerprint = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(fingerprint, "{byte:02x}").ok()?;
+    }
+    Some(fingerprint)
 }
 
 /// Well-known Steam app IDs that are not playable games.
@@ -405,6 +474,49 @@ mod tests {
 
         assert_eq!(details.app_id, "1234567");
         assert_eq!(details.display_name.as_deref(), Some("My Test Game"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn malformed_manifest_directory_is_not_authoritative_for_pruning() {
+        let root = temp_dir("steam-manifest-incomplete");
+        fs::create_dir_all(&root).expect("manifest directory");
+        fs::write(root.join("appmanifest_123.acf"), "not an appmanifest")
+            .expect("malformed manifest");
+
+        assert!(try_steam_install_dirs_in_steamapps(&root).is_none());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn manifest_index_carries_a_checkpoint_for_each_playable_install() {
+        let root = temp_dir("steam-manifest-index");
+        fs::create_dir_all(&root).expect("manifest directory");
+        fs::write(
+            root.join("appmanifest_10.acf"),
+            r#""AppState" { "installdir" "Alpha" "name" "Alpha" }"#,
+        )
+        .expect("alpha manifest");
+        fs::write(
+            root.join("appmanifest_20.acf"),
+            r#""AppState" { "installdir" "Beta" "name" "Beta" }"#,
+        )
+        .expect("beta manifest");
+
+        let index = try_steam_manifest_index(&root).expect("manifest index");
+
+        assert_eq!(index.len(), 2);
+        assert_eq!(index["alpha"].checkpoint.source_key, "steam:10");
+        assert_eq!(index["beta"].checkpoint.source_key, "steam:20");
+        assert_eq!(index["alpha"].details.app_id, "10");
+        assert_eq!(
+            index["alpha"].details.display_name.as_deref(),
+            Some("Alpha")
+        );
+        assert!(!index["alpha"].checkpoint.fingerprint.is_empty());
+        assert!(!index["beta"].checkpoint.fingerprint.is_empty());
 
         let _ = fs::remove_dir_all(&root);
     }

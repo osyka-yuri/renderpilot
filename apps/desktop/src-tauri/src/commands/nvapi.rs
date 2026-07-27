@@ -6,7 +6,7 @@ use renderpilot_api as desktop;
 use renderpilot_orchestration::Context;
 
 use super::validation::require_non_empty_string;
-use super::{JsonCommandResult, require_game_context, run_desktop_command};
+use super::{CommandError, JsonCommandResult, require_game_context, run_desktop_command};
 
 // ---------------------------------------------------------------------------
 // NVAPI / DLSS preset commands
@@ -53,10 +53,21 @@ pub async fn set_game_executable_override(
 ) -> JsonCommandResult {
     let (game_id, context) = require_game_context(game_id, &context)?;
     let absolute_path = require_non_empty_string("absolute_path", absolute_path)?;
-    run_desktop_command(move || {
+    let refresh_context = Arc::clone(&context);
+    let changed_game_id = renderpilot_orchestration::domain::GameId::new(game_id.clone())
+        .map_err(|_| CommandError::invalid_argument("game_id", "must be a valid game id"))?;
+    let result = run_desktop_command(move || {
         desktop::set_game_executable_override(&context, game_id, &absolute_path)
     })
-    .await
+    .await;
+    if result.is_ok() {
+        super::addon_catalog::refresh_game_catalog_addon_capabilities(
+            refresh_context,
+            changed_game_id,
+        )
+        .await;
+    }
+    result
 }
 
 #[tauri::command]
@@ -65,7 +76,20 @@ pub async fn clear_game_executable_override(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::clear_game_executable_override(&context, game_id)).await
+    let refresh_context = Arc::clone(&context);
+    let changed_game_id = renderpilot_orchestration::domain::GameId::new(game_id.clone())
+        .map_err(|_| CommandError::invalid_argument("game_id", "must be a valid game id"))?;
+    let result =
+        run_desktop_command(move || desktop::clear_game_executable_override(&context, game_id))
+            .await;
+    if result.is_ok() {
+        super::addon_catalog::refresh_game_catalog_addon_capabilities(
+            refresh_context,
+            changed_game_id,
+        )
+        .await;
+    }
+    result
 }
 
 #[tauri::command]

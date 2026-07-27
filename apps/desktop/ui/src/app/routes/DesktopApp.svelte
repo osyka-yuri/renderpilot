@@ -3,8 +3,14 @@
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
   import type { WorkspaceScreen } from '@app/navigation/workspace';
-  import { isGameSelected } from '@app/navigation/selection';
-  import { fetchGameCover, getGameDetails } from '@entities/game';
+  import { isGameSelected, workspaceShellGameTitle } from '@app/navigation/selection';
+  import {
+    bootstrapGamesCatalog,
+    type CatalogDelta,
+    fetchGameCover,
+    findGameSummaryForSelection,
+    getGameDetails,
+  } from '@entities/game';
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
@@ -16,22 +22,27 @@
     GameDetailsPage as GameDetailsScreen,
     createGameDetailsPageModel,
   } from '@pages/game-details';
-  import { GamesPage as GamesScreen } from '@pages/games';
+  import { GamesPage as GamesScreen, createGamesPageModel } from '@pages/games';
+  import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
   import { OperationsPage as OperationsScreen } from '@pages/operations';
   import { SettingsPage as SettingsScreen, settingsTabMemory } from '@pages/settings';
-  import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
   import { createDesktopAppModel } from '@app/model/create-desktop-app-model.svelte';
+  import {
+    createInitialCatalogLifecycle,
+    type CatalogEventPayloads,
+    type InitialCatalogSyncCompletion,
+  } from '@app/model/initial-catalog-lifecycle';
   import {
     loadAndPresentGameDetails,
     openDesktopGame,
-    refreshDesktopCatalog,
+    queueBackgroundCoverSync,
     reloadSelectedGame as reloadSelectedGameWorkflow,
     runUserCatalogRefresh,
-    scanAutoLibrariesAndRefreshCards,
     scanManualFolderAndRefreshCards,
     syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
-  import type { AppInitializationState } from '@entities/app';
+  import { startBackgroundRefresh, type AppInitializationState } from '@entities/app';
+  import { listen } from '@tauri-apps/api/event';
   import {
     AppUpdateDialog,
     createAppUpdaterModel,
@@ -49,14 +60,26 @@
   const appUpdater = createAppUpdaterModel({
     gateway: createTauriAppUpdaterGateway(),
   });
+  const gamesSession = createGamesPageModel({
+    getCoversAutoFetchingIds: () => coverSyncQueue.autoFetchingIds,
+    getOnClearError: () => model.clearError,
+  });
+  const currentGameCard = $derived(
+    findGameSummaryForSelection(model.selectedGameId, gamesSession.games),
+  );
+  const selectedShellGameTitle = $derived(
+    workspaceShellGameTitle(currentGameCard, model.selectedDetails),
+  );
 
   let refreshCounter = $state(0);
   let isRefreshing = $state(false);
+  let backgroundCoverHydrationEnabled = $state(false);
+  let lastCoverHydrationScope = '';
   const gameDetailsModel = createGameDetailsPageModel({
     getSelectedGameId: () => model.selectedGameId,
     checkIsGameStillSelected: (gameId) => isGameSelected(model.selectedGameId, gameId),
     runExclusive: (task) => model.runExclusive(task),
-    reloadGameDetails: () => reloadSelectedGame('details'),
+    reloadGameDetails: reloadDetailsAndCatalog,
   });
 
   /** Shared exclusive-lock + cover-sync deps for catalog mutations. */
@@ -67,20 +90,36 @@
       coverSyncQueue,
       syncMissingCoversAfterCardsLoad: () =>
         syncMissingCoversAfterCardsLoad({
-          games: model.games,
+          games: gamesSession.games,
           readSetting: getCatalogSetting,
           fetchGameCover,
-          refreshGameCards,
           coverSyncQueue,
           beforeSync: () => tick(),
-          onCoverReady: () => {
-            // Re-run the games-page query as each cover lands so the grid
-            // updates incrementally instead of only after the full batch.
-            model.catalog.incrementCatalogVersion();
+          onCoverReady: (gameId, result) => {
+            gamesSession.patchCover(gameId, result.updated_at_ms);
           },
         }),
     };
   }
+
+  function queueMissingCoverHydration(): void {
+    queueBackgroundCoverSync(catalogRefreshDeps());
+  }
+
+  $effect(() => {
+    if (!backgroundCoverHydrationEnabled || gamesSession.bootstrapping) {
+      return;
+    }
+    const scope = gamesSession.games
+      .map((game) => game.game_id)
+      .sort()
+      .join('\u0000');
+    if (scope === lastCoverHydrationScope) {
+      return;
+    }
+    lastCoverHydrationScope = scope;
+    queueMissingCoverHydration();
+  });
 
   onMount(() => {
     model.applyCurrentTheme();
@@ -89,11 +128,81 @@
       model.applyCurrentTheme();
     });
 
-    void appUpdater.start();
-    void scanAutoLibrariesAndRefreshCards(catalogRefreshDeps());
+    let disposed = false;
+    const isDisposed = () => disposed;
+    const completeInitialCatalogSync = async ({
+      forceCatalogRefresh,
+    }: InitialCatalogSyncCompletion) => {
+      if (disposed) {
+        return;
+      }
+      try {
+        if (forceCatalogRefresh || gamesSession.catalogSize === 0) {
+          await gamesSession.refreshCatalog();
+        }
+      } catch (error: unknown) {
+        console.error('Failed to read catalog after background refresh.', error);
+      } finally {
+        if (!isDisposed()) {
+          gamesSession.completeInitialCatalogSync();
+        }
+      }
+    };
+    const catalogLifecycle = createInitialCatalogLifecycle({
+      previewMode: isDesktopPreviewMode(),
+      listenEvent: (event, onPayload) =>
+        listen<CatalogEventPayloads[typeof event]>(event, ({ payload }) => {
+          onPayload(payload);
+        }),
+      startBackgroundRefresh,
+      startUpdater: () => {
+        void appUpdater.start();
+      },
+      onCatalogDelta: (delta: CatalogDelta) => {
+        if (gamesSession.acceptCatalogDelta(delta)) {
+          void gamesSession.refreshCatalog();
+        }
+      },
+      completeInitialCatalogSync,
+      enableCoverHydration: () => {
+        backgroundCoverHydrationEnabled = true;
+      },
+    });
+    void bootstrapGamesCatalog().then(
+      async (bootstrap) => {
+        if (isDisposed()) {
+          return;
+        }
+        gamesSession.applyBootstrap(bootstrap);
+        if (gamesSession.pendingCatalogDelta !== null) {
+          await gamesSession.refreshCatalog();
+        }
+        await tick();
+        catalogLifecycle.startServices();
+      },
+      async (error: unknown) => {
+        console.error('Failed to bootstrap games catalog.', error);
+        try {
+          await gamesSession.loadFilterPreferences(isDisposed);
+          if (!isDisposed()) {
+            await model.runExclusive(refreshGameCards);
+          }
+        } finally {
+          if (!isDisposed()) {
+            gamesSession.completeBootstrapRecovery();
+            await tick();
+            catalogLifecycle.startServices();
+          }
+        }
+      },
+    );
 
     return () => {
       stopThemeObserver();
+      disposed = true;
+      catalogLifecycle.dispose();
+      gamesSession.flushSearchPersist();
+      gamesSession.dispose();
       void appUpdater.dispose();
     };
   });
@@ -102,16 +211,8 @@
     await scanManualFolderAndRefreshCards(catalogRefreshDeps());
   }
 
-  async function handleReloadCards(): Promise<void> {
-    await model.runExclusive(refreshGameCards);
-  }
-
   async function refreshGameCards(): Promise<void> {
-    await refreshDesktopCatalog({
-      setGames: model.catalog.setGames,
-      incrementCatalogVersion: model.catalog.incrementCatalogVersion,
-      clearSelectionIfSelectedGameMissing: model.clearSelectionIfSelectedGameMissing,
-    });
+    await gamesSession.refreshCatalog();
   }
 
   async function openGameDetails(gameId: string): Promise<void> {
@@ -135,6 +236,11 @@
       selectedGameId: model.selectedGameId,
       loadGameDetails,
     });
+  }
+
+  async function reloadDetailsAndCatalog(): Promise<void> {
+    await reloadSelectedGame('details');
+    await gamesSession.refreshCatalog();
   }
 
   function openRenoDxSettings(): void {
@@ -171,7 +277,7 @@
   screen={model.screen}
   busy={model.busy}
   refreshing={isRefreshing}
-  selectedGameTitle={model.selectedShellGameTitle}
+  selectedGameTitle={selectedShellGameTitle}
   onNavigate={model.handleNavigate}
   onRefresh={handleRefresh}
   updateAvailable={appUpdater.notice !== null}
@@ -191,14 +297,14 @@
         onRollback={gameDetailsModel.handleRollback}
         onBulkSwap={gameDetailsModel.handleBulkSwap}
         onBulkRollback={gameDetailsModel.handleBulkRollback}
-        onGameDetailsInvalidate={() => reloadSelectedGame('details')}
+        onGameDetailsInvalidate={reloadDetailsAndCatalog}
         onOpenRenoDxSettings={openRenoDxSettings}
         onOpenOperations={() => {
           model.handleNavigate('operations');
         }}
       />
     {:else if model.screen === 'operations'}
-      <OperationsScreen details={model.selectedDetails} gameCard={model.currentGameCard} />
+      <OperationsScreen details={model.selectedDetails} gameCard={currentGameCard} />
     {:else if model.screen === 'settings'}
       <SettingsScreen
         isElevated={model.isElevated}
@@ -220,14 +326,11 @@
       <LibrariesScreen refreshKey={refreshCounter} />
     {:else}
       <GamesScreen
-        games={model.games}
-        catalogVersion={model.catalogVersion}
+        session={gamesSession}
         busy={model.busy}
         coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
         pickCoverDisabled={isDesktopPreviewMode()}
         onScan={handleScan}
-        onReloadCards={handleReloadCards}
-        onClearError={model.clearError}
         onOpenDetails={openGameDetails}
       />
     {/if}

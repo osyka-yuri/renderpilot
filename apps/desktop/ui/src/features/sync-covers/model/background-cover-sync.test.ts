@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary, createGameSummary } from '@entities/game';
 import { t } from '@shared/i18n';
 import {
-  refreshCardsAfterCoverSync,
   formatBackgroundCoverSyncError,
   executeBackgroundCoverSync,
 } from './background-cover-sync';
+
+const COVER_RESULT = { file_name: 'cover.webp', updated_at_ms: 123 };
 
 function gameWithCover(overrides: Partial<GameSummary> = {}): GameSummary {
   return createGameSummary({
@@ -71,25 +72,6 @@ function gogGame(overrides: Partial<GameSummary> = {}): GameSummary {
 }
 
 describe('background-cover-sync', () => {
-  describe('refreshCardsAfterCoverSync', () => {
-    it('returns null on success', async () => {
-      const refreshGameCards = vi.fn(() => Promise.resolve());
-
-      const result = await refreshCardsAfterCoverSync(refreshGameCards);
-
-      expect(result).toBeNull();
-    });
-
-    it('returns error message on failure', async () => {
-      const error = new Error('refresh failed');
-      const refreshGameCards = vi.fn(() => Promise.reject(error));
-
-      const result = await refreshCardsAfterCoverSync(refreshGameCards);
-
-      expect(result).toBe(t('coverSync.refreshFailed'));
-    });
-  });
-
   describe('formatBackgroundCoverSyncError', () => {
     it('formats error with describeCommandError', () => {
       const error = new Error('network failure');
@@ -102,32 +84,28 @@ describe('background-cover-sync', () => {
 
   describe('executeBackgroundCoverSync', () => {
     it('does nothing when all games already have covers', async () => {
-      const fetchGameCover = vi.fn(() => Promise.resolve());
-      const refreshGameCards = vi.fn(() => Promise.resolve());
+      const fetchGameCover = vi.fn(() => Promise.resolve(COVER_RESULT));
       const onError = vi.fn();
 
       await executeBackgroundCoverSync([gameWithCover()], {
         readSetting: vi.fn(() => Promise.resolve({ value: 'false' })),
         fetchGameCover,
-        refreshGameCards,
         onGameStart: vi.fn(),
         onGameEnd: vi.fn(),
         onError,
       });
 
       expect(fetchGameCover).not.toHaveBeenCalled();
-      expect(refreshGameCards).not.toHaveBeenCalled();
       expect(onError).not.toHaveBeenCalled();
     });
 
     it('fetches covers for missing games and reports combined errors', async () => {
       const fetchGameCover = vi.fn((gameId: string) => {
         if (gameId === 'steam-game') {
-          return Promise.resolve();
+          return Promise.resolve(COVER_RESULT);
         }
         return Promise.reject(new Error('fetch failed'));
       });
-      const refreshGameCards = vi.fn(() => Promise.resolve());
       const onGameStart = vi.fn();
       const onGameEnd = vi.fn();
       const onCoverReady = vi.fn();
@@ -141,7 +119,6 @@ describe('background-cover-sync', () => {
           return Promise.resolve({ value: 'false' });
         }),
         fetchGameCover,
-        refreshGameCards,
         onGameStart,
         onGameEnd,
         onCoverReady,
@@ -150,16 +127,14 @@ describe('background-cover-sync', () => {
 
       expect(onGameStart).toHaveBeenCalledTimes(2);
       expect(onGameEnd).toHaveBeenCalledTimes(2);
-      expect(refreshGameCards).toHaveBeenCalledTimes(1);
       // Only the successful download fires onCoverReady; the failed one does not.
       expect(onCoverReady).toHaveBeenCalledTimes(1);
-      expect(onCoverReady).toHaveBeenCalledWith('steam-game');
+      expect(onCoverReady).toHaveBeenCalledWith('steam-game', COVER_RESULT);
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('Could not download'));
     });
 
     it('fires onCoverReady progressively, once per successfully downloaded cover', async () => {
-      const fetchGameCover = vi.fn(() => Promise.resolve());
-      const refreshGameCards = vi.fn(() => Promise.resolve());
+      const fetchGameCover = vi.fn(() => Promise.resolve(COVER_RESULT));
       const onCoverReady = vi.fn();
       const onError = vi.fn();
 
@@ -171,19 +146,16 @@ describe('background-cover-sync', () => {
           return Promise.resolve({ value: 'false' });
         }),
         fetchGameCover,
-        refreshGameCards,
         onGameStart: vi.fn(),
         onGameEnd: vi.fn(),
         onCoverReady,
         onError,
       });
 
-      // Each card refreshes as its cover arrives (progressive), and the batch still
-      // performs exactly one final reconciliation refresh.
+      // Each card is patched as its cover arrives; no catalog-wide refresh is needed.
       expect(onCoverReady).toHaveBeenCalledTimes(2);
-      expect(onCoverReady).toHaveBeenCalledWith('steam-game');
-      expect(onCoverReady).toHaveBeenCalledWith('gog-game');
-      expect(refreshGameCards).toHaveBeenCalledTimes(1);
+      expect(onCoverReady).toHaveBeenCalledWith('steam-game', COVER_RESULT);
+      expect(onCoverReady).toHaveBeenCalledWith('gog-game', COVER_RESULT);
       expect(onError).not.toHaveBeenCalled();
     });
   });

@@ -12,8 +12,9 @@ use crate::ServiceError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Call {
-    SteamCdn {
+    SteamArtwork {
         app_id: String,
+        title: String,
     },
     GogCdn {
         product_id: String,
@@ -58,7 +59,7 @@ impl SourceOutcome {
 #[derive(Debug, Default)]
 struct MockCoverSourceBackend {
     calls: RefCell<Vec<Call>>,
-    steam_cdn: RefCell<VecDeque<SourceOutcome>>,
+    steam_artwork: RefCell<VecDeque<SourceOutcome>>,
     gog_cdn: RefCell<VecDeque<SourceOutcome>>,
     grid_slug: RefCell<VecDeque<SourceOutcome>>,
     grid_slug_then_autocomplete: RefCell<VecDeque<SourceOutcome>>,
@@ -66,8 +67,8 @@ struct MockCoverSourceBackend {
 }
 
 impl MockCoverSourceBackend {
-    fn with_steam_cdn(self, outcomes: impl IntoIterator<Item = SourceOutcome>) -> Self {
-        self.steam_cdn.borrow_mut().extend(outcomes);
+    fn with_steam_artwork(self, outcomes: impl IntoIterator<Item = SourceOutcome>) -> Self {
+        self.steam_artwork.borrow_mut().extend(outcomes);
         self
     }
 
@@ -118,12 +119,13 @@ impl MockCoverSourceBackend {
 }
 
 impl CoverSourceBackend for MockCoverSourceBackend {
-    fn try_steam_cdn(&self, _client: &Client, app_id: &str) -> Option<Vec<u8>> {
-        self.calls.borrow_mut().push(Call::SteamCdn {
+    fn try_steam_artwork(&self, _client: &Client, app_id: &str, title: &str) -> Option<Vec<u8>> {
+        self.calls.borrow_mut().push(Call::SteamArtwork {
             app_id: app_id.to_owned(),
+            title: title.to_owned(),
         });
 
-        Self::next_option(&self.steam_cdn)
+        Self::next_option(&self.steam_artwork)
     }
 
     fn try_gog_cdn(&self, _client: &Client, product_id: &str) -> Option<Vec<u8>> {
@@ -232,7 +234,7 @@ fn normalizes_missing_blank_and_non_blank_steamgriddb_api_keys() {
 }
 
 #[test]
-fn steam_without_external_id_returns_cover_not_found_before_any_remote_call() {
+fn steam_without_external_id_returns_cover_not_found_before_any_source_call() {
     let backend = MockCoverSourceBackend::default();
 
     let result = resolve_with_backend(
@@ -247,9 +249,10 @@ fn steam_without_external_id_returns_cover_not_found_before_any_remote_call() {
 }
 
 #[test]
-fn steam_uses_steam_cdn_first_and_does_not_require_grid_key_when_cdn_succeeds() {
+fn steam_uses_first_party_artwork_first_and_does_not_require_grid_key_when_it_succeeds()
+-> Result<(), ServiceError> {
     let backend = MockCoverSourceBackend::default()
-        .with_steam_cdn([SourceOutcome::Bytes(b"steam-cdn-cover")]);
+        .with_steam_artwork([SourceOutcome::Bytes(b"steam-first-party-cover")]);
 
     let result = resolve_with_backend(
         &backend,
@@ -258,17 +261,19 @@ fn steam_uses_steam_cdn_first_and_does_not_require_grid_key_when_cdn_succeeds() 
         request(RemoteCoverLauncher::Steam, Some("480"), "Portal"),
     );
 
-    assert_eq!(result.unwrap(), b"steam-cdn-cover".to_vec());
+    assert_eq!(result?, b"steam-first-party-cover".to_vec());
     assert_eq!(
         backend.calls(),
-        vec![Call::SteamCdn {
+        vec![Call::SteamArtwork {
             app_id: "480".to_owned(),
+            title: "Portal".to_owned(),
         }]
     );
+    Ok(())
 }
 
 #[test]
-fn steam_skips_steam_cdn_when_disabled_and_uses_grid_slug() {
+fn steam_skips_first_party_artwork_when_disabled_and_uses_grid_slug() {
     let backend =
         MockCoverSourceBackend::default().with_grid_slug([SourceOutcome::Bytes(b"grid-cover")]);
 
@@ -290,8 +295,8 @@ fn steam_skips_steam_cdn_when_disabled_and_uses_grid_slug() {
 }
 
 #[test]
-fn steam_returns_cover_not_found_after_cdn_miss_when_grid_disabled() {
-    let backend = MockCoverSourceBackend::default().with_steam_cdn([SourceOutcome::Miss]);
+fn steam_returns_cover_not_found_after_first_party_miss_when_grid_disabled() {
+    let backend = MockCoverSourceBackend::default().with_steam_artwork([SourceOutcome::Miss]);
 
     let result = resolve_with_backend(
         &backend,
@@ -303,15 +308,16 @@ fn steam_returns_cover_not_found_after_cdn_miss_when_grid_disabled() {
     assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
-        vec![Call::SteamCdn {
+        vec![Call::SteamArtwork {
             app_id: "480".to_owned(),
+            title: "Portal".to_owned(),
         }]
     );
 }
 
 #[test]
-fn steam_returns_cover_not_found_after_cdn_miss_when_grid_enabled_but_key_absent() {
-    let backend = MockCoverSourceBackend::default().with_steam_cdn([SourceOutcome::Miss]);
+fn steam_returns_cover_not_found_after_first_party_miss_when_grid_key_is_absent() {
+    let backend = MockCoverSourceBackend::default().with_steam_artwork([SourceOutcome::Miss]);
 
     let result = resolve_with_backend(
         &backend,
@@ -325,15 +331,16 @@ fn steam_returns_cover_not_found_after_cdn_miss_when_grid_enabled_but_key_absent
     assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
-        vec![Call::SteamCdn {
+        vec![Call::SteamArtwork {
             app_id: "480".to_owned(),
+            title: "Portal".to_owned(),
         }]
     );
 }
 
 #[test]
-fn steam_treats_blank_grid_key_as_cover_not_found_after_cdn_miss() {
-    let backend = MockCoverSourceBackend::default().with_steam_cdn([SourceOutcome::Miss]);
+fn steam_treats_blank_grid_key_as_cover_not_found_after_first_party_miss() {
+    let backend = MockCoverSourceBackend::default().with_steam_artwork([SourceOutcome::Miss]);
 
     let result = resolve_with_backend(
         &backend,
@@ -345,16 +352,17 @@ fn steam_treats_blank_grid_key_as_cover_not_found_after_cdn_miss() {
     assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
-        vec![Call::SteamCdn {
+        vec![Call::SteamArtwork {
             app_id: "480".to_owned(),
+            title: "Portal".to_owned(),
         }]
     );
 }
 
 #[test]
-fn steam_falls_back_to_grid_slug_after_cdn_miss() {
+fn steam_falls_back_to_grid_slug_after_first_party_miss() {
     let backend = MockCoverSourceBackend::default()
-        .with_steam_cdn([SourceOutcome::Miss])
+        .with_steam_artwork([SourceOutcome::Miss])
         .with_grid_slug([SourceOutcome::Bytes(b"steam-grid-cover")]);
 
     let result = resolve_with_backend(
@@ -368,8 +376,9 @@ fn steam_falls_back_to_grid_slug_after_cdn_miss() {
     assert_eq!(
         backend.calls(),
         vec![
-            Call::SteamCdn {
+            Call::SteamArtwork {
                 app_id: "480".to_owned(),
+                title: "Portal".to_owned(),
             },
             Call::GridSlug {
                 api_key: "grid-key".to_owned(),
@@ -380,9 +389,9 @@ fn steam_falls_back_to_grid_slug_after_cdn_miss() {
 }
 
 #[test]
-fn steam_propagates_grid_cover_not_found_after_cdn_miss() {
+fn steam_propagates_grid_cover_not_found_after_first_party_miss() {
     let backend = MockCoverSourceBackend::default()
-        .with_steam_cdn([SourceOutcome::Miss])
+        .with_steam_artwork([SourceOutcome::Miss])
         .with_grid_slug([SourceOutcome::Miss]);
 
     let result = resolve_with_backend(
@@ -396,8 +405,9 @@ fn steam_propagates_grid_cover_not_found_after_cdn_miss() {
     assert_eq!(
         backend.calls(),
         vec![
-            Call::SteamCdn {
+            Call::SteamArtwork {
                 app_id: "480".to_owned(),
+                title: "Portal".to_owned(),
             },
             Call::GridSlug {
                 api_key: "grid-key".to_owned(),
@@ -688,9 +698,9 @@ fn other_propagates_grid_cover_not_found() {
 }
 
 #[test]
-fn steam_cdn_disabled_means_no_steam_cdn_call_even_if_outcome_is_configured() {
+fn steam_first_party_source_disabled_means_no_call_even_if_outcome_is_configured() {
     let backend = MockCoverSourceBackend::default()
-        .with_steam_cdn([SourceOutcome::Bytes(b"should-not-be-used")])
+        .with_steam_artwork([SourceOutcome::Bytes(b"should-not-be-used")])
         .with_grid_slug([SourceOutcome::Bytes(b"grid-cover")]);
 
     let result = resolve_with_backend(
@@ -740,7 +750,7 @@ fn gog_cdn_disabled_means_no_gog_cdn_call_even_if_outcome_is_configured() {
 
 #[test]
 fn grid_disabled_means_no_grid_call_even_when_key_is_present() {
-    let backend = MockCoverSourceBackend::default().with_steam_cdn([SourceOutcome::Miss]);
+    let backend = MockCoverSourceBackend::default().with_steam_artwork([SourceOutcome::Miss]);
 
     let result = resolve_with_backend(
         &backend,
@@ -752,8 +762,9 @@ fn grid_disabled_means_no_grid_call_even_when_key_is_present() {
     assert_cover_not_found(&result);
     assert_eq!(
         backend.calls(),
-        vec![Call::SteamCdn {
+        vec![Call::SteamArtwork {
             app_id: "480".to_owned(),
+            title: "Portal".to_owned(),
         }]
     );
 }

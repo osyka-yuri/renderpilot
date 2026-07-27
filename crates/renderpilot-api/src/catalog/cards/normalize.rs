@@ -1,8 +1,13 @@
 //! Input normalization for the game-card query: search text, page bounds, and
-//! the library / launcher filter sets validated against what is available.
+//! domain-valid library / launcher filter values.
 
-use renderpilot_orchestration::domain::{AddonKind, GraphicsTechnology};
-use std::collections::BTreeSet;
+use renderpilot_orchestration::domain::{AddonKind, GraphicsTechnology, Launcher};
+
+const AMD_FSR_FILTER_ALIAS_MEMBERS: &[GraphicsTechnology] = &[
+    GraphicsTechnology::AmdFsrUpscaler,
+    GraphicsTechnology::AmdFsrLoader,
+    GraphicsTechnology::AmdFsrRadianceCache,
+];
 
 pub(super) fn normalize_search_query(value: &str) -> String {
     value.trim().to_lowercase()
@@ -27,6 +32,26 @@ pub(super) fn normalize_library_names(values: Vec<String>) -> Vec<String> {
     normalized
 }
 
+pub(super) fn expand_library_filter_aliases(values: Vec<String>) -> Vec<String> {
+    let mut expanded = Vec::with_capacity(values.len());
+
+    for value in values {
+        let is_amd_fsr_alias =
+            GraphicsTechnology::from_slug(&value) == Some(GraphicsTechnology::AmdFsr);
+        expanded.push(value);
+
+        if is_amd_fsr_alias {
+            expanded.extend(
+                AMD_FSR_FILTER_ALIAS_MEMBERS
+                    .iter()
+                    .map(|technology| technology.as_slug().to_owned()),
+            );
+        }
+    }
+
+    expanded
+}
+
 pub(super) fn normalize_library_name(value: &str) -> Option<String> {
     let trimmed = value.trim();
 
@@ -41,25 +66,8 @@ pub(super) fn normalize_library_name(value: &str) -> Option<String> {
     }
 }
 
-pub(super) fn normalize_selected_libraries(
-    selected_libraries: Vec<String>,
-    available_libraries: &[String],
-) -> Vec<String> {
-    if available_libraries.is_empty() {
-        return Vec::new();
-    }
-
-    let allowed_libraries = available_libraries
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-
-    let mut selected_libraries = normalize_library_names(selected_libraries);
-
-    // `normalize_library_names` already sorts + dedups; retain preserves order.
-    selected_libraries.retain(|library| allowed_libraries.contains(library.as_str()));
-
-    selected_libraries
+pub(super) fn normalize_selected_libraries(selected_libraries: Vec<String>) -> Vec<String> {
+    normalize_library_names(selected_libraries)
 }
 
 pub(super) fn normalize_addon_names(values: Vec<String>) -> Vec<String> {
@@ -76,8 +84,9 @@ pub(super) fn normalize_addon_names(values: Vec<String>) -> Vec<String> {
 pub(super) fn normalize_launcher_names(values: Vec<String>) -> Vec<String> {
     let mut normalized = values
         .into_iter()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
+        .filter_map(|value| {
+            Launcher::from_stable_str(value.trim()).map(|launcher| launcher.as_str().to_owned())
+        })
         .collect::<Vec<_>>();
 
     normalized.sort();
@@ -85,24 +94,8 @@ pub(super) fn normalize_launcher_names(values: Vec<String>) -> Vec<String> {
     normalized
 }
 
-pub(super) fn normalize_selected_launchers(
-    selected_launchers: Vec<String>,
-    available_launchers: &[String],
-) -> Vec<String> {
-    if available_launchers.is_empty() {
-        return Vec::new();
-    }
-
-    let allowed_launchers = available_launchers
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-
-    let mut selected_launchers = normalize_launcher_names(selected_launchers);
-
-    selected_launchers.retain(|launcher| allowed_launchers.contains(launcher.as_str()));
-
-    selected_launchers
+pub(super) fn normalize_selected_launchers(selected_launchers: Vec<String>) -> Vec<String> {
+    normalize_launcher_names(selected_launchers)
 }
 
 fn parse_graphics_technology(value: &str) -> Option<GraphicsTechnology> {

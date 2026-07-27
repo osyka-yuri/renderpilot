@@ -1,13 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { getGameDetails, queryGameCards } from '@entities/game';
-import { createGameDetails, createGameSummary } from '@entities/game';
+import type { getGameDetails } from '@entities/game';
+import { createGameDetails } from '@entities/game';
 
 import type { OpenDesktopGameDeps } from './desktop-app-workflows';
 
 const scanMocks = vi.hoisted(() => ({
   scanAutoLibrariesWithErrorRecovery: vi.fn(() => Promise.resolve({ kind: 'ok', errors: [] })),
   refreshRemoteManifests: vi.fn(() => Promise.resolve()),
+  refreshCatalogCapabilities: vi.fn(() => Promise.resolve({ refreshed: true })),
   publishAutomaticLibraryScanFailedNotification: vi.fn(),
   publishPartialLibraryScanWarning: vi.fn(),
 }));
@@ -15,6 +16,7 @@ const scanMocks = vi.hoisted(() => ({
 vi.mock('@features/scan-libraries', () => ({
   scanAutoLibrariesWithErrorRecovery: scanMocks.scanAutoLibrariesWithErrorRecovery,
   refreshRemoteManifests: scanMocks.refreshRemoteManifests,
+  refreshCatalogCapabilities: scanMocks.refreshCatalogCapabilities,
   publishAutomaticLibraryScanFailedNotification:
     scanMocks.publishAutomaticLibraryScanFailedNotification,
   publishPartialLibraryScanWarning: scanMocks.publishPartialLibraryScanWarning,
@@ -25,41 +27,27 @@ vi.mock('@features/scan-libraries', () => ({
 import {
   loadAndPresentGameDetails,
   openDesktopGame,
-  refreshDesktopCatalog,
+  queueBackgroundCoverSync,
   reloadSelectedGame,
   runCatalogRefreshWithCoverSync,
   runUserCatalogRefresh,
-  scanAutoLibrariesAndRefreshCards,
 } from './desktop-app-workflows';
 
 describe('desktop-app-workflows', () => {
-  it('refreshDesktopCatalog loads cards and updates catalog state', async () => {
-    const setGames = vi.fn();
-    const incrementCatalogVersion = vi.fn();
-    const clearSelectionIfSelectedGameMissing = vi.fn();
+  it('queues non-blocking cover hydration for the current card snapshot', () => {
+    const syncMissingCoversAfterCardsLoad = vi.fn(() => Promise.resolve());
+    const queue = vi.fn();
 
-    const cards = [createGameSummary({ game_id: 'game-1', title: 'Test Game' })];
-    const queryGameCardsMock = vi.fn<typeof queryGameCards>(() =>
-      Promise.resolve({
-        items: cards,
-        total: 1,
-        hiddenCount: 0,
-        availableLibraries: [],
-        availableLaunchers: [],
-        queryFingerprint: 'fp-1',
-      }),
-    );
-
-    await refreshDesktopCatalog({
-      queryGameCards: queryGameCardsMock,
-      setGames,
-      incrementCatalogVersion,
-      clearSelectionIfSelectedGameMissing,
+    queueBackgroundCoverSync({
+      coverSyncQueue: {
+        queue,
+        setAutoFetching: vi.fn(),
+        autoFetchingIds: new Set<string>(),
+      } as never,
+      syncMissingCoversAfterCardsLoad,
     });
 
-    expect(setGames).toHaveBeenCalledWith(cards);
-    expect(incrementCatalogVersion).toHaveBeenCalledTimes(1);
-    expect(clearSelectionIfSelectedGameMissing).toHaveBeenCalledTimes(1);
+    expect(queue).toHaveBeenCalledWith(syncMissingCoversAfterCardsLoad, expect.any(Function));
   });
 
   it('loadAndPresentGameDetails ignores stale requests', async () => {
@@ -90,9 +78,11 @@ describe('desktop-app-workflows', () => {
   });
 
   it('openDesktopGame normalizes ids and runs the loader exclusively', async () => {
-    const runExclusive = vi.fn(
-      async (task: () => Promise<unknown>) => await task(),
-    ) as unknown as OpenDesktopGameDeps['runExclusive'];
+    const runExclusiveCall = vi.fn();
+    const runExclusive: OpenDesktopGameDeps['runExclusive'] = async <T>(task: () => Promise<T>) => {
+      runExclusiveCall();
+      return await task();
+    };
     const loadGameDetails = vi.fn(() => Promise.resolve(undefined));
 
     await openDesktopGame('  raw-id  ', 'operations', {
@@ -101,7 +91,7 @@ describe('desktop-app-workflows', () => {
       normalizeGameId: (gameId) => gameId.trim(),
     });
 
-    expect(runExclusive).toHaveBeenCalledTimes(1);
+    expect(runExclusiveCall).toHaveBeenCalledTimes(1);
     expect(loadGameDetails).toHaveBeenCalledWith('raw-id', 'operations');
   });
 
@@ -166,6 +156,7 @@ describe('desktop-app-workflows', () => {
         errors: [],
       });
       scanMocks.refreshRemoteManifests.mockResolvedValue(undefined);
+      scanMocks.refreshCatalogCapabilities.mockResolvedValue({ refreshed: true });
     });
 
     function coverDeps() {
@@ -194,6 +185,7 @@ describe('desktop-app-workflows', () => {
 
       expect(forceManifests).toHaveBeenCalledTimes(1);
       expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
+      expect(scanMocks.refreshCatalogCapabilities).toHaveBeenCalledTimes(1);
       expect(deps.refreshGameCards).toHaveBeenCalledTimes(1);
       expect(forceManifests.mock.invocationCallOrder[0]).toBeLessThan(
         scanMocks.scanAutoLibrariesWithErrorRecovery.mock.invocationCallOrder[0],
@@ -212,27 +204,5 @@ describe('desktop-app-workflows', () => {
       expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
       expect(deps.refreshGameCards).toHaveBeenCalledTimes(1);
     });
-  });
-
-  it('scanAutoLibrariesAndRefreshCards does not force remote manifests', async () => {
-    vi.clearAllMocks();
-    scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({
-      kind: 'ok',
-      errors: [],
-    });
-
-    await scanAutoLibrariesAndRefreshCards({
-      runExclusive: (task) => task(),
-      refreshGameCards: vi.fn(() => Promise.resolve()),
-      coverSyncQueue: {
-        queue: vi.fn(),
-        setAutoFetching: vi.fn(),
-        autoFetchingIds: new Set<string>(),
-      } as never,
-      syncMissingCoversAfterCardsLoad: vi.fn(),
-    });
-
-    expect(scanMocks.refreshRemoteManifests).not.toHaveBeenCalled();
-    expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
   });
 });

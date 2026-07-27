@@ -1,0 +1,44 @@
+[
+  {
+    "name": "known values survive while stale values are ignored",
+    "persisted": {
+      "libraries": ["stale-library", "intel_xess"],
+      "addons": ["stale-addon", "luma"],
+      "launchers": ["StaleLauncher", "Steam"],
+      "launcherOrder": ["StaleLauncher", "Steam"],
+      "searchQuery": "  vegas  ",
+      "showHidden": true,
+      "favoritesOnly": false
+    },
+    "expected": {
+      "libraries": ["intel_xess"],
+      "addons": ["luma"],
+      "launchers": ["Steam"],
+      "launcherOrder": ["Steam", "Epic", "Gog", "Ubisoft", "Ea", "BattleNet", "Xbox", "Manual"],
+      "searchQuery": "vegas",
+      "showHidden": true,
+      "favoritesOnly": false
+    }
+  },
+  {
+    "name": "an entirely stale selection becomes an inactive filter",
+    "persisted": {
+      "libraries": ["stale-library"],
+      "addons": ["stale-addon"],
+      "launchers": ["StaleLauncher"],
+      "launcherOrder": ["StaleLauncher"],
+      "searchQuery": "",
+      "showHidden": false,
+      "favoritesOnly": true
+    },
+    "expected": {
+      "libraries": [],
+      "addons": [],
+      "launchers": [],
+      "launcherOrder": ["Steam", "Epic", "Gog", "Ubisoft", "Ea", "BattleNet", "Xbox", "Manual"],
+      "searchQuery": "",
+      "showHidden": false,
+      "favoritesOnly": true
+    }
+  }
+]

@@ -251,35 +251,16 @@ fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder 
             // Propagate (don't panic) so a catalog-open failure routes through the
             // graceful `exit_with_startup_error` path like any other startup error.
             let context = Arc::new(Context::open()?);
-            app.manage(context.clone());
+            app.manage(context);
             log::info!(
                 "Started with is_elevated={}, user_declined={}, attempted={}",
                 init_state.is_elevated,
                 init_state.elevation_user_declined,
                 init_state.elevation_attempted
             );
-            renderpilot_api::gc_cover_orphans_on_startup(&context);
-            refresh_libraries_catalog_in_background();
-            refresh_catalog_addon_capabilities_in_background(context);
             Ok(())
         },
     )
-}
-
-fn refresh_libraries_catalog_in_background() {
-    tauri::async_runtime::spawn(async {
-        if let Err(error) = renderpilot_api::fetch_libraries_catalog().await {
-            log::warn!("Failed to refresh libraries catalog on startup: {error}");
-        }
-    });
-}
-
-/// Warms profile-derived add-on capability flags so catalog badges/filters work
-/// on cold start without requiring a library rescan.
-fn refresh_catalog_addon_capabilities_in_background(context: Arc<Context>) {
-    tauri::async_runtime::spawn(async move {
-        commands::addon_catalog::refresh_catalog_addon_capabilities(context).await;
-    });
 }
 
 fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
@@ -327,10 +308,13 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         // Library scanning
         commands::scan_manual_folder,
         commands::scan_auto_libraries,
+        commands::start_background_refresh,
         // Remote CDN manifests (shell Refresh force path)
         commands::refresh_remote_manifests,
+        commands::refresh_catalog_capabilities,
         // Game data
         commands::query_game_cards,
+        commands::bootstrap_games_catalog,
         commands::get_game_details,
         commands::fetch_game_cover,
         commands::clear_game_cover,

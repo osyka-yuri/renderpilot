@@ -123,9 +123,9 @@ impl D3d12ExecutableMutationGuard {
                 .ok_or_else(|| {
                     AppError::invalid_input("D3D12SDKVersion offset is out of bounds")
                 })?;
-            let sdk_bytes: [u8; 4] = self.original_bytes[export.file_offset..end]
+            let sdk_bytes = self.original_bytes[export.file_offset..end]
                 .try_into()
-                .expect("validated four-byte D3D12SDKVersion range");
+                .map_err(|_| AppError::invalid_input("D3D12SDKVersion field is not four bytes"))?;
             self.write_sdk_field_at_and_verify(
                 state,
                 export.file_offset,
@@ -173,9 +173,9 @@ impl D3d12ExecutableMutationGuard {
             .checked_add(4)
             .filter(|end| *end <= target_bytes.len())
             .ok_or_else(|| AppError::invalid_input("D3D12SDKVersion offset is out of bounds"))?;
-        let sdk_bytes: [u8; 4] = target_bytes[export.file_offset..end]
+        let sdk_bytes = target_bytes[export.file_offset..end]
             .try_into()
-            .expect("validated four-byte D3D12SDKVersion range");
+            .map_err(|_| AppError::invalid_input("D3D12SDKVersion field is not four bytes"))?;
         let expected_sha256 = renderpilot_detection::sha256_bytes(target_bytes)?;
         self.write_sdk_field_at_and_verify(
             state,

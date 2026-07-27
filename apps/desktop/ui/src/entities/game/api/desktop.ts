@@ -6,7 +6,12 @@ import type {
   GameCardsQuery,
   GameCardsResult,
   GameDetails,
+  GamesCatalogBootstrap,
 } from '../model/types';
+
+export async function bootstrapGamesCatalog(limit = 120): Promise<GamesCatalogBootstrap> {
+  return invokeDesktop<GamesCatalogBootstrap>('bootstrap_games_catalog', { limit });
+}
 
 export async function queryGameCards(query: GameCardsQuery): Promise<GameCardsResult> {
   return invokeDesktop<GameCardsResult>('query_game_cards', {

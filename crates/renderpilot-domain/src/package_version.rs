@@ -51,7 +51,7 @@ impl PackageVersion {
                 .collect::<Vec<_>>()
                 .join("."),
         )
-        .expect("normalized package numeric core must remain valid");
+        .map_err(PackageVersionParseError::InvalidNumericCore)?;
 
         let prerelease = prerelease.map(normalize_prerelease).transpose()?;
         let text = match &prerelease {

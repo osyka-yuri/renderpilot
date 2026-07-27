@@ -9,31 +9,29 @@ export type PrunedCoverMenuState<T> = {
   menuOpenFor: string | null;
 };
 
-export type ManualCoverBusyParams = {
+export type ManualCoverBusyParams<TResult> = {
   gameId: string;
   manualCoverBusyFor: string | null;
   setManualCoverBusyFor: (gameId: string | null) => void;
-  task: () => Promise<unknown>;
+  task: () => Promise<TResult>;
   onClearError: () => void;
-  onReloadCards: () => Promise<void>;
-  onSuccess?: () => void;
+  onSuccess?: (result: TResult) => void;
   onCoverError: (message: string) => void;
   describeError: (error: unknown) => string;
   focusMenuTrigger: (gameId: string) => void;
 };
 
-export async function withManualCoverBusy({
+export async function withManualCoverBusy<TResult>({
   gameId,
   manualCoverBusyFor,
   setManualCoverBusyFor,
   task,
   onClearError,
-  onReloadCards,
   onSuccess,
   onCoverError,
   describeError,
   focusMenuTrigger,
-}: ManualCoverBusyParams): Promise<void> {
+}: ManualCoverBusyParams<TResult>): Promise<void> {
   if (manualCoverBusyFor !== null) {
     return;
   }
@@ -41,11 +39,10 @@ export async function withManualCoverBusy({
   setManualCoverBusyFor(gameId);
 
   try {
-    await task();
+    const result = await task();
 
     onClearError();
-    await onReloadCards();
-    onSuccess?.();
+    onSuccess?.(result);
   } catch (error: unknown) {
     onCoverError(describeError(error));
   } finally {

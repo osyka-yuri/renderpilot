@@ -5,7 +5,6 @@ import {
   getOrCreateManualGameId,
   findGameSummary,
   upsertGameSummary,
-  requireGameDetails,
 } from '../desktop-state';
 import { clone, lastPathSegment, normalizeInstallPath, resolveMock } from '../desktop-utils';
 import { createManualPreviewDetails } from '../fixtures';
@@ -34,17 +33,21 @@ export function mockScanManualFolder(path: string): Promise<ScanManualFolderResu
     });
 
     return {
-      games: [clone(details)],
+      addedGameIds: previousDetails ? [] : [gameId],
+      updatedGameIds: previousDetails ? [gameId] : [],
+      changedGameIds: [gameId],
+      removedGameIds: [],
     };
   });
 }
 
 export function mockScanAutoLibraries(): Promise<AutoScanResponse> {
   return resolveMock(() => {
-    const games = [...mockState.autoGameIds].map((gameId) => requireGameDetails(gameId));
-
     return {
-      games: clone(games),
+      addedGameIds: [],
+      updatedGameIds: [...mockState.autoGameIds],
+      changedGameIds: [...mockState.autoGameIds],
+      removedGameIds: [],
       errors: [],
     };
   });

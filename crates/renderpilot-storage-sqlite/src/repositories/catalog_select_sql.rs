@@ -87,6 +87,17 @@ pub(super) const LIST_COMPONENTS_FOR_GAME_SQL: &str = concat!(
     "
 );
 
+pub(super) const LIST_ALL_COMPONENTS_SQL: &str = concat!(
+    "
+    SELECT
+    ",
+    projection_component_sql!(),
+    "
+    FROM components
+    ORDER BY components.game_id, components.id
+    "
+);
+
 pub(super) const LIST_ARTIFACTS_SQL: &str = concat!(
     "
     SELECT
@@ -118,6 +129,17 @@ pub(super) const SELECT_OPERATIONS_FOR_GAME_SQL: &str = concat!(
     FROM operations
     WHERE operations.game_id = ?1
     ORDER BY operations.created_at DESC, operations.id DESC
+    "
+);
+
+pub(super) const SELECT_ALL_OPERATION_HEADERS_SQL: &str = concat!(
+    "
+    SELECT
+    ",
+    projection_operation_sql!(),
+    "
+    FROM operations
+    ORDER BY operations.game_id, operations.created_at DESC, operations.id DESC
     "
 );
 

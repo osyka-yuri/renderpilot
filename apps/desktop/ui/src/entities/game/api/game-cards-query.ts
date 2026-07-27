@@ -9,7 +9,7 @@ const SORT_DIRECTIONS = ['asc', 'desc'] as const satisfies readonly GameCardsSor
 const SORT_FIELD_SET: ReadonlySet<string> = new Set(SORT_FIELDS);
 const SORT_DIRECTION_SET: ReadonlySet<string> = new Set(SORT_DIRECTIONS);
 
-export const DEFAULT_DESKTOP_GAME_CARDS_PAGE_LIMIT = 10_000;
+const DEFAULT_DESKTOP_GAME_CARDS_PAGE_LIMIT = 120;
 
 export const DEFAULT_GAME_CARDS_CATALOG_SORT = {
   field: 'title',
@@ -116,6 +116,7 @@ export function normalizeGameCardsQuery(value: unknown): GameCardsQuery {
     selectedLibraries: normalizeStringList(query.selectedLibraries, 'query.selectedLibraries'),
     selectedAddons: normalizeAddons(query.selectedAddons),
     selectedLaunchers: normalizeStringList(query.selectedLaunchers, 'query.selectedLaunchers'),
+    launcherOrder: normalizeStringList(query.launcherOrder ?? [], 'query.launcherOrder'),
     showHidden: query.showHidden === true,
     favoritesOnly: query.favoritesOnly === true,
     sort: {

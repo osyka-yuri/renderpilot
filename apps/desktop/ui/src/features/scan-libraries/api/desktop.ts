@@ -22,3 +22,8 @@ export async function scanManualFolder(path: string): Promise<ScanManualFolderRe
 export async function refreshRemoteManifests(): Promise<ManifestRefreshReport> {
   return invokeDesktop<ManifestRefreshReport>('refresh_remote_manifests');
 }
+
+/** Rebuilds the durable capability projection after scan/manifest changes. */
+export async function refreshCatalogCapabilities(): Promise<{ refreshed: boolean }> {
+  return invokeDesktop<{ refreshed: boolean }>('refresh_catalog_capabilities');
+}

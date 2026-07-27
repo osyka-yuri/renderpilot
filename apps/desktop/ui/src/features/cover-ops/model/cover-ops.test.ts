@@ -32,10 +32,6 @@ describe('cover-ops', () => {
           onClearError: () => {
             calls.push('clear-error');
           },
-          onReloadCards: () => {
-            calls.push('reload');
-            return Promise.resolve();
-          },
           onSuccess,
           onCoverError,
           focusMenuTrigger: (gameId) => {
@@ -48,7 +44,6 @@ describe('cover-ops', () => {
         'busy:game-1',
         'task',
         'clear-error',
-        'reload',
         'success',
         'busy:none',
         'focus:game-1',
@@ -61,7 +56,6 @@ describe('cover-ops', () => {
       const task = vi.fn(() => Promise.resolve());
       const setManualCoverBusyFor = vi.fn();
       const onClearError = vi.fn();
-      const onReloadCards = vi.fn(() => Promise.resolve());
       const onCoverError = vi.fn();
       const focusMenuTrigger = vi.fn();
 
@@ -71,7 +65,6 @@ describe('cover-ops', () => {
           setManualCoverBusyFor,
           task,
           onClearError,
-          onReloadCards,
           onCoverError,
           focusMenuTrigger,
         }),
@@ -80,7 +73,6 @@ describe('cover-ops', () => {
       expect(task).not.toHaveBeenCalled();
       expect(setManualCoverBusyFor).not.toHaveBeenCalled();
       expect(onClearError).not.toHaveBeenCalled();
-      expect(onReloadCards).not.toHaveBeenCalled();
       expect(onCoverError).not.toHaveBeenCalled();
       expect(focusMenuTrigger).not.toHaveBeenCalled();
     });
@@ -91,10 +83,6 @@ describe('cover-ops', () => {
 
       const onClearError = vi.fn(() => {
         calls.push('clear-error');
-      });
-      const onReloadCards = vi.fn(() => {
-        calls.push('reload');
-        return Promise.resolve();
       });
       const onSuccess = vi.fn(() => {
         calls.push('success');
@@ -113,7 +101,6 @@ describe('cover-ops', () => {
             return Promise.reject(error);
           },
           onClearError,
-          onReloadCards,
           onSuccess,
           onCoverError,
           focusMenuTrigger: (gameId) => {
@@ -124,59 +111,8 @@ describe('cover-ops', () => {
 
       expect(calls).toEqual(['busy:game-1', 'task', 'error:failed', 'busy:none', 'focus:game-1']);
       expect(onClearError).not.toHaveBeenCalled();
-      expect(onReloadCards).not.toHaveBeenCalled();
       expect(onSuccess).not.toHaveBeenCalled();
       expect(onCoverError).toHaveBeenCalledWith('failed');
-    });
-
-    it('reports reload error and still restores busy state and focus', async () => {
-      const calls: string[] = [];
-      const reloadError = new Error('reload failed');
-
-      const onClearError = vi.fn(() => {
-        calls.push('clear-error');
-      });
-      const onSuccess = vi.fn(() => {
-        calls.push('success');
-      });
-      const onCoverError = vi.fn((message: string) => {
-        calls.push(`error:${message}`);
-      });
-
-      await withManualCoverBusy(
-        createManualCoverBusyParams({
-          setManualCoverBusyFor: (gameId) => {
-            calls.push(`busy:${gameId ?? 'none'}`);
-          },
-          task: () => {
-            calls.push('task');
-            return Promise.resolve();
-          },
-          onClearError,
-          onReloadCards: () => {
-            calls.push('reload');
-            return Promise.reject(reloadError);
-          },
-          onSuccess,
-          onCoverError,
-          focusMenuTrigger: (gameId) => {
-            calls.push(`focus:${gameId}`);
-          },
-        }),
-      );
-
-      expect(calls).toEqual([
-        'busy:game-1',
-        'task',
-        'clear-error',
-        'reload',
-        'error:reload failed',
-        'busy:none',
-        'focus:game-1',
-      ]);
-      expect(onClearError).toHaveBeenCalledTimes(1);
-      expect(onSuccess).not.toHaveBeenCalled();
-      expect(onCoverError).toHaveBeenCalledWith('reload failed');
     });
   });
 
@@ -268,15 +204,14 @@ describe('cover-ops', () => {
 });
 
 function createManualCoverBusyParams(
-  overrides: Partial<ManualCoverBusyParams> = {},
-): ManualCoverBusyParams {
+  overrides: Partial<ManualCoverBusyParams<void>> = {},
+): ManualCoverBusyParams<void> {
   return {
     gameId: GAME_1,
     manualCoverBusyFor: null,
     setManualCoverBusyFor: vi.fn(),
     task: vi.fn(() => Promise.resolve()),
     onClearError: vi.fn(),
-    onReloadCards: vi.fn(() => Promise.resolve()),
     onSuccess: vi.fn(),
     onCoverError: vi.fn(),
     describeError: (error) => (error instanceof Error ? error.message : 'unknown'),

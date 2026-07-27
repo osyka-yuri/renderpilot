@@ -1,6 +1,7 @@
 import type {
   GameCardsQuery,
   GameCardsResult,
+  GamesCatalogBootstrap,
   GameDetails,
   CoverArtworkResult,
   ScanManualFolderResult,
@@ -29,7 +30,10 @@ export type DesktopCommandPayloadMap = {
   scan_manual_folder: { path: string };
   scan_auto_libraries: undefined;
   refresh_remote_manifests: undefined;
+  refresh_catalog_capabilities: undefined;
   query_game_cards: { query: GameCardsQuery };
+  bootstrap_games_catalog: { limit: number };
+  start_background_refresh: undefined;
   get_game_details: { gameId: string };
   fetch_game_cover: { gameId: string };
   clear_game_cover: { gameId: string };
@@ -83,7 +87,10 @@ export type DesktopCommandResultMap = {
   scan_manual_folder: ScanManualFolderResult;
   scan_auto_libraries: AutoScanResponse;
   refresh_remote_manifests: ManifestRefreshReport;
+  refresh_catalog_capabilities: { refreshed: boolean };
   query_game_cards: GameCardsResult;
+  bootstrap_games_catalog: GamesCatalogBootstrap;
+  start_background_refresh: { started: boolean };
   get_game_details: GameDetails;
   fetch_game_cover: CoverArtworkResult;
   clear_game_cover: { cleared: boolean };
@@ -129,7 +136,10 @@ const ALL_DESKTOP_COMMANDS = [
   'scan_manual_folder',
   'scan_auto_libraries',
   'refresh_remote_manifests',
+  'refresh_catalog_capabilities',
   'query_game_cards',
+  'bootstrap_games_catalog',
+  'start_background_refresh',
   'get_game_details',
   'fetch_game_cover',
   'clear_game_cover',

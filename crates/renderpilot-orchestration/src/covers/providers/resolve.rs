@@ -93,7 +93,7 @@ fn resolve_steam_cover_bytes(
     let app_id = external_id_or_cover_not_found(request)?;
 
     if policy.steam_cdn
-        && let Some(bytes) = backend.try_steam_cdn(client, app_id)
+        && let Some(bytes) = backend.try_steam_artwork(client, app_id, request.title)
     {
         return Ok(bytes);
     }

@@ -195,12 +195,6 @@ pub fn executable_candidate_dto(
     }
 }
 
-/// Non-Windows stub: executable candidate conversion is only supported on Windows.
-#[cfg(not(windows))]
-pub fn executable_candidate_dto(_candidate: ()) -> ExecutableCandidateDto {
-    unreachable!()
-}
-
 /// Returns the wire string for an [`NvapiValueType`].
 pub fn value_type_str(v: NvapiValueType) -> &'static str {
     match v {

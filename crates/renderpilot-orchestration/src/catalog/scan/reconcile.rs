@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use renderpilot_application::AppResult;
+use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    GameId, GameIdentity, GameInstallation, GraphicsComponent, Launcher, LibraryArtifact,
+    ArtifactId, ArtifactTrustLevel, ComponentId, GameId, GameIdentity, GameInstallation,
+    GraphicsComponent, Launcher, LibraryArtifact,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -17,12 +18,14 @@ use super::paths;
 ///
 /// Loaded once per scan so multi-root parent scans do not call `list_games`
 /// once per derived install.
-pub(super) struct CatalogInstallIndex {
+pub(crate) struct CatalogInstallIndex {
     by_install_path: HashMap<String, GameInstallation>,
+    components_by_game: HashMap<GameId, HashMap<ComponentId, GraphicsComponent>>,
+    local_artifacts_by_game: HashMap<GameId, HashMap<ArtifactId, LibraryArtifact>>,
 }
 
 impl CatalogInstallIndex {
-    pub(super) fn load(storage: &SqliteStorage) -> Result<Self, ServiceError> {
+    pub(crate) fn load(storage: &SqliteStorage) -> Result<Self, ServiceError> {
         let games = storage.list_games()?;
         let mut by_install_path = HashMap::with_capacity(games.len());
 
@@ -31,12 +34,77 @@ impl CatalogInstallIndex {
             by_install_path.entry(key).or_insert(game);
         }
 
-        Ok(Self { by_install_path })
+        let mut components_by_game =
+            HashMap::<GameId, HashMap<ComponentId, GraphicsComponent>>::new();
+        for component in storage.list_all_components()? {
+            components_by_game
+                .entry(component.game_id().clone())
+                .or_default()
+                .insert(component.id().clone(), component);
+        }
+
+        let mut local_artifacts_by_game =
+            HashMap::<GameId, HashMap<ArtifactId, LibraryArtifact>>::new();
+        for artifact in storage.list_artifacts()? {
+            if artifact.trust_level() != ArtifactTrustLevel::LocalObserved {
+                continue;
+            }
+            if let Some(game_id) = artifact.source_game_id() {
+                local_artifacts_by_game
+                    .entry(game_id.clone())
+                    .or_default()
+                    .insert(artifact.id().clone(), artifact);
+            }
+        }
+
+        Ok(Self {
+            by_install_path,
+            components_by_game,
+            local_artifacts_by_game,
+        })
     }
 
     fn find_by_install_path(&self, install_path: &str) -> Option<&GameInstallation> {
         self.by_install_path
             .get(&paths::install_path_match_key(install_path))
+    }
+
+    #[cfg(any(windows, test))]
+    pub(crate) fn contains_install_path(&self, install_path: &std::path::Path) -> bool {
+        self.contains_install_path_str(&install_path.to_string_lossy())
+    }
+
+    pub(super) fn contains_install_path_str(&self, install_path: &str) -> bool {
+        self.find_by_install_path(install_path).is_some()
+    }
+
+    pub(super) fn card_facts_changed(
+        &self,
+        game: &GameInstallation,
+        components: &[GraphicsComponent],
+        artifacts: &[LibraryArtifact],
+    ) -> bool {
+        self.find_by_install_path(game.install_path().as_str()) != Some(game)
+            || !self.components_match(game.id(), components)
+            || !self.local_artifacts_match(game.id(), artifacts)
+    }
+
+    fn components_match(&self, game_id: &GameId, components: &[GraphicsComponent]) -> bool {
+        let existing = self.components_by_game.get(game_id);
+        let existing_len = existing.map_or(0, HashMap::len);
+        existing_len == components.len()
+            && components.iter().all(|component| {
+                existing.and_then(|items| items.get(component.id())) == Some(component)
+            })
+    }
+
+    fn local_artifacts_match(&self, game_id: &GameId, artifacts: &[LibraryArtifact]) -> bool {
+        let existing = self.local_artifacts_by_game.get(game_id);
+        let existing_len = existing.map_or(0, HashMap::len);
+        existing_len == artifacts.len()
+            && artifacts.iter().all(|artifact| {
+                existing.and_then(|items| items.get(artifact.id())) == Some(artifact)
+            })
     }
 }
 
@@ -143,11 +211,71 @@ pub(super) fn build_library_artifacts(
 
 #[cfg(test)]
 mod tests {
+    use renderpilot_application::{ComponentRepository, GameRepository};
     use renderpilot_domain::{
-        GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
+        GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, Swappability,
     };
+    use renderpilot_storage_sqlite::SqliteStorage;
 
-    use super::merge_scan_game_with_existing;
+    use super::{CatalogInstallIndex, merge_scan_game_with_existing};
+
+    #[test]
+    fn catalog_index_distinguishes_noop_scan_from_changed_game_facts() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let existing = sample_install(
+            "manual:C:/Games/Stable",
+            "Stable",
+            Launcher::Manual,
+            None,
+            "C:/Games/Stable",
+        );
+        storage.upsert_game(&existing).expect("seed game");
+        let index = CatalogInstallIndex::load(&storage).expect("catalog index");
+
+        assert!(index.contains_install_path(std::path::Path::new("C:/Games/Stable")));
+        assert!(!index.contains_install_path(std::path::Path::new("C:/Games/Missing")));
+        assert!(!index.card_facts_changed(&existing, &[], &[]));
+
+        let renamed = sample_install(
+            "manual:C:/Games/Stable",
+            "Renamed",
+            Launcher::Manual,
+            None,
+            "C:/Games/Stable",
+        );
+        assert!(index.card_facts_changed(&renamed, &[], &[]));
+    }
+
+    #[test]
+    fn catalog_index_compares_component_sets_independent_of_query_order() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game = sample_install(
+            "manual:C:/Games/Stable",
+            "Stable",
+            Launcher::Manual,
+            None,
+            "C:/Games/Stable",
+        );
+        let first = sample_component(
+            &game,
+            "component:first",
+            GraphicsTechnology::DlssSuperResolution,
+        );
+        let second = sample_component(
+            &game,
+            "component:second",
+            GraphicsTechnology::NvidiaStreamline,
+        );
+        storage.upsert_game(&game).expect("seed game");
+        storage
+            .replace_components_for_game(game.id(), &[first.clone(), second.clone()])
+            .expect("seed components");
+
+        let index = CatalogInstallIndex::load(&storage).expect("catalog index");
+
+        assert!(!index.card_facts_changed(&game, &[second, first], &[]));
+    }
 
     #[test]
     fn merge_preserves_existing_non_manual_launcher_when_rescan_is_manual() {
@@ -293,6 +421,20 @@ mod tests {
             Platform::Windows,
             GameRuntime::NativeWindows,
             PathRef::new(install_path).expect("path"),
+        )
+    }
+
+    fn sample_component(
+        game: &GameInstallation,
+        id: &str,
+        technology: GraphicsTechnology,
+    ) -> GraphicsComponent {
+        GraphicsComponent::new(
+            ComponentId::new(id).expect("component id"),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            technology,
+            Swappability::Swappable,
         )
     }
 }

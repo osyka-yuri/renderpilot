@@ -11,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    SqliteStorage, catalog_select_sql::LIST_COMPONENTS_FOR_GAME_SQL,
+    SqliteStorage,
+    catalog_select_sql::{LIST_ALL_COMPONENTS_SQL, LIST_COMPONENTS_FOR_GAME_SQL},
     row_mapping::component_from_row,
 };
 
@@ -84,6 +85,13 @@ impl ComponentRepository for SqliteStorage {
             },
             component_from_row,
         )
+    }
+}
+
+impl SqliteStorage {
+    /// Loads all component facts in one stable query for catalog snapshot builds.
+    pub fn list_all_components(&self) -> AppResult<Vec<GraphicsComponent>> {
+        self.query_list(LIST_ALL_COMPONENTS_SQL, [], component_from_row)
     }
 }
 

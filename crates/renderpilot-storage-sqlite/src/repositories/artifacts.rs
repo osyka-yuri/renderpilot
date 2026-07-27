@@ -1,5 +1,6 @@
 use renderpilot_application::{AppResult, ArtifactRepository};
 use std::collections::HashSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use renderpilot_domain::{ArtifactTrustLevel, GameId, LibraryArtifact};
 use rusqlite::{Statement, Transaction, named_params};
@@ -49,6 +50,33 @@ const UPSERT_ARTIFACT_SQL: &str = "
     WHERE library_artifacts.trust_level != 'catalog_downloaded'
        OR excluded.trust_level = 'catalog_downloaded'
 ";
+
+impl SqliteStorage {
+    /// Process-local revision of only the durable replacement inventory.
+    ///
+    /// Unlike SQLite's connection-wide `total_changes()`, this fingerprint is
+    /// unaffected by favorites, covers, operations, or other catalog writes.
+    /// It therefore keeps the expensive replacement universe hot until an
+    /// artifact row actually changes.
+    pub fn library_artifact_revision(&self) -> AppResult<u64> {
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached("SELECT id, updated_at FROM library_artifacts ORDER BY id")
+                .map_err(storage_error)?;
+            let mut rows = statement.query([]).map_err(storage_error)?;
+            let mut hasher = DefaultHasher::new();
+            while let Some(row) = rows.next().map_err(storage_error)? {
+                row.get::<_, String>(0)
+                    .map_err(storage_error)?
+                    .hash(&mut hasher);
+                row.get::<_, i64>(1)
+                    .map_err(storage_error)?
+                    .hash(&mut hasher);
+            }
+            Ok(hasher.finish())
+        })
+    }
+}
 
 impl ArtifactRepository for SqliteStorage {
     fn upsert_artifact(&self, artifact: &LibraryArtifact) -> AppResult<()> {
@@ -291,6 +319,43 @@ mod tests {
 
     const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const HASH_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    #[test]
+    fn artifact_revision_changes_only_with_artifact_inventory() {
+        let storage = SqliteStorage::in_memory().expect("in-memory sqlite should open");
+        let game = sample_game("manual:revision", "Revision Game");
+        storage.upsert_game(&game).expect("game should be stored");
+        let empty_revision = storage
+            .library_artifact_revision()
+            .expect("empty inventory revision");
+
+        storage
+            .save_game_ui_state(game.id().as_str(), true, false)
+            .expect("favorite state");
+        assert_eq!(
+            storage
+                .library_artifact_revision()
+                .expect("revision after unrelated write"),
+            empty_revision,
+            "UI-only writes must not invalidate the replacement universe"
+        );
+
+        let artifact = sample_artifact(
+            "artifact:revision",
+            "C:/Games/Revision/nvngx_dlss.dll",
+            "nvngx_dlss.dll",
+            HASH_A,
+        );
+        storage
+            .upsert_artifact(&artifact)
+            .expect("artifact should be stored");
+        assert_ne!(
+            storage
+                .library_artifact_revision()
+                .expect("revision after artifact write"),
+            empty_revision
+        );
+    }
 
     #[test]
     fn list_artifacts_round_trips_all_required_fields() {

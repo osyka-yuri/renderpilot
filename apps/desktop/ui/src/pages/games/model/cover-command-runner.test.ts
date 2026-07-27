@@ -38,8 +38,8 @@ describe('createCoverCommandRunner', () => {
     vi.clearAllMocks();
 
     vi.mocked(withManualCoverBusy).mockImplementation(async (params) => {
-      await params.task();
-      params.onSuccess?.();
+      const result = await params.task();
+      params.onSuccess?.(result);
     });
   });
 
@@ -112,6 +112,5 @@ function createDeps() {
     getMenuOpenFor: () => null,
     setMenuOpenFor: vi.fn(),
     getOnClearError: () => vi.fn(),
-    getOnReloadCards: () => vi.fn(() => Promise.resolve()),
   };
 }

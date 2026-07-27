@@ -41,6 +41,8 @@ pub mod discovery;
 pub(crate) use auto::scan_auto_in_shared_batch;
 #[cfg(windows)]
 pub use prune::prune_auto_scan_orphans;
+#[cfg(windows)]
+pub(crate) use reconcile::CatalogInstallIndex;
 
 use std::path::PathBuf;
 
@@ -105,9 +107,10 @@ pub(super) fn scan_folder_impl(
             context,
             detector: &detector,
         },
-        path,
+        &ManualFolderGameSource::new(path),
         DetectionMode::FullCached,
         InstallRootStrategy::FromSelectedIdentity,
+        None,
         None,
     )
 }
@@ -121,15 +124,16 @@ struct ScanInputs<'a> {
 
 fn scan_impl(
     inputs: ScanInputs<'_>,
-    path: impl Into<PathBuf>,
+    source: &ManualFolderGameSource,
     detection_mode: DetectionMode,
     install_root_strategy: InstallRootStrategy,
     prefetched_cache: Option<&FileHashCache>,
+    catalog_index: Option<&reconcile::CatalogInstallIndex>,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
     let storage = inputs.context.storage();
     let detector = inputs.detector;
 
-    let selected_game = ManualFolderGameSource::new(path).discover_game()?;
+    let selected_game = source.discover_game()?;
     let _guard = crate::game_mutation_lock::enter_game_mutation_boundary(
         inputs.context,
         selected_game.id(),
@@ -148,7 +152,13 @@ fn scan_impl(
 
     let install_roots = derive_install_roots(&selected_game, &libraries, install_root_strategy);
 
-    let results = persist_scan_results(storage, selected_game, libraries, install_roots)?;
+    let results = persist_scan_results(
+        storage,
+        selected_game,
+        libraries,
+        install_roots,
+        catalog_index,
+    )?;
 
     prune::prune_stale_manual_games_under_scope(
         storage,
@@ -157,46 +167,4 @@ fn scan_impl(
     )?;
 
     Ok(results)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::scan_plan::{FastScanFallbackReason, decide_fast_scan_fallback};
-
-    #[test]
-    fn fallback_when_fast_result_is_empty() {
-        let decision = decide_fast_scan_fallback(0, 3, 2);
-        assert!(decision.should_fallback());
-        assert_eq!(
-            decision.fallback_reason,
-            Some(FastScanFallbackReason::EmptyFastResult)
-        );
-    }
-
-    #[test]
-    fn fallback_when_fast_result_is_incomplete_against_detectable_count() {
-        let decision = decide_fast_scan_fallback(2, 3, 0);
-        assert!(decision.should_fallback());
-        assert_eq!(
-            decision.fallback_reason,
-            Some(FastScanFallbackReason::IncompleteFastResult)
-        );
-    }
-
-    #[test]
-    fn fallback_when_fast_result_degrades_existing_catalog() {
-        let decision = decide_fast_scan_fallback(2, 2, 3);
-        assert!(decision.should_fallback());
-        assert_eq!(
-            decision.fallback_reason,
-            Some(FastScanFallbackReason::DegradedComparedToCatalog)
-        );
-    }
-
-    #[test]
-    fn keep_fast_result_when_complete_and_not_degraded() {
-        let decision = decide_fast_scan_fallback(3, 3, 3);
-        assert!(!decision.should_fallback());
-        assert_eq!(decision.fallback_reason, None);
-    }
 }

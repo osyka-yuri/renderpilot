@@ -229,10 +229,11 @@
   // and the RenoDX install location, so it lives above the tabs in its own context.
   // Changing it re-reads the NVIDIA settings (they key off the profile's exe).
   const gameExe = createGameExecutableContext({
-    onChange: (id) => {
-      if (hasNvidiaTab) {
-        void nvidia.reload(id);
-      }
+    onChange: async (id) => {
+      await Promise.all([
+        hasNvidiaTab ? nvidia.reload(id) : Promise.resolve(),
+        onGameDetailsInvalidate(id),
+      ]);
     },
   });
 

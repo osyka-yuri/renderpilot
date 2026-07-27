@@ -31,13 +31,18 @@ pub(crate) fn is_renodx_addon_file_name(lower: &str) -> bool {
 /// caller that already holds a manifest) skip the network/cache round trip.
 #[must_use]
 pub(crate) fn capability_probe(manifest: RenoDxManifest) -> CapabilityProbe {
-    CapabilityProbe::new(AddonKind::RenoDx, move |facts: &MatchFacts| {
-        let resolution = matcher::resolve(&manifest, facts);
-        matches!(
-            &resolution,
-            RenoDxResolution::Installable(_) | RenoDxResolution::External { .. }
-        )
-    })
+    let source_revision = manifest.generated_at.clone();
+    CapabilityProbe::new(
+        AddonKind::RenoDx,
+        source_revision,
+        move |facts: &MatchFacts| {
+            let resolution = matcher::resolve(&manifest, facts);
+            matches!(
+                &resolution,
+                RenoDxResolution::Installable(_) | RenoDxResolution::External { .. }
+            )
+        },
+    )
 }
 
 fn unmanaged_present(game_dir: &Path) -> bool {

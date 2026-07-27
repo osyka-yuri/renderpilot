@@ -7,7 +7,7 @@ use renderpilot_domain::GameInstallation;
 use renderpilot_storage_sqlite::{ScanWriteUnit, SqliteStorage};
 
 use crate::ServiceError;
-use crate::catalog::ScanFolderCatalogResult;
+use crate::catalog::{CatalogScanChange, ScanFolderCatalogResult};
 
 use super::reconcile::{
     CatalogInstallIndex, build_graphics_components, build_library_artifacts,
@@ -21,13 +21,21 @@ pub(super) fn persist_scan_results(
     selected_game: GameInstallation,
     libraries: Vec<DetectedLibraryFile>,
     install_roots: Vec<PathBuf>,
+    prefetched_catalog_index: Option<&CatalogInstallIndex>,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
-    let catalog_index = CatalogInstallIndex::load(storage)?;
+    let owned_catalog_index;
+    let catalog_index = match prefetched_catalog_index {
+        Some(index) => index,
+        None => {
+            owned_catalog_index = CatalogInstallIndex::load(storage)?;
+            &owned_catalog_index
+        }
+    };
 
     if install_roots.len() <= 1 {
         return Ok(vec![persist_scan_result(
             storage,
-            &catalog_index,
+            catalog_index,
             selected_game,
             libraries,
         )?]);
@@ -35,7 +43,7 @@ pub(super) fn persist_scan_results(
 
     persist_split_scan_results(
         storage,
-        &catalog_index,
+        catalog_index,
         &selected_game,
         libraries,
         install_roots,
@@ -100,17 +108,33 @@ fn persist_scan_result(
     game: GameInstallation,
     libraries: Vec<DetectedLibraryFile>,
 ) -> Result<ScanFolderCatalogResult, ServiceError> {
+    let existed = catalog_index.contains_install_path_str(game.install_path().as_str());
     let game = reconcile_game_with_catalog(catalog_index, game);
     let components = build_graphics_components(&game, &libraries)?;
     let artifacts = build_library_artifacts(game.id(), &libraries)?;
+    let mut changed = catalog_index.card_facts_changed(&game, &components, &artifacts);
 
-    storage.save_scan_write_unit(ScanWriteUnit {
-        game: &game,
-        components: &components,
-        artifacts: &artifacts,
-    })?;
+    if changed {
+        storage.save_scan_write_unit(ScanWriteUnit {
+            game: &game,
+            components: &components,
+            artifacts: &artifacts,
+        })?;
+    }
 
+    let generation_before_recovery = storage.catalog_generation();
     recovery::recover_orphaned_backups(storage, game.id(), &components)?;
+    changed |= storage.catalog_generation() != generation_before_recovery;
 
-    Ok(ScanFolderCatalogResult { game, libraries })
+    Ok(ScanFolderCatalogResult {
+        game,
+        libraries,
+        change: if !changed {
+            CatalogScanChange::Unchanged
+        } else if existed {
+            CatalogScanChange::Updated
+        } else {
+            CatalogScanChange::Added
+        },
+    })
 }

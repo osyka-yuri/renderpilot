@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { ALL_KNOWN_LAUNCHERS } from '@entities/game';
+import { ALL_KNOWN_LIBRARIES } from '@shared/graphics';
+
 import {
   mockGetCatalogSetting,
   mockQueryGameCards,
@@ -46,7 +49,7 @@ describe('mockQueryGameCards', () => {
     expect(filtered.items.every((item) => item.library_tags.includes(selectedLibrary))).toBe(true);
   });
 
-  it('normalizes query fingerprint for equivalent input', async () => {
+  it('normalizes semantically equivalent input consistently', async () => {
     const left = await mockQueryGameCards({
       searchQuery: '  cyber  ',
       selectedLibraries: [' dlss_super_resolution ', 'dlss_super_resolution'],
@@ -69,7 +72,78 @@ describe('mockQueryGameCards', () => {
       page: { limit: 50, offset: 0 },
     });
 
-    expect(left.queryFingerprint).toBe(right.queryFingerprint);
+    expect(left).toEqual(right);
+  });
+
+  it('keeps known filters active when the current catalog has no matching facet', async () => {
+    const baseline = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 100, offset: 0 },
+    });
+    const absentLibrary = ALL_KNOWN_LIBRARIES.find(
+      (library) => !baseline.availableLibraries.includes(library),
+    );
+    const absentLauncher = ALL_KNOWN_LAUNCHERS.find(
+      (launcher) => !baseline.availableLaunchers.includes(launcher),
+    );
+    if (absentLibrary === undefined || absentLauncher === undefined) {
+      throw new Error('Mock catalog must leave at least one known library and launcher absent');
+    }
+
+    const libraryFiltered = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [absentLibrary],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 100, offset: 0 },
+    });
+    const launcherFiltered = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [absentLauncher],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 100, offset: 0 },
+    });
+
+    expect(libraryFiltered.total).toBe(0);
+    expect(launcherFiltered.total).toBe(0);
+  });
+
+  it('ignores values outside the filter vocabulary', async () => {
+    const baseline = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: [],
+      selectedAddons: [],
+      selectedLaunchers: [],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 100, offset: 0 },
+    });
+    const stale = await mockQueryGameCards({
+      searchQuery: '',
+      selectedLibraries: ['stale-library'],
+      selectedAddons: [],
+      selectedLaunchers: ['StaleLauncher'],
+      showHidden: false,
+      favoritesOnly: false,
+      sort: { field: 'title', direction: 'asc' },
+      page: { limit: 100, offset: 0 },
+    });
+
+    expect(stale).toEqual(baseline);
   });
 
   it('filters favoritesOnly and floats favorites when sorting', async () => {

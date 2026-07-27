@@ -5,7 +5,7 @@
 //! [`GameMutationGuard`] instead of acquiring the mutex again.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use renderpilot_domain::GameId;
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
@@ -32,7 +32,7 @@ impl GameMutationGuard {
 fn lock_for(game_id: &GameId) -> Arc<AsyncMutex<()>> {
     let key = game_id.as_str().to_owned();
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut locks = locks.lock().expect("game mutation lock map poisoned");
+    let mut locks = locks.lock().unwrap_or_else(PoisonError::into_inner);
 
     if locks.len() >= LOCK_MAP_EVICT_AT {
         locks.retain(|_, arc| Arc::strong_count(arc) > 1);

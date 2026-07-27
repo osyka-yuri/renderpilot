@@ -5,7 +5,7 @@
 //! not reused here: RenoDX availability may adopt an orphaned install and both
 //! tools perform host/filesystem checks that do not belong in card rendering.
 //! Instead, a scan refresh resolves the pure manifest matchers once and stores
-//! the resulting profile snapshot in [`crate::Context`].
+//! the resulting profile snapshot durably in SQLite.
 //!
 //! `CapabilityProbe` type-erases the per-tool manifest + pure matcher behind
 //! one `Fn(&MatchFacts) -> bool`, built by each tool's
@@ -19,7 +19,6 @@ use std::pin::Pin;
 use renderpilot_domain::{AddonKind, GameId};
 
 use crate::addons::game_analysis::analyze_game;
-use crate::addons::game_context::executable_override;
 use crate::addons::matching::MatchFacts;
 use crate::addons::tool;
 use crate::{Context, ServiceError};
@@ -34,6 +33,7 @@ pub(crate) type CapabilityProbeFuture =
 /// caller needing to know the tool's manifest or resolution types.
 pub(crate) struct CapabilityProbe {
     kind: AddonKind,
+    source_revision: String,
     is_available: Box<dyn Fn(&MatchFacts) -> bool + Send + Sync>,
 }
 
@@ -44,16 +44,22 @@ impl CapabilityProbe {
     #[must_use]
     pub(crate) fn new(
         kind: AddonKind,
+        source_revision: impl Into<String>,
         is_available: impl Fn(&MatchFacts) -> bool + Send + Sync + 'static,
     ) -> Self {
         Self {
             kind,
+            source_revision: source_revision.into(),
             is_available: Box::new(is_available),
         }
     }
 
     fn kind(&self) -> AddonKind {
         self.kind
+    }
+
+    fn source_revision(&self) -> &str {
+        &self.source_revision
     }
 
     fn is_profile_available(&self, facts: &MatchFacts) -> bool {
@@ -69,17 +75,25 @@ impl std::fmt::Debug for CapabilityProbe {
     }
 }
 
-/// In-memory, profile-derived capability set keyed by game.
+/// Profile-derived capability set keyed by game, loaded from durable facts.
 ///
 /// Installed add-ons are intentionally not stored here. Catalog aggregation
 /// reads those from `installed_addons` so install/uninstall changes are visible
 /// immediately without synchronizing derived state.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ProfileCapabilitySnapshot {
+pub(crate) struct DurableProfileCapabilities {
     by_game: HashMap<GameId, HashSet<AddonKind>>,
 }
 
-impl ProfileCapabilitySnapshot {
+impl DurableProfileCapabilities {
+    pub(crate) fn load(context: &Context) -> Result<Self, ServiceError> {
+        let mut snapshot = Self::default();
+        for (game_id, kind) in context.storage().list_profile_addon_capabilities()? {
+            snapshot.insert(game_id, kind);
+        }
+        Ok(snapshot)
+    }
+
     pub(crate) fn capabilities_for(&self, game_id: &GameId) -> Vec<AddonKind> {
         let Some(capabilities) = self.by_game.get(game_id) else {
             return Vec::new();
@@ -92,11 +106,14 @@ impl ProfileCapabilitySnapshot {
             .collect()
     }
 
-    fn clear_kind(&mut self, kind: AddonKind) {
-        self.by_game.retain(|_, capabilities| {
-            capabilities.remove(&kind);
-            !capabilities.is_empty()
-        });
+    pub(crate) fn load_for_game(
+        context: &Context,
+        game_id: &GameId,
+    ) -> Result<Vec<AddonKind>, ServiceError> {
+        context
+            .storage()
+            .list_profile_addon_capabilities_for_game(game_id)
+            .map_err(Into::into)
     }
 
     fn insert(&mut self, game_id: GameId, kind: AddonKind) {
@@ -107,35 +124,75 @@ impl ProfileCapabilitySnapshot {
 /// Rebuilds profile-derived catalog capabilities for every known game.
 ///
 /// Each supplied probe replaces only its own capability kind. A missing kind
-/// preserves the previous in-process values, so a transient CDN/cache failure
+/// preserves the previous durable values, so a transient CDN/cache failure
 /// never clears a previously valid snapshot.
 fn refresh_profile_capabilities(
     context: &Context,
     probes: &[CapabilityProbe],
-) -> Result<(), ServiceError> {
+) -> Result<bool, ServiceError> {
     if probes.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let games = context.storage().list_games()?;
-    let mut next = context.profile_capability_snapshot();
-
-    for probe in probes {
-        next.clear_kind(probe.kind());
-    }
-
+    let executable_overrides = context
+        .storage()
+        .list_nvapi_executable_overrides()?
+        .into_iter()
+        .map(|row| (row.game_id, std::path::PathBuf::from(row.selected_path)))
+        .collect::<HashMap<_, _>>();
+    let mut matches = HashMap::<AddonKind, Vec<GameId>>::new();
     for game in games {
-        let override_path = executable_override(context, game.id());
-        let analysis = analyze_game(&game, override_path.as_deref());
+        let override_path = executable_overrides
+            .get(game.id().as_str())
+            .map(std::path::PathBuf::as_path);
+        let analysis = analyze_game(&game, override_path);
         let capabilities = profile_capabilities_for_facts(probes, &analysis.facts);
 
         for kind in capabilities {
-            next.insert(game.id().clone(), kind);
+            matches.entry(kind).or_default().push(game.id().clone());
         }
     }
+    let mut changed = false;
+    for probe in probes {
+        changed |= context.storage().replace_profile_addon_capabilities(
+            probe.kind(),
+            probe.source_revision(),
+            matches.get(&probe.kind()).map_or(&[], Vec::as_slice),
+        )?;
+    }
+    Ok(changed)
+}
 
-    context.replace_profile_capability_snapshot(next);
-    Ok(())
+fn refresh_profile_capabilities_for_game(
+    context: &Context,
+    probes: &[CapabilityProbe],
+    game_id: &GameId,
+) -> Result<bool, ServiceError> {
+    if probes.is_empty() {
+        return Ok(false);
+    }
+
+    let game = crate::addons::game_context::require_game(context, game_id)?;
+    let override_path = context
+        .storage()
+        .get_nvapi_executable_override(game_id.as_str())?
+        .map(|row| std::path::PathBuf::from(row.selected_path));
+    let analysis = analyze_game(&game, override_path.as_deref());
+    let capabilities = probes
+        .iter()
+        .map(|probe| {
+            (
+                probe.kind(),
+                probe.source_revision().to_owned(),
+                probe.is_profile_available(&analysis.facts),
+            )
+        })
+        .collect::<Vec<_>>();
+    context
+        .storage()
+        .replace_game_profile_addon_capabilities(game_id, &capabilities)
+        .map_err(Into::into)
 }
 
 fn profile_capabilities_for_facts(
@@ -165,10 +222,15 @@ impl LoadedCapabilityProbes {
         self.items.is_empty()
     }
 
-    /// Rebuilds the in-process profile capability snapshot from the loaded
-    /// probes (blocking; call from a worker thread).
-    pub fn refresh(self, context: &Context) -> Result<(), ServiceError> {
+    /// Rebuilds durable profile capability rows from the loaded probes
+    /// (blocking; call from a worker thread).
+    pub fn refresh(self, context: &Context) -> Result<bool, ServiceError> {
         refresh_profile_capabilities(context, &self.items)
+    }
+
+    /// Refreshes only one game's rows for the successfully loaded kinds.
+    pub fn refresh_game(self, context: &Context, game_id: &GameId) -> Result<bool, ServiceError> {
+        refresh_profile_capabilities_for_game(context, &self.items, game_id)
     }
 }
 
@@ -272,14 +334,15 @@ mod tests {
     }
 
     #[test]
-    fn missing_manifest_preserves_that_kind_in_snapshot() {
+    fn capability_snapshot_orders_kinds_stably() {
         let game_id = GameId::new("game:test").expect("game id");
-        let mut snapshot = ProfileCapabilitySnapshot::default();
+        let mut snapshot = DurableProfileCapabilities::default();
         snapshot.insert(game_id.clone(), AddonKind::RenoDx);
         snapshot.insert(game_id.clone(), AddonKind::Luma);
 
-        snapshot.clear_kind(AddonKind::Luma);
-
-        assert_eq!(snapshot.capabilities_for(&game_id), vec![AddonKind::RenoDx]);
+        assert_eq!(
+            snapshot.capabilities_for(&game_id),
+            vec![AddonKind::RenoDx, AddonKind::Luma]
+        );
     }
 }

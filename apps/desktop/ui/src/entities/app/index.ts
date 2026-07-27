@@ -1,2 +1,6 @@
-export { getAppInitializationState, requestAdminRelaunch } from './api/desktop';
+export {
+  getAppInitializationState,
+  requestAdminRelaunch,
+  startBackgroundRefresh,
+} from './api/desktop';
 export type { AppInitializationState } from './model/types';

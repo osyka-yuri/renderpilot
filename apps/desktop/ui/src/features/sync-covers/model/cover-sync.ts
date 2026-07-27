@@ -1,7 +1,7 @@
 /**
  * CONTRACT: Background-sync eligibility (`filterGamesMissingStoredCoverForBackgroundSync` /
- * `gameMayReceiveRemoteCoverViaPolicy`) must stay equivalent to remote resolution in
- * `crates/renderpilot-cli/src/catalog/covers/providers/resolve.rs` (`resolve_cover_bytes`).
+ * `gameMayReceiveRemoteCoverViaPolicy`) must stay equivalent to remote cover resolution in
+ * `crates/renderpilot-orchestration/src/covers/providers/resolve.rs` (`resolve_cover_bytes`).
  * When you change launcher branches or policy semantics on either side, update the other and
  * re-verify manually.
  */
@@ -40,14 +40,6 @@ function getGameTitleOrId(game: GameSummary): string {
 
 export function filterGamesMissingStoredCover(games: readonly GameSummary[]): GameSummary[] {
   return games.filter((game) => !gameCardHasStoredCover(game));
-}
-
-/**
- * Without SteamGridDB, auto-fetch can still use first-party artwork when the catalog has a Steam app id
- * or GOG product id (numeric `external_id`).
- */
-export function gameCoverFetchMayUseLauncherCdnOnly(game: GameSummary): boolean {
-  return gameHasSteamCdnCandidate(game) || gameHasGogCdnCandidate(game);
 }
 
 function gameHasSteamCdnCandidate(game: GameSummary): boolean {
@@ -92,7 +84,7 @@ export function filterGamesMissingStoredCoverForBackgroundSync(
   );
 }
 
-export type CoverFetchBatchHooks = {
+export type CoverFetchBatchHooks<TResult> = {
   /** Fired before each attempt (success or failure) — typically a per-card busy spinner on. */
   onGameStart?: (gameId: string) => void;
   /** Fired after each attempt (success or failure) — typically a per-card busy spinner off. */
@@ -101,13 +93,13 @@ export type CoverFetchBatchHooks = {
    * Fired once per *successful* download, after `onGameEnd`, so a single card can refresh the
    * moment its cover lands instead of waiting for the whole batch.
    */
-  onCoverReady?: (gameId: string) => void;
+  onCoverReady?: (gameId: string, result: TResult) => void;
 };
 
-export type CoverFetchBatchOptions = CoverFetchBatchHooks & {
+export type CoverFetchBatchOptions<TResult> = CoverFetchBatchHooks<TResult> & {
   games: readonly GameSummary[];
   concurrency: number;
-  fetchCover: (gameId: string) => Promise<unknown>;
+  fetchCover: (gameId: string) => Promise<TResult>;
 };
 
 /**
@@ -118,8 +110,8 @@ export type CoverFetchBatchOptions = CoverFetchBatchHooks & {
  * defensively: a throwing hook is logged and isolated, so a buggy callback can neither abort the
  * remaining downloads nor be mistaken for a fetch failure.
  */
-export async function runCoverFetchBatch(
-  options: CoverFetchBatchOptions,
+export async function runCoverFetchBatch<TResult>(
+  options: CoverFetchBatchOptions<TResult>,
 ): Promise<{ failures: CoverFetchFailure[] }> {
   const items = [...options.games];
 
@@ -135,9 +127,10 @@ export async function runCoverFetchBatch(
     notifyLifecycleHook(options.onGameStart, gameId);
 
     let downloaded = false;
+    let result!: TResult;
 
     try {
-      await options.fetchCover(gameId);
+      result = await options.fetchCover(gameId);
       downloaded = true;
     } catch (error: unknown) {
       failuresByInputIndex[index] = createCoverFetchFailure(game, error);
@@ -148,7 +141,7 @@ export async function runCoverFetchBatch(
     // Notify success outside the fetch's try/catch: a throwing onCoverReady must never be
     // recorded as a download failure, and only confirmed downloads should trigger a refresh.
     if (downloaded) {
-      notifyLifecycleHook(options.onCoverReady, gameId);
+      notifyLifecycleHook(options.onCoverReady, gameId, result);
     }
   };
 
@@ -164,13 +157,16 @@ export async function runCoverFetchBatch(
  * Hooks are fire-and-forget side effects (busy flags, cache-version bumps); a failure in one
  * must not abort the remaining downloads or corrupt failure accounting.
  */
-function notifyLifecycleHook(hook: ((gameId: string) => void) | undefined, gameId: string): void {
+function notifyLifecycleHook<TArgs extends readonly unknown[]>(
+  hook: ((...args: TArgs) => void) | undefined,
+  ...args: TArgs
+): void {
   if (hook === undefined) {
     return;
   }
 
   try {
-    hook(gameId);
+    hook(...args);
   } catch (error: unknown) {
     console.error('Cover sync lifecycle hook threw.', error);
   }
@@ -192,9 +188,9 @@ const COVER_SYNC_SETTINGS_HINT = 'Check Game artwork sources and SteamGridDB set
 
 /** User-visible banner when some automatic cover downloads failed.
  *
- * Returns `null` when `failures` is empty so callers (typically piped through
- * `combineCoverSyncMessages`) can suppress the banner without an explicit
- * branch. Without this guard, accessing `failures[0].title` on an empty array
+ * Returns `null` when `failures` is empty so callers can suppress the banner
+ * without an explicit branch. Without this guard, accessing `failures[0].title`
+ * on an empty array
  * threw `TypeError: Cannot read properties of undefined (reading 'title')`,
  * which propagated up to `startMissingCoverSync` and surfaced as a generic
  * "Background cover sync failed" toast even when every cover had downloaded.
@@ -213,14 +209,4 @@ export function formatCoverSyncBanner(failures: readonly CoverFetchFailure[]): s
   const summary = `${first.title}: ${first.message}`;
 
   return `Could not download covers for ${failures.length} games. First failure: ${summary}. ${COVER_SYNC_SETTINGS_HINT}`;
-}
-
-/** Merges background sync banner text with a post-sync refresh error, if any. */
-export function combineCoverSyncMessages(
-  syncBanner: string | null,
-  refreshAfterSyncError: string | null,
-): string | null {
-  const messages = [syncBanner, refreshAfterSyncError].filter(isDefined);
-
-  return messages.length > 0 ? messages.join(' ') : null;
 }

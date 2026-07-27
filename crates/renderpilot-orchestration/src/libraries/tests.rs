@@ -568,6 +568,18 @@ fn refresh_fetch_parse_and_activation_failures_return_the_validated_last_known_g
 }
 
 #[test]
+fn identical_catalog_activation_does_not_replace_the_authoritative_file() {
+    let directory = tempfile::tempdir().expect("catalog storage");
+    let storage = super::storage::LibraryStorage::from_root(directory.path().join("libraries"));
+    let catalog =
+        super::resolved::ValidatedCatalog::new(complete_catalog(package("nvidia_streamline")))
+            .expect("validated catalog");
+
+    assert!(super::catalog::save_catalog(&storage, &catalog).expect("first activation"));
+    assert!(!super::catalog::save_catalog(&storage, &catalog).expect("identical activation"));
+}
+
+#[test]
 fn invalid_last_known_good_is_quarantined_after_refresh_failure() {
     let directory = tempfile::tempdir().expect("catalog storage");
     let storage = super::storage::LibraryStorage::from_root(directory.path().join("libraries"));

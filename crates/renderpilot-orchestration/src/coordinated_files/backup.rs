@@ -67,7 +67,7 @@ pub(crate) fn available_component_backup_ids(
         .collect())
 }
 
-fn classify_component_backup(
+pub(crate) fn classify_component_backup(
     recorded: Option<ComponentRollbackBaseline>,
     current: &[ComponentFile],
 ) -> ComponentBackupAvailability {

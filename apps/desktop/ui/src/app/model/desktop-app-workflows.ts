@@ -1,10 +1,7 @@
 import type { WorkspaceScreen } from '@app/navigation/workspace';
 import {
-  DEFAULT_GAME_CARDS_CATALOG_PAGE,
-  DEFAULT_GAME_CARDS_CATALOG_SORT,
   getGameDetails,
   normalizeSelectableGameId,
-  queryGameCards,
   type GameDetails,
   type GameSummary,
 } from '@entities/game';
@@ -19,47 +16,13 @@ import {
 import {
   publishAutomaticLibraryScanFailedNotification,
   publishPartialLibraryScanWarning,
+  refreshCatalogCapabilities,
   refreshRemoteManifests,
   scanAutoLibrariesWithErrorRecovery,
   selectManualScanFolder,
   scanManualFolder,
 } from '@features/scan-libraries';
 import { describeCommandErrorBrief } from '@shared/api';
-
-/**
- * Dependencies required for the refreshDesktopCatalog workflow.
- */
-export type RefreshDesktopCatalogDeps = {
-  /** Optional override for the queryGameCards API call. */
-  queryGameCards?: typeof queryGameCards;
-  /** Callback to update the games catalog state. */
-  setGames: (games: GameSummary[]) => void;
-  /** Callback to increment the catalog version for cache invalidation. */
-  incrementCatalogVersion: () => void;
-  /** Callback when the currently selected game is no longer in the catalog. */
-  clearSelectionIfSelectedGameMissing: () => void;
-};
-
-/**
- * Refreshes the main games catalog by querying the backend with default parameters
- * and updating the local application state.
- */
-export async function refreshDesktopCatalog(deps: RefreshDesktopCatalogDeps): Promise<void> {
-  const result = await (deps.queryGameCards ?? queryGameCards)({
-    searchQuery: '',
-    selectedLibraries: [],
-    selectedAddons: [],
-    selectedLaunchers: [],
-    showHidden: false,
-    favoritesOnly: false,
-    sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
-    page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
-  });
-
-  deps.setGames(result.items);
-  deps.incrementCatalogVersion();
-  deps.clearSelectionIfSelectedGameMissing();
-}
 
 export type LoadAndPresentGameDetailsDeps<RequestToken> = {
   getGameDetails?: typeof getGameDetails;
@@ -133,6 +96,18 @@ export type CatalogRefreshWithCoverSyncDeps = {
   syncMissingCoversAfterCardsLoad: () => Promise<void>;
 };
 
+type QueueBackgroundCoverSyncDeps = Pick<
+  CatalogRefreshWithCoverSyncDeps,
+  'coverSyncQueue' | 'syncMissingCoversAfterCardsLoad'
+>;
+
+/** Coalesces background cover hydration through the process-wide UI queue. */
+export function queueBackgroundCoverSync(deps: QueueBackgroundCoverSyncDeps): void {
+  deps.coverSyncQueue.queue(deps.syncMissingCoversAfterCardsLoad, (error) => {
+    publishBackgroundCoverSyncFailureNotification(error);
+  });
+}
+
 /**
  * Runs a prepare step under the exclusive lock, refreshes the catalog when it
  * succeeds, then queues background cover sync (outside the exclusive lock).
@@ -156,13 +131,9 @@ export async function runCatalogRefreshWithCoverSync(
   });
 
   if (refreshed === true) {
-    deps.coverSyncQueue.queue(deps.syncMissingCoversAfterCardsLoad, (error) => {
-      publishBackgroundCoverSyncFailureNotification(error);
-    });
+    queueBackgroundCoverSync(deps);
   }
 }
-
-export type ScanAutoLibrariesAndRefreshDeps = CatalogRefreshWithCoverSyncDeps;
 
 /**
  * Runs auto library scan with recovery notifications.
@@ -198,16 +169,25 @@ async function forceRemoteManifestsBestEffort(
   }
 }
 
-/** Scans auto libraries (with recovery), then refreshes cards + cover sync. */
-export async function scanAutoLibrariesAndRefreshCards(
-  deps: ScanAutoLibrariesAndRefreshDeps,
+/** Capability refresh is best-effort; the last durable snapshot remains valid on failure. */
+async function refreshCatalogCapabilitiesBestEffort(
+  refresh: () => Promise<unknown> = refreshCatalogCapabilities,
 ): Promise<void> {
-  await runCatalogRefreshWithCoverSync(prepareAutoLibraryScan, deps);
+  try {
+    await refresh();
+  } catch (error) {
+    console.error(
+      `Catalog capability refresh failed; keeping the previous snapshot. ${describeCommandErrorBrief(error)}`,
+      error,
+    );
+  }
 }
 
 export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
   /** Optional override for the forced remote-manifest refresh. */
   refreshRemoteManifests?: () => Promise<unknown>;
+  /** Optional override for rebuilding durable capability facts. */
+  refreshCatalogCapabilities?: () => Promise<unknown>;
 };
 
 /**
@@ -218,7 +198,11 @@ export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
 export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<void> {
   await runCatalogRefreshWithCoverSync(async () => {
     await forceRemoteManifestsBestEffort(deps.refreshRemoteManifests);
-    return prepareAutoLibraryScan();
+    const shouldRefresh = await prepareAutoLibraryScan();
+    if (shouldRefresh) {
+      await refreshCatalogCapabilitiesBestEffort(deps.refreshCatalogCapabilities);
+    }
+    return shouldRefresh;
   }, deps);
 }
 
@@ -236,6 +220,7 @@ export async function scanManualFolderAndRefreshCards(
     }
 
     await scanManualFolder(selectedFolder);
+    await refreshCatalogCapabilitiesBestEffort();
     return true;
   }, deps);
 }
@@ -244,9 +229,8 @@ export type SyncMissingCoversDeps = {
   games: readonly GameSummary[];
   readSetting: (key: string) => Promise<CatalogSettingPayload>;
   fetchGameCover: (gameId: string) => Promise<CoverArtworkResult>;
-  refreshGameCards: () => Promise<void>;
   coverSyncQueue: CoverSyncQueue;
-  onCoverReady: () => void;
+  onCoverReady: (gameId: string, result: CoverArtworkResult) => void;
   /** Yield before snapshotting cards (e.g. `tick()` so the UI paints first). */
   beforeSync?: () => Promise<void>;
 };
@@ -269,14 +253,15 @@ export async function syncMissingCoversAfterCardsLoad(deps: SyncMissingCoversDep
   await executeBackgroundCoverSync(cardSnapshot, {
     readSetting: deps.readSetting,
     fetchGameCover: deps.fetchGameCover,
-    refreshGameCards: deps.refreshGameCards,
     onGameStart: (gameId) => {
       deps.coverSyncQueue.setAutoFetching(gameId, true);
     },
     onGameEnd: (gameId) => {
       deps.coverSyncQueue.setAutoFetching(gameId, false);
     },
-    onCoverReady: deps.onCoverReady,
+    onCoverReady: (gameId, result) => {
+      deps.onCoverReady(gameId, result);
+    },
     onError: publishBackgroundCoverSyncIssueNotification,
   });
 }

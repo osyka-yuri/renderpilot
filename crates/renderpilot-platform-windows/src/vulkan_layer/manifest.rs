@@ -48,8 +48,7 @@ struct DisableEnvironment {
 
 /// Builds the Vulkan layer manifest JSON. Matches the official ReShade manifest
 /// format: relative `library_path`, `device_extensions`, `disable_environment`.
-#[must_use]
-pub(crate) fn layer_manifest_json() -> String {
+pub(crate) fn layer_manifest_json() -> Result<String, serde_json::Error> {
     let manifest = LayerManifest {
         file_format_version: "1.0.0",
         layer: LayerEntry {
@@ -67,7 +66,7 @@ pub(crate) fn layer_manifest_json() -> String {
             disable_environment: DisableEnvironment { disable: "1" },
         },
     };
-    serde_json::to_string_pretty(&manifest).expect("layer manifest serializes")
+    serde_json::to_string_pretty(&manifest)
 }
 
 // -----------------------------------------------------------------------------

@@ -1,4 +1,9 @@
-import { clearGameCover, fetchGameCover, setGameCover } from '@entities/game';
+import {
+  clearGameCover,
+  fetchGameCover,
+  setGameCover,
+  type CoverArtworkResult,
+} from '@entities/game';
 import { describeCommandError } from '@shared/api';
 import {
   publishCoverDownloadedNotification,
@@ -19,7 +24,7 @@ export type CoverCommandRunnerDeps = {
   getMenuOpenFor: () => string | null;
   setMenuOpenFor: (value: string | null) => void;
   getOnClearError: () => () => void;
-  getOnReloadCards: () => () => Promise<void>;
+  patchCover?: (gameId: string, updatedAtMs: number | null) => void;
 };
 
 export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
@@ -27,10 +32,10 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
     deps.setMenuOpenFor(null);
   }
 
-  async function runManualCoverCommand(
+  async function runManualCoverCommand<TResult>(
     gameId: string,
-    command: () => Promise<unknown>,
-    onSuccess?: () => void,
+    command: () => Promise<TResult>,
+    onSuccess?: (result: TResult) => void,
   ): Promise<void> {
     closeMenu();
 
@@ -40,7 +45,6 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       setManualCoverBusyFor: deps.setManualCoverBusyFor,
       task: command,
       onClearError: deps.getOnClearError(),
-      onReloadCards: deps.getOnReloadCards(),
       onSuccess,
       onCoverError: publishCoverOperationErrorNotification,
       describeError: describeCommandError,
@@ -70,7 +74,8 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
     await runManualCoverCommand(
       gameId,
       () => setGameCover(gameId, selectedPath),
-      () => {
+      (result: CoverArtworkResult) => {
+        deps.patchCover?.(gameId, result.updated_at_ms);
         publishCoverUpdatedNotification();
       },
     );
@@ -80,7 +85,8 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
     void runManualCoverCommand(
       gameId,
       () => fetchGameCover(gameId),
-      () => {
+      (result: CoverArtworkResult) => {
+        deps.patchCover?.(gameId, result.updated_at_ms);
         publishCoverDownloadedNotification();
       },
     );
@@ -91,6 +97,7 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       gameId,
       () => clearGameCover(gameId),
       () => {
+        deps.patchCover?.(gameId, null);
         publishCoverRemovedNotification();
       },
     );

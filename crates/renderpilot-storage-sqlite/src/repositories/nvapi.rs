@@ -61,6 +61,34 @@ pub struct NvapiSettingBaselineRow {
 // -----------------------------------------------------------------------------
 
 impl SqliteStorage {
+    /// Returns every executable override in one stable query.
+    pub fn list_nvapi_executable_overrides(&self) -> AppResult<Vec<NvapiExecutableOverrideRow>> {
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached(
+                    "SELECT game_id, selected_path, selected_basename, updated_at
+                     FROM nvapi_executable_overrides
+                     ORDER BY game_id",
+                )
+                .map_err(|error| {
+                    storage_context("could not prepare executable override list", error)
+                })?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(NvapiExecutableOverrideRow {
+                        game_id: row.get(0)?,
+                        selected_path: row.get(1)?,
+                        selected_basename: row.get(2)?,
+                        updated_at: row.get(3)?,
+                    })
+                })
+                .map_err(|error| storage_context("could not read executable overrides", error))?;
+
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|error| storage_context("could not map executable overrides", error))
+        })
+    }
+
     /// Inserts or replaces the executable override for `game_id`.
     pub fn upsert_nvapi_executable_override(
         &self,

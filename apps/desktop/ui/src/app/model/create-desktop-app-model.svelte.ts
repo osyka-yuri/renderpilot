@@ -1,9 +1,8 @@
 import type { Screen } from '@app/navigation/screen';
 import type { WorkspaceScreen } from '@app/navigation/workspace';
 import { isWorkspaceScreen } from '@app/navigation/workspace';
-import { resolveSelectedGameDetails, workspaceShellGameTitle } from '@app/navigation/selection';
+import { resolveSelectedGameDetails } from '@app/navigation/selection';
 import type { AppInitializationState } from '@entities/app';
-import { findGameSummaryForSelection, gameCardExists } from '@entities/game';
 import type { GameDetails } from '@entities/game';
 import { ignoreError } from '@shared/callbacks';
 import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
@@ -11,7 +10,6 @@ import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
 import type { LanguageMode } from '@shared/i18n';
 import { readStoredLanguageMode, setLanguageMode } from '@shared/i18n';
-import { createGamesCatalogModel } from '@widgets/games-catalog';
 import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
 import { createExclusiveTaskRunner } from '@shared/concurrency';
 import { publishMissingStableGameDetailsNotification } from './notifications';
@@ -38,9 +36,8 @@ const DEFAULT_INITIALIZATION: AppInitializationState = {
  * Root desktop application model.
  *
  * Public surface style:
- * - **Flat getters** for template-friendly reads (screen, games, busy, theme, …)
- * - **Nested `catalog` / `workspace`** for mutations and request tokens
- *   (callers that need `setGames` or `beginDetailsRequest` use the submodel)
+ * - **Flat getters** for template-friendly reads (screen, busy, theme, …)
+ * - **Nested `workspace`** for details mutations and request tokens.
  *
  * Plan APIs live only on `workspace` — the root model does not re-wrap them.
  */
@@ -50,24 +47,17 @@ export function createDesktopAppModel(
   const initialization = getInitialization();
   let screen = $state<Screen>('games');
 
-  const catalog = createGamesCatalogModel();
   const workspace = createGameWorkspaceModel();
 
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
   let languageMode = $state<LanguageMode>(readStoredLanguageMode());
 
-  const currentGameCard = $derived(
-    findGameSummaryForSelection(workspace.selectedGameId, catalog.games),
-  );
   const selectedDetails = $derived(
     resolveSelectedGameDetails({
       activeScreen: screen,
       selectedGameId: workspace.selectedGameId,
       currentDetails: workspace.currentDetails,
     }),
-  );
-  const selectedShellGameTitle = $derived(
-    workspaceShellGameTitle(currentGameCard, selectedDetails),
   );
   const hasSelectedGameDetails = $derived(selectedDetails !== null);
 
@@ -101,17 +91,6 @@ export function createDesktopAppModel(
     if (isWorkspaceScreen(screen)) {
       screen = 'games';
     }
-  }
-
-  function clearSelectionIfSelectedGameMissing(): void {
-    if (
-      workspace.selectedGameId === null ||
-      gameCardExists(catalog.games, workspace.selectedGameId)
-    ) {
-      return;
-    }
-
-    clearSelection();
   }
 
   function presentGameDetails(details: GameDetails, nextScreen: WorkspaceScreen): void {
@@ -213,12 +192,6 @@ export function createDesktopAppModel(
     get screen() {
       return screen;
     },
-    get games() {
-      return catalog.games;
-    },
-    get catalogVersion() {
-      return catalog.catalogVersion;
-    },
     get selectedGameId() {
       return workspace.selectedGameId;
     },
@@ -249,23 +222,14 @@ export function createDesktopAppModel(
     get elevationAttempted() {
       return initialization.elevationAttempted;
     },
-    get currentGameCard() {
-      return currentGameCard;
-    },
     get selectedDetails() {
       return selectedDetails;
-    },
-    get selectedShellGameTitle() {
-      return selectedShellGameTitle;
     },
     get hasSelectedGameDetails() {
       return hasSelectedGameDetails;
     },
 
     // Nested mutation / request surfaces
-    get catalog() {
-      return catalog;
-    },
     get workspace() {
       return workspace;
     },
@@ -273,7 +237,6 @@ export function createDesktopAppModel(
     // Root-owned actions
     handleNavigate,
     clearSelection,
-    clearSelectionIfSelectedGameMissing,
     presentGameDetails,
     clearError,
     showError,

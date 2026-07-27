@@ -307,6 +307,21 @@ pub mod game_ui_state {
     pub const ALL: &[&str] = &[GAME_ID, IS_FAVORITE, IS_HIDDEN, UPDATED_AT];
 }
 
+pub mod profile_addon_capabilities {
+    pub const GAME_ID: &str = "game_id";
+    pub const ADDON_KIND: &str = "addon_kind";
+    pub const SOURCE_REVISION: &str = "source_revision";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[GAME_ID, ADDON_KIND, SOURCE_REVISION, UPDATED_AT];
+}
+
+pub mod scan_source_checkpoints {
+    pub const SOURCE_KEY: &str = "source_key";
+    pub const FINGERPRINT: &str = "fingerprint";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[SOURCE_KEY, FINGERPRINT, UPDATED_AT];
+}
+
 /// Tables covered by the physical-column contract (exact set equality vs
 /// `PRAGMA table_info` after migration).
 ///
@@ -330,4 +345,9 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
     ),
     ("nvapi_setting_baselines", nvapi_setting_baselines::ALL),
     ("game_ui_state", game_ui_state::ALL),
+    (
+        "profile_addon_capabilities",
+        profile_addon_capabilities::ALL,
+    ),
+    ("scan_source_checkpoints", scan_source_checkpoints::ALL),
 ];

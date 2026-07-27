@@ -36,10 +36,15 @@ pub(crate) fn is_luma_addon_backup_file_name(lower: &str) -> bool {
 /// caller that already holds a manifest) skip the network/cache round trip.
 #[must_use]
 pub(crate) fn capability_probe(manifest: LumaManifest) -> CapabilityProbe {
-    CapabilityProbe::new(AddonKind::Luma, move |facts: &MatchFacts| {
-        let resolution = matcher::resolve(&manifest, facts);
-        matches!(&resolution, LumaResolution::Installable(_))
-    })
+    let source_revision = manifest.generated_at.clone();
+    CapabilityProbe::new(
+        AddonKind::Luma,
+        source_revision,
+        move |facts: &MatchFacts| {
+            let resolution = matcher::resolve(&manifest, facts);
+            matches!(&resolution, LumaResolution::Installable(_))
+        },
+    )
 }
 
 fn unmanaged_present(game_dir: &Path) -> bool {

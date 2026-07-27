@@ -33,6 +33,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 zstd = { version = "0.13", default-features = false }
 
 [dev-dependencies]
+renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite", features = ["test-instrumentation"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt"] }

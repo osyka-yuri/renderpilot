@@ -103,7 +103,9 @@ pub fn fetch_game_cover_auto(
 
     let bytes = providers::resolve_cover_bytes(&client, api_key.as_deref(), &remote_policy, &game)?;
 
-    catalog.install_cover(&game, &bytes)
+    let output = catalog.install_cover(&game, &bytes)?;
+    context.patch_catalog_cover(game_id, Some(output.updated_at_ms));
+    Ok(output)
 }
 
 /// Copies a user-selected image into the catalog cover store after validation.
@@ -117,7 +119,9 @@ pub fn set_game_cover_from_file(
 
     let bytes = read_cover_source_file(source)?;
 
-    catalog.install_cover(&game, &bytes)
+    let output = catalog.install_cover(&game, &bytes)?;
+    context.patch_catalog_cover(game_id, Some(output.updated_at_ms));
+    Ok(output)
 }
 
 /// Removes stored cover metadata and deletes the associated cover file from disk.
@@ -128,12 +132,15 @@ pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<()
     let existing = catalog.sqlite.find_game_cover(game_id)?;
 
     catalog.sqlite.clear_game_cover_row(game_id)?;
+    context.patch_catalog_cover(game_id, None);
 
     if let Some(record) = existing {
         unlink_cover_file_best_effort(&catalog.catalog_path, Some(record.file_name.as_str()));
     }
 
-    catalog.gc_orphans()?;
+    if let Err(error) = catalog.gc_orphans() {
+        log::warn!("cover was cleared but orphan cleanup failed: {error}");
+    }
 
     Ok(())
 }

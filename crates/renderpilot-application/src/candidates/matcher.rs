@@ -6,6 +6,7 @@
 //! produces live in [`super::dto`].
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use renderpilot_domain::{
     ArtifactId, CatalogPackageAvailability, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
@@ -25,8 +26,8 @@ use crate::{
 /// Context for candidate lookup that carries source metadata for artifacts.
 #[derive(Debug, Clone)]
 pub struct CandidateContext {
-    downloaded_ids: HashSet<ArtifactId>,
-    active_catalog: HashMap<ArtifactId, ActiveCatalogPackage>,
+    downloaded_ids: Arc<HashSet<ArtifactId>>,
+    active_catalog: Arc<HashMap<ArtifactId, ActiveCatalogPackage>>,
     target_profile: SwapTargetProfile,
 }
 
@@ -37,8 +38,8 @@ impl CandidateContext {
         active_catalog: HashMap<ArtifactId, ActiveCatalogPackage>,
     ) -> Self {
         Self {
-            downloaded_ids,
-            active_catalog,
+            downloaded_ids: Arc::new(downloaded_ids),
+            active_catalog: Arc::new(active_catalog),
             target_profile: SwapTargetProfile::default(),
         }
     }
@@ -46,17 +47,20 @@ impl CandidateContext {
     /// Returns an empty context with no source metadata.
     pub fn empty() -> Self {
         Self {
-            downloaded_ids: HashSet::new(),
-            active_catalog: HashMap::new(),
+            downloaded_ids: Arc::new(HashSet::new()),
+            active_catalog: Arc::new(HashMap::new()),
             target_profile: SwapTargetProfile::default(),
         }
     }
 
     /// Attaches fresh executable facts used by Microsoft runtime policies.
     #[must_use]
-    pub fn with_target_profile(mut self, profile: SwapTargetProfile) -> Self {
-        self.target_profile = profile;
-        self
+    pub fn with_target_profile(&self, profile: SwapTargetProfile) -> Self {
+        Self {
+            downloaded_ids: Arc::clone(&self.downloaded_ids),
+            active_catalog: Arc::clone(&self.active_catalog),
+            target_profile: profile,
+        }
     }
 
     fn catalog_package(&self, artifact: &LibraryArtifact) -> Option<CatalogCandidatePackage> {
@@ -91,7 +95,48 @@ pub fn find_replacement_candidates(
     artifacts: &[LibraryArtifact],
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
-    let artifacts_by_technology = group_artifacts_by_technology(artifacts);
+    let lookup = CandidateArtifactLookup::build(artifacts);
+    find_replacement_candidates_with_lookup(components, artifacts, &lookup, context)
+}
+
+/// Immutable artifact universe indexed once for repeated per-game matching.
+#[derive(Debug)]
+pub struct CandidateArtifactIndex {
+    artifacts: Vec<LibraryArtifact>,
+    lookup: CandidateArtifactLookup,
+}
+
+impl CandidateArtifactIndex {
+    /// Builds one reusable technology and intrinsic-identity index.
+    #[must_use]
+    pub fn new(artifacts: Vec<LibraryArtifact>) -> Self {
+        let lookup = CandidateArtifactLookup::build(&artifacts);
+        Self { artifacts, lookup }
+    }
+
+    /// Returns the authoritative artifacts in stable universe order.
+    #[must_use]
+    pub fn artifacts(&self) -> &[LibraryArtifact] {
+        &self.artifacts
+    }
+}
+
+/// Matches components against an already-indexed artifact universe.
+#[must_use]
+pub fn find_replacement_candidates_indexed(
+    components: &[GraphicsComponent],
+    index: &CandidateArtifactIndex,
+    context: &CandidateContext,
+) -> Vec<ComponentReplacementCandidates> {
+    find_replacement_candidates_with_lookup(components, &index.artifacts, &index.lookup, context)
+}
+
+fn find_replacement_candidates_with_lookup(
+    components: &[GraphicsComponent],
+    artifacts: &[LibraryArtifact],
+    lookup: &CandidateArtifactLookup,
+    context: &CandidateContext,
+) -> Vec<ComponentReplacementCandidates> {
     let mut groups = Vec::new();
 
     for component in components {
@@ -99,16 +144,17 @@ pub fn find_replacement_candidates(
             continue;
         }
 
-        let Some(component_artifacts) = artifacts_by_technology.get(&component.technology()) else {
+        let Some(component_artifacts) = lookup.by_technology.get(&component.technology()) else {
             continue;
         };
 
-        let installed_release = installed_release_state(component, component_artifacts, context);
+        let installed_release =
+            installed_release_state(component, artifacts, component_artifacts, context);
         let current_version = installed_release.known_version();
         let candidates = component_artifacts
             .iter()
             .filter_map(|indexed| {
-                let artifact = indexed.artifact;
+                let artifact = &artifacts[indexed.artifact_index];
                 // Ignore artifacts scanned from the exact same game.
                 // Such artifacts represent the game's own mutable file paths.
                 // If the game was modified (e.g. rolled back), the artifact's
@@ -154,11 +200,12 @@ pub fn find_replacement_candidates(
         }
 
         let candidates = sort_and_deduplicate_candidates(candidates);
-        groups.push(ComponentReplacementCandidates::new(
-            component,
-            installed_release,
-            candidates,
-        ));
+        let Some(group) =
+            ComponentReplacementCandidates::new(component, installed_release, candidates)
+        else {
+            continue;
+        };
+        groups.push(group);
     }
 
     groups.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
@@ -167,10 +214,11 @@ pub fn find_replacement_candidates(
 
 fn installed_release_state(
     component: &GraphicsComponent,
-    artifacts: &[IndexedArtifact<'_>],
+    universe: &[LibraryArtifact],
+    artifacts: &[IndexedArtifact],
     context: &CandidateContext,
 ) -> InstalledReleaseState {
-    if let Some(release) = installed_catalog_release(component, artifacts, context) {
+    if let Some(release) = installed_catalog_release(component, universe, artifacts, context) {
         return release;
     }
     if component.technology() == GraphicsTechnology::OpenVr {
@@ -181,12 +229,13 @@ fn installed_release_state(
 
 fn installed_catalog_release(
     component: &GraphicsComponent,
-    artifacts: &[IndexedArtifact<'_>],
+    universe: &[LibraryArtifact],
+    artifacts: &[IndexedArtifact],
     context: &CandidateContext,
 ) -> Option<InstalledReleaseState> {
     let matched = artifacts
         .iter()
-        .map(|indexed| indexed.artifact)
+        .map(|indexed| &universe[indexed.artifact_index])
         .filter_map(|artifact| {
             let catalog_package = context.catalog_package(artifact)?;
             Some((artifact, catalog_package))
@@ -217,28 +266,32 @@ fn installed_catalog_release(
 }
 
 #[derive(Debug, Clone)]
-struct IndexedArtifact<'a> {
-    artifact: &'a LibraryArtifact,
+struct IndexedArtifact {
+    artifact_index: usize,
     intrinsic_identity: Option<IntrinsicPackageIdentity>,
 }
 
-/// Groups artifacts by their exact technology.
-fn group_artifacts_by_technology(
-    artifacts: &[LibraryArtifact],
-) -> HashMap<GraphicsTechnology, Vec<IndexedArtifact<'_>>> {
-    let mut grouped = HashMap::<GraphicsTechnology, Vec<IndexedArtifact<'_>>>::new();
+#[derive(Debug)]
+struct CandidateArtifactLookup {
+    by_technology: HashMap<GraphicsTechnology, Vec<IndexedArtifact>>,
+}
 
-    for artifact in artifacts {
-        grouped
-            .entry(artifact.technology())
-            .or_default()
-            .push(IndexedArtifact {
-                artifact,
-                intrinsic_identity: IntrinsicPackageIdentity::for_artifact(artifact),
-            });
+impl CandidateArtifactLookup {
+    fn build(artifacts: &[LibraryArtifact]) -> Self {
+        let mut by_technology = HashMap::<GraphicsTechnology, Vec<IndexedArtifact>>::new();
+
+        for (artifact_index, artifact) in artifacts.iter().enumerate() {
+            by_technology
+                .entry(artifact.technology())
+                .or_default()
+                .push(IndexedArtifact {
+                    artifact_index,
+                    intrinsic_identity: IntrinsicPackageIdentity::for_artifact(artifact),
+                });
+        }
+
+        Self { by_technology }
     }
-
-    grouped
 }
 
 fn compare_versions(

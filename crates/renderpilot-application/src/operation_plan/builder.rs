@@ -16,7 +16,7 @@ pub fn build_swap_operation_plan(
     let target_file = primary_component_file(component)?;
     let files = build_plan_files(component, artifact)?;
     let assessment = OperationPlanAssessment::assess(component, artifact);
-    let identity = generate_operation_plan_identity(component, artifact);
+    let identity = generate_operation_plan_identity(component, artifact)?;
 
     Ok(OperationPlan::new(
         component,

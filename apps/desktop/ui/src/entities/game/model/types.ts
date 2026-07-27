@@ -95,12 +95,30 @@ export type CoverArtworkResult = {
 
 export type GameCardsSortField = 'title' | 'updates' | 'risk';
 export type GameCardsSortDirection = 'asc' | 'desc';
+export type CatalogRevision = number;
+export type CatalogSyncState = 'ready' | 'refreshing';
+export type CatalogDeltaReason = 'scan' | 'remote_catalog' | 'capabilities' | 'live_facts';
+
+export type CatalogDelta = {
+  revision: CatalogRevision;
+  reasons: CatalogDeltaReason[];
+  changedGameIds: string[];
+  removedGameIds: string[];
+};
+
+export type GamesCatalogScrollAnchor = {
+  gameId: GameId;
+  offsetWithinRow: number;
+};
+
+export type GameCardFocusTarget = 'details' | 'menu';
 
 export type GameCardsQuery = {
   searchQuery: string;
   selectedLibraries: string[];
   selectedAddons: AddonCapability[];
   selectedLaunchers: string[];
+  launcherOrder?: string[];
   showHidden: boolean;
   favoritesOnly: boolean;
   sort: {
@@ -115,15 +133,28 @@ export type GameCardsQuery = {
 
 export type GameCardsResult = {
   items: GameSummary[];
+  catalogSize: number;
   total: number;
   hiddenCount: number;
   availableLibraries: string[];
   availableLaunchers: string[];
-  queryFingerprint: string;
+  catalogRevision: CatalogRevision;
+  nextOffset: number | null;
 };
 
-export type GameListResponse = {
-  games: GameInstallation[];
+export type EffectiveGamesFilters = {
+  libraries: string[];
+  addons: AddonCapability[];
+  launchers: string[];
+  launcherOrder: string[];
+  searchQuery: string;
+  showHidden: boolean;
+  favoritesOnly: boolean;
+};
+
+export type GamesCatalogBootstrap = {
+  filters: EffectiveGamesFilters;
+  result: GameCardsResult;
 };
 
 export type GameSelectionHandler = (gameId: GameId) => void;
@@ -206,7 +237,10 @@ export type ScanError = {
 };
 
 export type AutoScanResponse = {
-  games: GameDetails[];
+  addedGameIds: string[];
+  updatedGameIds: string[];
+  changedGameIds: string[];
+  removedGameIds: string[];
   /**
    * Explicitly omitted during serialization by the Rust backend when the collection is empty.
    * Clients must robustly handle absence by substituting an empty array `[]`.
@@ -215,5 +249,8 @@ export type AutoScanResponse = {
 };
 
 export type ScanManualFolderResult = {
-  games: GameDetails[];
+  addedGameIds: string[];
+  updatedGameIds: string[];
+  changedGameIds: string[];
+  removedGameIds: string[];
 };

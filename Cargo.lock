@@ -3027,6 +3027,7 @@ dependencies = [
  "renderpilot-orchestration",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -3059,6 +3060,7 @@ name = "renderpilot-desktop"
 version = "1.7.2"
 dependencies = [
  "env_logger",
+ "futures-util",
  "log",
  "renderpilot-api",
  "renderpilot-orchestration",
@@ -3142,6 +3144,7 @@ dependencies = [
  "renderpilot-domain",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "winreg 0.56.0",
 ]

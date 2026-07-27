@@ -43,8 +43,9 @@ pub fn gc_cover_orphans_on_startup(context: &renderpilot_orchestration::Context)
 }
 
 pub use self::catalog::{
-    QueryGameCardsRequest, get_catalog_setting, get_game_details, list_games, query_game_cards,
-    set_catalog_setting, set_game_favorite, set_game_hidden,
+    QueryGameCardsRequest, ValidatedCatalogRefreshOutput, bootstrap_games_catalog,
+    get_catalog_setting, get_game_details, query_game_cards, refresh_catalog_snapshot_revision,
+    refresh_validated_catalog_snapshot, set_catalog_setting, set_game_favorite, set_game_hidden,
 };
 pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
@@ -52,12 +53,13 @@ pub use self::libraries::{
     DownloadProgress, LibraryCatalogStatus, LibraryLegalDocumentFormat, LibraryLegalDocumentKind,
     LibraryLegalDocumentLink, LibraryLocalState, LibraryPackageMutation, LibraryPackageState,
     LibraryPackageSummary, LibraryPackagesOutput, ProgressObserver, delete_library_package,
-    download_artifact, download_library_package, fetch_libraries_catalog, list_library_packages,
+    download_artifact, download_library_package, fetch_libraries_catalog_output,
+    list_library_packages,
 };
 pub use self::luma::{
     luma_availability, luma_check_update, luma_install, luma_uninstall, luma_update,
 };
-pub use self::manifests::refresh_remote_manifests_forced;
+pub use self::manifests::{RemoteManifestRefreshOutput, refresh_remote_manifests_forced_output};
 pub use self::nvapi::{
     clear_game_executable_override, get_nvapi_setting_state, list_game_executable_candidates,
     list_global_nvapi_setting_states, list_nvapi_setting_states, list_nvapi_supported_settings,
@@ -72,4 +74,6 @@ pub use self::renodx::{
     renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
     renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
-pub use self::scan::{scan_auto_libraries, scan_manual_folder};
+pub use self::scan::{
+    AutoScanOutput, scan_auto_libraries, scan_auto_libraries_background_output, scan_manual_folder,
+};

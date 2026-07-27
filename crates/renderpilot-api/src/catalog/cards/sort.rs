@@ -4,7 +4,6 @@ use serde::Serialize;
 use std::cmp::Ordering;
 
 use super::normalize::{normalize_page_limit, normalize_page_offset};
-use super::output::GameCardOutput;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +34,17 @@ impl QueryGameCardsPage {
             limit: normalize_page_limit(limit),
             offset: normalize_page_offset(offset),
         }
+    }
+
+    pub(super) fn next_offset(self, total: usize) -> Option<usize> {
+        let next = self.offset.saturating_add(self.limit);
+        (next < total).then_some(next)
+    }
+
+    pub(super) fn bounds(self, total: usize) -> std::ops::Range<usize> {
+        let start = self.offset.min(total);
+        let end = start.saturating_add(self.limit).min(total);
+        start..end
     }
 }
 
@@ -78,24 +88,4 @@ impl QuerySortDirection {
             Self::Desc => ordering.reverse(),
         }
     }
-}
-
-pub(super) fn compare_game_card_identity(
-    left: &GameCardOutput,
-    right: &GameCardOutput,
-) -> Ordering {
-    left.title
-        .cmp(&right.title)
-        .then_with(|| left.game_id.cmp(&right.game_id))
-}
-
-pub(super) fn page_items(
-    items: &[GameCardOutput],
-    page: QueryGameCardsPage,
-) -> Vec<GameCardOutput> {
-    let total = items.len();
-    let start = page.offset.min(total);
-    let end = start.saturating_add(page.limit).min(total);
-
-    items[start..end].to_vec()
 }

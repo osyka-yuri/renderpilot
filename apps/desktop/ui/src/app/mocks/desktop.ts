@@ -1,9 +1,9 @@
-import type { GameCardsQuery } from '@entities/game';
 import { registerPreviewInvoker, type DesktopInvoker } from '@shared/api-preview';
 import { mockScanManualFolder, mockScanAutoLibraries } from './commands/scan';
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
+import { resolveGamesFiltersBootstrap } from '@features/filter-games';
 import {
   mockApplySwap,
   mockPlanRollback,
@@ -61,10 +61,33 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         },
       };
 
+    case 'refresh_catalog_capabilities':
+      return { refreshed: true };
+
     case 'query_game_cards': {
-      const query = readObjectField(command, payload, 'query') as unknown as GameCardsQuery;
+      const query = readObjectField(command, payload, 'query');
       return mockQueryGameCards(query);
     }
+
+    case 'bootstrap_games_catalog': {
+      const storedFilters = await mockGetCatalogSetting('games_filters_v3');
+      const filters = resolveGamesFiltersBootstrap(storedFilters.value);
+      const result = await mockQueryGameCards({
+        searchQuery: filters.searchQuery,
+        selectedLibraries: filters.selectedLibraries,
+        selectedAddons: filters.selectedAddons,
+        selectedLaunchers: filters.selectedLaunchers,
+        launcherOrder: filters.launcherOrder,
+        showHidden: filters.showHidden,
+        favoritesOnly: filters.favoritesOnly,
+        sort: { field: 'title', direction: 'asc' },
+        page: { limit: 120, offset: 0 },
+      });
+      return { filters: filters.filters, result };
+    }
+
+    case 'start_background_refresh':
+      return { started: true };
 
     case 'get_game_details':
       return mockGetGameDetails(readStringField(command, payload, 'gameId'));

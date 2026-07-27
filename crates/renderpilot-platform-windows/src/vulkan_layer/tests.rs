@@ -104,7 +104,7 @@ fn write_external_reshade(dir: &Path) -> PathBuf {
 
 #[test]
 fn manifest_json_matches_reshade_format() {
-    let json = layer_manifest_json();
+    let json = layer_manifest_json().expect("manifest");
     let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
     assert_eq!(value["file_format_version"], "1.0.0");
     assert_eq!(value["layer"]["name"], "VK_LAYER_reshade");
@@ -273,7 +273,11 @@ fn broken_layer_in_standard_location_without_dll_is_conflict() {
     let dir = tempdir().unwrap();
     std::fs::create_dir_all(dir.path()).unwrap();
     // Write the manifest file but not the DLL.
-    std::fs::write(dir.path().join(LAYER_JSON_NAME), layer_manifest_json()).unwrap();
+    std::fs::write(
+        dir.path().join(LAYER_JSON_NAME),
+        layer_manifest_json().expect("manifest"),
+    )
+    .unwrap();
     registry
         .register(&dir.path().join(LAYER_JSON_NAME))
         .unwrap();
@@ -300,7 +304,11 @@ fn permission_denied_dll_is_distinct_from_unreadable() {
     let dir = tempdir().unwrap();
     std::fs::create_dir_all(dir.path()).unwrap();
     // Write the manifest file.
-    std::fs::write(dir.path().join(LAYER_JSON_NAME), layer_manifest_json()).unwrap();
+    std::fs::write(
+        dir.path().join(LAYER_JSON_NAME),
+        layer_manifest_json().expect("manifest"),
+    )
+    .unwrap();
     // Create a *directory* at the DLL path — reading it fails with
     // PermissionDenied on Windows.
     std::fs::create_dir_all(dir.path().join(LAYER_DLL_NAME)).unwrap();

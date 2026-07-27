@@ -170,6 +170,7 @@
 
 <Popover open={isMenuOpen} onOpenChange={handlePopoverOpenChange}>
   <PopoverTrigger
+    data-game-focus-target="menu"
     bind:ref={triggerEl}
     class={buttonVariants({ variant: 'outline', size: 'icon-sm' })}
     aria-label={gameOptionsLabel}

@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use renderpilot_domain::Launcher;
 use serde::Deserialize;
 
-use crate::steam_appmanifest::steam_install_details;
+use crate::steam_appmanifest::{SteamInstallDetails, steam_install_details};
 
 /// Optional override for Epic manifests directory (tests only).
 static EPIC_MANIFESTS_DIR_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -25,6 +25,16 @@ pub struct InstallIdentityDetails {
     pub external_id: Option<String>,
     /// Display title from launcher metadata when available.
     pub display_name: Option<String>,
+}
+
+impl From<SteamInstallDetails> for InstallIdentityDetails {
+    fn from(steam: SteamInstallDetails) -> Self {
+        Self {
+            launcher: Launcher::Steam,
+            external_id: Some(steam.app_id),
+            display_name: steam.display_name,
+        }
+    }
 }
 
 /// Detects launcher identity for `game_install_root`.
@@ -42,13 +52,7 @@ pub fn detect_install_identity(game_install_root: &Path) -> Option<InstallIdenti
 }
 
 fn steam_identity(game_install_root: &Path) -> Option<InstallIdentityDetails> {
-    let steam = steam_install_details(game_install_root)?;
-
-    Some(InstallIdentityDetails {
-        launcher: Launcher::Steam,
-        external_id: Some(steam.app_id),
-        display_name: steam.display_name,
-    })
+    steam_install_details(game_install_root).map(InstallIdentityDetails::from)
 }
 
 // -----------------------------------------------------------------------------

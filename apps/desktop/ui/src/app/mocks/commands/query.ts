@@ -1,5 +1,10 @@
-import type { GameCardsQuery, GameCardsResult, GameDetails } from '@entities/game';
-import { normalizeGameCardsQuery } from '@entities/game';
+import type { GameCardsResult, GameDetails } from '@entities/game';
+import {
+  ALL_KNOWN_LAUNCHERS,
+  expandLibraryFilterAliases,
+  normalizeGameCardsQuery,
+} from '@entities/game';
+import { ALL_KNOWN_LIBRARIES } from '@shared/graphics';
 import { mockState, requireGameDetails } from '../desktop-state';
 import {
   clone,
@@ -10,24 +15,26 @@ import {
 } from '../desktop-utils';
 import { buildGameCardFilterContext, matchesGameCardFilters, sortGameCards } from './query-filters';
 
-export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResult> {
+const KNOWN_QUERY_LIBRARIES = new Set(expandLibraryFilterAliases(ALL_KNOWN_LIBRARIES));
+const KNOWN_QUERY_LAUNCHERS = new Set<string>(ALL_KNOWN_LAUNCHERS);
+
+export function mockQueryGameCards(query: unknown): Promise<GameCardsResult> {
   return resolveMock(() => {
     const normalizedQuery = normalizeGameCardsQuery(query);
     const allCards = clone(mockState.games);
 
     const availableLibraries = collectAvailableLibraries(allCards);
-    const availableLibrarySet = new Set(availableLibraries);
     const availableLaunchers = collectAvailableLaunchers(allCards);
-    const availableLauncherSet = new Set(availableLaunchers);
 
-    // Drop selections the catalog no longer offers (stale filter persistence).
+    // Match the backend contract: reject values outside the domain vocabulary,
+    // but keep known selections active even when the current catalog has no match.
     const effectiveQuery = {
       ...normalizedQuery,
       selectedLibraries: normalizedQuery.selectedLibraries.filter((library) =>
-        availableLibrarySet.has(library),
+        KNOWN_QUERY_LIBRARIES.has(library),
       ),
       selectedLaunchers: normalizedQuery.selectedLaunchers.filter((launcher) =>
-        availableLauncherSet.has(launcher),
+        KNOWN_QUERY_LAUNCHERS.has(launcher),
       ),
     };
 
@@ -43,11 +50,13 @@ export function mockQueryGameCards(query: GameCardsQuery): Promise<GameCardsResu
 
     return {
       items: filtered.slice(offset, offset + limit),
+      catalogSize: allCards.length,
       total: filtered.length,
       hiddenCount,
       availableLibraries,
       availableLaunchers,
-      queryFingerprint: JSON.stringify(normalizedQuery),
+      catalogRevision: 1,
+      nextOffset: offset + limit < filtered.length ? offset + limit : null,
     };
   });
 }

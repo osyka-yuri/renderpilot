@@ -1,6 +1,7 @@
 //! Atomic activation and last-known-good caching of catalog v1 snapshots.
 
 use renderpilot_domain::ArtifactId;
+use std::time::UNIX_EPOCH;
 
 use crate::ServiceError;
 use crate::cdn;
@@ -119,17 +120,30 @@ where
 pub(super) fn save_catalog(
     storage: &LibraryStorage,
     catalog: &ValidatedCatalog,
-) -> Result<(), ServiceError> {
+) -> Result<bool, ServiceError> {
     let mut bytes = serde_json::to_vec_pretty(catalog.as_catalog())
         .map_err(|error| library_error(format!("failed to serialize library catalog: {error}")))?;
     bytes.push(b'\n');
-    crate::fs::write_file_atomically(&storage.catalog_cache_path(), &bytes)
+    let path = storage.catalog_cache_path();
+    match std::fs::read(&path) {
+        Ok(existing) if existing == bytes => return Ok(false),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(library_error(format!(
+                "failed to compare cached library catalog: {error}"
+            )));
+        }
+    }
+    crate::fs::write_file_atomically(&path, &bytes)?;
+    Ok(true)
 }
 
 #[derive(Debug)]
 pub(super) struct CatalogRefresh {
     pub(super) catalog: ValidatedCatalog,
     pub(super) activated: bool,
+    pub(super) changed: bool,
 }
 
 pub(super) fn complete_refresh<F>(
@@ -138,13 +152,14 @@ pub(super) fn complete_refresh<F>(
     activate: F,
 ) -> Result<CatalogRefresh, ServiceError>
 where
-    F: FnOnce(&LibraryStorage, &ValidatedCatalog) -> Result<(), ServiceError>,
+    F: FnOnce(&LibraryStorage, &ValidatedCatalog) -> Result<bool, ServiceError>,
 {
     match remote {
         Ok(catalog) => match activate(storage, &catalog) {
-            Ok(()) => Ok(CatalogRefresh {
+            Ok(changed) => Ok(CatalogRefresh {
                 catalog,
                 activated: true,
+                changed,
             }),
             Err(error) => last_known_good_after_failure(storage, error),
         },
@@ -155,13 +170,17 @@ where
 /// Fetches and atomically activates a complete catalog. On remote failure, a
 /// fully validated last-known-good snapshot is returned without mutation.
 pub(super) async fn fetch_validated_catalog() -> Result<ValidatedCatalog, ServiceError> {
+    Ok(fetch_validated_catalog_refresh().await?.catalog)
+}
+
+pub(super) async fn fetch_validated_catalog_refresh() -> Result<CatalogRefresh, ServiceError> {
     let storage = LibraryStorage::discover()?;
     storage.ensure_content_layout_v1()?;
     let refresh = complete_refresh(&storage, fetch_remote_catalog().await, save_catalog)?;
     if refresh.activated {
         download_presets_best_effort(&storage).await;
     }
-    Ok(refresh.catalog)
+    Ok(refresh)
 }
 
 fn last_known_good_after_failure(
@@ -178,6 +197,7 @@ fn last_known_good_after_failure(
             Ok(CatalogRefresh {
                 catalog,
                 activated: false,
+                changed: false,
             })
         }
         Ok(None) => Err(refresh_error),
@@ -241,6 +261,26 @@ pub(super) fn require_local_catalog() -> Result<ValidatedCatalog, ServiceError> 
 pub(super) fn load_local_catalog() -> Result<Option<ValidatedCatalog>, ServiceError> {
     let storage = LibraryStorage::discover()?;
     load_local_catalog_from(&storage)
+}
+
+pub(super) fn local_catalog_revision() -> Result<Option<(u64, u128)>, ServiceError> {
+    let storage = LibraryStorage::discover()?;
+    let path = storage.catalog_cache_path();
+    let metadata = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(library_error(format!(
+                "failed to inspect cached library catalog: {error}"
+            )));
+        }
+    };
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_nanos());
+    Ok(Some((metadata.len(), modified)))
 }
 
 fn load_local_catalog_from(

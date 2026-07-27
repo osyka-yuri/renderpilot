@@ -15,8 +15,10 @@ use crate::{
 };
 
 use renderpilot_orchestration::domain::GameId;
+#[cfg(windows)]
+use renderpilot_orchestration::nvapi::dto::executable_candidate_dto;
 use renderpilot_orchestration::nvapi::dto::{
-    ExecutableCandidateDto, SettingDescriptorDto, executable_candidate_dto, setting_descriptor_dto,
+    ExecutableCandidateDto, SettingDescriptorDto, setting_descriptor_dto,
 };
 use renderpilot_orchestration::nvapi::ops::{
     SettingTarget, WriteOp, read_all_setting_states, read_setting_state, resolve_revert_op,
@@ -92,10 +94,16 @@ pub fn list_game_executable_candidates(
     let game = load_game_with_context(context, game_id.as_str())?;
     let install_dir = Path::new(game.install_path().as_str()).to_path_buf();
     let candidates = collect_executable_candidates(&install_dir);
+    #[cfg(windows)]
     let dtos: Vec<ExecutableCandidateDto> = candidates
         .into_iter()
         .map(executable_candidate_dto)
         .collect();
+    #[cfg(not(windows))]
+    let dtos = {
+        drop(candidates);
+        Vec::<ExecutableCandidateDto>::new()
+    };
     to_json(dtos)
 }
 

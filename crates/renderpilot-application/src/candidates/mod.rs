@@ -15,4 +15,7 @@ pub use dto::{
     ActiveCatalogPackage, CandidateComparison, ComponentReplacementCandidates,
     InstalledReleaseState, ReplacementCandidate, is_automatic_catalog_candidate,
 };
-pub use matcher::{CandidateContext, find_replacement_candidates};
+pub use matcher::{
+    CandidateArtifactIndex, CandidateContext, find_replacement_candidates,
+    find_replacement_candidates_indexed,
+};

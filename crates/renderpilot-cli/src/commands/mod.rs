@@ -119,21 +119,11 @@ fn render_scan_folder_results(results: Vec<catalog::ScanFolderCatalogResult>) ->
         "catalog::scan_folder should return at least one scan result"
     );
 
-    match results.len() {
-        1 => {
-            let result = into_single_scan_result(results);
-            render_single_scan_folder_result(result)
-        }
-        _ => render_scan_folder_batch_results(results),
+    let single: Result<[catalog::ScanFolderCatalogResult; 1], _> = results.try_into();
+    match single {
+        Ok([result]) => render_single_scan_folder_result(result),
+        Err(results) => render_scan_folder_batch_results(results),
     }
-}
-
-fn into_single_scan_result(
-    mut results: Vec<catalog::ScanFolderCatalogResult>,
-) -> catalog::ScanFolderCatalogResult {
-    results
-        .pop()
-        .expect("single scan result should exist after len() == 1 check")
 }
 
 fn render_single_scan_folder_result(result: catalog::ScanFolderCatalogResult) -> CliOutput {

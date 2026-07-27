@@ -1,4 +1,4 @@
-import { type GameSummary } from '@entities/game';
+import { type CoverArtworkResult, type GameSummary } from '@entities/game';
 import { describeCommandError } from '@shared/api';
 import { t } from '@shared/i18n';
 import {
@@ -9,7 +9,6 @@ import {
 import {
   filterGamesMissingStoredCoverForBackgroundSync,
   formatCoverSyncBanner,
-  combineCoverSyncMessages,
   runCoverFetchBatch,
   COVER_FETCH_CONCURRENCY,
 } from './cover-sync';
@@ -28,17 +27,6 @@ export async function findGamesMissingStoredCovers(
   return filterGamesMissingStoredCoverForBackgroundSync(games, policy, hasSteamGridDbApiKey);
 }
 
-export async function refreshCardsAfterCoverSync(
-  refreshGameCards: () => Promise<void>,
-): Promise<string | null> {
-  try {
-    await refreshGameCards();
-    return null;
-  } catch (error) {
-    return t('coverSync.refreshFailed', { error: describeCommandError(error) });
-  }
-}
-
 export function formatBackgroundCoverSyncError(error: unknown): string {
   return t('coverSync.failed', { error: describeCommandError(error) });
 }
@@ -47,8 +35,7 @@ export async function executeBackgroundCoverSync(
   games: readonly GameSummary[],
   options: {
     readSetting: CatalogSettingReader;
-    fetchGameCover: (gameId: string) => Promise<unknown>;
-    refreshGameCards: () => Promise<void>;
+    fetchGameCover: (gameId: string) => Promise<CoverArtworkResult>;
     onGameStart: (gameId: string) => void;
     onGameEnd: (gameId: string) => void;
     onError: (message: string) => void;
@@ -56,7 +43,7 @@ export async function executeBackgroundCoverSync(
      * Fired after each cover finishes downloading successfully, so callers can refresh that
      * card right away instead of waiting for the whole batch. Failed downloads do not fire it.
      */
-    onCoverReady?: (gameId: string) => void;
+    onCoverReady?: (gameId: string, result: CoverArtworkResult) => void;
   },
 ): Promise<void> {
   const missingCoverCards = await findGamesMissingStoredCovers(games, options.readSetting);
@@ -71,13 +58,12 @@ export async function executeBackgroundCoverSync(
     fetchCover: options.fetchGameCover,
     onGameStart: options.onGameStart,
     onGameEnd: options.onGameEnd,
-    onCoverReady: options.onCoverReady,
+    onCoverReady: (gameId, result) => options.onCoverReady?.(gameId, result),
   });
 
-  const refreshError = await refreshCardsAfterCoverSync(options.refreshGameCards);
-  const combinedMessage = combineCoverSyncMessages(formatCoverSyncBanner(failures), refreshError);
+  const message = formatCoverSyncBanner(failures);
 
-  if (combinedMessage !== null) {
-    options.onError(combinedMessage);
+  if (message !== null) {
+    options.onError(message);
   }
 }

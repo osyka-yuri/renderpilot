@@ -34,6 +34,12 @@ const SELECT_BACKUPS_FOR_GAME_SQL: &str = "
     WHERE game_id = :game_id
 ";
 
+const SELECT_ALL_BACKUPS_SQL: &str = "
+    SELECT component_id, files_json, auxiliary_json
+    FROM component_backups
+    ORDER BY component_id
+";
+
 const CAPTURE_BACKUP_SQL: &str = "
     INSERT INTO component_backups
         (component_id, game_id, files_json, auxiliary_json, created_at, updated_at)
@@ -107,6 +113,36 @@ fn auxiliary_json(d3d12_executable: Option<&D3d12ExecutableBaseline>) -> AppResu
 }
 
 impl SqliteStorage {
+    /// Returns every persisted component baseline in one query.
+    pub fn list_all_component_backups(
+        &self,
+    ) -> AppResult<HashMap<ComponentId, ComponentRollbackBaseline>> {
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached(SELECT_ALL_BACKUPS_SQL)
+                .map_err(storage_error)?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(storage_error)?;
+
+            let mut backups = HashMap::new();
+            for row in rows {
+                let (component_id, files_json, auxiliary_json) = row.map_err(storage_error)?;
+                backups.insert(
+                    mapping::component_id(component_id)?,
+                    rollback_baseline(&files_json, &auxiliary_json)?,
+                );
+            }
+            Ok(backups)
+        })
+    }
+
     /// Returns the recorded pre-swap baseline files for a component, if any.
     ///
     /// `Some` only means the identity row exists. Orchestration must still

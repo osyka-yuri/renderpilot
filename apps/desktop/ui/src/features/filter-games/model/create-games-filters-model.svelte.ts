@@ -1,5 +1,5 @@
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
-import { ALL_ADDON_CAPABILITIES } from '@entities/game';
+import { ALL_ADDON_CAPABILITIES, type EffectiveGamesFilters } from '@entities/game';
 import { createGamesFilterPersistence, type PersistedGamesFilters } from './index-internal';
 import {
   hasFilterIndicator as checkHasFilterIndicator,
@@ -56,6 +56,18 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     ),
   );
 
+  function commitPreferences(value: PersistedGamesFilters | null): void {
+    persistedFilters = value;
+    filterPreferenceLoaded = true;
+    // Do not wait for Svelte's next effect flush: bootstrap cards and their
+    // matching filters must become observable as one catalog-session state.
+    sync.synchronizeAvailability();
+  }
+
+  function hydratePreferences(prefetchedValue: EffectiveGamesFilters): void {
+    commitPreferences(prefetchedValue);
+  }
+
   async function loadPreferences(isDisposed: () => boolean): Promise<void> {
     try {
       const value = await loadPersistedGamesFilters();
@@ -64,14 +76,11 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
         return;
       }
 
-      persistedFilters = value;
+      commitPreferences(value);
     } catch (error: unknown) {
       if (!isDisposed()) {
         console.error('Failed to load persisted game filters.', error);
-      }
-    } finally {
-      if (!isDisposed()) {
-        filterPreferenceLoaded = true;
+        commitPreferences(null);
       }
     }
   }
@@ -95,6 +104,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
     get hasFilterIndicator() {
       return hasFilterIndicator;
     },
+    hydratePreferences,
     loadPreferences,
 
     // Delegated Store Actions

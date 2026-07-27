@@ -180,22 +180,21 @@ impl ComponentReplacementCandidates {
     /// `version_report` distinguishes known, mixed, and unknown state instead
     /// of overloading `None`. `file_path` is the user-facing display path
     /// (dx12 entry point for FSR, name-min for Streamline).
-    pub fn new(
+    pub(crate) fn new(
         component: &GraphicsComponent,
         installed_release: InstalledReleaseState,
         candidates: Vec<ReplacementCandidate>,
-    ) -> Self {
-        let display = fsr::display_component_file(component.files())
-            .expect("component candidate group requires at least one display file");
+    ) -> Option<Self> {
+        let display = fsr::display_component_file(component.files())?;
 
-        Self {
+        Some(Self {
             component_id: component.id().clone(),
             game_id: component.game_id().clone(),
             technology: component.technology(),
             file_path: display.path().clone(),
             installed_release,
             candidates,
-        }
+        })
     }
 
     pub(super) fn sort_key(&self) -> (&'static str, &str, &str) {

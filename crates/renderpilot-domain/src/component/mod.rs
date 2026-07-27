@@ -201,6 +201,7 @@ impl ComponentFile {
 /// its siblings). `files[0]` is the primary/representative file and `file_name`
 /// is its name; callers are responsible for placing the representative first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "LibraryArtifactUnchecked")]
 pub struct LibraryArtifact {
     id: ArtifactId,
     technology: GraphicsTechnology,
@@ -211,6 +212,39 @@ pub struct LibraryArtifact {
     trust_level: ArtifactTrustLevel,
     #[serde(default)]
     metadata: ArtifactMetadata,
+}
+
+#[derive(Deserialize)]
+struct LibraryArtifactUnchecked {
+    id: ArtifactId,
+    technology: GraphicsTechnology,
+    file_name: String,
+    files: Vec<ComponentFile>,
+    source: Option<String>,
+    source_game_id: Option<GameId>,
+    trust_level: ArtifactTrustLevel,
+    #[serde(default)]
+    metadata: ArtifactMetadata,
+}
+
+impl TryFrom<LibraryArtifactUnchecked> for LibraryArtifact {
+    type Error = ComponentError;
+
+    fn try_from(value: LibraryArtifactUnchecked) -> Result<Self, Self::Error> {
+        let mut artifact = Self::new(
+            value.id,
+            value.technology,
+            value.file_name,
+            value.files,
+            value.trust_level,
+        )?;
+        if let Some(source) = value.source {
+            artifact = artifact.with_source(source)?;
+        }
+        artifact.source_game_id = value.source_game_id;
+        artifact.metadata = value.metadata;
+        Ok(artifact)
+    }
 }
 
 impl LibraryArtifact {
@@ -266,6 +300,10 @@ impl LibraryArtifact {
     }
 
     /// Returns the primary (representative) file of the bundle.
+    #[allow(
+        clippy::expect_used,
+        reason = "construction and deserialization both reject empty artifact bundles"
+    )]
     pub fn primary_file(&self) -> &ComponentFile {
         self.files
             .first()
@@ -299,6 +337,10 @@ impl LibraryArtifact {
     }
 
     /// Returns the required primary artifact SHA-256 hash.
+    #[allow(
+        clippy::expect_used,
+        reason = "construction and deserialization both require every artifact member hash"
+    )]
     pub fn sha256(&self) -> &Sha256Hash {
         self.primary_file()
             .sha256()

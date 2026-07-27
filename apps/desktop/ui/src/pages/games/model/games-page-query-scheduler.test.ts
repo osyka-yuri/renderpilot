@@ -52,11 +52,13 @@ function makeResult(
   overrides: Partial<GameCardsResult> & Pick<GameCardsResult, 'items'>,
 ): GameCardsResult {
   return {
+    catalogSize: overrides.catalogSize ?? overrides.items.length,
     total: overrides.items.length,
     hiddenCount: 0,
     availableLibraries: [],
     availableLaunchers: [],
-    queryFingerprint: 'fp',
+    catalogRevision: 1,
+    nextOffset: null,
     ...overrides,
   };
 }
@@ -120,6 +122,9 @@ describe('createGamesPageQueryScheduler', () => {
         selectedLaunchers: [],
         showHidden: false,
         favoritesOnly: false,
+        launcherOrder: [],
+        sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
+        page: DEFAULT_GAME_CARDS_CATALOG_PAGE,
       });
 
       expect(queryKey).toBe(buildGameCardsQueryKey('abc', ['x', 'y'], [], [], false, false));
@@ -131,6 +136,36 @@ describe('createGamesPageQueryScheduler', () => {
   });
 
   describe('createGamesQuerySnapshot', () => {
+    it('canonicalizes non-semantic selection order and search casing', () => {
+      const scheduler = createGamesPageQueryScheduler({
+        queryGameCardsFn: createQueryGameCardsMock(),
+      });
+      const first = scheduler.createGamesQuerySnapshot(
+        1,
+        true,
+        true,
+        '  DOOM ',
+        ['z', 'a'],
+        ['renodx', 'luma'],
+        ['Steam', 'Epic'],
+        false,
+        false,
+      );
+      const second = scheduler.createGamesQuerySnapshot(
+        1,
+        true,
+        true,
+        'doom',
+        ['a', 'z'],
+        ['luma', 'renodx'],
+        ['Epic', 'Steam'],
+        false,
+        false,
+      );
+
+      expect(first?.requestKey).toBe(second?.requestKey);
+    });
+
     it.each([
       {
         filtersReady: false,
@@ -230,6 +265,7 @@ describe('createGamesPageQueryScheduler', () => {
         selectedLibraries: ['Steam'],
         selectedAddons: [],
         selectedLaunchers: [],
+        launcherOrder: [],
         showHidden: false,
         favoritesOnly: false,
         sort: DEFAULT_GAME_CARDS_CATALOG_SORT,
@@ -264,10 +300,6 @@ describe('createGamesPageQueryScheduler', () => {
       const staleRun = scheduler.runGamesQuery(staleSnapshot, sinks);
       const freshRun = scheduler.runGamesQuery(freshSnapshot, sinks);
 
-      await freshRun;
-
-      expect(getItems()).toEqual([stubCard('fresh')]);
-
       staleResult.resolve(
         makeResult({
           items: [stubCard('stale')],
@@ -275,6 +307,7 @@ describe('createGamesPageQueryScheduler', () => {
         }),
       );
 
+      await freshRun;
       await staleRun;
 
       expect(getItems()).toEqual([stubCard('fresh')]);
@@ -417,17 +450,65 @@ describe('createGamesPageQueryScheduler', () => {
       const staleRun = scheduler.runGamesQuery(staleSnapshot, sinks);
       const freshRun = scheduler.runGamesQuery(freshSnapshot, sinks);
 
-      await freshRun;
-
       staleResult.reject(new Error('Stale query failed.'));
 
       try {
+        await freshRun;
         await staleRun;
 
         expect(consoleErrorSpy).not.toHaveBeenCalled();
       } finally {
         consoleErrorSpy.mockRestore();
       }
+    });
+  });
+
+  describe('response revision safety', () => {
+    it('rejects a response from an older catalog revision', async () => {
+      const queryGameCardsFn = createQueryGameCardsMock();
+      queryGameCardsFn
+        .mockResolvedValueOnce(makeResult({ items: [stubCard('new')], catalogRevision: 2 }))
+        .mockResolvedValueOnce(makeResult({ items: [stubCard('old')], catalogRevision: 1 }));
+      const scheduler = createGamesPageQueryScheduler({ queryGameCardsFn });
+      const { sinks, getItems } = createResultSinks();
+
+      await scheduler.runGamesQuery(
+        createReadySnapshot(scheduler, { searchQuery: 'first' }),
+        sinks,
+      );
+      await scheduler.runGamesQuery(
+        createReadySnapshot(scheduler, { searchQuery: 'second' }),
+        sinks,
+      );
+
+      expect(getItems().map((game) => game.game_id)).toEqual(['new']);
+    });
+
+    it('rejects a page from another revision and allows an atomic page-zero restart', async () => {
+      const queryGameCardsFn = createQueryGameCardsMock();
+      queryGameCardsFn.mockImplementation((query) => {
+        return Promise.resolve(
+          makeResult({
+            items: [stubCard(query.page.offset === 0 ? 'restarted' : 'mixed-page')],
+            catalogRevision: 2,
+          }),
+        );
+      });
+      const scheduler = createGamesPageQueryScheduler({ queryGameCardsFn });
+      const base = createReadySnapshot(scheduler);
+      const page = scheduler.createPageQuerySnapshot(base, 120, 1);
+      const { sinks, getItems } = createResultSinks();
+      const onCatalogRevisionMismatch = vi.fn();
+
+      await scheduler.runGamesQuery(page, { ...sinks, onCatalogRevisionMismatch });
+
+      expect(getItems()).toEqual([]);
+      expect(onCatalogRevisionMismatch).toHaveBeenCalledOnce();
+      expect(onCatalogRevisionMismatch).toHaveBeenCalledWith(2);
+
+      const restart = scheduler.createRevisionRestartSnapshot(base, 2);
+      await scheduler.runGamesQuery(restart, sinks);
+      expect(getItems().map((game) => game.game_id)).toEqual(['restarted']);
     });
   });
 

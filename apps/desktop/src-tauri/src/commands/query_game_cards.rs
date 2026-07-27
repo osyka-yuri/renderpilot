@@ -100,6 +100,9 @@ pub(crate) struct QueryGameCardsDto {
     selected_launchers: Vec<String>,
 
     #[serde(default)]
+    launcher_order: Vec<String>,
+
+    #[serde(default)]
     show_hidden: bool,
 
     #[serde(default)]
@@ -114,6 +117,7 @@ pub(crate) struct QueryGameCardsArgs {
     pub(super) selected_libraries: Vec<String>,
     pub(super) selected_addons: Vec<String>,
     pub(super) selected_launchers: Vec<String>,
+    pub(super) launcher_order: Vec<String>,
     pub(super) show_hidden: bool,
     pub(super) favorites_only: bool,
     pub(super) sort_field: String,
@@ -128,10 +132,12 @@ impl QueryGameCardsDto {
         let selected_libraries = trim_string_vec(self.selected_libraries);
         let selected_addons = trim_string_vec(self.selected_addons);
         let selected_launchers = trim_string_vec(self.selected_launchers);
+        let launcher_order = trim_string_vec(self.launcher_order);
 
         reject_empty_items("selected_libraries", &selected_libraries)?;
         reject_empty_items("selected_addons", &selected_addons)?;
         reject_empty_items("selected_launchers", &selected_launchers)?;
+        reject_empty_items("launcher_order", &launcher_order)?;
 
         let (sort_field, sort_direction) = self.sort.into_api_values();
         let (limit, offset) = self.page.into_api_values()?;
@@ -141,6 +147,7 @@ impl QueryGameCardsDto {
             selected_libraries,
             selected_addons,
             selected_launchers,
+            launcher_order,
             show_hidden: self.show_hidden,
             favorites_only: self.favorites_only,
             sort_field,

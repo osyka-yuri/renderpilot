@@ -2,7 +2,8 @@
 
 use std::{
     path::Path,
-    sync::{Mutex, MutexGuard},
+    sync::atomic::{AtomicU64, Ordering},
+    sync::{Arc, Mutex, MutexGuard},
     time::Duration,
 };
 
@@ -14,6 +15,18 @@ use crate::repositories::SqliteStorage;
 use crate::schema;
 
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+const CATALOG_PROJECTION_TABLES: &[&str] = &[
+    "games",
+    "components",
+    "game_ui_state",
+    "component_backups",
+    "nvapi_executable_overrides",
+    "operations",
+    "operation_items",
+    "installed_addons",
+    "profile_addon_capabilities",
+    "library_artifacts",
+];
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum JournalModePreference {
@@ -79,8 +92,19 @@ impl SqliteStorage {
         configure_connection(&connection, options)?;
         schema::apply(&mut connection)?;
 
+        let catalog_generation = Arc::new(AtomicU64::new(0));
+        let hook_generation = Arc::clone(&catalog_generation);
+        connection
+            .update_hook(Some(move |_, database: &str, table: &str, _| {
+                if database == "main" && CATALOG_PROJECTION_TABLES.contains(&table) {
+                    hook_generation.fetch_add(1, Ordering::AcqRel);
+                }
+            }))
+            .map_err(|error| storage_context("failed to install catalog update hook", error))?;
+
         Ok(Self {
             connection: Mutex::new(connection),
+            catalog_generation,
         })
     }
 
@@ -135,6 +159,52 @@ impl SqliteStorage {
     /// Returns the active SQLite journal mode.
     pub fn journal_mode(&self) -> AppResult<String> {
         self.with_connection(read_journal_mode)
+    }
+
+    /// Runs a diagnostic operation and reports how many top-level SQLite
+    /// `SELECT` statements were prepared. This is primarily used by regression
+    /// tests that prove a batch read path does not grow with catalog size.
+    #[cfg(feature = "test-instrumentation")]
+    #[doc(hidden)]
+    pub fn with_select_statement_count<T, E>(
+        &self,
+        operation: impl FnOnce(&Self) -> Result<T, E>,
+    ) -> Result<(T, u64), E>
+    where
+        E: From<renderpilot_application::AppError>,
+    {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+        let count = Arc::new(AtomicU64::new(0));
+        let hook_count = Arc::clone(&count);
+        {
+            let connection = self.connection().map_err(E::from)?;
+            connection
+                .authorizer(Some(move |context: AuthContext<'_>| {
+                    if matches!(context.action, AuthAction::Select) {
+                        hook_count.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Authorization::Allow
+                }))
+                .map_err(|error| {
+                    E::from(storage_context(
+                        "failed to install SQLite SELECT counter",
+                        error,
+                    ))
+                })?;
+        }
+
+        let result = operation(self);
+        let cleanup = self.connection().and_then(|connection| {
+            connection
+                .authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> Authorization>)
+                .map_err(|error| storage_context("failed to remove SQLite SELECT counter", error))
+        });
+        if let Err(error) = cleanup {
+            return Err(E::from(error));
+        }
+
+        result.map(|value| (value, count.load(Ordering::Relaxed)))
     }
 }
 

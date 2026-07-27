@@ -2,7 +2,7 @@ use reqwest::blocking::Client;
 
 use crate::ServiceError;
 
-use super::{gog, steam_cdn, steamgriddb};
+use super::{gog, steam, steamgriddb};
 
 /// Abstraction over remote cover sources.
 ///
@@ -10,7 +10,7 @@ use super::{gog, steam_cdn, steamgriddb};
 /// Tests use a mock implementation to verify branching, fallback, and errors
 /// without touching the network.
 pub(super) trait CoverSourceBackend {
-    fn try_steam_cdn(&self, client: &Client, app_id: &str) -> Option<Vec<u8>>;
+    fn try_steam_artwork(&self, client: &Client, app_id: &str, title: &str) -> Option<Vec<u8>>;
 
     fn try_gog_cdn(&self, client: &Client, product_id: &str) -> Option<Vec<u8>>;
 
@@ -41,8 +41,8 @@ pub(super) trait CoverSourceBackend {
 pub(super) struct RealCoverSourceBackend;
 
 impl CoverSourceBackend for RealCoverSourceBackend {
-    fn try_steam_cdn(&self, client: &Client, app_id: &str) -> Option<Vec<u8>> {
-        steam_cdn::try_steam_cdn(client, app_id).ok()
+    fn try_steam_artwork(&self, client: &Client, app_id: &str, title: &str) -> Option<Vec<u8>> {
+        steam::try_steam_artwork(client, app_id, title).ok()
     }
 
     fn try_gog_cdn(&self, client: &Client, product_id: &str) -> Option<Vec<u8>> {

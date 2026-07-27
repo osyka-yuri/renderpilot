@@ -15,23 +15,21 @@ use renderpilot_orchestration::domain::GraphicsComponent;
 
 use crate::utils::is_visible_graphics_technology;
 
-pub use cards::{QueryGameCardsRequest, list_games, query_game_cards};
+pub use cards::{
+    QueryGameCardsRequest, ValidatedCatalogRefreshOutput, bootstrap_games_catalog,
+    query_game_cards, refresh_catalog_snapshot_revision, refresh_validated_catalog_snapshot,
+};
 pub use details::get_game_details;
 pub use settings::{get_catalog_setting, set_catalog_setting, set_game_favorite, set_game_hidden};
 
-// Re-exported for `scan.rs`, which loads game details for freshly scanned games.
-pub(crate) use details::GameDetailsOutput;
-
-/// Whether the GUI surfaces this component (single source of the visibility rule,
-/// shared by [`cards`] and [`details`] so it can never drift).
+/// Whether the GUI surfaces this component in the details projection.
 fn is_component_visible(component: &GraphicsComponent) -> bool {
     is_visible_graphics_technology(component.technology())
 }
 
 /// Stable string ids of the components the GUI surfaces for a game.
 ///
-/// Shared by [`cards`] (update counts per visible component) and [`details`]
-/// (candidate-group filtering).
+/// Used to keep details components and candidate groups aligned.
 fn visible_component_ids(components: &[GraphicsComponent]) -> BTreeSet<String> {
     components
         .iter()

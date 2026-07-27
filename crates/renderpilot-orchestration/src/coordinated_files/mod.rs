@@ -18,7 +18,8 @@ mod snapshot;
 mod tests;
 
 pub(crate) use backup::{
-    ComponentBackupAvailability, available_component_backup_ids, load_component_backup_availability,
+    ComponentBackupAvailability, available_component_backup_ids, classify_component_backup,
+    load_component_backup_availability,
 };
 pub(crate) use baseline::resolve_component_baseline;
 pub(crate) use claim::{CatalogPathClaim, catalog_path_claim, managed_files_of};

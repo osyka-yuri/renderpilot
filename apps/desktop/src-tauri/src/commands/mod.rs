@@ -5,6 +5,7 @@
 
 pub(crate) mod addon_catalog;
 mod app;
+mod background_catalog_refresh;
 mod error;
 mod luma;
 mod nvapi;
@@ -131,45 +132,58 @@ pub async fn scan_manual_folder(
 ) -> JsonCommandResult {
     let path = require_non_empty_path(path)?;
     let context = Arc::clone(&context);
-    let scan_context = Arc::clone(&context);
 
-    let result =
-        run_desktop_command(move || desktop::scan_manual_folder(&scan_context, path)).await;
-    if result.is_ok() {
-        addon_catalog::refresh_catalog_addon_capabilities(context).await;
-    }
-    result
+    run_desktop_command(move || desktop::scan_manual_folder(&context, path)).await
 }
 
 #[tauri::command]
 pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
     let context = Arc::clone(&context);
-    let scan_context = Arc::clone(&context);
 
-    let result = run_desktop_command(move || desktop::scan_auto_libraries(&scan_context)).await;
-    if result.is_ok() {
-        addon_catalog::refresh_catalog_addon_capabilities(context).await;
-    }
-    result
+    run_desktop_command(move || desktop::scan_auto_libraries(&context)).await
 }
 
 /// Force-refreshes all remote CDN manifests (libraries, RenoDX, Luma, ReShade).
 ///
 /// Subject to a process-local cooldown / single-flight gate. Best-effort: the
 /// report encodes per-kind failures; the command itself succeeds so shell
-/// Refresh can still scan the disk. After a successful command result, rebuilds
-/// catalog add-on capability flags from the (possibly just-warmed) cache --
-/// including cooldown skips, which still re-read local manifests.
+/// Refresh can still scan the disk. Capability projection refresh is an
+/// explicit, separate command so scan/manifest transport cannot publish a
+/// duplicate catalog update behind the caller's atomic refresh.
 #[tauri::command]
 pub async fn refresh_remote_manifests(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let context = Arc::clone(&context);
-    let result = run_desktop_async_command(desktop::refresh_remote_manifests_forced).await;
-    if result.is_ok() {
-        addon_catalog::refresh_catalog_addon_capabilities(context).await;
+    let output = tauri::async_runtime::spawn(desktop::refresh_remote_manifests_forced_output())
+        .await
+        .map_err(CommandError::task_failed)?
+        .map_err(CommandError::from)?;
+    if output.library_catalog_refreshed {
+        // The library catalog is an authoritative atomic file rather than a
+        // SQLite table, so its revision must invalidate the card projection
+        // explicitly. The caller still performs exactly one query after the
+        // separate scan + capabilities phases finish.
+        context.invalidate_catalog_snapshot();
     }
-    result
+    Ok(output.json)
+}
+
+/// Rebuilds the durable add-on capability projection independently of scan.
+/// The caller performs one catalog query only after all requested refresh
+/// phases have completed.
+#[tauri::command]
+pub async fn refresh_catalog_capabilities(
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let refreshed =
+        match addon_catalog::refresh_catalog_addon_capabilities(Arc::clone(&context)).await {
+            Ok(refreshed) => refreshed,
+            Err(error) => {
+                log::warn!("failed to rebuild catalog add-on capabilities: {error}");
+                false
+            }
+        };
+    Ok(serde_json::json!({ "refreshed": refreshed }))
 }
 
 #[tauri::command]
@@ -182,6 +196,7 @@ pub async fn query_game_cards(
         selected_libraries,
         selected_addons,
         selected_launchers,
+        launcher_order,
         show_hidden,
         favorites_only,
         sort_field,
@@ -199,6 +214,7 @@ pub async fn query_game_cards(
                 selected_libraries,
                 selected_addons,
                 selected_launchers,
+                launcher_order,
                 show_hidden,
                 favorites_only,
                 sort_field,
@@ -209,6 +225,31 @@ pub async fn query_game_cards(
         )
     })
     .await
+}
+
+#[tauri::command]
+pub async fn bootstrap_games_catalog(
+    limit: u32,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    if limit == 0 || limit > 10_000 {
+        return Err(CommandError::invalid_argument(
+            "limit",
+            "must be between 1 and 10000",
+        ));
+    }
+    let context = Arc::clone(&context);
+    run_desktop_command(move || desktop::bootstrap_games_catalog(&context, i64::from(limit))).await
+}
+
+/// Starts non-critical catalog maintenance after the frontend's first catalog paint.
+#[tauri::command]
+pub async fn start_background_refresh(
+    context: tauri::State<'_, Arc<Context>>,
+    app: tauri::AppHandle,
+) -> JsonCommandResult {
+    let started = background_catalog_refresh::start(Arc::clone(&context), app).await;
+    Ok(serde_json::json!({ "started": started }))
 }
 
 #[tauri::command]

@@ -13,13 +13,12 @@ pub use renderpilot_orchestration::libraries::{
 };
 pub use renderpilot_orchestration::net::{DownloadProgress, ProgressObserver};
 
-// ---------------------------------------------------------------------------
-// Public JSON facade
-// ---------------------------------------------------------------------------
-
-/// Fetches and atomically activates the remote catalog snapshot.
-pub async fn fetch_libraries_catalog() -> JsonResult {
-    to_json(renderpilot_orchestration::libraries::fetch_catalog().await?)
+/// Fetches the replacement catalog and reports whether its authoritative file
+/// changed, without forcing the coordinator to inspect serialized JSON.
+pub async fn fetch_libraries_catalog_output() -> Result<bool, crate::ApiError> {
+    renderpilot_orchestration::libraries::fetch_catalog()
+        .await
+        .map_err(Into::into)
 }
 
 /// Downloads an explicit library package by its catalog ID.

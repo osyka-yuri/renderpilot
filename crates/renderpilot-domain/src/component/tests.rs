@@ -175,3 +175,28 @@ fn library_artifact_requires_sha256() {
 
     assert_eq!(error, ComponentError::MissingArtifactSha256);
 }
+
+#[test]
+fn library_artifact_deserialization_preserves_constructor_invariants() {
+    let artifact = LibraryArtifact::new(
+        ArtifactId::new("artifact:deserialization").expect("valid artifact id"),
+        GraphicsTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
+                .with_sha256(Sha256Hash::new("a".repeat(64)).expect("valid hash")),
+        ],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("valid artifact");
+
+    let mut empty_files = serde_json::to_value(&artifact).expect("serialize artifact");
+    empty_files["files"] = serde_json::json!([]);
+    let error =
+        serde_json::from_value::<LibraryArtifact>(empty_files).expect_err("empty files must fail");
+    assert!(error.to_string().contains("at least one file"));
+
+    let mut missing_hash = serde_json::to_value(&artifact).expect("serialize artifact");
+    missing_hash["files"][0]["sha256"] = serde_json::Value::Null;
+    serde_json::from_value::<LibraryArtifact>(missing_hash).expect_err("missing hash must fail");
+}

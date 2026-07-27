@@ -24,11 +24,8 @@ pub(super) struct InventoryEntry {
 }
 
 impl InventoryEntry {
-    pub(super) fn presentation_artifact(&self) -> &LibraryArtifact {
-        self.active
-            .as_ref()
-            .or(self.local.as_ref())
-            .expect("inventory entry must contain an active or local artifact")
+    pub(super) fn presentation_artifact(&self) -> Option<&LibraryArtifact> {
+        self.active.as_ref().or(self.local.as_ref())
     }
 
     pub(super) const fn availability(&self) -> CatalogPackageAvailability {
@@ -70,11 +67,12 @@ impl Inventory {
             .map_err(ServiceError::from)?;
         backfill_legacy_receipts(context, &mut local_artifacts, &active_artifacts);
 
-        let mut verifier = LocalArtifactVerifier::default();
+        let mut verifier = LocalArtifactVerifier::load(context.storage())?;
         let local_states = local_artifacts
             .iter()
             .map(|artifact| (artifact.id().clone(), verifier.artifact_state(artifact)))
             .collect::<HashMap<_, _>>();
+        verifier.persist(context.storage())?;
 
         let uncatalogued_verified = local_artifacts
             .iter()
@@ -90,7 +88,12 @@ impl Inventory {
             let package_id = active
                 .metadata()
                 .catalog_package_receipt()
-                .expect("active catalog artifact must carry a receipt")
+                .ok_or_else(|| {
+                    ServiceError::invalid_input(format!(
+                        "active catalog artifact `{}` has no package receipt",
+                        active.id().as_str()
+                    ))
+                })?
                 .package_id
                 .clone();
             groups.entry(package_id).or_default().active = Some(active);
@@ -99,9 +102,12 @@ impl Inventory {
             let Some(receipt) = local.metadata().catalog_package_receipt() else {
                 continue;
             };
-            let local_state = *local_states
-                .get(local.id())
-                .expect("all local artifacts were classified");
+            let local_state = *local_states.get(local.id()).ok_or_else(|| {
+                ServiceError::invalid_input(format!(
+                    "local artifact `{}` was not classified",
+                    local.id().as_str()
+                ))
+            })?;
             groups
                 .entry(receipt.package_id.clone())
                 .or_default()
@@ -111,15 +117,13 @@ impl Inventory {
 
         let mut ignored_registrations = 0;
         let mut affected_packages = 0;
-        let entries = groups
-            .into_iter()
-            .map(|(package_id, group)| {
-                let (entry, ignored) = resolve_group(package_id, group);
-                ignored_registrations += ignored;
-                affected_packages += usize::from(ignored > 0);
-                entry
-            })
-            .collect();
+        let mut entries = Vec::with_capacity(groups.len());
+        for (package_id, group) in groups {
+            let (entry, ignored) = resolve_group(package_id, group)?;
+            ignored_registrations += ignored;
+            affected_packages += usize::from(ignored > 0);
+            entries.push(entry);
+        }
         if ignored_registrations > 0 {
             log::warn!(
                 "stale catalog package registrations ignored; registration_count={ignored_registrations}; package_count={affected_packages}"
@@ -176,11 +180,9 @@ impl Inventory {
             if entry.local_state == LibraryLocalState::Verified && entry.local.is_some() {
                 downloaded_ids.insert(candidate.id().clone());
             }
-            if let Some(active) = &entry.active {
-                let receipt = active
-                    .metadata()
-                    .catalog_package_receipt()
-                    .expect("active catalog artifact must carry a receipt");
+            if let Some(active) = &entry.active
+                && let Some(receipt) = active.metadata().catalog_package_receipt()
+            {
                 active_catalog.insert(
                     active.id().clone(),
                     ActiveCatalogPackage::new(
@@ -202,7 +204,10 @@ struct PackageGroup {
     locals: Vec<(LibraryArtifact, LibraryLocalState)>,
 }
 
-fn resolve_group(package_id: String, mut group: PackageGroup) -> (InventoryEntry, usize) {
+fn resolve_group(
+    package_id: String,
+    mut group: PackageGroup,
+) -> Result<(InventoryEntry, usize), ServiceError> {
     group
         .locals
         .sort_by(|left, right| left.0.id().cmp(right.0.id()));
@@ -220,7 +225,7 @@ fn resolve_group(package_id: String, mut group: PackageGroup) -> (InventoryEntry
                 Some((local, state)) => (Some(local), state),
                 None => (None, LibraryLocalState::Absent),
             };
-            (
+            Ok((
                 InventoryEntry {
                     package_id,
                     active: Some(active),
@@ -228,16 +233,16 @@ fn resolve_group(package_id: String, mut group: PackageGroup) -> (InventoryEntry
                     local_state,
                 },
                 ignored,
-            )
+            ))
         }
         None => {
             let ignored = group.locals.len().saturating_sub(1);
-            let (local, local_state) = group
-                .locals
-                .into_iter()
-                .next()
-                .expect("package group without active definition must contain a local receipt");
-            (
+            let Some((local, local_state)) = group.locals.into_iter().next() else {
+                return Err(ServiceError::invalid_input(format!(
+                    "inventory package group `{package_id}` has no artifact"
+                )));
+            };
+            Ok((
                 InventoryEntry {
                     package_id,
                     active: None,
@@ -245,7 +250,7 @@ fn resolve_group(package_id: String, mut group: PackageGroup) -> (InventoryEntry
                     local_state,
                 },
                 ignored,
-            )
+            ))
         }
     }
 }
@@ -381,7 +386,8 @@ mod tests {
                 active: Some(active.clone()),
                 locals: Vec::new(),
             },
-        );
+        )
+        .expect("active group");
         assert!(active_only.local.is_none());
         assert_eq!(active_only.local_state, LibraryLocalState::Absent);
         assert_eq!(ignored, 0);
@@ -392,7 +398,8 @@ mod tests {
                 active: None,
                 locals: vec![(local.clone(), LibraryLocalState::Verified)],
             },
-        );
+        )
+        .expect("local group");
         assert_eq!(local_only.local.as_ref(), Some(&local));
         assert_eq!(ignored, 0);
 
@@ -405,7 +412,8 @@ mod tests {
                     (local.clone(), LibraryLocalState::Verified),
                 ],
             },
-        );
+        )
+        .expect("matched group");
         assert_eq!(matched.local.as_ref(), Some(&local));
         assert_eq!(matched.local_state, LibraryLocalState::Verified);
         assert_eq!(ignored, 1);
@@ -423,7 +431,8 @@ mod tests {
                 active: Some(active.clone()),
                 locals: vec![(stale, LibraryLocalState::Verified)],
             },
-        );
+        )
+        .expect("active group");
         assert_eq!(ignored, 1);
         let inventory = Inventory {
             entries: vec![

@@ -49,7 +49,12 @@ use self::version::database_has_user_schema;
 //          (`pending_file_mutations` must accept state `preparing`).
 //   10 → 11: typed artifact package/runtime metadata persisted as JSON.
 //   11 → 12: typed auxiliary rollback baselines (including managed D3D12 EXEs).
-const CURRENT_SCHEMA_VERSION: i32 = 12;
+//   12 → 13: durable profile-derived add-on capability cache + reliable launcher
+//            scan source checkpoints (one release boundary).
+const CURRENT_SCHEMA_VERSION: i32 = 13;
+// A development build briefly stamped the exact v13 physical contract as 14.
+// Normalize that known shape in place so users who ran it keep their catalog.
+const MISSTAMPED_DEVELOPMENT_SCHEMA_VERSION: i32 = 14;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,
@@ -96,6 +101,10 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
             // after the additive migration commits.
             apply_keep(connection)
         }
+        Plan::NormalizeDevelopmentVersion => apply_with_transaction(connection, |tx| {
+            validate_catalog_schema(tx)?;
+            version::write(tx, CURRENT_SCHEMA_VERSION)
+        }),
         Plan::Rebuild => {
             backup::backup_before_rebuild(connection)?;
             apply_with_transaction(connection, reset_catalog_schema)
@@ -144,6 +153,7 @@ enum Plan {
     Keep,
     ApplyBaseline,
     Upgrade { from: i32 },
+    NormalizeDevelopmentVersion,
     Rebuild,
 }
 
@@ -152,6 +162,11 @@ fn classify(connection: &Connection) -> AppResult<Plan> {
 
     if schema_version == CURRENT_SCHEMA_VERSION {
         return Ok(Plan::Keep);
+    }
+    if schema_version == MISSTAMPED_DEVELOPMENT_SCHEMA_VERSION
+        && catalog_schema_is_valid(connection)?
+    {
+        return Ok(Plan::NormalizeDevelopmentVersion);
     }
     if schema_version == 0 {
         return if database_has_user_schema(connection)? {

@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   filterGamesMissingStoredCover,
-  gameCoverFetchMayUseLauncherCdnOnly,
   gameMayReceiveRemoteCoverViaPolicy,
   filterGamesMissingStoredCoverForBackgroundSync,
   runCoverFetchBatch,
   formatCoverSyncBanner,
-  combineCoverSyncMessages,
   COVER_FETCH_CONCURRENCY,
 } from './cover-sync';
 import {
@@ -196,28 +194,6 @@ describe('cover-sync', () => {
     });
   });
 
-  describe('gameCoverFetchMayUseLauncherCdnOnly', () => {
-    it('returns true for Steam game with external_id', () => {
-      expect(gameCoverFetchMayUseLauncherCdnOnly(steamGame({ external_id: '12345' }))).toBe(true);
-    });
-
-    it('returns true for GOG game with numeric product id', () => {
-      expect(gameCoverFetchMayUseLauncherCdnOnly(gogGame({ external_id: '12345' }))).toBe(true);
-    });
-
-    it('returns false for Steam game without external_id', () => {
-      expect(gameCoverFetchMayUseLauncherCdnOnly(steamGame({}))).toBe(false);
-    });
-
-    it('returns false for GOG game with non-numeric external_id', () => {
-      expect(gameCoverFetchMayUseLauncherCdnOnly(gogGame({ external_id: 'abc' }))).toBe(false);
-    });
-
-    it('returns false for unknown launcher', () => {
-      expect(gameCoverFetchMayUseLauncherCdnOnly(gameWithoutCover())).toBe(false);
-    });
-  });
-
   describe('gameMayReceiveRemoteCoverViaPolicy', () => {
     const allEnabledPolicy = { steamCdn: true, gogCdn: true, steamgriddb: true };
     const allDisabledPolicy = { steamCdn: false, gogCdn: false, steamgriddb: false };
@@ -356,7 +332,7 @@ describe('cover-sync', () => {
       });
 
       expect(onGameStart).toHaveBeenCalledWith('game-a');
-      expect(onCoverReady).toHaveBeenCalledWith('game-a');
+      expect(onCoverReady).toHaveBeenCalledWith('game-a', undefined);
       expect(onGameEnd).toHaveBeenCalledWith('game-a');
     });
 
@@ -389,7 +365,7 @@ describe('cover-sync', () => {
       });
 
       // The cover did download, so it must not appear as a failure, and the batch must resolve.
-      expect(onCoverReady).toHaveBeenCalledWith('game-a');
+      expect(onCoverReady).toHaveBeenCalledWith('game-a', undefined);
       expect(result.failures).toEqual([]);
 
       consoleError.mockRestore();
@@ -465,24 +441,6 @@ describe('cover-sync', () => {
 
       expect(result).toContain('2 games');
       expect(result).toContain('Game One');
-    });
-  });
-
-  describe('combineCoverSyncMessages', () => {
-    it('returns null when both messages are null', () => {
-      expect(combineCoverSyncMessages(null, null)).toBeNull();
-    });
-
-    it('returns banner when only banner is present', () => {
-      expect(combineCoverSyncMessages('banner text', null)).toBe('banner text');
-    });
-
-    it('returns refresh error when only refresh error is present', () => {
-      expect(combineCoverSyncMessages(null, 'refresh error')).toBe('refresh error');
-    });
-
-    it('combines both messages with a space', () => {
-      expect(combineCoverSyncMessages('banner', 'refresh')).toBe('banner refresh');
     });
   });
 });

@@ -14,8 +14,8 @@ use crate::{
 use super::{
     SqliteStorage,
     catalog_select_sql::{
-        SELECT_OPERATION_ITEMS_FOR_GAME_SQL, SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL,
-        SELECT_OPERATIONS_FOR_GAME_SQL,
+        SELECT_ALL_OPERATION_HEADERS_SQL, SELECT_OPERATION_ITEMS_FOR_GAME_SQL,
+        SELECT_OPERATION_ITEMS_SQL, SELECT_OPERATION_SQL, SELECT_OPERATIONS_FOR_GAME_SQL,
     },
     row_mapping::{collect_rows, operation_from_row, operation_item_from_row},
 };
@@ -121,6 +121,13 @@ impl OperationRepository for SqliteStorage {
 
             result
         })
+    }
+}
+
+impl SqliteStorage {
+    /// Loads operation headers for every game in one stable query.
+    pub fn list_all_operation_headers(&self) -> AppResult<Vec<OperationRecord>> {
+        self.query_list(SELECT_ALL_OPERATION_HEADERS_SQL, [], operation_from_row)
     }
 }
 

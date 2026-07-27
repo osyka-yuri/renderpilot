@@ -45,8 +45,8 @@ fn library_error(message: impl Into<String>) -> ServiceError {
 }
 
 /// Fetches and atomically activates a complete catalog snapshot.
-pub async fn fetch_catalog() -> Result<(), ServiceError> {
-    catalog::fetch_validated_catalog().await.map(drop)
+pub async fn fetch_catalog() -> Result<bool, ServiceError> {
+    Ok(catalog::fetch_validated_catalog_refresh().await?.changed)
 }
 
 /// Returns the active local snapshot, fetching one when absent.
@@ -148,4 +148,8 @@ pub(crate) fn replacement_artifacts(
         LibraryCatalogStatus::LocalFallback
     };
     Ok(inventory::Inventory::load(context, catalog.as_ref(), status)?.replacement_projection())
+}
+
+pub(crate) fn replacement_catalog_revision() -> Result<Option<(u64, u128)>, ServiceError> {
+    catalog::local_catalog_revision()
 }

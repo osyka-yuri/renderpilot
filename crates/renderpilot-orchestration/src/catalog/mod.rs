@@ -1,12 +1,14 @@
 //! Catalog orchestration: scan, query, and library management.
 
-use std::collections::HashSet;
+use std::borrow::Cow;
+use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use renderpilot_application::{
-    AppError, AppResult, ArtifactRepository, ComponentReplacementCandidates, ComponentRepository,
-    GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
-    find_replacement_candidates,
+    AppError, AppResult, ArtifactRepository, CandidateArtifactIndex,
+    ComponentReplacementCandidates, ComponentRepository, GameRepository, InstalledAddonRepository,
+    OperationPlan, OperationRecord, find_replacement_candidates_indexed,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
@@ -39,6 +41,7 @@ pub(crate) mod cascade;
 pub mod execute;
 mod operations;
 pub mod output;
+mod read_service;
 mod runtime_compatibility;
 /// Auto-discovery and scanning.
 pub mod scan;
@@ -54,6 +57,46 @@ pub struct ScanFolderCatalogResult {
     pub game: GameInstallation,
     /// Library files detected within the game installation.
     pub libraries: Vec<DetectedLibraryFile>,
+    /// How persisted card facts changed compared with the previous scan.
+    pub change: CatalogScanChange,
+}
+
+/// Identity-level outcome for one scanned installation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogScanChange {
+    /// The install already existed and its card facts were identical.
+    Unchanged,
+    /// A new catalog installation was persisted.
+    Added,
+    /// An existing installation's catalog facts changed.
+    Updated,
+}
+
+/// Stable identity delta produced by a complete scan session.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CatalogScanDelta {
+    /// Newly discovered game ids.
+    pub added_game_ids: Vec<GameId>,
+    /// Existing game ids whose persisted catalog facts changed.
+    pub updated_game_ids: Vec<GameId>,
+    /// Catalog game ids removed as stale within the scanned scope.
+    pub removed_game_ids: Vec<GameId>,
+}
+
+impl CatalogScanDelta {
+    /// All added and updated ids in stable order, excluding removals.
+    #[must_use]
+    pub fn changed_game_ids(&self) -> Vec<GameId> {
+        let removed = self.removed_game_ids.iter().collect::<HashSet<_>>();
+        self.added_game_ids
+            .iter()
+            .chain(&self.updated_game_ids)
+            .filter(|game_id| !removed.contains(game_id))
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
 }
 
 /// Game id and replacement candidate groups for a component swap UI.
@@ -65,17 +108,22 @@ pub struct CandidateCatalogResult {
 }
 
 /// Full game details for the main detail view.
+#[derive(Debug, Clone)]
 pub struct GameDetailsCatalogResult {
     /// The game installation.
     pub game: GameInstallation,
     /// All graphics components for this game.
     pub components: Vec<GraphicsComponent>,
+    /// Component ids with a currently usable rollback baseline.
+    pub backup_component_ids: HashSet<String>,
     /// Replacement candidate groups across all components.
     pub candidate_groups: Vec<ComponentReplacementCandidates>,
     /// Fresh active D3D12 executable status, independent of candidate availability.
     pub d3d12_executable_status: Option<D3d12ExecutableStatus>,
     /// Operation history for this game.
     pub operations: OperationListCatalogResult,
+    /// Profile-derived and currently installed add-on capabilities.
+    pub addon_capabilities: Vec<AddonKind>,
 }
 
 /// Fresh read-only D3D12 executable status for the game details view.
@@ -140,6 +188,7 @@ pub struct SwapPlanCatalogResult {
 }
 
 /// Operation history for a game.
+#[derive(Debug, Clone)]
 pub struct OperationListCatalogResult {
     /// The game id the operations belong to.
     pub game_id: GameId,
@@ -148,6 +197,7 @@ pub struct OperationListCatalogResult {
 }
 
 /// A single entry in the operation history list.
+#[derive(Debug, Clone)]
 pub struct OperationListCatalogEntry {
     /// The operation record.
     pub operation: OperationRecord,
@@ -164,9 +214,8 @@ pub fn addon_capabilities(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<Vec<AddonKind>, ServiceError> {
-    let profile = context
-        .profile_capability_snapshot()
-        .capabilities_for(game_id);
+    let profile =
+        crate::addons::capabilities::DurableProfileCapabilities::load_for_game(context, game_id)?;
     let installed =
         crate::addons::records::active_record(context, game_id)?.map(|record| record.kind());
     Ok(merge_addon_capabilities(&profile, installed))
@@ -194,7 +243,52 @@ pub fn scan_folder(
     context: &crate::Context,
     path: PathBuf,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
+    let _scan_guard = context.catalog_scan_guard();
     scan_folder_impl(context, path)
+}
+
+/// Scans a folder and returns only the identity delta needed by callers that
+/// refresh an existing projection. No per-game details models are built.
+pub fn scan_folder_delta(
+    context: &crate::Context,
+    path: PathBuf,
+) -> Result<CatalogScanDelta, ServiceError> {
+    let _scan_guard = context.catalog_scan_guard();
+    let before = context
+        .storage()
+        .list_games()?
+        .into_iter()
+        .map(|game| game.id().clone())
+        .collect::<HashSet<_>>();
+    let results = scan_folder_impl(context, path)?;
+    let after = context
+        .storage()
+        .list_games()?
+        .into_iter()
+        .map(|game| game.id().clone())
+        .collect::<HashSet<_>>();
+
+    let mut added_game_ids = Vec::new();
+    let mut updated_game_ids = Vec::new();
+    for result in results {
+        match result.change {
+            CatalogScanChange::Unchanged => {}
+            CatalogScanChange::Added => added_game_ids.push(result.game.id().clone()),
+            CatalogScanChange::Updated => updated_game_ids.push(result.game.id().clone()),
+        }
+    }
+    let mut removed_game_ids = before.difference(&after).cloned().collect::<Vec<_>>();
+    added_game_ids.sort();
+    added_game_ids.dedup();
+    updated_game_ids.sort();
+    updated_game_ids.dedup();
+    removed_game_ids.sort();
+
+    Ok(CatalogScanDelta {
+        added_game_ids,
+        updated_game_ids,
+        removed_game_ids,
+    })
 }
 
 /// Returns all game installations stored in the catalog.
@@ -206,11 +300,19 @@ pub fn list_games(context: &crate::Context) -> Result<Vec<GameInstallation>, Ser
 /// catalog artifact universe and the candidate context.
 ///
 /// Loading these is independent of the game, so a multi-game caller (the
-/// dashboard's [`game_cards`]) builds this **once** and reuses it for every game
+/// catalog snapshot builder builds this **once** and reuses it for every game
 /// instead of re-reading the artifacts table and catalog snapshot per game.
+#[derive(Debug)]
 pub(crate) struct ReplacementUniverse {
-    artifacts: Vec<LibraryArtifact>,
+    artifact_index: CandidateArtifactIndex,
     candidate_context: renderpilot_application::CandidateContext,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReplacementUniverseRevision {
+    inventory: u64,
+    catalog: Option<(u64, u128)>,
+    local_files: u64,
 }
 
 /// Loads the artifact universe (local artifacts + catalog packages) and the
@@ -218,16 +320,81 @@ pub(crate) struct ReplacementUniverse {
 /// artifacts.
 pub(crate) fn load_replacement_universe(
     context: &crate::Context,
-) -> Result<ReplacementUniverse, ServiceError> {
+) -> Result<Arc<ReplacementUniverse>, ServiceError> {
+    let mut inventory_revision = context.storage().library_artifact_revision()?;
+    let mut catalog_revision = crate::libraries::replacement_catalog_revision()?;
+    if let Some(cached) =
+        current_replacement_universe(context, inventory_revision, catalog_revision)
+    {
+        return Ok(cached);
+    }
+
+    let _rebuild = context.replacement_universe_rebuild_guard();
+    inventory_revision = context.storage().library_artifact_revision()?;
+    catalog_revision = crate::libraries::replacement_catalog_revision()?;
+    if let Some(cached) =
+        current_replacement_universe(context, inventory_revision, catalog_revision)
+    {
+        return Ok(cached);
+    }
+
     let (artifacts, downloaded_ids, active_catalog) =
         crate::libraries::replacement_artifacts(context)?;
     let candidate_context =
         renderpilot_application::CandidateContext::new(downloaded_ids, active_catalog);
 
-    Ok(ReplacementUniverse {
-        artifacts,
+    let universe = Arc::new(ReplacementUniverse {
+        artifact_index: CandidateArtifactIndex::new(artifacts),
         candidate_context,
-    })
+    });
+    let effective_revision = ReplacementUniverseRevision {
+        inventory: context.storage().library_artifact_revision()?,
+        catalog: crate::libraries::replacement_catalog_revision()?,
+        local_files: local_artifact_metadata_revision(universe.artifact_index.artifacts()),
+    };
+    context.cache_replacement_universe(effective_revision, Arc::clone(&universe));
+    Ok(universe)
+}
+
+fn current_replacement_universe(
+    context: &crate::Context,
+    inventory_revision: u64,
+    catalog_revision: Option<(u64, u128)>,
+) -> Option<Arc<ReplacementUniverse>> {
+    let (cached_revision, cached) = context.replacement_universe_cache()?;
+    (cached_revision.inventory == inventory_revision
+        && cached_revision.catalog == catalog_revision
+        && cached_revision.local_files
+            == local_artifact_metadata_revision(cached.artifact_index.artifacts()))
+    .then_some(cached)
+}
+
+fn local_artifact_metadata_revision(artifacts: &[LibraryArtifact]) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::time::UNIX_EPOCH;
+
+    let mut hasher = DefaultHasher::new();
+    for artifact in artifacts {
+        artifact.id().as_str().hash(&mut hasher);
+        for file in artifact.files() {
+            let path = file.path().as_str();
+            path.hash(&mut hasher);
+            match std::fs::metadata(path) {
+                Ok(metadata) => {
+                    true.hash(&mut hasher);
+                    metadata.len().hash(&mut hasher);
+                    metadata
+                        .modified()
+                        .ok()
+                        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                        .map(|value| value.as_nanos())
+                        .hash(&mut hasher);
+                }
+                Err(_) => false.hash(&mut hasher),
+            }
+        }
+    }
+    hasher.finish()
 }
 
 /// Builds full game details using a pre-loaded [`ReplacementUniverse`].
@@ -243,6 +410,15 @@ pub(crate) fn get_game_details_with_universe(
     let storage = context.storage();
     let game = storage.require_game(game_id)?;
     let components = storage.list_components_for_game(game_id)?;
+    let installed_addon = storage.get_installed_addon(game_id)?;
+    let profile_capabilities =
+        crate::addons::capabilities::DurableProfileCapabilities::load_for_game(context, game_id)?;
+    let addon_capabilities = merge_addon_capabilities(
+        &profile_capabilities,
+        installed_addon.as_ref().map(|a| a.kind()),
+    );
+    let backup_component_ids =
+        crate::coordinated_files::available_component_backup_ids(storage, game_id, &components)?;
 
     let d3d12_component = components
         .iter()
@@ -261,12 +437,15 @@ pub(crate) fn get_game_details_with_universe(
         .transpose()?;
     let candidate_context = universe
         .candidate_context
-        .clone()
         .with_target_profile(target_profile);
-    let matching_components = components_for_candidate_matching(context, game_id, &components)?;
-    let candidate_groups = find_replacement_candidates(
+    let matching_components = components_for_candidate_matching_with_installed(
+        game_id,
+        &components,
+        installed_addon.as_ref(),
+    )?;
+    let candidate_groups = find_replacement_candidates_indexed(
         &matching_components,
-        &universe.artifacts,
+        &universe.artifact_index,
         &candidate_context,
     );
 
@@ -275,9 +454,11 @@ pub(crate) fn get_game_details_with_universe(
     Ok(GameDetailsCatalogResult {
         game,
         components,
+        backup_component_ids,
         candidate_groups,
         d3d12_executable_status,
         operations,
+        addon_capabilities,
     })
 }
 
@@ -310,33 +491,65 @@ fn build_d3d12_status(
 /// sufficient for a live dropdown. A component that cannot be refreshed is
 /// omitted fail-closed. Other technologies retain their existing executable-
 /// context policy and avoid an unnecessary per-query file hash.
-pub(crate) fn components_for_candidate_matching(
+pub(crate) fn components_for_candidate_matching<'components>(
     context: &crate::Context,
     game_id: &GameId,
-    components: &[GraphicsComponent],
-) -> Result<Vec<GraphicsComponent>, ServiceError> {
+    components: &'components [GraphicsComponent],
+) -> Result<Cow<'components, [GraphicsComponent]>, ServiceError> {
     if !components
         .iter()
         .any(|component| component.technology() == GraphicsTechnology::OpenVr)
     {
-        return Ok(components.to_vec());
+        return Ok(Cow::Borrowed(components));
     }
 
     let installed_addon = context.storage().get_installed_addon(game_id)?;
     let managed_files = crate::coordinated_files::managed_files_of(installed_addon.as_ref());
 
+    Ok(Cow::Owned(
+        components
+            .iter()
+            .filter_map(|component| {
+                if component.technology() != GraphicsTechnology::OpenVr {
+                    return Some(component.clone());
+                }
+                match crate::coordinated_files::current_component_snapshot(component, managed_files)
+                {
+                    Ok(snapshot) => Some(snapshot.into_component()),
+                    Err(error) => {
+                        log::warn!(
+                            "omitting stale OpenVR component {} from replacement candidates: {error}",
+                            component.id().as_str()
+                        );
+                        None
+                    }
+                }
+            })
+            .collect(),
+    ))
+}
+
+/// Re-hashes every active component member for the background card validator.
+///
+/// External replacement of any DLL invalidates its persisted hash/version
+/// facts. Stale components are omitted fail-closed from candidate matching;
+/// the original durable component still remains visible on the card.
+pub(crate) fn components_for_candidate_matching_with_installed(
+    game_id: &GameId,
+    components: &[GraphicsComponent],
+    installed_addon: Option<&renderpilot_domain::InstalledAddon>,
+) -> Result<Vec<GraphicsComponent>, ServiceError> {
+    let managed_files = crate::coordinated_files::managed_files_of(installed_addon);
     Ok(components
         .iter()
         .filter_map(|component| {
-            if component.technology() != GraphicsTechnology::OpenVr {
-                return Some(component.clone());
-            }
             match crate::coordinated_files::current_component_snapshot(component, managed_files) {
                 Ok(snapshot) => Some(snapshot.into_component()),
                 Err(error) => {
                     log::warn!(
-                        "omitting stale OpenVR component {} from replacement candidates: {error}",
-                        component.id().as_str()
+                        "omitting stale component {} from live catalog candidates for {}: {error}",
+                        component.id().as_str(),
+                        game_id.as_str(),
                     );
                     None
                 }
@@ -350,8 +563,35 @@ pub fn get_game_details(
     context: &crate::Context,
     game_id: &GameId,
 ) -> Result<GameDetailsCatalogResult, ServiceError> {
-    let universe = load_replacement_universe(context)?;
-    get_game_details_with_universe(context, game_id, &universe)
+    let initial_generation = context.storage().catalog_generation();
+    if let Some(details) = context.game_details_cache(game_id, initial_generation) {
+        return Ok((*details).clone());
+    }
+
+    let rebuild_lock = context.game_details_rebuild_lock(game_id);
+    let _rebuild = rebuild_lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let catalog_generation = context.storage().catalog_generation();
+        if let Some(details) = context.game_details_cache(game_id, catalog_generation) {
+            return Ok((*details).clone());
+        }
+        let universe = load_replacement_universe(context)?;
+        let details = get_game_details_with_universe(context, game_id, &universe)?;
+        if context.storage().catalog_generation() == catalog_generation {
+            context.cache_game_details(
+                game_id.clone(),
+                catalog_generation,
+                Arc::new(details.clone()),
+            );
+            return Ok(details);
+        }
+        log::debug!(
+            "catalog changed during details build for {}; retrying",
+            game_id.as_str()
+        );
+    }
 }
 
 /// Returns library artifacts stored in the catalog, optionally filtered by technology.
@@ -364,12 +604,13 @@ pub fn list_artifacts(
 }
 
 // Re-export core operations from sub-modules directly.
-pub use cards::{GameCardData, game_cards};
+pub use cards::{CatalogCardRiskLevel, CatalogRevision, CatalogSnapshot, GameCardData};
 pub use execute::{
     D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, RollbackPlan, apply_swap,
     apply_swap_confirmed, build_rollback_plan, rollback_component,
 };
 pub use operations::list_operations;
+pub use read_service::CatalogReadService;
 pub use swap::{build_swap_plan, find_candidates};
 
 /// Returns the distinct graphics-technology library tags present in the catalog.
@@ -447,14 +688,27 @@ fn update_game_ui_state(
     f: impl FnOnce(bool, bool) -> (bool, bool),
 ) -> Result<(), ServiceError> {
     let storage = context.storage();
+    let generation_before = storage.catalog_generation();
     let current = storage.get_game_ui_state(game_id.as_str())?;
     let (prev_favorite, prev_hidden) = current
         .map(|state| (state.is_favorite, state.is_hidden))
         .unwrap_or((false, false));
     let (is_favorite, is_hidden) = f(prev_favorite, prev_hidden);
+    if (is_favorite, is_hidden) == (prev_favorite, prev_hidden) {
+        return Ok(());
+    }
     storage
         .save_game_ui_state(game_id.as_str(), is_favorite, is_hidden)
-        .map_err(Into::into)
+        .map_err(ServiceError::from)?;
+    let generation_after = storage.catalog_generation();
+    context.patch_catalog_ui_state(
+        game_id,
+        is_favorite,
+        is_hidden,
+        generation_before,
+        generation_after,
+    );
+    Ok(())
 }
 
 fn filter_artifacts_by_technology(
@@ -481,6 +735,22 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn scan_delta_changed_ids_are_sorted_deduplicated_and_exclude_removals() {
+        let game_a = GameId::new("manual:a").expect("game a");
+        let game_b = GameId::new("manual:b").expect("game b");
+        let delta = CatalogScanDelta {
+            added_game_ids: vec![game_b.clone(), game_b],
+            updated_game_ids: vec![game_a.clone()],
+            removed_game_ids: vec![game_a],
+        };
+
+        assert_eq!(
+            delta.changed_game_ids(),
+            vec![GameId::new("manual:b").expect("game b")]
+        );
+    }
 
     #[test]
     fn merge_addon_capabilities_unions_profile_with_installed_in_stable_order() {
@@ -551,8 +821,9 @@ mod tests {
                 .with_pe_compatibility(profile),
         );
 
+        let components = [component];
         let refreshed =
-            components_for_candidate_matching(&context, &game_id, &[component]).expect("refresh");
+            components_for_candidate_matching(&context, &game_id, &components).expect("refresh");
         assert_eq!(refreshed.len(), 1);
         assert_eq!(refreshed[0].files()[0].pe_compatibility(), None);
 
@@ -590,13 +861,43 @@ mod tests {
         .with_metadata(metadata);
 
         assert!(
-            find_replacement_candidates(
+            renderpilot_application::find_replacement_candidates(
                 &refreshed,
                 &[candidate],
                 &renderpilot_application::CandidateContext::empty(),
             )
             .is_empty(),
             "an OpenVR DLL without a freshly observed profile must have no dropdown candidates"
+        );
+    }
+
+    #[test]
+    fn live_card_candidate_matching_checks_non_openvr_dll_bytes() {
+        let game_dir = tempdir().expect("game dir");
+        let game_id = GameId::new("game:dlss-freshness").expect("game id");
+        let dll = game_dir.path().join("nvngx_dlss.dll");
+        std::fs::write(&dll, b"catalog-bytes").expect("write DLL");
+        let catalog_hash = renderpilot_detection::sha256_file(&dll).expect("catalog hash");
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:dlss-freshness").expect("component id"),
+            game_id.clone(),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(PathRef::new(dll.to_string_lossy()).expect("path"))
+                .with_sha256(catalog_hash),
+        );
+        std::fs::write(&dll, b"externally-replaced").expect("replace DLL");
+
+        let refreshed =
+            components_for_candidate_matching_with_installed(&game_id, &[component], None)
+                .expect("live refresh");
+
+        assert!(
+            refreshed.is_empty(),
+            "an externally replaced non-OpenVR DLL must not use stale candidate facts",
         );
     }
 }

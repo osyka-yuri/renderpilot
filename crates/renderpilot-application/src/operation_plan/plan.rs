@@ -86,18 +86,25 @@ impl OperationPlan {
     ) -> Self {
         self.confirmation_token = confirmation_token;
         match action.kind() {
-            D3d12ExecutableActionKind::Patch | D3d12ExecutableActionKind::Restore => {
+            D3d12ExecutableActionKind::Patch => {
                 self.files.push(OperationPlanFile::executable(
+                    OperationPlanFileAction::PatchExecutable,
                     &action,
                     current_sha256,
                     target_sha256,
                 ));
-                if action.kind() == D3d12ExecutableActionKind::Patch
-                    && action.current_sdk_version() == action.original_sdk_version()
-                {
+                if action.current_sdk_version() == action.original_sdk_version() {
                     self.warnings
                         .push(OperationPlanWarning::ExecutableSignatureMayBecomeInvalid);
                 }
+            }
+            D3d12ExecutableActionKind::Restore => {
+                self.files.push(OperationPlanFile::executable(
+                    OperationPlanFileAction::RestoreExecutable,
+                    &action,
+                    current_sha256,
+                    target_sha256,
+                ));
             }
             D3d12ExecutableActionKind::RepairRequired => {
                 self.blockers
@@ -274,17 +281,11 @@ impl OperationPlanFile {
     }
 
     fn executable(
+        file_action: OperationPlanFileAction,
         action: &D3d12ExecutableAction,
         current_sha256: Sha256Hash,
         target_sha256: Option<Sha256Hash>,
     ) -> Self {
-        let file_action = match action.kind() {
-            D3d12ExecutableActionKind::Patch => OperationPlanFileAction::PatchExecutable,
-            D3d12ExecutableActionKind::Restore => OperationPlanFileAction::RestoreExecutable,
-            D3d12ExecutableActionKind::None | D3d12ExecutableActionKind::RepairRequired => {
-                unreachable!("only EXE-changing actions produce an operation-plan file")
-            }
-        };
         Self {
             action: file_action,
             target_path: action.executable_path().clone(),

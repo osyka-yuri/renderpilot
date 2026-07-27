@@ -5,7 +5,7 @@ use renderpilot_domain::{
     GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
 };
 
-use crate::install_identity::detect_install_identity;
+use crate::install_identity::{InstallIdentityDetails, detect_install_identity};
 use crate::path_normalize::canonicalize_install_dir;
 
 /// Game source backed by one user-selected install folder.
@@ -17,6 +17,7 @@ use crate::path_normalize::canonicalize_install_dir;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManualFolderGameSource {
     folder: PathBuf,
+    known_identity: Option<InstallIdentityDetails>,
 }
 
 impl ManualFolderGameSource {
@@ -24,7 +25,15 @@ impl ManualFolderGameSource {
     pub fn new(folder: impl Into<PathBuf>) -> Self {
         Self {
             folder: folder.into(),
+            known_identity: None,
         }
+    }
+
+    /// Uses launcher metadata already resolved by an authoritative discovery adapter.
+    #[must_use]
+    pub fn with_known_identity(mut self, identity: InstallIdentityDetails) -> Self {
+        self.known_identity = Some(identity);
+        self
     }
 
     /// Returns the configured folder path.
@@ -61,7 +70,12 @@ impl ManualFolderGameSource {
             .map_err(|error| AppError::invalid_input(error.to_string()))?;
         let folder_title = folder_title(&folder);
 
-        let identity = game_identity_for_install_folder(&folder, &install_path, folder_title)?;
+        let identity = game_identity_for_install_folder(
+            &folder,
+            &install_path,
+            folder_title,
+            self.known_identity.clone(),
+        )?;
 
         let installation = GameInstallation::new(
             identity,
@@ -116,11 +130,12 @@ fn game_identity_for_install_folder(
     folder: &Path,
     install_path: &PathRef,
     folder_title: String,
+    known_identity: Option<InstallIdentityDetails>,
 ) -> AppResult<GameIdentity> {
     let game_id = GameId::new(format!("manual:{}", install_path.as_str()))
         .map_err(|error| AppError::invalid_input(error.to_string()))?;
 
-    if let Some(detected) = detect_install_identity(folder) {
+    if let Some(detected) = known_identity.or_else(|| detect_install_identity(folder)) {
         let title = detected
             .display_name
             .filter(|name| !name.trim().is_empty())
@@ -150,6 +165,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::ManualFolderGameSource;
+    use crate::InstallIdentityDetails;
 
     #[test]
     fn manual_folder_source_builds_manual_game_installation() {
@@ -206,6 +222,30 @@ mod tests {
         assert_eq!(game.identity().launcher(), Launcher::Steam);
         assert_eq!(game.identity().external_id(), Some("1234567"));
         assert_eq!(game.identity().title(), "My Test Game");
+    }
+
+    #[test]
+    fn authoritative_identity_avoids_reopening_launcher_metadata() {
+        let root = tempdir().expect("temp dir");
+        let game_dir = root
+            .path()
+            .join("steamapps")
+            .join("common")
+            .join("IndexedGame");
+        fs::create_dir_all(&game_dir).expect("dirs");
+
+        let game = ManualFolderGameSource::new(&game_dir)
+            .with_known_identity(InstallIdentityDetails {
+                launcher: Launcher::Steam,
+                external_id: Some("765".to_owned()),
+                display_name: Some("Indexed Game".to_owned()),
+            })
+            .discover_game()
+            .expect("prefetched identity should be sufficient without an appmanifest");
+
+        assert_eq!(game.identity().launcher(), Launcher::Steam);
+        assert_eq!(game.identity().external_id(), Some("765"));
+        assert_eq!(game.identity().title(), "Indexed Game");
     }
 
     #[test]

@@ -4,7 +4,7 @@ use super::inventory::InventoryEntry;
 use super::types::{LibraryLegalDocumentLink, LibraryPackageSummary, LibraryTarget, SignatureInfo};
 
 pub(super) fn package_summary(entry: &InventoryEntry) -> Option<LibraryPackageSummary> {
-    let artifact = entry.presentation_artifact();
+    let artifact = entry.presentation_artifact()?;
     let receipt = artifact.metadata().catalog_package_receipt()?;
     Some(LibraryPackageSummary {
         package_id: receipt.package_id.clone(),

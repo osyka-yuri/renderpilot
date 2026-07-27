@@ -98,6 +98,10 @@ pub struct ManifestRefreshReport {
     pub outcome: ManifestRefreshOutcome,
     /// Per-kind detail.
     pub kinds: ManifestKindResults,
+    /// Whether the authoritative replacement-library catalog file changed.
+    /// This coordinator-only fact is intentionally not part of the UI JSON.
+    #[serde(skip)]
+    pub libraries_changed: bool,
 }
 
 impl ManifestRefreshReport {
@@ -105,11 +109,13 @@ impl ManifestRefreshReport {
         Self {
             outcome,
             kinds: ManifestKindResults::default(),
+            libraries_changed: false,
         }
     }
 
     fn from_kind_fetches<E: std::fmt::Display>(
         outcome: ManifestRefreshOutcome,
+        libraries_changed: bool,
         mode: &str,
         libraries: &Result<impl Sized, E>,
         renodx: &Result<impl Sized, E>,
@@ -125,6 +131,7 @@ impl ManifestRefreshReport {
                 luma: ManifestKindStatus::from_result(luma),
                 reshade: ManifestKindStatus::from_result(reshade),
             },
+            libraries_changed,
         }
     }
 }
@@ -162,6 +169,7 @@ async fn refresh_passive() -> ManifestRefreshReport {
 
     ManifestRefreshReport::from_kind_fetches(
         ManifestRefreshOutcome::PassiveCompleted,
+        false,
         "passive",
         &libraries,
         &renodx,
@@ -202,6 +210,7 @@ async fn force_fetch_all_kinds() -> ManifestRefreshReport {
 
     ManifestRefreshReport::from_kind_fetches(
         ManifestRefreshOutcome::ForcedFetched,
+        libraries.as_ref().copied().unwrap_or(false),
         "forced",
         &libraries,
         &renodx,
@@ -277,6 +286,7 @@ mod tests {
 
         let report = ManifestRefreshReport::from_kind_fetches(
             ManifestRefreshOutcome::ForcedFetched,
+            true,
             "test",
             &libraries,
             &renodx,
@@ -285,6 +295,7 @@ mod tests {
         );
 
         assert_eq!(report.outcome, ManifestRefreshOutcome::ForcedFetched);
+        assert!(report.libraries_changed);
         assert_eq!(report.kinds.libraries, ManifestKindStatus::Ok);
         assert_matches!(
             report.kinds.renodx,

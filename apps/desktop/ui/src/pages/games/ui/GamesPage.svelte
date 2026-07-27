@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   import {
     getDashboardStats,
     normalizeAddonCapabilities,
     type GameSelectionHandler,
-    type GameSummary,
+    type GamesCatalogScrollAnchor,
+    type GameCardFocusTarget,
   } from '@entities/game';
   import type { VoidHandler } from '@shared/callbacks';
   import {
@@ -25,53 +26,40 @@
   import { GamesHeaderBar } from '@widgets/games-header';
   import { GamesFilterDialog } from '@features/filter-games';
   import { t } from '@shared/i18n';
-  import { createGamesPageModel } from '../model/create-games-page-model.svelte';
+  import type { GamesCatalogSession } from '../model/create-games-page-model.svelte';
 
   type Props = {
-    games?: GameSummary[];
-    catalogVersion?: number;
     busy?: boolean;
     coversAutoFetchingIds?: ReadonlySet<string>;
     pickCoverDisabled?: boolean;
 
     onScan?: VoidHandler;
-    onReloadCards?: () => Promise<void>;
-    onClearError?: VoidHandler;
     onOpenDetails?: GameSelectionHandler;
+    session: GamesCatalogSession;
   };
 
   const noop: VoidHandler = () => undefined;
   const noopGameSelection: GameSelectionHandler = () => undefined;
-  const noopReloadCards = () => Promise.resolve();
 
   const {
-    games = [],
-    catalogVersion = 0,
     busy = false,
     coversAutoFetchingIds = new Set<string>(),
     pickCoverDisabled = false,
 
     onScan = noop,
-    onReloadCards = noopReloadCards,
-    onClearError = noop,
     onOpenDetails = noopGameSelection,
+    session: model,
   }: Props = $props();
-
-  const hasGames = $derived(games.length > 0);
-  const showEmptyState = $derived(!hasGames && !busy);
-  const showInitialBusyState = $derived(!hasGames && busy);
-
-  const scanButtonLabel = $derived(busy ? t('games.scanning') : t('games.scanFolder'));
-  const dashboardStats = $derived(getDashboardStats(games));
-
-  const model = createGamesPageModel({
-    getGames: () => games,
-    getCatalogVersion: () => catalogVersion,
-    getBusy: () => busy,
-    getCoversAutoFetchingIds: () => coversAutoFetchingIds,
-    getOnClearError: () => onClearError,
-    getOnReloadCards: () => onReloadCards,
-  });
+  const hasGames = $derived(model.games.length > 0);
+  const hasCatalog = $derived(model.catalogSize > 0);
+  const waitingForBootstrap = $derived(model.bootstrapping || !model.filtersState.ready);
+  const effectiveBusy = $derived(
+    busy || waitingForBootstrap || (!hasCatalog && model.catalogSyncState === 'refreshing'),
+  );
+  const showEmptyState = $derived(!hasCatalog && !effectiveBusy);
+  const showInitialBusyState = $derived(waitingForBootstrap || (!hasCatalog && effectiveBusy));
+  const scanButtonLabel = $derived(effectiveBusy ? t('games.scanning') : t('games.scanFolder'));
+  const dashboardStats = $derived(getDashboardStats(model.games));
 
   const filtersButtonLabel = $derived(
     model.hasFilterIndicator ? t('games.openFiltersActive') : t('games.openFilters'),
@@ -88,58 +76,32 @@
   );
 
   const hasManualCoverAction = $derived(model.manualCoverBusyFor !== null);
+  let scrollViewportRef = $state<HTMLElement | null>(null);
 
   onMount(() => {
-    let disposed = false;
-    const isDisposed = () => disposed;
-
-    loadFilterPreferencesSafely(isDisposed);
-
-    return () => {
-      disposed = true;
-      cleanupModelSafely();
-    };
-  });
-
-  function loadFilterPreferencesSafely(isDisposed: () => boolean): void {
-    model.loadFilterPreferences(isDisposed).catch((error: unknown) => {
-      if (!isDisposed()) {
-        reportLifecycleError('loadFilterPreferences', error);
+    void tick().then(() => {
+      const viewport = untrack(() => scrollViewportRef);
+      if (viewport && !model.scrollAnchor) {
+        viewport.scrollTop = model.scrollTop;
       }
     });
-  }
 
-  function cleanupModelSafely(): void {
-    runSafely('flushSearchPersist', () => {
-      model.flushSearchPersist();
-    });
-
-    runSafely('dispose', () => {
-      model.dispose();
-    });
-  }
-
-  function runSafely(operation: string, callback: () => void): void {
-    try {
-      callback();
-    } catch (error) {
-      reportLifecycleError(operation, error);
-    }
-  }
-
-  function reportLifecycleError(operation: string, error: unknown): void {
-    console.error(`[GamesPage] ${operation} failed`, error);
-  }
+    return () => {
+      if (scrollViewportRef) {
+        model.setScrollTop(scrollViewportRef.scrollTop);
+      }
+    };
+  });
 
   function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
     model.setSearchQuery(event.currentTarget.value);
   }
 </script>
 
-<section class="flex h-full min-h-0 flex-col gap-4" aria-busy={busy}>
+<section class="flex h-full min-h-0 flex-col gap-4" aria-busy={effectiveBusy}>
   {#if showEmptyState}
     <div class="flex flex-1 flex-col items-center justify-center">
-      <GamesEmptyState {busy} {scanButtonLabel} {onScan} />
+      <GamesEmptyState busy={effectiveBusy} {scanButtonLabel} {onScan} />
     </div>
   {:else if showInitialBusyState}
     <Empty class="border-0" role="status" aria-live="polite" aria-atomic="true">
@@ -151,7 +113,7 @@
       </EmptyHeader>
     </Empty>
   {:else}
-    <GamesHeaderBar {hasGames} {busy} {scanButtonLabel} {dashboardStats} {onScan} />
+    <GamesHeaderBar {hasGames} busy={effectiveBusy} {scanButtonLabel} {dashboardStats} {onScan} />
 
     <div class="grid shrink-0 gap-2 px-1">
       <div
@@ -230,11 +192,12 @@
       </div>
     </div>
 
-    <ScrollArea class="min-h-0 flex-1">
+    <ScrollArea class="min-h-0 flex-1" bind:viewportRef={scrollViewportRef}>
       <GamesGrid
+        scrollElement={scrollViewportRef}
         games={model.gameItems}
         launcherOrder={model.appliedLauncherOrder}
-        {busy}
+        busy={effectiveBusy}
         {hasManualCoverAction}
         pickDisabled={pickCoverDisabled}
         {coversAutoFetchingIds}
@@ -249,6 +212,16 @@
         onToggleHidden={model.toggleHidden}
         onResetFilters={model.resetFilters}
         {onOpenDetails}
+        onLoadMore={model.loadNextPage}
+        scrollAnchor={model.scrollAnchor}
+        focusedGameId={model.focusedGameId}
+        focusedTarget={model.focusedTarget}
+        onScrollAnchorChange={(anchor: GamesCatalogScrollAnchor) => {
+          model.setScrollAnchor(anchor);
+        }}
+        onCardFocus={(gameId: string, target: GameCardFocusTarget) => {
+          model.setFocusedGame(gameId, target);
+        }}
       />
     </ScrollArea>
   {/if}

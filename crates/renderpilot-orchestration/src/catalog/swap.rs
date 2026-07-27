@@ -32,7 +32,6 @@ pub fn find_candidates(
         super::runtime_compatibility::presentation_target_profile(context, &game, d3d12_component)?;
     let candidate_context = universe
         .candidate_context
-        .clone()
         .with_target_profile(target.profile);
     let matching_components =
         super::components_for_candidate_matching(context, game_id, &components)?;
@@ -41,7 +40,7 @@ pub fn find_candidates(
         game_id: game_id.clone(),
         groups: find_replacement_candidates(
             &matching_components,
-            &universe.artifacts,
+            universe.artifact_index.artifacts(),
             &candidate_context,
         ),
     })

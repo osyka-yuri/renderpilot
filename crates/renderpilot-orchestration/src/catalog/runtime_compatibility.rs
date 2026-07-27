@@ -178,13 +178,43 @@ pub(super) fn presentation_target_profile(
     game: &GameInstallation,
     d3d12_component: Option<&GraphicsComponent>,
 ) -> AppResult<PresentationTargetProfileAssessment> {
+    let backup_availability = d3d12_component
+        .map(|component| {
+            crate::coordinated_files::load_component_backup_availability(
+                context.storage(),
+                component,
+            )
+        })
+        .transpose()?;
+    let override_path = crate::addons::game_context::executable_override(context, game.id());
+    presentation_target_profile_from_facts(
+        game,
+        d3d12_component,
+        backup_availability,
+        override_path.as_deref(),
+    )
+}
+
+/// Builds the details-compatible presentation profile from facts already read
+/// by a catalog snapshot, avoiding per-game SQLite access.
+pub(super) fn presentation_target_profile_from_facts(
+    game: &GameInstallation,
+    d3d12_component: Option<&GraphicsComponent>,
+    backup_availability: Option<crate::coordinated_files::ComponentBackupAvailability>,
+    override_path: Option<&Path>,
+) -> AppResult<PresentationTargetProfileAssessment> {
     let ResolvedExecutableTarget {
         recorded,
         aggregate_unavailable,
         executable_candidates,
         executable_path,
         architecture,
-    } = resolve_executable_target(context, game, d3d12_component)?;
+    } = resolve_executable_target_from_facts(
+        game,
+        d3d12_component,
+        backup_availability,
+        override_path,
+    );
 
     let Some(component) = d3d12_component else {
         return Ok(PresentationTargetProfileAssessment::without_d3d12(
@@ -275,15 +305,30 @@ fn resolve_executable_target(
     game: &GameInstallation,
     d3d12_component: Option<&GraphicsComponent>,
 ) -> AppResult<ResolvedExecutableTarget> {
-    let (recorded, aggregate_unavailable) = match d3d12_component
+    let backup_availability = d3d12_component
         .map(|component| {
             crate::coordinated_files::load_component_backup_availability(
                 context.storage(),
                 component,
             )
         })
-        .transpose()?
-    {
+        .transpose()?;
+    let override_path = crate::addons::game_context::executable_override(context, game.id());
+    Ok(resolve_executable_target_from_facts(
+        game,
+        d3d12_component,
+        backup_availability,
+        override_path.as_deref(),
+    ))
+}
+
+fn resolve_executable_target_from_facts(
+    game: &GameInstallation,
+    d3d12_component: Option<&GraphicsComponent>,
+    backup_availability: Option<crate::coordinated_files::ComponentBackupAvailability>,
+    override_path: Option<&Path>,
+) -> ResolvedExecutableTarget {
+    let (recorded, aggregate_unavailable) = match backup_availability {
         Some(crate::coordinated_files::ComponentBackupAvailability::Available(baseline)) => {
             (Some(baseline), false)
         }
@@ -298,10 +343,13 @@ fn resolve_executable_target(
         .as_ref()
         .and_then(ComponentRollbackBaseline::d3d12_executable);
 
-    let override_path = crate::addons::game_context::executable_override(context, game.id());
     let pinned_path = recorded_executable
         .map(|baseline| PathBuf::from(baseline.executable_path().as_str()))
-        .or_else(|| override_path.filter(|path| path.is_file()));
+        .or_else(|| {
+            override_path
+                .filter(|path| path.is_file())
+                .map(Path::to_path_buf)
+        });
     let resolved = crate::game_executable::resolve_primary_executable(
         Path::new(game.install_path().as_str()),
         pinned_path.as_deref(),
@@ -321,13 +369,13 @@ fn resolve_executable_target(
     let architecture = executable_path
         .as_deref()
         .and_then(|path| renderpilot_detection::analyze_executable(path).architecture());
-    Ok(ResolvedExecutableTarget {
+    ResolvedExecutableTarget {
         recorded,
         aggregate_unavailable,
         executable_candidates,
         executable_path,
         architecture,
-    })
+    }
 }
 
 fn preferred_d3d12_executable(
@@ -488,11 +536,12 @@ pub(super) fn assess_d3d12_executable(
     let live_export =
         renderpilot_detection::pe_exported_u32_from_bytes(&live_bytes, D3D12_SDK_VERSION_EXPORT);
     let current_sha256 = if live_read_failed {
-        recorded_executable
-            .expect("tracked unreadable executable has a baseline")
-            .expected_active()
-            .sha256()
-            .clone()
+        let Some(recorded_executable) = recorded_executable else {
+            return Err(AppError::invalid_input(
+                "unreadable D3D12 executable has no recorded baseline",
+            ));
+        };
+        recorded_executable.expected_active().sha256().clone()
     } else {
         renderpilot_detection::sha256_bytes(&live_bytes)?
     };

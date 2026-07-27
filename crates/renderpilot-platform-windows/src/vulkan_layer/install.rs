@@ -17,6 +17,8 @@ pub enum LayerInstallError {
     PermissionDenied,
     /// A generic filesystem or registry IO error.
     Io(io::Error),
+    /// The built-in layer manifest could not be serialized.
+    ManifestSerialization(serde_json::Error),
 }
 
 impl fmt::Display for LayerInstallError {
@@ -30,6 +32,9 @@ impl fmt::Display for LayerInstallError {
             }
             Self::PermissionDenied => write!(f, "access denied"),
             Self::Io(error) => write!(f, "{error}"),
+            Self::ManifestSerialization(error) => {
+                write!(f, "cannot serialize Vulkan layer manifest: {error}")
+            }
         }
     }
 }
@@ -68,7 +73,8 @@ pub fn install(
     std::fs::write(&dll_path, dll_bytes).map_err(LayerInstallError::from)?;
 
     let manifest_path = layer_dir.join(LAYER_JSON_NAME);
-    std::fs::write(&manifest_path, layer_manifest_json()).map_err(LayerInstallError::from)?;
+    let manifest_json = layer_manifest_json().map_err(LayerInstallError::ManifestSerialization)?;
+    std::fs::write(&manifest_path, manifest_json).map_err(LayerInstallError::from)?;
 
     registry.register(&manifest_path).map_err(|error| {
         if error.kind() == io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(5) {

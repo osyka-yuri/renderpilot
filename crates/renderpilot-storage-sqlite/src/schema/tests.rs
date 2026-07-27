@@ -326,6 +326,70 @@ fn apply_migrates_v11_component_backups_with_empty_auxiliary_array() {
 }
 
 #[test]
+fn apply_migrates_v12_to_v13_as_one_release_boundary() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            INSERT INTO settings (key, value) VALUES ('v12_marker', 'preserved');
+            DROP TABLE profile_addon_capabilities;
+            DROP TABLE scan_source_checkpoints;
+            PRAGMA user_version = 12;
+            ",
+        )
+        .expect("reduce to v12");
+
+    apply(&mut connection).expect("v12 migration");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert!(schema_object_exists(
+        &connection,
+        "table",
+        "profile_addon_capabilities"
+    ));
+    assert!(schema_object_exists(
+        &connection,
+        "table",
+        "scan_source_checkpoints"
+    ));
+    let marker: String = connection
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'v12_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("preserved marker");
+    assert_eq!(marker, "preserved");
+}
+
+#[test]
+fn apply_normalizes_the_misstamped_development_v14_without_losing_rows() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            INSERT INTO settings (key, value) VALUES ('v14_marker', 'preserved');
+            PRAGMA user_version = 14;
+            ",
+        )
+        .expect("stamp development version");
+
+    apply(&mut connection).expect("development version normalization");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    let marker: String = connection
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'v14_marker'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("preserved marker");
+    assert_eq!(marker, "preserved");
+}
+
+#[test]
 fn v10_migration_preserves_artifact_rows_with_empty_metadata() {
     let connection = open_test_connection();
     connection

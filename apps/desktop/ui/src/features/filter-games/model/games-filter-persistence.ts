@@ -5,7 +5,7 @@ import {
   type GamesFilterState,
 } from './games-filter-state';
 
-const DEFAULT_SEARCH_PERSIST_DEBOUNCE_MS = 250;
+const DEFAULT_SEARCH_PERSIST_DEBOUNCE_MS = 300;
 
 export type GamesFilterPersistenceContext = {
   getState: () => GamesFilterState;

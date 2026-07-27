@@ -1,4 +1,4 @@
-//! Remote cover resolution: Steam CDN, GOG catalog + CDN, SteamGridDB.
+//! Remote cover resolution: Steam CDN/store, GOG catalog/CDN, SteamGridDB.
 //!
 //! Each source can be turned off via catalog settings (see [`super::policy::CoverRemotePolicy`]).
 //! Defaults match previous behavior: all sources enabled when settings are absent.
@@ -7,7 +7,7 @@
 //!
 //! | Launcher | Steps |
 //! |----------|-------|
-//! | **Steam** | Steam CDN → GridDB `steam-{app_id}` |
+//! | **Steam** | Steam CDN → canonical Steam store match → GridDB `steam-{app_id}` |
 //! | **Gog** | GOG CDN → GridDB `gog-{id}` → autocomplete |
 //! | **Other** | GridDB autocomplete only |
 //!
@@ -20,17 +20,19 @@
 //! * The configured SteamGridDB API key is missing or blank.
 //!
 //! CONTRACT: Launcher/policy branching here must stay aligned with background-sync eligibility in the
-//! desktop UI (`apps/desktop/ui/src/shared/covers/cover-sync.ts`,
+//! desktop UI (`apps/desktop/ui/src/features/sync-covers/model/cover-sync.ts`,
 //! `gameMayReceiveRemoteCoverViaPolicy` / `filterGamesMissingStoredCoverForBackgroundSync`).
 //!
 //! Orchestration lives in [`resolve`] (`resolve_cover_bytes`); network helpers are under
-//! [`download`], [`gog`], [`steam_cdn`], [`steamgriddb`].
+//! [`download`], [`gog`], [`steam`], [`steam_cdn`], [`steam_store`], [`steamgriddb`].
 
 mod backend;
 mod download;
 mod gog;
 mod resolve;
+mod steam;
 mod steam_cdn;
+mod steam_store;
 mod steamgriddb;
 
 pub(crate) use resolve::resolve_cover_bytes;

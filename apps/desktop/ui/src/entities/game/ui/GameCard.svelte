@@ -24,6 +24,7 @@
 
   type VoidHandler = () => void;
   type MenuOpenChangeHandler = (open: boolean) => void;
+  type FocusWithinHandler = (event: FocusEvent) => void;
 
   type Props = {
     game: GameCardViewModel;
@@ -42,6 +43,7 @@
     onToggleFavorite?: VoidHandler;
     onToggleHidden?: VoidHandler;
     onOpenDetails?: VoidHandler;
+    onFocusWithin?: FocusWithinHandler;
   };
 
   const noop: VoidHandler = () => undefined;
@@ -67,6 +69,7 @@
     onToggleFavorite = noop,
     onToggleHidden = noop,
     onOpenDetails = noop,
+    onFocusWithin = () => undefined,
   }: Props = $props();
 
   const titleId = $derived(createTitleId(game.id));
@@ -86,7 +89,7 @@
   }
 </script>
 
-<Card aria-labelledby={titleId}>
+<Card aria-labelledby={titleId} data-game-id={game.id} onfocusin={onFocusWithin}>
   <CardHeader>
     <CardAction>
       <GameCardActionsMenu
@@ -164,6 +167,7 @@
 
   <CardFooter>
     <Button
+      data-game-focus-target="details"
       class="w-full"
       variant="default"
       size="sm"

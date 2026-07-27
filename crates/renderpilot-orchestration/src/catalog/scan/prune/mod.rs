@@ -48,7 +48,7 @@ pub(super) fn prune_stale_manual_games_under_scope(
 
     let stale_ids = collect_stale_manual_game_ids(storage, scope_root, retained_ids)?;
 
-    delete_games(storage, stale_ids)
+    delete_games(storage, &stale_ids)
 }
 
 fn should_skip_prune(retained_ids: &HashSet<GameId>) -> bool {
@@ -84,7 +84,7 @@ fn collect_stale_manual_game_ids(
     Ok(stale_ids)
 }
 
-fn delete_games(storage: &SqliteStorage, game_ids: Vec<GameId>) -> Result<(), ServiceError> {
+fn delete_games(storage: &SqliteStorage, game_ids: &[GameId]) -> Result<(), ServiceError> {
     if game_ids.is_empty() {
         return Ok(());
     }
@@ -92,7 +92,7 @@ fn delete_games(storage: &SqliteStorage, game_ids: Vec<GameId>) -> Result<(), Se
     let catalog_path = crate::storage::catalog_database_path()?;
 
     for game_id in game_ids {
-        let deleted = storage.delete_game(&game_id)?;
+        let deleted = storage.delete_game(game_id)?;
         crate::covers::unlink_cover_file_best_effort(
             &catalog_path,
             deleted.old_cover_file_name.as_deref(),

@@ -28,7 +28,8 @@ pub use launch_exe::launcher_launch_executable;
 
 use std::{fs, path::PathBuf};
 
-use crate::steam_appmanifest::steam_install_dirs_in_steamapps;
+use crate::install_identity::InstallIdentityDetails;
+use crate::steam_appmanifest::{SteamScanSourceFingerprint, try_steam_manifest_index};
 
 use self::launchers::{
     discover_ea_libraries, discover_epic_games_libraries, discover_gog_libraries,
@@ -51,6 +52,23 @@ pub struct DiscoveredGameSources {
     /// Useful for catalog-side cleanup of stale entries that were created when
     /// a launcher root was previously persisted as a single game.
     pub library_roots: Vec<PathBuf>,
+    /// Roots whose complete child and manifest enumeration succeeded. Only
+    /// these roots are safe inputs for pruning disappeared catalog children.
+    pub authoritative_library_roots: Vec<PathBuf>,
+    /// Launcher-owned checkpoints collected during discovery without a second
+    /// appmanifest pass for each install.
+    pub scan_sources: Vec<DiscoveredScanSource>,
+}
+
+#[derive(Debug, Clone)]
+/// A launcher-owned scan checkpoint associated with one discovered install.
+pub struct DiscoveredScanSource {
+    /// Install directory that the checkpoint describes.
+    pub install_path: PathBuf,
+    /// Launcher identity parsed during the same authoritative manifest pass.
+    pub identity: InstallIdentityDetails,
+    /// Stable source identity and content fingerprint.
+    pub checkpoint: SteamScanSourceFingerprint,
 }
 
 /// Discovers game sources from common Windows launchers.
@@ -104,14 +122,14 @@ impl DiscoveredSources {
         let library_roots = existing_unique_dirs(self.library_roots.iter().cloned());
         let steam_common_roots = existing_unique_dirs(self.steam_common_roots.iter().cloned());
 
-        let regular_children = enumerate_library_root_children(&library_roots);
-        let steam_children = enumerate_steam_common_root_children(&steam_common_roots);
+        let regular = enumerate_library_root_children(&library_roots);
+        let steam = enumerate_steam_common_root_children(&steam_common_roots);
 
         let combined = self
             .game_installs
             .into_iter()
-            .chain(regular_children)
-            .chain(steam_children);
+            .chain(regular.children.iter().cloned())
+            .chain(steam.children.iter().cloned());
         let install_paths = existing_unique_dirs(combined);
 
         let all_library_roots = library_roots
@@ -122,55 +140,80 @@ impl DiscoveredSources {
         DiscoveredGameSources {
             install_paths,
             library_roots: all_library_roots,
+            authoritative_library_roots: regular
+                .authoritative_roots
+                .into_iter()
+                .chain(steam.authoritative_roots)
+                .collect(),
+            scan_sources: steam.scan_sources,
         }
     }
 }
 
-fn enumerate_library_root_children(library_roots: &[PathBuf]) -> Vec<PathBuf> {
-    let mut children = Vec::new();
+#[derive(Default)]
+struct RootEnumeration {
+    children: Vec<PathBuf>,
+    authoritative_roots: Vec<PathBuf>,
+    scan_sources: Vec<DiscoveredScanSource>,
+}
+
+fn enumerate_library_root_children(library_roots: &[PathBuf]) -> RootEnumeration {
+    let mut output = RootEnumeration::default();
 
     for root in library_roots {
         let Ok(entries) = fs::read_dir(root) else {
             continue;
         };
-
-        for entry in entries.filter_map(Result::ok) {
+        let mut complete = true;
+        for entry in entries {
+            let Ok(entry) = entry else {
+                complete = false;
+                continue;
+            };
             let Ok(file_type) = entry.file_type() else {
+                complete = false;
                 continue;
             };
 
             if file_type.is_dir() {
-                children.push(entry.path());
+                output.children.push(entry.path());
             }
+        }
+        if complete {
+            output.authoritative_roots.push(root.clone());
         }
     }
 
-    children
+    output
 }
 
 /// Enumerates direct sub-directories of each Steam `steamapps/common` root,
 /// keeping only those that match an `installdir` declared by a manifest in
 /// the sibling `steamapps/` directory.
-fn enumerate_steam_common_root_children(common_roots: &[PathBuf]) -> Vec<PathBuf> {
-    let mut children = Vec::new();
+fn enumerate_steam_common_root_children(common_roots: &[PathBuf]) -> RootEnumeration {
+    let mut output = RootEnumeration::default();
 
     for common in common_roots {
         let Some(steamapps_dir) = common.parent() else {
             continue;
         };
 
-        let allowed_installdirs = steam_install_dirs_in_steamapps(steamapps_dir);
-
-        if allowed_installdirs.is_empty() {
+        let Some(manifests) = try_steam_manifest_index(steamapps_dir) else {
             continue;
-        }
+        };
 
         let Ok(entries) = fs::read_dir(common) else {
             continue;
         };
 
-        for entry in entries.filter_map(Result::ok) {
+        let mut complete = true;
+        for entry in entries {
+            let Ok(entry) = entry else {
+                complete = false;
+                continue;
+            };
             let Ok(file_type) = entry.file_type() else {
+                complete = false;
                 continue;
             };
 
@@ -182,13 +225,22 @@ fn enumerate_steam_common_root_children(common_roots: &[PathBuf]) -> Vec<PathBuf
                 continue;
             };
 
-            if allowed_installdirs.contains(&name) {
-                children.push(entry.path());
+            if let Some(manifest) = manifests.get(&name) {
+                let install_path = entry.path();
+                output.children.push(install_path.clone());
+                output.scan_sources.push(DiscoveredScanSource {
+                    install_path,
+                    identity: manifest.details.clone().into(),
+                    checkpoint: manifest.checkpoint.clone(),
+                });
             }
+        }
+        if complete {
+            output.authoritative_roots.push(common.clone());
         }
     }
 
-    children
+    output
 }
 
 #[cfg(test)]
@@ -209,15 +261,17 @@ mod tests {
         fs::create_dir_all(root.join("GameB")).expect("GameB dir");
         fs::write(root.join("readme.txt"), b"not a game").expect("non-dir entry");
 
-        let children = enumerate_library_root_children(std::slice::from_ref(&root));
+        let enumeration = enumerate_library_root_children(std::slice::from_ref(&root));
 
-        let mut sorted: Vec<String> = children
+        let mut sorted: Vec<String> = enumeration
+            .children
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
         sorted.sort();
 
         assert_eq!(sorted, vec!["GameA".to_owned(), "GameB".to_owned()]);
+        assert_eq!(enumeration.authoritative_roots, vec![root.clone()]);
 
         let _ = fs::remove_dir_all(root);
     }
@@ -227,12 +281,13 @@ mod tests {
         let root = temp_dir("library-root-missing");
         // Do NOT create the directory.
 
-        let children = enumerate_library_root_children(&[root]);
+        let enumeration = enumerate_library_root_children(&[root]);
 
         assert!(
-            children.is_empty(),
+            enumeration.children.is_empty(),
             "missing root should produce no children"
         );
+        assert!(enumeration.authoritative_roots.is_empty());
     }
 
     #[test]
@@ -277,6 +332,7 @@ mod tests {
         );
 
         assert_eq!(finalized.library_roots.len(), 1);
+        assert_eq!(finalized.authoritative_library_roots.len(), 1);
         assert_eq!(
             comparable_path_key(&finalized.library_roots[0]),
             comparable_path_key(&library_root),
@@ -331,6 +387,17 @@ mod tests {
             vec![comparable_path_key(&real_game)],
             "only manifest-backed children should be returned, runtime sub-folders dropped",
         );
+        assert_eq!(finalized.scan_sources.len(), 1);
+        assert_eq!(
+            comparable_path_key(&finalized.scan_sources[0].install_path),
+            comparable_path_key(&real_game),
+        );
+        assert_eq!(finalized.scan_sources[0].checkpoint.source_key, "steam:555",);
+        assert_eq!(
+            finalized.scan_sources[0].identity.external_id.as_deref(),
+            Some("555")
+        );
+        assert!(!finalized.scan_sources[0].checkpoint.fingerprint.is_empty());
 
         let library_keys: Vec<String> = finalized
             .library_roots
@@ -353,12 +420,13 @@ mod tests {
         let common = steamapps.join("common");
         fs::create_dir_all(common.join("OrphanFolder")).expect("orphan dir");
 
-        let children = enumerate_steam_common_root_children(&[common]);
+        let enumeration = enumerate_steam_common_root_children(&[common]);
 
         assert!(
-            children.is_empty(),
+            enumeration.children.is_empty(),
             "without appmanifests, no children should be considered games",
         );
+        assert_eq!(enumeration.authoritative_roots.len(), 1);
 
         let _ = fs::remove_dir_all(root);
     }

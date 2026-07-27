@@ -24,6 +24,8 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "nvapi_executable_overrides",
     "nvapi_setting_baselines",
     "game_ui_state",
+    "profile_addon_capabilities",
+    "scan_source_checkpoints",
 ];
 
 /// Every named index created by the baseline (excluding auto-indexes).
@@ -50,6 +52,7 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "idx_operation_items_status",
     "idx_settings_updated_at",
     "idx_file_hash_cache_updated_at",
+    "idx_profile_addon_capabilities_kind",
 ];
 
 /// Every named trigger created by the baseline.
@@ -68,6 +71,8 @@ pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
     "trg_game_ui_state_touch_updated_at",
     "trg_installed_addons_touch_updated_at",
     "trg_shared_artifacts_touch_updated_at",
+    "trg_profile_addon_capabilities_touch_updated_at",
+    "trg_scan_source_checkpoints_touch_updated_at",
 ];
 
 /// Exact physical-column contract for every catalog table.
