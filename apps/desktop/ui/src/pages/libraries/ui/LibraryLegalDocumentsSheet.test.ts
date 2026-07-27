@@ -3,10 +3,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 
 import { legalDocumentLink, packageSummary } from '../model/library-package-test-fixtures';
-import LibraryLegalDocumentsSheet from './LibraryLegalDocumentsSheet.svelte';
+import LibraryLegalDocumentsSheetTestHost from './LibraryLegalDocumentsSheet.test-host.svelte';
 
 const mocks = vi.hoisted(() => ({
   openExternal: vi.fn<(url: string) => Promise<void>>(),
@@ -25,7 +25,7 @@ vi.mock('svelte-sonner', () => ({
 
 describe('LibraryLegalDocumentsSheet', () => {
   let target: HTMLDivElement;
-  let component: object | undefined;
+  let component: { close: () => void } | undefined;
 
   beforeEach(() => {
     vi.stubGlobal(
@@ -43,6 +43,9 @@ describe('LibraryLegalDocumentsSheet', () => {
 
   afterEach(async () => {
     if (component) {
+      component.close();
+      flushSync();
+      await settleOverlays();
       await unmount(component);
       component = undefined;
     }
@@ -53,9 +56,9 @@ describe('LibraryLegalDocumentsSheet', () => {
 
   it('shows the package context and opens the exact validated document URL', async () => {
     const row = rowWithDocument();
-    component = mount(LibraryLegalDocumentsSheet, {
+    component = mount(LibraryLegalDocumentsSheetTestHost, {
       target,
-      props: { row, onClose: vi.fn() },
+      props: { initialRow: row, onClose: vi.fn() },
     });
     flushSync();
 
@@ -76,9 +79,9 @@ describe('LibraryLegalDocumentsSheet', () => {
 
   it('reports an external-open failure and re-enables the action', async () => {
     mocks.openExternal.mockRejectedValueOnce(new Error('shell unavailable'));
-    component = mount(LibraryLegalDocumentsSheet, {
+    component = mount(LibraryLegalDocumentsSheetTestHost, {
       target,
-      props: { row: rowWithDocument(), onClose: vi.fn() },
+      props: { initialRow: rowWithDocument(), onClose: vi.fn() },
     });
     flushSync();
 
@@ -93,9 +96,9 @@ describe('LibraryLegalDocumentsSheet', () => {
 
   it('delegates closing the sheet to its owner', async () => {
     const onClose = vi.fn();
-    component = mount(LibraryLegalDocumentsSheet, {
+    component = mount(LibraryLegalDocumentsSheetTestHost, {
       target,
-      props: { row: rowWithDocument(), onClose },
+      props: { initialRow: rowWithDocument(), onClose },
     });
     flushSync();
 
@@ -133,4 +136,16 @@ function openButton(): HTMLButtonElement {
     throw new Error('legal document open button is missing');
   }
   return button;
+}
+
+async function settleOverlays(): Promise<void> {
+  await tick();
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+  await tick();
 }
