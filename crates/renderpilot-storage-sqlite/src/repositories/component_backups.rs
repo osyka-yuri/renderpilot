@@ -73,6 +73,9 @@ enum AuxiliaryBaselineWire {
         expected_active_sha256: Sha256Hash,
         expected_active_sdk_version: u32,
     },
+    ExpectedActiveFiles {
+        files: Vec<ComponentFile>,
+    },
 }
 
 impl From<&D3d12ExecutableBaseline> for AuxiliaryBaselineWire {
@@ -87,32 +90,40 @@ impl From<&D3d12ExecutableBaseline> for AuxiliaryBaselineWire {
     }
 }
 
-impl AuxiliaryBaselineWire {
-    fn into_d3d12(self) -> D3d12ExecutableBaseline {
-        let Self::D3d12Executable {
-            executable_path,
-            original_sha256,
-            original_sdk_version,
-            expected_active_sha256,
-            expected_active_sdk_version,
-        } = self;
-        D3d12ExecutableBaseline::new(
-            executable_path,
-            D3d12ExecutableIdentity::new(original_sdk_version, original_sha256),
-            D3d12ExecutableIdentity::new(expected_active_sdk_version, expected_active_sha256),
-        )
+fn auxiliary_json(baseline: &ComponentRollbackBaseline) -> AppResult<String> {
+    let mut wire = Vec::new();
+    if !baseline.expected_active_files().is_empty() {
+        wire.push(AuxiliaryBaselineWire::ExpectedActiveFiles {
+            files: baseline.expected_active_files().to_vec(),
+        });
     }
-}
-
-fn auxiliary_json(d3d12_executable: Option<&D3d12ExecutableBaseline>) -> AppResult<String> {
-    let wire = d3d12_executable
-        .map(AuxiliaryBaselineWire::from)
-        .into_iter()
-        .collect::<Vec<_>>();
+    if let Some(executable) = baseline.d3d12_executable() {
+        wire.push(AuxiliaryBaselineWire::from(executable));
+    }
     mapping::serialize_json(&wire)
 }
 
 impl SqliteStorage {
+    /// Returns whether this game still owns any rollback baseline metadata.
+    ///
+    /// This intentionally queries by `game_id` rather than joining current
+    /// components because baselines survive component replacement by design.
+    pub fn has_component_backups_for_game(&self, game_id: &GameId) -> AppResult<bool> {
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1
+                        FROM component_backups
+                        WHERE game_id = ?1
+                    )",
+                    [game_id.as_str()],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(storage_error)
+        })
+    }
+
     /// Returns every persisted component baseline in one query.
     pub fn list_all_component_backups(
         &self,
@@ -286,7 +297,7 @@ pub(super) fn capture_component_backup_within_transaction(
 ) -> AppResult<()> {
     let now_ms = sqlite_clock::now_ms(transaction)?;
     let files_json = mapping::serialize_json(baseline.files())?;
-    let auxiliary_json = auxiliary_json(baseline.d3d12_executable())?;
+    let auxiliary_json = auxiliary_json(baseline)?;
 
     transaction
         .prepare_cached(CAPTURE_BACKUP_SQL)
@@ -315,7 +326,32 @@ pub(super) fn update_component_d3d12_executable_state_within_transaction(
         .ok_or_else(|| storage_error("D3D12 executable baseline does not exist"))?;
 
     let now_ms = sqlite_clock::now_ms(transaction)?;
-    let auxiliary_json = auxiliary_json(updated.d3d12_executable())?;
+    let auxiliary_json = auxiliary_json(&updated)?;
+    let changed = transaction
+        .prepare_cached(UPDATE_AUXILIARY_SQL)
+        .map_err(storage_error)?
+        .execute(named_params! {
+            ":component_id": component_id.as_str(),
+            ":auxiliary_json": auxiliary_json,
+            ":now_ms": now_ms,
+        })
+        .map_err(storage_error)?;
+    if changed != 1 {
+        return Err(storage_error("component rollback baseline does not exist"));
+    }
+    Ok(())
+}
+
+pub(super) fn update_component_expected_active_files_within_transaction(
+    transaction: &Transaction<'_>,
+    component_id: &ComponentId,
+    files: &[ComponentFile],
+) -> AppResult<()> {
+    let current = load_component_backup_within_transaction(transaction, component_id)?
+        .ok_or_else(|| storage_error("component rollback baseline does not exist"))?;
+    let updated = current.with_expected_active_files(files.to_vec());
+    let now_ms = sqlite_clock::now_ms(transaction)?;
+    let auxiliary_json = auxiliary_json(&updated)?;
     let changed = transaction
         .prepare_cached(UPDATE_AUXILIARY_SQL)
         .map_err(storage_error)?
@@ -343,8 +379,9 @@ pub(super) fn capture_component_d3d12_executable_within_transaction(
             "D3D12 executable baseline original has already been captured",
         ));
     }
+    let updated = current.with_d3d12_executable(executable.clone());
     let now_ms = sqlite_clock::now_ms(transaction)?;
-    let auxiliary_json = auxiliary_json(Some(executable))?;
+    let auxiliary_json = auxiliary_json(&updated)?;
     let changed = transaction
         .prepare_cached(UPDATE_AUXILIARY_SQL)
         .map_err(storage_error)?
@@ -395,19 +432,43 @@ fn rollback_baseline(
     auxiliary_json: &str,
 ) -> AppResult<ComponentRollbackBaseline> {
     let files = mapping::component_files(files_json)?;
-    let auxiliary_files: Vec<AuxiliaryBaselineWire> = mapping::deserialize_json(auxiliary_json)?;
-    if auxiliary_files.len() > 1 {
-        return Err(storage_error(
-            "component rollback baseline contains duplicate D3D12 executables",
-        ));
+    let auxiliary: Vec<AuxiliaryBaselineWire> = mapping::deserialize_json(auxiliary_json)?;
+    let mut d3d12 = None;
+    let mut expected_active_files = None;
+    for item in auxiliary {
+        match item {
+            AuxiliaryBaselineWire::D3d12Executable {
+                executable_path,
+                original_sha256,
+                original_sdk_version,
+                expected_active_sha256,
+                expected_active_sdk_version,
+            } => {
+                if d3d12.is_some() {
+                    return Err(storage_error(
+                        "component rollback baseline contains duplicate D3D12 executables",
+                    ));
+                }
+                d3d12 = Some(D3d12ExecutableBaseline::new(
+                    executable_path,
+                    D3d12ExecutableIdentity::new(original_sdk_version, original_sha256),
+                    D3d12ExecutableIdentity::new(
+                        expected_active_sdk_version,
+                        expected_active_sha256,
+                    ),
+                ));
+            }
+            AuxiliaryBaselineWire::ExpectedActiveFiles { files } => {
+                if expected_active_files.replace(files).is_some() {
+                    return Err(storage_error(
+                        "component rollback baseline contains duplicate expected-active file sets",
+                    ));
+                }
+            }
+        }
     }
-    Ok(ComponentRollbackBaseline::from_parts(
-        files,
-        auxiliary_files
-            .into_iter()
-            .next()
-            .map(AuxiliaryBaselineWire::into_d3d12),
-    ))
+    Ok(ComponentRollbackBaseline::from_parts(files, d3d12)
+        .with_expected_active_files(expected_active_files.unwrap_or_default()))
 }
 
 #[cfg(test)]
@@ -461,6 +522,42 @@ mod tests {
             Some(baseline_b.as_slice())
         );
         assert!(!backups.contains_key(&other_component));
+    }
+
+    #[test]
+    fn expected_active_files_round_trip_and_update_without_changing_the_original() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game = game("steam:expected-active");
+        storage.upsert_game(&game).expect("game");
+        let component = ComponentId::new("component:expected-active").expect("component");
+        let original = baseline("C:/Games/Test/nvngx_dlss.dll");
+        let first_active = baseline("C:/Games/Test/active-a.dll");
+        let second_active = baseline("C:/Games/Test/active-b.dll");
+        let captured = ComponentRollbackBaseline::new(original.clone())
+            .with_expected_active_files(first_active);
+        storage
+            .recover_component_rollback_baseline(game.id(), &component, &captured)
+            .expect("capture");
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: game.id(),
+                component_set: None,
+                baseline_mutations: &[ComponentBaselineMutation::UpdateExpectedActiveFiles {
+                    component_id: &component,
+                    files: &second_active,
+                }],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: None,
+            })
+            .expect("update active provenance");
+
+        let persisted = storage
+            .get_component_backup(&component)
+            .expect("query")
+            .expect("baseline");
+        assert_eq!(persisted.files(), original);
+        assert_eq!(persisted.expected_active_files(), second_active);
     }
 
     #[test]
@@ -677,7 +774,10 @@ mod tests {
     }
 
     fn auxiliary_json_for_test(executable: &D3d12ExecutableBaseline) -> String {
-        auxiliary_json(Some(executable)).expect("auxiliary json")
+        auxiliary_json(
+            &ComponentRollbackBaseline::new(Vec::new()).with_d3d12_executable(executable.clone()),
+        )
+        .expect("auxiliary json")
     }
 
     fn game(id: &str) -> GameInstallation {

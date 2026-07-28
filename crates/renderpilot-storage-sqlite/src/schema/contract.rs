@@ -31,6 +31,7 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
 /// Every named index created by the baseline (excluding auto-indexes).
 pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "uq_games_launcher_external_id",
+    "uq_games_install_key",
     "idx_games_launcher_install_path",
     "idx_games_updated_at",
     "idx_game_covers_updated_at",
@@ -77,3 +78,25 @@ pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
 
 /// Exact physical-column contract for every catalog table.
 pub(super) const CONTRACT_TABLES: &[(&str, &[&str])] = physical::CONTRACT_TABLES;
+
+/// Required handling for every table whose rows are scoped to a game or
+/// component. A contract test discovers scoped columns from
+/// [`CONTRACT_TABLES`] and fails when a new table has no policy.
+#[allow(
+    dead_code,
+    reason = "consumed by the schema contract test; kept beside production schema metadata"
+)]
+pub(super) const CONSOLIDATION_POLICIES: &[(&str, &str)] = &[
+    ("game_covers", "destination_wins_then_file_gc"),
+    ("components", "explicit_component_rekey"),
+    ("library_artifacts", "reassign_source_game"),
+    ("component_backups", "component_rekey_destination_wins"),
+    ("installed_addons", "destination_wins"),
+    ("pending_file_mutations", "recover_before_consolidation"),
+    ("operations", "reassign_game"),
+    ("operation_items", "reassign_game_and_component"),
+    ("nvapi_executable_overrides", "destination_wins"),
+    ("nvapi_setting_baselines", "destination_wins_per_setting"),
+    ("game_ui_state", "merge_boolean_flags"),
+    ("profile_addon_capabilities", "destination_wins_per_kind"),
+];

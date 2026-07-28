@@ -40,7 +40,7 @@ pub(super) fn backup_before_rebuild(connection: &Connection) -> AppResult<Option
     Ok(Some(backup_path))
 }
 
-fn main_database_file_path(connection: &Connection) -> AppResult<Option<PathBuf>> {
+pub(crate) fn main_database_file_path(connection: &Connection) -> AppResult<Option<PathBuf>> {
     let mut statement = connection
         .prepare("PRAGMA database_list")
         .map_err(|error| storage_context("could not prepare database_list", error))?;
@@ -70,7 +70,7 @@ fn main_database_file_path(connection: &Connection) -> AppResult<Option<PathBuf>
     Ok(None)
 }
 
-fn checkpoint_wal(connection: &Connection) -> AppResult<()> {
+pub(crate) fn checkpoint_wal(connection: &Connection) -> AppResult<()> {
     connection
         .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
         .map_err(|error| storage_context("could not checkpoint sqlite WAL before backup", error))

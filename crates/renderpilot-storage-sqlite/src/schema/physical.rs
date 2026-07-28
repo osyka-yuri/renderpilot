@@ -12,6 +12,9 @@ pub mod games {
     pub const PLATFORM: &str = "platform";
     pub const RUNTIME: &str = "runtime";
     pub const INSTALL_PATH: &str = "install_path";
+    pub const INSTALL_KEY: &str = "install_key";
+    pub const ROOT_AUTHORITY: &str = "root_authority";
+    pub const CONFIRMED_EXECUTABLE_PATH: &str = "confirmed_executable_path";
     pub const EXECUTABLE_CANDIDATES_JSON: &str = "executable_candidates_json";
     pub const CREATED_AT: &str = "created_at";
     pub const UPDATED_AT: &str = "updated_at";
@@ -24,6 +27,9 @@ pub mod games {
         PLATFORM,
         RUNTIME,
         INSTALL_PATH,
+        INSTALL_KEY,
+        ROOT_AUTHORITY,
+        CONFIRMED_EXECUTABLE_PATH,
         EXECUTABLE_CANDIDATES_JSON,
         CREATED_AT,
         UPDATED_AT,

@@ -113,6 +113,9 @@ struct GameRow {
     platform: String,
     runtime: String,
     install_path: String,
+    install_key: String,
+    root_authority: String,
+    confirmed_executable_path: Option<String>,
     executable_candidates_json: String,
 }
 
@@ -130,6 +133,9 @@ impl DomainRow for GameRow {
             platform: row.read(g::PLATFORM)?,
             runtime: row.read(g::RUNTIME)?,
             install_path: row.read(g::INSTALL_PATH)?,
+            install_key: row.read(g::INSTALL_KEY)?,
+            root_authority: row.read(g::ROOT_AUTHORITY)?,
+            confirmed_executable_path: row.read(g::CONFIRMED_EXECUTABLE_PATH)?,
             executable_candidates_json: row.read(g::EXECUTABLE_CANDIDATES_JSON)?,
         })
     }
@@ -143,6 +149,9 @@ impl DomainRow for GameRow {
             platform,
             runtime,
             install_path,
+            install_key,
+            root_authority,
+            confirmed_executable_path,
             executable_candidates_json,
         } = self;
 
@@ -152,11 +161,21 @@ impl DomainRow for GameRow {
         let install_path = mapping::path_ref(install_path)?;
         let executable_candidates =
             mapping::deserialize_json::<Vec<PathRef>>(&executable_candidates_json)?;
-
-        Ok(executable_candidates.into_iter().fold(
-            GameInstallation::new(identity, platform, runtime, install_path),
+        let game = GameInstallation::new(identity, platform, runtime, install_path);
+        if game.install_key().as_str() != install_key {
+            return Err(invalid_row(format!(
+                "stored install_key `{install_key}` does not match install_path"
+            )));
+        }
+        let mut game = executable_candidates.into_iter().fold(
+            game.with_root_authority(mapping::root_authority(root_authority)?),
             GameInstallation::with_executable_candidate,
-        ))
+        );
+        if let Some(confirmed_executable_path) = confirmed_executable_path {
+            game = game.with_confirmed_executable(mapping::path_ref(confirmed_executable_path)?);
+        }
+
+        Ok(game)
     }
 }
 
@@ -433,13 +452,15 @@ mod tests {
             "CREATE TABLE games (
                 id TEXT, title TEXT, launcher TEXT, external_id TEXT,
                 platform TEXT, runtime TEXT, install_path TEXT,
+                install_key TEXT, root_authority TEXT,
+                confirmed_executable_path TEXT,
                 executable_candidates_json TEXT
             )",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO games VALUES ('game:1', 'Title', 'Manual', NULL, 'Windows', 'NativeWindows', 'C:/Games/Test', '[]')",
+            "INSERT INTO games VALUES ('game:1', 'Title', 'Manual', NULL, 'Windows', 'NativeWindows', 'C:/Games/Test', 'c:/games/test', 'legacy', NULL, '[]')",
             [],
         )
         .unwrap();
@@ -453,7 +474,10 @@ mod tests {
                 runtime AS {},
                 platform AS {},
                 executable_candidates_json AS {},
-                install_path AS {}
+                install_path AS {},
+                install_key AS {},
+                root_authority AS {},
+                confirmed_executable_path AS {}
             FROM games",
             projection::game::TITLE,
             projection::game::LAUNCHER,
@@ -463,6 +487,9 @@ mod tests {
             projection::game::PLATFORM,
             projection::game::EXECUTABLE_CANDIDATES_JSON,
             projection::game::INSTALL_PATH,
+            projection::game::INSTALL_KEY,
+            projection::game::ROOT_AUTHORITY,
+            projection::game::CONFIRMED_EXECUTABLE_PATH,
         );
 
         let mut stmt = conn.prepare(&sql).unwrap();

@@ -231,6 +231,60 @@ impl SqliteStorage {
         })
     }
 
+    /// Returns whether reverting at least one managed NVAPI value still
+    /// depends on a captured baseline for this game.
+    pub fn has_nvapi_baselines_for_game(&self, game_id: &str) -> AppResult<bool> {
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1
+                        FROM nvapi_setting_baselines
+                        WHERE game_id = ?1
+                    )",
+                    [game_id],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(|error| {
+                    storage_context("could not inspect nvapi setting baselines", error)
+                })
+        })
+    }
+
+    /// Returns every immutable NVAPI baseline for one game in stable key order.
+    pub fn list_nvapi_setting_baselines_for_game(
+        &self,
+        game_id: &str,
+    ) -> AppResult<Vec<NvapiSettingBaselineRow>> {
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare_cached(
+                    "SELECT game_id, setting_key, baseline_dword,
+                            baseline_was_predefined, predefined_dword,
+                            captured_exe, captured_at
+                     FROM nvapi_setting_baselines
+                     WHERE game_id = ?1
+                     ORDER BY setting_key",
+                )
+                .map_err(|error| storage_context("could not prepare NVAPI baseline list", error))?;
+            let rows = statement
+                .query_map([game_id], |row| {
+                    Ok(NvapiSettingBaselineRow {
+                        game_id: row.get(0)?,
+                        setting_key: row.get(1)?,
+                        baseline_dword: row.get(2)?,
+                        baseline_was_predefined: row.get::<_, i64>(3)? != 0,
+                        predefined_dword: row.get(4)?,
+                        captured_exe: row.get(5)?,
+                        captured_at: row.get(6)?,
+                    })
+                })
+                .map_err(|error| storage_context("could not read NVAPI baselines", error))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|error| storage_context("could not map NVAPI baselines", error))
+        })
+    }
+
     /// Erases any existing baseline snapshot associated with the `(game_id, setting_key)`
     /// tuple. This capability is primarily utilized within testing environments, as
     /// production workflows generally require the baseline to be durably persisted

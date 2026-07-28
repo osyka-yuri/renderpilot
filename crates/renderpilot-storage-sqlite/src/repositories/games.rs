@@ -24,6 +24,9 @@ const UPSERT_GAME_SQL: &str = "
             platform,
             runtime,
             install_path,
+            install_key,
+            root_authority,
+            confirmed_executable_path,
             executable_candidates_json,
             created_at,
             updated_at
@@ -37,6 +40,9 @@ const UPSERT_GAME_SQL: &str = "
             :platform,
             :runtime,
             :install_path,
+            :install_key,
+            :root_authority,
+            :confirmed_executable_path,
             :executable_candidates_json,
             :created_at,
             :updated_at
@@ -48,6 +54,9 @@ const UPSERT_GAME_SQL: &str = "
         platform                   = excluded.platform,
         runtime                    = excluded.runtime,
         install_path               = excluded.install_path,
+        install_key                = excluded.install_key,
+        root_authority             = excluded.root_authority,
+        confirmed_executable_path  = excluded.confirmed_executable_path,
         executable_candidates_json = excluded.executable_candidates_json,
         updated_at                 = excluded.updated_at
 ";
@@ -101,6 +110,18 @@ impl SqliteStorage {
     /// Missing id is a no-op.
     pub fn delete_game(&self, id: &GameId) -> AppResult<DeletedGameInfo> {
         self.with_transaction(|transaction| delete_game_in_connection(transaction, id))
+    }
+
+    /// Deletes a set of games atomically.
+    ///
+    /// Returned cover metadata follows the input order so filesystem cleanup
+    /// can happen only after the database transaction commits.
+    pub fn delete_games(&self, ids: &[GameId]) -> AppResult<Vec<DeletedGameInfo>> {
+        self.with_transaction(|transaction| {
+            ids.iter()
+                .map(|id| delete_game_in_connection(transaction, id))
+                .collect()
+        })
     }
 }
 
@@ -214,6 +235,9 @@ fn execute_game_upsert(
             ":platform": params.platform.as_str(),
             ":runtime": params.runtime.as_str(),
             ":install_path": params.install_path,
+            ":install_key": params.install_key,
+            ":root_authority": params.root_authority.as_str(),
+            ":confirmed_executable_path": params.confirmed_executable_path,
             ":executable_candidates_json": params.executable_candidates_json.as_str(),
             ":created_at": timestamps.created_at_ms,
             ":updated_at": timestamps.updated_at_ms,
@@ -249,6 +273,9 @@ struct GameSqlParams<'a> {
     platform: String,
     runtime: String,
     install_path: &'a str,
+    install_key: &'a str,
+    root_authority: String,
+    confirmed_executable_path: Option<&'a str>,
     executable_candidates_json: String,
 }
 
@@ -262,6 +289,9 @@ impl<'a> GameSqlParams<'a> {
             platform: mapping::enum_to_text(&game.platform())?,
             runtime: mapping::enum_to_text(&game.runtime())?,
             install_path: game.install_path().as_str(),
+            install_key: game.install_key().as_str(),
+            root_authority: mapping::enum_to_text(&game.root_authority())?,
+            confirmed_executable_path: game.confirmed_executable().map(|path| path.as_str()),
             executable_candidates_json: mapping::serialize_json(game.executable_candidates())?,
         })
     }
@@ -294,7 +324,8 @@ mod tests {
     #[test]
     fn find_game_returns_stored_game_by_id() {
         let storage = in_memory_storage();
-        let game = sample_game("game:cyberpunk", "Cyberpunk 2077");
+        let game = sample_game("game:cyberpunk", "Cyberpunk 2077")
+            .with_confirmed_executable(PathRef::new("bin/Cyberpunk2077.exe").expect("executable"));
 
         store_game(&storage, &game);
 
@@ -442,7 +473,7 @@ mod tests {
             identity,
             Platform::Windows,
             GameRuntime::NativeWindows,
-            install_path_for_title(title),
+            install_path_for_id(id),
         )
     }
 
@@ -450,8 +481,8 @@ mod tests {
         GameId::new(id).expect("game id should be valid")
     }
 
-    fn install_path_for_title(title: &str) -> PathRef {
-        PathRef::new(format!("C:/Games/{}", title.replace(' ', "_")))
+    fn install_path_for_id(id: &str) -> PathRef {
+        PathRef::new(format!("C:/Games/{}", id.replace([':', '/', '\\'], "_")))
             .expect("install path should be valid")
     }
 }

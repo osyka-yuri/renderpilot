@@ -7,6 +7,7 @@ mod util;
 mod v10_to_v11;
 mod v11_to_v12;
 mod v12_to_v13;
+mod v13_to_v14;
 mod v8_to_v9;
 mod v9_to_v10;
 
@@ -26,6 +27,7 @@ const STEPS: &[(i32, i32, StepFn)] = &[
     (10, 11, v10_to_v11::apply),
     (11, 12, v11_to_v12::apply),
     (12, 13, v12_to_v13::apply),
+    (13, 14, v13_to_v14::apply),
 ];
 
 /// Runs every step from the live `user_version` until CURRENT is reached.
@@ -63,6 +65,11 @@ pub(super) fn can_upgrade_from(from: i32) -> bool {
         }
     }
     version == super::CURRENT_SCHEMA_VERSION
+}
+
+#[cfg(test)]
+pub(super) fn run_v10_to_v11_for_test(connection: &Connection) -> AppResult<()> {
+    v10_to_v11::apply(connection)
 }
 
 #[cfg(test)]

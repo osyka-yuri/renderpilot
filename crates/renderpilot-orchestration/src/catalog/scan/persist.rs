@@ -119,6 +119,7 @@ fn persist_scan_result(
             game: &game,
             components: &components,
             artifacts: &artifacts,
+            prune_empty_operations: false,
         })?;
     }
 

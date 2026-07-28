@@ -690,7 +690,8 @@ mod tests {
             identity,
             Platform::Windows,
             GameRuntime::NativeWindows,
-            PathRef::new("C:/Games/Test").expect("install path should be valid"),
+            PathRef::new(format!("C:/Games/{}", id.replace([':', '/', '\\'], "_")))
+                .expect("install path should be valid"),
         )
     }
 

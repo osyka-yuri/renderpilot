@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 use rusqlite::Connection;
 
-use super::contract::{CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS};
+use super::contract::{
+    CONSOLIDATION_POLICIES, CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS,
+};
 use super::physical;
 use super::{CURRENT_SCHEMA_VERSION, apply, ddl};
 
@@ -299,9 +301,10 @@ fn apply_migrates_v11_component_backups_with_empty_auxiliary_array() {
             "
             INSERT INTO games
                 (id, title, launcher, platform, runtime, install_path,
-                 executable_candidates_json)
+                 install_key, root_authority, executable_candidates_json)
             VALUES
-                ('steam:v11', 'Legacy', 'Steam', 'Windows', 'NativeWindows', 'C:/Game', '[]');
+                ('steam:v11', 'Legacy', 'Steam', 'Windows', 'NativeWindows', 'C:/Game',
+                 'c:/game', 'legacy', '[]');
             INSERT INTO component_backups
                 (component_id, game_id, files_json)
             VALUES
@@ -364,6 +367,159 @@ fn apply_migrates_v12_to_v13_as_one_release_boundary() {
 }
 
 #[test]
+fn apply_v14_consolidates_only_exact_install_key_duplicates() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            DROP INDEX uq_games_install_key;
+
+            INSERT INTO games (
+                id, title, launcher, platform, runtime, install_path,
+                install_key, root_authority, executable_candidates_json,
+                created_at, updated_at
+            ) VALUES
+                ('manual:keeper', 'Exact', 'Manual', 'Windows', 'NativeWindows',
+                 'C:/Games/Exact', 'c:/games/exact', 'legacy', '[]', 1, 1),
+                ('manual:duplicate', 'Exact', 'Manual', 'Windows', 'NativeWindows',
+                 'c:/games/exact/', 'c:/games/exact', 'legacy', '[]', 2, 2),
+                ('manual:child', 'Child', 'Manual', 'Windows', 'NativeWindows',
+                 'C:/Games/Exact/D3D12', 'c:/games/exact/d3d12', 'legacy', '[]', 3, 3);
+
+            INSERT INTO components (
+                id, game_id, kind, library, swappability, files_json,
+                created_at, updated_at
+            ) VALUES (
+                'component:duplicate', 'manual:duplicate', 'NativeLibrary',
+                'DlssSuperResolution', 'Swappable',
+                '[{\"path\":\"C:/Games/Exact/nvngx_dlss.dll\"}]', 2, 2
+            );
+            INSERT INTO game_ui_state (game_id, is_favorite, is_hidden, updated_at)
+            VALUES
+                ('manual:keeper', 0, 1, 1),
+                ('manual:duplicate', 1, 0, 2);
+            INSERT INTO game_covers (game_id, file_name, updated_at) VALUES
+                ('manual:keeper', 'exact.webp', 1),
+                ('manual:duplicate', 'exact.webp', 2);
+            PRAGMA user_version = 13;
+            ",
+        )
+        .expect("reduce to v13 and seed exact duplicates");
+
+    apply(&mut connection).expect("v14 migration");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    let game_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0))
+        .expect("game count");
+    assert_eq!(game_count, 2, "only exact duplicate should be merged");
+    let component_owner: String = connection
+        .query_row(
+            "SELECT game_id FROM components WHERE id = 'component:duplicate'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("component owner");
+    assert_eq!(component_owner, "manual:keeper");
+    let ui_state: (i64, i64) = connection
+        .query_row(
+            "SELECT is_favorite, is_hidden
+               FROM game_ui_state WHERE game_id = 'manual:keeper'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("merged ui state");
+    assert_eq!(ui_state, (1, 1));
+    let child_exists: i64 = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM games WHERE id = 'manual:child')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("child existence");
+    assert_eq!(
+        child_exists, 1,
+        "nested legacy card is not a startup heuristic"
+    );
+}
+
+#[test]
+fn apply_v14_refuses_lossy_exact_duplicate_conflicts() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            DROP INDEX uq_games_install_key;
+            INSERT INTO games (
+                id, title, launcher, platform, runtime, install_path,
+                install_key, root_authority, executable_candidates_json,
+                created_at, updated_at
+            ) VALUES
+                ('manual:keeper', 'Exact', 'Manual', 'Windows', 'NativeWindows',
+                 'C:/Games/Exact', 'c:/games/exact', 'legacy', '[]', 1, 1),
+                ('manual:duplicate', 'Exact', 'Manual', 'Windows', 'NativeWindows',
+                 'c:/games/exact/', 'c:/games/exact', 'legacy', '[]', 2, 2);
+            INSERT INTO game_covers (game_id, file_name, updated_at) VALUES
+                ('manual:keeper', 'keeper.webp', 1),
+                ('manual:duplicate', 'duplicate.webp', 2);
+            PRAGMA user_version = 13;
+            ",
+        )
+        .expect("v13 duplicate conflict fixture");
+
+    let error = apply(&mut connection).expect_err("lossy migration must fail closed");
+
+    assert!(
+        error
+            .message()
+            .contains("without discarding conflicting game_covers")
+    );
+    assert_eq!(user_version(&connection), 13);
+    let games: i64 = connection
+        .query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0))
+        .expect("game count");
+    let covers: i64 = connection
+        .query_row("SELECT COUNT(*) FROM game_covers", [], |row| row.get(0))
+        .expect("cover count");
+    assert_eq!((games, covers), (2, 2));
+}
+
+#[test]
+fn apply_v14_refuses_install_key_collisions_with_different_game_identity() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(
+            "
+            DROP INDEX uq_games_install_key;
+            INSERT INTO games (
+                id, title, launcher, external_id, platform, runtime, install_path,
+                install_key, root_authority, executable_candidates_json,
+                created_at, updated_at
+            ) VALUES
+                ('manual:keeper', 'Example', 'Manual', NULL, 'Windows', 'NativeWindows',
+                 'C:/Games/Exact', 'c:/games/exact', 'legacy', '[]', 1, 1),
+                ('steam:42', 'Example', 'Steam', '42', 'Windows', 'NativeWindows',
+                 'c:/games/exact/', 'c:/games/exact', 'launcher_manifest',
+                 '[\"bin/game.exe\"]', 2, 2);
+            PRAGMA user_version = 13;
+            ",
+        )
+        .expect("v13 identity collision fixture");
+
+    let error = apply(&mut connection).expect_err("different game identities must not be merged");
+
+    assert!(error.message().contains("game identity"));
+    assert_eq!(user_version(&connection), 13);
+    let games: i64 = connection
+        .query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0))
+        .expect("game count");
+    assert_eq!(games, 2);
+}
+
+#[test]
 fn apply_normalizes_the_misstamped_development_v14_without_losing_rows() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration");
@@ -402,8 +558,8 @@ fn v10_migration_preserves_artifact_rows_with_empty_metadata() {
         )
         .expect("v10 artifact row should be seeded");
 
-    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
-    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should migrate additively");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should be idempotent");
 
     let metadata: String = connection
         .query_row(
@@ -437,8 +593,8 @@ fn v10_migration_normalizes_legacy_trust_levels_without_losing_unknown_values() 
         )
         .expect("v10 trust levels should be seeded");
 
-    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
-    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should migrate additively");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should be idempotent");
 
     let values: Vec<(String, String)> = connection
         .prepare("SELECT id, trust_level FROM library_artifacts ORDER BY id")
@@ -482,8 +638,8 @@ fn v10_migration_removes_only_legacy_manifest_registrations() {
         )
         .expect("v10 artifact rows should be seeded");
 
-    super::steps::run_from(&connection, 10).expect("v10 step should migrate additively");
-    super::steps::run_from(&connection, 10).expect("v10 step should be idempotent");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should migrate additively");
+    super::steps::run_v10_to_v11_for_test(&connection).expect("v10 step should be idempotent");
 
     let values: Vec<(String, String, Option<String>)> = connection
         .prepare("SELECT id, trust_level, source FROM library_artifacts ORDER BY id")
@@ -670,6 +826,33 @@ fn contract_required_tables_match_physical_contract() {
             "REQUIRED_TABLES and CONTRACT_TABLES order/name drift at {index}"
         );
         assert_eq!(physical::CONTRACT_TABLES[index].0, table);
+    }
+}
+
+#[test]
+fn every_game_or_component_scoped_table_has_a_consolidation_policy() {
+    let policy_tables: std::collections::HashSet<&str> = CONSOLIDATION_POLICIES
+        .iter()
+        .map(|(table, _)| *table)
+        .collect();
+
+    for &(table, columns) in CONTRACT_TABLES {
+        let scoped = columns
+            .iter()
+            .any(|column| *column == "component_id" || column.ends_with("game_id"));
+        if scoped {
+            assert!(
+                policy_tables.contains(table),
+                "table {table} is game/component scoped but has no consolidation policy"
+            );
+        }
+    }
+
+    for table in policy_tables {
+        assert!(
+            CONTRACT_TABLES.iter().any(|(known, _)| *known == table),
+            "consolidation policy references unknown table {table}"
+        );
     }
 }
 

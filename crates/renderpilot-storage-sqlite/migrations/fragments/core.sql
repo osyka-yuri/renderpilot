@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS games (
     platform                   TEXT    NOT NULL,
     runtime                    TEXT    NOT NULL,
     install_path               TEXT    NOT NULL,
+    install_key                TEXT    NOT NULL,
+    root_authority             TEXT    NOT NULL,
+    confirmed_executable_path  TEXT,
     executable_candidates_json TEXT    NOT NULL,
     created_at                 INTEGER NOT NULL DEFAULT (
         CAST(unixepoch('subsec') * 1000 AS INTEGER)
@@ -24,6 +27,19 @@ CREATE TABLE IF NOT EXISTS games (
     CHECK (length(trim(install_path)) > 0),
     CHECK (instr(install_path, char(0)) = 0),
     CHECK (instr(install_path, '\') = 0),
+    CHECK (length(trim(install_key)) > 0),
+    CHECK (instr(install_key, char(0)) = 0),
+    CHECK (instr(install_key, '\') = 0),
+    CHECK (install_key = lower(install_key)),
+    CHECK (root_authority IN ('launcher_manifest', 'user_confirmed', 'legacy')),
+    CHECK (
+        confirmed_executable_path IS NULL
+        OR (
+            length(trim(confirmed_executable_path)) > 0
+            AND instr(confirmed_executable_path, char(0)) = 0
+            AND instr(confirmed_executable_path, '\') = 0
+        )
+    ),
     CHECK (json_valid(executable_candidates_json)),
     CHECK (json_type(executable_candidates_json) = 'array'),
     CHECK (created_at >= 0),
@@ -33,6 +49,9 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_games_launcher_external_id
     ON games(launcher, external_id)
     WHERE external_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_games_install_key
+    ON games(install_key);
 
 CREATE INDEX IF NOT EXISTS idx_games_launcher_install_path
     ON games(launcher, install_path);

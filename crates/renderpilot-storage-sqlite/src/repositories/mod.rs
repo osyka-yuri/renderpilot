@@ -4,6 +4,7 @@ mod catalog_select_sql;
 pub(crate) mod columns;
 mod component_backups;
 mod components;
+mod consolidation;
 pub mod file_hash_cache;
 pub mod game_covers;
 mod game_mutations;
@@ -19,6 +20,7 @@ mod scan_source_checkpoints;
 mod settings;
 mod shared_artifacts;
 
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -28,6 +30,10 @@ use rusqlite::{Connection, Params, Transaction};
 
 use crate::error::storage_error;
 
+pub use consolidation::{
+    ComponentRekey, ConsolidatedScanWriteReport, ConsolidationConflictSummary, ConsolidationPlan,
+    ConsolidationReport, ConsolidationSource,
+};
 pub use game_mutations::{ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation};
 pub use pending_file_mutations::{PendingFileMutationRow, PendingFileMutationState};
 
@@ -47,6 +53,9 @@ pub struct ScanWriteUnit<'a> {
     pub components: &'a [GraphicsComponent],
     /// Artifact rows to upsert while persisting the scan.
     pub artifacts: &'a [LibraryArtifact],
+    /// Remove operation headers left without items when a deliberate root
+    /// correction prunes components outside the new installation boundary.
+    pub prune_empty_operations: bool,
 }
 
 /// Summary of rows written by [`SqliteStorage::save_scan_write_unit`].
@@ -75,6 +84,63 @@ impl ScanWriteReport {
 }
 
 impl SqliteStorage {
+    /// Returns the actual file backing the live SQLite connection.
+    ///
+    /// This is connection-derived rather than environment-derived so custom
+    /// contexts cannot publish recovery data beside an unrelated catalog.
+    pub fn catalog_file_path(&self) -> AppResult<Option<PathBuf>> {
+        self.with_connection(crate::schema::backup::main_database_file_path)
+    }
+
+    /// Copies a consistent file-backed catalog snapshot to `destination`.
+    ///
+    /// The connection mutex excludes concurrent adapter writes, and a WAL
+    /// checkpoint makes the main database file self-contained before copying.
+    /// Returns `false` for in-memory storage.
+    pub fn copy_catalog_snapshot_to(&self, destination: &Path) -> AppResult<bool> {
+        self.with_connection(|connection| {
+            let Some(source) = crate::schema::backup::main_database_file_path(connection)? else {
+                return Ok(false);
+            };
+            crate::schema::backup::checkpoint_wal(connection)?;
+            std::fs::copy(&source, destination).map_err(|error| {
+                crate::error::storage_context(
+                    &format!(
+                        "could not copy catalog recovery snapshot to {}",
+                        destination.display()
+                    ),
+                    error,
+                )
+            })?;
+            // Windows requires a write-capable handle for FlushFileBuffers,
+            // which is what File::sync_all delegates to. The snapshot has
+            // already been copied, so open it read/write without truncation.
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(destination)
+                .map_err(|error| {
+                    crate::error::storage_context(
+                        &format!(
+                            "could not reopen catalog recovery snapshot {}",
+                            destination.display()
+                        ),
+                        error,
+                    )
+                })?;
+            file.sync_all().map_err(|error| {
+                crate::error::storage_context(
+                    &format!(
+                        "could not flush catalog recovery snapshot {}",
+                        destination.display()
+                    ),
+                    error,
+                )
+            })?;
+            Ok(true)
+        })
+    }
+
     /// Process-local generation of tables that contribute to catalog cards.
     /// Settings and filesystem hash-cache writes intentionally do not advance it.
     #[must_use]
@@ -112,6 +178,7 @@ impl SqliteStorage {
             game,
             components,
             artifacts,
+            prune_empty_operations: false,
         })?;
         Ok(())
     }
@@ -124,8 +191,61 @@ impl SqliteStorage {
                 unit.game,
                 unit.components,
                 unit.artifacts,
+                unit.prune_empty_operations,
             )
         })
+    }
+
+    /// Persists a full installation scan and a proven legacy-card
+    /// consolidation as one SQLite transaction.
+    ///
+    /// Component identities are explicitly rekeyed before source games are
+    /// removed. Every game/component-scoped table is handled by the
+    /// consolidation module's schema contract.
+    pub fn save_install_scan_with_consolidation(
+        &self,
+        unit: ScanWriteUnit<'_>,
+        plan: &ConsolidationPlan,
+        expected_conflicts: &ConsolidationConflictSummary,
+    ) -> AppResult<ConsolidatedScanWriteReport> {
+        self.with_transaction(|transaction| {
+            transaction
+                .pragma_update(None, "defer_foreign_keys", "ON")
+                .map_err(storage_error)?;
+
+            consolidation::ensure_conflicts_unchanged(transaction, plan, expected_conflicts)?;
+            let scan = persist_scan_result_in_transaction(
+                transaction,
+                unit.game,
+                unit.components,
+                unit.artifacts,
+                unit.prune_empty_operations,
+            )?;
+            let consolidation = consolidation::apply(transaction, plan)?;
+            consolidation::verify_foreign_keys(transaction)?;
+
+            Ok(ConsolidatedScanWriteReport {
+                scan,
+                consolidation,
+            })
+        })
+    }
+
+    /// Read-only preview of destination-key conflicts that would require a
+    /// recovery bundle before consolidation.
+    pub fn inspect_consolidation_conflicts(
+        &self,
+        plan: &ConsolidationPlan,
+    ) -> AppResult<ConsolidationConflictSummary> {
+        self.with_connection(|connection| consolidation::inspect_conflicts(connection, plan))
+    }
+
+    /// Absolute files referenced by state that a consolidation may discard.
+    pub fn list_consolidation_recovery_file_paths(
+        &self,
+        plan: &ConsolidationPlan,
+    ) -> AppResult<Vec<PathBuf>> {
+        self.with_connection(|connection| consolidation::recovery_file_paths(connection, plan))
     }
 
     /// `rusqlite::query_map` returns `rusqlite::Result<Rows>`, and each row
@@ -151,6 +271,7 @@ fn persist_scan_result_in_transaction(
     game: &GameInstallation,
     components: &[GraphicsComponent],
     artifacts: &[LibraryArtifact],
+    prune_empty_operations: bool,
 ) -> AppResult<ScanWriteReport> {
     games::upsert_game_within_transaction(transaction, game)?;
     components::replace_components_for_game_within_transaction(transaction, game.id(), components)?;
@@ -162,6 +283,21 @@ fn persist_scan_result_in_transaction(
         game.id(),
         artifacts,
     )?;
+    if prune_empty_operations {
+        transaction
+            .execute(
+                "DELETE FROM operations
+                 WHERE game_id = ?1
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM operation_items
+                       WHERE operation_items.operation_id = operations.id
+                         AND operation_items.game_id = operations.game_id
+                   )",
+                [game.id().as_str()],
+            )
+            .map_err(storage_error)?;
+    }
 
     Ok(ScanWriteReport {
         game_rows_written: 1,
@@ -262,6 +398,7 @@ mod tests {
                 game: &game,
                 components: &[component],
                 artifacts: &[artifact],
+                prune_empty_operations: false,
             })
             .expect("scan write unit should persist");
 
@@ -371,6 +508,49 @@ mod tests {
         assert_eq!(entries[0].items(), operation_b_items.as_slice());
         assert_eq!(entries[1].operation(), &operation_a);
         assert_eq!(entries[1].items(), operation_a_items.as_slice());
+    }
+
+    #[test]
+    fn root_correction_prunes_only_operation_headers_left_without_items() {
+        let fixture = StorageFixture::new();
+        let game = sample_game(GAME_EXISTING);
+        let removed = sample_component(COMPONENT_EXISTING, game.id().as_str());
+        let retained = sample_component(COMPONENT_SECOND, game.id().as_str());
+        let removed_operation = sample_operation(OPERATION_EXISTING, game.id().as_str());
+        let retained_operation = sample_operation(OPERATION_NEW, game.id().as_str());
+
+        fixture.store_game(&game);
+        fixture.replace_components(game.id(), &[removed, retained.clone()]);
+        fixture.save_operation_entry_parts(
+            &removed_operation,
+            &[sample_operation_item(
+                OPERATION_EXISTING,
+                COMPONENT_EXISTING,
+            )],
+        );
+        fixture.save_operation_entry_parts(
+            &retained_operation,
+            &[sample_operation_item(OPERATION_NEW, COMPONENT_SECOND)],
+        );
+
+        fixture
+            .storage
+            .save_scan_write_unit(super::ScanWriteUnit {
+                game: &game,
+                components: std::slice::from_ref(&retained),
+                artifacts: &[],
+                prune_empty_operations: true,
+            })
+            .expect("root correction scan");
+
+        fixture.assert_operation_absent(&removed_operation.id);
+        assert!(
+            fixture
+                .storage
+                .find_operation_entry(&retained_operation.id)
+                .expect("retained operation query")
+                .is_some()
+        );
     }
 
     struct StorageFixture {

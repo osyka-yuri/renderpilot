@@ -3,7 +3,7 @@ use std::any::type_name;
 use renderpilot_application::{AppResult, MetadataJson};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId, GameRuntime,
-    GraphicsTechnology, Launcher, PathRef, Platform, Swappability,
+    GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority, Swappability,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -78,6 +78,7 @@ validated_parser!(metadata_json, MetadataJson, MetadataJson::new);
 enum_parser!(launcher, Launcher);
 enum_parser!(platform, Platform);
 enum_parser!(runtime, GameRuntime);
+enum_parser!(root_authority, RootAuthority);
 enum_parser!(component_kind, ComponentKind);
 enum_parser!(graphics_technology, GraphicsTechnology);
 enum_parser!(artifact_trust_level, ArtifactTrustLevel);

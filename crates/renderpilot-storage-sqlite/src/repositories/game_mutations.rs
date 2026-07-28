@@ -34,6 +34,16 @@ pub enum ComponentBaselineMutation<'a> {
         /// New active state; original path and identity remain storage-owned.
         expected_active: &'a D3d12ExecutableIdentity,
     },
+    /// Update the last component-file identities committed by RenderPilot.
+    ///
+    /// This provenance lets cleanup validate an orphaned rollback aggregate
+    /// after a later scan no longer detects the component row.
+    UpdateExpectedActiveFiles {
+        /// Component whose active identity changed.
+        component_id: &'a ComponentId,
+        /// Complete active file set produced by the committed replacement.
+        files: &'a [renderpilot_domain::ComponentFile],
+    },
     /// Delete the aggregate after a fully verified rollback.
     Delete {
         /// Component whose rollback aggregate was consumed.
@@ -104,6 +114,14 @@ impl SqliteStorage {
                             expected_active,
                         )?
                     }
+                    ComponentBaselineMutation::UpdateExpectedActiveFiles {
+                        component_id,
+                        files,
+                    } => component_backups::update_component_expected_active_files_within_transaction(
+                        transaction,
+                        component_id,
+                        files,
+                    )?,
                     ComponentBaselineMutation::CaptureD3d12Executable {
                         component_id,
                         baseline,

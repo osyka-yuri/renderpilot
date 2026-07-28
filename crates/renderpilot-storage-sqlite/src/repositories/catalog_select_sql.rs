@@ -7,7 +7,7 @@
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::game`].
 macro_rules! projection_game_sql {
     () => {
-        "games.id AS game_id,\n        games.title AS game_title,\n        games.launcher AS game_launcher,\n        games.external_id AS game_external_id,\n        games.platform AS game_platform,\n        games.runtime AS game_runtime,\n        games.install_path AS game_install_path,\n        games.executable_candidates_json AS game_executable_candidates_json"
+        "games.id AS game_id,\n        games.title AS game_title,\n        games.launcher AS game_launcher,\n        games.external_id AS game_external_id,\n        games.platform AS game_platform,\n        games.runtime AS game_runtime,\n        games.install_path AS game_install_path,\n        games.install_key AS game_install_key,\n        games.root_authority AS game_root_authority,\n        games.confirmed_executable_path AS game_confirmed_executable_path,\n        games.executable_candidates_json AS game_executable_candidates_json"
     };
 }
 
@@ -209,6 +209,9 @@ mod tests {
                 proj::game::PLATFORM,
                 proj::game::RUNTIME,
                 proj::game::INSTALL_PATH,
+                proj::game::INSTALL_KEY,
+                proj::game::ROOT_AUTHORITY,
+                proj::game::CONFIRMED_EXECUTABLE_PATH,
                 proj::game::EXECUTABLE_CANDIDATES_JSON,
             ],
         );
@@ -222,6 +225,9 @@ mod tests {
                 ("games", phys::games::PLATFORM),
                 ("games", phys::games::RUNTIME),
                 ("games", phys::games::INSTALL_PATH),
+                ("games", phys::games::INSTALL_KEY),
+                ("games", phys::games::ROOT_AUTHORITY),
+                ("games", phys::games::CONFIRMED_EXECUTABLE_PATH),
                 ("games", phys::games::EXECUTABLE_CANDIDATES_JSON),
             ],
         );

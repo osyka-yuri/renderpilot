@@ -14,6 +14,9 @@ pub mod projection {
         pub const PLATFORM: &str = "game_platform";
         pub const RUNTIME: &str = "game_runtime";
         pub const INSTALL_PATH: &str = "game_install_path";
+        pub const INSTALL_KEY: &str = "game_install_key";
+        pub const ROOT_AUTHORITY: &str = "game_root_authority";
+        pub const CONFIRMED_EXECUTABLE_PATH: &str = "game_confirmed_executable_path";
         pub const EXECUTABLE_CANDIDATES_JSON: &str = "game_executable_candidates_json";
     }
 

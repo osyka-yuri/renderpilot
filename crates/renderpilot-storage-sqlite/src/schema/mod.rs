@@ -20,7 +20,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::storage_context;
 
-mod backup;
+pub(crate) mod backup;
 mod contract;
 mod ddl;
 mod objects;
@@ -51,10 +51,8 @@ use self::version::database_has_user_schema;
 //   11 → 12: typed auxiliary rollback baselines (including managed D3D12 EXEs).
 //   12 → 13: durable profile-derived add-on capability cache + reliable launcher
 //            scan source checkpoints (one release boundary).
-const CURRENT_SCHEMA_VERSION: i32 = 13;
-// A development build briefly stamped the exact v13 physical contract as 14.
-// Normalize that known shape in place so users who ran it keep their catalog.
-const MISSTAMPED_DEVELOPMENT_SCHEMA_VERSION: i32 = 14;
+//   13 → 14: canonical installation identity + explicit root authority.
+const CURRENT_SCHEMA_VERSION: i32 = 14;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,
@@ -87,24 +85,21 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
     let plan = classify(connection)?;
 
     match plan {
-        Plan::Keep => apply_keep(connection),
+        Plan::Keep => apply_keep(connection, false),
         Plan::ApplyBaseline => apply_with_transaction(connection, |tx| {
             apply_baseline(tx)?;
             version::write(tx, CURRENT_SCHEMA_VERSION)?;
             validate_catalog_schema(tx)
         }),
         Plan::Upgrade { from } => {
+            backup::backup_before_rebuild(connection)?;
             apply_with_transaction(connection, |tx| steps::run_from(tx, from))?;
             // A version upgrade can coexist with an older malformed physical
             // shape (for example a pre-release v10 CHECK constraint). Reuse the
             // current-schema validation, targeted healing, and rebuild policy
             // after the additive migration commits.
-            apply_keep(connection)
+            apply_keep(connection, true)
         }
-        Plan::NormalizeDevelopmentVersion => apply_with_transaction(connection, |tx| {
-            validate_catalog_schema(tx)?;
-            version::write(tx, CURRENT_SCHEMA_VERSION)
-        }),
         Plan::Rebuild => {
             backup::backup_before_rebuild(connection)?;
             apply_with_transaction(connection, reset_catalog_schema)
@@ -112,7 +107,7 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
     }
 }
 
-fn apply_keep(connection: &mut Connection) -> AppResult<()> {
+fn apply_keep(connection: &mut Connection, backup_already_created: bool) -> AppResult<()> {
     if catalog_schema_is_valid(connection)? {
         return Ok(());
     }
@@ -127,7 +122,9 @@ fn apply_keep(connection: &mut Connection) -> AppResult<()> {
         return Ok(());
     }
 
-    backup::backup_before_rebuild(connection)?;
+    if !backup_already_created {
+        backup::backup_before_rebuild(connection)?;
+    }
     apply_with_transaction(connection, reset_catalog_schema)
 }
 
@@ -153,7 +150,6 @@ enum Plan {
     Keep,
     ApplyBaseline,
     Upgrade { from: i32 },
-    NormalizeDevelopmentVersion,
     Rebuild,
 }
 
@@ -162,11 +158,6 @@ fn classify(connection: &Connection) -> AppResult<Plan> {
 
     if schema_version == CURRENT_SCHEMA_VERSION {
         return Ok(Plan::Keep);
-    }
-    if schema_version == MISSTAMPED_DEVELOPMENT_SCHEMA_VERSION
-        && catalog_schema_is_valid(connection)?
-    {
-        return Ok(Plan::NormalizeDevelopmentVersion);
     }
     if schema_version == 0 {
         return if database_has_user_schema(connection)? {
