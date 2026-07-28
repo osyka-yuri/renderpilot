@@ -8,15 +8,25 @@
  * while `Locale` is the concrete, resolved language the catalog is keyed by.
  */
 
-export type Locale = 'en' | 'ru' | 'es' | 'zh' | 'fr' | 'de' | 'ja';
-export type LanguageMode = 'system' | Locale;
+export const LOCALES = ['en', 'ru', 'es', 'zh', 'fr', 'de', 'ja'] as const;
+export type Locale = (typeof LOCALES)[number];
+
+export const LAZY_LOCALES = [
+  'ru',
+  'es',
+  'zh',
+  'fr',
+  'de',
+  'ja',
+] as const satisfies readonly Locale[];
+
+const LANGUAGE_MODES = ['system', ...LOCALES] as const;
+export type LanguageMode = (typeof LANGUAGE_MODES)[number];
 
 const STORAGE_KEY = 'renderpilot.language-mode';
 
 const DEFAULT_LANGUAGE_MODE: LanguageMode = 'system';
 const DEFAULT_LOCALE: Locale = 'en';
-
-const LANGUAGE_MODES = ['system', 'en', 'ru', 'es', 'zh', 'fr', 'de', 'ja'] as const;
 
 export function readStoredLanguageMode(): LanguageMode {
   const storage = getLocalStorage();

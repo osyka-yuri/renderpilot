@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
 import type { ExecutableCandidate } from '@features/nvapi-settings';
-import { setLanguageMode } from '@shared/i18n';
 
 import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
 import type { ExecutableLockReason } from '../model/game-executable-lock';
@@ -17,7 +16,6 @@ describe('GameExecutablePopover', () => {
   let component: object | undefined;
 
   beforeEach(() => {
-    setLanguageMode('en');
     vi.stubGlobal(
       'ResizeObserver',
       class {

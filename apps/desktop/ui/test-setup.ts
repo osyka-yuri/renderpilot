@@ -28,9 +28,9 @@ const { setLanguageMode } = await import('@shared/i18n');
 // Unit tests assert against the English catalog. Pin the locale to 'en' so
 // results are deterministic regardless of the host machine's system language
 // (otherwise `resolveLocale('system')` follows navigator.language).
-setLanguageMode('en');
+await setLanguageMode('en');
 
-beforeEach(() => {
+beforeEach(async () => {
   values.clear();
-  setLanguageMode('en');
+  await setLanguageMode('en');
 });

@@ -2,16 +2,16 @@ import type { Screen } from '@app/navigation/screen';
 import type { WorkspaceScreen } from '@app/navigation/workspace';
 import { isWorkspaceScreen } from '@app/navigation/workspace';
 import { resolveSelectedGameDetails } from '@app/navigation/selection';
-import type { AppInitializationState } from '@entities/app';
+import { DEFAULT_APP_INITIALIZATION, type AppInitializationState } from '@entities/app';
 import type { GameDetails } from '@entities/game';
 import { ignoreError } from '@shared/callbacks';
 import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
 import type { ThemeMode } from '@shared/theme';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode } from '@shared/theme';
 import type { LanguageMode } from '@shared/i18n';
-import { readStoredLanguageMode, setLanguageMode } from '@shared/i18n';
-import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
+import { getI18nState, setLanguageMode } from '@shared/i18n';
 import { createExclusiveTaskRunner } from '@shared/concurrency';
+import { createGameWorkspaceModel } from './create-game-workspace-model.svelte';
 import { publishMissingStableGameDetailsNotification } from './notifications';
 
 export type DesktopAppModel = ReturnType<typeof createDesktopAppModel>;
@@ -21,19 +21,10 @@ export type RunExclusiveOptions = {
 };
 
 /**
- * Safe initialization snapshot for tests and any code path that runs
- * before the Tauri shell has booted. Real prod calls always pass an
- * explicit snapshot fetched in bootstrap.ts.
- */
-const DEFAULT_INITIALIZATION: AppInitializationState = {
-  isElevated: true,
-  elevationSupported: false,
-  elevationUserDeclined: false,
-  elevationAttempted: false,
-};
-
-/**
  * Root desktop application model.
+ *
+ * The default initialization snapshot keeps tests and pre-shell callers safe;
+ * production bootstrap passes the explicit backend snapshot.
  *
  * Public surface style:
  * - **Flat getters** for template-friendly reads (screen, busy, theme, …)
@@ -42,7 +33,7 @@ const DEFAULT_INITIALIZATION: AppInitializationState = {
  * Plan APIs live only on `workspace` — the root model does not re-wrap them.
  */
 export function createDesktopAppModel(
-  getInitialization: () => AppInitializationState = () => DEFAULT_INITIALIZATION,
+  getInitialization: () => AppInitializationState = () => DEFAULT_APP_INITIALIZATION,
 ) {
   const initialization = getInitialization();
   let screen = $state<Screen>('games');
@@ -50,7 +41,7 @@ export function createDesktopAppModel(
   const workspace = createGameWorkspaceModel();
 
   let themeMode = $state<ThemeMode>(readStoredThemeMode());
-  let languageMode = $state<LanguageMode>(readStoredLanguageMode());
+  const i18nState = $derived(getI18nState());
 
   const selectedDetails = $derived(
     resolveSelectedGameDetails({
@@ -131,29 +122,16 @@ export function createDesktopAppModel(
     }
   }
 
-  function changeLanguageMode(mode: LanguageMode): void {
-    if (languageMode === mode) {
-      return;
-    }
-
-    const previousMode = languageMode;
-
+  async function changeLanguageMode(mode: LanguageMode): Promise<void> {
     try {
-      setLanguageMode(mode);
-      languageMode = mode;
-      clearError();
+      const result = await setLanguageMode(mode);
+
+      if (result.outcome === 'applied') {
+        clearError();
+      }
     } catch (error) {
-      restoreLanguageMode(previousMode);
       showError(error);
     }
-  }
-
-  function restoreLanguageMode(mode: LanguageMode): void {
-    languageMode = mode;
-
-    ignoreError(() => {
-      setLanguageMode(mode);
-    });
   }
 
   function applyCurrentTheme(): void {
@@ -208,7 +186,10 @@ export function createDesktopAppModel(
       return themeMode;
     },
     get languageMode() {
-      return languageMode;
+      return i18nState.pending?.mode ?? i18nState.activeMode;
+    },
+    get languageBusy() {
+      return i18nState.status === 'loading';
     },
     get isElevated() {
       return initialization.isElevated;

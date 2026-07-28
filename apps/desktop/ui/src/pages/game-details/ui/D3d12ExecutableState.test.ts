@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
 import type { GameGraphicsComponent } from '@entities/game';
-import { setLanguageMode } from '@shared/i18n';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 import { candidate, group } from '../model/candidate-group-fixtures';
@@ -17,7 +16,6 @@ describe('D3D12 executable state UI', () => {
   let component: object | undefined;
 
   beforeEach(() => {
-    setLanguageMode('en');
     vi.stubGlobal(
       'ResizeObserver',
       class {

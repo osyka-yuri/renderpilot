@@ -104,18 +104,17 @@ describe('createDesktopAppModel', () => {
     expect(model.themeMode).toBe('light');
   });
 
-  it('changeLanguageMode updates languageMode and rolls back on failure', () => {
+  it('changeLanguageMode exposes the pending mode and settles on the applied mode', async () => {
     const model = createDesktopAppModel();
     const previous = model.languageMode;
+    const next = previous === 'en' ? 'ru' : 'en';
 
-    model.changeLanguageMode(previous === 'en' ? 'ru' : 'en');
-    expect(model.languageMode).not.toBe(previous);
+    const transition = model.changeLanguageMode(next);
+    expect(model.languageMode).toBe(next);
 
-    // Force a failure path by stubbing setLanguageMode via change to same (no-op)
-    // then verifying changeLanguageMode is idempotent for equal values.
-    const current = model.languageMode;
-    model.changeLanguageMode(current);
-    expect(model.languageMode).toBe(current);
+    await transition;
+    expect(model.languageMode).toBe(next);
+    expect(model.languageBusy).toBe(false);
   });
 
   it('handleNavigate switches to settings', () => {

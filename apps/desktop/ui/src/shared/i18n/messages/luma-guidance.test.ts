@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { lumaGuidanceKeys, lumaGuidanceOverrides } from './luma-guidance';
+import { lumaGuidanceKeys } from './overrides/luma/schema';
+import { lumaGuidanceOverrides as de } from './overrides/luma/de';
+import { lumaGuidanceOverrides as es } from './overrides/luma/es';
+import { lumaGuidanceOverrides as fr } from './overrides/luma/fr';
+import { lumaGuidanceOverrides as ja } from './overrides/luma/ja';
+import { lumaGuidanceOverrides as ru } from './overrides/luma/ru';
+import { lumaGuidanceOverrides as zh } from './overrides/luma/zh';
 
 const nonEnglishLocales = ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const;
+const lumaGuidanceOverrides = { ru, de, es, fr, ja, zh } as const;
 
 describe('lumaGuidanceOverrides', () => {
   it('expands every current guidance ID exactly once for each translated locale', () => {
@@ -16,8 +23,8 @@ describe('lumaGuidanceOverrides', () => {
       const overrides = lumaGuidanceOverrides[locale];
 
       expect(overrides).toBeDefined();
-      expect(Object.keys(overrides ?? {}).sort()).toEqual(expectedKeys);
-      for (const translation of Object.values(overrides ?? {})) {
+      expect(Object.keys(overrides).sort()).toEqual(expectedKeys);
+      for (const translation of Object.values(overrides)) {
         expect(translation.trim().length).toBeGreaterThan(0);
       }
     }

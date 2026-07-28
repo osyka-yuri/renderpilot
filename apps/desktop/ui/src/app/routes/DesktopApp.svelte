@@ -356,6 +356,7 @@
             isElevated={model.isElevated}
             themeMode={model.themeMode}
             languageMode={model.languageMode}
+            languageBusy={model.languageBusy}
             appVersion={appUpdater.appVersion}
             updateAction={appUpdater.settingsAction}
             onThemeModeChange={model.changeThemeMode}

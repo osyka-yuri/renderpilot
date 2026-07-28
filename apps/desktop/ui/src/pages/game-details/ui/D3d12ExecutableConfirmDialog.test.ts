@@ -5,7 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
-import { setLanguageMode } from '@shared/i18n';
 import type { D3d12ExecutableMutationAction } from '@shared/model';
 
 import D3d12ExecutableConfirmDialogTestHost from './D3d12ExecutableConfirmDialog.test-host.svelte';
@@ -15,7 +14,6 @@ describe('D3d12ExecutableConfirmDialog', () => {
   let component: { close: () => void } | undefined;
 
   beforeEach(() => {
-    setLanguageMode('en');
     vi.stubGlobal(
       'ResizeObserver',
       class {

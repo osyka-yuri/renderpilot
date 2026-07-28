@@ -19,7 +19,6 @@ describe('LumaGuidanceCallouts', () => {
   const writeText = vi.fn<Navigator['clipboard']['writeText']>();
 
   beforeEach(() => {
-    setLanguageMode('en');
     target = document.createElement('div');
     document.body.append(target);
     writeText.mockResolvedValue(undefined);
@@ -58,7 +57,6 @@ describe('LumaGuidanceCallouts', () => {
     component = undefined;
     target.remove();
     vi.clearAllMocks();
-    setLanguageMode('en');
   });
 
   it('uses reviewed fallback text and a copyable code block', () => {
@@ -70,8 +68,8 @@ describe('LumaGuidanceCallouts', () => {
     expect(target.textContent).toContain('Do not combine this profile with OptiScaler.');
   });
 
-  it('renders a localized manifest guidance entry without changing its code', () => {
-    setLanguageMode('ru');
+  it('renders a localized manifest guidance entry without changing its code', async () => {
+    await setLanguageMode('ru');
     flushSync();
 
     expect(target.textContent).toContain('Вручную добавьте в Engine.ini следующие настройки.');

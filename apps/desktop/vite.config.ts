@@ -6,6 +6,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
+import { i18nBundleBoundaryPlugin } from './scripts/i18n-bundle-boundary-plugin';
+
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');
 
@@ -57,7 +59,7 @@ const hmrConfig = devHost
 export default defineConfig({
   clearScreen: false,
 
-  plugins: [tailwindcss(), svelte()],
+  plugins: [tailwindcss(), svelte(), i18nBundleBoundaryPlugin()],
 
   resolve: {
     alias: createLayerAliases(UI_SOURCE_ROOT, LAYER_ALIAS_PATHS),

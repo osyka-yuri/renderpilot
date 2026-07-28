@@ -20,6 +20,7 @@
     SelectContent,
     SelectItem,
     SelectTrigger,
+    Spinner,
     ToggleGroup,
     ToggleGroupItem,
   } from '@shared/ui';
@@ -33,15 +34,17 @@
     disabled?: boolean;
   };
 
-  type SelectChangeHandler<TValue extends string> = (value: TValue) => void;
+  type ThemeChangeHandler = (value: ThemeMode) => void;
+  type LanguageChangeHandler = (value: LanguageMode) => Promise<void>;
 
   type Props = {
     themeMode?: ThemeMode;
     languageMode?: LanguageMode;
     themeOptions?: readonly SelectOption<ThemeMode>[];
     languageOptions?: readonly SelectOption<LanguageMode>[];
-    onThemeChange?: SelectChangeHandler<ThemeMode>;
-    onLanguageChange?: SelectChangeHandler<LanguageMode>;
+    languageBusy?: boolean;
+    onThemeChange?: ThemeChangeHandler;
+    onLanguageChange?: LanguageChangeHandler;
   };
 
   const {
@@ -49,8 +52,9 @@
     languageMode = 'system',
     themeOptions = [],
     languageOptions = [],
+    languageBusy = false,
     onThemeChange = () => undefined,
-    onLanguageChange = () => undefined,
+    onLanguageChange = () => Promise.resolve(),
   }: Props = $props();
 
   const themeIcons: Record<ThemeMode, Component> = {
@@ -77,7 +81,7 @@
     if (!isSelectOptionValue(languageOptions, value)) {
       return;
     }
-    onLanguageChange(value);
+    void onLanguageChange(value);
   }
 
   const languageTriggerLabel = $derived(
@@ -139,7 +143,14 @@
             value={languageMode}
             onValueChange={handleLanguageChange}
           >
-            <SelectTrigger class="w-60" aria-label={t('settings.appearance.language.triggerLabel')}>
+            <SelectTrigger
+              class="w-60"
+              aria-label={t('settings.appearance.language.triggerLabel')}
+              aria-busy={languageBusy}
+            >
+              {#if languageBusy}
+                <Spinner class="size-4" aria-hidden="true" />
+              {/if}
               {languageTriggerLabel}
             </SelectTrigger>
             <SelectContent>

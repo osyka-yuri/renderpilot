@@ -5,8 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
-import { setLanguageMode } from '@shared/i18n';
-
 import {
   catalogCandidate,
   component as componentFixture,
@@ -19,7 +17,6 @@ describe('ComponentVersionRow catalog releases', () => {
   let mounted: object | undefined;
 
   beforeEach(() => {
-    setLanguageMode('en');
     vi.stubGlobal(
       'ResizeObserver',
       class {

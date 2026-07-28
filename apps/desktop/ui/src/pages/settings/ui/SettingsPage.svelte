@@ -37,6 +37,7 @@
     isElevated?: boolean;
     themeMode?: ThemeMode;
     languageMode?: LanguageMode;
+    languageBusy?: boolean;
     appVersion?: string | null;
     updateAction?: SettingsUpdateAction;
     onThemeModeChange?: ThemeModeHandler;
@@ -48,10 +49,11 @@
     isElevated = false,
     themeMode = 'system',
     languageMode = 'system',
+    languageBusy = false,
     appVersion = null,
     updateAction = 'check',
     onThemeModeChange = () => undefined,
-    onLanguageModeChange = () => undefined,
+    onLanguageModeChange = () => Promise.resolve(),
     onCheckForUpdates = () => undefined,
   }: Props = $props();
 
@@ -102,6 +104,7 @@
     <SettingsAppearanceSection
       {themeMode}
       {languageMode}
+      {languageBusy}
       themeOptions={localizedThemeOptions}
       languageOptions={localizedLanguageOptions}
       onThemeChange={onThemeModeChange}

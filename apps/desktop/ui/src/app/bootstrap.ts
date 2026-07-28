@@ -1,23 +1,26 @@
-import '@shared/theme';
 import { mount } from 'svelte';
 
 import { isDesktopPreviewMode } from '@shared/api-preview';
-import { initI18n } from '@shared/i18n';
-import { getAppInitializationState, type AppInitializationState } from '@entities/app';
+import { publishCommandErrorNotification } from '@shared/notifications';
+import { applyThemeMode, readStoredThemeMode } from '@shared/theme';
+import { initializeI18n } from '@shared/i18n';
+import {
+  DEFAULT_APP_INITIALIZATION,
+  getAppInitializationState,
+  type AppInitializationState,
+} from '@entities/app';
+import { loadDesktopStartup } from './desktop-startup';
 
-if (isDesktopPreviewMode()) {
-  const { registerMockInvoker } = await import('@app/mocks/desktop');
-  registerMockInvoker();
+function getAppRoot(): HTMLElement {
+  const root = document.getElementById('app');
+
+  if (!root) {
+    throw new Error("Render root '#app' was not found.");
+  }
+
+  return root;
 }
-
-// Apply the persisted language before the first render so the UI mounts localized.
-initI18n();
-
-const target = document.getElementById('app');
-
-if (!target) {
-  throw new Error("Render root '#app' was not found.");
-}
+const appRoot = getAppRoot();
 
 /**
  * Retrieves the process-wide initialization snapshot (e.g., elevation status)
@@ -34,22 +37,50 @@ async function loadInitialization(): Promise<AppInitializationState> {
   try {
     return await getAppInitializationState();
   } catch {
-    return {
-      isElevated: true,
-      elevationSupported: false,
-      elevationUserDeclined: false,
-      elevationAttempted: false,
-    };
+    return DEFAULT_APP_INITIALIZATION;
   }
 }
 
-const desktopAppModule = import('@app/routes/DesktopApp.svelte');
-const initState = await loadInitialization();
-const { default: DesktopApp } = await desktopAppModule;
+async function preparePreview(): Promise<void> {
+  if (isDesktopPreviewMode()) {
+    const { registerMockInvoker } = await import('@app/mocks/desktop');
+    registerMockInvoker();
+  }
+}
 
+const {
+  i18n: i18nResult,
+  desktopAppModule,
+  initialization: initState,
+} = await loadDesktopStartup({
+  // Global theme CSS is imported before module evaluation; apply the persisted
+  // mode before any await so the static skeleton cannot flash the wrong theme.
+  applyStoredTheme: () => {
+    applyThemeMode(readStoredThemeMode());
+  },
+  preparePreview,
+  initializeI18n,
+  importDesktopApp: () => import('@app/routes/DesktopApp.svelte'),
+  loadInitialization,
+});
+const { default: DesktopApp } = desktopAppModule;
+
+function finishStartup(): void {
+  appRoot.replaceChildren();
+  appRoot.removeAttribute('data-startup-skeleton');
+  appRoot.removeAttribute('aria-busy');
+  appRoot.removeAttribute('role');
+  appRoot.removeAttribute('aria-label');
+}
+
+finishStartup();
 const app = mount(DesktopApp, {
-  target,
+  target: appRoot,
   props: { initState },
 });
+
+if (i18nResult.error !== null) {
+  publishCommandErrorNotification(i18nResult.error);
+}
 
 export default app;

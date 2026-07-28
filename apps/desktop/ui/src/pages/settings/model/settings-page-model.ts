@@ -8,7 +8,7 @@ export type SettingsSelectOption<Value extends string = string> = {
 };
 
 export type ThemeModeHandler = (mode: ThemeMode) => void;
-export type LanguageModeHandler = (mode: LanguageMode) => void;
+export type LanguageModeHandler = (mode: LanguageMode) => Promise<void>;
 
 export const themeOptions = [
   { value: 'system', labelKey: 'settings.theme.system' },

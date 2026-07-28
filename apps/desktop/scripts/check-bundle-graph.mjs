@@ -14,7 +14,6 @@ const LAZY_PAGE_ENTRIES = {
   libraries: '/pages/libraries/ui/LibrariesPage.svelte',
 };
 const UPDATE_DIALOG_ENTRY = '/features/app-updater/ui/AppUpdateDialog.svelte';
-
 const entries = Object.entries(manifest);
 const normalizeKey = (key) => `/${key.replaceAll('\\', '/')}`;
 const findEntryKey = (sourceSuffix) => {
@@ -60,6 +59,12 @@ const initialKeys = new Set([...staticGraph(entryKeys[0]), ...staticGraph(deskto
 const initialDynamicTargets = new Set(
   [...initialKeys].flatMap((key) => manifest[key]?.dynamicImports ?? []),
 );
+const localePackKeys = new Map(
+  entries.flatMap(([key]) => {
+    const match = normalizeKey(key).match(/\/ui\/src\/shared\/i18n\/packs\/([^/]+)\.ts$/);
+    return match && match[1] !== 'en' ? [[match[1], key]] : [];
+  }),
+);
 
 const jsBytes = async (keys) => {
   let total = 0;
@@ -77,6 +82,12 @@ if (initialBytes > INITIAL_JS_BUDGET_BYTES) {
   throw new Error(
     `Initial JS graph is ${initialBytes} bytes; budget is ${INITIAL_JS_BUDGET_BYTES}.`,
   );
+}
+
+const localeSizes = [];
+for (const [locale, packKey] of localePackKeys) {
+  const localeKeys = [...staticGraph(packKey)].filter((dependency) => !initialKeys.has(dependency));
+  localeSizes.push(`${locale} ${await jsBytes(localeKeys)}`);
 }
 
 const routeSizes = [];
@@ -112,4 +123,6 @@ if (dynamicUpdateDialog) {
   throw new Error('AppUpdateDialog must be part of the eager application graph.');
 }
 
-console.log(`Bundle graph OK: initial ${initialBytes} bytes; lazy pages ${routeSizes.join(', ')}.`);
+console.log(
+  `Bundle graph OK: initial ${initialBytes} bytes; locale graphs ${localeSizes.join(', ')}; lazy pages ${routeSizes.join(', ')}.`,
+);

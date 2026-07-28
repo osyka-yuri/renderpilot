@@ -5,8 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
-import { setLanguageMode } from '@shared/i18n';
-
 import { packageSummary } from '../model/library-package-test-fixtures';
 import LibraryVersionCell from './LibraryVersionCell.svelte';
 
@@ -15,7 +13,6 @@ describe('LibraryVersionCell', () => {
   let component: object | undefined;
 
   beforeEach(() => {
-    setLanguageMode('en');
     target = document.createElement('div');
     document.body.append(target);
   });

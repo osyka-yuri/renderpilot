@@ -1,28 +1,29 @@
-import type { Locale } from './locale';
-import type { MessageDictionary, MessageValue } from './messages/types';
+import type { LocalePack } from './packs/types';
+import type { MessageValue } from './messages/types';
 
-export type DynamicMessageCatalog = Partial<Record<Locale, MessageDictionary>>;
-
-/** Resolves every source for the active locale before considering English.
- * This keeps a localized runtime/catalog override from being shadowed by a
- * coincidentally matching English static key. */
-export function lookupLocalizedMessage(
+/**
+ * Looks up a key in the already committed pack and then in the eager English
+ * fallback pack. Keeping the active pack as the first argument makes the
+ * atomic runtime commit the only state transition translation reads observe.
+ */
+export function lookupLocalePackMessage(
   key: string,
-  locale: Locale,
-  staticMessages: Partial<Record<Locale, MessageDictionary>> & { en: MessageDictionary },
-  dynamicCatalogs: readonly DynamicMessageCatalog[],
+  activePack: LocalePack,
+  fallbackPack: LocalePack,
 ): MessageValue | undefined {
-  const localizedStatic = staticMessages[locale]?.[key];
+  const activeMessages: Readonly<Partial<Record<string, MessageValue>>> = activePack.messages;
+  const localizedStatic = activeMessages[key];
   if (localizedStatic !== undefined) {
     return localizedStatic;
   }
 
-  for (const catalog of dynamicCatalogs) {
-    const localizedDynamic = catalog[locale]?.[key];
+  for (const catalog of activePack.dynamicCatalogs) {
+    const localizedDynamic = catalog[key];
     if (localizedDynamic !== undefined) {
       return localizedDynamic;
     }
   }
 
-  return staticMessages.en[key];
+  const fallbackMessages: Readonly<Partial<Record<string, MessageValue>>> = fallbackPack.messages;
+  return fallbackMessages[key];
 }

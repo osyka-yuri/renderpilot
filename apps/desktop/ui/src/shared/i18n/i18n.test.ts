@@ -1,14 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { getLocale, setLanguageMode, t, translateKey } from './index';
-import { lookupLocalizedMessage } from './lookup';
 import { resolveLocale } from './locale';
-
-// The shared test setup pins the locale to 'en'; restore it after each case so
-// locale changes here never leak into other suites running in this worker.
-afterEach(() => {
-  setLanguageMode('en');
-});
 
 describe('i18n', () => {
   describe('resolveLocale', () => {
@@ -23,32 +16,32 @@ describe('i18n', () => {
   });
 
   describe('t', () => {
-    it('returns the string for the active locale', () => {
-      setLanguageMode('en');
+    it('returns the string for the active locale', async () => {
+      await setLanguageMode('en');
       expect(t('nav.games')).toBe('Games');
 
-      setLanguageMode('ru');
+      await setLanguageMode('ru');
       expect(t('nav.games')).toBe('Игры');
     });
 
-    it('interpolates named parameters', () => {
-      setLanguageMode('en');
+    it('interpolates named parameters', async () => {
+      await setLanguageMode('en');
       expect(t('game.card.action.detailsAria', { title: 'Halo' })).toBe('Open details for Halo');
     });
 
-    it('leaves unknown placeholders untouched', () => {
-      setLanguageMode('en');
+    it('leaves unknown placeholders untouched', async () => {
+      await setLanguageMode('en');
       expect(t('game.card.action.detailsAria', { other: 'x' })).toBe('Open details for {title}');
     });
 
-    it('selects English plural forms by count', () => {
-      setLanguageMode('en');
+    it('selects English plural forms by count', async () => {
+      await setLanguageMode('en');
       expect(t('game.dashboard.games', { count: 1 })).toBe('1 game');
       expect(t('game.dashboard.games', { count: 5 })).toBe('5 games');
     });
 
-    it('selects Russian plural forms (one/few/many) by count', () => {
-      setLanguageMode('ru');
+    it('selects Russian plural forms (one/few/many) by count', async () => {
+      await setLanguageMode('ru');
       expect(t('game.dashboard.games', { count: 1 })).toBe('1 игра');
       expect(t('game.dashboard.games', { count: 2 })).toBe('2 игры');
       expect(t('game.dashboard.games', { count: 5 })).toBe('5 игр');
@@ -57,8 +50,8 @@ describe('i18n', () => {
       expect(t('game.dashboard.games', { count: 11 })).toBe('11 игр');
     });
 
-    it('pluralizes the bulk download summary toast', () => {
-      setLanguageMode('en');
+    it('pluralizes the bulk download summary toast', async () => {
+      await setLanguageMode('en');
       expect(t('libraries.actions.downloadAllDoneToast', { count: 1 })).toBe(
         'Downloaded 1 library',
       );
@@ -66,93 +59,67 @@ describe('i18n', () => {
         'Downloaded 3 libraries',
       );
 
-      setLanguageMode('ru');
+      await setLanguageMode('ru');
       expect(t('libraries.actions.downloadAllDoneToast', { count: 5 })).toBe('Скачано 5 библиотек');
     });
   });
 
   describe('translateKey', () => {
-    it('translates a known dynamic (backend) key instead of using the fallback', () => {
-      setLanguageMode('ru');
+    it('translates a known dynamic (backend) key instead of using the fallback', async () => {
+      await setLanguageMode('ru');
       const translated = translateKey('user_message.game_not_in_catalog', 'FALLBACK');
 
       expect(translated).not.toBe('FALLBACK');
       expect(translated.length).toBeGreaterThan(0);
     });
 
-    it('uses the NVAPI override for ru and the backend fallback for en', () => {
-      setLanguageMode('ru');
+    it('uses the NVAPI override for ru and the backend fallback for en', async () => {
+      await setLanguageMode('ru');
       const ruLabel = translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset');
       expect(ruLabel).not.toBe('Render Preset');
       expect(ruLabel.length).toBeGreaterThan(0);
 
       // English is intentionally omitted from the overrides, so the caller's
       // fallback (the backend dlss_settings.json text) is used.
-      setLanguageMode('en');
+      await setLanguageMode('en');
       expect(translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset')).toBe(
         'Render Preset',
       );
     });
 
-    it('uses the Luma guidance override in every translated locale and the manifest fallback in English', () => {
+    it('uses the Luma guidance override in every translated locale and the manifest fallback in English', async () => {
       const key = 'luma.cod-black-ops-3.bundled_dlss';
       const fallback =
         "Luma reserves the game's bundled DLSS library and restores it when removed.";
 
       for (const locale of ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const) {
-        setLanguageMode(locale);
+        await setLanguageMode(locale);
         expect(translateKey(key, fallback)).not.toBe(fallback);
       }
 
-      setLanguageMode('en');
+      await setLanguageMode('en');
       expect(translateKey(key, fallback)).toBe(fallback);
     });
 
-    it('returns the fallback for an unknown key', () => {
-      setLanguageMode('en');
+    it('returns the fallback for an unknown key', async () => {
+      await setLanguageMode('en');
       expect(translateKey('does.not.exist', 'Fallback text')).toBe('Fallback text');
     });
 
-    it('interpolates the fallback when the key is missing', () => {
-      setLanguageMode('en');
+    it('interpolates the fallback when the key is missing', async () => {
+      await setLanguageMode('en');
       expect(translateKey('missing.key', '{action} failed', { action: 'Save' })).toBe(
         'Save failed',
       );
     });
   });
 
-  describe('catalog precedence', () => {
-    it('checks localized dynamic catalogs before the English static fallback', () => {
-      const staticMessages = {
-        en: { collision: 'English static' },
-        ru: {},
-      };
-      const dynamicCatalogs = [{ ru: { collision: 'Русский dynamic' } }];
-
-      expect(lookupLocalizedMessage('collision', 'ru', staticMessages, dynamicCatalogs)).toBe(
-        'Русский dynamic',
-      );
-    });
-
-    it('keeps the current locale static catalog authoritative', () => {
-      const staticMessages = {
-        en: { collision: 'English static' },
-        ru: { collision: 'Русский static' },
-      };
-      const dynamicCatalogs = [{ ru: { collision: 'Русский dynamic' } }];
-
-      expect(lookupLocalizedMessage('collision', 'ru', staticMessages, dynamicCatalogs)).toBe(
-        'Русский static',
-      );
-    });
-  });
-
   describe('getLocale', () => {
-    it('reflects the active language mode', () => {
-      setLanguageMode('ru');
+    it('reflects the active language mode', async () => {
+      await setLanguageMode('ru');
       expect(getLocale()).toBe('ru');
 
-      setLanguageMode('en');
+      await setLanguageMode('en');
       expect(getLocale()).toBe('en');
     });
   });

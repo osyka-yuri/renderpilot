@@ -1,0 +1,218 @@
+import { LAZY_LOCALES } from '../ui/src/shared/i18n/locale';
+
+type BundleChunk = {
+  type: 'chunk';
+  fileName: string;
+  facadeModuleId: string | null;
+  imports: string[];
+  dynamicImports: string[];
+  isEntry: boolean;
+  isDynamicEntry: boolean;
+  modules: Record<string, unknown>;
+};
+
+type BundleAsset = BundleChunk | { type: 'asset'; fileName: string; source?: unknown };
+type OutputBundleLike = Record<string, BundleAsset>;
+
+const NON_ENGLISH_LOCALES = LAZY_LOCALES;
+const PACK_ROOT = '/ui/src/shared/i18n/packs/';
+
+function normalize(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function hasSourceSuffix(value: string, suffix: string): boolean {
+  return normalize(value).endsWith(suffix);
+}
+
+function staticReachable(bundle: OutputBundleLike, rootFileName: string): Set<string> {
+  const reachable = new Set<string>();
+  const visit = (fileName: string): void => {
+    if (reachable.has(fileName)) {
+      return;
+    }
+
+    const chunk = bundle[fileName];
+    if (!chunk || chunk.type !== 'chunk') {
+      return;
+    }
+
+    reachable.add(fileName);
+    for (const dependency of chunk.imports) {
+      visit(dependency);
+    }
+  };
+
+  visit(rootFileName);
+  return reachable;
+}
+
+function dynamicReachable(bundle: OutputBundleLike, roots: Set<string>): Set<string> {
+  const reachable = new Set<string>();
+  const visit = (fileName: string): void => {
+    if (reachable.has(fileName)) {
+      return;
+    }
+
+    const chunk = bundle[fileName];
+    if (!chunk || chunk.type !== 'chunk') {
+      return;
+    }
+
+    reachable.add(fileName);
+    for (const dependency of chunk.imports) {
+      visit(dependency);
+    }
+    for (const dependency of chunk.dynamicImports) {
+      visit(dependency);
+    }
+  };
+
+  for (const root of roots) {
+    const chunk = bundle[root];
+    if (!chunk || chunk.type !== 'chunk') {
+      continue;
+    }
+
+    for (const dependency of chunk.dynamicImports) {
+      visit(dependency);
+    }
+  }
+
+  return reachable;
+}
+
+function moduleIds(bundle: OutputBundleLike, chunkNames: Set<string>): string[] {
+  return [...chunkNames].flatMap((fileName) => {
+    const chunk = bundle[fileName];
+    return chunk?.type === 'chunk' ? Object.keys(chunk.modules) : [];
+  });
+}
+
+function findChunkByFacade(bundle: OutputBundleLike, suffix: string): BundleChunk {
+  const matches = Object.values(bundle).filter(
+    (asset): asset is BundleChunk =>
+      asset.type === 'chunk' &&
+      asset.facadeModuleId !== null &&
+      hasSourceSuffix(asset.facadeModuleId, suffix),
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(`Expected one chunk for ${suffix}, found ${matches.length}.`);
+  }
+
+  return matches[0];
+}
+
+function findChunkContainingModule(bundle: OutputBundleLike, suffix: string): BundleChunk {
+  const matches = Object.values(bundle).filter(
+    (asset): asset is BundleChunk =>
+      asset.type === 'chunk' &&
+      Object.keys(asset.modules).some((moduleId) => hasSourceSuffix(moduleId, suffix)),
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(`Expected one chunk containing ${suffix}, found ${matches.length}.`);
+  }
+
+  return matches[0];
+}
+
+function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
+  const chunks = Object.values(bundle).filter((asset) => asset.type === 'chunk');
+  const entries = chunks.filter((chunk) => chunk.isEntry);
+
+  if (entries.length !== 1) {
+    throw new Error(`Expected one application entry, found ${entries.length}.`);
+  }
+
+  const bootstrap = entries[0];
+  const desktopApp = findChunkByFacade(bundle, '/ui/src/app/routes/DesktopApp.svelte');
+  const indexHtml = Object.values(bundle).find(
+    (asset): asset is Extract<BundleAsset, { type: 'asset' }> =>
+      asset.type === 'asset' && asset.fileName === 'index.html',
+  );
+  const indexHtmlSource = typeof indexHtml?.source === 'string' ? indexHtml.source : '';
+  const initialChunks = new Set([
+    ...staticReachable(bundle, bootstrap.fileName),
+    ...staticReachable(bundle, desktopApp.fileName),
+  ]);
+  const initialModules = moduleIds(bundle, initialChunks);
+
+  const englishPack = `${PACK_ROOT}en.ts`;
+  if (!initialModules.some((moduleId) => hasSourceSuffix(moduleId, englishPack))) {
+    throw new Error('The eager English locale pack is missing from the initial module graph.');
+  }
+  if (
+    !initialModules.some((moduleId) =>
+      hasSourceSuffix(moduleId, '/ui/src/shared/i18n/messages/en.ts'),
+    )
+  ) {
+    throw new Error('The eager English message catalog is missing from the initial module graph.');
+  }
+
+  const forbiddenInitialPatterns = [
+    new RegExp(`${PACK_ROOT}(?:${NON_ENGLISH_LOCALES.join('|')})\\.ts$`),
+    new RegExp(`/ui/src/shared/i18n/messages/(?:${NON_ENGLISH_LOCALES.join('|')})\\.ts$`),
+    /\/ui\/src\/shared\/i18n\/messages\/overrides\/(?:luma|nvapi)\//,
+  ];
+  const leakedModules = [...initialChunks].flatMap((fileName) => {
+    const chunk = bundle[fileName];
+    if (!chunk || chunk.type !== 'chunk') {
+      return [];
+    }
+
+    return Object.keys(chunk.modules)
+      .filter((moduleId) =>
+        forbiddenInitialPatterns.some((pattern) => pattern.test(normalize(moduleId))),
+      )
+      .map((moduleId) => ({ fileName, moduleId }));
+  });
+
+  if (leakedModules.length > 0) {
+    throw new Error(
+      `Non-active locale modules leaked into the initial graph:\n${leakedModules
+        .map(({ fileName, moduleId }) => `- ${moduleId} (initial chunk: ${fileName})`)
+        .join('\n')}`,
+    );
+  }
+
+  const dynamicChunks = dynamicReachable(bundle, initialChunks);
+  const registryChunk = findChunkContainingModule(bundle, `${PACK_ROOT}registry.ts`);
+  for (const locale of NON_ENGLISH_LOCALES) {
+    const pack = findChunkByFacade(bundle, `${PACK_ROOT}${locale}.ts`);
+
+    if (!pack.isDynamicEntry) {
+      throw new Error(`Locale pack ${locale} is not emitted as a dynamic entry.`);
+    }
+    if (initialChunks.has(pack.fileName)) {
+      throw new Error(`Locale pack ${locale} is present in the initial chunk graph.`);
+    }
+    if (!dynamicChunks.has(pack.fileName)) {
+      throw new Error(`Locale pack ${locale} is not dynamically reachable from bootstrap.`);
+    }
+    if (!registryChunk.dynamicImports.includes(pack.fileName)) {
+      throw new Error(
+        `Locale pack ${locale} is not a direct dynamic import of the locale loader registry.`,
+      );
+    }
+
+    for (const graphFileName of staticReachable(bundle, pack.fileName)) {
+      const graphChunk = bundle[graphFileName];
+      if (graphChunk?.type === 'chunk' && indexHtmlSource.includes(graphChunk.fileName)) {
+        throw new Error(`Locale graph ${locale} was preloaded by index.html: ${graphFileName}`);
+      }
+    }
+  }
+}
+
+export function i18nBundleBoundaryPlugin() {
+  return {
+    name: 'renderpilot-i18n-bundle-boundaries',
+    apply: 'build',
+    enforce: 'post',
+    generateBundle(_options: unknown, bundle: OutputBundleLike): void {
+      assertI18nBundleBoundaries(bundle);
+    },
+  };
+}

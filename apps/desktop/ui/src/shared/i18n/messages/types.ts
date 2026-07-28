@@ -20,6 +20,9 @@ export type PluralForms = {
 
 export type MessageValue = string | PluralForms;
 
-export type MessageDictionary = Record<string, MessageValue>;
+export type MessageDictionary = Readonly<Record<string, MessageValue>>;
+
+/** Feature-specific catalogs may intentionally cover only a subset of keys. */
+export type MessageOverrides = Readonly<Partial<Record<string, MessageValue>>>;
 
 export type InterpolationParams = Record<string, string | number>;

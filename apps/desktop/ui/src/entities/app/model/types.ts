@@ -18,3 +18,10 @@ export type AppInitializationState = {
    */
   elevationAttempted: boolean;
 };
+
+export const DEFAULT_APP_INITIALIZATION: AppInitializationState = {
+  isElevated: true,
+  elevationSupported: false,
+  elevationUserDeclined: false,
+  elevationAttempted: false,
+};
