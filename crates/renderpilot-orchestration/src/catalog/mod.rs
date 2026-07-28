@@ -38,6 +38,7 @@ use self::scan::scan_folder_impl;
 pub mod auto_scan;
 mod cards;
 pub(crate) mod cascade;
+mod developer_mode;
 pub mod execute;
 mod operations;
 pub mod output;
@@ -47,6 +48,8 @@ mod runtime_compatibility;
 pub mod scan;
 mod source_assessment;
 mod swap;
+#[cfg(test)]
+mod test_support;
 
 #[cfg(windows)]
 pub use scan::prune_auto_scan_orphans;

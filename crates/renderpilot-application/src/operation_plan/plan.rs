@@ -107,18 +107,42 @@ impl OperationPlan {
                 ));
             }
             D3d12ExecutableActionKind::RepairRequired => {
-                self.blockers
-                    .push(OperationPlanBlocker::D3d12ExecutableRepairRequired);
+                let _ = self.insert_blocker(OperationPlanBlocker::D3d12ExecutableRepairRequired);
             }
             D3d12ExecutableActionKind::None => {}
         }
+        self.recalculate_risk();
+        self.d3d12_executable_action = Some(action);
+        self
+    }
+
+    /// Adds a prerequisite blocker discovered after the pure plan was built.
+    ///
+    /// Platform and environment checks intentionally happen at orchestration
+    /// boundaries. Keeping their enrichment here preserves blocker
+    /// de-duplication and risk recalculation as `OperationPlan` invariants.
+    #[must_use]
+    pub fn with_prerequisite_blocker(mut self, blocker: OperationPlanBlocker) -> Self {
+        if self.insert_blocker(blocker) {
+            self.recalculate_risk();
+        }
+        self
+    }
+
+    fn insert_blocker(&mut self, blocker: OperationPlanBlocker) -> bool {
+        if !self.blockers.contains(&blocker) {
+            self.blockers.push(blocker);
+            return true;
+        }
+        false
+    }
+
+    fn recalculate_risk(&mut self) {
         self.risk_level = OperationPlanRiskLevel::from_findings(
             &self.blockers,
             &self.warnings,
             self.requires_elevation,
         );
-        self.d3d12_executable_action = Some(action);
-        self
     }
 
     /// Returns the generated operation identifier.

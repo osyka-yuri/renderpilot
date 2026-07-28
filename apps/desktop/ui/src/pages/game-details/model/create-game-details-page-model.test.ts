@@ -163,8 +163,16 @@ describe('createGameDetailsPageModel', () => {
 
   describe('handleBulkSwap', () => {
     const items = [
-      { componentId: 'c1', artifactId: 'a1', isDownloaded: true },
-      { componentId: 'c2', artifactId: 'a2', isDownloaded: true },
+      {
+        componentId: 'c1',
+        artifactId: 'a1',
+        isDownloaded: true,
+      },
+      {
+        componentId: 'c2',
+        artifactId: 'a2',
+        isDownloaded: true,
+      },
     ];
 
     it('swaps every plugin, reloads once and notifies the applied count', async () => {

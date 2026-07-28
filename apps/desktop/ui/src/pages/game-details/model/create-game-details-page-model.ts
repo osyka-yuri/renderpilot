@@ -8,14 +8,13 @@ import { t, type MessageKey } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { clearDownloadProgress } from '@shared/lib';
 
-import type { BulkSwapItem } from './streamline-versions';
 import type { SwapRequest } from './swap-request';
 
 export type SwapHandler = (request: SwapRequest) => Promise<void> | void;
 
 export type RollbackHandler = (componentId: string) => Promise<void> | void;
 
-export type BulkSwapHandler = (items: BulkSwapItem[]) => Promise<void> | void;
+export type BulkSwapHandler = (items: readonly SwapRequest[]) => Promise<void> | void;
 
 export type BulkRollbackHandler = (componentIds: string[]) => Promise<void> | void;
 
@@ -152,7 +151,7 @@ export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {
   }
 
   /** Bulk download-then-apply (Streamline bundle swap / update-all). */
-  async function handleBulkSwap(items: BulkSwapItem[]): Promise<void> {
+  async function handleBulkSwap(items: readonly SwapRequest[]): Promise<void> {
     clearDownloadProgress(items.map((item) => item.artifactId));
     const outcome = await runBatch(items, async (gameId, item, signal) => {
       const appliedOperation = await executeGraphicsSwap({

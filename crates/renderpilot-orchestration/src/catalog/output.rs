@@ -478,18 +478,74 @@ mod tests {
     use super::{
         CandidateOutput, CatalogCandidateOutput, D3d12ExecutableActionOutput,
         D3d12ExecutableStatusOutput, InstalledReleaseStateOutput, OperationSummaryOutput,
+        SwapPlanOutput,
     };
     use renderpilot_application::{
         D3d12ExecutableAction, D3d12ExecutableProfile, InstalledReleaseState, MetadataJson,
-        OperationKind, OperationRecord, OperationStatus, UnixTimestampMillis,
+        OperationKind, OperationPlanBlocker, OperationRecord, OperationStatus, UnixTimestampMillis,
+        build_swap_operation_plan,
     };
     use renderpilot_domain::{
-        CatalogPackageAvailability, ComponentId, GameId, OperationId, PackageRelease,
-        PackageVersion, PathRef, ReleaseChannel, Version,
+        ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, ComponentFile, ComponentId,
+        ComponentKind, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, OperationId,
+        PackageRelease, PackageVersion, PathRef, ReleaseChannel, Sha256Hash, Swappability, Version,
     };
     use serde_json::json;
 
     use crate::catalog::{D3d12ExecutableStatus, OperationListCatalogEntry};
+
+    #[test]
+    fn developer_mode_blockers_and_recalculated_risk_have_stable_wire_values() {
+        let component = GraphicsComponent::new(
+            ComponentId::new("component:d3d12-wire").expect("component"),
+            GameId::new("game:d3d12-wire").expect("game"),
+            ComponentKind::NativeLibrary,
+            GraphicsTechnology::D3D12Agility,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(PathRef::new("C:/Game/D3D12Core.dll").expect("component path"))
+                .with_sha256(
+                    Sha256Hash::new(
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    )
+                    .expect("component hash"),
+                ),
+        );
+        let artifact = LibraryArtifact::new(
+            ArtifactId::new("artifact:d3d12-wire").expect("artifact id"),
+            GraphicsTechnology::D3D12Agility,
+            "D3D12Core.dll",
+            vec![
+                ComponentFile::new(
+                    PathRef::new("C:/Library/D3D12Core.dll").expect("artifact path"),
+                )
+                .with_sha256(
+                    Sha256Hash::new(
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    )
+                    .expect("artifact hash"),
+                ),
+            ],
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("artifact");
+        let plan = build_swap_operation_plan(&component, &artifact)
+            .expect("plan")
+            .with_prerequisite_blocker(OperationPlanBlocker::DeveloperModeRequired)
+            .with_prerequisite_blocker(OperationPlanBlocker::DeveloperModeCheckUnavailable);
+
+        let wire = serde_json::to_value(SwapPlanOutput::from(&plan)).expect("plan json");
+
+        assert_eq!(
+            wire["blockers"],
+            json!([
+                "developer_mode_required",
+                "developer_mode_check_unavailable"
+            ])
+        );
+        assert_eq!(wire["risk_level"], "blocked");
+    }
 
     #[test]
     fn candidate_wire_nests_catalog_identity_and_keeps_technical_version_explicit() {

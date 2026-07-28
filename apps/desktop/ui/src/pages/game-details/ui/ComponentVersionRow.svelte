@@ -32,10 +32,13 @@
   import { t } from '@shared/i18n';
   import { formatReleaseVersionLabel } from '../model/release-version-label';
   import { installedSelectionValue } from '../model/version-selection';
+  import { createD3d12PreflightFlow } from '../model/create-d3d12-preflight-flow.svelte';
+  import { requiresD3d12Preflight, type PreparedD3d12Swap } from '../model/d3d12-preflight';
   import { prepareD3d12Swap } from '../model/prepare-d3d12-operation';
   import { partitionD3d12Candidates } from '../model/candidate-partition';
   import type { SwapHandler } from '../model/create-game-details-page-model';
   import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
+  import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
   import ComponentVersionOption from './ComponentVersionOption.svelte';
   import D3d12ExecutableStatusPanel from './D3d12ExecutableStatusPanel.svelte';
 
@@ -50,6 +53,11 @@
   type SwapOwner = {
     gameId: string;
     componentId: string;
+  };
+
+  type PendingD3d12Swap = {
+    candidate: GameCandidate;
+    owner: SwapOwner;
   };
 
   const { component, group, busy, onSwap, onRollback }: Props = $props();
@@ -91,14 +99,31 @@
   let pendingArtifactId = $state<string | null>(null);
   let confirmOpen = $state(false);
   let pendingCandidate = $state<GameCandidate | null>(null);
-  let planning = $state(false);
   let pendingConfirmationToken = $state<string | null>(null);
   let pendingExecutableAction = $state<D3d12ExecutableMutationAction | null>(null);
   let pendingSwapOwner = $state<SwapOwner | null>(null);
-  let preparationGeneration = 0;
+  const preflight = createD3d12PreflightFlow<PendingD3d12Swap, PreparedD3d12Swap>({
+    prepare: (pending) =>
+      prepareD3d12Swap(
+        pending.owner.gameId,
+        pending.owner.componentId,
+        pending.candidate.artifact_id,
+      ),
+    isCurrent: (pending) => isCurrentSwapOwner(pending.owner),
+    onReady: (pending, prepared) => {
+      handlePreparedSwap(pending, prepared);
+    },
+    onError: (error) => {
+      selected = currentValue;
+      publishCommandErrorNotification(error);
+    },
+    onCancel: () => {
+      selected = currentValue;
+    },
+  });
 
   onDestroy(() => {
-    preparationGeneration++;
+    invalidatePendingSwap();
   });
 
   // The dropdown always marks the backend-reported installed state as selected.
@@ -110,15 +135,27 @@
   // FAILS — a clicked-but-never-installed version cannot stay selected. Also
   // resets pendingArtifactId.
   let selected = $state<string | undefined>(undefined);
+  let preflightOwnerKey: string | null = null;
   $effect(() => {
     if (!busy) {
       selected = currentValue;
       pendingArtifactId = null;
     }
   });
+  $effect(() => {
+    const ownerKey = `${component.game_id}\0${component.id}`;
+    if (preflightOwnerKey === null) {
+      preflightOwnerKey = ownerKey;
+      return;
+    }
+    if (ownerKey !== preflightOwnerKey) {
+      preflightOwnerKey = ownerKey;
+      invalidatePendingSwap();
+    }
+  });
 
   function handleSwapChange(value: string | undefined) {
-    if (!value || value === currentValue || busy || planning) {
+    if (!value || value === currentValue || busy || preflight.planning) {
       return;
     }
     const candidate = candidates.find((c) => c.artifact_id === value);
@@ -128,48 +165,25 @@
         selected = currentValue;
         return;
       }
-      if (action?.requires_confirmation) {
-        void prepareSwap(candidate);
+      if (requiresD3d12Preflight(component.technology)) {
+        void preflight.start({ candidate, owner: currentSwapOwner() });
         return;
       }
       startSwap(candidate);
     }
   }
 
-  async function prepareSwap(candidate: GameCandidate): Promise<void> {
-    const owner = currentSwapOwner();
-    const generation = ++preparationGeneration;
-    planning = true;
-    try {
-      const prepared = await prepareD3d12Swap(
-        owner.gameId,
-        owner.componentId,
-        candidate.artifact_id,
-      );
-      if (!isCurrentPreparation(generation, owner)) {
-        return;
-      }
-      const action = prepared.action;
-      if (!action?.requires_confirmation || !isD3d12ExecutableMutationAction(action)) {
-        startSwap(candidate, undefined, owner);
-        return;
-      }
-      pendingCandidate = candidate;
-      pendingConfirmationToken = prepared.confirmationToken;
-      pendingExecutableAction = action;
-      pendingSwapOwner = owner;
-      confirmOpen = true;
-    } catch (error) {
-      if (!isCurrentPreparation(generation, owner)) {
-        return;
-      }
-      selected = currentValue;
-      publishCommandErrorNotification(error);
-    } finally {
-      if (generation === preparationGeneration) {
-        planning = false;
-      }
+  function handlePreparedSwap(pending: PendingD3d12Swap, prepared: PreparedD3d12Swap): void {
+    const action = prepared.action;
+    if (!action?.requires_confirmation || !isD3d12ExecutableMutationAction(action)) {
+      startSwap(pending.candidate, undefined, pending.owner);
+      return;
     }
+    pendingCandidate = pending.candidate;
+    pendingConfirmationToken = prepared.confirmationToken;
+    pendingExecutableAction = action;
+    pendingSwapOwner = pending.owner;
+    confirmOpen = true;
   }
 
   function startSwap(
@@ -190,7 +204,7 @@
   }
 
   function handleRollback() {
-    if (busy || planning) {
+    if (busy || preflight.planning) {
       return;
     }
     onRollback(component.id);
@@ -201,10 +215,20 @@
     if (pendingCandidate && pendingSwapOwner) {
       startSwap(pendingCandidate, pendingConfirmationToken, pendingSwapOwner);
     }
+    clearPendingExecutableAction();
+  }
+
+  function clearPendingExecutableAction(): void {
     pendingCandidate = null;
     pendingConfirmationToken = null;
     pendingExecutableAction = null;
     pendingSwapOwner = null;
+  }
+
+  function invalidatePendingSwap(): void {
+    preflight.cancel();
+    confirmOpen = false;
+    clearPendingExecutableAction();
   }
 
   function currentSwapOwner(): SwapOwner {
@@ -216,10 +240,6 @@
 
   function isCurrentSwapOwner(owner: SwapOwner): boolean {
     return component.game_id === owner.gameId && component.id === owner.componentId;
-  }
-
-  function isCurrentPreparation(generation: number, owner: SwapOwner): boolean {
-    return generation === preparationGeneration && isCurrentSwapOwner(owner);
   }
 
   const pendingExecutableActions = $derived.by((): D3d12ExecutableMutationAction[] => {
@@ -257,7 +277,7 @@
       <span class="text-xs text-muted-foreground">{t('gameDetails.version.noReplacements')}</span>
     {:else}
       <DownloadProgressBar ids={progressIds} active={busy} />
-      {#if planning}
+      {#if preflight.planning}
         <Loader2Icon
           class="size-4 shrink-0 animate-spin text-muted-foreground"
           aria-label={t('games.loading')}
@@ -266,7 +286,7 @@
       <Select
         type="single"
         bind:value={selected}
-        disabled={busy || planning}
+        disabled={busy || preflight.planning}
         onValueChange={handleSwapChange}
       >
         <SelectTrigger size="sm" class="w-60">
@@ -329,7 +349,7 @@
               variant="ghost"
               size="icon-sm"
               disabled={busy ||
-                planning ||
+                preflight.planning ||
                 component.d3d12_executable_status?.status === 'repair_required'}
               onclick={handleRollback}
               aria-label={t('gameDetails.version.restoreOriginal', { fileName })}
@@ -352,12 +372,22 @@
   onOpenChange={(open: boolean) => {
     confirmOpen = open;
     if (!open) {
-      pendingCandidate = null;
-      pendingConfirmationToken = null;
-      pendingExecutableAction = null;
-      pendingSwapOwner = null;
+      clearPendingExecutableAction();
       selected = currentValue;
     }
   }}
   onConfirm={confirmExecutableAction}
+/>
+
+<DeveloperModeRequirementDialog
+  open={preflight.developerModeOpen}
+  blocker={preflight.developerModeBlocker}
+  retrying={preflight.developerModeRetrying}
+  stillDisabledAfterRetry={preflight.developerModeStillDisabledAfterRetry}
+  onOpenChange={(open: boolean) => {
+    if (!open) {
+      invalidatePendingSwap();
+    }
+  }}
+  onRetry={() => void preflight.retry()}
 />

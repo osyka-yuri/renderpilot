@@ -62,6 +62,10 @@ pub enum OperationPlanBlocker {
     ArtifactMatchesCurrentFile,
     /// D3D12 executable changed outside the managed SDK export.
     D3d12ExecutableRepairRequired,
+    /// Windows Developer Mode is required for the selected DX12Core preview.
+    DeveloperModeRequired,
+    /// Windows Developer Mode could not be checked safely.
+    DeveloperModeCheckUnavailable,
 }
 
 impl OperationPlanBlocker {
@@ -74,6 +78,8 @@ impl OperationPlanBlocker {
             Self::ComponentUnsafe => "component_unsafe",
             Self::ArtifactMatchesCurrentFile => "artifact_matches_current_file",
             Self::D3d12ExecutableRepairRequired => "d3d12_executable_repair_required",
+            Self::DeveloperModeRequired => "developer_mode_required",
+            Self::DeveloperModeCheckUnavailable => "developer_mode_check_unavailable",
         }
     }
 }

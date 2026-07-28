@@ -268,6 +268,11 @@ pub(super) fn load_swap_preflight(
             issue,
         });
     }
+    operation_plan = super::developer_mode::apply_developer_mode_prerequisite(
+        context,
+        operation_plan,
+        &artifact,
+    );
 
     Ok(SwapPreflight::Ready(Box::new(ReadySwapPreflight {
         game,

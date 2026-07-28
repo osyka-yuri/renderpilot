@@ -2,6 +2,7 @@
   import { AddonStateMessage } from '@entities/addon';
   import { openExternal } from '@shared/api';
   import { t, translateKey } from '@shared/i18n';
+  import { formatError, publishErrorNotification } from '@shared/notifications';
   import { Button } from '@shared/ui';
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
@@ -29,12 +30,17 @@
 
   const externalLinkDisabled = $derived(busy || !externalUrl);
 
-  function openExternalLink(): void {
-    if (busy || !externalUrl) {
+  async function openExternalLink(): Promise<void> {
+    const url = externalUrl;
+    if (busy || !url) {
       return;
     }
 
-    void openExternal(externalUrl);
+    try {
+      await openExternal(url);
+    } catch (error) {
+      publishErrorNotification(externalLabel, formatError(error));
+    }
   }
 </script>
 

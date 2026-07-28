@@ -271,6 +271,28 @@ export const ru: Record<MessageKey, MessageValue> = {
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
+  'gameDetails.developerMode.requiredTitle': 'Режим разработчика Windows выключен',
+  'gameDetails.developerMode.requiredDescription':
+    'Для работы Microsoft D3D12 Agility Preview требуется эта системная настройка.',
+  'gameDetails.developerMode.checkTitle': 'Не удалось проверить режим разработчика',
+  'gameDetails.developerMode.checkDescription':
+    'RenderPilot не смог определить текущее состояние режима разработчика Windows.',
+  'gameDetails.developerMode.checkUnavailable': 'Перед продолжением требуется успешная проверка.',
+  'gameDetails.developerMode.enableGuidance':
+    'Режим разработчика можно включить в разделе «Для разработчиков» параметров Windows.',
+  'gameDetails.developerMode.previewGuidance':
+    'Инструкция по включению режима разработчика доступна в документации Microsoft.',
+  'gameDetails.developerMode.restartInfo':
+    'В отдельных случаях изменение вступает в силу только после перезагрузки Windows.',
+  'gameDetails.developerMode.stillDisabled': 'Режим разработчика по-прежнему выключен.',
+  'gameDetails.developerMode.settingsOpenFailed':
+    'Не удалось открыть параметры Windows. Откройте раздел «Для разработчиков» вручную.',
+  'gameDetails.developerMode.documentationOpenFailed': 'Не удалось открыть документацию Microsoft.',
+  'gameDetails.developerMode.openSettings': 'Открыть параметры',
+  'gameDetails.developerMode.openDocumentation': 'Открыть документацию',
+  'gameDetails.developerMode.checkStatus': 'Проверить статус',
+  'gameDetails.developerMode.retryCheck': 'Повторить проверку',
+  'gameDetails.developerMode.checkingStatus': 'Проверка…',
   'gameDetails.d3d12.status.original': 'Оригинальный EXE',
   'gameDetails.d3d12.status.patched': 'EXE пропатчен: {from} → {to}',
   'gameDetails.d3d12.status.repair': 'Требуется восстановление',

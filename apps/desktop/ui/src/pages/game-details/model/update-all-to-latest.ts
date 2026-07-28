@@ -6,7 +6,9 @@ import {
 import { comparePackageVersions } from '@shared/model';
 
 import { NVIDIA_STREAMLINE_TECHNOLOGY } from './game-details-tabs';
-import { buildStreamlineVersionModel, type BulkSwapItem } from './streamline-versions';
+import { requiresD3d12Preflight } from './d3d12-preflight';
+import { buildStreamlineVersionModel } from './streamline-versions';
+import type { PlannedSwap } from './swap-request';
 
 type GameCandidate = GameCandidateGroup['candidates'][number];
 
@@ -23,7 +25,7 @@ const NEWER_VERSION = 'newer_version';
 
 export type UpdateAllPlan = {
   /** Components to swap to reach their latest version (already-current excluded). */
-  items: BulkSwapItem[];
+  items: PlannedSwap[];
   /** How many components this plan updates (`items.length`). */
   updateCount: number;
 };
@@ -54,7 +56,7 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
     (component) => component.technology !== NVIDIA_STREAMLINE_TECHNOLOGY,
   );
 
-  const items: BulkSwapItem[] = [];
+  const items: PlannedSwap[] = [];
 
   // Independent components: pick the newest genuine upgrade by its full catalogue
   // package version rather than trusting the candidates' arrival order.
@@ -62,10 +64,12 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
     const candidate = latestUpgrade(groupsById[component.id]);
     if (candidate) {
       items.push({
-        componentId: component.id,
-        artifactId: candidate.artifact_id,
-        isDownloaded: candidate.is_downloaded,
-        d3d12ExecutableAction: candidate.d3d12_executable_action,
+        kind: requiresD3d12Preflight(component.technology) ? 'd3d12' : 'direct',
+        target: {
+          componentId: component.id,
+          artifactId: candidate.artifact_id,
+          isDownloaded: candidate.is_downloaded,
+        },
       });
     }
   }
@@ -79,7 +83,12 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
     const model = buildStreamlineVersionModel(streamlineComponents, groupsById, 'automatic');
     const latestComplete = model.options.find((option) => option.isComplete);
     if (latestComplete) {
-      items.push(...latestComplete.items);
+      items.push(
+        ...latestComplete.items.map((target): PlannedSwap => ({
+          kind: 'direct',
+          target,
+        })),
+      );
     }
   }
 

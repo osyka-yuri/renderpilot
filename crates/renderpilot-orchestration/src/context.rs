@@ -1,4 +1,5 @@
 use crate::{ServiceError, storage::open_catalog_storage};
+use renderpilot_platform_windows::DeveloperModeStatus;
 use renderpilot_storage_sqlite::SqliteStorage;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -9,6 +10,8 @@ mod snapshot_cache;
 use self::caches::{BackgroundRefreshGate, GameDetailsCache, ReplacementUniverseCache};
 use self::snapshot_cache::CatalogSnapshotCache;
 
+type DeveloperModeStatusProvider = dyn Fn() -> DeveloperModeStatus + Send + Sync;
+
 /// Shared application context holding the catalog storage and configuration.
 pub struct Context {
     storage: SqliteStorage,
@@ -18,6 +21,7 @@ pub struct Context {
     replacement_universe_cache: ReplacementUniverseCache,
     game_details_cache: GameDetailsCache,
     background_refresh_gate: BackgroundRefreshGate,
+    developer_mode_status_provider: Arc<DeveloperModeStatusProvider>,
 }
 
 impl Context {
@@ -65,7 +69,24 @@ impl Context {
             replacement_universe_cache: ReplacementUniverseCache::default(),
             game_details_cache: GameDetailsCache::default(),
             background_refresh_gate: BackgroundRefreshGate::default(),
+            developer_mode_status_provider: Arc::new(
+                renderpilot_platform_windows::developer_mode_status,
+            ),
         }
+    }
+
+    pub(crate) fn developer_mode_status(&self) -> DeveloperModeStatus {
+        (self.developer_mode_status_provider)()
+    }
+
+    /// Replaces the platform probe for deterministic orchestration tests.
+    #[cfg(test)]
+    pub(crate) fn with_developer_mode_status_provider(
+        mut self,
+        provider: impl Fn() -> DeveloperModeStatus + Send + Sync + 'static,
+    ) -> Self {
+        self.developer_mode_status_provider = Arc::new(provider);
+        self
     }
 
     /// Exposes the underlying SQLite storage for orchestration internal use.

@@ -49,8 +49,9 @@
   import DlssComponentCard from './DlssComponentCard.svelte';
   import StreamlineComponentCard from './StreamlineComponentCard.svelte';
   import D3d12ExecutableConfirmDialog from './D3d12ExecutableConfirmDialog.svelte';
+  import DeveloperModeRequirementDialog from './DeveloperModeRequirementDialog.svelte';
   import VendorComponentCard from './VendorComponentCard.svelte';
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
 
   type Props = {
     details?: GameDetails | null;
@@ -148,6 +149,25 @@
   const updateConfirmOpen = $derived(updateAllWorkflow.confirmationOpen);
   const preparedUpdateExecutableActions = $derived(updateAllWorkflow.confirmationActions);
   const pendingDownloadIds = $derived(updateAllWorkflow.pendingDownloadIds);
+  let updateAllOwnerGameId: string | null | undefined;
+
+  $effect(() => {
+    const currentGameId = gameId;
+    if (updateAllOwnerGameId === undefined) {
+      updateAllOwnerGameId = currentGameId;
+      return;
+    }
+    if (currentGameId !== updateAllOwnerGameId) {
+      updateAllOwnerGameId = currentGameId;
+      untrack(() => {
+        updateAllWorkflow.invalidatePending();
+      });
+    }
+  });
+
+  onDestroy(() => {
+    updateAllWorkflow.destroy();
+  });
   // Shared exclusive gate for Luma/RenoDX cards (peer mutations + Update-all).
   const exclusiveBusy = $derived(busy || anyAddonBusy || updatingAll || planningUpdateAll);
   const showProgress = $derived(updatingAll && pendingDownloadIds.length > 0);
@@ -451,4 +471,17 @@
     updateAllWorkflow.setConfirmationOpen(open);
   }}
   onConfirm={() => void updateAllWorkflow.confirm()}
+/>
+
+<DeveloperModeRequirementDialog
+  open={updateAllWorkflow.developerModeOpen}
+  blocker={updateAllWorkflow.developerModeBlocker}
+  retrying={updateAllWorkflow.developerModeRetrying}
+  stillDisabledAfterRetry={updateAllWorkflow.developerModeStillDisabledAfterRetry}
+  onOpenChange={(open: boolean) => {
+    if (!open) {
+      updateAllWorkflow.cancelDeveloperMode();
+    }
+  }}
+  onRetry={() => void updateAllWorkflow.retryDeveloperMode()}
 />

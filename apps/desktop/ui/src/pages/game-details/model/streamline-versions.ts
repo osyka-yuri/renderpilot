@@ -4,7 +4,6 @@ import {
   type GameCandidateGroup,
   type GameGraphicsComponent,
 } from '@entities/game';
-import type { D3d12ExecutableAction } from '@shared/model';
 import type { SwapRequest } from './swap-request';
 
 import {
@@ -13,11 +12,6 @@ import {
   compareVersionDesc,
   versionsEqual,
 } from './version-compare';
-
-/** One component's swap target within a Streamline version change. */
-export type BulkSwapItem = SwapRequest & {
-  d3d12ExecutableAction?: D3d12ExecutableAction | null;
-};
 
 /** A Streamline release that can be applied across all installed components. */
 export type StreamlineVersionOption = {
@@ -28,7 +22,7 @@ export type StreamlineVersionOption = {
   /** Every installed component is already known to be on this version. */
   isCurrent: boolean;
   /** Components that will be swapped to reach this version. */
-  items: BulkSwapItem[];
+  items: SwapRequest[];
   /** How many components this swap updates (`items.length`). */
   updateCount: number;
   /** Components that cannot reach this version with a candidate. */
@@ -150,7 +144,7 @@ function buildOption(
   groupsById: Record<string, GameCandidateGroup | null>,
   selectionMode: CandidateSelectionMode,
 ): StreamlineVersionOption {
-  const items: BulkSwapItem[] = [];
+  const items: SwapRequest[] = [];
   let missingCount = 0;
   let allDownloaded = true;
   let fullyOnVersionCount = 0;
@@ -180,7 +174,6 @@ function buildOption(
       componentId: component.id,
       artifactId: candidate.artifact_id,
       isDownloaded: candidate.is_downloaded,
-      d3d12ExecutableAction: candidate.d3d12_executable_action,
     });
     if (!candidate.is_downloaded) {
       allDownloaded = false;

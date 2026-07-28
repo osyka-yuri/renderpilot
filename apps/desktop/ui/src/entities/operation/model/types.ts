@@ -19,11 +19,23 @@ export type SwapPlan = {
   replacement_sha256: string | null;
   risk_level: string;
   requires_elevation: boolean;
-  blockers: string[];
+  blockers: SwapPlanBlocker[];
   warnings: string[];
   files: SwapPlanFile[];
   d3d12_executable_action: D3d12ExecutableAction | null;
 };
+
+type KnownSwapPlanBlocker =
+  | 'technology_mismatch'
+  | 'component_read_only'
+  | 'component_integrated_into_engine'
+  | 'component_unsafe'
+  | 'artifact_matches_current_file'
+  | 'd3d12_executable_repair_required'
+  | 'developer_mode_required'
+  | 'developer_mode_check_unavailable';
+
+export type SwapPlanBlocker = KnownSwapPlanBlocker | (string & {});
 
 export type SwapPlanFile = {
   action: string;

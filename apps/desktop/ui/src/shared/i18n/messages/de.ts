@@ -188,6 +188,31 @@ export const de: Record<MessageKey, MessageValue> = {
     other: '{count} Komponenten jeweils auf die neueste stabile Version aktualisieren',
   },
   'gameDetails.executable.title': 'Spiel-Programmdatei',
+  'gameDetails.developerMode.requiredTitle': 'Windows-Entwicklermodus ist deaktiviert',
+  'gameDetails.developerMode.requiredDescription':
+    'Microsoft D3D12 Agility Preview benötigt diese Windows-Einstellung.',
+  'gameDetails.developerMode.checkTitle': 'Entwicklermodus konnte nicht geprüft werden',
+  'gameDetails.developerMode.checkDescription':
+    'RenderPilot konnte den aktuellen Status des Windows-Entwicklermodus nicht ermitteln.',
+  'gameDetails.developerMode.checkUnavailable':
+    'Vor dem Fortfahren ist eine erfolgreiche Prüfung erforderlich.',
+  'gameDetails.developerMode.enableGuidance':
+    'Der Entwicklermodus kann unter „Für Entwickler“ in den Windows-Einstellungen aktiviert werden.',
+  'gameDetails.developerMode.previewGuidance':
+    'Die Microsoft-Dokumentation erklärt, wie der Entwicklermodus in Windows aktiviert wird.',
+  'gameDetails.developerMode.restartInfo':
+    'In einigen Fällen wird diese Einstellung erst nach einem Neustart von Windows wirksam.',
+  'gameDetails.developerMode.stillDisabled':
+    'Der Entwicklermodus ist weiterhin deaktiviert. Wenn er erst kürzlich aktiviert wurde, muss Windows möglicherweise neu gestartet werden, bevor die Änderung wirksam wird.',
+  'gameDetails.developerMode.settingsOpenFailed':
+    'Die Windows-Einstellungen konnten nicht geöffnet werden. Öffnen Sie „Für Entwickler“ manuell.',
+  'gameDetails.developerMode.documentationOpenFailed':
+    'Die Microsoft-Dokumentation konnte nicht geöffnet werden.',
+  'gameDetails.developerMode.openSettings': 'Einstellungen öffnen',
+  'gameDetails.developerMode.openDocumentation': 'Dokumentation öffnen',
+  'gameDetails.developerMode.checkStatus': 'Status prüfen',
+  'gameDetails.developerMode.retryCheck': 'Prüfung wiederholen',
+  'gameDetails.developerMode.checkingStatus': 'Wird geprüft…',
   'gameDetails.d3d12.status.original': 'Originale EXE',
   'gameDetails.d3d12.status.patched': 'EXE gepatcht: {from} → {to}',
   'gameDetails.d3d12.status.repair': 'Reparatur erforderlich',

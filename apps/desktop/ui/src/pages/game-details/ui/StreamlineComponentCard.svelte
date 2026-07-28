@@ -24,13 +24,14 @@
     DownloadProgressBar,
   } from '@shared/ui';
   import { t } from '@shared/i18n';
-  import { buildStreamlineVersionModel, type BulkSwapItem } from '../model/streamline-versions';
+  import { buildStreamlineVersionModel } from '../model/streamline-versions';
+  import type { SwapRequest } from '../model/swap-request';
 
   type Props = {
     components: GameGraphicsComponent[];
     groupsById: Record<string, GameCandidateGroup | null>;
     busy: boolean;
-    onBulkSwap: (items: BulkSwapItem[]) => void;
+    onBulkSwap: (items: readonly SwapRequest[]) => void;
     onBulkRollback: (componentIds: string[]) => void;
   };
 

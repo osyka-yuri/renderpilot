@@ -2,6 +2,8 @@
   import type { D3d12ExecutableMutationAction } from '@shared/model';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import {
+    Alert,
+    AlertDescription,
     Button,
     Dialog,
     DialogContent,
@@ -37,7 +39,7 @@
 </script>
 
 <Dialog {open} onOpenChange={requestOpenChange}>
-  <DialogContent class="sm:max-w-xl">
+  <DialogContent>
     <DialogHeader>
       <DialogTitle>{t('gameDetails.d3d12.confirm.title')}</DialogTitle>
       <DialogDescription>
@@ -72,13 +74,10 @@
     </div>
 
     {#if includesIntegrityChange}
-      <div
-        role="alert"
-        class="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
-      >
-        <TriangleAlertIcon class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
-        <p>{t('gameDetails.d3d12.confirm.signatureWarning')}</p>
-      </div>
+      <Alert variant="warning" size="sm">
+        <TriangleAlertIcon aria-hidden="true" />
+        <AlertDescription>{t('gameDetails.d3d12.confirm.signatureWarning')}</AlertDescription>
+      </Alert>
     {/if}
 
     <DialogFooter>

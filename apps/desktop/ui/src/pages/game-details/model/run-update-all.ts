@@ -2,7 +2,7 @@ import type { AddonStoreLike } from '@entities/addon';
 import { isMutationFailure } from '@entities/addon';
 
 import type { BulkSwapHandler } from './create-game-details-page-model';
-import type { BulkSwapItem } from './streamline-versions';
+import type { SwapRequest } from './swap-request';
 
 type UpdateStore = Pick<AddonStoreLike, 'update'>;
 export type UpdateAllStep = 'libraries' | 'renodx' | 'luma';
@@ -13,7 +13,7 @@ export type UpdateAllFailure = {
 };
 
 export type RunUpdateAllOptions = {
-  items: BulkSwapItem[];
+  items: readonly SwapRequest[];
   gameId: string | null;
   addonUpdates: { step: Exclude<UpdateAllStep, 'libraries'>; store: UpdateStore }[];
   onBulkSwap: BulkSwapHandler;

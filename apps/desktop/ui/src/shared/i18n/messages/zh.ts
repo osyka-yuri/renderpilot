@@ -174,6 +174,26 @@ export const zh: Record<MessageKey, MessageValue> = {
     other: '将 {count} 个组件更新到最新稳定版本',
   },
   'gameDetails.executable.title': '游戏可执行文件',
+  'gameDetails.developerMode.requiredTitle': 'Windows 开发者模式已关闭',
+  'gameDetails.developerMode.requiredDescription':
+    'Microsoft D3D12 Agility Preview 需要启用此 Windows 设置。',
+  'gameDetails.developerMode.checkTitle': '无法检查开发者模式',
+  'gameDetails.developerMode.checkDescription':
+    'RenderPilot 无法确定 Windows 开发者模式的当前状态。',
+  'gameDetails.developerMode.checkUnavailable': '必须成功完成检查才能继续。',
+  'gameDetails.developerMode.enableGuidance': '可以在 Windows 设置的“开发者选项”中启用开发者模式。',
+  'gameDetails.developerMode.previewGuidance':
+    'Microsoft 文档提供了在 Windows 中启用开发者模式的说明。',
+  'gameDetails.developerMode.restartInfo': '在某些情况下，此设置仅在重启 Windows 后生效。',
+  'gameDetails.developerMode.stillDisabled':
+    '开发者模式仍处于关闭状态。如果刚刚启用，Windows 可能需要重启才能应用更改。',
+  'gameDetails.developerMode.settingsOpenFailed': '无法打开 Windows 设置。请手动打开“开发者选项”。',
+  'gameDetails.developerMode.documentationOpenFailed': '无法打开 Microsoft 文档。',
+  'gameDetails.developerMode.openSettings': '打开设置',
+  'gameDetails.developerMode.openDocumentation': '打开文档',
+  'gameDetails.developerMode.checkStatus': '检查状态',
+  'gameDetails.developerMode.retryCheck': '重试检查',
+  'gameDetails.developerMode.checkingStatus': '正在检查…',
   'gameDetails.d3d12.status.original': '原始 EXE',
   'gameDetails.d3d12.status.patched': 'EXE 已修补：{from} → {to}',
   'gameDetails.d3d12.status.repair': '需要修复',

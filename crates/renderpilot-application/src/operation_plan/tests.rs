@@ -59,6 +59,37 @@ fn builds_valid_swap_plan_for_swappable_component() {
 }
 
 #[test]
+fn environment_blocker_is_deduplicated_and_recalculates_risk() {
+    let component = sample_component(
+        "component:game-a:dlss",
+        "game:a",
+        GraphicsTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        "C:/Games/GameA/nvngx_dlss.dll",
+        Some("3.5.0"),
+        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    );
+    let artifact = sample_artifact(
+        "artifact:dlss-3.7",
+        GraphicsTechnology::DlssSuperResolution,
+        "D:/Library/nvngx_dlss.dll",
+        Some("3.7.0"),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    );
+
+    let plan = build_swap_operation_plan(&component, &artifact)
+        .expect("plan should build")
+        .with_prerequisite_blocker(OperationPlanBlocker::DeveloperModeRequired)
+        .with_prerequisite_blocker(OperationPlanBlocker::DeveloperModeRequired);
+
+    assert_eq!(
+        plan.blockers(),
+        &[OperationPlanBlocker::DeveloperModeRequired]
+    );
+    assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Blocked);
+}
+
+#[test]
 fn operation_id_is_generated() {
     let component = sample_component(
         "component:game-a:dlss",

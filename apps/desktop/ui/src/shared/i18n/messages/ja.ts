@@ -186,6 +186,30 @@ export const ja: Record<MessageKey, MessageValue> = {
     other: '{count} 個のコンポーネントを最新の安定版に更新します',
   },
   'gameDetails.executable.title': 'ゲームの実行ファイル',
+  'gameDetails.developerMode.requiredTitle': 'Windows の開発者モードが無効です',
+  'gameDetails.developerMode.requiredDescription':
+    'Microsoft D3D12 Agility Preview には、この Windows 設定が必要です。',
+  'gameDetails.developerMode.checkTitle': '開発者モードを確認できませんでした',
+  'gameDetails.developerMode.checkDescription':
+    'RenderPilot は Windows の開発者モードの現在の状態を確認できませんでした。',
+  'gameDetails.developerMode.checkUnavailable':
+    '続行するには、状態の確認に成功する必要があります。',
+  'gameDetails.developerMode.enableGuidance':
+    '開発者モードは、Windows の設定にある「開発者向け」で有効にできます。',
+  'gameDetails.developerMode.previewGuidance':
+    'Windows で開発者モードを有効にする方法は、Microsoft のドキュメントで確認できます。',
+  'gameDetails.developerMode.restartInfo': 'Windows の再起動後に設定が反映される場合があります。',
+  'gameDetails.developerMode.stillDisabled':
+    '開発者モードはまだ無効です。最近有効にした場合は、変更を反映するために Windows の再起動が必要になることがあります。',
+  'gameDetails.developerMode.settingsOpenFailed':
+    'Windows の設定を開けませんでした。「開発者向け」を手動で開いてください。',
+  'gameDetails.developerMode.documentationOpenFailed':
+    'Microsoft のドキュメントを開けませんでした。',
+  'gameDetails.developerMode.openSettings': '設定を開く',
+  'gameDetails.developerMode.openDocumentation': 'ドキュメントを開く',
+  'gameDetails.developerMode.checkStatus': '状態を確認',
+  'gameDetails.developerMode.retryCheck': '確認を再試行',
+  'gameDetails.developerMode.checkingStatus': '確認中…',
   'gameDetails.d3d12.status.original': '元の EXE',
   'gameDetails.d3d12.status.patched': 'EXE パッチ済み: {from} → {to}',
   'gameDetails.d3d12.status.repair': '修復が必要です',

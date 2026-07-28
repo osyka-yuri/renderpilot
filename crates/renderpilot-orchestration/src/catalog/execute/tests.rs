@@ -1,5 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use renderpilot_application::{
     ArtifactRepository, ComponentRepository, D3d12ExecutableAction, D3d12ExecutableProfile,
@@ -14,6 +18,7 @@ use renderpilot_domain::{
     RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
     UpstreamPackageProvider, Version,
 };
+use renderpilot_platform_windows::DeveloperModeStatus;
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::Context;
@@ -971,6 +976,91 @@ fn confirmed_d3d12_apply_reports_token_mismatch_when_the_live_dll_changes() {
     );
     assert!(!bak_of(&executable).exists());
     assert!(!bak_of(&live_dll).exists());
+}
+
+#[test]
+fn d3d12_preview_apply_rechecks_developer_mode_after_a_successful_plan() {
+    let root = tempfile::tempdir().expect("root");
+    let game_dir = root.path().join("game");
+    let library_dir = root.path().join("library");
+    fs::create_dir_all(&game_dir).expect("game dir");
+    fs::create_dir_all(&library_dir).expect("library dir");
+
+    let executable = game_dir.join("game.exe");
+    let live_dll = game_dir.join("D3D12Core.dll");
+    let source_dll = library_dir.join("D3D12Core.dll");
+    let original_executable =
+        crate::catalog::runtime_compatibility::synthetic_d3d12_executable(606);
+    write(&executable, &original_executable);
+    write(&live_dll, b"scanned-sdk-606-runtime");
+    write(
+        &source_dll,
+        &crate::catalog::test_support::synthetic_versioned_d3d12_runtime(619),
+    );
+    let original_runtime = fs::read(&live_dll).expect("runtime fixture");
+
+    let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
+    let component_id = ComponentId::new("component:d3d12-developer-mode").expect("component");
+    let component = GraphicsComponent::new(
+        component_id.clone(),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        GraphicsTechnology::D3D12Agility,
+        Swappability::Swappable,
+    )
+    .with_file(
+        ComponentFile::new(path_as_ref(&live_dll))
+            .with_sha256(sha_of(&live_dll))
+            .with_version(Version::parse("1.606.1").expect("version")),
+    );
+    let artifact = crate::catalog::test_support::d3d12_preview_artifact_at(&source_dll, 619);
+    let storage = SqliteStorage::in_memory().expect("storage");
+    storage.upsert_game(&game).expect("game");
+    storage
+        .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+        .expect("component");
+    storage.upsert_artifact(&artifact).expect("artifact");
+
+    let developer_mode_enabled = Arc::new(AtomicBool::new(true));
+    let status = Arc::clone(&developer_mode_enabled);
+    let context = Context::from_storage(storage).with_developer_mode_status_provider(move || {
+        if status.load(Ordering::SeqCst) {
+            DeveloperModeStatus::Enabled
+        } else {
+            DeveloperModeStatus::Disabled
+        }
+    });
+
+    let plan = crate::catalog::build_swap_plan(&context, game.id(), &component_id, artifact.id())
+        .expect("enabled Developer Mode should allow planning");
+    assert!(plan.plan.blockers().is_empty());
+    let token = plan.plan.confirmation_token().to_owned();
+    assert!(!token.is_empty());
+
+    developer_mode_enabled.store(false, Ordering::SeqCst);
+    let error = crate::catalog::apply_swap_confirmed(
+        &context,
+        game.id(),
+        &component_id,
+        artifact.id(),
+        Some(&token),
+    )
+    .expect_err("apply must recheck Developer Mode");
+
+    match error {
+        crate::ServiceError::InvalidInput(message) => {
+            assert!(message.contains("developer_mode_required"));
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    assert_eq!(
+        fs::read(&executable).expect("unchanged executable"),
+        original_executable
+    );
+    assert_eq!(
+        fs::read(&live_dll).expect("unchanged runtime"),
+        original_runtime
+    );
 }
 
 #[test]

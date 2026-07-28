@@ -38,6 +38,9 @@
       "windows": {
         "installMode": "passive"
       }
+    },
+    "shell": {
+      "open": "(?:https?://.+|mailto:.+|tel:.+|ms-settings:developers)"
     }
   },
   "app": {

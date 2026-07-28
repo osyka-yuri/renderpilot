@@ -23,10 +23,12 @@ describe('buildUpdateAllToLatestPlan', () => {
 
     expect(plan.updateCount).toBe(1);
     expect(plan.items[0]).toEqual({
-      componentId: 'sr',
-      artifactId: 'sr-370',
-      isDownloaded: false,
-      d3d12ExecutableAction: null,
+      kind: 'direct',
+      target: {
+        componentId: 'sr',
+        artifactId: 'sr-370',
+        isDownloaded: false,
+      },
     });
   });
 
@@ -45,7 +47,7 @@ describe('buildUpdateAllToLatestPlan', () => {
     );
 
     expect(plan.updateCount).toBe(1);
-    expect(plan.items[0]?.artifactId).toBe('sr-3100');
+    expect(plan.items[0]?.target.artifactId).toBe('sr-3100');
   });
 
   it('uses the full catalog release when technical PE versions are equal', () => {
@@ -64,7 +66,7 @@ describe('buildUpdateAllToLatestPlan', () => {
                   label: null,
                 },
                 availability: 'available',
-                automatic_selection_allowed: true,
+                automatic_selection_allowed: false,
               },
             }),
             catalogCandidate('10.1.0', {
@@ -85,7 +87,7 @@ describe('buildUpdateAllToLatestPlan', () => {
       ),
     );
 
-    expect(plan.items[0]?.artifactId).toBe('dxc-newer-package');
+    expect(plan.items[0]?.target.artifactId).toBe('dxc-newer-package');
   });
 
   it('never selects preview or local-only candidates automatically', () => {
@@ -122,7 +124,7 @@ describe('buildUpdateAllToLatestPlan', () => {
       ),
     );
 
-    expect(plan.items.map((item) => item.artifactId)).toEqual(['stable-active']);
+    expect(plan.items.map((item) => item.target.artifactId)).toEqual(['stable-active']);
   });
 
   it('skips components whose only candidates are not upgrades', () => {
@@ -171,6 +173,33 @@ describe('buildUpdateAllToLatestPlan', () => {
     expect(plan).toEqual({ items: [], updateCount: 0 });
   });
 
+  it('marks a D3D12 candidate for preflight even without an executable action', () => {
+    const plan = buildUpdateAllToLatestPlan(
+      details(
+        [component('d3d12', 'd3d12_agility')],
+        [
+          group('d3d12', 'd3d12_agility', '1.606.4', [
+            catalogCandidate('1.619.1', {
+              artifact_id: 'd3d12-619',
+              d3d12_executable_action: null,
+              catalog_package: {
+                package_id: 'd3d12-preview',
+                release: { version: '1.619.1', channel: 'preview', label: null },
+                availability: 'available',
+                automatic_selection_allowed: true,
+              },
+            }),
+          ]),
+        ],
+      ),
+    );
+
+    expect(plan.items[0]).toMatchObject({
+      kind: 'd3d12',
+      target: { artifactId: 'd3d12-619' },
+    });
+  });
+
   it('combines independent upgrades with the newest Streamline bundle version', () => {
     const plan = buildUpdateAllToLatestPlan(
       details(
@@ -195,7 +224,11 @@ describe('buildUpdateAllToLatestPlan', () => {
     );
 
     expect(plan.updateCount).toBe(3);
-    expect(plan.items.map((item) => item.artifactId).sort()).toEqual(['a-240', 'b-240', 'sr-370']);
+    expect(plan.items.map((item) => item.target.artifactId).sort()).toEqual([
+      'a-240',
+      'b-240',
+      'sr-370',
+    ]);
   });
 
   it('skips an incomplete newest Streamline version for an older complete one', () => {
@@ -216,7 +249,7 @@ describe('buildUpdateAllToLatestPlan', () => {
     );
 
     expect(plan.updateCount).toBe(2);
-    expect(plan.items.map((item) => item.artifactId).sort()).toEqual(['a-240', 'b-240']);
+    expect(plan.items.map((item) => item.target.artifactId).sort()).toEqual(['a-240', 'b-240']);
   });
 
   it('skips Streamline entirely when no version every plugin can reach exists', () => {
@@ -241,7 +274,7 @@ describe('buildUpdateAllToLatestPlan', () => {
     );
 
     expect(plan.updateCount).toBe(1);
-    expect(plan.items[0]?.artifactId).toBe('sr-370');
+    expect(plan.items[0]?.target.artifactId).toBe('sr-370');
   });
 
   it('reports nothing to update when everything is current', () => {

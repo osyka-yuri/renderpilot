@@ -63,6 +63,7 @@ describe('D3d12ExecutableConfirmDialog', () => {
         'When you fully roll back D3D12, RenderPilot will restore the original EXE.',
       );
     });
+    expect(document.body.querySelector('[data-slot="alert"][role="alert"]')).not.toBeNull();
 
     const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent.trim() === 'Change',

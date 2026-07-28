@@ -22,6 +22,7 @@ export type { OperationBadgeVariant } from './model/presenters';
 
 export type {
   SwapPlan,
+  SwapPlanBlocker,
   RollbackPlan,
   ApplySwapResult,
   RollbackComponentResult,

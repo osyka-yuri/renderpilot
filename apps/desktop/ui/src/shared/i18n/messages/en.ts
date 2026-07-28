@@ -254,6 +254,28 @@ export const en = {
   },
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
+  'gameDetails.developerMode.requiredTitle': 'Windows Developer Mode is off',
+  'gameDetails.developerMode.requiredDescription':
+    'Microsoft D3D12 Agility Preview requires this Windows setting.',
+  'gameDetails.developerMode.checkTitle': 'Could not check Developer Mode',
+  'gameDetails.developerMode.checkDescription':
+    'RenderPilot could not determine the current Windows Developer Mode status.',
+  'gameDetails.developerMode.checkUnavailable': 'A successful check is required before continuing.',
+  'gameDetails.developerMode.enableGuidance':
+    'You can turn on Developer Mode under “For developers” in Windows Settings.',
+  'gameDetails.developerMode.previewGuidance':
+    'Microsoft documentation explains how to turn on Developer Mode in Windows.',
+  'gameDetails.developerMode.restartInfo':
+    'In some cases, Windows applies this setting only after a restart.',
+  'gameDetails.developerMode.stillDisabled': 'Developer Mode is still off.',
+  'gameDetails.developerMode.settingsOpenFailed':
+    'Could not open Windows Settings. Open “For developers” manually.',
+  'gameDetails.developerMode.documentationOpenFailed': 'Could not open Microsoft documentation.',
+  'gameDetails.developerMode.openSettings': 'Open Settings',
+  'gameDetails.developerMode.openDocumentation': 'Open documentation',
+  'gameDetails.developerMode.checkStatus': 'Check status',
+  'gameDetails.developerMode.retryCheck': 'Retry check',
+  'gameDetails.developerMode.checkingStatus': 'Checking…',
   'gameDetails.d3d12.status.original': 'Original EXE',
   'gameDetails.d3d12.status.patched': 'EXE patched: {from} → {to}',
   'gameDetails.d3d12.status.repair': 'Repair required',

@@ -1,8 +1,9 @@
 //! Windows platform adapter boundary for RenderPilot.
 //!
-//! This crate currently contains only std-based Windows adapter scaffolding.
-//! It does not call WinAPI, NVAPI, Restart Manager, or elevation APIs.
+//! Platform-specific filesystem, registry, and executable adapters live here
+//! so higher layers can depend on stable typed results instead of Windows APIs.
 
+mod developer_mode;
 #[cfg(windows)]
 pub mod dlss;
 #[cfg(windows)]
@@ -18,6 +19,7 @@ mod steam_appmanifest;
 #[cfg(windows)]
 pub mod vulkan_layer;
 
+pub use developer_mode::{DeveloperModeStatus, developer_mode_status};
 #[cfg(windows)]
 pub use executable_detection::{
     ExecutableCandidate, RejectionReason, detect_executable_candidates,
