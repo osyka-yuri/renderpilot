@@ -11,6 +11,7 @@ mod exe_graphics;
 pub mod fsr;
 mod game;
 mod ids;
+mod install_root;
 mod model;
 pub mod mutation_features;
 pub mod openvr;
@@ -39,8 +40,9 @@ pub use component::{
     UpstreamPackageProvider, component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
-pub use game::{GameIdentity, GameInstallation, GameModelError};
+pub use game::{GameIdentity, GameInstallation, GameModelError, RootAuthority};
 pub use ids::{ArtifactId, ComponentId, GameId, IdentifierError, OperationId};
+pub use install_root::{InstallKey, InstallRoot};
 pub use model::{
     AddonKind, Architecture, ComponentKind, GameRuntime, GraphicsApi, GraphicsTechnology, Launcher,
     Platform, Swappability,

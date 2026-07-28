@@ -68,6 +68,14 @@ define_identifier!(
     GameId
 );
 
+impl GameId {
+    /// Generates a fresh RenderPilot-owned game identity.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self(format!("game:{}", ulid::Ulid::generate()))
+    }
+}
+
 define_identifier!(
     /// Stable identifier of a detected graphics component.
     ComponentId

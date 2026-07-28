@@ -3,9 +3,22 @@ use std::{error::Error, fmt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    GameId, GameRuntime, Launcher, PathRef, PathRefError, Platform,
+    GameId, GameRuntime, InstallKey, InstallRoot, Launcher, PathRef, PathRefError, Platform,
     text::{RequiredTextError, normalize_required_text},
 };
+
+/// Evidence that established the installation root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RootAuthority {
+    /// A launcher manifest or equivalent authoritative inventory entry.
+    LauncherManifest,
+    /// The user explicitly confirmed this directory as one installation root.
+    UserConfirmed,
+    /// A row created before explicit root authority was persisted.
+    #[default]
+    Legacy,
+}
 
 /// Stable identity and user-facing title for a game.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,8 +80,12 @@ pub struct GameInstallation {
     identity: GameIdentity,
     platform: Platform,
     runtime: GameRuntime,
-    install_path: PathRef,
+    #[serde(rename = "install_path")]
+    install_root: InstallRoot,
+    root_authority: RootAuthority,
     executable_candidates: Vec<PathRef>,
+    #[serde(default)]
+    confirmed_executable: Option<PathRef>,
 }
 
 impl GameInstallation {
@@ -83,8 +100,10 @@ impl GameInstallation {
             identity,
             platform,
             runtime,
-            install_path,
+            install_root: InstallRoot::new(install_path),
+            root_authority: RootAuthority::Legacy,
             executable_candidates: Vec::new(),
+            confirmed_executable: None,
         }
     }
 
@@ -110,7 +129,29 @@ impl GameInstallation {
 
     /// Returns the root installation path.
     pub fn install_path(&self) -> &PathRef {
-        &self.install_path
+        self.install_root.path()
+    }
+
+    /// Returns the typed installation root.
+    pub const fn install_root(&self) -> &InstallRoot {
+        &self.install_root
+    }
+
+    /// Returns the canonical identity of the physical installation root.
+    pub fn install_key(&self) -> &InstallKey {
+        self.install_root.key()
+    }
+
+    /// Returns the evidence that established the installation root.
+    pub fn root_authority(&self) -> RootAuthority {
+        self.root_authority
+    }
+
+    /// Sets the evidence that established the installation root.
+    #[must_use]
+    pub fn with_root_authority(mut self, authority: RootAuthority) -> Self {
+        self.root_authority = authority;
+        self
     }
 
     /// Returns candidate executable paths.
@@ -118,9 +159,25 @@ impl GameInstallation {
         &self.executable_candidates
     }
 
+    /// Returns the executable explicitly confirmed by the user, if any.
+    pub fn confirmed_executable(&self) -> Option<&PathRef> {
+        self.confirmed_executable.as_ref()
+    }
+
     /// Adds an executable candidate and returns the updated installation.
     pub fn with_executable_candidate(mut self, candidate: PathRef) -> Self {
         self.executable_candidates.push(candidate);
+        self
+    }
+
+    /// Records an explicit user choice and keeps it in the executable
+    /// candidate set used by compatibility analysis.
+    #[must_use]
+    pub fn with_confirmed_executable(mut self, executable: PathRef) -> Self {
+        if !self.executable_candidates.contains(&executable) {
+            self.executable_candidates.push(executable.clone());
+        }
+        self.confirmed_executable = Some(executable);
         self
     }
 }
@@ -215,5 +272,45 @@ mod tests {
             "C:/Games/Cyberpunk 2077"
         );
         assert_eq!(installation.executable_candidates().len(), 1);
+    }
+
+    #[test]
+    fn install_key_is_case_and_separator_insensitive_but_game_id_is_not_path_based() {
+        let make = |id: &str, path: &str| {
+            GameInstallation::new(
+                GameIdentity::new(GameId::new(id).expect("id"), "Game", Launcher::Manual)
+                    .expect("identity"),
+                Platform::Windows,
+                GameRuntime::NativeWindows,
+                PathRef::new(path).expect("path"),
+            )
+        };
+        let first = make("game:stable", r"C:\Games\Black Flag\\");
+        let same_install = make("game:other", "c:/games/black flag");
+
+        assert_eq!(first.install_key(), same_install.install_key());
+        assert_ne!(first.id(), same_install.id());
+        assert_eq!(first.id().as_str(), "game:stable");
+    }
+
+    #[test]
+    fn confirmed_executable_is_an_explicit_candidate_without_duplication() {
+        let executable = PathRef::new("bin/GameLauncher.exe").expect("path");
+        let installation = GameInstallation::new(
+            GameIdentity::new(
+                GameId::new("game:confirmed-exe").expect("id"),
+                "Game",
+                Launcher::Manual,
+            )
+            .expect("identity"),
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new("C:/Games/Game").expect("install path"),
+        )
+        .with_executable_candidate(executable.clone())
+        .with_confirmed_executable(executable.clone());
+
+        assert_eq!(installation.confirmed_executable(), Some(&executable));
+        assert_eq!(installation.executable_candidates(), &[executable]);
     }
 }

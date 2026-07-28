@@ -38,6 +38,14 @@ impl D3d12ExecutableIdentity {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComponentRollbackBaseline {
     files: Vec<ComponentFile>,
+    /// Last component-file identities committed by RenderPilot.
+    ///
+    /// Older records legitimately omit this field. Such records can still be
+    /// rolled back while their component exists (the component row supplies
+    /// the active identity), but an orphaned baseline must fail closed rather
+    /// than overwrite unproven live bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    expected_active_files: Vec<ComponentFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     d3d12_executable: Option<D3d12ExecutableBaseline>,
 }
@@ -48,6 +56,7 @@ impl ComponentRollbackBaseline {
     pub fn new(files: Vec<ComponentFile>) -> Self {
         Self {
             files,
+            expected_active_files: Vec::new(),
             d3d12_executable: None,
         }
     }
@@ -60,6 +69,7 @@ impl ComponentRollbackBaseline {
     ) -> Self {
         Self {
             files,
+            expected_active_files: Vec::new(),
             d3d12_executable,
         }
     }
@@ -68,6 +78,20 @@ impl ComponentRollbackBaseline {
     #[must_use]
     pub fn files(&self) -> &[ComponentFile] {
         &self.files
+    }
+
+    /// Returns the last active component identity committed with this baseline.
+    #[must_use]
+    pub fn expected_active_files(&self) -> &[ComponentFile] {
+        &self.expected_active_files
+    }
+
+    /// Records the active component identity produced by the latest committed
+    /// replacement without changing the immutable original baseline.
+    #[must_use]
+    pub fn with_expected_active_files(mut self, files: Vec<ComponentFile>) -> Self {
+        self.expected_active_files = files;
+        self
     }
 
     /// Attaches the executable baseline while the aggregate is first captured.

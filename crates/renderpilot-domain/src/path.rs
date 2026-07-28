@@ -36,8 +36,14 @@ pub struct PathRef(
 /// for `std::path::Path` is a thin wrapper over this.
 #[must_use]
 pub fn normalized_path_key(path: &str) -> String {
-    let stripped = path.strip_prefix(r"\\?\").unwrap_or(path);
-    stripped.replace('\\', "/").to_ascii_lowercase()
+    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    if let Some(rest) = normalized.strip_prefix("//?/unc/") {
+        format!("//{rest}")
+    } else if let Some(rest) = normalized.strip_prefix("//?/") {
+        rest.to_owned()
+    } else {
+        normalized
+    }
 }
 
 impl PathRef {
@@ -185,7 +191,7 @@ fn is_windows_drive_root(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{PathRef, PathRefError};
+    use super::{PathRef, PathRefError, normalized_path_key};
 
     #[test]
     fn path_ref_normalizes_windows_separators_and_trailing_slash() {
@@ -255,6 +261,18 @@ mod tests {
         let error = PathRef::new("  ").expect_err("blank path should fail");
 
         assert_eq!(error, PathRefError::Empty);
+    }
+
+    #[test]
+    fn normalized_key_unifies_verbatim_drive_and_unc_paths() {
+        assert_eq!(
+            normalized_path_key(r"\\?\C:\Games\Example"),
+            normalized_path_key("c:/games/example"),
+        );
+        assert_eq!(
+            normalized_path_key(r"\\?\UNC\server\share\Game"),
+            normalized_path_key(r"\\server\share\game"),
+        );
     }
 
     #[test]
