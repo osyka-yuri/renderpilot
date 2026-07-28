@@ -104,6 +104,11 @@ export const fr: Record<MessageKey, MessageValue> = {
   'error.boundary.description':
     'Cet écran a rencontré une erreur inattendue. Réessayez ou passez à une autre section.',
   'error.boundary.reset': 'Réessayer',
+  'pageLoad.loading': 'Chargement de la page…',
+  'pageLoad.error.title': "Impossible d'ouvrir cette page",
+  'pageLoad.error.description': "La page n'a pas pu être chargée. Réessayez ou revenez aux jeux.",
+  'pageLoad.error.retry': 'Réessayer',
+  'pageLoad.error.backToGames': 'Retour aux jeux',
 
   'games.scanFolder': 'Analyser le dossier',
   'games.scanning': 'Analyse en cours...',

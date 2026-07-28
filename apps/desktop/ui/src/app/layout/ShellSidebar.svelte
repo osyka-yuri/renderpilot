@@ -19,9 +19,10 @@
   type Props = {
     screen: Screen;
     onNavigate: ScreenHandler;
+    onPreload: ScreenHandler;
   };
 
-  const { screen, onNavigate }: Props = $props();
+  const { screen, onNavigate, onPreload }: Props = $props();
 
   type PrimaryScreen = Extract<Screen, 'games' | 'libraries' | 'settings'>;
 
@@ -62,6 +63,12 @@
               isActive={screen === item.screen}
               onclick={() => {
                 onNavigate(item.screen);
+              }}
+              onpointerenter={() => {
+                onPreload(item.screen);
+              }}
+              onfocus={() => {
+                onPreload(item.screen);
               }}
               tooltipContent={t(item.labelKey)}
             >

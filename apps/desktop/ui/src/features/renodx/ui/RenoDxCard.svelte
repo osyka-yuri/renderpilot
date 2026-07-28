@@ -28,6 +28,7 @@
      */
     store?: RenoDxStore;
     onOpenRenoDxSettings: () => void;
+    onPreloadRenoDxSettings?: () => void;
   };
 
   const {
@@ -35,6 +36,7 @@
     busy: pageBusy = false,
     store: injectedStore,
     onOpenRenoDxSettings,
+    onPreloadRenoDxSettings = () => undefined,
   }: Props = $props();
 
   /*
@@ -121,6 +123,8 @@
           type="button"
           aria-label={vulkanSettingsLabel}
           onclick={onOpenRenoDxSettings}
+          onpointerenter={onPreloadRenoDxSettings}
+          onfocus={onPreloadRenoDxSettings}
         >
           {#snippet child({ props })}
             <Button {...props} variant="ghost" size="icon-sm">

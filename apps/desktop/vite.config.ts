@@ -75,6 +75,7 @@ export default defineConfig({
   },
 
   build: {
+    manifest: true,
     rolldownOptions: {
       output: {
         codeSplitting: {

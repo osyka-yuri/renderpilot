@@ -104,6 +104,12 @@ export const de: Record<MessageKey, MessageValue> = {
   'error.boundary.description':
     'Auf diesem Bildschirm ist ein unerwarteter Fehler aufgetreten. Versuchen Sie es erneut oder wechseln Sie in einen anderen Bereich.',
   'error.boundary.reset': 'Erneut versuchen',
+  'pageLoad.loading': 'Seite wird geladen…',
+  'pageLoad.error.title': 'Diese Seite konnte nicht geöffnet werden',
+  'pageLoad.error.description':
+    'Die Seite konnte nicht geladen werden. Versuchen Sie es erneut oder kehren Sie zu den Spielen zurück.',
+  'pageLoad.error.retry': 'Erneut versuchen',
+  'pageLoad.error.backToGames': 'Zurück zu den Spielen',
 
   'games.scanFolder': 'Ordner scannen',
   'games.scanning': 'Scannen...',

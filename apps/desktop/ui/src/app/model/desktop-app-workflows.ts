@@ -50,13 +50,15 @@ export async function loadAndPresentGameDetails<RequestToken>(
 }
 
 export type OpenDesktopGameDeps = {
+  preloadPage: () => void;
   runExclusive: <T>(task: () => Promise<T>) => Promise<T | null>;
   loadGameDetails: (gameId: string, nextScreen: WorkspaceScreen) => Promise<void>;
   normalizeGameId?: (gameId: string) => string;
 };
 
 /**
- * Opens a game in the workspace after normalizing its id and acquiring the exclusive lock.
+ * Starts loading the target page before acquiring the exclusive lock and fetching
+ * details, so code loading and IPC can proceed in parallel.
  */
 export async function openDesktopGame(
   gameId: string,
@@ -69,6 +71,7 @@ export async function openDesktopGame(
     return;
   }
 
+  deps.preloadPage();
   await deps.runExclusive(() => deps.loadGameDetails(normalizedGameId, nextScreen));
 }
 

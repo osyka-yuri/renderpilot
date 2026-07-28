@@ -65,7 +65,9 @@
     onBulkSwap?: BulkSwapHandler;
     onBulkRollback?: BulkRollbackHandler;
     onOpenOperations?: () => void;
+    onPreloadOperations?: () => void;
     onOpenRenoDxSettings?: () => void;
+    onPreloadRenoDxSettings?: () => void;
     onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
   };
 
@@ -78,7 +80,9 @@
     onBulkSwap = () => undefined,
     onBulkRollback = () => undefined,
     onOpenOperations,
+    onPreloadOperations = () => undefined,
     onOpenRenoDxSettings = () => undefined,
+    onPreloadRenoDxSettings = () => undefined,
     onGameDetailsInvalidate = () => undefined,
   }: Props = $props();
 
@@ -348,7 +352,13 @@
           </Tooltip>
 
           {#if onOpenOperations}
-            <Button variant="secondary" size="sm" onclick={onOpenOperations}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onclick={onOpenOperations}
+              onpointerenter={onPreloadOperations}
+              onfocus={onPreloadOperations}
+            >
               <HistoryIcon aria-hidden="true" />
               {t('operations.title')}
             </Button>
@@ -417,7 +427,13 @@
       <TabsContent value={OTHER_TAB} class="min-h-0 flex-1 overflow-hidden">
         <ScrollArea class="h-full">
           <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3 p-1">
-            <RenoDxCard {gameId} busy={exclusiveBusy} store={renodx} {onOpenRenoDxSettings} />
+            <RenoDxCard
+              {gameId}
+              busy={exclusiveBusy}
+              store={renodx}
+              {onOpenRenoDxSettings}
+              {onPreloadRenoDxSettings}
+            />
             <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
           </div>
         </ScrollArea>

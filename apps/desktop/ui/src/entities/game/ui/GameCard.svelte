@@ -43,6 +43,7 @@
     onToggleFavorite?: VoidHandler;
     onToggleHidden?: VoidHandler;
     onOpenDetails?: VoidHandler;
+    onPreloadDetails?: VoidHandler;
     onFocusWithin?: FocusWithinHandler;
   };
 
@@ -69,6 +70,7 @@
     onToggleFavorite = noop,
     onToggleHidden = noop,
     onOpenDetails = noop,
+    onPreloadDetails = noop,
     onFocusWithin = () => undefined,
   }: Props = $props();
 
@@ -168,11 +170,14 @@
   <CardFooter>
     <Button
       data-game-focus-target="details"
+      data-game-details-trigger
       class="w-full"
       variant="default"
       size="sm"
       aria-label={detailsAriaLabel}
       onclick={onOpenDetails}
+      onpointerenter={onPreloadDetails}
+      onfocus={onPreloadDetails}
     >
       {t('game.card.action.details')}
     </Button>

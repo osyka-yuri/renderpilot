@@ -1,13 +1,12 @@
 import '@shared/theme';
 import { mount } from 'svelte';
 
-import DesktopApp from '@app/routes/DesktopApp.svelte';
 import { isDesktopPreviewMode } from '@shared/api-preview';
 import { initI18n } from '@shared/i18n';
-import { registerMockInvoker } from '@app/mocks/desktop';
 import { getAppInitializationState, type AppInitializationState } from '@entities/app';
 
 if (isDesktopPreviewMode()) {
+  const { registerMockInvoker } = await import('@app/mocks/desktop');
   registerMockInvoker();
 }
 
@@ -44,7 +43,9 @@ async function loadInitialization(): Promise<AppInitializationState> {
   }
 }
 
+const desktopAppModule = import('@app/routes/DesktopApp.svelte');
 const initState = await loadInitialization();
+const { default: DesktopApp } = await desktopAppModule;
 
 const app = mount(DesktopApp, {
   target,

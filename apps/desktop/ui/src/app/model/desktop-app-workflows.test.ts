@@ -77,22 +77,33 @@ describe('desktop-app-workflows', () => {
     expect(presentGameDetails).not.toHaveBeenCalled();
   });
 
-  it('openDesktopGame normalizes ids and runs the loader exclusively', async () => {
+  it('openDesktopGame preloads the page before starting the exclusive details request', async () => {
+    const calls: string[] = [];
+    const preloadPage = vi.fn(() => {
+      calls.push('preload');
+    });
     const runExclusiveCall = vi.fn();
     const runExclusive: OpenDesktopGameDeps['runExclusive'] = async <T>(task: () => Promise<T>) => {
       runExclusiveCall();
+      calls.push('exclusive');
       return await task();
     };
-    const loadGameDetails = vi.fn(() => Promise.resolve(undefined));
+    const loadGameDetails = vi.fn(() => {
+      calls.push('details');
+      return Promise.resolve(undefined);
+    });
 
     await openDesktopGame('  raw-id  ', 'operations', {
+      preloadPage,
       runExclusive,
       loadGameDetails,
       normalizeGameId: (gameId) => gameId.trim(),
     });
 
+    expect(preloadPage).toHaveBeenCalledTimes(1);
     expect(runExclusiveCall).toHaveBeenCalledTimes(1);
     expect(loadGameDetails).toHaveBeenCalledWith('raw-id', 'operations');
+    expect(calls).toEqual(['preload', 'exclusive', 'details']);
   });
 
   it('reloadSelectedGame skips when there is no selection', async () => {

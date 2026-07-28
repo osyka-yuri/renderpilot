@@ -127,6 +127,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'error.boundary.description':
     'На этом экране произошла непредвиденная ошибка. Попробуйте ещё раз или перейдите в другой раздел.',
   'error.boundary.reset': 'Повторить',
+  'pageLoad.loading': 'Загрузка страницы…',
+  'pageLoad.error.title': 'Не удалось открыть страницу',
+  'pageLoad.error.description':
+    'Страница не загрузилась. Попробуйте ещё раз или вернитесь к списку игр.',
+  'pageLoad.error.retry': 'Повторить',
+  'pageLoad.error.backToGames': 'К играм',
 
   // ── Games page / catalog ──
   'games.scanFolder': 'Сканировать папку',

@@ -118,6 +118,11 @@ export const en = {
   'error.boundary.description':
     'This screen ran into an unexpected error. You can try again, or switch to another section.',
   'error.boundary.reset': 'Try again',
+  'pageLoad.loading': 'Loading page…',
+  'pageLoad.error.title': "Couldn't open this page",
+  'pageLoad.error.description': 'The page could not be loaded. Try again or return to Games.',
+  'pageLoad.error.retry': 'Try again',
+  'pageLoad.error.backToGames': 'Back to Games',
 
   // ── Games page / catalog ──
   'games.scanFolder': 'Scan Folder',

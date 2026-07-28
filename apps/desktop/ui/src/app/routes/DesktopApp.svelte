@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
 
   import DesktopShell from '@app/layout/DesktopShell.svelte';
+  import type { Screen } from '@app/navigation/screen';
   import type { WorkspaceScreen } from '@app/navigation/workspace';
   import { isGameSelected, workspaceShellGameTitle } from '@app/navigation/selection';
   import {
@@ -18,14 +19,9 @@
   import { NotificationsToaster } from '@widgets/notifications-toaster';
   import { ElevationBanner } from '@widgets/elevation-banner';
   import { createCoverSyncQueue } from '@features/sync-covers';
-  import {
-    GameDetailsPage as GameDetailsScreen,
-    createGameDetailsPageModel,
-  } from '@pages/game-details';
+  import { createGameDetailsPageModel } from '@pages/game-details';
   import { GamesPage as GamesScreen, createGamesPageModel } from '@pages/games';
-  import { LibrariesPage as LibrariesScreen } from '@pages/libraries';
-  import { OperationsPage as OperationsScreen } from '@pages/operations';
-  import { SettingsPage as SettingsScreen, settingsTabMemory } from '@pages/settings';
+  import { settingsTabMemory } from '@pages/settings';
   import { createDesktopAppModel } from '@app/model/create-desktop-app-model.svelte';
   import {
     createInitialCatalogLifecycle,
@@ -49,6 +45,9 @@
     createTauriAppUpdaterGateway,
   } from '@features/app-updater';
 
+  import LazyPage from './LazyPage.svelte';
+  import { createDesktopPageRegistry } from './desktop-page-registry.svelte';
+
   type Props = {
     initState: AppInitializationState;
   };
@@ -56,6 +55,7 @@
   const { initState }: Props = $props();
 
   const model = createDesktopAppModel(() => initState);
+  const pages = createDesktopPageRegistry();
   const coverSyncQueue = createCoverSyncQueue();
   const appUpdater = createAppUpdaterModel({
     gateway: createTauriAppUpdaterGateway(),
@@ -100,6 +100,15 @@
           },
         }),
     };
+  }
+
+  function preloadPage(screen: Screen): void {
+    void pages.preload(screen);
+  }
+
+  function navigate(screen: Screen): void {
+    preloadPage(screen);
+    model.handleNavigate(screen);
   }
 
   function queueMissingCoverHydration(): void {
@@ -217,6 +226,9 @@
 
   async function openGameDetails(gameId: string): Promise<void> {
     await openDesktopGame(gameId, 'details', {
+      preloadPage: () => {
+        void pages.details.preload();
+      },
       runExclusive: (task) => model.runExclusive(task),
       loadGameDetails,
     });
@@ -245,7 +257,7 @@
 
   function openRenoDxSettings(): void {
     settingsTabMemory.rememberTab('renodx');
-    model.handleNavigate('settings');
+    navigate('settings');
   }
 
   async function handleRefresh(): Promise<void> {
@@ -265,20 +277,23 @@
 
 <NotificationsToaster />
 
-<AppUpdateDialog
-  state={appUpdater.dialog}
-  onInstall={() => void appUpdater.installAvailableUpdate()}
-  onRetry={() => void appUpdater.retry()}
-  onDismiss={() => void appUpdater.dismissDialog()}
-  onRestart={() => void appUpdater.restartApplication()}
-/>
+{#if appUpdater.dialog !== null}
+  <AppUpdateDialog
+    state={appUpdater.dialog}
+    onInstall={() => void appUpdater.installAvailableUpdate()}
+    onRetry={() => void appUpdater.retry()}
+    onDismiss={() => void appUpdater.dismissDialog()}
+    onRestart={() => void appUpdater.restartApplication()}
+  />
+{/if}
 
 <DesktopShell
   screen={model.screen}
   busy={model.busy}
   refreshing={isRefreshing}
   selectedGameTitle={selectedShellGameTitle}
-  onNavigate={model.handleNavigate}
+  onNavigate={navigate}
+  onPreload={preloadPage}
   onRefresh={handleRefresh}
   updateAvailable={appUpdater.notice !== null}
   updateOpening={appUpdater.settingsAction === 'checking'}
@@ -289,41 +304,83 @@
   {/snippet}
   <ErrorBoundary>
     {#if model.screen === 'details'}
-      <GameDetailsScreen
-        details={model.selectedDetails}
-        busy={model.busy}
-        isElevated={model.isElevated}
-        onSwap={gameDetailsModel.handleSwap}
-        onRollback={gameDetailsModel.handleRollback}
-        onBulkSwap={gameDetailsModel.handleBulkSwap}
-        onBulkRollback={gameDetailsModel.handleBulkRollback}
-        onGameDetailsInvalidate={reloadDetailsAndCatalog}
-        onOpenRenoDxSettings={openRenoDxSettings}
-        onOpenOperations={() => {
-          model.handleNavigate('operations');
+      <LazyPage
+        page={pages.details}
+        onBack={() => {
+          navigate('games');
         }}
-      />
+      >
+        {#snippet children(GameDetailsScreen)}
+          <GameDetailsScreen
+            details={model.selectedDetails}
+            busy={model.busy}
+            isElevated={model.isElevated}
+            onSwap={gameDetailsModel.handleSwap}
+            onRollback={gameDetailsModel.handleRollback}
+            onBulkSwap={gameDetailsModel.handleBulkSwap}
+            onBulkRollback={gameDetailsModel.handleBulkRollback}
+            onGameDetailsInvalidate={reloadDetailsAndCatalog}
+            onOpenRenoDxSettings={openRenoDxSettings}
+            onPreloadRenoDxSettings={() => {
+              preloadPage('settings');
+            }}
+            onOpenOperations={() => {
+              navigate('operations');
+            }}
+            onPreloadOperations={() => {
+              preloadPage('operations');
+            }}
+          />
+        {/snippet}
+      </LazyPage>
     {:else if model.screen === 'operations'}
-      <OperationsScreen details={model.selectedDetails} gameCard={currentGameCard} />
-    {:else if model.screen === 'settings'}
-      <SettingsScreen
-        isElevated={model.isElevated}
-        themeMode={model.themeMode}
-        languageMode={model.languageMode}
-        appVersion={appUpdater.appVersion}
-        updateAction={appUpdater.settingsAction}
-        onThemeModeChange={model.changeThemeMode}
-        onLanguageModeChange={model.changeLanguageMode}
-        onCheckForUpdates={() => {
-          if (appUpdater.settingsAction === 'open-update') {
-            void appUpdater.openAvailableUpdate();
-          } else {
-            void appUpdater.checkForUpdates();
-          }
+      <LazyPage
+        page={pages.operations}
+        onBack={() => {
+          navigate('games');
         }}
-      />
+      >
+        {#snippet children(OperationsScreen)}
+          <OperationsScreen details={model.selectedDetails} gameCard={currentGameCard} />
+        {/snippet}
+      </LazyPage>
+    {:else if model.screen === 'settings'}
+      <LazyPage
+        page={pages.settings}
+        onBack={() => {
+          navigate('games');
+        }}
+      >
+        {#snippet children(SettingsScreen)}
+          <SettingsScreen
+            isElevated={model.isElevated}
+            themeMode={model.themeMode}
+            languageMode={model.languageMode}
+            appVersion={appUpdater.appVersion}
+            updateAction={appUpdater.settingsAction}
+            onThemeModeChange={model.changeThemeMode}
+            onLanguageModeChange={model.changeLanguageMode}
+            onCheckForUpdates={() => {
+              if (appUpdater.settingsAction === 'open-update') {
+                void appUpdater.openAvailableUpdate();
+              } else {
+                void appUpdater.checkForUpdates();
+              }
+            }}
+          />
+        {/snippet}
+      </LazyPage>
     {:else if model.screen === 'libraries'}
-      <LibrariesScreen refreshKey={refreshCounter} />
+      <LazyPage
+        page={pages.libraries}
+        onBack={() => {
+          navigate('games');
+        }}
+      >
+        {#snippet children(LibrariesScreen)}
+          <LibrariesScreen refreshKey={refreshCounter} />
+        {/snippet}
+      </LazyPage>
     {:else}
       <GamesScreen
         session={gamesSession}
@@ -332,6 +389,9 @@
         pickCoverDisabled={isDesktopPreviewMode()}
         onScan={handleScan}
         onOpenDetails={openGameDetails}
+        onPreloadDetails={() => {
+          preloadPage('details');
+        }}
       />
     {/if}
   </ErrorBoundary>

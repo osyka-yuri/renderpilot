@@ -13,6 +13,7 @@
     refreshing?: boolean;
     selectedGameTitle?: string | null;
     onNavigate?: ScreenHandler;
+    onPreload?: ScreenHandler;
     onRefresh?: () => void;
     updateAvailable?: boolean;
     updateOpening?: boolean;
@@ -29,6 +30,7 @@
     refreshing = false,
     selectedGameTitle = null,
     onNavigate = () => undefined,
+    onPreload = () => undefined,
     onRefresh = () => undefined,
     updateAvailable = false,
     updateOpening = false,
@@ -43,7 +45,7 @@
 </script>
 
 <SidebarProvider bind:open={sidebarOpen}>
-  <ShellSidebar {screen} {onNavigate} />
+  <ShellSidebar {screen} {onNavigate} {onPreload} />
 
   <SidebarInset class="min-h-0 overflow-hidden">
     <ShellHeader
@@ -52,6 +54,7 @@
       {busy}
       {refreshing}
       {onNavigate}
+      {onPreload}
       {onRefresh}
       {updateAvailable}
       {updateOpening}

@@ -13,6 +13,7 @@
     onToggleFavorite: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden: (gameId: GameId, isHidden: boolean) => void;
     onOpenDetails: GameActionHandler;
+    onPreloadDetails: () => void;
     onCardFocus: (gameId: GameId, target: GameCardFocusTarget) => void;
   };
 
@@ -26,6 +27,7 @@
     onToggleFavorite,
     onToggleHidden,
     onOpenDetails,
+    onPreloadDetails,
     onCardFocus,
   }: Props = $props();
 </script>
@@ -70,6 +72,7 @@
           .gameFocusTarget;
         onCardFocus(card.id, target === 'menu' ? 'menu' : 'details');
       }}
+      {onPreloadDetails}
     />
   {/each}
 </div>

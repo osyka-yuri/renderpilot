@@ -22,6 +22,7 @@
     busy: boolean;
     refreshing: boolean;
     onNavigate: ScreenHandler;
+    onPreload: ScreenHandler;
     onRefresh: () => void;
     updateAvailable?: boolean;
     updateOpening?: boolean;
@@ -34,6 +35,7 @@
     busy,
     refreshing,
     onNavigate,
+    onPreload,
     onRefresh,
     updateAvailable = false,
     updateOpening = false,
@@ -103,6 +105,12 @@
               onclick={(event: MouseEvent) => {
                 event.preventDefault();
                 onNavigate(item.target);
+              }}
+              onpointerenter={() => {
+                onPreload(item.target);
+              }}
+              onfocus={() => {
+                onPreload(item.target);
               }}
             >
               {item.label}

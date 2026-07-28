@@ -5,8 +5,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 
+import { defaultHostFacts } from '@entities/addon';
+
 import type { RenoDxStore } from '../model/create-renodx-store.svelte';
-import RenoDxCard from './RenoDxCard.svelte';
+import RenoDxCardTestHost from './RenoDxCard.test-host.svelte';
 
 describe('RenoDxCard availability failure', () => {
   let target: HTMLDivElement;
@@ -29,7 +31,7 @@ describe('RenoDxCard availability failure', () => {
     const retryStore = vi.fn(() => Promise.resolve());
     const store = loadErrorStore(retryStore);
 
-    component = mount(RenoDxCard, {
+    component = mount(RenoDxCardTestHost, {
       target,
       props: {
         gameId: 'renodx-game',
@@ -47,6 +49,34 @@ describe('RenoDxCard availability failure', () => {
     retry?.click();
 
     expect(retryStore).toHaveBeenCalledWith('renodx-game');
+  });
+
+  it('prefetches settings on pointer and keyboard intent before opening them', () => {
+    const onPreloadRenoDxSettings = vi.fn();
+    const onOpenRenoDxSettings = vi.fn();
+
+    component = mount(RenoDxCardTestHost, {
+      target,
+      props: {
+        gameId: 'renodx-game',
+        store: vulkanInstalledStore(),
+        onOpenRenoDxSettings,
+        onPreloadRenoDxSettings,
+      },
+    });
+    flushSync();
+
+    const settings = target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open RenoDX settings"]',
+    );
+    expect(settings).not.toBeNull();
+
+    settings?.dispatchEvent(new Event('pointerenter'));
+    settings?.focus();
+    settings?.click();
+
+    expect(onPreloadRenoDxSettings).toHaveBeenCalledTimes(2);
+    expect(onOpenRenoDxSettings).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -71,5 +101,47 @@ function loadErrorStore(retry: RenoDxStore['retry']): RenoDxStore {
     state: null,
     otherAddonUnmanaged: false,
     otherAddonKind: null,
+  } as unknown as RenoDxStore;
+}
+
+function vulkanInstalledStore(): RenoDxStore {
+  return {
+    ...loadErrorStore(vi.fn(() => Promise.resolve())),
+    loaded: true,
+    loadError: null,
+    isInstalled: true,
+    state: {
+      status: 'installed',
+      host_kind: 'vulkan',
+      version: null,
+      addon_dated: null,
+      installed_at: 0,
+      updated_at: 0,
+      dlss_fix_installed: false,
+      addon_tracked: true,
+    },
+    freshness: 'current',
+    addonDated: null,
+    installedAt: null,
+    lastCheckedAt: null,
+    requiresConfirmation: false,
+    hostDetection: 'absent',
+    hostFacts: defaultHostFacts('stable'),
+    hostActions: {},
+    hostUpdate: null,
+    addonUpdate: null,
+    updateAvailable: false,
+    checkForUpdates: vi.fn(() => Promise.resolve()),
+    update: vi.fn(() => Promise.resolve('success')),
+    uninstall: vi.fn(() => Promise.resolve('success')),
+    renodxAddon: null,
+    addonTracked: true,
+    reshadeChannel: null,
+    selectedReshadeChannel: 'stable',
+    reshadeStableSupported: true,
+    dlssFixInstalled: false,
+    dlssFixAvailable: false,
+    dlssFixUpdate: null,
+    vulkanUpdateDiagnostics: [],
   } as unknown as RenoDxStore;
 }

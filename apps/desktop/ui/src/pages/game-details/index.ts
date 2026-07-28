@@ -1,4 +1,7 @@
-export { default as GameDetailsPage } from './ui/GameDetailsPage.svelte';
+export async function loadGameDetailsPage() {
+  return (await import('./ui/GameDetailsPage.svelte')).default;
+}
+
 export {
   createGameDetailsPageModel,
   type GameDetailsPageModelDeps,

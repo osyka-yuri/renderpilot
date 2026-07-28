@@ -46,6 +46,7 @@
     onToggleFavorite?: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden?: (gameId: GameId, isHidden: boolean) => void;
     onOpenDetails?: GameActionHandler;
+    onPreloadDetails?: () => void;
     onLoadMore?: () => void;
     onResetFilters?: () => void;
     scrollAnchor?: GamesCatalogScrollAnchor | null;
@@ -83,6 +84,7 @@
     onToggleFavorite = noopToggleFavorite,
     onToggleHidden = noopToggleHidden,
     onOpenDetails = noopAction,
+    onPreloadDetails = () => undefined,
     onLoadMore = () => undefined,
     onResetFilters = () => undefined,
     scrollAnchor = null,
@@ -288,6 +290,7 @@
               {onToggleFavorite}
               {onToggleHidden}
               {onOpenDetails}
+              {onPreloadDetails}
               {onCardFocus}
             />
           {/if}

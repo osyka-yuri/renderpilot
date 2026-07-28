@@ -103,6 +103,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'error.boundary.description':
     'この画面で予期しないエラーが発生しました。もう一度試すか、別のセクションに切り替えてください。',
   'error.boundary.reset': '再試行',
+  'pageLoad.loading': 'ページを読み込んでいます…',
+  'pageLoad.error.title': 'このページを開けませんでした',
+  'pageLoad.error.description':
+    'ページを読み込めませんでした。もう一度試すか、ゲーム一覧に戻ってください。',
+  'pageLoad.error.retry': '再試行',
+  'pageLoad.error.backToGames': 'ゲーム一覧に戻る',
 
   'games.scanFolder': 'フォルダをスキャン',
   'games.scanning': 'スキャン中...',

@@ -98,6 +98,11 @@ export const zh: Record<MessageKey, MessageValue> = {
   'error.boundary.title': '出现了一些问题',
   'error.boundary.description': '此屏幕遇到意外错误。您可以重试，或切换到其他部分。',
   'error.boundary.reset': '重试',
+  'pageLoad.loading': '正在加载页面…',
+  'pageLoad.error.title': '无法打开此页面',
+  'pageLoad.error.description': '页面加载失败。请重试或返回游戏列表。',
+  'pageLoad.error.retry': '重试',
+  'pageLoad.error.backToGames': '返回游戏列表',
 
   'games.scanFolder': '扫描文件夹',
   'games.scanning': '正在扫描...',

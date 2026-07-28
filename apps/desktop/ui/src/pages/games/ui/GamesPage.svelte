@@ -35,6 +35,7 @@
 
     onScan?: VoidHandler;
     onOpenDetails?: GameSelectionHandler;
+    onPreloadDetails?: VoidHandler;
     session: GamesCatalogSession;
   };
 
@@ -48,6 +49,7 @@
 
     onScan = noop,
     onOpenDetails = noopGameSelection,
+    onPreloadDetails = noop,
     session: model,
   }: Props = $props();
   const hasGames = $derived(model.games.length > 0);
@@ -212,6 +214,7 @@
         onToggleHidden={model.toggleHidden}
         onResetFilters={model.resetFilters}
         {onOpenDetails}
+        {onPreloadDetails}
         onLoadMore={model.loadNextPage}
         scrollAnchor={model.scrollAnchor}
         focusedGameId={model.focusedGameId}

@@ -1,1 +1,3 @@
-export { default as LibrariesPage } from './ui/LibrariesPage.svelte';
+export async function loadLibrariesPage() {
+  return (await import('./ui/LibrariesPage.svelte')).default;
+}

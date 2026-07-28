@@ -104,6 +104,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'error.boundary.description':
     'Esta pantalla encontró un error inesperado. Vuelve a intentarlo o cambia a otra sección.',
   'error.boundary.reset': 'Reintentar',
+  'pageLoad.loading': 'Cargando página…',
+  'pageLoad.error.title': 'No se pudo abrir esta página',
+  'pageLoad.error.description':
+    'No se pudo cargar la página. Vuelve a intentarlo o regresa a Juegos.',
+  'pageLoad.error.retry': 'Reintentar',
+  'pageLoad.error.backToGames': 'Volver a Juegos',
 
   'games.scanFolder': 'Escanear carpeta',
   'games.scanning': 'Escaneando...',
