@@ -24,8 +24,9 @@ pub use file_metadata::{
     FileCacheKey, FileHashCache, VersionDetectionStatus, sha256_bytes, sha256_file,
 };
 pub use filesystem_detector::{
-    DetectedLibraryFile, DetectionConfidence, LibraryPatternComponentDetector,
-    group_into_artifacts, group_into_components,
+    DetectedLibraryFile, DetectionConfidence, InstallTreeCompleteness, InstallTreeReport,
+    InstallTreeWalker, InstallWalkMode, LibraryPatternComponentDetector, WalkDiagnostic,
+    WalkDiagnosticKind, group_into_artifacts, group_into_components,
 };
 pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,

@@ -1,289 +1,313 @@
-use std::{
-    ffi::OsStr,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use renderpilot_application::AppResult;
 
-use crate::error::detection_context_error;
+const DEFAULT_PROBE_ENTRY_BUDGET: usize = 20_000;
 
-const SYSTEM_DIRECTORY_NAMES: &[&str] = &[
-    "windows",
-    "system32",
-    "syswow64",
-    "system volume information",
-    "$recycle.bin",
-];
-
-/// Predicate driving the walker's per-file early-rejection.
-///
-/// Implemented for both `()` (no filter — the legacy walker behaviour) and any
-/// `Fn(&str) -> bool` so callers can pass a closure that pre-filters by
-/// extension via [`crate::CandidateFileExtensions::allows_file_name`].
-pub(super) trait FileNameFilter {
-    fn should_consider(&self, file_name: &str) -> bool;
+/// Whether an installation traversal observed the complete reachable tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkCompleteness {
+    /// Every reachable non-reparse directory was enumerated.
+    Complete,
+    /// One or more entries could not be enumerated or inspected.
+    Incomplete,
 }
 
-impl FileNameFilter for () {
-    fn should_consider(&self, _file_name: &str) -> bool {
-        true
+/// Purpose and cost envelope of an installation-tree traversal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallWalkMode {
+    /// Bounded filename-only advisory inspection.
+    Probe,
+    /// Authoritative traversal of the confirmed install tree.
+    Full,
+}
+
+/// Stable class of a recoverable traversal diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkDiagnosticKind {
+    /// Filesystem metadata or enumeration failure.
+    Io,
+    /// Cooperative cancellation requested by the caller.
+    Cancelled,
+    /// The caller's traversal-entry budget was exhausted.
+    BudgetExceeded,
+    /// Probe depth limit intentionally prevented a complete traversal.
+    DepthLimit,
+}
+
+/// One recoverable traversal failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WalkDiagnostic {
+    kind: WalkDiagnosticKind,
+    path: PathBuf,
+    message: String,
+}
+
+impl WalkDiagnostic {
+    /// Stable diagnostic category.
+    pub fn kind(&self) -> WalkDiagnosticKind {
+        self.kind
+    }
+
+    /// Path whose metadata or children could not be read.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// User-safe operating-system diagnostic.
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }
 
-impl<F: Fn(&str) -> bool> FileNameFilter for F {
-    fn should_consider(&self, file_name: &str) -> bool {
-        self(file_name)
-    }
-}
+mod adapter;
+use adapter::*;
 
-/// Walks `root` (up to `max_depth` levels deep) and returns every file the
-/// caller should consider during detection.
-///
-/// `name_filter` rejects leaf files using only [`fs::DirEntry::file_name`] and
-/// [`fs::DirEntry::file_type`] when the entry is clearly a regular file, so
-/// most non-matching assets never incur `fs::symlink_metadata`. Directories
-/// are still opened and recursed; symlink targets and ambiguous entries fall
-/// back to `symlink_metadata` for correctness.
-pub(super) fn collect_files_filtered(
-    root: &Path,
-    max_depth: usize,
-    name_filter: impl FileNameFilter,
-) -> AppResult<Vec<PathBuf>> {
-    let mut collector = FileCollector::new(max_depth, name_filter);
+mod collector;
+pub(super) use collector::collect_files_filtered;
+use collector::{collect_files_filtered_with_cancel, collect_files_filtered_with_mode};
+mod policy;
 
-    collector.collect(root)?;
-
-    Ok(collector.into_sorted_files())
-}
-
-#[derive(Debug)]
-struct FileCollector<F: FileNameFilter> {
-    max_depth: usize,
-    name_filter: F,
+/// Result of one installation-tree traversal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallTreeReport {
     files: Vec<PathBuf>,
+    diagnostics: Vec<WalkDiagnostic>,
+    visited_entries: usize,
 }
 
-impl<F: FileNameFilter> FileCollector<F> {
-    fn new(max_depth: usize, name_filter: F) -> Self {
-        Self {
-            max_depth,
-            name_filter,
-            files: Vec::new(),
+impl InstallTreeReport {
+    /// Completeness of this traversal.
+    pub fn completeness(&self) -> WalkCompleteness {
+        if self.diagnostics.is_empty() {
+            WalkCompleteness::Complete
+        } else {
+            WalkCompleteness::Incomplete
         }
     }
 
-    fn collect(&mut self, root: &Path) -> AppResult<()> {
-        let metadata = read_symlink_metadata(root)?;
-
-        if is_symlink(&metadata) {
-            return Ok(());
-        }
-
-        if metadata.is_file() {
-            self.visit_file_path(root, 0);
-            return Ok(());
-        }
-
-        if metadata.is_dir() {
-            self.visit_directory(root, 0)?;
-        }
-
-        Ok(())
+    /// Candidate files in deterministic path order.
+    pub fn files(&self) -> &[PathBuf] {
+        &self.files
     }
 
-    fn into_sorted_files(mut self) -> Vec<PathBuf> {
-        self.files.sort_unstable();
+    /// Recoverable failures that made the result incomplete.
+    pub fn diagnostics(&self) -> &[WalkDiagnostic] {
+        &self.diagnostics
+    }
+
+    /// Number of directory entries consumed from the caller's budget.
+    pub fn visited_entries(&self) -> usize {
+        self.visited_entries
+    }
+
+    /// Consumes the report and returns its candidate files.
+    pub fn into_files(self) -> Vec<PathBuf> {
         self.files
     }
+}
 
-    fn visit_directory(&mut self, path: &Path, dir_depth: usize) -> AppResult<()> {
-        if self.should_skip_directory(path, dir_depth) {
-            return Ok(());
-        }
+/// Shared traversal for executable probing and full component detection.
+#[derive(Clone, Copy)]
+pub struct InstallTreeWalker {
+    mode: InstallWalkMode,
+    max_depth: Option<usize>,
+    max_entries: Option<usize>,
+}
 
-        for entry_result in read_dir_entries(path)? {
-            self.visit_child_entry(&entry_result?, dir_depth)?;
-        }
-
-        Ok(())
-    }
-
-    /// `parent_dir_depth` is the depth of the directory whose children we are visiting.
-    fn visit_child_entry(
-        &mut self,
-        entry: &fs::DirEntry,
-        parent_dir_depth: usize,
-    ) -> AppResult<()> {
-        let path = entry.path();
-        let child_depth = parent_dir_depth + 1;
-
-        let Some(file_type) = read_entry_file_type_tolerant(entry, &path)? else {
-            return Ok(());
-        };
-
-        if file_type.is_symlink() {
-            return Ok(());
-        }
-
-        if file_type.is_file() {
-            if child_depth > self.max_depth {
-                return Ok(());
-            }
-
-            let os_name = entry.file_name();
-            let Some(name) = os_name.to_str() else {
-                return Ok(());
-            };
-
-            if !self.name_filter.should_consider(name) {
-                return Ok(());
-            }
-
-            self.files.push(path);
-            return Ok(());
-        }
-
-        if file_type.is_dir() {
-            if self.should_skip_directory(&path, child_depth) {
-                return Ok(());
-            }
-
-            // Re-check symlinks/junctions that can look like directories in `file_type`.
-            let Some(md) = read_symlink_metadata_tolerant(&path)? else {
-                return Ok(());
-            };
-
-            if is_symlink(&md) {
-                return Ok(());
-            }
-            if md.is_dir() {
-                self.visit_directory(&path, child_depth)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn visit_file_path(&mut self, path: &Path, depth: usize) {
-        if depth > self.max_depth {
-            return;
-        }
-
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            return;
-        };
-
-        if !self.name_filter.should_consider(file_name) {
-            return;
-        }
-
-        self.files.push(path.to_path_buf());
-    }
-
-    fn should_skip_directory(&self, path: &Path, depth: usize) -> bool {
-        depth >= self.max_depth || is_system_directory(path)
+impl Default for InstallTreeWalker {
+    fn default() -> Self {
+        Self::full()
     }
 }
 
-fn read_symlink_metadata(path: &Path) -> AppResult<fs::Metadata> {
-    fs::symlink_metadata(path).map_err(|error| {
-        detection_context_error(format_args!("could not read {}", path.display()), error)
-    })
-}
-
-/// Returns `Ok(None)` when the entry vanished between `read_dir` and the
-/// follow-up syscall (Steam updates, AV scanner, search indexer). The walker
-/// then skips this entry instead of aborting the whole scan, mirroring the
-/// tolerant policy of [`crate::file_metadata::try_read_detected_file_metadata`].
-fn read_symlink_metadata_tolerant(path: &Path) -> AppResult<Option<fs::Metadata>> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) => Ok(Some(metadata)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(detection_context_error(
-            format_args!("could not read {}", path.display()),
-            error,
-        )),
+impl InstallTreeWalker {
+    /// Creates a full-tree walker with no arbitrary recursion cutoff.
+    #[must_use]
+    pub fn full() -> Self {
+        Self {
+            mode: InstallWalkMode::Full,
+            max_depth: None,
+            max_entries: None,
+        }
     }
-}
 
-/// Resolves a `DirEntry::file_type`, falling back to a tolerant
-/// `symlink_metadata` read when `file_type()` itself fails (rare on Windows
-/// when the entry already disappeared). Returns `Ok(None)` when neither call
-/// can see the entry anymore.
-fn read_entry_file_type_tolerant(
-    entry: &fs::DirEntry,
-    path: &Path,
-) -> AppResult<Option<fs::FileType>> {
-    match entry.file_type() {
-        Ok(file_type) => Ok(Some(file_type)),
-        Err(_) => Ok(read_symlink_metadata_tolerant(path)?.map(|md| md.file_type())),
+    /// Creates a cheap advisory probe with a bounded directory depth.
+    #[must_use]
+    pub fn probe() -> Self {
+        Self {
+            mode: InstallWalkMode::Probe,
+            max_depth: Some(4),
+            max_entries: Some(DEFAULT_PROBE_ENTRY_BUDGET),
+        }
     }
-}
-
-fn is_symlink(metadata: &fs::Metadata) -> bool {
-    metadata.file_type().is_symlink()
-}
-
-/// Iterator over a directory's entries that maps IO errors to detection context
-/// errors, tagging each with the directory `path` for diagnostics.
-struct ReadDirEntries {
-    path: PathBuf,
-    entries: fs::ReadDir,
-}
-
-impl Iterator for ReadDirEntries {
-    type Item = AppResult<fs::DirEntry>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.entries.next().map(|entry| {
-            entry.map_err(|error| {
-                detection_context_error(
-                    format_args!("could not enumerate directory {}", self.path.display()),
-                    error,
-                )
-            })
-        })
+    /// Purpose of this walker.
+    pub fn mode(self) -> InstallWalkMode {
+        self.mode
     }
-}
 
-/// Reads a directory's entries in OS order.
-///
-/// Entries are intentionally not sorted here: the walker pushes only the
-/// filtered files into `self.files`, and `into_sorted_files` imposes the final
-/// deterministic order once — a per-directory sort would be redundant work
-/// (and `sort_unstable_by_key(|e| e.file_name())` reallocates an `OsString` on
-/// every comparison, which is expensive on large game folders).
-fn read_dir_entries(path: &Path) -> AppResult<ReadDirEntries> {
-    let path_buf = path.to_path_buf();
-    let entries = fs::read_dir(path).map_err(|error| {
-        detection_context_error(
-            format_args!("could not read directory {}", path.display()),
-            error,
+    /// Limits recursion for narrowly scoped tests or callers with explicit policy.
+    #[must_use]
+    pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = Some(max_depth);
+        self
+    }
+
+    /// Caps the number of directory entries examined by this traversal.
+    ///
+    /// Exhausting the budget yields an incomplete report rather than a hard
+    /// failure, so advisory callers cannot treat a truncated tree as proof.
+    #[must_use]
+    pub fn with_entry_budget(mut self, max_entries: usize) -> Self {
+        self.max_entries = Some(max_entries);
+        self
+    }
+
+    /// Traverses an installation tree with cheap filename filtering.
+    pub fn walk_filtered(
+        self,
+        root: &Path,
+        name_filter: impl Fn(&str) -> bool,
+    ) -> AppResult<InstallTreeReport> {
+        collect_files_filtered_with_mode(
+            root,
+            self.mode,
+            self.max_depth,
+            self.max_entries,
+            &SYSTEM_INSTALL_TREE_FILE_SYSTEM,
+            name_filter,
         )
-    })?;
+    }
 
-    Ok(ReadDirEntries {
-        path: path_buf,
-        entries,
-    })
-}
-
-fn is_system_directory(path: &Path) -> bool {
-    let Some(name) = path.file_name() else {
-        return false;
-    };
-
-    SYSTEM_DIRECTORY_NAMES
-        .iter()
-        .any(|system_name| name.eq_ignore_ascii_case(OsStr::new(system_name)))
+    /// Traverses with cooperative cancellation. A cancelled walk returns an
+    /// incomplete report, so callers cannot accidentally prune from it.
+    pub fn walk_filtered_cancellable(
+        self,
+        root: &Path,
+        name_filter: impl Fn(&str) -> bool,
+        is_cancelled: impl Fn() -> bool,
+    ) -> AppResult<InstallTreeReport> {
+        collect_files_filtered_with_cancel(
+            root,
+            self.mode,
+            self.max_depth,
+            self.max_entries,
+            &SYSTEM_INSTALL_TREE_FILE_SYSTEM,
+            name_filter,
+            is_cancelled,
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{ffi::OsString, fs, io, path::PathBuf};
 
-    use super::{collect_files_filtered, read_symlink_metadata_tolerant};
+    use super::{
+        InstallTreeDirectoryEntry, InstallTreeEntryKind, InstallTreeFileSystem,
+        InstallTreeMetadata, InstallTreeWalker, InstallWalkMode, WalkCompleteness,
+        WalkDiagnosticKind, collect_files_filtered, collect_files_filtered_with_mode,
+        read_symlink_metadata_tolerant,
+    };
+
+    #[test]
+    fn probe_and_full_modes_are_explicit() {
+        assert_eq!(InstallTreeWalker::probe().mode(), InstallWalkMode::Probe);
+        assert_eq!(InstallTreeWalker::full().mode(), InstallWalkMode::Full);
+    }
+
+    #[test]
+    fn cancellation_returns_incomplete_without_files() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        fs::write(temp.path().join("game.exe"), b"candidate").expect("fixture");
+
+        let report = InstallTreeWalker::full()
+            .walk_filtered_cancellable(temp.path(), |_| true, || true)
+            .expect("cancelled report");
+
+        assert_eq!(report.completeness(), WalkCompleteness::Incomplete);
+        assert!(report.files().is_empty());
+        assert_eq!(report.diagnostics().len(), 1);
+        assert_eq!(
+            report.diagnostics()[0].kind(),
+            WalkDiagnosticKind::Cancelled
+        );
+    }
+
+    #[test]
+    fn entry_budget_returns_an_incomplete_prefix_and_exact_usage() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        fs::write(temp.path().join("one.exe"), b"candidate").expect("fixture");
+        fs::write(temp.path().join("two.exe"), b"candidate").expect("fixture");
+
+        let report = InstallTreeWalker::full()
+            .with_entry_budget(1)
+            .walk_filtered(temp.path(), |_| true)
+            .expect("bounded report");
+
+        assert_eq!(report.completeness(), WalkCompleteness::Incomplete);
+        assert_eq!(report.visited_entries(), 1);
+        assert_eq!(report.files().len(), 1);
+        assert_eq!(report.diagnostics().len(), 1);
+        assert_eq!(
+            report.diagnostics()[0].kind(),
+            WalkDiagnosticKind::BudgetExceeded
+        );
+    }
+
+    #[test]
+    fn injected_filesystem_reports_a_vanished_entry_deterministically() {
+        struct VanishingFileSystem;
+
+        impl InstallTreeFileSystem for VanishingFileSystem {
+            fn symlink_metadata(&self, path: &std::path::Path) -> io::Result<InstallTreeMetadata> {
+                if path == std::path::Path::new("virtual-root") {
+                    Ok(InstallTreeMetadata::new(
+                        InstallTreeEntryKind::Directory,
+                        false,
+                    ))
+                } else {
+                    Err(io::Error::new(io::ErrorKind::NotFound, "vanished"))
+                }
+            }
+
+            fn read_directory(
+                &self,
+                _path: &std::path::Path,
+            ) -> io::Result<Vec<io::Result<InstallTreeDirectoryEntry>>> {
+                Ok(vec![Ok(InstallTreeDirectoryEntry::new(
+                    PathBuf::from("virtual-root/vanished.exe"),
+                    OsString::from("vanished.exe"),
+                    Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "stale entry",
+                    )),
+                ))])
+            }
+        }
+
+        fn accept_all(_: &str) -> bool {
+            true
+        }
+
+        let file_system = VanishingFileSystem;
+        let report = collect_files_filtered_with_mode(
+            std::path::Path::new("virtual-root"),
+            InstallWalkMode::Full,
+            None,
+            None,
+            &file_system,
+            accept_all,
+        )
+        .expect("injected walk");
+
+        assert_eq!(report.completeness(), WalkCompleteness::Incomplete);
+        assert_eq!(report.visited_entries(), 1);
+        assert!(report.files().is_empty());
+        assert_eq!(report.diagnostics().len(), 1);
+        assert_eq!(report.diagnostics()[0].kind(), WalkDiagnosticKind::Io);
+        assert!(report.diagnostics()[0].message().contains("disappeared"));
+    }
 
     #[test]
     fn read_symlink_metadata_tolerant_returns_none_for_missing_path() {
@@ -313,7 +337,9 @@ mod tests {
             lower.ends_with(".dll")
         };
 
-        let collected = collect_files_filtered(root, 3, allow_dll).expect("walk should succeed");
+        let collected = collect_files_filtered(root, Some(3), allow_dll)
+            .expect("walk should succeed")
+            .into_files();
 
         let names = collected
             .iter()
@@ -336,7 +362,9 @@ mod tests {
 
         let allow_dll = |file_name: &str| file_name.to_ascii_lowercase().ends_with(".dll");
 
-        let collected = collect_files_filtered(root, 3, allow_dll).expect("walk should succeed");
+        let collected = collect_files_filtered(root, Some(3), allow_dll)
+            .expect("walk should succeed")
+            .into_files();
 
         assert_eq!(collected.len(), 1);
         assert_eq!(
@@ -363,10 +391,11 @@ mod tests {
         fs::write(&depth_two_dll, b"depth2").expect("depth2 dll");
         fs::write(&depth_three_dll, b"depth3").expect("depth3 dll");
 
-        let collected = collect_files_filtered(root, 3, |name: &str| {
+        let collected = collect_files_filtered(root, Some(3), |name: &str| {
             name.to_ascii_lowercase().ends_with(".dll")
         })
-        .expect("walk should succeed");
+        .expect("walk should succeed")
+        .into_files();
 
         let collected_set = collected
             .into_iter()
@@ -397,10 +426,11 @@ mod tests {
             return;
         }
 
-        let collected = collect_files_filtered(root, 4, |name: &str| {
+        let collected = collect_files_filtered(root, Some(4), |name: &str| {
             name.to_ascii_lowercase().ends_with(".dll")
         })
-        .expect("walk should succeed");
+        .expect("walk should succeed")
+        .into_files();
 
         let names = collected
             .iter()

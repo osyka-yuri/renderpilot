@@ -25,11 +25,14 @@ use self::paths::{
     cached_files_under_root, file_name_for_matching, install_root_path, path_ref_from_path,
     sort_detected_library_files, sorted_unique_paths,
 };
-use self::scan::collect_files_filtered;
+use self::scan::{WalkCompleteness, collect_files_filtered};
 
 pub use self::grouping::{group_into_artifacts, group_into_components};
+pub use self::scan::{
+    InstallTreeReport, InstallTreeWalker, InstallWalkMode,
+    WalkCompleteness as InstallTreeCompleteness, WalkDiagnostic, WalkDiagnosticKind,
+};
 
-const DEFAULT_MAX_RECURSION_DEPTH: usize = 12;
 const DETECTOR_NAME: &str = "library-pattern-detector";
 
 /// One graphics library file detected inside a game folder.
@@ -180,7 +183,7 @@ pub enum DetectionConfidence {
 pub struct LibraryPatternComponentDetector {
     patterns: LibraryPatternSet,
     platform: PatternPlatform,
-    max_depth: usize,
+    max_depth: Option<usize>,
 }
 
 impl LibraryPatternComponentDetector {
@@ -189,7 +192,7 @@ impl LibraryPatternComponentDetector {
         Self {
             patterns,
             platform,
-            max_depth: DEFAULT_MAX_RECURSION_DEPTH,
+            max_depth: None,
         }
     }
 
@@ -201,7 +204,7 @@ impl LibraryPatternComponentDetector {
 
     /// Sets the maximum recursion depth used when scanning a game folder.
     pub fn with_max_depth(mut self, max_depth: usize) -> Self {
-        self.max_depth = max_depth;
+        self.max_depth = Some(max_depth);
         self
     }
 
@@ -216,7 +219,7 @@ impl LibraryPatternComponentDetector {
     }
 
     /// Returns the maximum recursion depth used when scanning a game folder.
-    pub fn max_depth(&self) -> usize {
+    pub fn max_depth(&self) -> Option<usize> {
         self.max_depth
     }
 
@@ -291,11 +294,23 @@ impl LibraryPatternComponentDetector {
     fn collect_candidate_library_paths(&self, game: &GameInstallation) -> AppResult<Vec<PathBuf>> {
         let root = install_root_path(game);
         let candidate_extensions = self.patterns.candidate_file_extensions(self.platform);
-        let files = collect_files_filtered(&root, self.max_depth, |file_name: &str| {
+        let report = collect_files_filtered(&root, self.max_depth, |file_name: &str| {
             candidate_extensions.allows_file_name(file_name)
         })?;
+        if report.completeness() == WalkCompleteness::Incomplete {
+            let paths = report
+                .diagnostics()
+                .iter()
+                .take(3)
+                .map(|diagnostic| diagnostic.path().display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(renderpilot_application::AppError::detection_failed(
+                format!("installation scan was incomplete; catalog state was preserved ({paths})"),
+            ));
+        }
 
-        Ok(sorted_unique_paths(files))
+        Ok(sorted_unique_paths(report.into_files()))
     }
 
     fn count_detectable_from_paths(&self, paths: Vec<PathBuf>) -> usize {

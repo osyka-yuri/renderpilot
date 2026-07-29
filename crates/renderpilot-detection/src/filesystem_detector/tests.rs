@@ -76,7 +76,7 @@ fn fixture_does_not_detect_garbage_dlls() {
 }
 
 #[test]
-fn fixture_does_not_scan_system_directories() {
+fn full_scan_does_not_hide_game_owned_system_named_directories() {
     let detector = LibraryPatternComponentDetector::windows_default().expect("valid patterns");
     let game = game_installation(&fixture_path());
     let libraries = detector
@@ -84,31 +84,27 @@ fn fixture_does_not_scan_system_directories() {
         .expect("fixture detection should succeed");
 
     assert!(
-        !libraries
+        libraries
             .iter()
-            .any(|library| library.file_path().as_str().contains("/Windows/"))
+            .any(|library| library.file_path().as_str().contains("/Windows/System32/")),
+        "a directory name alone is not authority to exclude part of a confirmed install tree",
     );
 }
 
 #[test]
-fn detector_respects_max_recursion_depth() {
+fn bounded_full_detection_reports_incomplete_instead_of_publishing_partial_state() {
     let detector = LibraryPatternComponentDetector::windows_default()
         .expect("valid patterns")
         .with_max_depth(1);
     let game = game_installation(&fixture_path());
-    let libraries = detector
+    let error = detector
         .detect_library_files(&game)
-        .expect("fixture detection should succeed");
+        .expect_err("a bounded authoritative scan must fail closed");
 
-    assert_detects(
-        &libraries,
-        "nvngx_dlss.dll",
-        GraphicsTechnology::DlssSuperResolution,
-    );
     assert!(
-        !libraries
-            .iter()
-            .any(|library| library.file_name() == "nvngx_dlssg.dll")
+        error
+            .message()
+            .contains("installation scan was incomplete; catalog state was preserved"),
     );
 }
 

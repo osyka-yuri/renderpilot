@@ -120,7 +120,7 @@ fn build_grouped_artifact(
     )
     .map_err(detection_error)?
     .with_metadata(metadata)
-    .with_source("scan-folder")
+    .with_source("install-tree-scan")
     .map_err(detection_error)
     .map(|artifact| artifact.with_source_game_id(game_id.clone()))
 }
