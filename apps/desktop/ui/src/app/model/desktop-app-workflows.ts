@@ -2,6 +2,7 @@ import type { WorkspaceScreen } from '@app/navigation/workspace';
 import {
   getGameDetails,
   normalizeSelectableGameId,
+  removeGameFromCatalog,
   type GameDetails,
   type GameSummary,
 } from '@entities/game';
@@ -15,14 +16,19 @@ import {
 } from '@features/sync-covers';
 import {
   publishAutomaticLibraryScanFailedNotification,
+  publishAddGameWarnings,
   publishPartialLibraryScanWarning,
   refreshCatalogCapabilities,
   refreshRemoteManifests,
   scanAutoLibrariesWithErrorRecovery,
-  selectManualScanFolder,
-  scanManualFolder,
+  addGame,
+  type AddGameConfirmation,
+  type AddGameInspection,
+  type AddGameResult,
 } from '@features/scan-libraries';
 import { describeCommandErrorBrief } from '@shared/api';
+import { t } from '@shared/i18n';
+import { publishSuccessNotification } from '@shared/notifications';
 
 export type LoadAndPresentGameDetailsDeps<RequestToken> = {
   getGameDetails?: typeof getGameDetails;
@@ -209,23 +215,105 @@ export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promi
   }, deps);
 }
 
-export type ManualScanAndRefreshDeps = CatalogRefreshWithCoverSyncDeps;
+export type SubmitAddGameDeps = CatalogRefreshWithCoverSyncDeps;
 
-/** Manual folder scan flow: picker → scan → catalog refresh → cover sync. */
-export async function scanManualFolderAndRefreshCards(
-  deps: ManualScanAndRefreshDeps,
-): Promise<void> {
-  await runCatalogRefreshWithCoverSync(async () => {
-    const selectedFolder = await selectManualScanFolder();
-
-    if (selectedFolder === null) {
-      return false;
-    }
-
-    await scanManualFolder(selectedFolder);
+/**
+ * Persists one already-confirmed inspection and refreshes the visible catalog.
+ * Folder selection, review policy, and error presentation stay with the shell;
+ * this function owns only the atomic catalog-side submission effects.
+ */
+export async function submitAddGameAndRefreshCards(
+  inspection: AddGameInspection,
+  confirmation: AddGameConfirmation,
+  deps: SubmitAddGameDeps,
+): Promise<AddGameResult | null> {
+  const result = await deps.runExclusive(async () => {
+    const added = await addGame({
+      selectedRoot: inspection.selectedRoot,
+      rootChoice: confirmation.rootChoice,
+      allowRootCorrection: confirmation.allowRootCorrection,
+      chosenExecutable: confirmation.chosenExecutable,
+      inspectionFingerprint: inspection.inspectionFingerprint,
+    });
     await refreshCatalogCapabilitiesBestEffort();
+    await deps.refreshGameCards();
+    return added;
+  });
+  if (result === null) {
+    return null;
+  }
+  publishAddGameWarnings(result);
+  queueBackgroundCoverSync(deps);
+  return result;
+}
+
+export type RollbackRootCorrectionDeps = {
+  rollbackComponent: (gameId: string, componentId: string) => Promise<unknown>;
+  refreshGameCards: () => Promise<void>;
+};
+
+/**
+ * Reverts the exact component set approved by the user before root correction.
+ *
+ * Rollbacks are deliberately sequential because each mutation owns the same
+ * game lock and refreshes shared component state. The catalog is refreshed even
+ * after a partial failure, while the original rollback error remains the
+ * primary error shown to the user.
+ */
+export async function rollbackRootCorrectionComponents(
+  gameId: string,
+  componentIds: readonly string[],
+  deps: RollbackRootCorrectionDeps,
+): Promise<void> {
+  let rollbackError: unknown = null;
+  try {
+    for (const componentId of componentIds) {
+      await deps.rollbackComponent(gameId, componentId);
+    }
+  } catch (error) {
+    rollbackError = error;
+  }
+
+  let refreshError: unknown = null;
+  try {
+    await deps.refreshGameCards();
+  } catch (error) {
+    refreshError = error;
+  }
+
+  if (rollbackError !== null) {
+    throw asThrowable(rollbackError);
+  }
+  if (refreshError !== null) {
+    throw asThrowable(refreshError);
+  }
+}
+
+function asThrowable(error: unknown): Error {
+  return error instanceof Error ? error : new Error(describeCommandErrorBrief(error));
+}
+
+export type RemoveGameAndRefreshDeps = Pick<
+  CatalogRefreshWithCoverSyncDeps,
+  'runExclusive' | 'refreshGameCards'
+> & {
+  removeGame?: typeof removeGameFromCatalog;
+};
+
+/** Removes one user-managed card, then replaces the visible catalog snapshot. */
+export async function removeGameAndRefreshCards(
+  gameId: string,
+  deps: RemoveGameAndRefreshDeps,
+): Promise<boolean> {
+  const result = await deps.runExclusive(async () => {
+    await (deps.removeGame ?? removeGameFromCatalog)(gameId);
+    await deps.refreshGameCards();
     return true;
-  }, deps);
+  });
+  if (result === true) {
+    publishSuccessNotification(t('notify.gameRemovedFromCatalog'));
+  }
+  return result === true;
 }
 
 export type SyncMissingCoversDeps = {

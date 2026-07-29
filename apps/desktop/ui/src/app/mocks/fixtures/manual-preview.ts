@@ -21,7 +21,7 @@ export function createManualPreviewDetails(
       platform: 'Windows',
       runtime: 'NativeWindows',
       install_path: installPath,
-      executable_candidates: [],
+      can_remove_from_catalog: true,
     },
     components: [
       {

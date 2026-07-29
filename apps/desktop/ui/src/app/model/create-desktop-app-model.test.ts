@@ -77,6 +77,17 @@ describe('createDesktopAppModel', () => {
     releaseFirst('done');
   });
 
+  it('runExclusive can route a scoped workflow error to an inline handler', async () => {
+    const model = createDesktopAppModel();
+    const error = new Error('folder rejected');
+    const onError = vi.fn();
+
+    const result = await model.runExclusive(() => Promise.reject(error), { onError });
+
+    expect(result).toBeNull();
+    expect(onError).toHaveBeenCalledWith(error);
+  });
+
   it('clearSelection resets selected game and plan via workspace', () => {
     const model = createDesktopAppModel();
     model.workspace.setCurrentPlan(
@@ -222,7 +233,7 @@ function createStubDetails(gameId: string): GameDetails {
       platform: 'Windows',
       runtime: 'NativeWindows',
       install_path: '/test',
-      executable_candidates: [],
+      can_remove_from_catalog: true,
     },
   });
 }

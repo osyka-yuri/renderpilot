@@ -79,6 +79,12 @@ export const de: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Spiel verstecken',
   'game.card.menu.hidden.remove': 'Spiel einblenden',
   'game.card.menu.hidden.toggleHint': 'Versteckt-Status für dieses Spiel umschalten.',
+  'game.card.menu.removeFromCatalog': 'Aus Katalog entfernen',
+  'game.card.menu.removeFromCatalogHint': 'Dieses manuell hinzugefügte Spiel vergessen.',
+  'game.card.removeConfirm.title': '{title} aus dem Katalog entfernen?',
+  'game.card.removeConfirm.description':
+    'RenderPilot macht verwaltete Änderungen sicher rückgängig und entfernt anschließend die Karte samt Verlauf. Die Dateien des Spiels bleiben unverändert.',
+  'game.card.removeConfirm.action': 'Aus Katalog entfernen',
 
   'game.cover.alt': 'Cover',
   'game.cover.altWithTitle': 'Cover: {title}',
@@ -111,15 +117,105 @@ export const de: Record<MessageKey, MessageValue> = {
   'pageLoad.error.retry': 'Erneut versuchen',
   'pageLoad.error.backToGames': 'Zurück zu den Spielen',
 
-  'games.scanFolder': 'Ordner scannen',
-  'games.scanning': 'Scannen...',
+  'games.addGame': 'Spiel hinzufügen',
+  'games.addingGame': 'Spiel wird hinzugefügt...',
+  'games.chooseInstallFolder': 'Installationsordner des Spiels auswählen',
+  'addGame.title': 'Spiel hinzufügen',
+  'addGame.cannotAddTitle': 'Das Spiel konnte nicht hinzugefügt werden',
+  'addGame.installRoot': 'Installationsordner',
+  'addGame.reviewTitle': 'Spielinstallation prüfen',
+  'addGame.reviewDescription':
+    'Bestätigen Sie den Installationsordner, bevor ein Spiel hinzugefügt wird.',
+  'addGame.selectedFolder': 'Ausgewählter Ordner',
+  'addGame.recommendedFolder': 'Empfohlener Installationsordner',
+  'addGame.existingRoot': 'Aktueller Spielordner',
+  'addGame.chooseExecutable': 'Ausführbare Spieldatei',
+  'addGame.chooseExecutablePlaceholder': 'Ausführbare Datei auswählen',
+  'addGame.chooseAnother': 'Anderen auswählen',
+  'addGame.add': 'Spiel hinzufügen',
+  'addGame.addSelected': 'Ausgewählten Ordner hinzufügen',
+  'addGame.correctRoot': 'Spielpfad korrigieren',
+  'addGame.addRecommended': 'Empfohlenen Ordner hinzufügen',
+  'addGame.replaceRootTitle': 'Spielpfad korrigieren',
+  'addGame.replaceRootDescription':
+    'RenderPilot verwendet den ausgewählten Ordner anstelle des aktuellen. Die Spieldateien bleiben unverändert.',
+  'addGame.replaceExistingRoot': 'Spielpfad korrigieren',
+  'addGame.rootCorrection.rollbackTitle':
+    'Aktive Komponentenänderungen müssen zuerst rückgängig gemacht werden',
+  'addGame.rootCorrection.rollbackDescription': {
+    one: 'RenderPilot muss die aktive Änderung an einer Komponente rückgängig machen, bevor der Kartenordner ersetzt wird.',
+    other:
+      'RenderPilot muss die aktiven Änderungen an {count} Komponenten rückgängig machen, bevor der Kartenordner ersetzt wird.',
+  },
+  'addGame.rootCorrection.rollbackAndReplace': 'Änderungen rückgängig machen und Ordner ersetzen',
+  'addGame.rootCorrection.rollbackFailed':
+    'Die Komponentenänderungen konnten nicht vollständig rückgängig gemacht werden. Der vorhandene Spielordner wurde nicht geändert.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'Ein unterbrochener Dateivorgang muss noch wiederhergestellt werden.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'Ein installiertes Add-on gehört zu Dateien außerhalb des ausgewählten Spielordners.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'Aktive NVIDIA-Profileinstellungen gehören zu Programmdateien außerhalb des ausgewählten Ordners.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'Für einen gespeicherten Rollback-Zustand gibt es keine passende Komponente mehr.',
+  'addGame.rescan': 'Spiel erneut scannen',
+  'addGame.catalogBusy':
+    'Ein anderer Katalogvorgang wird noch ausgeführt. Schließen Sie ihn ab und versuchen Sie es erneut.',
+  'addGame.warning.legacyCardsConsolidated': {
+    one: 'Eine nachweislich falsche ältere Spielkarte wurde zusammengeführt.',
+    other: '{count} nachweislich falsche ältere Spielkarten wurden zusammengeführt.',
+  },
+  'addGame.warning.legacyCardsRetained': {
+    one: 'Eine ältere Spielkarte wurde beibehalten, da die Hinweise auf eine eigenständige Installation nicht eindeutig waren.',
+    other:
+      '{count} ältere Spielkarten wurden beibehalten, da die Hinweise auf eigenständige Installationen nicht eindeutig waren.',
+  },
+  'addGame.warning.recoveryBundleCreated':
+    'In Konflikt stehende ältere Daten wurden im Wiederherstellungspaket {path} gesichert.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'Katalogverlauf außerhalb des korrigierten Spielordners wurde im Wiederherstellungspaket {path} gesichert.',
+  'addGame.warning.recoveryBundleFallback': 'Wiederherstellungspaket: {path}',
+  'addGame.warning.unsupportedPlatform':
+    'Die Prüfung von Spielinstallationen wird nur unter Windows unterstützt.',
+  'addGame.warning.probeIncomplete':
+    'Einige Ordner konnten nicht geprüft werden. Die Empfehlung ist daher weniger zuverlässig.',
+  'addGame.warning.parentProbeIncomplete':
+    'Der empfohlene übergeordnete Ordner konnte nicht vollständig geprüft werden. Prüfen Sie ihn vor dem Hinzufügen.',
+  'addGame.unavailable.multipleInstalls':
+    'Der ausgewählte Ordner scheint eine gemeinsame Bibliothek mit mehreren Spielen zu sein. Wählen Sie den Ordner eines einzelnen Spiels aus.',
+  'addGame.unavailable.containsProvenInstall':
+    'Im ausgewählten Ordner befindet sich eine bereits erkannte Spielinstallation. Wählen Sie den genauen Ordner dieses Spiels statt des gemeinsamen übergeordneten Ordners.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'Im ausgewählten Ordner befinden sich mehrere bereits erkannte Spiele. Wählen Sie den Ordner eines einzelnen Spiels aus.',
+  'addGame.unavailable.insideExistingInstall':
+    'Der ausgewählte Ordner liegt innerhalb eines bereits hinzugefügten Spiels. Verwenden Sie dessen Installationsstammordner.',
+  'addGame.unavailable.noReadableExecutable':
+    'Im ausgewählten Ordner wurde keine lesbare ausführbare Spieldatei gefunden. Wählen Sie den Installationsordner mit der ausführbaren Spieldatei.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'Der vorhandene Installationsstammordner kann nicht sicher geändert werden, solange verwaltete Zustände vorhanden sind. Beheben Sie zuerst die aufgeführten Blockierungen.',
+  'addGame.warning.insideExistingInstall':
+    'Dieser Ordner gehört zu einem vorhandenen Spiel. Verwenden Sie dessen Installationsordner.',
+  'addGame.warning.narrowsExistingInstall':
+    'Der vorhandene manuelle Stammordner scheint mehrere Spielordner zu enthalten. Bei Bestätigung bleibt dieselbe Karte erhalten, ihr Stammordner wird jedoch auf den ausgewählten Ordner korrigiert.',
+  'addGame.warning.multipleProvenInstalls':
+    'Dieser Ordner enthält mehrere bestätigte Spielinstallationen.',
+  'addGame.warning.containsProvenInstall':
+    'Dieser Ordner enthält eine bestätigte Spielinstallation. Verwenden Sie deren genauen Installationsordner.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Ausführbare Dateien in getrennten Unterordnern können zu verschiedenen Spielen gehören. Bei Bestätigung wird der Ordner dennoch als ein Spiel behandelt.',
+  'addGame.warning.explicitExecutableRequired':
+    'Alle gültigen ausführbaren Dateien sehen wie Launcher oder Hilfsprogramme aus. Wählen Sie eine Datei ausdrücklich aus.',
+  'addGame.warning.noReadableExecutable':
+    'Dieser Ordner kann nicht separat hinzugefügt werden, da er keine lesbare Spiel-Programmdatei enthält.',
+  'addGame.warning.filesystemProbeError':
+    'Ein Teil der Installation konnte nicht geprüft werden. Überprüfen Sie die Dateizugriffsrechte.',
   'games.libraryActions': 'Aktionen',
   'games.search': 'Spiele suchen',
   'games.openFilters': 'Filter',
   'games.openFiltersActive': 'Filter (aktiv)',
   'games.loading': 'Laden...',
   'games.empty.title': 'Keine Spiele gefunden',
-  'games.empty.description': 'Scannen Sie einen Ordner, um Spiele zum Dashboard hinzuzufügen.',
+  'games.empty.description': 'Fügen Sie ein Spiel hinzu, damit es im Dashboard angezeigt wird.',
   'games.filterEmpty.title': 'Keine Treffer gefunden',
   'games.filterEmpty.description': 'Versuchen Sie, Ihre Suche oder Filter zu ändern.',
   'games.filterEmpty.reset': 'Filter zurücksetzen',
@@ -384,6 +480,8 @@ export const de: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': 'Versteckt-Status konnte nicht geändert werden.',
   'notify.gameHidden': 'Spiel ausgeblendet.',
   'notify.gameUnhidden': 'Spiel eingeblendet.',
+  'notify.gameRemovedFromCatalog': 'Spiel aus dem Katalog entfernt.',
+  'notify.removeGameFailed': 'Das Spiel konnte nicht aus dem Katalog entfernt werden.',
   'notify.applyCompleted': 'Änderungen angewendet',
   'notify.rollbackCompleted': 'Rollback abgeschlossen',
   'notify.swapBatchFailed.title': 'Einige Aktualisierungen fehlgeschlagen',
@@ -457,6 +555,20 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.catalog.artworkSaveError': 'Cover-Einstellungen konnten nicht gespeichert werden.',
 
   'user_message.invalid_argument': 'Ungültige Eingabe bereitgestellt.',
+  'user_message.invalid_install_root':
+    'Wählen Sie den Installationsordner eines einzelnen Spiels. Laufwerkswurzeln, Netzwerkfreigabewurzeln und Systemordner können nicht hinzugefügt werden.',
+  'user_message.multiple_installs_detected':
+    'Dieser Ordner enthält mehrere Spielinstallationen. Wähle den Installationsordner eines einzelnen Spiels.',
+  'user_message.stale_install_inspection':
+    'Die Installation hat sich während der Prüfung geändert. Prüfen Sie das aktualisierte Ergebnis vor dem Hinzufügen.',
+  'user_message.root_correction_cleanup_required':
+    'Aktive Komponentenänderungen müssen rückgängig gemacht werden, bevor dieser Spielordner geändert werden kann.',
+  'user_message.root_correction_blocked':
+    'Bereinigen Sie den aktiven Spielzustand in der vorhandenen Karte, bevor Sie den Stammordner ändern.',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot hat sich überschneidende verwaltete Änderungen gefunden, deren sichere Rücksetzreihenfolge nicht belegt werden kann. Es wurde nichts geändert und ein Wiederherstellungspaket wurde erstellt.',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot konnte die ursprünglichen Spieldateien nicht wiederherstellen. Die Karte wurde daher nicht entfernt. Prüfen Sie die Spieldateien und versuchen Sie es erneut.',
   'user_message.invalid_game_reference': 'Spiel nicht gefunden.',
   'user_message.invalid_component_reference': 'Komponente nicht gefunden.',
   'user_message.invalid_artifact_reference': 'Element nicht gefunden.',

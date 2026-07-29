@@ -1,5 +1,5 @@
 import { registerPreviewInvoker, type DesktopInvoker } from '@shared/api-preview';
-import { mockScanManualFolder, mockScanAutoLibraries } from './commands/scan';
+import { mockAddGame, mockInspectGameInstall, mockScanAutoLibraries } from './commands/scan';
 import { mockQueryGameCards, mockGetGameDetails } from './commands/query';
 import { mockFetchGameCover, mockClearGameCover, mockSetGameCover } from './commands/cover';
 import { mockGetCatalogSetting, mockSetCatalogSetting } from './commands/settings';
@@ -17,6 +17,7 @@ import {
   mockListLibraryPackages,
 } from './commands/libraries';
 import { mockSetGameFavorite, mockSetGameHidden } from './commands/game-ui-state';
+import { mockRemoveGameFromCatalog } from './commands/game-catalog';
 import { mockState, createMockState } from './desktop-state';
 import {
   mockAddonWriteUnsupported,
@@ -44,8 +45,15 @@ export const mockInvoker = mockInvokerImpl as DesktopInvoker<DesktopCommand>;
 
 async function dispatchCommand(command: DesktopCommand, payload: unknown): Promise<unknown> {
   switch (command) {
-    case 'scan_manual_folder':
-      return mockScanManualFolder(readStringField(command, payload, 'path'));
+    case 'inspect_game_install':
+      return mockInspectGameInstall(readStringField(command, payload, 'path'));
+
+    case 'add_game':
+      return mockAddGame(
+        readStringField(command, payload, 'selectedRoot'),
+        readStringField(command, payload, 'rootChoice'),
+        readBooleanField(command, payload, 'allowRootCorrection'),
+      );
 
     case 'scan_auto_libraries':
       return mockScanAutoLibraries();
@@ -115,6 +123,9 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
         readStringField(command, payload, 'gameId'),
         readBooleanField(command, payload, 'isHidden'),
       );
+
+    case 'remove_game_from_catalog':
+      return mockRemoveGameFromCatalog(readStringField(command, payload, 'gameId'));
 
     case 'get_catalog_setting':
       return mockGetCatalogSetting(readStringField(command, payload, 'key'));
@@ -240,7 +251,8 @@ export function resetMockDesktopState(): void {
 }
 
 export {
-  mockScanManualFolder,
+  mockInspectGameInstall,
+  mockAddGame,
   mockScanAutoLibraries,
   mockQueryGameCards,
   mockGetGameDetails,
@@ -249,6 +261,7 @@ export {
   mockSetGameCover,
   mockSetGameFavorite,
   mockSetGameHidden,
+  mockRemoveGameFromCatalog,
   mockGetCatalogSetting,
   mockSetCatalogSetting,
   mockApplySwap,

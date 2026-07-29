@@ -52,7 +52,7 @@ export type GameInstallation = {
   platform: Platform;
   runtime: Runtime;
   install_path: FilePath;
-  executable_candidates: FilePath[];
+  can_remove_from_catalog: boolean;
 };
 
 export type GameSummary = {
@@ -63,6 +63,7 @@ export type GameSummary = {
   runtime: Runtime;
   install_path: FilePath;
   external_id?: Nullable<string>;
+  can_remove_from_catalog: boolean;
 
   library_tags: Technology[];
   component_count: number;
@@ -91,6 +92,10 @@ export type GameSummary = {
 export type CoverArtworkResult = {
   file_name: string;
   updated_at_ms: number;
+};
+
+export type RemoveGameFromCatalogResult = {
+  gameId: string;
 };
 
 export type GameCardsSortField = 'title' | 'updates' | 'risk';
@@ -246,11 +251,4 @@ export type AutoScanResponse = {
    * Clients must robustly handle absence by substituting an empty array `[]`.
    */
   errors?: ScanError[];
-};
-
-export type ScanManualFolderResult = {
-  addedGameIds: string[];
-  updatedGameIds: string[];
-  changedGameIds: string[];
-  removedGameIds: string[];
 };

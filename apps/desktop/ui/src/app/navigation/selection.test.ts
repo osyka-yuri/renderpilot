@@ -68,7 +68,7 @@ function expectCanonicalIdentity(identityId: unknown, expected: string | null): 
           platform: 'windows',
           runtime: 'unknown',
           install_path: 'D:/games/x',
-          executable_candidates: [],
+          can_remove_from_catalog: true,
         },
       }),
     ),
@@ -138,7 +138,7 @@ describe('selection helpers', () => {
             platform: 'windows',
             runtime: 'unknown',
             install_path: 'D:/games/x',
-            executable_candidates: [],
+            can_remove_from_catalog: true,
           },
         }),
       });
@@ -153,7 +153,7 @@ describe('selection helpers', () => {
             platform: 'windows',
             runtime: 'unknown',
             install_path: 'D:/games/x',
-            executable_candidates: [],
+            can_remove_from_catalog: true,
           },
         });
 
@@ -177,7 +177,7 @@ describe('selection helpers', () => {
             platform: 'windows',
             runtime: 'unknown',
             install_path: 'D:/games/x',
-            executable_candidates: [],
+            can_remove_from_catalog: true,
           },
         });
 
@@ -204,7 +204,7 @@ describe('selection helpers', () => {
               platform: 'windows',
               runtime: 'unknown',
               install_path: 'D:/games/x',
-              executable_candidates: [],
+              can_remove_from_catalog: true,
             },
           }),
         });
@@ -218,7 +218,7 @@ describe('selection helpers', () => {
           platform: 'windows',
           runtime: 'unknown',
           install_path: 'D:/games/x',
-          executable_candidates: [],
+          can_remove_from_catalog: true,
         },
       });
 
@@ -260,7 +260,7 @@ describe('selection helpers', () => {
               platform: 'windows',
               runtime: 'unknown',
               install_path: 'D:/games/x',
-              executable_candidates: [],
+              can_remove_from_catalog: true,
             },
           }),
         ),
@@ -277,7 +277,7 @@ describe('selection helpers', () => {
               platform: 'windows',
               runtime: 'unknown',
               install_path: 'D:/games/x',
-              executable_candidates: [],
+              can_remove_from_catalog: true,
             },
           }),
         ),
@@ -294,7 +294,7 @@ describe('selection helpers', () => {
               platform: 'windows',
               runtime: 'unknown',
               install_path: 'D:/games/x',
-              executable_candidates: [],
+              can_remove_from_catalog: true,
             },
           }),
         ),

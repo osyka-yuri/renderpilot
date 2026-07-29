@@ -1,4 +1,8 @@
-import type { GameDetails, GameSummary } from './types';
+import type { GameDetails, GameInstallation, GameSummary } from './types';
+
+type GameDetailsOverrides = Omit<Partial<GameDetails>, 'game'> & {
+  game?: Partial<GameInstallation>;
+};
 
 /**
  * Shared test utility for creating minimal GameSummary objects.
@@ -14,6 +18,7 @@ export function createGameSummary(overrides: Partial<GameSummary> = {}): GameSum
     platform: 'Windows',
     runtime: 'NativeWindows',
     install_path: '/games/test',
+    can_remove_from_catalog: false,
     library_tags: [],
     component_count: 0,
     addon_capabilities: [],
@@ -35,23 +40,24 @@ export function createGameSummary(overrides: Partial<GameSummary> = {}): GameSum
  * Mirrors createGameSummary so tests that need the richer details shape (used
  * by the game details page and its stores) do not duplicate boilerplate.
  */
-export function createGameDetails(overrides: Partial<GameDetails> = {}): GameDetails {
-  return {
-    game: {
-      identity: {
-        id: 'game:test',
-        title: 'Test Game',
-        launcher: 'Manual',
-      },
-      platform: 'Windows',
-      runtime: 'NativeWindows',
-      install_path: '/games/test',
-      executable_candidates: [],
+export function createGameDetails(overrides: GameDetailsOverrides = {}): GameDetails {
+  const defaultGame: GameInstallation = {
+    identity: {
+      id: 'game:test',
+      title: 'Test Game',
+      launcher: 'Manual',
     },
+    platform: 'Windows',
+    runtime: 'NativeWindows',
+    install_path: '/games/test',
+    can_remove_from_catalog: true,
+  };
+  return {
     components: [],
     candidate_groups: [],
     operations: [],
     addon_capabilities: [],
     ...overrides,
+    game: { ...defaultGame, ...overrides.game },
   };
 }

@@ -33,7 +33,8 @@
     coversAutoFetchingIds?: ReadonlySet<string>;
     pickCoverDisabled?: boolean;
 
-    onScan?: VoidHandler;
+    onAddGame?: VoidHandler;
+    onRemoveGame?: (gameId: string) => boolean | Promise<boolean>;
     onOpenDetails?: GameSelectionHandler;
     onPreloadDetails?: VoidHandler;
     session: GamesCatalogSession;
@@ -47,7 +48,8 @@
     coversAutoFetchingIds = new Set<string>(),
     pickCoverDisabled = false,
 
-    onScan = noop,
+    onAddGame = noop,
+    onRemoveGame = () => false,
     onOpenDetails = noopGameSelection,
     onPreloadDetails = noop,
     session: model,
@@ -60,7 +62,7 @@
   );
   const showEmptyState = $derived(!hasCatalog && !effectiveBusy);
   const showInitialBusyState = $derived(waitingForBootstrap || (!hasCatalog && effectiveBusy));
-  const scanButtonLabel = $derived(effectiveBusy ? t('games.scanning') : t('games.scanFolder'));
+  const addGameButtonLabel = $derived(effectiveBusy ? t('games.addingGame') : t('games.addGame'));
   const dashboardStats = $derived(getDashboardStats(model.games));
 
   const filtersButtonLabel = $derived(
@@ -103,7 +105,7 @@
 <section class="flex h-full min-h-0 flex-col gap-4" aria-busy={effectiveBusy}>
   {#if showEmptyState}
     <div class="flex flex-1 flex-col items-center justify-center">
-      <GamesEmptyState busy={effectiveBusy} {scanButtonLabel} {onScan} />
+      <GamesEmptyState busy={effectiveBusy} {addGameButtonLabel} {onAddGame} />
     </div>
   {:else if showInitialBusyState}
     <Empty class="border-0" role="status" aria-live="polite" aria-atomic="true">
@@ -115,7 +117,13 @@
       </EmptyHeader>
     </Empty>
   {:else}
-    <GamesHeaderBar {hasGames} busy={effectiveBusy} {scanButtonLabel} {dashboardStats} {onScan} />
+    <GamesHeaderBar
+      {hasGames}
+      busy={effectiveBusy}
+      {addGameButtonLabel}
+      {dashboardStats}
+      {onAddGame}
+    />
 
     <div class="grid shrink-0 gap-2 px-1">
       <div
@@ -212,6 +220,7 @@
         onClearCover={model.clearCover}
         onToggleFavorite={model.toggleFavorite}
         onToggleHidden={model.toggleHidden}
+        {onRemoveGame}
         onResetFilters={model.resetFilters}
         {onOpenDetails}
         {onPreloadDetails}

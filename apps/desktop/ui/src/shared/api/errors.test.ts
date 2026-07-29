@@ -29,12 +29,21 @@ describe('normalizeCommandError', () => {
   });
 
   it('preserves a well-formed backend DTO', () => {
-    const err = normalizeCommandError(dto({ code: 'provider_failed', details: 'No source' }));
+    const err = normalizeCommandError(
+      dto({
+        code: 'invalid_install_root',
+        details: 'Choose one game folder',
+        reason: 'contains_proven_install',
+        recoveryBundlePath: 'C:/Recovery/renderpilot-bundle',
+      }),
+    );
 
     expect(err).toBeInstanceOf(DesktopCommandError);
-    expect(err.dto.code).toBe('provider_failed');
+    expect(err.dto.code).toBe('invalid_install_root');
     expect(err.dto.severity).toBe('error');
-    expect(err.dto.details).toBe('No source');
+    expect(err.dto.details).toBe('Choose one game folder');
+    expect(err.dto.reason).toBe('contains_proven_install');
+    expect(err.dto.recoveryBundlePath).toBe('C:/Recovery/renderpilot-bundle');
   });
 
   it('wraps a malformed DTO (invalid severity) as a generic fallback', () => {

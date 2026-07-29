@@ -91,6 +91,12 @@ export const en = {
   'game.card.menu.hidden.add': 'Hide game',
   'game.card.menu.hidden.remove': 'Unhide game',
   'game.card.menu.hidden.toggleHint': 'Toggle hidden status for this game.',
+  'game.card.menu.removeFromCatalog': 'Remove from catalog',
+  'game.card.menu.removeFromCatalogHint': 'Forget this manually added game.',
+  'game.card.removeConfirm.title': 'Remove {title} from the catalog?',
+  'game.card.removeConfirm.description':
+    'RenderPilot will safely undo managed changes, then remove the card and its history. The game files themselves will not be changed.',
+  'game.card.removeConfirm.action': 'Remove from catalog',
 
   // ── Game cover ──
   'game.cover.alt': 'Cover',
@@ -125,15 +131,100 @@ export const en = {
   'pageLoad.error.backToGames': 'Back to Games',
 
   // ── Games page / catalog ──
-  'games.scanFolder': 'Scan Folder',
-  'games.scanning': 'Scanning...',
+  'games.addGame': 'Add Game',
+  'games.addingGame': 'Adding game...',
+  'games.chooseInstallFolder': 'Choose game installation folder',
+  'addGame.title': 'Add game',
+  'addGame.cannotAddTitle': 'Could not add the game',
+  'addGame.installRoot': 'Installation root',
+  'addGame.reviewTitle': 'Review game installation',
+  'addGame.reviewDescription': 'Confirm the installation root before RenderPilot adds one game.',
+  'addGame.selectedFolder': 'Selected folder',
+  'addGame.recommendedFolder': 'Recommended installation root',
+  'addGame.existingRoot': 'Current game folder',
+  'addGame.chooseExecutable': 'Game executable',
+  'addGame.chooseExecutablePlaceholder': 'Choose an executable',
+  'addGame.chooseAnother': 'Choose another',
+  'addGame.add': 'Add game',
+  'addGame.addSelected': 'Add selected folder',
+  'addGame.correctRoot': 'Correct path',
+  'addGame.addRecommended': 'Add recommended root',
+  'addGame.replaceRootTitle': 'Correct the game path',
+  'addGame.replaceRootDescription':
+    'RenderPilot will use the selected folder instead of the current one. Game files will remain unchanged.',
+  'addGame.replaceExistingRoot': 'Correct path',
+  'addGame.rootCorrection.rollbackTitle': 'Active component changes must be reverted first',
+  'addGame.rootCorrection.rollbackDescription': {
+    one: 'RenderPilot must revert the active change for 1 component before replacing the card root.',
+    other:
+      'RenderPilot must revert the active changes for {count} components before replacing the card root.',
+  },
+  'addGame.rootCorrection.rollbackAndReplace': 'Revert changes and replace root',
+  'addGame.rootCorrection.rollbackFailed':
+    'The component changes could not be fully reverted. The existing game root was not changed.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'An interrupted file operation still requires recovery.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'An installed add-on belongs outside the selected game folder.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'Active NVIDIA profile settings belong outside the selected executable scope.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'A saved component rollback state no longer has a matching component.',
+  'addGame.rescan': 'Rescan game',
+  'addGame.catalogBusy': 'Another catalog operation is still running. Finish it, then try again.',
+  'addGame.warning.legacyCardsConsolidated': {
+    one: 'Consolidated one proven false legacy game card.',
+    other: 'Consolidated {count} proven false legacy game cards.',
+  },
+  'addGame.warning.legacyCardsRetained': {
+    one: 'Kept one legacy card because independent-install evidence was inconclusive.',
+    other: 'Kept {count} legacy cards because independent-install evidence was inconclusive.',
+  },
+  'addGame.warning.recoveryBundleCreated': 'Conflicting legacy state was preserved in {path}.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'Catalog history outside the corrected game root was preserved in {path}.',
+  'addGame.warning.recoveryBundleFallback': 'Recovery bundle: {path}',
+  'addGame.warning.unsupportedPlatform':
+    'Game installation inspection is supported only on Windows.',
+  'addGame.warning.probeIncomplete':
+    'Some folders could not be inspected. Recommendation confidence was reduced.',
+  'addGame.warning.parentProbeIncomplete':
+    'The recommended parent could not be inspected completely. Verify it before adding.',
+  'addGame.unavailable.multipleInstalls':
+    'The selected folder appears to be a shared library containing multiple games. Select one game’s folder.',
+  'addGame.unavailable.containsProvenInstall':
+    'An already recognized game installation is inside the selected folder. Select that game’s exact folder instead of the shared parent.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'Multiple already recognized games are inside the selected folder. Select one game’s folder.',
+  'addGame.unavailable.insideExistingInstall':
+    'The selected folder is inside an already added game. Use that game’s installation root.',
+  'addGame.unavailable.noReadableExecutable':
+    'No readable game executable was found in the selected folder. Select the installation folder that contains the game executable.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'The existing installation root cannot be changed safely while managed state is present. Resolve the listed blockers first.',
+  'addGame.warning.insideExistingInstall':
+    'This folder belongs to an existing game. Use that game’s root.',
+  'addGame.warning.narrowsExistingInstall':
+    'The existing manual root appears to include several game folders. Confirming will keep the same card but correct its root to the selected folder.',
+  'addGame.warning.multipleProvenInstalls':
+    'This folder contains multiple proven game installations.',
+  'addGame.warning.containsProvenInstall':
+    'This folder contains a proven game installation. Use its exact root.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Executables in separate child folders may belong to different games. If confirmed, this folder will still be treated as one game.',
+  'addGame.warning.explicitExecutableRequired':
+    'All valid executables look like launchers or helpers. Choose one explicitly.',
+  'addGame.warning.noReadableExecutable':
+    'This folder cannot be added separately because it contains no readable game executable.',
+  'addGame.warning.filesystemProbeError':
+    'Part of the installation could not be inspected. Check file access permissions.',
   'games.libraryActions': 'Actions',
   'games.search': 'Search games',
   'games.openFilters': 'Filters',
   'games.openFiltersActive': 'Filters (active)',
   'games.loading': 'Loading...',
   'games.empty.title': 'No games found',
-  'games.empty.description': 'Scan a folder to add games to the dashboard.',
+  'games.empty.description': 'Add a game to show it on the dashboard.',
   'games.filterEmpty.title': 'No matches found',
   'games.filterEmpty.description': 'Try changing your search or filters.',
   'games.filterEmpty.reset': 'Reset Filters',
@@ -438,6 +529,8 @@ export const en = {
   'notify.hiddenFailed': 'Failed to change hidden status.',
   'notify.gameHidden': 'Game hidden.',
   'notify.gameUnhidden': 'Game unhidden.',
+  'notify.gameRemovedFromCatalog': 'Game removed from the catalog.',
+  'notify.removeGameFailed': 'Failed to remove the game from the catalog.',
   'notify.applyCompleted': 'Changes applied',
   'notify.rollbackCompleted': 'Rollback completed',
   'notify.swapBatchFailed.title': 'Some updates failed',
@@ -518,6 +611,20 @@ export const en = {
 
   // ── Backend user messages (mirror of src-tauri/commands/error/strings.rs) ──
   'user_message.invalid_argument': 'Invalid input provided.',
+  'user_message.invalid_install_root':
+    'Choose the installation folder of one game. Drive roots, network share roots, and system folders cannot be added.',
+  'user_message.multiple_installs_detected':
+    'This folder contains multiple game installations. Choose the installation folder of one game.',
+  'user_message.stale_install_inspection':
+    'The installation changed while it was being checked. Review the updated result before adding it.',
+  'user_message.root_correction_cleanup_required':
+    'Active component changes must be reverted before changing this game root.',
+  'user_message.root_correction_blocked':
+    'Resolve the active game state from its existing card before changing the root.',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot found overlapping managed changes whose safe restore order cannot be proven. Nothing was changed and a recovery bundle was created.',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot could not restore the original game files, so the card was not removed. Check the game files and try again.',
   'user_message.invalid_game_reference': 'Game not found.',
   'user_message.invalid_component_reference': 'Component not found.',
   'user_message.invalid_artifact_reference': 'Item not found.',

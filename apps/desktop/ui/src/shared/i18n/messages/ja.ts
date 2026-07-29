@@ -79,6 +79,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'ゲームを隠す',
   'game.card.menu.hidden.remove': 'ゲームの非表示を解除',
   'game.card.menu.hidden.toggleHint': 'このゲームの非表示状態を切り替えます。',
+  'game.card.menu.removeFromCatalog': 'カタログから削除',
+  'game.card.menu.removeFromCatalogHint': '手動で追加したこのゲームをカタログから除外します。',
+  'game.card.removeConfirm.title': '{title} をカタログから削除しますか？',
+  'game.card.removeConfirm.description':
+    'RenderPilot は管理対象の変更を安全に元に戻してから、カードと関連履歴を削除します。ゲーム自体のファイルは変更されません。',
+  'game.card.removeConfirm.action': 'カタログから削除',
 
   'game.cover.alt': 'カバー画像',
   'game.cover.altWithTitle': 'カバー画像：{title}',
@@ -110,15 +116,93 @@ export const ja: Record<MessageKey, MessageValue> = {
   'pageLoad.error.retry': '再試行',
   'pageLoad.error.backToGames': 'ゲーム一覧に戻る',
 
-  'games.scanFolder': 'フォルダをスキャン',
-  'games.scanning': 'スキャン中...',
+  'games.addGame': 'ゲームを追加',
+  'games.addingGame': 'ゲームを追加中...',
+  'games.chooseInstallFolder': 'ゲームのインストールフォルダーを選択',
+  'addGame.title': 'ゲームを追加',
+  'addGame.cannotAddTitle': 'ゲームを追加できませんでした',
+  'addGame.installRoot': 'インストールルート',
+  'addGame.reviewTitle': 'ゲームのインストールを確認',
+  'addGame.reviewDescription': '1つのゲームを追加する前にインストールルートを確認してください。',
+  'addGame.selectedFolder': '選択したフォルダー',
+  'addGame.recommendedFolder': '推奨インストールルート',
+  'addGame.existingRoot': '現在のゲームフォルダー',
+  'addGame.chooseExecutable': 'ゲーム実行ファイル',
+  'addGame.chooseExecutablePlaceholder': '実行ファイルを選択',
+  'addGame.chooseAnother': '選び直す',
+  'addGame.add': 'ゲームを追加',
+  'addGame.addSelected': '選択したフォルダーを追加',
+  'addGame.correctRoot': 'パスを修正',
+  'addGame.addRecommended': '推奨ルートを追加',
+  'addGame.replaceRootTitle': 'ゲームのパスを修正',
+  'addGame.replaceRootDescription':
+    'RenderPilot は現在のフォルダーの代わりに、選択したフォルダーを使用します。ゲームファイルは変更されません。',
+  'addGame.replaceExistingRoot': 'パスを修正',
+  'addGame.rootCorrection.rollbackTitle': '先に有効なコンポーネント変更を元に戻す必要があります',
+  'addGame.rootCorrection.rollbackDescription':
+    'カードのルートを置き換える前に、{count} 件のコンポーネント変更を元に戻す必要があります。',
+  'addGame.rootCorrection.rollbackAndReplace': '変更を元に戻してルートを置き換える',
+  'addGame.rootCorrection.rollbackFailed':
+    'コンポーネントの変更を完全には元に戻せませんでした。現在のゲームルートは変更されていません。',
+  'addGame.rootCorrection.blocker.pendingRecovery': '中断されたファイル操作の復旧がまだ必要です。',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'インストール済みアドオンが選択したゲームフォルダー外のファイルに属しています。',
+  'addGame.rootCorrection.blocker.nvapi':
+    '有効な NVIDIA プロファイル設定が選択したフォルダー外の実行ファイルに属しています。',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    '保存済みのロールバック状態に対応するコンポーネントがありません。',
+  'addGame.rescan': 'ゲームを再スキャン',
+  'addGame.catalogBusy': '別のカタログ操作が実行中です。完了してからもう一度お試しください。',
+  'addGame.warning.legacyCardsConsolidated':
+    '誤って作成されたことが確認された従来のゲームカードを {count} 件統合しました。',
+  'addGame.warning.legacyCardsRetained':
+    '独立したインストールかどうかを判断できないため、従来のゲームカードを {count} 件保持しました。',
+  'addGame.warning.recoveryBundleCreated':
+    '競合する従来の状態を復旧パッケージ {path} に保存しました。',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    '修正後のゲームルート外にあるカタログ履歴を復旧パッケージ {path} に保存しました。',
+  'addGame.warning.recoveryBundleFallback': '復旧パッケージ: {path}',
+  'addGame.warning.unsupportedPlatform':
+    'ゲームインストールの検査は Windows でのみサポートされています。',
+  'addGame.warning.probeIncomplete':
+    '一部のフォルダーを検査できなかったため、推奨結果の信頼度が下がっています。',
+  'addGame.warning.parentProbeIncomplete':
+    '推奨された親フォルダーを完全に検査できませんでした。追加する前に確認してください。',
+  'addGame.unavailable.multipleInstalls':
+    '選択したフォルダーは、複数のゲームを含む共通ライブラリのようです。個別のゲームフォルダーを選択してください。',
+  'addGame.unavailable.containsProvenInstall':
+    '選択したフォルダー内に、すでに認識されているゲームのインストールがあります。共通の親フォルダーではなく、そのゲームの正確なフォルダーを選択してください。',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    '選択したフォルダー内に、すでに認識されているゲームが複数あります。個別のゲームフォルダーを選択してください。',
+  'addGame.unavailable.insideExistingInstall':
+    '選択したフォルダーは、追加済みゲームのインストール内にあります。そのゲームのインストールルートを使用してください。',
+  'addGame.unavailable.noReadableExecutable':
+    '選択したフォルダーに読み取り可能なゲーム実行ファイルが見つかりません。ゲーム実行ファイルを含むインストールフォルダーを選択してください。',
+  'addGame.unavailable.rootCorrectionBlocked':
+    '管理対象の状態が残っているため、既存のインストールルートを安全に変更できません。先に表示されたブロック要因を解消してください。',
+  'addGame.warning.insideExistingInstall':
+    'このフォルダーは既存のゲームに属しています。そのゲームのインストールルートを使用してください。',
+  'addGame.warning.narrowsExistingInstall':
+    '既存の手動ルートには複数のゲームフォルダーが含まれている可能性があります。確定すると同じカードを維持したまま、ルートを選択したフォルダーに修正します。',
+  'addGame.warning.multipleProvenInstalls':
+    'このフォルダーには、確認済みのゲームインストールが複数含まれています。',
+  'addGame.warning.containsProvenInstall':
+    'このフォルダーには確認済みのゲームインストールが含まれています。正確なルートを使用してください。',
+  'addGame.warning.multipleInstallsSuspected':
+    '別々の子フォルダーにある実行ファイルは、異なるゲームに属している可能性があります。確定した場合でも、このフォルダーは 1 つのゲームとして扱われます。',
+  'addGame.warning.explicitExecutableRequired':
+    '有効な実行ファイルがすべてランチャーまたは補助ツールに見えます。使用するファイルを明示的に選択してください。',
+  'addGame.warning.noReadableExecutable':
+    '読み取り可能なゲーム実行ファイルがないため、このフォルダーを単独で追加することはできません。',
+  'addGame.warning.filesystemProbeError':
+    'インストールの一部を検査できませんでした。ファイルのアクセス権限を確認してください。',
   'games.libraryActions': 'アクション',
   'games.search': 'ゲームを検索',
   'games.openFilters': 'フィルター',
   'games.openFiltersActive': 'フィルター（適用中）',
   'games.loading': '読み込み中...',
   'games.empty.title': 'ゲームが見つかりません',
-  'games.empty.description': 'ダッシュボードにゲームを追加するにはフォルダをスキャンしてください。',
+  'games.empty.description': 'ゲームを追加するとダッシュボードに表示されます。',
   'games.filterEmpty.title': '一致する結果がありません',
   'games.filterEmpty.description': '検索条件またはフィルターを変更してみてください。',
   'games.filterEmpty.reset': 'フィルターをリセット',
@@ -375,6 +459,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': '非表示の状態を変更できませんでした。',
   'notify.gameHidden': 'ゲームを非表示にしました。',
   'notify.gameUnhidden': 'ゲームを表示にしました。',
+  'notify.gameRemovedFromCatalog': 'ゲームをカタログから削除しました。',
+  'notify.removeGameFailed': 'ゲームをカタログから削除できませんでした。',
   'notify.applyCompleted': '変更を適用しました',
   'notify.rollbackCompleted': 'ロールバックが完了しました',
   'notify.swapBatchFailed.title': '一部の更新に失敗しました',
@@ -448,6 +534,20 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.catalog.artworkSaveError': 'カバー画像の設定の保存に失敗しました。',
 
   'user_message.invalid_argument': '無効な入力が提供されました。',
+  'user_message.invalid_install_root':
+    '1 つのゲームのインストールフォルダーを選択してください。ドライブ、ネットワーク共有のルート、およびシステムフォルダーは追加できません。',
+  'user_message.multiple_installs_detected':
+    'このフォルダーには複数のゲームがインストールされています。1 つのゲームのインストールフォルダーを選択してください。',
+  'user_message.stale_install_inspection':
+    '確認中にインストール内容が変更されました。追加する前に更新された結果を確認してください。',
+  'user_message.root_correction_cleanup_required':
+    'ゲームルートを変更する前に、有効なコンポーネント変更を元に戻す必要があります。',
+  'user_message.root_correction_blocked':
+    'ゲームルートを変更する前に、既存のカードで有効な状態を解決してください。',
+  'user_message.managed_cleanup_ambiguous':
+    '安全な復元順序を判断できない重複した管理変更が見つかりました。変更は行われず、リカバリーパッケージが作成されました。',
+  'user_message.game_removal_cleanup_failed':
+    '元のゲームファイルを復元できなかったため、カードは削除されませんでした。ゲームファイルを確認して、もう一度お試しください。',
   'user_message.invalid_game_reference': 'ゲームが見つかりません。',
   'user_message.invalid_component_reference': 'コンポーネントが見つかりません。',
   'user_message.invalid_artifact_reference': 'アイテムが見つかりません。',

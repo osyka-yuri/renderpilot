@@ -93,7 +93,16 @@ function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
     return null;
   }
 
-  const { code, severity, messageKey, details, suggestedActions, debugDetails } = value;
+  const {
+    code,
+    severity,
+    messageKey,
+    details,
+    reason,
+    recoveryBundlePath,
+    suggestedActions,
+    debugDetails,
+  } = value;
 
   if (
     !isNonEmptyString(code) ||
@@ -112,6 +121,8 @@ function parseCommandErrorDto(value: unknown): CommandErrorDto | null {
     severity,
     messageKey,
     details,
+    reason: isNonEmptyString(reason) ? reason : undefined,
+    recoveryBundlePath: isNonEmptyString(recoveryBundlePath) ? recoveryBundlePath : undefined,
     suggestedActions: normalizedSuggestedActions,
     debugDetails: isString(debugDetails) ? debugDetails : undefined,
   });
@@ -132,6 +143,10 @@ function normalizeCommandErrorDto(dto: CommandErrorDto): CommandErrorDto {
     severity: normalizeSeverity(dto.severity),
     messageKey: normalizeNonEmptyString(dto.messageKey, FALLBACK_MESSAGE_KEY),
     details: normalizeDetails(dto.details),
+    reason: isNonEmptyString(dto.reason) ? dto.reason : undefined,
+    recoveryBundlePath: isNonEmptyString(dto.recoveryBundlePath)
+      ? dto.recoveryBundlePath.trim()
+      : undefined,
     suggestedActions: normalizeSuggestedActions(dto.suggestedActions),
     debugDetails,
   };

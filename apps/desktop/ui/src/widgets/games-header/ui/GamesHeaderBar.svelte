@@ -15,20 +15,20 @@
   type Props = {
     hasGames?: boolean;
     busy?: boolean;
-    scanButtonLabel?: string;
+    addGameButtonLabel?: string;
     dashboardStats?: DashboardStats;
-    onScan?: ActionHandler;
+    onAddGame?: ActionHandler;
   };
 
   const {
     hasGames = false,
     busy = false,
-    scanButtonLabel = '',
+    addGameButtonLabel = '',
     dashboardStats = createDefaultDashboardStats(),
-    onScan = () => undefined,
+    onAddGame = () => undefined,
   }: Props = $props();
 
-  const normalizedScanButtonLabel = $derived(scanButtonLabel.trim() || t('games.scanFolder'));
+  const normalizedAddGameButtonLabel = $derived(addGameButtonLabel.trim() || t('games.addGame'));
 </script>
 
 <div
@@ -47,11 +47,11 @@
     role="group"
     aria-label={t('games.libraryActions')}
   >
-    <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
+    <Button variant="default" size="sm" disabled={busy} onclick={onAddGame}>
       {#if busy}
         <Spinner />
       {/if}
-      {normalizedScanButtonLabel}
+      {normalizedAddGameButtonLabel}
     </Button>
   </div>
 </div>

@@ -27,6 +27,7 @@
   } from '../model/launcher-groups';
 
   type GameActionHandler = (gameId: GameId) => void;
+  type RemoveGameHandler = (gameId: GameId) => boolean | Promise<boolean>;
   type MenuOpenChangeHandler = (gameId: GameId, next: boolean) => void;
   type Props = {
     games?: readonly GameCardViewModel[];
@@ -45,6 +46,7 @@
     onClearCover?: GameActionHandler;
     onToggleFavorite?: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden?: (gameId: GameId, isHidden: boolean) => void;
+    onRemoveGame?: RemoveGameHandler;
     onOpenDetails?: GameActionHandler;
     onPreloadDetails?: () => void;
     onLoadMore?: () => void;
@@ -64,6 +66,7 @@
   const noopMenuOpenChange: MenuOpenChangeHandler = () => undefined;
   const noopToggleFavorite = (_gameId: GameId, _isFavorite: boolean): void => undefined;
   const noopToggleHidden = (_gameId: GameId, _isHidden: boolean): void => undefined;
+  const noopRemoveGame: RemoveGameHandler = () => false;
   const isCoverOperationIdle: CoverBusyPredicate = () => false;
 
   const {
@@ -83,6 +86,7 @@
     onClearCover = noopAction,
     onToggleFavorite = noopToggleFavorite,
     onToggleHidden = noopToggleHidden,
+    onRemoveGame = noopRemoveGame,
     onOpenDetails = noopAction,
     onPreloadDetails = () => undefined,
     onLoadMore = () => undefined,
@@ -289,6 +293,7 @@
               {onClearCover}
               {onToggleFavorite}
               {onToggleHidden}
+              {onRemoveGame}
               {onOpenDetails}
               {onPreloadDetails}
               {onCardFocus}

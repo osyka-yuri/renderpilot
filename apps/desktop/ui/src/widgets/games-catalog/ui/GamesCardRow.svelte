@@ -12,6 +12,7 @@
     onClearCover: GameActionHandler;
     onToggleFavorite: (gameId: GameId, isFavorite: boolean) => void;
     onToggleHidden: (gameId: GameId, isHidden: boolean) => void;
+    onRemoveGame: (gameId: GameId) => boolean | Promise<boolean>;
     onOpenDetails: GameActionHandler;
     onPreloadDetails: () => void;
     onCardFocus: (gameId: GameId, target: GameCardFocusTarget) => void;
@@ -26,6 +27,7 @@
     onClearCover,
     onToggleFavorite,
     onToggleHidden,
+    onRemoveGame,
     onOpenDetails,
     onPreloadDetails,
     onCardFocus,
@@ -63,6 +65,7 @@
       onToggleHidden={() => {
         onToggleHidden(card.id, !card.game.isHidden);
       }}
+      onRemoveFromCatalog={() => onRemoveGame(card.id)}
       onOpenDetails={() => {
         onOpenDetails(card.id);
       }}

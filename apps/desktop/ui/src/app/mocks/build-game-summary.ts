@@ -37,6 +37,7 @@ export function createGameSummaryFromDetails(
     runtime: details.game.runtime,
     install_path: details.game.install_path,
     external_id: details.game.identity.external_id,
+    can_remove_from_catalog: details.game.can_remove_from_catalog,
     library_tags: unique(visibleComponents.map((component) => component.technology.trim())),
     component_count: visibleComponents.length,
     addon_capabilities: [...details.addon_capabilities],

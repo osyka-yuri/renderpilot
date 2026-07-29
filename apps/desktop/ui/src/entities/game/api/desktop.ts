@@ -7,6 +7,7 @@ import type {
   GameCardsResult,
   GameDetails,
   GamesCatalogBootstrap,
+  RemoveGameFromCatalogResult,
 } from '../model/types';
 
 export async function bootstrapGamesCatalog(limit = 120): Promise<GamesCatalogBootstrap> {
@@ -64,5 +65,11 @@ export async function setGameHidden(
   return invokeDesktop('set_game_hidden', {
     gameId: requireNonBlankString(gameId, 'gameId'),
     isHidden,
+  });
+}
+
+export async function removeGameFromCatalog(gameId: string): Promise<RemoveGameFromCatalogResult> {
+  return invokeDesktop<RemoveGameFromCatalogResult>('remove_game_from_catalog', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
   });
 }

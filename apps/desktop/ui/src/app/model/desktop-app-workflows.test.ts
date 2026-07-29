@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { getGameDetails } from '@entities/game';
 import { createGameDetails } from '@entities/game';
+import type { AddGameInspection } from '@features/scan-libraries';
 
 import type { OpenDesktopGameDeps } from './desktop-app-workflows';
 
@@ -10,7 +11,9 @@ const scanMocks = vi.hoisted(() => ({
   refreshRemoteManifests: vi.fn(() => Promise.resolve()),
   refreshCatalogCapabilities: vi.fn(() => Promise.resolve({ refreshed: true })),
   publishAutomaticLibraryScanFailedNotification: vi.fn(),
+  publishAddGameWarnings: vi.fn(),
   publishPartialLibraryScanWarning: vi.fn(),
+  addGame: vi.fn(),
 }));
 
 vi.mock('@features/scan-libraries', () => ({
@@ -19,9 +22,9 @@ vi.mock('@features/scan-libraries', () => ({
   refreshCatalogCapabilities: scanMocks.refreshCatalogCapabilities,
   publishAutomaticLibraryScanFailedNotification:
     scanMocks.publishAutomaticLibraryScanFailedNotification,
+  publishAddGameWarnings: scanMocks.publishAddGameWarnings,
   publishPartialLibraryScanWarning: scanMocks.publishPartialLibraryScanWarning,
-  selectManualScanFolder: vi.fn(),
-  scanManualFolder: vi.fn(),
+  addGame: scanMocks.addGame,
 }));
 
 import {
@@ -29,8 +32,11 @@ import {
   openDesktopGame,
   queueBackgroundCoverSync,
   reloadSelectedGame,
+  removeGameAndRefreshCards,
+  rollbackRootCorrectionComponents,
   runCatalogRefreshWithCoverSync,
   runUserCatalogRefresh,
+  submitAddGameAndRefreshCards,
 } from './desktop-app-workflows';
 
 describe('desktop-app-workflows', () => {
@@ -61,7 +67,7 @@ describe('desktop-app-workflows', () => {
             platform: 'Windows',
             runtime: 'NativeWindows',
             install_path: '/test',
-            executable_candidates: [],
+            can_remove_from_catalog: true,
           },
         }),
       ),
@@ -157,6 +163,230 @@ describe('desktop-app-workflows', () => {
 
     expect(refreshGameCards).not.toHaveBeenCalled();
     expect(queue).not.toHaveBeenCalled();
+  });
+
+  describe('submitAddGameAndRefreshCards', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    function inspection(): AddGameInspection {
+      return {
+        selectedRoot: 'D:/Games/The Last of Us Part I',
+        inspectionFingerprint: 'inspection:test',
+        catalogGeneration: 11,
+        boundary: {
+          kind: 'single_install',
+          completeness: 'complete',
+          candidateRoots: ['D:/Games/The Last of Us Part I'],
+          evidence: ['root_executable'],
+        },
+        recommendation: {
+          root: 'D:/Games',
+          source: 'existing_catalog',
+          confidence: 'suggested',
+          completeness: 'complete',
+          evidence: [],
+        },
+        relationship: {
+          kind: 'inside_existing' as const,
+          gameIds: ['game:oversized-root'],
+          provenInstallRoots: [],
+        },
+        executables: [],
+        requiresExplicitExecutable: false,
+        rootCorrection: {
+          gameId: 'game:existing',
+          status: 'ready',
+          cleanupActions: [],
+          blockers: [],
+        },
+        decision: {
+          kind: 'review',
+          defaultOption: {
+            rootChoice: 'selected',
+            catalogAction: 'correct_existing_root',
+          },
+          options: [
+            {
+              rootChoice: 'selected',
+              catalogAction: 'correct_existing_root',
+            },
+          ],
+        },
+        warnings: [],
+      };
+    }
+
+    function addDeps() {
+      const coverQueue = vi.fn();
+      return {
+        runExclusive: <T>(task: () => Promise<T>): Promise<T | null> => task(),
+        refreshGameCards: vi.fn(() => Promise.resolve()),
+        coverSyncQueue: {
+          queue: coverQueue,
+          setAutoFetching: vi.fn(),
+          autoFetchingIds: new Set<string>(),
+        } as never,
+        coverQueue,
+        syncMissingCoversAfterCardsLoad: vi.fn(() => Promise.resolve()),
+      };
+    }
+
+    it('submits one explicit correction and refreshes the catalog', async () => {
+      scanMocks.addGame.mockResolvedValue({
+        gameId: 'game:oversized-root',
+        effectiveRoot: 'D:/Games/The Last of Us Part I',
+        disposition: 'root_corrected',
+        rootAuthority: 'user_confirmed',
+        detectedLibraryCount: 1,
+        consolidatedGameIds: [],
+        recoveryBundlePath: null,
+        warnings: [],
+      });
+      const deps = addDeps();
+
+      const result = await submitAddGameAndRefreshCards(
+        inspection(),
+        {
+          rootChoice: 'selected',
+          allowRootCorrection: true,
+          chosenExecutable: null,
+        },
+        deps,
+      );
+
+      expect(result?.gameId).toBe('game:oversized-root');
+      expect(scanMocks.addGame).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedRoot: 'D:/Games/The Last of Us Part I',
+          rootChoice: 'selected',
+          allowRootCorrection: true,
+        }),
+      );
+      expect(deps.refreshGameCards).toHaveBeenCalledOnce();
+      expect(scanMocks.publishAddGameWarnings).toHaveBeenCalledWith(result);
+      expect(deps.coverQueue).toHaveBeenCalledOnce();
+    });
+
+    it('does not publish completion effects when the exclusive runner reports an error', async () => {
+      const deps = {
+        ...addDeps(),
+        runExclusive: <T>(_task: () => Promise<T>): Promise<T | null> => Promise.resolve(null),
+      };
+
+      const result = await submitAddGameAndRefreshCards(
+        inspection(),
+        {
+          rootChoice: 'selected',
+          allowRootCorrection: true,
+          chosenExecutable: null,
+        },
+        deps,
+      );
+
+      expect(result).toBeNull();
+      expect(scanMocks.publishAddGameWarnings).not.toHaveBeenCalled();
+      expect(deps.coverQueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rollbackRootCorrectionComponents', () => {
+    it('rolls back the approved components sequentially and refreshes once', async () => {
+      const calls: string[] = [];
+      const rollbackComponent = vi.fn((_gameId: string, componentId: string) => {
+        calls.push(`rollback:${componentId}`);
+        return Promise.resolve();
+      });
+      const refreshGameCards = vi.fn(() => {
+        calls.push('refresh');
+        return Promise.resolve();
+      });
+
+      await rollbackRootCorrectionComponents(
+        'game:oversized-root',
+        ['component:a', 'component:b'],
+        { rollbackComponent, refreshGameCards },
+      );
+
+      expect(calls).toEqual(['rollback:component:a', 'rollback:component:b', 'refresh']);
+    });
+
+    it('stops after a rollback failure, refreshes visible state, and preserves the exact error', async () => {
+      const rollbackFailure = new Error('baseline verification failed');
+      const rollbackComponent = vi.fn((_gameId: string, componentId: string) => {
+        if (componentId === 'component:b') {
+          return Promise.reject(rollbackFailure);
+        }
+        return Promise.resolve();
+      });
+      const refreshGameCards = vi.fn(() => Promise.resolve());
+
+      await expect(
+        rollbackRootCorrectionComponents(
+          'game:oversized-root',
+          ['component:a', 'component:b', 'component:c'],
+          { rollbackComponent, refreshGameCards },
+        ),
+      ).rejects.toBe(rollbackFailure);
+
+      expect(rollbackComponent).toHaveBeenCalledTimes(2);
+      expect(refreshGameCards).toHaveBeenCalledOnce();
+    });
+
+    it('does not let a refresh failure hide the rollback failure', async () => {
+      const rollbackFailure = new Error('rollback failed');
+      const rollbackComponent = vi.fn(() => Promise.reject(rollbackFailure));
+      const refreshGameCards = vi.fn(() => Promise.reject(new Error('refresh failed')));
+
+      await expect(
+        rollbackRootCorrectionComponents('game:oversized-root', ['component:a'], {
+          rollbackComponent,
+          refreshGameCards,
+        }),
+      ).rejects.toBe(rollbackFailure);
+    });
+  });
+
+  describe('removeGameAndRefreshCards', () => {
+    it('removes the card and refreshes the visible catalog under one exclusive task', async () => {
+      const calls: string[] = [];
+      const removeGame = vi.fn((gameId: string) => {
+        calls.push(`remove:${gameId}`);
+        return Promise.resolve({ gameId });
+      });
+      const refreshGameCards = vi.fn(() => {
+        calls.push('refresh');
+        return Promise.resolve();
+      });
+
+      const removed = await removeGameAndRefreshCards('game:oversized-root', {
+        runExclusive: async (task) => {
+          calls.push('exclusive');
+          return await task();
+        },
+        refreshGameCards,
+        removeGame,
+      });
+
+      expect(removed).toBe(true);
+      expect(calls).toEqual(['exclusive', 'remove:game:oversized-root', 'refresh']);
+    });
+
+    it('does not refresh when the exclusive task cannot start', async () => {
+      const refreshGameCards = vi.fn(() => Promise.resolve());
+      const removeGame = vi.fn((gameId: string) => Promise.resolve({ gameId }));
+
+      const removed = await removeGameAndRefreshCards('game:missing', {
+        runExclusive: () => Promise.resolve(null),
+        refreshGameCards,
+        removeGame,
+      });
+
+      expect(removed).toBe(false);
+      expect(removeGame).not.toHaveBeenCalled();
+      expect(refreshGameCards).not.toHaveBeenCalled();
+    });
   });
 
   describe('runUserCatalogRefresh', () => {

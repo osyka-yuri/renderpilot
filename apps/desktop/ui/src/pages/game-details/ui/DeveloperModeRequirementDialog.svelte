@@ -161,7 +161,7 @@
       </Alert>
     {/if}
 
-    <DialogFooter class="sm:justify-between">
+    <DialogFooter>
       <Button
         variant="secondary"
         size="sm"
@@ -171,31 +171,29 @@
       >
         {t('common.cancel')}
       </Button>
-      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-        {#if !unavailable}
-          <Button variant="outline" size="sm" disabled={actionsBusy} onclick={retryStatus}>
-            {#if retrying}
-              <Spinner aria-hidden="true" />
-            {/if}
-            {retrying ? t('gameDetails.developerMode.checkingStatus') : t(copy.retryAction)}
-          </Button>
-          <Button size="sm" disabled={actionsBusy} onclick={openExternalTarget}>
-            {#if openingExternalTarget}
-              <Spinner aria-hidden="true" />
-            {/if}
-            {#if copy.openAction}
-              {t(copy.openAction)}
-            {/if}
-          </Button>
-        {:else}
-          <Button size="sm" disabled={actionsBusy} onclick={retryStatus}>
-            {#if retrying}
-              <Spinner aria-hidden="true" />
-            {/if}
-            {retrying ? t('gameDetails.developerMode.checkingStatus') : t(copy.retryAction)}
-          </Button>
-        {/if}
-      </div>
+      {#if !unavailable}
+        <Button variant="outline" size="sm" disabled={actionsBusy} onclick={retryStatus}>
+          {#if retrying}
+            <Spinner aria-hidden="true" />
+          {/if}
+          {retrying ? t('gameDetails.developerMode.checkingStatus') : t(copy.retryAction)}
+        </Button>
+        <Button size="sm" disabled={actionsBusy} onclick={openExternalTarget}>
+          {#if openingExternalTarget}
+            <Spinner aria-hidden="true" />
+          {/if}
+          {#if copy.openAction}
+            {t(copy.openAction)}
+          {/if}
+        </Button>
+      {:else}
+        <Button size="sm" disabled={actionsBusy} onclick={retryStatus}>
+          {#if retrying}
+            <Spinner aria-hidden="true" />
+          {/if}
+          {retrying ? t('gameDetails.developerMode.checkingStatus') : t(copy.retryAction)}
+        </Button>
+      {/if}
     </DialogFooter>
   </DialogContent>
 </Dialog>

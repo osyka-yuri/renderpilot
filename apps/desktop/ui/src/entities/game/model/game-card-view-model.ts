@@ -21,6 +21,7 @@ export type GameCardViewModel = {
   title: string;
   launcher: string;
   installPath: string;
+  canRemoveFromCatalog: boolean;
   monogram: string;
   updateBadge: UpdateBadge;
   libraries: string[];
@@ -41,6 +42,7 @@ export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
     title: game.title,
     launcher: game.launcher,
     installPath: game.install_path,
+    canRemoveFromCatalog: game.can_remove_from_catalog,
     monogram: titleMonogram(game.title),
     updateBadge: getUpdateBadge(game),
     libraries: [...game.library_tags],

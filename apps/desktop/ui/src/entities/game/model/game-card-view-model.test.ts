@@ -22,4 +22,13 @@ describe('game-card-view-model', () => {
       'dlss_super_resolution',
     ]);
   });
+
+  it('carries the backend removal capability into the card actions', () => {
+    expect(
+      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: true })).canRemoveFromCatalog,
+    ).toBe(true);
+    expect(
+      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: false })).canRemoveFromCatalog,
+    ).toBe(false);
+  });
 });

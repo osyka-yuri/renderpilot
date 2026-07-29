@@ -79,6 +79,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Ocultar juego',
   'game.card.menu.hidden.remove': 'Mostrar juego',
   'game.card.menu.hidden.toggleHint': 'Alternar el estado de oculto para este juego.',
+  'game.card.menu.removeFromCatalog': 'Eliminar del catálogo',
+  'game.card.menu.removeFromCatalogHint': 'Olvidar este juego añadido manualmente.',
+  'game.card.removeConfirm.title': '¿Eliminar {title} del catálogo?',
+  'game.card.removeConfirm.description':
+    'RenderPilot revertirá de forma segura los cambios administrados y después eliminará la tarjeta junto con su historial. Los archivos del juego no se modificarán.',
+  'game.card.removeConfirm.action': 'Eliminar del catálogo',
 
   'game.cover.alt': 'Carátula',
   'game.cover.altWithTitle': 'Carátula: {title}',
@@ -111,15 +117,104 @@ export const es: Record<MessageKey, MessageValue> = {
   'pageLoad.error.retry': 'Reintentar',
   'pageLoad.error.backToGames': 'Volver a Juegos',
 
-  'games.scanFolder': 'Escanear carpeta',
-  'games.scanning': 'Escaneando...',
+  'games.addGame': 'Añadir juego',
+  'games.addingGame': 'Añadiendo juego...',
+  'games.chooseInstallFolder': 'Elegir carpeta de instalación del juego',
+  'addGame.title': 'Añadir juego',
+  'addGame.cannotAddTitle': 'No se pudo añadir el juego',
+  'addGame.installRoot': 'Raíz de instalación',
+  'addGame.reviewTitle': 'Revisar instalación del juego',
+  'addGame.reviewDescription': 'Confirma la raíz de instalación antes de añadir un juego.',
+  'addGame.selectedFolder': 'Carpeta seleccionada',
+  'addGame.recommendedFolder': 'Raíz de instalación recomendada',
+  'addGame.existingRoot': 'Carpeta actual del juego',
+  'addGame.chooseExecutable': 'Ejecutable del juego',
+  'addGame.chooseExecutablePlaceholder': 'Elegir un ejecutable',
+  'addGame.chooseAnother': 'Elegir otra',
+  'addGame.add': 'Añadir juego',
+  'addGame.addSelected': 'Añadir carpeta seleccionada',
+  'addGame.correctRoot': 'Corregir la ruta',
+  'addGame.addRecommended': 'Añadir raíz recomendada',
+  'addGame.replaceRootTitle': 'Corregir la ruta del juego',
+  'addGame.replaceRootDescription':
+    'RenderPilot usará la carpeta seleccionada en lugar de la actual. Los archivos del juego no se modificarán.',
+  'addGame.replaceExistingRoot': 'Corregir la ruta',
+  'addGame.rootCorrection.rollbackTitle':
+    'Primero deben revertirse los cambios activos de componentes',
+  'addGame.rootCorrection.rollbackDescription': {
+    one: 'RenderPilot debe revertir el cambio activo de 1 componente antes de sustituir la raíz de la tarjeta.',
+    other:
+      'RenderPilot debe revertir los cambios activos de {count} componentes antes de sustituir la raíz de la tarjeta.',
+  },
+  'addGame.rootCorrection.rollbackAndReplace': 'Revertir cambios y sustituir raíz',
+  'addGame.rootCorrection.rollbackFailed':
+    'No se pudieron revertir por completo los cambios de componentes. La raíz actual del juego no se modificó.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'Una operación de archivos interrumpida aún requiere recuperación.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'Un complemento instalado pertenece a archivos fuera de la carpeta seleccionada.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'La configuración activa del perfil NVIDIA pertenece a ejecutables fuera de la carpeta seleccionada.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'Un estado de reversión guardado ya no tiene un componente correspondiente.',
+  'addGame.rescan': 'Volver a analizar el juego',
+  'addGame.catalogBusy':
+    'Hay otra operación del catálogo en curso. Termínala y vuelve a intentarlo.',
+  'addGame.warning.legacyCardsConsolidated': {
+    one: 'Se consolidó una tarjeta antigua que se confirmó como incorrecta.',
+    other: 'Se consolidaron {count} tarjetas antiguas que se confirmaron como incorrectas.',
+  },
+  'addGame.warning.legacyCardsRetained': {
+    one: 'Se conservó una tarjeta antigua porque no había pruebas concluyentes de una instalación independiente.',
+    other:
+      'Se conservaron {count} tarjetas antiguas porque no había pruebas concluyentes de instalaciones independientes.',
+  },
+  'addGame.warning.recoveryBundleCreated':
+    'El estado antiguo en conflicto se guardó en el paquete de recuperación {path}.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'El historial del catálogo fuera de la raíz corregida se guardó en el paquete de recuperación {path}.',
+  'addGame.warning.recoveryBundleFallback': 'Paquete de recuperación: {path}',
+  'addGame.warning.unsupportedPlatform':
+    'La inspección de instalaciones de juegos solo es compatible con Windows.',
+  'addGame.warning.probeIncomplete':
+    'No se pudieron inspeccionar algunas carpetas. La recomendación tiene menos fiabilidad.',
+  'addGame.warning.parentProbeIncomplete':
+    'No se pudo inspeccionar por completo la carpeta superior recomendada. Compruébala antes de añadirla.',
+  'addGame.unavailable.multipleInstalls':
+    'La carpeta seleccionada parece una biblioteca compartida con varios juegos. Selecciona la carpeta de un juego concreto.',
+  'addGame.unavailable.containsProvenInstall':
+    'Dentro de la carpeta seleccionada hay una instalación de juego ya reconocida. Selecciona la carpeta exacta de ese juego en vez de la carpeta superior compartida.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'Dentro de la carpeta seleccionada hay varios juegos ya reconocidos. Selecciona la carpeta de un juego concreto.',
+  'addGame.unavailable.insideExistingInstall':
+    'La carpeta seleccionada está dentro de un juego ya añadido. Usa la raíz de instalación de ese juego.',
+  'addGame.unavailable.noReadableExecutable':
+    'No se encontró ningún ejecutable de juego legible en la carpeta seleccionada. Selecciona la carpeta de instalación que contiene el ejecutable del juego.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'No se puede cambiar de forma segura la raíz de instalación existente mientras haya un estado gestionado. Resuelve primero los bloqueos indicados.',
+  'addGame.warning.insideExistingInstall':
+    'Esta carpeta pertenece a un juego existente. Usa la raíz de su instalación.',
+  'addGame.warning.narrowsExistingInstall':
+    'La raíz manual existente parece incluir varias carpetas de juegos. Al confirmar, se conservará la misma tarjeta y su raíz se corregirá a la carpeta seleccionada.',
+  'addGame.warning.multipleProvenInstalls':
+    'Esta carpeta contiene varias instalaciones de juegos confirmadas.',
+  'addGame.warning.containsProvenInstall':
+    'Esta carpeta contiene una instalación de juego confirmada. Usa su raíz exacta.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Los ejecutables de distintas subcarpetas pueden pertenecer a juegos diferentes. Si confirmas, la carpeta se tratará igualmente como un solo juego.',
+  'addGame.warning.explicitExecutableRequired':
+    'Todos los ejecutables válidos parecen iniciadores o utilidades. Selecciona uno de forma explícita.',
+  'addGame.warning.noReadableExecutable':
+    'Esta carpeta no se puede añadir por separado porque no contiene ningún ejecutable de juego legible.',
+  'addGame.warning.filesystemProbeError':
+    'No se pudo inspeccionar parte de la instalación. Comprueba los permisos de acceso a los archivos.',
   'games.libraryActions': 'Acciones',
   'games.search': 'Buscar juegos',
   'games.openFilters': 'Filtros',
   'games.openFiltersActive': 'Filtros (activos)',
   'games.loading': 'Cargando...',
   'games.empty.title': 'No se encontraron juegos',
-  'games.empty.description': 'Escanea una carpeta para añadir juegos al panel.',
+  'games.empty.description': 'Añade un juego para mostrarlo en el panel.',
   'games.filterEmpty.title': 'No se encontraron coincidencias',
   'games.filterEmpty.description': 'Intenta cambiar tu búsqueda o filtros.',
   'games.filterEmpty.reset': 'Restablecer filtros',
@@ -380,6 +475,8 @@ export const es: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': 'No se pudo cambiar el estado de oculto.',
   'notify.gameHidden': 'Juego ocultado.',
   'notify.gameUnhidden': 'Juego mostrado.',
+  'notify.gameRemovedFromCatalog': 'Juego eliminado del catálogo.',
+  'notify.removeGameFailed': 'No se pudo eliminar el juego del catálogo.',
   'notify.applyCompleted': 'Cambios aplicados',
   'notify.rollbackCompleted': 'Reversión completada',
   'notify.swapBatchFailed.title': 'Algunas actualizaciones fallaron',
@@ -451,6 +548,20 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.catalog.artworkSaveError': 'Error al guardar la configuración de carátulas.',
 
   'user_message.invalid_argument': 'Entrada proporcionada no válida.',
+  'user_message.invalid_install_root':
+    'Elige la carpeta de instalación de un solo juego. No se pueden añadir raíces de unidades, recursos compartidos de red ni carpetas del sistema.',
+  'user_message.multiple_installs_detected':
+    'Esta carpeta contiene varias instalaciones de juegos. Selecciona la carpeta de instalación de un solo juego.',
+  'user_message.stale_install_inspection':
+    'La instalación cambió durante la comprobación. Revisa el resultado actualizado antes de añadirla.',
+  'user_message.root_correction_cleanup_required':
+    'Los cambios activos de componentes deben revertirse antes de cambiar la raíz del juego.',
+  'user_message.root_correction_blocked':
+    'Resuelve el estado activo desde la tarjeta existente antes de cambiar la raíz del juego.',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot encontró cambios administrados superpuestos cuyo orden de restauración seguro no se puede demostrar. No se cambió nada y se creó un paquete de recuperación.',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot no pudo restaurar los archivos originales del juego, así que no se eliminó la tarjeta. Comprueba los archivos del juego e inténtalo de nuevo.',
   'user_message.invalid_game_reference': 'Juego no encontrado.',
   'user_message.invalid_component_reference': 'Componente no encontrado.',
   'user_message.invalid_artifact_reference': 'Elemento no encontrado.',

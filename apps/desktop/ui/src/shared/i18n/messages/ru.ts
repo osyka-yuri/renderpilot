@@ -90,6 +90,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Скрыть игру',
   'game.card.menu.hidden.remove': 'Показать игру',
   'game.card.menu.hidden.toggleHint': 'Переключить статус видимости для этой игры.',
+  'game.card.menu.removeFromCatalog': 'Удалить из каталога',
+  'game.card.menu.removeFromCatalogHint': 'Убрать добавленную вручную игру из каталога.',
+  'game.card.removeConfirm.title': 'Удалить «{title}» из каталога?',
+  'game.card.removeConfirm.description':
+    'RenderPilot безопасно отменит управляемые изменения, затем удалит карточку и связанную с ней историю. Файлы самой игры затронуты не будут.',
+  'game.card.removeConfirm.action': 'Удалить из каталога',
 
   // ── Game cover ──
   'game.cover.alt': 'Обложка',
@@ -135,15 +141,106 @@ export const ru: Record<MessageKey, MessageValue> = {
   'pageLoad.error.backToGames': 'К играм',
 
   // ── Games page / catalog ──
-  'games.scanFolder': 'Сканировать папку',
-  'games.scanning': 'Поиск игр...',
+  'games.addGame': 'Добавить игру',
+  'games.addingGame': 'Добавление игры...',
+  'games.chooseInstallFolder': 'Выберите папку установки игры',
+  'addGame.title': 'Добавить игру',
+  'addGame.cannotAddTitle': 'Не удалось добавить игру',
+  'addGame.installRoot': 'Корень установки',
+  'addGame.reviewTitle': 'Проверка установки игры',
+  'addGame.reviewDescription': 'Подтвердите корень установки — RenderPilot добавит одну игру.',
+  'addGame.selectedFolder': 'Выбранная папка',
+  'addGame.recommendedFolder': 'Рекомендуемый корень установки',
+  'addGame.existingRoot': 'Текущая папка игры',
+  'addGame.chooseExecutable': 'Исполняемый файл игры',
+  'addGame.chooseExecutablePlaceholder': 'Выберите исполняемый файл',
+  'addGame.chooseAnother': 'Выбрать другую',
+  'addGame.add': 'Добавить игру',
+  'addGame.addSelected': 'Добавить выбранную папку',
+  'addGame.correctRoot': 'Исправить путь',
+  'addGame.addRecommended': 'Добавить рекомендуемый корень',
+  'addGame.replaceRootTitle': 'Исправить путь к игре',
+  'addGame.replaceRootDescription':
+    'RenderPilot будет использовать выбранную папку вместо текущей. Файлы игры останутся без изменений.',
+  'addGame.replaceExistingRoot': 'Исправить путь',
+  'addGame.rootCorrection.rollbackTitle': 'Сначала нужно откатить активные замены',
+  'addGame.rootCorrection.rollbackDescription': {
+    one: 'Перед заменой корня RenderPilot должен откатить активную замену 1 компонента.',
+    few: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонентов.',
+    many: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонентов.',
+    other: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонента.',
+  },
+  'addGame.rootCorrection.rollbackAndReplace': 'Откатить изменения и заменить корень',
+  'addGame.rootCorrection.rollbackFailed':
+    'Не удалось полностью откатить изменения компонентов. Текущий корень игры не изменён.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'Не завершено восстановление после прерванной файловой операции.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'Установленное дополнение относится к файлам вне выбранной папки игры.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'Активные настройки профиля NVIDIA относятся к исполняемым файлам вне выбранной папки.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'Для сохранённого состояния отката больше не найден соответствующий компонент.',
+  'addGame.rescan': 'Пересканировать игру',
+  'addGame.catalogBusy':
+    'Сейчас выполняется другая операция с каталогом. Завершите её и повторите действие.',
+  'addGame.warning.legacyCardsConsolidated': {
+    one: 'Объединена одна подтверждённо ложная устаревшая карточка игры.',
+    few: 'Объединены {count} подтверждённо ложные устаревшие карточки игры.',
+    many: 'Объединено {count} подтверждённо ложных устаревших карточек игры.',
+    other: 'Объединено {count} подтверждённо ложной устаревшей карточки игры.',
+  },
+  'addGame.warning.legacyCardsRetained': {
+    one: 'Сохранена одна устаревшая карточка: доказательств отдельной установки недостаточно.',
+    few: 'Сохранены {count} устаревшие карточки: доказательств отдельных установок недостаточно.',
+    many: 'Сохранено {count} устаревших карточек: доказательств отдельных установок недостаточно.',
+    other: 'Сохранено {count} устаревшей карточки: доказательств отдельных установок недостаточно.',
+  },
+  'addGame.warning.recoveryBundleCreated':
+    'Конфликтующее устаревшее состояние сохранено в пакете восстановления: {path}.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'История каталога за пределами исправленного корня сохранена в пакете восстановления: {path}.',
+  'addGame.warning.recoveryBundleFallback': 'Пакет восстановления: {path}',
+  'addGame.warning.unsupportedPlatform': 'Проверка установки игры поддерживается только в Windows.',
+  'addGame.warning.probeIncomplete':
+    'Некоторые папки не удалось проверить. Уверенность в рекомендации снижена.',
+  'addGame.warning.parentProbeIncomplete':
+    'Рекомендуемую родительскую папку не удалось проверить полностью. Проверьте её перед добавлением.',
+  'addGame.unavailable.multipleInstalls':
+    'Выбранная папка похожа на общую библиотеку с несколькими играми. Выберите папку конкретной игры.',
+  'addGame.unavailable.containsProvenInstall':
+    'Внутри выбранной папки находится уже распознанная установка игры. Выберите папку этой игры, а не общий родительский каталог.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'Внутри выбранной папки находится несколько уже распознанных игр. Выберите папку конкретной игры.',
+  'addGame.unavailable.insideExistingInstall':
+    'Выбрана вложенная папка уже добавленной игры. Используйте корневую папку этой игры.',
+  'addGame.unavailable.noReadableExecutable':
+    'В выбранной папке не найден исполняемый файл игры. Выберите папку установки, содержащую файл запуска.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'Существующий корень установки нельзя безопасно изменить, пока у игры есть управляемые изменения. Сначала устраните перечисленные блокирующие состояния.',
+  'addGame.warning.insideExistingInstall':
+    'Эта папка относится к уже добавленной игре. Используйте корень её установки.',
+  'addGame.warning.narrowsExistingInstall':
+    'Существующий ручной корень, вероятно, охватывает несколько папок с играми. При подтверждении сохранится та же карточка, но её корнем станет выбранная папка.',
+  'addGame.warning.multipleProvenInstalls':
+    'Эта папка содержит несколько подтверждённых установок игр.',
+  'addGame.warning.containsProvenInstall':
+    'Эта папка содержит подтверждённую установку игры. Используйте её точный корень.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Исполняемые файлы в разных дочерних папках могут относиться к разным играм. При подтверждении эта папка всё равно будет считаться одной игрой.',
+  'addGame.warning.explicitExecutableRequired':
+    'Все допустимые исполняемые файлы похожи на лаунчеры или служебные программы. Выберите нужный файл вручную.',
+  'addGame.warning.noReadableExecutable':
+    'Эту папку нельзя добавить отдельно: в ней не найден исполняемый файл игры.',
+  'addGame.warning.filesystemProbeError':
+    'Часть установки не удалось проверить. Проверьте права доступа к файлам.',
   'games.libraryActions': 'Действия',
   'games.search': 'Поиск игр',
   'games.openFilters': 'Фильтры',
   'games.openFiltersActive': 'Фильтры (активны)',
   'games.loading': 'Загрузка...',
   'games.empty.title': 'Игры не найдены',
-  'games.empty.description': 'Просканируйте папку, чтобы добавить игры в список.',
+  'games.empty.description': 'Добавьте игру, чтобы она появилась в списке.',
   'games.filterEmpty.title': 'Ничего не найдено',
   'games.filterEmpty.description': 'Попробуйте изменить условия поиска или фильтры.',
   'games.filterEmpty.reset': 'Сбросить фильтры',
@@ -475,6 +572,8 @@ export const ru: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': 'Не удалось изменить видимость игры.',
   'notify.gameHidden': 'Игра скрыта.',
   'notify.gameUnhidden': 'Игра теперь отображается.',
+  'notify.gameRemovedFromCatalog': 'Игра удалена из каталога.',
+  'notify.removeGameFailed': 'Не удалось удалить игру из каталога.',
   'notify.applyCompleted': 'Изменения применены',
   'notify.rollbackCompleted': 'Откат выполнен',
   'notify.swapBatchFailed.title': 'Некоторые обновления не удались',
@@ -553,6 +652,20 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Backend user messages (mirror of src-tauri/commands/error/strings.rs) ──
   'user_message.invalid_argument': 'Указано неверное значение.',
+  'user_message.invalid_install_root':
+    'Выберите папку установки одной игры. Корень диска, сетевого ресурса и системные папки добавить нельзя.',
+  'user_message.multiple_installs_detected':
+    'В этой папке найдено несколько игр. Выберите папку установки одной игры.',
+  'user_message.stale_install_inspection':
+    'Установка изменилась во время проверки. Перед добавлением проверьте обновлённый результат.',
+  'user_message.root_correction_cleanup_required':
+    'Перед изменением корня игры необходимо откатить активные замены компонентов.',
+  'user_message.root_correction_blocked':
+    'Перед изменением корня устраните активное состояние в существующей карточке игры.',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot обнаружил пересекающиеся изменения, безопасный порядок отката которых нельзя доказать. Ничего не изменено; создан пакет восстановления.',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot не удалось восстановить исходные файлы игры, поэтому карточка не удалена. Проверьте файлы игры и повторите попытку.',
   'user_message.invalid_game_reference': 'Игра не найдена.',
   'user_message.invalid_component_reference': 'Компонент не найден.',
   'user_message.invalid_artifact_reference': 'Объект не найден.',

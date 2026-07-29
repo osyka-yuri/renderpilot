@@ -2,8 +2,6 @@
   import { t, type MessageKey } from '@shared/i18n';
   import {
     AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
     AlertDialogFooter,
@@ -88,14 +86,22 @@
     </AlertDialogHeader>
 
     <AlertDialogFooter>
-      <AlertDialogCancel type="button" {disabled}>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        {disabled}
+        onclick={() => {
+          open = false;
+        }}
+      >
         {t('common.cancel')}
-      </AlertDialogCancel>
+      </Button>
 
-      <AlertDialogAction type="button" {disabled} onclick={confirmUninstall}>
+      <Button type="button" variant="destructive" size="sm" {disabled} onclick={confirmUninstall}>
         <Trash2Icon class="size-4" aria-hidden="true" />
         {t(confirmActionKey)}
-      </AlertDialogAction>
+      </Button>
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>

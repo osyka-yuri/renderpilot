@@ -18,6 +18,7 @@ export type DesktopAppModel = ReturnType<typeof createDesktopAppModel>;
 
 export type RunExclusiveOptions = {
   clearErrorOnStart?: boolean;
+  onError?: (error: unknown) => void;
 };
 
 /**
@@ -159,10 +160,10 @@ export function createDesktopAppModel(
     task: () => Promise<T>,
     options: RunExclusiveOptions = {},
   ): Promise<T | null> {
-    return taskRunner.run(
-      task,
-      options.clearErrorOnStart === false ? { onBeforeRun: undefined } : {},
-    );
+    return taskRunner.run(task, {
+      ...(options.clearErrorOnStart === false ? { onBeforeRun: undefined } : {}),
+      ...(options.onError === undefined ? {} : { onError: options.onError }),
+    });
   }
 
   return {

@@ -15,6 +15,10 @@ export type CommandErrorDto = {
   severity: CommandErrorSeverity;
   messageKey: string;
   details: string;
+  /** Stable machine-readable reason for typed validation errors. */
+  reason?: string;
+  /** Published recovery bundle retained after fail-closed managed cleanup. */
+  recoveryBundlePath?: string;
   suggestedActions: SuggestedActionDto[];
   /**
    * Backend-provided technical message, populated only in dev builds

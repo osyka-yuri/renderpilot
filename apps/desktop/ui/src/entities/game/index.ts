@@ -38,6 +38,7 @@ export type {
   AddonCapability,
   Launcher,
   CoverArtworkResult,
+  RemoveGameFromCatalogResult,
   GameCardsQuery,
   GameCardsResult,
   EffectiveGamesFilters,
@@ -56,7 +57,6 @@ export type {
   D3d12ExecutableStatus,
   ScanError,
   AutoScanResponse,
-  ScanManualFolderResult,
 } from './model/types';
 
 export { formatPartialScanWarning } from './model/scan-presenters';
@@ -84,6 +84,7 @@ export {
   getGameDetails,
   setGameFavorite,
   setGameHidden,
+  removeGameFromCatalog,
 } from './api/desktop';
 export { default as GameCard } from './ui/GameCard.svelte';
 export { default as GamesDashboardSummary } from './ui/GamesDashboardSummary.svelte';

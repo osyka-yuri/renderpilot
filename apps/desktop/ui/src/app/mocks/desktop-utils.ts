@@ -4,9 +4,9 @@ import type {
   GamesCatalogBootstrap,
   GameDetails,
   CoverArtworkResult,
-  ScanManualFolderResult,
   AutoScanResponse,
   GameSummary,
+  RemoveGameFromCatalogResult,
 } from '@entities/game';
 import type { CatalogSettingPayload } from '@entities/settings';
 import type {
@@ -20,14 +20,25 @@ import type {
   LibraryPackageState,
   LibraryPackagesOutput,
 } from '@entities/library';
-import type { ManifestRefreshReport } from '@features/scan-libraries';
+import type {
+  AddGameInspection,
+  AddGameResult,
+  ManifestRefreshReport,
+} from '@features/scan-libraries';
 import { fileNameFromPath } from '@shared/path';
 import { isRecord, isString, requireNonBlankString } from '@shared/validation';
 
 type PayloadRecord = Record<PropertyKey, unknown>;
 
 export type DesktopCommandPayloadMap = {
-  scan_manual_folder: { path: string };
+  inspect_game_install: { path: string };
+  add_game: {
+    selectedRoot: string;
+    rootChoice: 'selected' | 'recommended';
+    allowRootCorrection: boolean;
+    chosenExecutable: string | null;
+    inspectionFingerprint: string;
+  };
   scan_auto_libraries: undefined;
   refresh_remote_manifests: undefined;
   refresh_catalog_capabilities: undefined;
@@ -40,6 +51,7 @@ export type DesktopCommandPayloadMap = {
   set_game_cover: { gameId: string; sourcePath: string };
   set_game_favorite: { gameId: string; isFavorite: boolean };
   set_game_hidden: { gameId: string; isHidden: boolean };
+  remove_game_from_catalog: { gameId: string };
   get_catalog_setting: { key: string };
   set_catalog_setting: { key: string; value: string };
   plan_swap: { gameId: string; componentId: string; artifactId: string };
@@ -84,7 +96,8 @@ export type DesktopCommandPayloadMap = {
 };
 
 export type DesktopCommandResultMap = {
-  scan_manual_folder: ScanManualFolderResult;
+  inspect_game_install: AddGameInspection;
+  add_game: AddGameResult;
   scan_auto_libraries: AutoScanResponse;
   refresh_remote_manifests: ManifestRefreshReport;
   refresh_catalog_capabilities: { refreshed: boolean };
@@ -97,6 +110,7 @@ export type DesktopCommandResultMap = {
   set_game_cover: CoverArtworkResult;
   set_game_favorite: { saved: boolean };
   set_game_hidden: { saved: boolean };
+  remove_game_from_catalog: RemoveGameFromCatalogResult;
   get_catalog_setting: CatalogSettingPayload;
   set_catalog_setting: { saved: boolean };
   plan_swap: SwapPlan;
@@ -133,7 +147,8 @@ export type DesktopCommandResultMap = {
 export type DesktopCommand = keyof DesktopCommandPayloadMap & keyof DesktopCommandResultMap;
 
 const ALL_DESKTOP_COMMANDS = [
-  'scan_manual_folder',
+  'inspect_game_install',
+  'add_game',
   'scan_auto_libraries',
   'refresh_remote_manifests',
   'refresh_catalog_capabilities',
@@ -146,6 +161,7 @@ const ALL_DESKTOP_COMMANDS = [
   'set_game_cover',
   'set_game_favorite',
   'set_game_hidden',
+  'remove_game_from_catalog',
   'get_catalog_setting',
   'set_catalog_setting',
   'plan_swap',

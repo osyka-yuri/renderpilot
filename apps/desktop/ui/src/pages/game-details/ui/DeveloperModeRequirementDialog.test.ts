@@ -80,10 +80,6 @@ describe('DeveloperModeRequirementDialog', () => {
       );
     });
     expect(document.body.querySelector('[data-slot="alert"][role="note"]')).not.toBeNull();
-    expect(footerLayout()).toEqual({
-      cancel: 'Cancel',
-      actions: ['Check status', 'Open Settings'],
-    });
     expect(footerButtonLabels()).toEqual(['Cancel', 'Check status', 'Open Settings']);
 
     findButton('Open Settings').click();
@@ -221,25 +217,14 @@ function findButton(label: string): HTMLButtonElement {
 }
 
 function footerButtonLabels(): string[] {
-  return [
-    ...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button'),
-  ].map((button) => button.textContent.trim());
-}
-
-function footerLayout(): { cancel: string; actions: string[] } {
   const footer = document.body.querySelector<HTMLElement>('[data-slot="dialog-footer"]');
-  const cancel = footer?.querySelector<HTMLButtonElement>(':scope > button');
-  const actionGroup = footer?.querySelector<HTMLElement>(':scope > div');
-  if (!cancel || !actionGroup) {
-    throw new Error('Expected the dialog footer to contain separate cancel and action groups.');
+  if (!footer) {
+    throw new Error('Dialog footer not found.');
   }
 
-  return {
-    cancel: cancel.textContent.trim(),
-    actions: [...actionGroup.querySelectorAll<HTMLButtonElement>('button')].map((button) =>
-      button.textContent.trim(),
-    ),
-  };
+  return [...footer.querySelectorAll<HTMLButtonElement>(':scope > button')].map((button) =>
+    button.textContent.trim(),
+  );
 }
 
 async function settleOverlays(): Promise<void> {

@@ -198,7 +198,7 @@ export function createCyberpunkDetails(): GameDetails {
       platform: 'Windows',
       runtime: 'NativeWindows',
       install_path: 'C:/Games/Cyberpunk 2077',
-      executable_candidates: ['C:/Games/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe'],
+      can_remove_from_catalog: false,
     },
     components,
     candidate_groups: candidateGroups,

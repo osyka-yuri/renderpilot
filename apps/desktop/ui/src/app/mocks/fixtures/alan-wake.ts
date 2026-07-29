@@ -55,7 +55,7 @@ export function createAlanWakeDetails(): GameDetails {
       platform: 'Windows',
       runtime: 'NativeWindows',
       install_path: 'D:/Epic Games/Alan Wake 2',
-      executable_candidates: ['D:/Epic Games/Alan Wake 2/AlanWake2.exe'],
+      can_remove_from_catalog: false,
     },
     components,
     candidate_groups: [

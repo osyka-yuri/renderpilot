@@ -9,11 +9,21 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import type { Component } from 'svelte';
 
+  import { describeCommandErrorBrief, normalizeCommandError } from '@shared/api';
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
   import { formatError, publishErrorNotification } from '@shared/notifications';
   import {
+    Alert,
+    AlertDescription,
+    AlertTitle,
     Button,
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -22,9 +32,15 @@
   } from '@shared/ui';
 
   type MenuActionId =
-    'fetch-cover' | 'pick-cover' | 'clear-cover' | 'toggle-favorite' | 'toggle-hidden';
+    | 'fetch-cover'
+    | 'pick-cover'
+    | 'clear-cover'
+    | 'toggle-favorite'
+    | 'toggle-hidden'
+    | 'remove-from-catalog';
 
   type MenuActionHandler = () => void | Promise<void>;
+  type ConfirmActionHandler = () => boolean | Promise<boolean>;
 
   type MenuAction = {
     readonly id: MenuActionId;
@@ -44,6 +60,7 @@
     hasCover?: boolean;
     isFavorite?: boolean;
     isHidden?: boolean;
+    canRemoveFromCatalog?: boolean;
     open?: boolean;
 
     onOpenChange?: (next: boolean) => void;
@@ -52,6 +69,7 @@
     onClearCover?: MenuActionHandler;
     onToggleFavorite?: MenuActionHandler;
     onToggleHidden?: MenuActionHandler;
+    onRemoveFromCatalog?: ConfirmActionHandler;
   };
 
   const noop: MenuActionHandler = () => undefined;
@@ -65,6 +83,7 @@
     hasCover = false,
     isFavorite = false,
     isHidden = false,
+    canRemoveFromCatalog = false,
     open = false,
 
     onOpenChange = noopOpenChange,
@@ -73,9 +92,14 @@
     onClearCover = noop,
     onToggleFavorite = noop,
     onToggleHidden = noop,
+    onRemoveFromCatalog = () => false,
   }: Props = $props();
 
   let triggerEl = $state<HTMLButtonElement | null>(null);
+  let removeConfirmOpen = $state(false);
+  let removalError = $state<string | null>(null);
+  let removalRecoveryBundlePath = $state<string | null>(null);
+  let removing = $state(false);
 
   const isMenuOpen = $derived(open && !disabled);
   const gameOptionsLabel = $derived(t('game.card.menu.ariaLabel', { title }));
@@ -130,6 +154,21 @@
         handler: onClearCover,
       },
     ],
+    ...(canRemoveFromCatalog
+      ? [
+          [
+            {
+              id: 'remove-from-catalog' as const,
+              label: t('game.card.menu.removeFromCatalog'),
+              disabled: disabled || removing,
+              danger: true,
+              title: t('game.card.menu.removeFromCatalogHint'),
+              icon: Trash2Icon,
+              handler: openRemoveConfirmation,
+            },
+          ],
+        ]
+      : []),
   ]);
 
   $effect(() => {
@@ -165,6 +204,46 @@
 
     onOpenChange(false);
     void runMenuAction(action);
+  }
+
+  function openRemoveConfirmation(): void {
+    if (!disabled && !removing) {
+      removalError = null;
+      removalRecoveryBundlePath = null;
+      removeConfirmOpen = true;
+    }
+  }
+
+  function setRemoveConfirmOpen(open: boolean): void {
+    if (!removing || open) {
+      removeConfirmOpen = open;
+      if (!open) {
+        removalError = null;
+        removalRecoveryBundlePath = null;
+      }
+    }
+  }
+
+  async function confirmRemoveFromCatalog(): Promise<void> {
+    if (removing) {
+      return;
+    }
+    removing = true;
+    removalError = null;
+    removalRecoveryBundlePath = null;
+    try {
+      if (await onRemoveFromCatalog()) {
+        removeConfirmOpen = false;
+      } else {
+        removalError = t('notify.removeGameFailed');
+      }
+    } catch (error) {
+      const commandError = normalizeCommandError(error);
+      removalError = describeCommandErrorBrief(commandError);
+      removalRecoveryBundlePath = commandError.dto.recoveryBundlePath ?? null;
+    } finally {
+      removing = false;
+    }
   }
 </script>
 
@@ -207,3 +286,52 @@
     </div>
   </PopoverContent>
 </Popover>
+
+{#if canRemoveFromCatalog}
+  <AlertDialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+    <AlertDialogContent class="sm:max-w-md" escapeKeydownBehavior={removing ? 'ignore' : 'close'}>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{t('game.card.removeConfirm.title', { title })}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {t('game.card.removeConfirm.description')}
+        </AlertDialogDescription>
+        {#if removalError !== null}
+          <Alert variant="destructive" size="sm" data-removal-error>
+            <AlertTitle>{t('notify.removeGameFailed')}</AlertTitle>
+            <AlertDescription class="grid gap-2">
+              <span>{removalError}</span>
+              {#if removalRecoveryBundlePath !== null}
+                <code class="text-xs break-all">
+                  {t('addGame.warning.recoveryBundleFallback', {
+                    path: removalRecoveryBundlePath,
+                  })}
+                </code>
+              {/if}
+            </AlertDescription>
+          </Alert>
+        {/if}
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={removing}
+          onclick={() => {
+            setRemoveConfirmOpen(false);
+          }}
+        >
+          {t('common.cancel')}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={removing}
+          onclick={confirmRemoveFromCatalog}
+        >
+          <Trash2Icon class="size-4" aria-hidden="true" />
+          {t('game.card.removeConfirm.action')}
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
+{/if}

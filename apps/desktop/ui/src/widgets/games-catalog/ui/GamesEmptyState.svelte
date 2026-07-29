@@ -14,19 +14,19 @@
 
   type Props = HTMLAttributes<HTMLDivElement> & {
     busy?: boolean;
-    scanButtonLabel?: string;
-    onScan?: VoidHandler;
+    addGameButtonLabel?: string;
+    onAddGame?: VoidHandler;
   };
 
   const {
     busy = false,
-    scanButtonLabel = '',
-    onScan = () => undefined,
+    addGameButtonLabel = '',
+    onAddGame = () => undefined,
     class: className = '',
     ...rest
   }: Props = $props();
 
-  const resolvedScanButtonLabel = $derived(scanButtonLabel.trim() || t('games.scanFolder'));
+  const resolvedAddGameButtonLabel = $derived(addGameButtonLabel.trim() || t('games.addGame'));
 </script>
 
 <Empty {...rest} class={className}>
@@ -38,11 +38,11 @@
   </EmptyHeader>
 
   <EmptyContent>
-    <Button variant="default" size="sm" disabled={busy} onclick={onScan}>
+    <Button variant="default" size="sm" disabled={busy} onclick={onAddGame}>
       {#if busy}
         <Spinner />
       {/if}
-      {resolvedScanButtonLabel}
+      {resolvedAddGameButtonLabel}
     </Button>
   </EmptyContent>
 </Empty>

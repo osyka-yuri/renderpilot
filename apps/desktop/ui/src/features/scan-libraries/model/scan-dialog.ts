@@ -1,6 +1,7 @@
 import { openFolderPicker } from '@shared/api';
+import { t } from '@shared/i18n';
 
-/** Opens the system folder picker for a manual scan. Returns the chosen path or null. */
-export async function selectManualScanFolder(): Promise<string | null> {
-  return openFolderPicker({ title: 'Select a folder to scan for games' });
+/** Opens the system folder picker for one game installation root. */
+export async function selectGameInstallFolder(): Promise<string | null> {
+  return openFolderPicker({ title: t('games.chooseInstallFolder') });
 }

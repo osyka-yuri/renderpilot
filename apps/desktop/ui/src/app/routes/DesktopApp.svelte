@@ -12,6 +12,7 @@
     findGameSummaryForSelection,
     getGameDetails,
   } from '@entities/game';
+  import { rollbackComponent } from '@entities/operation';
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
@@ -34,7 +35,9 @@
     queueBackgroundCoverSync,
     reloadSelectedGame as reloadSelectedGameWorkflow,
     runUserCatalogRefresh,
-    scanManualFolderAndRefreshCards,
+    rollbackRootCorrectionComponents,
+    submitAddGameAndRefreshCards,
+    removeGameAndRefreshCards,
     syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
   import { startBackgroundRefresh, type AppInitializationState } from '@entities/app';
@@ -44,6 +47,15 @@
     createAppUpdaterModel,
     createTauriAppUpdaterGateway,
   } from '@features/app-updater';
+  import {
+    AddGameDialog,
+    createAddGameFlow,
+    inspectGameInstall,
+    selectGameInstallFolder,
+  } from '@features/scan-libraries';
+  import { describeCommandErrorBrief, normalizeCommandError } from '@shared/api';
+  import { t } from '@shared/i18n';
+  import { publishCommandErrorNotification } from '@shared/notifications';
 
   import LazyPage from './LazyPage.svelte';
   import { createDesktopPageRegistry } from './desktop-page-registry.svelte';
@@ -101,6 +113,63 @@
         }),
     };
   }
+
+  const addGameFlow = createAddGameFlow({
+    chooseFolder: selectGameInstallFolder,
+    inspect: inspectGameInstall,
+    submit: async (inspection, confirmation) => {
+      let commandError: unknown = null;
+      const result = await submitAddGameAndRefreshCards(inspection, confirmation, {
+        ...catalogRefreshDeps(),
+        runExclusive: (task) =>
+          model.runExclusive(task, {
+            onError: (error) => {
+              commandError = error;
+            },
+          }),
+      });
+      if (result !== null) {
+        return { kind: 'completed' as const, result };
+      }
+      return commandError === null
+        ? { kind: 'busy' as const }
+        : { kind: 'failed' as const, error: commandError };
+    },
+    rollback: async (gameId, componentIds) => {
+      let rollbackError: unknown = null;
+      const result = await model.runExclusive(
+        async () => {
+          await rollbackRootCorrectionComponents(gameId, componentIds, {
+            rollbackComponent,
+            refreshGameCards,
+          });
+          return true as const;
+        },
+        {
+          onError: (error) => {
+            rollbackError = error;
+          },
+        },
+      );
+      return result === true
+        ? { kind: 'completed' as const }
+        : {
+            kind: 'failed' as const,
+            error: rollbackError ?? new Error(t('addGame.rootCorrection.rollbackFailed')),
+          };
+    },
+    describeError: describeCommandErrorBrief,
+    publishError: publishCommandErrorNotification,
+    requiresReinspection: (error) => {
+      const code = normalizeCommandError(error).dto.code;
+      return (
+        code === 'root_correction_cleanup_required' ||
+        code === 'root_correction_blocked' ||
+        code === 'stale_install_inspection'
+      );
+    },
+    catalogBusyMessage: () => t('addGame.catalogBusy'),
+  });
 
   function preloadPage(screen: Screen): void {
     void pages.preload(screen);
@@ -216,8 +285,27 @@
     };
   });
 
-  async function handleScan(): Promise<void> {
-    await scanManualFolderAndRefreshCards(catalogRefreshDeps());
+  async function handleAddGame(): Promise<void> {
+    await addGameFlow.chooseFolder();
+  }
+
+  async function handleRemoveGame(gameId: string): Promise<boolean> {
+    let removalError: unknown = null;
+    const removed = await removeGameAndRefreshCards(gameId, {
+      runExclusive: (task) =>
+        model.runExclusive(task, {
+          onError: (error) => {
+            removalError = error;
+          },
+        }),
+      refreshGameCards,
+    });
+    if (removalError !== null) {
+      throw removalError instanceof Error
+        ? removalError
+        : new Error(describeCommandErrorBrief(removalError));
+    }
+    return removed;
   }
 
   async function refreshGameCards(): Promise<void> {
@@ -276,6 +364,16 @@
 </svelte:head>
 
 <NotificationsToaster />
+
+{#if addGameFlow.dialog !== null}
+  <AddGameDialog
+    state={addGameFlow.dialog}
+    onClose={addGameFlow.close}
+    onChooseFolder={addGameFlow.chooseFolder}
+    onConfirm={addGameFlow.confirm}
+    onRollbackAndConfirm={addGameFlow.rollbackAndConfirm}
+  />
+{/if}
 
 {#if appUpdater.dialog !== null}
   <AppUpdateDialog
@@ -385,10 +483,11 @@
     {:else}
       <GamesScreen
         session={gamesSession}
-        busy={model.busy}
+        busy={model.busy || addGameFlow.busy}
         coversAutoFetchingIds={coverSyncQueue.autoFetchingIds}
         pickCoverDisabled={isDesktopPreviewMode()}
-        onScan={handleScan}
+        onAddGame={handleAddGame}
+        onRemoveGame={handleRemoveGame}
         onOpenDetails={openGameDetails}
         onPreloadDetails={() => {
           preloadPage('details');

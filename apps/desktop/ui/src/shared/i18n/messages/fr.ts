@@ -79,6 +79,12 @@ export const fr: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': 'Masquer le jeu',
   'game.card.menu.hidden.remove': 'Afficher le jeu',
   'game.card.menu.hidden.toggleHint': "Basculer l'état masqué pour ce jeu.",
+  'game.card.menu.removeFromCatalog': 'Retirer du catalogue',
+  'game.card.menu.removeFromCatalogHint': 'Oublier ce jeu ajouté manuellement.',
+  'game.card.removeConfirm.title': 'Retirer {title} du catalogue ?',
+  'game.card.removeConfirm.description':
+    'RenderPilot annulera en toute sécurité les modifications gérées, puis retirera la carte et son historique. Les fichiers du jeu ne seront pas modifiés.',
+  'game.card.removeConfirm.action': 'Retirer du catalogue',
 
   'game.cover.alt': 'Jaquette',
   'game.cover.altWithTitle': 'Jaquette : {title}',
@@ -110,15 +116,104 @@ export const fr: Record<MessageKey, MessageValue> = {
   'pageLoad.error.retry': 'Réessayer',
   'pageLoad.error.backToGames': 'Retour aux jeux',
 
-  'games.scanFolder': 'Analyser le dossier',
-  'games.scanning': 'Analyse en cours...',
+  'games.addGame': 'Ajouter un jeu',
+  'games.addingGame': 'Ajout du jeu...',
+  'games.chooseInstallFolder': 'Choisir le dossier d’installation du jeu',
+  'addGame.title': 'Ajouter un jeu',
+  'addGame.cannotAddTitle': 'Impossible d’ajouter le jeu',
+  'addGame.installRoot': 'Racine d’installation',
+  'addGame.reviewTitle': 'Vérifier l’installation du jeu',
+  'addGame.reviewDescription': 'Confirmez la racine d’installation avant d’ajouter un jeu.',
+  'addGame.selectedFolder': 'Dossier sélectionné',
+  'addGame.recommendedFolder': 'Racine d’installation recommandée',
+  'addGame.existingRoot': 'Dossier actuel du jeu',
+  'addGame.chooseExecutable': 'Exécutable du jeu',
+  'addGame.chooseExecutablePlaceholder': 'Choisir un exécutable',
+  'addGame.chooseAnother': 'En choisir un autre',
+  'addGame.add': 'Ajouter le jeu',
+  'addGame.addSelected': 'Ajouter le dossier sélectionné',
+  'addGame.correctRoot': 'Corriger le chemin',
+  'addGame.addRecommended': 'Ajouter la racine recommandée',
+  'addGame.replaceRootTitle': 'Corriger le chemin du jeu',
+  'addGame.replaceRootDescription':
+    'RenderPilot utilisera le dossier sélectionné à la place du dossier actuel. Les fichiers du jeu resteront inchangés.',
+  'addGame.replaceExistingRoot': 'Corriger le chemin',
+  'addGame.rootCorrection.rollbackTitle':
+    'Les modifications actives des composants doivent d’abord être annulées',
+  'addGame.rootCorrection.rollbackDescription': {
+    one: 'RenderPilot doit annuler la modification active d’un composant avant de remplacer la racine de la fiche.',
+    other:
+      'RenderPilot doit annuler les modifications actives de {count} composants avant de remplacer la racine de la fiche.',
+  },
+  'addGame.rootCorrection.rollbackAndReplace': 'Annuler les modifications et remplacer la racine',
+  'addGame.rootCorrection.rollbackFailed':
+    'Les modifications des composants n’ont pas pu être entièrement annulées. La racine actuelle du jeu n’a pas été modifiée.',
+  'addGame.rootCorrection.blocker.pendingRecovery':
+    'Une opération de fichiers interrompue doit encore être récupérée.',
+  'addGame.rootCorrection.blocker.installedAddon':
+    'Un module installé dépend de fichiers situés hors du dossier sélectionné.',
+  'addGame.rootCorrection.blocker.nvapi':
+    'Des paramètres de profil NVIDIA actifs concernent des exécutables hors du dossier sélectionné.',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    'Un état de restauration enregistré ne correspond plus à aucun composant.',
+  'addGame.rescan': 'Analyser à nouveau le jeu',
+  'addGame.catalogBusy':
+    'Une autre opération sur le catalogue est en cours. Terminez-la puis réessayez.',
+  'addGame.warning.legacyCardsConsolidated': {
+    one: 'Une ancienne fiche de jeu, confirmée comme erronée, a été fusionnée.',
+    other: '{count} anciennes fiches de jeu, confirmées comme erronées, ont été fusionnées.',
+  },
+  'addGame.warning.legacyCardsRetained': {
+    one: 'Une ancienne fiche a été conservée, faute de preuve concluante d’une installation indépendante.',
+    other:
+      '{count} anciennes fiches ont été conservées, faute de preuves concluantes d’installations indépendantes.',
+  },
+  'addGame.warning.recoveryBundleCreated':
+    'L’ancien état en conflit a été conservé dans le paquet de récupération {path}.',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    'L’historique du catalogue hors de la racine corrigée a été conservé dans le paquet de récupération {path}.',
+  'addGame.warning.recoveryBundleFallback': 'Paquet de récupération : {path}',
+  'addGame.warning.unsupportedPlatform':
+    'L’inspection des installations de jeux est uniquement prise en charge sous Windows.',
+  'addGame.warning.probeIncomplete':
+    'Certains dossiers n’ont pas pu être inspectés. La recommandation est donc moins fiable.',
+  'addGame.warning.parentProbeIncomplete':
+    'Le dossier parent recommandé n’a pas pu être inspecté complètement. Vérifiez-le avant de l’ajouter.',
+  'addGame.unavailable.multipleInstalls':
+    'Le dossier sélectionné semble être une bibliothèque commune contenant plusieurs jeux. Sélectionnez le dossier d’un jeu précis.',
+  'addGame.unavailable.containsProvenInstall':
+    'Une installation de jeu déjà reconnue se trouve dans le dossier sélectionné. Sélectionnez le dossier exact de ce jeu plutôt que le dossier parent commun.',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    'Plusieurs jeux déjà reconnus se trouvent dans le dossier sélectionné. Sélectionnez le dossier d’un jeu précis.',
+  'addGame.unavailable.insideExistingInstall':
+    'Le dossier sélectionné se trouve dans un jeu déjà ajouté. Utilisez la racine d’installation de ce jeu.',
+  'addGame.unavailable.noReadableExecutable':
+    'Aucun exécutable de jeu lisible n’a été trouvé dans le dossier sélectionné. Sélectionnez le dossier d’installation qui contient l’exécutable du jeu.',
+  'addGame.unavailable.rootCorrectionBlocked':
+    'La racine d’installation existante ne peut pas être modifiée en toute sécurité tant qu’un état géré est présent. Résolvez d’abord les blocages indiqués.',
+  'addGame.warning.insideExistingInstall':
+    'Ce dossier appartient à un jeu existant. Utilisez la racine de son installation.',
+  'addGame.warning.narrowsExistingInstall':
+    'La racine manuelle existante semble contenir plusieurs dossiers de jeux. La confirmation conservera la même carte, mais corrigera sa racine vers le dossier sélectionné.',
+  'addGame.warning.multipleProvenInstalls':
+    'Ce dossier contient plusieurs installations de jeux confirmées.',
+  'addGame.warning.containsProvenInstall':
+    'Ce dossier contient une installation de jeu confirmée. Utilisez sa racine exacte.',
+  'addGame.warning.multipleInstallsSuspected':
+    'Les exécutables de différents sous-dossiers peuvent appartenir à plusieurs jeux. En cas de confirmation, ce dossier sera néanmoins traité comme un seul jeu.',
+  'addGame.warning.explicitExecutableRequired':
+    'Tous les exécutables valides ressemblent à des lanceurs ou à des utilitaires. Sélectionnez-en un explicitement.',
+  'addGame.warning.noReadableExecutable':
+    'Ce dossier ne peut pas être ajouté séparément, car il ne contient aucun exécutable de jeu lisible.',
+  'addGame.warning.filesystemProbeError':
+    'Une partie de l’installation n’a pas pu être inspectée. Vérifiez les autorisations d’accès aux fichiers.',
   'games.libraryActions': 'Actions',
   'games.search': 'Rechercher des jeux',
   'games.openFilters': 'Filtres',
   'games.openFiltersActive': 'Filtres (actifs)',
   'games.loading': 'Chargement...',
   'games.empty.title': 'Aucun jeu trouvé',
-  'games.empty.description': 'Analysez un dossier pour ajouter des jeux au tableau de bord.',
+  'games.empty.description': 'Ajoutez un jeu pour l’afficher dans le tableau de bord.',
   'games.filterEmpty.title': 'Aucun résultat',
   'games.filterEmpty.description': 'Essayez de modifier votre recherche ou vos filtres.',
   'games.filterEmpty.reset': 'Réinitialiser les filtres',
@@ -379,6 +474,8 @@ export const fr: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': "Impossible de modifier l'état masqué.",
   'notify.gameHidden': 'Jeu masqué.',
   'notify.gameUnhidden': 'Jeu affiché.',
+  'notify.gameRemovedFromCatalog': 'Jeu retiré du catalogue.',
+  'notify.removeGameFailed': 'Impossible de retirer le jeu du catalogue.',
   'notify.applyCompleted': 'Modifications appliquées',
   'notify.rollbackCompleted': 'Restauration terminée',
   'notify.swapBatchFailed.title': 'Certaines mises à jour ont échoué',
@@ -453,6 +550,20 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.catalog.artworkSaveError': 'Échec de l’enregistrement des paramètres de jaquette.',
 
   'user_message.invalid_argument': 'Entrée fournie invalide.',
+  'user_message.invalid_install_root':
+    'Choisissez le dossier d’installation d’un seul jeu. Les racines de lecteur, de partage réseau et les dossiers système ne peuvent pas être ajoutés.',
+  'user_message.multiple_installs_detected':
+    'Ce dossier contient plusieurs installations de jeux. Sélectionnez le dossier d’installation d’un seul jeu.',
+  'user_message.stale_install_inspection':
+    'L’installation a changé pendant la vérification. Examinez le résultat actualisé avant de l’ajouter.',
+  'user_message.root_correction_cleanup_required':
+    'Les modifications actives des composants doivent être annulées avant de changer la racine du jeu.',
+  'user_message.root_correction_blocked':
+    'Résolvez l’état actif depuis la fiche existante avant de changer la racine du jeu.',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot a trouvé des modifications gérées qui se chevauchent sans ordre de restauration sûr démontrable. Rien n’a été modifié et un paquet de récupération a été créé.',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot n’a pas pu restaurer les fichiers d’origine du jeu. La carte n’a donc pas été retirée. Vérifiez les fichiers du jeu et réessayez.',
   'user_message.invalid_game_reference': 'Jeu introuvable.',
   'user_message.invalid_component_reference': 'Composant introuvable.',
   'user_message.invalid_artifact_reference': 'Élément introuvable.',

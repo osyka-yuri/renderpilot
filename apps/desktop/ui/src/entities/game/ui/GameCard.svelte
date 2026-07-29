@@ -23,6 +23,7 @@
   import type { GameCardMenuHandle } from './types';
 
   type VoidHandler = () => void;
+  type ConfirmHandler = () => boolean | Promise<boolean>;
   type MenuOpenChangeHandler = (open: boolean) => void;
   type FocusWithinHandler = (event: FocusEvent) => void;
 
@@ -42,6 +43,7 @@
     onClearCover?: VoidHandler;
     onToggleFavorite?: VoidHandler;
     onToggleHidden?: VoidHandler;
+    onRemoveFromCatalog?: ConfirmHandler;
     onOpenDetails?: VoidHandler;
     onPreloadDetails?: VoidHandler;
     onFocusWithin?: FocusWithinHandler;
@@ -69,6 +71,7 @@
     onClearCover = noop,
     onToggleFavorite = noop,
     onToggleHidden = noop,
+    onRemoveFromCatalog = () => false,
     onOpenDetails = noop,
     onPreloadDetails = noop,
     onFocusWithin = () => undefined,
@@ -110,6 +113,8 @@
         {onClearCover}
         {onToggleFavorite}
         {onToggleHidden}
+        canRemoveFromCatalog={game.canRemoveFromCatalog}
+        {onRemoveFromCatalog}
       />
     </CardAction>
 

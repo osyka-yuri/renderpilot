@@ -75,6 +75,12 @@ export const zh: Record<MessageKey, MessageValue> = {
   'game.card.menu.hidden.add': '隐藏游戏',
   'game.card.menu.hidden.remove': '取消隐藏游戏',
   'game.card.menu.hidden.toggleHint': '切换此游戏的隐藏状态。',
+  'game.card.menu.removeFromCatalog': '从目录中移除',
+  'game.card.menu.removeFromCatalogHint': '从目录中移除这款手动添加的游戏。',
+  'game.card.removeConfirm.title': '要从目录中移除 {title} 吗？',
+  'game.card.removeConfirm.description':
+    'RenderPilot 会先安全撤销由其管理的更改，再移除游戏卡片及相关历史记录。游戏文件本身不会被修改。',
+  'game.card.removeConfirm.action': '从目录中移除',
 
   'game.cover.alt': '封面',
   'game.cover.altWithTitle': '封面：{title}',
@@ -104,15 +110,82 @@ export const zh: Record<MessageKey, MessageValue> = {
   'pageLoad.error.retry': '重试',
   'pageLoad.error.backToGames': '返回游戏列表',
 
-  'games.scanFolder': '扫描文件夹',
-  'games.scanning': '正在扫描...',
+  'games.addGame': '添加游戏',
+  'games.addingGame': '正在添加游戏...',
+  'games.chooseInstallFolder': '选择游戏安装文件夹',
+  'addGame.title': '添加游戏',
+  'addGame.cannotAddTitle': '无法添加游戏',
+  'addGame.installRoot': '安装根目录',
+  'addGame.reviewTitle': '检查游戏安装',
+  'addGame.reviewDescription': '添加一个游戏前，请确认安装根目录。',
+  'addGame.selectedFolder': '所选文件夹',
+  'addGame.recommendedFolder': '推荐的安装根目录',
+  'addGame.existingRoot': '当前游戏文件夹',
+  'addGame.chooseExecutable': '游戏可执行文件',
+  'addGame.chooseExecutablePlaceholder': '选择可执行文件',
+  'addGame.chooseAnother': '重新选择',
+  'addGame.add': '添加游戏',
+  'addGame.addSelected': '添加所选文件夹',
+  'addGame.correctRoot': '修正路径',
+  'addGame.addRecommended': '添加推荐根目录',
+  'addGame.replaceRootTitle': '修正游戏路径',
+  'addGame.replaceRootDescription':
+    'RenderPilot 将使用所选文件夹替代当前文件夹。游戏文件不会被修改。',
+  'addGame.replaceExistingRoot': '修正路径',
+  'addGame.rootCorrection.rollbackTitle': '必须先还原活动的组件更改',
+  'addGame.rootCorrection.rollbackDescription':
+    '替换卡片根目录前，RenderPilot 必须还原 {count} 个组件的活动更改。',
+  'addGame.rootCorrection.rollbackAndReplace': '还原更改并替换根目录',
+  'addGame.rootCorrection.rollbackFailed': '无法完整还原组件更改。现有游戏根目录未被修改。',
+  'addGame.rootCorrection.blocker.pendingRecovery': '中断的文件操作仍需恢复。',
+  'addGame.rootCorrection.blocker.installedAddon': '已安装的附加组件属于所选游戏文件夹之外的文件。',
+  'addGame.rootCorrection.blocker.nvapi':
+    '活动的 NVIDIA 配置文件设置属于所选文件夹之外的可执行文件。',
+  'addGame.rootCorrection.blocker.orphanedComponentBaseline':
+    '已保存的组件回滚状态不再有匹配的组件。',
+  'addGame.rescan': '重新扫描游戏',
+  'addGame.catalogBusy': '另一个目录操作仍在运行。请等待其完成后重试。',
+  'addGame.warning.legacyCardsConsolidated': '已合并 {count} 个经确认错误的旧版游戏卡片。',
+  'addGame.warning.legacyCardsRetained':
+    '由于无法确认是否为独立安装，已保留 {count} 个旧版游戏卡片。',
+  'addGame.warning.recoveryBundleCreated': '冲突的旧版状态已保存在恢复包 {path} 中。',
+  'addGame.warning.rootCorrectionHistoryArchived':
+    '已将修正后的游戏根目录之外的目录历史保存在恢复包 {path} 中。',
+  'addGame.warning.recoveryBundleFallback': '恢复包：{path}',
+  'addGame.warning.unsupportedPlatform': '游戏安装检查仅支持 Windows。',
+  'addGame.warning.probeIncomplete': '部分文件夹无法检查，因此推荐结果的可信度已降低。',
+  'addGame.warning.parentProbeIncomplete': '无法完整检查推荐的父文件夹。请在添加前进行确认。',
+  'addGame.unavailable.multipleInstalls':
+    '所选文件夹像是包含多个游戏的共享游戏库。请选择某个具体游戏的文件夹。',
+  'addGame.unavailable.containsProvenInstall':
+    '所选文件夹内有一个已识别的游戏安装。请选择该游戏的准确文件夹，而不是共享的上级目录。',
+  'addGame.unavailable.containsMultipleCatalogInstalls':
+    '所选文件夹内有多个已识别的游戏。请选择某个具体游戏的文件夹。',
+  'addGame.unavailable.insideExistingInstall':
+    '所选文件夹位于一个已添加游戏的安装目录内。请使用该游戏的安装根目录。',
+  'addGame.unavailable.noReadableExecutable':
+    '在所选文件夹中未找到可读取的游戏可执行文件。请选择包含游戏可执行文件的安装文件夹。',
+  'addGame.unavailable.rootCorrectionBlocked':
+    '存在受管理状态时，无法安全更改现有安装根目录。请先解决列出的阻止项。',
+  'addGame.warning.insideExistingInstall': '此文件夹属于已添加的游戏。请使用该游戏的安装根目录。',
+  'addGame.warning.narrowsExistingInstall':
+    '现有手动根目录似乎包含多个游戏文件夹。确认后将保留同一张卡片，并把其根目录更正为所选文件夹。',
+  'addGame.warning.multipleProvenInstalls': '此文件夹包含多个已确认的游戏安装。',
+  'addGame.warning.containsProvenInstall': '此文件夹包含一个已确认的游戏安装。请使用其准确根目录。',
+  'addGame.warning.multipleInstallsSuspected':
+    '不同子文件夹中的可执行文件可能属于不同游戏。确认后，此文件夹仍会被视为一个游戏。',
+  'addGame.warning.explicitExecutableRequired':
+    '所有有效的可执行文件都像是启动器或辅助工具。请明确选择要使用的文件。',
+  'addGame.warning.noReadableExecutable':
+    '此文件夹不包含可读取的游戏可执行文件，因此无法单独添加。',
+  'addGame.warning.filesystemProbeError': '无法检查安装目录的某些部分。请检查文件访问权限。',
   'games.libraryActions': '操作',
   'games.search': '搜索游戏',
   'games.openFilters': '筛选',
   'games.openFiltersActive': '筛选（已启用）',
   'games.loading': '正在加载...',
   'games.empty.title': '未找到游戏',
-  'games.empty.description': '扫描文件夹以将游戏添加到仪表板。',
+  'games.empty.description': '添加游戏后，它会显示在仪表板中。',
   'games.filterEmpty.title': '未找到匹配项',
   'games.filterEmpty.description': '请尝试更改搜索或筛选条件。',
   'games.filterEmpty.reset': '重置筛选',
@@ -348,6 +421,8 @@ export const zh: Record<MessageKey, MessageValue> = {
   'notify.hiddenFailed': '无法更改隐藏状态。',
   'notify.gameHidden': '游戏已隐藏。',
   'notify.gameUnhidden': '游戏已显示。',
+  'notify.gameRemovedFromCatalog': '游戏已从目录中移除。',
+  'notify.removeGameFailed': '无法从目录中移除游戏。',
   'notify.applyCompleted': '更改已应用',
   'notify.rollbackCompleted': '回滚已完成',
   'notify.swapBatchFailed.title': '部分更新失败',
@@ -414,6 +489,17 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.catalog.artworkSaveError': '保存封面设置失败。',
 
   'user_message.invalid_argument': '提供的输入无效。',
+  'user_message.invalid_install_root':
+    '请选择单个游戏的安装文件夹。不能添加驱动器根目录、网络共享根目录或系统文件夹。',
+  'user_message.multiple_installs_detected':
+    '此文件夹包含多个游戏安装。请选择单个游戏的安装文件夹。',
+  'user_message.stale_install_inspection': '检查期间安装内容发生了变化。添加前请查看更新后的结果。',
+  'user_message.root_correction_cleanup_required': '更改游戏根目录前，必须还原活动的组件更改。',
+  'user_message.root_correction_blocked': '更改游戏根目录前，请先在现有游戏卡片中处理活动状态。',
+  'user_message.managed_cleanup_ambiguous':
+    'RenderPilot 发现了无法确定安全还原顺序的重叠托管更改。未进行任何更改，并已创建恢复包。',
+  'user_message.game_removal_cleanup_failed':
+    'RenderPilot 无法还原原始游戏文件，因此未移除卡片。请检查游戏文件后重试。',
   'user_message.invalid_game_reference': '未找到游戏。',
   'user_message.invalid_component_reference': '未找到组件。',
   'user_message.invalid_artifact_reference': '未找到项目。',
