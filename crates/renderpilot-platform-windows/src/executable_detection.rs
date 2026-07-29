@@ -12,9 +12,13 @@
 //! via filesystem metadata—deliberately eschewing deep PE parsing. Version-specific PE introspection
 //! lives in the global catalog (`renderpilot-detection`), not in this crate.
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
+};
 
-use crate::fs_walk;
+use renderpilot_detection::{InstallTreeCompleteness, InstallTreeWalker, WalkDiagnosticKind};
 
 // -----------------------------------------------------------------------------
 // Filter lists
@@ -187,6 +191,49 @@ pub struct ExecutableCandidate {
     pub rejection: Option<RejectionReason>,
 }
 
+/// Read-only executable probe for one installation tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutableDetectionReport {
+    candidates: Vec<ExecutableCandidate>,
+    structural_files: Vec<PathBuf>,
+    completeness: InstallTreeCompleteness,
+    diagnostics: Vec<String>,
+    visited_entries: usize,
+}
+
+impl ExecutableDetectionReport {
+    /// Ranked executable candidates.
+    pub fn candidates(&self) -> &[ExecutableCandidate] {
+        &self.candidates
+    }
+
+    /// Non-executable distribution files observed by the same traversal.
+    ///
+    /// These paths are boundary evidence only; their contents are never read
+    /// or hashed by executable inspection.
+    pub fn structural_files(&self) -> &[PathBuf] {
+        &self.structural_files
+    }
+
+    /// Whether every reachable directory was enumerated.
+    pub fn completeness(&self) -> InstallTreeCompleteness {
+        self.completeness
+    }
+
+    /// Recoverable filesystem/cancellation diagnostics.
+    ///
+    /// An intentional advisory depth limit is reflected by [`Self::completeness`]
+    /// but is not an error and therefore is not included here.
+    pub fn diagnostics(&self) -> &[String] {
+        &self.diagnostics
+    }
+
+    /// Directory entries consumed by this inspection.
+    pub fn visited_entries(&self) -> usize {
+        self.visited_entries
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Detection entry point
 // -----------------------------------------------------------------------------
@@ -201,6 +248,57 @@ pub struct ExecutableCandidate {
 /// Returns an empty vector if the directory does not exist or cannot
 /// be read; never panics on filesystem errors.
 pub fn detect_executable_candidates(install_dir: &Path) -> Vec<ExecutableCandidate> {
+    inspect_executable_candidates(install_dir).candidates
+}
+
+/// Probes executable candidates and preserves traversal completeness evidence.
+#[must_use]
+pub fn inspect_executable_candidates(install_dir: &Path) -> ExecutableDetectionReport {
+    inspect_executable_candidates_with_walker(install_dir, InstallTreeWalker::probe())
+}
+
+/// Performs a complete, non-hashing executable walk for an installation
+/// boundary decision.
+///
+/// Advisory probes intentionally trade coverage for latency. A root
+/// recommendation, however, must know whether another executable branch exists
+/// before it can call a parent one installation. This variant traverses every
+/// reachable non-reparse directory and preserves incomplete diagnostics.
+#[must_use]
+pub fn inspect_executable_candidates_complete(install_dir: &Path) -> ExecutableDetectionReport {
+    inspect_executable_candidates_with_walker(install_dir, InstallTreeWalker::full())
+}
+
+/// Performs a complete executable walk with an explicit entry budget and
+/// cooperative cancellation.
+///
+/// Budget exhaustion and cancellation both produce an incomplete report;
+/// callers must not use such a report as authoritative boundary evidence.
+#[must_use]
+pub fn inspect_executable_candidates_bounded(
+    install_dir: &Path,
+    max_entries: usize,
+    is_cancelled: impl Fn() -> bool,
+) -> ExecutableDetectionReport {
+    inspect_executable_candidates_with_walker_and_cancel(
+        install_dir,
+        InstallTreeWalker::full().with_entry_budget(max_entries),
+        is_cancelled,
+    )
+}
+
+fn inspect_executable_candidates_with_walker(
+    install_dir: &Path,
+    walker: InstallTreeWalker,
+) -> ExecutableDetectionReport {
+    inspect_executable_candidates_with_walker_and_cancel(install_dir, walker, || false)
+}
+
+fn inspect_executable_candidates_with_walker_and_cancel(
+    install_dir: &Path,
+    walker: InstallTreeWalker,
+    is_cancelled: impl Fn() -> bool,
+) -> ExecutableDetectionReport {
     let install_dir_canonical = install_dir.to_path_buf();
     let install_dir_name = install_dir
         .file_name()
@@ -208,7 +306,8 @@ pub fn detect_executable_candidates(install_dir: &Path) -> Vec<ExecutableCandida
         .map(str::to_owned)
         .unwrap_or_default();
 
-    let raw_candidates = collect_raw_candidates(&install_dir_canonical);
+    let (raw_candidates, structural_files, completeness, diagnostics, visited_entries) =
+        collect_raw_candidates(&install_dir_canonical, walker, is_cancelled);
 
     let mut candidates: Vec<ExecutableCandidate> = raw_candidates
         .into_iter()
@@ -238,7 +337,39 @@ pub fn detect_executable_candidates(install_dir: &Path) -> Vec<ExecutableCandida
         },
     );
 
-    candidates
+    ExecutableDetectionReport {
+        candidates,
+        structural_files,
+        completeness,
+        diagnostics,
+        visited_entries,
+    }
+}
+
+/// Returns whether `path` is a readable Windows PE executable.
+///
+/// This intentionally validates only the DOS and PE signatures required to
+/// distinguish a real executable from an arbitrary file named `*.exe`.
+#[must_use]
+pub fn is_readable_windows_pe_executable(path: &Path) -> bool {
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
+    let mut dos_header = [0_u8; 64];
+    if file.read_exact(&mut dos_header).is_err() || &dos_header[..2] != b"MZ" {
+        return false;
+    }
+    let pe_offset = u32::from_le_bytes([
+        dos_header[0x3c],
+        dos_header[0x3d],
+        dos_header[0x3e],
+        dos_header[0x3f],
+    ]);
+    if file.seek(SeekFrom::Start(u64::from(pe_offset))).is_err() {
+        return false;
+    }
+    let mut signature = [0_u8; 4];
+    file.read_exact(&mut signature).is_ok() && signature == *b"PE\0\0"
 }
 
 // -----------------------------------------------------------------------------
@@ -293,34 +424,85 @@ struct RawCandidate {
     depth: u32,
 }
 
-fn collect_raw_candidates(root: &Path) -> Vec<RawCandidate> {
+fn collect_raw_candidates(
+    root: &Path,
+    walker: InstallTreeWalker,
+    is_cancelled: impl Fn() -> bool,
+) -> (
+    Vec<RawCandidate>,
+    Vec<PathBuf>,
+    InstallTreeCompleteness,
+    Vec<String>,
+    usize,
+) {
     let mut out = Vec::new();
-    fs_walk::walk_files(root, 0, &mut |entry, path, depth| {
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-            return;
-        };
-        let lower = file_name.to_ascii_lowercase();
-        if !lower.ends_with(".exe") {
-            return;
-        }
+    let mut structural_files = Vec::new();
+    let Ok(report) = walker.walk_filtered_cancellable(
+        root,
+        |file_name| {
+            let lower = file_name.to_ascii_lowercase();
+            lower.ends_with(".exe") || is_structural_file_name(&lower)
+        },
+        is_cancelled,
+    ) else {
+        return (
+            out,
+            structural_files,
+            InstallTreeCompleteness::Incomplete,
+            vec![format!("could not inspect {}", root.display())],
+            0,
+        );
+    };
+    let completeness = report.completeness();
+    let visited_entries = report.visited_entries();
+    let diagnostics = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.kind() != WalkDiagnosticKind::DepthLimit)
+        .map(|diagnostic| format!("{}: {}", diagnostic.path().display(), diagnostic.message()))
+        .collect();
 
-        let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+    for path in report.files() {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if is_structural_file_name(&file_name.to_ascii_lowercase()) {
+            structural_files.push(path.clone());
+            continue;
+        }
+        let size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
         let relative_path = relative_path_from(root, path);
+        let depth = Path::new(&relative_path)
+            .parent()
+            .map(|parent| parent.components().count() as u32)
+            .unwrap_or(0);
         let file_name_no_ext = file_name
             .rsplit_once('.')
             .map(|(stem, _)| stem.to_owned())
             .unwrap_or_else(|| file_name.to_owned());
 
         out.push(RawCandidate {
-            absolute_path: path.to_path_buf(),
+            absolute_path: path.clone(),
             relative_path,
             file_name: file_name.to_owned(),
             file_name_no_ext,
             size_bytes,
             depth,
         });
-    });
-    out
+    }
+    (
+        out,
+        structural_files,
+        completeness,
+        diagnostics,
+        visited_entries,
+    )
+}
+
+fn is_structural_file_name(lower_file_name: &str) -> bool {
+    [".dll", ".pak", ".utoc", ".ucas", ".archive", ".bundle"]
+        .iter()
+        .any(|extension| lower_file_name.ends_with(extension))
 }
 
 fn relative_path_from(root: &Path, full: &Path) -> String {
@@ -617,6 +799,36 @@ mod tests {
 
         let results = detect_executable_candidates(tmp.path());
         assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn pe_validation_rejects_extension_only_and_accepts_signatures() {
+        let tmp = TempDir::new().unwrap();
+        let fake = tmp.path().join("Fake.exe");
+        write_file(&fake, b"not a PE");
+        assert!(!is_readable_windows_pe_executable(&fake));
+
+        let pe = tmp.path().join("Game.exe");
+        let mut bytes = vec![0_u8; 0x84];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[0x3c..0x40].copy_from_slice(&0x80_u32.to_le_bytes());
+        bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+        write_file(&pe, &bytes);
+        assert!(is_readable_windows_pe_executable(&pe));
+    }
+
+    #[test]
+    fn intentional_probe_depth_limit_is_not_a_filesystem_diagnostic() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("a/b/c/d/e")).expect("deep directory");
+
+        let report = inspect_executable_candidates(tmp.path());
+
+        assert_eq!(report.completeness(), InstallTreeCompleteness::Incomplete);
+        assert!(
+            report.diagnostics().is_empty(),
+            "a bounded advisory probe is not an access failure"
+        );
     }
 
     #[test]

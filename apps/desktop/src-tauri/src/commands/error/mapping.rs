@@ -106,6 +106,90 @@ impl CommandError {
                 Self::debug(Kind::InvalidArgument, Msg::INVALID_ARGUMENT, message)
             }
 
+            ServiceError::InvalidInstallRoot { reason, detail } => {
+                Self::debug(Kind::InvalidInstallRoot, Msg::INVALID_INSTALL_ROOT, detail)
+                    .with_reason(reason.code())
+            }
+
+            ServiceError::MultipleInstallsDetected(message) => Self::debug(
+                Kind::MultipleInstallsDetected,
+                Msg::MULTIPLE_INSTALLS_DETECTED,
+                message,
+            ),
+
+            ServiceError::StaleInstallInspection {
+                selected_root,
+                current_fingerprint,
+            } => Self::debug(
+                Kind::StaleInstallInspection,
+                Msg::STALE_INSTALL_INSPECTION,
+                format!(
+                    "installation inspection for {selected_root} is stale; current fingerprint: {current_fingerprint}"
+                ),
+            ),
+
+            ServiceError::RootCorrectionCleanupRequired {
+                game_id,
+                component_ids,
+            } => Self::debug(
+                Kind::RootCorrectionCleanupRequired,
+                Msg::ROOT_CORRECTION_CLEANUP_REQUIRED,
+                format!(
+                    "root correction for {game_id} requires managed cleanup of components: {}",
+                    component_ids.join(", ")
+                ),
+            ),
+
+            ServiceError::RootCorrectionBlocked { game_id, blockers } => Self::debug(
+                Kind::RootCorrectionBlocked,
+                Msg::ROOT_CORRECTION_BLOCKED,
+                format!(
+                    "root correction for {game_id} is blocked by: {}",
+                    blockers.join(", ")
+                ),
+            ),
+
+            ServiceError::ManagedCleanupAmbiguous {
+                game_id,
+                targets,
+                recovery_bundle_path,
+            } => {
+                let error = Self::debug(
+                    Kind::ManagedCleanupAmbiguous,
+                    Msg::MANAGED_CLEANUP_AMBIGUOUS,
+                    format!(
+                        "managed cleanup for {game_id} is ambiguous at {}; recovery bundle: {recovery_bundle_path}",
+                        targets.join(", ")
+                    ),
+                );
+                error.with_recovery_bundle_path(recovery_bundle_path)
+            }
+
+            ServiceError::CatalogConsolidationBlocked {
+                tables,
+                recovery_bundle_path,
+            } => {
+                let error = Self::debug(
+                    Kind::CatalogConsolidationBlocked,
+                    Msg::CATALOG_CONSOLIDATION_BLOCKED,
+                    format!(
+                        "catalog consolidation is blocked by ambiguous state in {}; recovery bundle: {recovery_bundle_path}",
+                        tables.join(", ")
+                    ),
+                );
+                error.with_recovery_bundle_path(recovery_bundle_path)
+            }
+
+            ServiceError::GameRemovalCleanupFailed {
+                game_id,
+                action,
+                reason,
+            } => Self::debug(
+                Kind::GameRemovalCleanupFailed,
+                Msg::GAME_REMOVAL_CLEANUP_FAILED,
+                format!("removing game {game_id} could not complete {action}: {reason}"),
+            ),
+
             ServiceError::StaleReplacementSource => {
                 Self::user_facing(Kind::StaleReplacementSource, Msg::STALE_REPLACEMENT_SOURCE)
             }

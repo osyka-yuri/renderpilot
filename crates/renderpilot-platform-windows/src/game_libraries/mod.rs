@@ -7,9 +7,9 @@
 //!
 //! * Per-game install paths come straight from per-app registry keys or per-app
 //!   manifest files. Each path already points at one game install folder.
-//! * Launcher library roots are container folders (e.g. `steamapps/common`) that
-//!   hold many games as their immediate sub-directories. Their children are
-//!   enumerated and surfaced as individual game install paths.
+//! * Launcher library roots are retained only as cleanup scope metadata.
+//!   Children are never guessed to be games. Steam roots are resolved through
+//!   `appmanifest_*.acf`; other launchers contribute only per-game records.
 //!
 //! This separation prevents launcher container folders themselves from being
 //! treated as a single "game" by the catalog scan.
@@ -26,26 +26,24 @@ mod registry;
 
 pub use launch_exe::launcher_launch_executable;
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use crate::install_identity::InstallIdentityDetails;
 use crate::steam_appmanifest::{SteamScanSourceFingerprint, try_steam_manifest_index};
+use renderpilot_domain::{InstallKey, Launcher};
 
 use self::launchers::{
     discover_ea_libraries, discover_epic_games_libraries, discover_gog_libraries,
     discover_steam_libraries, discover_ubisoft_libraries,
 };
-use self::paths::existing_unique_dirs;
+use self::paths::{comparable_path_key, existing_unique_dirs, normalize_existing_dir};
 
 /// Game sources discovered from common Windows launchers.
 #[derive(Debug, Default, Clone)]
 pub struct DiscoveredGameSources {
-    /// Per-game install folders ready for scanning.
-    ///
-    /// Includes both per-app paths (registry / per-game manifests) and the
-    /// immediate sub-directories of every discovered launcher library root.
-    /// Launcher library roots themselves are NOT included.
-    pub install_paths: Vec<PathBuf>,
+    /// Exact installs returned by launcher records/manifests, including the
+    /// provider evidence that established each root.
+    pub installs: Vec<DiscoveredInstall>,
     /// Existing launcher library roots (e.g. `steamapps/common`,
     /// `Program Files/EA Games`).
     ///
@@ -55,39 +53,67 @@ pub struct DiscoveredGameSources {
     /// Roots whose complete child and manifest enumeration succeeded. Only
     /// these roots are safe inputs for pruning disappeared catalog children.
     pub authoritative_library_roots: Vec<PathBuf>,
-    /// Launcher-owned checkpoints collected during discovery without a second
-    /// appmanifest pass for each install.
-    pub scan_sources: Vec<DiscoveredScanSource>,
 }
 
+/// Exact installation target produced by a launcher provider.
 #[derive(Debug, Clone)]
-/// A launcher-owned scan checkpoint associated with one discovered install.
-pub struct DiscoveredScanSource {
-    /// Install directory that the checkpoint describes.
+pub struct DiscoveredInstall {
+    /// Confirmed game installation root.
     pub install_path: PathBuf,
-    /// Launcher identity parsed during the same authoritative manifest pass.
+    /// Launcher identity established by the provider record.
     pub identity: InstallIdentityDetails,
-    /// Stable source identity and content fingerprint.
-    pub checkpoint: SteamScanSourceFingerprint,
+    /// Optional launcher checkpoint for avoiding an unchanged full scan.
+    pub checkpoint: Option<SteamScanSourceFingerprint>,
+}
+
+impl DiscoveredInstall {
+    pub(super) fn launcher(install_path: PathBuf, launcher: Launcher) -> Self {
+        Self {
+            install_path,
+            identity: InstallIdentityDetails {
+                launcher,
+                external_id: None,
+                display_name: None,
+            },
+            checkpoint: None,
+        }
+    }
+
+    pub(super) fn with_identity(install_path: PathBuf, identity: InstallIdentityDetails) -> Self {
+        Self {
+            install_path,
+            identity,
+            checkpoint: None,
+        }
+    }
+
+    fn with_checkpoint(mut self, checkpoint: SteamScanSourceFingerprint) -> Self {
+        self.checkpoint = Some(checkpoint);
+        self
+    }
+
+    fn evidence_rank(&self) -> (bool, bool, bool) {
+        (
+            self.checkpoint.is_some(),
+            self.identity.external_id.is_some(),
+            self.identity.display_name.is_some(),
+        )
+    }
 }
 
 /// Discovers game sources from common Windows launchers.
 ///
-/// Returned paths in [`DiscoveredGameSources::install_paths`] are existing
-/// directories that point at one game install each. Launcher library roots
-/// are returned separately in [`DiscoveredGameSources::library_roots`] and
-/// are never used as scan targets directly.
+/// Returned installs point at existing game directories. Launcher library
+/// roots are returned separately in [`DiscoveredGameSources::library_roots`]
+/// and are never used as scan targets directly.
 ///
 /// Only existing directories are returned. Invalid registry entries, missing
 /// files, malformed launcher manifests, and inaccessible paths are ignored.
 pub fn discover_game_sources() -> DiscoveredGameSources {
     let mut sources = DiscoveredSources::default();
-
-    sources.merge(discover_steam_libraries());
-    sources.merge(discover_epic_games_libraries());
-    sources.merge(discover_gog_libraries());
-    sources.merge(discover_ea_libraries());
-    sources.merge(discover_ubisoft_libraries());
+    for provider in LAUNCHER_INSTALL_PROVIDERS {
+        sources.merge(provider.discover());
+    }
 
     sources.finalize()
 }
@@ -97,9 +123,9 @@ pub fn discover_game_sources() -> DiscoveredGameSources {
 struct DiscoveredSources {
     /// Paths that already point at one game install folder (per-app
     /// registry keys, Epic per-game manifests, etc.).
-    game_installs: Vec<PathBuf>,
-    /// Container folders whose immediate sub-directories are game installs.
-    /// All children are enumerated unconditionally.
+    game_installs: Vec<DiscoveredInstall>,
+    /// Container folders retained as cleanup scope only. Their children are
+    /// never inferred to be installations.
     library_roots: Vec<PathBuf>,
     /// Steam `steamapps/common` paths.
     ///
@@ -110,6 +136,41 @@ struct DiscoveredSources {
     /// or `Steamworks Shared` out of the install path list.
     steam_common_roots: Vec<PathBuf>,
 }
+
+/// Provider boundary: implementations return launcher-record evidence and
+/// never infer installs from directory layout.
+trait LauncherInstallProvider {
+    fn discover(&self) -> DiscoveredSources;
+}
+
+#[derive(Clone, Copy)]
+struct FunctionLauncherInstallProvider {
+    discover: fn() -> DiscoveredSources,
+}
+
+impl LauncherInstallProvider for FunctionLauncherInstallProvider {
+    fn discover(&self) -> DiscoveredSources {
+        (self.discover)()
+    }
+}
+
+const LAUNCHER_INSTALL_PROVIDERS: [FunctionLauncherInstallProvider; 5] = [
+    FunctionLauncherInstallProvider {
+        discover: discover_steam_libraries,
+    },
+    FunctionLauncherInstallProvider {
+        discover: discover_epic_games_libraries,
+    },
+    FunctionLauncherInstallProvider {
+        discover: discover_gog_libraries,
+    },
+    FunctionLauncherInstallProvider {
+        discover: discover_ea_libraries,
+    },
+    FunctionLauncherInstallProvider {
+        discover: discover_ubisoft_libraries,
+    },
+];
 
 impl DiscoveredSources {
     fn merge(&mut self, other: DiscoveredSources) {
@@ -122,15 +183,10 @@ impl DiscoveredSources {
         let library_roots = existing_unique_dirs(self.library_roots.iter().cloned());
         let steam_common_roots = existing_unique_dirs(self.steam_common_roots.iter().cloned());
 
-        let regular = enumerate_library_root_children(&library_roots);
         let steam = enumerate_steam_common_root_children(&steam_common_roots);
 
-        let combined = self
-            .game_installs
-            .into_iter()
-            .chain(regular.children.iter().cloned())
-            .chain(steam.children.iter().cloned());
-        let install_paths = existing_unique_dirs(combined);
+        let installs =
+            existing_unique_installs(self.game_installs.into_iter().chain(steam.installs));
 
         let all_library_roots = library_roots
             .into_iter()
@@ -138,53 +194,41 @@ impl DiscoveredSources {
             .collect::<Vec<_>>();
 
         DiscoveredGameSources {
-            install_paths,
+            installs,
             library_roots: all_library_roots,
-            authoritative_library_roots: regular
-                .authoritative_roots
-                .into_iter()
-                .chain(steam.authoritative_roots)
-                .collect(),
-            scan_sources: steam.scan_sources,
+            authoritative_library_roots: steam.authoritative_roots,
         }
     }
+}
+
+fn existing_unique_installs(
+    installs: impl IntoIterator<Item = DiscoveredInstall>,
+) -> Vec<DiscoveredInstall> {
+    let mut by_path = BTreeMap::<InstallKey, DiscoveredInstall>::new();
+
+    for mut install in installs {
+        let Some(path) = normalize_existing_dir(&install.install_path) else {
+            continue;
+        };
+        install.install_path = path;
+        let Some(key) = comparable_path_key(&install.install_path) else {
+            continue;
+        };
+        match by_path.get(&key) {
+            Some(existing) if existing.evidence_rank() >= install.evidence_rank() => {}
+            _ => {
+                by_path.insert(key, install);
+            }
+        }
+    }
+
+    by_path.into_values().collect()
 }
 
 #[derive(Default)]
 struct RootEnumeration {
-    children: Vec<PathBuf>,
+    installs: Vec<DiscoveredInstall>,
     authoritative_roots: Vec<PathBuf>,
-    scan_sources: Vec<DiscoveredScanSource>,
-}
-
-fn enumerate_library_root_children(library_roots: &[PathBuf]) -> RootEnumeration {
-    let mut output = RootEnumeration::default();
-
-    for root in library_roots {
-        let Ok(entries) = fs::read_dir(root) else {
-            continue;
-        };
-        let mut complete = true;
-        for entry in entries {
-            let Ok(entry) = entry else {
-                complete = false;
-                continue;
-            };
-            let Ok(file_type) = entry.file_type() else {
-                complete = false;
-                continue;
-            };
-
-            if file_type.is_dir() {
-                output.children.push(entry.path());
-            }
-        }
-        if complete {
-            output.authoritative_roots.push(root.clone());
-        }
-    }
-
-    output
 }
 
 /// Enumerates direct sub-directories of each Steam `steamapps/common` root,
@@ -227,12 +271,10 @@ fn enumerate_steam_common_root_children(common_roots: &[PathBuf]) -> RootEnumera
 
             if let Some(manifest) = manifests.get(&name) {
                 let install_path = entry.path();
-                output.children.push(install_path.clone());
-                output.scan_sources.push(DiscoveredScanSource {
-                    install_path,
-                    identity: manifest.details.clone().into(),
-                    checkpoint: manifest.checkpoint.clone(),
-                });
+                output.installs.push(
+                    DiscoveredInstall::with_identity(install_path, manifest.details.clone().into())
+                        .with_checkpoint(manifest.checkpoint.clone()),
+                );
             }
         }
         if complete {
@@ -255,43 +297,40 @@ mod tests {
     use crate::path_normalize::strip_verbatim_prefix;
 
     #[test]
-    fn enumerate_library_root_children_lists_immediate_subdirectories() {
+    fn unmanifested_library_children_are_never_guessed_as_installs() {
         let root = temp_dir("library-root-children");
         fs::create_dir_all(root.join("GameA")).expect("GameA dir");
         fs::create_dir_all(root.join("GameB")).expect("GameB dir");
         fs::write(root.join("readme.txt"), b"not a game").expect("non-dir entry");
 
-        let enumeration = enumerate_library_root_children(std::slice::from_ref(&root));
-
-        let mut sorted: Vec<String> = enumeration
-            .children
-            .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
-            .collect();
-        sorted.sort();
-
-        assert_eq!(sorted, vec!["GameA".to_owned(), "GameB".to_owned()]);
-        assert_eq!(enumeration.authoritative_roots, vec![root.clone()]);
+        let finalized = DiscoveredSources {
+            library_roots: vec![root.clone()],
+            ..DiscoveredSources::default()
+        }
+        .finalize();
+        assert!(finalized.installs.is_empty());
+        assert!(finalized.authoritative_library_roots.is_empty());
+        assert_eq!(finalized.library_roots, vec![root.clone()]);
 
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn enumerate_library_root_children_skips_missing_roots() {
+    fn missing_library_roots_are_ignored() {
         let root = temp_dir("library-root-missing");
         // Do NOT create the directory.
 
-        let enumeration = enumerate_library_root_children(&[root]);
-
-        assert!(
-            enumeration.children.is_empty(),
-            "missing root should produce no children"
-        );
-        assert!(enumeration.authoritative_roots.is_empty());
+        let finalized = DiscoveredSources {
+            library_roots: vec![root],
+            ..DiscoveredSources::default()
+        }
+        .finalize();
+        assert!(finalized.installs.is_empty());
+        assert!(finalized.library_roots.is_empty());
     }
 
     #[test]
-    fn finalize_returns_per_game_paths_and_library_root_children() {
+    fn finalize_returns_only_provider_confirmed_game_paths() {
         let root = temp_dir("discovered-sources-merge");
         let library_root = root.join("LauncherLibrary");
         let registry_game = root.join("RegistryGame");
@@ -303,36 +342,34 @@ mod tests {
         fs::create_dir_all(&library_game_b).expect("library game B dir");
 
         let sources = DiscoveredSources {
-            game_installs: vec![registry_game.clone()],
+            game_installs: vec![DiscoveredInstall::launcher(
+                registry_game.clone(),
+                Launcher::Gog,
+            )],
             library_roots: vec![library_root.clone()],
             ..DiscoveredSources::default()
         };
 
         let finalized = sources.finalize();
-        let mut keys: Vec<String> = finalized
-            .install_paths
+        let mut keys: Vec<InstallKey> = finalized
+            .installs
             .iter()
-            .map(|p| comparable_path_key(p))
+            .filter_map(|install| comparable_path_key(&install.install_path))
             .collect();
         keys.sort();
 
-        let mut expected = vec![
-            comparable_path_key(&registry_game),
-            comparable_path_key(&library_game_a),
-            comparable_path_key(&library_game_b),
-        ];
+        let mut expected = vec![comparable_path_key(&registry_game).expect("registry game key")];
         expected.sort();
 
         assert_eq!(keys, expected);
+        let library_key = comparable_path_key(&library_root).expect("library key");
         assert!(
-            !keys
-                .iter()
-                .any(|key| key == &comparable_path_key(&library_root)),
+            !keys.iter().any(|key| key == &library_key),
             "library root itself must not be returned as a game install path"
         );
 
         assert_eq!(finalized.library_roots.len(), 1);
-        assert_eq!(finalized.authoritative_library_roots.len(), 1);
+        assert!(finalized.authoritative_library_roots.is_empty());
         assert_eq!(
             comparable_path_key(&finalized.library_roots[0]),
             comparable_path_key(&library_root),
@@ -376,37 +413,41 @@ mod tests {
         };
 
         let finalized = sources.finalize();
-        let install_keys: Vec<String> = finalized
-            .install_paths
+        let install_keys: Vec<InstallKey> = finalized
+            .installs
             .iter()
-            .map(|p| comparable_path_key(p))
+            .filter_map(|install| comparable_path_key(&install.install_path))
             .collect();
 
         assert_eq!(
             install_keys,
-            vec![comparable_path_key(&real_game)],
+            vec![comparable_path_key(&real_game).expect("real game key")],
             "only manifest-backed children should be returned, runtime sub-folders dropped",
         );
-        assert_eq!(finalized.scan_sources.len(), 1);
+        assert_eq!(finalized.installs.len(), 1);
         assert_eq!(
-            comparable_path_key(&finalized.scan_sources[0].install_path),
+            comparable_path_key(&finalized.installs[0].install_path),
             comparable_path_key(&real_game),
         );
-        assert_eq!(finalized.scan_sources[0].checkpoint.source_key, "steam:555",);
+        let checkpoint = finalized.installs[0]
+            .checkpoint
+            .as_ref()
+            .expect("Steam install checkpoint");
+        assert_eq!(checkpoint.source_key, "steam:555");
         assert_eq!(
-            finalized.scan_sources[0].identity.external_id.as_deref(),
+            finalized.installs[0].identity.external_id.as_deref(),
             Some("555")
         );
-        assert!(!finalized.scan_sources[0].checkpoint.fingerprint.is_empty());
+        assert!(!checkpoint.fingerprint.is_empty());
 
-        let library_keys: Vec<String> = finalized
+        let library_keys: Vec<InstallKey> = finalized
             .library_roots
             .iter()
-            .map(|p| comparable_path_key(p))
+            .filter_map(|path| comparable_path_key(path))
             .collect();
         assert_eq!(
             library_keys,
-            vec![comparable_path_key(&common)],
+            vec![comparable_path_key(&common).expect("common root key")],
             "steam common root must still surface in library_roots for catalog cleanup",
         );
 
@@ -423,7 +464,7 @@ mod tests {
         let enumeration = enumerate_steam_common_root_children(&[common]);
 
         assert!(
-            enumeration.children.is_empty(),
+            enumeration.installs.is_empty(),
             "without appmanifests, no children should be considered games",
         );
         assert_eq!(enumeration.authoritative_roots.len(), 1);
@@ -440,7 +481,7 @@ mod tests {
         fs::create_dir_all(&game).expect("game dir");
 
         let sources = DiscoveredSources {
-            game_installs: vec![game.clone()],
+            game_installs: vec![DiscoveredInstall::launcher(game.clone(), Launcher::Gog)],
             library_roots: vec![library_root],
             ..DiscoveredSources::default()
         };
@@ -448,15 +489,48 @@ mod tests {
         let finalized = sources.finalize();
 
         assert_eq!(
-            finalized.install_paths.len(),
+            finalized.installs.len(),
             1,
-            "duplicate per-game and library-root child should appear once",
+            "provider-confirmed install should appear once",
         );
         assert_eq!(
-            comparable_path_key(&finalized.install_paths[0]),
+            comparable_path_key(&finalized.installs[0].install_path),
             comparable_path_key(&game),
         );
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn deduplication_preserves_the_strongest_provider_evidence() {
+        let root = temp_dir("discovered-evidence-dedup");
+        fs::create_dir_all(&root).expect("install");
+        let sources = DiscoveredSources {
+            game_installs: vec![
+                DiscoveredInstall::launcher(root.clone(), Launcher::Epic),
+                DiscoveredInstall::with_identity(
+                    root.clone(),
+                    InstallIdentityDetails {
+                        launcher: Launcher::Epic,
+                        external_id: Some("app-name".to_owned()),
+                        display_name: Some("Display Name".to_owned()),
+                    },
+                ),
+            ],
+            ..DiscoveredSources::default()
+        };
+
+        let finalized = sources.finalize();
+
+        assert_eq!(finalized.installs.len(), 1);
+        assert_eq!(
+            finalized.installs[0].identity.external_id.as_deref(),
+            Some("app-name")
+        );
+        assert_eq!(
+            finalized.installs[0].identity.display_name.as_deref(),
+            Some("Display Name")
+        );
         let _ = fs::remove_dir_all(root);
     }
 

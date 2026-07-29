@@ -1873,13 +1873,16 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
 
     assert_eq!(fs::read(&live).unwrap(), b"library-overlay");
     assert!(!bak_of(&live).exists());
+    let baseline = context
+        .storage()
+        .get_component_backup(&component_id)
+        .unwrap()
+        .expect("empty original baseline");
+    assert!(baseline.files().is_empty());
+    assert_eq!(baseline.expected_active_files().len(), 1);
     assert_eq!(
-        context
-            .storage()
-            .get_component_backup(&component_id)
-            .unwrap()
-            .expect("empty baseline"),
-        ComponentRollbackBaseline::new(Vec::<ComponentFile>::new())
+        baseline.expected_active_files()[0].sha256(),
+        Some(&sha_of(&live))
     );
 
     rollback_component(&context, game.id(), &component_id).expect("catalog rollback");

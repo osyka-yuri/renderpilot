@@ -37,7 +37,7 @@ fn help_flag_prints_usage() {
     let output = run(args(&["--help"])).expect("help should render");
 
     assert!(output.contains("Usage:"));
-    assert!(output.contains("renderpilot scan-folder <path>"));
+    assert!(output.contains("renderpilot add-game <install-root>"));
     assert!(output.contains("renderpilot list-artifacts [--technology <technology>]"));
     assert!(output.contains("renderpilot list-operations --game <game_id>"));
     assert!(output.contains("renderpilot candidates --game <game_id>"));

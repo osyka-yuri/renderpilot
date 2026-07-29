@@ -1,13 +1,10 @@
-//! Integration tests for SQLite `file_hash_cache` persistence during `scan-folder`.
+//! Integration tests for SQLite `file_hash_cache` persistence during installation scans.
 
 use std::{fs, path::Path};
 
 use renderpilot_storage_sqlite::SqliteStorage;
 
-use crate::{
-    catalog,
-    commands::test_support::{CatalogFixture, TempGameFolder, path_string},
-};
+use crate::commands::test_support::{CatalogFixture, TempGameFolder, path_string};
 
 use super::scan::{create_dlss_file, scan_catalog_folder};
 
@@ -104,10 +101,22 @@ fn failed_scan_does_not_overwrite_existing_file_hash_cache_rows() {
         .find(|row| row.path == dll_norm)
         .expect("cache row")
         .sha256;
+    let inspection =
+        renderpilot_orchestration::catalog::inspect_game_install(&context, folder.path())
+            .expect("inspection");
 
     fs::remove_dir_all(folder.path()).expect("remove scanned folder");
 
-    let error = catalog::scan_folder(&context, folder.path().to_path_buf());
+    let error = renderpilot_orchestration::catalog::add_game(
+        &context,
+        renderpilot_orchestration::catalog::AddGameRequest {
+            selected_root: folder.path().to_path_buf(),
+            root_choice: renderpilot_orchestration::catalog::AddGameRootChoice::Selected,
+            allow_root_correction: false,
+            chosen_executable: None,
+            inspection_fingerprint: inspection.inspection_fingerprint,
+        },
+    );
     assert!(
         error.is_err(),
         "scan should fail when the game folder no longer exists",

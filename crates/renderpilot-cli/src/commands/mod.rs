@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use renderpilot_orchestration::application::AppInfo;
 use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 use renderpilot_orchestration::{Context, ServiceError};
@@ -12,7 +10,7 @@ use crate::{
     output::{
         render_candidates_output, render_help, render_list_artifacts_output,
         render_list_operations_output, render_plan_rollback_output, render_plan_swap_output,
-        render_scan_folder_batch_output, render_scan_folder_output, render_summary, render_version,
+        render_summary, render_version,
     },
     renodx,
 };
@@ -22,6 +20,10 @@ mod test_support;
 
 #[cfg(test)]
 mod tests;
+
+mod add_game;
+
+use add_game::add_game;
 
 type CliOutput = Result<String, CliError>;
 
@@ -50,7 +52,18 @@ where
 
 fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
     match command {
-        Command::ScanFolder { path } => scan_folder(context, path),
+        Command::AddGame {
+            path,
+            executable,
+            root_choice,
+            allow_root_correction,
+        } => add_game(
+            context,
+            path,
+            executable,
+            root_choice,
+            allow_root_correction,
+        ),
         Command::ListArtifacts { technology } => list_artifacts(context, technology),
         Command::ListOperations { game_id } => list_operations(context, &game_id),
         Command::Candidates { game_id } => candidates(context, &game_id),
@@ -91,7 +104,10 @@ fn render_stateful_command(command: Command, context: &Context) -> CliOutput {
         Command::LumaCheckUpdate { game_id, deep } => luma_check_update(context, &game_id, deep),
         Command::LumaCheckUpdates => luma_check_updates(context),
 
-        _ => unreachable!("stateless commands are handled in render_command"),
+        Command::Summary | Command::Help | Command::Version => Err(ServiceError::invalid_input(
+            "stateless command reached the stateful command dispatcher",
+        )
+        .into()),
     }
 }
 
@@ -105,38 +121,6 @@ fn render_help_command(info: AppInfo) -> CliOutput {
 
 fn render_version_command(info: AppInfo) -> CliOutput {
     Ok(render_version(info))
-}
-
-fn scan_folder(context: &renderpilot_orchestration::Context, path: PathBuf) -> CliOutput {
-    let results = catalog::scan_folder(context, path)?;
-
-    render_scan_folder_results(results)
-}
-
-fn render_scan_folder_results(results: Vec<catalog::ScanFolderCatalogResult>) -> CliOutput {
-    debug_assert!(
-        !results.is_empty(),
-        "catalog::scan_folder should return at least one scan result"
-    );
-
-    let single: Result<[catalog::ScanFolderCatalogResult; 1], _> = results.try_into();
-    match single {
-        Ok([result]) => render_single_scan_folder_result(result),
-        Err(results) => render_scan_folder_batch_results(results),
-    }
-}
-
-fn render_single_scan_folder_result(result: catalog::ScanFolderCatalogResult) -> CliOutput {
-    render_output(render_scan_folder_output(result.game, result.libraries))
-}
-
-fn render_scan_folder_batch_results(results: Vec<catalog::ScanFolderCatalogResult>) -> CliOutput {
-    let scans = results
-        .into_iter()
-        .map(|result| (result.game, result.libraries))
-        .collect();
-
-    render_output(render_scan_folder_batch_output(scans))
 }
 
 fn list_artifacts(

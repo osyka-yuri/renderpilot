@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use renderpilot_domain::{InstallKey, PathRef};
+
 pub(super) fn existing_unique_dirs(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -19,7 +21,9 @@ pub(super) fn existing_unique_dirs(paths: impl IntoIterator<Item = PathBuf>) -> 
             continue;
         };
 
-        let key = comparable_path_key(&path);
+        let Some(key) = comparable_path_key(&path) else {
+            continue;
+        };
 
         if seen.insert(key) {
             unique.push(path);
@@ -29,24 +33,20 @@ pub(super) fn existing_unique_dirs(paths: impl IntoIterator<Item = PathBuf>) -> 
     unique
 }
 
-fn normalize_existing_dir(path: &Path) -> Option<PathBuf> {
+pub(super) fn normalize_existing_dir(path: &Path) -> Option<PathBuf> {
     let metadata = fs::metadata(path).ok()?;
 
     if !metadata.is_dir() {
         return None;
     }
 
-    Some(crate::path_normalize::canonicalize_install_dir(path))
+    crate::path_normalize::canonicalize_install_path(path).ok()
 }
 
-pub(super) fn comparable_path_key(path: &Path) -> String {
-    let mut value = path.to_string_lossy().replace('/', "\\");
-
-    while value.ends_with('\\') {
-        value.pop();
-    }
-
-    value.to_ascii_lowercase()
+pub(super) fn comparable_path_key(path: &Path) -> Option<InstallKey> {
+    PathRef::new(path.to_string_lossy())
+        .ok()
+        .map(|path| InstallKey::from_path(&path))
 }
 
 pub(super) fn path_from_string(value: &str) -> Option<PathBuf> {

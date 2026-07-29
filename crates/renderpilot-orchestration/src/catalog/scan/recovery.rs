@@ -7,7 +7,9 @@ use renderpilot_domain::{
     ComponentFile, ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity,
     GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
 };
-use renderpilot_storage_sqlite::SqliteStorage;
+use renderpilot_storage_sqlite::{
+    ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation, SqliteStorage,
+};
 
 pub(super) fn recover_orphaned_backups(
     storage: &SqliteStorage,
@@ -29,6 +31,26 @@ pub(super) fn recover_orphaned_backups(
                     Some(baseline.files()),
                     crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
                 )?;
+                if baseline.expected_active_files().is_empty() {
+                    let current = crate::coordinated_files::current_component_snapshot(
+                        component,
+                        crate::coordinated_files::managed_files_of(installed_addon.as_ref()),
+                    )
+                    .map_err(renderpilot_application::AppError::from)?
+                    .into_component();
+                    storage.commit_game_mutation(GameMutationCommit {
+                        game_id,
+                        component_set: None,
+                        baseline_mutations: &[
+                            ComponentBaselineMutation::UpdateExpectedActiveFiles {
+                                component_id: component.id(),
+                                files: current.files(),
+                            },
+                        ],
+                        addon: InstalledAddonMutation::Keep,
+                        mutation_id: None,
+                    })?;
+                }
                 if component.technology() == GraphicsTechnology::D3D12Agility
                     && baseline.d3d12_executable().is_none()
                     && let Some(executable) =
@@ -104,7 +126,8 @@ pub(super) fn recover_orphaned_backups(
         }
 
         if !recovered_baseline.is_empty() {
-            let mut rollback_baseline = ComponentRollbackBaseline::new(recovered_baseline);
+            let mut rollback_baseline = ComponentRollbackBaseline::new(recovered_baseline)
+                .with_expected_active_files(component.files().to_vec());
             if component.technology() == GraphicsTechnology::D3D12Agility
                 && let Some(executable) = recover_unique_d3d12_executable_baseline(storage, &game)?
             {

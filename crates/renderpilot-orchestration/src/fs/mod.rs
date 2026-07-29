@@ -42,7 +42,9 @@ mod mtime;
 mod sidecar;
 
 pub(crate) use atomic::{copy_file_atomically, write_file_atomically};
-pub(crate) use durability::{sync_directory_best_effort, sync_parent_directory_best_effort};
+pub(crate) use durability::{
+    sync_directory, sync_directory_best_effort, sync_parent_directory_best_effort,
+};
 pub(crate) use hash::{
     NonEmptyFileError, is_readable_file, is_readable_non_empty_file, sha256_of_non_empty_file,
 };

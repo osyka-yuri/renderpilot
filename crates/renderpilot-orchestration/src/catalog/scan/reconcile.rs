@@ -6,20 +6,21 @@ use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentId, GameId, GameIdentity, GameInstallation,
-    GraphicsComponent, Launcher, LibraryArtifact,
+    GraphicsComponent, InstallKey, Launcher, LibraryArtifact, RootAuthority,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
 use crate::ServiceError;
 
-use super::paths;
+use crate::catalog::install_paths;
 
-/// Snapshot of catalog installs keyed by [`paths::install_path_match_key`].
+/// Snapshot of catalog installs keyed by [`install_paths::install_path_match_key`].
 ///
 /// Loaded once per scan so multi-root parent scans do not call `list_games`
 /// once per derived install.
 pub(crate) struct CatalogInstallIndex {
-    by_install_path: HashMap<String, GameInstallation>,
+    by_install_path: HashMap<InstallKey, GameInstallation>,
+    by_game_id: HashMap<GameId, GameInstallation>,
     components_by_game: HashMap<GameId, HashMap<ComponentId, GraphicsComponent>>,
     local_artifacts_by_game: HashMap<GameId, HashMap<ArtifactId, LibraryArtifact>>,
 }
@@ -28,10 +29,12 @@ impl CatalogInstallIndex {
     pub(crate) fn load(storage: &SqliteStorage) -> Result<Self, ServiceError> {
         let games = storage.list_games()?;
         let mut by_install_path = HashMap::with_capacity(games.len());
+        let mut by_game_id = HashMap::with_capacity(games.len());
 
         for game in games {
-            let key = paths::install_path_match_key(game.install_path().as_str());
-            by_install_path.entry(key).or_insert(game);
+            let key = game.install_key().clone();
+            by_install_path.entry(key).or_insert_with(|| game.clone());
+            by_game_id.insert(game.id().clone(), game);
         }
 
         let mut components_by_game =
@@ -59,19 +62,40 @@ impl CatalogInstallIndex {
 
         Ok(Self {
             by_install_path,
+            by_game_id,
             components_by_game,
             local_artifacts_by_game,
         })
     }
 
+    pub(super) fn game(&self, game_id: &GameId) -> Option<&GameInstallation> {
+        self.by_game_id.get(game_id)
+    }
+
+    pub(super) fn components(
+        &self,
+        game_id: &GameId,
+    ) -> Option<&HashMap<ComponentId, GraphicsComponent>> {
+        self.components_by_game.get(game_id)
+    }
+
     fn find_by_install_path(&self, install_path: &str) -> Option<&GameInstallation> {
-        self.by_install_path
-            .get(&paths::install_path_match_key(install_path))
+        let key = install_paths::install_path_match_key(install_path)?;
+        self.by_install_path.get(&key)
     }
 
     #[cfg(any(windows, test))]
     pub(crate) fn contains_install_path(&self, install_path: &std::path::Path) -> bool {
         self.contains_install_path_str(&install_path.to_string_lossy())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn game_id_for_install_path(
+        &self,
+        install_path: &std::path::Path,
+    ) -> Option<&GameId> {
+        self.find_by_install_path(&install_path.to_string_lossy())
+            .map(GameInstallation::id)
     }
 
     pub(super) fn contains_install_path_str(&self, install_path: &str) -> bool {
@@ -165,18 +189,40 @@ pub(super) fn merge_scan_game_with_existing(
         build_reconciled_identity(existing.id(), &title, launcher, external_id.as_deref())
             .unwrap_or_else(|| existing.identity().clone());
 
+    let root_authority =
+        reconcile_root_authority(existing.root_authority(), discovered.root_authority());
     let mut game = GameInstallation::new(
         identity,
         discovered.platform(),
         discovered.runtime(),
         discovered.install_path().clone(),
-    );
+    )
+    .with_root_authority(root_authority);
 
     for candidate in discovered.executable_candidates() {
         game = game.with_executable_candidate(candidate.clone());
     }
+    if let Some(confirmed) = discovered.confirmed_executable() {
+        game = game.with_confirmed_executable(confirmed.clone());
+    } else if existing.install_key() == discovered.install_key()
+        && let Some(confirmed) = existing.confirmed_executable()
+    {
+        game = game.with_confirmed_executable(confirmed.clone());
+    }
 
     game
+}
+
+fn reconcile_root_authority(existing: RootAuthority, discovered: RootAuthority) -> RootAuthority {
+    match (existing, discovered) {
+        (RootAuthority::UserConfirmed, _) | (_, RootAuthority::UserConfirmed) => {
+            RootAuthority::UserConfirmed
+        }
+        (RootAuthority::LauncherManifest, _) | (_, RootAuthority::LauncherManifest) => {
+            RootAuthority::LauncherManifest
+        }
+        (RootAuthority::Legacy, RootAuthority::Legacy) => RootAuthority::Legacy,
+    }
 }
 
 fn build_reconciled_identity(
@@ -214,7 +260,8 @@ mod tests {
     use renderpilot_application::{ComponentRepository, GameRepository};
     use renderpilot_domain::{
         ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
-        GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, Swappability,
+        GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority,
+        Swappability,
     };
     use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -317,13 +364,82 @@ mod tests {
             Launcher::Gog,
             Some("1207659999"),
             "D:/Games/GogGame",
-        );
+        )
+        .with_root_authority(RootAuthority::LauncherManifest);
 
         let merged = merge_scan_game_with_existing(&existing, &discovered);
 
         assert_eq!(merged.identity().launcher(), Launcher::Gog);
+        assert_eq!(
+            merged.id(),
+            existing.id(),
+            "launcher promotion keeps GameId"
+        );
+        assert_eq!(merged.root_authority(), RootAuthority::LauncherManifest);
         assert_eq!(merged.identity().external_id(), Some("1207659999"));
         assert_eq!(merged.identity().title(), "The Witcher 3");
+    }
+
+    #[test]
+    fn launcher_refresh_preserves_user_confirmed_root_authority() {
+        let existing = sample_install(
+            "game:stable",
+            "Black Flag",
+            Launcher::Manual,
+            None,
+            "C:/Games/Black Flag",
+        )
+        .with_root_authority(RootAuthority::UserConfirmed);
+        let discovered = sample_install(
+            "game:provisional",
+            "Assassin's Creed IV Black Flag",
+            Launcher::Ubisoft,
+            Some("273"),
+            "C:/Games/Black Flag",
+        )
+        .with_root_authority(RootAuthority::LauncherManifest);
+
+        let merged = merge_scan_game_with_existing(&existing, &discovered);
+
+        assert_eq!(merged.id(), existing.id());
+        assert_eq!(merged.identity().launcher(), Launcher::Ubisoft);
+        assert_eq!(merged.identity().external_id(), Some("273"));
+        assert_eq!(merged.root_authority(), RootAuthority::UserConfirmed);
+    }
+
+    #[test]
+    fn generic_merge_only_carries_confirmed_executable_for_the_same_install_key() {
+        let confirmed = PathRef::new("CustomLauncher.exe").expect("executable");
+        let existing = sample_install(
+            "game:stable",
+            "Black Flag",
+            Launcher::Manual,
+            None,
+            "C:/Games/Black Flag",
+        )
+        .with_confirmed_executable(confirmed.clone());
+        let exact_refresh = sample_install(
+            "game:provisional",
+            "Black Flag",
+            Launcher::Manual,
+            None,
+            "C:/Games/Black Flag",
+        );
+        let root_correction = sample_install(
+            "game:provisional",
+            "Black Flag",
+            Launcher::Manual,
+            None,
+            "C:/Games",
+        );
+
+        let refreshed = merge_scan_game_with_existing(&existing, &exact_refresh);
+        let corrected = merge_scan_game_with_existing(&existing, &root_correction);
+
+        assert_eq!(refreshed.confirmed_executable(), Some(&confirmed));
+        assert_eq!(refreshed.executable_candidates(), &[confirmed]);
+        assert_eq!(corrected.confirmed_executable(), None);
+        assert!(corrected.executable_candidates().is_empty());
     }
 
     #[test]

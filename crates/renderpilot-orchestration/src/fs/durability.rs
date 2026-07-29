@@ -15,14 +15,17 @@ pub(crate) fn sync_parent_directory_best_effort(path: &Path) {
 }
 
 #[cfg(not(windows))]
+pub(crate) fn sync_directory(path: &Path) -> std::io::Result<()> {
+    std::fs::File::open(path)?.sync_all()
+}
+
+#[cfg(not(windows))]
 pub(crate) fn sync_directory_best_effort(path: &Path) {
-    if let Ok(dir) = std::fs::File::open(path) {
-        let _ = dir.sync_all();
-    }
+    let _ = sync_directory(path);
 }
 
 #[cfg(windows)]
-pub(crate) fn sync_directory_best_effort(path: &Path) {
+pub(crate) fn sync_directory(path: &Path) -> std::io::Result<()> {
     use std::fs::OpenOptions;
     use std::os::windows::fs::OpenOptionsExt;
 
@@ -30,11 +33,15 @@ pub(crate) fn sync_directory_best_effort(path: &Path) {
     // so that `sync_all` (FlushFileBuffers) can be issued against it.
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 
-    if let Ok(dir) = OpenOptions::new()
+    OpenOptions::new()
         .read(true)
+        .write(true)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
         .open(path)
-    {
-        let _ = dir.sync_all();
-    }
+        .and_then(|dir| dir.sync_all())
+}
+
+#[cfg(windows)]
+pub(crate) fn sync_directory_best_effort(path: &Path) {
+    let _ = sync_directory(path);
 }

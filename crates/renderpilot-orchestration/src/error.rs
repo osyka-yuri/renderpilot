@@ -3,6 +3,29 @@ use std::{error::Error, fmt};
 use renderpilot_application::{AppError, AppErrorKind, invalid_operation_state_display_message};
 use renderpilot_detection::LibraryPatternError;
 
+/// Stable reason why a selected directory cannot represent one game install.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvalidInstallRootReason {
+    /// A drive, filesystem, or UNC share root was selected.
+    FilesystemRoot,
+    /// A protected operating-system directory was selected.
+    SystemDirectory,
+    /// The selected parent contains a launcher- or catalog-proven install.
+    ContainsProvenInstall,
+}
+
+impl InvalidInstallRootReason {
+    /// Stable wire value used by desktop clients for precise remediation.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::FilesystemRoot => "filesystem_root",
+            Self::SystemDirectory => "system_directory",
+            Self::ContainsProvenInstall => "contains_proven_install",
+        }
+    }
+}
+
 /// Service-layer errors produced by orchestration feature modules.
 ///
 /// These variants cover domain, infrastructure, and runtime failure modes.
@@ -20,6 +43,65 @@ pub enum ServiceError {
     ComponentNotFound(String),
     /// Caller supplied malformed, incomplete, or inconsistent input.
     InvalidInput(String),
+    /// A filesystem or protected system root was selected instead of one game
+    /// installation directory.
+    InvalidInstallRoot {
+        /// Stable machine-readable reason.
+        reason: InvalidInstallRootReason,
+        /// Internal diagnostic detail, never exposed verbatim in release UI.
+        detail: String,
+    },
+    /// The selected folder contains more than one independent installation.
+    MultipleInstallsDetected(String),
+    /// The filesystem or catalog facts changed after the caller inspected the
+    /// selected installation. No catalog mutation was attempted.
+    StaleInstallInspection {
+        /// Canonical root that must be inspected again.
+        selected_root: String,
+        /// Current assessment token retained for diagnostics.
+        current_fingerprint: String,
+    },
+    /// Managed inverse actions must complete before the root can change safely.
+    RootCorrectionCleanupRequired {
+        /// Existing game whose root would change.
+        game_id: String,
+        /// Components that still own rollback baselines outside the new root.
+        component_ids: Vec<String>,
+    },
+    /// Managed state without an inline component rollback prevents narrowing.
+    RootCorrectionBlocked {
+        /// Existing game whose root would change.
+        game_id: String,
+        /// Stable blocker names used only for diagnostics.
+        blockers: Vec<String>,
+    },
+    /// Managed inverse actions overlap without enough provenance to establish
+    /// a lossless order. No inverse action was executed.
+    ManagedCleanupAmbiguous {
+        /// Game whose managed state remains unchanged.
+        game_id: String,
+        /// Conflicting action/target descriptions.
+        targets: Vec<String>,
+        /// Published recovery bundle containing the catalog and related files.
+        recovery_bundle_path: String,
+    },
+    /// Legacy-card consolidation found ambiguous active managed state.
+    CatalogConsolidationBlocked {
+        /// Scoped tables whose rows cannot be merged losslessly.
+        tables: Vec<String>,
+        /// Published recovery bundle containing the preflight snapshot.
+        recovery_bundle_path: String,
+    },
+    /// Removing a catalog card could not safely complete one managed inverse
+    /// action. The card and remaining recovery metadata stay in the catalog.
+    GameRemovalCleanupFailed {
+        /// Game that remains in the catalog.
+        game_id: String,
+        /// Inverse action that failed.
+        action: String,
+        /// Technical cause retained for diagnostics only.
+        reason: String,
+    },
     /// Catalog replacement snapshot is missing or no longer matches its hash.
     StaleReplacementSource,
     /// A storage adapter (the catalog database) failed.
@@ -70,6 +152,61 @@ impl fmt::Display for ServiceError {
             Self::ArtifactNotFound(id) => write!(formatter, "artifact not found: {id}"),
             Self::ComponentNotFound(id) => write!(formatter, "component not found: {id}"),
             Self::InvalidInput(message) => write!(formatter, "invalid input: {message}"),
+            Self::InvalidInstallRoot { reason, detail } => {
+                write!(
+                    formatter,
+                    "invalid game install root ({}): {detail}",
+                    reason.code()
+                )
+            }
+            Self::MultipleInstallsDetected(message) => {
+                write!(formatter, "multiple game installations detected: {message}")
+            }
+            Self::StaleInstallInspection {
+                selected_root,
+                current_fingerprint,
+            } => write!(
+                formatter,
+                "installation inspection for {selected_root} is stale; current fingerprint: {current_fingerprint}"
+            ),
+            Self::RootCorrectionCleanupRequired {
+                game_id,
+                component_ids,
+            } => write!(
+                formatter,
+                "root correction for {game_id} requires managed cleanup of components: {}",
+                component_ids.join(", ")
+            ),
+            Self::RootCorrectionBlocked { game_id, blockers } => write!(
+                formatter,
+                "root correction for {game_id} is blocked by: {}",
+                blockers.join(", ")
+            ),
+            Self::ManagedCleanupAmbiguous {
+                game_id,
+                targets,
+                recovery_bundle_path,
+            } => write!(
+                formatter,
+                "managed cleanup for {game_id} is ambiguous at {}; recovery bundle: {recovery_bundle_path}",
+                targets.join(", ")
+            ),
+            Self::CatalogConsolidationBlocked {
+                tables,
+                recovery_bundle_path,
+            } => write!(
+                formatter,
+                "catalog consolidation is blocked by ambiguous state in {}; recovery bundle: {recovery_bundle_path}",
+                tables.join(", ")
+            ),
+            Self::GameRemovalCleanupFailed {
+                game_id,
+                action,
+                reason,
+            } => write!(
+                formatter,
+                "cannot remove game {game_id}: {action} failed: {reason}"
+            ),
             Self::StaleReplacementSource => formatter
                 .write_str("replacement source is missing or was modified outside RenderPilot"),
             Self::StorageFailed(message) => write!(formatter, "storage failed: {message}"),
@@ -124,6 +261,18 @@ impl ServiceError {
     #[must_use]
     pub fn invalid_input(message: impl Into<String>) -> Self {
         Self::InvalidInput(message.into())
+    }
+
+    /// Constructs a typed invalid-install-root error with stable reason data.
+    #[must_use]
+    pub fn invalid_install_root(
+        reason: InvalidInstallRootReason,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self::InvalidInstallRoot {
+            reason,
+            detail: detail.into(),
+        }
     }
 
     /// Combines a primary failure with a durable-transaction rollback failure.
@@ -184,7 +333,25 @@ mod tests {
 
     use renderpilot_application::{AppError, AppErrorKind, OperationStatus};
 
-    use super::ServiceError;
+    use super::{InvalidInstallRootReason, ServiceError};
+
+    #[test]
+    fn invalid_install_root_reasons_have_stable_unique_codes() {
+        let reasons = [
+            InvalidInstallRootReason::FilesystemRoot,
+            InvalidInstallRootReason::SystemDirectory,
+            InvalidInstallRootReason::ContainsProvenInstall,
+        ];
+        let codes = reasons.map(InvalidInstallRootReason::code);
+        assert_eq!(
+            codes,
+            [
+                "filesystem_root",
+                "system_directory",
+                "contains_proven_install",
+            ]
+        );
+    }
 
     #[test]
     fn not_found_variants_are_usage_like() {
@@ -197,6 +364,33 @@ mod tests {
             ServiceError::InvalidOperationState {
                 operation_id: "op".to_owned(),
                 state: "planned".to_owned(),
+            },
+            ServiceError::invalid_install_root(
+                InvalidInstallRootReason::FilesystemRoot,
+                "filesystem root",
+            ),
+            ServiceError::MultipleInstallsDetected("two roots".to_owned()),
+            ServiceError::StaleInstallInspection {
+                selected_root: "C:/Games/Test".to_owned(),
+                current_fingerprint: "current".to_owned(),
+            },
+            ServiceError::RootCorrectionCleanupRequired {
+                game_id: "g1".to_owned(),
+                component_ids: vec!["c1".to_owned()],
+            },
+            ServiceError::RootCorrectionBlocked {
+                game_id: "g1".to_owned(),
+                blockers: vec!["pending_recovery".to_owned()],
+            },
+            ServiceError::GameRemovalCleanupFailed {
+                game_id: "g1".to_owned(),
+                action: "component rollback c1".to_owned(),
+                reason: "backup is missing".to_owned(),
+            },
+            ServiceError::ManagedCleanupAmbiguous {
+                game_id: "g1".to_owned(),
+                targets: vec!["c1 <> addon: file.dll".to_owned()],
+                recovery_bundle_path: "recovery/test.bundle".to_owned(),
             },
         ];
 

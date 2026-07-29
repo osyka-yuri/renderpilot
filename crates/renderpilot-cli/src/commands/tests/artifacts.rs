@@ -1,5 +1,6 @@
 use std::{ffi::OsString, fs};
 
+use super::scan::create_game_executable;
 use super::{CatalogFixture, TempGameFolder, args};
 
 #[test]
@@ -14,16 +15,18 @@ fn list_artifacts_groups_artifacts_from_multiple_scans() {
         .expect("dlss file should be written");
     fs::write(xess_folder.path().join("libxess.dll"), b"xess-b")
         .expect("xess file should be written");
+    create_game_executable(dlss_folder.path(), "DlssGame.exe");
+    create_game_executable(xess_folder.path(), "XessGame.exe");
 
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             dlss_folder.path().as_os_str().to_owned(),
         ])
         .expect("first scan should succeed");
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             xess_folder.path().as_os_str().to_owned(),
         ])
         .expect("second scan should succeed");
@@ -53,16 +56,18 @@ fn list_artifacts_filters_by_technology() {
         .expect("dlss file should be written");
     fs::write(fg_folder.path().join("nvngx_dlssg.dll"), b"fg-a")
         .expect("fg file should be written");
+    create_game_executable(dlss_folder.path(), "DlssGame.exe");
+    create_game_executable(fg_folder.path(), "FrameGenGame.exe");
 
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             dlss_folder.path().as_os_str().to_owned(),
         ])
         .expect("first scan should succeed");
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             fg_folder.path().as_os_str().to_owned(),
         ])
         .expect("second scan should succeed");
@@ -101,16 +106,18 @@ fn scan_folder_deduplicates_identical_sha256_across_games() {
         .expect("first file should be written");
     fs::write(second_folder.path().join("nvngx_dlss.dll"), b"same-bytes")
         .expect("second file should be written");
+    create_game_executable(first_folder.path(), "FirstGame.exe");
+    create_game_executable(second_folder.path(), "SecondGame.exe");
 
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             first_folder.path().as_os_str().to_owned(),
         ])
         .expect("first scan should succeed");
     fixture
         .run(vec![
-            OsString::from("scan-folder"),
+            OsString::from("add-game"),
             second_folder.path().as_os_str().to_owned(),
         ])
         .expect("second scan should succeed");

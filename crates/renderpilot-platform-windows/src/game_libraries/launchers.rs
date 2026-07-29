@@ -10,12 +10,16 @@ use std::{fs, path::PathBuf};
 use serde::Deserialize;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
-use super::DiscoveredSources;
+use renderpilot_domain::Launcher;
+
+use crate::install_identity::{InstallIdentityDetails, detect_install_identity};
+
 use super::paths::{
     env_path, has_extension_ignore_ascii_case, parse_steam_library_roots, path_from_string,
     push_env_join,
 };
 use super::registry::{discover_registry_paths, read_registry_values};
+use super::{DiscoveredInstall, DiscoveredSources};
 
 pub(super) fn discover_steam_libraries() -> DiscoveredSources {
     let steam_roots = read_registry_values(
@@ -58,6 +62,12 @@ pub(super) fn discover_epic_games_libraries() -> DiscoveredSources {
     struct EpicManifest {
         #[serde(rename = "InstallLocation")]
         install_location: Option<String>,
+        #[serde(rename = "AppName")]
+        app_name: Option<String>,
+        #[serde(rename = "CatalogItemId")]
+        catalog_item_id: Option<String>,
+        #[serde(rename = "DisplayName")]
+        display_name: Option<String>,
     }
 
     let mut game_installs = Vec::new();
@@ -90,7 +100,15 @@ pub(super) fn discover_epic_games_libraries() -> DiscoveredSources {
             };
 
             if let Some(path) = path_from_string(&install_location) {
-                game_installs.push(path);
+                game_installs.push(DiscoveredInstall::with_identity(
+                    path,
+                    InstallIdentityDetails {
+                        launcher: Launcher::Epic,
+                        external_id: non_empty(manifest.app_name)
+                            .or_else(|| non_empty(manifest.catalog_item_id)),
+                        display_name: non_empty(manifest.display_name),
+                    },
+                ));
             }
         }
     }
@@ -110,20 +128,28 @@ pub(super) fn discover_epic_games_libraries() -> DiscoveredSources {
 pub(super) fn discover_gog_libraries() -> DiscoveredSources {
     let mut game_installs = Vec::new();
 
-    game_installs.extend(discover_registry_paths(
-        HKEY_LOCAL_MACHINE,
-        &[
-            r"SOFTWARE\GOG.com\Games",
-            r"SOFTWARE\WOW6432Node\GOG.com\Games",
-        ],
-        &["path", "Path"],
-    ));
+    game_installs.extend(
+        discover_registry_paths(
+            HKEY_LOCAL_MACHINE,
+            &[
+                r"SOFTWARE\GOG.com\Games",
+                r"SOFTWARE\WOW6432Node\GOG.com\Games",
+            ],
+            &["path", "Path"],
+        )
+        .into_iter()
+        .map(|path| discovered_registry_install(path, Launcher::Gog)),
+    );
 
-    game_installs.extend(discover_registry_paths(
-        HKEY_CURRENT_USER,
-        &[r"Software\GOG.com\Games"],
-        &["path", "Path"],
-    ));
+    game_installs.extend(
+        discover_registry_paths(
+            HKEY_CURRENT_USER,
+            &[r"Software\GOG.com\Games"],
+            &["path", "Path"],
+        )
+        .into_iter()
+        .map(|path| discovered_registry_install(path, Launcher::Gog)),
+    );
 
     let mut library_roots = Vec::new();
 
@@ -154,7 +180,10 @@ pub(super) fn discover_ea_libraries() -> DiscoveredSources {
             r"SOFTWARE\WOW6432Node\Origin Games",
         ],
         &["Install Dir", "InstallDir", "InstallPath", "Path"],
-    );
+    )
+    .into_iter()
+    .map(|path| DiscoveredInstall::launcher(path, Launcher::Ea))
+    .collect();
 
     let mut library_roots = Vec::new();
 
@@ -179,7 +208,10 @@ pub(super) fn discover_ubisoft_libraries() -> DiscoveredSources {
             r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs",
         ],
         &["InstallDir", "Install Dir", "InstallPath", "Path"],
-    );
+    )
+    .into_iter()
+    .map(|path| DiscoveredInstall::launcher(path, Launcher::Ubisoft))
+    .collect();
 
     let mut library_roots = Vec::new();
 
@@ -198,4 +230,17 @@ pub(super) fn discover_ubisoft_libraries() -> DiscoveredSources {
         library_roots,
         ..DiscoveredSources::default()
     }
+}
+
+fn discovered_registry_install(path: PathBuf, launcher: Launcher) -> DiscoveredInstall {
+    detect_install_identity(&path)
+        .map(|identity| DiscoveredInstall::with_identity(path.clone(), identity))
+        .unwrap_or_else(|| DiscoveredInstall::launcher(path, launcher))
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let value = value.trim();
+        (!value.is_empty()).then(|| value.to_owned())
+    })
 }

@@ -1,11 +1,12 @@
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
-use renderpilot_platform_windows::{InstallIdentityDetails, ManualFolderGameSource};
+use renderpilot_domain::{GameId, RootAuthority};
+use renderpilot_platform_windows::{ManualFolderGameSource, game_libraries::DiscoveredInstall};
 
 use crate::ServiceError;
 use crate::catalog::ScanFolderCatalogResult;
 
-use super::scan_impl;
-use super::scan_plan::{DetectionMode, InstallRootStrategy};
+use super::scan_plan::DetectionMode;
+use super::scan_source_impl;
 
 /// Per-install auto-scan using a shared open catalog, detector, and full
 /// `file_hash_cache` prefetch
@@ -15,22 +16,28 @@ pub(crate) fn scan_auto_in_shared_batch(
     detector: &LibraryPatternComponentDetector,
     prefetched_cache: &FileHashCache,
     catalog_index: &super::reconcile::CatalogInstallIndex,
-    path: &std::path::Path,
-    known_identity: Option<&InstallIdentityDetails>,
+    install: &DiscoveredInstall,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
-    let mut source = ManualFolderGameSource::new(path);
-    if let Some(identity) = known_identity {
-        source = source.with_known_identity(identity.clone());
-    }
+    let path = &install.install_path;
+    let game_id = catalog_index
+        .game_id_for_install_path(path)
+        .cloned()
+        .unwrap_or_else(GameId::generate);
+    let source = ManualFolderGameSource::new(path)
+        .with_game_id(game_id)
+        .with_known_identity(install.identity.clone())
+        .with_root_authority(RootAuthority::LauncherManifest);
 
-    scan_impl(
+    scan_source_impl(
         super::ScanInputs { context, detector },
         &source,
         // A checkpoint miss still requires one complete metadata walk. The
         // launcher identity itself was already resolved during discovery.
         DetectionMode::FullCached,
-        InstallRootStrategy::SingleInstall,
         Some(prefetched_cache),
         Some(catalog_index),
+        super::ExplicitRootChange::Unchanged,
+        &[],
     )
+    .map(|result| vec![result])
 }

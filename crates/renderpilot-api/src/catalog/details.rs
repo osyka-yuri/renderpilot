@@ -4,7 +4,9 @@
 use renderpilot_orchestration::application::ComponentReplacementCandidates;
 use renderpilot_orchestration::catalog as orch_catalog;
 use renderpilot_orchestration::catalog::output as catalog_output;
-use renderpilot_orchestration::domain::{AddonKind, GameId, GraphicsComponent};
+use renderpilot_orchestration::domain::{
+    AddonKind, GameId, GameInstallation, GraphicsComponent, RootAuthority,
+};
 use serde::Serialize;
 use std::collections::BTreeSet;
 
@@ -31,11 +33,45 @@ pub(crate) struct GameComponentOutput {
 
 #[derive(Debug, Serialize)]
 pub(crate) struct GameDetailsOutput {
-    game: renderpilot_orchestration::domain::GameInstallation,
+    game: GameDetailsGameOutput,
     components: Vec<GameComponentOutput>,
     candidate_groups: Vec<catalog_output::ComponentCandidateOutput>,
     operations: Vec<catalog_output::OperationSummaryOutput>,
     addon_capabilities: Vec<AddonKind>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct GameDetailsGameOutput {
+    identity: GameDetailsIdentityOutput,
+    platform: String,
+    runtime: String,
+    install_path: String,
+    can_remove_from_catalog: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct GameDetailsIdentityOutput {
+    id: String,
+    title: String,
+    launcher: String,
+    external_id: Option<String>,
+}
+
+impl From<GameInstallation> for GameDetailsGameOutput {
+    fn from(game: GameInstallation) -> Self {
+        Self {
+            identity: GameDetailsIdentityOutput {
+                id: game.id().as_str().to_owned(),
+                title: game.identity().title().to_owned(),
+                launcher: game.identity().launcher().as_str().to_owned(),
+                external_id: game.identity().external_id().map(str::to_owned),
+            },
+            platform: game.platform().as_str().to_owned(),
+            runtime: game.runtime().as_str().to_owned(),
+            install_path: game.install_path().as_str().to_owned(),
+            can_remove_from_catalog: game.root_authority() != RootAuthority::LauncherManifest,
+        }
+    }
 }
 
 impl GameDetailsOutput {
@@ -87,7 +123,7 @@ impl GameDetailsOutput {
             .collect();
 
         Ok(Self {
-            game,
+            game: game.into(),
             components,
             candidate_groups,
             operations,
@@ -111,4 +147,55 @@ fn filter_visible_candidate_groups(
         .into_iter()
         .filter(|group| visible_component_ids.contains(group.component_id().as_str()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_orchestration::domain::{
+        GameIdentity, GameRuntime, Launcher, PathRef, Platform,
+    };
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn game_details_uses_an_explicit_minimal_wire_contract() {
+        let identity = GameIdentity::new(
+            GameId::new("game:details-contract").expect("game id"),
+            "Details Contract",
+            Launcher::Manual,
+        )
+        .expect("identity")
+        .with_external_id("external-42")
+        .expect("external id");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new("D:/Games/Details Contract").expect("install path"),
+        )
+        .with_root_authority(RootAuthority::UserConfirmed);
+
+        let encoded = serde_json::to_value(GameDetailsGameOutput::from(game))
+            .expect("serialize details game");
+
+        assert_eq!(
+            encoded,
+            json!({
+                "identity": {
+                    "id": "game:details-contract",
+                    "title": "Details Contract",
+                    "launcher": "Manual",
+                    "external_id": "external-42"
+                },
+                "platform": "Windows",
+                "runtime": "NativeWindows",
+                "install_path": "D:/Games/Details Contract",
+                "can_remove_from_catalog": true
+            })
+        );
+        assert!(encoded.get("root_authority").is_none());
+        assert!(encoded.get("executable_candidates").is_none());
+        assert!(encoded.get("confirmed_executable").is_none());
+    }
 }

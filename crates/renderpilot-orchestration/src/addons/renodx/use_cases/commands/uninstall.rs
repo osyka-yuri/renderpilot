@@ -32,6 +32,20 @@ use crate::{Context, ServiceError};
 /// after the per-game uninstall committed.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
     let guard = game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    uninstall_locked(context, &guard, game_id)
+}
+
+/// Uninstalls RenoDX while a compound operation owns the game mutation boundary.
+pub(crate) fn uninstall_locked(
+    context: &Context,
+    guard: &game_mutation_lock::GameMutationGuard,
+    game_id: &GameId,
+) -> Result<(), ServiceError> {
+    if guard.game_id() != game_id {
+        return Err(ServiceError::invalid_input(
+            "RenoDX uninstall guard does not match the requested game",
+        ));
+    }
     let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
 
@@ -45,7 +59,7 @@ pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError
     crate::addons::durable::run_uninstall_workset(
         crate::addons::durable::UninstallWorkset {
             context,
-            guard: &guard,
+            guard,
             workset,
             feature: crate::addons::mutation_features::RENODX_UNINSTALL,
             game_id,

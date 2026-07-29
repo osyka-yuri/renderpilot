@@ -20,9 +20,9 @@ use renderpilot_orchestration::domain::AddonKind;
 
 use self::addon::parse_addon_command;
 use self::catalog::{
-    parse_apply_command, parse_candidates_command, parse_list_artifacts_command,
-    parse_list_operations_command, parse_plan_rollback_command, parse_plan_swap_command,
-    parse_rollback_command, parse_scan_folder_command,
+    parse_add_game_command, parse_apply_command, parse_candidates_command,
+    parse_list_artifacts_command, parse_list_operations_command, parse_plan_rollback_command,
+    parse_plan_swap_command, parse_rollback_command,
 };
 use self::command::Command;
 use self::cursor::ArgCursor;
@@ -38,7 +38,7 @@ pub(crate) fn parse_args(
     match first.as_str() {
         "--help" | "-h" => parse_flag_command(Command::Help, &mut args),
         "--version" | "-V" => parse_flag_command(Command::Version, &mut args),
-        "scan-folder" => parse_scan_folder_command(&mut args),
+        "add-game" => parse_add_game_command(&mut args),
         "list-artifacts" => parse_list_artifacts_command(&mut args),
         "list-operations" => parse_list_operations_command(&mut args),
         "candidates" => parse_candidates_command(&mut args),

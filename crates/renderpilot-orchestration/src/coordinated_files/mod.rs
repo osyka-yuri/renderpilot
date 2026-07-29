@@ -28,7 +28,9 @@ pub(crate) use plan::{
     CoordinatedFilePlan, ExpectedLive, FilePlanBatchLog, OverlaySource, execute_file_plan,
     execute_file_plans, execute_restore_batch,
 };
-pub(crate) use snapshot::{current_component_snapshot, record_after_component_rollback};
+pub(crate) use snapshot::{
+    current_component_snapshot, record_after_component_rollback, record_after_paths_rollback,
+};
 
 #[cfg(test)]
 pub(crate) use baseline::{BaselineConflict, BaselineResolver, ResolvedBaseline};

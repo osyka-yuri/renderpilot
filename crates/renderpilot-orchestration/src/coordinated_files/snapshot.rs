@@ -74,12 +74,25 @@ pub(crate) fn record_after_component_rollback(
     component: &GraphicsComponent,
     baseline: &[ComponentFile],
 ) -> Result<Option<renderpilot_domain::InstalledAddon>, AppError> {
-    let rolled_back_paths: std::collections::HashSet<String> = component
+    let rolled_back_paths = component
         .files()
         .iter()
         .chain(baseline)
-        .map(|file| crate::paths::normalized_key(Path::new(file.path().as_str())))
-        .collect();
+        .map(|file| file.path().clone())
+        .collect::<Vec<_>>();
+    record_after_paths_rollback(record, &rolled_back_paths)
+}
+
+/// Removes owned bindings consumed by an orphaned catalog rollback, where the
+/// component row no longer exists but its immutable path provenance remains.
+pub(crate) fn record_after_paths_rollback(
+    record: &renderpilot_domain::InstalledAddon,
+    rolled_back_paths: &[renderpilot_domain::PathRef],
+) -> Result<Option<renderpilot_domain::InstalledAddon>, AppError> {
+    let rolled_back_paths = rolled_back_paths
+        .iter()
+        .map(|path| crate::paths::normalized_key(Path::new(path.as_str())))
+        .collect::<std::collections::HashSet<_>>();
     let remaining: Vec<_> = record
         .managed_files()
         .iter()

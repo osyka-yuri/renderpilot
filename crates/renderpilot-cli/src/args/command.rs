@@ -1,13 +1,24 @@
 use std::path::PathBuf;
 
 use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AddGameRootChoiceArg {
+    Auto,
+    Selected,
+    Recommended,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Command {
     Summary,
     Help,
     Version,
-    ScanFolder {
+    AddGame {
         path: PathBuf,
+        executable: Option<PathBuf>,
+        root_choice: AddGameRootChoiceArg,
+        allow_root_correction: bool,
     },
     ListArtifacts {
         technology: Option<GraphicsTechnology>,

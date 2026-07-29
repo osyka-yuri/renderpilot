@@ -126,14 +126,51 @@ where
 }
 
 #[tauri::command]
-pub async fn scan_manual_folder(
+pub async fn inspect_game_install(
     path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
     let path = require_non_empty_path(path)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::scan_manual_folder(&context, path)).await
+    run_desktop_command(move || desktop::inspect_game_install(&context, &path)).await
+}
+
+#[tauri::command]
+pub async fn add_game(
+    selected_root: String,
+    root_choice: String,
+    allow_root_correction: bool,
+    chosen_executable: Option<String>,
+    inspection_fingerprint: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let selected_root = require_non_empty_path(selected_root)?;
+    let chosen_executable = chosen_executable.map(require_non_empty_path).transpose()?;
+    let inspection_fingerprint =
+        require_non_empty_string("inspection_fingerprint", inspection_fingerprint)?;
+    let context = Arc::clone(&context);
+
+    run_desktop_command(move || {
+        desktop::add_game(
+            &context,
+            selected_root,
+            &root_choice,
+            allow_root_correction,
+            chosen_executable,
+            inspection_fingerprint,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_game_from_catalog(
+    game_id: String,
+    context: tauri::State<'_, Arc<Context>>,
+) -> JsonCommandResult {
+    let (game_id, context) = require_game_context(game_id, &context)?;
+    run_desktop_command(move || desktop::remove_game_from_catalog(&context, game_id)).await
 }
 
 #[tauri::command]

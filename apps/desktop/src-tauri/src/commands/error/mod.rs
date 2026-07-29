@@ -34,6 +34,16 @@ pub struct CommandError {
     /// Sanitized user-facing fallback text, scrubbed of internal technical context. Serialized as the JSON field `details`.
     details: String,
 
+    /// Stable validation reason for typed errors such as `invalid_install_root`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+
+    /// Published recovery artifact that the user may need after a fail-closed
+    /// managed cleanup. This is structured separately from debug diagnostics
+    /// and remains available in release builds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovery_bundle_path: Option<String>,
+
     suggested_actions: SuggestedActions,
 }
 
@@ -46,6 +56,8 @@ impl CommandError {
             severity: spec.severity,
             message_key: user_message.key(),
             details: user_message.default_text().to_owned(),
+            reason: None,
+            recovery_bundle_path: None,
             suggested_actions: spec.suggested_actions,
         }
     }
@@ -78,6 +90,16 @@ impl CommandError {
     ) -> Self {
         log::warn!("{debug_label}: {raw}");
         Self::user_facing(kind, user_message)
+    }
+
+    fn with_reason(mut self, reason: &'static str) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    fn with_recovery_bundle_path(mut self, path: String) -> Self {
+        self.recovery_bundle_path = Some(path);
+        self
     }
 
     /// Retrieves the sanitized text explicitly intended for UI consumption, serialized as the JSON field `details`.
@@ -142,15 +164,25 @@ mod tests {
     }
 
     #[test]
-    fn every_error_has_suggested_action() {
+    fn only_terminal_validation_errors_intentionally_omit_suggested_actions() {
         for &kind in CommandErrorKind::ALL {
             let spec = kind.spec();
 
-            assert!(
-                !spec.suggested_actions.is_empty(),
-                "missing suggested action for {}",
-                spec.code
-            );
+            if matches!(
+                kind,
+                CommandErrorKind::InvalidInstallRoot
+                    | CommandErrorKind::MultipleInstallsDetected
+                    | CommandErrorKind::StaleInstallInspection
+                    | CommandErrorKind::RootCorrectionCleanupRequired
+            ) {
+                assert!(spec.suggested_actions.is_empty());
+            } else {
+                assert!(
+                    !spec.suggested_actions.is_empty(),
+                    "missing suggested action for {}",
+                    spec.code
+                );
+            }
         }
     }
 
@@ -236,6 +268,14 @@ mod tests {
             (
                 ServiceError::StaleReplacementSource,
                 "stale_replacement_source",
+            ),
+            (
+                ServiceError::GameRemovalCleanupFailed {
+                    game_id: "private-game".into(),
+                    action: "private-component rollback".into(),
+                    reason: "private path D:\\Games\\secret is unavailable".into(),
+                },
+                "game_removal_cleanup_failed",
             ),
         ];
 
@@ -355,6 +395,158 @@ mod tests {
     }
 
     #[test]
+    fn rejected_game_root_uses_specific_safe_user_message() {
+        let err = CommandError::from(ApiError::Service(ServiceError::invalid_install_root(
+            renderpilot_orchestration::InvalidInstallRootReason::FilesystemRoot,
+            "drive root D:/",
+        )));
+
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(value.get("code"), Some(&json!("invalid_install_root")));
+        assert_eq!(
+            value.get("details"),
+            Some(&json!(
+                strings::user_message::INVALID_INSTALL_ROOT.default_text()
+            ))
+        );
+        assert_eq!(
+            value.get("messageKey"),
+            Some(&json!(strings::user_message::INVALID_INSTALL_ROOT.key()))
+        );
+        assert_ne!(value.get("details"), Some(&json!("drive root D:/")));
+        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
+        assert_eq!(value.get("reason"), Some(&json!("filesystem_root")));
+    }
+
+    #[test]
+    fn rejected_parent_install_scope_uses_invalid_root_reason() {
+        let err = CommandError::from(ApiError::Service(ServiceError::invalid_install_root(
+            renderpilot_orchestration::InvalidInstallRootReason::ContainsProvenInstall,
+            "selected parent contains private game ids",
+        )));
+
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(value.get("code"), Some(&json!("invalid_install_root")));
+        assert_eq!(
+            value.get("details"),
+            Some(&json!(
+                strings::user_message::INVALID_INSTALL_ROOT.default_text()
+            ))
+        );
+        assert_eq!(
+            value.get("messageKey"),
+            Some(&json!(strings::user_message::INVALID_INSTALL_ROOT.key()))
+        );
+        assert_ne!(
+            value.get("details"),
+            Some(&json!("selected parent contains private game ids"))
+        );
+        assert_eq!(value.get("reason"), Some(&json!("contains_proven_install")));
+        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
+    }
+
+    #[test]
+    fn multiple_install_container_has_a_distinct_safe_error() {
+        let err = CommandError::from(ApiError::Service(ServiceError::MultipleInstallsDetected(
+            "private installation roots".to_owned(),
+        )));
+
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(
+            value.get("code"),
+            Some(&json!("multiple_installs_detected"))
+        );
+        assert_eq!(
+            value.get("details"),
+            Some(&json!(
+                strings::user_message::MULTIPLE_INSTALLS_DETECTED.default_text()
+            ))
+        );
+        assert_ne!(
+            value.get("details"),
+            Some(&json!("private installation roots"))
+        );
+        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
+    }
+
+    #[test]
+    fn root_correction_state_errors_are_typed_and_do_not_expose_catalog_ids() {
+        let rollback = CommandError::from(ApiError::Service(
+            ServiceError::RootCorrectionCleanupRequired {
+                game_id: "private-game".to_owned(),
+                component_ids: vec!["private-component".to_owned()],
+            },
+        ));
+        let blocked = CommandError::from(ApiError::Service(ServiceError::RootCorrectionBlocked {
+            game_id: "private-game".to_owned(),
+            blockers: vec!["pending_recovery".to_owned()],
+        }));
+
+        let rollback = serde_json::to_value(&rollback).expect("rollback error");
+        assert_eq!(
+            rollback.get("code"),
+            Some(&json!("root_correction_cleanup_required"))
+        );
+        assert_eq!(
+            rollback.get("details"),
+            Some(&json!(
+                strings::user_message::ROOT_CORRECTION_CLEANUP_REQUIRED.default_text()
+            ))
+        );
+        assert_eq!(rollback.get("suggestedActions"), Some(&json!([])));
+
+        let blocked = serde_json::to_value(&blocked).expect("blocked error");
+        assert_eq!(blocked.get("code"), Some(&json!("root_correction_blocked")));
+        assert_eq!(
+            blocked.get("details"),
+            Some(&json!(
+                strings::user_message::ROOT_CORRECTION_BLOCKED.default_text()
+            ))
+        );
+        assert!(
+            !blocked
+                .get("details")
+                .expect("details")
+                .as_str()
+                .expect("string")
+                .contains("private-game")
+        );
+    }
+
+    #[test]
+    fn game_removal_cleanup_error_is_specific_and_hides_diagnostics() {
+        let technical = "private path D:\\Games\\secret is unavailable";
+        let err = CommandError::from(ApiError::Service(ServiceError::GameRemovalCleanupFailed {
+            game_id: "private-game".to_owned(),
+            action: "private-component rollback".to_owned(),
+            reason: technical.to_owned(),
+        }));
+
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(
+            value.get("code"),
+            Some(&json!("game_removal_cleanup_failed"))
+        );
+        assert_eq!(
+            value.get("messageKey"),
+            Some(&json!(
+                strings::user_message::GAME_REMOVAL_CLEANUP_FAILED.key()
+            ))
+        );
+        assert_eq!(
+            value.get("details"),
+            Some(&json!(
+                strings::user_message::GAME_REMOVAL_CLEANUP_FAILED.default_text()
+            ))
+        );
+        assert_ne!(value.get("details"), Some(&json!(technical)));
+    }
+
+    #[test]
     fn invalid_id_uses_safe_details() {
         let err = CommandError::invalid_id(
             CommandErrorKind::InvalidGameId,
@@ -374,6 +566,33 @@ mod tests {
         assert_eq!(
             value.get("messageKey"),
             Some(&json!(strings::user_message::INVALID_GAME_REFERENCE.key()))
+        );
+    }
+
+    #[test]
+    fn managed_cleanup_error_exposes_the_published_recovery_bundle_structurally() {
+        let recovery_bundle = r"C:\Recovery\renderpilot-bundle";
+        let err = CommandError::from(ApiError::Service(ServiceError::ManagedCleanupAmbiguous {
+            game_id: "private-game".to_owned(),
+            targets: vec!["private target".to_owned()],
+            recovery_bundle_path: recovery_bundle.to_owned(),
+        }));
+
+        let value = serde_json::to_value(&err).expect("serialize CommandError");
+
+        assert_eq!(value.get("code"), Some(&json!("managed_cleanup_ambiguous")));
+        assert_eq!(
+            value.get("recoveryBundlePath"),
+            Some(&json!(recovery_bundle))
+        );
+        assert!(
+            !value
+                .get("details")
+                .expect("details")
+                .as_str()
+                .expect("string")
+                .contains("private target"),
+            "technical conflict details must remain sanitized"
         );
     }
 

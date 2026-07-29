@@ -2,7 +2,7 @@
 
 use renderpilot_application::AppError;
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
-use renderpilot_platform_windows::game_libraries::DiscoveredScanSource;
+use renderpilot_platform_windows::game_libraries::DiscoveredInstall;
 use renderpilot_storage_sqlite::SqliteStorage;
 use std::collections::HashMap;
 
@@ -59,15 +59,15 @@ pub fn open_auto_scan_batch(context: &crate::Context) -> Result<AutoScanBatch<'_
 /// Per-install entry point used inside an [`AutoScanBatch`] loop.
 pub fn scan_auto_in_batch(
     batch: &AutoScanBatch<'_>,
-    path: &std::path::Path,
-    source: Option<&DiscoveredScanSource>,
+    install: &DiscoveredInstall,
     allow_checkpoint_skip: bool,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
+    let path = &install.install_path;
     if checkpoint_allows_skip(
         allow_checkpoint_skip,
         batch.catalog_index.contains_install_path(path),
         &batch.checkpoints,
-        source.map(|source| &source.checkpoint),
+        install.checkpoint.as_ref(),
     ) {
         log::debug!("auto-scan checkpoint hit for {}", path.display());
         return Ok(Vec::new());
@@ -78,10 +78,9 @@ pub fn scan_auto_in_batch(
         &batch.detector,
         &batch.prefetched_cache,
         &batch.catalog_index,
-        path,
-        source.map(|source| &source.identity),
+        install,
     )?;
-    if let Some(source) = source.map(|source| &source.checkpoint) {
+    if let Some(source) = install.checkpoint.as_ref() {
         batch
             .context()
             .storage()

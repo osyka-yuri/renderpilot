@@ -23,6 +23,8 @@ pub enum CliError {
     MissingArgument(&'static str),
     /// The user passed a technology filter that RenderPilot does not recognize.
     InvalidTechnology(String),
+    /// The user passed an unsupported add-game root choice.
+    InvalidAddGameRootChoice(String),
     /// The user passed a game identifier that RenderPilot could not parse.
     InvalidGameId(String),
     /// The user passed a component identifier that RenderPilot could not parse.
@@ -68,6 +70,9 @@ impl CliError {
             Self::InvalidTechnology(tech) => {
                 Some(Cow::Owned(format!("unknown technology: {tech}")))
             }
+            Self::InvalidAddGameRootChoice(choice) => Some(Cow::Owned(format!(
+                "unknown add-game root choice: {choice}; expected auto, selected, or recommended"
+            ))),
             Self::InvalidGameId(id) => Some(Cow::Owned(format!("invalid game id: {id}"))),
             Self::InvalidComponentId(id) => Some(Cow::Owned(format!("invalid component id: {id}"))),
             Self::InvalidArtifactId(id) => Some(Cow::Owned(format!("invalid artifact id: {id}"))),
@@ -88,6 +93,7 @@ const fn service_error_category(error: &ServiceError) -> ErrorCategory {
     match error {
         ServiceError::CommandFailed(_)
         | ServiceError::InvalidInput(_)
+        | ServiceError::CatalogConsolidationBlocked { .. }
         | ServiceError::StaleReplacementSource
         | ServiceError::StorageFailed(_)
         | ServiceError::ProviderFailed(_)

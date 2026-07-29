@@ -136,3 +136,83 @@ pub fn write_setting_value(
     }
     Ok(())
 }
+
+/// Restores every setting baseline for one game in a single DRS session and
+/// publishes the driver changes with exactly one save.
+///
+/// Baseline rows are deleted only after the driver save succeeds. A later
+/// SQLite failure therefore leaves an idempotent, retryable restore record.
+pub(crate) fn restore_game_baselines(
+    context: &crate::Context,
+    game_id: &str,
+) -> Result<(), ServiceError> {
+    let baselines = context
+        .storage()
+        .list_nvapi_setting_baselines_for_game(game_id)?;
+    if baselines.is_empty() {
+        return Ok(());
+    }
+
+    let settings = baselines
+        .iter()
+        .map(|baseline| {
+            let setting = crate::nvapi::registry::lookup_setting(&baseline.setting_key)
+                .ok_or_else(|| {
+                    ServiceError::command_failed(format!(
+                        "NVAPI baseline uses an unsupported setting key: {}",
+                        baseline.setting_key
+                    ))
+                })?;
+            if baseline.captured_exe.trim().is_empty() {
+                return Err(ServiceError::command_failed(format!(
+                    "NVAPI baseline {} has no captured executable",
+                    baseline.setting_key
+                )));
+            }
+            Ok((baseline, setting))
+        })
+        .collect::<Result<Vec<_>, ServiceError>>()?;
+
+    let session = open_drs_session().map_err(warning_to_service_error)?;
+    let executables = baselines
+        .iter()
+        .map(|baseline| baseline.captured_exe.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for executable in executables {
+        session.find_profile_by_exe(executable).map_err(|_| {
+            ServiceError::command_failed(format!(
+                "NVIDIA profile for captured executable {executable} was not found"
+            ))
+        })?;
+    }
+
+    for (baseline, setting) in &settings {
+        let profile = session
+            .find_profile_by_exe(&baseline.captured_exe)
+            .map_err(|_| {
+                ServiceError::command_failed(format!(
+                    "NVIDIA profile for captured executable {} was not found",
+                    baseline.captured_exe
+                ))
+            })?;
+        if baseline.baseline_was_predefined {
+            profile
+                .delete_setting(setting.nvapi_id())
+                .map_err(|error| map_nvapi_write_error(error, "baseline delete failed"))?;
+        } else {
+            profile
+                .set_dword(setting.nvapi_id(), baseline.baseline_dword)
+                .map_err(|error| map_nvapi_write_error(error, "baseline restore failed"))?;
+        }
+    }
+    session
+        .save()
+        .map_err(|error| map_nvapi_write_error(error, "baseline save failed"))?;
+
+    for baseline in baselines {
+        context
+            .storage()
+            .delete_nvapi_baseline(game_id, &baseline.setting_key)?;
+    }
+    Ok(())
+}

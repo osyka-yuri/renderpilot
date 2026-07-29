@@ -17,6 +17,7 @@ pub(super) struct GameCardOutput {
     pub(super) runtime: String,
     pub(super) install_path: String,
     pub(super) external_id: Option<String>,
+    pub(super) can_remove_from_catalog: bool,
     pub(super) library_tags: Vec<String>,
     pub(super) component_count: usize,
     pub(super) addon_capabilities: Vec<AddonKind>,
@@ -63,6 +64,8 @@ impl GameCardOutput {
             runtime: game.runtime().as_str().to_owned(),
             install_path: game.install_path().as_str().to_owned(),
             external_id: identity.external_id().map(str::to_owned),
+            can_remove_from_catalog: game.root_authority()
+                != renderpilot_orchestration::domain::RootAuthority::LauncherManifest,
             library_tags: card.library_tags.clone(),
             component_count: card.component_count,
             addon_capabilities: card.addon_capabilities.clone(),

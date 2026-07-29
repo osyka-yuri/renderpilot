@@ -7,6 +7,7 @@ use renderpilot_orchestration::catalog::CatalogCardRiskLevel;
 use renderpilot_orchestration::catalog::GameCardData;
 use renderpilot_orchestration::domain::{
     AddonKind, GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+    RootAuthority,
 };
 
 fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
@@ -19,6 +20,7 @@ fn stub_card(launcher: &str, library_tags: &[&str]) -> GameCardOutput {
         runtime: String::from("dx11"),
         install_path: String::from("/games/test"),
         external_id: None,
+        can_remove_from_catalog: true,
         library_tags: library_tags.iter().map(|&t| String::from(t)).collect(),
         component_count: 1,
         addon_capabilities: Vec::new(),
@@ -55,6 +57,38 @@ fn empty_bootstrap_returns_typed_filters_and_catalog_result() {
     );
     assert!(output.get("catalogRevision").is_none());
     assert!(output.get("syncState").is_none());
+}
+
+#[test]
+fn removal_capability_is_exposed_only_for_user_managed_catalog_roots() {
+    let manual = data_card(
+        "manual",
+        "Manual",
+        Launcher::Manual,
+        &[],
+        &[],
+        false,
+        false,
+        0,
+        CatalogCardRiskLevel::Low,
+    );
+    let mut launcher = data_card(
+        "launcher",
+        "Launcher",
+        Launcher::Steam,
+        &[],
+        &[],
+        false,
+        false,
+        0,
+        CatalogCardRiskLevel::Low,
+    );
+    launcher.game = launcher
+        .game
+        .with_root_authority(RootAuthority::LauncherManifest);
+
+    assert!(GameCardOutput::from_card(&manual).can_remove_from_catalog);
+    assert!(!GameCardOutput::from_card(&launcher).can_remove_from_catalog);
 }
 
 #[test]

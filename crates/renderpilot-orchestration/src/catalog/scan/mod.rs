@@ -3,9 +3,8 @@
 //! ## Modules
 //!
 //! - `detect` -- library-file detection modes + hash-cache I/O glue
-//! - `roots` -- multi-install root derivation and library bucketing
 //! - `reconcile` -- catalog identity merge for stable game ids
-//! - `persist` -- write scan units and prune stale parent rows
+//! - `persist` -- write one explicit installation scan unit
 //! - `hash_cache` -- populate/load/save `file_hash_cache` (crate-visible for
 //!   auto_scan batch prefetch)
 //! - existing: `discovery`, `paths`, `prune`, `recovery`, `scan_plan`, `auto`
@@ -13,22 +12,18 @@
 //! ## Dependency rules
 //!
 //! ```text
-//! mod (scan_impl) -> detect, roots (via install_partitioner), persist, prune
+//! mod (scan_impl) -> detect, persist
 //! detect          -> hash_cache, scan_plan
-//! persist         -> reconcile, recovery, roots
-//! roots           -> paths (lexical scope)
+//! persist         -> reconcile, recovery
 //! ```
 
 mod detect;
 // crate-visible for auto_scan batch prefetch (hard path).
 pub(crate) mod hash_cache;
-mod install_partitioner;
-mod paths;
 mod persist;
 mod prune;
 mod reconcile;
 mod recovery;
-mod roots;
 mod scan_plan;
 
 #[cfg(windows)]
@@ -40,78 +35,64 @@ pub mod discovery;
 #[cfg(windows)]
 pub(crate) use auto::scan_auto_in_shared_batch;
 #[cfg(windows)]
-pub use prune::prune_auto_scan_orphans;
+pub(crate) use prune::prune_auto_scan_orphans;
 #[cfg(windows)]
 pub(crate) use reconcile::CatalogInstallIndex;
 
 use std::path::PathBuf;
 
-use install_partitioner::derive_install_roots;
-use renderpilot_application::AppError;
+use renderpilot_application::{AppError, GameRepository, OperationRepository};
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
+use renderpilot_domain::{GameId, GraphicsComponent, RootAuthority};
 use renderpilot_platform_windows::ManualFolderGameSource;
-use scan_plan::{DetectionMode, InstallRootStrategy, resolve_install_root_strategy};
+use scan_plan::DetectionMode;
 
 use crate::ServiceError;
 
 use super::ScanFolderCatalogResult;
 
 use self::detect::detect_libraries;
-use self::persist::persist_scan_results;
+use self::persist::persist_scan_result;
 
-/// Scans `path` for manual-folder game installations.
-///
-/// The scan intentionally performs one filesystem detection pass over the selected root.
-/// If multiple sibling game installs are detected under the selected path, detected
-/// library files are reassigned to the best matching sub-installation by longest path
-/// prefix.
-///
-/// Example:
-///
-/// ```text
-/// D:/SteamLibrary/
-///   steamapps/common/GameA/nvngx_dlss.dll
-///   steamapps/common/GameB/bin/x64/nvngx_dlss.dll
-/// ```
-///
-/// Shared prefix:
-///
-/// ```text
-/// steamapps/common
-/// ```
-///
-/// First diverging components:
-///
-/// ```text
-/// GameA
-/// GameB
-/// ```
-///
-/// Result: two separate game installations (launcher-tagged when metadata is present).
-///
-/// When the selected folder itself is already a known launcher install (Steam /
-/// GOG / Epic), the scan keeps a single install root. Splitting those trees by
-/// diverging DLL paths would re-tag subfolders as `Manual` and drop the store
-/// identity that auto-scan established.
-pub(super) fn scan_folder_impl(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExplicitRootChange {
+    Unchanged,
+    Expanded,
+    Narrowed,
+}
+
+/// Scans one installation whose identity and root authority were resolved by
+/// the add-game use case.
+pub(super) fn scan_explicit_install(
     context: &crate::Context,
     path: PathBuf,
-) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
+    game_id: GameId,
+    root_authority: RootAuthority,
+    explicit_executable: Option<PathBuf>,
+    root_change: ExplicitRootChange,
+    consolidation_candidates: &[GameId],
+) -> Result<ScanFolderCatalogResult, ServiceError> {
     let detector = LibraryPatternComponentDetector::windows_default()
         .map_err(|error| AppError::detection_failed(error.to_string()))?;
+    let source = ManualFolderGameSource::new(path)
+        .with_game_id(game_id)
+        .with_root_authority(root_authority);
+    let source = match explicit_executable {
+        Some(executable) => source.with_explicit_executable(executable),
+        None => source,
+    };
 
-    // Strategy is resolved after a single discover inside `scan_impl` so
-    // launcher-owned installs never get split into Manual sub-roots.
-    scan_impl(
+    scan_source_impl(
         ScanInputs {
             context,
             detector: &detector,
         },
-        &ManualFolderGameSource::new(path),
+        &source,
         DetectionMode::FullCached,
-        InstallRootStrategy::FromSelectedIdentity,
         None,
         None,
+        root_change,
+        consolidation_candidates,
     )
 }
 
@@ -122,26 +103,26 @@ struct ScanInputs<'a> {
     detector: &'a LibraryPatternComponentDetector,
 }
 
-fn scan_impl(
+fn scan_source_impl(
     inputs: ScanInputs<'_>,
     source: &ManualFolderGameSource,
     detection_mode: DetectionMode,
-    install_root_strategy: InstallRootStrategy,
     prefetched_cache: Option<&FileHashCache>,
     catalog_index: Option<&reconcile::CatalogInstallIndex>,
-) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
+    root_change: ExplicitRootChange,
+    consolidation_candidates: &[GameId],
+) -> Result<ScanFolderCatalogResult, ServiceError> {
     let storage = inputs.context.storage();
     let detector = inputs.detector;
 
     let selected_game = source.discover_game()?;
-    let _guard = crate::game_mutation_lock::enter_game_mutation_boundary(
-        inputs.context,
-        selected_game.id(),
-    )?;
-    let scope_root = selected_game.install_path().as_str().to_owned();
-    let install_root_strategy =
-        resolve_install_root_strategy(install_root_strategy, &selected_game);
-
+    let mut affected_ids = consolidation_candidates.to_vec();
+    affected_ids.push(selected_game.id().clone());
+    let _guards =
+        crate::game_mutation_lock::enter_game_mutation_boundaries(inputs.context, affected_ids)?;
+    if root_change != ExplicitRootChange::Unchanged {
+        ensure_root_change_not_blocked_before_scan(inputs.context, &selected_game)?;
+    }
     let libraries = detect_libraries(
         storage,
         detector,
@@ -149,22 +130,132 @@ fn scan_impl(
         detection_mode,
         prefetched_cache,
     )?;
+    let components = reconcile::build_graphics_components(&selected_game, &libraries)?;
+    if root_change != ExplicitRootChange::Unchanged {
+        ensure_root_change_preserves_state(inputs.context, &selected_game, &components)?;
+    }
+    let root_correction_recovery_bundle_path = if root_change == ExplicitRootChange::Narrowed {
+        archive_pruned_operation_history(inputs.context, &selected_game, &components)?
+    } else {
+        None
+    };
 
-    let install_roots = derive_install_roots(&selected_game, &libraries, install_root_strategy);
-
-    let results = persist_scan_results(
+    persist_scan_result(
         storage,
-        selected_game,
-        libraries,
-        install_roots,
-        catalog_index,
-    )?;
+        persist::PersistScanRequest {
+            game: selected_game,
+            libraries,
+            components: &components,
+            prune_empty_operations: root_change == ExplicitRootChange::Narrowed,
+            root_correction_recovery_bundle_path,
+            prefetched_catalog_index: catalog_index,
+            consolidation_candidates,
+        },
+    )
+}
 
-    prune::prune_stale_manual_games_under_scope(
-        storage,
-        &scope_root,
-        &prune::game_ids_from_scan_results(&results),
-    )?;
+fn archive_pruned_operation_history(
+    context: &crate::Context,
+    game: &renderpilot_domain::GameInstallation,
+    prospective_components: &[GraphicsComponent],
+) -> Result<Option<String>, ServiceError> {
+    let prospective_ids = prospective_components
+        .iter()
+        .map(|component| component.id().as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut archived_component_ids = context
+        .storage()
+        .list_operation_entries_for_game(game.id())?
+        .into_iter()
+        .flat_map(|entry| entry.into_parts().1)
+        .filter(|item| !prospective_ids.contains(item.component_id.as_str()))
+        .map(|item| item.component_id.as_str().to_owned())
+        .collect::<Vec<_>>();
+    archived_component_ids.sort();
+    archived_component_ids.dedup();
+    if archived_component_ids.is_empty() {
+        return Ok(None);
+    }
 
-    Ok(results)
+    let previous = context.storage().require_game(game.id())?;
+    let bundle = super::recovery_bundle::create_root_correction_recovery_bundle(
+        context.storage(),
+        game.id().as_str(),
+        previous.install_path().as_str(),
+        game.install_path().as_str(),
+        &archived_component_ids,
+    )?;
+    Ok(Some(bundle.to_string_lossy().to_string()))
+}
+
+fn ensure_root_change_preserves_state(
+    context: &crate::Context,
+    game: &renderpilot_domain::GameInstallation,
+    prospective_components: &[GraphicsComponent],
+) -> Result<(), ServiceError> {
+    let assessment = assess_root_change(context, game, Some(prospective_components))?;
+    match assessment.status {
+        super::RootCorrectionStatus::Ready => Ok(()),
+        super::RootCorrectionStatus::CleanupRequired => {
+            Err(ServiceError::RootCorrectionCleanupRequired {
+                game_id: assessment.game_id,
+                component_ids: assessment
+                    .cleanup_actions
+                    .into_iter()
+                    .map(|action| match action {
+                        super::RootCorrectionCleanupAction::RollbackComponent { component_id } => {
+                            component_id
+                        }
+                    })
+                    .collect(),
+            })
+        }
+        super::RootCorrectionStatus::Blocked => Err(ServiceError::RootCorrectionBlocked {
+            game_id: assessment.game_id,
+            blockers: assessment
+                .blockers
+                .into_iter()
+                .map(|blocker| blocker.as_str().to_owned())
+                .collect(),
+        }),
+    }
+}
+
+fn ensure_root_change_not_blocked_before_scan(
+    context: &crate::Context,
+    game: &renderpilot_domain::GameInstallation,
+) -> Result<(), ServiceError> {
+    let assessment = assess_root_change(context, game, None)?;
+    if assessment.status != super::RootCorrectionStatus::Blocked {
+        return Ok(());
+    }
+
+    Err(ServiceError::RootCorrectionBlocked {
+        game_id: assessment.game_id,
+        blockers: assessment
+            .blockers
+            .into_iter()
+            .map(|blocker| blocker.as_str().to_owned())
+            .collect(),
+    })
+}
+
+fn assess_root_change(
+    context: &crate::Context,
+    game: &renderpilot_domain::GameInstallation,
+    prospective_components: Option<&[GraphicsComponent]>,
+) -> Result<super::RootCorrectionAssessment, ServiceError> {
+    let executable_basenames = game
+        .executable_candidates()
+        .iter()
+        .filter_map(|candidate| std::path::Path::new(candidate.as_str()).file_name())
+        .map(|name| name.to_string_lossy().to_ascii_lowercase())
+        .collect();
+    super::root_correction::assess(
+        context,
+        game.id(),
+        game.install_path().as_str(),
+        &executable_basenames,
+        prospective_components,
+    )
 }

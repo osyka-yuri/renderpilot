@@ -23,4 +23,5 @@ mod tests;
 
 pub use read::{read_all_setting_states, read_setting_state};
 pub use target::{SettingTarget, WriteOp};
+pub(crate) use write::restore_game_baselines;
 pub use write::{resolve_revert_op, validate_value_supported, write_setting_value};

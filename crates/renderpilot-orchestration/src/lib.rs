@@ -31,8 +31,8 @@ mod util;
 
 pub use context::Context;
 
-pub use error::ServiceError;
 pub(crate) use error::failed;
+pub use error::{InvalidInstallRootReason, ServiceError};
 
 pub use renderpilot_application as application;
 pub use renderpilot_detection as detection;

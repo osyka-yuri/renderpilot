@@ -22,6 +22,19 @@ pub(crate) struct GameMutationGuard {
     _guard: OwnedMutexGuard<()>,
 }
 
+/// Proof that the caller owns mutation boundaries for a sorted set of games.
+pub(crate) struct GameMutationGuardSet {
+    _guards: Vec<GameMutationGuard>,
+}
+
+impl GameMutationGuardSet {
+    /// Protected identities in deterministic lock order.
+    #[cfg(test)]
+    pub(crate) fn game_ids(&self) -> impl Iterator<Item = &GameId> {
+        self._guards.iter().map(GameMutationGuard::game_id)
+    }
+}
+
 impl GameMutationGuard {
     /// Returns the game protected by this guard.
     pub(crate) fn game_id(&self) -> &GameId {
@@ -78,6 +91,29 @@ pub(crate) fn enter_game_mutation_boundary(
     crate::file_mutation::recover_pending(context, &guard)?;
     crate::addons::reconcile_legacy_managed_files_locked(context, &guard, game_id)?;
     Ok(guard)
+}
+
+/// Acquires every requested game boundary in stable id order.
+///
+/// Sorting is the global deadlock-avoidance rule for root correction and
+/// legacy-card consolidation.
+pub(crate) fn enter_game_mutation_boundaries(
+    context: &crate::Context,
+    game_ids: impl IntoIterator<Item = GameId>,
+) -> Result<GameMutationGuardSet, crate::ServiceError> {
+    let mut game_ids = game_ids.into_iter().collect::<Vec<_>>();
+    game_ids.sort();
+    game_ids.dedup();
+
+    let mut guards = Vec::with_capacity(game_ids.len());
+    for game_id in game_ids {
+        guards.push(blocking_lock(&game_id));
+    }
+    for guard in &guards {
+        crate::file_mutation::recover_pending(context, guard)?;
+        crate::addons::reconcile_legacy_managed_files_locked(context, guard, guard.game_id())?;
+    }
+    Ok(GameMutationGuardSet { _guards: guards })
 }
 
 /// Async variant for callers that cannot block (e.g. Tauri async commands).
@@ -139,6 +175,50 @@ mod tests {
         assert_eq!(first.game_id(), &game_id);
         drop(first);
         assert!(try_lock(&game_id).is_some());
+    }
+
+    #[test]
+    fn multi_game_boundary_sorts_and_deduplicates_ids() {
+        let temp = tempfile::tempdir().expect("temp");
+        let context = crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context");
+        let a = GameId::new("game:a").expect("a");
+        let b = GameId::new("game:b").expect("b");
+        let set = enter_game_mutation_boundaries(&context, [b.clone(), a.clone(), b.clone()])
+            .expect("locks");
+        assert_eq!(set.game_ids().collect::<Vec<_>>(), vec![&a, &b]);
+    }
+
+    #[test]
+    fn reverse_multi_game_requests_complete_without_deadlock() {
+        use std::sync::{Arc, Barrier, mpsc};
+        use std::time::Duration;
+
+        let temp = tempfile::tempdir().expect("temp");
+        let context =
+            Arc::new(crate::Context::open_at(temp.path().join("catalog.sqlite")).expect("context"));
+        let barrier = Arc::new(Barrier::new(3));
+        let (done_tx, done_rx) = mpsc::channel();
+
+        for ids in [["game:b", "game:a"], ["game:a", "game:b"]] {
+            let context = Arc::clone(&context);
+            let barrier = Arc::clone(&barrier);
+            let done_tx = done_tx.clone();
+            std::thread::spawn(move || {
+                let ids = ids.map(|id| GameId::new(id).expect("id"));
+                barrier.wait();
+                let guard =
+                    enter_game_mutation_boundaries(&context, ids).expect("multi-game locks");
+                done_tx.send(()).expect("completion");
+                drop(guard);
+            });
+        }
+        barrier.wait();
+        done_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("first lock set should complete");
+        done_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("reverse lock set should complete");
     }
 
     #[tokio::test]

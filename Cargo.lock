@@ -3142,6 +3142,7 @@ version = "1.7.2"
 dependencies = [
  "dirs",
  "renderpilot-application",
+ "renderpilot-detection",
  "renderpilot-domain",
  "serde",
  "serde_json",

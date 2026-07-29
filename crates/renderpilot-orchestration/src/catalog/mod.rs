@@ -32,17 +32,22 @@ pub(crate) fn game_root_for_mutation(
         .ok_or_else(|| AppError::game_not_found(game_id.as_str()))
 }
 
-use self::scan::scan_folder_impl;
-
+mod add_game;
 #[cfg(windows)]
 pub mod auto_scan;
 mod cards;
 pub(crate) mod cascade;
 mod developer_mode;
 pub mod execute;
+mod install_boundary;
+mod install_paths;
+mod managed_state;
 mod operations;
 pub mod output;
 mod read_service;
+mod recovery_bundle;
+mod remove_game;
+mod root_correction;
 mod runtime_compatibility;
 /// Auto-discovery and scanning.
 pub mod scan;
@@ -50,9 +55,6 @@ mod source_assessment;
 mod swap;
 #[cfg(test)]
 mod test_support;
-
-#[cfg(windows)]
-pub use scan::prune_auto_scan_orphans;
 
 /// The game installation and detected library files produced by a folder scan.
 pub struct ScanFolderCatalogResult {
@@ -62,6 +64,24 @@ pub struct ScanFolderCatalogResult {
     pub libraries: Vec<DetectedLibraryFile>,
     /// How persisted card facts changed compared with the previous scan.
     pub change: CatalogScanChange,
+    /// Proven legacy-card consolidation performed with this scan.
+    pub consolidation: ScanConsolidationOutcome,
+    /// Durable snapshot created before root correction archived operation
+    /// history outside the corrected installation boundary.
+    pub root_correction_recovery_bundle_path: Option<String>,
+}
+
+/// Observable state migration performed by a full installation scan.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScanConsolidationOutcome {
+    /// False legacy cards removed after one-to-one component proof.
+    pub removed_game_ids: Vec<GameId>,
+    /// Candidate legacy cards retained because proof was insufficient.
+    pub retained_candidate_game_ids: Vec<GameId>,
+    /// Tables whose destination rows won a key conflict.
+    pub destination_wins_conflicts: Vec<String>,
+    /// Durable recovery bundle created before a lossy conflict.
+    pub recovery_bundle_path: Option<String>,
 }
 
 /// Identity-level outcome for one scanned installation.
@@ -241,63 +261,15 @@ pub(crate) fn merge_addon_capabilities(
         .collect()
 }
 
-/// Scans a folder path for game installations and persists or updates catalog rows.
-pub fn scan_folder(
-    context: &crate::Context,
-    path: PathBuf,
-) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
-    let _scan_guard = context.catalog_scan_guard();
-    scan_folder_impl(context, path)
-}
-
-/// Scans a folder and returns only the identity delta needed by callers that
-/// refresh an existing projection. No per-game details models are built.
-pub fn scan_folder_delta(
-    context: &crate::Context,
-    path: PathBuf,
-) -> Result<CatalogScanDelta, ServiceError> {
-    let _scan_guard = context.catalog_scan_guard();
-    let before = context
-        .storage()
-        .list_games()?
-        .into_iter()
-        .map(|game| game.id().clone())
-        .collect::<HashSet<_>>();
-    let results = scan_folder_impl(context, path)?;
-    let after = context
-        .storage()
-        .list_games()?
-        .into_iter()
-        .map(|game| game.id().clone())
-        .collect::<HashSet<_>>();
-
-    let mut added_game_ids = Vec::new();
-    let mut updated_game_ids = Vec::new();
-    for result in results {
-        match result.change {
-            CatalogScanChange::Unchanged => {}
-            CatalogScanChange::Added => added_game_ids.push(result.game.id().clone()),
-            CatalogScanChange::Updated => updated_game_ids.push(result.game.id().clone()),
-        }
-    }
-    let mut removed_game_ids = before.difference(&after).cloned().collect::<Vec<_>>();
-    added_game_ids.sort();
-    added_game_ids.dedup();
-    updated_game_ids.sort();
-    updated_game_ids.dedup();
-    removed_game_ids.sort();
-
-    Ok(CatalogScanDelta {
-        added_game_ids,
-        updated_game_ids,
-        removed_game_ids,
-    })
-}
-
 /// Returns all game installations stored in the catalog.
 pub fn list_games(context: &crate::Context) -> Result<Vec<GameInstallation>, ServiceError> {
     context.storage().list_games().map_err(Into::into)
 }
+
+pub use root_correction::{
+    RootCorrectionAssessment, RootCorrectionBlockerKind, RootCorrectionCleanupAction,
+    RootCorrectionStatus,
+};
 
 /// The per-query-constant inputs for replacement-candidate matching: the local +
 /// catalog artifact universe and the candidate context.
@@ -607,6 +579,14 @@ pub fn list_artifacts(
 }
 
 // Re-export core operations from sub-modules directly.
+pub use add_game::{
+    AddGameCatalogAction, AddGameDecision, AddGameDisposition, AddGameInspection, AddGameOption,
+    AddGameRequest, AddGameResult, AddGameReview, AddGameRootChoice, AddGameUnavailableReason,
+    AddGameWarning, ExecutableInspection, InstallBoundaryEvidence, InstallBoundaryInspection,
+    InstallBoundaryKind, InstallRelationship, InstallRelationshipKind,
+    RootRecommendationConfidence, RootRecommendationInspection, RootRecommendationSource,
+    TraversalCompleteness, add_game, inspect_game_install,
+};
 pub use cards::{CatalogCardRiskLevel, CatalogRevision, CatalogSnapshot, GameCardData};
 pub use execute::{
     D3d12ExecutableActionResult, D3d12ExecutableActionResultKind, RollbackPlan, apply_swap,
@@ -614,6 +594,7 @@ pub use execute::{
 };
 pub use operations::list_operations;
 pub use read_service::CatalogReadService;
+pub use remove_game::{RemoveGameFromCatalogResult, remove_game_from_catalog};
 pub use swap::{build_swap_plan, find_candidates};
 
 /// Returns the distinct graphics-technology library tags present in the catalog.

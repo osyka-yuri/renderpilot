@@ -1,490 +1,480 @@
-use std::{
-    collections::BTreeSet,
-    ffi::OsString,
-    fs,
-    path::{Path, PathBuf},
+use std::{ffi::OsString, fs, path::Path};
+
+use renderpilot_orchestration::application::GameRepository;
+use renderpilot_orchestration::domain::{
+    ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
+    GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority,
+    Swappability,
 };
-
-use renderpilot_orchestration::Context;
-
+use renderpilot_orchestration::{Context, catalog};
 use serde_json::Value;
 
-use crate::{
-    catalog,
-    commands::test_support::{CatalogFixture, TempGameFolder, path_string},
-};
+use crate::commands::test_support::{CatalogFixture, TempGameFolder, path_string};
 
-const SCAN_FOLDER_COMMAND: &str = "scan-folder";
-
+const ADD_GAME_COMMAND: &str = "add-game";
 const DLSS_DLL_FILE_NAME: &str = "nvngx_dlss.dll";
-const DLSS_TECHNOLOGY: &str = "dlss_super_resolution";
-const EMPTY_FILE_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 #[test]
-fn scan_folder_outputs_single_game_json_with_detected_dlss_component() {
-    let fixture = CatalogFixture::new("scan-output");
-    let folder = TempGameFolder::new("cli-scan-folder");
+fn add_game_outputs_one_structured_result() {
+    let fixture = CatalogFixture::new("add-game-output");
+    let folder = TempGameFolder::new("cli-add-game");
+    create_game_executable(folder.path(), "BlackFlag.exe");
+    create_dlss_file(folder.path(), b"dlss");
 
-    create_dlss_file(folder.path(), b"");
+    let output = run_add_game_json(&fixture, folder.path());
 
-    let output = run_scan_folder_json(&fixture, folder.path());
-
-    assert!(
-        required_field(&output, "game").is_object(),
-        "scan output should contain object field `game`, got: {output:#?}",
-    );
-
-    let component = single_component(&output);
-    assert_dlss_component(component);
+    assert!(output["gameId"].as_str().is_some());
+    assert_eq!(output["effectiveRoot"], path_string(folder.path()));
+    assert_eq!(output["disposition"], "added");
+    assert_eq!(output["detectedLibraryCount"], 1);
+    assert!(output["warnings"].is_array());
 }
 
 #[test]
-fn rescan_parent_prunes_removed_manual_child_game() {
-    let fixture = CatalogFixture::new("scan-prune");
-    let context = fixture.context();
-    let parent = TempGameFolder::new("cli-scan-prune");
+fn add_game_is_idempotent_and_keeps_stable_game_id() {
+    let fixture = CatalogFixture::new("add-game-repeat");
+    let folder = TempGameFolder::new("cli-add-game-repeat");
+    create_game_executable(folder.path(), "Game.exe");
+    create_dlss_file(folder.path(), b"dlss");
 
-    let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
-    let game_b = create_child_game_with_dlss(parent.path(), "GameB", b"b-bytes");
+    let first = run_add_game_json(&fixture, folder.path());
+    let second = run_add_game_json(&fixture, folder.path());
 
-    scan_catalog_folder(&context, parent.path(), "first parent scan should succeed");
-    assert_catalog_game_count(&context, 2, "first parent scan should discover two games");
-
-    fs::remove_dir_all(&game_b).unwrap_or_else(|error| {
-        panic!(
-            "GameB directory should be removed at `{}`: {error}",
-            game_b.display()
-        )
-    });
-
-    scan_catalog_folder(&context, parent.path(), "parent rescan should succeed");
-
-    let install_paths = catalog_install_paths(&context);
-
+    assert_eq!(first["gameId"], second["gameId"]);
+    assert_eq!(second["disposition"], "unchanged");
     assert_eq!(
-        install_paths.len(),
-        1,
-        "removed child game should be pruned, got install paths: {install_paths:#?}",
+        catalog::list_games(&fixture.context())
+            .expect("games")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn black_flag_nested_middleware_fixture_creates_exactly_one_card() {
+    let fixture = CatalogFixture::new("issue-5-black-flag");
+    let folder = TempGameFolder::new("Assassins-Creed-Black-Flag");
+    create_game_executable(folder.path(), "AC4BFSP.exe");
+    write_file(&folder.path().join("dstorage.dll"), b"direct-storage");
+    write_file(&folder.path().join("D3D12").join("D3D12Core.dll"), b"d3d12");
+    write_file(
+        &folder
+            .path()
+            .join("NVStreamline")
+            .join("production")
+            .join(DLSS_DLL_FILE_NAME),
+        b"dlss",
     );
 
-    let expected_scope = path_string(parent.path());
-    assert_eq!(
-        install_paths[0], expected_scope,
-        "when one subdirectory remains, install path stays the user-selected parent scope; got install paths: {install_paths:#?}",
-    );
+    run_add_game_json(&fixture, folder.path());
 
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 1);
+    assert_eq!(games[0].install_path().as_str(), path_string(folder.path()));
     assert!(
-        install_paths
+        games
             .iter()
-            .all(|path| !path_ends_with(path, "GameB")),
-        "GameB catalog row should be removed, got install paths: {install_paths:#?}",
+            .all(|game| !game.install_path().as_str().ends_with("/D3D12")
+                && !game.install_path().as_str().contains("/NVStreamline")),
+        "middleware directories must never become game roots"
     );
-
+    let components = fixture.storage().list_all_components().expect("components");
     assert!(
-        path_ends_with(&game_a, "GameA"),
-        "test setup should create GameA path, got `{}`",
-        game_a.display(),
+        components.len() >= 2,
+        "root and nested component files should remain on the one card"
     );
 }
 
 #[test]
-fn scan_child_does_not_prune_sibling_manual_game() {
-    let fixture = CatalogFixture::new("scan-prune-sibling");
-    let context = fixture.context();
-    let parent = TempGameFolder::new("cli-scan-prune-sib");
+fn inspection_does_not_promote_a_game_library_container() {
+    let fixture = CatalogFixture::new("add-game-library-container-advice");
+    let library = TempGameFolder::new("add-game-library-container");
+    let selected = library.path().join("The Last of Us Part I");
+    let sibling = library.path().join("Another Game");
+    create_game_executable(&selected, "tlou-i.exe");
+    create_game_executable(&sibling, "AnotherGame.exe");
+    create_dlss_file(&selected, b"dlss");
+    fs::create_dir_all(selected.join("a/b/c/d/e")).expect("deep selected tree");
 
-    let game_a = create_child_game_with_dlss(parent.path(), "GameA", b"a-bytes");
-    let _game_b = create_child_game_with_dlss(parent.path(), "GameB", b"b-bytes");
-
-    scan_catalog_folder(&context, parent.path(), "parent scan should succeed");
-    assert_catalog_game_count(&context, 2, "parent scan should discover two games");
-
-    scan_catalog_folder(&context, &game_a, "child scan should succeed");
-
-    assert_catalog_game_count(
-        &context,
-        2,
-        "sibling manual game must remain when only one subdirectory is scanned",
-    );
-}
-
-#[test]
-fn scan_parent_outputs_games_array_for_multiple_child_installs() {
-    let fixture = CatalogFixture::new("scan-multi");
-    let parent = TempGameFolder::new("cli-scan-parent");
-
-    create_child_game_with_dlss(parent.path(), "GameAlpha", b"alpha-bytes");
-    create_child_game_with_dlss(parent.path(), "GameBeta", b"beta-bytes");
-
-    let output = run_scan_folder_json(&fixture, parent.path());
-    let games = required_array(&output, "games");
+    let inspection =
+        catalog::inspect_game_install(&fixture.context(), &selected).expect("inspection");
 
     assert_eq!(
-        games.len(),
-        2,
-        "two child directories should produce two game entries, got: {output:#?}",
+        inspection.selected_root.path().as_str(),
+        path_string(&selected)
     );
-
-    assert_game_titles(games, ["GameAlpha", "GameBeta"]);
+    assert_eq!(
+        inspection.recommendation, None,
+        "a sibling game's executable must not turn the library container into one install"
+    );
+    assert!(
+        inspection
+            .warnings
+            .iter()
+            .all(|warning| !matches!(warning, catalog::AddGameWarning::FilesystemProbeError)),
+        "an intentional depth limit must not be presented as an access failure: {:?}",
+        inspection.warnings
+    );
 }
 
 #[test]
-fn scan_folder_reports_missing_folder() {
-    let fixture = CatalogFixture::new("scan-missing-folder");
-    let folder = TempGameFolder::new("missing-cli-scan-folder");
+fn inspection_recommends_parent_with_a_root_level_game_executable() {
+    let fixture = CatalogFixture::new("add-game-parent-root-advice");
+    let library = TempGameFolder::new("add-game-parent-root");
+    let game_root = library.path().join("Black Flag");
+    let selected = game_root.join("D3D12");
+    create_game_executable(&game_root, "AC4BFSP.exe");
+    write_file(&selected.join("D3D12Core.dll"), b"d3d12");
+
+    let inspection =
+        catalog::inspect_game_install(&fixture.context(), &selected).expect("inspection");
+
+    assert_eq!(
+        inspection
+            .recommendation
+            .as_ref()
+            .map(|recommendation| recommendation.root.path().as_str().to_owned()),
+        Some(path_string(&game_root)),
+        "root-local executable evidence should still recover a nested middleware selection"
+    );
+    assert!(
+        inspection
+            .warnings
+            .iter()
+            .all(|warning| !matches!(warning, catalog::AddGameWarning::InsideExistingInstall)),
+        "a recommendation is presented as a root choice, not as a speculative warning"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn black_flag_parent_scan_consolidates_proven_false_legacy_children() {
+    let (fixture, folder, output) = run_black_flag_legacy_consolidation_fixture();
+
+    assert_eq!(
+        output["consolidatedGameIds"]
+            .as_array()
+            .expect("consolidated ids")
+            .len(),
+        2,
+    );
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 1);
+    assert_eq!(games[0].install_path().as_str(), path_string(folder.path()));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn black_flag_parent_scan_retains_legacy_children_without_launcher_inventory() {
+    let (fixture, _folder, output) = run_black_flag_legacy_consolidation_fixture();
+
+    assert_eq!(
+        output["consolidatedGameIds"]
+            .as_array()
+            .expect("consolidated ids")
+            .len(),
+        0,
+        "missing Windows launcher inventory must never be interpreted as proof that no child is launcher-owned",
+    );
+    assert!(
+        output["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| {
+                warning["code"] == "legacy_cards_retained" && warning["parameters"]["count"] == 2
+            }),
+        "the fail-closed retention must remain visible to callers",
+    );
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 3);
+}
+
+fn run_black_flag_legacy_consolidation_fixture() -> (CatalogFixture, TempGameFolder, Value) {
+    let fixture = CatalogFixture::new("issue-5-black-flag-legacy");
+    let folder = TempGameFolder::new("Assassins-Creed-Black-Flag-Legacy");
+    create_game_executable(folder.path(), "AC4BFSP.exe");
+    let d3d12 = folder.path().join("D3D12").join("D3D12Core.dll");
+    let streamline = folder
+        .path()
+        .join("NVStreamline")
+        .join("production")
+        .join(DLSS_DLL_FILE_NAME);
+    write_file(&d3d12, b"d3d12");
+    write_file(&streamline, b"dlss");
+    seed_legacy_child(
+        &fixture,
+        "manual:false-d3d12",
+        &folder.path().join("D3D12"),
+        &d3d12,
+        GraphicsTechnology::D3D12Agility,
+    );
+    seed_legacy_child(
+        &fixture,
+        "manual:false-streamline",
+        &folder.path().join("NVStreamline"),
+        &streamline,
+        GraphicsTechnology::DlssSuperResolution,
+    );
+
+    let output = run_add_game_json(&fixture, folder.path());
+
+    (fixture, folder, output)
+}
+
+#[test]
+fn parent_with_an_independent_pe_install_is_rejected_without_consolidation() {
+    let fixture = CatalogFixture::new("issue-5-independent-child");
+    let folder = TempGameFolder::new("Parent-With-Independent-Child");
+    create_game_executable(folder.path(), "Parent.exe");
+    let false_component = folder.path().join("D3D12").join("D3D12Core.dll");
+    let independent_root = folder.path().join("Independent");
+    let independent_component = independent_root.join(DLSS_DLL_FILE_NAME);
+    write_file(&false_component, b"d3d12");
+    write_file(&independent_component, b"dlss");
+    create_game_executable(&independent_root, "Independent.exe");
+    seed_legacy_child(
+        &fixture,
+        "manual:false-child",
+        &folder.path().join("D3D12"),
+        &false_component,
+        GraphicsTechnology::D3D12Agility,
+    );
+    seed_legacy_child(
+        &fixture,
+        "manual:independent-child",
+        &independent_root,
+        &independent_component,
+        GraphicsTechnology::DlssSuperResolution,
+    );
+
+    let error = fixture.run(add_game_args(folder.path())).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("contains_multiple_catalog_installs"),
+        "unexpected error: {error}"
+    );
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 2);
+    assert!(
+        games
+            .iter()
+            .any(|game| game.id().as_str() == "manual:false-child"),
+        "a rejected parent must not consolidate even a proven-false child"
+    );
+    assert!(
+        games
+            .iter()
+            .any(|game| game.id().as_str() == "manual:independent-child"),
+    );
+}
+
+#[test]
+fn add_game_treats_selected_parent_as_one_install_not_a_batch() {
+    let fixture = CatalogFixture::new("add-game-parent");
+    let folder = TempGameFolder::new("cli-add-game-parent");
+    create_game_executable(folder.path(), "ParentGame.exe");
+    create_dlss_file(&folder.path().join("D3D12"), b"nested");
+    create_dlss_file(&folder.path().join("NVStreamline"), b"nested");
+
+    run_add_game_json(&fixture, folder.path());
+
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 1);
+    assert_eq!(games[0].install_path().as_str(), path_string(folder.path()));
+}
+
+#[test]
+fn add_game_reports_missing_folder() {
+    let fixture = CatalogFixture::new("add-game-missing-folder");
+    let folder = TempGameFolder::new("missing-cli-add-game");
     let missing_path = folder.path().to_path_buf();
 
-    ensure_path_does_not_exist(&missing_path);
-
-    let error = fixture.run(scan_folder_args(&missing_path)).unwrap_err();
-    let message = error.to_string();
-
-    assert!(
-        message.contains("game folder does not exist"),
-        "missing folder error should explain the problem, got: {message}",
-    );
+    let error = fixture.run(add_game_args(&missing_path)).unwrap_err();
+    assert!(error.to_string().contains("game folder does not exist"));
 }
 
 #[test]
-fn rescan_preserves_steam_launcher_when_manifest_disappears() {
-    use renderpilot_orchestration::domain::Launcher;
+fn add_game_explicit_executable_is_persisted_when_ranking_rejects_it() {
+    let fixture = CatalogFixture::new("add-game-explicit-executable");
+    let folder = TempGameFolder::new("explicit-executable");
+    let executable = folder.path().join("CustomLauncher.exe");
+    create_game_executable(folder.path(), "CustomLauncher.exe");
 
-    let fixture = CatalogFixture::new("scan-preserve-steam");
-    let context = fixture.context();
-    let root = TempGameFolder::new("cli-scan-preserve-steam");
+    fixture
+        .run(vec![
+            OsString::from(ADD_GAME_COMMAND),
+            folder.path().as_os_str().to_owned(),
+            OsString::from("--executable"),
+            executable.as_os_str().to_owned(),
+            OsString::from("--root-choice"),
+            OsString::from("selected"),
+        ])
+        .expect("explicit executable should make the install addable");
+    fixture
+        .run(vec![
+            OsString::from(ADD_GAME_COMMAND),
+            folder.path().as_os_str().to_owned(),
+            OsString::from("--root-choice"),
+            OsString::from("selected"),
+        ])
+        .expect("idempotent refresh should preserve the explicit executable");
 
-    let steamapps = root.path().join("steamapps");
-    let game_dir = steamapps.join("common").join("PreserveGame");
-    create_dlss_file(&game_dir, b"steam-preserve");
-    let manifest_path =
-        write_steam_appmanifest(&steamapps, "424242", "PreserveGame", "Preserve Me");
-
-    scan_catalog_folder(&context, &game_dir, "initial steam scan should succeed");
-
-    let first = catalog::list_games(&context)
-        .expect("games should list")
-        .into_iter()
-        .next()
-        .expect("one game after first scan");
-    assert_eq!(first.identity().launcher(), Launcher::Steam);
-    assert_eq!(first.identity().external_id(), Some("424242"));
-    assert_eq!(first.identity().title(), "Preserve Me");
-    let first_id = first.id().as_str().to_owned();
-
-    // Simulate a re-scan where Steam metadata is no longer readable.
-    fs::remove_file(&manifest_path).expect("appmanifest should be removable");
-
-    scan_catalog_folder(
-        &context,
-        &game_dir,
-        "rescan without manifest should succeed",
-    );
-
-    let games = catalog::list_games(&context).expect("games should list after rescan");
-    assert_eq!(games.len(), 1, "rescan must not create a second Manual row");
-
-    let second = &games[0];
-    assert_eq!(
-        second.id().as_str(),
-        first_id,
-        "game id must stay stable across rescan"
-    );
-    assert_eq!(
-        second.identity().launcher(),
-        Launcher::Steam,
-        "launcher must not demote to Manual when catalog already has Steam"
-    );
-    assert_eq!(second.identity().external_id(), Some("424242"));
-    assert_eq!(second.identity().title(), "Preserve Me");
-}
-
-#[test]
-fn steam_game_with_diverging_dll_paths_stays_single_steam_install() {
-    use renderpilot_orchestration::domain::Launcher;
-
-    let fixture = CatalogFixture::new("scan-steam-no-split");
-    let context = fixture.context();
-    let root = TempGameFolder::new("cli-scan-steam-no-split");
-
-    let steamapps = root.path().join("steamapps");
-    let game_dir = steamapps.join("common").join("SplitTrap");
-    create_dlss_file(&game_dir.join("bin").join("x64"), b"left-branch");
-    create_dlss_file(&game_dir.join("engine").join("plugins"), b"right-branch");
-    write_steam_appmanifest(&steamapps, "777", "SplitTrap", "Split Trap");
-
-    scan_catalog_folder(&context, &game_dir, "steam game scan should succeed");
-
-    let games = catalog::list_games(&context).expect("games should list");
-    assert_eq!(
-        games.len(),
-        1,
-        "launcher-owned install must not split into Manual sub-roots, got: {games:#?}",
-    );
-    assert_eq!(games[0].identity().launcher(), Launcher::Steam);
-    assert_eq!(games[0].identity().external_id(), Some("777"));
-}
-
-#[test]
-fn gog_info_file_tags_scanned_folder_as_gog() {
-    use renderpilot_orchestration::domain::Launcher;
-
-    let fixture = CatalogFixture::new("scan-gog-tag");
-    let context = fixture.context();
-    let folder = TempGameFolder::new("cli-scan-gog-tag");
-
-    create_dlss_file(folder.path(), b"gog-bytes");
-    write_gog_info(folder.path(), "1207659999", "GOG Tagged Game");
-
-    scan_catalog_folder(&context, folder.path(), "gog scan should succeed");
-
-    let games = catalog::list_games(&context).expect("games should list");
+    let games = catalog::list_games(&fixture.context()).expect("games");
     assert_eq!(games.len(), 1);
-    assert_eq!(games[0].identity().launcher(), Launcher::Gog);
-    assert_eq!(games[0].identity().external_id(), Some("1207659999"));
-    assert_eq!(games[0].identity().title(), "GOG Tagged Game");
+    assert_eq!(
+        games[0]
+            .confirmed_executable()
+            .map(|candidate| candidate.as_str()),
+        Some("CustomLauncher.exe")
+    );
+    assert!(
+        games[0]
+            .executable_candidates()
+            .iter()
+            .any(|candidate| candidate.as_str() == "CustomLauncher.exe"),
+    );
 }
 
-fn write_steam_appmanifest(
-    steamapps: &Path,
-    app_id: &str,
-    installdir: &str,
-    name: &str,
-) -> PathBuf {
-    fs::create_dir_all(steamapps).expect("steamapps dir should exist");
-    let path = steamapps.join(format!("appmanifest_{app_id}.acf"));
-    fs::write(
-        &path,
-        format!(
-            r#""AppState"
-{{
-    "appid" "{app_id}"
-    "installdir" "{installdir}"
-    "name" "{name}"
-}}
-"#
-        ),
+#[test]
+fn root_correction_remaps_and_preserves_confirmed_executable() {
+    let fixture = CatalogFixture::new("add-game-root-correction-executable");
+    let parent = TempGameFolder::new("root-correction-parent");
+    let child = parent.path().join("Bin");
+    create_game_executable(&child, "CustomLauncher.exe");
+    write_file(&parent.path().join("Data/game.pak"), b"distribution");
+
+    let stable_id = GameId::new("game:root-correction-stable").expect("game id");
+    let existing = GameInstallation::new(
+        GameIdentity::new(stable_id.clone(), "Nested install", Launcher::Manual).expect("identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(path_string(&child)).expect("child root"),
     )
-    .expect("appmanifest should be written");
-    path
-}
+    .with_root_authority(RootAuthority::UserConfirmed)
+    .with_confirmed_executable(PathRef::new("CustomLauncher.exe").expect("confirmed executable"));
+    fixture
+        .storage()
+        .upsert_game(&existing)
+        .expect("seed existing card");
 
-fn write_gog_info(install_dir: &Path, game_id: &str, name: &str) {
-    fs::write(
-        install_dir.join(format!("goggame-{game_id}.info")),
-        format!(
-            r#"{{
-            "gameId": "{game_id}",
-            "name": "{name}",
-            "playTasks": [{{ "type": "FileTask", "isPrimary": true, "path": "Game.exe" }}]
-        }}"#
-        ),
-    )
-    .expect("goggame info should be written");
-}
+    let output = fixture
+        .run(vec![
+            OsString::from(ADD_GAME_COMMAND),
+            parent.path().as_os_str().to_owned(),
+            OsString::from("--root-choice"),
+            OsString::from("selected"),
+            OsString::from("--allow-root-correction"),
+        ])
+        .expect("explicit root correction");
+    let output: Value = serde_json::from_str(&output).expect("root-correction JSON");
+    assert_eq!(output["gameId"], stable_id.as_str());
+    assert_eq!(output["disposition"], "root_corrected");
 
-fn create_child_game_with_dlss(parent: &Path, game_name: &str, contents: &[u8]) -> PathBuf {
-    let game_path = parent.join(game_name);
-    create_dlss_file(&game_path, contents);
-    game_path
+    let games = catalog::list_games(&fixture.context()).expect("games");
+    assert_eq!(games.len(), 1);
+    assert_eq!(games[0].id(), &stable_id);
+    assert_eq!(games[0].install_path().as_str(), path_string(parent.path()));
+    assert_eq!(
+        games[0]
+            .confirmed_executable()
+            .map(|candidate| candidate.as_str()),
+        Some("Bin/CustomLauncher.exe"),
+    );
 }
 
 pub(super) fn create_dlss_file(folder: &Path, contents: &[u8]) {
-    fs::create_dir_all(folder).unwrap_or_else(|error| {
-        panic!(
-            "game folder should be created at `{}`: {error}",
-            folder.display()
-        )
-    });
-
-    let dlss_path = folder.join(DLSS_DLL_FILE_NAME);
-
-    fs::write(&dlss_path, contents).unwrap_or_else(|error| {
-        panic!(
-            "DLSS test file should be written at `{}`: {error}",
-            dlss_path.display()
-        )
-    });
+    write_file(&folder.join(DLSS_DLL_FILE_NAME), contents);
 }
 
-fn ensure_path_does_not_exist(path: &Path) {
-    if !path.exists() {
-        return;
-    }
-
-    fs::remove_dir_all(path).unwrap_or_else(|error| {
-        panic!(
-            "test path should be removable before missing-folder assertion at `{}`: {error}",
-            path.display()
-        )
-    });
-}
-
-fn run_scan_folder_json(fixture: &CatalogFixture, path: &Path) -> Value {
-    let output = run_scan_folder(fixture, path);
-
-    serde_json::from_str(&output).unwrap_or_else(|error| {
-        panic!(
-            "scan-folder output should be valid JSON for `{}`: {error}\nOutput:\n{output}",
-            path.display(),
-        )
-    })
-}
-
-fn run_scan_folder(fixture: &CatalogFixture, path: &Path) -> String {
-    fixture.run(scan_folder_args(path)).unwrap_or_else(|error| {
-        panic!(
-            "scan-folder command should succeed for `{}`: {error}",
-            path.display()
-        )
-    })
+pub(super) fn create_game_executable(folder: &Path, name: &str) {
+    let mut bytes = vec![0_u8; 0x84];
+    bytes[..2].copy_from_slice(b"MZ");
+    bytes[0x3c..0x40].copy_from_slice(&0x80_u32.to_le_bytes());
+    bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+    write_file(&folder.join(name), &bytes);
 }
 
 pub(super) fn scan_catalog_folder(context: &Context, path: &Path, message: &str) {
-    catalog::scan_folder(context, path.to_path_buf())
+    if !path.join("RenderPilotTestGame.exe").is_file() {
+        create_game_executable(path, "RenderPilotTestGame.exe");
+    }
+    let inspection = catalog::inspect_game_install(context, path)
         .unwrap_or_else(|error| panic!("{message} for `{}`: {error}", path.display()));
+    catalog::add_game(
+        context,
+        catalog::AddGameRequest {
+            selected_root: path.to_path_buf(),
+            root_choice: catalog::AddGameRootChoice::Selected,
+            allow_root_correction: false,
+            chosen_executable: None,
+            inspection_fingerprint: inspection.inspection_fingerprint,
+        },
+    )
+    .unwrap_or_else(|error| panic!("{message} for `{}`: {error}", path.display()));
 }
 
-fn scan_folder_args(path: &Path) -> Vec<OsString> {
+fn run_add_game_json(fixture: &CatalogFixture, path: &Path) -> Value {
+    let output = fixture.run(add_game_args(path)).unwrap_or_else(|error| {
+        panic!(
+            "add-game command should succeed for `{}`: {error}",
+            path.display()
+        )
+    });
+    serde_json::from_str(&output).unwrap_or_else(|error| {
+        panic!(
+            "add-game output should be valid JSON for `{}`: {error}\n{output}",
+            path.display()
+        )
+    })
+}
+
+fn add_game_args(path: &Path) -> Vec<OsString> {
     vec![
-        OsString::from(SCAN_FOLDER_COMMAND),
+        OsString::from(ADD_GAME_COMMAND),
         path.as_os_str().to_owned(),
     ]
 }
 
-fn assert_catalog_game_count(context: &Context, expected: usize, message: &str) {
-    let actual = catalog_install_paths(context).len();
-
-    assert_eq!(actual, expected, "{message}");
+fn write_file(path: &Path, contents: &[u8]) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .unwrap_or_else(|error| panic!("fixture directory {}: {error}", parent.display()));
+    }
+    fs::write(path, contents)
+        .unwrap_or_else(|error| panic!("fixture file {}: {error}", path.display()));
 }
 
-fn catalog_install_paths(context: &Context) -> Vec<String> {
-    catalog::list_games(context)
-        .expect("catalog games should be listed")
-        .into_iter()
-        .map(|game| game.install_path().as_str().to_owned())
-        .collect()
-}
-
-fn single_component(output: &Value) -> &Value {
-    let components = required_array(output, "components");
-
-    assert_eq!(
-        components.len(),
-        1,
-        "expected exactly one component, got: {output:#?}",
+fn seed_legacy_child(
+    fixture: &CatalogFixture,
+    id: &str,
+    root: &Path,
+    component_path: &Path,
+    technology: GraphicsTechnology,
+) {
+    let game = GameInstallation::new(
+        GameIdentity::new(
+            GameId::new(id).expect("legacy game id"),
+            "Legacy false child",
+            Launcher::Manual,
+        )
+        .expect("legacy identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(path_string(root)).expect("legacy root"),
     );
-
-    &components[0]
-}
-
-fn assert_dlss_component(component: &Value) {
-    assert_json_string(component, "file_name", DLSS_DLL_FILE_NAME);
-    assert_json_string(component, "technology", DLSS_TECHNOLOGY);
-    assert_json_string(component, "kind", "NativeLibrary");
-    assert_json_string(component, "detection_confidence", "High");
-    assert_json_string(component, "swappability", "Swappable");
-    assert_json_string(component, "status", "unknown_version");
-    assert_json_string(component, "sha256", EMPTY_FILE_SHA256);
-    assert_json_null(component, "version");
-
-    let cache_key = required_field(component, "cache_key");
-
-    assert_json_string(cache_key, "sha256", EMPTY_FILE_SHA256);
-    assert_json_number(cache_key, "size", 0);
-    assert_required_non_null(cache_key, "modified_at");
-
-    let cache_path = json_string_field(cache_key, "path");
-
-    assert!(
-        path_ends_with(cache_path, DLSS_DLL_FILE_NAME),
-        "cache_key.path should point to the DLSS DLL, got `{cache_path}`",
-    );
-}
-
-fn assert_game_titles<const N: usize>(games: &[Value], expected: [&str; N]) {
-    let actual_titles = game_titles(games);
-    let expected_titles = expected.into_iter().collect::<BTreeSet<_>>();
-
-    assert_eq!(
-        actual_titles, expected_titles,
-        "unexpected game titles in scan output",
-    );
-}
-
-fn game_titles(games: &[Value]) -> BTreeSet<&str> {
-    games.iter().map(game_title).collect()
-}
-
-fn game_title(game_entry: &Value) -> &str {
-    game_entry
-        .get("game")
-        .and_then(|game| game.get("identity"))
-        .and_then(|identity| identity.get("title"))
-        .and_then(Value::as_str)
-        .unwrap_or_else(|| {
-            panic!("game entry should contain game.identity.title, got: {game_entry:#?}")
-        })
-}
-
-fn required_array<'a>(json: &'a Value, field: &str) -> &'a [Value] {
-    required_field(json, field)
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_else(|| panic!("expected JSON field `{field}` to be an array, got: {json:#?}"))
-}
-
-fn required_field<'a>(json: &'a Value, field: &str) -> &'a Value {
-    json.get(field)
-        .unwrap_or_else(|| panic!("expected JSON field `{field}` to be present, got: {json:#?}"))
-}
-
-fn json_string_field<'a>(json: &'a Value, field: &str) -> &'a str {
-    required_field(json, field)
-        .as_str()
-        .unwrap_or_else(|| panic!("expected JSON field `{field}` to be a string, got: {json:#?}"))
-}
-
-fn json_number_field(json: &Value, field: &str) -> i64 {
-    required_field(json, field)
-        .as_i64()
-        .unwrap_or_else(|| panic!("expected JSON field `{field}` to be an integer, got: {json:#?}"))
-}
-
-fn assert_json_string(json: &Value, field: &str, expected: &str) {
-    let actual = json_string_field(json, field);
-
-    assert_eq!(
-        actual, expected,
-        "unexpected value for JSON field `{field}`",
-    );
-}
-
-fn assert_json_number(json: &Value, field: &str, expected: i64) {
-    let actual = json_number_field(json, field);
-
-    assert_eq!(
-        actual, expected,
-        "unexpected value for JSON field `{field}`",
-    );
-}
-
-fn assert_json_null(json: &Value, field: &str) {
-    assert!(
-        matches!(json.get(field), Some(Value::Null)),
-        "expected JSON field `{field}` to be null, got: {:?}",
-        json.get(field),
-    );
-}
-
-fn assert_required_non_null(json: &Value, field: &str) {
-    let value = required_field(json, field);
-
-    assert!(
-        !value.is_null(),
-        "expected JSON field `{field}` to be present and non-null, got: {json:#?}",
-    );
-}
-
-fn path_ends_with(path: impl AsRef<Path>, child: impl AsRef<Path>) -> bool {
-    path.as_ref().ends_with(child)
+    let component = GraphicsComponent::new(
+        ComponentId::new(format!("{id}:component")).expect("component id"),
+        game.id().clone(),
+        ComponentKind::NativeLibrary,
+        technology,
+        Swappability::Swappable,
+    )
+    .with_file(ComponentFile::new(
+        PathRef::new(path_string(component_path)).expect("component path"),
+    ));
+    fixture.store_game(&game);
+    fixture.store_components(game.id(), &[component]);
 }

@@ -306,7 +306,9 @@ fn configure_plugins(builder: DesktopBuilder) -> DesktopBuilder {
 fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
     builder.invoke_handler(tauri::generate_handler![
         // Library scanning
-        commands::scan_manual_folder,
+        commands::inspect_game_install,
+        commands::add_game,
+        commands::remove_game_from_catalog,
         commands::scan_auto_libraries,
         commands::start_background_refresh,
         // Remote CDN manifests (shell Refresh force path)

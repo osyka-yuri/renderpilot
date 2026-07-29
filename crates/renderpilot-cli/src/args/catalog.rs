@@ -1,14 +1,39 @@
 use renderpilot_orchestration::domain::GraphicsTechnology;
 
-use super::command::Command;
+use super::command::{AddGameRootChoiceArg, Command};
 use super::cursor::{ArgCursor, parse_identifier_argument, parse_named_identifier};
 use crate::CliError;
 
-pub(super) fn parse_scan_folder_command(args: &mut ArgCursor) -> Result<Command, CliError> {
-    let path = args.next_required_path("<path>")?;
-    args.finish()?;
+pub(super) fn parse_add_game_command(args: &mut ArgCursor) -> Result<Command, CliError> {
+    let path = args.next_required_path("<install-root>")?;
+    let mut executable = None;
+    let mut root_choice = AddGameRootChoiceArg::Auto;
+    let mut allow_root_correction = false;
+    while let Some(argument) = args.next_keyword()? {
+        match argument.as_str() {
+            "--executable" => {
+                executable = Some(args.next_required_path("<executable>")?);
+            }
+            "--root-choice" => {
+                let value = args.next_required_keyword("<auto|selected|recommended>")?;
+                root_choice = match value.as_str() {
+                    "auto" => AddGameRootChoiceArg::Auto,
+                    "selected" => AddGameRootChoiceArg::Selected,
+                    "recommended" => AddGameRootChoiceArg::Recommended,
+                    _ => return Err(CliError::InvalidAddGameRootChoice(value)),
+                };
+            }
+            "--allow-root-correction" => allow_root_correction = true,
+            _ => return Err(CliError::UnexpectedArgument(argument)),
+        }
+    }
 
-    Ok(Command::ScanFolder { path })
+    Ok(Command::AddGame {
+        path,
+        executable,
+        root_choice,
+        allow_root_correction,
+    })
 }
 
 pub(super) fn parse_list_artifacts_command(args: &mut ArgCursor) -> Result<Command, CliError> {

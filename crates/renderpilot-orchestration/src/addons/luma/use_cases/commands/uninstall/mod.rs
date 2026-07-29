@@ -22,13 +22,27 @@ use crate::{Context, ServiceError};
 /// mutation.
 pub fn uninstall(context: &Context, game_id: &GameId) -> Result<(), ServiceError> {
     let guard = game_mutation_lock::enter_game_mutation_boundary(context, game_id)?;
+    uninstall_locked(context, &guard, game_id)
+}
+
+/// Uninstalls Luma while a compound operation owns the game mutation boundary.
+pub(crate) fn uninstall_locked(
+    context: &Context,
+    guard: &game_mutation_lock::GameMutationGuard,
+    game_id: &GameId,
+) -> Result<(), ServiceError> {
+    if guard.game_id() != game_id {
+        return Err(ServiceError::invalid_input(
+            "Luma uninstall guard does not match the requested game",
+        ));
+    }
     let plan = plan::plan_uninstall(context, game_id)?;
     let plan::UninstallPlan { apply, workset } = plan;
 
     crate::addons::durable::run_uninstall_workset(
         crate::addons::durable::UninstallWorkset {
             context,
-            guard: &guard,
+            guard,
             workset,
             feature: crate::addons::mutation_features::LUMA_UNINSTALL,
             game_id,

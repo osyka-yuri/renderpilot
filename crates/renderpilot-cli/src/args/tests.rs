@@ -2,7 +2,7 @@ use std::ffi::OsString;
 
 use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
 
-use super::command::Command;
+use super::command::{AddGameRootChoiceArg, Command};
 use super::parse_args;
 use crate::CliError;
 fn args(values: &[&str]) -> Vec<OsString> {
@@ -26,10 +26,10 @@ fn version_flag_parses() {
 }
 
 #[test]
-fn scan_folder_requires_path() {
-    let error = parse_args(args(&["scan-folder"])).expect_err("path is required");
+fn add_game_requires_install_root() {
+    let error = parse_args(args(&["add-game"])).expect_err("path is required");
 
-    assert_eq!(error, CliError::MissingArgument("<path>"));
+    assert_eq!(error, CliError::MissingArgument("<install-root>"));
 }
 
 #[test]
@@ -40,11 +40,50 @@ fn extra_arg_is_reported() {
 }
 
 #[test]
-fn scan_folder_rejects_extra_arg() {
+fn add_game_rejects_extra_arg() {
     let error =
-        parse_args(args(&["scan-folder", "game-dir", "--bad"])).expect_err("extra arg should fail");
+        parse_args(args(&["add-game", "game-dir", "--bad"])).expect_err("extra arg should fail");
 
     assert_eq!(error, CliError::UnexpectedArgument("--bad".to_owned()));
+}
+
+#[test]
+fn add_game_accepts_explicit_executable() {
+    assert_eq!(
+        parse_args(args(&[
+            "add-game",
+            "game-dir",
+            "--executable",
+            "game-dir/bin/Game.exe",
+        ]))
+        .expect("valid add-game arguments"),
+        Command::AddGame {
+            path: "game-dir".into(),
+            executable: Some("game-dir/bin/Game.exe".into()),
+            root_choice: AddGameRootChoiceArg::Auto,
+            allow_root_correction: false,
+        }
+    );
+}
+
+#[test]
+fn add_game_accepts_explicit_root_policy() {
+    assert_eq!(
+        parse_args(args(&[
+            "add-game",
+            "game-dir",
+            "--root-choice",
+            "recommended",
+            "--allow-root-correction",
+        ]))
+        .expect("valid add-game arguments"),
+        Command::AddGame {
+            path: "game-dir".into(),
+            executable: None,
+            root_choice: AddGameRootChoiceArg::Recommended,
+            allow_root_correction: true,
+        }
+    );
 }
 
 #[test]

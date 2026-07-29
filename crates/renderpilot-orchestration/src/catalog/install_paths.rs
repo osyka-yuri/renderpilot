@@ -1,4 +1,4 @@
-//! PathRef-style string helpers.
+//! PathRef-style install relation helpers shared by catalog use cases.
 //!
 //! Domain `PathRef` values use `/` as a separator even on Windows.
 //! Because of that, this module intentionally works with normalized path strings
@@ -9,8 +9,7 @@
 //! Scan helpers assume PathRef-normalized input and add scope/drive-root
 //! boundary checks for library discovery.
 
-const PATH_SEPARATOR: u8 = b'/';
-const WINDOWS_DRIVE_ROOT_LEN: usize = 3;
+use renderpilot_domain::{InstallKey, InstallRoot, PathRef};
 
 /// Returns `true` when `path` is equal to `scope_root` or lies under it.
 ///
@@ -39,22 +38,14 @@ const WINDOWS_DRIVE_ROOT_LEN: usize = 3;
 /// C:\Games\Game\bin\x.dll
 /// ```
 pub(super) fn normalized_path_within_scope(path: &str, scope_root: &str) -> bool {
-    let path = trim_trailing_separators_except_root(path);
-    let scope_root = trim_trailing_separators_except_root(scope_root);
-
-    if path.is_empty() || scope_root.is_empty() {
+    let Ok(path) = PathRef::new(path) else {
         return false;
-    }
-
-    if normalized_path_eq(path, scope_root) {
-        return true;
-    }
-
-    if !normalized_path_starts_with(path, scope_root) {
+    };
+    let Ok(scope_root) = PathRef::new(scope_root) else {
         return false;
-    }
+    };
 
-    is_root_scope(scope_root) || has_path_boundary_after_prefix(path, scope_root.len())
+    InstallRoot::new(scope_root).contains_path(&path)
 }
 
 /// Normalized PathRef-style comparison key for install-path matching.
@@ -62,61 +53,18 @@ pub(super) fn normalized_path_within_scope(path: &str, scope_root: &str) -> bool
 /// Lower-cases ASCII and strips trailing `/` so case-only and trailing-slash
 /// differences do not block matching catalog install paths against auto-scan
 /// roots or a later manual re-scan of the same folder.
-pub(super) fn install_path_match_key(path: &str) -> String {
-    let mut key = path.to_ascii_lowercase();
-
-    while key.ends_with('/') && key.len() > 1 {
-        key.pop();
-    }
-
-    key
+pub(super) fn install_path_match_key(path: &str) -> Option<InstallKey> {
+    PathRef::new(path)
+        .ok()
+        .map(|path| InstallKey::from_path(&path))
 }
 
-fn trim_trailing_separators_except_root(path: &str) -> &str {
-    let mut trimmed = path;
-
-    while trimmed.len() > 1
-        && trimmed.ends_with('/')
-        && !is_windows_drive_root(trimmed)
-        && !is_unix_root(trimmed)
-    {
-        trimmed = &trimmed[..trimmed.len() - 1];
-    }
-
-    trimmed
-}
-
-fn normalized_path_eq(left: &str, right: &str) -> bool {
-    left.as_bytes().eq_ignore_ascii_case(right.as_bytes())
-}
-
-fn normalized_path_starts_with(path: &str, prefix: &str) -> bool {
-    path.len() >= prefix.len()
-        && path.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
-}
-
-fn has_path_boundary_after_prefix(path: &str, prefix_len: usize) -> bool {
-    matches!(
-        path.as_bytes().get(prefix_len),
-        None | Some(&PATH_SEPARATOR)
-    )
-}
-
-fn is_root_scope(path: &str) -> bool {
-    is_windows_drive_root(path) || is_unix_root(path)
-}
-
-fn is_unix_root(path: &str) -> bool {
-    path == "/"
-}
-
-fn is_windows_drive_root(path: &str) -> bool {
-    let bytes = path.as_bytes();
-
-    bytes.len() == WINDOWS_DRIVE_ROOT_LEN
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && bytes[2] == PATH_SEPARATOR
+/// Compares two validated install-path spellings without conflating invalid
+/// inputs into one synthetic key.
+pub(super) fn same_install_path(left: &str, right: &str) -> bool {
+    install_path_match_key(left)
+        .zip(install_path_match_key(right))
+        .is_some_and(|(left, right)| left == right)
 }
 
 #[cfg(test)]

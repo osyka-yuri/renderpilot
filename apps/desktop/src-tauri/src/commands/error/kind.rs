@@ -5,7 +5,6 @@ use super::strings::{SuggestedActions, suggested_action};
 pub(crate) struct ErrorSpec {
     pub code: &'static str,
     pub severity: CommandErrorSeverity,
-    pub message_key: &'static str,
     pub suggested_actions: SuggestedActions,
 }
 
@@ -37,7 +36,6 @@ macro_rules! command_error_kinds {
                         Self::$kind => ErrorSpec {
                             code: $code,
                             severity: CommandErrorSeverity::$severity,
-                            message_key: concat!("errors.", $code),
                             suggested_actions: $actions,
                         },
                     )+
@@ -52,6 +50,46 @@ command_error_kinds! {
         code: "invalid_argument",
         severity: Warning,
         actions: suggested_action::RETRY_AFTER_REQUIRED_DATA,
+    },
+    InvalidInstallRoot => {
+        code: "invalid_install_root",
+        severity: Warning,
+        actions: suggested_action::NONE,
+    },
+    MultipleInstallsDetected => {
+        code: "multiple_installs_detected",
+        severity: Warning,
+        actions: suggested_action::NONE,
+    },
+    StaleInstallInspection => {
+        code: "stale_install_inspection",
+        severity: Warning,
+        actions: suggested_action::NONE,
+    },
+    RootCorrectionCleanupRequired => {
+        code: "root_correction_cleanup_required",
+        severity: Warning,
+        actions: suggested_action::NONE,
+    },
+    RootCorrectionBlocked => {
+        code: "root_correction_blocked",
+        severity: Warning,
+        actions: suggested_action::RELOAD_GAME_DETAILS,
+    },
+    ManagedCleanupAmbiguous => {
+        code: "managed_cleanup_ambiguous",
+        severity: Error,
+        actions: suggested_action::RELOAD_GAME_DETAILS,
+    },
+    CatalogConsolidationBlocked => {
+        code: "catalog_consolidation_blocked",
+        severity: Error,
+        actions: suggested_action::REFRESH_OR_SCAN_GAME_FOLDER,
+    },
+    GameRemovalCleanupFailed => {
+        code: "game_removal_cleanup_failed",
+        severity: Error,
+        actions: suggested_action::RELOAD_GAME_DETAILS,
     },
     InvalidGameId => {
         code: "invalid_game_id",
@@ -188,19 +226,6 @@ mod tests {
                 seen.insert(spec.code),
                 "duplicate command error code: {:?}",
                 spec.code
-            );
-        }
-    }
-
-    #[test]
-    fn message_keys_are_derived_from_error_codes() {
-        for kind in CommandErrorKind::ALL {
-            let spec = kind.spec();
-
-            assert_eq!(
-                spec.message_key,
-                format!("errors.{}", spec.code),
-                "{kind:?} has an invalid message key"
             );
         }
     }

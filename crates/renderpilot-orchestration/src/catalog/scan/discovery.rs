@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::{
         Mutex,
@@ -81,8 +80,8 @@ fn scan_auto_libraries_with_checkpoints(
 
     let mut scan = AutoScanAccumulator::default();
 
-    match crate::catalog::prune_auto_scan_orphans(
-        context.storage(),
+    match super::prune_auto_scan_orphans(
+        context,
         &library_root_keys,
         &authoritative_root_keys,
         &install_path_keys,
@@ -101,14 +100,55 @@ fn scan_auto_libraries_with_checkpoints(
 
     let outcome = scan_install_paths_in_parallel(&batch, &installs);
     scan.merge(outcome);
+    refresh_confirmed_manual_roots(context, &mut scan);
 
     scan.into_output()
 }
 
+fn refresh_confirmed_manual_roots(context: &crate::Context, scan: &mut AutoScanAccumulator) {
+    let mut games = match context.storage().list_games() {
+        Ok(games) => games
+            .into_iter()
+            .filter(|game| {
+                game.root_authority() == renderpilot_domain::RootAuthority::UserConfirmed
+                    || (game.root_authority() == renderpilot_domain::RootAuthority::Legacy
+                        && game.identity().launcher() == renderpilot_domain::Launcher::Manual)
+            })
+            .collect::<Vec<_>>(),
+        Err(error) => {
+            scan.push_global_error(GlobalErrorLabel::OpenBatch, &error.into());
+            return;
+        }
+    };
+    games.sort_by_key(|game| game.install_path().as_str().matches('/').count());
+
+    for game in games {
+        let root = PathBuf::from(game.install_path().as_str());
+        if !root.is_dir() {
+            scan.errors.push(ScanErrorOutput {
+                root: normalized_path_string(&root),
+                message: "confirmed manual installation is currently unavailable".to_owned(),
+            });
+            continue;
+        }
+        let outcome = super::scan_explicit_install(
+            context,
+            root.clone(),
+            game.id().clone(),
+            game.root_authority(),
+            game.confirmed_executable()
+                .map(|relative| root.join(relative.as_str())),
+            super::ExplicitRootChange::Unchanged,
+            &[],
+        )
+        .map(|result| vec![result]);
+        scan.record_scan_outcome(&root, outcome);
+    }
+}
+
 #[derive(Debug)]
 struct AutoScanInstall {
-    path: PathBuf,
-    source: Option<renderpilot_platform_windows::game_libraries::DiscoveredScanSource>,
+    install: renderpilot_platform_windows::game_libraries::DiscoveredInstall,
     allow_checkpoint_skip: bool,
 }
 
@@ -118,34 +158,28 @@ fn discover_normalized_auto_scan_inputs(
     use renderpilot_platform_windows::game_libraries::DiscoveredGameSources;
 
     let DiscoveredGameSources {
-        install_paths,
+        installs,
         library_roots,
         authoritative_library_roots,
-        scan_sources,
     } = renderpilot_platform_windows::game_libraries::discover_game_sources();
 
     let library_root_keys = library_roots
         .iter()
         .map(normalized_path_string)
         .collect::<Vec<_>>();
-    let install_path_keys = install_paths
+    let install_path_keys = installs
         .iter()
-        .map(normalized_path_string)
+        .map(|install| normalized_path_string(&install.install_path))
         .collect::<Vec<_>>();
     let authoritative_root_keys = authoritative_library_roots
         .iter()
         .map(normalized_path_string)
         .collect::<Vec<_>>();
-    let mut discovered_sources = scan_sources
+    let installs = installs
         .into_iter()
-        .map(|source| (normalized_path_key(&source.install_path), source))
-        .collect::<HashMap<_, _>>();
-    let installs = install_paths
-        .into_iter()
-        .map(|path| AutoScanInstall {
-            source: discovered_sources.remove(&normalized_path_key(&path)),
+        .map(|install| AutoScanInstall {
             allow_checkpoint_skip: use_checkpoints,
-            path,
+            install,
         })
         .collect();
 
@@ -188,12 +222,8 @@ fn scan_install_paths_in_parallel(
                         break;
                     };
 
-                    let outcome = scan_auto_in_batch(
-                        batch,
-                        &install.path,
-                        install.source.as_ref(),
-                        install.allow_checkpoint_skip,
-                    );
+                    let outcome =
+                        scan_auto_in_batch(batch, &install.install, install.allow_checkpoint_skip);
 
                     // Held only for the few microseconds it takes to record
                     // the per-scan outcome. The heavy work (file walk,
@@ -207,7 +237,7 @@ fn scan_install_paths_in_parallel(
                         // here; for a best-effort bulk scan we prefer partial
                         // results over total failure.
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    guard.record_scan_outcome(&install.path, outcome);
+                    guard.record_scan_outcome(&install.install.install_path, outcome);
                 }
             });
         }
@@ -341,10 +371,6 @@ impl ScanErrorOutput {
 
 fn normalized_path_string(path: impl AsRef<Path>) -> String {
     path.as_ref().to_string_lossy().replace('\\', "/")
-}
-
-fn normalized_path_key(path: impl AsRef<Path>) -> String {
-    normalized_path_string(path).to_ascii_lowercase()
 }
 
 #[cfg(test)]

@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
 use renderpilot_orchestration::application::{ComponentReplacementCandidates, OperationPlan};
-use renderpilot_orchestration::detection::DetectedLibraryFile;
-use renderpilot_orchestration::domain::{GameId, GameInstallation, LibraryArtifact};
+use renderpilot_orchestration::domain::{GameId, LibraryArtifact};
 use serde::Serialize;
 
 use crate::catalog::OperationListCatalogResult;
@@ -16,19 +15,6 @@ type JsonResult<T> = Result<T, serde_json::Error>;
 // -----------------------------------------------------------------------------
 // Public render functions
 // -----------------------------------------------------------------------------
-
-pub(crate) fn render_scan_folder_output(
-    game: GameInstallation,
-    components: Vec<DetectedLibraryFile>,
-) -> JsonResult<String> {
-    render_pretty_json(ScanFolderOutput::new(game, components))
-}
-
-pub(crate) fn render_scan_folder_batch_output(
-    scans: Vec<(GameInstallation, Vec<DetectedLibraryFile>)>,
-) -> JsonResult<String> {
-    render_pretty_json(ScanFolderBatchOutput::from_scans(scans))
-}
 
 pub(crate) fn render_list_artifacts_output(artifacts: Vec<LibraryArtifact>) -> JsonResult<String> {
     render_pretty_json(ArtifactListOutput::from_artifacts(artifacts))
@@ -65,38 +51,6 @@ where
     json.push('\n');
 
     Ok(json)
-}
-
-// -----------------------------------------------------------------------------
-// Scan folder output
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct ScanFolderOutput {
-    game: GameInstallation,
-    components: Vec<DetectedLibraryFile>,
-}
-
-impl ScanFolderOutput {
-    fn new(game: GameInstallation, components: Vec<DetectedLibraryFile>) -> Self {
-        Self { game, components }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ScanFolderBatchOutput {
-    games: Vec<ScanFolderOutput>,
-}
-
-impl ScanFolderBatchOutput {
-    fn from_scans(scans: Vec<(GameInstallation, Vec<DetectedLibraryFile>)>) -> Self {
-        let games = scans
-            .into_iter()
-            .map(|(game, components)| ScanFolderOutput::new(game, components))
-            .collect();
-
-        Self { games }
-    }
 }
 
 // -----------------------------------------------------------------------------

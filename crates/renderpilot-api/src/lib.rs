@@ -75,5 +75,6 @@ pub use self::renodx::{
     renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
 pub use self::scan::{
-    AutoScanOutput, scan_auto_libraries, scan_auto_libraries_background_output, scan_manual_folder,
+    AutoScanOutput, add_game, inspect_game_install, remove_game_from_catalog, scan_auto_libraries,
+    scan_auto_libraries_background_output,
 };

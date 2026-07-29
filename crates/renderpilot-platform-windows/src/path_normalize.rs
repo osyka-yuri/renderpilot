@@ -1,18 +1,21 @@
 //! Shared install-path normalization used by auto-discovery and folder scan.
 //!
 //! `fs::canonicalize` on Windows often returns verbatim paths (`\\?\C:\…`).
-//! Catalog ids and install paths must use the short form so auto-scan and
-//! manual re-scan of the same folder produce the same `manual:<path>` id.
+//! Install paths must use the short form so auto-discovery and a manual
+//! re-scan resolve to the same [`renderpilot_domain::InstallKey`]. `GameId`
+//! remains opaque and independent of the path.
 
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
-/// Canonicalizes an existing path best-effort and strips a Windows verbatim prefix.
-pub(crate) fn canonicalize_install_dir(path: &Path) -> PathBuf {
-    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    strip_verbatim_prefix(canonical)
+/// Canonicalizes an existing installation path and strips a Windows verbatim prefix.
+///
+/// Callers must not persist a lexical fallback when canonicalization fails:
+/// junction aliases would then receive different installation identities.
+pub fn canonicalize_install_path(path: &Path) -> io::Result<PathBuf> {
+    fs::canonicalize(path).map(strip_verbatim_prefix)
 }
 
 /// Strips `\\?\` / `\\?\UNC\` prefixes returned by Windows `canonicalize`.
@@ -48,5 +51,15 @@ mod tests {
     fn leaves_non_verbatim_path_unchanged() {
         let path = PathBuf::from(r"D:\SteamLibrary\steamapps\common\Game");
         assert_eq!(strip_verbatim_prefix(path.clone()), path);
+    }
+
+    #[test]
+    fn canonicalization_never_falls_back_to_a_lexical_alias() {
+        let missing = std::env::temp_dir().join(format!(
+            "renderpilot-missing-install-{}",
+            std::process::id()
+        ));
+
+        assert!(canonicalize_install_path(&missing).is_err());
     }
 }

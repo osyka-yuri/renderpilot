@@ -41,6 +41,14 @@ impl fmt::Display for LocalizedText {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum UserMessage {
     InvalidArgument,
+    InvalidInstallRoot,
+    MultipleInstallsDetected,
+    StaleInstallInspection,
+    RootCorrectionCleanupRequired,
+    RootCorrectionBlocked,
+    ManagedCleanupAmbiguous,
+    CatalogConsolidationBlocked,
+    GameRemovalCleanupFailed,
 
     InvalidGameReference,
     InvalidComponentReference,
@@ -80,6 +88,14 @@ impl UserMessage {
     #[cfg(test)]
     pub(crate) const ALL: &'static [Self] = &[
         Self::InvalidArgument,
+        Self::InvalidInstallRoot,
+        Self::MultipleInstallsDetected,
+        Self::StaleInstallInspection,
+        Self::RootCorrectionCleanupRequired,
+        Self::RootCorrectionBlocked,
+        Self::ManagedCleanupAmbiguous,
+        Self::CatalogConsolidationBlocked,
+        Self::GameRemovalCleanupFailed,
         Self::InvalidGameReference,
         Self::InvalidComponentReference,
         Self::InvalidArtifactReference,
@@ -111,6 +127,38 @@ impl UserMessage {
             Self::InvalidArgument => LocalizedText::new(
                 "user_message.invalid_argument",
                 "The request contains an invalid value.",
+            ),
+            Self::InvalidInstallRoot => LocalizedText::new(
+                "user_message.invalid_install_root",
+                "Choose the installation folder of one game. Drive roots, network share roots, and system folders cannot be added.",
+            ),
+            Self::MultipleInstallsDetected => LocalizedText::new(
+                "user_message.multiple_installs_detected",
+                "This folder contains multiple game installations. Choose the installation folder of one game.",
+            ),
+            Self::StaleInstallInspection => LocalizedText::new(
+                "user_message.stale_install_inspection",
+                "The installation changed while it was being checked. Review the updated result before adding it.",
+            ),
+            Self::RootCorrectionCleanupRequired => LocalizedText::new(
+                "user_message.root_correction_cleanup_required",
+                "Active component replacements must be rolled back before changing this game root.",
+            ),
+            Self::RootCorrectionBlocked => LocalizedText::new(
+                "user_message.root_correction_blocked",
+                "Resolve the active RenderPilot state from the existing game card before changing its root.",
+            ),
+            Self::ManagedCleanupAmbiguous => LocalizedText::new(
+                "user_message.managed_cleanup_ambiguous",
+                "RenderPilot found overlapping managed changes whose safe restore order cannot be proven. Nothing was changed and a recovery bundle was created.",
+            ),
+            Self::CatalogConsolidationBlocked => LocalizedText::new(
+                "user_message.catalog_consolidation_blocked",
+                "RenderPilot found conflicting managed state on duplicate game cards. Nothing was changed and a recovery bundle was created.",
+            ),
+            Self::GameRemovalCleanupFailed => LocalizedText::new(
+                "user_message.game_removal_cleanup_failed",
+                "RenderPilot could not restore the original game files, so the card was not removed. Check the game files and try again.",
             ),
 
             Self::InvalidGameReference => LocalizedText::new(
@@ -252,6 +300,18 @@ pub(crate) mod user_message {
     use super::UserMessage;
 
     pub(crate) const INVALID_ARGUMENT: UserMessage = UserMessage::InvalidArgument;
+    pub(crate) const INVALID_INSTALL_ROOT: UserMessage = UserMessage::InvalidInstallRoot;
+    pub(crate) const MULTIPLE_INSTALLS_DETECTED: UserMessage =
+        UserMessage::MultipleInstallsDetected;
+    pub(crate) const STALE_INSTALL_INSPECTION: UserMessage = UserMessage::StaleInstallInspection;
+    pub(crate) const ROOT_CORRECTION_CLEANUP_REQUIRED: UserMessage =
+        UserMessage::RootCorrectionCleanupRequired;
+    pub(crate) const ROOT_CORRECTION_BLOCKED: UserMessage = UserMessage::RootCorrectionBlocked;
+    pub(crate) const MANAGED_CLEANUP_AMBIGUOUS: UserMessage = UserMessage::ManagedCleanupAmbiguous;
+    pub(crate) const CATALOG_CONSOLIDATION_BLOCKED: UserMessage =
+        UserMessage::CatalogConsolidationBlocked;
+    pub(crate) const GAME_REMOVAL_CLEANUP_FAILED: UserMessage =
+        UserMessage::GameRemovalCleanupFailed;
 
     pub(crate) const INVALID_GAME_REFERENCE: UserMessage = UserMessage::InvalidGameReference;
     pub(crate) const INVALID_COMPONENT_REFERENCE: UserMessage =
@@ -414,6 +474,7 @@ impl Serialize for SuggestedAction {
 pub(crate) mod suggested_action {
     use super::{SuggestedAction, SuggestedActions};
 
+    pub(crate) const NONE: SuggestedActions = &[];
     pub(crate) const REFRESH_GAMES: SuggestedActions = &[SuggestedAction::RefreshGames];
     pub(crate) const RELOAD_GAME_DETAILS: SuggestedActions = &[SuggestedAction::ReloadGameDetails];
     pub(crate) const REFRESH_CANDIDATES: SuggestedActions = &[SuggestedAction::RefreshCandidates];
