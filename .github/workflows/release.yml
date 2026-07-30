@@ -48,6 +48,27 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
+      - name: Read and validate app version
+        id: version
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $package = $metadata.packages |
+            Where-Object { $_.name -eq "renderpilot-desktop" } |
+            Select-Object -First 1
+          if (-not $package) {
+            throw "Could not find the renderpilot-desktop package in Cargo metadata."
+          }
+
+          $version = $package.version
+          $expectedTag = "v$version"
+          $actualTag = "${{ github.ref_name }}"
+          if ($actualTag -ne $expectedTag) {
+            throw "Release tag $actualTag does not match Cargo version $expectedTag."
+          }
+
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
@@ -101,13 +122,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-
-      - name: Read app version
-        id: version
-        shell: pwsh
-        run: |
-          $v = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Package portable zip
         shell: pwsh

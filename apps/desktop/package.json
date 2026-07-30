@@ -1,7 +1,6 @@
 {
   "name": "renderpilot-desktop-ui",
   "private": true,
-  "version": "1.7.2",
   "type": "module",
   "scripts": {
     "dev": "vite",

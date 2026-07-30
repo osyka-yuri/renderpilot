@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-07-30
+
+### Added
+
+- **Guided game installation**: RenderPilot now inspects a selected folder before adding it, recommends the correct installation root, and asks for an executable when one cannot be chosen safely. Existing manual entries can be corrected without silently discarding managed state, with excluded data preserved in a recovery bundle.
+- **Safer D3D12 previews**: Preview D3D12 Agility SDK swaps now verify Windows Developer Mode before modifying a game. If action is required, RenderPilot explains the issue and provides direct links to the relevant Windows setting and documentation.
+- **CLI add-game workflow**: `add-game <install-root>` replaces the former `scan-folder` command and exposes executable selection, root review, and root-correction controls.
+
+### Changed
+
+- **Games catalog performance**: Games load and refresh faster, especially in large collections. Updating favorites, visibility, covers, or removing a game no longer reloads unrelated catalog data.
+- **Desktop startup and navigation**: Secondary pages and non-English languages now load only when needed, reducing initial work while keeping navigation and language changes consistent.
+- **Locale-aware presentation**: Dates, times, relative durations, byte sizes, numbers, lists, and updater progress now use shared locale-aware formatters with strict timestamp parsing at application boundaries.
+- **Installation tracking**: RenderPilot now identifies installation roots more reliably. During an upgrade, only verified duplicate entries are consolidated; ambiguous or conflicting state is left untouched.
+
 ## [1.7.2] - 2026-07-27
 
 ### Added
