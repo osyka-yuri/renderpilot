@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-07-30
+
+### Fixed
+
+- **Select controls**: Opening a selector no longer prevents interaction with the rest of the app. Clicking another control now closes the list and performs the requested action normally.
+
 ## [1.8.0] - 2026-07-30
 
 ### Added
