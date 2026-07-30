@@ -23,6 +23,7 @@ pub(crate) fn d3d12_preview_artifact_at(source: &Path, sdk_line: u32) -> Library
             version: PackageVersion::parse(&package_version).expect("package version"),
             channel: ReleaseChannel::Preview,
             label: None,
+            components: Default::default(),
         },
         target: CatalogTargetReceipt {
             os: "windows".to_owned(),

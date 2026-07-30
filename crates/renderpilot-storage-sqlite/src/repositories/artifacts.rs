@@ -218,10 +218,10 @@ fn validate_catalog_package_replacement(
         .metadata()
         .catalog_package_receipt()
         .ok_or_else(|| storage_error("catalog package replacement requires a receipt"))?;
-    if receipt.package_id != package_id {
+    if receipt.package_id() != package_id {
         return Err(storage_error(format!(
             "catalog package replacement expected package `{package_id}`, got `{}`",
-            receipt.package_id
+            receipt.package_id()
         )));
     }
     validate_catalog_receipt_identity(artifact)
@@ -747,6 +747,7 @@ mod tests {
                 version: PackageVersion::parse("3.10.0").expect("package version"),
                 channel: ReleaseChannel::Stable,
                 label: None,
+                components: Default::default(),
             },
             target: CatalogTargetReceipt {
                 os: "windows".to_owned(),

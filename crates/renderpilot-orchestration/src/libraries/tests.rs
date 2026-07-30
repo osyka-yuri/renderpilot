@@ -1,17 +1,21 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use renderpilot_application::ArtifactRepository;
-use renderpilot_domain::{Architecture, ArtifactMetadata, PackageVersion, PeExportSet};
+use renderpilot_domain::{
+    Architecture, ArtifactMetadata, CatalogPackageProvenanceReceipt, CatalogPackageReceipt,
+    CatalogSignatureReceipt, PackageVersion, PeExportSet, PeImportProfile, PeImportSet,
+};
 use sha2::{Digest, Sha256};
 
 use super::artifact_builder::{build_catalog_artifact, package_is_supported};
 use super::types::{
     LibraryArtifactRecord, LibraryCatalog, LibraryContent, LibraryLegalDocument,
     LibraryLegalDocumentFormat, LibraryLegalDocumentKind, LibraryPackage, LibraryPackageMember,
-    LibraryProvenance, LibraryRelease, LibraryReleaseChannel, LibraryTarget, LibraryTransport,
-    LibraryVendor, LibraryVendorCatalog, LibraryVendorReference, LibraryVendorSnapshot,
-    SignatureInfo,
+    LibraryProvenance, LibraryRelease, LibraryReleaseChannel, LibrarySourceBuildToolchain,
+    LibrarySourceInput, LibrarySourcePatch, LibraryTarget, LibraryTransport, LibraryVendor,
+    LibraryVendorCatalog, LibraryVendorReference, LibraryVendorSnapshot, SignatureInfo,
 };
 
 mod legal;
@@ -24,6 +28,7 @@ fn physical_artifact(digest: char, file_name: &str) -> LibraryArtifactRecord {
         file_name: file_name.to_owned(),
         file_version: Some("1.2.3.4".to_owned()),
         pe_named_exports: None,
+        pe_imports: None,
         architecture: Architecture::X64,
         dll: LibraryContent {
             sha256,
@@ -79,11 +84,13 @@ fn package(technology: &str) -> LibraryPackage {
         members: vec![
             LibraryPackageMember {
                 artifact_id: format!("sha256:{}", "a".repeat(64)),
+                component: String::new(),
                 role: "primary".to_owned(),
                 install_as: "primary.dll".to_owned(),
             },
             LibraryPackageMember {
                 artifact_id: format!("sha256:{}", "b".repeat(64)),
+                component: String::new(),
                 role: "support".to_owned(),
                 install_as: "support.dll".to_owned(),
             },
@@ -143,6 +150,163 @@ fn catalog_with_nvidia(nvidia: LibraryVendorCatalog) -> LibraryCatalog {
     }
 }
 
+fn xiph_catalog(dynamic_crt: bool) -> LibraryCatalog {
+    let mut vorbis = physical_artifact('d', "vorbis.dll");
+    vorbis.library_id = "xiph_vorbis".to_owned();
+    vorbis.file_version = Some("1.3.7.0".to_owned());
+    vorbis.pe_named_exports = Some(
+        PeExportSet::from_observed_names(vec!["vorbis_info_init".to_owned()]).expect("exports"),
+    );
+    let mut vorbis_imports = vec!["kernel32.dll".to_owned(), "ogg.dll".to_owned()];
+    if dynamic_crt {
+        vorbis_imports.push("api-ms-win-crt-runtime-l1-1-0.dll".to_owned());
+    }
+    vorbis.pe_imports = Some(PeImportProfile {
+        regular: PeImportSet::from_observed_names(vorbis_imports).expect("imports"),
+        delay: PeImportSet::default(),
+    });
+
+    let mut ogg = physical_artifact('e', "ogg.dll");
+    ogg.library_id = "xiph_ogg".to_owned();
+    ogg.file_version = Some("1.3.6".to_owned());
+    ogg.pe_named_exports =
+        Some(PeExportSet::from_observed_names(vec!["ogg_sync_init".to_owned()]).expect("exports"));
+    ogg.pe_imports = Some(PeImportProfile {
+        regular: PeImportSet::from_observed_names(vec!["kernel32.dll".to_owned()])
+            .expect("imports"),
+        delay: PeImportSet::default(),
+    });
+
+    let mut vorbisfile = physical_artifact('f', "vorbisfile.dll");
+    vorbisfile.library_id = "xiph_vorbisfile".to_owned();
+    vorbisfile.file_version = Some("1.3.7.0".to_owned());
+    vorbisfile.pe_named_exports =
+        Some(PeExportSet::from_observed_names(vec!["ov_open".to_owned()]).expect("exports"));
+    vorbisfile.pe_imports = Some(PeImportProfile {
+        regular: PeImportSet::from_observed_names(vec![
+            "kernel32.dll".to_owned(),
+            "ogg.dll".to_owned(),
+            "vorbis.dll".to_owned(),
+        ])
+        .expect("imports"),
+        delay: PeImportSet::default(),
+    });
+
+    let mut vorbisenc = physical_artifact('a', "vorbisenc.dll");
+    vorbisenc.library_id = "xiph_vorbisenc".to_owned();
+    vorbisenc.file_version = Some("1.3.7.0".to_owned());
+    vorbisenc.pe_named_exports = Some(
+        PeExportSet::from_observed_names(vec!["vorbis_encode_init".to_owned()]).expect("exports"),
+    );
+    vorbisenc.pe_imports = Some(PeImportProfile {
+        regular: PeImportSet::from_observed_names(vec![
+            "kernel32.dll".to_owned(),
+            "vorbis.dll".to_owned(),
+        ])
+        .expect("imports"),
+        delay: PeImportSet::default(),
+    });
+
+    let source = |component: &str, version: &str, marker: char| LibrarySourceInput {
+        repository: format!("xiph/{component}"),
+        version: version.to_owned(),
+        tag: Some(format!("v{version}")),
+        tag_object_sha: Some(marker.to_string().repeat(40)),
+        commit_sha: Some(marker.to_string().repeat(40)),
+        archive_url: format!(
+            "https://downloads.xiph.org/releases/{component}/lib{component}-{version}.tar.xz"
+        ),
+        archive_sha256: marker.to_string().repeat(64),
+    };
+    let mut release = LibraryRelease::new(
+        PackageVersion::parse("1.3.7").expect("version"),
+        LibraryReleaseChannel::Stable,
+        Some("source build".to_owned()),
+    );
+    release.components = BTreeMap::from([
+        (
+            "ogg".to_owned(),
+            PackageVersion::parse("1.3.6").expect("version"),
+        ),
+        (
+            "vorbis".to_owned(),
+            PackageVersion::parse("1.3.7").expect("version"),
+        ),
+    ]);
+    let mut xiph_package = LibraryPackage {
+        package_id: "xiph_vorbis.vorbis-1.3.7.ogg-1.3.6.r1.x64.shared.plain".to_owned(),
+        revision_sha256: String::new(),
+        technology: "xiph_vorbis".to_owned(),
+        variant: "shared.plain".to_owned(),
+        display_name: "Xiph Vorbis/Ogg".to_owned(),
+        release,
+        target: LibraryTarget {
+            os: "windows".to_owned(),
+            architecture: Architecture::X64,
+            compatibility: None,
+        },
+        provenance: Some(LibraryProvenance::SourceBuild {
+            sources: BTreeMap::from([
+                ("ogg".to_owned(), source("ogg", "1.3.6", '1')),
+                ("vorbis".to_owned(), source("vorbis", "1.3.7", '2')),
+            ]),
+            build_revision: 1,
+            recipe_sha256: "3".repeat(64),
+            verification_policy_sha256: "4".repeat(64),
+            patches: BTreeMap::new(),
+            toolchain: LibrarySourceBuildToolchain {
+                runner_image: "windows-2025-vs2026@20260720.1".to_owned(),
+                compiler: "MSVC 19.50".to_owned(),
+                linker: "link 14.50".to_owned(),
+                windows_sdk: "10.0.26100.0".to_owned(),
+                cmake: "4.1.0".to_owned(),
+            },
+        }),
+        legal_document_ids: Vec::new(),
+        members: vec![
+            LibraryPackageMember {
+                artifact_id: vorbis.artifact_id.clone(),
+                component: "vorbis".to_owned(),
+                role: "primary".to_owned(),
+                install_as: "vorbis.dll".to_owned(),
+            },
+            LibraryPackageMember {
+                artifact_id: vorbisfile.artifact_id.clone(),
+                component: "vorbisfile".to_owned(),
+                role: "support".to_owned(),
+                install_as: "vorbisfile.dll".to_owned(),
+            },
+            LibraryPackageMember {
+                artifact_id: vorbisenc.artifact_id.clone(),
+                component: "vorbisenc".to_owned(),
+                role: "support".to_owned(),
+                install_as: "vorbisenc.dll".to_owned(),
+            },
+            LibraryPackageMember {
+                artifact_id: ogg.artifact_id.clone(),
+                component: "ogg".to_owned(),
+                role: "support".to_owned(),
+                install_as: "ogg.dll".to_owned(),
+            },
+        ],
+        extensions: None,
+    };
+    xiph_package.revision_sha256 = package_revision(&xiph_package);
+
+    let mut catalog = complete_catalog(package("nvidia_streamline"));
+    catalog.vendors.push(LibraryVendorCatalog {
+        vendor: LibraryVendor {
+            id: "xiph".to_owned(),
+            display_name: "Xiph.Org Foundation".to_owned(),
+        },
+        generated_at: "2026-07-27T00:00:00Z".to_owned(),
+        legal_documents: Vec::new(),
+        artifacts: vec![vorbis, vorbisfile, vorbisenc, ogg],
+        packages: vec![xiph_package],
+    });
+    catalog
+}
+
 pub(super) fn openvr_catalog(repository: &str) -> LibraryCatalog {
     let dll_bytes = b"openvr-api-fixture";
     let dll_sha256 = hex::encode(Sha256::digest(dll_bytes));
@@ -194,6 +358,7 @@ pub(super) fn openvr_catalog(repository: &str) -> LibraryCatalog {
         legal_document_ids: vec![legal_document_id],
         members: vec![LibraryPackageMember {
             artifact_id: artifact.artifact_id.clone(),
+            component: String::new(),
             role: "primary".to_owned(),
             install_as: renderpilot_domain::openvr::DLL_NAME.to_owned(),
         }],
@@ -228,6 +393,106 @@ fn explicit_package_contract_builds_one_domain_artifact() {
     assert_eq!(artifact.files()[0].install_as(), Some("primary.dll"));
     assert_eq!(artifact.files()[1].install_as(), Some("support.dll"));
     assert_eq!(artifact.release_version().unwrap().as_str(), "1.2.3");
+}
+
+#[test]
+fn generic_composite_receipts_preserve_each_supported_provenance_kind() {
+    let cases = [
+        LibraryProvenance::Nuget {
+            package_id: "Example.Composite".to_owned(),
+            version: PackageVersion::parse("1.3.7").expect("version"),
+            package_sha512: format!("{}==", "A".repeat(86)),
+        },
+        LibraryProvenance::GithubRelease {
+            repository: "example/composite".to_owned(),
+            tag: "v1.3.7".to_owned(),
+            commit_sha: "a".repeat(40),
+        },
+    ];
+
+    for provenance in cases {
+        let mut catalog = xiph_catalog(false);
+        let package = catalog
+            .vendors
+            .iter_mut()
+            .find(|vendor| vendor.vendor.id == "xiph")
+            .and_then(|vendor| vendor.packages.first_mut())
+            .expect("fixture package");
+        package.package_id = "example.composite.x64".to_owned();
+        package.technology = "example_composite".to_owned();
+        package.provenance = Some(provenance);
+        package.revision_sha256 = package_revision(package);
+
+        let validated =
+            super::resolved::ValidatedCatalog::new(catalog).expect("generic composite catalog");
+        let resolved = validated
+            .packages()
+            .find(|candidate| candidate.package().technology == "example_composite")
+            .expect("generic composite package");
+        let CatalogPackageReceipt::V2(receipt) =
+            super::receipt::package_receipt(&resolved).expect("V2 receipt")
+        else {
+            panic!("composite package must produce V2");
+        };
+        assert!(matches!(
+            receipt.provenance,
+            CatalogPackageProvenanceReceipt::Nuget { .. }
+                | CatalogPackageProvenanceReceipt::GithubRelease { .. }
+        ));
+        assert_eq!(
+            receipt.members[0].signature,
+            CatalogSignatureReceipt::Unsigned
+        );
+        assert_eq!(
+            CatalogPackageReceipt::V2(receipt).primary_signature(),
+            Some(&CatalogSignatureReceipt::Unsigned)
+        );
+    }
+}
+
+#[test]
+fn generic_composite_package_requires_provenance() {
+    let mut catalog = xiph_catalog(false);
+    let package = catalog
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("fixture package");
+    package.package_id = "example.composite.x64".to_owned();
+    package.technology = "example_composite".to_owned();
+    package.provenance = None;
+    let error = super::resolved::ValidatedCatalog::new(catalog)
+        .expect_err("missing composite provenance must fail");
+    assert!(error.to_string().contains("requires provenance"));
+}
+
+#[test]
+fn source_patch_must_reference_an_existing_provenance_source() {
+    let mut catalog = xiph_catalog(false);
+    let package = catalog
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    let Some(LibraryProvenance::SourceBuild { patches, .. }) = package.provenance.as_mut() else {
+        panic!("source-build provenance");
+    };
+    patches.insert(
+        "missing.source".to_owned(),
+        LibrarySourcePatch {
+            source: "not_present".to_owned(),
+            target: "src/example.c".to_owned(),
+            descriptor_sha256: "a".repeat(64),
+            original_sha256: "b".repeat(64),
+            patched_sha256: "c".repeat(64),
+        },
+    );
+    package.revision_sha256 = package_revision(package);
+    let error = super::resolved::ValidatedCatalog::new(catalog)
+        .expect_err("patch source relationship must be validated");
+    assert!(error.to_string().contains("invalid source patch metadata"));
 }
 
 #[test]
@@ -394,8 +659,11 @@ fn active_catalog_backfills_a_legacy_download_without_a_receipt() {
         .metadata()
         .catalog_package_receipt()
         .expect("receipt was backfilled");
-    assert_eq!(receipt.package_id, resolved.package().package_id);
-    assert_eq!(receipt.release.version, resolved.package().release.version);
+    assert_eq!(receipt.package_id(), resolved.package().package_id);
+    assert_eq!(
+        receipt.release().version,
+        resolved.package().release.version
+    );
 }
 
 #[test]
@@ -463,9 +731,17 @@ fn current_client_filters_unknown_vendor_before_snapshot_fetch_selection() {
     let index = super::types::LibraryIndex {
         schema_version: 1,
         generated_at: "2026-07-23T00:00:00Z".to_owned(),
-        vendors: ["amd", "intel", "microsoft", "nvidia", "valve", "future"]
-            .map(reference)
-            .into(),
+        vendors: [
+            "amd",
+            "intel",
+            "microsoft",
+            "nvidia",
+            "valve",
+            "xiph",
+            "future",
+        ]
+        .map(reference)
+        .into(),
     };
     let (selected, skipped) =
         super::catalog::partition_vendor_references(&index, super::validation::is_supported_vendor);
@@ -475,7 +751,7 @@ fn current_client_filters_unknown_vendor_before_snapshot_fetch_selection() {
             .iter()
             .map(|reference| reference.vendor_id.as_str())
             .collect::<Vec<_>>(),
-        ["amd", "intel", "microsoft", "nvidia", "valve"]
+        ["amd", "intel", "microsoft", "nvidia", "valve", "xiph"]
     );
     assert_eq!(
         skipped

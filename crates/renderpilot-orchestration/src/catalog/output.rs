@@ -563,6 +563,7 @@ mod tests {
                     version: PackageVersion::parse("1.9.2602.17").expect("package version"),
                     channel: ReleaseChannel::Stable,
                     label: Some("SDK".to_owned()),
+                    components: Default::default(),
                 },
                 availability: CatalogPackageAvailability::Available,
                 automatic_selection_allowed: true,
@@ -642,6 +643,7 @@ mod tests {
                         version: PackageVersion::parse("1.721.2-preview").expect("package version"),
                         channel: ReleaseChannel::Preview,
                         label: Some("SDK".to_owned()),
+                        components: Default::default(),
                     }),
                 },
                 json!({

@@ -151,10 +151,11 @@ fn build_component_file(
             })?);
     }
     if let Some(exports) = &artifact.pe_named_exports {
-        file = file.with_pe_compatibility(PeCompatibilityProfile::new(
-            artifact.architecture,
-            exports.clone(),
-        ));
+        let mut profile = PeCompatibilityProfile::new(artifact.architecture, exports.clone());
+        if let Some(imports) = &artifact.pe_imports {
+            profile = profile.with_imports(imports.clone());
+        }
+        file = file.with_pe_compatibility(profile);
     }
     Ok(file)
 }
@@ -191,6 +192,7 @@ fn package_metadata(resolved: &ResolvedPackage<'_>) -> Result<ArtifactMetadata, 
                 .map_err(|error| library_error(format!("invalid GitHub provenance: {error}")))?,
             );
         }
+        Some(LibraryProvenance::SourceBuild { .. }) => {}
         None => {}
     }
     Ok(metadata.with_catalog_package_receipt(super::receipt::package_receipt(resolved)?))

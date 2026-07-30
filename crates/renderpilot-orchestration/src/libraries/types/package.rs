@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use renderpilot_domain::{
     Architecture, CatalogPackageAvailability, CatalogSignatureReceipt, PackageRelease,
     PackageVersion, PeExportSet, ReleaseChannel, RuntimeCompatibility,
@@ -21,6 +23,10 @@ pub struct LibraryArtifactRecord {
     /// Sorted, unique named PE exports when the package contract relies on them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pe_named_exports: Option<PeExportSet>,
+    /// Strict regular and delay-load imports when the package contract relies
+    /// on them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pe_imports: Option<renderpilot_domain::PeImportProfile>,
     /// DLL architecture.
     pub architecture: Architecture,
     /// Uncompressed DLL content metadata.
@@ -102,6 +108,9 @@ pub struct LibraryRelease {
     pub channel: ReleaseChannel,
     /// Optional supplemental annotation.
     pub label: Option<String>,
+    /// Composite component versions in deterministic key order.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub components: BTreeMap<String, PackageVersion>,
     #[serde(skip)]
     pub(crate) revision_version: String,
 }
@@ -114,6 +123,7 @@ impl LibraryRelease {
             version,
             channel,
             label,
+            components: BTreeMap::new(),
         }
     }
 
@@ -128,6 +138,7 @@ impl LibraryRelease {
             version: self.version.clone(),
             channel: self.channel,
             label: self.label.clone(),
+            components: self.components.clone(),
         }
     }
 }
@@ -143,6 +154,8 @@ impl<'de> Deserialize<'de> for LibraryRelease {
             version: String,
             channel: ReleaseChannel,
             label: Option<String>,
+            #[serde(default)]
+            components: BTreeMap<String, PackageVersion>,
         }
 
         let wire = WireRelease::deserialize(deserializer)?;
@@ -156,6 +169,7 @@ impl<'de> Deserialize<'de> for LibraryRelease {
             version,
             channel: wire.channel,
             label: wire.label,
+            components: wire.components,
             revision_version: wire.version,
         })
     }
@@ -163,7 +177,9 @@ impl<'de> Deserialize<'de> for LibraryRelease {
 
 impl From<PackageRelease> for LibraryRelease {
     fn from(release: PackageRelease) -> Self {
-        Self::new(release.version, release.channel, release.label)
+        let mut value = Self::new(release.version, release.channel, release.label);
+        value.components = release.components;
+        value
     }
 }
 
@@ -217,6 +233,73 @@ pub enum LibraryProvenance {
         /// Lowercase immutable Git commit SHA.
         commit_sha: String,
     },
+    /// Reproducible build from immutable source archives.
+    SourceBuild {
+        /// Named source inputs in deterministic key order.
+        sources: BTreeMap<String, LibrarySourceInput>,
+        /// Monotonic recipe rebuild revision.
+        build_revision: u32,
+        /// Complete build-recipe digest.
+        recipe_sha256: String,
+        /// Binary verification-policy digest.
+        verification_policy_sha256: String,
+        /// Applied source transformations keyed by stable patch id.
+        patches: BTreeMap<String, LibrarySourcePatch>,
+        /// Exact nested toolchain identity.
+        toolchain: LibrarySourceBuildToolchain,
+    },
+}
+
+/// Exact toolchain used by a reproducible source build.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LibrarySourceBuildToolchain {
+    /// Exact runner image.
+    pub runner_image: String,
+    /// Exact compiler identity.
+    pub compiler: String,
+    /// Exact linker identity.
+    pub linker: String,
+    /// Exact Windows SDK.
+    pub windows_sdk: String,
+    /// Exact CMake.
+    pub cmake: String,
+}
+
+/// Content-addressed transformation of one temporary source-tree file.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LibrarySourcePatch {
+    /// Source input owning the target file.
+    pub source: String,
+    /// Normalized source-relative target path.
+    pub target: String,
+    /// Declarative patch descriptor SHA-256.
+    pub descriptor_sha256: String,
+    /// Pristine target SHA-256.
+    pub original_sha256: String,
+    /// Transformed target SHA-256.
+    pub patched_sha256: String,
+}
+
+/// Immutable source input for a reproducible package build.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LibrarySourceInput {
+    /// Repository in `owner/name` form.
+    pub repository: String,
+    /// Exact upstream release version, without catalog normalization.
+    pub version: String,
+    /// Exact source tag.
+    pub tag: Option<String>,
+    /// Immutable tag object SHA.
+    pub tag_object_sha: Option<String>,
+    /// Immutable peeled commit SHA.
+    pub commit_sha: Option<String>,
+    /// Canonical archive URL.
+    pub archive_url: String,
+    /// Verified archive SHA-256.
+    pub archive_sha256: String,
 }
 
 /// One physical artifact installed as part of a package.
@@ -225,6 +308,9 @@ pub enum LibraryProvenance {
 pub struct LibraryPackageMember {
     /// Referenced physical artifact identifier.
     pub artifact_id: String,
+    /// Stable semantic component name for composite V2 packages.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub component: String,
     /// Semantic role within the package.
     pub role: String,
     /// Target DLL basename at installation time.

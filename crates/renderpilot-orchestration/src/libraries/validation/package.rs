@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use renderpilot_domain::{PackageVersion, ReleaseChannel, RuntimeCompatibility, openvr};
+use renderpilot_domain::{PackageVersion, ReleaseChannel, RuntimeCompatibility, Version, openvr};
 
 use crate::ServiceError;
 
@@ -99,7 +99,90 @@ fn validate_provenance(package: &LibraryPackage) -> Result<(), ServiceError> {
             tag,
             commit_sha,
         }) => validate_github_release_provenance(&package.package_id, repository, tag, commit_sha)?,
-        None => {}
+        Some(LibraryProvenance::SourceBuild {
+            sources,
+            build_revision,
+            recipe_sha256,
+            verification_policy_sha256,
+            patches,
+            toolchain,
+        }) => {
+            if package.release.components.is_empty() || *build_revision == 0 || sources.is_empty() {
+                return Err(library_error(format!(
+                    "package `{}` has source-build provenance without a composite release",
+                    package.package_id
+                )));
+            }
+            ensure_sha256("source-build recipe", recipe_sha256)?;
+            ensure_sha256(
+                "source-build verification policy",
+                verification_policy_sha256,
+            )?;
+            for (patch_id, patch) in patches {
+                ensure_id("source-build patch id", patch_id)?;
+                ensure_id("source-build patch source", &patch.source)?;
+                if !sources.contains_key(&patch.source)
+                    || !is_safe_source_relative_path(&patch.target)
+                    || patch.original_sha256 == patch.patched_sha256
+                {
+                    return Err(library_error(format!(
+                        "package `{}` has invalid source patch metadata",
+                        package.package_id
+                    )));
+                }
+                ensure_sha256("source patch descriptor", &patch.descriptor_sha256)?;
+                ensure_sha256("source patch original", &patch.original_sha256)?;
+                ensure_sha256("source patch result", &patch.patched_sha256)?;
+            }
+            for (label, value) in [
+                ("source-build runner", &toolchain.runner_image),
+                ("source-build compiler", &toolchain.compiler),
+                ("source-build linker", &toolchain.linker),
+                ("source-build Windows SDK", &toolchain.windows_sdk),
+                ("source-build CMake", &toolchain.cmake),
+            ] {
+                ensure_not_blank(label, value)?;
+            }
+            for (component, source) in sources {
+                ensure_id("source-build component", component)?;
+                let valid_version = Version::parse(&source.version).is_ok();
+                let valid_git_identity = match (
+                    source.tag.as_deref(),
+                    source.tag_object_sha.as_deref(),
+                    source.commit_sha.as_deref(),
+                ) {
+                    (Some(tag), Some(tag_object_sha), Some(commit_sha)) => {
+                        validate_github_release_provenance(
+                            &package.package_id,
+                            &source.repository,
+                            tag,
+                            commit_sha,
+                        )?;
+                        is_lower_hex_40(tag_object_sha)
+                    }
+                    (None, None, None) => true,
+                    _ => false,
+                };
+                if !valid_version
+                    || !valid_git_identity
+                    || !source.archive_url.starts_with("https://")
+                {
+                    return Err(library_error(format!(
+                        "package `{}` has invalid source-build source metadata",
+                        package.package_id
+                    )));
+                }
+                ensure_sha256("source archive", &source.archive_sha256)?;
+            }
+        }
+        None => {
+            if !package.release.components.is_empty() {
+                return Err(library_error(format!(
+                    "composite package `{}` requires provenance",
+                    package.package_id
+                )));
+            }
+        }
     }
 
     if let Some(expected_package_id) = expected_microsoft_package_id(&package.technology) {
@@ -131,6 +214,25 @@ fn validate_provenance(package: &LibraryPackage) -> Result<(), ServiceError> {
     }
 
     Ok(())
+}
+
+fn is_safe_source_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('/')
+        && !value.contains('\\')
+        && !value
+            .split('/')
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+        && !(value.len() >= 2
+            && value.as_bytes()[0].is_ascii_alphabetic()
+            && value.as_bytes()[1] == b':')
+}
+
+fn is_lower_hex_40(value: &str) -> bool {
+    value.len() == 40
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn validate_nuget_provenance(

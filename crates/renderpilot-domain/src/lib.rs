@@ -28,16 +28,18 @@ pub use addon::{
 };
 pub use catalog_package::{
     CatalogLegalDocumentFormat, CatalogLegalDocumentKind, CatalogLegalDocumentReceipt,
-    CatalogPackageAvailability, CatalogPackageReceiptV1, CatalogProvenanceReceipt,
-    CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, PackageRelease,
-    ReleaseChannel,
+    CatalogPackageAvailability, CatalogPackageMemberReceipt, CatalogPackageProvenanceReceipt,
+    CatalogPackageReceipt, CatalogPackageReceiptV1, CatalogPackageReceiptV2,
+    CatalogProvenanceReceipt, CatalogReceiptSchemaV1, CatalogReceiptSchemaV2,
+    CatalogSignatureReceipt, CatalogSourceBuildToolchainReceipt, CatalogSourcePatchReceipt,
+    CatalogSourceReceipt, CatalogTargetReceipt, PackageRelease, ReleaseChannel,
 };
 pub use component::{
     ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentRollbackBaseline,
     ComponentVersionReport, D3d12ExecutableBaseline, D3d12ExecutableIdentity, LibraryArtifact,
-    LibraryComponent, PeCompatibilityProfile, PeExportSet, PeExportSetError, ReleaseMetadata,
-    RuntimeCompatibility, RuntimeTarget, Sha256Hash, UpstreamPackage, UpstreamPackageProvider,
-    component_version_report,
+    LibraryComponent, PeCompatibilityProfile, PeExportSet, PeExportSetError, PeImportProfile,
+    PeImportSet, PeImportSetError, ReleaseMetadata, RuntimeCompatibility, RuntimeTarget,
+    Sha256Hash, UpstreamPackage, UpstreamPackageProvider, component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
 pub use game::{GameIdentity, GameInstallation, GameModelError, RootAuthority};

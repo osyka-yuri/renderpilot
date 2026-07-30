@@ -1031,6 +1031,7 @@ fn openvr_installed_release_is_resolved_by_full_catalog_content() {
                 version: PackageVersion::parse("1.1.0").expect("package version"),
                 channel: ReleaseChannel::Stable,
                 label: Some("revision b".to_owned()),
+                components: Default::default(),
             }),
         }
     );
@@ -1142,6 +1143,7 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
                 version: PackageVersion::parse("4.1.1.2740").expect("package version"),
                 channel: ReleaseChannel::Stable,
                 label: Some("FSR 3.1.4".to_owned()),
+                components: Default::default(),
             }),
         },
         "stable package identity must win over a preview with the same technical version"
@@ -1257,6 +1259,7 @@ fn test_catalog_receipt(
             version: PackageVersion::parse(release).expect("package version"),
             channel: ReleaseChannel::Stable,
             label: label.map(str::to_owned),
+            components: Default::default(),
         },
         target: CatalogTargetReceipt {
             os: "windows".to_owned(),
@@ -1290,9 +1293,9 @@ fn active_catalog_for(
             Some((
                 artifact.id().clone(),
                 ActiveCatalogPackage::new(
-                    receipt.package_id.clone(),
-                    receipt.release.clone(),
-                    receipt.release.channel == ReleaseChannel::Stable,
+                    receipt.package_id().to_owned(),
+                    receipt.release().clone(),
+                    receipt.release().channel == ReleaseChannel::Stable,
                 ),
             ))
         })

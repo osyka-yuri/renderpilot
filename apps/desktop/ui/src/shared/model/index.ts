@@ -7,6 +7,7 @@ export {
 export type { ExecutedD3d12ExecutableAction, OperationMetadata } from './operation-metadata';
 export { canonicalizePackageVersion, comparePackageVersions } from './package-version';
 export {
+  type CatalogCandidateProvenance,
   type CatalogCandidatePackage,
   type CatalogPackageAvailability,
   type CatalogRelease,

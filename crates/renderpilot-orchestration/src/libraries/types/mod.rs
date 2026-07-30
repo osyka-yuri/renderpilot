@@ -20,4 +20,6 @@ pub use package::{
 #[cfg(test)]
 pub(crate) use catalog::LibraryVendor;
 #[cfg(test)]
-pub(crate) use package::LibraryTransport;
+pub(crate) use package::{
+    LibrarySourceBuildToolchain, LibrarySourceInput, LibrarySourcePatch, LibraryTransport,
+};

@@ -23,8 +23,8 @@ struct VendorPolicy {
     required_in_v1_cache: bool,
 }
 
-// Valve is supported by this client, but remains optional so an older
-// last-known-good cache can still be used offline.
+// Valve and Xiph are supported by this client, but remain optional so older
+// last-known-good caches can still be used offline.
 const VENDOR_POLICIES: &[VendorPolicy] = &[
     VendorPolicy {
         id: "amd",
@@ -44,6 +44,10 @@ const VENDOR_POLICIES: &[VendorPolicy] = &[
     },
     VendorPolicy {
         id: "valve",
+        required_in_v1_cache: false,
+    },
+    VendorPolicy {
+        id: "xiph",
         required_in_v1_cache: false,
     },
 ];

@@ -4,6 +4,82 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::Architecture;
 
+/// Canonical lowercase set of PE import-library basenames.
+///
+/// Empty sets are valid because one of the regular or delay-load directories
+/// may be absent. Path-like names are rejected so import facts never carry
+/// filesystem semantics.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct PeImportSet(Vec<String>);
+
+impl PeImportSet {
+    /// Maximum number of import descriptors accepted from one directory.
+    pub const MAX_NAMES: usize = 4_096;
+    /// Maximum byte length of one imported DLL basename.
+    pub const MAX_NAME_BYTES: usize = 256;
+
+    /// Validates a sorted, unique, lowercase sequence of DLL basenames.
+    pub fn from_canonical_names(names: Vec<String>) -> Result<Self, PeImportSetError> {
+        if names.len() > Self::MAX_NAMES {
+            return Err(PeImportSetError);
+        }
+        let mut previous: Option<&str> = None;
+        for name in &names {
+            if name.is_empty()
+                || name.len() > Self::MAX_NAME_BYTES
+                || !name.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'.' | b'_' | b'-')
+                })
+                || !name.ends_with(".dll")
+                || name.contains("..")
+                || previous.is_some_and(|value| value >= name.as_str())
+            {
+                return Err(PeImportSetError);
+            }
+            previous = Some(name);
+        }
+        Ok(Self(names))
+    }
+
+    /// Lowercases and sorts names observed from a PE directory.
+    pub fn from_observed_names(mut names: Vec<String>) -> Result<Self, PeImportSetError> {
+        for name in &mut names {
+            name.make_ascii_lowercase();
+        }
+        names.sort();
+        Self::from_canonical_names(names)
+    }
+
+    /// Returns canonical imported DLL basenames.
+    #[must_use]
+    pub fn names(&self) -> &[String] {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for PeImportSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let names = Vec::<String>::deserialize(deserializer)?;
+        Self::from_canonical_names(names).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Strictly separated regular and delay-load PE imports.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PeImportProfile {
+    /// Imports from `IMAGE_DIRECTORY_ENTRY_IMPORT`.
+    pub regular: PeImportSet,
+    /// Imports from `IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT`.
+    pub delay: PeImportSet,
+}
+
 /// Canonical, case-sensitive set of named PE exports.
 ///
 /// This is an export-surface compatibility signal. It does not model a
@@ -90,6 +166,8 @@ impl<'de> Deserialize<'de> for PeExportSet {
 pub struct PeCompatibilityProfile {
     architecture: Architecture,
     named_exports: PeExportSet,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    imports: Option<PeImportProfile>,
 }
 
 impl PeCompatibilityProfile {
@@ -99,7 +177,15 @@ impl PeCompatibilityProfile {
         Self {
             architecture,
             named_exports,
+            imports: None,
         }
+    }
+
+    /// Attaches strict regular and delay-load import facts.
+    #[must_use]
+    pub fn with_imports(mut self, imports: PeImportProfile) -> Self {
+        self.imports = Some(imports);
+        self
     }
 
     /// Returns the observed COFF architecture.
@@ -112,6 +198,12 @@ impl PeCompatibilityProfile {
     #[must_use]
     pub const fn named_exports(&self) -> &PeExportSet {
         &self.named_exports
+    }
+
+    /// Returns separately verified regular and delay-load imports.
+    #[must_use]
+    pub const fn imports(&self) -> Option<&PeImportProfile> {
+        self.imports.as_ref()
     }
 }
 
@@ -128,6 +220,20 @@ impl fmt::Display for PeExportSetError {
 }
 
 impl Error for PeExportSetError {}
+
+/// Invalid canonical PE import set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeImportSetError;
+
+impl fmt::Display for PeImportSetError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(
+            "PE imports must be sorted unique lowercase DLL basenames with at most 4096 names and 256 bytes per name",
+        )
+    }
+}
+
+impl Error for PeImportSetError {}
 
 #[cfg(test)]
 mod tests {
@@ -182,5 +288,36 @@ mod tests {
         let mut excessive = maximum;
         excessive.push("Export99999".to_owned());
         assert!(PeExportSet::from_canonical_names(excessive).is_err());
+    }
+
+    #[test]
+    fn import_sets_are_lowercase_sorted_and_may_be_empty() {
+        assert!(PeImportSet::from_canonical_names(Vec::new()).is_ok());
+        let observed = PeImportSet::from_observed_names(vec![
+            "VCRUNTIME140.DLL".into(),
+            "KERNEL32.dll".into(),
+        ])
+        .expect("imports");
+        assert_eq!(
+            observed.names(),
+            &["kernel32.dll".to_owned(), "vcruntime140.dll".to_owned()]
+        );
+    }
+
+    #[test]
+    fn import_sets_reject_duplicates_and_path_like_names() {
+        assert!(
+            PeImportSet::from_canonical_names(vec!["kernel32.dll".into(), "kernel32.dll".into()])
+                .is_err()
+        );
+        for invalid in [
+            "C:\\windows\\kernel32.dll",
+            "../kernel32.dll",
+            "sub/kernel32.dll",
+            "KERNEL32.dll",
+            "kernel32",
+        ] {
+            assert!(PeImportSet::from_canonical_names(vec![invalid.into()]).is_err());
+        }
     }
 }

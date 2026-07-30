@@ -63,6 +63,7 @@ describe('ComponentVersionRow catalog releases', () => {
           release: { version: '1.721.2-preview', channel: 'preview', label: null },
           availability: 'available',
           automatic_selection_allowed: false,
+          presentation: null,
         },
       }),
     ]);
@@ -84,6 +85,7 @@ describe('ComponentVersionRow catalog releases', () => {
           release: { version: '1.721.2-preview', channel: 'preview', label: null },
           availability: 'local_only',
           automatic_selection_allowed: false,
+          presentation: null,
         },
         is_downloaded: true,
       }),
@@ -103,6 +105,7 @@ describe('ComponentVersionRow catalog releases', () => {
           release: { version: '1.721.1-preview', channel: 'preview', label: null },
           availability: 'available',
           automatic_selection_allowed: false,
+          presentation: null,
         },
       }),
     ]);
@@ -132,6 +135,155 @@ describe('ComponentVersionRow catalog releases', () => {
     await openVersionSelect();
     expect(selectItemLabels()).toContain('v1.721.2-preview');
     expect(selectItemLabels()).toContain('v1.721.1-preview');
+  });
+
+  it('keeps Xiph options concise while showing the complete release composition', async () => {
+    mounted = mountRow([
+      catalogCandidate('1.3.7', {
+        artifact_id: 'xiph',
+        catalog_package: {
+          package_id: 'xiph_vorbis.vorbis-1.3.7.ogg-1.3.6.r1.x64.plain',
+          release: {
+            version: '1.3.7',
+            channel: 'stable',
+            label: null,
+            components: { ogg: '1.3.6', vorbis: '1.3.7' },
+          },
+          availability: 'available',
+          automatic_selection_allowed: true,
+          presentation: {
+            variant: 'shared.plain',
+            architecture: 'X64',
+            unsigned: true,
+            provenance: {
+              kind: 'source_build',
+              sources: {
+                ogg: {
+                  repository: 'xiph/ogg',
+                  version: '1.3.6',
+                  tag: 'v1.3.6',
+                  tag_object_sha: 'db03f3f4f8dd37a9f0c7f0b2cfd8a0d2d3c6f5c4',
+                  commit_sha: 'be05b13e98b048f0b5a0f5fa8ce514d56db5f822',
+                  archive_url: 'https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.xz',
+                  archive_sha256:
+                    '5c8253428e181840cd20d41f3ca16557a9cc04bad4a3d04cce84808677fa1061',
+                },
+                vorbis: {
+                  repository: 'xiph/vorbis',
+                  version: '1.3.7',
+                  tag: 'v1.3.7',
+                  tag_object_sha: '0c55b9f34f7f14a84ecfe1140ffecf95e8c9a596',
+                  commit_sha: '0657aee69dec8508a0011f47f3b69d7538e9d262',
+                  archive_url: 'https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz',
+                  archive_sha256:
+                    'b33cc4934322bcbf6efcbacf49e3ca01aadbea4114ec9589d1b1e9d20f72954b',
+                },
+              },
+              build_revision: 1,
+              recipe_sha256: 'a'.repeat(64),
+              verification_policy_sha256: 'b'.repeat(64),
+              patches: {},
+              toolchain: {
+                runner_image: 'windows-2025-vs2026',
+                compiler: 'MSVC',
+                linker: 'link.exe',
+                windows_sdk: '10.0',
+                cmake: '4.1',
+              },
+            },
+            legal_documents: [
+              {
+                legal_document_id: 'xiph-license',
+                kind: 'license',
+                title: 'Xiph BSD licenses',
+                format: 'text',
+                file_name: 'LICENSE.txt',
+                content_url: 'https://cdn.example.test/xiph/LICENSE.txt',
+              },
+            ],
+          },
+        },
+      }),
+    ]);
+
+    await openVersionSelect();
+    const text =
+      document.body.querySelector('[role="option"][data-value="xiph"]')?.textContent ?? '';
+    expect(text).toContain('Ogg 1.3.6');
+    expect(text).toContain('Vorbis 1.3.7');
+    expect(text).not.toContain('Unsigned');
+    expect(text).not.toContain('source-build');
+    expect(text).not.toContain('shared.plain');
+    expect(text).not.toContain('be05b13e98b0');
+    expect(text).not.toContain('windows-2025-vs2026');
+    expect(text).not.toContain('Xiph BSD licenses');
+  });
+
+  it('shows only differing member versions for generic composite packages', async () => {
+    mounted = mountRow([
+      catalogCandidate('2.0.0', {
+        artifact_id: 'nuget-composite',
+        catalog_package: {
+          package_id: 'example.nuget.composite',
+          release: {
+            version: '2.0.0',
+            channel: 'stable',
+            label: null,
+            components: { core: '2.0.0', support: '1.4.0' },
+          },
+          availability: 'available',
+          automatic_selection_allowed: true,
+          presentation: {
+            variant: 'runtime',
+            architecture: 'X64',
+            unsigned: false,
+            provenance: {
+              kind: 'nuget',
+              package_id: 'Example.Composite',
+              version: '2.0.0',
+              package_sha512: 'fixture',
+            },
+            legal_documents: [],
+          },
+        },
+      }),
+      catalogCandidate('1.0.0', {
+        artifact_id: 'github-composite',
+        catalog_package: {
+          package_id: 'example.github.composite',
+          release: {
+            version: '1.0.0',
+            channel: 'stable',
+            label: null,
+            components: { core: '1.0.0', support: '0.9.0' },
+          },
+          availability: 'available',
+          automatic_selection_allowed: true,
+          presentation: {
+            variant: 'runtime',
+            architecture: 'X64',
+            unsigned: false,
+            provenance: {
+              kind: 'github_release',
+              repository: 'example/composite',
+              tag: 'v1.0.0',
+              commit_sha: 'a'.repeat(40),
+            },
+            legal_documents: [],
+          },
+        },
+      }),
+    ]);
+
+    await openVersionSelect();
+    const nuget = document.body.querySelector('[role="option"][data-value="nuget-composite"]');
+    const github = document.body.querySelector('[role="option"][data-value="github-composite"]');
+    expect(nuget?.textContent).toContain('Core 2.0.0');
+    expect(nuget?.textContent).toContain('Support 1.4.0');
+    expect(github?.textContent).toContain('Core 1.0.0');
+    expect(github?.textContent).toContain('Support 0.9.0');
+    expect(nuget?.textContent).not.toContain('NuGet Example.Composite');
+    expect(github?.textContent).not.toContain('example/composite');
   });
 
   function mountRow(candidates: Parameters<typeof group>[3]): object {

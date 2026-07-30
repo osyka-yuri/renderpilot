@@ -50,13 +50,13 @@ fn developer_mode_requirement(artifact: &LibraryArtifact) -> DeveloperModeRequir
     };
 
     if !receipt
-        .technology
+        .technology()
         .eq_ignore_ascii_case(LibraryTechnology::D3D12Agility.as_slug())
     {
         return DeveloperModeRequirement::Unverifiable;
     }
 
-    match receipt.release.channel {
+    match receipt.release().channel {
         ReleaseChannel::Preview => DeveloperModeRequirement::Required,
         ReleaseChannel::Stable | ReleaseChannel::Beta | ReleaseChannel::Debug => {
             DeveloperModeRequirement::NotRequired
@@ -277,6 +277,7 @@ mod tests {
                 version: PackageVersion::parse("1.619.1").expect("package version"),
                 channel,
                 label: None,
+                components: Default::default(),
             },
             target: CatalogTargetReceipt {
                 os: "windows".to_owned(),

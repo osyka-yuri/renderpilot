@@ -37,10 +37,20 @@ impl InventoryEntry {
     }
 
     pub(super) fn automatic_selection_allowed(&self) -> bool {
-        self.active
-            .as_ref()
-            .and_then(|artifact| artifact.metadata().catalog_package_receipt())
-            .is_some_and(|receipt| receipt.release.channel == ReleaseChannel::Stable)
+        self.active.as_ref().is_some_and(|artifact| {
+            let Some(receipt) = artifact.metadata().catalog_package_receipt() else {
+                return false;
+            };
+            if receipt.release().channel != ReleaseChannel::Stable {
+                return false;
+            }
+            receipt.technology() != "xiph_vorbis"
+                || (receipt.composite_provenance().is_some()
+                    && artifact.files().iter().all(|file| {
+                        file.pe_compatibility()
+                            .is_some_and(|profile| profile.imports().is_some())
+                    }))
+        })
     }
 }
 
@@ -94,8 +104,8 @@ impl Inventory {
                         active.id().as_str()
                     ))
                 })?
-                .package_id
-                .clone();
+                .package_id()
+                .to_owned();
             groups.entry(package_id).or_default().active = Some(active);
         }
         for local in local_artifacts {
@@ -109,7 +119,7 @@ impl Inventory {
                 ))
             })?;
             groups
-                .entry(receipt.package_id.clone())
+                .entry(receipt.package_id().to_owned())
                 .or_default()
                 .locals
                 .push((local, local_state));
@@ -186,8 +196,8 @@ impl Inventory {
                 active_catalog.insert(
                     active.id().clone(),
                     ActiveCatalogPackage::new(
-                        receipt.package_id.clone(),
-                        receipt.release.clone(),
+                        receipt.package_id().to_owned(),
+                        receipt.release().clone(),
                         entry.automatic_selection_allowed(),
                     ),
                 );
@@ -343,6 +353,7 @@ mod tests {
                 version: PackageVersion::parse("1.0.0").expect("package version"),
                 channel: ReleaseChannel::Stable,
                 label: None,
+                components: Default::default(),
             },
             target: CatalogTargetReceipt {
                 os: "windows".to_owned(),

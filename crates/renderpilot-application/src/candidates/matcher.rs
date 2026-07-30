@@ -74,8 +74,8 @@ impl CandidateContext {
         }
         let receipt = artifact.metadata().catalog_package_receipt()?;
         Some(CatalogCandidatePackage::new(
-            receipt.package_id.clone(),
-            receipt.release.clone(),
+            receipt.package_id().to_owned(),
+            receipt.release().clone(),
             CatalogPackageAvailability::LocalOnly,
             false,
         ))

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    Architecture, CatalogPackageReceiptV1, PackageVersion, Version, text::normalize_required_text,
+    Architecture, CatalogPackageReceipt, PackageVersion, Version, text::normalize_required_text,
 };
 
 use super::ComponentError;
@@ -170,7 +170,7 @@ pub struct ArtifactMetadata {
     release: Option<ReleaseMetadata>,
     upstream_package: Option<UpstreamPackage>,
     runtime_target: Option<RuntimeTarget>,
-    catalog_package_receipt: Option<CatalogPackageReceiptV1>,
+    catalog_package_receipt: Option<CatalogPackageReceipt>,
 }
 
 impl ArtifactMetadata {
@@ -203,7 +203,7 @@ impl ArtifactMetadata {
     }
 
     /// Returns the immutable catalog receipt attached at download time.
-    pub const fn catalog_package_receipt(&self) -> Option<&CatalogPackageReceiptV1> {
+    pub const fn catalog_package_receipt(&self) -> Option<&CatalogPackageReceipt> {
         self.catalog_package_receipt.as_ref()
     }
 
@@ -243,8 +243,11 @@ impl ArtifactMetadata {
 
     /// Attaches the immutable catalog receipt used for local package lifecycle.
     #[must_use]
-    pub fn with_catalog_package_receipt(mut self, receipt: CatalogPackageReceiptV1) -> Self {
-        self.catalog_package_receipt = Some(receipt);
+    pub fn with_catalog_package_receipt(
+        mut self,
+        receipt: impl Into<CatalogPackageReceipt>,
+    ) -> Self {
+        self.catalog_package_receipt = Some(receipt.into());
         self
     }
 }
@@ -265,7 +268,7 @@ impl Serialize for ArtifactMetadata {
             #[serde(skip_serializing_if = "Option::is_none")]
             runtime_target: Option<&'a RuntimeTarget>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            catalog_package_receipt: Option<&'a CatalogPackageReceiptV1>,
+            catalog_package_receipt: Option<&'a CatalogPackageReceipt>,
         }
 
         WireMetadata {
@@ -295,7 +298,7 @@ impl<'de> Deserialize<'de> for ArtifactMetadata {
             #[serde(default)]
             runtime_target: Option<RuntimeTarget>,
             #[serde(default)]
-            catalog_package_receipt: Option<CatalogPackageReceiptV1>,
+            catalog_package_receipt: Option<CatalogPackageReceipt>,
         }
 
         let wire = WireMetadata::deserialize(deserializer)?;

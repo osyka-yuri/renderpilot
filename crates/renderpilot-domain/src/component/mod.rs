@@ -11,7 +11,10 @@ pub use metadata::{
     ArtifactMetadata, ReleaseMetadata, RuntimeCompatibility, RuntimeTarget, UpstreamPackage,
     UpstreamPackageProvider,
 };
-pub use pe_compatibility::{PeCompatibilityProfile, PeExportSet, PeExportSetError};
+pub use pe_compatibility::{
+    PeCompatibilityProfile, PeExportSet, PeExportSetError, PeImportProfile, PeImportSet,
+    PeImportSetError,
+};
 pub use rollback_baseline::{
     ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity,
 };
