@@ -647,8 +647,7 @@ export const es: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     'La actualización se instaló, pero la aplicación no pudo reiniciarse automáticamente. Reinicia RenderPilot manualmente para finalizar la actualización.',
 
-  'settings.about.updateDialog.progressAria': 'Progreso de descarga: {percent} por ciento',
-  'settings.about.updateDialog.indeterminateProgressAria': 'Progreso de descarga',
+  'settings.about.updateDialog.progressAria': 'Progreso de descarga',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

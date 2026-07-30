@@ -1,7 +1,9 @@
+import { createPluralRules } from '@shared/intl';
+
 import type { Locale } from './locale';
 import type { InterpolationParams, MessageValue, PluralForms } from './messages/types';
 
-const pluralRulesByLocale: Partial<Record<Locale, Intl.PluralRules>> = {};
+const cardinalPluralRules = createPluralRules({ type: 'cardinal' });
 
 export function renderMessage(
   value: MessageValue,
@@ -13,7 +15,7 @@ export function renderMessage(
   }
 
   const count = typeof params?.count === 'number' ? params.count : 0;
-  const category = pluralRulesFor(locale).select(count);
+  const category = cardinalPluralRules(locale).select(count);
   const plural = value[category as keyof PluralForms] ?? value.other;
 
   return interpolateMessage(plural, params);
@@ -27,15 +29,4 @@ export function interpolateMessage(template: string, params?: InterpolationParam
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
   );
-}
-
-function pluralRulesFor(locale: Locale): Intl.PluralRules {
-  let rules = pluralRulesByLocale[locale];
-
-  if (!rules) {
-    rules = new Intl.PluralRules(locale);
-    pluralRulesByLocale[locale] = rules;
-  }
-
-  return rules;
 }

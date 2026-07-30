@@ -313,8 +313,7 @@ export const ru: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     'Обновление установлено, но приложение не удалось перезапустить автоматически. Перезапустите RenderPilot вручную, чтобы завершить обновление.',
 
-  'settings.about.updateDialog.progressAria': 'Прогресс загрузки: {percent} процентов',
-  'settings.about.updateDialog.indeterminateProgressAria': 'Прогресс загрузки',
+  'settings.about.updateDialog.progressAria': 'Прогресс загрузки',
 
   // ── Common ──
   'common.unknown': 'Неизвестно',

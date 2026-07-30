@@ -1,4 +1,5 @@
 import { describeCommandErrorTechnical } from '@shared/api';
+import { parseHttpDateTimestamp } from '@shared/date';
 import { t, type MessageKey } from '@shared/i18n';
 import { publishErrorNotification } from '@shared/notifications';
 
@@ -125,7 +126,9 @@ export function createAddonStore<
   );
   const addonUpdate = $derived(core.updateReport?.addon ?? null);
   const hostUpdate = $derived(core.updateReport?.host ?? null);
-  const addonDated = $derived(core.state?.status === 'installed' ? core.state.addon_dated : null);
+  const addonDated = $derived(
+    core.state?.status === 'installed' ? parseHttpDateTimestamp(core.state.addon_dated) : null,
+  );
   const installedAt = $derived(core.state?.status === 'installed' ? core.state.installed_at : null);
   const updatedAt = $derived(core.state?.status === 'installed' ? core.state.updated_at : null);
   const freshness = $derived.by(() =>

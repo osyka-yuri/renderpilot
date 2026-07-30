@@ -250,7 +250,7 @@ describe('createAppUpdaterModel', () => {
 
     it('shows completed verifying progress and installing before calling install', async () => {
       const phasesAtInstall: (string | undefined)[] = [];
-      const settleFrames: { phase: string | undefined; percent: number | null }[] = [];
+      const settleFrames: { phase: string | undefined; ratio: number | null }[] = [];
       const modelRef: { current: AppUpdaterModel | null } = { current: null };
       const handle = createHandle({
         downloadImpl: (onEvent) => {
@@ -271,8 +271,8 @@ describe('createAppUpdaterModel', () => {
             const d = modelRef.current?.dialog;
             settleFrames.push({
               phase: d?.phase,
-              percent:
-                d?.phase === 'downloading' || d?.phase === 'verifying' ? d.progress.percent : null,
+              ratio:
+                d?.phase === 'downloading' || d?.phase === 'verifying' ? d.progress.ratio : null,
             });
             return Promise.resolve();
           },
@@ -283,7 +283,7 @@ describe('createAppUpdaterModel', () => {
 
       await model.installAvailableUpdate();
 
-      expect(settleFrames).toContainEqual({ phase: 'verifying', percent: 100 });
+      expect(settleFrames).toContainEqual({ phase: 'verifying', ratio: 1 });
       expect(settleFrames.some((frame) => frame.phase === 'downloading')).toBe(false);
       expect(settleFrames.some((frame) => frame.phase === 'installing')).toBe(true);
       expect(phasesAtInstall).toEqual(['installing']);

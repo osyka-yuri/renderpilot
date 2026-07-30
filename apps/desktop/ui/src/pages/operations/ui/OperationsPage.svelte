@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { type ColumnDef, getCoreRowModel } from '@tanstack/table-core';
+
   import type { GameSummary } from '@entities/game';
+  import { getLocale, t } from '@shared/i18n';
   import {
     Badge,
     Card,
@@ -16,13 +19,12 @@
     FlexRender,
     renderSnippet,
   } from '@shared/ui';
-  import { t } from '@shared/i18n';
+
   import {
     createOperationViewModel,
     type OperationHistoryDetails,
     type OperationViewModel,
   } from '../model/operations-page-presenter';
-  import { type ColumnDef, getCoreRowModel } from '@tanstack/table-core';
 
   const EMPTY_VALUE = '—';
 
@@ -35,6 +37,7 @@
 
   const { gameCard = null, details = null }: Props = $props();
 
+  const locale = $derived(getLocale());
   const pageSubtitle = $derived(
     gameCard === null ? undefined : t('operations.subtitleGame', { title: gameCard.title }),
   );
@@ -44,7 +47,9 @@
       return EMPTY_OPERATIONS;
     }
 
-    return details.operations.map((op) => createOperationViewModel(op, gameCard));
+    return details.operations.map((operation) =>
+      createOperationViewModel(operation, locale, gameCard),
+    );
   });
 
   const hasOperations = $derived(operations.length > 0);

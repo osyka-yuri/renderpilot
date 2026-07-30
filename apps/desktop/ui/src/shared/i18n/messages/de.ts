@@ -661,8 +661,7 @@ export const de: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     'Das Update wurde installiert, aber die Anwendung konnte nicht automatisch neu gestartet werden. Starten Sie RenderPilot manuell neu, um das Update abzuschließen.',
 
-  'settings.about.updateDialog.progressAria': 'Downloadfortschritt: {percent} Prozent',
-  'settings.about.updateDialog.indeterminateProgressAria': 'Downloadfortschritt',
+  'settings.about.updateDialog.progressAria': 'Downloadfortschritt',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

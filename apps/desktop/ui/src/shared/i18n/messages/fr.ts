@@ -649,8 +649,7 @@ export const fr: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     "La mise à jour a été installée, mais l'application n'a pas pu redémarrer automatiquement. Redémarrez RenderPilot manuellement pour terminer la mise à jour.",
 
-  'settings.about.updateDialog.progressAria': 'Progression du téléchargement : {percent} pour cent',
-  'settings.about.updateDialog.indeterminateProgressAria': 'Progression du téléchargement',
+  'settings.about.updateDialog.progressAria': 'Progression du téléchargement',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

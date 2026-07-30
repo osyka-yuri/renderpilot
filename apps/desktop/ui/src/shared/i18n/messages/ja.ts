@@ -630,8 +630,7 @@ export const ja: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     'アップデートはインストールされましたが、アプリを自動で再起動できませんでした。RenderPilot を手動で再起動して更新を完了してください。',
 
-  'settings.about.updateDialog.progressAria': 'ダウンロード進捗: {percent} パーセント',
-  'settings.about.updateDialog.indeterminateProgressAria': 'ダウンロード進捗',
+  'settings.about.updateDialog.progressAria': 'ダウンロード進捗',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

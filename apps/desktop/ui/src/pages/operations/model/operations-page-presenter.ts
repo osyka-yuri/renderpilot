@@ -1,3 +1,5 @@
+import { formatLabel } from '@entities/component';
+import type { GameSummary } from '@entities/game';
 import {
   formatOperationLabel,
   getCompletedDurationText,
@@ -5,12 +7,8 @@ import {
   type OperationBadgeVariant,
   type OperationSummary,
 } from '@entities/operation';
-import { formatTimestamp } from '@shared/format';
-import { t } from '@shared/i18n';
-
-import { formatLabel } from '@entities/component';
-
-import type { GameSummary } from '@entities/game';
+import { formatLocalDateTime } from '@shared/format';
+import { t, type Locale } from '@shared/i18n';
 
 const COMPONENT_ID_LABEL_MAP: Record<string, string> = {
   'dlss super resolution': 'DLSS Super Resolution',
@@ -41,11 +39,12 @@ export type OperationViewModel = {
 
 export function createOperationViewModel(
   operation: OperationSummary,
+  locale: Locale,
   gameCard?: GameSummary | null,
 ): OperationViewModel {
   const kindLabel = formatOperationLabel(operation.kind);
   const statusLabel = formatOperationLabel(operation.status);
-  const createdAtText = formatTimestamp(operation.created_at);
+  const createdAtText = formatLocalDateTime(operation.created_at, locale) ?? t('common.unknown');
   const badgeVariant = statusBadgeVariant(operation.status);
 
   const gameName = operation.metadata?.game_name ?? gameCard?.title ?? '-';

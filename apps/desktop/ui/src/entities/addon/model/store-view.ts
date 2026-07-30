@@ -29,7 +29,7 @@ export type AddonStoreView = {
   requiresConfirmation: boolean;
   confidence: MatchConfidence | null;
   freshness: Freshness;
-  addonDated: string | null;
+  addonDated: number | null;
   installedAt: number | null;
   lastCheckedAt: number | null;
   updateAvailable: boolean;

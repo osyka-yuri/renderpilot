@@ -1,12 +1,14 @@
-import { trimToEmpty } from '@shared/text';
-import { t, getLocale } from '@shared/i18n';
-import { comparePackageVersions } from '@shared/model';
-import type { LibraryPackageSummary, Signature } from '@entities/library';
+import { parseRfc3339Timestamp } from '@shared/date';
+import { formatUtcNumericDate } from '@shared/format';
 import {
   libraryVendorOrder,
   vendorLabelForLibraryVendorKey,
   type LibraryVendorKey,
 } from '@shared/graphics';
+import { t, type Locale } from '@shared/i18n';
+import { comparePackageVersions } from '@shared/model';
+import { trimToEmpty } from '@shared/text';
+import type { LibraryPackageSummary, Signature } from '@entities/library';
 
 export type Vendor = Exclude<LibraryVendorKey, 'other'>;
 
@@ -221,21 +223,15 @@ export function formatArchitectureLabel(row: LibraryPackageRow): string {
   return row.target.architecture === 'X86' ? 'x86' : 'x64';
 }
 
-export function formatSignedDate(signature: Signature): string {
+export function formatSignedDate(signature: Signature, locale: Locale): string {
   if (signature.status !== 'signed') {
     return t('libraries.unsigned');
   }
   if (signature.signed_at === null) {
     return '—';
   }
-  const signedDate = new Date(signature.signed_at);
-  if (Number.isNaN(signedDate.getTime())) {
-    return t('libraries.invalidDate');
-  }
-  return new Intl.DateTimeFormat(getLocale(), {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    timeZone: 'UTC',
-  }).format(signedDate);
+  const timestamp = parseRfc3339Timestamp(signature.signed_at);
+  return timestamp === null
+    ? t('libraries.invalidDate')
+    : (formatUtcNumericDate(timestamp, locale) ?? t('libraries.invalidDate'));
 }

@@ -1,8 +1,9 @@
 import type { Component, ComponentProps } from 'svelte';
 import type { ColumnDef } from '@tanstack/table-core';
-import { renderComponent } from '@shared/ui';
+
 import { formatBytes } from '@shared/format';
-import { t } from '@shared/i18n';
+import { getLocale, t } from '@shared/i18n';
+import { renderComponent } from '@shared/ui';
 import {
   compareReleaseVersions,
   formatSignedDate,
@@ -84,7 +85,7 @@ export function createLibraryColumns(
           column,
           class: 'w-full justify-center',
         }),
-      cell: ({ row }) => formatSignedDate(row.original.primary_signature),
+      cell: ({ row }) => formatSignedDate(row.original.primary_signature, getLocale()),
     },
     size: {
       id: 'size',
@@ -95,7 +96,7 @@ export function createLibraryColumns(
           column,
           class: 'w-full justify-center',
         }),
-      cell: ({ row }) => formatBytes(row.original.size_bytes),
+      cell: ({ row }) => formatBytes(row.original.size_bytes, getLocale()),
     },
     documents: {
       id: 'documents',

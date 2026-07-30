@@ -577,8 +577,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'settings.about.updateDialog.restartRequiredDescription':
     '更新已安装，但应用无法自动重启。请手动重启 RenderPilot 以完成更新。',
 
-  'settings.about.updateDialog.progressAria': '下载进度：{percent} 百分比',
-  'settings.about.updateDialog.indeterminateProgressAria': '下载进度',
+  'settings.about.updateDialog.progressAria': '下载进度',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': '通过 RenoDX 的 ReShade 插件为本游戏添加 HDR 与色调映射。',

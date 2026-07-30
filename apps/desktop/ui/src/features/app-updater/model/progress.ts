@@ -49,14 +49,14 @@ export function applyDownloadEvent(
 export function toProgressView(state: DownloadProgressState): DownloadProgressView {
   const { totalBytes, receivedBytes, networkFinished } = state;
 
-  let percent: number | null = null;
+  let ratio: number | null = null;
   if (totalBytes !== null && totalBytes > 0) {
-    const raw = networkFinished ? 100 : (receivedBytes / totalBytes) * 100;
-    percent = clamp(raw, 0, 100);
+    const raw = networkFinished ? 1 : receivedBytes / totalBytes;
+    ratio = clamp(raw, 0, 1);
   }
 
   return {
-    percent,
+    ratio,
     receivedBytes,
     totalBytes,
     networkFinished,
@@ -73,7 +73,7 @@ export function toCompletedProgressView(state: DownloadProgressState): DownloadP
     totalBytes !== null ? Math.max(state.receivedBytes, totalBytes) : state.receivedBytes;
 
   return {
-    percent: 100,
+    ratio: 1,
     receivedBytes,
     totalBytes,
     networkFinished: true,

@@ -210,11 +210,20 @@ describe('library package presentation', () => {
 
     expect(formatVersionLabel(row)).toBe('1.9.0 (SDK release)');
     expect(formatArchitectureLabel(row)).toBe('x86');
-    expect(formatSignedDate(row.primary_signature)).toBe('—');
-    expect(formatSignedDate({ status: 'unsigned' })).toBe(t('libraries.unsigned'));
-    expect(formatSignedDate({ status: 'signed', signed_at: 'invalid' })).toBe(
+    expect(formatSignedDate(row.primary_signature, 'en')).toBe('—');
+    expect(formatSignedDate({ status: 'unsigned' }, 'en')).toBe(t('libraries.unsigned'));
+    expect(formatSignedDate({ status: 'signed', signed_at: 'invalid' }, 'en')).toBe(
       t('libraries.invalidDate'),
     );
+    expect(
+      formatSignedDate(
+        {
+          status: 'signed',
+          signed_at: '2026-01-01T00:30:00+02:00',
+        },
+        'en',
+      ),
+    ).toBe('12/31/2025');
   });
 
   it('appends the supplemental catalog annotation verbatim', () => {

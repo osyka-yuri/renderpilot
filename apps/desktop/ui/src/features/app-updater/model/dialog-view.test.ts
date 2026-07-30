@@ -14,7 +14,7 @@ import type { AppUpdateDialogState, AppUpdateOffer } from './types';
 const offer: AppUpdateOffer = {
   currentVersion: '1.0.0',
   version: '1.1.0',
-  date: null,
+  releaseTimestamp: null,
   releaseNotes: { blocks: [], truncated: false },
 };
 
@@ -23,13 +23,13 @@ const dialogByPhase = {
   downloading: {
     phase: 'downloading',
     offer,
-    progress: { percent: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
+    progress: { ratio: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
   },
   'retrying-download': { phase: 'retrying-download', offer },
   verifying: {
     phase: 'verifying',
     offer,
-    progress: { percent: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
+    progress: { ratio: null, receivedBytes: 0, totalBytes: null, networkFinished: false },
   },
   installing: { phase: 'installing', offer },
   restarting: { phase: 'restarting', offer },

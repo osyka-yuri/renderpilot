@@ -1,21 +1,20 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { t } from '@shared/i18n';
-  import { Badge, Button, ItemGroup, Spinner } from '@shared/ui';
   import CalendarIcon from '@lucide/svelte/icons/calendar';
   import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
   import ClockIcon from '@lucide/svelte/icons/clock';
   import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
+  import { formatLocalShortDate, formatRelativeTime, formatUtcShortDate } from '@shared/format';
+  import { getLocale, t } from '@shared/i18n';
+  import { Badge, Button, ItemGroup, Spinner } from '@shared/ui';
 
-  import { formatDate, formatHttpDate, formatRelative } from '@shared/format';
-
+  import { isMutationSuccess } from '../model/busy-mutation';
   import type { AddonInstalledLabels } from '../model/presenters';
   import { actionDisabledMessage } from '../model/presenters';
-  import { isMutationSuccess } from '../model/busy-mutation';
-  import type { ActionDescriptor } from '../model/types';
   import type { AddonStoreView } from '../model/store-view';
+  import type { ActionDescriptor } from '../model/types';
   import AddonComponentRow from './AddonComponentRow.svelte';
   import AddonFieldLabel from './AddonFieldLabel.svelte';
   import AddonStateMessage from './AddonStateMessage.svelte';
@@ -81,9 +80,16 @@
     actionRowLeading,
   }: Props = $props();
 
-  const addonDateLabel = $derived(formatHttpDate(store.addonDated));
-  const installedLabel = $derived(store.installedAt ? formatDate(store.installedAt) : null);
-  const checkedLabel = $derived(store.lastCheckedAt ? formatRelative(store.lastCheckedAt) : null);
+  const locale = $derived(getLocale());
+  const addonDateLabel = $derived(
+    store.addonDated === null ? null : formatUtcShortDate(store.addonDated, locale),
+  );
+  const installedLabel = $derived(
+    store.installedAt === null ? null : formatLocalShortDate(store.installedAt, locale),
+  );
+  const checkedLabel = $derived(
+    store.lastCheckedAt === null ? null : formatRelativeTime(store.lastCheckedAt, locale),
+  );
 
   const isCheckingForUpdates = $derived(store.freshness === 'checking');
   const checkUpdatesDisabled = $derived(busy || isCheckingForUpdates);

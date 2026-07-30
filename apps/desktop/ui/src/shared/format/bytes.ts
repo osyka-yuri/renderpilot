@@ -1,18 +1,35 @@
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
-const BYTES_PER_UNIT = 1024;
+import type { Locale } from '@shared/i18n';
+import { createNumberFormatter } from '@shared/intl';
 
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 B';
-  }
+const BYTES_PER_UNIT = 1024;
+const BYTE_FORMATTERS = [
+  createByteFormatter('byte'),
+  createByteFormatter('kilobyte'),
+  createByteFormatter('megabyte'),
+  createByteFormatter('gigabyte'),
+  createByteFormatter('terabyte'),
+] as const;
+
+export function formatBytes(bytes: number, locale: Locale): string {
+  const normalizedBytes = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
 
   const unitIndex = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(BYTES_PER_UNIT)),
-    BYTE_UNITS.length - 1,
+    Math.max(
+      normalizedBytes === 0 ? 0 : Math.floor(Math.log(normalizedBytes) / Math.log(BYTES_PER_UNIT)),
+      0,
+    ),
+    BYTE_FORMATTERS.length - 1,
   );
 
-  const value = bytes / BYTES_PER_UNIT ** unitIndex;
-  const rounded = Number(value.toFixed(1));
+  const value = normalizedBytes / BYTES_PER_UNIT ** unitIndex;
+  return BYTE_FORMATTERS[unitIndex](locale).format(value);
+}
 
-  return `${rounded} ${BYTE_UNITS[unitIndex]}`;
+function createByteFormatter(unit: Intl.NumberFormatOptions['unit']) {
+  return createNumberFormatter({
+    style: 'unit',
+    unit,
+    unitDisplay: 'short',
+    maximumFractionDigits: 1,
+  });
 }

@@ -12,6 +12,7 @@ import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+import { createIntlBoundariesRule } from './eslint/intl-boundaries.js';
 import svelteConfig from './svelte.config.js';
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,10 @@ const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE_ROOT = 'ui/src';
 const TAILWIND_ENTRY_POINT = `${SOURCE_ROOT}/shared/theme/global.css`;
 const TYPESCRIPT_CONFIG = './tsconfig.json';
+const intlBoundariesRule = createIntlBoundariesRule({
+  projectRoot: PROJECT_ROOT,
+  sourceRoot: SOURCE_ROOT,
+});
 
 const JAVASCRIPT_EXTENSIONS = ['js', 'jsx', 'mjs', 'cjs'];
 const TYPESCRIPT_EXTENSIONS = ['ts', 'tsx', 'mts', 'cts'];
@@ -110,6 +115,7 @@ function scopeConfigs(configs, files) {
 const LINTED_SOURCE_FILE_GLOBS = sourceFiles(SOURCE_SCRIPT_EXTENSIONS);
 const JAVASCRIPT_SOURCE_FILE_GLOBS = sourceFiles(JAVASCRIPT_EXTENSIONS);
 const TYPESCRIPT_SOURCE_FILE_GLOBS = sourceFiles(TYPESCRIPT_EXTENSIONS);
+const TOOLING_JAVASCRIPT_FILE_GLOBS = ['eslint/**/*.js'];
 
 const SVELTE_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte`, `${SOURCE_ROOT}/**/*.svelte.{js,ts}`];
 
@@ -137,7 +143,7 @@ const FSD_PUBLIC_API_FILE_NAMES = [
 
 const javascriptRecommendedConfigs = scopeConfigs(
   [js.configs.recommended],
-  LINTED_SOURCE_FILE_GLOBS,
+  [...LINTED_SOURCE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
 );
 
 const typeCheckedTypeScriptConfigs = scopeConfigs(
@@ -507,6 +513,8 @@ const localArchitecturePlugin = {
         };
       },
     },
+
+    'intl-boundaries': intlBoundariesRule,
   },
 };
 
@@ -643,7 +651,7 @@ export default defineConfig([
   {
     name: 'project/javascript-rules',
 
-    files: JAVASCRIPT_SOURCE_FILE_GLOBS,
+    files: [...JAVASCRIPT_SOURCE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
 
     rules: {
       'no-unused-vars': ['error', UNUSED_VALUE_OPTIONS],
@@ -713,6 +721,7 @@ export default defineConfig([
        * export from '@/entities/user' is not OK.
        */
       'local-architecture/no-fsd-alias-re-export': 'error',
+      'local-architecture/intl-boundaries': 'error',
     },
   },
 

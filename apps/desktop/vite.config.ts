@@ -16,7 +16,7 @@ const DEV_SERVER_HMR_PORT = 1421;
 const NODE_MODULES_PATH_PATTERN = /node_modules[\\/]/;
 
 const TAURI_SOURCE_GLOB = '**/src-tauri/**';
-const TEST_FILE_GLOB = 'ui/src/**/*.test.ts';
+const TEST_FILE_GLOBS = ['ui/src/**/*.test.ts', 'eslint/**/*.test.js'];
 const TEST_SETUP_FILE = './ui/test-setup.ts';
 
 const LAYER_ALIAS_PATHS = {
@@ -94,7 +94,7 @@ export default defineConfig({
 
   test: {
     environment: 'node',
-    include: [TEST_FILE_GLOB],
+    include: TEST_FILE_GLOBS,
     setupFiles: [TEST_SETUP_FILE],
   },
 });

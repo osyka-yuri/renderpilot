@@ -1,7 +1,8 @@
 import type { ReleaseNotesDocument } from './release-notes';
 
 export type DownloadProgressView = {
-  percent: number | null;
+  /** Completed fraction in the inclusive range 0..1, or null when the total is unknown. */
+  ratio: number | null;
   receivedBytes: number;
   totalBytes: number | null;
   networkFinished: boolean;
@@ -11,8 +12,8 @@ export type AppUpdateOffer = {
   currentVersion: string;
   version: string;
 
-  /** Original RFC 3339 value, null when absent or invalid. */
-  date: string | null;
+  /** Validated release instant in epoch milliseconds, null when absent or invalid. */
+  releaseTimestamp: number | null;
 
   /** Already parsed, bounded and safe to render as text nodes. */
   releaseNotes: ReleaseNotesDocument;

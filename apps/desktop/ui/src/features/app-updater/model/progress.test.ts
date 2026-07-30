@@ -27,7 +27,7 @@ describe('applyDownloadEvent', () => {
       receivedBytes: 0,
       networkFinished: false,
     });
-    expect(toProgressView(next).percent).toBe(0);
+    expect(toProgressView(next).ratio).toBe(0);
   });
 
   it('handles Started without content length', () => {
@@ -37,7 +37,7 @@ describe('applyDownloadEvent', () => {
     });
 
     expect(next.totalBytes).toBeNull();
-    expect(toProgressView(next).percent).toBeNull();
+    expect(toProgressView(next).ratio).toBeNull();
   });
 
   it('rejects Started with zero or invalid content length', () => {
@@ -74,7 +74,7 @@ describe('applyDownloadEvent', () => {
     state = applyDownloadEvent(state, { type: 'progress', chunkLength: 20 });
 
     expect(state.receivedBytes).toBe(60);
-    expect(toProgressView(state).percent).toBe(60);
+    expect(toProgressView(state).ratio).toBe(0.6);
   });
 
   it('ignores negative and non-finite chunks', () => {
@@ -89,14 +89,14 @@ describe('applyDownloadEvent', () => {
     expect(state.receivedBytes).toBe(10);
   });
 
-  it('clamps percentage to 100', () => {
+  it('clamps the ratio to 1', () => {
     let state = applyDownloadEvent(EMPTY_PROGRESS, {
       type: 'started',
       contentLength: 100,
     });
     state = applyDownloadEvent(state, { type: 'progress', chunkLength: 150 });
 
-    expect(toProgressView(state).percent).toBe(100);
+    expect(toProgressView(state).ratio).toBe(1);
   });
 
   it('marks Finished with known total as 100% without inventing received bytes', () => {
@@ -108,7 +108,7 @@ describe('applyDownloadEvent', () => {
     state = applyDownloadEvent(state, { type: 'finished' });
 
     expect(state.networkFinished).toBe(true);
-    expect(toProgressView(state).percent).toBe(100);
+    expect(toProgressView(state).ratio).toBe(1);
     expect(toProgressView(state).receivedBytes).toBe(90);
   });
 
@@ -121,7 +121,7 @@ describe('applyDownloadEvent', () => {
     state = applyDownloadEvent(state, { type: 'finished' });
 
     expect(state.networkFinished).toBe(true);
-    expect(toProgressView(state).percent).toBeNull();
+    expect(toProgressView(state).ratio).toBeNull();
     expect(toProgressView(state).receivedBytes).toBe(40);
   });
 
@@ -154,7 +154,7 @@ describe('toCompletedProgressView', () => {
     state = applyDownloadEvent(state, { type: 'progress', chunkLength: 40 });
 
     const view = toCompletedProgressView(state);
-    expect(view.percent).toBe(100);
+    expect(view.ratio).toBe(1);
     expect(view.receivedBytes).toBe(40);
     expect(view.networkFinished).toBe(true);
   });
@@ -167,7 +167,7 @@ describe('toCompletedProgressView', () => {
     state = applyDownloadEvent(state, { type: 'progress', chunkLength: 90 });
 
     const view = toCompletedProgressView(state);
-    expect(view.percent).toBe(100);
+    expect(view.ratio).toBe(1);
     expect(view.receivedBytes).toBe(200);
     expect(view.totalBytes).toBe(200);
   });

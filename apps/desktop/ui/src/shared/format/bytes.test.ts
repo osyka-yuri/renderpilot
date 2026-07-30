@@ -2,27 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { formatBytes } from './bytes';
 
 describe('formatBytes', () => {
-  it('returns "0 B" for zero', () => {
-    expect(formatBytes(0)).toBe('0 B');
+  it('formats zero with the locale byte unit', () => {
+    expect(formatBytes(0, 'en')).toBe('0 byte');
   });
 
-  it('returns "0 B" for negative values', () => {
-    expect(formatBytes(-1)).toBe('0 B');
+  it('normalizes negative and non-finite values to zero', () => {
+    expect(formatBytes(-1, 'en')).toBe('0 byte');
+    expect(formatBytes(Number.NaN, 'en')).toBe('0 byte');
   });
 
   it('formats bytes', () => {
-    expect(formatBytes(512)).toBe('512 B');
+    expect(formatBytes(0.5, 'en')).toBe('0.5 byte');
+    expect(formatBytes(512, 'en')).toBe('512 byte');
   });
 
   it('formats kilobytes', () => {
-    expect(formatBytes(1024)).toBe('1 KB');
+    expect(formatBytes(1024, 'en')).toBe('1 kB');
   });
 
   it('formats megabytes', () => {
-    expect(formatBytes(1_048_576)).toBe('1 MB');
+    expect(formatBytes(1_048_576, 'en')).toBe('1 MB');
   });
 
-  it('formats gigabytes with one decimal', () => {
-    expect(formatBytes(1_500_000_000)).toBe('1.4 GB');
+  it('formats gigabytes with one localized decimal', () => {
+    expect(formatBytes(1_500_000_000, 'en')).toBe('1.4 GB');
+    expect(formatBytes(1_500_000_000, 'ru')).toMatch(/^1,4\sГБ$/u);
+    expect(formatBytes(1_500_000_000, 'fr')).toMatch(/^1,4\sGo$/u);
   });
 });

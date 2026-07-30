@@ -1,4 +1,11 @@
 export { formatBytes } from './bytes';
-export { formatTimestamp } from './format';
-export { compactList } from './list';
-export { formatDate, formatRelative, formatHttpDate } from './addon-dates';
+export {
+  formatLocalDateTime,
+  formatLocalShortDate,
+  formatRelativeTime,
+  formatUtcLongDate,
+  formatUtcNumericDate,
+  formatUtcShortDate,
+} from './date-time';
+export { formatList } from './list';
+export { formatPercent } from './numbers';

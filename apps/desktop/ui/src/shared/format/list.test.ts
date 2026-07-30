@@ -1,23 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { compactList } from './list';
+import { formatList } from './list';
 
-describe('list utils', () => {
-  describe('compactList', () => {
-    it('returns empty copy for empty list', () => {
-      expect(compactList([], 'None')).toBe('None');
-    });
+describe('formatList', () => {
+  it('returns an empty string for an empty list', () => {
+    expect(formatList([], 'en')).toBe('');
+  });
 
-    it('joins items with dot separator', () => {
-      expect(compactList(['A', 'B'], 'None')).toBe('A · B');
-    });
-
-    it('truncates after default limit of 3', () => {
-      expect(compactList(['A', 'B', 'C', 'D'], 'None')).toBe('A · B · C +1 more');
-    });
-
-    it('respects custom limit', () => {
-      expect(compactList(['A', 'B', 'C'], 'None', 2)).toBe('A · B +1 more');
-    });
+  it('uses locale-specific conjunctions and punctuation', () => {
+    expect(formatList(['A', 'B', 'C'], 'en')).toBe('A, B, and C');
+    expect(formatList(['A', 'B', 'C'], 'ru')).toBe('A, B и C');
+    expect(formatList(['A', 'B', 'C'], 'ja')).toBe('A、B、C');
   });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatUtcLongDate } from '@shared/format';
   import { getLocale, t } from '@shared/i18n';
   import {
     Dialog,
@@ -11,7 +12,6 @@
   } from '@shared/ui';
 
   import { canDismissDialog, dialogFooter, failureKind, progressPhase } from '../model/dialog-view';
-  import { formatReleaseDateForLocale } from '../model/format-release-date';
   import type { AppUpdateDialogState } from '../model/types';
   import UpdateChangelog from './UpdateChangelog.svelte';
   import UpdateDialogActions from './UpdateDialogActions.svelte';
@@ -31,6 +31,7 @@
   const open = $derived(state !== null);
   const canDismiss = $derived(canDismissDialog(state));
   const offer = $derived(state?.offer ?? null);
+  const locale = $derived(getLocale());
   const phase = $derived(progressPhase(state));
   const failure = $derived(failureKind(state));
   const footer = $derived(dialogFooter(state));
@@ -44,8 +45,9 @@
       : '',
   );
 
+  const releaseTimestamp = $derived(offer?.releaseTimestamp ?? null);
   const releaseDateLabel = $derived(
-    offer ? formatReleaseDateForLocale(offer.date, getLocale()) : null,
+    releaseTimestamp === null ? null : formatUtcLongDate(releaseTimestamp, locale),
   );
 
   const progress = $derived(

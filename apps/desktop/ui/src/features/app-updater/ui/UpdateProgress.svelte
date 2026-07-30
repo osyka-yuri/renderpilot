@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { t } from '@shared/i18n';
-  import { formatBytes } from '@shared/format';
+  import { formatBytes, formatPercent } from '@shared/format';
+  import { getLocale, t } from '@shared/i18n';
   import { Progress, Spinner } from '@shared/ui';
 
   import { phaseStatusKey, type UpdateProgressPhase } from '../model/dialog-view';
@@ -13,13 +13,16 @@
 
   const { phase, progress = null }: Props = $props();
 
+  const locale = $derived(getLocale());
   const showsProgressBar = $derived(phase === 'downloading' || phase === 'verifying');
   const isDownloadPhase = $derived(phase === 'downloading');
-  const isDeterminate = $derived(
-    showsProgressBar && progress !== null && progress.percent !== null,
-  );
+  const determinateRatio = $derived(showsProgressBar ? (progress?.ratio ?? null) : null);
+  const isDeterminate = $derived(determinateRatio !== null);
 
   const statusLabel = $derived(t(phaseStatusKey(phase)));
+  const percentLabel = $derived.by(() =>
+    determinateRatio === null ? null : formatPercent(determinateRatio, locale),
+  );
 
   const detailLabel = $derived.by(() => {
     if (phase === 'verifying') {
@@ -32,27 +35,21 @@
 
     if (progress.totalBytes !== null) {
       return t('settings.about.updateDialog.downloadingBytesTotal', {
-        received: formatBytes(progress.receivedBytes),
-        total: formatBytes(progress.totalBytes),
+        received: formatBytes(progress.receivedBytes, locale),
+        total: formatBytes(progress.totalBytes, locale),
       });
     }
 
     if (progress.receivedBytes > 0) {
       return t('settings.about.updateDialog.downloadingBytes', {
-        received: formatBytes(progress.receivedBytes),
+        received: formatBytes(progress.receivedBytes, locale),
       });
     }
 
     return null;
   });
 
-  const progressAria = $derived(
-    isDeterminate
-      ? t('settings.about.updateDialog.progressAria', {
-          percent: Math.round(progress?.percent ?? 0),
-        })
-      : t('settings.about.updateDialog.indeterminateProgressAria'),
-  );
+  const progressLabel = $derived(t('settings.about.updateDialog.progressAria'));
 </script>
 
 <div class="flex flex-col gap-2" role="status" aria-live="polite" aria-atomic="true">
@@ -61,21 +58,19 @@
       <Spinner class="size-4" />
     {/if}
     <span>{statusLabel}</span>
-    {#if isDeterminate && progress}
+    {#if isDeterminate}
       <span class="ms-auto text-muted-foreground tabular-nums">
-        {Math.round(progress.percent ?? 0)}%
+        {percentLabel}
       </span>
     {/if}
   </div>
 
   {#if showsProgressBar}
     <Progress
-      value={isDeterminate ? (progress?.percent ?? 0) : undefined}
-      max={100}
-      aria-label={progressAria}
-      aria-valuemin={isDeterminate ? 0 : undefined}
-      aria-valuemax={isDeterminate ? 100 : undefined}
-      aria-valuenow={isDeterminate ? Math.round(progress?.percent ?? 0) : undefined}
+      value={determinateRatio}
+      max={1}
+      aria-label={progressLabel}
+      aria-valuetext={percentLabel ?? undefined}
       class={isDeterminate ? undefined : 'animate-pulse'}
     />
   {/if}

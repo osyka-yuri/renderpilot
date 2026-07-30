@@ -298,8 +298,7 @@ export const en = {
   'settings.about.updateDialog.restartRequiredDescription':
     'The update was installed, but the application could not restart automatically. Restart RenderPilot manually to finish the update.',
 
-  'settings.about.updateDialog.progressAria': 'Download progress: {percent} percent',
-  'settings.about.updateDialog.indeterminateProgressAria': 'Download progress',
+  'settings.about.updateDialog.progressAria': 'Download progress',
 
   // ── Common ──
   'common.unknown': 'Unknown',

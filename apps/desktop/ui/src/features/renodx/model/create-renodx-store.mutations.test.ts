@@ -801,7 +801,7 @@ describe('createRenoDxStore', () => {
 
     await store.load('steam:1091500');
 
-    expect(store.addonDated).toBe('Wed, 18 Jun 2026 12:00:00 GMT');
+    expect(store.addonDated).toBe(Date.UTC(2026, 5, 18, 12));
     expect(store.installedAt).toBe(1_700_000_000_000);
     expect(store.updatedAt).toBe(1_700_000_500_000);
     // A completed load stamps the last-checked time and resolves freshness.

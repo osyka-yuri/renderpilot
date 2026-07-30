@@ -1,5 +1,6 @@
+import { parseRfc3339Timestamp } from '@shared/date';
+
 import type { AppUpdateHandle } from '../api/app-updater-gateway';
-import { normalizeReleaseDate } from './format-release-date';
 import { parseReleaseNotes } from './release-notes';
 import type { AppUpdateOffer } from './types';
 
@@ -8,7 +9,7 @@ export function toOffer(handle: AppUpdateHandle): AppUpdateOffer {
   return {
     currentVersion: handle.metadata.currentVersion,
     version: handle.metadata.version,
-    date: normalizeReleaseDate(handle.metadata.date),
+    releaseTimestamp: parseRfc3339Timestamp(handle.metadata.date),
     releaseNotes: parseReleaseNotes(handle.metadata.body),
   };
 }

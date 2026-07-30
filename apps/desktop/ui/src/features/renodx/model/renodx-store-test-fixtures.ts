@@ -131,7 +131,7 @@ export const INSTALLED: AvailabilityReport = availability({
     status: 'installed',
     host_kind: 'proxy',
     version: 'snapshot-2026.06',
-    addon_dated: 'Wed, 18 Jun 2026 12:00:00 GMT',
+    addon_dated: 'Thu, 18 Jun 2026 12:00:00 GMT',
     installed_at: 1_700_000_000_000,
     updated_at: 1_700_000_500_000,
     dlss_fix_installed: false,
