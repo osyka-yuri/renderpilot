@@ -3,7 +3,7 @@ use std::any::type_name;
 use renderpilot_application::{AppResult, MetadataJson};
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId, GameRuntime,
-    GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority, Swappability,
+    Launcher, LibraryTechnology, PathRef, Platform, RootAuthority, Swappability,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -80,7 +80,7 @@ enum_parser!(platform, Platform);
 enum_parser!(runtime, GameRuntime);
 enum_parser!(root_authority, RootAuthority);
 enum_parser!(component_kind, ComponentKind);
-enum_parser!(graphics_technology, GraphicsTechnology);
+enum_parser!(library_technology, LibraryTechnology);
 enum_parser!(artifact_trust_level, ArtifactTrustLevel);
 enum_parser!(swappability, Swappability);
 
@@ -90,48 +90,48 @@ pub(crate) fn component_files(value: &str) -> AppResult<Vec<ComponentFile>> {
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_domain::{ArtifactTrustLevel, GraphicsTechnology};
+    use renderpilot_domain::{ArtifactTrustLevel, LibraryTechnology};
 
-    use super::{enum_from_text, enum_to_text, graphics_technology};
+    use super::{enum_from_text, enum_to_text, library_technology};
 
     #[test]
-    fn graphics_technology_codec_roundtrips_direct_storage_slug() {
+    fn library_technology_codec_roundtrips_direct_storage_slug() {
         let serialized =
-            enum_to_text(&GraphicsTechnology::DirectStorage).expect("enum should serialize");
+            enum_to_text(&LibraryTechnology::DirectStorage).expect("enum should serialize");
 
         assert_eq!(serialized, "direct_storage");
 
-        let parsed: GraphicsTechnology =
+        let parsed: LibraryTechnology =
             enum_from_text(&serialized).expect("enum should deserialize");
-        assert_eq!(parsed, GraphicsTechnology::DirectStorage);
+        assert_eq!(parsed, LibraryTechnology::DirectStorage);
     }
 
     #[test]
-    fn graphics_technology_storage_parser_accepts_slug_values() {
-        let parsed = graphics_technology("direct_storage".to_owned())
+    fn library_technology_storage_parser_accepts_slug_values() {
+        let parsed = library_technology("direct_storage".to_owned())
             .expect("slug value should deserialize through storage mapping");
-        assert_eq!(parsed, GraphicsTechnology::DirectStorage);
+        assert_eq!(parsed, LibraryTechnology::DirectStorage);
     }
 
     #[test]
-    fn graphics_technology_codec_roundtrips_new_graphics_slugs() {
+    fn library_technology_codec_roundtrips_new_graphics_slugs() {
         for technology in [
-            GraphicsTechnology::IntelXeLl,
-            GraphicsTechnology::AmdFsrRayRegeneration,
+            LibraryTechnology::IntelXeLl,
+            LibraryTechnology::AmdFsrRayRegeneration,
         ] {
             let serialized = enum_to_text(&technology).expect("enum should serialize");
             assert_eq!(serialized, technology.as_slug());
 
-            let parsed: GraphicsTechnology =
+            let parsed: LibraryTechnology =
                 enum_from_text(&serialized).expect("enum should deserialize");
             assert_eq!(parsed, technology);
         }
     }
 
     #[test]
-    fn graphics_technology_storage_parser_rejects_legacy_pascal_case_values() {
-        let intel = graphics_technology("IntelXeLl".to_owned());
-        let amd = graphics_technology("AmdFsrRayRegeneration".to_owned());
+    fn library_technology_storage_parser_rejects_legacy_pascal_case_values() {
+        let intel = library_technology("IntelXeLl".to_owned());
+        let amd = library_technology("AmdFsrRayRegeneration".to_owned());
 
         assert!(intel.is_err());
         assert!(amd.is_err());
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn enum_from_text_rejects_legacy_pascal_case_graphics_values() {
-        let parsed = enum_from_text::<GraphicsTechnology>("IntelXeLl");
+        let parsed = enum_from_text::<LibraryTechnology>("IntelXeLl");
 
         assert!(parsed.is_err());
     }

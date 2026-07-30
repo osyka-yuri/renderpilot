@@ -1,4 +1,4 @@
-//! Projects catalogued [`GraphicsComponent`]s into the per-family DLSS DLL map
+//! Projects catalogued [`LibraryComponent`]s into the per-family DLSS DLL map
 //! the NVAPI layer consumes.
 //!
 //! This is the single place that turns the catalog's view of installed DLSS DLLs
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 
-use renderpilot_domain::{GraphicsComponent, GraphicsTechnology, Version};
+use renderpilot_domain::{LibraryComponent, LibraryTechnology, Version};
 use renderpilot_nvapi::setting::DllInfo;
 use renderpilot_nvapi::{DlssDllKind, DlssVersion};
 
@@ -19,11 +19,11 @@ use renderpilot_nvapi::{DlssDllKind, DlssVersion};
 ///
 /// DLSS technologies are each their own `family()`, so every `nvngx_dlss*.dll`
 /// is its own single-file component and maps 1:1 onto a [`DlssDllKind`].
-fn dlss_dll_kind_for_technology(technology: GraphicsTechnology) -> Option<DlssDllKind> {
+fn dlss_dll_kind_for_technology(technology: LibraryTechnology) -> Option<DlssDllKind> {
     match technology {
-        GraphicsTechnology::DlssSuperResolution => Some(DlssDllKind::Sr),
-        GraphicsTechnology::DlssFrameGeneration => Some(DlssDllKind::FrameGen),
-        GraphicsTechnology::DlssRayReconstruction => Some(DlssDllKind::RayReconstruction),
+        LibraryTechnology::DlssSuperResolution => Some(DlssDllKind::Sr),
+        LibraryTechnology::DlssFrameGeneration => Some(DlssDllKind::FrameGen),
+        LibraryTechnology::DlssRayReconstruction => Some(DlssDllKind::RayReconstruction),
         _ => None,
     }
 }
@@ -50,7 +50,7 @@ fn dlss_version_from_domain(version: &Version) -> DlssVersion {
 /// skipped; a family with no usable copy is simply absent from the map (treated
 /// downstream as "DLL not present", imposing no preset constraints).
 pub fn installed_dlls_from_components(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
 ) -> HashMap<DlssDllKind, DllInfo> {
     let mut best: HashMap<DlssDllKind, (usize, DllInfo)> = HashMap::new();
 
@@ -114,16 +114,16 @@ mod tests {
 
     fn dlss_component(
         suffix: &str,
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
         path: &str,
         version: Option<&str>,
-    ) -> GraphicsComponent {
+    ) -> LibraryComponent {
         let mut file = ComponentFile::new(PathRef::new(path).expect("valid path"));
         if let Some(version) = version {
             file = file.with_version(Version::parse(version).expect("valid version"));
         }
 
-        GraphicsComponent::new(
+        LibraryComponent::new(
             ComponentId::new(format!("component:test:{suffix}")).expect("valid component id"),
             game_id(),
             ComponentKind::NativeLibrary,
@@ -138,19 +138,19 @@ mod tests {
         let components = [
             dlss_component(
                 "sr",
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 "C:/Games/G/nvngx_dlss.dll",
                 Some("3.7.20.0"),
             ),
             dlss_component(
                 "fg",
-                GraphicsTechnology::DlssFrameGeneration,
+                LibraryTechnology::DlssFrameGeneration,
                 "C:/Games/G/nvngx_dlssg.dll",
                 Some("3.8.0.0"),
             ),
             dlss_component(
                 "rr",
-                GraphicsTechnology::DlssRayReconstruction,
+                LibraryTechnology::DlssRayReconstruction,
                 "C:/Games/G/nvngx_dlssd.dll",
                 Some("3.5.0.0"),
             ),
@@ -181,7 +181,7 @@ mod tests {
     fn non_dlss_technologies_are_ignored() {
         let components = [dlss_component(
             "sl",
-            GraphicsTechnology::NvidiaStreamline,
+            LibraryTechnology::NvidiaStreamline,
             "C:/Games/G/sl.interposer.dll",
             Some("2.0.0.0"),
         )];
@@ -194,13 +194,13 @@ mod tests {
         let components = [
             dlss_component(
                 "deep",
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 "C:/Games/G/Engine/Binaries/ThirdParty/NVIDIA/nvngx_dlss.dll",
                 Some("3.1.0.0"),
             ),
             dlss_component(
                 "shallow",
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 "C:/Games/G/nvngx_dlss.dll",
                 Some("3.7.20.0"),
             ),
@@ -225,13 +225,13 @@ mod tests {
             // Shallowest copy has no version: it must not shadow a deeper, versioned one.
             dlss_component(
                 "shallow_no_version",
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 "C:/Games/G/nvngx_dlss.dll",
                 None,
             ),
             dlss_component(
                 "deep_versioned",
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 "C:/Games/G/bin/nvngx_dlss.dll",
                 Some("3.7.20.0"),
             ),
@@ -250,7 +250,7 @@ mod tests {
     fn family_with_no_versioned_copy_is_absent() {
         let components = [dlss_component(
             "sr_no_version",
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "C:/Games/G/nvngx_dlss.dll",
             None,
         )];

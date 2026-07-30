@@ -5,8 +5,8 @@ use std::path::Path;
 use std::os::windows::fs::OpenOptionsExt as _;
 
 use renderpilot_orchestration::domain::{
-    ArtifactId, ArtifactTrustLevel, ComponentFile, GameInstallation, GraphicsTechnology,
-    LibraryArtifact, PathRef, Sha256Hash, Swappability, Version,
+    ArtifactId, ArtifactTrustLevel, ComponentFile, GameInstallation, LibraryArtifact,
+    LibraryTechnology, PathRef, Sha256Hash, Swappability, Version,
 };
 
 use crate::hash::sha256_hex;
@@ -24,7 +24,7 @@ pub(super) const ORIGINAL_BYTES: &[u8] = b"original-bytes";
 pub(super) const REPLACEMENT_BYTES: &[u8] = b"replacement-bytes";
 pub(super) fn write_bundle_artifact(
     folder: &Path,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     files: &[(&str, &[u8], Option<&str>)],
 ) -> (LibraryArtifact, String) {
     let component_files: Vec<ComponentFile> = files
@@ -61,7 +61,7 @@ pub(super) fn write_fsr_bundle_artifact(
     folder: &Path,
     files: &[(&str, &[u8], Option<&str>)],
 ) -> (LibraryArtifact, String) {
-    write_bundle_artifact(folder, GraphicsTechnology::AmdFsr, files)
+    write_bundle_artifact(folder, LibraryTechnology::AmdFsr, files)
 }
 
 pub(super) fn store_manual_game(
@@ -88,7 +88,7 @@ pub(super) fn store_single_file_fsr_component(
         &[sample_component(
             FSR_COMPONENT_ID,
             game.id().as_str(),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             Swappability::BundleOnly,
             &path_string(path),
             Some(version),
@@ -125,7 +125,7 @@ pub(super) fn store_written_fsr_bundle_component<'a>(
         &[sample_bundle_component(
             FSR_COMPONENT_ID,
             game.id().as_str(),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             Swappability::BundleOnly,
             &component_files,
         )],
@@ -176,7 +176,7 @@ pub(super) fn setup_applied_scenario(name: &str) -> AppliedScenario {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &source_path_string,
             Some("3.5.0"),
@@ -185,7 +185,7 @@ pub(super) fn setup_applied_scenario(name: &str) -> AppliedScenario {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
         REPLACEMENT_SHA256,

@@ -268,7 +268,7 @@ fn openvr_catalog_builds_nullable_version_exports_provenance_and_label() {
 
     assert_eq!(
         built.technology(),
-        renderpilot_domain::GraphicsTechnology::OpenVr
+        renderpilot_domain::LibraryTechnology::OpenVr
     );
     assert_eq!(built.files()[0].version(), None);
     assert_eq!(

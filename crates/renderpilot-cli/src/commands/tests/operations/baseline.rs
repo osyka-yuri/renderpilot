@@ -1,6 +1,6 @@
 use std::fs;
 
-use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
+use renderpilot_orchestration::domain::{LibraryTechnology, Swappability};
 
 use crate::hash::sha256_hex;
 
@@ -42,7 +42,7 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
         &[sample_component(
             "component:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&original_path),
             Some("3.5.0"),
@@ -51,7 +51,7 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
         Some("3.7.0"),
         REPLACEMENT_SHA256,

@@ -11,9 +11,9 @@ mod settings;
 
 use std::collections::BTreeSet;
 
-use renderpilot_orchestration::domain::GraphicsComponent;
+use renderpilot_orchestration::domain::LibraryComponent;
 
-use crate::utils::is_visible_graphics_technology;
+use crate::utils::is_visible_library_technology;
 
 pub use cards::{
     QueryGameCardsRequest, ValidatedCatalogRefreshOutput, bootstrap_games_catalog,
@@ -23,14 +23,14 @@ pub use details::get_game_details;
 pub use settings::{get_catalog_setting, set_catalog_setting, set_game_favorite, set_game_hidden};
 
 /// Whether the GUI surfaces this component in the details projection.
-fn is_component_visible(component: &GraphicsComponent) -> bool {
-    is_visible_graphics_technology(component.technology())
+fn is_component_visible(component: &LibraryComponent) -> bool {
+    is_visible_library_technology(component.technology())
 }
 
 /// Stable string ids of the components the GUI surfaces for a game.
 ///
 /// Used to keep details components and candidate groups aligned.
-fn visible_component_ids(components: &[GraphicsComponent]) -> BTreeSet<String> {
+fn visible_component_ids(components: &[LibraryComponent]) -> BTreeSet<String> {
     components
         .iter()
         .filter(|component| is_component_visible(component))

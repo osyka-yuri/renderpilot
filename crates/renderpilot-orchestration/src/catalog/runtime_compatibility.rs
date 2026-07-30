@@ -10,7 +10,7 @@ use renderpilot_application::{
 };
 use renderpilot_domain::{
     ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameInstallation,
-    GraphicsComponent, LibraryArtifact, PathRef, Sha256Hash,
+    LibraryArtifact, LibraryComponent, PathRef, Sha256Hash,
 };
 
 use crate::Context;
@@ -116,7 +116,7 @@ impl D3d12ExecutableProbe {
 pub(super) fn target_profile(
     context: &Context,
     game: &GameInstallation,
-    d3d12_component: Option<&GraphicsComponent>,
+    d3d12_component: Option<&LibraryComponent>,
 ) -> AppResult<TargetProfileAssessment> {
     let resolved_target = resolve_executable_target(context, game, d3d12_component)?;
     let ResolvedExecutableTarget {
@@ -176,7 +176,7 @@ pub(super) fn target_profile(
 pub(super) fn presentation_target_profile(
     context: &Context,
     game: &GameInstallation,
-    d3d12_component: Option<&GraphicsComponent>,
+    d3d12_component: Option<&LibraryComponent>,
 ) -> AppResult<PresentationTargetProfileAssessment> {
     let backup_availability = d3d12_component
         .map(|component| {
@@ -199,7 +199,7 @@ pub(super) fn presentation_target_profile(
 /// by a catalog snapshot, avoiding per-game SQLite access.
 pub(super) fn presentation_target_profile_from_facts(
     game: &GameInstallation,
-    d3d12_component: Option<&GraphicsComponent>,
+    d3d12_component: Option<&LibraryComponent>,
     backup_availability: Option<crate::coordinated_files::ComponentBackupAvailability>,
     override_path: Option<&Path>,
 ) -> AppResult<PresentationTargetProfileAssessment> {
@@ -303,7 +303,7 @@ pub(super) fn presentation_target_profile_from_facts(
 fn resolve_executable_target(
     context: &Context,
     game: &GameInstallation,
-    d3d12_component: Option<&GraphicsComponent>,
+    d3d12_component: Option<&LibraryComponent>,
 ) -> AppResult<ResolvedExecutableTarget> {
     let backup_availability = d3d12_component
         .map(|component| {
@@ -324,7 +324,7 @@ fn resolve_executable_target(
 
 fn resolve_executable_target_from_facts(
     game: &GameInstallation,
-    d3d12_component: Option<&GraphicsComponent>,
+    d3d12_component: Option<&LibraryComponent>,
     backup_availability: Option<crate::coordinated_files::ComponentBackupAvailability>,
     override_path: Option<&Path>,
 ) -> ResolvedExecutableTarget {
@@ -494,7 +494,7 @@ fn is_unique_valid_executable_pair_for_presentation<'a>(
 }
 
 fn has_complete_d3d12_dll_sidecars(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     recorded: Option<&ComponentRollbackBaseline>,
 ) -> bool {
     let files = recorded.map_or(component.files(), ComponentRollbackBaseline::files);
@@ -507,7 +507,7 @@ fn has_complete_d3d12_dll_sidecars(
 
 /// Enforces transition compatibility against one already-fresh assessment.
 pub(super) fn ensure_transition_compatible(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
     assessment: &TargetProfileAssessment,
 ) -> AppResult<()> {
@@ -729,7 +729,7 @@ mod tests {
     use renderpilot_domain::{
         ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
         D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform,
+        GameRuntime, Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform,
         Swappability,
     };
 
@@ -941,7 +941,7 @@ mod tests {
     fn d3d12_test_game(
         install_root: &std::path::Path,
         executable_candidates: &[&str],
-    ) -> (GameInstallation, GraphicsComponent) {
+    ) -> (GameInstallation, LibraryComponent) {
         let identity = GameIdentity::new(
             GameId::new("manual:d3d12-test").expect("game id"),
             "D3D12 test",
@@ -959,11 +959,11 @@ mod tests {
                 PathRef::new((*candidate).to_owned()).expect("executable path"),
             );
         }
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:d3d12-test").expect("component id"),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(ComponentFile::new(

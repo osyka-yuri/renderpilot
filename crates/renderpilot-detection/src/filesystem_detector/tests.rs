@@ -6,7 +6,7 @@ use std::{
 
 use renderpilot_application::ComponentDetector;
 use renderpilot_domain::{
-    GameId, GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, Launcher, PathRef,
+    GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, LibraryTechnology, PathRef,
     Platform, Swappability,
 };
 
@@ -35,24 +35,24 @@ fn fixture_detects_known_graphics_libraries() {
     assert_detects(
         &libraries,
         "nvngx_dlss.dll",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
     );
     assert_detects(
         &libraries,
         "nvngx_dlssg.dll",
-        GraphicsTechnology::DlssFrameGeneration,
+        LibraryTechnology::DlssFrameGeneration,
     );
     assert_detects(
         &libraries,
         "nvngx_dlssd.dll",
-        GraphicsTechnology::DlssRayReconstruction,
+        LibraryTechnology::DlssRayReconstruction,
     );
     assert_detects(
         &libraries,
         "sl.interposer.dll",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
     );
-    assert_detects(&libraries, "libxess.dll", GraphicsTechnology::IntelXeSs);
+    assert_detects(&libraries, "libxess.dll", LibraryTechnology::IntelXeSs);
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn component_detector_trait_maps_detected_files_to_domain_components() {
     assert!(
         components
             .iter()
-            .any(|component| component.technology() == GraphicsTechnology::DlssSuperResolution)
+            .any(|component| component.technology() == LibraryTechnology::DlssSuperResolution)
     );
     assert!(
         components
@@ -184,7 +184,7 @@ fn openvr_dlls_in_different_subfolders_stay_independent_and_fail_closed() {
     let components = group_into_components(&game, &libraries).expect("grouping");
     let openvr = components
         .iter()
-        .filter(|component| component.technology() == GraphicsTechnology::OpenVr)
+        .filter(|component| component.technology() == LibraryTechnology::OpenVr)
         .collect::<Vec<_>>();
 
     assert_eq!(openvr.len(), 2);
@@ -199,7 +199,7 @@ fn openvr_dlls_in_different_subfolders_stay_independent_and_fail_closed() {
 fn assert_detects(
     libraries: &[DetectedLibraryFile],
     file_name: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) {
     assert!(
         libraries
@@ -395,12 +395,8 @@ fn detector_scans_intel_xell_runtime_files_from_disk() {
         .detect_library_files(&game)
         .expect("detection should succeed");
 
-    assert_detects(&libraries, "libxell.dll", GraphicsTechnology::IntelXeLl);
-    assert_detects(
-        &libraries,
-        "libxell_dx11.dll",
-        GraphicsTechnology::IntelXeLl,
-    );
+    assert_detects(&libraries, "libxell.dll", LibraryTechnology::IntelXeLl);
+    assert_detects(&libraries, "libxell_dx11.dll", LibraryTechnology::IntelXeLl);
 }
 
 #[test]
@@ -435,22 +431,22 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
     assert_detects(
         &libraries,
         "amd_fidelityfx_denoiser_dx12.dll",
-        GraphicsTechnology::AmdFsrRayRegeneration,
+        LibraryTechnology::AmdFsrRayRegeneration,
     );
     assert_detects(
         &libraries,
         "amd_fidelityfx_loader_dx12.dll",
-        GraphicsTechnology::AmdFsrLoader,
+        LibraryTechnology::AmdFsrLoader,
     );
     assert_detects(
         &libraries,
         "amd_fidelityfx_upscaler_dx12.dll",
-        GraphicsTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrUpscaler,
     );
     assert_detects(
         &libraries,
         "amd_fidelityfx_framegeneration_dx12.dll",
-        GraphicsTechnology::AmdFsrFrameGeneration,
+        LibraryTechnology::AmdFsrFrameGeneration,
     );
 
     let components = group_into_components(&game, &libraries).expect("grouping should succeed");
@@ -460,10 +456,10 @@ fn detector_scans_amd_denoiser_loader_and_upscaler_runtime_files_from_disk() {
         "native FSR 4 keeps one component per DLL"
     );
     for technology in [
-        GraphicsTechnology::AmdFsrUpscaler,
-        GraphicsTechnology::AmdFsrLoader,
-        GraphicsTechnology::AmdFsrFrameGeneration,
-        GraphicsTechnology::AmdFsrRayRegeneration,
+        LibraryTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrLoader,
+        LibraryTechnology::AmdFsrFrameGeneration,
+        LibraryTechnology::AmdFsrRayRegeneration,
     ] {
         let component = components
             .iter()
@@ -512,18 +508,18 @@ fn detector_keeps_dx12_lineage_fsr_cohesive() {
     assert_detects(
         &libraries,
         "amd_fidelityfx_dx12.dll",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
     );
     assert_detects(
         &libraries,
         "amd_fidelityfx_upscaler_dx12.dll",
-        GraphicsTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrUpscaler,
     );
 
     let components = group_into_components(&game, &libraries).expect("grouping should succeed");
     let fsr = components
         .iter()
-        .find(|component| component.technology() == GraphicsTechnology::AmdFsr)
+        .find(|component| component.technology() == LibraryTechnology::AmdFsr)
         .expect("expected cohesive FSR component");
 
     assert_eq!(components.len(), 1, "dx12-lineage FSR stays cohesive");
@@ -559,13 +555,13 @@ fn detector_keeps_unified_fsr31_as_one_component() {
     assert_detects(
         &libraries,
         "amd_fidelityfx_dx12.dll",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
     );
 
     let components = group_into_components(&game, &libraries).expect("grouping should succeed");
     let fsr = components
         .iter()
-        .find(|component| component.technology() == GraphicsTechnology::AmdFsr)
+        .find(|component| component.technology() == LibraryTechnology::AmdFsr)
         .expect("expected unified FSR component");
 
     assert_eq!(components.len(), 1, "pure FSR 3.1 stays one component");
@@ -592,7 +588,7 @@ fn detector_scans_amd_radiance_cache_runtime_file_from_disk() {
     assert_detects(
         &libraries,
         "amd_fidelityfx_radiancecache_dx12.dll",
-        GraphicsTechnology::AmdFsrRadianceCache,
+        LibraryTechnology::AmdFsrRadianceCache,
     );
 }
 
@@ -619,7 +615,7 @@ fn default_detector_depth_finds_deeply_nested_nvidia_runtime_dlls() {
 
     assert!(libraries.iter().any(|library| {
         library.file_name() == "nvngx_dlss.dll"
-            && library.technology() == GraphicsTechnology::DlssSuperResolution
+            && library.technology() == LibraryTechnology::DlssSuperResolution
     }));
 }
 

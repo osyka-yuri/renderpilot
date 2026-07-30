@@ -51,7 +51,7 @@ export type {
   GamesCatalogBootstrap,
   GameSelectionHandler,
   GameDetails,
-  GameGraphicsComponent,
+  GameLibraryComponent,
   GameCandidateGroup,
   GameCandidate,
   D3d12ExecutableStatus,

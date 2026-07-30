@@ -25,6 +25,30 @@ pub(super) fn validate_catalog_schema(connection: &Connection) -> AppResult<()> 
     )))
 }
 
+/// Fails when SQLite reports relational or on-disk corruption.
+pub(super) fn validate_database_integrity(connection: &Connection) -> AppResult<()> {
+    let foreign_key_violations: i64 = connection
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })
+        .map_err(|error| storage_error(format!("could not run foreign_key_check: {error}")))?;
+    if foreign_key_violations != 0 {
+        return Err(storage_error(format!(
+            "sqlite foreign_key_check reported {foreign_key_violations} violation(s)"
+        )));
+    }
+
+    let integrity: String = connection
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(|error| storage_error(format!("could not run integrity_check: {error}")))?;
+    if integrity != "ok" {
+        return Err(storage_error(format!(
+            "sqlite integrity_check failed: {integrity}"
+        )));
+    }
+    Ok(())
+}
+
 fn validate_violations(connection: &Connection) -> AppResult<Vec<String>> {
     let mut violations = Vec::new();
 

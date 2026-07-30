@@ -219,7 +219,7 @@ pub(crate) fn build_rollback_plan_locked(
 
 struct PreparedRollback {
     game: renderpilot_domain::GameInstallation,
-    component: renderpilot_domain::GraphicsComponent,
+    component: renderpilot_domain::LibraryComponent,
     rollback_baseline: ComponentRollbackBaseline,
     baseline: Vec<renderpilot_domain::ComponentFile>,
     d3d12_state: Option<crate::catalog::runtime_compatibility::D3d12ExecutableState>,
@@ -305,7 +305,7 @@ fn prepare_rollback(
 }
 
 fn validate_expected_active_component(
-    component: &renderpilot_domain::GraphicsComponent,
+    component: &renderpilot_domain::LibraryComponent,
     expected_active: &[renderpilot_domain::ComponentFile],
     managed_files: &[renderpilot_domain::ManagedAddonFile],
 ) -> AppResult<()> {
@@ -420,7 +420,7 @@ pub(super) fn rollback_mutation_paths(
 fn addon_after_catalog_rollback(
     storage: &SqliteStorage,
     game_id: &GameId,
-    component: &renderpilot_domain::GraphicsComponent,
+    component: &renderpilot_domain::LibraryComponent,
     baseline: &[renderpilot_domain::ComponentFile],
 ) -> AppResult<Option<renderpilot_domain::InstalledAddon>> {
     let Some(record) = storage.get_installed_addon(game_id)? else {

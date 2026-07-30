@@ -1,8 +1,8 @@
 use std::fs;
 
 use renderpilot_domain::{
-    Architecture, ComponentFile, ComponentId, ComponentKind, GameId, GraphicsComponent,
-    GraphicsTechnology, ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile,
+    Architecture, ComponentFile, ComponentId, ComponentKind, GameId, LibraryComponent,
+    LibraryTechnology, ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile,
     PeExportSet, Swappability,
 };
 
@@ -15,7 +15,7 @@ fn adopts_a_valid_unrecorded_classic_sidecar() {
     fs::write(&live, b"overlay").expect("live");
     fs::write(root.path().join("nvngx_dlss.dll.bak"), b"original").expect("bak");
 
-    let resolved = BaselineResolver::new(root.path(), &[], GraphicsTechnology::DlssSuperResolution)
+    let resolved = BaselineResolver::new(root.path(), &[], LibraryTechnology::DlssSuperResolution)
         .resolve(&live, None)
         .expect("valid sidecar");
 
@@ -33,7 +33,7 @@ fn rejects_an_empty_unrecorded_sidecar() {
     fs::write(root.path().join("nvngx_dlss.dll.bak"), b"").expect("bak");
 
     assert!(matches!(
-        BaselineResolver::new(root.path(), &[], GraphicsTechnology::DlssSuperResolution,)
+        BaselineResolver::new(root.path(), &[], LibraryTechnology::DlssSuperResolution,)
             .resolve(&live, None),
         Err(BaselineConflict::Empty(_))
     ));
@@ -117,7 +117,7 @@ fn owned_absent_binding_wins_over_the_current_live_overlay() {
     let resolved = BaselineResolver::new(
         root.path(),
         &[binding],
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
     )
     .resolve(&live, None)
     .expect("owned binding");
@@ -131,11 +131,11 @@ fn current_snapshot_rejects_external_replacement_and_missing_members() {
     let live = root.path().join("nvngx_dlss.dll");
     fs::write(&live, b"scanned").expect("live");
     let scanned_hash = renderpilot_detection::sha256_file(&live).expect("hash");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:freshness").expect("component"),
         GameId::new("manual:freshness").expect("game"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(
@@ -168,11 +168,11 @@ fn openvr_snapshot_and_recorded_baseline_discard_stale_pe_metadata() {
                 Architecture::X64,
                 PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports"),
             ));
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:openvr-freshness").expect("component"),
         GameId::new("manual:openvr-freshness").expect("game"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         Swappability::Swappable,
     )
     .with_file(stale);
@@ -184,7 +184,7 @@ fn openvr_snapshot_and_recorded_baseline_discard_stale_pe_metadata() {
 
     let baseline = resolve_component_baseline(
         root.path(),
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         component.files(),
         Some(component.files()),
         &[],

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, LibraryTechnology};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AddGameRootChoiceArg {
@@ -21,7 +21,7 @@ pub(crate) enum Command {
         allow_root_correction: bool,
     },
     ListArtifacts {
-        technology: Option<GraphicsTechnology>,
+        technology: Option<LibraryTechnology>,
     },
     ListOperations {
         game_id: GameId,

@@ -3,8 +3,7 @@ use std::{ffi::OsString, fs, path::Path};
 use renderpilot_orchestration::application::GameRepository;
 use renderpilot_orchestration::domain::{
     ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
-    GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority,
-    Swappability,
+    Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform, RootAuthority, Swappability,
 };
 use renderpilot_orchestration::{Context, catalog};
 use serde_json::Value;
@@ -207,14 +206,14 @@ fn run_black_flag_legacy_consolidation_fixture() -> (CatalogFixture, TempGameFol
         "manual:false-d3d12",
         &folder.path().join("D3D12"),
         &d3d12,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
     );
     seed_legacy_child(
         &fixture,
         "manual:false-streamline",
         &folder.path().join("NVStreamline"),
         &streamline,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
     );
 
     let output = run_add_game_json(&fixture, folder.path());
@@ -238,14 +237,14 @@ fn parent_with_an_independent_pe_install_is_rejected_without_consolidation() {
         "manual:false-child",
         &folder.path().join("D3D12"),
         &false_component,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
     );
     seed_legacy_child(
         &fixture,
         "manual:independent-child",
         &independent_root,
         &independent_component,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
     );
 
     let error = fixture.run(add_game_args(folder.path())).unwrap_err();
@@ -452,7 +451,7 @@ fn seed_legacy_child(
     id: &str,
     root: &Path,
     component_path: &Path,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) {
     let game = GameInstallation::new(
         GameIdentity::new(
@@ -465,7 +464,7 @@ fn seed_legacy_child(
         GameRuntime::NativeWindows,
         PathRef::new(path_string(root)).expect("legacy root"),
     );
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new(format!("{id}:component")).expect("component id"),
         game.id().clone(),
         ComponentKind::NativeLibrary,

@@ -1,4 +1,4 @@
-use renderpilot_domain::{GameInstallation, GraphicsComponent};
+use renderpilot_domain::{GameInstallation, LibraryComponent};
 
 use crate::AppResult;
 
@@ -9,5 +9,5 @@ pub trait ComponentDetector: Send + Sync {
     fn name(&self) -> &str;
 
     /// Detects graphics components for a single game installation.
-    fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<GraphicsComponent>>;
+    fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<LibraryComponent>>;
 }

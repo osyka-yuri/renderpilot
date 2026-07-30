@@ -10,7 +10,7 @@ use renderpilot_orchestration::application::{
 };
 use renderpilot_orchestration::domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GameIdentity, GameInstallation, GameRuntime, GraphicsTechnology, Launcher, LibraryArtifact,
+    GameIdentity, GameInstallation, GameRuntime, Launcher, LibraryArtifact, LibraryTechnology,
     PathRef, Platform, Sha256Hash, Swappability, Version,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
@@ -90,7 +90,7 @@ impl CatalogFixture {
     pub(super) fn store_components(
         &self,
         game_id: &GameId,
-        components: &[renderpilot_orchestration::domain::GraphicsComponent],
+        components: &[renderpilot_orchestration::domain::LibraryComponent],
     ) {
         self.storage
             .replace_components_for_game(game_id, components)
@@ -175,12 +175,12 @@ pub(super) fn path_string(path: &Path) -> String {
 pub(super) fn sample_component(
     component_id: &str,
     game_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     swappability: Swappability,
     path: &str,
     version: Option<&str>,
     sha256: &str,
-) -> renderpilot_orchestration::domain::GraphicsComponent {
+) -> renderpilot_orchestration::domain::LibraryComponent {
     let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
         .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
@@ -188,7 +188,7 @@ pub(super) fn sample_component(
         file = file.with_version(Version::parse(version).expect("version should be valid"));
     }
 
-    renderpilot_orchestration::domain::GraphicsComponent::new(
+    renderpilot_orchestration::domain::LibraryComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,
@@ -204,11 +204,11 @@ pub(super) fn sample_component(
 pub(super) fn sample_bundle_component(
     component_id: &str,
     game_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     swappability: Swappability,
     files: &[(&str, Option<&str>, &str)],
-) -> renderpilot_orchestration::domain::GraphicsComponent {
-    let mut component = renderpilot_orchestration::domain::GraphicsComponent::new(
+) -> renderpilot_orchestration::domain::LibraryComponent {
+    let mut component = renderpilot_orchestration::domain::LibraryComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,
@@ -231,7 +231,7 @@ pub(super) fn sample_bundle_component(
 
 pub(super) fn sample_artifact(
     artifact_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     path: &str,
     version: Option<&str>,
     sha256: &str,
@@ -269,7 +269,7 @@ pub(super) fn sample_artifact(
 
 pub(super) fn sample_bundle_artifact(
     artifact_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     files: &[(&str, Option<&str>, &str)],
     source_game_id: Option<&str>,
 ) -> LibraryArtifact {

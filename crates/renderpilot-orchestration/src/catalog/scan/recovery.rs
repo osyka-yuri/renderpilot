@@ -5,7 +5,7 @@ use renderpilot_application::{AppResult, GameRepository, InstalledAddonRepositor
 use renderpilot_detection::sha256_file;
 use renderpilot_domain::{
     ComponentFile, ComponentRollbackBaseline, D3d12ExecutableBaseline, D3d12ExecutableIdentity,
-    GameId, GraphicsComponent, GraphicsTechnology, PathRef, fsr,
+    GameId, LibraryComponent, LibraryTechnology, PathRef, fsr,
 };
 use renderpilot_storage_sqlite::{
     ComponentBaselineMutation, GameMutationCommit, InstalledAddonMutation, SqliteStorage,
@@ -14,7 +14,7 @@ use renderpilot_storage_sqlite::{
 pub(super) fn recover_orphaned_backups(
     storage: &SqliteStorage,
     game_id: &GameId,
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
 ) -> AppResult<()> {
     let installed_addon = storage.get_installed_addon(game_id)?;
     let game = storage.require_game(game_id)?;
@@ -51,7 +51,7 @@ pub(super) fn recover_orphaned_backups(
                         mutation_id: None,
                     })?;
                 }
-                if component.technology() == GraphicsTechnology::D3D12Agility
+                if component.technology() == LibraryTechnology::D3D12Agility
                     && baseline.d3d12_executable().is_none()
                     && let Some(executable) =
                         recover_unique_d3d12_executable_baseline(storage, &game)?
@@ -118,7 +118,7 @@ pub(super) fn recover_orphaned_backups(
         // 2. FSR-specific: recover orphaned split-member backups from a previous downgrade.
         //    When an FSR 4 package is replaced by a single-file FSR 3 package, the split
         //    member `.bak` files remain on disk but are no longer tracked by the component.
-        if component.technology().family() == GraphicsTechnology::AmdFsr
+        if component.technology().family() == LibraryTechnology::AmdFsr
             && let Some(primary) = component.files().first()
             && let Some(parent) = primary.path().parent()
         {
@@ -128,7 +128,7 @@ pub(super) fn recover_orphaned_backups(
         if !recovered_baseline.is_empty() {
             let mut rollback_baseline = ComponentRollbackBaseline::new(recovered_baseline)
                 .with_expected_active_files(component.files().to_vec());
-            if component.technology() == GraphicsTechnology::D3D12Agility
+            if component.technology() == LibraryTechnology::D3D12Agility
                 && let Some(executable) = recover_unique_d3d12_executable_baseline(storage, &game)?
             {
                 rollback_baseline = rollback_baseline.with_d3d12_executable(executable);
@@ -239,7 +239,7 @@ fn recover_d3d12_executable_pair(live_path: &Path) -> AppResult<Option<D3d12Exec
 fn recover_bak_file_for_technology(
     bak_path: &std::path::Path,
     original_path: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) -> AppResult<Option<ComponentFile>> {
     match std::fs::metadata(bak_path) {
         Ok(meta) if !meta.is_file() || meta.len() == 0 => {
@@ -332,7 +332,7 @@ fn recover_orphaned_fsr_split_members(
         if let Some(recovered_file) = recover_bak_file_for_technology(
             &bak_path,
             original_path.as_ref(),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
         )? {
             recovered_baseline.push(recovered_file);
         }
@@ -363,7 +363,7 @@ mod tests {
         let recovered = recover_bak_file_for_technology(
             &bak,
             original.to_string_lossy().as_ref(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         )
         .expect("no error");
         assert!(recovered.is_none());
@@ -378,7 +378,7 @@ mod tests {
         let error = recover_bak_file_for_technology(
             &bak,
             original.to_string_lossy().as_ref(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         )
         .expect_err("invalid sidecar must block");
         assert!(error.message().contains("non-empty"));
@@ -393,7 +393,7 @@ mod tests {
         let recovered = recover_bak_file_for_technology(
             &bak,
             original.to_string_lossy().as_ref(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         )
         .expect("no error")
         .expect("a readable backup should be recovered");
@@ -466,11 +466,11 @@ mod tests {
 
         let game = recovery_game(dir.path(), &executable, "coherent");
         let component_id = ComponentId::new("component:recovery-coherent").expect("component");
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(
@@ -522,11 +522,11 @@ mod tests {
         let component_id = ComponentId::new("component:recovery-unpaired").expect("component");
         let live_file = ComponentFile::new(path_ref(&live_dll))
             .with_sha256(renderpilot_detection::sha256_file(&live_dll).expect("live hash"));
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(live_file.clone());

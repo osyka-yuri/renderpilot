@@ -1,4 +1,4 @@
-use renderpilot_domain::{GraphicsTechnology, LibraryArtifact, UpstreamPackageProvider};
+use renderpilot_domain::{LibraryArtifact, LibraryTechnology, UpstreamPackageProvider};
 
 use crate::dxc::PACKAGE_FILE_NAMES;
 
@@ -94,7 +94,7 @@ pub(super) fn ensure_executable_compatible(
         });
     }
 
-    if artifact.technology() != GraphicsTechnology::D3D12Agility {
+    if artifact.technology() != LibraryTechnology::D3D12Agility {
         return Ok(());
     }
 

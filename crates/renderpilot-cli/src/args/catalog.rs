@@ -1,4 +1,4 @@
-use renderpilot_orchestration::domain::GraphicsTechnology;
+use renderpilot_orchestration::domain::LibraryTechnology;
 
 use super::command::{AddGameRootChoiceArg, Command};
 use super::cursor::{ArgCursor, parse_identifier_argument, parse_named_identifier};
@@ -43,7 +43,7 @@ pub(super) fn parse_list_artifacts_command(args: &mut ArgCursor) -> Result<Comma
         match argument.as_str() {
             "--technology" => {
                 let value = args.next_required_keyword("<technology>")?;
-                let parsed = GraphicsTechnology::from_slug(&value)
+                let parsed = LibraryTechnology::from_slug(&value)
                     .ok_or(CliError::InvalidTechnology(value))?;
                 technology = Some(parsed);
             }

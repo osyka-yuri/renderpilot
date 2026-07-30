@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use renderpilot_domain::{ComponentFile, GraphicsComponent, LibraryArtifact, PathRef, fsr};
+use renderpilot_domain::{ComponentFile, LibraryArtifact, LibraryComponent, PathRef, fsr};
 
 use crate::{AppError, AppResult};
 
@@ -10,7 +10,7 @@ use super::{OperationPlan, generate_operation_plan_identity};
 
 /// Builds a swap operation plan without applying any filesystem changes.
 pub fn build_swap_operation_plan(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> AppResult<OperationPlan> {
     let target_file = primary_component_file(component)?;
@@ -34,7 +34,7 @@ pub fn build_swap_operation_plan(
 /// projections such as standalone DXC and Streamline are applied before plan
 /// actions are classified.
 fn build_plan_files(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> AppResult<Vec<OperationPlanFile>> {
     let target_dir = primary_component_file(component)?
@@ -67,7 +67,7 @@ fn build_plan_files(
 }
 
 fn resolve_plan_members<'a>(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &'a LibraryArtifact,
 ) -> AppResult<Vec<&'a ComponentFile>> {
     if component.technology() == artifact.technology() {

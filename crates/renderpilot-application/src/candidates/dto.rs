@@ -8,7 +8,7 @@
 use crate::D3d12ExecutableAction;
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, ComponentId,
-    ComponentVersionReport, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    ComponentVersionReport, GameId, LibraryArtifact, LibraryComponent, LibraryTechnology,
     PackageRelease, PathRef, ReleaseChannel, Version, component_version_report, fsr,
 };
 
@@ -98,7 +98,7 @@ impl CatalogCandidatePackage {
 }
 
 /// Version state used for both the DTO and matcher comparison baseline.
-pub(super) fn component_version_state(component: &GraphicsComponent) -> ComponentVersionReport {
+pub(super) fn component_version_state(component: &LibraryComponent) -> ComponentVersionReport {
     component_version_report(component.files(), component.technology())
 }
 
@@ -168,7 +168,7 @@ impl InstalledReleaseState {
 pub struct ComponentReplacementCandidates {
     component_id: ComponentId,
     game_id: GameId,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     file_path: PathRef,
     installed_release: InstalledReleaseState,
     candidates: Vec<ReplacementCandidate>,
@@ -181,7 +181,7 @@ impl ComponentReplacementCandidates {
     /// of overloading `None`. `file_path` is the user-facing display path
     /// (dx12 entry point for FSR, name-min for Streamline).
     pub(crate) fn new(
-        component: &GraphicsComponent,
+        component: &LibraryComponent,
         installed_release: InstalledReleaseState,
         candidates: Vec<ReplacementCandidate>,
     ) -> Option<Self> {
@@ -216,7 +216,7 @@ impl ComponentReplacementCandidates {
     }
 
     /// Returns the graphics technology of the component.
-    pub fn technology(&self) -> GraphicsTechnology {
+    pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
 

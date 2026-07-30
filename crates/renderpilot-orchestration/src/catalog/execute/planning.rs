@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppError, AppResult, ComponentRepository};
 use renderpilot_domain::{
-    ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact, PathRef,
+    ComponentFile, ComponentId, GameId, LibraryArtifact, LibraryComponent, PathRef,
     component_version_report, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
@@ -79,7 +79,7 @@ pub(super) fn fsr_members_to_remove(
     .collect()
 }
 
-pub(super) fn resolve_target_dir(component: &GraphicsComponent) -> AppResult<PathBuf> {
+pub(super) fn resolve_target_dir(component: &LibraryComponent) -> AppResult<PathBuf> {
     let primary = component
         .files()
         .first()
@@ -98,7 +98,7 @@ pub(super) fn resolve_target_dir(component: &GraphicsComponent) -> AppResult<Pat
 pub(super) fn planned_target_files(
     artifact: &LibraryArtifact,
     target_dir: &Path,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
 ) -> AppResult<Vec<PlannedFile>> {
     let artifact_files = renderpilot_application::resolve_transition_members(component, artifact)?;
 
@@ -144,8 +144,8 @@ pub(super) fn planned_target_files(
 pub(super) fn full_component_set(
     storage: &SqliteStorage,
     game_id: &GameId,
-    rebuilt: GraphicsComponent,
-) -> AppResult<Vec<GraphicsComponent>> {
+    rebuilt: LibraryComponent,
+) -> AppResult<Vec<LibraryComponent>> {
     let mut components = storage.list_components_for_game(game_id)?;
 
     if rebuilt.files().is_empty() {
@@ -168,12 +168,12 @@ pub(super) fn full_component_set(
 pub(super) fn rebuild_component_set_after_overlay(
     storage: &SqliteStorage,
     game_id: &GameId,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     component_id: &ComponentId,
     baseline: &[ComponentFile],
     rebound_planned: &[PlannedFile],
     removed: &[ComponentFile],
-) -> AppResult<(Vec<GraphicsComponent>, Option<String>)> {
+) -> AppResult<(Vec<LibraryComponent>, Option<String>)> {
     let mut new_files = additive_active_files(baseline, rebound_planned, removed);
     fsr::sort_representative_first(&mut new_files);
     let rebuilt = component.rebuild_with_files(new_files);

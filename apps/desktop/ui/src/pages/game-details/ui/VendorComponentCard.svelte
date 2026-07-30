@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import { formatCanonicalLibraryLabel } from '@shared/graphics';
   import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
   import { t } from '@shared/i18n';
@@ -7,7 +7,7 @@
   import type { RollbackHandler, SwapHandler } from '../model/create-game-details-page-model';
 
   type Props = {
-    component: GameGraphicsComponent;
+    component: GameLibraryComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
     onSwap: SwapHandler;

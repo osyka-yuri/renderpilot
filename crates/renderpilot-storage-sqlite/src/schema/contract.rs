@@ -36,9 +36,9 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "idx_games_updated_at",
     "idx_game_covers_updated_at",
     "idx_components_game_id",
-    "idx_components_game_id_library",
-    "idx_components_library",
-    "idx_library_artifacts_library",
+    "idx_components_game_id_technology",
+    "idx_components_technology",
+    "idx_library_artifacts_technology",
     "idx_library_artifacts_source_game_id",
     "idx_library_artifacts_updated_at",
     "idx_component_backups_game_id",
@@ -58,8 +58,8 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
 
 /// Every named trigger created by the baseline.
 pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
-    "trg_operation_items_artifact_library_insert",
-    "trg_operation_items_artifact_library_update",
+    "trg_operation_items_artifact_technology_insert",
+    "trg_operation_items_artifact_technology_update",
     "trg_games_touch_updated_at",
     "trg_game_covers_touch_updated_at",
     "trg_components_touch_updated_at",

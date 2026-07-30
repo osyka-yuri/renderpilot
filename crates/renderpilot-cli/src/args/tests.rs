@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, LibraryTechnology};
 
 use super::command::{AddGameRootChoiceArg, Command};
 use super::parse_args;
@@ -104,7 +104,7 @@ fn list_artifacts_parses_technology_filter() {
         ]))
         .expect("valid args"),
         Command::ListArtifacts {
-            technology: Some(GraphicsTechnology::DlssSuperResolution)
+            technology: Some(LibraryTechnology::DlssSuperResolution)
         }
     );
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use renderpilot_domain::{GraphicsComponent, LibraryArtifact, Sha256Hash, fsr};
+use renderpilot_domain::{LibraryArtifact, LibraryComponent, Sha256Hash, fsr};
 
 use crate::AppResult;
 
@@ -66,7 +66,7 @@ pub(super) struct ResolvedTransitionIdentity {
 
 impl ResolvedTransitionIdentity {
     pub(super) fn for_replacement(
-        component: &GraphicsComponent,
+        component: &LibraryComponent,
         artifact: &LibraryArtifact,
     ) -> AppResult<Option<Self>> {
         let members = crate::resolve_transition_members(component, artifact)?;
@@ -121,7 +121,7 @@ impl ResolvedTransitionIdentity {
     /// replace the upscaling stack while leaving separately owned effect DLLs
     /// untouched. Every transition target must still exist exactly once and
     /// carry a hash for the installed identity to be trustworthy.
-    pub(super) fn installed_projection(&self, component: &GraphicsComponent) -> Option<Self> {
+    pub(super) fn installed_projection(&self, component: &LibraryComponent) -> Option<Self> {
         let mut installed_by_target = HashMap::with_capacity(component.files().len());
         for file in component.files() {
             let target = file.path().file_name()?.trim().to_ascii_lowercase();
@@ -158,7 +158,7 @@ impl ResolvedTransitionIdentity {
 mod tests {
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-        GraphicsTechnology, PathRef, Swappability,
+        LibraryTechnology, PathRef, Swappability,
     };
 
     use super::*;
@@ -168,17 +168,17 @@ mod tests {
             .with_sha256(Sha256Hash::new(hash.to_string().repeat(64)).expect("hash"))
     }
 
-    fn component(files: Vec<ComponentFile>) -> GraphicsComponent {
-        let component = GraphicsComponent::new(
+    fn component(files: Vec<ComponentFile>) -> LibraryComponent {
+        let component = LibraryComponent::new(
             ComponentId::new("component:identity").expect("component"),
             GameId::new("game:identity").expect("game"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             Swappability::Swappable,
         );
         files
             .into_iter()
-            .fold(component, GraphicsComponent::with_file)
+            .fold(component, LibraryComponent::with_file)
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests {
             .with_install_as("amd_fidelityfx_dx12.dll");
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:fsr-loader").expect("artifact"),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             "amd_fidelityfx_loader_dx12.dll",
             vec![loader],
             ArtifactTrustLevel::CatalogDownloaded,
@@ -212,7 +212,7 @@ mod tests {
     fn installed_projection_ignores_files_outside_the_resolved_transition() {
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:fsr-upscaler").expect("artifact"),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             "amd_fidelityfx_upscaler_dx12.dll",
             vec![file("C:/library/amd_fidelityfx_upscaler_dx12.dll", 'a')],
             ArtifactTrustLevel::CatalogDownloaded,
@@ -237,7 +237,7 @@ mod tests {
     fn installed_projection_requires_unified_fsr_cleanup_to_be_complete() {
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:fsr-unified").expect("artifact"),
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             "amd_fidelityfx_dx12.dll",
             vec![file("C:/library/amd_fidelityfx_dx12.dll", 'a')],
             ArtifactTrustLevel::CatalogDownloaded,

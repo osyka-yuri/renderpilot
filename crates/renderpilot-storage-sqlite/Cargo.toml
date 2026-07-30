@@ -16,7 +16,7 @@ test-instrumentation = []
 log = "0.4"
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-domain = { path = "../renderpilot-domain" }
-rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
+rusqlite = { version = "0.40", features = ["backup", "bundled", "hooks"] }
 serde = "1"
 serde_json = "1"
 

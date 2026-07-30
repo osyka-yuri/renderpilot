@@ -73,8 +73,8 @@ mod tests {
     use renderpilot_application::{ComponentRepository, GameRepository, InstalledAddonRepository};
     use renderpilot_domain::{
         AddonKind, ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
-        GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology,
-        InstalledAddon, Launcher, PathRef, Platform, Swappability,
+        GameIdentity, GameInstallation, GameRuntime, InstalledAddon, Launcher, LibraryComponent,
+        LibraryTechnology, PathRef, Platform, Swappability,
     };
 
     use super::*;
@@ -138,11 +138,11 @@ mod tests {
         let game = game(&install, RootAuthority::UserConfirmed);
         context.storage().upsert_game(&game).expect("seed");
         let component_id = ComponentId::new("component:managed").expect("component");
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(
@@ -294,11 +294,11 @@ mod tests {
         let game = game(&install, RootAuthority::UserConfirmed);
         context.storage().upsert_game(&game).expect("seed");
         let component_id = ComponentId::new("component:managed").expect("component");
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(
@@ -369,11 +369,11 @@ mod tests {
         let components = component_ids
             .iter()
             .map(|component_id| {
-                GraphicsComponent::new(
+                LibraryComponent::new(
                     component_id.clone(),
                     game.id().clone(),
                     ComponentKind::NativeLibrary,
-                    GraphicsTechnology::DlssSuperResolution,
+                    LibraryTechnology::DlssSuperResolution,
                     Swappability::Swappable,
                 )
                 .with_file(
@@ -458,11 +458,11 @@ mod tests {
         let components = component_ids
             .iter()
             .map(|component_id| {
-                GraphicsComponent::new(
+                LibraryComponent::new(
                     component_id.clone(),
                     game.id().clone(),
                     ComponentKind::NativeLibrary,
-                    GraphicsTechnology::DlssSuperResolution,
+                    LibraryTechnology::DlssSuperResolution,
                     Swappability::Swappable,
                 )
                 .with_file(active_file.clone())

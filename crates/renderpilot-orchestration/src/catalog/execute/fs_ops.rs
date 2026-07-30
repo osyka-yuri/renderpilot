@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use renderpilot_application::{AppError, AppResult};
-use renderpilot_domain::{ComponentFile, GraphicsComponent, Sha256Hash};
+use renderpilot_domain::{ComponentFile, LibraryComponent, Sha256Hash};
 
 use crate::coordinated_files::{
     CoordinatedFilePlan, FilePlanBatchLog, execute_file_plans, execute_restore_batch,
@@ -23,7 +23,7 @@ use crate::coordinated_files::{
 use super::types::{AppliedFsLog, PlannedFile};
 
 pub(super) fn perform_apply_fs(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
     removed: &[ComponentFile],
@@ -46,7 +46,7 @@ pub(super) fn perform_apply_fs(
 /// Builds the ordered plan list that converges immutable baseline + current
 /// active set onto the next desired overlay.
 fn plan_converge_active_set(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     baseline: &[ComponentFile],
     planned: &[PlannedFile],
     removed: &[ComponentFile],

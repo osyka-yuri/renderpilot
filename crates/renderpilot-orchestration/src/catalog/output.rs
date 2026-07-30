@@ -487,7 +487,7 @@ mod tests {
     };
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, ComponentFile, ComponentId,
-        ComponentKind, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact, OperationId,
+        ComponentKind, GameId, LibraryArtifact, LibraryComponent, LibraryTechnology, OperationId,
         PackageRelease, PackageVersion, PathRef, ReleaseChannel, Sha256Hash, Swappability, Version,
     };
     use serde_json::json;
@@ -496,11 +496,11 @@ mod tests {
 
     #[test]
     fn developer_mode_blockers_and_recalculated_risk_have_stable_wire_values() {
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:d3d12-wire").expect("component"),
             GameId::new("game:d3d12-wire").expect("game"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(
@@ -514,7 +514,7 @@ mod tests {
         );
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:d3d12-wire").expect("artifact id"),
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             "D3D12Core.dll",
             vec![
                 ComponentFile::new(

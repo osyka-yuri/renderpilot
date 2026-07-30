@@ -6,7 +6,7 @@
 
 use renderpilot_application::{AppError, AppResult};
 use renderpilot_detection::{inspect_pe_bytes, sha256_bytes};
-use renderpilot_domain::{ComponentFile, GraphicsTechnology};
+use renderpilot_domain::{ComponentFile, LibraryTechnology};
 
 use super::types::PlannedFile;
 
@@ -21,14 +21,14 @@ use super::types::PlannedFile;
 /// inheriting a manifest label that was never observed on the installed file.
 pub(super) fn rebind_planned_files_for_technology(
     planned: &mut [PlannedFile],
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) -> AppResult<()> {
     planned
         .iter_mut()
         .try_for_each(|plan| rebind_planned_file(plan, technology))
 }
 
-fn rebind_planned_file(plan: &mut PlannedFile, technology: GraphicsTechnology) -> AppResult<()> {
+fn rebind_planned_file(plan: &mut PlannedFile, technology: LibraryTechnology) -> AppResult<()> {
     let target = plan.target();
     let Some(expected) = plan.file.sha256() else {
         return Err(AppError::stale_replacement_source());
@@ -45,7 +45,7 @@ fn rebind_planned_file(plan: &mut PlannedFile, technology: GraphicsTechnology) -
     }
 
     let inspection = inspect_pe_bytes(&bytes);
-    if technology == GraphicsTechnology::OpenVr {
+    if technology == LibraryTechnology::OpenVr {
         let expected_profile = plan
             .file
             .pe_compatibility()
@@ -71,8 +71,8 @@ mod tests {
     use std::fs;
 
     use renderpilot_domain::{
-        Architecture, ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology,
-        LibraryArtifact, PathRef, PeCompatibilityProfile, PeExportSet, Sha256Hash, Version,
+        Architecture, ArtifactId, ArtifactTrustLevel, ComponentFile, LibraryArtifact,
+        LibraryTechnology, PathRef, PeCompatibilityProfile, PeExportSet, Sha256Hash, Version,
     };
 
     use super::rebind_planned_files_for_technology;
@@ -97,7 +97,7 @@ mod tests {
         let sha = renderpilot_detection::sha256_file(&source).expect("hash");
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:ok").expect("id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(PathRef::new(source.to_string_lossy().as_ref()).expect("path"))
@@ -122,7 +122,7 @@ mod tests {
 
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:stale").expect("id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(PathRef::new(source.to_string_lossy().as_ref()).expect("path"))
@@ -143,7 +143,7 @@ mod tests {
     fn reports_missing_path() {
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:missing").expect("id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(PathRef::new("C:/does/not/exist/nvngx_dlss.dll").expect("path"))
@@ -164,7 +164,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:directory").expect("id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(
@@ -190,7 +190,7 @@ mod tests {
         let sha = renderpilot_detection::sha256_file(&source).expect("hash");
         let artifact = LibraryArtifact::new(
             ArtifactId::new("artifact:runtime-metadata-mismatch").expect("id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "runtime.dll",
             vec![
                 ComponentFile::new(PathRef::new(source.to_string_lossy().as_ref()).expect("path"))
@@ -227,7 +227,7 @@ mod tests {
                 .with_version(Version::parse("310.7.0.0").expect("version")),
         }];
 
-        rebind_planned_files_for_technology(&mut planned, GraphicsTechnology::DlssSuperResolution)
+        rebind_planned_files_for_technology(&mut planned, LibraryTechnology::DlssSuperResolution)
             .expect("matching target rebinds");
         assert_eq!(planned[0].file.sha256(), Some(&expected));
         assert_eq!(
@@ -252,7 +252,7 @@ mod tests {
         }];
         let error = rebind_planned_files_for_technology(
             &mut planned,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         )
         .expect_err("changed target is stale");
         assert_eq!(
@@ -278,7 +278,7 @@ mod tests {
                 .with_pe_compatibility(profile),
         }];
 
-        let error = rebind_planned_files_for_technology(&mut planned, GraphicsTechnology::OpenVr)
+        let error = rebind_planned_files_for_technology(&mut planned, LibraryTechnology::OpenVr)
             .expect_err("OpenVR requires an observed profile");
         assert_eq!(
             error.kind(),

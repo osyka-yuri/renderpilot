@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use renderpilot_application::AppResult;
-use renderpilot_domain::{ComponentFile, ComponentRollbackBaseline, GameId, GraphicsComponent};
+use renderpilot_domain::{ComponentFile, ComponentRollbackBaseline, GameId, LibraryComponent};
 use renderpilot_storage_sqlite::SqliteStorage;
 
 /// Cheap rollback availability for one persisted component baseline.
@@ -41,7 +41,7 @@ impl ComponentBackupAvailability {
 /// Loads and classifies the persisted baseline for one catalog component.
 pub(crate) fn load_component_backup_availability(
     storage: &SqliteStorage,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
 ) -> AppResult<ComponentBackupAvailability> {
     let recorded = storage.get_component_backup(component.id())?;
     Ok(classify_component_backup(recorded, component.files()))
@@ -54,7 +54,7 @@ pub(crate) fn load_component_backup_availability(
 pub(crate) fn available_component_backup_ids(
     storage: &SqliteStorage,
     game_id: &GameId,
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
 ) -> AppResult<HashSet<String>> {
     let mut recorded = storage.component_backups_for_game(game_id)?;
     Ok(components

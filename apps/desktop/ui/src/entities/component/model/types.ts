@@ -13,7 +13,7 @@ export type ComponentFile = {
   sha256?: Nullable<Sha256Hash>;
 };
 
-export type GraphicsComponent = {
+export type LibraryComponent = {
   id: ComponentId;
   game_id: GameId;
   kind: ComponentKind;

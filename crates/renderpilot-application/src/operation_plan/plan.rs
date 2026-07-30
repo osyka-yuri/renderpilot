@@ -1,6 +1,6 @@
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, GameId, GraphicsComponent, LibraryArtifact,
-    OperationId, PathRef, Sha256Hash, Version,
+    ArtifactId, ComponentFile, ComponentId, GameId, LibraryArtifact, LibraryComponent, OperationId,
+    PathRef, Sha256Hash, Version,
 };
 
 use crate::{D3d12ExecutableAction, D3d12ExecutableActionKind, OperationKind};
@@ -35,7 +35,7 @@ pub struct OperationPlan {
 
 impl OperationPlan {
     pub(crate) fn new(
-        component: &GraphicsComponent,
+        component: &LibraryComponent,
         artifact: &LibraryArtifact,
         target_file: &ComponentFile,
         files: Vec<OperationPlanFile>,

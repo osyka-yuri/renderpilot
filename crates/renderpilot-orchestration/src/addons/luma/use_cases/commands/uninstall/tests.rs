@@ -3,7 +3,7 @@ use std::path::Path;
 use renderpilot_application::{ComponentRepository, GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{
     AddonKind, ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation,
-    GameRuntime, GraphicsComponent, GraphicsTechnology, InstalledAddon, Launcher, ManagedAddonFile,
+    GameRuntime, InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, ManagedAddonFile,
     ManagedFileBaseline, PathRef, Platform, Swappability,
 };
 use tempfile::tempdir;
@@ -37,11 +37,11 @@ fn seed_dlss_component(
         ComponentId::new(format!("component:{}:dlss", game_id.as_str())).expect("component id");
     let current = ComponentFile::new(path_ref(live))
         .with_sha256(renderpilot_detection::sha256_file(live).expect("live hash"));
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game_id.clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(current);

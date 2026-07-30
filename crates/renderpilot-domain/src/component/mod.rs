@@ -22,31 +22,31 @@ use std::{error::Error, fmt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ArtifactId, ComponentId, ComponentKind, GameId, GraphicsTechnology, PackageVersionParseError,
+    ArtifactId, ComponentId, ComponentKind, GameId, LibraryTechnology, PackageVersionParseError,
     PathRef, Swappability, Version,
     text::{RequiredTextError, normalize_required_text},
 };
 
-pub use self::hash::{Sha256Digest, Sha256Hash};
+pub use self::hash::Sha256Hash;
 
 /// Detected graphics component associated with a game installation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphicsComponent {
+pub struct LibraryComponent {
     id: ComponentId,
     game_id: GameId,
     kind: ComponentKind,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     swappability: Swappability,
     files: Vec<ComponentFile>,
 }
 
-impl GraphicsComponent {
+impl LibraryComponent {
     /// Creates a graphics component with required identity and classification data.
     pub fn new(
         id: ComponentId,
         game_id: GameId,
         kind: ComponentKind,
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
         swappability: Swappability,
     ) -> Self {
         Self {
@@ -75,7 +75,7 @@ impl GraphicsComponent {
     }
 
     /// Returns the detected graphics technology.
-    pub fn technology(&self) -> GraphicsTechnology {
+    pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
 
@@ -204,7 +204,7 @@ impl ComponentFile {
 #[serde(try_from = "LibraryArtifactUnchecked")]
 pub struct LibraryArtifact {
     id: ArtifactId,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     file_name: String,
     files: Vec<ComponentFile>,
     source: Option<String>,
@@ -217,7 +217,7 @@ pub struct LibraryArtifact {
 #[derive(Deserialize)]
 struct LibraryArtifactUnchecked {
     id: ArtifactId,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     file_name: String,
     files: Vec<ComponentFile>,
     source: Option<String>,
@@ -255,7 +255,7 @@ impl LibraryArtifact {
     /// single-file convenience accessors.
     pub fn new(
         id: ArtifactId,
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
         file_name: impl Into<String>,
         files: Vec<ComponentFile>,
         trust_level: ArtifactTrustLevel,
@@ -285,7 +285,7 @@ impl LibraryArtifact {
     }
 
     /// Returns the artifact graphics technology.
-    pub fn technology(&self) -> GraphicsTechnology {
+    pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
 

@@ -3,7 +3,7 @@
 //! Upgrade path is a linear step registry (sqlx-style discipline on rusqlite):
 //! known `user_version` values run `from→to` steps until CURRENT, then validate.
 //! Unknown or corrupt shapes rebuild from the composed baseline after a
-//! file-backed pre-rebuild backup.
+//! file-backed backup before rebuilds and non-additive migrations.
 //!
 //! Healthy CURRENT catalogs take a read-only keep path (validate only). Soft-heal
 //! of WIP `pending_file_mutations` CHECK shapes runs only when validation fails.
@@ -52,7 +52,8 @@ use self::version::database_has_user_schema;
 //   12 → 13: durable profile-derived add-on capability cache + reliable launcher
 //            scan source checkpoints (one release boundary).
 //   13 → 14: canonical installation identity + explicit root authority.
-const CURRENT_SCHEMA_VERSION: i32 = 14;
+//   14 → 15: generalize stored library classification columns to `technology`.
+const CURRENT_SCHEMA_VERSION: i32 = 15;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,
@@ -92,13 +93,23 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
             validate_catalog_schema(tx)
         }),
         Plan::Upgrade { from } => {
-            backup::backup_before_rebuild(connection)?;
-            apply_with_transaction(connection, |tx| steps::run_from(tx, from))?;
-            // A version upgrade can coexist with an older malformed physical
-            // shape (for example a pre-release v10 CHECK constraint). Reuse the
-            // current-schema validation, targeted healing, and rebuild policy
-            // after the additive migration commits.
-            apply_keep(connection, true)
+            backup::backup_before_migration(connection, CURRENT_SCHEMA_VERSION)?;
+            apply_with_transaction(connection, |tx| {
+                steps::run_from(tx, from)?;
+                // A pre-release v10 database can carry the old CHECK that
+                // rejects `preparing`. Heal that known shape before validating
+                // the complete current contract, still inside this transaction.
+                pending_file_mutations::ensure_correct_shape(tx)?;
+                if !catalog_schema_is_valid(tx)? {
+                    // Any other malformed historical shape follows the
+                    // documented rebuild policy. The pre-migration backup was
+                    // already created, and a failure below rolls this entire
+                    // upgrade/rebuild transaction back to the original schema.
+                    reset_catalog_schema(tx)?;
+                }
+                validate_catalog_schema(tx)?;
+                validation::validate_database_integrity(tx)
+            })
         }
         Plan::Rebuild => {
             backup::backup_before_rebuild(connection)?;

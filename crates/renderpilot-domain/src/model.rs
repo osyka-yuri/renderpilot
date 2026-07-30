@@ -218,7 +218,7 @@ stable_enum! {
 
 /// Graphics or presentation technology detected in a game installation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-pub enum GraphicsTechnology {
+pub enum LibraryTechnology {
     /// NVIDIA DLSS Super Resolution.
     #[serde(rename = "dlss_super_resolution")]
     DlssSuperResolution,
@@ -293,7 +293,7 @@ pub enum GraphicsTechnology {
     Unknown,
 }
 
-impl GraphicsTechnology {
+impl LibraryTechnology {
     /// All known variants in a stable order.
     pub const ALL: &'static [Self] = &[
         Self::DlssSuperResolution,
@@ -354,7 +354,7 @@ impl GraphicsTechnology {
 
     /// Returns the technology that represents this technology's swap family.
     ///
-    /// AMD FSR family members collapse onto [`GraphicsTechnology::AmdFsr`]. Every
+    /// AMD FSR family members collapse onto [`LibraryTechnology::AmdFsr`]. Every
     /// other technology is its own family (DLSS variants stay independent,
     /// Streamline is already a single technology).
     #[must_use]
@@ -371,23 +371,23 @@ impl GraphicsTechnology {
     }
 }
 
-impl fmt::Display for GraphicsTechnology {
+impl fmt::Display for LibraryTechnology {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str((*self).as_slug())
     }
 }
 
-impl AsRef<str> for GraphicsTechnology {
+impl AsRef<str> for LibraryTechnology {
     fn as_ref(&self) -> &str {
         (*self).as_slug()
     }
 }
 
-impl FromStr for GraphicsTechnology {
+impl FromStr for LibraryTechnology {
     type Err = ParseEnumError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::from_slug(value).ok_or_else(|| ParseEnumError::new("GraphicsTechnology", value))
+        Self::from_slug(value).ok_or_else(|| ParseEnumError::new("LibraryTechnology", value))
     }
 }
 
@@ -558,14 +558,14 @@ mod tests {
     }
 
     #[test]
-    fn graphics_technology_slug_round_trips() {
-        for technology in GraphicsTechnology::ALL {
+    fn library_technology_slug_round_trips() {
+        for technology in LibraryTechnology::ALL {
             assert_eq!(
-                GraphicsTechnology::from_slug(technology.as_slug()),
+                LibraryTechnology::from_slug(technology.as_slug()),
                 Some(*technology)
             );
             assert_eq!(
-                technology.as_slug().parse::<GraphicsTechnology>().unwrap(),
+                technology.as_slug().parse::<LibraryTechnology>().unwrap(),
                 *technology
             );
             assert_eq!(technology.to_string(), technology.as_slug());
@@ -574,36 +574,36 @@ mod tests {
     }
 
     #[test]
-    fn graphics_technology_slug_parse_is_trimmed_and_case_insensitive() {
+    fn library_technology_slug_parse_is_trimmed_and_case_insensitive() {
         assert_eq!(
-            GraphicsTechnology::from_slug(" DLSS_SUPER_RESOLUTION "),
-            Some(GraphicsTechnology::DlssSuperResolution)
+            LibraryTechnology::from_slug(" DLSS_SUPER_RESOLUTION "),
+            Some(LibraryTechnology::DlssSuperResolution)
         );
     }
 
     #[test]
-    fn graphics_technology_rejects_unknown_slug() {
-        assert_eq!(GraphicsTechnology::from_slug("does_not_exist"), None);
-        assert!("does_not_exist".parse::<GraphicsTechnology>().is_err());
+    fn library_technology_rejects_unknown_slug() {
+        assert_eq!(LibraryTechnology::from_slug("does_not_exist"), None);
+        assert!("does_not_exist".parse::<LibraryTechnology>().is_err());
     }
 
     #[test]
-    fn graphics_technology_fsr_variants_collapse_to_amd_fsr_family() {
+    fn library_technology_fsr_variants_collapse_to_amd_fsr_family() {
         for technology in [
-            GraphicsTechnology::AmdFsr,
-            GraphicsTechnology::AmdFsrUpscaler,
-            GraphicsTechnology::AmdFsrFrameGeneration,
-            GraphicsTechnology::AmdFsrRayRegeneration,
-            GraphicsTechnology::AmdFsrLoader,
-            GraphicsTechnology::AmdFsrRadianceCache,
+            LibraryTechnology::AmdFsr,
+            LibraryTechnology::AmdFsrUpscaler,
+            LibraryTechnology::AmdFsrFrameGeneration,
+            LibraryTechnology::AmdFsrRayRegeneration,
+            LibraryTechnology::AmdFsrLoader,
+            LibraryTechnology::AmdFsrRadianceCache,
         ] {
-            assert_eq!(technology.family(), GraphicsTechnology::AmdFsr);
+            assert_eq!(technology.family(), LibraryTechnology::AmdFsr);
         }
     }
 
     #[test]
     fn defaults_are_unknown_when_available() {
-        assert_eq!(GraphicsTechnology::default(), GraphicsTechnology::Unknown);
+        assert_eq!(LibraryTechnology::default(), LibraryTechnology::Unknown);
         assert_eq!(Swappability::default(), Swappability::Unknown);
     }
 
@@ -635,17 +635,17 @@ mod tests {
 
     #[test]
     fn serde_uses_graphics_slugs_only() {
-        let json = serde_json::to_string(&GraphicsTechnology::DlssSuperResolution).unwrap();
+        let json = serde_json::to_string(&LibraryTechnology::DlssSuperResolution).unwrap();
         assert_eq!(json, "\"dlss_super_resolution\"");
 
-        let from_slug: GraphicsTechnology =
+        let from_slug: LibraryTechnology =
             serde_json::from_str("\"dlss_super_resolution\"").unwrap();
-        assert_eq!(from_slug, GraphicsTechnology::DlssSuperResolution);
+        assert_eq!(from_slug, LibraryTechnology::DlssSuperResolution);
     }
 
     #[test]
     fn serde_rejects_legacy_graphics_variant_names() {
-        let legacy_name = serde_json::from_str::<GraphicsTechnology>("\"DlssSuperResolution\"");
+        let legacy_name = serde_json::from_str::<LibraryTechnology>("\"DlssSuperResolution\"");
 
         assert!(legacy_name.is_err());
     }

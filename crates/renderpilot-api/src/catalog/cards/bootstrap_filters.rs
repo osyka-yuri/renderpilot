@@ -4,23 +4,23 @@
 //! first card page and the visible filter state cannot interpret missing, legacy,
 //! or malformed settings differently.
 
-use renderpilot_orchestration::domain::{AddonKind, GraphicsTechnology, Launcher};
+use renderpilot_orchestration::domain::{AddonKind, Launcher, LibraryTechnology};
 
-const INITIAL_LIBRARY_FILTERS: &[GraphicsTechnology] = &[
-    GraphicsTechnology::DlssSuperResolution,
-    GraphicsTechnology::DlssFrameGeneration,
-    GraphicsTechnology::DlssRayReconstruction,
-    GraphicsTechnology::NvidiaStreamline,
-    GraphicsTechnology::IntelXeSs,
-    GraphicsTechnology::IntelXeFg,
-    GraphicsTechnology::IntelXeLl,
-    GraphicsTechnology::AmdFsr,
-    GraphicsTechnology::AmdFsrFrameGeneration,
-    GraphicsTechnology::AmdFsrRayRegeneration,
-    GraphicsTechnology::DirectStorage,
-    GraphicsTechnology::MicrosoftDxc,
-    GraphicsTechnology::D3D12Agility,
-    GraphicsTechnology::OpenVr,
+const INITIAL_LIBRARY_FILTERS: &[LibraryTechnology] = &[
+    LibraryTechnology::DlssSuperResolution,
+    LibraryTechnology::DlssFrameGeneration,
+    LibraryTechnology::DlssRayReconstruction,
+    LibraryTechnology::NvidiaStreamline,
+    LibraryTechnology::IntelXeSs,
+    LibraryTechnology::IntelXeFg,
+    LibraryTechnology::IntelXeLl,
+    LibraryTechnology::AmdFsr,
+    LibraryTechnology::AmdFsrFrameGeneration,
+    LibraryTechnology::AmdFsrRayRegeneration,
+    LibraryTechnology::DirectStorage,
+    LibraryTechnology::MicrosoftDxc,
+    LibraryTechnology::D3D12Agility,
+    LibraryTechnology::OpenVr,
 ];
 const INITIAL_LAUNCHER_FILTERS: &[Launcher] = &[
     Launcher::Steam,

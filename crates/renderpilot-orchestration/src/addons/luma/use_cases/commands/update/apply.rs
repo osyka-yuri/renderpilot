@@ -189,7 +189,7 @@ pub(super) fn apply_set_diff_with_mutation(
 
 struct PlannedSetDiffSideEffects {
     rollback_specs: Vec<ValidatedRollbackPlan>,
-    next_components: Option<Vec<renderpilot_domain::GraphicsComponent>>,
+    next_components: Option<Vec<renderpilot_domain::LibraryComponent>>,
     dlss: crate::addons::luma::dlss::PlannedDlss,
     new_addon_path: PathBuf,
     new_addon_file: PathRef,
@@ -303,7 +303,7 @@ struct PersistSetDiff<'a> {
     dependency_paths: &'a [PathBuf],
     sources: Vec<renderpilot_domain::TrackedSource>,
     managed_files: crate::addons::tracking::ManagedFilesUpdate,
-    next_components: Option<&'a [renderpilot_domain::GraphicsComponent]>,
+    next_components: Option<&'a [renderpilot_domain::LibraryComponent]>,
     rollback_specs: &'a [ValidatedRollbackPlan],
 }
 

@@ -6,4 +6,4 @@ export {
   presentComponentFiles,
 } from './model/presenters';
 
-export type { ComponentFile, GraphicsComponent, BuildPlanHandler } from './model/types';
+export type { ComponentFile, LibraryComponent, BuildPlanHandler } from './model/types';

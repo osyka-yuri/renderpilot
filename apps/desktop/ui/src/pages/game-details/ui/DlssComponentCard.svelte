@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import type { NvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import type { RollbackHandler, SwapHandler } from '../model/create-game-details-page-model';
   import {
@@ -15,7 +15,7 @@
 
   type Props = {
     gameId: string;
-    component: GameGraphicsComponent;
+    component: GameLibraryComponent;
     group: GameCandidateGroup | null;
     family: SettingFamily;
     title: string;

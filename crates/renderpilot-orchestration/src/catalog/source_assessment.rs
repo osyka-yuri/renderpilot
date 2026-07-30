@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use renderpilot_detection::sha256_file;
-use renderpilot_domain::{GraphicsTechnology, LibraryArtifact};
+use renderpilot_domain::{LibraryArtifact, LibraryTechnology};
 
 /// Why an artifact source cannot be used for a transition.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,7 +132,7 @@ fn assess_runtime_member_metadata(
         return Some(issue("PE architecture differs from catalog metadata"));
     }
 
-    if artifact.technology() == GraphicsTechnology::OpenVr {
+    if artifact.technology() == LibraryTechnology::OpenVr {
         let Some(observed) = inspection.compatibility_profile() else {
             return Some(issue(
                 "complete OpenVR export-surface profile cannot be read",
@@ -145,7 +145,7 @@ fn assess_runtime_member_metadata(
         }
     }
 
-    if artifact.technology() == GraphicsTechnology::D3D12Agility {
+    if artifact.technology() == LibraryTechnology::D3D12Agility {
         let declared = target
             .compatibility()
             .and_then(renderpilot_domain::RuntimeCompatibility::as_d3d12_sdk_version);

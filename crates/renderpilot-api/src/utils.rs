@@ -1,4 +1,4 @@
-use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, LibraryTechnology};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -10,8 +10,8 @@ pub(crate) fn to_json<T: Serialize>(value: T) -> JsonResult {
     serde_json::to_value(value).map_err(Into::into)
 }
 
-pub(crate) fn is_visible_graphics_technology(technology: GraphicsTechnology) -> bool {
-    technology != GraphicsTechnology::Unknown
+pub(crate) fn is_visible_library_technology(technology: LibraryTechnology) -> bool {
+    technology != LibraryTechnology::Unknown
 }
 
 pub(crate) fn parse_game_id(value: impl Into<String>) -> Result<GameId, ApiError> {

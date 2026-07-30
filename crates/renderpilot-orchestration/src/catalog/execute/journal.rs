@@ -1,7 +1,7 @@
 //! Best-effort recording of completed swap / rollback operations in the journal.
 
 use renderpilot_domain::{
-    ArtifactId, ComponentId, GameId, GraphicsComponent, PathRef, component_version_report,
+    ArtifactId, ComponentId, GameId, LibraryComponent, PathRef, component_version_report,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -64,7 +64,7 @@ pub(crate) struct JournalEntryParams<'a> {
     pub(crate) game_id: &'a GameId,
     pub(crate) component_id: &'a ComponentId,
     pub(crate) kind: OperationKind,
-    pub(crate) component: &'a GraphicsComponent,
+    pub(crate) component: &'a LibraryComponent,
     /// The version the component is being swapped to.
     /// `None` falls back to [`UNKNOWN_VERSION`] in the stored metadata.
     pub(crate) to_version: Option<&'a str>,
@@ -142,7 +142,7 @@ pub(crate) fn record_operation_journal_entry(
 fn build_metadata_json(
     storage: &SqliteStorage,
     game_id: &GameId,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     to_version: Option<&str>,
     d3d12_executable_action: Option<D3d12ExecutableActionResult>,
 ) -> AppResult<MetadataJson> {

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import { TooltipProvider } from '@shared/ui';
   import type { SwapHandler } from '../model/create-game-details-page-model';
 
   import ComponentVersionRow from './ComponentVersionRow.svelte';
 
   type Props = {
-    component: GameGraphicsComponent;
+    component: GameLibraryComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
     onSwap: SwapHandler;

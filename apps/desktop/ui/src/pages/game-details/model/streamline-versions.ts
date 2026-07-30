@@ -2,7 +2,7 @@ import {
   isAutomaticCatalogCandidate,
   type GameCandidate,
   type GameCandidateGroup,
-  type GameGraphicsComponent,
+  type GameLibraryComponent,
 } from '@entities/game';
 import type { SwapRequest } from './swap-request';
 
@@ -54,7 +54,7 @@ export type CandidateSelectionMode = 'manual' | 'automatic';
  * backend is the only authority for known, mixed, and unknown classification.
  */
 export function buildStreamlineVersionModel(
-  components: GameGraphicsComponent[],
+  components: GameLibraryComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
   selectionMode: CandidateSelectionMode = 'manual',
 ): StreamlineVersionModel {
@@ -140,7 +140,7 @@ function mixedVersionRange(versions: string[]): { min: string; max: string } | n
 
 function buildOption(
   version: string,
-  components: GameGraphicsComponent[],
+  components: GameLibraryComponent[],
   groupsById: Record<string, GameCandidateGroup | null>,
   selectionMode: CandidateSelectionMode,
 ): StreamlineVersionOption {

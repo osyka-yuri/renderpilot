@@ -1,5 +1,5 @@
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, GraphicsComponent, LibraryArtifact, PathRef, Swappability,
+    ArtifactId, ComponentFile, LibraryArtifact, LibraryComponent, PathRef, Swappability,
 };
 
 use crate::{AppError, AppResult};
@@ -17,7 +17,7 @@ pub(crate) struct OperationPlanAssessment {
 }
 
 impl OperationPlanAssessment {
-    pub(crate) fn assess(component: &GraphicsComponent, artifact: &LibraryArtifact) -> Self {
+    pub(crate) fn assess(component: &LibraryComponent, artifact: &LibraryArtifact) -> Self {
         let blockers = collect_blockers(component, artifact);
         let warnings = collect_warnings(component, artifact);
         let requires_elevation = component_requires_elevation(component);
@@ -35,7 +35,7 @@ impl OperationPlanAssessment {
 }
 
 fn collect_blockers(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> Vec<OperationPlanBlocker> {
     let mut blockers = Vec::new();
@@ -56,7 +56,7 @@ fn collect_blockers(
 }
 
 fn collect_warnings(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> Vec<OperationPlanWarning> {
     let mut warnings = Vec::new();
@@ -76,7 +76,7 @@ fn collect_warnings(
 /// currently active file set, i.e. applying it would be a no-op. Compared by
 /// content identity (the bundle id of each file set).
 fn artifact_matches_active_bundle(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> bool {
     match (
@@ -88,21 +88,21 @@ fn artifact_matches_active_bundle(
     }
 }
 
-fn component_requires_elevation(component: &GraphicsComponent) -> bool {
+fn component_requires_elevation(component: &LibraryComponent) -> bool {
     component
         .files()
         .iter()
         .any(|file| path_requires_elevation(file.path()))
 }
 
-fn primary_version_unknown(component: &GraphicsComponent) -> bool {
+fn primary_version_unknown(component: &LibraryComponent) -> bool {
     component
         .files()
         .first()
         .is_none_or(|file| file.version().is_none())
 }
 
-pub(crate) fn primary_component_file(component: &GraphicsComponent) -> AppResult<&ComponentFile> {
+pub(crate) fn primary_component_file(component: &LibraryComponent) -> AppResult<&ComponentFile> {
     component.files().first().ok_or_else(|| {
         AppError::invalid_input(format!(
             "component {} does not contain a target file",

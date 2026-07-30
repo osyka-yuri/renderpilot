@@ -4,7 +4,7 @@ mod d3d12;
 mod microsoft;
 mod openvr;
 
-use renderpilot_domain::{Architecture, GraphicsComponent, GraphicsTechnology, LibraryArtifact};
+use renderpilot_domain::{Architecture, LibraryArtifact, LibraryComponent, LibraryTechnology};
 
 pub use d3d12::{
     D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,
@@ -141,9 +141,9 @@ impl std::error::Error for SwapCompatibilityError {}
 /// catalog is being resolved, before any game has been selected.
 pub fn validate_runtime_artifact(artifact: &LibraryArtifact) -> Result<(), SwapCompatibilityError> {
     match artifact.technology() {
-        GraphicsTechnology::MicrosoftDxc => microsoft::validate_dxc_artifact(artifact),
-        GraphicsTechnology::D3D12Agility => microsoft::validate_d3d12_artifact(artifact),
-        GraphicsTechnology::OpenVr => openvr::validate_artifact(artifact),
+        LibraryTechnology::MicrosoftDxc => microsoft::validate_dxc_artifact(artifact),
+        LibraryTechnology::D3D12Agility => microsoft::validate_d3d12_artifact(artifact),
+        LibraryTechnology::OpenVr => openvr::validate_artifact(artifact),
         _ => match artifact.metadata().runtime_target() {
             Some(target) if target.compatibility().is_some() => {
                 Err(SwapCompatibilityError::InvalidArtifactMetadata)
@@ -158,7 +158,7 @@ pub fn validate_runtime_artifact(artifact: &LibraryArtifact) -> Result<(), SwapC
 /// Microsoft runtimes are checked against the selected executable. OpenVR is
 /// checked against freshly inspected facts from the installed `openvr_api.dll`.
 pub fn ensure_replacement_compatible(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
     profile: &SwapTargetProfile,
 ) -> Result<(), SwapCompatibilityError> {
@@ -167,7 +167,7 @@ pub fn ensure_replacement_compatible(
     }
     validate_runtime_artifact(artifact)?;
     match artifact.technology() {
-        GraphicsTechnology::OpenVr => openvr::ensure_transition_compatible(component, artifact),
+        LibraryTechnology::OpenVr => openvr::ensure_transition_compatible(component, artifact),
         _ => {
             microsoft::ensure_executable_compatible(artifact, profile)?;
             if replacement_executable_action(artifact, profile)?
@@ -189,7 +189,7 @@ pub fn ensure_swap_compatible(
     artifact: &LibraryArtifact,
     profile: &SwapTargetProfile,
 ) -> Result<(), SwapCompatibilityError> {
-    if artifact.technology() == GraphicsTechnology::OpenVr {
+    if artifact.technology() == LibraryTechnology::OpenVr {
         return Err(SwapCompatibilityError::ComponentContextRequired);
     }
     validate_runtime_artifact(artifact)?;
@@ -204,7 +204,7 @@ fn runtime_file_name(file: &renderpilot_domain::ComponentFile) -> Option<&str> {
 mod tests {
     use renderpilot_domain::{
         ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId,
-        ComponentKind, GameId, GraphicsComponent, PathRef, PeCompatibilityProfile, PeExportSet,
+        ComponentKind, GameId, LibraryComponent, PathRef, PeCompatibilityProfile, PeExportSet,
         RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
         UpstreamPackageProvider, Version,
     };
@@ -217,7 +217,7 @@ mod tests {
     }
 
     fn artifact(
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
         files: Vec<ComponentFile>,
         target: RuntimeTarget,
     ) -> LibraryArtifact {
@@ -232,7 +232,7 @@ mod tests {
         .expect("artifact")
         .with_metadata({
             let mut metadata = ArtifactMetadata::default().with_runtime_target(target);
-            if technology == GraphicsTechnology::MicrosoftDxc {
+            if technology == LibraryTechnology::MicrosoftDxc {
                 metadata = metadata.with_upstream_package(
                     UpstreamPackage::new(
                         UpstreamPackageProvider::NuGet,
@@ -260,7 +260,7 @@ mod tests {
 
     fn openvr_artifact(architecture: Architecture, exports: &[&str]) -> LibraryArtifact {
         artifact(
-            GraphicsTechnology::OpenVr,
+            LibraryTechnology::OpenVr,
             vec![openvr_file(architecture, exports, '8')],
             RuntimeTarget::new(architecture),
         )
@@ -278,12 +278,12 @@ mod tests {
         )
     }
 
-    fn openvr_component(architecture: Architecture, exports: &[&str]) -> GraphicsComponent {
-        GraphicsComponent::new(
+    fn openvr_component(architecture: Architecture, exports: &[&str]) -> LibraryComponent {
+        LibraryComponent::new(
             ComponentId::new("component:openvr").expect("id"),
             GameId::new("game:openvr").expect("id"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::OpenVr,
+            LibraryTechnology::OpenVr,
             Swappability::Swappable,
         )
         .with_file(openvr_file(architecture, exports, '7'))
@@ -291,7 +291,7 @@ mod tests {
 
     fn complete_dxc_artifact(architecture: Architecture) -> LibraryArtifact {
         artifact(
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             vec![
                 file(crate::dxc::COMPILER_FILE_NAME, 'a'),
                 file(crate::dxc::VALIDATOR_FILE_NAME, 'b'),
@@ -315,7 +315,7 @@ mod tests {
         );
 
         let partial = artifact(
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             vec![file(crate::dxc::COMPILER_FILE_NAME, 'c')],
             RuntimeTarget::new(Architecture::X64),
         );
@@ -327,11 +327,11 @@ mod tests {
 
     #[test]
     fn dxc_complete_pair_is_compatible_with_a_standalone_compiler() {
-        let standalone_target = GraphicsComponent::new(
+        let standalone_target = LibraryComponent::new(
             ComponentId::new("component:dxc-standalone").expect("component id"),
             GameId::new("game:dxc-standalone").expect("game id"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             Swappability::Swappable,
         )
         .with_file(file(crate::dxc::COMPILER_FILE_NAME, 'd'));
@@ -351,7 +351,7 @@ mod tests {
         let files = vec![file("dxcompiler.dll", 'e'), file("dxil.dll", 'f')];
         let without_package = LibraryArtifact::new(
             ArtifactId::for_bundle(files.iter().filter_map(ComponentFile::sha256)),
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             "dxcompiler.dll",
             files,
             ArtifactTrustLevel::LocalObserved,
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn d3d12_requires_exact_exported_sdk_line() {
         let core = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12Core.dll", 'd')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
@@ -408,7 +408,7 @@ mod tests {
     fn d3d12_requires_the_core_install_unit_and_consistent_package_line() {
         let profile = SwapTargetProfile::new(Some(Architecture::X64), Some(618));
         let wrong_file = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12SDKLayers.dll", '1')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
@@ -419,7 +419,7 @@ mod tests {
         );
 
         let core = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12Core.dll", '2')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 618 }),
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn every_declared_runtime_target_requires_the_executable_architecture() {
         let runtime = artifact(
-            GraphicsTechnology::DirectStorage,
+            LibraryTechnology::DirectStorage,
             vec![file("dstorage.dll", '3')],
             RuntimeTarget::new(Architecture::X86),
         );
@@ -542,7 +542,7 @@ mod tests {
 
         let incomplete = LibraryArtifact::new(
             ArtifactId::new("artifact:openvr-incomplete").expect("artifact"),
-            GraphicsTechnology::OpenVr,
+            LibraryTechnology::OpenVr,
             renderpilot_domain::openvr::DLL_NAME,
             vec![file(renderpilot_domain::openvr::DLL_NAME, '9')],
             ArtifactTrustLevel::LocalObserved,
@@ -608,16 +608,16 @@ mod tests {
 
     #[test]
     fn d3d12_confirmation_fingerprint_changes_with_active_executable_hash() {
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:d3d12-token").expect("component"),
             GameId::new("game:d3d12-token").expect("game"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(file("D3D12Core.dll", '7'));
         let artifact = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12Core.dll", '8')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
@@ -661,11 +661,11 @@ mod tests {
     #[test]
     fn d3d12_confirmation_fingerprint_uses_unambiguous_file_fields() {
         let component = |path: &str, version: &str| {
-            GraphicsComponent::new(
+            LibraryComponent::new(
                 ComponentId::new("component:d3d12-token-fields").expect("component"),
                 GameId::new("game:d3d12-token-fields").expect("game"),
                 ComponentKind::NativeLibrary,
-                GraphicsTechnology::D3D12Agility,
+                LibraryTechnology::D3D12Agility,
                 Swappability::Swappable,
             )
             .with_file(
@@ -674,7 +674,7 @@ mod tests {
             )
         };
         let artifact = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12Core.dll", '8')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
@@ -719,16 +719,16 @@ mod tests {
 
     #[test]
     fn d3d12_confirmation_fingerprint_changes_with_backup_presence() {
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:d3d12-token-backup").expect("component"),
             GameId::new("game:d3d12-token-backup").expect("game"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(file("D3D12Core.dll", '7'));
         let artifact = artifact(
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             vec![file("D3D12Core.dll", '8')],
             RuntimeTarget::new(Architecture::X64)
                 .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),

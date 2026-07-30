@@ -48,7 +48,7 @@ pub mod components {
     pub const ID: &str = "id";
     pub const GAME_ID: &str = "game_id";
     pub const KIND: &str = "kind";
-    pub const LIBRARY: &str = "library";
+    pub const TECHNOLOGY: &str = "technology";
     pub const SWAPPABILITY: &str = "swappability";
     pub const FILES_JSON: &str = "files_json";
     pub const CREATED_AT: &str = "created_at";
@@ -58,7 +58,7 @@ pub mod components {
         ID,
         GAME_ID,
         KIND,
-        LIBRARY,
+        TECHNOLOGY,
         SWAPPABILITY,
         FILES_JSON,
         CREATED_AT,
@@ -68,7 +68,7 @@ pub mod components {
 
 pub mod library_artifacts {
     pub const ID: &str = "id";
-    pub const LIBRARY: &str = "library";
+    pub const TECHNOLOGY: &str = "technology";
     pub const FILE_NAME: &str = "file_name";
     pub const FILES_JSON: &str = "files_json";
     pub const METADATA_JSON: &str = "metadata_json";
@@ -80,7 +80,7 @@ pub mod library_artifacts {
 
     pub const ALL: &[&str] = &[
         ID,
-        LIBRARY,
+        TECHNOLOGY,
         FILE_NAME,
         FILES_JSON,
         METADATA_JSON,

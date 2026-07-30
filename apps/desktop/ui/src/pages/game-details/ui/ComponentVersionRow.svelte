@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import type { GameCandidate, GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidate, GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import { presentComponentFiles } from '@entities/component';
   import {
     isD3d12ExecutableMutationAction,
@@ -43,7 +43,7 @@
   import D3d12ExecutableStatusPanel from './D3d12ExecutableStatusPanel.svelte';
 
   type Props = {
-    component: GameGraphicsComponent;
+    component: GameLibraryComponent;
     group: GameCandidateGroup | null;
     busy: boolean;
     onSwap: SwapHandler;

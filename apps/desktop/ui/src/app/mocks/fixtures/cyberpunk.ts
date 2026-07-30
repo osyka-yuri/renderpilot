@@ -1,10 +1,10 @@
-import type { GameCandidateGroup, GameDetails, GameGraphicsComponent } from '@entities/game';
+import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
 
 import { RENDERPILOT_LIBRARY_PATH } from './library-path';
 
 /** Seed fixture: Cyberpunk 2077 with DLSS SR/G/R plus a managed D3D12 candidate. */
 export function createCyberpunkDetails(): GameDetails {
-  const components: GameGraphicsComponent[] = [
+  const components: GameLibraryComponent[] = [
     {
       id: 'component:cp2077:dlss',
       game_id: 'steam:1091500',

@@ -3,7 +3,7 @@ use renderpilot_application::{
     UnixTimestampMillis,
 };
 use renderpilot_domain::{
-    GameIdentity, GameInstallation, GraphicsComponent, LibraryArtifact, PathRef,
+    GameIdentity, GameInstallation, LibraryArtifact, LibraryComponent, PathRef,
 };
 use rusqlite::types::FromSql;
 
@@ -22,7 +22,7 @@ pub(super) fn game_from_row(
 
 pub(super) fn component_from_row(
     row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<AppResult<GraphicsComponent>> {
+) -> rusqlite::Result<AppResult<LibraryComponent>> {
     read_domain_row::<ComponentRow>(row)
 }
 
@@ -204,7 +204,7 @@ struct ComponentRow {
 }
 
 impl DomainRow for ComponentRow {
-    type Domain = GraphicsComponent;
+    type Domain = LibraryComponent;
 
     fn from_sqlite_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
         use columns::projection::component as c;
@@ -219,7 +219,7 @@ impl DomainRow for ComponentRow {
         })
     }
 
-    fn into_domain(self) -> AppResult<GraphicsComponent> {
+    fn into_domain(self) -> AppResult<LibraryComponent> {
         let Self {
             id,
             game_id,
@@ -229,18 +229,18 @@ impl DomainRow for ComponentRow {
             files_json,
         } = self;
 
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             mapping::component_id(id)?,
             mapping::game_id(game_id)?,
             mapping::component_kind(kind)?,
-            mapping::graphics_technology(technology)?,
+            mapping::library_technology(technology)?,
             mapping::swappability(swappability)?,
         );
         let files = mapping::component_files(&files_json)?;
 
         Ok(files
             .into_iter()
-            .fold(component, GraphicsComponent::with_file))
+            .fold(component, LibraryComponent::with_file))
     }
 }
 
@@ -291,7 +291,7 @@ impl DomainRow for ArtifactRow {
             mapping::deserialize_json(&metadata_json).map_err(invalid_row)?;
         let artifact = LibraryArtifact::new(
             mapping::artifact_id(id)?,
-            mapping::graphics_technology(technology)?,
+            mapping::library_technology(technology)?,
             file_name,
             files,
             mapping::artifact_trust_level(trust_level)?,

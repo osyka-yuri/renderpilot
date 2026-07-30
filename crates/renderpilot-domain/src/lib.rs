@@ -34,17 +34,17 @@ pub use catalog_package::{
 };
 pub use component::{
     ArtifactMetadata, ArtifactTrustLevel, ComponentError, ComponentFile, ComponentRollbackBaseline,
-    ComponentVersionReport, D3d12ExecutableBaseline, D3d12ExecutableIdentity, GraphicsComponent,
-    LibraryArtifact, PeCompatibilityProfile, PeExportSet, PeExportSetError, ReleaseMetadata,
-    RuntimeCompatibility, RuntimeTarget, Sha256Digest, Sha256Hash, UpstreamPackage,
-    UpstreamPackageProvider, component_version_report,
+    ComponentVersionReport, D3d12ExecutableBaseline, D3d12ExecutableIdentity, LibraryArtifact,
+    LibraryComponent, PeCompatibilityProfile, PeExportSet, PeExportSetError, ReleaseMetadata,
+    RuntimeCompatibility, RuntimeTarget, Sha256Hash, UpstreamPackage, UpstreamPackageProvider,
+    component_version_report,
 };
 pub use exe_graphics::ExeGraphicsInfo;
 pub use game::{GameIdentity, GameInstallation, GameModelError, RootAuthority};
 pub use ids::{ArtifactId, ComponentId, GameId, IdentifierError, OperationId};
 pub use install_root::{InstallKey, InstallRoot};
 pub use model::{
-    AddonKind, Architecture, ComponentKind, GameRuntime, GraphicsApi, GraphicsTechnology, Launcher,
+    AddonKind, Architecture, ComponentKind, GameRuntime, GraphicsApi, Launcher, LibraryTechnology,
     Platform, Swappability,
 };
 pub use package_version::{PackageVersion, PackageVersionParseError};

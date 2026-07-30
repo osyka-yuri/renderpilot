@@ -5,7 +5,7 @@ use renderpilot_application::{
 };
 #[cfg(windows)]
 use renderpilot_domain::{
-    ComponentFile, ComponentId, ComponentKind, GraphicsComponent, GraphicsTechnology, OperationId,
+    ComponentFile, ComponentId, ComponentKind, LibraryComponent, LibraryTechnology, OperationId,
     Swappability,
 };
 use renderpilot_domain::{GameIdentity, GameInstallation, GameRuntime, Platform};
@@ -1083,11 +1083,11 @@ fn seed_external_operation(
         canonical_path_text(component_path).expect("canonical external component path");
     let component_id =
         ComponentId::new(format!("component:{}:external", game.id())).expect("component id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(

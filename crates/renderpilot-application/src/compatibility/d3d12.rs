@@ -1,8 +1,8 @@
 //! D3D12 Agility executable policy and confirmation fingerprinting.
 
 use renderpilot_domain::{
-    Architecture, ComponentFile, D3d12ExecutableIdentity, GraphicsComponent, GraphicsTechnology,
-    LibraryArtifact, PathRef, RuntimeCompatibility, normalized_path_key,
+    Architecture, ComponentFile, D3d12ExecutableIdentity, LibraryArtifact, LibraryComponent,
+    LibraryTechnology, PathRef, RuntimeCompatibility, normalized_path_key,
 };
 use sha2::{Digest, Sha256};
 
@@ -326,7 +326,7 @@ pub fn replacement_executable_action(
     artifact: &LibraryArtifact,
     profile: &SwapTargetProfile,
 ) -> Result<Option<D3d12ExecutableAction>, SwapCompatibilityError> {
-    if artifact.technology() != GraphicsTechnology::D3D12Agility {
+    if artifact.technology() != LibraryTechnology::D3D12Agility {
         return Ok(None);
     }
     let Some(executable) = profile.d3d12_executable() else {
@@ -344,7 +344,7 @@ pub fn replacement_executable_action(
 /// Computes the canonical, state-bound preflight fingerprint.
 #[must_use]
 pub fn d3d12_confirmation_token(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
     profile: &SwapTargetProfile,
     action: &D3d12ExecutableAction,
@@ -355,7 +355,7 @@ pub fn d3d12_confirmation_token(
 }
 
 fn d3d12_confirmation_fingerprint(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     snapshot: &D3d12ExecutableSnapshot,
     action: &D3d12ExecutableAction,
     artifact: &LibraryArtifact,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameDetails, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
   import {
     createVendorTabs,
     NVIDIA_STREAMLINE_TECHNOLOGY,
@@ -297,12 +297,12 @@
   }
 
   function dlssFamilyCard(
-    component: GameGraphicsComponent,
+    component: GameLibraryComponent,
   ): { family: SettingFamily; title: string } | null {
     return DLSS_FAMILY_CARDS[component.technology] ?? null;
   }
 
-  function isStreamline(component: GameGraphicsComponent): boolean {
+  function isStreamline(component: GameLibraryComponent): boolean {
     return component.technology === NVIDIA_STREAMLINE_TECHNOLOGY;
   }
 </script>

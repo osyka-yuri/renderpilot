@@ -1,5 +1,5 @@
 use renderpilot_orchestration::application::AppInfo;
-use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, GraphicsTechnology};
+use renderpilot_orchestration::domain::{ArtifactId, ComponentId, GameId, LibraryTechnology};
 use renderpilot_orchestration::{Context, ServiceError};
 
 use crate::{
@@ -125,7 +125,7 @@ fn render_version_command(info: AppInfo) -> CliOutput {
 
 fn list_artifacts(
     context: &renderpilot_orchestration::Context,
-    technology: Option<GraphicsTechnology>,
+    technology: Option<LibraryTechnology>,
 ) -> CliOutput {
     let artifacts = catalog::list_artifacts(context, technology)?;
 

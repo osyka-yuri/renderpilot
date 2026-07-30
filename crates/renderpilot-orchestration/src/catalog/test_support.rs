@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 use renderpilot_domain::{
     Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
     CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
-    GraphicsTechnology, LibraryArtifact, PackageRelease, PackageVersion, PathRef, ReleaseChannel,
+    LibraryArtifact, LibraryTechnology, PackageRelease, PackageVersion, PathRef, ReleaseChannel,
     RuntimeCompatibility, RuntimeTarget, UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
@@ -16,7 +16,7 @@ pub(crate) fn d3d12_preview_artifact_at(source: &Path, sdk_line: u32) -> Library
         schema_version: CatalogReceiptSchemaV1,
         package_id: "microsoft.d3d12-preview".to_owned(),
         vendor: "microsoft".to_owned(),
-        technology: GraphicsTechnology::D3D12Agility.as_slug().to_owned(),
+        technology: LibraryTechnology::D3D12Agility.as_slug().to_owned(),
         variant: "runtime".to_owned(),
         display_name: "Microsoft D3D12 Agility Preview".to_owned(),
         release: PackageRelease {
@@ -40,7 +40,7 @@ pub(crate) fn d3d12_preview_artifact_at(source: &Path, sdk_line: u32) -> Library
 
     LibraryArtifact::new(
         ArtifactId::for_package_revision(&source_hash),
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         "D3D12Core.dll",
         vec![
             ComponentFile::new(path_ref(source))

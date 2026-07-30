@@ -6,7 +6,7 @@ import {
 } from '@shared/graphics';
 import type { PresentedLibraryFiles } from '@shared/graphics';
 
-import type { GraphicsComponent } from './types';
+import type { LibraryComponent } from './types';
 
 export function formatComponentLabel(value?: string | null): string {
   return formatCanonicalLibraryLabel(value);
@@ -25,13 +25,13 @@ export function formatCompactLibraryLabel(value?: string | null): string {
 }
 
 export function displayComponentFilePath(
-  component: Pick<GraphicsComponent, 'technology' | 'files'>,
+  component: Pick<LibraryComponent, 'technology' | 'files'>,
 ): string | null {
   return displayLibraryFilePath(component.technology, component.files);
 }
 
 export function presentComponentFiles(
-  component: Pick<GraphicsComponent, 'technology' | 'files'>,
+  component: Pick<LibraryComponent, 'technology' | 'files'>,
 ): PresentedLibraryFiles | null {
   return presentLibraryFiles(component.technology, component.files);
 }

@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::ServiceError;
 use renderpilot_application::{ComponentRepository, GameRepository, InstalledAddonRepository};
 use renderpilot_domain::{
-    ComponentRollbackBaseline, GameId, GameInstallation, GraphicsComponent, InstalledAddon,
+    ComponentRollbackBaseline, GameId, GameInstallation, InstalledAddon, LibraryComponent,
 };
 
 /// High-level result of assessing a root correction.
@@ -96,7 +96,7 @@ pub(super) fn assess(
     game_id: &GameId,
     selected_root: &str,
     selected_executable_basenames: &HashSet<String>,
-    prospective_components: Option<&[GraphicsComponent]>,
+    prospective_components: Option<&[LibraryComponent]>,
 ) -> Result<RootCorrectionAssessment, ServiceError> {
     let storage = context.storage();
     let current_components = storage
@@ -169,7 +169,7 @@ pub(super) fn assess(
     })
 }
 
-fn component_belongs_to_root(component: &GraphicsComponent, root: &str) -> bool {
+fn component_belongs_to_root(component: &LibraryComponent, root: &str) -> bool {
     !component.files().is_empty()
         && component
             .files()
@@ -283,7 +283,7 @@ mod tests {
     use renderpilot_domain::{
         AddonKind, ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
         D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsComponent, GraphicsTechnology, InstalledAddon, Launcher, PathRef,
+        GameRuntime, InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, PathRef,
         Platform, RootAuthority, Sha256Hash, Swappability,
     };
     use renderpilot_storage_sqlite::{PendingFileMutationRow, PendingFileMutationState};
@@ -565,7 +565,7 @@ mod tests {
 
     fn assessment(
         fixture: &Fixture,
-        prospective_components: &[GraphicsComponent],
+        prospective_components: &[LibraryComponent],
     ) -> super::RootCorrectionAssessment {
         assess(
             &fixture.context,
@@ -577,12 +577,12 @@ mod tests {
         .expect("assessment")
     }
 
-    fn component(game_id: &GameId, id: &str, path: &str) -> GraphicsComponent {
-        GraphicsComponent::new(
+    fn component(game_id: &GameId, id: &str, path: &str) -> LibraryComponent {
+        LibraryComponent::new(
             ComponentId::new(id).expect("component id"),
             game_id.clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(component_file(path))

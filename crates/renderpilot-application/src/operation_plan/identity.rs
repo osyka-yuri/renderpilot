@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::Rng;
-use renderpilot_domain::{GraphicsComponent, LibraryArtifact, OperationId};
+use renderpilot_domain::{LibraryArtifact, LibraryComponent, OperationId};
 
 use crate::{AppError, AppResult, OperationKind};
 
@@ -15,7 +15,7 @@ pub(crate) struct OperationPlanIdentity {
 }
 
 pub(crate) fn generate_operation_plan_identity(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> AppResult<OperationPlanIdentity> {
     Ok(OperationPlanIdentity {
@@ -25,7 +25,7 @@ pub(crate) fn generate_operation_plan_identity(
 }
 
 fn generate_operation_id(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> AppResult<OperationId> {
     let timestamp = current_epoch_nanos();

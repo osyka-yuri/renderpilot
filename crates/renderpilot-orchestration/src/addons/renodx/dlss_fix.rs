@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 
 use renderpilot_application::ComponentRepository;
-use renderpilot_domain::{ComponentFile, GameId, GraphicsComponent, GraphicsTechnology};
+use renderpilot_domain::{ComponentFile, GameId, LibraryComponent, LibraryTechnology};
 
 use crate::ServiceError;
 
@@ -35,17 +35,17 @@ pub(crate) fn resolve_dlss_fix(
 
     let dlss_path = find_dll_path(
         &components,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
     );
     let streamline_path = find_dll_path(
         &components,
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         "sl.interposer.dll",
     );
     let has_frame_gen = components
         .iter()
-        .any(|c| c.technology() == GraphicsTechnology::DlssFrameGeneration);
+        .any(|c| c.technology() == LibraryTechnology::DlssFrameGeneration);
 
     // All three are required: FG triggers the need, DLSS SR and Streamline provide
     // the paths the [RENODX-DLSSFIX] section must point at.
@@ -64,8 +64,8 @@ pub(crate) fn resolve_dlss_fix(
 
 /// Finds the first file named `dll_name` within the component for `technology`.
 fn find_dll_path(
-    components: &[GraphicsComponent],
-    technology: GraphicsTechnology,
+    components: &[LibraryComponent],
+    technology: LibraryTechnology,
     dll_name: &str,
 ) -> Option<PathBuf> {
     components
@@ -92,24 +92,24 @@ mod tests {
     use super::*;
     use renderpilot_application::AppResult;
     use renderpilot_domain::{
-        ComponentFile, ComponentId, ComponentKind, GameId, GraphicsComponent, GraphicsTechnology,
+        ComponentFile, ComponentId, ComponentKind, GameId, LibraryComponent, LibraryTechnology,
         PathRef, Swappability,
     };
 
     /// A minimal in-memory `ComponentRepository` for testing `resolve_dlss_fix`.
     struct FakeRepo {
-        components: Vec<GraphicsComponent>,
+        components: Vec<LibraryComponent>,
     }
 
     impl ComponentRepository for FakeRepo {
         fn replace_components_for_game(
             &self,
             _game_id: &GameId,
-            _components: &[GraphicsComponent],
+            _components: &[LibraryComponent],
         ) -> AppResult<()> {
             Ok(())
         }
-        fn list_components_for_game(&self, _game_id: &GameId) -> AppResult<Vec<GraphicsComponent>> {
+        fn list_components_for_game(&self, _game_id: &GameId) -> AppResult<Vec<LibraryComponent>> {
             Ok(self.components.clone())
         }
     }
@@ -118,11 +118,11 @@ mod tests {
         GameId::new("steam:1091500").expect("id")
     }
 
-    fn component(technology: GraphicsTechnology, file_names: &[&str]) -> GraphicsComponent {
+    fn component(technology: LibraryTechnology, file_names: &[&str]) -> LibraryComponent {
         let id =
             ComponentId::new(format!("component:game:{:?}:dir", technology)).expect("component id");
         let game = game_id();
-        let mut component = GraphicsComponent::new(
+        let mut component = LibraryComponent::new(
             id,
             game,
             ComponentKind::NativeLibrary,
@@ -141,13 +141,10 @@ mod tests {
     fn returns_paths_when_all_three_technologies_present() {
         let repo = FakeRepo {
             components: vec![
+                component(LibraryTechnology::DlssFrameGeneration, &["nvngx_dlssg.dll"]),
+                component(LibraryTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
                 component(
-                    GraphicsTechnology::DlssFrameGeneration,
-                    &["nvngx_dlssg.dll"],
-                ),
-                component(GraphicsTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
-                component(
-                    GraphicsTechnology::NvidiaStreamline,
+                    LibraryTechnology::NvidiaStreamline,
                     &["sl.interposer.dll", "sl.common.dll"],
                 ),
             ],
@@ -163,8 +160,8 @@ mod tests {
     fn returns_none_when_frame_generation_missing() {
         let repo = FakeRepo {
             components: vec![
-                component(GraphicsTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
-                component(GraphicsTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
+                component(LibraryTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
+                component(LibraryTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
             ],
         };
         assert!(
@@ -178,11 +175,8 @@ mod tests {
     fn returns_none_when_dlss_sr_missing() {
         let repo = FakeRepo {
             components: vec![
-                component(
-                    GraphicsTechnology::DlssFrameGeneration,
-                    &["nvngx_dlssg.dll"],
-                ),
-                component(GraphicsTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
+                component(LibraryTechnology::DlssFrameGeneration, &["nvngx_dlssg.dll"]),
+                component(LibraryTechnology::NvidiaStreamline, &["sl.interposer.dll"]),
             ],
         };
         assert!(
@@ -197,12 +191,9 @@ mod tests {
         // Streamline component exists but has no sl.interposer.dll (only sl.common.dll).
         let repo = FakeRepo {
             components: vec![
-                component(
-                    GraphicsTechnology::DlssFrameGeneration,
-                    &["nvngx_dlssg.dll"],
-                ),
-                component(GraphicsTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
-                component(GraphicsTechnology::NvidiaStreamline, &["sl.common.dll"]),
+                component(LibraryTechnology::DlssFrameGeneration, &["nvngx_dlssg.dll"]),
+                component(LibraryTechnology::DlssSuperResolution, &["nvngx_dlss.dll"]),
+                component(LibraryTechnology::NvidiaStreamline, &["sl.common.dll"]),
             ],
         };
         assert!(

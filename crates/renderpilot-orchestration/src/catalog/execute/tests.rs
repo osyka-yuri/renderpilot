@@ -12,9 +12,9 @@ use renderpilot_application::{
 use renderpilot_domain::{
     AddonKind, Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile,
     ComponentId, ComponentKind, ComponentRollbackBaseline, D3d12ExecutableBaseline,
-    D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation, GameRuntime,
-    GraphicsComponent, GraphicsTechnology, InstalledAddon, Launcher, LibraryArtifact,
-    ManagedAddonFile, ManagedFileBaseline, PathRef, PeCompatibilityProfile, PeExportSet, Platform,
+    D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation, GameRuntime, InstalledAddon,
+    Launcher, LibraryArtifact, LibraryComponent, LibraryTechnology, ManagedAddonFile,
+    ManagedFileBaseline, PathRef, PeCompatibilityProfile, PeExportSet, Platform,
     RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, UpstreamPackage,
     UpstreamPackageProvider, Version,
 };
@@ -56,12 +56,12 @@ fn planned_copy(source: &Path, target: &Path) -> PlannedFile {
 /// Minimal FSR component placeholder; `component` is only read on the
 /// re-swap (`first_swap == false`) revert path, so these tests pass it
 /// `first_swap = true` and never depend on its files.
-fn placeholder_component() -> GraphicsComponent {
-    GraphicsComponent::new(
+fn placeholder_component() -> LibraryComponent {
+    LibraryComponent::new(
         ComponentId::new("component:test").expect("component id"),
         GameId::new("manual:C:/Games/Test").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::Swappable,
     )
 }
@@ -153,11 +153,11 @@ fn dxc_pair_failure_midway_rolls_back_both_members() {
         comp_file(&compiler).with_sha256(sha_of(&compiler)),
         comp_file(&validator).with_sha256(sha_of(&validator)),
     ];
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:dxc-atomicity").expect("component id"),
         GameId::new("manual:dxc-atomicity").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::MicrosoftDxc,
+        LibraryTechnology::MicrosoftDxc,
         Swappability::BundleOnly,
     )
     .with_file(baseline[0].clone())
@@ -230,7 +230,7 @@ fn fsr_downgrade_removes_unmatched_upscaling_members() {
 
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
         vec![
             comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
@@ -273,7 +273,7 @@ fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
 
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
         vec![
             comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
@@ -296,12 +296,12 @@ fn fsr_downgrade_spares_the_games_own_loader_and_optional_effects() {
 
 /// Planning helpers for Streamline path building; these assert that the shared
 /// application transition policy is wired into `planned_target_files`.
-fn streamline_component(installed_names: &[&str]) -> GraphicsComponent {
-    let mut component = GraphicsComponent::new(
+fn streamline_component(installed_names: &[&str]) -> LibraryComponent {
+    let mut component = LibraryComponent::new(
         ComponentId::new("component:streamline").expect("id"),
         GameId::new("manual:C:/Games/Test").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         Swappability::BundleOnly,
     );
     for name in installed_names {
@@ -323,7 +323,7 @@ fn streamline_package(member_names: &[&str]) -> LibraryArtifact {
         .collect();
     LibraryArtifact::new(
         ArtifactId::new("artifact:sl-pkg").expect("id"),
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         member_names[0],
         files,
         ArtifactTrustLevel::CatalogDownloaded,
@@ -338,7 +338,7 @@ fn applied_path_uses_the_selected_renamed_member_after_projection() {
     let target_path = Path::new("C:/game/primary.dll");
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:projected-renamed").expect("id"),
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         "skipped.dll",
         vec![
             comp_file(skipped_path).with_sha256(Sha256Hash::new(HEX64).expect("sha")),
@@ -424,16 +424,16 @@ fn prepared_d3d12_path_swap(
     )
     .expect("D3D12 action");
 
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:d3d12-paths").expect("component id"),
         GameId::new("manual:C:/game").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     );
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:d3d12-paths").expect("artifact id"),
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         "D3D12Core.dll",
         vec![
             comp_file_str("C:/library/D3D12Core.dll")
@@ -506,18 +506,18 @@ fn planned_streamline_empty_overlap_is_an_error() {
 
 #[test]
 fn planned_non_streamline_multi_file_package_keeps_all_members() {
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:fsr").expect("id"),
         GameId::new("manual:C:/Games/Test").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::BundleOnly,
     )
     .with_file(comp_file_str("C:/game/amd_fidelityfx_dx12.dll"));
 
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:fsr-pkg").expect("id"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
         vec![
             comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")
@@ -568,7 +568,7 @@ fn d3d12_artifact_at(source: &Path, sdk_line: u32) -> LibraryArtifact {
     let package_version = format!("1.{sdk_line}.1");
     LibraryArtifact::new(
         ArtifactId::for_bundle([&source_hash]),
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         "D3D12Core.dll",
         vec![
             ComponentFile::new(path_as_ref(source))
@@ -617,7 +617,7 @@ fn dxc_package_at(
     let validator_hash = sha_of(validator_path);
     LibraryArtifact::new(
         ArtifactId::for_bundle([&compiler_hash, &validator_hash]),
-        GraphicsTechnology::MicrosoftDxc,
+        LibraryTechnology::MicrosoftDxc,
         "dxcompiler.dll",
         vec![
             ComponentFile::new(path_as_ref(compiler_path))
@@ -682,11 +682,11 @@ fn standalone_dxc_apply_and_rollback_preserve_the_games_file_set() {
         .expect("test executable architecture");
     let game = sample_game_at(&game_dir);
     let component_id = ComponentId::new("component:dxc-standalone").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::MicrosoftDxc,
+        LibraryTechnology::MicrosoftDxc,
         Swappability::Swappable,
     )
     .with_file(
@@ -747,11 +747,11 @@ fn d3d12_missing_executable_facts_are_blocked_at_plan_and_apply_boundaries() {
 
     let game = sample_game_at(&game_dir);
     let component_id = ComponentId::new("component:d3d12-policy").expect("component id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -763,7 +763,7 @@ fn d3d12_missing_executable_facts_are_blocked_at_plan_and_apply_boundaries() {
     let source_hash = sha_of(&source);
     let artifact = LibraryArtifact::new(
         ArtifactId::for_bundle([&source_hash]),
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         "D3D12Core.dll",
         vec![
             ComponentFile::new(path_as_ref(&source))
@@ -844,11 +844,11 @@ fn patched_executable_backup_without_dll_backup_is_never_captured_as_a_mixed_bas
 
     let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
     let component_id = ComponentId::new("component:d3d12-orphan-exe").expect("component id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -922,11 +922,11 @@ fn confirmed_d3d12_apply_reports_token_mismatch_when_the_live_dll_changes() {
 
     let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
     let component_id = ComponentId::new("component:d3d12-stale-apply").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -1001,11 +1001,11 @@ fn d3d12_preview_apply_rechecks_developer_mode_after_a_successful_plan() {
 
     let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
     let component_id = ComponentId::new("component:d3d12-developer-mode").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -1086,11 +1086,11 @@ fn confirmed_first_d3d12_apply_reports_token_mismatch_when_the_executable_change
 
     let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
     let component_id = ComponentId::new("component:d3d12-missing-after-plan").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -1188,11 +1188,11 @@ fn every_d3d12_apply_stage_rolls_back_dll_exe_sidecars_and_database_together() {
         let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
         let component_id =
             ComponentId::new(format!("component:d3d12-failure-{index}")).expect("component");
-        let original_component = GraphicsComponent::new(
+        let original_component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(
@@ -1294,11 +1294,11 @@ fn every_d3d12_rollback_stage_restores_the_active_state_and_keeps_retry_sidecars
         let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
         let component_id = ComponentId::new(format!("component:d3d12-rollback-failure-{index}"))
             .expect("component");
-        let active_component = GraphicsComponent::new(
+        let active_component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(
@@ -1397,11 +1397,11 @@ fn d3d12_rollback_revalidates_live_dll_without_user_confirmation() {
 
     let game = sample_game_at(&game_dir).with_executable_candidate(path_as_ref(&executable));
     let component_id = ComponentId::new("component:d3d12-stale-rollback").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
     )
     .with_file(
@@ -1486,11 +1486,11 @@ fn openvr_apply_reinspects_installed_dll_and_fails_before_mutation() {
         PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports");
     let game = sample_game_at(&game_dir);
     let component_id = ComponentId::new("component:openvr-boundary").expect("component");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         Swappability::Swappable,
     )
     .with_file(
@@ -1505,7 +1505,7 @@ fn openvr_apply_reinspects_installed_dll_and_fails_before_mutation() {
     let source_hash = sha_of(&source);
     let artifact = LibraryArtifact::new(
         ArtifactId::for_bundle([&source_hash]),
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         "openvr_api.dll",
         vec![
             ComponentFile::new(path_as_ref(&source))
@@ -1562,7 +1562,7 @@ fn dlss_artifact(path: &Path, version: &str) -> LibraryArtifact {
     let sha = sha_of(path);
     LibraryArtifact::new(
         ArtifactId::for_bundle([&sha]),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(path_as_ref(path))
@@ -1597,11 +1597,11 @@ fn fresh_dlss_fixture(component_suffix: &str, live_bytes: &[u8]) -> FreshDlssFix
     let game = sample_game_at(&game_dir);
     let component_id =
         ComponentId::new(format!("component:{component_suffix}")).expect("component id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(sha_of(&live)));
@@ -1775,11 +1775,11 @@ fn swap_over_luma_owned_dlss_adopts_its_original_sidecar_without_rewriting_it() 
     let luma_hash = sha_of(&live);
     let game = sample_game_at(&game_dir);
     let component_id = ComponentId::new("component:dlss-luma").expect("id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(luma_hash.clone()));
@@ -1846,11 +1846,11 @@ fn swap_over_luma_owned_absent_dlss_does_not_promote_luma_bytes_to_baseline() {
     let luma_hash = sha_of(&live);
     let game = sample_game_at(&game_dir);
     let component_id = ComponentId::new("component:dlss-luma-absent").expect("id");
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         component_id.clone(),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(path_as_ref(&live)).with_sha256(luma_hash.clone()));
@@ -1948,7 +1948,7 @@ fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
         .collect();
     let artifact = LibraryArtifact::new(
         ArtifactId::for_bundle(shas.iter()),
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         "sl.common.dll",
         package_files,
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1958,11 +1958,11 @@ fn streamline_package_apply_updates_all_installed_plugins_not_extras() {
     .expect("source");
 
     let game = sample_game_at(&game_dir);
-    let mut component = GraphicsComponent::new(
+    let mut component = LibraryComponent::new(
         ComponentId::new("component:streamline").expect("id"),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         Swappability::BundleOnly,
     );
     for name in ["sl.common.dll", "sl.interposer.dll", "sl.dlss.dll"] {
@@ -2051,7 +2051,7 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
     // Snapshot says 310.7, then the source file is overwritten (manual restore).
     let artifact = LibraryArtifact::new(
         ArtifactId::for_bundle([&expected_sha]),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(path_as_ref(&source))
@@ -2067,11 +2067,11 @@ fn preview_keeps_stale_artifact_but_apply_invalidates_it_at_mutation_boundary() 
     write(&source, b"dlss-3.1.30-after-manual-restore");
 
     let game = sample_game_at(&game_dir);
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:dlss").expect("id"),
         game.id().clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(
@@ -2243,7 +2243,7 @@ fn fsr_members_to_remove_reads_the_baseline_not_the_live_component() {
 
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:fsr31").expect("artifact id"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_dx12.dll",
         vec![
             comp_file_str("C:/lib/amd_fidelityfx_dx12.dll")
@@ -2309,7 +2309,7 @@ fn fsr_members_to_remove_is_empty_for_a_split_artifact() {
     // unified downgrade, so nothing is removed.
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:fsr4").expect("artifact id"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
         vec![
             comp_file_str("C:/lib/amd_fidelityfx_upscaler_dx12.dll")

@@ -1,4 +1,4 @@
-import type { GameDetails, GameGraphicsComponent } from '@entities/game';
+import type { GameDetails, GameLibraryComponent } from '@entities/game';
 import {
   libraryVendorOrder,
   libraryVendorKey,
@@ -26,7 +26,7 @@ const COMPONENT_TECHNOLOGY_ORDER: Record<string, number> = {
   dlss_frame_generation: 3,
 };
 
-function compareComponents(a: GameGraphicsComponent, b: GameGraphicsComponent): number {
+function compareComponents(a: GameLibraryComponent, b: GameLibraryComponent): number {
   const orderA = COMPONENT_TECHNOLOGY_ORDER[a.technology] ?? 999;
   const orderB = COMPONENT_TECHNOLOGY_ORDER[b.technology] ?? 999;
 
@@ -39,7 +39,7 @@ function compareComponents(a: GameGraphicsComponent, b: GameGraphicsComponent): 
 export type VendorTab = {
   key: LibraryVendorKey;
   label: string;
-  components: GameGraphicsComponent[];
+  components: GameLibraryComponent[];
 };
 
 /**
@@ -57,7 +57,7 @@ export function createVendorTabs(details: GameDetails | null): VendorTab[] {
       acc[key] = [];
       return acc;
     },
-    {} as Record<LibraryVendorKey, GameGraphicsComponent[]>,
+    {} as Record<LibraryVendorKey, GameLibraryComponent[]>,
   );
 
   for (const component of details.components) {

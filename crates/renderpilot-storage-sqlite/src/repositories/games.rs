@@ -90,7 +90,7 @@ impl SqliteStorage {
         self.query_list(LIST_GAMES_SQL, [], game_from_row)
     }
 
-    /// Lists distinct library values currently observed in `components`.
+    /// Lists distinct technology values currently observed in `components`.
     pub fn list_distinct_game_libraries(&self) -> AppResult<Vec<String>> {
         self.query_list(LIST_DISTINCT_GAME_LIBRARIES_SQL, [], |row| {
             Ok(Ok(row.get::<_, String>(0)?))

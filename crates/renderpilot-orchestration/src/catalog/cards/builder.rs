@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use renderpilot_application::{InstalledAddonRepository, find_replacement_candidates_indexed};
-use renderpilot_domain::{GameId, GraphicsComponent, GraphicsTechnology, InstalledAddon};
+use renderpilot_domain::{GameId, InstalledAddon, LibraryComponent, LibraryTechnology};
 
 use crate::ServiceError;
 use crate::catalog::{load_replacement_universe, merge_addon_capabilities};
@@ -20,7 +20,7 @@ pub(super) fn build_snapshot(
     let storage = context.storage();
     let games = storage.list_games()?;
 
-    let mut components_by_game = HashMap::<GameId, Vec<GraphicsComponent>>::new();
+    let mut components_by_game = HashMap::<GameId, Vec<LibraryComponent>>::new();
     for component in storage.list_all_components()? {
         components_by_game
             .entry(component.game_id().clone())
@@ -104,7 +104,7 @@ pub(super) fn build_snapshot(
         libraries.extend(
             components
                 .iter()
-                .filter(|component| component.technology() != GraphicsTechnology::Unknown)
+                .filter(|component| component.technology() != LibraryTechnology::Unknown)
                 .map(|component| component.technology().as_slug().to_owned()),
         );
         launchers.insert(game.identity().launcher().as_str().to_owned());

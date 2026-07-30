@@ -1,7 +1,7 @@
 use std::fs;
 
 use renderpilot_orchestration::application::ComponentRepository;
-use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
+use renderpilot_orchestration::domain::{LibraryTechnology, Swappability};
 
 use crate::hash::sha256_hex;
 
@@ -210,7 +210,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
             sample_component(
                 "component:fsr-loader",
                 game.id().as_str(),
-                GraphicsTechnology::AmdFsrLoader,
+                LibraryTechnology::AmdFsrLoader,
                 Swappability::Swappable,
                 &path_string(&loader_path),
                 Some("2.1.0"),
@@ -219,7 +219,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
             sample_component(
                 "component:fsr-upscaler",
                 game.id().as_str(),
-                GraphicsTechnology::AmdFsrUpscaler,
+                LibraryTechnology::AmdFsrUpscaler,
                 Swappability::Swappable,
                 &path_string(&upscaler_path),
                 Some("4.0.3"),
@@ -228,7 +228,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
             sample_component(
                 "component:fsr-framegen",
                 game.id().as_str(),
-                GraphicsTechnology::AmdFsrFrameGeneration,
+                LibraryTechnology::AmdFsrFrameGeneration,
                 Swappability::Swappable,
                 &path_string(&framegen_path),
                 Some("4.0.0"),
@@ -238,7 +238,7 @@ fn apply_then_rollback_native_fsr_upscaler_only_touches_that_dll() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:fsr-upscaler-4.1",
-        GraphicsTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrUpscaler,
         &path_string(&replacement_path),
         Some("4.1.0"),
         &sha256_hex(b"native-upscaler-b"),
@@ -726,7 +726,7 @@ fn dx12_lineage_downgrade_to_unified_fsr3_cleans_up_split_members() {
     fs::write(&fsr314_source, b"fsr3.1.4").expect("fsr3.1.4 written");
     let fsr314 = sample_artifact(
         "artifact:fsr-3.1.4",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         &path_string(&fsr314_source),
         Some("3.1.4"),
         &sha256_hex(b"fsr3.1.4"),
@@ -835,7 +835,7 @@ fn externally_upgraded_fsr4_downgrade_removes_split_members_on_first_swap() {
     fs::write(&fsr314_source, b"fsr3.1.4").expect("fsr3.1.4 written");
     let fsr314 = sample_artifact(
         "artifact:fsr-3.1.4",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         &path_string(&fsr314_source),
         Some("3.1.4"),
         &sha256_hex(b"fsr3.1.4"),
@@ -957,7 +957,7 @@ fn mixed_lineage_unified_update_replaces_only_the_entry_point() {
         fs::write(&source, bytes).expect("unified artifact written");
         sample_artifact(
             id,
-            GraphicsTechnology::AmdFsr,
+            LibraryTechnology::AmdFsr,
             &path_string(&source),
             Some(version),
             &sha256_hex(bytes),

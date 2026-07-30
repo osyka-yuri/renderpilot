@@ -3,7 +3,7 @@
 use renderpilot_application::AppResult;
 use renderpilot_domain::{
     AddonKind, ComponentId, ComponentRollbackBaseline, D3d12ExecutableBaseline,
-    D3d12ExecutableIdentity, GameId, GraphicsComponent, InstalledAddon,
+    D3d12ExecutableIdentity, GameId, InstalledAddon, LibraryComponent,
 };
 
 use super::{
@@ -69,7 +69,7 @@ pub struct GameMutationCommit<'a> {
     /// Game whose coordinated state is changing.
     pub game_id: &'a GameId,
     /// Optional full component-set replacement.
-    pub component_set: Option<&'a [GraphicsComponent]>,
+    pub component_set: Option<&'a [LibraryComponent]>,
     /// Typed rollback aggregate mutations.
     pub baseline_mutations: &'a [ComponentBaselineMutation<'a>],
     /// Optional installed-add-on mutation.

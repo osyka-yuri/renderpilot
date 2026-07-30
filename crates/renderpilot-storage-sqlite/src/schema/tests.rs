@@ -64,6 +64,52 @@ END;
 PRAGMA user_version = 9;
 ";
 
+const REDUCE_TECHNOLOGY_COLUMNS_TO_V14: &str = "
+DROP TRIGGER trg_operation_items_artifact_technology_insert;
+DROP TRIGGER trg_operation_items_artifact_technology_update;
+DROP INDEX idx_components_game_id_technology;
+DROP INDEX idx_components_technology;
+DROP INDEX idx_library_artifacts_technology;
+ALTER TABLE components RENAME COLUMN technology TO library;
+ALTER TABLE library_artifacts RENAME COLUMN technology TO library;
+CREATE INDEX idx_components_game_id_library ON components(game_id, library);
+CREATE INDEX idx_components_library ON components(library);
+CREATE INDEX idx_library_artifacts_library ON library_artifacts(library);
+CREATE TRIGGER trg_operation_items_artifact_library_insert
+BEFORE INSERT ON operation_items
+FOR EACH ROW
+WHEN NEW.artifact_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'operation_items artifact library mismatch')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM components AS c
+        JOIN library_artifacts AS a
+          ON a.id = NEW.artifact_id
+         AND a.library = c.library
+        WHERE c.id = NEW.component_id
+          AND c.game_id = NEW.game_id
+    );
+END;
+CREATE TRIGGER trg_operation_items_artifact_library_update
+BEFORE UPDATE OF game_id, component_id, artifact_id ON operation_items
+FOR EACH ROW
+WHEN NEW.artifact_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'operation_items artifact library mismatch')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM components AS c
+        JOIN library_artifacts AS a
+          ON a.id = NEW.artifact_id
+         AND a.library = c.library
+        WHERE c.id = NEW.component_id
+          AND c.game_id = NEW.game_id
+    );
+END;
+PRAGMA user_version = 14;
+";
+
 #[test]
 fn apply_creates_catalog_schema() {
     let mut connection = open_test_connection();
@@ -333,6 +379,9 @@ fn apply_migrates_v12_to_v13_as_one_release_boundary() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration");
     connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("restore pre-v15 technology columns");
+    connection
         .execute_batch(
             "
             INSERT INTO settings (key, value) VALUES ('v12_marker', 'preserved');
@@ -370,6 +419,9 @@ fn apply_migrates_v12_to_v13_as_one_release_boundary() {
 fn apply_v14_consolidates_only_exact_install_key_duplicates() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("restore v14 library columns");
     connection
         .execute_batch(
             "
@@ -449,6 +501,9 @@ fn apply_v14_refuses_lossy_exact_duplicate_conflicts() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration");
     connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("restore v14 library columns");
+    connection
         .execute_batch(
             "
             DROP INDEX uq_games_install_key;
@@ -490,6 +545,9 @@ fn apply_v14_refuses_lossy_exact_duplicate_conflicts() {
 fn apply_v14_refuses_install_key_collisions_with_different_game_identity() {
     let mut connection = open_test_connection();
     apply(&mut connection).expect("initial migration");
+    connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("restore v14 library columns");
     connection
         .execute_batch(
             "
@@ -543,6 +601,220 @@ fn apply_normalizes_the_misstamped_development_v14_without_losing_rows() {
         )
         .expect("preserved marker");
     assert_eq!(marker, "preserved");
+}
+
+#[test]
+fn apply_migrates_v14_technology_columns_without_losing_aggregate_state() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("v15 baseline");
+    seed_v14_migration_aggregate(&connection);
+    connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("reduce physical schema to v14");
+
+    apply(&mut connection).expect("v14 should migrate in place");
+
+    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    assert!(table_has_column(&connection, "components", "technology"));
+    assert!(table_has_column(
+        &connection,
+        "library_artifacts",
+        "technology"
+    ));
+    assert!(!table_has_column(&connection, "components", "library"));
+    assert!(!table_has_column(
+        &connection,
+        "library_artifacts",
+        "library"
+    ));
+    assert!(schema_object_exists(
+        &connection,
+        "index",
+        "idx_components_game_id_technology"
+    ));
+    assert!(schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_operation_items_artifact_technology_insert"
+    ));
+    assert!(!schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_operation_items_artifact_library_insert"
+    ));
+
+    let component: (String, String, i64, i64) = connection
+        .query_row(
+            "SELECT technology, files_json, created_at, updated_at
+             FROM components WHERE id = 'component:v12'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("migrated component");
+    assert_eq!(component, ("openvr".to_owned(), "[]".to_owned(), 100, 101));
+    let artifact: (String, String, String) = connection
+        .query_row(
+            "SELECT technology, files_json, metadata_json
+             FROM library_artifacts WHERE id = 'artifact:v12'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("migrated artifact");
+    assert_eq!(
+        artifact,
+        (
+            "openvr".to_owned(),
+            "[{\"sentinel\":true}]".to_owned(),
+            "{\"receipt\":\"preserved\"}".to_owned()
+        )
+    );
+    for (table, expected) in [
+        ("component_backups", 1_i64),
+        ("operations", 1),
+        ("operation_items", 1),
+        ("pending_file_mutations", 1),
+    ] {
+        let count: i64 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .expect("preserved row count");
+        assert_eq!(count, expected, "{table}");
+    }
+
+    connection
+        .execute(
+            "INSERT INTO library_artifacts
+                (id, technology, file_name, files_json, metadata_json, trust_level)
+             VALUES
+                ('artifact:mismatch', 'intel_xess', 'mismatch.dll', '[{}]', '{}', 'user_imported')",
+            [],
+        )
+        .expect("mismatched artifact");
+    let error = connection
+        .execute(
+            "INSERT INTO operation_items
+                (operation_id, game_id, component_id, artifact_id, source_path, status)
+             VALUES
+                ('operation:v12', 'game:v12', 'component:v12',
+                 'artifact:mismatch', 'C:/mismatch.dll', 'pending')",
+            [],
+        )
+        .expect_err("technology trigger must reject mismatch");
+    assert!(error.to_string().contains("artifact technology mismatch"));
+}
+
+#[test]
+fn fresh_v15_and_migrated_v14_have_equivalent_schema_semantics() {
+    let mut fresh = open_test_connection();
+    apply(&mut fresh).expect("fresh v15 baseline");
+    seed_v14_migration_aggregate(&fresh);
+
+    let mut migrated = open_test_connection();
+    apply(&mut migrated).expect("v15 baseline for migration fixture");
+    seed_v14_migration_aggregate(&migrated);
+    migrated
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("reduce physical schema to v14");
+    apply(&mut migrated).expect("v14 to v15 migration");
+
+    assert_eq!(
+        schema_semantic_snapshot(&migrated),
+        schema_semantic_snapshot(&fresh),
+        "fresh and migrated databases must agree on columns, indexes, foreign keys, and triggers"
+    );
+    assert_technology_trigger_rejects_mismatch(&fresh, "fresh");
+    assert_technology_trigger_rejects_mismatch(&migrated, "migrated");
+}
+
+#[test]
+fn apply_rolls_back_when_the_second_v15_column_rename_fails() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("v15 baseline");
+    seed_v14_migration_aggregate(&connection);
+    connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("reduce physical schema to v14");
+
+    connection
+        .authorizer(Some(|context: AuthContext<'_>| match context.action {
+            AuthAction::AlterTable {
+                table_name: "library_artifacts",
+                ..
+            } => Authorization::Deny,
+            _ => Authorization::Allow,
+        }))
+        .expect("install migration failure hook");
+    let error = apply(&mut connection).expect_err("second rename must fail");
+    connection
+        .authorizer(None::<fn(AuthContext<'_>) -> Authorization>)
+        .expect("remove migration failure hook");
+
+    assert!(error.to_string().contains("library_artifacts.library"));
+    assert_eq!(user_version(&connection), 14);
+    assert!(table_has_column(&connection, "components", "library"));
+    assert!(table_has_column(
+        &connection,
+        "library_artifacts",
+        "library"
+    ));
+    assert!(!table_has_column(&connection, "components", "technology"));
+    assert!(!table_has_column(
+        &connection,
+        "library_artifacts",
+        "technology"
+    ));
+    assert!(schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_operation_items_artifact_library_insert"
+    ));
+}
+
+#[test]
+fn apply_rolls_back_v15_migration_when_post_migration_validation_fails() {
+    let mut connection = open_test_connection();
+    apply(&mut connection).expect("v15 baseline");
+    seed_v14_migration_aggregate(&connection);
+    connection
+        .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+        .expect("reduce physical schema to v14");
+
+    connection
+        .execute_batch(
+            "
+            PRAGMA foreign_keys = OFF;
+            INSERT INTO operation_items
+                (operation_id, game_id, component_id, artifact_id,
+                 source_path, target_path, status, created_at, updated_at,
+                 metadata_json)
+            VALUES
+                ('missing-operation', 'missing-game', 'missing-component', NULL,
+                 'C:/source.dll', 'C:/target.dll', 'pending', 1, 1, '{}');
+            ",
+        )
+        .expect("inject a foreign-key violation");
+
+    let error = apply(&mut connection).expect_err("integrity validation must fail");
+    assert!(
+        error.to_string().contains("foreign_key_check"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(user_version(&connection), 14);
+    assert!(table_has_column(&connection, "components", "library"));
+    assert!(!table_has_column(&connection, "components", "technology"));
+    assert!(schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_operation_items_artifact_library_insert"
+    ));
+    assert!(!schema_object_exists(
+        &connection,
+        "trigger",
+        "trg_operation_items_artifact_technology_insert"
+    ));
 }
 
 #[test]
@@ -910,7 +1182,7 @@ fn compose_baseline_is_non_empty_and_includes_shared_fragments() {
 }
 
 #[test]
-fn apply_backs_up_file_database_before_rebuild() {
+fn apply_backs_up_file_database_before_upgrade_that_requires_rebuild() {
     let dir =
         std::env::temp_dir().join(format!("renderpilot-schema-backup-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
@@ -953,10 +1225,14 @@ fn apply_backs_up_file_database_before_rebuild() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-rebuild.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v15.") && name.ends_with(".bak"))
         })
         .collect();
-    assert_eq!(backups.len(), 1, "expected one pre-rebuild backup");
+    assert_eq!(
+        backups.len(),
+        1,
+        "expected one pre-migration backup before the transactional rebuild"
+    );
 
     let backup = Connection::open(&backups[0]).expect("open backup");
     let restored: i64 = backup
@@ -969,6 +1245,244 @@ fn apply_backs_up_file_database_before_rebuild() {
     assert_eq!(restored, 1);
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn apply_backs_up_file_database_before_v15_migration() {
+    let dir = std::env::temp_dir().join(format!(
+        "renderpilot-schema-v15-backup-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("temp dir");
+    let db_path = dir.join("catalog.db");
+
+    {
+        let mut connection = Connection::open(&db_path).expect("open file db");
+        apply(&mut connection).expect("v15 baseline");
+        seed_v14_migration_aggregate(&connection);
+        connection
+            .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
+            .expect("reduce physical schema to v14");
+        apply(&mut connection).expect("migrate file database");
+        assert_eq!(user_version(&connection), 15);
+    }
+
+    let backups: Vec<PathBuf> = fs::read_dir(&dir)
+        .expect("list temp")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(".pre-migration-v15.") && name.ends_with(".bak"))
+        })
+        .collect();
+    assert_eq!(backups.len(), 1, "expected one pre-migration backup");
+
+    let backup = Connection::open(&backups[0]).expect("open backup");
+    assert_eq!(user_version(&backup), 14);
+    assert!(table_has_column(&backup, "components", "library"));
+    assert!(!table_has_column(&backup, "components", "technology"));
+    let preserved: i64 = backup
+        .query_row(
+            "SELECT COUNT(*) FROM operation_items WHERE artifact_id = 'artifact:v12'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("operation item in backup");
+    assert_eq!(preserved, 1);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn seed_v14_migration_aggregate(connection: &Connection) {
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO games
+                (id, title, launcher, platform, runtime, install_path,
+                 install_key, root_authority, executable_candidates_json)
+            VALUES
+                ('game:v12', 'Migration Fixture', 'Manual', 'Windows',
+                 'NativeWindows', 'C:/Game', 'c:/game', 'legacy', '[]');
+            INSERT INTO components
+                (id, game_id, kind, technology, swappability, files_json,
+                 created_at, updated_at)
+            VALUES
+                ('component:v12', 'game:v12', 'NativeLibrary', 'openvr',
+                 'Swappable', '[]', 100, 101);
+            INSERT INTO library_artifacts
+                (id, technology, file_name, files_json, metadata_json,
+                 source, trust_level, created_at, updated_at)
+            VALUES
+                ('artifact:v12', 'openvr', 'openvr_api.dll',
+                 '[{"sentinel":true}]', '{"receipt":"preserved"}',
+                 'fixture', 'user_imported', 102, 103);
+            INSERT INTO component_backups
+                (component_id, game_id, files_json, auxiliary_json,
+                 created_at, updated_at)
+            VALUES
+                ('component:v12', 'game:v12', '[]', '[]', 104, 105);
+            INSERT INTO operations
+                (id, game_id, kind, status, created_at, updated_at, metadata_json)
+            VALUES
+                ('operation:v12', 'game:v12', 'replace_component', 'pending',
+                 106, 107, '{"sentinel":true}');
+            INSERT INTO operation_items
+                (operation_id, game_id, component_id, artifact_id,
+                 source_path, target_path, status, created_at, updated_at,
+                 metadata_json)
+            VALUES
+                ('operation:v12', 'game:v12', 'component:v12',
+                 'artifact:v12', 'C:/source.dll', 'C:/target.dll', 'pending',
+                 108, 109, '{"sentinel":true}');
+            INSERT INTO pending_file_mutations
+                (id, game_id, feature, subject_id, state, manifest_json,
+                 created_at, updated_at)
+            VALUES
+                ('mutation:v12', 'game:v12', 'catalog_swap', 'component:v12',
+                 'prepared', '{"sentinel":true}', 110, 111);
+            "#,
+        )
+        .expect("seed migration aggregate");
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SchemaSemanticSnapshot {
+    table_xinfo: Vec<(String, Vec<String>)>,
+    index_xinfo: Vec<(String, Vec<String>)>,
+    foreign_keys: Vec<(String, Vec<String>)>,
+    triggers: Vec<String>,
+}
+
+fn schema_semantic_snapshot(connection: &Connection) -> SchemaSemanticSnapshot {
+    let table_xinfo = REQUIRED_TABLES
+        .iter()
+        .map(|table| ((*table).to_owned(), table_xinfo_rows(connection, table)))
+        .collect();
+    let index_xinfo = REQUIRED_INDEXES
+        .iter()
+        .map(|index| ((*index).to_owned(), index_xinfo_rows(connection, index)))
+        .collect();
+    let foreign_keys = REQUIRED_TABLES
+        .iter()
+        .map(|table| ((*table).to_owned(), foreign_key_rows(connection, table)))
+        .collect();
+    let mut triggers = REQUIRED_TRIGGERS
+        .iter()
+        .filter(|trigger| schema_object_exists(connection, "trigger", trigger))
+        .map(|trigger| (*trigger).to_owned())
+        .collect::<Vec<_>>();
+    triggers.sort();
+
+    SchemaSemanticSnapshot {
+        table_xinfo,
+        index_xinfo,
+        foreign_keys,
+        triggers,
+    }
+}
+
+fn table_xinfo_rows(connection: &Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT cid, name, type, \"notnull\", dflt_value, pk, hidden
+             FROM pragma_table_xinfo(?1)
+             ORDER BY cid",
+        )
+        .expect("prepare table_xinfo");
+    statement
+        .query_map([table], |row| {
+            Ok(format!(
+                "{}|{}|{}|{}|{:?}|{}|{}",
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .expect("query table_xinfo")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read table_xinfo")
+}
+
+fn index_xinfo_rows(connection: &Connection, index: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT seqno, cid, name, \"desc\", coll, key
+             FROM pragma_index_xinfo(?1)
+             ORDER BY seqno",
+        )
+        .expect("prepare index_xinfo");
+    statement
+        .query_map([index], |row| {
+            Ok(format!(
+                "{}|{}|{:?}|{}|{:?}|{}",
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .expect("query index_xinfo")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read index_xinfo")
+}
+
+fn foreign_key_rows(connection: &Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, seq, \"table\", \"from\", \"to\", on_update, on_delete, \"match\"
+             FROM pragma_foreign_key_list(?1)
+             ORDER BY id, seq",
+        )
+        .expect("prepare foreign_key_list");
+    statement
+        .query_map([table], |row| {
+            Ok(format!(
+                "{}|{}|{}|{}|{:?}|{}|{}|{}",
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })
+        .expect("query foreign_key_list")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read foreign_key_list")
+}
+
+fn assert_technology_trigger_rejects_mismatch(connection: &Connection, suffix: &str) {
+    let artifact_id = format!("artifact:mismatch:{suffix}");
+    connection
+        .execute(
+            "INSERT INTO library_artifacts
+                (id, technology, file_name, files_json, metadata_json, trust_level)
+             VALUES
+                (?1, 'intel_xess', 'mismatch.dll', '[{}]', '{}', 'user_imported')",
+            [&artifact_id],
+        )
+        .expect("mismatched artifact");
+    let error = connection
+        .execute(
+            "INSERT INTO operation_items
+                (operation_id, game_id, component_id, artifact_id, source_path, status)
+             VALUES
+                ('operation:v12', 'game:v12', 'component:v12', ?1, 'C:/mismatch.dll', 'pending')",
+            [&artifact_id],
+        )
+        .expect_err("technology trigger must reject mismatch");
+    assert!(error.to_string().contains("artifact technology mismatch"));
 }
 
 fn open_test_connection() -> Connection {

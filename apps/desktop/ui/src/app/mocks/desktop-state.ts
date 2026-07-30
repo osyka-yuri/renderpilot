@@ -1,7 +1,7 @@
 import type {
   GameCandidateGroup,
   GameDetails,
-  GameGraphicsComponent,
+  GameLibraryComponent,
   GameSummary,
 } from '@entities/game';
 import type { LibraryPackageSummary } from '@entities/library';
@@ -38,7 +38,7 @@ export type MockState = {
   libraryPackages: LibraryPackageSummary[];
 };
 
-type ComponentFile = GameGraphicsComponent['files'][number];
+type ComponentFile = GameLibraryComponent['files'][number];
 
 export const mockState: MockState = createMockState();
 
@@ -113,7 +113,7 @@ export function requireGameDetails(gameId: string): GameDetails {
   return details;
 }
 
-export function requireComponent(details: GameDetails, componentId: string): GameGraphicsComponent {
+export function requireComponent(details: GameDetails, componentId: string): GameLibraryComponent {
   const component = details.components.find((item) => item.id === componentId);
 
   if (!component) {
@@ -140,7 +140,7 @@ export function requireCandidateGroup(
   return candidateGroup;
 }
 
-export function requireFirstComponentFile(component: GameGraphicsComponent): ComponentFile {
+export function requireFirstComponentFile(component: GameLibraryComponent): ComponentFile {
   if (component.files.length === 0) {
     throw new Error(`Mock preview component ${component.id} does not contain any files.`);
   }
@@ -148,7 +148,7 @@ export function requireFirstComponentFile(component: GameGraphicsComponent): Com
   return component.files[0];
 }
 
-export function captureComponentBaseline(gameId: string, component: GameGraphicsComponent): void {
+export function captureComponentBaseline(gameId: string, component: GameLibraryComponent): void {
   let baselines = mockState.componentBaselinesByGameId.get(gameId);
   if (!baselines) {
     baselines = new Map();

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use renderpilot_domain::{
-    ArtifactId, CatalogPackageAvailability, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    ArtifactId, CatalogPackageAvailability, LibraryArtifact, LibraryComponent, LibraryTechnology,
     PackageVersion, Version, fsr,
 };
 
@@ -87,11 +87,11 @@ impl CandidateContext {
 /// Matching is per *component bundle*, not per file: a component is matched
 /// against artifacts of the same exact technology whose bundle content differs
 /// from what is currently installed. A cohesive FSR component still uses
-/// [`GraphicsTechnology::AmdFsr`], so an FSR 3 (single-file) component can still
+/// [`LibraryTechnology::AmdFsr`], so an FSR 3 (single-file) component can still
 /// be replaced by an FSR 4 (three-file) artifact.
 #[must_use]
 pub fn find_replacement_candidates(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     artifacts: &[LibraryArtifact],
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
@@ -124,7 +124,7 @@ impl CandidateArtifactIndex {
 /// Matches components against an already-indexed artifact universe.
 #[must_use]
 pub fn find_replacement_candidates_indexed(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     index: &CandidateArtifactIndex,
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
@@ -132,7 +132,7 @@ pub fn find_replacement_candidates_indexed(
 }
 
 fn find_replacement_candidates_with_lookup(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     artifacts: &[LibraryArtifact],
     lookup: &CandidateArtifactLookup,
     context: &CandidateContext,
@@ -213,7 +213,7 @@ fn find_replacement_candidates_with_lookup(
 }
 
 fn installed_release_state(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     universe: &[LibraryArtifact],
     artifacts: &[IndexedArtifact],
     context: &CandidateContext,
@@ -221,14 +221,14 @@ fn installed_release_state(
     if let Some(release) = installed_catalog_release(component, universe, artifacts, context) {
         return release;
     }
-    if component.technology() == GraphicsTechnology::OpenVr {
+    if component.technology() == LibraryTechnology::OpenVr {
         return InstalledReleaseState::Unknown;
     }
     InstalledReleaseState::from_version_report(super::dto::component_version_state(component))
 }
 
 fn installed_catalog_release(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     universe: &[LibraryArtifact],
     artifacts: &[IndexedArtifact],
     context: &CandidateContext,
@@ -273,12 +273,12 @@ struct IndexedArtifact {
 
 #[derive(Debug)]
 struct CandidateArtifactLookup {
-    by_technology: HashMap<GraphicsTechnology, Vec<IndexedArtifact>>,
+    by_technology: HashMap<LibraryTechnology, Vec<IndexedArtifact>>,
 }
 
 impl CandidateArtifactLookup {
     fn build(artifacts: &[LibraryArtifact]) -> Self {
-        let mut by_technology = HashMap::<GraphicsTechnology, Vec<IndexedArtifact>>::new();
+        let mut by_technology = HashMap::<LibraryTechnology, Vec<IndexedArtifact>>::new();
 
         for (artifact_index, artifact) in artifacts.iter().enumerate() {
             by_technology
@@ -467,17 +467,17 @@ impl CompatibilityPolicy {
     }
 }
 
-impl From<GraphicsTechnology> for CompatibilityPolicy {
-    fn from(technology: GraphicsTechnology) -> Self {
+impl From<LibraryTechnology> for CompatibilityPolicy {
+    fn from(technology: LibraryTechnology) -> Self {
         match technology {
-            GraphicsTechnology::DlssSuperResolution => Self::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution => Self::DlssSuperResolution,
             _ => Self::AlwaysCompatible,
         }
     }
 }
 
 fn candidate_comparison(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
     current_version: Option<&Version>,
 ) -> Option<CandidateComparison> {
@@ -490,10 +490,10 @@ fn candidate_comparison(
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).
 fn require_compatible_graphics_api(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
-    if component.technology().family() != GraphicsTechnology::AmdFsr {
+    if component.technology().family() != LibraryTechnology::AmdFsr {
         return Some(());
     }
 
@@ -526,7 +526,7 @@ fn require_compatible_graphics_api(
 /// blocked — it would only strand the split members. Split → split (upgrades and FSR 4
 /// updates) is always allowed.
 fn require_not_split_downgrade(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> Option<()> {
     // A composed FSR package's primary file name is the upscaler (the split marker);
@@ -544,7 +544,7 @@ fn require_not_split_downgrade(
 }
 
 fn require_version_compatible(
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     current: Option<&Version>,
     candidate: Option<&Version>,
 ) -> Option<()> {
@@ -620,7 +620,7 @@ mod tests {
 
         assert!(
             require_version_compatible(
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 Some(&v1),
                 Some(&v2),
             )
@@ -635,7 +635,7 @@ mod tests {
 
         assert!(
             require_version_compatible(
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 Some(&v2),
                 Some(&v3),
             )
@@ -650,7 +650,7 @@ mod tests {
 
         assert!(
             require_version_compatible(
-                GraphicsTechnology::DlssFrameGeneration,
+                LibraryTechnology::DlssFrameGeneration,
                 Some(&v1),
                 Some(&v2),
             )

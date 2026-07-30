@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
-import type { GameGraphicsComponent } from '@entities/game';
+import type { GameLibraryComponent } from '@entities/game';
 import type { SwapPlan, SwapPlanBlocker } from '@entities/operation';
 import type { D3d12ExecutableAction } from '@shared/model';
 
@@ -307,7 +307,7 @@ async function settleOverlays(): Promise<void> {
   await tick();
 }
 
-function repairComponent(backupExists = true): GameGraphicsComponent {
+function repairComponent(backupExists = true): GameLibraryComponent {
   return {
     id: 'component:d3d12',
     game_id: 'steam:123',
@@ -328,7 +328,7 @@ function repairComponent(backupExists = true): GameGraphicsComponent {
   };
 }
 
-function patchedComponent(): GameGraphicsComponent {
+function patchedComponent(): GameLibraryComponent {
   return {
     ...repairComponent(),
     rollback_available: true,

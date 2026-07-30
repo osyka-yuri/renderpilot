@@ -50,6 +50,3 @@ impl<'de> Deserialize<'de> for Sha256Hash {
         Self::new(value).map_err(serde::de::Error::custom)
     }
 }
-
-/// Backward-compatible alias for the SHA-256 value object.
-pub type Sha256Digest = Sha256Hash;

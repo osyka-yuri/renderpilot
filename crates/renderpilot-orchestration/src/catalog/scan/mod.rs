@@ -43,7 +43,7 @@ use std::path::PathBuf;
 
 use renderpilot_application::{AppError, GameRepository, OperationRepository};
 use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
-use renderpilot_domain::{GameId, GraphicsComponent, RootAuthority};
+use renderpilot_domain::{GameId, LibraryComponent, RootAuthority};
 use renderpilot_platform_windows::ManualFolderGameSource;
 use scan_plan::DetectionMode;
 
@@ -130,7 +130,7 @@ fn scan_source_impl(
         detection_mode,
         prefetched_cache,
     )?;
-    let components = reconcile::build_graphics_components(&selected_game, &libraries)?;
+    let components = reconcile::build_library_components(&selected_game, &libraries)?;
     if root_change != ExplicitRootChange::Unchanged {
         ensure_root_change_preserves_state(inputs.context, &selected_game, &components)?;
     }
@@ -157,7 +157,7 @@ fn scan_source_impl(
 fn archive_pruned_operation_history(
     context: &crate::Context,
     game: &renderpilot_domain::GameInstallation,
-    prospective_components: &[GraphicsComponent],
+    prospective_components: &[LibraryComponent],
 ) -> Result<Option<String>, ServiceError> {
     let prospective_ids = prospective_components
         .iter()
@@ -191,7 +191,7 @@ fn archive_pruned_operation_history(
 fn ensure_root_change_preserves_state(
     context: &crate::Context,
     game: &renderpilot_domain::GameInstallation,
-    prospective_components: &[GraphicsComponent],
+    prospective_components: &[LibraryComponent],
 ) -> Result<(), ServiceError> {
     let assessment = assess_root_change(context, game, Some(prospective_components))?;
     match assessment.status {
@@ -243,7 +243,7 @@ fn ensure_root_change_not_blocked_before_scan(
 fn assess_root_change(
     context: &crate::Context,
     game: &renderpilot_domain::GameInstallation,
-    prospective_components: Option<&[GraphicsComponent]>,
+    prospective_components: Option<&[LibraryComponent]>,
 ) -> Result<super::RootCorrectionAssessment, ServiceError> {
     let executable_basenames = game
         .executable_candidates()

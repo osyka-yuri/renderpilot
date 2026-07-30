@@ -3,18 +3,18 @@
 use std::path::Path;
 
 use renderpilot_application::AppError;
-use renderpilot_domain::{ComponentFile, GraphicsComponent, ManagedFileMode};
+use renderpilot_domain::{ComponentFile, LibraryComponent, ManagedFileMode};
 
 use super::baseline::{BaselineConflict, verified_hash};
 
 /// Freshly hashed active component state accepted at the mutation boundary.
 #[derive(Debug, Clone)]
 pub(crate) struct CurrentComponentSnapshot {
-    component: GraphicsComponent,
+    component: LibraryComponent,
 }
 
 impl CurrentComponentSnapshot {
-    pub(crate) fn into_component(self) -> GraphicsComponent {
+    pub(crate) fn into_component(self) -> LibraryComponent {
         self.component
     }
 }
@@ -23,7 +23,7 @@ impl CurrentComponentSnapshot {
 /// the catalog snapshot or the active bytes of an owned coordinated binding.
 /// The returned component never carries a stale hash or version.
 pub(crate) fn current_component_snapshot(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     managed_files: &[renderpilot_domain::ManagedAddonFile],
 ) -> Result<CurrentComponentSnapshot, BaselineConflict> {
     let mut files = Vec::new();
@@ -71,7 +71,7 @@ pub(crate) fn current_component_snapshot(
 /// bindings and unrelated add-on kinds are intentionally left untouched.
 pub(crate) fn record_after_component_rollback(
     record: &renderpilot_domain::InstalledAddon,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     baseline: &[ComponentFile],
 ) -> Result<Option<renderpilot_domain::InstalledAddon>, AppError> {
     let rolled_back_paths = component

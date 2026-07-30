@@ -1,7 +1,7 @@
 //! Developer Mode prerequisite assessment for D3D12 Agility previews.
 
 use renderpilot_application::{OperationPlan, OperationPlanBlocker};
-use renderpilot_domain::{GraphicsTechnology, LibraryArtifact, ReleaseChannel};
+use renderpilot_domain::{LibraryArtifact, LibraryTechnology, ReleaseChannel};
 use renderpilot_platform_windows::DeveloperModeStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub(super) fn apply_developer_mode_prerequisite(
 }
 
 fn developer_mode_requirement(artifact: &LibraryArtifact) -> DeveloperModeRequirement {
-    if artifact.technology() != GraphicsTechnology::D3D12Agility {
+    if artifact.technology() != LibraryTechnology::D3D12Agility {
         return DeveloperModeRequirement::NotRequired;
     }
 
@@ -51,7 +51,7 @@ fn developer_mode_requirement(artifact: &LibraryArtifact) -> DeveloperModeRequir
 
     if !receipt
         .technology
-        .eq_ignore_ascii_case(GraphicsTechnology::D3D12Agility.as_slug())
+        .eq_ignore_ascii_case(LibraryTechnology::D3D12Agility.as_slug())
     {
         return DeveloperModeRequirement::Unverifiable;
     }
@@ -75,7 +75,7 @@ mod tests {
     use renderpilot_domain::{
         Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
         CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
-        ComponentId, ComponentKind, GameId, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+        ComponentId, ComponentKind, GameId, LibraryArtifact, LibraryComponent, LibraryTechnology,
         PackageRelease, PackageVersion, PathRef, ReleaseChannel, Sha256Hash, Swappability,
     };
     use renderpilot_platform_windows::DeveloperModeStatus;
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn preview_maps_platform_status_to_the_expected_blocker() {
-        let artifact = artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Preview);
+        let artifact = artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Preview);
         assert_eq!(
             developer_mode_requirement(&artifact),
             DeveloperModeRequirement::Required
@@ -131,9 +131,9 @@ mod tests {
             });
 
         for artifact in [
-            artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Stable),
-            artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Beta),
-            artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Debug),
+            artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Stable),
+            artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Beta),
+            artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Debug),
         ] {
             assert_eq!(
                 developer_mode_requirement(&artifact),
@@ -148,7 +148,7 @@ mod tests {
         }
 
         let non_d3d12 = artifact(
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             ReleaseChannel::Preview,
         );
         assert_eq!(
@@ -167,23 +167,23 @@ mod tests {
                 probe_reads.fetch_add(1, Ordering::SeqCst);
                 DeveloperModeStatus::Enabled
             });
-        let without_receipt = artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Preview)
+        let without_receipt = artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Preview)
             .with_metadata(ArtifactMetadata::default());
         let imported_without_receipt = LibraryArtifact::new(
             without_receipt.id().clone(),
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             "D3D12Core.dll",
             without_receipt.files().to_vec(),
             ArtifactTrustLevel::UserImported,
         )
         .expect("artifact");
         let mismatched_receipt = artifact(
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             ReleaseChannel::Preview,
         );
         let mismatched_receipt = LibraryArtifact::new(
             mismatched_receipt.id().clone(),
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             "D3D12Core.dll",
             mismatched_receipt.files().to_vec(),
             ArtifactTrustLevel::CatalogDownloaded,
@@ -222,12 +222,12 @@ mod tests {
                 probe_reads.fetch_add(1, Ordering::SeqCst);
                 DeveloperModeStatus::Enabled
             });
-        let artifact = artifact(GraphicsTechnology::D3D12Agility, ReleaseChannel::Preview);
-        let incompatible_component = GraphicsComponent::new(
+        let artifact = artifact(LibraryTechnology::D3D12Agility, ReleaseChannel::Preview);
+        let incompatible_component = LibraryComponent::new(
             ComponentId::new("component:dlss-test").expect("component id"),
             GameId::new("manual:d3d12-test").expect("game id"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(
@@ -248,12 +248,12 @@ mod tests {
         assert_eq!(reads.load(Ordering::SeqCst), 0);
     }
 
-    fn component() -> GraphicsComponent {
-        GraphicsComponent::new(
+    fn component() -> LibraryComponent {
+        LibraryComponent::new(
             ComponentId::new("component:d3d12-test").expect("component id"),
             GameId::new("manual:d3d12-test").expect("game id"),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(
@@ -264,7 +264,7 @@ mod tests {
         )
     }
 
-    fn artifact(technology: GraphicsTechnology, channel: ReleaseChannel) -> LibraryArtifact {
+    fn artifact(technology: LibraryTechnology, channel: ReleaseChannel) -> LibraryArtifact {
         let revision = Sha256Hash::new(ARTIFACT_HASH).expect("revision hash");
         let receipt = CatalogPackageReceiptV1 {
             schema_version: CatalogReceiptSchemaV1,

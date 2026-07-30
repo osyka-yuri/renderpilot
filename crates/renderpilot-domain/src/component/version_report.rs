@@ -4,7 +4,7 @@
 //! owns the state exposed to candidate matching, operation history, and clients
 //! so Streamline's multi-file truth is not recomputed in each layer.
 
-use crate::{ComponentFile, GraphicsTechnology, Version, fsr};
+use crate::{ComponentFile, LibraryTechnology, Version, fsr};
 
 /// Honest version state for one installed graphics component.
 ///
@@ -45,9 +45,9 @@ impl ComponentVersionReport {
 #[must_use]
 pub fn component_version_report(
     files: &[ComponentFile],
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) -> ComponentVersionReport {
-    if technology == GraphicsTechnology::NvidiaStreamline {
+    if technology == LibraryTechnology::NvidiaStreamline {
         streamline_version_report(files)
     } else {
         fsr::version_representative(files)
@@ -116,7 +116,7 @@ mod tests {
             versioned_file("C:/game/sl.interposer.dll", "2.9.0"),
         ];
         assert_eq!(
-            component_version_report(&uniform, GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&uniform, LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Known(Version::parse("2.9.0").expect("version")),
         );
     }
@@ -128,7 +128,7 @@ mod tests {
             versioned_file("C:/game/sl.interposer.dll", "2.4.0"),
         ];
         assert_eq!(
-            component_version_report(&mixed, GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&mixed, LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Mixed {
                 min: Version::parse("2.4.0").expect("version"),
                 max: Version::parse("2.9.0").expect("version"),
@@ -143,7 +143,7 @@ mod tests {
             versioned_file("C:/game/sl.interposer.dll", "2.9.0"),
         ];
         assert_eq!(
-            component_version_report(&files, GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&files, LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Known(Version::parse("2.9.0.0").expect("version")),
         );
     }
@@ -155,7 +155,7 @@ mod tests {
             ComponentFile::new(PathRef::new("C:/game/sl.interposer.dll").expect("path")),
         ];
         assert_eq!(
-            component_version_report(&files, GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&files, LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Unknown,
         );
     }
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn streamline_empty_set_is_unknown() {
         assert_eq!(
-            component_version_report(&[], GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&[], LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Unknown,
         );
     }
@@ -178,7 +178,7 @@ mod tests {
             ComponentFile::new(PathRef::new("C:/game/sl.dlss.dll").expect("path")),
         ];
         assert_eq!(
-            component_version_report(&files, GraphicsTechnology::NvidiaStreamline),
+            component_version_report(&files, LibraryTechnology::NvidiaStreamline),
             ComponentVersionReport::Mixed {
                 min: Version::parse("2.4.0").expect("version"),
                 max: Version::parse("2.9.0").expect("version"),
@@ -194,12 +194,12 @@ mod tests {
             versioned_file("C:/game/nvngx_dlss.dll", "3.7.0"),
         ];
         assert_eq!(
-            component_version_report(&files, GraphicsTechnology::DlssSuperResolution),
+            component_version_report(&files, LibraryTechnology::DlssSuperResolution),
             ComponentVersionReport::Known(Version::parse("3.7.0").expect("version")),
         );
 
         assert_eq!(
-            component_version_report(&[], GraphicsTechnology::DlssSuperResolution),
+            component_version_report(&[], LibraryTechnology::DlssSuperResolution),
             ComponentVersionReport::Unknown,
         );
     }

@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use renderpilot_domain::{
-    ComponentFile, GraphicsComponent, GraphicsTechnology, LibraryArtifact, fsr,
+    ComponentFile, LibraryArtifact, LibraryComponent, LibraryTechnology, fsr,
 };
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
 /// packages are intersected with the component's installed file set so a swap
 /// never expands the integration chosen by the game.
 pub fn resolve_transition_members<'a>(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &'a LibraryArtifact,
 ) -> AppResult<Vec<&'a ComponentFile>> {
     if component.technology() != artifact.technology() {
@@ -27,11 +27,11 @@ pub fn resolve_transition_members<'a>(
     }
 
     let members = match artifact.technology() {
-        GraphicsTechnology::NvidiaStreamline => {
+        LibraryTechnology::NvidiaStreamline => {
             let installed = installed_file_names(component)?;
             project_package_members(component, artifact, &installed, component.files().len() > 1)?
         }
-        GraphicsTechnology::MicrosoftDxc => {
+        LibraryTechnology::MicrosoftDxc => {
             let installed = installed_file_names(component)?;
             require_dxc_component_shape(&installed)?;
             project_package_members(component, artifact, &installed, true)?
@@ -64,7 +64,7 @@ pub fn resolve_transition_removals<'a, 'b>(
     artifact: &LibraryArtifact,
     resolved_install_targets: impl IntoIterator<Item = &'b str>,
 ) -> Vec<&'a ComponentFile> {
-    let target_is_unified_fsr = artifact.technology().family() == GraphicsTechnology::AmdFsr
+    let target_is_unified_fsr = artifact.technology().family() == LibraryTechnology::AmdFsr
         && !fsr::is_split_marker(artifact.file_name());
     if !target_is_unified_fsr || !fsr::has_entry_point(removal_basis) {
         return Vec::new();
@@ -86,7 +86,7 @@ pub fn resolve_transition_removals<'a, 'b>(
         .collect()
 }
 
-fn installed_file_names(component: &GraphicsComponent) -> AppResult<HashSet<String>> {
+fn installed_file_names(component: &LibraryComponent) -> AppResult<HashSet<String>> {
     let mut names = HashSet::with_capacity(component.files().len());
     for file in component.files() {
         let name = file
@@ -104,7 +104,7 @@ fn installed_file_names(component: &GraphicsComponent) -> AppResult<HashSet<Stri
 }
 
 fn project_package_members<'a>(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &'a LibraryArtifact,
     installed: &HashSet<String>,
     require_full_coverage: bool,
@@ -173,7 +173,7 @@ fn require_dxc_component_shape(installed: &HashSet<String>) -> AppResult<()> {
 }
 
 fn require_unique_resolved_targets(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     members: &[&ComponentFile],
 ) -> AppResult<()> {
     let mut targets = HashSet::with_capacity(members.len());
@@ -208,13 +208,13 @@ mod tests {
             .with_sha256(Sha256Hash::new(hash.to_string().repeat(64)).expect("hash"))
     }
 
-    fn streamline_component(names: &[&str]) -> GraphicsComponent {
+    fn streamline_component(names: &[&str]) -> LibraryComponent {
         names.iter().fold(
-            GraphicsComponent::new(
+            LibraryComponent::new(
                 ComponentId::new("component:streamline-transition").expect("component"),
                 GameId::new("game:streamline-transition").expect("game"),
                 ComponentKind::NativeLibrary,
-                GraphicsTechnology::NvidiaStreamline,
+                LibraryTechnology::NvidiaStreamline,
                 Swappability::BundleOnly,
             ),
             |component, name| component.with_file(file(&format!("C:/Game/{name}"), 'f')),
@@ -234,7 +234,7 @@ mod tests {
             .collect();
         LibraryArtifact::new(
             ArtifactId::new("artifact:streamline-transition").expect("artifact"),
-            GraphicsTechnology::NvidiaStreamline,
+            LibraryTechnology::NvidiaStreamline,
             names[0],
             files,
             ArtifactTrustLevel::CatalogDownloaded,
@@ -242,13 +242,13 @@ mod tests {
         .expect("artifact")
     }
 
-    fn dxc_component(names: &[&str]) -> GraphicsComponent {
+    fn dxc_component(names: &[&str]) -> LibraryComponent {
         names.iter().fold(
-            GraphicsComponent::new(
+            LibraryComponent::new(
                 ComponentId::new("component:dxc-transition").expect("component"),
                 GameId::new("game:dxc-transition").expect("game"),
                 ComponentKind::NativeLibrary,
-                GraphicsTechnology::MicrosoftDxc,
+                LibraryTechnology::MicrosoftDxc,
                 if names.len() > 1 {
                     Swappability::BundleOnly
                 } else {
@@ -262,7 +262,7 @@ mod tests {
     fn dxc_package() -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new("artifact:dxc-transition").expect("artifact"),
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             COMPILER_FILE_NAME,
             vec![
                 file(&format!("C:/Library/{COMPILER_FILE_NAME}"), 'a'),
@@ -349,7 +349,7 @@ mod tests {
         let component = dxc_component(&[COMPILER_FILE_NAME, VALIDATOR_FILE_NAME]);
         let incomplete = LibraryArtifact::new(
             ArtifactId::new("artifact:dxc-incomplete").expect("artifact"),
-            GraphicsTechnology::MicrosoftDxc,
+            LibraryTechnology::MicrosoftDxc,
             COMPILER_FILE_NAME,
             vec![file(&format!("C:/Library/{COMPILER_FILE_NAME}"), 'a')],
             ArtifactTrustLevel::CatalogDownloaded,
@@ -366,7 +366,7 @@ mod tests {
         let component = streamline_component(&["sl.common.dll"]);
         let mismatched = LibraryArtifact::new(
             ArtifactId::new("artifact:mismatched-transition").expect("artifact"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![file("C:/Library/nvngx_dlss.dll", 'a')],
             ArtifactTrustLevel::CatalogDownloaded,

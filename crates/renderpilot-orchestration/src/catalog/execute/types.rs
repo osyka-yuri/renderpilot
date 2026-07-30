@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{D3d12ExecutableAction, D3d12ExecutableActionKind};
 use renderpilot_domain::{
-    ComponentFile, ComponentId, ComponentRollbackBaseline, GameId, GraphicsComponent,
-    LibraryArtifact, PathRef,
+    ComponentFile, ComponentId, ComponentRollbackBaseline, GameId, LibraryArtifact,
+    LibraryComponent, PathRef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -141,7 +141,7 @@ impl D3d12ExecutableActionResult {
 pub(super) struct PreparedApplySwap {
     pub(super) game_id: GameId,
     pub(super) component_id: ComponentId,
-    pub(super) component: GraphicsComponent,
+    pub(super) component: LibraryComponent,
     pub(super) artifact: LibraryArtifact,
     pub(super) baseline: Vec<ComponentFile>,
     pub(super) rollback_baseline: Option<ComponentRollbackBaseline>,

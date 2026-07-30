@@ -1,4 +1,4 @@
-use renderpilot_domain::{GraphicsComponent, LibraryArtifact, UpstreamPackageProvider, openvr};
+use renderpilot_domain::{LibraryArtifact, LibraryComponent, UpstreamPackageProvider, openvr};
 
 use super::{SwapCompatibilityError, runtime_file_name};
 
@@ -35,7 +35,7 @@ pub(super) fn validate_artifact(artifact: &LibraryArtifact) -> Result<(), SwapCo
 }
 
 pub(super) fn ensure_transition_compatible(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     artifact: &LibraryArtifact,
 ) -> Result<(), SwapCompatibilityError> {
     if component.files().len() != 1

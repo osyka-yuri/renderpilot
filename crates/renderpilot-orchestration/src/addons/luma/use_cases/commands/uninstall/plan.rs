@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use renderpilot_domain::{AddonKind, ComponentId, GameId, GraphicsComponent, InstalledAddon};
+use renderpilot_domain::{AddonKind, ComponentId, GameId, InstalledAddon, LibraryComponent};
 
 use crate::addons::luma::dlss::PlannedDlss;
 use crate::addons::luma::errors;
@@ -18,7 +18,7 @@ use crate::{Context, ServiceError};
 pub(super) struct UninstallApply {
     pub(super) record: InstalledAddon,
     pub(super) rollback_specs: Vec<ValidatedRollbackPlan>,
-    pub(super) next_components: Vec<GraphicsComponent>,
+    pub(super) next_components: Vec<LibraryComponent>,
     pub(super) release_plans: Vec<PlannedDlss>,
     pub(super) rolled_back_ids: Vec<ComponentId>,
 }

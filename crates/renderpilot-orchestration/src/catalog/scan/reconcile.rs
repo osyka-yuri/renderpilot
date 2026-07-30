@@ -6,7 +6,7 @@ use renderpilot_application::{AppResult, ArtifactRepository};
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
     ArtifactId, ArtifactTrustLevel, ComponentId, GameId, GameIdentity, GameInstallation,
-    GraphicsComponent, InstallKey, Launcher, LibraryArtifact, RootAuthority,
+    InstallKey, Launcher, LibraryArtifact, LibraryComponent, RootAuthority,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -21,7 +21,7 @@ use crate::catalog::install_paths;
 pub(crate) struct CatalogInstallIndex {
     by_install_path: HashMap<InstallKey, GameInstallation>,
     by_game_id: HashMap<GameId, GameInstallation>,
-    components_by_game: HashMap<GameId, HashMap<ComponentId, GraphicsComponent>>,
+    components_by_game: HashMap<GameId, HashMap<ComponentId, LibraryComponent>>,
     local_artifacts_by_game: HashMap<GameId, HashMap<ArtifactId, LibraryArtifact>>,
 }
 
@@ -38,7 +38,7 @@ impl CatalogInstallIndex {
         }
 
         let mut components_by_game =
-            HashMap::<GameId, HashMap<ComponentId, GraphicsComponent>>::new();
+            HashMap::<GameId, HashMap<ComponentId, LibraryComponent>>::new();
         for component in storage.list_all_components()? {
             components_by_game
                 .entry(component.game_id().clone())
@@ -75,7 +75,7 @@ impl CatalogInstallIndex {
     pub(super) fn components(
         &self,
         game_id: &GameId,
-    ) -> Option<&HashMap<ComponentId, GraphicsComponent>> {
+    ) -> Option<&HashMap<ComponentId, LibraryComponent>> {
         self.components_by_game.get(game_id)
     }
 
@@ -105,7 +105,7 @@ impl CatalogInstallIndex {
     pub(super) fn card_facts_changed(
         &self,
         game: &GameInstallation,
-        components: &[GraphicsComponent],
+        components: &[LibraryComponent],
         artifacts: &[LibraryArtifact],
     ) -> bool {
         self.find_by_install_path(game.install_path().as_str()) != Some(game)
@@ -113,7 +113,7 @@ impl CatalogInstallIndex {
             || !self.local_artifacts_match(game.id(), artifacts)
     }
 
-    fn components_match(&self, game_id: &GameId, components: &[GraphicsComponent]) -> bool {
+    fn components_match(&self, game_id: &GameId, components: &[LibraryComponent]) -> bool {
         let existing = self.components_by_game.get(game_id);
         let existing_len = existing.map_or(0, HashMap::len);
         existing_len == components.len()
@@ -238,10 +238,10 @@ fn build_reconciled_identity(
     }
 }
 
-pub(super) fn build_graphics_components(
+pub(super) fn build_library_components(
     game: &GameInstallation,
     libraries: &[DetectedLibraryFile],
-) -> AppResult<Vec<GraphicsComponent>> {
+) -> AppResult<Vec<LibraryComponent>> {
     // Components and artifacts are grouped by the same `(directory, family)` rule
     // so a detected bundle (e.g. FSR 4's three DLLs) yields one component and one
     // matching artifact instead of three independent single-file entries.
@@ -259,9 +259,8 @@ pub(super) fn build_library_artifacts(
 mod tests {
     use renderpilot_application::{ComponentRepository, GameRepository};
     use renderpilot_domain::{
-        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
-        GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority,
-        Swappability,
+        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime, Launcher,
+        LibraryComponent, LibraryTechnology, PathRef, Platform, RootAuthority, Swappability,
     };
     use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -307,12 +306,12 @@ mod tests {
         let first = sample_component(
             &game,
             "component:first",
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         );
         let second = sample_component(
             &game,
             "component:second",
-            GraphicsTechnology::NvidiaStreamline,
+            LibraryTechnology::NvidiaStreamline,
         );
         storage.upsert_game(&game).expect("seed game");
         storage
@@ -543,9 +542,9 @@ mod tests {
     fn sample_component(
         game: &GameInstallation,
         id: &str,
-        technology: GraphicsTechnology,
-    ) -> GraphicsComponent {
-        GraphicsComponent::new(
+        technology: LibraryTechnology,
+    ) -> LibraryComponent {
+        LibraryComponent::new(
             ComponentId::new(id).expect("component id"),
             game.id().clone(),
             ComponentKind::NativeLibrary,

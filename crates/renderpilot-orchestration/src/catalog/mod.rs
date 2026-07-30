@@ -12,7 +12,7 @@ use renderpilot_application::{
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    AddonKind, GameId, GameInstallation, GraphicsComponent, GraphicsTechnology, LibraryArtifact,
+    AddonKind, GameId, GameInstallation, LibraryArtifact, LibraryComponent, LibraryTechnology,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -136,7 +136,7 @@ pub struct GameDetailsCatalogResult {
     /// The game installation.
     pub game: GameInstallation,
     /// All graphics components for this game.
-    pub components: Vec<GraphicsComponent>,
+    pub components: Vec<LibraryComponent>,
     /// Component ids with a currently usable rollback baseline.
     pub backup_component_ids: HashSet<String>,
     /// Replacement candidate groups across all components.
@@ -397,7 +397,7 @@ pub(crate) fn get_game_details_with_universe(
 
     let d3d12_component = components
         .iter()
-        .find(|component| component.technology() == GraphicsTechnology::D3D12Agility);
+        .find(|component| component.technology() == LibraryTechnology::D3D12Agility);
     // Game details are a presentation read model. Reading and hashing complete
     // EXE/backup images here made ordinary navigation scale with executable
     // size. Swap preview/apply and rollback retain their independent,
@@ -438,7 +438,7 @@ pub(crate) fn get_game_details_with_universe(
 }
 
 fn build_d3d12_status(
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
     state: &runtime_compatibility::D3d12ExecutablePresentationState,
 ) -> AppResult<D3d12ExecutableStatus> {
     Ok(D3d12ExecutableStatus {
@@ -469,11 +469,11 @@ fn build_d3d12_status(
 pub(crate) fn components_for_candidate_matching<'components>(
     context: &crate::Context,
     game_id: &GameId,
-    components: &'components [GraphicsComponent],
-) -> Result<Cow<'components, [GraphicsComponent]>, ServiceError> {
+    components: &'components [LibraryComponent],
+) -> Result<Cow<'components, [LibraryComponent]>, ServiceError> {
     if !components
         .iter()
-        .any(|component| component.technology() == GraphicsTechnology::OpenVr)
+        .any(|component| component.technology() == LibraryTechnology::OpenVr)
     {
         return Ok(Cow::Borrowed(components));
     }
@@ -485,7 +485,7 @@ pub(crate) fn components_for_candidate_matching<'components>(
         components
             .iter()
             .filter_map(|component| {
-                if component.technology() != GraphicsTechnology::OpenVr {
+                if component.technology() != LibraryTechnology::OpenVr {
                     return Some(component.clone());
                 }
                 match crate::coordinated_files::current_component_snapshot(component, managed_files)
@@ -511,9 +511,9 @@ pub(crate) fn components_for_candidate_matching<'components>(
 /// the original durable component still remains visible on the card.
 pub(crate) fn components_for_candidate_matching_with_installed(
     game_id: &GameId,
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     installed_addon: Option<&renderpilot_domain::InstalledAddon>,
-) -> Result<Vec<GraphicsComponent>, ServiceError> {
+) -> Result<Vec<LibraryComponent>, ServiceError> {
     let managed_files = crate::coordinated_files::managed_files_of(installed_addon);
     Ok(components
         .iter()
@@ -572,7 +572,7 @@ pub fn get_game_details(
 /// Returns library artifacts stored in the catalog, optionally filtered by technology.
 pub fn list_artifacts(
     context: &crate::Context,
-    technology: Option<GraphicsTechnology>,
+    technology: Option<LibraryTechnology>,
 ) -> Result<Vec<LibraryArtifact>, ServiceError> {
     let artifacts = context.storage().list_artifacts()?;
     Ok(filter_artifacts_by_technology(artifacts, technology))
@@ -697,7 +697,7 @@ fn update_game_ui_state(
 
 fn filter_artifacts_by_technology(
     artifacts: Vec<LibraryArtifact>,
-    technology: Option<GraphicsTechnology>,
+    technology: Option<LibraryTechnology>,
 ) -> Vec<LibraryArtifact> {
     match technology {
         Some(required_technology) => artifacts
@@ -792,11 +792,11 @@ mod tests {
             Architecture::X64,
             PeExportSet::from_canonical_names(vec!["VR_InitInternal".into()]).expect("exports"),
         );
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:openvr-freshness").expect("component id"),
             game_id.clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::OpenVr,
+            LibraryTechnology::OpenVr,
             Swappability::Swappable,
         )
         .with_file(
@@ -836,7 +836,7 @@ mod tests {
             );
         let candidate = LibraryArtifact::new(
             ArtifactId::new("artifact:openvr-freshness").expect("artifact id"),
-            GraphicsTechnology::OpenVr,
+            LibraryTechnology::OpenVr,
             renderpilot_domain::openvr::DLL_NAME,
             vec![candidate_file],
             ArtifactTrustLevel::CatalogDownloaded,
@@ -862,11 +862,11 @@ mod tests {
         let dll = game_dir.path().join("nvngx_dlss.dll");
         std::fs::write(&dll, b"catalog-bytes").expect("write DLL");
         let catalog_hash = renderpilot_detection::sha256_file(&dll).expect("catalog hash");
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:dlss-freshness").expect("component id"),
             game_id.clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(

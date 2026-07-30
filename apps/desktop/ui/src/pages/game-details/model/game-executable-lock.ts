@@ -1,8 +1,8 @@
-import type { GameGraphicsComponent } from '@entities/game';
+import type { GameLibraryComponent } from '@entities/game';
 
 export type ExecutableLockReason = 'd3d12_managed' | 'd3d12_repair_required';
 
-type D3d12StatusCarrier = Pick<GameGraphicsComponent, 'd3d12_executable_status'>;
+type D3d12StatusCarrier = Pick<GameLibraryComponent, 'd3d12_executable_status'>;
 
 /**
  * Resolves why executable selection is locked for the current game.

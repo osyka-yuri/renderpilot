@@ -1,8 +1,7 @@
 use renderpilot_application::{ComponentRepository, GameRepository};
 use renderpilot_domain::{
     ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
-    GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform, RootAuthority,
-    Swappability,
+    Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform, RootAuthority, Swappability,
 };
 
 use super::{ComponentRekey, ConsolidationPlan, ConsolidationSource};
@@ -535,13 +534,13 @@ fn seed_all_scoped_state(storage: &SqliteStorage) {
                     'component:source', 'manual:child', '[]', '[]', 1, 1
                 );
                 INSERT INTO library_artifacts (
-                    id, library, file_name, files_json, metadata_json, source,
+                    id, technology, file_name, files_json, metadata_json, source,
                     source_game_id, trust_level, created_at, updated_at
                 ) VALUES (
-                    'artifact:source', 'DlssSuperResolution', 'D3D12Core.dll',
+                    'artifact:source', 'dlss_super_resolution', 'D3D12Core.dll',
                     '[{"path":"C:/Games/Example/D3D12/D3D12Core.dll",
                        "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]',
-                    '{}', 'scan-folder', 'manual:child', 'UserImported', 1, 1
+                    '{}', 'scan-folder', 'manual:child', 'user_imported', 1, 1
                 );
                 INSERT INTO installed_addons (
                     game_id, kind, addon_file, created_files_json,
@@ -580,12 +579,12 @@ fn game(id: &str, path: &str) -> GameInstallation {
     .with_root_authority(RootAuthority::Legacy)
 }
 
-fn component(id: &str, game_id: &GameId, path: &str) -> GraphicsComponent {
-    GraphicsComponent::new(
+fn component(id: &str, game_id: &GameId, path: &str) -> LibraryComponent {
+    LibraryComponent::new(
         ComponentId::new(id).expect("component id"),
         game_id.clone(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(PathRef::new(path).expect("path")))

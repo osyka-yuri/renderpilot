@@ -1,4 +1,4 @@
-use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
+use renderpilot_orchestration::domain::{LibraryTechnology, Swappability};
 
 use crate::hash::sha256_hex;
 
@@ -23,7 +23,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
         &[sample_component(
             "component:game-a:dlss",
             game_a.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             "C:/Games/GameA/nvngx_dlss.dll",
             Some("3.5.0"),
@@ -32,7 +32,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &dlss_path,
         Some("3.7.0"),
         &sha256_hex(b"dlss-3.7"),
@@ -40,7 +40,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
     ));
     fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
-        GraphicsTechnology::DlssFrameGeneration,
+        LibraryTechnology::DlssFrameGeneration,
         &fg_path,
         Some("3.7.0"),
         &sha256_hex(b"fg-3.7"),
@@ -90,7 +90,7 @@ fn candidates_offer_streamline_bundle_swap() {
         &[sample_component(
             "component:game-a:streamline",
             game_a.id().as_str(),
-            GraphicsTechnology::NvidiaStreamline,
+            LibraryTechnology::NvidiaStreamline,
             Swappability::BundleOnly,
             "C:/Games/GameA/sl.interposer.dll",
             Some("2.4.0"),
@@ -99,7 +99,7 @@ fn candidates_offer_streamline_bundle_swap() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         &streamline_path,
         Some("2.5.0"),
         &sha256_hex(b"streamline-2.5"),
@@ -147,7 +147,7 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
             sample_bundle_component(
                 "component:game-a:streamline-mixed",
                 game.id().as_str(),
-                GraphicsTechnology::NvidiaStreamline,
+                LibraryTechnology::NvidiaStreamline,
                 Swappability::BundleOnly,
                 &[
                     (
@@ -165,7 +165,7 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
             sample_component(
                 "component:game-a:dlss-unknown",
                 game.id().as_str(),
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 Swappability::Swappable,
                 "C:/Games/GameA/nvngx_dlss.dll",
                 None,
@@ -175,7 +175,7 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
     );
     fixture.store_artifact(&sample_bundle_artifact(
         "artifact:streamline-2.5",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         &[
             (
                 common_path.as_str(),
@@ -192,7 +192,7 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
     ));
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &dlss_path,
         Some("3.7.0"),
         &sha256_hex(b"dlss-3.7"),

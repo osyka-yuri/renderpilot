@@ -258,8 +258,8 @@ mod tests {
     use renderpilot_application::{ComponentRepository, GameRepository};
     use renderpilot_domain::{
         ComponentFile, ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform,
-        Sha256Hash, Swappability,
+        GameRuntime, Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform, Sha256Hash,
+        Swappability,
     };
     use renderpilot_storage_sqlite::SqliteStorage;
     use std::path::Path;
@@ -442,11 +442,11 @@ mod tests {
                 .expect("missing path");
         let hash = Sha256Hash::new("a".repeat(64)).expect("hash");
         let file = ComponentFile::new(missing_path).with_sha256(hash);
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game_id.clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(file.clone());

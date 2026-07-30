@@ -1,12 +1,12 @@
 //! Input normalization for the game-card query: search text, page bounds, and
 //! domain-valid library / launcher filter values.
 
-use renderpilot_orchestration::domain::{AddonKind, GraphicsTechnology, Launcher};
+use renderpilot_orchestration::domain::{AddonKind, Launcher, LibraryTechnology};
 
-const AMD_FSR_FILTER_ALIAS_MEMBERS: &[GraphicsTechnology] = &[
-    GraphicsTechnology::AmdFsrUpscaler,
-    GraphicsTechnology::AmdFsrLoader,
-    GraphicsTechnology::AmdFsrRadianceCache,
+const AMD_FSR_FILTER_ALIAS_MEMBERS: &[LibraryTechnology] = &[
+    LibraryTechnology::AmdFsrUpscaler,
+    LibraryTechnology::AmdFsrLoader,
+    LibraryTechnology::AmdFsrRadianceCache,
 ];
 
 pub(super) fn normalize_search_query(value: &str) -> String {
@@ -37,7 +37,7 @@ pub(super) fn expand_library_filter_aliases(values: Vec<String>) -> Vec<String> 
 
     for value in values {
         let is_amd_fsr_alias =
-            GraphicsTechnology::from_slug(&value) == Some(GraphicsTechnology::AmdFsr);
+            LibraryTechnology::from_slug(&value) == Some(LibraryTechnology::AmdFsr);
         expanded.push(value);
 
         if is_amd_fsr_alias {
@@ -59,8 +59,8 @@ pub(super) fn normalize_library_name(value: &str) -> Option<String> {
         return None;
     }
 
-    match parse_graphics_technology(trimmed) {
-        Some(GraphicsTechnology::Unknown) => None,
+    match parse_library_technology(trimmed) {
+        Some(LibraryTechnology::Unknown) => None,
         Some(technology) => Some(technology.as_slug().to_owned()),
         None => None,
     }
@@ -98,6 +98,6 @@ pub(super) fn normalize_selected_launchers(selected_launchers: Vec<String>) -> V
     normalize_launcher_names(selected_launchers)
 }
 
-fn parse_graphics_technology(value: &str) -> Option<GraphicsTechnology> {
-    GraphicsTechnology::from_slug(value)
+fn parse_library_technology(value: &str) -> Option<LibraryTechnology> {
+    LibraryTechnology::from_slug(value)
 }

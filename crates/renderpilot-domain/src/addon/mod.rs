@@ -1,6 +1,6 @@
 //! Domain types for injected game add-ons (RenoDX, Luma, …).
 //!
-//! Unlike a [`crate::GraphicsComponent`], which models a vendor library that
+//! Unlike a [`crate::LibraryComponent`], which models a vendor library that
 //! already exists in a game folder and is swapped between versions, an add-on is
 //! a third-party runtime that RenderPilot *introduces* into a game (a ReShade
 //! host and tool payload, plus any coordinated managed files such as Luma's

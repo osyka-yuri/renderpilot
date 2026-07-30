@@ -7,8 +7,8 @@ use renderpilot_application::{
     is_automatic_catalog_candidate,
 };
 use renderpilot_domain::{
-    ComponentId, ComponentRollbackBaseline, GameInstallation, GraphicsComponent,
-    GraphicsTechnology, InstalledAddon, PathRef, Swappability,
+    ComponentId, ComponentRollbackBaseline, GameInstallation, InstalledAddon, LibraryComponent,
+    LibraryTechnology, PathRef, Swappability,
 };
 
 use crate::ServiceError;
@@ -24,14 +24,14 @@ pub(super) enum SnapshotFactsMode {
 
 pub(super) struct CardDynamicFacts<'components> {
     pub(super) rollback_available: bool,
-    pub(super) matching_components: Cow<'components, [GraphicsComponent]>,
+    pub(super) matching_components: Cow<'components, [LibraryComponent]>,
     pub(super) target_profile: SwapTargetProfile,
 }
 
 pub(super) fn card_dynamic_facts<'components>(
     mode: SnapshotFactsMode,
     game: &GameInstallation,
-    components: &'components [GraphicsComponent],
+    components: &'components [LibraryComponent],
     installed_addon: Option<&InstalledAddon>,
     component_backups: &mut HashMap<ComponentId, ComponentRollbackBaseline>,
     executable_override: Option<&Path>,
@@ -53,7 +53,7 @@ pub(super) fn card_dynamic_facts<'components>(
                     component.files(),
                 );
                 rollback_available |= availability.is_available();
-                if component.technology() == GraphicsTechnology::D3D12Agility {
+                if component.technology() == LibraryTechnology::D3D12Agility {
                     d3d12_backup_availability = Some(availability);
                 }
             }
@@ -64,7 +64,7 @@ pub(super) fn card_dynamic_facts<'components>(
             )?;
             let d3d12_component = components
                 .iter()
-                .find(|component| component.technology() == GraphicsTechnology::D3D12Agility);
+                .find(|component| component.technology() == LibraryTechnology::D3D12Agility);
             let target_profile = if d3d12_component.is_some() {
                 crate::catalog::runtime_compatibility::presentation_target_profile_from_facts(
                     game,
@@ -86,18 +86,18 @@ pub(super) fn card_dynamic_facts<'components>(
 }
 
 fn durable_card_target_profile(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     component_backups: &HashMap<ComponentId, ComponentRollbackBaseline>,
 ) -> SwapTargetProfile {
     let architecture = components
         .iter()
-        .flat_map(GraphicsComponent::files)
+        .flat_map(LibraryComponent::files)
         .filter_map(|file| file.pe_compatibility())
         .map(|profile| profile.architecture())
         .next();
     let d3d12_component = components
         .iter()
-        .find(|component| component.technology() == GraphicsTechnology::D3D12Agility);
+        .find(|component| component.technology() == LibraryTechnology::D3D12Agility);
     let d3d12_baseline =
         d3d12_component.and_then(|component| component_backups.get(component.id()));
     let persisted_sdk_version = d3d12_baseline
@@ -128,7 +128,7 @@ fn durable_card_target_profile(
     ))
 }
 
-fn component_d3d12_sdk_version(component: &GraphicsComponent) -> Option<u32> {
+fn component_d3d12_sdk_version(component: &LibraryComponent) -> Option<u32> {
     component
         .files()
         .iter()
@@ -150,17 +150,17 @@ pub(super) struct CardMetrics {
 }
 
 pub(super) fn card_metrics(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     candidate_groups: &[ComponentReplacementCandidates],
 ) -> CardMetrics {
     let visible_ids = components
         .iter()
-        .filter(|component| component.technology() != GraphicsTechnology::Unknown)
+        .filter(|component| component.technology() != LibraryTechnology::Unknown)
         .map(|component| component.id().as_str())
         .collect::<HashSet<_>>();
     let library_tags = components
         .iter()
-        .filter(|component| component.technology() != GraphicsTechnology::Unknown)
+        .filter(|component| component.technology() != LibraryTechnology::Unknown)
         .map(|component| component.technology().as_slug().to_owned())
         .collect::<BTreeSet<_>>()
         .into_iter()

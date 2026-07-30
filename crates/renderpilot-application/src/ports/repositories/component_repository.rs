@@ -1,4 +1,4 @@
-use renderpilot_domain::{GameId, GraphicsComponent};
+use renderpilot_domain::{GameId, LibraryComponent};
 
 use crate::AppResult;
 
@@ -8,9 +8,9 @@ pub trait ComponentRepository: Send + Sync {
     fn replace_components_for_game(
         &self,
         game_id: &GameId,
-        components: &[GraphicsComponent],
+        components: &[LibraryComponent],
     ) -> AppResult<()>;
 
     /// Lists detected components currently stored for a game.
-    fn list_components_for_game(&self, game_id: &GameId) -> AppResult<Vec<GraphicsComponent>>;
+    fn list_components_for_game(&self, game_id: &GameId) -> AppResult<Vec<LibraryComponent>>;
 }

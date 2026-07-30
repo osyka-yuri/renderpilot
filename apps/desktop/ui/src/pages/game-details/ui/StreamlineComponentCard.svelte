@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GameCandidateGroup, GameGraphicsComponent } from '@entities/game';
+  import type { GameCandidateGroup, GameLibraryComponent } from '@entities/game';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import Undo2Icon from '@lucide/svelte/icons/undo-2';
   import {
@@ -28,7 +28,7 @@
   import type { SwapRequest } from '../model/swap-request';
 
   type Props = {
-    components: GameGraphicsComponent[];
+    components: GameLibraryComponent[];
     groupsById: Record<string, GameCandidateGroup | null>;
     busy: boolean;
     onBulkSwap: (items: readonly SwapRequest[]) => void;

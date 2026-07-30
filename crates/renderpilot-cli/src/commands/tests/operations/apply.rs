@@ -1,7 +1,7 @@
 use std::fs;
 
 use renderpilot_orchestration::application::ComponentRepository;
-use renderpilot_orchestration::domain::{GraphicsTechnology, Swappability};
+use renderpilot_orchestration::domain::{LibraryTechnology, Swappability};
 
 use crate::hash::sha256_hex;
 
@@ -35,7 +35,7 @@ fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&source_path),
             Some("3.5.0"),
@@ -44,7 +44,7 @@ fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
-        GraphicsTechnology::DlssFrameGeneration,
+        LibraryTechnology::DlssFrameGeneration,
         &path_string(&artifact_path),
         Some("3.7.0"),
         &sha256_hex(b"mismatched-artifact"),
@@ -99,7 +99,7 @@ fn apply_rejects_artifact_that_already_matches_current_component() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&source_path),
             Some("3.7.0"),
@@ -108,7 +108,7 @@ fn apply_rejects_artifact_that_already_matches_current_component() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
         Some("3.7.0"),
         &source_sha256,
@@ -166,7 +166,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &source_path_string,
             Some("3.5.0"),
@@ -175,7 +175,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
         &artifact_sha256,
@@ -270,7 +270,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
             sample_component(
                 "component:game-a:dlss",
                 game.id().as_str(),
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 Swappability::Swappable,
                 &dlss_source_string,
                 Some("3.5.0"),
@@ -279,7 +279,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
             sample_component(
                 "component:game-a:fsr",
                 game.id().as_str(),
-                GraphicsTechnology::AmdFsr,
+                LibraryTechnology::AmdFsr,
                 Swappability::Swappable,
                 &fsr_sibling_string,
                 Some("3.1.0"),
@@ -289,7 +289,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
         &artifact_sha256,
@@ -375,7 +375,7 @@ fn apply_succeeds_without_prior_sidecar_and_creates_sidecar_bak() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &source_path_string,
             Some("3.5.0"),
@@ -384,7 +384,7 @@ fn apply_succeeds_without_prior_sidecar_and_creates_sidecar_bak() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
         REPLACEMENT_SHA256,
@@ -450,7 +450,7 @@ fn apply_rejects_a_target_changed_after_plan_swap_without_mutating_it() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &source_path_string,
             Some("3.5.0"),
@@ -459,7 +459,7 @@ fn apply_rejects_a_target_changed_after_plan_swap_without_mutating_it() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &artifact_path_string,
         Some("3.7.0"),
         REPLACEMENT_SHA256,

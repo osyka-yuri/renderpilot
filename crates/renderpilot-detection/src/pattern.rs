@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fs, path::Path};
 
-use renderpilot_domain::GraphicsTechnology;
+use renderpilot_domain::LibraryTechnology;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -113,7 +113,7 @@ impl LibraryPatternSet {
     }
 
     /// Returns the first graphics technology matching the given file name.
-    pub fn match_file_name(&self, file_name: &str) -> Option<GraphicsTechnology> {
+    pub fn match_file_name(&self, file_name: &str) -> Option<LibraryTechnology> {
         self.match_file_name_on_platform(file_name, PatternPlatform::Any)
     }
 
@@ -127,7 +127,7 @@ impl LibraryPatternSet {
         &self,
         file_name: &str,
         platform: PatternPlatform,
-    ) -> Option<GraphicsTechnology> {
+    ) -> Option<LibraryTechnology> {
         self.find_match_on_platform(file_name, platform)
             .map(|matched| matched.technology)
     }
@@ -202,14 +202,14 @@ impl LibraryPatternSet {
 /// Metadata for a successful library pattern match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LibraryPatternMatch {
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     kind: PatternKind,
     platform: PatternPlatform,
 }
 
 impl LibraryPatternMatch {
     /// Returns the classified graphics technology.
-    pub fn technology(self) -> GraphicsTechnology {
+    pub fn technology(self) -> LibraryTechnology {
         self.technology
     }
 
@@ -272,7 +272,7 @@ pub struct LibraryPattern {
     pattern: String,
     kind: PatternKind,
     platform: PatternPlatform,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     normalized_pattern: String,
 }
 
@@ -282,7 +282,7 @@ impl LibraryPattern {
         pattern: impl Into<String>,
         kind: PatternKind,
         platform: PatternPlatform,
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
     ) -> Result<Self, LibraryPatternError> {
         let pattern = pattern.into();
         let normalized_pattern =
@@ -313,7 +313,7 @@ impl LibraryPattern {
     }
 
     /// Returns the classified graphics technology.
-    pub fn technology(&self) -> GraphicsTechnology {
+    pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
 
@@ -337,7 +337,7 @@ impl<'de> Deserialize<'de> for LibraryPattern {
             kind: PatternKind,
             #[serde(default = "default_pattern_platform")]
             platform: PatternPlatform,
-            technology: GraphicsTechnology,
+            technology: LibraryTechnology,
         }
 
         let raw = RawLibraryPattern::deserialize(deserializer)?;
@@ -356,7 +356,7 @@ impl Serialize for LibraryPattern {
             pattern: &'a str,
             kind: PatternKind,
             platform: PatternPlatform,
-            technology: GraphicsTechnology,
+            technology: LibraryTechnology,
         }
 
         RawLibraryPattern {
@@ -440,7 +440,7 @@ fn static_extension_of_pattern(normalized_pattern: &str) -> Option<String> {
 mod tests {
     use std::assert_matches;
 
-    use renderpilot_domain::GraphicsTechnology;
+    use renderpilot_domain::LibraryTechnology;
 
     use super::{LibraryPattern, LibraryPatternSet, PatternKind, PatternPlatform};
     use crate::LibraryPatternError;
@@ -458,7 +458,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("nvngx_dlss.dll"),
-            Some(GraphicsTechnology::DlssSuperResolution)
+            Some(LibraryTechnology::DlssSuperResolution)
         );
     }
 
@@ -468,7 +468,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("nvngx_dlssg.dll"),
-            Some(GraphicsTechnology::DlssFrameGeneration)
+            Some(LibraryTechnology::DlssFrameGeneration)
         );
     }
 
@@ -478,7 +478,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("nvngx_dlssd.dll"),
-            Some(GraphicsTechnology::DlssRayReconstruction)
+            Some(LibraryTechnology::DlssRayReconstruction)
         );
     }
 
@@ -488,7 +488,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("sl.interposer.dll"),
-            Some(GraphicsTechnology::NvidiaStreamline)
+            Some(LibraryTechnology::NvidiaStreamline)
         );
     }
 
@@ -498,7 +498,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("libxess.dll"),
-            Some(GraphicsTechnology::IntelXeSs)
+            Some(LibraryTechnology::IntelXeSs)
         );
     }
 
@@ -508,17 +508,17 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsr)
+            Some(LibraryTechnology::AmdFsr)
         );
 
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_upscaler_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsrUpscaler)
+            Some(LibraryTechnology::AmdFsrUpscaler)
         );
 
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_vk.dll"),
-            Some(GraphicsTechnology::AmdFsr)
+            Some(LibraryTechnology::AmdFsr)
         );
     }
 
@@ -528,16 +528,16 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_denoiser_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsrRayRegeneration)
+            Some(LibraryTechnology::AmdFsrRayRegeneration)
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_loader_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsrLoader),
+            Some(LibraryTechnology::AmdFsrLoader),
             "the FSR loader must be recognized as its own exact technology"
         );
         assert_eq!(
             patterns.match_file_name("amd_fidelityfx_radiancecache_dx12.dll"),
-            Some(GraphicsTechnology::AmdFsrRadianceCache),
+            Some(LibraryTechnology::AmdFsrRadianceCache),
             "the FSR radiance cache must be recognized as its own exact technology"
         );
     }
@@ -548,19 +548,19 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("dstorage.dll"),
-            Some(GraphicsTechnology::DirectStorage)
+            Some(LibraryTechnology::DirectStorage)
         );
         assert_eq!(
             patterns.match_file_name("dxcompiler.dll"),
-            Some(GraphicsTechnology::MicrosoftDxc)
+            Some(LibraryTechnology::MicrosoftDxc)
         );
         assert_eq!(
             patterns.match_file_name("dxil.dll"),
-            Some(GraphicsTechnology::MicrosoftDxc)
+            Some(LibraryTechnology::MicrosoftDxc)
         );
         assert_eq!(
             patterns.match_file_name("D3D12Core.dll"),
-            Some(GraphicsTechnology::D3D12Agility)
+            Some(LibraryTechnology::D3D12Agility)
         );
     }
 
@@ -570,15 +570,15 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name("libxess_dx11.dll"),
-            Some(GraphicsTechnology::IntelXeSs)
+            Some(LibraryTechnology::IntelXeSs)
         );
         assert_eq!(
             patterns.match_file_name("libxell.dll"),
-            Some(GraphicsTechnology::IntelXeLl)
+            Some(LibraryTechnology::IntelXeLl)
         );
         assert_eq!(
             patterns.match_file_name("libxell_dx11.dll"),
-            Some(GraphicsTechnology::IntelXeLl)
+            Some(LibraryTechnology::IntelXeLl)
         );
     }
 
@@ -588,7 +588,7 @@ mod tests {
 
         assert_eq!(
             patterns.match_file_name(r"C:\Games\Game\NVNGX_DLSS.DLL"),
-            Some(GraphicsTechnology::DlssSuperResolution)
+            Some(LibraryTechnology::DlssSuperResolution)
         );
     }
 
@@ -608,7 +608,7 @@ mod tests {
             "nvngx_dlss.dll",
             PatternKind::Exact,
             PatternPlatform::Windows,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
         )
         .expect("valid pattern");
 
@@ -671,7 +671,7 @@ mod tests {
                 "weird.*",
                 super::PatternKind::Glob,
                 super::PatternPlatform::Windows,
-                renderpilot_domain::GraphicsTechnology::Unknown,
+                renderpilot_domain::LibraryTechnology::Unknown,
             )
             .expect("valid pattern"),
         ])

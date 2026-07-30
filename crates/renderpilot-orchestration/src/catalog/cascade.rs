@@ -11,7 +11,7 @@ use renderpilot_application::{
     AppError, AppResult, ComponentRepository, InstalledAddonRepository, OperationKind,
 };
 use renderpilot_domain::{
-    ComponentFile, ComponentId, ComponentRollbackBaseline, GameId, GraphicsComponent,
+    ComponentFile, ComponentId, ComponentRollbackBaseline, GameId, LibraryComponent,
     component_version_report, fsr,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
@@ -24,14 +24,14 @@ use crate::catalog::execute::{
 /// Full catalog component rollback selected by an owned managed-file intersection.
 #[derive(Debug)]
 pub(crate) struct ValidatedRollbackPlan {
-    component: GraphicsComponent,
+    component: LibraryComponent,
     rollback_baseline: ComponentRollbackBaseline,
 }
 
 /// Named result of [`cascade_for_owned_paths`].
 pub(crate) struct CascadeResult {
     pub(crate) rollback_specs: Vec<ValidatedRollbackPlan>,
-    pub(crate) next_components: Vec<GraphicsComponent>,
+    pub(crate) next_components: Vec<LibraryComponent>,
     pub(crate) mutation_paths: Vec<PathBuf>,
 }
 
@@ -134,7 +134,7 @@ pub(crate) fn cascade_next_components(
     storage: &SqliteStorage,
     game_id: &GameId,
     specs: &[ValidatedRollbackPlan],
-) -> AppResult<Vec<GraphicsComponent>> {
+) -> AppResult<Vec<LibraryComponent>> {
     let mut components = storage.list_components_for_game(game_id)?;
     for spec in specs {
         if spec.files().is_empty() {
@@ -237,7 +237,7 @@ mod tests {
     use renderpilot_domain::{
         ComponentFile, ComponentId, ComponentKind, ComponentRollbackBaseline,
         D3d12ExecutableBaseline, D3d12ExecutableIdentity, GameId, GameIdentity, GameInstallation,
-        GameRuntime, GraphicsComponent, GraphicsTechnology, Launcher, PathRef, Platform,
+        GameRuntime, Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform,
         Swappability,
     };
     use renderpilot_storage_sqlite::SqliteStorage;
@@ -267,11 +267,11 @@ mod tests {
         let component_id = ComponentId::new("component:cascade-d3d12").expect("component id");
         let runtime_file = ComponentFile::new(path_ref(&runtime))
             .with_sha256(renderpilot_detection::sha256_file(&runtime).expect("runtime hash"));
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             component_id.clone(),
             game.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Swappability::Swappable,
         )
         .with_file(runtime_file.clone());

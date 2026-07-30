@@ -4,8 +4,8 @@ use renderpilot_application::{
     find_replacement_candidates, replacement_executable_action,
 };
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, ComponentId, GameId, GameInstallation, GraphicsComponent,
-    GraphicsTechnology, LibraryArtifact,
+    ArtifactId, ComponentFile, ComponentId, GameId, GameInstallation, LibraryArtifact,
+    LibraryComponent, LibraryTechnology,
 };
 
 use crate::ServiceError;
@@ -27,7 +27,7 @@ pub fn find_candidates(
     let universe = super::load_replacement_universe(context)?;
     let d3d12_component = components
         .iter()
-        .find(|component| component.technology() == GraphicsTechnology::D3D12Agility);
+        .find(|component| component.technology() == LibraryTechnology::D3D12Agility);
     let target =
         super::runtime_compatibility::presentation_target_profile(context, &game, d3d12_component)?;
     let candidate_context = universe
@@ -77,7 +77,7 @@ pub fn build_swap_plan(
 /// Immutable inputs established by the common preview/apply preflight.
 pub(super) struct ReadySwapPreflight {
     pub(super) game: GameInstallation,
-    pub(super) component: GraphicsComponent,
+    pub(super) component: LibraryComponent,
     pub(super) artifact: LibraryArtifact,
     pub(super) baseline: Vec<ComponentFile>,
     pub(super) rollback_baseline: Option<renderpilot_domain::ComponentRollbackBaseline>,
@@ -205,7 +205,7 @@ pub(super) fn load_swap_preflight(
     let target_profile = super::runtime_compatibility::target_profile(
         context,
         &game,
-        (component.technology() == GraphicsTechnology::D3D12Agility).then_some(&component),
+        (component.technology() == LibraryTechnology::D3D12Agility).then_some(&component),
     )
     .map_err(|error| mode.map_assessment_error(error))?;
     let mut operation_plan = build_swap_operation_plan(&component, &artifact)?;
@@ -309,7 +309,7 @@ pub(super) fn require_component_for_game<S>(
     storage: &S,
     game_id: &GameId,
     component_id: &ComponentId,
-) -> AppResult<GraphicsComponent>
+) -> AppResult<LibraryComponent>
 where
     S: ComponentRepository,
 {

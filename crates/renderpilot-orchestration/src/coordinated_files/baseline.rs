@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::AppError;
 use renderpilot_domain::{
-    ComponentFile, GraphicsTechnology, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode,
+    ComponentFile, LibraryTechnology, ManagedAddonFile, ManagedFileBaseline, ManagedFileMode,
     PathRef, Sha256Hash,
 };
 
@@ -151,14 +151,14 @@ impl From<BaselineConflict> for AppError {
 pub(crate) struct BaselineResolver<'a> {
     game_root: &'a Path,
     managed_files: &'a [ManagedAddonFile],
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 }
 
 impl<'a> BaselineResolver<'a> {
     pub(crate) fn new(
         game_root: &'a Path,
         managed_files: &'a [ManagedAddonFile],
-        technology: GraphicsTechnology,
+        technology: LibraryTechnology,
     ) -> Self {
         Self {
             game_root,
@@ -296,7 +296,7 @@ impl<'a> BaselineResolver<'a> {
 /// Resolves the complete immutable baseline for a component.
 pub(crate) fn resolve_component_baseline(
     game_root: &Path,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     current: &[ComponentFile],
     recorded: Option<&[ComponentFile]>,
     managed_files: &[ManagedAddonFile],
@@ -331,7 +331,7 @@ pub(crate) fn resolve_component_baseline(
 fn component_file_from_disk(
     bytes_path: &Path,
     live_path: &Path,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
 ) -> Result<ComponentFile, BaselineConflict> {
     let sha256 = verified_hash(bytes_path)?;
     let path = PathRef::new(live_path.to_string_lossy().as_ref())

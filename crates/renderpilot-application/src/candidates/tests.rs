@@ -1,10 +1,10 @@
 use renderpilot_domain::{
     Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
     CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
-    ComponentId, ComponentKind, D3d12ExecutableIdentity, GameId, GraphicsComponent,
-    GraphicsTechnology, LibraryArtifact, PackageRelease, PackageVersion, PathRef,
-    PeCompatibilityProfile, PeExportSet, ReleaseChannel, RuntimeCompatibility, RuntimeTarget,
-    Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider, Version,
+    ComponentId, ComponentKind, D3d12ExecutableIdentity, GameId, LibraryArtifact, LibraryComponent,
+    LibraryTechnology, PackageRelease, PackageVersion, PathRef, PeCompatibilityProfile,
+    PeExportSet, ReleaseChannel, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability,
+    UpstreamPackage, UpstreamPackageProvider, Version,
 };
 
 use crate::{
@@ -23,7 +23,7 @@ fn selects_only_same_technology_candidates() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.5.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -32,7 +32,7 @@ fn selects_only_same_technology_candidates() {
 
     let sr_candidate = sample_artifact(
         "artifact:sr-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -40,7 +40,7 @@ fn selects_only_same_technology_candidates() {
     );
     let fg_candidate = sample_artifact(
         "artifact:fg-3.7",
-        GraphicsTechnology::DlssFrameGeneration,
+        LibraryTechnology::DlssFrameGeneration,
         Some("3.7.0"),
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "C:/Games/GameB/nvngx_dlssg.dll",
@@ -48,7 +48,7 @@ fn selects_only_same_technology_candidates() {
     );
     let rr_candidate = sample_artifact(
         "artifact:rr-3.7",
-        GraphicsTechnology::DlssRayReconstruction,
+        LibraryTechnology::DlssRayReconstruction,
         Some("3.7.0"),
         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "C:/Games/GameB/nvngx_dlssd.dll",
@@ -74,7 +74,7 @@ fn legacy_d3d12_candidates_require_the_exact_executable_sdk_line() {
     let component = sample_component(
         "component:game-a:d3d12",
         "game:a",
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
         Some("1.618.3"),
         &"a".repeat(64),
@@ -82,7 +82,7 @@ fn legacy_d3d12_candidates_require_the_exact_executable_sdk_line() {
     );
     let artifact = sample_artifact(
         "artifact:d3d12-618-5",
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Some("1.618.5"),
         &"b".repeat(64),
         "C:/Library/D3D12Core.dll",
@@ -118,7 +118,7 @@ fn managed_d3d12_candidates_allow_newer_lines_and_hide_original_downgrades() {
     let component = sample_component(
         "component:game-a:d3d12-managed",
         "game:a",
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
         Some("1.606.4"),
         &"a".repeat(64),
@@ -127,7 +127,7 @@ fn managed_d3d12_candidates_allow_newer_lines_and_hide_original_downgrades() {
     let artifact = |id: &str, line: u32, hash: char| {
         sample_artifact(
             id,
-            GraphicsTechnology::D3D12Agility,
+            LibraryTechnology::D3D12Agility,
             Some(&format!("1.{line}.1")),
             &hash.to_string().repeat(64),
             &format!("C:/Library/{id}/D3D12Core.dll"),
@@ -177,7 +177,7 @@ fn presentation_d3d12_candidates_explain_actions_without_minting_tokens() {
     let component = sample_component(
         "component:game-a:d3d12-presentation",
         "game:a",
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Swappability::Swappable,
         Some("1.606.1"),
         &"a".repeat(64),
@@ -185,7 +185,7 @@ fn presentation_d3d12_candidates_explain_actions_without_minting_tokens() {
     );
     let artifact = sample_artifact(
         "artifact:d3d12-presentation-619",
-        GraphicsTechnology::D3D12Agility,
+        LibraryTechnology::D3D12Agility,
         Some("1.619.1"),
         &"b".repeat(64),
         "catalog://microsoft/D3D12Core.dll",
@@ -225,7 +225,7 @@ fn dxc_candidates_allow_a_standalone_installed_compiler() {
     let component = sample_component(
         "component:game-a:dxc",
         "game:a",
-        GraphicsTechnology::MicrosoftDxc,
+        LibraryTechnology::MicrosoftDxc,
         Swappability::Swappable,
         Some("1.5.0"),
         &"a".repeat(64),
@@ -249,7 +249,7 @@ fn dlss_v1_is_incompatible_with_v2_and_ignored() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("1.0.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -257,7 +257,7 @@ fn dlss_v1_is_incompatible_with_v2_and_ignored() {
     );
     let v2_artifact = sample_artifact(
         "artifact:dlss-v2",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("2.0.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -265,7 +265,7 @@ fn dlss_v1_is_incompatible_with_v2_and_ignored() {
     );
     let v1_artifact = sample_artifact(
         "artifact:dlss-v1-other",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("1.5.0"),
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "C:/Games/GameC/nvngx_dlss.dll",
@@ -287,7 +287,7 @@ fn dlss_v2_is_compatible_with_v3_only() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("2.0.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -295,7 +295,7 @@ fn dlss_v2_is_compatible_with_v3_only() {
     );
     let v3_artifact = sample_artifact(
         "artifact:dlss-v3",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.0.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -303,7 +303,7 @@ fn dlss_v2_is_compatible_with_v3_only() {
     );
     let v1_artifact = sample_artifact(
         "artifact:dlss-v1",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("1.0.0"),
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "C:/Games/GameC/nvngx_dlss.dll",
@@ -321,7 +321,7 @@ fn includes_all_known_versions_for_replacement() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.7.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -329,7 +329,7 @@ fn includes_all_known_versions_for_replacement() {
     );
     let older = sample_artifact(
         "artifact:older",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.5.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -337,7 +337,7 @@ fn includes_all_known_versions_for_replacement() {
     );
     let same = sample_artifact(
         "artifact:same",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "C:/Games/GameC/nvngx_dlss.dll",
@@ -345,7 +345,7 @@ fn includes_all_known_versions_for_replacement() {
     );
     let newer = sample_artifact(
         "artifact:newer",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.8.0"),
         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "C:/Games/GameD/nvngx_dlss.dll",
@@ -387,7 +387,7 @@ fn order_is_version_descending_even_when_every_candidate_is_older() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("9.9.9"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -396,7 +396,7 @@ fn order_is_version_descending_even_when_every_candidate_is_older() {
     let make = |id: &str, version: &str, sha: char| {
         sample_artifact(
             id,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Some(version),
             &sha.to_string().repeat(64),
             "C:/Games/GameB/nvngx_dlss.dll",
@@ -426,7 +426,7 @@ fn unknown_version_candidates_sort_last() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.7.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -434,7 +434,7 @@ fn unknown_version_candidates_sort_last() {
     );
     let unknown = sample_artifact(
         "artifact:unknown",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         None,
         &"b".repeat(64),
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -442,7 +442,7 @@ fn unknown_version_candidates_sort_last() {
     );
     let versioned = sample_artifact(
         "artifact:v35",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.5.0"),
         &"c".repeat(64),
         "C:/Games/GameC/nvngx_dlss.dll",
@@ -466,7 +466,7 @@ fn download_state_does_not_reorder_distinct_versions() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.5.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -474,7 +474,7 @@ fn download_state_does_not_reorder_distinct_versions() {
     );
     let newer = sample_artifact(
         "artifact:v38",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.8.0"),
         &"b".repeat(64),
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -482,7 +482,7 @@ fn download_state_does_not_reorder_distinct_versions() {
     );
     let older_downloaded = sample_artifact(
         "artifact:v37",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         &"c".repeat(64),
         "C:/Library/nvngx_dlss.dll",
@@ -508,7 +508,7 @@ fn distinct_payloads_with_the_same_version_are_not_deduplicated() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.5.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -516,7 +516,7 @@ fn distinct_payloads_with_the_same_version_are_not_deduplicated() {
     );
     let downloaded = sample_artifact(
         "artifact:downloaded",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         &"f".repeat(64), // sorts AFTER the twin's sha — only is_downloaded puts it first
         "C:/Library/nvngx_dlss.dll",
@@ -524,7 +524,7 @@ fn distinct_payloads_with_the_same_version_are_not_deduplicated() {
     );
     let manifest_twin = sample_artifact(
         "artifact:manifest",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         &"b".repeat(64),
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -551,7 +551,7 @@ fn unknown_versions_are_manual_candidates() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         None,
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -559,7 +559,7 @@ fn unknown_versions_are_manual_candidates() {
     );
     let candidate = sample_artifact(
         "artifact:unknown",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -681,7 +681,7 @@ fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.5.0"),
         &"a".repeat(64),
@@ -689,7 +689,7 @@ fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
     );
     let local = sample_artifact(
         "artifact:local",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         &"b".repeat(64),
         "C:/Other/nvngx_dlss.dll",
@@ -697,7 +697,7 @@ fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
     );
     let manifest = LibraryArtifact::new(
         ArtifactId::new("artifact:manifest").expect("id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(PathRef::new("C:/cache/nvngx_dlss.dll").expect("path"))
@@ -725,7 +725,7 @@ fn streamline_candidate_without_an_installed_target_is_rejected() {
     let component = sample_component(
         "component:game-a:streamline",
         "game:a",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         Swappability::BundleOnly,
         Some("2.4.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -733,7 +733,7 @@ fn streamline_candidate_without_an_installed_target_is_rejected() {
     );
     let artifact = sample_artifact(
         "artifact:streamline-interposer",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         Some("2.5.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/sl.interposer.dll",
@@ -750,7 +750,7 @@ fn deduplicates_identical_candidates_observed_in_multiple_games() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         Some("3.5.0"),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -760,7 +760,7 @@ fn deduplicates_identical_candidates_observed_in_multiple_games() {
     // the same DLL observed in two different games is one artifact id.
     let duplicate_a = sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -768,7 +768,7 @@ fn deduplicates_identical_candidates_observed_in_multiple_games() {
     );
     let duplicate_b = sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Some("3.7.0"),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "D:/Games/GameC/nvngx_dlss.dll",
@@ -787,7 +787,7 @@ fn content_identical_to_the_installed_component_is_not_a_candidate() {
     let component = sample_component(
         "component:game-a:dlss",
         "game:a",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
         None,
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -795,7 +795,7 @@ fn content_identical_to_the_installed_component_is_not_a_candidate() {
     );
     let artifact = sample_artifact(
         "artifact:same-sha",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         None,
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "C:/Games/GameB/nvngx_dlss.dll",
@@ -812,7 +812,7 @@ fn package_backed_candidate_keeps_technical_version_separate_from_package_releas
     let component = sample_component(
         "component:game-a:xess",
         "game:a",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Swappability::Swappable,
         Some("3.5.0"),
         &"a".repeat(64),
@@ -820,7 +820,7 @@ fn package_backed_candidate_keeps_technical_version_separate_from_package_releas
     );
     let artifact = sample_artifact(
         "artifact:package-version",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Some("101.7.2207.20"),
         &"b".repeat(64),
         "C:/Library/libxess.dll",
@@ -857,7 +857,7 @@ fn catalog_candidates_sort_by_full_package_release_before_pe_file_version() {
     let component = sample_component(
         "component:package-order",
         "game:a",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Swappability::Swappable,
         Some("0.5.0"),
         &"a".repeat(64),
@@ -868,7 +868,7 @@ fn catalog_candidates_sort_by_full_package_release_before_pe_file_version() {
         receipt.release.channel = ReleaseChannel::Preview;
         sample_artifact(
             id,
-            GraphicsTechnology::IntelXeSs,
+            LibraryTechnology::IntelXeSs,
             Some(pe_version),
             &hash.to_string().repeat(64),
             &format!("C:/Library/{id}.dll"),
@@ -893,7 +893,7 @@ fn automatic_policy_accepts_only_active_stable_catalog_candidates() {
     let component = sample_component(
         "component:automatic-policy",
         "game:a",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Swappability::Swappable,
         Some("1.0.0"),
         &"a".repeat(64),
@@ -909,7 +909,7 @@ fn automatic_policy_accepts_only_active_stable_catalog_candidates() {
         receipt.release.channel = channel;
         sample_artifact(
             id,
-            GraphicsTechnology::IntelXeSs,
+            LibraryTechnology::IntelXeSs,
             Some("9.0.0"),
             &hash.to_string().repeat(64),
             &format!("C:/Library/{id}.dll"),
@@ -951,7 +951,7 @@ fn active_descriptor_enriches_a_legacy_download_without_a_receipt() {
     let component = sample_component(
         "component:legacy-catalog",
         "game:a",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Swappability::Swappable,
         Some("1.0.0"),
         &"a".repeat(64),
@@ -959,7 +959,7 @@ fn active_descriptor_enriches_a_legacy_download_without_a_receipt() {
     );
     let active = sample_artifact(
         "artifact:legacy-catalog",
-        GraphicsTechnology::IntelXeSs,
+        LibraryTechnology::IntelXeSs,
         Some("2.0.0"),
         &"b".repeat(64),
         "catalog://intel/libxess.dll",
@@ -994,11 +994,11 @@ fn openvr_installed_release_is_resolved_by_full_catalog_content() {
             Architecture::X64,
             PeExportSet::from_canonical_names(vec!["A".into()]).unwrap(),
         ));
-    let component = GraphicsComponent::new(
+    let component = LibraryComponent::new(
         ComponentId::new("component:openvr").unwrap(),
         GameId::new("game:openvr").unwrap(),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         Swappability::Swappable,
     )
     .with_file(installed_file);
@@ -1055,7 +1055,7 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
     let component = sample_component(
         "component:fsr-catalog-release",
         "game:a",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::Swappable,
         Some("1.0.1.41314"),
         &"a".repeat(64),
@@ -1068,7 +1068,7 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
     );
     let installed = sample_artifact(
         "artifact:fsr-installed",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("1.0.1.41314"),
         &"a".repeat(64),
         "catalog://amd/amd_fidelityfx_dx12.dll",
@@ -1090,7 +1090,7 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
     );
     let installed_preview = sample_artifact(
         "artifact:fsr-installed-preview",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("1.0.1.41314"),
         &"a".repeat(64),
         "catalog://amd/amd_fidelityfx_dx12.dll",
@@ -1116,7 +1116,7 @@ fn installed_catalog_release_resolution_is_not_openvr_specific() {
     );
     let candidate = sample_artifact(
         "artifact:fsr-candidate",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("1.0.2.0"),
         &"b".repeat(64),
         "catalog://amd/amd_fidelityfx_dx12.dll",
@@ -1231,7 +1231,7 @@ fn openvr_catalog_artifact(
         ));
     LibraryArtifact::new(
         ArtifactId::new(id).unwrap(),
-        GraphicsTechnology::OpenVr,
+        LibraryTechnology::OpenVr,
         "openvr_api.dll",
         vec![file],
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1274,7 +1274,7 @@ fn test_catalog_receipt(
 }
 
 fn find_test_candidates(
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     artifacts: &[LibraryArtifact],
 ) -> Vec<ComponentReplacementCandidates> {
     find_replacement_candidates(components, artifacts, &CandidateContext::empty())
@@ -1302,12 +1302,12 @@ fn active_catalog_for(
 fn sample_component(
     component_id: &str,
     game_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     swappability: Swappability,
     version: Option<&str>,
     sha256: &str,
     path: &str,
-) -> GraphicsComponent {
+) -> LibraryComponent {
     let mut file = ComponentFile::new(PathRef::new(path).expect("component path should be valid"))
         .with_sha256(Sha256Hash::new(sha256).expect("sha256 should be valid"));
 
@@ -1315,7 +1315,7 @@ fn sample_component(
         file = file.with_version(Version::parse(version).expect("version should be valid"));
     }
 
-    GraphicsComponent::new(
+    LibraryComponent::new(
         ComponentId::new(component_id).expect("component id should be valid"),
         GameId::new(game_id).expect("game id should be valid"),
         ComponentKind::NativeLibrary,
@@ -1327,7 +1327,7 @@ fn sample_component(
 
 fn sample_artifact(
     artifact_id: &str,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     version: Option<&str>,
     sha256: &str,
     path: &str,
@@ -1383,7 +1383,7 @@ fn dxc_package_artifact() -> LibraryArtifact {
                 .into_iter()
                 .filter_map(ComponentFile::sha256),
         ),
-        GraphicsTechnology::MicrosoftDxc,
+        LibraryTechnology::MicrosoftDxc,
         COMPILER_FILE_NAME,
         vec![compiler, validator],
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1406,12 +1406,12 @@ fn dxc_package_artifact() -> LibraryArtifact {
 }
 
 /// Multi-file Streamline component with optional per-file PE versions.
-fn streamline_component(files: &[(&str, Option<&str>)]) -> GraphicsComponent {
-    let mut component = GraphicsComponent::new(
+fn streamline_component(files: &[(&str, Option<&str>)]) -> LibraryComponent {
+    let mut component = LibraryComponent::new(
         ComponentId::new("component:game-a:streamline").expect("component id"),
         GameId::new("game:a").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         Swappability::BundleOnly,
     );
     for (index, (name, version)) in files.iter().enumerate() {
@@ -1444,7 +1444,7 @@ fn streamline_package_artifact(
         .collect();
     LibraryArtifact::new(
         ArtifactId::new(artifact_id).expect("artifact id"),
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         "sl.common.dll",
         files,
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1467,7 +1467,7 @@ fn streamline_artifact_with_members(
         .collect();
     LibraryArtifact::new(
         ArtifactId::new(artifact_id).expect("artifact id"),
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         members[0].0,
         files,
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1487,7 +1487,7 @@ fn split_package_artifact(artifact_id: &str, version: &str) -> LibraryArtifact {
 
     LibraryArtifact::new(
         ArtifactId::new(artifact_id).expect("artifact id should be valid"),
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
         vec![upscaler, loader],
         ArtifactTrustLevel::CatalogDownloaded,
@@ -1500,7 +1500,7 @@ fn split_fsr_component_is_not_offered_a_unified_single_file_downgrade() {
     let component = sample_component(
         "component:game-a:fsr",
         "game:a",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::BundleOnly,
         Some("4.0.3"),
         &"f".repeat(64),
@@ -1509,7 +1509,7 @@ fn split_fsr_component_is_not_offered_a_unified_single_file_downgrade() {
     // The unified FSR 3.x backend is a single `amd_fidelityfx_dx12.dll`.
     let unified = sample_artifact(
         "artifact:fsr-3.1",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("3.1.0"),
         &"e".repeat(64),
         "C:/Lib/amd_fidelityfx_dx12.dll",
@@ -1528,7 +1528,7 @@ fn split_fsr_component_accepts_another_split_package() {
     let component = sample_component(
         "component:game-a:fsr",
         "game:a",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::BundleOnly,
         Some("4.0.3"),
         &"f".repeat(64),
@@ -1546,7 +1546,7 @@ fn unified_fsr_component_accepts_both_unified_and_split() {
     let component = sample_component(
         "component:game-a:fsr",
         "game:a",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::Swappable,
         Some("3.1.0"),
         &"f".repeat(64),
@@ -1554,7 +1554,7 @@ fn unified_fsr_component_accepts_both_unified_and_split() {
     );
     let unified = sample_artifact(
         "artifact:fsr-3.1.1",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("3.1.1"),
         &"e".repeat(64),
         "C:/Lib/amd_fidelityfx_dx12.dll",
@@ -1601,11 +1601,11 @@ fn mixed_fsr_component_reports_the_entry_points_version() {
     // A real unified FSR 3.1 entry point next to developer-left split files:
     // the builds do not match (no release cohesion), so the version the game
     // actually runs must win — regardless of the stored file order.
-    let mut component = GraphicsComponent::new(
+    let mut component = LibraryComponent::new(
         ComponentId::new("component:game-a:fsr").expect("component id"),
         GameId::new("game:a").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::BundleOnly,
     );
     for (name, version, sha) in [
@@ -1651,7 +1651,7 @@ fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
     let component = sample_component(
         "component:game-a:fsr-upscaler",
         "game:a",
-        GraphicsTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrUpscaler,
         Swappability::Swappable,
         Some("4.0.3"),
         &"f".repeat(64),
@@ -1659,7 +1659,7 @@ fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
     );
     let upscaler = sample_artifact(
         "artifact:fsr-upscaler-4.1",
-        GraphicsTechnology::AmdFsrUpscaler,
+        LibraryTechnology::AmdFsrUpscaler,
         Some("4.1.0"),
         &"e".repeat(64),
         "C:/Lib/amd_fidelityfx_upscaler_dx12.dll",
@@ -1667,7 +1667,7 @@ fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
     );
     let framegen = sample_artifact(
         "artifact:fsr-framegen-4.1",
-        GraphicsTechnology::AmdFsrFrameGeneration,
+        LibraryTechnology::AmdFsrFrameGeneration,
         Some("4.1.0"),
         &"d".repeat(64),
         "C:/Lib/amd_fidelityfx_framegeneration_dx12.dll",
@@ -1684,12 +1684,12 @@ fn native_fsr_upscaler_component_only_matches_upscaler_singles() {
 
 /// Builds a multi-file FSR component with the given file basenames (FSR family,
 /// the first file is the primary). Used to model dx12-lineage vs native FSR 4.
-fn fsr_component(file_names: &[&str]) -> GraphicsComponent {
-    let mut component = GraphicsComponent::new(
+fn fsr_component(file_names: &[&str]) -> LibraryComponent {
+    let mut component = LibraryComponent::new(
         ComponentId::new("component:game-a:fsr").expect("component id"),
         GameId::new("game:a").expect("game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Swappability::BundleOnly,
     );
     for (index, name) in file_names.iter().enumerate() {
@@ -1714,7 +1714,7 @@ fn dx12_lineage_fsr4_is_offered_a_unified_fsr3_downgrade() {
     ]);
     let unified = sample_artifact(
         "artifact:fsr-3.1.4",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("3.1.4"),
         &"e".repeat(64),
         "C:/Lib/amd_fidelityfx_dx12.dll",
@@ -1739,7 +1739,7 @@ fn unified_fsr_cleanup_remains_visible_when_the_entry_point_hash_already_matches
     ]);
     let cleanup = sample_artifact(
         "artifact:fsr-cleanup",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("3.1.4"),
         &"b".repeat(64),
         "C:/Lib/amd_fidelityfx_dx12.dll",
@@ -1766,7 +1766,7 @@ fn native_fsr4_is_not_offered_a_unified_fsr3_downgrade() {
     ]);
     let unified = sample_artifact(
         "artifact:fsr-3.1.4",
-        GraphicsTechnology::AmdFsr,
+        LibraryTechnology::AmdFsr,
         Some("3.1.4"),
         &"e".repeat(64),
         "C:/Lib/amd_fidelityfx_dx12.dll",

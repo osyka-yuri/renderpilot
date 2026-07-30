@@ -3,7 +3,7 @@ use renderpilot_orchestration::application::{
     OperationRepository, OperationStatus, UnixTimestampMillis,
 };
 use renderpilot_orchestration::domain::{
-    ComponentId, GraphicsTechnology, OperationId, PathRef, Swappability,
+    ComponentId, LibraryTechnology, OperationId, PathRef, Swappability,
 };
 
 use super::super::{CatalogFixture, args, sample_component, sample_game};
@@ -20,7 +20,7 @@ fn list_operations_renders_item_counts_from_aggregate_entries() {
             sample_component(
                 "component:game-a:dlss",
                 game.id().as_str(),
-                GraphicsTechnology::DlssSuperResolution,
+                LibraryTechnology::DlssSuperResolution,
                 Swappability::Swappable,
                 "C:/Games/GameA/nvngx_dlss.dll",
                 Some("3.5.0"),
@@ -29,7 +29,7 @@ fn list_operations_renders_item_counts_from_aggregate_entries() {
             sample_component(
                 "component:game-a:fg",
                 game.id().as_str(),
-                GraphicsTechnology::DlssFrameGeneration,
+                LibraryTechnology::DlssFrameGeneration,
                 Swappability::Swappable,
                 "C:/Games/GameA/nvngx_dlssg.dll",
                 Some("3.5.0"),

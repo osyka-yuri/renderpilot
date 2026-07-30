@@ -4,7 +4,7 @@ use std::path::Path;
 
 use renderpilot_application::validate_runtime_artifact;
 use renderpilot_domain::{
-    ArtifactMetadata, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact,
+    ArtifactMetadata, ArtifactTrustLevel, ComponentFile, LibraryArtifact, LibraryTechnology,
     PathRef, PeCompatibilityProfile, RuntimeTarget, Sha256Hash, UpstreamPackage,
     UpstreamPackageProvider, Version,
 };
@@ -113,15 +113,15 @@ pub(super) fn build_catalog_artifact(
 
 pub(super) fn package_is_supported(package: &LibraryPackage) -> bool {
     match package_technology(package) {
-        Some(GraphicsTechnology::MicrosoftDxc) => has_complete_dxc_pair(package),
+        Some(LibraryTechnology::MicrosoftDxc) => has_complete_dxc_pair(package),
         Some(_) => true,
         None => false,
     }
 }
 
-fn package_technology(package: &LibraryPackage) -> Option<GraphicsTechnology> {
-    GraphicsTechnology::from_slug(&package.technology)
-        .filter(|technology| *technology != GraphicsTechnology::Unknown)
+fn package_technology(package: &LibraryPackage) -> Option<LibraryTechnology> {
+    LibraryTechnology::from_slug(&package.technology)
+        .filter(|technology| *technology != LibraryTechnology::Unknown)
 }
 
 fn has_complete_dxc_pair(package: &LibraryPackage) -> bool {

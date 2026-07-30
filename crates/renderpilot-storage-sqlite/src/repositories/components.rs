@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use renderpilot_application::{AppResult, ComponentRepository};
-use renderpilot_domain::{GameId, GraphicsComponent};
+use renderpilot_domain::{GameId, LibraryComponent};
 use rusqlite::{CachedStatement, Connection, OptionalExtension, Transaction, named_params};
 use serde_json::json;
 
@@ -28,7 +28,7 @@ const INSERT_COMPONENT_SQL: &str = "
             id,
             game_id,
             kind,
-            library,
+            technology,
             swappability,
             files_json,
             created_at,
@@ -50,7 +50,7 @@ const INSERT_COMPONENT_SQL: &str = "
 const UPDATE_COMPONENT_SQL: &str = "
     UPDATE components
        SET kind = :kind,
-           library = :technology,
+           technology = :technology,
            swappability = :swappability,
            files_json = :files_json,
            updated_at = :updated_at_ms
@@ -70,14 +70,14 @@ impl ComponentRepository for SqliteStorage {
     fn replace_components_for_game(
         &self,
         game_id: &GameId,
-        components: &[GraphicsComponent],
+        components: &[LibraryComponent],
     ) -> AppResult<()> {
         self.with_transaction(|transaction| {
             replace_components_for_game_within_transaction(transaction, game_id, components)
         })
     }
 
-    fn list_components_for_game(&self, game_id: &GameId) -> AppResult<Vec<GraphicsComponent>> {
+    fn list_components_for_game(&self, game_id: &GameId) -> AppResult<Vec<LibraryComponent>> {
         self.query_list(
             LIST_COMPONENTS_FOR_GAME_SQL,
             named_params! {
@@ -90,7 +90,7 @@ impl ComponentRepository for SqliteStorage {
 
 impl SqliteStorage {
     /// Loads all component facts in one stable query for catalog snapshot builds.
-    pub fn list_all_components(&self) -> AppResult<Vec<GraphicsComponent>> {
+    pub fn list_all_components(&self) -> AppResult<Vec<LibraryComponent>> {
         self.query_list(LIST_ALL_COMPONENTS_SQL, [], component_from_row)
     }
 }
@@ -110,7 +110,7 @@ impl SqliteStorage {
 pub(super) fn replace_components_for_game_within_transaction(
     transaction: &Transaction<'_>,
     game_id: &GameId,
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
 ) -> AppResult<()> {
     let rows = ComponentSqlRows::from_components(game_id, components)?;
 
@@ -298,7 +298,7 @@ struct ComponentSqlRows<'a> {
 impl<'a> ComponentSqlRows<'a> {
     fn from_components(
         expected_game_id: &'a GameId,
-        components: &'a [GraphicsComponent],
+        components: &'a [LibraryComponent],
     ) -> AppResult<Self> {
         let mut rows = Vec::with_capacity(components.len());
         let mut seen_ids = HashSet::with_capacity(components.len());
@@ -342,7 +342,7 @@ struct ComponentSqlRow<'a> {
 impl<'a> ComponentSqlRow<'a> {
     fn from_component(
         expected_game_id: &'a GameId,
-        component: &'a GraphicsComponent,
+        component: &'a LibraryComponent,
     ) -> AppResult<Self> {
         validate_component_belongs_to_game(expected_game_id, component)?;
 
@@ -359,7 +359,7 @@ impl<'a> ComponentSqlRow<'a> {
 
 fn validate_component_belongs_to_game(
     expected_game_id: &GameId,
-    component: &GraphicsComponent,
+    component: &LibraryComponent,
 ) -> AppResult<()> {
     if component.game_id() == expected_game_id {
         return Ok(());

@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use renderpilot_application::AppResult;
-use renderpilot_domain::{GameInstallation, GraphicsComponent, LibraryArtifact};
+use renderpilot_domain::{GameInstallation, LibraryArtifact, LibraryComponent};
 use rusqlite::{Connection, Params, Transaction};
 
 use crate::error::storage_error;
@@ -50,7 +50,7 @@ pub struct ScanWriteUnit<'a> {
     /// Game installation row that anchors the write.
     pub game: &'a GameInstallation,
     /// Full replacement component set for the game.
-    pub components: &'a [GraphicsComponent],
+    pub components: &'a [LibraryComponent],
     /// Artifact rows to upsert while persisting the scan.
     pub artifacts: &'a [LibraryArtifact],
     /// Remove operation headers left without items when a deliberate root
@@ -171,7 +171,7 @@ impl SqliteStorage {
     pub fn save_scan_result(
         &self,
         game: &GameInstallation,
-        components: &[GraphicsComponent],
+        components: &[LibraryComponent],
         artifacts: &[LibraryArtifact],
     ) -> AppResult<()> {
         self.save_scan_write_unit(ScanWriteUnit {
@@ -269,7 +269,7 @@ impl SqliteStorage {
 fn persist_scan_result_in_transaction(
     transaction: &Transaction<'_>,
     game: &GameInstallation,
-    components: &[GraphicsComponent],
+    components: &[LibraryComponent],
     artifacts: &[LibraryArtifact],
     prune_empty_operations: bool,
 ) -> AppResult<ScanWriteReport> {
@@ -315,8 +315,8 @@ mod tests {
     };
     use renderpilot_domain::{
         ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-        GameIdentity, GameInstallation, GameRuntime, GraphicsComponent, GraphicsTechnology,
-        Launcher, LibraryArtifact, OperationId, PathRef, Platform, Sha256Hash, Swappability,
+        GameIdentity, GameInstallation, GameRuntime, Launcher, LibraryArtifact, LibraryComponent,
+        LibraryTechnology, OperationId, PathRef, Platform, Sha256Hash, Swappability,
     };
 
     use super::SqliteStorage;
@@ -573,7 +573,7 @@ mod tests {
         }
 
         #[track_caller]
-        fn replace_components(&self, game_id: &GameId, components: &[GraphicsComponent]) {
+        fn replace_components(&self, game_id: &GameId, components: &[LibraryComponent]) {
             self.storage
                 .replace_components_for_game(game_id, components)
                 .expect("component set should be stored");
@@ -626,7 +626,7 @@ mod tests {
         }
 
         #[track_caller]
-        fn assert_components(&self, game_id: &GameId, expected: &[GraphicsComponent]) {
+        fn assert_components(&self, game_id: &GameId, expected: &[LibraryComponent]) {
             assert_eq!(
                 self.storage
                     .list_components_for_game(game_id)
@@ -667,12 +667,12 @@ mod tests {
         )
     }
 
-    fn sample_component(component_id: &str, game_id: &str) -> GraphicsComponent {
-        GraphicsComponent::new(
+    fn sample_component(component_id: &str, game_id: &str) -> LibraryComponent {
+        LibraryComponent::new(
             component_id_from(component_id),
             game_id_from(game_id),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(ComponentFile::new(component_path(component_id)))
@@ -700,7 +700,7 @@ mod tests {
     fn sample_artifact(id: &str, path: &str, sha256: &str) -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new(id).expect("artifact id should be valid"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![ComponentFile::new(path_ref(path)).with_sha256(sha256_hash(sha256))],
             ArtifactTrustLevel::LocalObserved,

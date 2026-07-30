@@ -5,7 +5,7 @@ use renderpilot_orchestration::application::ComponentReplacementCandidates;
 use renderpilot_orchestration::catalog as orch_catalog;
 use renderpilot_orchestration::catalog::output as catalog_output;
 use renderpilot_orchestration::domain::{
-    AddonKind, GameId, GameInstallation, GraphicsComponent, RootAuthority,
+    AddonKind, GameId, GameInstallation, LibraryComponent, RootAuthority,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -26,7 +26,7 @@ pub fn get_game_details(
 #[derive(Debug, Serialize)]
 pub(crate) struct GameComponentOutput {
     #[serde(flatten)]
-    component: GraphicsComponent,
+    component: LibraryComponent,
     rollback_available: bool,
     d3d12_executable_status: Option<catalog_output::D3d12ExecutableStatusOutput>,
 }
@@ -132,7 +132,7 @@ impl GameDetailsOutput {
     }
 }
 
-fn filter_visible_components(components: Vec<GraphicsComponent>) -> Vec<GraphicsComponent> {
+fn filter_visible_components(components: Vec<LibraryComponent>) -> Vec<LibraryComponent> {
     components
         .into_iter()
         .filter(is_component_visible)

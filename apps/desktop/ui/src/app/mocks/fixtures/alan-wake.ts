@@ -1,10 +1,10 @@
-import type { GameDetails, GameGraphicsComponent } from '@entities/game';
+import type { GameDetails, GameLibraryComponent } from '@entities/game';
 
 import { RENDERPILOT_LIBRARY_PATH } from './library-path';
 
 /** Seed fixture: Alan Wake 2 with Streamline bundle + read-only DLSS-G. */
 export function createAlanWakeDetails(): GameDetails {
-  const components: GameGraphicsComponent[] = [
+  const components: GameLibraryComponent[] = [
     {
       id: 'component:aw2:streamline',
       game_id: 'epic:alanwake2',

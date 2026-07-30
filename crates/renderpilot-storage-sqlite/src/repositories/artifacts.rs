@@ -15,7 +15,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
     INSERT INTO library_artifacts
         (
             id,
-            library,
+            technology,
             file_name,
             files_json,
             metadata_json,
@@ -39,7 +39,7 @@ const UPSERT_ARTIFACT_SQL: &str = "
             :updated_at_ms
         )
     ON CONFLICT(id) DO UPDATE SET
-        library        = excluded.library,
+        technology     = excluded.technology,
         file_name      = excluded.file_name,
         files_json     = excluded.files_json,
         metadata_json  = excluded.metadata_json,
@@ -309,10 +309,10 @@ mod tests {
     use renderpilot_domain::{
         Architecture, ArtifactId, ArtifactMetadata, ArtifactTrustLevel, CatalogPackageReceiptV1,
         CatalogReceiptSchemaV1, CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile,
-        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
-        GraphicsComponent, GraphicsTechnology, Launcher, LibraryArtifact, PackageRelease,
-        PackageVersion, PathRef, Platform, ReleaseChannel, RuntimeCompatibility, RuntimeTarget,
-        Sha256Hash, Swappability, UpstreamPackage, UpstreamPackageProvider,
+        ComponentId, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime, Launcher,
+        LibraryArtifact, LibraryComponent, LibraryTechnology, PackageRelease, PackageVersion,
+        PathRef, Platform, ReleaseChannel, RuntimeCompatibility, RuntimeTarget, Sha256Hash,
+        Swappability, UpstreamPackage, UpstreamPackageProvider,
     };
 
     use super::SqliteStorage;
@@ -714,7 +714,7 @@ mod tests {
     ) -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new(id).expect("artifact id should be valid"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             file_name,
             vec![
                 ComponentFile::new(PathRef::new(path).expect("artifact path should be valid"))
@@ -862,11 +862,11 @@ mod tests {
 
         // Rescan game A with only current_a in the write unit (plus empty
         // components): prune runs inside save_scan_write_unit.
-        let component = GraphicsComponent::new(
+        let component = LibraryComponent::new(
             ComponentId::new("component:a:dlss").expect("component id"),
             game_a.id().clone(),
             ComponentKind::NativeLibrary,
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
         )
         .with_file(

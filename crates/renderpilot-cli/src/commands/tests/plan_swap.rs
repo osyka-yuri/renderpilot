@@ -1,4 +1,4 @@
-use renderpilot_orchestration::domain::GraphicsTechnology;
+use renderpilot_orchestration::domain::LibraryTechnology;
 use renderpilot_orchestration::domain::Swappability;
 
 use std::path::PathBuf;
@@ -49,7 +49,7 @@ fn plan_swap_renders_operation_plan_json() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&target),
             Some("3.5.0"),
@@ -58,7 +58,7 @@ fn plan_swap_renders_operation_plan_json() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:dlss-3.7",
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         &path_string(&artifact_path),
         Some("3.7.0"),
         &sha256_hex(b"candidate-dlss"),
@@ -131,7 +131,7 @@ fn plan_swap_blocks_invalid_artifact() {
         &[sample_component(
             "component:game-a:dlss",
             game.id().as_str(),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             Swappability::Swappable,
             &path_string(&target),
             Some("3.5.0"),
@@ -140,7 +140,7 @@ fn plan_swap_blocks_invalid_artifact() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:fg-3.7",
-        GraphicsTechnology::DlssFrameGeneration,
+        LibraryTechnology::DlssFrameGeneration,
         &path_string(&artifact_path),
         Some("3.7.0"),
         &sha256_hex(b"candidate-frame-generation"),
@@ -185,7 +185,7 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
         &[sample_component(
             "component:game-a:streamline",
             game.id().as_str(),
-            GraphicsTechnology::NvidiaStreamline,
+            LibraryTechnology::NvidiaStreamline,
             Swappability::BundleOnly,
             &path_string(&target),
             Some("2.4.0"),
@@ -194,7 +194,7 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
     );
     fixture.store_artifact(&sample_artifact(
         "artifact:streamline-2.5",
-        GraphicsTechnology::NvidiaStreamline,
+        LibraryTechnology::NvidiaStreamline,
         &path_string(&artifact_path),
         Some("2.5.0"),
         &sha256_hex(b"candidate-streamline"),

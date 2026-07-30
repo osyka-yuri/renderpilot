@@ -1,4 +1,4 @@
-import type { GameCandidateGroup, GameDetails, GameGraphicsComponent } from '@entities/game';
+import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
 
 /**
  * Shared test factories for game-details candidate groups. Imported only by
@@ -8,7 +8,7 @@ import type { GameCandidateGroup, GameDetails, GameGraphicsComponent } from '@en
 
 export type Candidate = GameCandidateGroup['candidates'][number];
 
-export function component(id: string, technology = 'nvidia_streamline'): GameGraphicsComponent {
+export function component(id: string, technology = 'nvidia_streamline'): GameLibraryComponent {
   return {
     id,
     game_id: 'game-1',
@@ -74,7 +74,7 @@ export function group(
 }
 
 export function details(
-  components: GameGraphicsComponent[],
+  components: GameLibraryComponent[],
   candidate_groups: GameCandidateGroup[],
 ): GameDetails {
   return { components, candidate_groups } as unknown as GameDetails;

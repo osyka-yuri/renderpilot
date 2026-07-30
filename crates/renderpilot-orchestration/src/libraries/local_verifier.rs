@@ -113,7 +113,7 @@ impl LocalArtifactVerifier {
 #[cfg(test)]
 mod tests {
     use renderpilot_domain::{
-        ArtifactId, ArtifactTrustLevel, ComponentFile, GraphicsTechnology, LibraryArtifact, PathRef,
+        ArtifactId, ArtifactTrustLevel, ComponentFile, LibraryArtifact, LibraryTechnology, PathRef,
     };
 
     use super::*;
@@ -121,7 +121,7 @@ mod tests {
     fn artifact(path: &std::path::Path) -> LibraryArtifact {
         LibraryArtifact::new(
             ArtifactId::new("artifact:local-state").expect("artifact id"),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(

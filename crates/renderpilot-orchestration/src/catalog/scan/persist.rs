@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    GameId, GameInstallation, GraphicsComponent, InstallKey, Launcher, RootAuthority,
+    GameId, GameInstallation, InstallKey, Launcher, LibraryComponent, RootAuthority,
     normalized_path_key,
 };
 use renderpilot_storage_sqlite::{
@@ -23,7 +23,7 @@ use super::recovery;
 pub(super) struct PersistScanRequest<'a> {
     pub game: GameInstallation,
     pub libraries: Vec<DetectedLibraryFile>,
-    pub components: &'a [GraphicsComponent],
+    pub components: &'a [LibraryComponent],
     pub prune_empty_operations: bool,
     pub root_correction_recovery_bundle_path: Option<String>,
     pub prefetched_catalog_index: Option<&'a CatalogInstallIndex>,
@@ -135,7 +135,7 @@ pub(super) fn persist_scan_result(
 fn prove_consolidation_plan(
     catalog: &CatalogInstallIndex,
     destination_game: &GameInstallation,
-    destination_components: &[GraphicsComponent],
+    destination_components: &[LibraryComponent],
     candidates: &[GameId],
 ) -> (ConsolidationPlan, Vec<GameId>) {
     let mut candidates = candidates.to_vec();
@@ -208,7 +208,7 @@ fn launcher_install_keys_for_consolidation() -> Option<HashSet<InstallKey>> {
 fn prove_source_component_mapping(
     catalog: &CatalogInstallIndex,
     destination_game: &GameInstallation,
-    destination_components: &[GraphicsComponent],
+    destination_components: &[LibraryComponent],
     source_game_id: &GameId,
     launcher_install_keys: &HashSet<InstallKey>,
 ) -> Option<Vec<ComponentRekey>> {
@@ -251,11 +251,11 @@ fn prove_source_component_mapping(
 
     let mut used_destinations = HashSet::new();
     let mut rekeys = Vec::with_capacity(source_components.len());
-    let mut ordered_sources: Vec<&GraphicsComponent> = source_components.values().collect();
+    let mut ordered_sources: Vec<&LibraryComponent> = source_components.values().collect();
     ordered_sources.sort_by(|left, right| left.id().as_str().cmp(right.id().as_str()));
 
     for source in ordered_sources {
-        let matching: Vec<&GraphicsComponent> = destination_components
+        let matching: Vec<&LibraryComponent> = destination_components
             .iter()
             .filter(|destination| components_represent_same_files(source, destination))
             .collect();
@@ -275,8 +275,8 @@ fn prove_source_component_mapping(
 }
 
 fn components_represent_same_files(
-    source: &GraphicsComponent,
-    destination: &GraphicsComponent,
+    source: &LibraryComponent,
+    destination: &LibraryComponent,
 ) -> bool {
     if source.kind() != destination.kind() || source.technology() != destination.technology() {
         return false;

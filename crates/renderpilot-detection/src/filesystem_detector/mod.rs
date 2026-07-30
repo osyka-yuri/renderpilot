@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
-    ComponentFile, ComponentKind, GameInstallation, GraphicsComponent, GraphicsTechnology, PathRef,
+    ComponentFile, ComponentKind, GameInstallation, LibraryComponent, LibraryTechnology, PathRef,
     PeCompatibilityProfile, RuntimeCompatibility, RuntimeTarget, Sha256Hash, Swappability, Version,
 };
 use serde::Serialize;
@@ -40,7 +40,7 @@ const DETECTOR_NAME: &str = "library-pattern-detector";
 pub struct DetectedLibraryFile {
     file_name: String,
     file_path: PathRef,
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     kind: ComponentKind,
     detection_confidence: DetectionConfidence,
     swappability: Swappability,
@@ -110,7 +110,7 @@ impl DetectedLibraryFile {
     }
 
     /// Returns the detected graphics technology.
-    pub fn technology(&self) -> GraphicsTechnology {
+    pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
 
@@ -360,9 +360,9 @@ impl LibraryPatternComponentDetector {
         let file_path = path_ref_from_path(file)?;
         let inspection = matches!(
             classification.technology,
-            GraphicsTechnology::MicrosoftDxc
-                | GraphicsTechnology::D3D12Agility
-                | GraphicsTechnology::OpenVr
+            LibraryTechnology::MicrosoftDxc
+                | LibraryTechnology::D3D12Agility
+                | LibraryTechnology::OpenVr
         )
         .then(|| crate::inspect_pe(file))
         .flatten();
@@ -377,7 +377,7 @@ impl LibraryPatternComponentDetector {
 
         let runtime_target =
             runtime_target_from_inspection(classification.technology, inspection.as_ref());
-        let pe_compatibility = (classification.technology == GraphicsTechnology::OpenVr)
+        let pe_compatibility = (classification.technology == LibraryTechnology::OpenVr)
             .then(|| inspection.as_ref()?.compatibility_profile())
             .flatten();
 
@@ -404,12 +404,12 @@ impl LibraryPatternComponentDetector {
 }
 
 fn runtime_target_from_inspection(
-    technology: GraphicsTechnology,
+    technology: LibraryTechnology,
     inspection: Option<&crate::PeInspection>,
 ) -> Option<RuntimeTarget> {
     if !matches!(
         technology,
-        GraphicsTechnology::MicrosoftDxc | GraphicsTechnology::D3D12Agility
+        LibraryTechnology::MicrosoftDxc | LibraryTechnology::D3D12Agility
     ) {
         return None;
     }
@@ -417,7 +417,7 @@ fn runtime_target_from_inspection(
     let inspection = inspection?;
     let architecture = inspection.architecture?;
     let mut target = RuntimeTarget::new(architecture);
-    if technology == GraphicsTechnology::D3D12Agility {
+    if technology == LibraryTechnology::D3D12Agility {
         let sdk_version = inspection
             .version
             .as_ref()
@@ -435,7 +435,7 @@ impl ComponentDetector for LibraryPatternComponentDetector {
         DETECTOR_NAME
     }
 
-    fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<GraphicsComponent>> {
+    fn detect_components(&self, game: &GameInstallation) -> AppResult<Vec<LibraryComponent>> {
         let libraries = self.detect_library_files(game)?;
         group_into_components(game, &libraries)
     }

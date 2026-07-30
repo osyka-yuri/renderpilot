@@ -323,7 +323,7 @@ fn legacy_contract_matches(local: &LibraryArtifact, active: &LibraryArtifact) ->
 mod tests {
     use renderpilot_domain::{
         Architecture, ArtifactMetadata, CatalogPackageReceiptV1, CatalogReceiptSchemaV1,
-        CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile, GraphicsTechnology,
+        CatalogSignatureReceipt, CatalogTargetReceipt, ComponentFile, LibraryTechnology,
         PackageRelease, PackageVersion, PathRef, Sha256Hash,
     };
 
@@ -359,7 +359,7 @@ mod tests {
         };
         LibraryArtifact::new(
             ArtifactId::for_package_revision(&revision),
-            GraphicsTechnology::DlssSuperResolution,
+            LibraryTechnology::DlssSuperResolution,
             "nvngx_dlss.dll",
             vec![
                 ComponentFile::new(

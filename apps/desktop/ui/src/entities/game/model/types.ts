@@ -164,7 +164,7 @@ export type GamesCatalogBootstrap = {
 
 export type GameSelectionHandler = (gameId: GameId) => void;
 
-export type GameGraphicsComponent = {
+export type GameLibraryComponent = {
   id: string;
   game_id: string;
   kind: string;
@@ -229,7 +229,7 @@ export type GameCandidateGroup = {
 
 export type GameDetails = {
   game: GameInstallation;
-  components: GameGraphicsComponent[];
+  components: GameLibraryComponent[];
   candidate_groups: GameCandidateGroup[];
   operations: GameOperationSummary[];
   /** Add-on capabilities derived the same way as for catalog list cards (profile + installed). */

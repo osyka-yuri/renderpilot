@@ -1,6 +1,6 @@
 use crate::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
-    GraphicsComponent, GraphicsTechnology, LibraryArtifact, PathRef, Sha256Hash, Swappability,
+    LibraryArtifact, LibraryComponent, LibraryTechnology, PathRef, Sha256Hash, Swappability,
     Version,
 };
 
@@ -71,12 +71,12 @@ fn legacy_component_file_json_defaults_new_pe_metadata() {
 }
 
 #[test]
-fn graphics_component_collects_component_files() {
-    let component = GraphicsComponent::new(
+fn library_component_collects_component_files() {
+    let component = LibraryComponent::new(
         ComponentId::new("component:dlss").expect("valid component id"),
         GameId::new("steam:10").expect("valid game id"),
         ComponentKind::NativeLibrary,
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         Swappability::Swappable,
     )
     .with_file(ComponentFile::new(
@@ -90,7 +90,7 @@ fn graphics_component_collects_component_files() {
 fn library_artifact_normalizes_source() {
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         " nvngx_dlss.dll ",
         vec![
             ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
@@ -116,7 +116,7 @@ fn library_artifact_normalizes_source() {
 fn library_artifact_rejects_empty_source() {
     let error = LibraryArtifact::new(
         ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
@@ -141,7 +141,7 @@ fn library_artifact_tracks_source_game() {
     let source_game_id = GameId::new("manual:C:/Games/Test").expect("valid game id");
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
@@ -164,7 +164,7 @@ fn library_artifact_tracks_source_game() {
 fn library_artifact_requires_sha256() {
     let error = LibraryArtifact::new(
         ArtifactId::new("artifact:dlss:3.7.20").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![ComponentFile::new(
             PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"),
@@ -180,7 +180,7 @@ fn library_artifact_requires_sha256() {
 fn library_artifact_deserialization_preserves_constructor_invariants() {
     let artifact = LibraryArtifact::new(
         ArtifactId::new("artifact:deserialization").expect("valid artifact id"),
-        GraphicsTechnology::DlssSuperResolution,
+        LibraryTechnology::DlssSuperResolution,
         "nvngx_dlss.dll",
         vec![
             ComponentFile::new(PathRef::new("data/library/nvngx_dlss.dll").expect("valid path"))
