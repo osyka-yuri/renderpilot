@@ -18,10 +18,10 @@ env:
   CARGO_TERM_COLOR: always
   # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over
   # RUSTFLAGS=-Dwarnings so the build cache is not thrash-invalidated.
-  # Note (Cargo #17142): build.warnings=deny can elevate linker_messages on some
-  # platforms even though rustc's `warnings` group does not include them. If a
-  # matrix cell fails on linker noise only, set CARGO_BUILD_WARNINGS=warn for
-  # that OS and track #17142 — do not silence linker_messages workspace-wide.
+  # Note (Cargo #17142): build.warnings=deny elevates informational MSVC
+  # linker_messages even though rustc's `warnings` group does not include them.
+  # Windows build/test steps override this one Cargo policy knob; Clippy still
+  # denies Rust warnings for every target on both matrix platforms.
   CARGO_BUILD_WARNINGS: deny
 
 jobs:
@@ -67,11 +67,16 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
 
+      - name: Build workspace
+        run: cargo build --workspace --locked --all-features
+        env:
+          CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
+
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --locked --no-fail-fast
+        run: cargo test --workspace --all-features --locked --no-fail-fast
         # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;
         # Clippy above still denies Rust warnings for every test target.
         env:
@@ -79,7 +84,7 @@ jobs:
 
       - name: Build docs
         if: runner.os == 'Linux'
-        run: cargo doc --workspace --no-deps --locked
+        run: cargo doc --workspace --all-features --no-deps --locked
         env:
           RUSTDOCFLAGS: "-D warnings"
 

@@ -86,7 +86,7 @@ cargo build -p renderpilot-cli
 cargo run -p renderpilot-cli -- --help
 ```
 
-The CLI also exposes `scan-folder`, `list-artifacts`, `list-operations`,
+The CLI also exposes `add-game <install-root>`, `list-artifacts`, `list-operations`,
 `candidates`, `plan-swap`, `apply`, `plan-rollback`, `rollback`, and
 `renodx`/`luma` status, uninstall, and update-check commands. Run
 `renderpilot --help` for the exact argument grammar (or run
