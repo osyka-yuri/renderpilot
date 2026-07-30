@@ -13,7 +13,8 @@
     sideOffset = 4,
     portalProps,
     children,
-    preventScroll = true,
+    // Dialogs own their scroll lock; selects stay non-modal so outside controls remain interactive.
+    preventScroll = false,
     ...restProps
   }: WithoutChild<SelectPrimitive.ContentProps> & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
