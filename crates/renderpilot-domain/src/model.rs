@@ -216,7 +216,7 @@ stable_enum! {
     }
 }
 
-/// Graphics or presentation technology detected in a game installation.
+/// Replaceable native-library technology detected in a game installation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum LibraryTechnology {
     /// NVIDIA DLSS Super Resolution.
@@ -287,6 +287,10 @@ pub enum LibraryTechnology {
     #[serde(rename = "openvr")]
     OpenVr,
 
+    /// Xiph.Org Vorbis codec runtime and its Ogg dependency.
+    #[serde(rename = "xiph_vorbis")]
+    XiphVorbis,
+
     /// Technology is present but not classified yet.
     #[default]
     #[serde(rename = "unknown")]
@@ -313,6 +317,7 @@ impl LibraryTechnology {
         Self::MicrosoftDxc,
         Self::D3D12Agility,
         Self::OpenVr,
+        Self::XiphVorbis,
         Self::Unknown,
     ];
 
@@ -337,6 +342,7 @@ impl LibraryTechnology {
             Self::MicrosoftDxc => "microsoft_dxc",
             Self::D3D12Agility => "d3d12_agility",
             Self::OpenVr => "openvr",
+            Self::XiphVorbis => "xiph_vorbis",
             Self::Unknown => "unknown",
         }
     }
@@ -368,6 +374,16 @@ impl LibraryTechnology {
             | Self::AmdFsrRadianceCache => Self::AmdFsr,
             other => other,
         }
+    }
+
+    /// Returns whether runtime safety depends on an exact observed PE profile.
+    ///
+    /// These technologies use the complete export/import surface as part of
+    /// their compatibility contract. Catalog-declared facts therefore must be
+    /// re-read from the exact bytes both before and after installation.
+    #[must_use]
+    pub const fn requires_exact_pe_profile(self) -> bool {
+        matches!(self, Self::OpenVr | Self::XiphVorbis)
     }
 }
 
@@ -634,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_uses_graphics_slugs_only() {
+    fn serde_uses_library_technology_slugs_only() {
         let json = serde_json::to_string(&LibraryTechnology::DlssSuperResolution).unwrap();
         assert_eq!(json, "\"dlss_super_resolution\"");
 
@@ -644,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_rejects_legacy_graphics_variant_names() {
+    fn serde_rejects_legacy_pascal_case_variant_names() {
         let legacy_name = serde_json::from_str::<LibraryTechnology>("\"DlssSuperResolution\"");
 
         assert!(legacy_name.is_err());

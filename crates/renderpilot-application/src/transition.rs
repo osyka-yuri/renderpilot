@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use renderpilot_domain::{
-    ComponentFile, LibraryArtifact, LibraryComponent, LibraryTechnology, fsr,
+    ComponentFile, LibraryArtifact, LibraryComponent, LibraryTechnology, fsr, xiph,
 };
 
 use crate::{
@@ -14,8 +14,9 @@ use crate::{
 /// Resolves the artifact members that one concrete component transition writes.
 ///
 /// Most technologies install the complete artifact. Streamline and DXC
-/// packages are intersected with the component's installed file set so a swap
-/// never expands the integration chosen by the game.
+/// packages are intersected by installed file name; Xiph packages are
+/// intersected by semantic member. A swap therefore never expands the
+/// integration chosen by the game.
 pub fn resolve_transition_members<'a>(
     component: &LibraryComponent,
     artifact: &'a LibraryArtifact,
@@ -36,6 +37,7 @@ pub fn resolve_transition_members<'a>(
             require_dxc_component_shape(&installed)?;
             project_package_members(component, artifact, &installed, true)?
         }
+        LibraryTechnology::XiphVorbis => project_xiph_members(component, artifact)?,
         _ => {
             let members: Vec<_> = artifact.files().iter().collect();
             require_unique_resolved_targets(component, &members)?;
@@ -49,6 +51,33 @@ pub fn resolve_transition_members<'a>(
     }
 
     Ok(members)
+}
+
+/// Resolves the concrete basename written by one transition member.
+///
+/// Xiph packages are selected semantically but must preserve the exact
+/// case-insensitive ABI alias already loaded by the game. All other
+/// technologies retain the existing install-target policy.
+#[must_use]
+pub fn resolve_transition_install_target(
+    component: &LibraryComponent,
+    artifact_file: &ComponentFile,
+) -> String {
+    if component.technology() == LibraryTechnology::XiphVorbis
+        && let Some(artifact_name) = artifact_file
+            .install_as()
+            .or_else(|| artifact_file.path().file_name())
+        && let Some((artifact_member, _)) = xiph::classify_file_name(artifact_name)
+        && let Some(installed_name) = component.files().iter().find_map(|file| {
+            let name = file.path().file_name()?;
+            (xiph::classify_file_name(name).map(|value| value.0) == Some(artifact_member))
+                .then_some(name)
+        })
+    {
+        return installed_name.to_owned();
+    }
+
+    fsr::resolve_artifact_install_target(artifact_file, component.files())
 }
 
 /// Resolves installed files that a transition must remove in addition to its
@@ -101,6 +130,60 @@ fn installed_file_names(component: &LibraryComponent) -> AppResult<HashSet<Strin
         }
     }
     Ok(names)
+}
+
+fn project_xiph_members<'a>(
+    component: &LibraryComponent,
+    artifact: &'a LibraryArtifact,
+) -> AppResult<Vec<&'a ComponentFile>> {
+    let mut installed_members = HashSet::new();
+    for file in component.files() {
+        let name = file
+            .path()
+            .file_name()
+            .ok_or_else(|| AppError::invalid_input("Xiph target has no file name"))?;
+        let member = xiph::classify_file_name(name)
+            .map(|value| value.0)
+            .ok_or_else(|| AppError::invalid_input("Xiph target has an unsupported DLL alias"))?;
+        if !installed_members.insert(member) {
+            return Err(AppError::invalid_input(
+                "Xiph component has duplicate semantic members",
+            ));
+        }
+    }
+
+    let mut package_members = HashSet::new();
+    let mut projected = Vec::with_capacity(installed_members.len());
+    for file in artifact.files() {
+        let name = file
+            .install_as()
+            .or_else(|| file.path().file_name())
+            .ok_or_else(|| AppError::invalid_input("Xiph artifact member has no file name"))?;
+        let member = xiph::classify_file_name(name)
+            .map(|value| value.0)
+            .ok_or_else(|| AppError::invalid_input("Xiph artifact has an unsupported DLL alias"))?;
+        if !package_members.insert(member) {
+            return Err(AppError::invalid_input(
+                "Xiph artifact has duplicate semantic members",
+            ));
+        }
+        if installed_members.contains(&member) {
+            projected.push(file);
+        }
+    }
+
+    let mut missing = installed_members
+        .difference(&package_members)
+        .map(|member| member.as_slug())
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        missing.sort_unstable();
+        return Err(AppError::invalid_input(format!(
+            "Xiph package does not cover installed members: {}",
+            missing.join(", ")
+        )));
+    }
+    Ok(projected)
 }
 
 fn project_package_members<'a>(
@@ -271,6 +354,63 @@ mod tests {
             ArtifactTrustLevel::CatalogDownloaded,
         )
         .expect("artifact")
+    }
+
+    fn xiph_component(names: &[&str]) -> LibraryComponent {
+        names.iter().fold(
+            LibraryComponent::new(
+                ComponentId::new("component:xiph-transition").expect("component"),
+                GameId::new("game:xiph-transition").expect("game"),
+                ComponentKind::NativeLibrary,
+                LibraryTechnology::XiphVorbis,
+                Swappability::BundleOnly,
+            ),
+            |component, name| component.with_file(file(&format!("C:/Game/{name}"), 'f')),
+        )
+    }
+
+    fn xiph_artifact(names: &[&str]) -> LibraryArtifact {
+        let files = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                file(
+                    &format!("C:/Library/{name}"),
+                    char::from(b'a' + index as u8),
+                )
+            })
+            .collect();
+        LibraryArtifact::new(
+            ArtifactId::new("artifact:xiph-transition").expect("artifact"),
+            LibraryTechnology::XiphVorbis,
+            names[0],
+            files,
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("artifact")
+    }
+
+    #[test]
+    fn xiph_transition_writes_only_members_present_in_the_game() {
+        let component = xiph_component(&["libvorbisfile.dll", "libvorbis.dll", "libogg.dll"]);
+        let package = xiph_artifact(&[
+            "libvorbis.dll",
+            "libvorbisfile.dll",
+            "libvorbisenc.dll",
+            "libogg.dll",
+        ]);
+
+        let members = resolve_transition_members(&component, &package).expect("transition");
+        let targets = members
+            .iter()
+            .map(|member| resolve_transition_install_target(&component, member))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            targets,
+            ["libvorbis.dll", "libvorbisfile.dll", "libogg.dll"],
+            "the optional encoder must not expand a three-member game integration"
+        );
     }
 
     #[test]

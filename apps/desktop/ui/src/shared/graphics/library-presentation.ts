@@ -7,6 +7,7 @@ export const libraryVendorBlueprints = [
   { key: 'intel', label: 'Intel' },
   { key: 'microsoft', label: 'Microsoft' },
   { key: 'valve', label: 'Valve' },
+  { key: 'xiph', label: 'Xiph.Org' },
   { key: 'other', label: 'Additional' },
 ] as const;
 
@@ -65,6 +66,7 @@ const CANONICAL_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   microsoft_dxc: 'Microsoft DXC',
   d3d12_agility: 'Microsoft D3D12 Agility',
   openvr: 'Valve OpenVR',
+  xiph_vorbis: 'Xiph.Org Vorbis/Ogg',
 };
 
 /** Sub-tags that are internal to AMD FSR and expanded from the top-level `amd_fsr` alias. */
@@ -93,6 +95,7 @@ const COMPACT_LIBRARY_LABELS: Readonly<Record<string, string>> = {
   'Microsoft DXC': 'DXC',
   'Microsoft D3D12 Agility': 'D3D12 Agility',
   'Valve OpenVR': 'OpenVR',
+  'Xiph.Org Vorbis/Ogg': 'Vorbis/Ogg',
 };
 
 const AMD_FSR_TECHNOLOGY = 'amd_fsr';
@@ -149,6 +152,10 @@ export function libraryVendorKey(value?: string | null): LibraryVendorKey {
 
   if (normalized.startsWith('valve') || normalized.startsWith('openvr')) {
     return 'valve';
+  }
+
+  if (normalized.startsWith('xiph')) {
+    return 'xiph';
   }
 
   return 'other';

@@ -3,6 +3,7 @@
 mod d3d12;
 mod microsoft;
 mod openvr;
+mod xiph;
 
 use renderpilot_domain::{Architecture, LibraryArtifact, LibraryComponent, LibraryTechnology};
 
@@ -11,6 +12,7 @@ pub use d3d12::{
     D3d12ExecutableSnapshot, SwapTargetProfile, d3d12_confirmation_token,
     replacement_executable_action,
 };
+pub use xiph::is_allowed_xiph_system_import;
 
 #[cfg(test)]
 use microsoft::{D3D12_PACKAGE_ID, DXC_PACKAGE_ID};
@@ -51,17 +53,25 @@ pub enum SwapCompatibilityError {
     },
     /// The executable changed outside the one managed SDK export field.
     D3d12ExecutableRepairRequired,
-    /// Installed OpenVR DLL lacks freshly observed PE compatibility facts.
+    /// Installed native-library member lacks freshly observed PE compatibility facts.
     MissingInstalledPeMetadata,
-    /// Candidate OpenVR DLL architecture differs from the installed DLL.
+    /// Candidate native-library architecture differs from the installed DLL.
     InstalledArchitectureMismatch {
         /// Architecture declared by the candidate.
         artifact: Architecture,
         /// Architecture read from the installed DLL.
         installed: Architecture,
     },
-    /// Candidate removes named exports required by the installed OpenVR DLL.
+    /// Candidate removes named exports required by the installed runtime ABI.
     ExportSurfaceMismatch,
+    /// A required strict regular/delay import profile is absent.
+    InvalidImportProfile,
+    /// A Xiph member imports an unexpected DLL or changes its internal graph.
+    UnexpectedDependency,
+    /// Candidate and installed Xiph ABI aliases differ.
+    NamingFamilyMismatch,
+    /// A Xiph package or installed component has an invalid member shape.
+    IncompleteXiphPackage,
     /// This runtime requires the installed component as compatibility context.
     ComponentContextRequired,
     /// Component and replacement artifact technologies differ.
@@ -107,7 +117,7 @@ impl std::fmt::Display for SwapCompatibilityError {
                 "D3D12 executable differs from its backup outside D3D12SDKVersion"
             }
             Self::MissingInstalledPeMetadata => {
-                "installed OpenVR DLL architecture or named exports could not be determined"
+                "installed library architecture, exports, or imports could not be determined"
             }
             Self::InstalledArchitectureMismatch {
                 artifact,
@@ -115,14 +125,22 @@ impl std::fmt::Display for SwapCompatibilityError {
             } => {
                 return write!(
                     formatter,
-                    "OpenVR runtime architecture {} does not match installed DLL architecture {}",
+                    "runtime architecture {} does not match installed DLL architecture {}",
                     artifact.as_str(),
                     installed.as_str()
                 );
             }
             Self::ExportSurfaceMismatch => {
-                "OpenVR candidate does not preserve the installed DLL's named export surface"
+                "candidate does not preserve the installed runtime's required named exports"
             }
+            Self::InvalidImportProfile => "regular and delay-load PE imports could not be verified",
+            Self::UnexpectedDependency => {
+                "Xiph package has an unexpected dependency or incompatible import graph"
+            }
+            Self::NamingFamilyMismatch => {
+                "Xiph candidate does not preserve the installed DLL aliases"
+            }
+            Self::IncompleteXiphPackage => "Xiph package does not cover the installed members",
             Self::ComponentContextRequired => {
                 "runtime compatibility requires installed component context"
             }
@@ -144,6 +162,7 @@ pub fn validate_runtime_artifact(artifact: &LibraryArtifact) -> Result<(), SwapC
         LibraryTechnology::MicrosoftDxc => microsoft::validate_dxc_artifact(artifact),
         LibraryTechnology::D3D12Agility => microsoft::validate_d3d12_artifact(artifact),
         LibraryTechnology::OpenVr => openvr::validate_artifact(artifact),
+        LibraryTechnology::XiphVorbis => xiph::validate_artifact(artifact),
         _ => match artifact.metadata().runtime_target() {
             Some(target) if target.compatibility().is_some() => {
                 Err(SwapCompatibilityError::InvalidArtifactMetadata)
@@ -155,8 +174,8 @@ pub fn validate_runtime_artifact(artifact: &LibraryArtifact) -> Result<(), SwapC
 
 /// Enforces the complete technology-specific transition contract.
 ///
-/// Microsoft runtimes are checked against the selected executable. OpenVR is
-/// checked against freshly inspected facts from the installed `openvr_api.dll`.
+/// Microsoft runtimes are checked against the selected executable. OpenVR and
+/// Xiph are checked against freshly inspected facts from their installed DLLs.
 pub fn ensure_replacement_compatible(
     component: &LibraryComponent,
     artifact: &LibraryArtifact,
@@ -168,6 +187,7 @@ pub fn ensure_replacement_compatible(
     validate_runtime_artifact(artifact)?;
     match artifact.technology() {
         LibraryTechnology::OpenVr => openvr::ensure_transition_compatible(component, artifact),
+        LibraryTechnology::XiphVorbis => xiph::ensure_transition_compatible(component, artifact),
         _ => {
             microsoft::ensure_executable_compatible(artifact, profile)?;
             if replacement_executable_action(artifact, profile)?
@@ -189,7 +209,10 @@ pub fn ensure_swap_compatible(
     artifact: &LibraryArtifact,
     profile: &SwapTargetProfile,
 ) -> Result<(), SwapCompatibilityError> {
-    if artifact.technology() == LibraryTechnology::OpenVr {
+    if matches!(
+        artifact.technology(),
+        LibraryTechnology::OpenVr | LibraryTechnology::XiphVorbis
+    ) {
         return Err(SwapCompatibilityError::ComponentContextRequired);
     }
     validate_runtime_artifact(artifact)?;
@@ -490,6 +513,18 @@ mod tests {
             ensure_replacement_compatible(&component, &wrong, &SwapTargetProfile::default()),
             Err(SwapCompatibilityError::InstalledArchitectureMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn installed_architecture_error_is_technology_neutral() {
+        assert_eq!(
+            SwapCompatibilityError::InstalledArchitectureMismatch {
+                artifact: Architecture::X64,
+                installed: Architecture::X86,
+            }
+            .to_string(),
+            "runtime architecture X64 does not match installed DLL architecture X86"
+        );
     }
 
     #[test]

@@ -6,7 +6,11 @@
 
 use renderpilot_orchestration::domain::{AddonKind, Launcher, LibraryTechnology};
 
-const INITIAL_LIBRARY_FILTERS: &[LibraryTechnology] = &[
+/// Frozen default selection used by application versions before Xiph support.
+///
+/// Keep this snapshot unchanged: it identifies the persisted select-all state
+/// that must be migrated when new technology defaults are introduced.
+const PRE_XIPH_DEFAULT_LIBRARY_FILTERS: &[LibraryTechnology] = &[
     LibraryTechnology::DlssSuperResolution,
     LibraryTechnology::DlssFrameGeneration,
     LibraryTechnology::DlssRayReconstruction,
@@ -22,6 +26,7 @@ const INITIAL_LIBRARY_FILTERS: &[LibraryTechnology] = &[
     LibraryTechnology::D3D12Agility,
     LibraryTechnology::OpenVr,
 ];
+const XIPH_DEFAULT_LIBRARY_FILTERS: &[LibraryTechnology] = &[LibraryTechnology::XiphVorbis];
 const INITIAL_LAUNCHER_FILTERS: &[Launcher] = &[
     Launcher::Steam,
     Launcher::Epic,
@@ -49,10 +54,7 @@ pub(super) struct EffectiveGamesFilters {
 impl EffectiveGamesFilters {
     fn initial() -> Self {
         Self {
-            libraries: INITIAL_LIBRARY_FILTERS
-                .iter()
-                .map(|technology| technology.as_slug().to_owned())
-                .collect(),
+            libraries: initial_library_filter_slugs().map(str::to_owned).collect(),
             addons: initial_addon_filters(),
             launchers: INITIAL_LAUNCHER_FILTERS
                 .iter()
@@ -63,12 +65,10 @@ impl EffectiveGamesFilters {
     }
 
     fn canonicalized(mut self) -> Self {
-        self.libraries = canonicalize_selection(
+        self.libraries = migrate_pre_xiph_default_selection(canonicalize_selection(
             &self.libraries,
-            INITIAL_LIBRARY_FILTERS
-                .iter()
-                .map(|technology| technology.as_slug()),
-        );
+            initial_library_filter_slugs(),
+        ));
         self.addons = canonicalize_selection(
             &self.addons,
             AddonKind::ALL.iter().map(|kind| kind.as_str()),
@@ -87,6 +87,31 @@ impl EffectiveGamesFilters {
         );
         self
     }
+}
+
+fn initial_library_filter_slugs() -> impl Iterator<Item = &'static str> {
+    PRE_XIPH_DEFAULT_LIBRARY_FILTERS
+        .iter()
+        .chain(XIPH_DEFAULT_LIBRARY_FILTERS)
+        .map(|technology| technology.as_slug())
+}
+
+/// Preserves the old "select all" intent when Xiph first becomes available.
+///
+/// A partial or explicitly empty selection remains untouched. After
+/// canonicalization, exactly every pre-Xiph default and no Xiph value is an
+/// unambiguous persisted select-all state from an earlier application version.
+fn migrate_pre_xiph_default_selection(selected: Vec<String>) -> Vec<String> {
+    let selected_every_pre_xiph_default = selected.len() == PRE_XIPH_DEFAULT_LIBRARY_FILTERS.len()
+        && PRE_XIPH_DEFAULT_LIBRARY_FILTERS
+            .iter()
+            .all(|technology| selected.iter().any(|value| value == technology.as_slug()));
+
+    if selected_every_pre_xiph_default {
+        return initial_library_filter_slugs().map(str::to_owned).collect();
+    }
+
+    selected
 }
 
 pub(super) fn parse_bootstrap_filters(value: Option<&str>) -> EffectiveGamesFilters {
@@ -234,6 +259,7 @@ mod tests {
                 "microsoft_dxc",
                 "d3d12_agility",
                 "openvr",
+                "xiph_vorbis",
             ]
         );
         assert_eq!(
@@ -302,6 +328,44 @@ mod tests {
         assert_eq!(
             parsed.addons,
             vec![String::from("renodx"), String::from("luma")]
+        );
+    }
+
+    #[test]
+    fn complete_pre_xiph_selection_adopts_xiph_without_changing_partial_selections() {
+        let previous_select_all = parse_bootstrap_filters(Some(
+            r#"{
+                "libraries": [
+                    "dlss_super_resolution",
+                    "dlss_frame_generation",
+                    "dlss_ray_reconstruction",
+                    "nvidia_streamline",
+                    "intel_xess",
+                    "intel_xefg",
+                    "intel_xell",
+                    "amd_fsr",
+                    "amd_fsr_frame_generation",
+                    "amd_fsr_ray_regeneration",
+                    "direct_storage",
+                    "microsoft_dxc",
+                    "d3d12_agility",
+                    "openvr"
+                ]
+            }"#,
+        ));
+        let partial =
+            parse_bootstrap_filters(Some(r#"{"libraries":["dlss_super_resolution","openvr"]}"#));
+
+        assert_eq!(
+            previous_select_all.libraries.last().map(String::as_str),
+            Some("xiph_vorbis")
+        );
+        assert_eq!(
+            partial.libraries,
+            vec![
+                String::from("dlss_super_resolution"),
+                String::from("openvr")
+            ]
         );
     }
 

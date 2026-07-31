@@ -10,6 +10,7 @@ use super::super::revision::package_revision_sha256;
 use super::super::types::{LibraryArtifactRecord, LibraryPackage, LibraryProvenance};
 use super::fields::{ensure_dll_name, ensure_id, ensure_not_blank, ensure_sha256};
 use super::legal::LegalDocumentLookup;
+use super::xiph as xiph_validation;
 
 pub(super) type ArtifactLookup<'a> = HashMap<&'a str, (usize, &'a LibraryArtifactRecord)>;
 
@@ -213,6 +214,10 @@ fn validate_provenance(package: &LibraryPackage) -> Result<(), ServiceError> {
         }
     }
 
+    if package.technology == "xiph_vorbis" {
+        xiph_validation::validate_identity(package)?;
+    }
+
     Ok(())
 }
 
@@ -383,7 +388,7 @@ fn resolve_members(
     let mut install_targets = HashSet::new();
     let mut resolved = Vec::with_capacity(package.members.len());
 
-    for member in &package.members {
+    for (member_index, member) in package.members.iter().enumerate() {
         ensure_dll_name("package install target", &member.install_as)?;
         ensure_id("package member role", &member.role)?;
         if !member_ids.insert(member.artifact_id.as_str()) {
@@ -423,6 +428,9 @@ fn resolve_members(
                 "package `{}` has an invalid OpenVR member contract",
                 package.package_id
             )));
+        }
+        if package.technology == "xiph_vorbis" {
+            xiph_validation::validate_artifact_contract(package, member_index, artifact)?;
         }
 
         resolved.push(artifact_index);

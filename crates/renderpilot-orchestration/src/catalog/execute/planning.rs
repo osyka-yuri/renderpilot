@@ -105,8 +105,10 @@ pub(super) fn planned_target_files(
     let planned: AppResult<Vec<PlannedFile>> = artifact_files
         .iter()
         .map(|artifact_file| {
-            let install_name =
-                fsr::resolve_artifact_install_target(artifact_file, component.files());
+            let install_name = renderpilot_application::resolve_transition_install_target(
+                component,
+                artifact_file,
+            );
             let destination = target_dir.join(&install_name);
             let target_ref =
                 PathRef::new(destination.to_string_lossy().as_ref()).map_err(|error| {

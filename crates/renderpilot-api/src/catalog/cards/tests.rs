@@ -51,6 +51,11 @@ fn empty_bootstrap_returns_typed_filters_and_catalog_result() {
             .as_array()
             .is_some_and(|filters| filters.contains(&serde_json::json!("dlss_super_resolution")))
     );
+    assert!(
+        output["filters"]["libraries"]
+            .as_array()
+            .is_some_and(|filters| filters.contains(&serde_json::json!("xiph_vorbis")))
+    );
     assert_eq!(
         output["filters"]["addons"],
         serde_json::json!(["renodx", "luma"])
@@ -141,9 +146,11 @@ fn initial_bootstrap_selection_hides_cards_without_a_selected_technology_or_addo
         &[String::from("Steam")],
     );
     let technology_card = stub_card("Steam", &["dlss_super_resolution"]);
+    let xiph_card = stub_card("Steam", &["xiph_vorbis"]);
     let plain_card = stub_card("Steam", &[]);
 
     assert!(query.matches(&technology_card));
+    assert!(query.matches(&xiph_card));
     assert!(!query.matches(&plain_card));
 }
 

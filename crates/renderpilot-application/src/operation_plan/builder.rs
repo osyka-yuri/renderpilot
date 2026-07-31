@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use renderpilot_domain::{ComponentFile, LibraryArtifact, LibraryComponent, PathRef, fsr};
+use renderpilot_domain::{ComponentFile, LibraryArtifact, LibraryComponent, PathRef};
 
 use crate::{AppError, AppResult};
 
@@ -53,7 +53,7 @@ fn build_plan_files(
     let mut files = Vec::with_capacity(transition_members.len());
 
     for artifact_file in transition_members {
-        let install_name = fsr::resolve_artifact_install_target(artifact_file, component.files());
+        let install_name = crate::resolve_transition_install_target(component, artifact_file);
         match current_by_name.get(&install_name.to_ascii_lowercase()) {
             Some(current) => files.push(OperationPlanFile::replace(current, artifact_file)),
             None => {

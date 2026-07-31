@@ -7,7 +7,9 @@
 //! once; each consumer then reads only the data directory it cares about (the
 //! resource directory or the import directory).
 
-use super::binary::{checked_range, read_u16, read_u32};
+use std::ops::Range;
+
+use super::binary::{checked_range, read_u16, read_u32, read_u64};
 
 // `pub(super)` so the synthetic-PE test builders in sibling modules can lay out
 // a structurally valid image with the same offsets the parser reads.
@@ -43,8 +45,10 @@ pub(super) struct SectionHeader {
 pub(super) struct PeHeaders<'a> {
     bytes: &'a [u8],
     machine: u16,
+    image_base: u64,
     optional_header_end: usize,
     data_directories_offset: usize,
+    data_directory_count: usize,
     sections: Vec<SectionHeader>,
 }
 
@@ -73,13 +77,24 @@ impl<'a> PeHeaders<'a> {
         checked_range(bytes, optional_header_offset, optional_header_size)?;
 
         let magic = read_u16(bytes, optional_header_offset)?;
-        let data_directories_offset = match magic {
-            PE32_MAGIC => optional_header_offset.checked_add(PE32_DATA_DIRECTORY_OFFSET)?,
-            PE32_PLUS_MAGIC => {
-                optional_header_offset.checked_add(PE32_PLUS_DATA_DIRECTORY_OFFSET)?
-            }
+        let (data_directories_offset, image_base) = match magic {
+            PE32_MAGIC => (
+                optional_header_offset.checked_add(PE32_DATA_DIRECTORY_OFFSET)?,
+                u64::from(read_u32(bytes, optional_header_offset.checked_add(28)?)?),
+            ),
+            PE32_PLUS_MAGIC => (
+                optional_header_offset.checked_add(PE32_PLUS_DATA_DIRECTORY_OFFSET)?,
+                read_u64(bytes, optional_header_offset.checked_add(24)?)?,
+            ),
             _ => return None,
         };
+        let data_directory_count =
+            usize::try_from(read_u32(bytes, data_directories_offset.checked_sub(4)?)?).ok()?;
+        let data_directory_capacity =
+            optional_header_end.checked_sub(data_directories_offset)? / DATA_DIRECTORY_ENTRY_LEN;
+        if data_directory_count > data_directory_capacity {
+            return None;
+        }
 
         let section_table_offset = optional_header_end;
         let mut sections = Vec::with_capacity(section_count);
@@ -111,8 +126,10 @@ impl<'a> PeHeaders<'a> {
         Some(Self {
             bytes,
             machine,
+            image_base,
             optional_header_end,
             data_directories_offset,
+            data_directory_count,
             sections,
         })
     }
@@ -127,15 +144,24 @@ impl<'a> PeHeaders<'a> {
         self.machine
     }
 
+    /// Preferred image base used by legacy VA-based delay-import descriptors.
+    pub(super) fn image_base(&self) -> u64 {
+        self.image_base
+    }
+
     /// The parsed section table.
     pub(super) fn sections(&self) -> &[SectionHeader] {
         &self.sections
     }
 
     /// Reads data-directory entry `index` as `(rva, size)`, bounds-checked
-    /// against the optional header. Returns `None` if the entry lies past the
-    /// header (a truncated or malformed image).
+    /// against both `NumberOfRvaAndSizes` and the optional header. A directory
+    /// not declared by an otherwise valid image is represented as `(0, 0)`;
+    /// `None` is reserved for arithmetic overflow or malformed/truncated data.
     pub(super) fn data_directory(&self, index: usize) -> Option<(u32, u32)> {
+        if index >= self.data_directory_count {
+            return Some((0, 0));
+        }
         let entry_offset = self
             .data_directories_offset
             .checked_add(index.checked_mul(DATA_DIRECTORY_ENTRY_LEN)?)?;
@@ -156,6 +182,7 @@ pub(super) fn data_rva_to_offset(sections: &[SectionHeader], rva: u32, size: u32
     unique_section_mapping(sections, rva, size, |section| {
         section.characteristics & IMAGE_SCN_MEM_EXECUTE == 0
     })
+    .map(|mapping| mapping.file_offset)
 }
 
 /// Resolves a relative virtual address to a file offset using the section table.
@@ -167,6 +194,27 @@ pub(super) fn rva_to_offset(sections: &[SectionHeader], rva: u32) -> Option<usiz
     rva_range_to_offset(sections, rva, 1)
 }
 
+/// Resolves a bounded file range starting at `rva` without crossing the raw
+/// boundary of its unique section.
+///
+/// This is the correct primitive for NUL-terminated PE strings: mapping only
+/// the first byte and then reading through the remainder of the file could
+/// otherwise accept a string that continues into another section or overlay.
+/// Partially overlapping section mappings are rejected as malformed.
+pub(super) fn rva_bounded_file_range(
+    sections: &[SectionHeader],
+    rva: u32,
+    max_size: usize,
+) -> Option<Range<usize>> {
+    let requested_size = u32::try_from(max_size).ok()?;
+    let point = unique_section_mapping(sections, rva, 1, |_| true)?;
+    let size = requested_size.min(point.available_bytes);
+    let mapping = unique_section_mapping(sections, rva, size, |_| true)?;
+    let start = mapping.file_offset;
+    let end = start.checked_add(usize::try_from(size).ok()?)?;
+    Some(start..end)
+}
+
 /// Resolves an entire file-backed RVA range and rejects overlapping section
 /// mappings. Ambiguous section tables are malformed and must never be resolved
 /// by whichever header happens to appear first.
@@ -175,7 +223,12 @@ pub(super) fn rva_range_to_offset(
     rva: u32,
     size: u32,
 ) -> Option<usize> {
-    unique_section_mapping(sections, rva, size, |_| true)
+    unique_section_mapping(sections, rva, size, |_| true).map(|mapping| mapping.file_offset)
+}
+
+struct SectionMapping {
+    file_offset: usize,
+    available_bytes: u32,
 }
 
 fn unique_section_mapping(
@@ -183,24 +236,115 @@ fn unique_section_mapping(
     rva: u32,
     size: u32,
     accepts: impl Fn(&SectionHeader) -> bool,
-) -> Option<usize> {
+) -> Option<SectionMapping> {
     if size == 0 {
         return None;
     }
+    let requested_end = rva.checked_add(size)?;
     let mut resolved = None;
     for section in sections {
-        let Some(offset_in_section) = rva.checked_sub(section.virtual_address) else {
+        if section.raw_data_size == 0 {
             continue;
-        };
-        let end = offset_in_section.checked_add(size)?;
-        if end > section.raw_data_size {
+        }
+        let section_end = section.virtual_address.checked_add(section.raw_data_size)?;
+        if rva >= section_end || section.virtual_address >= requested_end {
             continue;
+        }
+
+        // Any partial overlap makes the mapping ambiguous or crosses a raw
+        // section boundary. Both are malformed for a file-backed PE read.
+        if rva < section.virtual_address || requested_end > section_end {
+            return None;
         }
         if !accepts(section) || resolved.is_some() {
             return None;
         }
-        let file_offset = section.raw_data_pointer.checked_add(offset_in_section)?;
-        resolved = Some(usize::try_from(file_offset).ok()?);
+        let offset_in_section = rva.checked_sub(section.virtual_address)?;
+        let file_offset =
+            usize::try_from(section.raw_data_pointer.checked_add(offset_in_section)?).ok()?;
+        resolved = Some(SectionMapping {
+            file_offset,
+            available_bytes: section.raw_data_size.checked_sub(offset_in_section)?,
+        });
     }
     resolved
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn undeclared_data_directory_is_structurally_absent() {
+        let bytes = build_header_only_pe(2);
+        let headers = PeHeaders::parse(&bytes).expect("valid PE headers");
+
+        assert_eq!(headers.data_directory(1), Some((0, 0)));
+        assert_eq!(headers.data_directory(13), Some((0, 0)));
+    }
+
+    #[test]
+    fn declared_directory_count_must_fit_optional_header() {
+        let bytes = build_header_only_pe(17);
+        assert!(PeHeaders::parse(&bytes).is_none());
+    }
+
+    #[test]
+    fn rva_range_rejects_partial_overlap_with_another_raw_section() {
+        let sections = [
+            test_section(0x1000, 0x100, 0x200),
+            test_section(0x1080, 0x100, 0x400),
+        ];
+
+        assert_eq!(rva_range_to_offset(&sections, 0x1010, 0x20), Some(0x210));
+        assert_eq!(rva_range_to_offset(&sections, 0x1040, 0x80), None);
+    }
+
+    #[test]
+    fn bounded_rva_range_rejects_overlapping_raw_sections() {
+        let sections = [
+            test_section(0x1000, 0x100, 0x200),
+            test_section(0x1080, 0x100, 0x400),
+        ];
+
+        assert_eq!(
+            rva_bounded_file_range(&sections, 0x1010, 0x20),
+            Some(0x210..0x230)
+        );
+        assert_eq!(rva_bounded_file_range(&sections, 0x1040, 0x80), None);
+    }
+
+    fn test_section(
+        virtual_address: u32,
+        raw_data_size: u32,
+        raw_data_pointer: u32,
+    ) -> SectionHeader {
+        SectionHeader {
+            virtual_address,
+            raw_data_size,
+            raw_data_pointer,
+            characteristics: 0,
+        }
+    }
+
+    fn build_header_only_pe(data_directory_count: u32) -> Vec<u8> {
+        let pe_offset = 0x80usize;
+        let coff_offset = pe_offset + 4;
+        let optional_header_offset = coff_offset + COFF_HEADER_LEN;
+        let optional_header_size = 0xf0usize;
+        let mut bytes = vec![0u8; optional_header_offset + optional_header_size];
+
+        bytes[0..2].copy_from_slice(b"MZ");
+        bytes[DOS_PE_POINTER_OFFSET..DOS_PE_POINTER_OFFSET + 4]
+            .copy_from_slice(&(pe_offset as u32).to_le_bytes());
+        bytes[pe_offset..pe_offset + 4].copy_from_slice(b"PE\0\0");
+        bytes[coff_offset..coff_offset + 2].copy_from_slice(&0x8664u16.to_le_bytes());
+        bytes[coff_offset + 16..coff_offset + 18]
+            .copy_from_slice(&(optional_header_size as u16).to_le_bytes());
+        bytes[optional_header_offset..optional_header_offset + 2]
+            .copy_from_slice(&PE32_PLUS_MAGIC.to_le_bytes());
+        let count_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET - 4;
+        bytes[count_offset..count_offset + 4].copy_from_slice(&data_directory_count.to_le_bytes());
+        bytes
+    }
 }

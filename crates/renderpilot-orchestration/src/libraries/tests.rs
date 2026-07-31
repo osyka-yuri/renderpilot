@@ -396,6 +396,40 @@ fn explicit_package_contract_builds_one_domain_artifact() {
 }
 
 #[test]
+fn canonical_xiph_catalog_is_validated_with_all_runtime_members() {
+    let catalog =
+        super::resolved::ValidatedCatalog::new(xiph_catalog(false)).expect("validated Xiph");
+    let resolved = catalog
+        .packages()
+        .find(|resolved| resolved.package().technology == "xiph_vorbis")
+        .expect("Xiph package");
+    let artifact = build_catalog_artifact(&resolved, None)
+        .expect("valid adapter")
+        .expect("known technology");
+
+    assert_eq!(
+        artifact.technology(),
+        renderpilot_domain::LibraryTechnology::XiphVorbis
+    );
+    assert_eq!(artifact.files().len(), 4);
+    assert_eq!(artifact.files()[0].install_as(), Some("vorbis.dll"));
+    assert_eq!(artifact.files()[1].install_as(), Some("vorbisfile.dll"));
+    assert_eq!(artifact.files()[2].install_as(), Some("vorbisenc.dll"));
+    assert_eq!(artifact.files()[3].install_as(), Some("ogg.dll"));
+    let receipt = artifact
+        .metadata()
+        .catalog_package_receipt()
+        .expect("composite receipt");
+    let wire = serde_json::to_value(receipt).expect("receipt JSON");
+    assert_eq!(wire["provenance"]["kind"], "source_build");
+    assert_eq!(
+        wire["provenance"]["toolchain"]["runner_image"],
+        "windows-2025-vs2026@20260720.1"
+    );
+    assert!(wire.get("source_build").is_none());
+}
+
+#[test]
 fn generic_composite_receipts_preserve_each_supported_provenance_kind() {
     let cases = [
         LibraryProvenance::Nuget {
@@ -465,6 +499,43 @@ fn generic_composite_package_requires_provenance() {
     let error = super::resolved::ValidatedCatalog::new(catalog)
         .expect_err("missing composite provenance must fail");
     assert!(error.to_string().contains("requires provenance"));
+}
+
+#[test]
+fn xiph_catalog_rejects_noncanonical_identity_and_dynamic_crt() {
+    let dynamic_crt = super::resolved::ValidatedCatalog::new(xiph_catalog(true))
+        .expect_err("dynamic CRT must fail");
+    assert!(
+        dynamic_crt
+            .to_string()
+            .contains("unexpected Xiph dependency")
+    );
+
+    let mut wrong_identity = xiph_catalog(false);
+    let package = wrong_identity
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    package.package_id.push_str(".rewritten");
+    package.revision_sha256 = package_revision(package);
+    let error = super::resolved::ValidatedCatalog::new(wrong_identity)
+        .expect_err("identity drift must fail");
+    assert!(error.to_string().contains("not a canonical Xiph"));
+
+    let mut wrong_runtime_name = xiph_catalog(false);
+    let package = wrong_runtime_name
+        .vendors
+        .iter_mut()
+        .find(|vendor| vendor.vendor.id == "xiph")
+        .and_then(|vendor| vendor.packages.first_mut())
+        .expect("Xiph package");
+    package.members[0].install_as = "Vorbis.dll".to_owned();
+    package.revision_sha256 = package_revision(package);
+    let error = super::resolved::ValidatedCatalog::new(wrong_runtime_name)
+        .expect_err("noncanonical runtime filename must fail");
+    assert!(error.to_string().contains("not a canonical Xiph"));
 }
 
 #[test]

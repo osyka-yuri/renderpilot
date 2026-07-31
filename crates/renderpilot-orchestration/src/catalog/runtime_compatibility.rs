@@ -708,6 +708,7 @@ pub(super) fn synthetic_d3d12_executable(sdk_version: u32) -> Vec<u8> {
     bytes[optional_header_offset..optional_header_offset + 2]
         .copy_from_slice(&0x20bu16.to_le_bytes());
     let export_directory = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET;
+    bytes[export_directory - 4..export_directory].copy_from_slice(&16u32.to_le_bytes());
     bytes[export_directory..export_directory + 4].copy_from_slice(&SECTION_RVA.to_le_bytes());
     bytes[export_directory + 4..export_directory + 8]
         .copy_from_slice(&(EXPORT_DIRECTORY_LEN as u32).to_le_bytes());

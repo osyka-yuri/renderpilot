@@ -26,8 +26,8 @@ pub use candidates::{
 pub use compatibility::{
     D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,
     D3d12ExecutableSnapshot, SwapCompatibilityError, SwapTargetProfile, d3d12_confirmation_token,
-    ensure_replacement_compatible, ensure_swap_compatible, replacement_executable_action,
-    validate_runtime_artifact,
+    ensure_replacement_compatible, ensure_swap_compatible, is_allowed_xiph_system_import,
+    replacement_executable_action, validate_runtime_artifact,
 };
 pub use error::{AppError, AppErrorKind, AppResult, invalid_operation_state_display_message};
 pub use info::{AppInfo, app_info};
@@ -45,4 +45,6 @@ pub use ports::{
     ArtifactRepository, ComponentDetector, ComponentRepository, GameRepository, GameSourceProvider,
     InstalledAddonRepository, OperationRepository, SharedArtifactRepository,
 };
-pub use transition::{resolve_transition_members, resolve_transition_removals};
+pub use transition::{
+    resolve_transition_install_target, resolve_transition_members, resolve_transition_removals,
+};

@@ -259,8 +259,12 @@ fn read_ascii_null_terminated_rva(
     sections: &[super::header::SectionHeader],
     rva: u32,
 ) -> Option<String> {
-    let offset = rva_range_to_offset(sections, rva, 1)?;
-    let bytes = source.read_at_most(offset, PeExportSet::MAX_NAME_BYTES.checked_add(1)?)?;
+    let range = super::header::rva_bounded_file_range(
+        sections,
+        rva,
+        PeExportSet::MAX_NAME_BYTES.checked_add(1)?,
+    )?;
+    let bytes = source.read_exact_at(range.start, range.len())?;
     let mut name = String::new();
     for byte in bytes {
         if byte == 0 {
@@ -659,6 +663,8 @@ mod tests {
             } else {
                 super::super::header::PE32_DATA_DIRECTORY_OFFSET
             };
+        bytes[data_directory_offset - 4..data_directory_offset]
+            .copy_from_slice(&16u32.to_le_bytes());
         bytes[data_directory_offset..data_directory_offset + 4]
             .copy_from_slice(&section_rva.to_le_bytes());
         bytes[data_directory_offset + 4..data_directory_offset + 8]
@@ -752,8 +758,9 @@ mod tests {
 
         bytes[optional_header_offset..optional_header_offset + 2]
             .copy_from_slice(&PE32_PLUS_MAGIC.to_le_bytes());
+        let data_dir_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET;
+        bytes[data_dir_offset - 4..data_dir_offset].copy_from_slice(&16u32.to_le_bytes());
         if !export_names.is_empty() {
-            let data_dir_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET;
             let export_entry = data_dir_offset + EXPORT_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
             bytes[export_entry..export_entry + 4].copy_from_slice(&section_rva.to_le_bytes());
             bytes[export_entry + 4..export_entry + 8]

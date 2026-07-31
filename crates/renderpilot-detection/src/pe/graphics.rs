@@ -20,7 +20,7 @@ use std::path::Path;
 use renderpilot_domain::{Architecture, ExeGraphicsInfo, GraphicsApi};
 
 use super::binary::read_u32;
-use super::header::{PeHeaders, rva_to_offset};
+use super::header::{PeHeaders, rva_bounded_file_range, rva_range_to_offset};
 use super::source::{ByteSource, read_header_region};
 
 const IMPORT_DESCRIPTOR_LEN: usize = 20;
@@ -149,7 +149,7 @@ fn walk_import_dir<S: ByteSource>(
     if dir_rva == 0 || dir_size == 0 {
         return;
     }
-    let Some(start) = rva_to_offset(headers.sections(), dir_rva) else {
+    let Some(start) = rva_range_to_offset(headers.sections(), dir_rva, dir_size) else {
         return;
     };
     let dir_size_us = usize::try_from(dir_size).unwrap_or(usize::MAX);
@@ -175,17 +175,12 @@ fn walk_import_dir<S: ByteSource>(
             break;
         }
         if name_rva != 0
-            && let Some(name_offset) = rva_to_offset(headers.sections(), name_rva)
+            && let Some(range) =
+                rva_bounded_file_range(headers.sections(), name_rva, MAX_DLL_NAME_LEN)
+            && let Some(chunk) = source.read_exact_at(range.start, range.len())
+            && let Some(name) = read_ascii_dll_name(&chunk, 0)
         {
-            // Read up to MAX_DLL_NAME_LEN bytes; a name near the end of the
-            // source may be truncated, which `read_ascii_dll_name` handles
-            // (it stops at NUL or buffer end). A strict full read would
-            // wrongly drop such a name.
-            if let Some(chunk) = source.read_at_most(name_offset, MAX_DLL_NAME_LEN)
-                && let Some(name) = read_ascii_dll_name(&chunk, 0)
-            {
-                f(&name);
-            }
+            f(&name);
         }
         offset = descriptor_end;
     }
@@ -544,6 +539,7 @@ mod tests {
             } else {
                 PE32_DATA_DIRECTORY_OFFSET
             };
+        bytes[data_dir_offset - 4..data_dir_offset].copy_from_slice(&16u32.to_le_bytes());
         let import_entry = data_dir_offset + IMPORT_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
         bytes[import_entry..import_entry + 4].copy_from_slice(&import_rva.to_le_bytes());
         bytes[import_entry + 4..import_entry + 8].copy_from_slice(&import_size.to_le_bytes());

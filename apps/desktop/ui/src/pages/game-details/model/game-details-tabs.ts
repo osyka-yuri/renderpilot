@@ -43,7 +43,7 @@ export type VendorTab = {
 };
 
 /**
- * Derives the active graphics components for a game and groups them into
+ * Derives the active library components for a game and groups them into
  * vendor-specific tabs. Sorts tabs according to a predefined vendor order,
  * and components within tabs by technology importance.
  */

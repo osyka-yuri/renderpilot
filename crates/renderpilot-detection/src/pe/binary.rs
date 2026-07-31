@@ -46,6 +46,11 @@ pub(super) fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
     Some(u32::from_le_bytes(*value))
 }
 
+pub(super) fn read_u64(bytes: &[u8], offset: usize) -> Option<u64> {
+    let value: &[u8; 8] = checked_range(bytes, offset, 8)?.try_into().ok()?;
+    Some(u64::from_le_bytes(*value))
+}
+
 pub(super) fn checked_range(bytes: &[u8], offset: usize, len: usize) -> Option<&[u8]> {
     bytes.get(offset..offset.checked_add(len)?)
 }

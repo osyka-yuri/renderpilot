@@ -23,9 +23,6 @@ const MAX_HEADER_REGION_LEN: usize = 1024 * 1024;
 pub(super) trait ByteSource {
     /// Reads exactly `len` bytes at `offset`.
     fn read_exact_at(&mut self, offset: usize, len: usize) -> Option<Vec<u8>>;
-
-    /// Reads at most `len` bytes at `offset`.
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>>;
 }
 
 impl ByteSource for File {
@@ -36,35 +33,12 @@ impl ByteSource for File {
         self.read_exact(&mut buffer).ok()?;
         Some(buffer)
     }
-
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let start = u64::try_from(offset).ok()?;
-        self.seek(SeekFrom::Start(start)).ok()?;
-        let mut buffer = vec![0; len];
-        let mut filled = 0;
-        while filled < len {
-            match self.read(&mut buffer[filled..]) {
-                Ok(0) => break,
-                Ok(read) => filled += read,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(_) => return None,
-            }
-        }
-        buffer.truncate(filled);
-        Some(buffer)
-    }
 }
 
 impl ByteSource for &[u8] {
     fn read_exact_at(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
         let end = offset.checked_add(len)?;
         self.get(offset..end).map(<[u8]>::to_vec)
-    }
-
-    fn read_at_most(&mut self, offset: usize, len: usize) -> Option<Vec<u8>> {
-        let start = offset.min(self.len());
-        let end = start.saturating_add(len).min(self.len());
-        Some(self[start..end].to_vec())
     }
 }
 
@@ -137,10 +111,6 @@ mod tests {
                 coff[4 + 16..4 + 18].copy_from_slice(&self.optional_header_size.to_le_bytes());
                 return Some(coff);
             }
-            None
-        }
-
-        fn read_at_most(&mut self, _offset: usize, _len: usize) -> Option<Vec<u8>> {
             None
         }
     }

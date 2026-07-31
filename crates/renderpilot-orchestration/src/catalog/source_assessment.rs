@@ -132,17 +132,21 @@ fn assess_runtime_member_metadata(
         return Some(issue("PE architecture differs from catalog metadata"));
     }
 
-    if artifact.technology() == LibraryTechnology::OpenVr {
-        let Some(observed) = inspection.compatibility_profile() else {
-            return Some(issue(
-                "complete OpenVR export-surface profile cannot be read",
-            ));
+    if let Err(mismatch) =
+        super::validate_exact_pe_profile(artifact.technology(), file, &inspection)
+    {
+        let detail = match mismatch {
+            super::ExactPeProfileMismatch::MissingDeclared => {
+                "catalog has no complete PE compatibility profile"
+            }
+            super::ExactPeProfileMismatch::MissingObserved => {
+                "complete PE compatibility profile cannot be read"
+            }
+            super::ExactPeProfileMismatch::Different => {
+                "observed PE compatibility profile differs from catalog metadata"
+            }
         };
-        if file.pe_compatibility() != Some(&observed) {
-            return Some(issue(
-                "OpenVR export-surface profile differs from catalog metadata",
-            ));
-        }
+        return Some(issue(detail));
     }
 
     if artifact.technology() == LibraryTechnology::D3D12Agility {

@@ -72,6 +72,12 @@ pub(crate) fn build_pe_with_exports(machine: u16, magic: u16, exports: &[&str]) 
             .copy_from_slice(&(optional_header_size as u16).to_le_bytes());
         bytes[optional_header_offset..optional_header_offset + 2]
             .copy_from_slice(&magic.to_le_bytes());
+        let data_directory_offset = match magic {
+            PE32_PLUS_MAGIC => PE32_PLUS_DATA_DIRECTORY_OFFSET,
+            _ => PE32_DATA_DIRECTORY_OFFSET,
+        };
+        let count_offset = optional_header_offset + data_directory_offset - 4;
+        bytes[count_offset..count_offset + 4].copy_from_slice(&16u32.to_le_bytes());
     };
 
     // No exports: a header-only image is enough for MZ + architecture checks.
@@ -201,9 +207,10 @@ pub(crate) fn build_nvidia_dlss_pe(version: [u16; 4]) -> Vec<u8> {
     bytes[optional_header_offset..optional_header_offset + 2]
         .copy_from_slice(&PE32_PLUS_MAGIC.to_le_bytes());
 
-    let resource_entry = optional_header_offset
-        + PE32_PLUS_DATA_DIRECTORY_OFFSET
-        + RESOURCE_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
+    let data_directory_offset = optional_header_offset + PE32_PLUS_DATA_DIRECTORY_OFFSET;
+    bytes[data_directory_offset - 4..data_directory_offset].copy_from_slice(&16u32.to_le_bytes());
+    let resource_entry =
+        data_directory_offset + RESOURCE_DIRECTORY_INDEX * DATA_DIRECTORY_ENTRY_LEN;
     bytes[resource_entry..resource_entry + 4].copy_from_slice(&section_rva.to_le_bytes());
     bytes[resource_entry + 4..resource_entry + 8]
         .copy_from_slice(&(section_body.len() as u32).to_le_bytes());

@@ -6,7 +6,7 @@
 
 use crate::{ComponentFile, LibraryTechnology, Version, fsr};
 
-/// Honest version state for one installed graphics component.
+/// Honest version state for one installed library component.
 ///
 /// `Mixed` is emitted only when known file versions prove the set is not
 /// uniform. A missing PE version alongside otherwise matching files is

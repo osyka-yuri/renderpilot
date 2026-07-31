@@ -2,6 +2,7 @@ mod classification;
 mod grouping;
 mod paths;
 mod scan;
+mod xiph_grouping;
 
 #[cfg(test)]
 mod tests;
@@ -35,7 +36,7 @@ pub use self::scan::{
 
 const DETECTOR_NAME: &str = "library-pattern-detector";
 
-/// One graphics library file detected inside a game folder.
+/// One native library file detected inside a game folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DetectedLibraryFile {
     file_name: String,
@@ -109,7 +110,7 @@ impl DetectedLibraryFile {
         &self.file_path
     }
 
-    /// Returns the detected graphics technology.
+    /// Returns the detected library technology.
     pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
@@ -152,6 +153,11 @@ impl DetectedLibraryFile {
     /// Returns runtime facts extracted while the file was detected.
     pub(crate) fn runtime_target(&self) -> Option<&RuntimeTarget> {
         self.runtime_target.as_ref()
+    }
+
+    /// Returns strict PE compatibility facts extracted during detection.
+    pub(crate) fn pe_compatibility(&self) -> Option<&PeCompatibilityProfile> {
+        self.pe_compatibility.as_ref()
     }
 
     /// Converts this detection into its domain file representation.
@@ -223,7 +229,7 @@ impl LibraryPatternComponentDetector {
         self.max_depth
     }
 
-    /// Detects graphics library files and returns file-level detection records.
+    /// Detects native library files and returns file-level detection records.
     pub fn detect_library_files(
         &self,
         game: &GameInstallation,
@@ -363,6 +369,7 @@ impl LibraryPatternComponentDetector {
             LibraryTechnology::MicrosoftDxc
                 | LibraryTechnology::D3D12Agility
                 | LibraryTechnology::OpenVr
+                | LibraryTechnology::XiphVorbis
         )
         .then(|| crate::inspect_pe(file))
         .flatten();
@@ -377,9 +384,12 @@ impl LibraryPatternComponentDetector {
 
         let runtime_target =
             runtime_target_from_inspection(classification.technology, inspection.as_ref());
-        let pe_compatibility = (classification.technology == LibraryTechnology::OpenVr)
-            .then(|| inspection.as_ref()?.compatibility_profile())
-            .flatten();
+        let pe_compatibility = matches!(
+            classification.technology,
+            LibraryTechnology::OpenVr | LibraryTechnology::XiphVorbis
+        )
+        .then(|| inspection.as_ref()?.compatibility_profile())
+        .flatten();
 
         Ok(Some(DetectedLibraryFile::from_parts(
             file_name.to_owned(),
@@ -399,6 +409,7 @@ impl LibraryPatternComponentDetector {
         Some(LibraryFileClassification::new(
             matched.technology(),
             matched.kind(),
+            file_name,
         ))
     }
 }

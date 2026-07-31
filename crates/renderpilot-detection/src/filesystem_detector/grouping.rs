@@ -1,4 +1,4 @@
-//! Clusters detected library files into graphics components and locally-observed
+//! Clusters detected library files into library components and locally-observed
 //! artifact bundles, keyed by `(directory, grouping technology)`.
 
 use std::collections::{HashMap, HashSet};
@@ -7,7 +7,7 @@ use renderpilot_application::AppResult;
 use renderpilot_domain::{
     ArtifactId, ArtifactMetadata, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind,
     GameId, GameInstallation, LibraryArtifact, LibraryComponent, LibraryTechnology, PathRef,
-    Swappability, fsr,
+    Swappability, fsr, xiph,
 };
 
 use crate::error::detection_error;
@@ -48,6 +48,7 @@ pub fn group_into_artifacts(
 #[derive(Debug)]
 struct GroupedDetectedFiles<'a> {
     technology: LibraryTechnology,
+    discriminator: Option<String>,
     files: Vec<&'a DetectedLibraryFile>,
 }
 
@@ -56,13 +57,15 @@ struct GroupedDetectedFiles<'a> {
 /// deterministic.
 fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<GroupedDetectedFiles<'_>> {
     let native_fsr_directories = native_fsr_directories(libraries);
+    let xiph_discriminators = super::xiph_grouping::discriminators(libraries);
     let mut groups: Vec<GroupedDetectedFiles<'_>> = Vec::new();
-    let mut index: HashMap<(String, &'static str), usize> = HashMap::new();
+    let mut index: HashMap<(String, &'static str, Option<String>), usize> = HashMap::new();
 
-    for library in libraries {
+    for (library_index, library) in libraries.iter().enumerate() {
         let parent_dir = parent_directory(library.file_path());
         let technology = grouping_technology(library, &parent_dir, &native_fsr_directories);
-        let key = (parent_dir, technology.as_slug());
+        let discriminator = xiph_discriminators.get(&library_index).cloned();
+        let key = (parent_dir, technology.as_slug(), discriminator.clone());
 
         if let Some(&existing) = index.get(&key) {
             groups[existing].files.push(library);
@@ -70,6 +73,7 @@ fn group_detected_files(libraries: &[DetectedLibraryFile]) -> Vec<GroupedDetecte
             index.insert(key, groups.len());
             groups.push(GroupedDetectedFiles {
                 technology,
+                discriminator,
                 files: vec![library],
             });
         }
@@ -84,14 +88,19 @@ fn build_grouped_component(
 ) -> AppResult<LibraryComponent> {
     let ordered = order_with_primary_first(&group.files);
     let parent_dir = parent_directory(ordered[0].file_path());
-    let component_id = grouped_component_id(game, group.technology, &parent_dir)?;
+    let component_id = grouped_component_id(
+        game,
+        group.technology,
+        &parent_dir,
+        group.discriminator.as_deref(),
+    )?;
 
     let mut component = LibraryComponent::new(
         component_id,
         game.id().clone(),
         group_kind(&ordered),
         group.technology,
-        group_swappability(&ordered),
+        group_swappability(group.technology, &ordered),
     );
 
     for file in &ordered {
@@ -187,6 +196,10 @@ fn primary_rank(
     if family == LibraryTechnology::AmdFsr {
         return fsr::primary_rank(file.file_name(), fsr_upscaler_represents);
     }
+    if family == LibraryTechnology::XiphVorbis {
+        return xiph::classify_file_name(file.file_name())
+            .map_or(4, |(member, _)| member.primary_rank());
+    }
 
     if file.technology() == family { 0 } else { 1 }
 }
@@ -205,7 +218,27 @@ fn group_kind(ordered: &[&DetectedLibraryFile]) -> ComponentKind {
 /// A multi-file bundle must be swapped as a unit ([`Swappability::BundleOnly`]);
 /// a single file keeps its own detected policy. (A single restrictive sibling no
 /// longer blocks an otherwise-swappable bundle.)
-fn group_swappability(ordered: &[&DetectedLibraryFile]) -> Swappability {
+fn group_swappability(
+    technology: LibraryTechnology,
+    ordered: &[&DetectedLibraryFile],
+) -> Swappability {
+    if technology == LibraryTechnology::XiphVorbis {
+        let files = ordered
+            .iter()
+            .map(|file| file.component_file())
+            .collect::<Vec<_>>();
+        let Some(layout) = xiph::detect_layout(&files) else {
+            return Swappability::ReadOnly;
+        };
+        if files.len() > 1 {
+            return Swappability::BundleOnly;
+        }
+        return if layout.members().next() == Some(xiph::XiphMember::Ogg) {
+            Swappability::Swappable
+        } else {
+            Swappability::ReadOnly
+        };
+    }
     if ordered.len() > 1 {
         return Swappability::BundleOnly;
     }
@@ -220,11 +253,13 @@ fn grouped_component_id(
     game: &GameInstallation,
     technology: LibraryTechnology,
     parent_dir: &str,
+    discriminator: Option<&str>,
 ) -> AppResult<ComponentId> {
+    let suffix = discriminator.map_or_else(String::new, |value| format!(":{value}"));
     ComponentId::new(format!(
-        "component:{}:{}:{parent_dir}",
+        "component:{}:{}:{parent_dir}{suffix}",
         game.id(),
-        technology.as_slug()
+        technology.as_slug(),
     ))
     .map_err(detection_error)
 }

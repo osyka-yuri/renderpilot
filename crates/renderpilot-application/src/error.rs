@@ -23,7 +23,7 @@ pub enum AppErrorKind {
     /// A game source provider failed.
     ProviderFailed,
 
-    /// A graphics component detector failed.
+    /// A library component detector failed.
     DetectionFailed,
 
     /// A storage adapter failed.
@@ -202,14 +202,14 @@ impl AppError {
         )
     }
 
-    /// Creates an error for when a graphics component is not found for a game.
+    /// Creates an error for when a library component is not found for a game.
     #[must_use]
     pub fn component_not_found(component_id: impl Into<String>) -> Self {
         let component_id = component_id.into();
 
         Self::new(
             AppErrorKind::ComponentNotFound,
-            format!("graphics component `{component_id}` was not found"),
+            format!("library component `{component_id}` was not found"),
         )
     }
 

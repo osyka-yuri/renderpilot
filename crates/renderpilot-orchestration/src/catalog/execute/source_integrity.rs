@@ -45,18 +45,8 @@ fn rebind_planned_file(plan: &mut PlannedFile, technology: LibraryTechnology) ->
     }
 
     let inspection = inspect_pe_bytes(&bytes);
-    if technology == LibraryTechnology::OpenVr {
-        let expected_profile = plan
-            .file
-            .pe_compatibility()
-            .ok_or_else(AppError::stale_replacement_source)?;
-        let observed_profile = inspection
-            .compatibility_profile()
-            .ok_or_else(AppError::stale_replacement_source)?;
-        if &observed_profile != expected_profile {
-            return Err(AppError::stale_replacement_source());
-        }
-    }
+    super::super::validate_exact_pe_profile(technology, &plan.file, &inspection)
+        .map_err(|_| AppError::stale_replacement_source())?;
 
     // Fresh ComponentFile keeps the install path and drops any planned version
     // unless PE metadata can be read from the installed bytes.
@@ -280,6 +270,33 @@ mod tests {
 
         let error = rebind_planned_files_for_technology(&mut planned, LibraryTechnology::OpenVr)
             .expect_err("OpenVR requires an observed profile");
+        assert_eq!(
+            error.kind(),
+            &renderpilot_application::AppErrorKind::StaleReplacementSource
+        );
+    }
+
+    #[test]
+    fn xiph_rebind_rejects_matching_non_pe_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target = dir.path().join("libogg-0.dll");
+        write(&target, b"matching-hash-but-not-a-pe");
+        let target_ref = PathRef::new(target.to_string_lossy().as_ref()).expect("path");
+        let expected = renderpilot_detection::sha256_file(&target).expect("hash");
+        let exports =
+            PeExportSet::from_canonical_names(vec!["ogg_sync_init".into()]).expect("exports");
+        let profile = PeCompatibilityProfile::new(Architecture::X64, exports)
+            .with_imports(renderpilot_domain::PeImportProfile::default());
+        let mut planned = [PlannedFile {
+            source: target,
+            file: ComponentFile::new(target_ref)
+                .with_sha256(expected)
+                .with_pe_compatibility(profile),
+        }];
+
+        let error =
+            rebind_planned_files_for_technology(&mut planned, LibraryTechnology::XiphVorbis)
+                .expect_err("Xiph requires an observed complete profile");
         assert_eq!(
             error.kind(),
             &renderpilot_application::AppErrorKind::StaleReplacementSource

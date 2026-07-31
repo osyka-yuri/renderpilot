@@ -16,6 +16,7 @@ describe('library-filter-options', () => {
           'intel_xell',
           'amd_fsr_frame_generation',
           'dlss_super_resolution',
+          'xiph_vorbis',
         ]),
       ).toEqual([
         {
@@ -35,6 +36,12 @@ describe('library-filter-options', () => {
           label: 'XeLL',
           vendorKey: 'intel',
           vendorLabel: 'Intel',
+        },
+        {
+          value: 'xiph_vorbis',
+          label: 'Vorbis/Ogg',
+          vendorKey: 'xiph',
+          vendorLabel: 'Xiph.Org',
         },
         {
           value: 'steam',

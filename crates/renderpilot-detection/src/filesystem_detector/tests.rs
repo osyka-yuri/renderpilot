@@ -196,6 +196,65 @@ fn openvr_dlls_in_different_subfolders_stay_independent_and_fail_closed() {
     );
 }
 
+#[test]
+fn malformed_xiph_files_are_not_grouped_by_naming_convention_alone() {
+    let root = tempfile::tempdir().expect("root");
+    for name in ["vorbis.dll", "ogg.dll", "libvorbis.dll", "libogg.dll"] {
+        fs::write(root.path().join(name), format!("malformed-{name}")).expect("fixture DLL");
+    }
+
+    let detector = LibraryPatternComponentDetector::windows_default().expect("patterns");
+    let game = game_installation(root.path());
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("Xiph detection");
+    let components = group_into_components(&game, &libraries).expect("grouping");
+    let xiph = components
+        .iter()
+        .filter(|component| component.technology() == LibraryTechnology::XiphVorbis)
+        .collect::<Vec<_>>();
+
+    assert_eq!(xiph.len(), 4);
+    assert!(xiph.iter().all(|component| {
+        component.files().len() == 1 && component.swappability() == Swappability::ReadOnly
+    }));
+    let ids = xiph
+        .iter()
+        .map(|component| component.id().as_str())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(ids.len(), 4);
+}
+
+#[test]
+fn xiph_singletons_fail_closed_without_cross_family_grouping() {
+    let root = tempfile::tempdir().expect("root");
+    fs::write(root.path().join("ogg.dll"), b"malformed-ogg").expect("Ogg fixture");
+    fs::write(root.path().join("libvorbis.dll"), b"malformed-vorbis").expect("Vorbis fixture");
+
+    let detector = LibraryPatternComponentDetector::windows_default().expect("patterns");
+    let game = game_installation(root.path());
+    let libraries = detector
+        .detect_library_files(&game)
+        .expect("Xiph detection");
+    let components = group_into_components(&game, &libraries).expect("grouping");
+    let xiph = components
+        .iter()
+        .filter(|component| component.technology() == LibraryTechnology::XiphVorbis)
+        .collect::<Vec<_>>();
+
+    assert_eq!(xiph.len(), 2);
+    let ogg = xiph
+        .iter()
+        .find(|component| component.files()[0].path().file_name() == Some("ogg.dll"))
+        .expect("plain Ogg singleton");
+    let vorbis = xiph
+        .iter()
+        .find(|component| component.files()[0].path().file_name() == Some("libvorbis.dll"))
+        .expect("lib Vorbis singleton");
+    assert_eq!(ogg.swappability(), Swappability::ReadOnly);
+    assert_eq!(vorbis.swappability(), Swappability::ReadOnly);
+}
+
 fn assert_detects(
     libraries: &[DetectedLibraryFile],
     file_name: &str,

@@ -32,7 +32,7 @@ use crate::{
 
 pub use self::hash::Sha256Hash;
 
-/// Detected graphics component associated with a game installation.
+/// Detected native-library component associated with a game installation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryComponent {
     id: ComponentId,
@@ -44,7 +44,7 @@ pub struct LibraryComponent {
 }
 
 impl LibraryComponent {
-    /// Creates a graphics component with required identity and classification data.
+    /// Creates a library component with required identity and classification data.
     pub fn new(
         id: ComponentId,
         game_id: GameId,
@@ -77,7 +77,7 @@ impl LibraryComponent {
         self.kind
     }
 
-    /// Returns the detected graphics technology.
+    /// Returns the detected library technology.
     pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
@@ -117,7 +117,7 @@ impl LibraryComponent {
     }
 }
 
-/// File that belongs to a detected graphics component.
+/// File that belongs to a detected native-library component.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComponentFile {
     path: PathRef,
@@ -287,7 +287,7 @@ impl LibraryArtifact {
         &self.id
     }
 
-    /// Returns the artifact graphics technology.
+    /// Returns the artifact library technology.
     pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }

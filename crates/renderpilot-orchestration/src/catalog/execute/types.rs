@@ -16,7 +16,8 @@ pub struct OperationMetadata {
     /// Human-readable game name at the time of the operation.
     pub game_name: String,
     /// Technology slug (e.g. `dlss`, `fsr`).
-    pub library: String,
+    #[serde(alias = "library")]
+    pub technology: String,
     /// Version string of the component before the operation, if known.
     pub from_version: Option<String>,
     /// Version string the component was swapped to.

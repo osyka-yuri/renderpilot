@@ -14,7 +14,16 @@
       "libraries": ["intel_xess"],
       "addons": ["luma"],
       "launchers": ["Steam"],
-      "launcherOrder": ["Steam", "Epic", "Gog", "Ubisoft", "Ea", "BattleNet", "Xbox", "Manual"],
+      "launcherOrder": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
       "searchQuery": "vegas",
       "showHidden": true,
       "favoritesOnly": false
@@ -35,10 +44,107 @@
       "libraries": [],
       "addons": [],
       "launchers": [],
-      "launcherOrder": ["Steam", "Epic", "Gog", "Ubisoft", "Ea", "BattleNet", "Xbox", "Manual"],
+      "launcherOrder": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
       "searchQuery": "",
       "showHidden": false,
       "favoritesOnly": true
+    }
+  },
+  {
+    "name": "the complete pre-Xiph default selection adopts Xiph",
+    "persisted": {
+      "libraries": [
+        "dlss_super_resolution",
+        "dlss_frame_generation",
+        "dlss_ray_reconstruction",
+        "nvidia_streamline",
+        "intel_xess",
+        "intel_xefg",
+        "intel_xell",
+        "amd_fsr",
+        "amd_fsr_frame_generation",
+        "amd_fsr_ray_regeneration",
+        "direct_storage",
+        "microsoft_dxc",
+        "d3d12_agility",
+        "openvr"
+      ],
+      "addons": ["renodx", "luma"],
+      "launchers": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
+      "launcherOrder": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
+      "searchQuery": "",
+      "showHidden": false,
+      "favoritesOnly": false
+    },
+    "expected": {
+      "libraries": [
+        "dlss_super_resolution",
+        "dlss_frame_generation",
+        "dlss_ray_reconstruction",
+        "nvidia_streamline",
+        "intel_xess",
+        "intel_xefg",
+        "intel_xell",
+        "amd_fsr",
+        "amd_fsr_frame_generation",
+        "amd_fsr_ray_regeneration",
+        "direct_storage",
+        "microsoft_dxc",
+        "d3d12_agility",
+        "openvr",
+        "xiph_vorbis"
+      ],
+      "addons": ["renodx", "luma"],
+      "launchers": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
+      "launcherOrder": [
+        "Steam",
+        "Epic",
+        "Gog",
+        "Ubisoft",
+        "Ea",
+        "BattleNet",
+        "Xbox",
+        "Manual"
+      ],
+      "searchQuery": "",
+      "showHidden": false,
+      "favoritesOnly": false
     }
   }
 ]

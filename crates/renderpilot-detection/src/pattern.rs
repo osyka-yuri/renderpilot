@@ -112,7 +112,7 @@ impl LibraryPatternSet {
         &self.patterns
     }
 
-    /// Returns the first graphics technology matching the given file name.
+    /// Returns the first library technology matching the given file name.
     pub fn match_file_name(&self, file_name: &str) -> Option<LibraryTechnology> {
         self.match_file_name_on_platform(file_name, PatternPlatform::Any)
     }
@@ -122,7 +122,7 @@ impl LibraryPatternSet {
         self.find_match_on_platform(file_name, PatternPlatform::Any)
     }
 
-    /// Returns the first graphics technology matching the given file name and platform.
+    /// Returns the first library technology matching the given file name and platform.
     pub fn match_file_name_on_platform(
         &self,
         file_name: &str,
@@ -208,7 +208,7 @@ pub struct LibraryPatternMatch {
 }
 
 impl LibraryPatternMatch {
-    /// Returns the classified graphics technology.
+    /// Returns the classified library technology.
     pub fn technology(self) -> LibraryTechnology {
         self.technology
     }
@@ -266,7 +266,7 @@ impl Serialize for LibraryPatternSet {
     }
 }
 
-/// One filename pattern and its graphics technology classification.
+/// One filename pattern and its library technology classification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryPattern {
     pattern: String,
@@ -312,7 +312,7 @@ impl LibraryPattern {
         self.platform
     }
 
-    /// Returns the classified graphics technology.
+    /// Returns the classified library technology.
     pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
@@ -562,6 +562,22 @@ mod tests {
             patterns.match_file_name("D3D12Core.dll"),
             Some(LibraryTechnology::D3D12Agility)
         );
+    }
+
+    #[test]
+    fn bundled_patterns_cover_every_reviewed_xiph_basename() {
+        let patterns = pattern_set();
+
+        for member in renderpilot_domain::xiph::XiphMember::ALL {
+            for style in renderpilot_domain::xiph::XiphNameStyle::ALL {
+                let file_name = renderpilot_domain::xiph::file_name(member, style);
+                assert_eq!(
+                    patterns.match_file_name(file_name),
+                    Some(LibraryTechnology::XiphVorbis),
+                    "missing or misclassified Xiph pattern for {file_name}"
+                );
+            }
+        }
     }
 
     #[test]

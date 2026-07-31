@@ -47,6 +47,37 @@ describe('library package presentation', () => {
     ]);
   });
 
+  it('exposes every Xiph topology through one Vorbis/Ogg technology filter', () => {
+    expect(typeOptionsByVendor.xiph).toEqual([
+      { value: 'vorbis', label: 'Vorbis/Ogg', technology: 'xiph_vorbis' },
+    ]);
+    const rows = packagesOf([
+      {
+        id: 'xiph.shared',
+        vendor: 'xiph',
+        technology: 'xiph_vorbis',
+        variant: 'shared.lib',
+      },
+      {
+        id: 'xiph.embedded',
+        vendor: 'xiph',
+        technology: 'xiph_vorbis',
+        variant: 'embedded_ogg.lib',
+      },
+      {
+        id: 'openvr',
+        vendor: 'valve',
+        technology: 'openvr',
+        variant: 'runtime',
+      },
+    ]);
+
+    expect(filterPackageRows(rows, 'xiph', 'vorbis').map((row) => row.package_id)).toEqual([
+      'xiph.shared',
+      'xiph.embedded',
+    ]);
+  });
+
   it('filters backend summaries by vendor, technology, and explicit variant', () => {
     const rows = packagesOf([
       { id: 'fsr.dx12', vendor: 'amd', technology: 'amd_fsr', variant: 'dx12_runtime' },

@@ -19,6 +19,7 @@ mod package_version;
 mod path;
 mod text;
 mod version;
+pub mod xiph;
 
 pub use addon::{
     InstalledAddon, InstalledAddonHostKind, InstalledAddonInvariantError, InstalledAddonParts,

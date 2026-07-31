@@ -16,12 +16,16 @@ pub(super) struct LibraryFileClassification {
 }
 
 impl LibraryFileClassification {
-    pub(super) fn new(technology: LibraryTechnology, pattern_kind: PatternKind) -> Self {
+    pub(super) fn new(
+        technology: LibraryTechnology,
+        pattern_kind: PatternKind,
+        file_name: &str,
+    ) -> Self {
         Self {
             technology,
             kind: component_kind_for(technology),
             confidence: confidence_for(pattern_kind, technology),
-            swappability: swappability_for(technology),
+            swappability: swappability_for(technology, file_name),
         }
     }
 }
@@ -41,9 +45,17 @@ fn confidence_for(pattern_kind: PatternKind, technology: LibraryTechnology) -> D
     }
 }
 
-fn swappability_for(technology: LibraryTechnology) -> Swappability {
+fn swappability_for(technology: LibraryTechnology, file_name: &str) -> Swappability {
     match technology {
         LibraryTechnology::NvidiaStreamline => Swappability::BundleOnly,
+        LibraryTechnology::XiphVorbis
+            if !matches!(
+                renderpilot_domain::xiph::classify_file_name(file_name),
+                Some((renderpilot_domain::xiph::XiphMember::Ogg, _))
+            ) =>
+        {
+            Swappability::ReadOnly
+        }
         LibraryTechnology::Unknown => Swappability::Unknown,
         _ => Swappability::Swappable,
     }

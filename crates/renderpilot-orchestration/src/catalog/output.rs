@@ -761,7 +761,7 @@ mod tests {
                 .cloned(),
             Some(json!({
                 "game_name": "Example",
-                "library": "d3d12_agility",
+                "technology": "d3d12_agility",
                 "from_version": "1.606.4",
                 "to_version": "1.619.1",
                 "d3d12_executable_action": {

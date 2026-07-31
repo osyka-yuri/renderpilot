@@ -5,6 +5,7 @@ mod catalog;
 mod fields;
 mod legal;
 mod package;
+mod xiph;
 
 pub(super) use artifact::{validate_dll_hash, validate_exact_document, validate_transport};
 pub(super) use catalog::{

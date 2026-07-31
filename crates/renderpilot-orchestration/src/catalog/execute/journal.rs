@@ -155,7 +155,7 @@ fn build_metadata_json(
 
     let metadata = OperationMetadata {
         game_name,
-        library: component.technology().as_slug().to_string(),
+        technology: component.technology().as_slug().to_string(),
         from_version: component_version_report(component.files(), component.technology())
             .known_version()
             .map(ToString::to_string),

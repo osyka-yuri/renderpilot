@@ -161,6 +161,78 @@
       "kind": "exact",
       "platform": "windows",
       "technology": "openvr"
+    },
+    {
+      "pattern": "vorbis.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "ogg.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbis.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libogg.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "vorbisfile.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "vorbisenc.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisfile.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisenc.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libogg-0.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbis-0.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisfile-3.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
+    },
+    {
+      "pattern": "libvorbisenc-2.dll",
+      "kind": "exact",
+      "platform": "windows",
+      "technology": "xiph_vorbis"
     }
   ]
 }

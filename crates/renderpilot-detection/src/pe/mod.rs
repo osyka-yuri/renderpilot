@@ -9,6 +9,7 @@ mod exports;
 mod graphics;
 mod header;
 mod image;
+mod imports;
 mod source;
 #[cfg(test)]
 mod tests;
@@ -16,9 +17,12 @@ mod version_info;
 
 use std::{fs, path::Path};
 
-use renderpilot_domain::{Architecture, PeCompatibilityProfile, PeExportSet, Version};
+use renderpilot_domain::{
+    Architecture, PeCompatibilityProfile, PeExportSet, PeImportProfile, Version,
+};
 
 pub use self::graphics::{analyze_executable, analyze_executable_bytes};
+pub use self::imports::PeImportError;
 pub use self::version_info::VersionIdentityStrings;
 use self::{
     exports::{
@@ -49,6 +53,9 @@ pub struct PeInspection {
     pub identity: VersionIdentityStrings,
     /// Exported symbol names (`None` when the export table is unreadable).
     pub export_names: Option<Vec<String>>,
+    /// Strict import facts. `None` means the bytes were not a supported PE;
+    /// `Some(Err(_))` preserves a distinct malformed-import result.
+    pub import_profile: Option<Result<PeImportProfile, PeImportError>>,
 }
 
 impl PeInspection {
@@ -60,7 +67,8 @@ impl PeInspection {
     pub fn compatibility_profile(&self) -> Option<PeCompatibilityProfile> {
         let architecture = self.architecture?;
         let exports = PeExportSet::from_observed_names(self.export_names.clone()?).ok()?;
-        Some(PeCompatibilityProfile::new(architecture, exports))
+        let imports = self.import_profile.as_ref()?.as_ref().ok()?.clone();
+        Some(PeCompatibilityProfile::new(architecture, exports).with_imports(imports))
     }
 }
 
@@ -83,6 +91,7 @@ pub fn inspect_pe_bytes(bytes: &[u8]) -> PeInspection {
         version: read_windows_file_version_from_bytes(bytes),
         identity: read_windows_version_strings_from_bytes(bytes).unwrap_or_default(),
         export_names: read_pe_export_names_from_bytes(bytes),
+        import_profile: imports::profile_from_bytes(bytes),
     }
 }
 

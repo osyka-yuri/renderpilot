@@ -12,7 +12,8 @@ use renderpilot_application::{
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
-    AddonKind, GameId, GameInstallation, LibraryArtifact, LibraryComponent, LibraryTechnology,
+    AddonKind, ComponentFile, GameId, GameInstallation, LibraryArtifact, LibraryComponent,
+    LibraryTechnology,
 };
 use renderpilot_storage_sqlite::SqliteStorage;
 
@@ -33,6 +34,33 @@ pub(crate) fn game_root_for_mutation(
 }
 
 mod add_game;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExactPeProfileMismatch {
+    MissingDeclared,
+    MissingObserved,
+    Different,
+}
+
+pub(crate) fn validate_exact_pe_profile(
+    technology: LibraryTechnology,
+    declared: &ComponentFile,
+    observed: &renderpilot_detection::PeInspection,
+) -> Result<(), ExactPeProfileMismatch> {
+    if !technology.requires_exact_pe_profile() {
+        return Ok(());
+    }
+    let declared = declared
+        .pe_compatibility()
+        .ok_or(ExactPeProfileMismatch::MissingDeclared)?;
+    let observed = observed
+        .compatibility_profile()
+        .ok_or(ExactPeProfileMismatch::MissingObserved)?;
+    if declared != &observed {
+        return Err(ExactPeProfileMismatch::Different);
+    }
+    Ok(())
+}
 #[cfg(windows)]
 pub mod auto_scan;
 mod cards;
