@@ -22,7 +22,7 @@ function operation(overrides: Partial<OperationSummary> = {}): OperationSummary 
 function metadata(overrides: Partial<OperationMetadata> = {}): OperationMetadata {
   return {
     game_name: 'Test Game',
-    library: 'dlss_super_resolution',
+    technology: 'dlss_super_resolution',
     from_version: null,
     to_version: 'unknown',
     ...overrides,
@@ -48,14 +48,14 @@ describe('createOperationViewModel', () => {
     expect(vm.statusLabel.length).toBeGreaterThan(0);
   });
 
-  it('uses metadata.library for the library type when present', () => {
-    const vm = present(operation({ metadata: metadata({ library: 'dlss_super_resolution' }) }));
+  it('uses metadata.technology for the library type when present', () => {
+    const vm = present(operation({ metadata: metadata({ technology: 'dlss_super_resolution' }) }));
 
-    // metadata.library is routed through formatLabel (canonical library label).
+    // metadata.technology is routed through formatLabel (canonical technology label).
     expect(vm.libraryType).toBe('DLSS Super Resolution');
   });
 
-  it('falls back to the component-id label map when metadata.library is missing', () => {
+  it('falls back to the component-id label map when metadata.technology is missing', () => {
     expect(
       present(operation({ metadata: null, component_id: 'component:DLSS Super Resolution' }))
         .libraryType,

@@ -29,7 +29,6 @@ export {
 export { LAUNCHER_DISPLAY_LABELS, getLauncherDisplayLabel } from './model/launcher-labels';
 
 export { createGameSummary, createGameDetails } from './model/test-support';
-export { isAutomaticCatalogCandidate } from './model/automatic-catalog-candidate';
 
 export { LAUNCHER_STEAM, LAUNCHER_GOG } from './model/types';
 
@@ -54,6 +53,7 @@ export type {
   GameLibraryComponent,
   GameCandidateGroup,
   GameCandidate,
+  CoordinatedCandidateOption,
   D3d12ExecutableStatus,
   ScanError,
   AutoScanResponse,

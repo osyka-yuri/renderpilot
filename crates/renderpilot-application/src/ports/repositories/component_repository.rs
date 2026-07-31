@@ -2,7 +2,7 @@ use renderpilot_domain::{GameId, LibraryComponent};
 
 use crate::AppResult;
 
-/// Repository port for storing detected graphics components.
+/// Repository port for storing detected library components.
 pub trait ComponentRepository: Send + Sync {
     /// Replaces all detected components for a game with the latest scan result.
     fn replace_components_for_game(

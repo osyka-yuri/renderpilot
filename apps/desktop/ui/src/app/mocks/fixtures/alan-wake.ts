@@ -69,6 +69,7 @@ export function createAlanWakeDetails(): GameDetails {
           release_label: null,
           catalog_release: null,
         },
+        automatic_candidate_artifact_id: 'artifact:streamline:2.5.1',
         candidates: [
           // Multi-file package candidate (matched Streamline release).
           {
@@ -84,6 +85,7 @@ export function createAlanWakeDetails(): GameDetails {
               release: { version: '2.5.1', channel: 'stable', label: null },
               availability: 'available',
               automatic_selection_allowed: true,
+              presentation: null,
             },
             is_downloaded: true,
             is_debug: false,

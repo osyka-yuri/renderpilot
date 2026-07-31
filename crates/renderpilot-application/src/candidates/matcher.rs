@@ -5,19 +5,21 @@
 //! deduplicates the resulting [`ReplacementCandidate`] list. The data types it
 //! produces live in [`super::dto`].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use renderpilot_domain::{
-    ArtifactId, CatalogPackageAvailability, LibraryArtifact, LibraryComponent, LibraryTechnology,
-    PackageVersion, Version, fsr,
+    ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, LibraryArtifact, LibraryComponent,
+    LibraryTechnology, Version, fsr,
 };
 
+use super::automatic::coordinate_selection;
 use super::dto::{
-    ActiveCatalogPackage, CandidateComparison, CatalogCandidatePackage,
+    ActiveCatalogPackage, CandidateComparison, CandidateSelection, CatalogCandidatePackage,
     ComponentReplacementCandidates, InstalledReleaseState, ReplacementCandidate,
 };
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
+use super::ordering::sort_and_deduplicate;
 use crate::{
     SwapCompatibilityError, SwapTargetProfile, ensure_replacement_compatible,
     replacement_executable_action,
@@ -63,22 +65,33 @@ impl CandidateContext {
         }
     }
 
-    fn catalog_package(&self, artifact: &LibraryArtifact) -> Option<CatalogCandidatePackage> {
+    /// Returns catalog metadata only when its immutable receipt is canonical.
+    /// A malformed catalog-backed artifact is not silently reclassified as an
+    /// ordinary local artifact: doing so would let invalid provenance bypass
+    /// the catalog eligibility boundary.
+    fn catalog_package(
+        &self,
+        artifact: &LibraryArtifact,
+    ) -> Result<Option<CatalogCandidatePackage>, ()> {
         if let Some(active) = self.active_catalog.get(artifact.id()) {
-            return Some(CatalogCandidatePackage::new(
-                active.package_id(),
-                active.release().clone(),
+            return Ok(Some(CatalogCandidatePackage::from_active(
+                active,
                 CatalogPackageAvailability::Available,
-                active.automatic_selection_allowed(),
-            ));
+            )));
         }
-        let receipt = artifact.metadata().catalog_package_receipt()?;
-        Some(CatalogCandidatePackage::new(
-            receipt.package_id().to_owned(),
-            receipt.release().clone(),
-            CatalogPackageAvailability::LocalOnly,
-            false,
-        ))
+        let Some(receipt) = artifact.metadata().catalog_package_receipt() else {
+            // `CatalogDownloaded` is the typed provenance boundary: every
+            // artifact materialized from the validated catalog must retain its
+            // immutable receipt. Never let a malformed cache entry become an
+            // ordinary local candidate merely because its receipt is absent.
+            if artifact.trust_level() == ArtifactTrustLevel::CatalogDownloaded {
+                return Err(());
+            }
+            return Ok(None);
+        };
+        CatalogCandidatePackage::from_receipt(receipt, CatalogPackageAvailability::LocalOnly, false)
+            .map(Some)
+            .ok_or(())
     }
 }
 
@@ -96,7 +109,19 @@ pub fn find_replacement_candidates(
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
     let lookup = CandidateArtifactLookup::build(artifacts);
-    find_replacement_candidates_with_lookup(components, artifacts, &lookup, context)
+    find_replacement_candidate_selection_with_lookup(components, artifacts, &lookup, context)
+        .into_groups()
+}
+
+/// Finds candidates plus coordinated multi-component manual options.
+#[must_use]
+pub fn find_replacement_candidate_selection(
+    components: &[LibraryComponent],
+    artifacts: &[LibraryArtifact],
+    context: &CandidateContext,
+) -> CandidateSelection {
+    let lookup = CandidateArtifactLookup::build(artifacts);
+    find_replacement_candidate_selection_with_lookup(components, artifacts, &lookup, context)
 }
 
 /// Immutable artifact universe indexed once for repeated per-game matching.
@@ -128,15 +153,36 @@ pub fn find_replacement_candidates_indexed(
     index: &CandidateArtifactIndex,
     context: &CandidateContext,
 ) -> Vec<ComponentReplacementCandidates> {
-    find_replacement_candidates_with_lookup(components, &index.artifacts, &index.lookup, context)
+    find_replacement_candidate_selection_with_lookup(
+        components,
+        &index.artifacts,
+        &index.lookup,
+        context,
+    )
+    .into_groups()
 }
 
-fn find_replacement_candidates_with_lookup(
+/// Matches an indexed artifact universe and preserves coordinated options.
+#[must_use]
+pub fn find_replacement_candidate_selection_indexed(
+    components: &[LibraryComponent],
+    index: &CandidateArtifactIndex,
+    context: &CandidateContext,
+) -> CandidateSelection {
+    find_replacement_candidate_selection_with_lookup(
+        components,
+        &index.artifacts,
+        &index.lookup,
+        context,
+    )
+}
+
+fn find_replacement_candidate_selection_with_lookup(
     components: &[LibraryComponent],
     artifacts: &[LibraryArtifact],
     lookup: &CandidateArtifactLookup,
     context: &CandidateContext,
-) -> Vec<ComponentReplacementCandidates> {
+) -> CandidateSelection {
     let mut groups = Vec::new();
 
     for component in components {
@@ -179,14 +225,20 @@ fn find_replacement_candidates_with_lookup(
                 {
                     return None;
                 }
-                let comparison = candidate_comparison(component, artifact, current_version)?;
+                let catalog_package = context.catalog_package(artifact).ok()?;
+                let comparison = candidate_comparison(
+                    component,
+                    artifact,
+                    current_version,
+                    catalog_package.as_ref(),
+                )?;
                 let is_downloaded = context.downloaded_ids.contains(artifact.id());
                 Some(
                     ReplacementCandidate::new(
                         artifact,
                         comparison,
                         is_downloaded,
-                        context.catalog_package(artifact),
+                        catalog_package,
                         indexed.intrinsic_identity.clone(),
                         resolved_identity,
                     )
@@ -199,7 +251,7 @@ fn find_replacement_candidates_with_lookup(
             continue;
         }
 
-        let candidates = sort_and_deduplicate_candidates(candidates);
+        let candidates = sort_and_deduplicate(candidates);
         let Some(group) =
             ComponentReplacementCandidates::new(component, installed_release, candidates)
         else {
@@ -209,7 +261,16 @@ fn find_replacement_candidates_with_lookup(
     }
 
     groups.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
-    groups
+    let selection = coordinate_selection(components, &groups);
+    for group in &mut groups {
+        group.set_automatic_candidate_artifact_id(
+            selection
+                .automatic_by_component
+                .get(group.component_id())
+                .cloned(),
+        );
+    }
+    CandidateSelection::new(groups, selection.streamline_options)
 }
 
 fn installed_release_state(
@@ -237,7 +298,7 @@ fn installed_catalog_release(
         .iter()
         .map(|indexed| &universe[indexed.artifact_index])
         .filter_map(|artifact| {
-            let catalog_package = context.catalog_package(artifact)?;
+            let catalog_package = context.catalog_package(artifact).ok()??;
             Some((artifact, catalog_package))
         })
         .filter(|artifact| {
@@ -308,139 +369,6 @@ fn compare_versions(
     }
 }
 
-/// Sorts candidates into their stable presentation order (the
-/// `ordering_key`), then collapses duplicates — first occurrence wins.
-///
-/// Two candidates are duplicates only when either their artifact id or their
-/// complete install-target + member-digest identity is equal. Releases that
-/// merely share a version remain independently selectable.
-fn sort_and_deduplicate_candidates(
-    mut candidates: Vec<ReplacementCandidate>,
-) -> Vec<ReplacementCandidate> {
-    candidates.sort_by(|left, right| candidate_sort_key(left).cmp(&candidate_sort_key(right)));
-
-    let mut seen_ids = HashSet::<ArtifactId>::new();
-    let mut seen_intrinsic = HashSet::<IntrinsicPackageIdentity>::new();
-    let mut seen_resolved = HashSet::<ResolvedTransitionIdentity>::new();
-    let mut deduplicated = Vec::with_capacity(candidates.len());
-
-    for candidate in candidates {
-        let duplicate = seen_ids.contains(candidate.artifact_id())
-            || candidate
-                .intrinsic_identity()
-                .is_some_and(|identity| seen_intrinsic.contains(identity))
-            || candidate
-                .resolved_identity()
-                .is_some_and(|identity| seen_resolved.contains(identity));
-        if duplicate {
-            continue;
-        }
-        seen_ids.insert(candidate.artifact_id().clone());
-        if let Some(identity) = candidate.intrinsic_identity() {
-            seen_intrinsic.insert(identity.clone());
-        }
-        if let Some(identity) = candidate.resolved_identity() {
-            seen_resolved.insert(identity.clone());
-        }
-        deduplicated.push(candidate);
-    }
-
-    deduplicated
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct CandidateSortKey<'a> {
-    presentation_version: std::cmp::Reverse<Option<CandidatePresentationVersion<'a>>>,
-    technical_version: std::cmp::Reverse<Option<&'a Version>>,
-    file_count: std::cmp::Reverse<usize>,
-    file_name: &'a str,
-    is_debug: bool,
-    trust_rank: u8,
-    downloaded: std::cmp::Reverse<bool>,
-    intrinsic_identity: Option<&'a IntrinsicPackageIdentity>,
-    resolved_identity: Option<&'a ResolvedTransitionIdentity>,
-    artifact_id: &'a str,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum CandidatePresentationVersion<'a> {
-    Package(&'a PackageVersion),
-    Technical(&'a Version),
-}
-
-impl PartialEq for CandidatePresentationVersion<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == std::cmp::Ordering::Equal
-    }
-}
-
-impl Eq for CandidatePresentationVersion<'_> {}
-
-impl Ord for CandidatePresentationVersion<'_> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let numeric = self.numeric_core().cmp(other.numeric_core());
-        if numeric != std::cmp::Ordering::Equal {
-            return numeric;
-        }
-        match (self, other) {
-            (Self::Package(left), Self::Package(right)) => left.cmp(right),
-            (Self::Technical(left), Self::Technical(right)) => left.cmp(right),
-            (Self::Package(package), Self::Technical(_)) => {
-                if package.is_prerelease() {
-                    std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            }
-            (Self::Technical(_), Self::Package(package)) => {
-                if package.is_prerelease() {
-                    std::cmp::Ordering::Greater
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            }
-        }
-    }
-}
-
-impl PartialOrd for CandidatePresentationVersion<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<'a> CandidatePresentationVersion<'a> {
-    fn numeric_core(self) -> &'a Version {
-        match self {
-            Self::Package(version) => version.numeric_core(),
-            Self::Technical(version) => version,
-        }
-    }
-}
-
-fn candidate_sort_key(candidate: &ReplacementCandidate) -> CandidateSortKey<'_> {
-    let presentation_version = candidate
-        .catalog_package()
-        .map(|package| CandidatePresentationVersion::Package(&package.release().version))
-        .or_else(|| {
-            candidate
-                .technical_version()
-                .map(CandidatePresentationVersion::Technical)
-        });
-    CandidateSortKey {
-        presentation_version: std::cmp::Reverse(presentation_version),
-        technical_version: std::cmp::Reverse(candidate.technical_version()),
-        file_count: std::cmp::Reverse(candidate.file_count()),
-        file_name: candidate.file_name(),
-        is_debug: candidate.is_debug(),
-        trust_rank: candidate.trust_level().candidate_preference_rank(),
-        downloaded: std::cmp::Reverse(candidate.is_downloaded()),
-        intrinsic_identity: candidate.intrinsic_identity(),
-        resolved_identity: candidate.resolved_identity(),
-        artifact_id: candidate.artifact_id().as_str(),
-    }
-}
-
 /// Policy that determines whether a candidate artifact can replace a component file
 /// based on their version compatibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,12 +408,73 @@ fn candidate_comparison(
     component: &LibraryComponent,
     artifact: &LibraryArtifact,
     current_version: Option<&Version>,
+    catalog_package: Option<&CatalogCandidatePackage>,
 ) -> Option<CandidateComparison> {
+    if component.technology() == LibraryTechnology::XiphVorbis {
+        return Some(xiph_candidate_comparison(component, catalog_package));
+    }
     require_not_split_downgrade(component, artifact)?;
     require_compatible_graphics_api(component, artifact)?;
     require_version_compatible(component.technology(), current_version, artifact.version())?;
 
     compare_versions(current_version, artifact.version())
+}
+
+fn xiph_candidate_comparison(
+    component: &LibraryComponent,
+    catalog_package: Option<&CatalogCandidatePackage>,
+) -> CandidateComparison {
+    let Some(release) = catalog_package.map(CatalogCandidatePackage::release) else {
+        return CandidateComparison::UnknownVersion;
+    };
+    let Some(required_axes) =
+        renderpilot_domain::xiph::XiphReleaseAxes::from_component_files(component.files())
+    else {
+        return CandidateComparison::UnknownVersion;
+    };
+    let Some(candidate_versions) =
+        renderpilot_domain::xiph::XiphReleaseVersions::from_catalog_components(
+            &required_axes,
+            &release.components,
+        )
+    else {
+        return CandidateComparison::UnknownVersion;
+    };
+    let mut has_newer = false;
+    let mut has_older = false;
+    let mut observed_axes = BTreeSet::new();
+    for file in component.files() {
+        let component_name = match file
+            .path()
+            .file_name()
+            .and_then(renderpilot_domain::xiph::classify_file_name)
+        {
+            Some((member, _)) => renderpilot_domain::xiph::XiphReleaseAxis::for_member(member),
+            None => return CandidateComparison::UnknownVersion,
+        };
+        observed_axes.insert(component_name);
+        let (Some(current), Some(candidate)) =
+            (file.version(), candidate_versions.get(component_name))
+        else {
+            return CandidateComparison::UnknownVersion;
+        };
+        match current.cmp(candidate.numeric_core()) {
+            std::cmp::Ordering::Less => has_newer = true,
+            std::cmp::Ordering::Equal => {}
+            std::cmp::Ordering::Greater => has_older = true,
+        }
+    }
+    if observed_axes.into_iter().collect::<Vec<_>>() != required_axes.iter().collect::<Vec<_>>() {
+        // Embedded Ogg has no physical FileVersion to compare. Treat it as an
+        // unknown mandatory dimension instead of inferring it from Vorbis.
+        return CandidateComparison::UnknownVersion;
+    }
+    match (has_newer, has_older) {
+        (true, true) => CandidateComparison::MixedVersion,
+        (true, false) => CandidateComparison::NewerVersion,
+        (false, true) => CandidateComparison::OlderVersion,
+        (false, false) => CandidateComparison::EqualVersion,
+    }
 }
 
 /// Prevents cross-API FSR replacements (e.g., offering a DX12 artifact to a Vulkan game).
@@ -558,6 +547,13 @@ fn require_version_compatible(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use renderpilot_domain::{
+        ComponentFile, ComponentId, ComponentKind, GameId, PackageRelease, PackageVersion, PathRef,
+        ReleaseChannel, Swappability,
+    };
+
     use super::*;
 
     #[test]
@@ -655,6 +651,87 @@ mod tests {
                 Some(&v2),
             )
             .is_some()
+        );
+    }
+
+    #[test]
+    fn xiph_versions_use_componentwise_partial_order_and_singleton_projection() {
+        let component = |files: &[(&str, Option<&str>)]| {
+            files.iter().fold(
+                LibraryComponent::new(
+                    ComponentId::new("component:xiph").expect("id"),
+                    GameId::new("game:xiph").expect("game"),
+                    ComponentKind::NativeLibrary,
+                    LibraryTechnology::XiphVorbis,
+                    Swappability::BundleOnly,
+                ),
+                |component, (name, version)| {
+                    let mut file =
+                        ComponentFile::new(PathRef::new(format!("C:/Game/{name}")).expect("path"));
+                    if let Some(version) = version {
+                        file = file.with_version(Version::parse(*version).expect("version"));
+                    }
+                    component.with_file(file)
+                },
+            )
+        };
+        let package = |vorbis: &str, ogg: &str| {
+            CatalogCandidatePackage::new(
+                "xiph:test",
+                PackageRelease {
+                    version: PackageVersion::parse(vorbis).expect("version"),
+                    channel: ReleaseChannel::Stable,
+                    label: None,
+                    components: BTreeMap::from([
+                        (
+                            "ogg".to_owned(),
+                            PackageVersion::parse(ogg).expect("Ogg version"),
+                        ),
+                        (
+                            "vorbis".to_owned(),
+                            PackageVersion::parse(vorbis).expect("Vorbis version"),
+                        ),
+                    ]),
+                },
+                CatalogPackageAvailability::Available,
+                true,
+            )
+        };
+        let pair = component(&[("vorbis.dll", Some("1.3.7")), ("ogg.dll", Some("1.3.5"))]);
+
+        assert_eq!(
+            xiph_candidate_comparison(&pair, Some(&package("1.3.7", "1.3.6"))),
+            CandidateComparison::NewerVersion
+        );
+        assert_eq!(
+            xiph_candidate_comparison(&pair, Some(&package("1.3.6", "1.3.6"))),
+            CandidateComparison::MixedVersion
+        );
+        assert_eq!(
+            xiph_candidate_comparison(&pair, Some(&package("1.3.7", "1.3.5"))),
+            CandidateComparison::EqualVersion
+        );
+
+        let ogg = component(&[("ogg.dll", Some("1.3.5"))]);
+        assert_eq!(
+            xiph_candidate_comparison(&ogg, Some(&package("0.1.0", "1.3.6"))),
+            CandidateComparison::NewerVersion,
+            "Vorbis is outside the Ogg singleton projection"
+        );
+        let unknown = component(&[("ogg.dll", None)]);
+        assert_eq!(
+            xiph_candidate_comparison(&unknown, Some(&package("1.3.7", "1.3.6"))),
+            CandidateComparison::UnknownVersion
+        );
+
+        let embedded = component(&[
+            ("libvorbisfile.dll", Some("1.3.6")),
+            ("libvorbis.dll", Some("1.3.6")),
+        ]);
+        assert_eq!(
+            xiph_candidate_comparison(&embedded, Some(&package("1.3.7", "1.3.6"))),
+            CandidateComparison::UnknownVersion,
+            "an unobservable embedded Ogg version must disable unattended comparison"
         );
     }
 }

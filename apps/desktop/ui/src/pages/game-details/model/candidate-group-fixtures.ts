@@ -46,6 +46,7 @@ export function catalogCandidate(version: string, overrides: Partial<Candidate> 
       release: { version, channel: 'stable', label: null },
       availability: 'available',
       automatic_selection_allowed: true,
+      presentation: null,
     },
     ...overrides,
   });
@@ -56,6 +57,7 @@ export function group(
   technology: string,
   current: string | null,
   candidates: Candidate[],
+  automaticCandidateArtifactId: string | null = null,
 ): GameCandidateGroup {
   return {
     component_id: componentId,
@@ -69,6 +71,7 @@ export function group(
           catalog_release: null,
         }
       : { kind: 'unknown' },
+    automatic_candidate_artifact_id: automaticCandidateArtifactId,
     candidates,
   };
 }

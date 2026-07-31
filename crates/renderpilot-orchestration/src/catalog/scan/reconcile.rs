@@ -242,9 +242,8 @@ pub(super) fn build_library_components(
     game: &GameInstallation,
     libraries: &[DetectedLibraryFile],
 ) -> AppResult<Vec<LibraryComponent>> {
-    // Components and artifacts are grouped by the same `(directory, family)` rule
-    // so a detected bundle (e.g. FSR 4's three DLLs) yields one component and one
-    // matching artifact instead of three independent single-file entries.
+    // Components and artifacts share the same `(directory, family)` grouping,
+    // so every detected bundle has one coherent component and artifact shape.
     renderpilot_detection::group_into_components(game, libraries)
 }
 

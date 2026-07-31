@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use renderpilot_domain::{LibraryArtifact, LibraryComponent, Sha256Hash, fsr};
+use renderpilot_domain::{LibraryArtifact, LibraryComponent, Sha256Hash};
 
 use crate::AppResult;
 
@@ -75,7 +75,7 @@ impl ResolvedTransitionIdentity {
             .map(|file| {
                 (
                     file,
-                    fsr::resolve_artifact_install_target(file, component.files()),
+                    crate::resolve_transition_install_target(component, file),
                 )
             })
             .collect();

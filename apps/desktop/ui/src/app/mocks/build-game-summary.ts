@@ -1,9 +1,4 @@
-import {
-  isAutomaticCatalogCandidate,
-  type GameCandidateGroup,
-  type GameDetails,
-  type GameSummary,
-} from '@entities/game';
+import { type GameCandidateGroup, type GameDetails, type GameSummary } from '@entities/game';
 import { isKnownLibrary } from '@shared/graphics';
 
 import { unique } from './desktop-utils';
@@ -64,10 +59,5 @@ export function getLatestOperationStatus(
 }
 
 function countAvailableUpdates(candidateGroups: readonly GameCandidateGroup[]): number {
-  return candidateGroups.filter((group) =>
-    group.candidates.some(
-      (candidate) =>
-        candidate.comparison === 'newer_version' && isAutomaticCatalogCandidate(candidate),
-    ),
-  ).length;
+  return candidateGroups.filter((group) => group.automatic_candidate_artifact_id !== null).length;
 }

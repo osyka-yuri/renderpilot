@@ -242,6 +242,7 @@ describe('createGameSummaryFromDetails', () => {
         release_label: null,
         catalog_release: null,
       },
+      automatic_candidate_artifact_id: null,
       candidates: [
         {
           artifact_id: 'artifact:preview:unknown',

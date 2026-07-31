@@ -9,7 +9,7 @@ export type ExecutedD3d12ExecutableAction = {
 /** Exact JSON metadata emitted for operation summaries by CLI/API output DTOs. */
 export type OperationMetadata = {
   game_name: string;
-  library: string;
+  technology: string;
   from_version: string | null;
   to_version: string;
   d3d12_executable_action?: ExecutedD3d12ExecutableAction;

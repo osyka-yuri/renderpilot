@@ -428,6 +428,7 @@
                   <StreamlineComponentCard
                     components={streamline}
                     {groupsById}
+                    coordinatedOptions={details?.streamline_candidate_options ?? []}
                     {busy}
                     {onBulkSwap}
                     {onBulkRollback}

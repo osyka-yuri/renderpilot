@@ -7,9 +7,11 @@
 
 use crate::D3d12ExecutableAction;
 use renderpilot_domain::{
-    ArtifactId, ArtifactTrustLevel, CatalogPackageAvailability, ComponentId,
-    ComponentVersionReport, GameId, LibraryArtifact, LibraryComponent, LibraryTechnology,
-    PackageRelease, PathRef, ReleaseChannel, Version, component_version_report, fsr,
+    Architecture, ArtifactId, ArtifactTrustLevel, CatalogLegalDocumentReceipt,
+    CatalogPackageAvailability, CatalogPackageProvenanceReceipt, CatalogPackageReceipt,
+    ComponentId, ComponentVersionReport, GameId, LibraryArtifact, LibraryComponent,
+    LibraryTechnology, PackageRelease, PathRef, ReleaseChannel, Version, component_version_report,
+    fsr,
 };
 
 use super::identity::{IntrinsicPackageIdentity, ResolvedTransitionIdentity};
@@ -20,6 +22,7 @@ pub struct ActiveCatalogPackage {
     package_id: String,
     release: PackageRelease,
     automatic_selection_allowed: bool,
+    presentation: Option<CatalogCandidatePresentation>,
 }
 
 impl ActiveCatalogPackage {
@@ -33,6 +36,20 @@ impl ActiveCatalogPackage {
             package_id: package_id.into(),
             automatic_selection_allowed,
             release,
+            presentation: None,
+        }
+    }
+
+    /// Creates an active descriptor from its canonical immutable receipt.
+    pub fn from_receipt(
+        receipt: &CatalogPackageReceipt,
+        automatic_selection_allowed: bool,
+    ) -> Self {
+        Self {
+            package_id: receipt.package_id().to_owned(),
+            release: receipt.release().clone(),
+            automatic_selection_allowed,
+            presentation: Some(CatalogCandidatePresentation::from_receipt(receipt)),
         }
     }
 
@@ -50,6 +67,58 @@ impl ActiveCatalogPackage {
     pub const fn automatic_selection_allowed(&self) -> bool {
         self.automatic_selection_allowed
     }
+
+    /// Returns immutable facts that may be rendered by a candidate UI.
+    pub const fn presentation(&self) -> Option<&CatalogCandidatePresentation> {
+        self.presentation.as_ref()
+    }
+}
+
+/// Immutable package facts attached to catalog candidates for presentation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogCandidatePresentation {
+    variant: String,
+    architecture: Architecture,
+    unsigned: bool,
+    provenance: Option<CatalogPackageProvenanceReceipt>,
+    legal_documents: Vec<CatalogLegalDocumentReceipt>,
+}
+
+impl CatalogCandidatePresentation {
+    fn from_receipt(receipt: &CatalogPackageReceipt) -> Self {
+        Self {
+            variant: receipt.variant().to_owned(),
+            architecture: receipt.target().architecture,
+            unsigned: receipt.has_unsigned_members(),
+            provenance: receipt.composite_provenance().cloned(),
+            legal_documents: receipt.legal_documents().to_vec(),
+        }
+    }
+
+    /// Returns the package variant; for Xiph this is `<topology>.<naming profile>`.
+    pub fn variant(&self) -> &str {
+        &self.variant
+    }
+
+    /// Returns the verified target architecture.
+    pub const fn architecture(&self) -> Architecture {
+        self.architecture
+    }
+
+    /// Returns whether package members are unsigned.
+    pub const fn unsigned(&self) -> bool {
+        self.unsigned
+    }
+
+    /// Returns immutable composite provenance when present.
+    pub const fn provenance(&self) -> Option<&CatalogPackageProvenanceReceipt> {
+        self.provenance.as_ref()
+    }
+
+    /// Returns validated legal-document links.
+    pub fn legal_documents(&self) -> &[CatalogLegalDocumentReceipt] {
+        &self.legal_documents
+    }
 }
 
 /// Catalog identity and availability attached to a replacement candidate.
@@ -59,9 +128,11 @@ pub struct CatalogCandidatePackage {
     release: PackageRelease,
     availability: CatalogPackageAvailability,
     automatic_selection_allowed: bool,
+    presentation: Option<CatalogCandidatePresentation>,
 }
 
 impl CatalogCandidatePackage {
+    #[cfg(test)]
     pub(super) fn new(
         package_id: impl Into<String>,
         release: PackageRelease,
@@ -73,6 +144,37 @@ impl CatalogCandidatePackage {
             release,
             availability,
             automatic_selection_allowed,
+            presentation: None,
+        }
+    }
+
+    pub(super) fn from_receipt(
+        receipt: &CatalogPackageReceipt,
+        availability: CatalogPackageAvailability,
+        automatic_selection_allowed: bool,
+    ) -> Option<Self> {
+        receipt.is_valid().then(|| Self {
+            package_id: receipt.package_id().to_owned(),
+            release: receipt.release().clone(),
+            availability,
+            automatic_selection_allowed,
+            presentation: Some(CatalogCandidatePresentation::from_receipt(receipt)),
+        })
+    }
+
+    pub(super) fn from_active(
+        active: &ActiveCatalogPackage,
+        availability: CatalogPackageAvailability,
+    ) -> Self {
+        // ActiveCatalogPackage is built from the authoritative active catalog
+        // snapshot. It is a canonical source in its own right; a downloaded
+        // artifact does not need a second local receipt to retain that status.
+        Self {
+            package_id: active.package_id().to_owned(),
+            release: active.release().clone(),
+            availability,
+            automatic_selection_allowed: active.automatic_selection_allowed(),
+            presentation: active.presentation().cloned(),
         }
     }
 
@@ -94,6 +196,18 @@ impl CatalogCandidatePackage {
     /// Returns the backend-computed unattended-selection capability.
     pub const fn automatic_selection_allowed(&self) -> bool {
         self.automatic_selection_allowed
+    }
+
+    /// Returns immutable facts that may be rendered by a candidate UI.
+    pub const fn presentation(&self) -> Option<&CatalogCandidatePresentation> {
+        self.presentation.as_ref()
+    }
+
+    pub(super) const fn canonical_source_rank(&self) -> u8 {
+        match self.availability {
+            CatalogPackageAvailability::Available => 0,
+            CatalogPackageAvailability::LocalOnly => 1,
+        }
     }
 }
 
@@ -172,6 +286,7 @@ pub struct ComponentReplacementCandidates {
     file_path: PathRef,
     installed_release: InstalledReleaseState,
     candidates: Vec<ReplacementCandidate>,
+    automatic_candidate_artifact_id: Option<ArtifactId>,
 }
 
 impl ComponentReplacementCandidates {
@@ -194,6 +309,7 @@ impl ComponentReplacementCandidates {
             file_path: display.path().clone(),
             installed_release,
             candidates,
+            automatic_candidate_artifact_id: None,
         })
     }
 
@@ -215,7 +331,7 @@ impl ComponentReplacementCandidates {
         &self.game_id
     }
 
-    /// Returns the graphics technology of the component.
+    /// Returns the library technology of the component.
     pub fn technology(&self) -> LibraryTechnology {
         self.technology
     }
@@ -244,6 +360,124 @@ impl ComponentReplacementCandidates {
     ///    identity as stable content tie-breaks.
     pub fn candidates(&self) -> &[ReplacementCandidate] {
         &self.candidates
+    }
+
+    /// Returns the unique backend-selected unattended candidate, when one
+    /// maximal eligible package exists.
+    pub fn automatic_candidate_artifact_id(&self) -> Option<&ArtifactId> {
+        self.automatic_candidate_artifact_id.as_ref()
+    }
+
+    pub(super) fn set_automatic_candidate_artifact_id(&mut self, artifact_id: Option<ArtifactId>) {
+        self.automatic_candidate_artifact_id = artifact_id;
+    }
+}
+
+/// One exact component/artifact pair within a coordinated manual option.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoordinatedCandidateItem {
+    component_id: ComponentId,
+    artifact_id: ArtifactId,
+}
+
+impl CoordinatedCandidateItem {
+    pub(super) const fn new(component_id: ComponentId, artifact_id: ArtifactId) -> Self {
+        Self {
+            component_id,
+            artifact_id,
+        }
+    }
+
+    /// Returns the component selected by this item.
+    pub fn component_id(&self) -> &ComponentId {
+        &self.component_id
+    }
+
+    /// Returns the exact selected artifact.
+    pub fn artifact_id(&self) -> &ArtifactId {
+        &self.artifact_id
+    }
+}
+
+/// A backend-coordinated, manually selectable composite release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoordinatedCandidateOption {
+    option_id: String,
+    release: PackageRelease,
+    items: Vec<CoordinatedCandidateItem>,
+}
+
+impl CoordinatedCandidateOption {
+    pub(super) fn new(
+        option_id: String,
+        release: PackageRelease,
+        items: Vec<CoordinatedCandidateItem>,
+    ) -> Self {
+        Self {
+            option_id,
+            release,
+            items,
+        }
+    }
+
+    /// Returns the stable SHA-256 identity of this option.
+    pub fn option_id(&self) -> &str {
+        &self.option_id
+    }
+
+    /// Returns the user-facing release metadata.
+    pub const fn release(&self) -> &PackageRelease {
+        &self.release
+    }
+
+    /// Returns selected component/artifact pairs in component-id order.
+    pub fn items(&self) -> &[CoordinatedCandidateItem] {
+        &self.items
+    }
+}
+
+/// Complete candidate projection for one game, including coordinated options
+/// that span multiple component groups.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CandidateSelection {
+    groups: Vec<ComponentReplacementCandidates>,
+    streamline_options: Vec<CoordinatedCandidateOption>,
+}
+
+impl CandidateSelection {
+    pub(super) fn new(
+        groups: Vec<ComponentReplacementCandidates>,
+        streamline_options: Vec<CoordinatedCandidateOption>,
+    ) -> Self {
+        Self {
+            groups,
+            streamline_options,
+        }
+    }
+
+    /// Returns per-component replacement candidates.
+    pub fn groups(&self) -> &[ComponentReplacementCandidates] {
+        &self.groups
+    }
+
+    /// Returns backend-coordinated Streamline manual options.
+    pub fn streamline_options(&self) -> &[CoordinatedCandidateOption] {
+        &self.streamline_options
+    }
+
+    /// Consumes the projection when only per-component candidates are needed.
+    pub fn into_groups(self) -> Vec<ComponentReplacementCandidates> {
+        self.groups
+    }
+
+    /// Consumes the projection into its transport-facing parts.
+    pub fn into_parts(
+        self,
+    ) -> (
+        Vec<ComponentReplacementCandidates>,
+        Vec<CoordinatedCandidateOption>,
+    ) {
+        (self.groups, self.streamline_options)
     }
 }
 
@@ -383,6 +617,13 @@ impl ReplacementCandidate {
         self.trust_level
     }
 
+    pub(super) fn canonical_source_rank(&self) -> u8 {
+        match self.catalog_package.as_ref() {
+            Some(package) => package.canonical_source_rank(),
+            None => 2,
+        }
+    }
+
     pub(super) const fn file_count(&self) -> usize {
         self.file_count
     }
@@ -401,16 +642,6 @@ impl ReplacementCandidate {
     }
 }
 
-/// Returns whether a candidate may be selected by unattended update paths.
-///
-/// Manual selectors deliberately expose a broader set. This predicate is the
-/// single application-layer policy for dashboards, counters, and bulk plans.
-pub fn is_automatic_catalog_candidate(candidate: &ReplacementCandidate) -> bool {
-    candidate
-        .catalog_package()
-        .is_some_and(CatalogCandidatePackage::automatic_selection_allowed)
-}
-
 /// Result of comparing a candidate artifact to the currently installed component file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CandidateComparison {
@@ -420,6 +651,10 @@ pub enum CandidateComparison {
     UnknownVersion,
     /// Both versions were known and the candidate is older than the current file.
     OlderVersion,
+    /// Every replaced component version is equal.
+    EqualVersion,
+    /// Composite component versions move in opposite directions.
+    MixedVersion,
 }
 
 impl CandidateComparison {
@@ -429,6 +664,8 @@ impl CandidateComparison {
             Self::NewerVersion => "newer_version",
             Self::UnknownVersion => "unknown_version",
             Self::OlderVersion => "older_version",
+            Self::EqualVersion => "equal_version",
+            Self::MixedVersion => "mixed_version",
         }
     }
 }

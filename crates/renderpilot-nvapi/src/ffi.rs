@@ -10,7 +10,7 @@
     unsafe_code,
     reason = "NVAPI C ABI function pointer types; call sites with SAFETY notes are in api.rs"
 )]
-#![allow(non_snake_case, non_camel_case_types, dead_code)]
+#![allow(non_snake_case, non_camel_case_types)]
 
 use std::os::raw::c_void;
 
@@ -56,9 +56,6 @@ pub const NVDRS_APPLICATION_VER: u32 = nvapi_version(std::mem::size_of::<NVDRS_A
 
 /// Setting type: integer (DWORD).
 pub const NVDRS_DWORD_TYPE: u32 = 0;
-
-/// Setting type: string.
-pub const NVDRS_WSTRING_TYPE: u32 = 2;
 
 /// DRS profile descriptor (V1).
 ///
@@ -246,23 +243,6 @@ pub type NvAPI_DRS_DeleteProfileSetting_fn = unsafe extern "C" fn(
 ) -> NvAPI_Status;
 
 /// Known NVIDIA DRS setting identifiers.
-pub mod setting_ids {
-    /// DLSS Super Resolution render preset override.
-    ///
-    /// Value type: DWORD.
-    ///   0          = Off / Game Controlled (default)
-    ///   1..=15     = Preset A … Preset O
-    ///   0x00ffffff = "Latest" (always use the newest preset NVIDIA ships)
-    ///
-    /// ID sourced from NVIDIA Inspector's `NvApiDriverSettings.cs`:
-    ///   `NGX_DLSS_SR_OVERRIDE_RENDER_PRESET_SELECTION_ID = 0x10E41DF3`
-    ///
-    /// The old `0x10B3292C` value that appeared in some third-party lists is
-    /// **incorrect** — it maps to an unrelated driver setting and is ignored by
-    /// NVIDIA Inspector.
-    pub const DLSS_SR_RENDER_PRESET: u32 = 0x10E41DF3;
-}
-
 /// Interface IDs used with `nvapi_QueryInterface`.
 ///
 /// Sourced from the official NVIDIA nvapi repository:

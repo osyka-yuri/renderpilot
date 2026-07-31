@@ -57,7 +57,7 @@ export function createGameWorkspaceModel() {
   }
 
   /**
-   * Sets or clears the active operation plan (e.g., swapping a graphics component).
+   * Sets or clears the active operation plan (e.g., swapping a library component).
    *
    * @param plan The new swap plan or null.
    */

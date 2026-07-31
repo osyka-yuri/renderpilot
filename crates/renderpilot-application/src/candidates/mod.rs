@@ -1,21 +1,27 @@
 //! Replacement-candidate lookup: which library artifacts can replace a game's
 //! detected components.
 //!
-//! * [`matcher`] — the matching algorithm and its compatibility rules.
-//! * [`dto`] — the data types the algorithm produces for presentation layers.
+//! * [`matcher`] — compatibility matching and group construction.
+//! * [`automatic`] — unattended-selection policy.
+//! * [`ordering`] — stable presentation order and deduplication.
+//! * [`dto`] — the data types produced for presentation layers.
 
+mod automatic;
 mod dto;
 mod identity;
 mod matcher;
+mod ordering;
 
 #[cfg(test)]
 mod tests;
 
 pub use dto::{
-    ActiveCatalogPackage, CandidateComparison, ComponentReplacementCandidates,
-    InstalledReleaseState, ReplacementCandidate, is_automatic_catalog_candidate,
+    ActiveCatalogPackage, CandidateComparison, CandidateSelection, ComponentReplacementCandidates,
+    CoordinatedCandidateItem, CoordinatedCandidateOption, InstalledReleaseState,
+    ReplacementCandidate,
 };
 pub use matcher::{
-    CandidateArtifactIndex, CandidateContext, find_replacement_candidates,
+    CandidateArtifactIndex, CandidateContext, find_replacement_candidate_selection,
+    find_replacement_candidate_selection_indexed, find_replacement_candidates,
     find_replacement_candidates_indexed,
 };

@@ -36,6 +36,8 @@ pub(crate) struct GameDetailsOutput {
     game: GameDetailsGameOutput,
     components: Vec<GameComponentOutput>,
     candidate_groups: Vec<catalog_output::ComponentCandidateOutput>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    streamline_candidate_options: Vec<catalog_output::CoordinatedCandidateOptionOutput>,
     operations: Vec<catalog_output::OperationSummaryOutput>,
     addon_capabilities: Vec<AddonKind>,
 }
@@ -84,6 +86,7 @@ impl GameDetailsOutput {
             components,
             backup_component_ids,
             candidate_groups,
+            streamline_candidate_options,
             d3d12_executable_status,
             operations,
             addon_capabilities,
@@ -100,6 +103,8 @@ impl GameDetailsOutput {
             filter_visible_candidate_groups(candidate_groups, &visible_component_ids);
         let candidate_groups =
             catalog_output::component_candidate_outputs(visible_candidate_groups);
+        let streamline_candidate_options =
+            catalog_output::coordinated_candidate_option_outputs(streamline_candidate_options);
         let operations = catalog_output::operation_summary_outputs(&operations);
 
         let components = visible_components
@@ -126,6 +131,7 @@ impl GameDetailsOutput {
             game: game.into(),
             components,
             candidate_groups,
+            streamline_candidate_options,
             operations,
             addon_capabilities,
         })

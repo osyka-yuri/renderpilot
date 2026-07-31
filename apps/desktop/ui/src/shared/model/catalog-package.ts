@@ -84,5 +84,5 @@ export type CatalogCandidatePackage = Readonly<{
   release: CatalogRelease;
   availability: CatalogPackageAvailability;
   automatic_selection_allowed: boolean;
-  presentation?: CatalogCandidatePresentation | null;
+  presentation: CatalogCandidatePresentation | null;
 }>;

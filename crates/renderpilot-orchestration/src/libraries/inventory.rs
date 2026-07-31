@@ -195,9 +195,8 @@ impl Inventory {
             {
                 active_catalog.insert(
                     active.id().clone(),
-                    ActiveCatalogPackage::new(
-                        receipt.package_id().to_owned(),
-                        receipt.release().clone(),
+                    ActiveCatalogPackage::from_receipt(
+                        receipt,
                         entry.automatic_selection_allowed(),
                     ),
                 );

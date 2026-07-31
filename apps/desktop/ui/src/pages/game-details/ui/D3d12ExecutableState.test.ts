@@ -7,6 +7,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 
 import type { GameLibraryComponent } from '@entities/game';
 import type { SwapPlan, SwapPlanBlocker } from '@entities/operation';
+import { setLanguageMode } from '@shared/i18n';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 import { candidate, group } from '../model/candidate-group-fixtures';
@@ -20,7 +21,8 @@ describe('D3D12 executable state UI', () => {
   let target: HTMLDivElement;
   let component: object | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await setLanguageMode('en');
     planSwap.mockReset();
     vi.stubGlobal(
       'ResizeObserver',
@@ -368,6 +370,7 @@ function previewCandidate(artifactId: string) {
       release: { version: '1.721.1', channel: 'preview', label: null },
       availability: 'available',
       automatic_selection_allowed: false,
+      presentation: null,
     },
     d3d12_executable_action: null,
   });

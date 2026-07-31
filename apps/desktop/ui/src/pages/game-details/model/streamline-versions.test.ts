@@ -1,158 +1,104 @@
 import { describe, expect, it } from 'vitest';
 
+import type { CoordinatedCandidateOption } from '@entities/game';
+
 import { buildStreamlineVersionModel } from './streamline-versions';
-import { compareVersionAsc, versionsEqual } from './version-compare';
-import {
-  candidate,
-  catalogCandidate,
-  component,
-  group as makeGroup,
-} from './candidate-group-fixtures';
+import { candidate, component, group } from './candidate-group-fixtures';
 
 const STREAMLINE = 'nvidia_streamline';
 
-function group(
-  componentId: string,
-  current: string | null,
-  candidates: Parameters<typeof makeGroup>[3],
-) {
-  return makeGroup(componentId, STREAMLINE, current, candidates);
-}
-
-function findOption(model: ReturnType<typeof buildStreamlineVersionModel>, version: string) {
-  const option = model.options.find(
-    (o) => o.version === version || versionsEqual(o.version, version),
-  );
-  if (!option) {
-    throw new Error(`expected an option for version ${version}`);
-  }
-  return option;
+function option(
+  optionId: string,
+  version: string,
+  items: CoordinatedCandidateOption['items'],
+): CoordinatedCandidateOption {
+  return {
+    option_id: optionId,
+    release: { version, channel: 'stable', label: null },
+    items,
+  };
 }
 
 describe('buildStreamlineVersionModel', () => {
-  it('lists versions newest-first and includes the current version', () => {
+  it('uses backend-coordinated artifact ids instead of matching a display version', () => {
     const components = [component('a'), component('b')];
     const groupsById = {
-      a: group('a', '2.3.0', [
+      a: group('a', STREAMLINE, '2.3.0', [
+        candidate('2.4.0', { artifact_id: 'a-decoy', is_downloaded: true }),
+        candidate('2.4.0', { artifact_id: 'a-selected', is_downloaded: false }),
+      ]),
+      b: group('b', STREAMLINE, '2.3.0', [
+        candidate('2.4.0', { artifact_id: 'b-decoy', is_downloaded: true }),
+        candidate('2.4.0', { artifact_id: 'b-selected', is_downloaded: true }),
+      ]),
+    };
+
+    const model = buildStreamlineVersionModel(components, groupsById, [
+      option('b'.repeat(64), '2.4.0', [
+        { component_id: 'a', artifact_id: 'a-selected' },
+        { component_id: 'b', artifact_id: 'b-selected' },
+      ]),
+    ]);
+
+    expect(model.options).toHaveLength(1);
+    expect(model.options[0]).toMatchObject({
+      optionId: 'b'.repeat(64),
+      version: '2.4.0',
+      allDownloaded: false,
+    });
+    expect(model.options[0].items.map((item) => item.artifactId)).toEqual([
+      'a-selected',
+      'b-selected',
+    ]);
+  });
+
+  it('fails closed for malformed or stale coordinated items', () => {
+    const components = [component('a'), component('b')];
+    const groupsById = {
+      a: group('a', STREAMLINE, '2.3.0', [candidate('2.4.0', { artifact_id: 'a-240' })]),
+      b: group('b', STREAMLINE, '2.3.0', [candidate('2.4.0', { artifact_id: 'b-240' })]),
+    };
+
+    const model = buildStreamlineVersionModel(components, groupsById, [
+      option('a'.repeat(64), '2.4.0', [
+        { component_id: 'b', artifact_id: 'b-240' },
+        { component_id: 'a', artifact_id: 'a-240' },
+      ]),
+      option('c'.repeat(64), '2.4.0', [
+        { component_id: 'a', artifact_id: 'missing' },
+        { component_id: 'b', artifact_id: 'b-240' },
+      ]),
+      option('d'.repeat(64), '2.4.0', [{ component_id: 'a', artifact_id: 'a-240' }]),
+    ]);
+
+    expect(model.options).toEqual([]);
+  });
+
+  it('sorts safe options by release while retaining option identity as the key', () => {
+    const components = [component('a')];
+    const groupsById = {
+      a: group('a', STREAMLINE, '2.3.0', [
+        candidate('2.5.0', { artifact_id: 'a-250' }),
         candidate('2.4.0', { artifact_id: 'a-240' }),
-        candidate('2.2.0', { artifact_id: 'a-220' }),
-      ]),
-      b: group('b', '2.3.0', [
-        candidate('2.4.0', { artifact_id: 'b-240' }),
-        candidate('2.2.0', { artifact_id: 'b-220' }),
       ]),
     };
 
-    const model = buildStreamlineVersionModel(components, groupsById);
+    const model = buildStreamlineVersionModel(components, groupsById, [
+      option('b'.repeat(64), '2.4.0', [{ component_id: 'a', artifact_id: 'a-240' }]),
+      option('a'.repeat(64), '2.5.0', [{ component_id: 'a', artifact_id: 'a-250' }]),
+    ]);
 
-    expect(model.currentVersion).toBe('2.3.0');
-    expect(model.isMixed).toBe(false);
-    expect(model.totalCount).toBe(2);
-
-    // Current version is always present so its SelectItem is never remounted.
-    expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0', '2.2.0']);
-
-    const current = findOption(model, '2.3.0');
-    expect(current.isCurrent).toBe(true);
-    expect(current.updateCount).toBe(0);
-    expect(current.items).toEqual([]);
-
-    const v240 = findOption(model, '2.4.0');
-    expect(v240.isCurrent).toBe(false);
-    expect(v240.label).toBe('v2.4.0');
-    expect(v240.updateCount).toBe(2);
-    expect(v240.isComplete).toBe(true);
-    expect(v240.allDownloaded).toBe(true);
-    expect(v240.items.map((item) => item.artifactId).sort()).toEqual(['a-240', 'b-240']);
+    expect(model.options.map((entry) => [entry.version, entry.optionId])).toEqual([
+      ['2.5.0', 'a'.repeat(64)],
+      ['2.4.0', 'b'.repeat(64)],
+    ]);
   });
 
-  it('reports mixed current versions and updates only the lagging plugin', () => {
-    const components = [component('a'), component('b')];
-    const groupsById = {
-      a: group('a', '2.4.0', [candidate('2.2.0', { artifact_id: 'a-220' })]),
-      b: group('b', '2.3.0', [
-        candidate('2.4.0', { artifact_id: 'b-240' }),
-        candidate('2.2.0', { artifact_id: 'b-220' }),
-      ]),
-    };
-
-    const model = buildStreamlineVersionModel(components, groupsById);
-
-    expect(model.currentVersion).toBeNull();
-    expect(model.isMixed).toBe(true);
-    expect(model.versionRange).toEqual({ min: '2.3.0', max: '2.4.0' });
-
-    // When mixed, no single current version is known — nothing is pre-inserted.
-    expect(model.options.every((o) => !o.isCurrent)).toBe(true);
-
-    const v240 = findOption(model, '2.4.0');
-    expect(v240.updateCount).toBe(1);
-    expect(v240.items[0]?.componentId).toBe('b');
-    expect(v240.isComplete).toBe(true);
-  });
-
-  it('marks a version incomplete when a plugin cannot reach it', () => {
-    const components = [component('a'), component('b')];
-    const groupsById = {
-      a: group('a', '2.3.0', [candidate('2.5.0', { artifact_id: 'a-250' })]),
-      b: group('b', '2.3.0', []),
-    };
-
-    const model = buildStreamlineVersionModel(components, groupsById);
-
-    const v250 = findOption(model, '2.5.0');
-    expect(v250.isCurrent).toBe(false);
-    expect(v250.updateCount).toBe(1);
-    expect(v250.missingCount).toBe(1);
-    expect(v250.isComplete).toBe(false);
-  });
-
-  it('flags allDownloaded=false and carries each item download state', () => {
-    const components = [component('a'), component('b')];
-    const groupsById = {
-      a: group('a', '2.3.0', [candidate('2.4.0', { artifact_id: 'a-240', is_downloaded: false })]),
-      b: group('b', '2.3.0', [candidate('2.4.0', { artifact_id: 'b-240', is_downloaded: true })]),
-    };
-
-    const model = buildStreamlineVersionModel(components, groupsById);
-
-    const v240 = findOption(model, '2.4.0');
-    expect(v240.allDownloaded).toBe(false);
-    expect(v240.items.find((item) => item.componentId === 'a')?.isDownloaded).toBe(false);
-    expect(v240.items.find((item) => item.componentId === 'b')?.isDownloaded).toBe(true);
-  });
-
-  it('includes the current version alongside older candidates', () => {
-    const components = [component('a'), component('b')];
-    const groupsById = {
-      a: group('a', '2.4.0', [candidate('2.3.0', { artifact_id: 'a-230' })]),
-      b: group('b', '2.4.0', [candidate('2.3.0', { artifact_id: 'b-230' })]),
-    };
-
-    const model = buildStreamlineVersionModel(components, groupsById);
-
-    expect(model.currentVersion).toBe('2.4.0');
-
-    // Current version is in the list so the Select always has a stable item for it.
-    expect(model.options.map((o) => o.version)).toEqual(['2.4.0', '2.3.0']);
-
-    const current = findOption(model, '2.4.0');
-    expect(current.isCurrent).toBe(true);
-    expect(current.updateCount).toBe(0);
-    expect(current.allDownloaded).toBe(true);
-
-    const v230 = findOption(model, '2.3.0');
-    expect(v230.isCurrent).toBe(false);
-  });
-
-  it('uses the backend mixed report without re-reading raw component files', () => {
+  it('keeps backend version reports as the authority for mixed installed state', () => {
     const bundle = component('streamline');
     const groupsById = {
       streamline: {
-        ...group('streamline', null, [
-          candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
-          candidate('2.4.0', { artifact_id: 'pkg-240', file_name: 'sl.common.dll' }),
-        ]),
+        ...group('streamline', STREAMLINE, null, []),
         version_report: {
           kind: 'mixed' as const,
           min_technical_version: '2.4.0',
@@ -161,133 +107,9 @@ describe('buildStreamlineVersionModel', () => {
       },
     };
 
-    const model = buildStreamlineVersionModel([bundle], groupsById);
-
+    const model = buildStreamlineVersionModel([bundle], groupsById, []);
+    expect(model.currentVersion).toBeNull();
     expect(model.isMixed).toBe(true);
-    expect(model.currentVersion).toBeNull();
     expect(model.versionRange).toEqual({ min: '2.4.0', max: '2.9.0' });
-
-    const v290 = findOption(model, '2.9.0');
-    expect(v290.isCurrent).toBe(false);
-    expect(v290.updateCount).toBe(1);
-    expect(v290.items[0]?.artifactId).toBe('pkg-290');
-  });
-
-  it('treats trailing-zero-equivalent known reports as current', () => {
-    const bundle = component('streamline');
-    // PE often reports 2.9.0.0 while package options use 2.9.0 — equality must
-    // mark the option current without inventing a second Select entry.
-    const groupsById = {
-      streamline: group('streamline', '2.9.0.0', [
-        candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
-        candidate('2.8.0', { artifact_id: 'pkg-280', file_name: 'sl.common.dll' }),
-      ]),
-    };
-
-    const model = buildStreamlineVersionModel([bundle], groupsById);
-
-    expect(model.isMixed).toBe(false);
-    expect(model.currentVersion).toBe('2.9.0.0');
-    // First spelling of an equivalent release is kept (known report before package label).
-    expect(model.options.map((o) => o.version)).toEqual(['2.9.0.0', '2.8.0']);
-    const current = findOption(model, '2.9.0');
-    expect(current.isCurrent).toBe(true);
-    expect(current.version).toBe('2.9.0.0');
-    expect(current.updateCount).toBe(0);
-  });
-
-  it('does not invent a uniform current from an unknown report', () => {
-    const bundle = component('streamline');
-    const groupsById = {
-      streamline: group('streamline', null, [
-        candidate('2.9.0', { artifact_id: 'pkg-290', file_name: 'sl.common.dll' }),
-      ]),
-    };
-
-    const model = buildStreamlineVersionModel([bundle], groupsById);
-
-    expect(model.currentVersion).toBeNull();
-    expect(model.isMixed).toBe(false);
-    const v290 = findOption(model, '2.9.0');
-    expect(v290.isCurrent).toBe(false);
-    expect(v290.updateCount).toBe(1);
-  });
-
-  it('uses an explicit automatic mode while manual mode keeps every candidate', () => {
-    const bundle = component('streamline');
-    const groupsById = {
-      streamline: group('streamline', '2.0.0', [
-        candidate('2.1.0', { artifact_id: 'local' }),
-        catalogCandidate('2.2.0-preview', {
-          artifact_id: 'preview',
-          catalog_package: {
-            package_id: 'preview',
-            release: { version: '2.2.0-preview', channel: 'preview', label: null },
-            availability: 'available',
-            automatic_selection_allowed: false,
-          },
-        }),
-        catalogCandidate('2.3.0', {
-          artifact_id: 'withdrawn',
-          catalog_package: {
-            package_id: 'withdrawn',
-            release: { version: '2.3.0', channel: 'stable', label: null },
-            availability: 'local_only',
-            automatic_selection_allowed: false,
-          },
-        }),
-        catalogCandidate('1.9.0', {
-          artifact_id: 'older-stable',
-          comparison: 'older_version',
-        }),
-        catalogCandidate('2.4.0', { artifact_id: 'stable' }),
-      ]),
-    };
-
-    const manual = buildStreamlineVersionModel([bundle], groupsById, 'manual');
-    expect(manual.options.map((option) => option.version)).toEqual([
-      '2.4.0',
-      '2.3.0',
-      '2.2.0-preview',
-      '2.1.0',
-      '2.0.0',
-      '1.9.0',
-    ]);
-
-    const automatic = buildStreamlineVersionModel([bundle], groupsById, 'automatic');
-    expect(automatic.options.map((option) => option.version)).toEqual(['2.4.0', '2.0.0']);
-    expect(automatic.options[0]?.items[0]?.artifactId).toBe('stable');
-  });
-
-  it('orders package prereleases below stable releases using package precedence', () => {
-    const bundle = component('streamline');
-    const groupsById = {
-      streamline: group('streamline', null, [
-        catalogCandidate('1.0.0-preview.2'),
-        catalogCandidate('1.0.0'),
-        catalogCandidate('1.0.0-preview.10'),
-      ]),
-    };
-
-    const model = buildStreamlineVersionModel([bundle], groupsById);
-
-    expect(model.options.map((option) => option.version)).toEqual([
-      '1.0.0',
-      '1.0.0-preview.10',
-      '1.0.0-preview.2',
-    ]);
-  });
-});
-
-describe('versionsEqual (version-compare)', () => {
-  it('ignores trailing zero segments', () => {
-    expect(versionsEqual('2.9.0', '2.9.0.0')).toBe(true);
-    expect(versionsEqual('2.9', '2.9.0.0')).toBe(true);
-    expect(versionsEqual('2.9.0', '2.9.1')).toBe(false);
-  });
-
-  it('compares u64-sized segments without JavaScript Number rounding', () => {
-    expect(compareVersionAsc('18446744073709551614', '18446744073709551615')).toBeLessThan(0);
-    expect(compareVersionAsc('18446744073709551615.0', '18446744073709551615')).toBe(0);
   });
 });

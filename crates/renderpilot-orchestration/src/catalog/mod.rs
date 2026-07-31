@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use renderpilot_application::{
     AppError, AppResult, ArtifactRepository, CandidateArtifactIndex,
-    ComponentReplacementCandidates, ComponentRepository, GameRepository, InstalledAddonRepository,
-    OperationPlan, OperationRecord, find_replacement_candidates_indexed,
+    ComponentReplacementCandidates, ComponentRepository, CoordinatedCandidateOption,
+    GameRepository, InstalledAddonRepository, OperationPlan, OperationRecord,
+    find_replacement_candidate_selection_indexed,
 };
 use renderpilot_detection::DetectedLibraryFile;
 use renderpilot_domain::{
@@ -163,12 +164,14 @@ pub struct CandidateCatalogResult {
 pub struct GameDetailsCatalogResult {
     /// The game installation.
     pub game: GameInstallation,
-    /// All graphics components for this game.
+    /// All library components for this game.
     pub components: Vec<LibraryComponent>,
     /// Component ids with a currently usable rollback baseline.
     pub backup_component_ids: HashSet<String>,
     /// Replacement candidate groups across all components.
     pub candidate_groups: Vec<ComponentReplacementCandidates>,
+    /// Backend-coordinated Streamline manual options.
+    pub streamline_candidate_options: Vec<CoordinatedCandidateOption>,
     /// Fresh active D3D12 executable status, independent of candidate availability.
     pub d3d12_executable_status: Option<D3d12ExecutableStatus>,
     /// Operation history for this game.
@@ -446,11 +449,12 @@ pub(crate) fn get_game_details_with_universe(
         &components,
         installed_addon.as_ref(),
     )?;
-    let candidate_groups = find_replacement_candidates_indexed(
+    let candidate_selection = find_replacement_candidate_selection_indexed(
         &matching_components,
         &universe.artifact_index,
         &candidate_context,
     );
+    let (candidate_groups, streamline_candidate_options) = candidate_selection.into_parts();
 
     let operations = list_operations(context, game_id)?;
 
@@ -459,6 +463,7 @@ pub(crate) fn get_game_details_with_universe(
         components,
         backup_component_ids,
         candidate_groups,
+        streamline_candidate_options,
         d3d12_executable_status,
         operations,
         addon_capabilities,

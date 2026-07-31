@@ -12,11 +12,14 @@ use crate::{
     dxc::{COMPILER_FILE_NAME, VALIDATOR_FILE_NAME},
 };
 
+use super::automatic::is_automatic_catalog_candidate;
 use super::dto::{
-    ActiveCatalogPackage, CandidateComparison, ComponentReplacementCandidates,
-    InstalledReleaseState, is_automatic_catalog_candidate,
+    ActiveCatalogPackage, CandidateComparison, CandidateSelection, ComponentReplacementCandidates,
+    InstalledReleaseState,
 };
-use super::matcher::{CandidateContext, find_replacement_candidates};
+use super::matcher::{
+    CandidateContext, find_replacement_candidate_selection, find_replacement_candidates,
+};
 
 #[test]
 fn selects_only_same_technology_candidates() {
@@ -192,11 +195,19 @@ fn presentation_d3d12_candidates_explain_actions_without_minting_tokens() {
         None,
     )
     .with_metadata(
-        ArtifactMetadata::default().with_runtime_target(
-            RuntimeTarget::new(Architecture::X64)
-                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
-        ),
+        ArtifactMetadata::default()
+            .with_runtime_target(
+                RuntimeTarget::new(Architecture::X64)
+                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 619 }),
+            )
+            .with_catalog_package_receipt(test_catalog_receipt(
+                "artifact:d3d12-presentation-619",
+                "d3d12_agility",
+                "1.619.1",
+                None,
+            )),
     );
+    let active_catalog = active_catalog_for(std::slice::from_ref(&artifact));
     let profile = SwapTargetProfile::new(Some(Architecture::X64), Some(606))
         .with_d3d12_executable_profile(D3d12ExecutableProfile::new(
             PathRef::new("C:/Games/GameA/game.exe").expect("exe"),
@@ -204,20 +215,26 @@ fn presentation_d3d12_candidates_explain_actions_without_minting_tokens() {
             606,
             606,
             false,
-            false,
+            true,
         ));
 
     let groups = find_replacement_candidates(
         &[component],
         &[artifact],
-        &CandidateContext::empty().with_target_profile(profile),
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog)
+            .with_target_profile(profile),
     );
     let action = groups[0].candidates()[0]
         .d3d12_executable_action()
         .expect("presentation action");
 
-    assert_eq!(action.kind(), D3d12ExecutableActionKind::Patch);
-    assert!(action.requires_confirmation());
+    assert_eq!(action.kind(), D3d12ExecutableActionKind::RepairRequired);
+    assert!(!action.requires_confirmation());
+    assert_eq!(
+        groups[0].automatic_candidate_artifact_id(),
+        None,
+        "repair-required executable state must disable unattended selection"
+    );
 }
 
 #[test]
@@ -626,6 +643,500 @@ fn uniform_streamline_compares_against_shared_version() {
 }
 
 #[test]
+fn backend_aligns_streamline_automatic_candidates_to_the_newest_complete_release() {
+    let common = streamline_component_at(
+        "component:game-a:streamline-common",
+        "C:/Game/A/sl.common.dll",
+        "2.3.0",
+    );
+    let interposer = streamline_component_at(
+        "component:game-a:streamline-interposer",
+        "C:/Game/B/sl.interposer.dll",
+        "2.3.0",
+    );
+    let package = |artifact: LibraryArtifact, id: &str, version: &str| {
+        artifact.with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+            test_catalog_receipt(id, "nvidia_streamline", version, None),
+        ))
+    };
+    let incomplete_newest = package(
+        streamline_artifact_with_members("artifact:sl-2.5", "2.5.0", &[("sl.common.dll", 'e')]),
+        "artifact:sl-2.5",
+        "2.5.0",
+    );
+    let complete = package(
+        streamline_artifact_with_members(
+            "artifact:sl-2.4",
+            "2.4.0",
+            &[("sl.common.dll", 'c'), ("sl.interposer.dll", 'd')],
+        ),
+        "artifact:sl-2.4",
+        "2.4.0",
+    );
+    let active_catalog = active_catalog_for(&[incomplete_newest.clone(), complete.clone()]);
+
+    let groups = find_replacement_candidates(
+        &[common, interposer],
+        &[incomplete_newest, complete.clone()],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    assert_eq!(groups.len(), 2);
+    for group in &groups {
+        assert_eq!(
+            group.automatic_candidate_artifact_id(),
+            Some(complete.id()),
+            "component {} candidates: {:?}",
+            group.component_id(),
+            group
+                .candidates()
+                .iter()
+                .map(|candidate| (
+                    candidate.artifact_id().as_str(),
+                    candidate.comparison(),
+                    is_automatic_catalog_candidate(candidate),
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn streamline_automatic_selection_fails_closed_when_a_component_has_no_candidate_group() {
+    let common = streamline_component_at(
+        "component:game-a:streamline-common-incomplete",
+        "C:/Game/A/sl.common.dll",
+        "2.3.0",
+    );
+    let interposer = streamline_component_at(
+        "component:game-a:streamline-interposer-incomplete",
+        "C:/Game/B/sl.interposer.dll",
+        "2.3.0",
+    );
+    let incomplete = streamline_artifact_with_members(
+        "artifact:sl-2.5-incomplete",
+        "2.5.0",
+        &[("sl.common.dll", 'e')],
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt(
+            "artifact:sl-2.5-incomplete",
+            "nvidia_streamline",
+            "2.5.0",
+            None,
+        ),
+    ));
+    let active_catalog = active_catalog_for(std::slice::from_ref(&incomplete));
+
+    let groups = find_replacement_candidates(
+        &[common, interposer],
+        std::slice::from_ref(&incomplete),
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    assert_eq!(
+        groups.len(),
+        1,
+        "only the installed member covered by the incomplete release has a candidate group"
+    );
+    assert_eq!(
+        groups[0].automatic_candidate_artifact_id(),
+        None,
+        "a missing Streamline candidate group must clear automatic selection for the bundle"
+    );
+}
+
+#[test]
+fn streamline_automatic_selection_requires_one_exact_full_release() {
+    let common = streamline_component_at(
+        "component:game-a:streamline-common-exact",
+        "C:/Game/A/sl.common.dll",
+        "2.3.0",
+    );
+    let interposer = streamline_component_at(
+        "component:game-a:streamline-interposer-exact",
+        "C:/Game/B/sl.interposer.dll",
+        "2.3.0",
+    );
+    let package = |artifact: LibraryArtifact, id: &str, label: &str| {
+        let mut receipt = test_catalog_receipt(id, "nvidia_streamline", "2.4.0", None);
+        receipt.release.label = Some(label.to_owned());
+        artifact.with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(receipt))
+    };
+    let release_a = package(
+        streamline_artifact_with_members(
+            "artifact:sl-2.4-a",
+            "2.4.0",
+            &[("sl.common.dll", 'c'), ("sl.interposer.dll", 'd')],
+        ),
+        "artifact:sl-2.4-a",
+        "release A",
+    );
+    let release_b = package(
+        streamline_artifact_with_members(
+            "artifact:sl-2.4-b",
+            "2.4.0",
+            &[("sl.common.dll", 'e'), ("sl.interposer.dll", 'f')],
+        ),
+        "artifact:sl-2.4-b",
+        "release B",
+    );
+    let active_catalog = active_catalog_for(&[release_a.clone(), release_b.clone()]);
+
+    let selection = find_replacement_candidate_selection(
+        &[common, interposer],
+        &[release_a, release_b],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    assert_eq!(selection.groups().len(), 2);
+    assert!(
+        selection
+            .groups()
+            .iter()
+            .all(|group| { group.automatic_candidate_artifact_id().is_none() })
+    );
+    assert!(
+        selection.streamline_options().is_empty(),
+        "distinct complete cohorts without a structural cohort identity are ambiguous"
+    );
+}
+
+#[test]
+fn streamline_option_id_ignores_presentation_label() {
+    let selection_for_label = |label: &str| {
+        let common = streamline_component_at(
+            "component:game-a:streamline-option-common",
+            "C:/Game/A/sl.common.dll",
+            "2.3.0",
+        );
+        let interposer = streamline_component_at(
+            "component:game-a:streamline-option-interposer",
+            "C:/Game/B/sl.interposer.dll",
+            "2.3.0",
+        );
+        let mut receipt = test_catalog_receipt(
+            "streamline-option",
+            "nvidia_streamline",
+            "2.4.0",
+            Some(label),
+        );
+        receipt.release.label = Some(label.to_owned());
+        let artifact = streamline_artifact_with_members(
+            "artifact:streamline-option",
+            "2.4.0",
+            &[("sl.common.dll", 'c'), ("sl.interposer.dll", 'd')],
+        )
+        .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(receipt));
+        let active_catalog = active_catalog_for(std::slice::from_ref(&artifact));
+
+        find_replacement_candidate_selection(
+            &[common, interposer],
+            std::slice::from_ref(&artifact),
+            &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+        )
+    };
+
+    let first = selection_for_label("Published release");
+    let second = selection_for_label("Localized presentation");
+    let [first] = first.streamline_options() else {
+        panic!("one unambiguous option");
+    };
+    let [second] = second.streamline_options() else {
+        panic!("one unambiguous option");
+    };
+
+    assert_eq!(first.option_id(), second.option_id());
+    assert_ne!(first.release().label, second.release().label);
+    assert_eq!(first.items(), second.items());
+}
+
+#[test]
+fn streamline_options_keep_every_component_in_the_cohort_when_one_is_already_at_release() {
+    let common = streamline_component_at(
+        "component:game-a:streamline-complete-common",
+        "C:/Game/A/sl.common.dll",
+        "2.3.0",
+    );
+    let interposer = streamline_component_at(
+        "component:game-a:streamline-complete-interposer",
+        "C:/Game/A/sl.interposer.dll",
+        "2.4.0",
+    );
+    let current_interposer = streamline_artifact_with_members(
+        "artifact:sl-current-interposer",
+        "2.4.0",
+        &[("sl.interposer.dll", 'a')],
+    )
+    .with_metadata(
+        ArtifactMetadata::default().with_catalog_package_receipt(test_catalog_receipt(
+            "streamline-current-interposer",
+            "nvidia_streamline",
+            "2.4.0",
+            None,
+        )),
+    );
+    let target = streamline_artifact_with_members(
+        "artifact:sl-complete-2.4",
+        "2.4.0",
+        &[("sl.common.dll", 'c'), ("sl.interposer.dll", 'd')],
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt(
+            "streamline-complete-2.4",
+            "nvidia_streamline",
+            "2.4.0",
+            None,
+        ),
+    ));
+    let active_catalog = active_catalog_for(&[current_interposer.clone(), target.clone()]);
+
+    let selection = find_replacement_candidate_selection(
+        &[common, interposer],
+        &[current_interposer, target.clone()],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    let [option] = selection.streamline_options() else {
+        panic!("one complete coordinated option");
+    };
+    assert_eq!(
+        option
+            .items()
+            .iter()
+            .map(|item| (item.component_id().as_str(), item.artifact_id().as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "component:game-a:streamline-complete-common",
+                target.id().as_str()
+            ),
+            (
+                "component:game-a:streamline-complete-interposer",
+                target.id().as_str()
+            ),
+        ],
+        "a manual option must never omit an installed Streamline component"
+    );
+}
+
+#[test]
+fn candidate_selection_is_invariant_to_component_and_artifact_input_order() {
+    let common = streamline_component_at(
+        "component:game-a:streamline-order-common",
+        "C:/Game/A/sl.common.dll",
+        "2.3.0",
+    );
+    let interposer = streamline_component_at(
+        "component:game-a:streamline-order-interposer",
+        "C:/Game/B/sl.interposer.dll",
+        "2.3.0",
+    );
+    let complete = streamline_artifact_with_members(
+        "artifact:streamline-order-2.4",
+        "2.4.0",
+        &[("sl.common.dll", 'c'), ("sl.interposer.dll", 'd')],
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt("streamline-order-2.4", "nvidia_streamline", "2.4.0", None),
+    ));
+    let incomplete = streamline_artifact_with_members(
+        "artifact:streamline-order-2.5",
+        "2.5.0",
+        &[("sl.common.dll", 'e')],
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt("streamline-order-2.5", "nvidia_streamline", "2.5.0", None),
+    ));
+    let active_catalog = active_catalog_for(&[complete.clone(), incomplete.clone()]);
+    let forward = find_replacement_candidate_selection(
+        &[common.clone(), interposer.clone()],
+        &[incomplete.clone(), complete.clone()],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog.clone()),
+    );
+    let reversed = find_replacement_candidate_selection(
+        &[interposer, common],
+        &[complete, incomplete],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    assert_eq!(forward.streamline_options(), reversed.streamline_options());
+    assert_eq!(
+        automatic_selection_snapshot(&forward),
+        automatic_selection_snapshot(&reversed)
+    );
+}
+
+#[test]
+fn canonical_catalog_candidate_wins_over_an_equivalent_local_artifact() {
+    let component = sample_component(
+        "component:game-a:canonical-source",
+        "game:a",
+        LibraryTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let active = sample_artifact(
+        "artifact:canonical-active",
+        LibraryTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"b".repeat(64),
+        "C:/Library/active/nvngx_dlss.dll",
+        Some("game:b"),
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+        test_catalog_receipt("canonical-active", "dlss_super_resolution", "3.7.0", None),
+    ));
+    let local = sample_artifact(
+        "artifact:ordinary-local",
+        LibraryTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"b".repeat(64),
+        "C:/Library/local/nvngx_dlss.dll",
+        Some("game:b"),
+    );
+    let active_catalog = active_catalog_for(std::slice::from_ref(&active));
+
+    let groups = find_replacement_candidates(
+        &[component],
+        &[local, active.clone()],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog),
+    );
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
+    assert_eq!(groups[0].candidates()[0].artifact_id(), active.id());
+}
+
+#[test]
+fn canonical_d3d12_catalog_release_wins_over_its_long_pe_file_version() {
+    let component = sample_component(
+        "component:game-a:d3d12-canonical-source",
+        "game:a",
+        LibraryTechnology::D3D12Agility,
+        Swappability::Swappable,
+        Some("1.721.3.0.20260730.2"),
+        &"a".repeat(64),
+        "C:/Games/GameA/D3D12Core.dll",
+    );
+    let local = sample_artifact(
+        "artifact:d3d12-observed-721-2",
+        LibraryTechnology::D3D12Agility,
+        Some("1.721.2.0.20260702.2"),
+        &"b".repeat(64),
+        "C:/Library/local/D3D12Core.dll",
+        Some("game:b"),
+    )
+    .with_metadata(
+        ArtifactMetadata::default().with_runtime_target(
+            RuntimeTarget::new(Architecture::X64)
+                .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 721 }),
+        ),
+    );
+    let mut receipt = test_catalog_receipt(
+        "d3d12_agility.1.721.2-preview.x64",
+        "d3d12_agility",
+        "1.721.2-preview",
+        None,
+    );
+    receipt.release.channel = ReleaseChannel::Preview;
+    receipt.target.compatibility = Some(RuntimeCompatibility::D3d12Sdk { version: 721 });
+    receipt.primary_file_name = "D3D12Core.dll".to_owned();
+    receipt.primary_sha256 = Sha256Hash::new("b".repeat(64)).expect("hash");
+    let active = sample_artifact(
+        "artifact:d3d12-catalog-721-2",
+        LibraryTechnology::D3D12Agility,
+        Some("1.721.2"),
+        &"b".repeat(64),
+        "C:/Library/catalog/D3D12Core.dll",
+        Some("game:b"),
+    )
+    .with_metadata(
+        ArtifactMetadata::default()
+            .with_runtime_target(
+                RuntimeTarget::new(Architecture::X64)
+                    .with_compatibility(RuntimeCompatibility::D3d12Sdk { version: 721 }),
+            )
+            .with_catalog_package_receipt(receipt),
+    );
+    let active_catalog = active_catalog_for(std::slice::from_ref(&active));
+
+    let groups = find_replacement_candidates(
+        &[component],
+        &[local, active.clone()],
+        &CandidateContext::new(std::collections::HashSet::new(), active_catalog)
+            .with_target_profile(SwapTargetProfile::new(Some(Architecture::X64), Some(721))),
+    );
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].candidates().len(), 1);
+    let candidate = &groups[0].candidates()[0];
+    assert_eq!(candidate.artifact_id(), active.id());
+    assert_eq!(
+        candidate.technical_version().map(Version::as_str),
+        Some("1.721.2")
+    );
+    assert_eq!(
+        candidate
+            .catalog_package()
+            .map(|package| package.release().version.as_str()),
+        Some("1.721.2-preview"),
+        "the UI must receive the SDK release, not the PE FileVersion from the duplicate scan"
+    );
+}
+
+#[test]
+fn missing_or_invalid_catalog_receipts_are_not_reclassified_as_local_candidates() {
+    let component = sample_component(
+        "component:game-a:receipt-eligibility",
+        "game:a",
+        LibraryTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+        Some("3.5.0"),
+        &"a".repeat(64),
+        "C:/Games/GameA/nvngx_dlss.dll",
+    );
+    let missing = LibraryArtifact::new(
+        ArtifactId::new("artifact:catalog-missing-receipt").expect("artifact id"),
+        LibraryTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![
+            ComponentFile::new(PathRef::new("C:/Catalog/nvngx_dlss.dll").expect("path"))
+                .with_sha256(Sha256Hash::new("b".repeat(64)).expect("hash"))
+                .with_version(Version::parse("3.7.0").expect("version")),
+        ],
+        ArtifactTrustLevel::CatalogDownloaded,
+    )
+    .expect("artifact");
+    let mut invalid_receipt =
+        test_catalog_receipt("invalid-receipt", "dlss_super_resolution", "3.7.0", None);
+    invalid_receipt.release.components.insert(
+        "unexpected".to_owned(),
+        PackageVersion::parse("1.0.0").expect("version"),
+    );
+    let invalid = sample_artifact(
+        "artifact:catalog-invalid-receipt",
+        LibraryTechnology::DlssSuperResolution,
+        Some("3.7.0"),
+        &"c".repeat(64),
+        "C:/Catalog/invalid/nvngx_dlss.dll",
+        Some("game:b"),
+    )
+    .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(invalid_receipt));
+
+    assert!(
+        find_replacement_candidates(
+            &[component],
+            &[missing, invalid],
+            &CandidateContext::empty(),
+        )
+        .is_empty()
+    );
+}
+
+#[test]
 fn pe_trailing_zeros_match_manifest_label_for_streamline_baseline() {
     // PE often reports 4-part versions; CDN packages may label 3-part. Equality
     // must not invent Newer/Older solely from trailing zeros.
@@ -695,18 +1206,22 @@ fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
         "C:/Other/nvngx_dlss.dll",
         Some("game:b"),
     );
-    let manifest = LibraryArtifact::new(
-        ArtifactId::new("artifact:manifest").expect("id"),
-        LibraryTechnology::DlssSuperResolution,
-        "nvngx_dlss.dll",
-        vec![
-            ComponentFile::new(PathRef::new("C:/cache/nvngx_dlss.dll").expect("path"))
-                .with_sha256(Sha256Hash::new("c".repeat(64)).expect("sha"))
-                .with_version(Version::parse("3.7.0").expect("version")),
-        ],
-        ArtifactTrustLevel::CatalogDownloaded,
-    )
-    .expect("manifest artifact");
+    let manifest =
+        LibraryArtifact::new(
+            ArtifactId::new("artifact:manifest").expect("id"),
+            LibraryTechnology::DlssSuperResolution,
+            "nvngx_dlss.dll",
+            vec![
+                ComponentFile::new(PathRef::new("C:/cache/nvngx_dlss.dll").expect("path"))
+                    .with_sha256(Sha256Hash::new("c".repeat(64)).expect("sha"))
+                    .with_version(Version::parse("3.7.0").expect("version")),
+            ],
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("manifest artifact")
+        .with_metadata(ArtifactMetadata::default().with_catalog_package_receipt(
+            test_catalog_receipt("dlss-3.7.0", "dlss_super_resolution", "3.7.0", None),
+        ));
 
     let groups = find_test_candidates(&[component], &[local, manifest.clone()]);
     assert_eq!(groups.len(), 1);
@@ -714,7 +1229,7 @@ fn catalog_and_local_payloads_with_the_same_version_remain_distinct() {
     assert_eq!(
         groups[0].candidates()[0].artifact_id(),
         manifest.id(),
-        "CatalogDownloaded still sorts before LocalObserved"
+        "a valid catalog receipt retains its canonical candidate priority"
     );
 }
 
@@ -931,6 +1446,10 @@ fn automatic_policy_accepts_only_active_stable_catalog_candidates() {
         .find(|candidate| candidate.artifact_id() == stable.id())
         .expect("stable candidate");
     assert!(is_automatic_catalog_candidate(stable_candidate));
+    assert_eq!(
+        active[0].automatic_candidate_artifact_id(),
+        Some(stable.id())
+    );
     assert!(
         active[0]
             .candidates()
@@ -939,11 +1458,25 @@ fn automatic_policy_accepts_only_active_stable_catalog_candidates() {
             .all(|candidate| !is_automatic_catalog_candidate(candidate))
     );
 
+    let equal_maximum = catalog_artifact("artifact:stable-peer", 'd', ReleaseChannel::Stable);
+    let ambiguous_catalog = active_catalog_for(&[stable.clone(), equal_maximum.clone()]);
+    let ambiguous = find_replacement_candidates(
+        std::slice::from_ref(&component),
+        &[stable.clone(), equal_maximum],
+        &CandidateContext::new(std::collections::HashSet::new(), ambiguous_catalog),
+    );
+    assert_eq!(
+        ambiguous[0].automatic_candidate_artifact_id(),
+        None,
+        "two equal maximal releases must fail closed"
+    );
+
     let local_only =
         find_replacement_candidates(&[component], &[stable], &CandidateContext::empty());
     assert!(!is_automatic_catalog_candidate(
         &local_only[0].candidates()[0]
     ));
+    assert_eq!(local_only[0].automatic_candidate_artifact_id(), None);
 }
 
 #[test]
@@ -1302,6 +1835,21 @@ fn active_catalog_for(
         .collect()
 }
 
+fn automatic_selection_snapshot(selection: &CandidateSelection) -> Vec<(String, Option<String>)> {
+    selection
+        .groups()
+        .iter()
+        .map(|group| {
+            (
+                group.component_id().as_str().to_owned(),
+                group
+                    .automatic_candidate_artifact_id()
+                    .map(|artifact_id| artifact_id.as_str().to_owned()),
+            )
+        })
+        .collect()
+}
+
 fn sample_component(
     component_id: &str,
     game_id: &str,
@@ -1389,7 +1937,7 @@ fn dxc_package_artifact() -> LibraryArtifact {
         LibraryTechnology::MicrosoftDxc,
         COMPILER_FILE_NAME,
         vec![compiler, validator],
-        ArtifactTrustLevel::CatalogDownloaded,
+        ArtifactTrustLevel::LocalObserved,
     )
     .expect("DXC artifact")
     .with_metadata(
@@ -1429,6 +1977,21 @@ fn streamline_component(files: &[(&str, Option<&str>)]) -> LibraryComponent {
     component
 }
 
+fn streamline_component_at(component_id: &str, path: &str, version: &str) -> LibraryComponent {
+    LibraryComponent::new(
+        ComponentId::new(component_id).expect("component id"),
+        GameId::new("game:a").expect("game id"),
+        ComponentKind::NativeLibrary,
+        LibraryTechnology::NvidiaStreamline,
+        Swappability::BundleOnly,
+    )
+    .with_file(
+        ComponentFile::new(PathRef::new(path).expect("path"))
+            .with_sha256(Sha256Hash::new("a".repeat(64)).expect("sha"))
+            .with_version(Version::parse(version).expect("version")),
+    )
+}
+
 /// Multi-file Streamline package (name-min primary = first member after sort).
 fn streamline_package_artifact(
     artifact_id: &str,
@@ -1450,7 +2013,7 @@ fn streamline_package_artifact(
         LibraryTechnology::NvidiaStreamline,
         "sl.common.dll",
         files,
-        ArtifactTrustLevel::CatalogDownloaded,
+        ArtifactTrustLevel::LocalObserved,
     )
     .expect("streamline package")
 }
@@ -1473,7 +2036,7 @@ fn streamline_artifact_with_members(
         LibraryTechnology::NvidiaStreamline,
         members[0].0,
         files,
-        ArtifactTrustLevel::CatalogDownloaded,
+        ArtifactTrustLevel::LocalObserved,
     )
     .expect("streamline artifact")
 }
@@ -1493,7 +2056,7 @@ fn split_package_artifact(artifact_id: &str, version: &str) -> LibraryArtifact {
         LibraryTechnology::AmdFsr,
         "amd_fidelityfx_upscaler_dx12.dll",
         vec![upscaler, loader],
-        ArtifactTrustLevel::CatalogDownloaded,
+        ArtifactTrustLevel::LocalObserved,
     )
     .expect("split package artifact should be valid")
 }

@@ -3,8 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use renderpilot_application::{
-    CandidateComparison, ComponentReplacementCandidates, D3d12ExecutableProfile, SwapTargetProfile,
-    is_automatic_catalog_candidate,
+    ComponentReplacementCandidates, D3d12ExecutableProfile, SwapTargetProfile,
 };
 use renderpilot_domain::{
     ComponentId, ComponentRollbackBaseline, GameInstallation, InstalledAddon, LibraryComponent,
@@ -169,12 +168,7 @@ pub(super) fn card_metrics(
     let update_count = candidate_groups
         .iter()
         .filter(|group| visible_ids.contains(group.component_id().as_str()))
-        .filter(|group| {
-            group.candidates().iter().any(|candidate| {
-                candidate.comparison() == CandidateComparison::NewerVersion
-                    && is_automatic_catalog_candidate(candidate)
-            })
-        })
+        .filter(|group| group.automatic_candidate_artifact_id().is_some())
         .count();
     let risk_level = components
         .iter()
@@ -192,5 +186,116 @@ pub(super) fn card_metrics(
         component_count,
         update_count,
         risk_level,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use renderpilot_application::{
+        ActiveCatalogPackage, CandidateContext, find_replacement_candidates,
+    };
+    use renderpilot_domain::{
+        ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentKind, GameId, LibraryArtifact,
+        PackageRelease, PackageVersion, ReleaseChannel, Sha256Hash, Version,
+    };
+
+    use super::*;
+
+    #[test]
+    fn card_metrics_count_the_unique_backend_selection() {
+        let component = test_component();
+        let artifact = test_artifact("artifact:card-selected", 'b');
+        let groups = candidate_groups(
+            std::slice::from_ref(&component),
+            std::slice::from_ref(&artifact),
+        );
+
+        assert_eq!(
+            groups[0].automatic_candidate_artifact_id(),
+            Some(artifact.id())
+        );
+        assert_eq!(card_metrics(&[component], &groups).update_count, 1);
+    }
+
+    #[test]
+    fn card_metrics_do_not_reinterpret_ambiguous_package_eligibility() {
+        let component = test_component();
+        let first = test_artifact("artifact:card-ambiguous-a", 'b');
+        let second = test_artifact("artifact:card-ambiguous-b", 'c');
+        let groups = candidate_groups(std::slice::from_ref(&component), &[first, second]);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].candidates().len(), 2);
+        assert_eq!(groups[0].automatic_candidate_artifact_id(), None);
+        assert_eq!(
+            card_metrics(&[component], &groups).update_count,
+            0,
+            "an ambiguous maximum must not appear as an available automatic update"
+        );
+    }
+
+    fn candidate_groups(
+        components: &[LibraryComponent],
+        artifacts: &[LibraryArtifact],
+    ) -> Vec<ComponentReplacementCandidates> {
+        let active_catalog = artifacts
+            .iter()
+            .map(|artifact| {
+                (
+                    artifact.id().clone(),
+                    ActiveCatalogPackage::new(
+                        format!("package:{}", artifact.id()),
+                        package_release(),
+                        true,
+                    ),
+                )
+            })
+            .collect();
+        find_replacement_candidates(
+            components,
+            artifacts,
+            &CandidateContext::new(HashSet::new(), active_catalog),
+        )
+    }
+
+    fn test_component() -> LibraryComponent {
+        LibraryComponent::new(
+            ComponentId::new("component:card-metrics").expect("component id"),
+            GameId::new("game:card-metrics").expect("game id"),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+        )
+        .with_file(
+            ComponentFile::new(PathRef::new("C:/Game/nvngx_dlss.dll").expect("component path"))
+                .with_sha256(Sha256Hash::new("a".repeat(64)).expect("component hash"))
+                .with_version(Version::parse("3.5.0").expect("component version")),
+        )
+    }
+
+    fn test_artifact(id: &str, hash: char) -> LibraryArtifact {
+        LibraryArtifact::new(
+            ArtifactId::new(id).expect("artifact id"),
+            LibraryTechnology::DlssSuperResolution,
+            "nvngx_dlss.dll",
+            vec![
+                ComponentFile::new(
+                    PathRef::new(format!("manifest://{id}/nvngx_dlss.dll")).expect("artifact path"),
+                )
+                .with_sha256(Sha256Hash::new(hash.to_string().repeat(64)).expect("artifact hash"))
+                .with_version(Version::parse("3.7.0").expect("artifact version")),
+            ],
+            ArtifactTrustLevel::CatalogDownloaded,
+        )
+        .expect("artifact")
+    }
+
+    fn package_release() -> PackageRelease {
+        PackageRelease {
+            version: PackageVersion::parse("3.7.0").expect("package version"),
+            channel: ReleaseChannel::Stable,
+            label: None,
+            components: Default::default(),
+        }
     }
 }

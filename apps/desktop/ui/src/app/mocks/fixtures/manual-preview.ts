@@ -52,6 +52,7 @@ export function createManualPreviewDetails(
           release_label: null,
           catalog_release: null,
         },
+        automatic_candidate_artifact_id: `artifact:${gameId}:dlss-preview`,
         candidates: [
           {
             artifact_id: `artifact:${gameId}:dlss-preview`,
@@ -66,6 +67,7 @@ export function createManualPreviewDetails(
               release: { version: '3.7.20', channel: 'stable', label: null },
               availability: 'available',
               automatic_selection_allowed: true,
+              presentation: null,
             },
             is_downloaded: true,
             is_debug: false,

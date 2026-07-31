@@ -23,13 +23,16 @@ pub use details::get_game_details;
 pub use settings::{get_catalog_setting, set_catalog_setting, set_game_favorite, set_game_hidden};
 
 /// Whether the GUI surfaces this component in the details projection.
+/// Whether the GUI surfaces this component (single source of the visibility rule,
+/// shared by [`cards`] and [`details`] so it can never drift).
 fn is_component_visible(component: &LibraryComponent) -> bool {
     is_visible_library_technology(component.technology())
 }
 
 /// Stable string ids of the components the GUI surfaces for a game.
 ///
-/// Used to keep details components and candidate groups aligned.
+/// Shared by [`cards`] (update counts per visible component) and [`details`]
+/// (candidate-group filtering).
 fn visible_component_ids(components: &[LibraryComponent]) -> BTreeSet<String> {
     components
         .iter()

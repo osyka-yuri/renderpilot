@@ -1,4 +1,4 @@
-//! Representative file selection for graphics components.
+//! Representative file selection for library components.
 //!
 //! Provides the user-facing display file (the entry point when present), the
 //! version-representative file (the upscaler when the set is cohesive, the

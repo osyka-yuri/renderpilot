@@ -1,13 +1,6 @@
-import {
-  isAutomaticCatalogCandidate,
-  type GameCandidateGroup,
-  type GameDetails,
-} from '@entities/game';
-import { comparePackageVersions } from '@shared/model';
+import { type GameCandidateGroup, type GameDetails } from '@entities/game';
 
-import { NVIDIA_STREAMLINE_TECHNOLOGY } from './game-details-tabs';
 import { requiresD3d12Preflight } from './d3d12-preflight';
-import { buildStreamlineVersionModel } from './streamline-versions';
 import type { PlannedSwap } from './swap-request';
 
 type GameCandidate = GameCandidateGroup['candidates'][number];
@@ -21,8 +14,6 @@ type GameCandidate = GameCandidateGroup['candidates'][number];
  * (or whose current version is unknown) contributes nothing.
  */
 
-const NEWER_VERSION = 'newer_version';
-
 export type UpdateAllPlan = {
   /** Components to swap to reach their latest version (already-current excluded). */
   items: PlannedSwap[];
@@ -34,34 +25,21 @@ export type UpdateAllPlan = {
  * Builds the "update all to latest" plan from a game's components and their
  * candidate groups.
  *
- * Non-Streamline components are upgraded independently to their newest available
- * version. Streamline plugins are `BundleOnly` — they must all run the same
- * release — so they are upgraded together to the newest version every installed
- * plugin can reach, keeping the bundle consistent (never a mixed state).
+ * The backend is the single owner of automatic-selection policy, including
+ * composite-version partial ordering and cohesive Streamline groups. The UI only
+ * resolves each returned artifact id to its already-present candidate payload.
  */
 export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateAllPlan {
   if (!details) {
     return { items: [], updateCount: 0 };
   }
 
-  const groupsById: Record<string, GameCandidateGroup | null> = {};
-  for (const group of details.candidate_groups) {
-    groupsById[group.component_id] = group;
-  }
-
-  const streamlineComponents = details.components.filter(
-    (component) => component.technology === NVIDIA_STREAMLINE_TECHNOLOGY,
-  );
-  const otherComponents = details.components.filter(
-    (component) => component.technology !== NVIDIA_STREAMLINE_TECHNOLOGY,
-  );
+  const groupsById = uniqueCandidateGroupIndex(details.candidate_groups);
 
   const items: PlannedSwap[] = [];
 
-  // Independent components: pick the newest genuine upgrade by its full catalogue
-  // package version rather than trusting the candidates' arrival order.
-  for (const component of otherComponents) {
-    const candidate = latestUpgrade(groupsById[component.id]);
+  for (const component of details.components) {
+    const candidate = resolveAutomaticCandidate(groupsById.get(component.id));
     if (candidate) {
       items.push({
         kind: requiresD3d12Preflight(component.technology) ? 'd3d12' : 'direct',
@@ -74,58 +52,36 @@ export function buildUpdateAllToLatestPlan(details: GameDetails | null): UpdateA
     }
   }
 
-  // Streamline bundle: BundleOnly plugins must share one release, so pick the
-  // newest version every installed plugin can reach (`isComplete`). `options`
-  // are newest-first and exclude each plugin's current version. Skipping
-  // incomplete versions avoids leaving the bundle in a mixed state; the user can
-  // still pick one manually from the Streamline dropdown.
-  if (streamlineComponents.length > 0) {
-    const model = buildStreamlineVersionModel(streamlineComponents, groupsById, 'automatic');
-    const latestComplete = model.options.find((option) => option.isComplete);
-    if (latestComplete) {
-      items.push(
-        ...latestComplete.items.map((target): PlannedSwap => ({
-          kind: 'direct',
-          target,
-        })),
-      );
-    }
-  }
-
   return { items, updateCount: items.length };
 }
 
 /**
- * The newest genuine upgrade for one component, or `null` when none exists.
- *
- * Considers only automatically eligible `newer_version` candidates and picks the
- * highest full `catalog_package.release.version`, so the result never depends on backend
- * arrival order. Automatic eligibility guarantees that this identity is present.
+ * Resolves the backend-selected automatic candidate without reimplementing its
+ * eligibility, ordering, provenance, or bundle-cohesion policy.
  */
-function latestUpgrade(group: GameCandidateGroup | null | undefined): GameCandidate | null {
-  const upgrades = (group?.candidates ?? []).filter(
-    (candidate) =>
-      candidate.comparison === NEWER_VERSION &&
-      isAutomaticCatalogCandidate(candidate) &&
-      candidate.d3d12_executable_action?.kind !== 'repair_required',
-  );
-
-  let best: GameCandidate | null = null;
-  for (const candidate of upgrades) {
-    if (best === null || isNewer(candidate, best)) {
-      best = candidate;
-    }
+export function resolveAutomaticCandidate(
+  group: GameCandidateGroup | null | undefined,
+): GameCandidate | null {
+  if (!group?.automatic_candidate_artifact_id) {
+    return null;
   }
 
-  return best;
+  const matches = group.candidates.filter(
+    (candidate) => candidate.artifact_id === group.automatic_candidate_artifact_id,
+  );
+  return matches.length === 1 ? matches[0] : null;
 }
 
-/** Whether `candidate` is a strictly newer version than the current `best`. */
-function isNewer(candidate: GameCandidate, best: GameCandidate): boolean {
-  const candidateVersion = candidate.catalog_package?.release.version;
-  const bestVersion = best.catalog_package?.release.version;
-  if (!candidateVersion || !bestVersion) {
-    return false;
+function uniqueCandidateGroupIndex(
+  groups: readonly GameCandidateGroup[],
+): Map<string, GameCandidateGroup | null> {
+  const index = new Map<string, GameCandidateGroup | null>();
+  for (const group of groups) {
+    if (index.has(group.component_id)) {
+      index.set(group.component_id, null);
+    } else {
+      index.set(group.component_id, group);
+    }
   }
-  return comparePackageVersions(candidateVersion, bestVersion) > 0;
+  return index;
 }

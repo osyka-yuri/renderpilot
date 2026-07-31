@@ -90,6 +90,7 @@ export function createCyberpunkDetails(): GameDetails {
         release_label: null,
         catalog_release: null,
       },
+      automatic_candidate_artifact_id: 'artifact:dlss:3.7.20',
       candidates: [
         {
           artifact_id: 'artifact:dlss:3.7.20',
@@ -104,6 +105,7 @@ export function createCyberpunkDetails(): GameDetails {
             release: { version: '3.7.20', channel: 'stable', label: null },
             availability: 'available',
             automatic_selection_allowed: true,
+            presentation: null,
           },
           is_downloaded: true,
           is_debug: false,
@@ -122,6 +124,7 @@ export function createCyberpunkDetails(): GameDetails {
         release_label: null,
         catalog_release: null,
       },
+      automatic_candidate_artifact_id: 'artifact:dlssg:3.7.10',
       candidates: [
         {
           artifact_id: 'artifact:dlssg:3.7.10',
@@ -136,6 +139,7 @@ export function createCyberpunkDetails(): GameDetails {
             release: { version: '3.7.10', channel: 'stable', label: null },
             availability: 'available',
             automatic_selection_allowed: true,
+            presentation: null,
           },
           is_downloaded: true,
           is_debug: false,
@@ -154,6 +158,7 @@ export function createCyberpunkDetails(): GameDetails {
         release_label: null,
         catalog_release: null,
       },
+      automatic_candidate_artifact_id: 'artifact:d3d12:1.619.1',
       candidates: [
         {
           artifact_id: 'artifact:d3d12:1.619.1',
@@ -168,6 +173,7 @@ export function createCyberpunkDetails(): GameDetails {
             release: { version: '1.619.1', channel: 'stable', label: null },
             availability: 'available',
             automatic_selection_allowed: true,
+            presentation: null,
           },
           is_downloaded: true,
           is_debug: false,

@@ -224,13 +224,26 @@ export type GameCandidateGroup = {
   technology: string;
   file_path: string;
   version_report: InstalledReleaseState;
+  automatic_candidate_artifact_id: string | null;
   candidates: GameCandidate[];
+};
+
+/** Backend-coordinated Streamline option; `option_id` is the selection identity. */
+export type CoordinatedCandidateOption = {
+  option_id: string;
+  release: CatalogRelease;
+  items: {
+    component_id: string;
+    artifact_id: string;
+  }[];
 };
 
 export type GameDetails = {
   game: GameInstallation;
   components: GameLibraryComponent[];
   candidate_groups: GameCandidateGroup[];
+  /** Optional additive API field; absent means no safe coordinated alternatives. */
+  streamline_candidate_options?: CoordinatedCandidateOption[];
   operations: GameOperationSummary[];
   /** Add-on capabilities derived the same way as for catalog list cards (profile + installed). */
   addon_capabilities: AddonCapability[];

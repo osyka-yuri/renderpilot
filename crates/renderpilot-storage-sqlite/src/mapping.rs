@@ -114,7 +114,7 @@ mod tests {
     }
 
     #[test]
-    fn library_technology_codec_roundtrips_new_graphics_slugs() {
+    fn library_technology_codec_roundtrips_new_library_slugs() {
         for technology in [
             LibraryTechnology::IntelXeLl,
             LibraryTechnology::AmdFsrRayRegeneration,

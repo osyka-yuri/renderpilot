@@ -50,10 +50,10 @@ export function createOperationViewModel(
   const gameName = operation.metadata?.game_name ?? gameCard?.title ?? '-';
 
   let libraryType = '-';
-  if (operation.metadata?.library) {
-    libraryType = formatLabel(operation.metadata.library);
+  if (operation.metadata?.technology) {
+    libraryType = formatLabel(operation.metadata.technology);
   } else if (operation.component_id) {
-    // Fallback for old manual operations where library is missing
+    // Fallback for old manual operations where technology is missing.
     const id = operation.component_id.toLowerCase();
     const match = Object.entries(COMPONENT_ID_LABEL_MAP).find(([key]) => id.includes(key));
     libraryType = match ? match[1] : formatLabel(operation.component_id);

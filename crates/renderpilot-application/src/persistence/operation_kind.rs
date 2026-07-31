@@ -5,7 +5,7 @@ use crate::{AppError, AppResult};
 /// Persisted operation kind.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OperationKind {
-    /// Scans one game installation for supported graphics components.
+    /// Scans one game installation for supported library components.
     Scan,
 
     /// Replaces one detected component with a selected artifact.

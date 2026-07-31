@@ -5,10 +5,13 @@
 //! use them so the wire format stays consistent.
 
 use renderpilot_application::{
-    ComponentReplacementCandidates, D3d12ExecutableAction, InstalledReleaseState, OperationPlan,
-    OperationPlanFile, ReplacementCandidate,
+    ComponentReplacementCandidates, CoordinatedCandidateOption, D3d12ExecutableAction,
+    InstalledReleaseState, OperationPlan, OperationPlanFile, ReplacementCandidate,
 };
-use renderpilot_domain::{CatalogPackageAvailability, PackageRelease};
+use renderpilot_domain::{
+    Architecture, CatalogLegalDocumentReceipt, CatalogPackageAvailability,
+    CatalogPackageProvenanceReceipt, PackageRelease,
+};
 use serde::Serialize;
 
 use super::{
@@ -33,6 +36,45 @@ pub struct ComponentCandidateOutput {
     pub version_report: InstalledReleaseStateOutput,
     /// Available replacement candidates for this component.
     pub candidates: Vec<CandidateOutput>,
+    /// Unique maximal candidate selected by backend unattended policy.
+    pub automatic_candidate_artifact_id: Option<String>,
+}
+
+/// Serializable coordinated Streamline manual option.
+#[derive(Debug, Serialize)]
+pub struct CoordinatedCandidateOptionOutput {
+    /// Stable SHA-256 option identity; never derived from presentation labels.
+    pub option_id: String,
+    /// User-facing catalog release.
+    pub release: PackageRelease,
+    /// Exact component/artifact pairs in component-id order.
+    pub items: Vec<CoordinatedCandidateItemOutput>,
+}
+
+/// One exact item in a coordinated option.
+#[derive(Debug, Serialize)]
+pub struct CoordinatedCandidateItemOutput {
+    /// Target component identifier.
+    pub component_id: String,
+    /// Selected artifact identifier.
+    pub artifact_id: String,
+}
+
+impl From<CoordinatedCandidateOption> for CoordinatedCandidateOptionOutput {
+    fn from(option: CoordinatedCandidateOption) -> Self {
+        Self {
+            option_id: option.option_id().to_owned(),
+            release: option.release().clone(),
+            items: option
+                .items()
+                .iter()
+                .map(|item| CoordinatedCandidateItemOutput {
+                    component_id: item.component_id().as_str().to_owned(),
+                    artifact_id: item.artifact_id().as_str().to_owned(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// JSON-safe representation of the installed component version state.
@@ -125,6 +167,23 @@ pub struct CatalogCandidateOutput {
     pub availability: CatalogPackageAvailability,
     /// Whether unattended selection is permitted.
     pub automatic_selection_allowed: bool,
+    /// Immutable verified facts for detailed candidate presentation.
+    pub presentation: Option<CatalogCandidatePresentationOutput>,
+}
+
+/// Verified package facts displayed without repeating policy in the UI.
+#[derive(Debug, Serialize)]
+pub struct CatalogCandidatePresentationOutput {
+    /// Package variant; for Xiph this is `<topology>.<naming profile>`.
+    pub variant: String,
+    /// Verified PE target architecture.
+    pub architecture: Architecture,
+    /// Whether package DLLs are unsigned.
+    pub unsigned: bool,
+    /// Exact composite provenance, when applicable.
+    pub provenance: Option<CatalogPackageProvenanceReceipt>,
+    /// Validated legal-document links applicable to this package.
+    pub legal_documents: Vec<CatalogLegalDocumentReceipt>,
 }
 
 /// Stable wire shape for D3D12 executable assessment.
@@ -366,6 +425,9 @@ impl From<ComponentReplacementCandidates> for ComponentCandidateOutput {
             technology: group.technology().as_slug().to_owned(),
             file_path: group.file_path().as_str().to_owned(),
             version_report: InstalledReleaseStateOutput::from(group.installed_release()),
+            automatic_candidate_artifact_id: group
+                .automatic_candidate_artifact_id()
+                .map(|id| id.as_str().to_owned()),
             candidates,
         }
     }
@@ -392,6 +454,15 @@ impl From<&ReplacementCandidate> for CandidateOutput {
                     release: package.release().clone(),
                     availability: package.availability(),
                     automatic_selection_allowed: package.automatic_selection_allowed(),
+                    presentation: package.presentation().map(|presentation| {
+                        CatalogCandidatePresentationOutput {
+                            variant: presentation.variant().to_owned(),
+                            architecture: presentation.architecture(),
+                            unsigned: presentation.unsigned(),
+                            provenance: presentation.provenance().cloned(),
+                            legal_documents: presentation.legal_documents().to_vec(),
+                        }
+                    }),
                 }),
             is_downloaded: candidate.is_downloaded(),
             is_debug: candidate.is_debug(),
@@ -410,6 +481,16 @@ pub fn component_candidate_outputs(
     groups
         .into_iter()
         .map(ComponentCandidateOutput::from)
+        .collect()
+}
+
+/// Converts backend-coordinated options to the additive details wire field.
+pub fn coordinated_candidate_option_outputs(
+    options: Vec<CoordinatedCandidateOption>,
+) -> Vec<CoordinatedCandidateOptionOutput> {
+    options
+        .into_iter()
+        .map(CoordinatedCandidateOptionOutput::from)
         .collect()
 }
 
@@ -567,6 +648,7 @@ mod tests {
                 },
                 availability: CatalogPackageAvailability::Available,
                 automatic_selection_allowed: true,
+                presentation: None,
             }),
             is_downloaded: false,
             is_debug: false,
@@ -594,6 +676,7 @@ mod tests {
                     },
                     "availability": "available",
                     "automatic_selection_allowed": true,
+                    "presentation": null,
                 },
                 "is_downloaded": false,
                 "is_debug": false,
@@ -761,7 +844,7 @@ mod tests {
                 .cloned(),
             Some(json!({
                 "game_name": "Example",
-                "technology": "d3d12_agility",
+                    "technology": "d3d12_agility",
                 "from_version": "1.606.4",
                 "to_version": "1.619.1",
                 "d3d12_executable_action": {

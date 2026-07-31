@@ -19,9 +19,10 @@ mod transition;
 
 pub use candidates::{
     ActiveCatalogPackage, CandidateArtifactIndex, CandidateComparison, CandidateContext,
-    ComponentReplacementCandidates, InstalledReleaseState, ReplacementCandidate,
+    CandidateSelection, ComponentReplacementCandidates, CoordinatedCandidateItem,
+    CoordinatedCandidateOption, InstalledReleaseState, ReplacementCandidate,
+    find_replacement_candidate_selection, find_replacement_candidate_selection_indexed,
     find_replacement_candidates, find_replacement_candidates_indexed,
-    is_automatic_catalog_candidate,
 };
 pub use compatibility::{
     D3d12ExecutableAction, D3d12ExecutableActionKind, D3d12ExecutableProfile,

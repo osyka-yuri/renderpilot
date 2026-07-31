@@ -1,4 +1,4 @@
-//! Immutable rollback identity for a graphics component and its D3D12 executable.
+//! Immutable rollback identity for a library component and its D3D12 executable.
 
 use serde::{Deserialize, Serialize};
 

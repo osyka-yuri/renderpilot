@@ -203,6 +203,100 @@ fn dxc_pair_failure_midway_rolls_back_both_members() {
 }
 
 #[test]
+fn xiph_pair_failure_after_first_dll_or_before_database_commit_rolls_back_both_members() {
+    for failure_point in ["after_first_dll", "before_database_commit"] {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let game_dir = dir.path().join("game");
+        let source_dir = dir.path().join("source");
+        fs::create_dir_all(&game_dir).expect("game dir");
+        fs::create_dir_all(&source_dir).expect("source dir");
+
+        let vorbis = game_dir.join("vorbis.dll");
+        let ogg = game_dir.join("ogg.dll");
+        let source_vorbis = source_dir.join("vorbis.dll");
+        let source_ogg = source_dir.join("ogg.dll");
+        write(&vorbis, b"original-vorbis");
+        write(&ogg, b"original-ogg");
+        write(&source_vorbis, b"replacement-vorbis");
+        if failure_point == "before_database_commit" {
+            write(&source_ogg, b"replacement-ogg");
+        }
+
+        let game = sample_game_at(&game_dir);
+        let baseline = vec![
+            comp_file(&vorbis).with_sha256(sha_of(&vorbis)),
+            comp_file(&ogg).with_sha256(sha_of(&ogg)),
+        ];
+        let component_id =
+            ComponentId::new(format!("component:xiph:{failure_point}")).expect("component id");
+        let component = LibraryComponent::new(
+            component_id.clone(),
+            game.id().clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::XiphVorbis,
+            Swappability::BundleOnly,
+        )
+        .with_file(baseline[0].clone())
+        .with_file(baseline[1].clone());
+        let plans = vec![
+            planned_copy(&source_vorbis, &vorbis),
+            planned_copy(&source_ogg, &ogg),
+        ];
+
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("game");
+        storage
+            .replace_components_for_game(game.id(), std::slice::from_ref(&component))
+            .expect("component");
+        let context = crate::Context::from_storage(storage);
+        let guard = crate::game_mutation_lock::blocking_lock(game.id());
+        let mutation = crate::file_mutation::DurableFileTransaction::prepare(
+            &context,
+            &guard,
+            &crate::file_mutation::MutationScope::single(&game_dir).expect("scope"),
+            "test_xiph_apply_failure",
+            Some(component_id.as_str()),
+            [vorbis.clone(), bak_of(&vorbis), ogg.clone(), bak_of(&ogg)],
+        )
+        .expect("durable transaction");
+
+        let result: renderpilot_application::AppResult<()> =
+            perform_apply_fs(&component, &baseline, &plans, &[]).and_then(|_| {
+                Err(renderpilot_application::AppError::provider_failed(
+                    "injected failure before database commit",
+                ))
+            });
+        assert!(result.is_err(), "{failure_point} must abort the apply");
+        mutation
+            .rollback(context.storage())
+            .expect("durable rollback");
+
+        assert_eq!(
+            fs::read(&vorbis).expect("vorbis readable"),
+            b"original-vorbis",
+            "{failure_point}: Vorbis must be restored"
+        );
+        assert_eq!(
+            fs::read(&ogg).expect("ogg readable"),
+            b"original-ogg",
+            "{failure_point}: Ogg must be restored"
+        );
+        assert!(
+            !bak_of(&vorbis).exists() && !bak_of(&ogg).exists(),
+            "{failure_point}: recovery sidecars must be consumed"
+        );
+        assert_eq!(
+            context
+                .storage()
+                .list_components_for_game(game.id())
+                .expect("stored components"),
+            vec![component],
+            "{failure_point}: database state must remain unchanged"
+        );
+    }
+}
+
+#[test]
 fn revert_to_baseline_restores_backup_and_deletes_added_files() {
     let dir = tempfile::tempdir().expect("temp dir");
     let replaced = dir.path().join("nvngx_dlss.dll");

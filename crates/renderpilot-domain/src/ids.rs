@@ -77,7 +77,7 @@ impl GameId {
 }
 
 define_identifier!(
-    /// Stable identifier of a detected graphics component.
+    /// Stable identifier of a detected library component.
     ComponentId
 );
 
