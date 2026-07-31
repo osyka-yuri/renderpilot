@@ -10,11 +10,11 @@ on:
         description: JSON array of runner OSes for the Rust matrix.
         type: string
         default: '["ubuntu-latest", "windows-latest"]'
-
 permissions:
   contents: read
 
 env:
+  RENDERPILOT_LIBRARIES_CONTRACT_REF: eff8f49eaa63033da0d03839d000a2de1924ea72
   CARGO_TERM_COLOR: always
   # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over
   # RUSTFLAGS=-Dwarnings so the build cache is not thrash-invalidated.
@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Tauri's Linux build requires WebKitGTK and other dependencies. On Windows, WebView2 is utilized natively.
       - name: Install system dependencies (Linux)
@@ -58,7 +58,7 @@ jobs:
         run: rustup show
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.os }}
 
@@ -99,15 +99,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
-          version: 11.11.0
+          package_json_file: apps/desktop/package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: pnpm
@@ -127,3 +127,41 @@ jobs:
 
       - name: Build (svelte-check + Vite)
         run: pnpm run build
+
+  libraries-contract:
+    name: Libraries V2 producer contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require an immutable producer ref
+        shell: bash
+        env:
+          PRODUCER_REF: ${{ env.RENDERPILOT_LIBRARIES_CONTRACT_REF }}
+        run: |
+          if [[ ! "$PRODUCER_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::RENDERPILOT_LIBRARIES_CONTRACT_REF must be a full commit SHA"
+            exit 1
+          fi
+      - name: Checkout RenderPilot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Checkout pinned catalog producer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: osyka-yuri/renderpilot-libraries
+          ref: ${{ env.RENDERPILOT_LIBRARIES_CONTRACT_REF }}
+          path: .contracts/renderpilot-libraries
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: rustup show
+      - name: Verify the shared V2 revision fixture
+        shell: bash
+        env:
+          RENDERPILOT_LIBRARIES_FIXTURE: ${{ github.workspace }}/.contracts/renderpilot-libraries/scripts/test/fixtures/catalog-package-revision-v2.golden.json
+        run: |
+          set -o pipefail
+          cargo test -p renderpilot-orchestration \
+            libraries::revision::tests::producer_v2_golden_fixture_matches_rust_projection \
+            --locked -- --ignored --exact 2>&1 | tee contract-test.log
+          grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored' contract-test.log
