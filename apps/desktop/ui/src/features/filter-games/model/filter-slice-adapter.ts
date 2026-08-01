@@ -26,7 +26,9 @@ type SliceFieldMapping = {
   draft: 'draftLibraries' | 'draftAddons' | 'draftLaunchers';
   deferSelectAll: 'deferSelectAllLibraries' | 'deferSelectAllAddons' | 'deferSelectAllLaunchers';
   pendingPersisted:
-    'pendingPersistedLibraries' | 'pendingPersistedAddons' | 'pendingPersistedLaunchers';
+    | 'pendingPersistedLibraries'
+    | 'pendingPersistedAddons'
+    | 'pendingPersistedLaunchers';
 };
 
 type SliceStateField = SliceFieldMapping[keyof SliceFieldMapping];

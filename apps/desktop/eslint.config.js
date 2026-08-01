@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
-import prettier from 'eslint-config-prettier';
+import eslintConfigPrettier from 'eslint-config-prettier';
 import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 import { getDefaultSelectors } from 'eslint-plugin-better-tailwindcss/defaults';
 import boundaries from 'eslint-plugin-boundaries';
@@ -80,7 +80,7 @@ const GLOBAL_IGNORES = [
   '**/*.css',
 
   'eslint.config.js',
-  'prettier.config.{js,cjs,mjs,ts}',
+  'oxfmt.config.{js,cjs,mjs,ts,mts,cts}',
   'svelte.config.{js,cjs,mjs,ts}',
   'tailwind.config.{js,cjs,mjs,ts}',
   'vite.config.{js,cjs,mjs,ts}',
@@ -548,14 +548,14 @@ const fsdBoundariesSettings = {
  * ESLint flat config:
  * - strict type-aware TypeScript only for TS/Svelte sources;
  * - JS sources stay non-type-aware;
- * - Svelte recommended + Svelte Prettier compatibility;
+ * - Svelte recommended + formatter compatibility;
  * - Tailwind CSS v4 linting through better-tailwindcss recommended preset;
  * - cn/clsx/cx/cva Tailwind class detection through better-tailwindcss selectors;
  * - strict FSD topology through eslint-plugin-boundaries;
  * - public API import enforcement;
  * - public API files are treated as thin local facades;
  * - bootstrap files are intentionally excluded from FSD import restrictions;
- * - Prettier compatibility is applied as the final override.
+ * - formatter compatibility is applied through eslint-config-prettier as the final override.
  */
 export default defineConfig([
   globalIgnores(GLOBAL_IGNORES),
@@ -748,8 +748,8 @@ export default defineConfig([
 
     rules: {
       /*
-       * Prettier already handles line-wrapping at printWidth 100.
-       * The Tailwind plugin's wrapping rule conflicts with Prettier's
+       * Oxfmt already handles line-wrapping at printWidth 100.
+       * The Tailwind plugin's wrapping rule conflicts with Oxfmt's
        * formatting, causing endless fix loops.
        */
       'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
@@ -757,7 +757,7 @@ export default defineConfig([
       /*
        * Keep exactly one tool responsible for class ordering.
        *
-       * Use "off" if prettier-plugin-tailwindcss is enabled.
+       * Oxfmt owns class ordering through sortTailwindcss.
        * Use "error" here if class ordering is owned by ESLint instead.
        */
       'better-tailwindcss/enforce-consistent-class-order': 'off',
@@ -829,19 +829,19 @@ export default defineConfig([
     },
   },
 
-  prettier,
+  eslintConfigPrettier,
 
   {
-    name: 'project/prettier-safe-overrides',
+    name: 'project/formatter-safe-overrides',
 
     files: LINTED_SOURCE_FILE_GLOBS,
 
     rules: {
       /*
        * eslint-config-prettier disables `curly` as a "special" rule, so it must
-       * be re-asserted after the prettier config or it stays off. The `'all'`
-       * mode is prettier-safe: it only requires block braces, which Prettier
-       * never adds or removes, so there is no formatting conflict.
+       * be re-asserted after the compatibility config or it stays off. The
+       * `'all'` mode is formatter-safe: it only requires block braces, which
+       * Oxfmt never adds or removes, so there is no formatting conflict.
        */
       curly: ['error', 'all'],
     },

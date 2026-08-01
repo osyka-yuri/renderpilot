@@ -6,7 +6,7 @@ export const alertVariants = tv({
     variant: {
       default: 'bg-card text-card-foreground',
       destructive:
-        'text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
+        'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
       warning:
         'border-warning/40 bg-warning/10 text-warning *:data-[slot=alert-description]:text-warning/90',
     },

@@ -116,7 +116,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting (Prettier)
+      - name: Check formatting (Oxfmt)
         run: pnpm run format:check
 
       - name: Lint (ESLint)

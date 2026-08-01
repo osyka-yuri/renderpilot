@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "endOfLine": "lf",
+  "sortPackageJson": false,
+  "sortTailwindcss": {
+    "stylesheet": "./ui/src/shared/theme/global.css",
+    "functions": ["cva", "cn", "clsx", "cx", "tv"]
+  },
+  "svelte": {},
+  "overrides": [
+    {
+      "files": ["**/*.toml"],
+      "options": {
+        "tabWidth": 4
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "coverage",
+    ".turbo",
+    "*.log",
+    "pnpm-lock.yaml",
+    "src-tauri/target",
+    "src-tauri/gen"
+  ]
+}

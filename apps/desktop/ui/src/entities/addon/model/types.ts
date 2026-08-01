@@ -130,7 +130,11 @@ export type IncompatibilityReason =
  * source) is a normal, non-error result.
  */
 export type UpdateStatus =
-  'current' | 'available' | 'unknown' | 'channel_mismatch' | 'unknown_needs_validation';
+  | 'current'
+  | 'available'
+  | 'unknown'
+  | 'channel_mismatch'
+  | 'unknown_needs_validation';
 
 /**
  * Single freshness verdict a card renders as a status pill (`checking` while a

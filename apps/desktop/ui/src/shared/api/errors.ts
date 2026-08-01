@@ -1,5 +1,5 @@
 import type { CommandErrorDto, CommandErrorSeverity, SuggestedActionDto } from './types';
-import { isString, isNonEmptyString, isRecord, isErrorLike, isFunction } from '@shared/validation';
+import { isString, isNonEmptyString, isRecord, isErrorLike } from '@shared/validation';
 import { translateKey } from '@shared/i18n';
 
 const FALLBACK_CODE = 'command_failed';
@@ -303,8 +303,8 @@ function attachCause(error: Error, cause: unknown): void {
 }
 
 function captureStackTrace(error: Error, constructor: object): void {
-  const capture = (Error as ErrorConstructorWithStackTrace).captureStackTrace;
-  if (isFunction(capture)) {
-    capture(error, constructor);
+  const errorConstructor = Error as ErrorConstructorWithStackTrace;
+  if (typeof errorConstructor.captureStackTrace === 'function') {
+    errorConstructor.captureStackTrace(error, constructor);
   }
 }

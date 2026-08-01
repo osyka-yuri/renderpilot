@@ -67,7 +67,12 @@ export type DllInfoDto = {
 };
 
 export type NvapiWarning =
-  'noDll' | 'noManifest' | 'noExecutable' | 'nvapiUnavailable' | 'nvapiInitFailed' | 'drsFailed';
+  | 'noDll'
+  | 'noManifest'
+  | 'noExecutable'
+  | 'nvapiUnavailable'
+  | 'nvapiInitFailed'
+  | 'drsFailed';
 
 export type SettingStateResponse = {
   setting_key: string;

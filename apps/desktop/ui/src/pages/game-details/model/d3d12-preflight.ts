@@ -7,7 +7,8 @@ export const DEVELOPER_MODE_REQUIRED = 'developer_mode_required';
 export const DEVELOPER_MODE_CHECK_UNAVAILABLE = 'developer_mode_check_unavailable';
 
 export type DeveloperModePlanBlocker =
-  typeof DEVELOPER_MODE_REQUIRED | typeof DEVELOPER_MODE_CHECK_UNAVAILABLE;
+  | typeof DEVELOPER_MODE_REQUIRED
+  | typeof DEVELOPER_MODE_CHECK_UNAVAILABLE;
 
 export type D3d12PreflightResult<T> =
   | {

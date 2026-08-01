@@ -28,22 +28,22 @@ export type AppUpdateDownloadEvent =
 export type AppUpdateHandle = {
   readonly metadata: AppUpdateMetadata;
 
-  download(onEvent: (event: AppUpdateDownloadEvent) => void): Promise<void>;
+  download: (onEvent: (event: AppUpdateDownloadEvent) => void) => Promise<void>;
 
   /**
    * Installs the downloaded update and consumes the native updater resource on success.
    * Do not call close() afterwards; close() is only for an unfinished session.
    */
-  install(): Promise<void>;
+  install: () => Promise<void>;
 
   /** Releases an unfinished updater resource. Safe to call repeatedly. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 };
 
 export type AppUpdaterGateway = {
-  getCurrentVersion(): Promise<string>;
+  getCurrentVersion: () => Promise<string>;
 
-  checkForUpdate(): Promise<AppUpdateHandle | null>;
+  checkForUpdate: () => Promise<AppUpdateHandle | null>;
 
-  relaunch(): Promise<void>;
+  relaunch: () => Promise<void>;
 };

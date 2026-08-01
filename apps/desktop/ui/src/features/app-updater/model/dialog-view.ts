@@ -3,7 +3,11 @@ import type { MessageKey } from '@shared/i18n';
 import type { AppUpdateDialogState } from './types';
 
 export type UpdateProgressPhase =
-  'downloading' | 'retrying-download' | 'verifying' | 'installing' | 'restarting';
+  | 'downloading'
+  | 'retrying-download'
+  | 'verifying'
+  | 'installing'
+  | 'restarting';
 
 export type UpdateFailureKind = 'prepare-failed' | 'install-failed' | 'restart-required';
 

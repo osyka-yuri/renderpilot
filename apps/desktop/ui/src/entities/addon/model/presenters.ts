@@ -48,7 +48,8 @@ export type AddonInstalledLabels = {
 };
 
 export type HostDescriptionPart =
-  { kind: 'version'; key: MessageKey; version: string } | { kind: 'message'; key: MessageKey };
+  | { kind: 'version'; key: MessageKey; version: string }
+  | { kind: 'message'; key: MessageKey };
 
 export type HostDescription =
   | { kind: 'conflict'; key: MessageKey }

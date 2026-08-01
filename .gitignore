@@ -11,7 +11,6 @@
 /apps/desktop/node_modules/
 /apps/desktop/ui/node_modules/
 /apps/desktop/src-tauri/gen/
-/apps/desktop/.prettiercache
 /apps/desktop/.eslintcache
 
 # Gemini / local assistant docs (not tracked)

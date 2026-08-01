@@ -13,7 +13,6 @@ const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');
 
 const DEV_SERVER_PORT = 1420;
 const DEV_SERVER_HMR_PORT = 1421;
-const NODE_MODULES_PATH_PATTERN = /node_modules[\\/]/;
 
 const TAURI_SOURCE_GLOB = '**/src-tauri/**';
 const TEST_FILE_GLOBS = ['ui/src/**/*.test.ts', 'eslint/**/*.test.js'];
@@ -78,18 +77,6 @@ export default defineConfig({
 
   build: {
     manifest: true,
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: 'vendor',
-              test: NODE_MODULES_PATH_PATTERN,
-            },
-          ],
-        },
-      },
-    },
   },
 
   test: {

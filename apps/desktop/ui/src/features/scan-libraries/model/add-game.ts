@@ -49,7 +49,10 @@ export type AddGameWarning = {
 export type RootCorrectionStatus = 'ready' | 'cleanup_required' | 'blocked';
 
 export type RootCorrectionBlockerKind =
-  'pending_recovery' | 'installed_addon' | 'nvapi' | 'orphaned_component_baseline';
+  | 'pending_recovery'
+  | 'installed_addon'
+  | 'nvapi'
+  | 'orphaned_component_baseline';
 
 export type RootCorrectionAssessment = {
   gameId: string;

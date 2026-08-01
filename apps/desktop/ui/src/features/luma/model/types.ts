@@ -79,7 +79,12 @@ export type LumaFeatures = {
 };
 
 export type LumaGuidanceKind =
-  'game_setting' | 'engine_ini' | 'launch_argument' | 'warning' | 'compatibility' | 'external_tool';
+  | 'game_setting'
+  | 'engine_ini'
+  | 'launch_argument'
+  | 'warning'
+  | 'compatibility'
+  | 'external_tool';
 
 /** A reviewed catalogue instruction. `id` is reserved for a local translation
  * override; `fallback_text` keeps the manifest usable before it is translated. */

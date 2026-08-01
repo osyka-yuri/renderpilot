@@ -97,7 +97,7 @@
   /** Shared exclusive-lock + cover-sync deps for catalog mutations. */
   function catalogRefreshDeps() {
     return {
-      runExclusive: <T,>(task: () => Promise<T>) => model.runExclusive(task),
+      runExclusive: <T>(task: () => Promise<T>) => model.runExclusive(task),
       refreshGameCards,
       coverSyncQueue,
       syncMissingCoversAfterCardsLoad: () =>

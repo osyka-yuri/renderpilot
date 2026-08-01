@@ -60,7 +60,9 @@ export type CatalogGithubReleaseProvenance = Readonly<{
 }>;
 
 export type CatalogCandidateProvenance =
-  CatalogNugetProvenance | CatalogGithubReleaseProvenance | CatalogSourceBuildProvenance;
+  | CatalogNugetProvenance
+  | CatalogGithubReleaseProvenance
+  | CatalogSourceBuildProvenance;
 
 export type CatalogLegalDocument = Readonly<{
   legal_document_id: string;
