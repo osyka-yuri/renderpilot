@@ -1,4 +1,3 @@
-import type { Component, ComponentProps } from 'svelte';
 import type { ColumnDef } from '@tanstack/table-core';
 
 import { formatBytes } from '@shared/format';
@@ -33,14 +32,6 @@ export function getLibraryColumnClass(columnId: string): string {
   return LIBRARY_COLUMN_LAYOUT.find((column) => column.id === columnId)?.className ?? '';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderTableCell<TComponent extends Component<any, any, any>>(
-  component: TComponent,
-  props: ComponentProps<TComponent>,
-): ReturnType<typeof renderComponent> {
-  return renderComponent(component, props);
-}
-
 /**
  * Builds the column defs once per page. Every input is a stable reference
  * (reactive containers + model callbacks); per-row state is derived inside the
@@ -62,9 +53,9 @@ export function createLibraryColumns(
       sortingFn: (left, right) =>
         compareReleaseVersions(left.original.release.version, right.original.release.version),
       header: ({ column }) =>
-        renderTableCell(SortHeader, { label: t('libraries.column.version'), column }),
+        renderComponent(SortHeader, { label: t('libraries.column.version'), column }),
       cell: ({ row }) =>
-        renderTableCell(LibraryVersionCell, {
+        renderComponent(LibraryVersionCell, {
           row: row.original,
           showPackageDisplayName,
         }),
@@ -73,14 +64,14 @@ export function createLibraryColumns(
       id: 'hash',
       header: () => t('libraries.column.hash'),
       enableSorting: false,
-      cell: ({ row }) => renderTableCell(LibraryHashCell, { row: row.original }),
+      cell: ({ row }) => renderComponent(LibraryHashCell, { row: row.original }),
     },
     signed: {
       id: 'signed',
       accessorFn: (row) =>
         row.primary_signature.status === 'signed' ? row.primary_signature.signed_at : '',
       header: ({ column }) =>
-        renderTableCell(SortHeader, {
+        renderComponent(SortHeader, {
           label: t('libraries.column.signed'),
           column,
           class: 'w-full justify-center',
@@ -91,7 +82,7 @@ export function createLibraryColumns(
       id: 'size',
       accessorFn: (row) => row.size_bytes,
       header: ({ column }) =>
-        renderTableCell(SortHeader, {
+        renderComponent(SortHeader, {
           label: t('libraries.column.size'),
           column,
           class: 'w-full justify-center',
@@ -103,7 +94,7 @@ export function createLibraryColumns(
       header: () => t('libraries.column.documents'),
       enableSorting: false,
       cell: ({ row }) =>
-        renderTableCell(LibraryLegalCell, {
+        renderComponent(LibraryLegalCell, {
           row: row.original,
           onOpen: onShowLegalDocuments,
         }),
@@ -113,7 +104,7 @@ export function createLibraryColumns(
       header: () => t('libraries.column.actions'),
       enableSorting: false,
       cell: ({ row }) =>
-        renderTableCell(LibraryActionsCell, {
+        renderComponent(LibraryActionsCell, {
           row: row.original,
           pendingActions,
           actionsDisabled,

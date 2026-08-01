@@ -119,7 +119,7 @@ jobs:
       - name: Check formatting (Oxfmt)
         run: pnpm run format:check
 
-      - name: Lint (ESLint)
+      - name: Lint (Oxlint + ESLint)
         run: pnpm run lint
 
       - name: Run tests (Vitest)

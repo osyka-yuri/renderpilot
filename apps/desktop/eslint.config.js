@@ -112,14 +112,32 @@ function scopeConfigs(configs, files) {
   }));
 }
 
-const LINTED_SOURCE_FILE_GLOBS = sourceFiles(SOURCE_SCRIPT_EXTENSIONS);
-const JAVASCRIPT_SOURCE_FILE_GLOBS = sourceFiles(JAVASCRIPT_EXTENSIONS);
-const TYPESCRIPT_SOURCE_FILE_GLOBS = sourceFiles(TYPESCRIPT_EXTENSIONS);
+const SOURCE_FILE_GLOBS = sourceFiles(SOURCE_SCRIPT_EXTENSIONS);
+const JAVASCRIPT_FILE_GLOBS = sourceFiles(JAVASCRIPT_EXTENSIONS);
+const TYPESCRIPT_FILE_GLOBS = sourceFiles(TYPESCRIPT_EXTENSIONS);
 const TOOLING_JAVASCRIPT_FILE_GLOBS = ['eslint/**/*.js'];
 
-const SVELTE_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte`, `${SOURCE_ROOT}/**/*.svelte.{js,ts}`];
+const SVELTE_COMPONENT_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte`];
+const SVELTE_TYPESCRIPT_MODULE_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte.ts`];
+const SVELTE_MODULE_FILE_GLOBS = [
+  `${SOURCE_ROOT}/**/*.svelte.js`,
+  ...SVELTE_TYPESCRIPT_MODULE_FILE_GLOBS,
+];
+const SVELTE_FILE_GLOBS = [...SVELTE_COMPONENT_FILE_GLOBS, ...SVELTE_MODULE_FILE_GLOBS];
 
-const TYPE_CHECKED_FILE_GLOBS = [...TYPESCRIPT_SOURCE_FILE_GLOBS, `${SOURCE_ROOT}/**/*.svelte`];
+/*
+ * Lint ownership:
+ * - Oxlint owns ordinary TypeScript, including its type-aware rules.
+ * - ESLint owns Svelte components and Svelte TypeScript modules because it
+ *   understands templates and compiler semantics such as runes.
+ * - ESLint also owns project-specific architecture, Tailwind, and import
+ *   rules that cannot be expressed faithfully in Oxlint.
+ */
+const SVELTE_TYPE_AWARE_FILE_GLOBS = [
+  ...SVELTE_COMPONENT_FILE_GLOBS,
+  ...SVELTE_TYPESCRIPT_MODULE_FILE_GLOBS,
+];
+const ESLINT_BASE_FILE_GLOBS = [...JAVASCRIPT_FILE_GLOBS, ...SVELTE_TYPE_AWARE_FILE_GLOBS];
 
 const TEST_FILE_GLOBS = [
   `${SOURCE_ROOT}/**/*.{test,spec}.{${toBraceGlob(SOURCE_SCRIPT_EXTENSIONS)}}`,
@@ -141,14 +159,16 @@ const FSD_PUBLIC_API_FILE_NAMES = [
   ...SVELTE_MODULE_EXTENSIONS.map((extension) => `index.${extension}`),
 ];
 
-const javascriptRecommendedConfigs = scopeConfigs(
+const eslintBaseConfigs = scopeConfigs(
   [js.configs.recommended],
-  [...LINTED_SOURCE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
+  [...ESLINT_BASE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
 );
+
+const typescriptParserConfigs = scopeConfigs([tseslint.configs.base], TYPESCRIPT_FILE_GLOBS);
 
 const typeCheckedTypeScriptConfigs = scopeConfigs(
   [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
-  TYPE_CHECKED_FILE_GLOBS,
+  SVELTE_TYPE_AWARE_FILE_GLOBS,
 );
 
 /*
@@ -546,8 +566,9 @@ const fsdBoundariesSettings = {
 
 /**
  * ESLint flat config:
- * - strict type-aware TypeScript only for TS/Svelte sources;
- * - JS sources stay non-type-aware;
+ * - Oxlint owns native and type-aware rules for ordinary TypeScript;
+ * - strict type-aware ESLint rules stay enabled only for Svelte sources;
+ * - JS plus architecture, Tailwind, and import rules stay in ESLint;
  * - Svelte recommended + formatter compatibility;
  * - Tailwind CSS v4 linting through better-tailwindcss recommended preset;
  * - cn/clsx/cx/cva Tailwind class detection through better-tailwindcss selectors;
@@ -581,7 +602,7 @@ export default defineConfig([
   {
     name: 'project/browser-source-globals',
 
-    files: LINTED_SOURCE_FILE_GLOBS,
+    files: SOURCE_FILE_GLOBS,
 
     languageOptions: {
       globals: {
@@ -590,13 +611,14 @@ export default defineConfig([
     },
   },
 
-  ...javascriptRecommendedConfigs,
+  ...eslintBaseConfigs,
+  ...typescriptParserConfigs,
   ...typeCheckedTypeScriptConfigs,
 
   {
     name: 'project/type-aware-parser-options',
 
-    files: TYPE_CHECKED_FILE_GLOBS,
+    files: SVELTE_TYPE_AWARE_FILE_GLOBS,
 
     languageOptions: {
       parserOptions: {
@@ -651,7 +673,7 @@ export default defineConfig([
   {
     name: 'project/javascript-rules',
 
-    files: [...JAVASCRIPT_SOURCE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
+    files: [...JAVASCRIPT_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
 
     rules: {
       'no-unused-vars': ['error', UNUSED_VALUE_OPTIONS],
@@ -660,9 +682,26 @@ export default defineConfig([
   },
 
   {
-    name: 'project/typescript-rules',
+    name: 'project/typescript-import-boundaries',
 
-    files: TYPE_CHECKED_FILE_GLOBS,
+    files: [...TYPESCRIPT_FILE_GLOBS, ...SVELTE_COMPONENT_FILE_GLOBS],
+
+    rules: {
+      /*
+       * This project-specific restriction is intentionally kept in ESLint
+       * alongside the other FSD checks. It does not require TypeScript's type
+       * service, and keeping one source of truth avoids duplicating its large
+       * path policy in the Oxlint config.
+       */
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': fsdRestrictedImportsRule,
+    },
+  },
+
+  {
+    name: 'project/svelte-type-aware-typescript-rules',
+
+    files: SVELTE_TYPE_AWARE_FILE_GLOBS,
 
     rules: {
       'no-unused-vars': 'off',
@@ -683,30 +722,33 @@ export default defineConfig([
           allowBoolean: true,
         },
       ],
-
-      /*
-       * Prefer the TypeScript-aware extension rule for TS/Svelte sources.
-       * It handles type-only imports better than the core ESLint rule.
-       */
-      'no-restricted-imports': 'off',
-      '@typescript-eslint/no-restricted-imports': fsdRestrictedImportsRule,
     },
   },
 
   {
-    name: 'project/base-source-rules',
+    name: 'project/portable-source-rules',
 
-    files: LINTED_SOURCE_FILE_GLOBS,
-
-    plugins: {
-      'local-architecture': localArchitecturePlugin,
-    },
+    files: ESLINT_BASE_FILE_GLOBS,
 
     rules: {
       curly: ['error', 'all'],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
 
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+
+  {
+    name: 'project/duplicate-imports',
+
+    files: SOURCE_FILE_GLOBS,
+
+    rules: {
+      /*
+       * Public APIs use mixed type/value re-export lists. ESLint implements
+       * the required allowSeparateTypeImports behavior correctly, and this
+       * rule remains cheap because it does not need type information.
+       */
       'no-duplicate-imports': [
         'error',
         {
@@ -714,7 +756,19 @@ export default defineConfig([
           allowSeparateTypeImports: true,
         },
       ],
+    },
+  },
 
+  {
+    name: 'project/architecture-rules',
+
+    files: SOURCE_FILE_GLOBS,
+
+    plugins: {
+      'local-architecture': localArchitecturePlugin,
+    },
+
+    rules: {
       /*
        * Prevent public APIs from becoming transit barrels:
        * export from './model/foo' is OK;
@@ -742,7 +796,7 @@ export default defineConfig([
   {
     name: 'project/tailwindcss-v4',
 
-    files: LINTED_SOURCE_FILE_GLOBS,
+    files: SOURCE_FILE_GLOBS,
 
     extends: [betterTailwindcss.configs.recommended],
 
@@ -761,6 +815,13 @@ export default defineConfig([
        * Use "error" here if class ordering is owned by ESLint instead.
        */
       'better-tailwindcss/enforce-consistent-class-order': 'off',
+
+      /*
+       * Canonicalization is intentionally disabled: it is stylistic and nearly
+       * doubles cold lint time. Correctness-oriented Tailwind rules stay on,
+       * while Oxfmt remains the single owner of class ordering.
+       */
+      'better-tailwindcss/enforce-canonical-classes': 'off',
 
       /*
        * shadcn-svelte Sonner uses a non-Tailwind root hook class upstream.
@@ -798,7 +859,7 @@ export default defineConfig([
   {
     name: 'project/strict-fsd-boundaries',
 
-    files: LINTED_SOURCE_FILE_GLOBS,
+    files: SOURCE_FILE_GLOBS,
     ignores: FSD_ENTRY_POINT_GLOBS,
 
     plugins: {
@@ -834,7 +895,7 @@ export default defineConfig([
   {
     name: 'project/formatter-safe-overrides',
 
-    files: LINTED_SOURCE_FILE_GLOBS,
+    files: ESLINT_BASE_FILE_GLOBS,
 
     rules: {
       /*

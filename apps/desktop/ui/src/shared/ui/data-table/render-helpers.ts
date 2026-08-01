@@ -1,4 +1,4 @@
-import type { Component, ComponentProps, Snippet } from 'svelte';
+import type { Component, Snippet } from 'svelte';
 
 type EmptyProps = Record<string, never>;
 
@@ -14,14 +14,16 @@ type RenderConfigBrand<TKind extends RenderConfigKind> = {
   readonly [RENDER_CONFIG_KIND]: TKind;
 };
 
-type RequiredKeys<T extends object> = {
+type RequiredKeys<T extends Record<string, unknown>> = {
   [K in keyof T]-?: EmptyProps extends Pick<T, K> ? never : K;
 }[keyof T];
 
-type ComponentPropsArgument<TComponent extends Component> =
-  RequiredKeys<ComponentProps<TComponent>> extends never
-    ? [props?: ComponentProps<TComponent>]
-    : [props: ComponentProps<TComponent>];
+/*
+ * Infer props separately from the component. Constraining the component type
+ * directly defaults its props to {}, which rejects components with required props.
+ */
+type ComponentPropsArgument<TProps extends Record<string, unknown>> =
+  RequiredKeys<TProps> extends never ? [props?: TProps] : [props: TProps];
 
 type SnippetParamsArgument<TParams> = [TParams] extends [undefined]
   ? [params?: undefined]
@@ -38,13 +40,13 @@ function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
  * This class is intended for internal adapter usage.
  */
 export class RenderComponentConfig<
-  TComponent extends Component,
+  TProps extends Record<string, unknown> = Record<string, unknown>,
 > implements RenderConfigBrand<'component'> {
   readonly [RENDER_CONFIG_KIND] = 'component';
 
   constructor(
-    readonly component: TComponent,
-    readonly props: ComponentProps<TComponent> | EmptyProps = EMPTY_PROPS,
+    readonly component: Component<TProps>,
+    readonly props: TProps | EmptyProps = EMPTY_PROPS,
   ) {}
 }
 
@@ -69,7 +71,7 @@ export class RenderSnippetConfig<TParams> implements RenderConfigBrand<'snippet'
  * Prefer this over `instanceof RenderComponentConfig`, because `instanceof`
  * can fail when the app contains multiple copies of this package.
  */
-export function isRenderComponentConfig(value: unknown): value is RenderComponentConfig<Component> {
+export function isRenderComponentConfig(value: unknown): value is RenderComponentConfig {
   return isRecord(value) && value[RENDER_CONFIG_KIND] === 'component';
 }
 
@@ -100,10 +102,10 @@ export function isRenderSnippetConfig(value: unknown): value is RenderSnippetCon
  *
  * @see {@link https://tanstack.com/table/latest/docs/guide/column-defs}
  */
-export function renderComponent<TComponent extends Component>(
-  component: TComponent,
-  ...args: ComponentPropsArgument<TComponent>
-): RenderComponentConfig<TComponent> {
+export function renderComponent<TProps extends Record<string, unknown>>(
+  component: Component<TProps>,
+  ...args: ComponentPropsArgument<TProps>
+): RenderComponentConfig<TProps> {
   return new RenderComponentConfig(component, args[0] ?? EMPTY_PROPS);
 }
 

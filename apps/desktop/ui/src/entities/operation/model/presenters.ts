@@ -84,7 +84,7 @@ export function isPlanForGame(plan: SwapPlan | null, gameId: string): boolean {
 }
 
 export function isPlanForComponent(plan: SwapPlan | null, componentId: string): boolean {
-  return plan !== null && plan.component_id === componentId;
+  return plan?.component_id === componentId;
 }
 
 export function formatUpdatedFilesSummary(itemCount: number): string {
