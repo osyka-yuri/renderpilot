@@ -1,5 +1,4 @@
 import { type CoverArtworkResult, type GameSummary } from '@entities/game';
-import { describeCommandError } from '@shared/api';
 import { t } from '@shared/i18n';
 import {
   STEAMGRIDDB_SETTING_KEY,
@@ -27,8 +26,8 @@ export async function findGamesMissingStoredCovers(
   return filterGamesMissingStoredCoverForBackgroundSync(games, policy, hasSteamGridDbApiKey);
 }
 
-export function formatBackgroundCoverSyncError(error: unknown): string {
-  return t('coverSync.failed', { error: describeCommandError(error) });
+export function formatBackgroundCoverSyncError(): string {
+  return t('coverSync.failed');
 }
 
 export async function executeBackgroundCoverSync(

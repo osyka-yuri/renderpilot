@@ -1,6 +1,6 @@
 import type { SwapPlan, SwapPlanBlocker } from '@entities/operation';
 import { DesktopCommandError } from '@shared/api';
-import type { MessageKey } from '@shared/i18n';
+import type { MessageKeyWithoutParams } from '@shared/i18n';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 export const DEVELOPER_MODE_REQUIRED = 'developer_mode_required';
@@ -116,7 +116,7 @@ function isDeveloperModeBlocker(blocker: SwapPlanBlocker): blocker is DeveloperM
 
 function d3d12PreparationError(
   code: string,
-  messageKey: MessageKey,
+  messageKey: MessageKeyWithoutParams,
   fallback: string,
   debugDetails?: string,
 ): DesktopCommandError {

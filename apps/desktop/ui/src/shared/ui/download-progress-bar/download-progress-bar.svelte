@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { cn } from '@shared/classnames';
   import { latestDownloadProgress } from '@shared/lib';
 
@@ -20,7 +20,11 @@
 
   // Indeterminate finalization keeps its phase text beside the spinner; byte-tracked
   // downloads intentionally render only the compact progress bar.
-  const phaseLabel = $derived(progress?.phase ? translateKey(progress.phase, progress.phase) : '');
+  const phaseLabel = $derived(
+    progress?.phase
+      ? translateExternalMessage({ key: progress.phase, fallback: progress.phase })
+      : '',
+  );
 </script>
 
 {#if progress && progress.total > 0}

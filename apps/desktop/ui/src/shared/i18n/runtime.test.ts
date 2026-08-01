@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { LanguageMode, Locale } from './locale';
+import { MESSAGE_CONTRACT_VERSION } from './messages/generated/contract-version';
 import { createI18nRuntime } from './runtime.svelte';
 import type { LocalePack } from './packs/types';
 
@@ -16,10 +17,11 @@ function pack(
 ): LocalePack {
   return {
     locale,
+    contractVersion: MESSAGE_CONTRACT_VERSION,
     messages: {
       'nav.games': messages.nav,
       ...(messages.dynamic ? { 'dynamic.key': messages.dynamic } : {}),
-    } as LocalePack['messages'],
+    },
     dynamicCatalogs,
   };
 }
@@ -46,7 +48,7 @@ function createTestRuntime(options: {
     messages: {
       ...baseEnglishPack.messages,
       'english.only': 'English fallback',
-    } as LocalePack['messages'],
+    },
   };
   const storedMode = options.storedMode ?? 'en';
   const systemLocale = options.systemLocale ?? 'en';
@@ -106,7 +108,9 @@ describe('createI18nRuntime', () => {
 
     const initialization = test.runtime.initializeI18n();
     expect(test.runtime.getState().status).toBe('loading');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Games');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Games',
+    );
 
     ru.resolve(pack('ru', { nav: 'Игры' }));
     const result = await initialization;
@@ -118,7 +122,9 @@ describe('createI18nRuntime', () => {
       error: null,
     });
     expect(test.runtime.getState().status).toBe('ready');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Игры');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Игры',
+    );
     expect(test.documentLocale).toBe('ru');
   });
 
@@ -135,7 +141,9 @@ describe('createI18nRuntime', () => {
 
     const ruRequest = test.runtime.setLanguageMode('ru');
     expect(test.runtime.getState().status).toBe('loading');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Games');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Games',
+    );
 
     const zhRequest = test.runtime.setLanguageMode('zh');
     zh.resolve(pack('zh', { nav: '游戏' }));
@@ -144,12 +152,16 @@ describe('createI18nRuntime', () => {
     ru.resolve(pack('ru', { nav: 'Игры' }));
     expect(await ruRequest).toEqual({ outcome: 'superseded', mode: 'ru', locale: 'ru' });
     expect(test.runtime.getLocale()).toBe('zh');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('游戏');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      '游戏',
+    );
     expect(test.persistedModes).toEqual(['zh']);
 
     await test.runtime.setLanguageMode('ru');
     expect(ruLoader).toHaveBeenCalledTimes(1);
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Игры');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Игры',
+    );
   });
 
   it('deduplicates same-locale imports and caches successful packs', async () => {
@@ -182,7 +194,9 @@ describe('createI18nRuntime', () => {
       locale: 'ru',
     });
     expect(test.runtime.getLocale()).toBe('en');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Games');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Games',
+    );
     expect(test.runtime.getState().status).toBe('error');
     expect(test.persistedMode).toBe('en');
     expect(test.documentLocale).toBe('en');
@@ -217,7 +231,9 @@ describe('createI18nRuntime', () => {
       pending: null,
     });
     expect(test.runtime.getLocale()).toBe('ru');
-    expect(test.runtime.translateKey('nav.games', 'fallback')).toBe('Игры');
+    expect(test.runtime.translateExternalMessage({ key: 'nav.games', fallback: 'fallback' })).toBe(
+      'Игры',
+    );
     expect(test.persistedModes).toEqual(['ru']);
     expect(test.documentLocale).toBe('ru');
   });
@@ -240,6 +256,51 @@ describe('createI18nRuntime', () => {
     });
     expect(test.runtime.getLocale()).toBe('en');
     expect(test.persistedModes).toEqual([]);
+  });
+
+  it('rejects a locale pack built against a stale message contract', async () => {
+    const test = createTestRuntime({
+      loaders: {
+        ru: () =>
+          Promise.resolve({
+            ...pack('ru', { nav: 'Игры' }),
+            contractVersion: 'i18n-v1:stale',
+          } as unknown as LocalePack),
+      },
+    });
+
+    await expect(test.runtime.setLanguageMode('ru')).rejects.toMatchObject({
+      code: 'i18n_locale_load_failed',
+      locale: 'ru',
+    });
+    expect(test.runtime.getLocale()).toBe('en');
+    expect(test.persistedModes).toEqual([]);
+  });
+
+  it('validates a production pack in constant time without traversing messages', async () => {
+    const opaqueMessages = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error('message traversal is forbidden during pack activation');
+        },
+      },
+    ) as LocalePack['messages'];
+    const test = createTestRuntime({
+      loaders: {
+        ru: () =>
+          Promise.resolve({
+            ...pack('ru', { nav: 'Игры' }),
+            messages: opaqueMessages,
+          }),
+      },
+    });
+
+    await expect(test.runtime.setLanguageMode('ru')).resolves.toMatchObject({
+      outcome: 'applied',
+      locale: 'ru',
+    });
+    expect(test.runtime.getLocale()).toBe('ru');
   });
 
   it('supersedes a pending import immediately when the active pack is selected', async () => {
@@ -354,10 +415,24 @@ describe('createI18nRuntime', () => {
     });
 
     await test.runtime.setLanguageMode('ru');
-    expect(test.runtime.translateKey('dynamic.key', 'caller fallback')).toBe('static wins');
-    expect(test.runtime.translateKey('other.key', 'caller fallback')).toBe('dynamic value');
-    expect(test.runtime.translateKey('english.only', 'caller fallback')).toBe('English fallback');
-    expect(test.runtime.translateKey('unknown.key', 'caller fallback')).toBe('caller fallback');
+    expect(
+      test.runtime.translateExternalMessage({
+        key: 'dynamic.key',
+        fallback: 'caller fallback',
+      }),
+    ).toBe('static wins');
+    expect(
+      test.runtime.translateExternalMessage({ key: 'other.key', fallback: 'caller fallback' }),
+    ).toBe('dynamic value');
+    expect(
+      test.runtime.translateExternalMessage({
+        key: 'english.only',
+        fallback: 'caller fallback',
+      }),
+    ).toBe('English fallback');
+    expect(
+      test.runtime.translateExternalMessage({ key: 'unknown.key', fallback: 'caller fallback' }),
+    ).toBe('caller fallback');
   });
 
   it('falls back to English when startup locale loading fails without overwriting storage', async () => {

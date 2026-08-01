@@ -1,4 +1,9 @@
-import { expandLumaGuidanceTranslations, type LumaGuidanceTranslations } from './schema';
+import { defineLocalizedOverrides } from '../../contract';
+import {
+  expandLumaGuidanceTranslations,
+  type LumaGuidanceTranslations,
+  type LumaSourceCatalog,
+} from './schema';
 
 const translations = {
   sherlockDx11Performance:
@@ -65,6 +70,8 @@ const translations = {
   sinkingCityOriginal: 'Оригинальная версия работает. Совместимость ремастера неизвестна.',
   heavyRainSteamUltrawide: 'Ультраширокий режим может работать только при запуске через Steam.',
   metroBorderless: 'Используйте безрамочный оконный режим.',
-} satisfies LumaGuidanceTranslations;
+} as const satisfies LumaGuidanceTranslations;
 
-export const lumaGuidanceOverrides = expandLumaGuidanceTranslations(translations);
+export const lumaGuidanceOverrides = defineLocalizedOverrides<'ru', LumaSourceCatalog>()(
+  expandLumaGuidanceTranslations(translations),
+);

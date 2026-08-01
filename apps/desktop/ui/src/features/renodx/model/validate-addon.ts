@@ -1,4 +1,4 @@
-import type { MessageKey } from '@shared/i18n';
+import { createMessageRef, type MessageRef } from '@shared/i18n';
 import { fileNameFromPath } from '@shared/path';
 
 export type AddonArch = 'x64' | 'x86';
@@ -12,7 +12,7 @@ export function isAddonFile(filePath: string): boolean {
 }
 
 /** An i18n message reference (key + optional params) for the UI to translate. */
-export type AddonMessage = { key: MessageKey; params?: Record<string, string> };
+export type AddonMessage = MessageRef;
 
 export type AddonValidation = {
   fileName: string;
@@ -54,17 +54,17 @@ export function validateAddonFile(
   if (!fileArch) {
     return {
       fileName,
-      error: { key: 'gameDetails.renodx.fileInstall.errorExtension' },
+      error: createMessageRef('gameDetails.renodx.fileInstall.errorExtension'),
       warning: null,
     };
   }
   if (ctx.gameArch && ctx.gameArch !== fileArch) {
     return {
       fileName,
-      error: {
-        key: 'gameDetails.renodx.fileInstall.errorArch',
-        params: { addon: ARCH_LABEL[fileArch], game: ARCH_LABEL[ctx.gameArch] },
-      },
+      error: createMessageRef('gameDetails.renodx.fileInstall.errorArch', {
+        addon: ARCH_LABEL[fileArch],
+        game: ARCH_LABEL[ctx.gameArch],
+      }),
       warning: null,
     };
   }
@@ -73,10 +73,9 @@ export function validateAddonFile(
     ctx.expectedAddonName &&
     !fileName.toLowerCase().startsWith(ctx.expectedAddonName.toLowerCase())
   ) {
-    warning = {
-      key: 'gameDetails.renodx.fileInstall.warnName',
-      params: { expected: ctx.expectedAddonName },
-    };
+    warning = createMessageRef('gameDetails.renodx.fileInstall.warnName', {
+      expected: ctx.expectedAddonName,
+    });
   }
   return { fileName, error: null, warning };
 }

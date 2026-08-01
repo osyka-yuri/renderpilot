@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Badge } from '@shared/ui';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 
   import type { LumaFeatures as LumaFeaturesModel, LumaFeatureStatus } from '../model/types';
 
@@ -10,7 +10,7 @@
 
   const { features }: Props = $props();
 
-  const STATUS_KEY: Record<LumaFeatureStatus, MessageKey> = {
+  const STATUS_KEY: Record<LumaFeatureStatus, MessageKeyWithoutParams> = {
     supported: 'gameDetails.luma.features.supported',
     unsupported: 'gameDetails.luma.features.unsupported',
     experimental: 'gameDetails.luma.features.experimental',

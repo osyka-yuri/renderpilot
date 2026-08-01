@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ToggleGroup, ToggleGroupItem } from '@shared/ui';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import { isReshadeChannel, type ReshadeChannel } from '@entities/addon';
 
   type Props = {
@@ -14,7 +14,7 @@
 
   type ChannelOption = {
     value: ReshadeChannel;
-    labelKey: MessageKey;
+    labelKey: MessageKeyWithoutParams;
   };
 
   const CHANNEL_OPTIONS = [

@@ -1,4 +1,9 @@
-import { expandLumaGuidanceTranslations, type LumaGuidanceTranslations } from './schema';
+import { defineLocalizedOverrides } from '../../contract';
+import {
+  expandLumaGuidanceTranslations,
+  type LumaGuidanceTranslations,
+  type LumaSourceCatalog,
+} from './schema';
 
 const translations = {
   sherlockDx11Performance:
@@ -67,6 +72,8 @@ const translations = {
   sinkingCityOriginal: 'Die Originalversion funktioniert. Der Remaster-Status ist unbekannt.',
   heavyRainSteamUltrawide: 'Ultrawide funktioniert möglicherweise nur beim Start über Steam.',
   metroBorderless: 'Verwende den rahmenlosen Fenstermodus.',
-} satisfies LumaGuidanceTranslations;
+} as const satisfies LumaGuidanceTranslations;
 
-export const lumaGuidanceOverrides = expandLumaGuidanceTranslations(translations);
+export const lumaGuidanceOverrides = defineLocalizedOverrides<'de', LumaSourceCatalog>()(
+  expandLumaGuidanceTranslations(translations),
+);

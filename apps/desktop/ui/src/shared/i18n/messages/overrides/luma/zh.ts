@@ -1,4 +1,9 @@
-import { expandLumaGuidanceTranslations, type LumaGuidanceTranslations } from './schema';
+import { defineLocalizedOverrides } from '../../contract';
+import {
+  expandLumaGuidanceTranslations,
+  type LumaGuidanceTranslations,
+  type LumaSourceCatalog,
+} from './schema';
 
 const translations = {
   sherlockDx11Performance:
@@ -56,6 +61,8 @@ const translations = {
   sinkingCityOriginal: '原版可用，重制版状态未知。',
   heavyRainSteamUltrawide: '超宽屏可能仅在通过 Steam 启动时可用。',
   metroBorderless: '请使用无边框窗口模式。',
-} satisfies LumaGuidanceTranslations;
+} as const satisfies LumaGuidanceTranslations;
 
-export const lumaGuidanceOverrides = expandLumaGuidanceTranslations(translations);
+export const lumaGuidanceOverrides = defineLocalizedOverrides<'zh', LumaSourceCatalog>()(
+  expandLumaGuidanceTranslations(translations),
+);

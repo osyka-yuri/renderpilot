@@ -4,7 +4,7 @@
   import AddonConfidenceBadge from './AddonConfidenceBadge.svelte';
   import AddonRiskConfirmDialog from './AddonRiskConfirmDialog.svelte';
   import AddonStateMessage from './AddonStateMessage.svelte';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import { Button, Spinner } from '@shared/ui';
   import DownloadIcon from '@lucide/svelte/icons/download';
 
@@ -29,7 +29,7 @@
     store: ViewStore;
     busy: boolean;
     labels: AddonInstallableLabels;
-    confidenceLabelKey: Record<MatchConfidence, MessageKey>;
+    confidenceLabelKey: Record<MatchConfidence, MessageKeyWithoutParams>;
     onInstall: (gameId: string, force: boolean) => void;
     riskText: string;
     preConflictWarnings?: Snippet;

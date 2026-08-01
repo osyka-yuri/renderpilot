@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MessageKey } from '@shared/i18n';
+  import type { MessageKeyWithoutParams } from '@shared/i18n';
 
   import AddonCardShell from './AddonCardShell.svelte';
 
@@ -19,6 +19,12 @@
     headerLabel?: string | null;
   };
 
+  type Attribution = {
+    textKey: MessageKeyWithoutParams;
+    linkKey: MessageKeyWithoutParams;
+    href: string;
+  };
+
   const {
     title = 'Card title',
     description = 'Card description',
@@ -35,9 +41,9 @@
     headerLabel = null,
   }: Props = $props();
 
-  const attribution = $derived({
-    textKey: 'gameDetails.luma.attribution' as MessageKey,
-    linkKey: 'gameDetails.luma.attributionLink' as MessageKey,
+  const attribution = $derived<Attribution>({
+    textKey: 'gameDetails.luma.attribution',
+    linkKey: 'gameDetails.luma.attributionLink',
     href: attributionHref,
   });
 </script>

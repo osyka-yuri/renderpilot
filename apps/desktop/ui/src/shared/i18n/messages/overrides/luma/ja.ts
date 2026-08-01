@@ -1,4 +1,9 @@
-import { expandLumaGuidanceTranslations, type LumaGuidanceTranslations } from './schema';
+import { defineLocalizedOverrides } from '../../contract';
+import {
+  expandLumaGuidanceTranslations,
+  type LumaGuidanceTranslations,
+  type LumaSourceCatalog,
+} from './schema';
 
 const translations = {
   sherlockDx11Performance:
@@ -66,6 +71,8 @@ const translations = {
   heavyRainSteamUltrawide:
     'ウルトラワイドは Steam 経由で起動した場合にのみ動作することがあります。',
   metroBorderless: 'ボーダーレスウィンドウモードを使用してください。',
-} satisfies LumaGuidanceTranslations;
+} as const satisfies LumaGuidanceTranslations;
 
-export const lumaGuidanceOverrides = expandLumaGuidanceTranslations(translations);
+export const lumaGuidanceOverrides = defineLocalizedOverrides<'ja', LumaSourceCatalog>()(
+  expandLumaGuidanceTranslations(translations),
+);

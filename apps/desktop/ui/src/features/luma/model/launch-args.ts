@@ -1,6 +1,6 @@
-import type { MessageKey } from '@shared/i18n';
+import type { MessageKeyWithoutParams } from '@shared/i18n';
 
-const INSTRUCTION_KEY_BY_LAUNCHER: Record<string, MessageKey | undefined> = {
+const INSTRUCTION_KEY_BY_LAUNCHER: Record<string, MessageKeyWithoutParams | undefined> = {
   Steam: 'gameDetails.luma.launchArgs.instructions.steam',
   Gog: 'gameDetails.luma.launchArgs.instructions.gog',
   Epic: 'gameDetails.luma.launchArgs.instructions.epic',
@@ -8,7 +8,7 @@ const INSTRUCTION_KEY_BY_LAUNCHER: Record<string, MessageKey | undefined> = {
   Ubisoft: 'gameDetails.luma.launchArgs.instructions.ubisoft',
 };
 
-export function launchArgsInstructionKey(launcher: string): MessageKey {
+export function launchArgsInstructionKey(launcher: string): MessageKeyWithoutParams {
   return INSTRUCTION_KEY_BY_LAUNCHER[launcher] ?? 'gameDetails.luma.launchArgs.instructions.other';
 }
 

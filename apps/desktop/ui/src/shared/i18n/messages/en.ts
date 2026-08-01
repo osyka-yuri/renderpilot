@@ -1,13 +1,15 @@
-import type { MessageDictionary } from './types';
+import { defineSourceCatalog } from './contract';
+import { plural } from './model';
+import type { ParamsForMessage } from './params';
 
 /**
  * English catalog — the source of truth for the key set.
  *
  * Keys are flat and dot-grouped by feature area. Every other locale must
- * provide the exact same keys (enforced via `Record<MessageKey, …>`), so
- * adding a key here turns missing translations into type errors.
+ * provide the same keys, tags, arguments, branch shape, and placeholders;
+ * adding or changing a source message therefore updates the typed contract.
  */
-export const en = {
+export const en = defineSourceCatalog({
   // ── App shell / navigation ──
   'nav.games': 'Games',
   'nav.libraries': 'Libraries',
@@ -80,10 +82,10 @@ export const en = {
   'game.card.availableAddons': 'Available add-ons',
   'game.card.badge.upToDate': 'Up to date',
   'game.card.badge.updatesAvailable': 'Updates available',
-  'game.card.badge.updatesAvailableCount': {
+  'game.card.badge.updatesAvailableCount': plural('count', {
     one: '1 update available',
     other: '{count} updates available',
-  },
+  }),
   'game.card.menu.ariaLabel': 'Options for {title}',
   'game.card.menu.favorite.add': 'Add to favorites',
   'game.card.menu.favorite.remove': 'Remove from favorites',
@@ -111,8 +113,8 @@ export const en = {
 
   // ── Games dashboard summary ──
   'game.dashboard.summary': 'Dashboard',
-  'game.dashboard.games': { one: '{count} game', other: '{count} games' },
-  'game.dashboard.updates': { one: '{count} update', other: '{count} updates' },
+  'game.dashboard.games': plural('count', { one: '{count} game', other: '{count} games' }),
+  'game.dashboard.updates': plural('count', { one: '{count} update', other: '{count} updates' }),
 
   // ── Elevation banner ──
   'elevation.title': 'Administrator privileges required',
@@ -154,11 +156,11 @@ export const en = {
     'RenderPilot will use the selected folder instead of the current one. Game files will remain unchanged.',
   'addGame.replaceExistingRoot': 'Correct path',
   'addGame.rootCorrection.rollbackTitle': 'Active component changes must be reverted first',
-  'addGame.rootCorrection.rollbackDescription': {
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
     one: 'RenderPilot must revert the active change for 1 component before replacing the card root.',
     other:
       'RenderPilot must revert the active changes for {count} components before replacing the card root.',
-  },
+  }),
   'addGame.rootCorrection.rollbackAndReplace': 'Revert changes and replace root',
   'addGame.rootCorrection.rollbackFailed':
     'The component changes could not be fully reverted. The existing game root was not changed.',
@@ -172,14 +174,14 @@ export const en = {
     'A saved component rollback state no longer has a matching component.',
   'addGame.rescan': 'Rescan game',
   'addGame.catalogBusy': 'Another catalog operation is still running. Finish it, then try again.',
-  'addGame.warning.legacyCardsConsolidated': {
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
     one: 'Consolidated one proven false legacy game card.',
     other: 'Consolidated {count} proven false legacy game cards.',
-  },
-  'addGame.warning.legacyCardsRetained': {
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
     one: 'Kept one legacy card because independent-install evidence was inconclusive.',
     other: 'Kept {count} legacy cards because independent-install evidence was inconclusive.',
-  },
+  }),
   'addGame.warning.recoveryBundleCreated': 'Conflicting legacy state was preserved in {path}.',
   'addGame.warning.rootCorrectionHistoryArchived':
     'Catalog history outside the corrected game root was preserved in {path}.',
@@ -311,7 +313,7 @@ export const en = {
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'No alternative versions',
   'gameDetails.version.restoreOriginal': 'Restore original {fileName}',
-  'gameDetails.version.fileCount': { one: '1 file', other: '{count} files' },
+  'gameDetails.version.fileCount': plural('count', { one: '1 file', other: '{count} files' }),
 
   // ── Game details: vendor component card ──
   'gameDetails.vendor.description': 'Change the component version.',
@@ -338,10 +340,10 @@ export const en = {
   'gameDetails.updateAll.upToDate': 'All stable versions are up to date',
   'gameDetails.updateAll.partialFailure':
     'Some updates failed ({count}). Check the details and try again.',
-  'gameDetails.updateAll.tooltip': {
+  'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Update 1 component to its latest stable version',
     other: 'Update {count} components to their latest stable versions',
-  },
+  }),
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Game executable',
   'gameDetails.developerMode.requiredTitle': 'Windows Developer Mode is off',
@@ -471,14 +473,14 @@ export const en = {
   'libraries.actions.downloadAll': 'Download latest',
   'libraries.actions.downloadAllCount': 'Download latest ({count})',
   'libraries.actions.downloadAllUpToDate': 'All latest versions already downloaded',
-  'libraries.actions.downloadAllTooltip': {
+  'libraries.actions.downloadAllTooltip': plural('count', {
     one: 'Download 1 latest version',
     other: 'Download {count} latest versions',
-  },
-  'libraries.actions.downloadAllDoneToast': {
+  }),
+  'libraries.actions.downloadAllDoneToast': plural('count', {
     one: 'Downloaded {count} library',
     other: 'Downloaded {count} libraries',
-  },
+  }),
   'libraries.actions.downloadAllPartialToast': 'Downloaded {succeeded}, {failed} failed',
   'libraries.actions.downloadAllNoneToast': 'All latest versions already downloaded',
 
@@ -507,9 +509,15 @@ export const en = {
   'operation.label.replaceComponent': 'Change Version',
   'operation.duration': 'Finished in {seconds}s',
   'operation.filesUpdated.none': 'No files updated.',
-  'operation.filesUpdated.count': { one: '1 file updated.', other: '{count} files updated.' },
+  'operation.filesUpdated.count': plural('count', {
+    one: '1 file updated.',
+    other: '{count} files updated.',
+  }),
   'operation.filesRestored.none': 'No files restored.',
-  'operation.filesRestored.count': { one: '1 file restored.', other: '{count} files restored.' },
+  'operation.filesRestored.count': plural('count', {
+    one: '1 file restored.',
+    other: '{count} files restored.',
+  }),
   'operation.itemAria': '{kind}, {status}',
 
   // ── Notifications (toasts) ──
@@ -546,10 +554,10 @@ export const en = {
   'games.showHiddenActive': 'Hidden games (active)',
 
   // ── Library scan ──
-  'scan.partialWarning': {
+  'scan.partialWarning': plural('count', {
     one: 'Could not scan 1 folder.',
     other: 'Could not scan {count} folders.',
-  },
+  }),
 
   // ── Background cover sync ──
   'coverSync.failed': 'Failed to sync covers.',
@@ -963,6 +971,29 @@ export const en = {
   // ── Game details: Luma attribution ──
   'gameDetails.luma.attribution': 'Luma Framework by Filoppi.',
   'gameDetails.luma.attributionLink': 'View project',
-} satisfies MessageDictionary;
+});
 
 export type MessageKey = keyof typeof en;
+export type EnglishCatalog = typeof en;
+
+export type MessageParams<Key extends MessageKey> = Key extends MessageKey
+  ? ParamsForMessage<EnglishCatalog[Key]>
+  : never;
+
+export type MessageKeyWithoutParams = {
+  [Key in MessageKey]: keyof MessageParams<Key> extends never ? Key : never;
+}[MessageKey];
+
+export type ParameterizedMessageKey = Exclude<MessageKey, MessageKeyWithoutParams>;
+
+type SameParams<Left, Right> = Left extends Right ? (Right extends Left ? true : false) : false;
+
+export type MessageKeyForParams<Params> = {
+  [Key in MessageKey]: SameParams<MessageParams<Key>, Params> extends true ? Key : never;
+}[MessageKey];
+
+export type MessageRef<Key extends MessageKey = MessageKey> = Key extends MessageKey
+  ? keyof MessageParams<Key> extends never
+    ? Readonly<{ key: Key }>
+    : Readonly<{ key: Key; params: MessageParams<Key> }>
+  : never;

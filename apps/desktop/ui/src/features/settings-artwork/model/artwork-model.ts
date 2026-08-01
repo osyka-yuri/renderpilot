@@ -3,7 +3,7 @@ import {
   COVERS_STEAM_CDN_SETTING_KEY,
   COVERS_STEAMGRIDDB_REMOTE_SETTING_KEY,
 } from '@entities/settings';
-import type { MessageKey } from '@shared/i18n';
+import type { MessageKeyWithoutParams } from '@shared/i18n';
 
 export type CoverSourcePolicyKey = 'steamCdn' | 'gogCdn' | 'steamgriddb';
 
@@ -18,10 +18,10 @@ export type CoverSourceSettingKey = keyof typeof coverSourcePolicyBySetting;
 export type CoverSourceToggleRow = {
   settingKey: CoverSourceSettingKey;
   policyKey: CoverSourcePolicyKey;
-  ariaLabelKey: MessageKey;
+  ariaLabelKey: MessageKeyWithoutParams;
   eyebrow: string;
-  titleKey: MessageKey;
-  descriptionKey: MessageKey;
+  titleKey: MessageKeyWithoutParams;
+  descriptionKey: MessageKeyWithoutParams;
 };
 
 type CoverSourceToggleRowDefinition = Omit<CoverSourceToggleRow, 'policyKey'>;

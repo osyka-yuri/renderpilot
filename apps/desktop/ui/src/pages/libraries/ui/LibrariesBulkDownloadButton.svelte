@@ -2,7 +2,6 @@
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { Button, Progress, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
-  import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
   import type { LibrariesPageModel } from '../model/create-libraries-page-model.svelte';
@@ -46,12 +45,9 @@
       }
 
       toast.success(t('libraries.actions.downloadAllDoneToast', { count: succeeded }));
-    } catch (error) {
+    } catch {
       toast.error(
-        t('libraries.actions.failedToast', {
-          action: t('libraries.actions.downloadAll'),
-          error: describeCommandError(error),
-        }),
+        t('libraries.actions.failedToast', { action: t('libraries.actions.downloadAll') }),
       );
     }
   }

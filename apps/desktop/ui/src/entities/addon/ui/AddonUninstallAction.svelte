@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     AlertDialog,
     AlertDialogContent,
@@ -15,10 +15,10 @@
 
   type Props = {
     busy?: boolean;
-    actionKey: MessageKey;
-    confirmTitleKey: MessageKey;
-    confirmBodyKey: MessageKey;
-    confirmActionKey: MessageKey;
+    actionKey: MessageKeyWithoutParams;
+    confirmTitleKey: MessageKeyWithoutParams;
+    confirmBodyKey: MessageKeyWithoutParams;
+    confirmActionKey: MessageKeyWithoutParams;
     onConfirm: () => ConfirmResult | Promise<ConfirmResult>;
   };
 

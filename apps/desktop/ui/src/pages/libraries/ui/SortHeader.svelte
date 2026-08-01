@@ -19,18 +19,18 @@
   const sortState = $derived(column.getIsSorted());
   const canSort = $derived(column.getCanSort());
 
-  const sortButtonLabel = $derived(getSortButtonLabel(label, sortState));
+  const sortButtonLabel = $derived(getSortButtonLabel(sortState));
 
-  function getSortButtonLabel(label: string, state: SortState): string {
+  function getSortButtonLabel(state: SortState): string {
     switch (state) {
       case 'asc':
-        return t('libraries.sort.asc', { label });
+        return t('libraries.sort.asc');
 
       case 'desc':
-        return t('libraries.sort.desc', { label });
+        return t('libraries.sort.desc');
 
       default:
-        return t('libraries.sort.none', { label });
+        return t('libraries.sort.none');
     }
   }
 

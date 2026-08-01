@@ -1,6 +1,6 @@
 import { describeCommandErrorTechnical } from '@shared/api';
 import { parseHttpDateTimestamp } from '@shared/date';
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import { publishErrorNotification } from '@shared/notifications';
 
 import {
@@ -38,7 +38,7 @@ export type AddonStoreApi<
 };
 
 export type AddonStoreMessages = {
-  loadFailed: MessageKey;
+  loadFailed: MessageKeyWithoutParams;
 };
 
 export type CreateAddonStoreConfig<

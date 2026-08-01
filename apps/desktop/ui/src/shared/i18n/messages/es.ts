@@ -1,7 +1,8 @@
-import type { MessageKey } from './en';
-import type { MessageValue } from './types';
+import type { EnglishCatalog } from './en';
+import { defineLocalizedCatalog } from './contract';
+import { plural } from './model';
 
-export const es: Record<MessageKey, MessageValue> = {
+export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'nav.games': 'Juegos',
   'nav.libraries': 'Bibliotecas',
   'nav.settings': 'Ajustes',
@@ -68,10 +69,11 @@ export const es: Record<MessageKey, MessageValue> = {
   'game.card.availableAddons': 'Complementos disponibles',
   'game.card.badge.upToDate': 'Actualizado',
   'game.card.badge.updatesAvailable': 'Actualizaciones disponibles',
-  'game.card.badge.updatesAvailableCount': {
+  'game.card.badge.updatesAvailableCount': plural('count', {
     one: '1 actualización disponible',
+    many: '{count} actualizaciones disponibles',
     other: '{count} actualizaciones disponibles',
-  },
+  }),
   'game.card.menu.ariaLabel': 'Opciones para {title}',
   'game.card.menu.favorite.add': 'Añadir a favoritos',
   'game.card.menu.favorite.remove': 'Eliminar de favoritos',
@@ -97,8 +99,16 @@ export const es: Record<MessageKey, MessageValue> = {
   'game.cover.menu.clearHint': 'Restaurar la carátula predeterminada.',
 
   'game.dashboard.summary': 'Resumen',
-  'game.dashboard.games': { one: '{count} juego', other: '{count} juegos' },
-  'game.dashboard.updates': { one: '{count} actualización', other: '{count} actualizaciones' },
+  'game.dashboard.games': plural('count', {
+    one: '{count} juego',
+    many: '{count} juegos',
+    other: '{count} juegos',
+  }),
+  'game.dashboard.updates': plural('count', {
+    one: '{count} actualización',
+    many: '{count} actualizaciones',
+    other: '{count} actualizaciones',
+  }),
 
   'elevation.title': 'Se requieren privilegios de administrador',
   'elevation.description':
@@ -141,11 +151,12 @@ export const es: Record<MessageKey, MessageValue> = {
   'addGame.replaceExistingRoot': 'Corregir la ruta',
   'addGame.rootCorrection.rollbackTitle':
     'Primero deben revertirse los cambios activos de componentes',
-  'addGame.rootCorrection.rollbackDescription': {
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
     one: 'RenderPilot debe revertir el cambio activo de 1 componente antes de sustituir la raíz de la tarjeta.',
+    many: 'RenderPilot debe revertir los cambios activos de {count} componentes antes de sustituir la raíz de la tarjeta.',
     other:
       'RenderPilot debe revertir los cambios activos de {count} componentes antes de sustituir la raíz de la tarjeta.',
-  },
+  }),
   'addGame.rootCorrection.rollbackAndReplace': 'Revertir cambios y sustituir raíz',
   'addGame.rootCorrection.rollbackFailed':
     'No se pudieron revertir por completo los cambios de componentes. La raíz actual del juego no se modificó.',
@@ -160,15 +171,17 @@ export const es: Record<MessageKey, MessageValue> = {
   'addGame.rescan': 'Volver a analizar el juego',
   'addGame.catalogBusy':
     'Hay otra operación del catálogo en curso. Termínala y vuelve a intentarlo.',
-  'addGame.warning.legacyCardsConsolidated': {
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
     one: 'Se consolidó una tarjeta antigua que se confirmó como incorrecta.',
+    many: 'Se consolidaron {count} tarjetas antiguas que se confirmaron como incorrectas.',
     other: 'Se consolidaron {count} tarjetas antiguas que se confirmaron como incorrectas.',
-  },
-  'addGame.warning.legacyCardsRetained': {
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
     one: 'Se conservó una tarjeta antigua porque no había pruebas concluyentes de una instalación independiente.',
+    many: 'Se conservaron {count} tarjetas antiguas porque no había pruebas concluyentes de instalaciones independientes.',
     other:
       'Se conservaron {count} tarjetas antiguas porque no había pruebas concluyentes de instalaciones independientes.',
-  },
+  }),
   'addGame.warning.recoveryBundleCreated':
     'El estado antiguo en conflicto se guardó en el paquete de recuperación {path}.',
   'addGame.warning.rootCorrectionHistoryArchived':
@@ -250,7 +263,11 @@ export const es: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': 'Sin versiones alternativas',
   'gameDetails.version.restoreOriginal': 'Restaurar {fileName} original',
-  'gameDetails.version.fileCount': { one: '1 archivo', other: '{count} archivos' },
+  'gameDetails.version.fileCount': plural('count', {
+    one: '1 archivo',
+    many: '{count} archivos',
+    other: '{count} archivos',
+  }),
 
   'gameDetails.vendor.description': 'Cambiar la versión del componente.',
 
@@ -275,10 +292,11 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.updateAll.upToDate': 'Todas las versiones estables están actualizadas',
   'gameDetails.updateAll.partialFailure':
     'Algunas actualizaciones fallaron ({count}). Revisa los detalles e inténtalo de nuevo.',
-  'gameDetails.updateAll.tooltip': {
+  'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Actualizar 1 componente a su última versión estable',
+    many: 'Actualizar {count} componentes a sus últimas versiones estables',
     other: 'Actualizar {count} componentes a sus últimas versiones estables',
-  },
+  }),
   'gameDetails.executable.title': 'Ejecutable del juego',
   'gameDetails.developerMode.requiredTitle': 'El modo de desarrollador de Windows está desactivado',
   'gameDetails.developerMode.requiredDescription':
@@ -410,14 +428,16 @@ export const es: Record<MessageKey, MessageValue> = {
   'libraries.actions.downloadAll': 'Descargar las últimas',
   'libraries.actions.downloadAllCount': 'Descargar las últimas ({count})',
   'libraries.actions.downloadAllUpToDate': 'Todas las últimas versiones ya están descargadas',
-  'libraries.actions.downloadAllTooltip': {
+  'libraries.actions.downloadAllTooltip': plural('count', {
     one: 'Descargar 1 versión más reciente',
+    many: 'Descargar {count} versiones más recientes',
     other: 'Descargar {count} versiones más recientes',
-  },
-  'libraries.actions.downloadAllDoneToast': {
+  }),
+  'libraries.actions.downloadAllDoneToast': plural('count', {
     one: '{count} biblioteca descargada',
+    many: '{count} bibliotecas descargadas',
     other: '{count} bibliotecas descargadas',
-  },
+  }),
   'libraries.actions.downloadAllPartialToast': '{succeeded} descargadas, {failed} con error',
   'libraries.actions.downloadAllNoneToast': 'Todas las últimas versiones ya están descargadas',
 
@@ -448,15 +468,17 @@ export const es: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'Cambiar versión',
   'operation.duration': 'Finalizado en {seconds}s',
   'operation.filesUpdated.none': 'Ningún archivo actualizado.',
-  'operation.filesUpdated.count': {
+  'operation.filesUpdated.count': plural('count', {
     one: '1 archivo actualizado.',
+    many: '{count} archivos actualizados.',
     other: '{count} archivos actualizados.',
-  },
+  }),
   'operation.filesRestored.none': 'Ningún archivo restaurado.',
-  'operation.filesRestored.count': {
+  'operation.filesRestored.count': plural('count', {
     one: '1 archivo restaurado.',
+    many: '{count} archivos restaurados.',
     other: '{count} archivos restaurados.',
-  },
+  }),
   'operation.itemAria': '{kind}, {status}',
 
   'notify.stalePlan': 'El plan de operación está desactualizado. Por favor, inténtalo de nuevo.',
@@ -488,10 +510,11 @@ export const es: Record<MessageKey, MessageValue> = {
   'notify.statusError': 'Error',
   'notify.statusWarning': 'Advertencia',
 
-  'scan.partialWarning': {
+  'scan.partialWarning': plural('count', {
     one: 'No se pudo escanear 1 carpeta.',
+    many: 'No se pudieron escanear {count} carpetas.',
     other: 'No se pudieron escanear {count} carpetas.',
-  },
+  }),
 
   'coverSync.failed': 'No se pudieron sincronizar las carátulas.',
   'coverSync.refreshFailed': 'No se pudieron sincronizar las carátulas.',
@@ -954,4 +977,4 @@ export const es: Record<MessageKey, MessageValue> = {
   'gameDetails.luma.guidance.copy': 'Copiar',
   'gameDetails.luma.guidance.copied': 'Copiado',
   'gameDetails.luma.guidance.copyFailed': 'No se pudo copiar',
-};
+});

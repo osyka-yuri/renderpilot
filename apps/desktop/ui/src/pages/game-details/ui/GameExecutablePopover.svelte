@@ -12,7 +12,7 @@
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import type { ExecutableCandidate } from '@features/nvapi-settings';
   import type { GameExecutableContext } from '../model/create-game-executable-context.svelte';
   import type { ExecutableLockReason } from '../model/game-executable-lock';
@@ -21,7 +21,7 @@
   const LOCK_TOOLTIP_KEYS = {
     d3d12_managed: 'gameDetails.d3d12.executableLocked',
     d3d12_repair_required: 'gameDetails.d3d12.executableRepairLocked',
-  } as const satisfies Record<ExecutableLockReason, MessageKey>;
+  } as const satisfies Record<ExecutableLockReason, MessageKeyWithoutParams>;
 
   type Props = {
     gameId: string;

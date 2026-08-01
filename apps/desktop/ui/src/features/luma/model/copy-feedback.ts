@@ -1,10 +1,10 @@
 import { toast } from 'svelte-sonner';
 
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 
 export type CopyFeedbackKeys = {
-  copied: MessageKey;
-  copyFailed: MessageKey;
+  copied: MessageKeyWithoutParams;
+  copyFailed: MessageKeyWithoutParams;
 };
 
 /**

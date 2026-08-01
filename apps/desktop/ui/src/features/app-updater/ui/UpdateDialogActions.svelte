@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MessageKey } from '@shared/i18n';
+  import type { MessageKeyWithoutParams } from '@shared/i18n';
   import { t } from '@shared/i18n';
   import { Button } from '@shared/ui';
 
@@ -16,8 +16,8 @@
   const { footer, onInstall, onRetry, onDismiss, onRestart }: Props = $props();
 
   type ActionView = {
-    secondaryKey: MessageKey;
-    primaryKey: MessageKey;
+    secondaryKey: MessageKeyWithoutParams;
+    primaryKey: MessageKeyWithoutParams;
     onPrimary: () => void;
   };
 

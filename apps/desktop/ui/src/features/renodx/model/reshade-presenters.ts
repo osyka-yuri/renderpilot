@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import { ADDON_DISPLAY_NAME } from '@shared/model';
 import {
   createReshadePresenters,
@@ -18,7 +18,7 @@ import type {
 export const CHANNEL_LABEL = {
   stable: 'gameDetails.renodx.channel.stable',
   nightly: 'gameDetails.renodx.channel.nightly',
-} satisfies Record<ReshadeChannel, MessageKey>;
+} satisfies Record<ReshadeChannel, MessageKeyWithoutParams>;
 
 export type VulkanLayerDisplayState = VulkanLayerDetection | 'needs_repair';
 
@@ -30,20 +30,20 @@ export const VULKAN_LAYER_STATE_LABEL = {
   conflict: 'gameDetails.renodx.vulkanLayer.state.conflict',
   needs_repair: 'gameDetails.renodx.vulkanLayer.state.needs_repair',
   unsupported: 'gameDetails.renodx.vulkanLayer.state.unsupported',
-} satisfies Record<VulkanLayerDisplayState, MessageKey>;
+} satisfies Record<VulkanLayerDisplayState, MessageKeyWithoutParams>;
 
 export const VULKAN_LAYER_PRIMARY_ACTION_LABEL = {
   install: 'gameDetails.renodx.vulkanLayer.action.install',
   update: 'gameDetails.renodx.vulkanLayer.action.update',
   switch_channel: 'gameDetails.renodx.vulkanLayer.action.switch_channel',
   repair: 'gameDetails.renodx.vulkanLayer.action.repair',
-} satisfies Record<'install' | 'update' | 'switch_channel' | 'repair', MessageKey>;
+} satisfies Record<'install' | 'update' | 'switch_channel' | 'repair', MessageKeyWithoutParams>;
 
 export const VULKAN_LOADER_VISIBILITY_NOTE = {
   hkcu_not_visible_when_elevated:
     'gameDetails.renodx.vulkanLayer.diagnostic.hkcu_not_visible_when_elevated',
   ambiguous: 'gameDetails.renodx.vulkanLayer.diagnostic.ambiguous_loader_visibility',
-} satisfies Partial<Record<VulkanLoaderVisibility, MessageKey>>;
+} satisfies Partial<Record<VulkanLoaderVisibility, MessageKeyWithoutParams>>;
 
 const presenters = createReshadePresenters('gameDetails.renodx', ADDON_DISPLAY_NAME.renodx);
 
@@ -96,7 +96,7 @@ export function canCheckVulkanLayerUpdates(
 export function getAddonDescriptionKey(
   addon: RenoDxAddonState | null,
   addonTracked: boolean | null,
-): MessageKey {
+): MessageKeyWithoutParams {
   if (addon?.enabled_by_config === false) {
     return 'gameDetails.renodx.component.addonDisabled';
   }
@@ -132,4 +132,4 @@ export const VULKAN_DIAGNOSTIC_LABEL = {
   backend_validation_failed: 'gameDetails.renodx.vulkanLayer.diagnostic.backend_validation_failed',
   hash_mismatch: 'gameDetails.renodx.vulkanLayer.diagnostic.hash_mismatch',
   db_only_fallback: 'gameDetails.renodx.vulkanLayer.diagnostic.db_only_fallback',
-} satisfies Record<LayerDiagnosticReason, MessageKey>;
+} satisfies Record<LayerDiagnosticReason, MessageKeyWithoutParams>;

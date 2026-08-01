@@ -15,7 +15,7 @@
     Spinner,
   } from '@shared/ui';
   import { isDesktopPreviewMode } from '@shared/api-preview';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     DEVELOPER_MODE_CHECK_UNAVAILABLE,
     type DeveloperModePlanBlocker,
@@ -35,12 +35,12 @@
     $props();
 
   type DialogCopy = {
-    title: MessageKey;
-    description: MessageKey;
-    guidance: MessageKey | null;
-    openAction: MessageKey | null;
-    openFailed: MessageKey | null;
-    retryAction: MessageKey;
+    title: MessageKeyWithoutParams;
+    description: MessageKeyWithoutParams;
+    guidance: MessageKeyWithoutParams | null;
+    openAction: MessageKeyWithoutParams | null;
+    openFailed: MessageKeyWithoutParams | null;
+    retryAction: MessageKeyWithoutParams;
   };
 
   let openingExternalTarget = $state(false);

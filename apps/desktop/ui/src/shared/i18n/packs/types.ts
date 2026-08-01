@@ -1,10 +1,11 @@
 import type { Locale } from '../locale';
-import type { MessageKey } from '../messages/en';
-import type { MessageOverrides, MessageValue } from '../messages/types';
+import type { MESSAGE_CONTRACT_VERSION } from '../messages/generated/contract-version';
+import type { MessageOverrides, MessageValue } from '../messages/model';
 
 export type LocalePack = Readonly<{
   locale: Locale;
-  messages: Readonly<Record<MessageKey, MessageValue>>;
+  contractVersion: typeof MESSAGE_CONTRACT_VERSION;
+  messages: Readonly<Record<string, MessageValue>>;
   dynamicCatalogs: readonly MessageOverrides[];
 }>;
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 
   import AddonStatusBadge from './AddonStatusBadge.svelte';
   import type { AddonBadgeStatus } from '../model/badge-status';
@@ -12,7 +12,10 @@
     i18nPrefix: AddonToolI18nPrefix;
   };
 
-  function labelKey(prefix: AddonToolI18nPrefix, status: AddonBadgeStatus): MessageKey {
+  function labelKey(
+    prefix: AddonToolI18nPrefix,
+    status: AddonBadgeStatus,
+  ): MessageKeyWithoutParams {
     switch (status) {
       case 'untracked':
         return `${prefix}.updatesNotTracked`;

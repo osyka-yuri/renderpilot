@@ -16,7 +16,7 @@
     TooltipContent,
     TooltipTrigger,
   } from '@shared/ui';
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import type { SettingStateResponse } from '../model/types';
 
   type Props = {
@@ -56,6 +56,10 @@
 
   const hasBaseline = $derived(state.baseline !== null);
 
+  function translateNvapi(key: string, fallback: string): string {
+    return translateExternalMessage({ key, fallback });
+  }
+
   // Each revert button is only meaningful when it would actually change
   // something — so they enable only then, instead of being permanently active.
   // "Reset to driver default" applies when an override is present (the current
@@ -70,10 +74,10 @@
 
 <Item size="sm">
   <ItemContent>
-    <ItemTitle>{translateKey(`nvapi.${state.setting_key}.label`, state.setting_label)}</ItemTitle>
+    <ItemTitle>{translateNvapi(`nvapi.${state.setting_key}.label`, state.setting_label)}</ItemTitle>
     {#if state.description !== null || state.min_driver !== null}
       <ItemDescription>
-        {#if state.description}{translateKey(
+        {#if state.description}{translateNvapi(
             `nvapi.${state.setting_key}.description`,
             state.description,
           )}{/if}
@@ -89,7 +93,7 @@
     <Select type="single" {disabled} bind:value={selected} onValueChange={handleChange}>
       <SelectTrigger size="sm" class="w-60">
         <span class="truncate"
-          >{translateKey(
+          >{translateNvapi(
             `nvapi.${state.setting_key}.value.${state.current.wire}`,
             state.current.label,
           )}</span
@@ -99,12 +103,12 @@
         {#each orderedValues as option (option.wire)}
           <SelectItem
             value={option.wire}
-            label={translateKey(`nvapi.${state.setting_key}.value.${option.wire}`, option.label)}
+            label={translateNvapi(`nvapi.${state.setting_key}.value.${option.wire}`, option.label)}
             disabled={!option.supported}
           >
             <span class="flex w-full items-center justify-between gap-2">
               <span
-                >{translateKey(
+                >{translateNvapi(
                   `nvapi.${state.setting_key}.value.${option.wire}`,
                   option.label,
                 )}</span

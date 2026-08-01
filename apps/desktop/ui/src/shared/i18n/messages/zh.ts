@@ -1,7 +1,8 @@
-import type { MessageKey } from './en';
-import type { MessageValue } from './types';
+import type { EnglishCatalog } from './en';
+import { defineLocalizedCatalog } from './contract';
+import { plural } from './model';
 
-export const zh: Record<MessageKey, MessageValue> = {
+export const zh = defineLocalizedCatalog<'zh', EnglishCatalog>()({
   'nav.games': '游戏',
   'nav.libraries': '组件库',
   'nav.settings': '设置',
@@ -64,10 +65,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'game.card.availableAddons': '可用插件',
   'game.card.badge.upToDate': '已是最新',
   'game.card.badge.updatesAvailable': '有可用更新',
-  'game.card.badge.updatesAvailableCount': {
-    one: '有 1 个可用更新',
-    other: '有 {count} 个可用更新',
-  },
+  'game.card.badge.updatesAvailableCount': plural('count', { other: '有 {count} 个可用更新' }),
   'game.card.menu.ariaLabel': '{title} 的选项',
   'game.card.menu.favorite.add': '添加到收藏',
   'game.card.menu.favorite.remove': '从收藏中移除',
@@ -93,8 +91,8 @@ export const zh: Record<MessageKey, MessageValue> = {
   'game.cover.menu.clearHint': '恢复默认封面。',
 
   'game.dashboard.summary': '仪表板',
-  'game.dashboard.games': { one: '{count} 个游戏', other: '{count} 个游戏' },
-  'game.dashboard.updates': { one: '{count} 个更新', other: '{count} 个更新' },
+  'game.dashboard.games': plural('count', { other: '{count} 个游戏' }),
+  'game.dashboard.updates': plural('count', { other: '{count} 个更新' }),
 
   'elevation.title': '需要管理员权限',
   'elevation.description': '需要管理员权限才能更改某些设置。',
@@ -133,8 +131,9 @@ export const zh: Record<MessageKey, MessageValue> = {
     'RenderPilot 将使用所选文件夹替代当前文件夹。游戏文件不会被修改。',
   'addGame.replaceExistingRoot': '修正路径',
   'addGame.rootCorrection.rollbackTitle': '必须先还原活动的组件更改',
-  'addGame.rootCorrection.rollbackDescription':
-    '替换卡片根目录前，RenderPilot 必须还原 {count} 个组件的活动更改。',
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
+    other: '替换卡片根目录前，RenderPilot 必须还原 {count} 个组件的活动更改。',
+  }),
   'addGame.rootCorrection.rollbackAndReplace': '还原更改并替换根目录',
   'addGame.rootCorrection.rollbackFailed': '无法完整还原组件更改。现有游戏根目录未被修改。',
   'addGame.rootCorrection.blocker.pendingRecovery': '中断的文件操作仍需恢复。',
@@ -145,9 +144,12 @@ export const zh: Record<MessageKey, MessageValue> = {
     '已保存的组件回滚状态不再有匹配的组件。',
   'addGame.rescan': '重新扫描游戏',
   'addGame.catalogBusy': '另一个目录操作仍在运行。请等待其完成后重试。',
-  'addGame.warning.legacyCardsConsolidated': '已合并 {count} 个经确认错误的旧版游戏卡片。',
-  'addGame.warning.legacyCardsRetained':
-    '由于无法确认是否为独立安装，已保留 {count} 个旧版游戏卡片。',
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
+    other: '已合并 {count} 个经确认错误的旧版游戏卡片。',
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
+    other: '由于无法确认是否为独立安装，已保留 {count} 个旧版游戏卡片。',
+  }),
   'addGame.warning.recoveryBundleCreated': '冲突的旧版状态已保存在恢复包 {path} 中。',
   'addGame.warning.rootCorrectionHistoryArchived':
     '已将修正后的游戏根目录之外的目录历史保存在恢复包 {path} 中。',
@@ -219,7 +221,7 @@ export const zh: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': '没有替代版本',
   'gameDetails.version.restoreOriginal': '恢复原始的 {fileName}',
-  'gameDetails.version.fileCount': { one: '1 个文件', other: '{count} 个文件' },
+  'gameDetails.version.fileCount': plural('count', { other: '{count} 个文件' }),
 
   'gameDetails.vendor.description': '更改组件版本。',
 
@@ -242,10 +244,9 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.updateAll.actionCount': '全部更新 ({count})',
   'gameDetails.updateAll.upToDate': '所有稳定版本均为最新',
   'gameDetails.updateAll.partialFailure': '部分更新失败（{count}）。请查看详情后重试。',
-  'gameDetails.updateAll.tooltip': {
-    one: '将 {count} 个组件更新到最新稳定版本',
+  'gameDetails.updateAll.tooltip': plural('count', {
     other: '将 {count} 个组件更新到最新稳定版本',
-  },
+  }),
   'gameDetails.executable.title': '游戏可执行文件',
   'gameDetails.developerMode.requiredTitle': 'Windows 开发者模式已关闭',
   'gameDetails.developerMode.requiredDescription':
@@ -363,14 +364,8 @@ export const zh: Record<MessageKey, MessageValue> = {
   'libraries.actions.downloadAll': '下载最新',
   'libraries.actions.downloadAllCount': '下载最新（{count}）',
   'libraries.actions.downloadAllUpToDate': '所有最新版本均已下载',
-  'libraries.actions.downloadAllTooltip': {
-    one: '下载 {count} 个最新版本',
-    other: '下载 {count} 个最新版本',
-  },
-  'libraries.actions.downloadAllDoneToast': {
-    one: '已下载 {count} 个库',
-    other: '已下载 {count} 个库',
-  },
+  'libraries.actions.downloadAllTooltip': plural('count', { other: '下载 {count} 个最新版本' }),
+  'libraries.actions.downloadAllDoneToast': plural('count', { other: '已下载 {count} 个库' }),
   'libraries.actions.downloadAllPartialToast': '已下载 {succeeded} 个，{failed} 个失败',
   'libraries.actions.downloadAllNoneToast': '所有最新版本均已下载',
 
@@ -401,9 +396,9 @@ export const zh: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': '更改版本',
   'operation.duration': '在 {seconds} 秒内完成',
   'operation.filesUpdated.none': '没有更新的文件。',
-  'operation.filesUpdated.count': { one: '更新了 1 个文件。', other: '更新了 {count} 个文件。' },
+  'operation.filesUpdated.count': plural('count', { other: '更新了 {count} 个文件。' }),
   'operation.filesRestored.none': '没有恢复的文件。',
-  'operation.filesRestored.count': { one: '恢复了 1 个文件。', other: '恢复了 {count} 个文件。' },
+  'operation.filesRestored.count': plural('count', { other: '恢复了 {count} 个文件。' }),
   'operation.itemAria': '{kind}，{status}',
 
   'notify.stalePlan': '操作计划已过期。请重试。',
@@ -432,10 +427,7 @@ export const zh: Record<MessageKey, MessageValue> = {
   'notify.statusError': '错误',
   'notify.statusWarning': '警告',
 
-  'scan.partialWarning': {
-    one: '无法扫描 1 个文件夹。',
-    other: '无法扫描 {count} 个文件夹。',
-  },
+  'scan.partialWarning': plural('count', { other: '无法扫描 {count} 个文件夹。' }),
 
   'coverSync.failed': '同步封面失败。',
   'coverSync.refreshFailed': '同步封面失败。',
@@ -859,4 +851,4 @@ export const zh: Record<MessageKey, MessageValue> = {
   'gameDetails.luma.guidance.copy': '复制',
   'gameDetails.luma.guidance.copied': '已复制',
   'gameDetails.luma.guidance.copyFailed': '无法复制',
-};
+});

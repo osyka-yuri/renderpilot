@@ -1,5 +1,5 @@
 import { describeCommandErrorTechnical } from '@shared/api';
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import { publishErrorNotification } from '@shared/notifications';
 import { clearDownloadProgress } from '@shared/lib';
 
@@ -39,7 +39,7 @@ export function isMutationSuccess(result: AddonMutationResult): boolean {
 }
 
 export type BusyMutationOptions = {
-  errorKey: MessageKey;
+  errorKey: MessageKeyWithoutParams;
   clearDownloadProgress?: boolean;
   requireUpdateAvailable?: boolean;
   afterCommit?: (token: number) => void | Promise<void>;

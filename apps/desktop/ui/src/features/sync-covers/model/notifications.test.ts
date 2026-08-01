@@ -12,9 +12,7 @@ describe('sync-covers notifications', () => {
   });
 
   it('publishes catastrophic background sync failures as status errors', () => {
-    const notificationId = publishBackgroundCoverSyncFailureNotification(
-      new Error('network failure'),
-    );
+    const notificationId = publishBackgroundCoverSyncFailureNotification();
 
     expect(notificationId).toBe('desktop-status');
     expect(getActiveNotifications()).toEqual([

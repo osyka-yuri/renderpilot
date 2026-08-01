@@ -1,4 +1,4 @@
-import type { MessageKey } from '@shared/i18n';
+import type { MessageKeyWithoutParams } from '@shared/i18n';
 
 /** Upstream project credit shown on every RenoDX card surface. */
 export const RENODX_ATTRIBUTION = {
@@ -6,7 +6,7 @@ export const RENODX_ATTRIBUTION = {
   linkKey: 'gameDetails.renodx.attributionLink',
   href: 'https://github.com/clshortfuse/renodx',
 } as const satisfies {
-  textKey: MessageKey;
-  linkKey: MessageKey;
+  textKey: MessageKeyWithoutParams;
+  linkKey: MessageKeyWithoutParams;
   href: string;
 };

@@ -73,12 +73,8 @@ function gogGame(overrides: Partial<GameSummary> = {}): GameSummary {
 
 describe('background-cover-sync', () => {
   describe('formatBackgroundCoverSyncError', () => {
-    it('formats error with describeCommandError', () => {
-      const error = new Error('network failure');
-
-      const result = formatBackgroundCoverSyncError(error);
-
-      expect(result).toBe(t('coverSync.failed'));
+    it('returns the localized background-sync failure message', () => {
+      expect(formatBackgroundCoverSyncError()).toBe(t('coverSync.failed'));
     });
   });
 

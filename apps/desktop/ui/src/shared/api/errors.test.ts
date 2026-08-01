@@ -9,7 +9,7 @@ import {
 } from './errors';
 import type { CommandErrorDto } from './types';
 
-// An unknown message key forces `translateKey` to fall back to `details`, so the
+// An unknown message key forces external-message translation to fall back to `details`, so the
 // assertions stay independent of the i18n catalog contents.
 function dto(overrides: Partial<CommandErrorDto> = {}): CommandErrorDto {
   return {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
 
   import { AddonStateMessage } from '@entities/addon';
 
@@ -26,7 +26,10 @@
 
     const reason = store.outcome.reason.reason;
 
-    return translateKey(`gameDetails.renodx.reason.${reason}`, reason.replace(/_/g, ' '));
+    return translateExternalMessage({
+      key: `gameDetails.renodx.reason.${reason}`,
+      fallback: reason.replace(/_/g, ' '),
+    });
   });
 </script>
 

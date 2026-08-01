@@ -1,4 +1,9 @@
-import { t, translateKey, type MessageKey } from '@shared/i18n';
+import {
+  t,
+  translateExternalMessage,
+  type MessageKeyForParams,
+  type MessageKeyWithoutParams,
+} from '@shared/i18n';
 
 import type {
   ActionDescriptor,
@@ -9,60 +14,62 @@ import type {
   RiskAssessment,
   RiskSeverity,
 } from './types';
+import { toolMessageKey as toolKey, type ToolI18nPrefix } from './tool-message-key';
 
-/** i18n key prefix for tool-specific freshness / status copy. */
-export type ToolI18nPrefix = 'gameDetails.luma' | 'gameDetails.renodx';
+type DateMessageKey = MessageKeyForParams<Readonly<{ date: string | number }>>;
+type TimeMessageKey = MessageKeyForParams<Readonly<{ time: string | number }>>;
+type VersionMessageKey = MessageKeyForParams<Readonly<{ version: string | number }>>;
 
 export type AddonInstallableLabels = {
-  installAction: MessageKey;
-  installing: MessageKey;
-  confidenceLabel: MessageKey;
-  hostCustomBuild: MessageKey;
-  hostConflictBlocksInstall: MessageKey;
-  fullAddonWarning: MessageKey;
-  confirmTitle: MessageKey;
-  confirmBody: MessageKey;
-  confirmAccept: MessageKey;
+  installAction: MessageKeyWithoutParams;
+  installing: MessageKeyWithoutParams;
+  confidenceLabel: MessageKeyWithoutParams;
+  hostCustomBuild: MessageKeyWithoutParams;
+  hostConflictBlocksInstall: MessageKeyWithoutParams;
+  fullAddonWarning: MessageKeyWithoutParams;
+  confirmTitle: MessageKeyWithoutParams;
+  confirmBody: MessageKeyWithoutParams;
+  confirmAccept: MessageKeyWithoutParams;
 };
 
 export type AddonInstalledLabels = {
-  statusLabel: MessageKey;
-  statusInstalled: MessageKey;
-  freshnessLabel: MessageKey;
-  addonDated: MessageKey;
-  installedOn: MessageKey;
-  lastChecked: MessageKey;
-  lastCheckedNever: MessageKey;
-  fullAddonWarning: MessageKey;
-  componentReshade: MessageKey;
-  componentAddon: MessageKey;
-  checking: MessageKey;
-  actionCheckUpdates: MessageKey;
-  updating: MessageKey;
-  actionUpdate: MessageKey;
-  actionRepair: MessageKey;
-  actionUninstall: MessageKey;
-  uninstallConfirmTitle: MessageKey;
-  uninstallConfirmBody: MessageKey;
-  uninstallConfirmAction: MessageKey;
+  statusLabel: MessageKeyWithoutParams;
+  statusInstalled: MessageKeyWithoutParams;
+  freshnessLabel: MessageKeyWithoutParams;
+  addonDated: DateMessageKey;
+  installedOn: DateMessageKey;
+  lastChecked: TimeMessageKey;
+  lastCheckedNever: MessageKeyWithoutParams;
+  fullAddonWarning: MessageKeyWithoutParams;
+  componentReshade: MessageKeyWithoutParams;
+  componentAddon: MessageKeyWithoutParams;
+  checking: MessageKeyWithoutParams;
+  actionCheckUpdates: MessageKeyWithoutParams;
+  updating: MessageKeyWithoutParams;
+  actionUpdate: MessageKeyWithoutParams;
+  actionRepair: MessageKeyWithoutParams;
+  actionUninstall: MessageKeyWithoutParams;
+  uninstallConfirmTitle: MessageKeyWithoutParams;
+  uninstallConfirmBody: MessageKeyWithoutParams;
+  uninstallConfirmAction: MessageKeyWithoutParams;
 };
 
 export type HostDescriptionPart =
-  | { kind: 'version'; key: MessageKey; version: string }
-  | { kind: 'message'; key: MessageKey };
+  | { kind: 'version'; key: VersionMessageKey; version: string }
+  | { kind: 'message'; key: MessageKeyWithoutParams };
 
 export type HostDescription =
-  | { kind: 'conflict'; key: MessageKey }
-  | { kind: 'parts'; fallbackKey: MessageKey; parts: HostDescriptionPart[] };
+  | { kind: 'conflict'; key: MessageKeyWithoutParams }
+  | { kind: 'parts'; fallbackKey: MessageKeyWithoutParams; parts: HostDescriptionPart[] };
 
 /** The tool-specific i18n keys {@link getHostDescription} renders with. */
 export type HostDescriptionKeys = {
-  versionKey: MessageKey;
-  versionUnknownKey: MessageKey;
-  conflictKey: MessageKey;
-  customBuildKey: MessageKey;
-  addonSupportLabel: Record<Exclude<HostAddonSupport, 'full'>, MessageKey>;
-  hostUpdateStatusLabel: Record<Exclude<HostUpdateStatus, 'current'>, MessageKey>;
+  versionKey: VersionMessageKey;
+  versionUnknownKey: MessageKeyWithoutParams;
+  conflictKey: MessageKeyWithoutParams;
+  customBuildKey: MessageKeyWithoutParams;
+  addonSupportLabel: Record<Exclude<HostAddonSupport, 'full'>, MessageKeyWithoutParams>;
+  hostUpdateStatusLabel: Record<Exclude<HostUpdateStatus, 'current'>, MessageKeyWithoutParams>;
 };
 
 /**
@@ -115,11 +122,11 @@ export function actionDisabledMessage(action: ActionDescriptor | undefined): str
 
 /** Severity-based fallback keys when the backend risk `message_key` is missing. */
 type RiskFallbackKeys = {
-  warn: MessageKey;
-  safe: MessageKey;
+  warn: MessageKeyWithoutParams;
+  safe: MessageKeyWithoutParams;
 };
 
-function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): MessageKey {
+function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): MessageKeyWithoutParams {
   switch (severity) {
     case 'warn':
       return keys.warn;
@@ -136,20 +143,15 @@ function humanizeMessageKey(key: string): string {
   return key.replace(/^.*\./, '').replace(/_/g, ' ');
 }
 
-/** Catalog keys are mirrored under both tool prefixes; cast keeps MessageKey strict. */
-function toolKey(prefix: ToolI18nPrefix, rest: string): MessageKey {
-  return `${prefix}.${rest}` as MessageKey;
-}
-
 /**
  * Shared host i18n key maps for a tool's `gameDetails.<tool>` prefix.
  * Tool presenters pass these into {@link getHostDescription}.
  */
 function createHostLabelMaps(prefix: ToolI18nPrefix): {
-  addonSupportLabel: Record<'limited' | 'unknown', MessageKey>;
+  addonSupportLabel: Record<'limited' | 'unknown', MessageKeyWithoutParams>;
   hostUpdateStatusLabel: Record<
     'update_available' | 'repair_available' | 'unknown_needs_validation' | 'channel_mismatch',
-    MessageKey
+    MessageKeyWithoutParams
   >;
   riskFallback: RiskFallbackKeys;
   descriptionKeys: Pick<
@@ -233,7 +235,11 @@ export function createReshadePresenters(
 
   const riskMessage = (risk: RiskAssessment): string => {
     const fallback = riskFallbackKey(risk.severity, hostLabels.riskFallback);
-    return translateKey(risk.message_key, t(fallback), { addonName });
+    return translateExternalMessage({
+      key: risk.message_key,
+      fallback: t(fallback),
+      params: { addonName },
+    });
   };
 
   return {
@@ -292,7 +298,7 @@ export function createInstallableLabels(prefix: ToolI18nPrefix): AddonInstallabl
 /** Confidence badge labels for a tool's `gameDetails.<tool>` prefix. */
 export function createConfidenceLabelKeys(
   prefix: ToolI18nPrefix,
-): Record<'verified' | 'experimental' | 'untested', MessageKey> {
+): Record<'verified' | 'experimental' | 'untested', MessageKeyWithoutParams> {
   return {
     verified: toolKey(prefix, 'confidenceVerified'),
     experimental: toolKey(prefix, 'confidenceExperimental'),

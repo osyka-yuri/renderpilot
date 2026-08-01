@@ -6,7 +6,7 @@
     createConfidenceLabelKeys,
     createInstallableLabels,
   } from '@entities/addon';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import { Badge, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 
@@ -32,7 +32,7 @@
   const LUMA_INSTALLABLE_LABELS = createInstallableLabels('gameDetails.luma');
   const CONFIDENCE_LABEL_KEY = createConfidenceLabelKeys('gameDetails.luma');
 
-  const GENERIC_ENGINE_LABEL: Record<LumaEngine, MessageKey> = {
+  const GENERIC_ENGINE_LABEL: Record<LumaEngine, MessageKeyWithoutParams> = {
     unreal: 'gameDetails.luma.generic.engineUnreal',
     unity: 'gameDetails.luma.generic.engineUnity',
   };

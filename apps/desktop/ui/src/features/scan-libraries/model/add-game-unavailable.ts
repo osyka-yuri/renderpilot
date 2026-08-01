@@ -1,7 +1,7 @@
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import type { AddGameUnavailableReason } from './add-game';
 
-const messageKeyByReason: Readonly<Record<AddGameUnavailableReason, MessageKey>> = {
+const messageKeyByReason: Readonly<Record<AddGameUnavailableReason, MessageKeyWithoutParams>> = {
   multiple_installs: 'addGame.unavailable.multipleInstalls',
   contains_proven_install: 'addGame.unavailable.containsProvenInstall',
   contains_multiple_catalog_installs: 'addGame.unavailable.containsMultipleCatalogInstalls',

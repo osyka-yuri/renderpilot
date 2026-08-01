@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import SettingsIcon from '@lucide/svelte/icons/settings';
 
@@ -70,7 +70,10 @@
 
   const blacklistText = $derived(
     store.blacklistMessage
-      ? translateKey(store.blacklistMessage.id, store.blacklistMessage.fallback_text)
+      ? translateExternalMessage({
+          key: store.blacklistMessage.id,
+          fallback: store.blacklistMessage.fallback_text,
+        })
       : t('gameDetails.renodx.blacklisted'),
   );
 

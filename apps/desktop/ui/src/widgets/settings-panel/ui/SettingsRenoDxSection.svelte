@@ -21,7 +21,7 @@
     isManagedVulkanLayer,
     vulkanLayerHostDescription,
   } from '@features/renodx';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     Badge,
     Button,
@@ -71,7 +71,7 @@
   const controlsDisabled = $derived(store.busy || store.loading);
   const displayState = $derived(store.displayState);
 
-  const loaderVisibilityNote = $derived<MessageKey | null>(
+  const loaderVisibilityNote = $derived<MessageKeyWithoutParams | null>(
     facts && facts.loader_visibility !== 'normal'
       ? VULKAN_LOADER_VISIBILITY_NOTE[facts.loader_visibility]
       : null,
@@ -89,7 +89,7 @@
     store.primaryAction && store.primaryAction !== 'switch_channel' ? store.primaryAction : null,
   );
 
-  const primaryActionLabel = $derived<MessageKey | null>(
+  const primaryActionLabel = $derived<MessageKeyWithoutParams | null>(
     visiblePrimaryAction ? VULKAN_LAYER_PRIMARY_ACTION_LABEL[visiblePrimaryAction] : null,
   );
 

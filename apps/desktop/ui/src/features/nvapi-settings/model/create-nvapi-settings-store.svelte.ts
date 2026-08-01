@@ -1,7 +1,7 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { describeCommandErrorTechnical } from '@shared/api';
 import { publishErrorNotification } from '@shared/notifications';
-import { t, translateKey } from '@shared/i18n';
+import { t } from '@shared/i18n';
 import type { DllInfoDto, NvapiWarning, SettingFamily, SettingStateResponse } from './types';
 
 /**
@@ -29,7 +29,7 @@ function isSessionWarning(warning: NvapiWarning): boolean {
 }
 
 function translateWarning(warning: NvapiWarning): string {
-  return translateKey(`gameDetails.nvapi.warning.${warning}`, warning);
+  return t(`gameDetails.nvapi.warning.${warning}`);
 }
 
 function distinctWarnings(values: NvapiWarning[]): NvapiWarning[] {

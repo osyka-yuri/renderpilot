@@ -7,7 +7,7 @@
     createConfidenceLabelKeys,
   } from '@entities/addon';
   import { openExternal } from '@shared/api';
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { publishErrorNotification, formatError } from '@shared/notifications';
   import { Button } from '@shared/ui';
 
@@ -49,7 +49,10 @@
 
   const externalLabel = $derived(
     store.externalMessage
-      ? translateKey(store.externalMessage.id, store.externalMessage.fallback_text)
+      ? translateExternalMessage({
+          key: store.externalMessage.id,
+          fallback: store.externalMessage.fallback_text,
+        })
       : t('gameDetails.renodx.actionOpenExternal'),
   );
 

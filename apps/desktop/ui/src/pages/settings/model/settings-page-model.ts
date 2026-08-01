@@ -1,9 +1,9 @@
 import type { ThemeMode } from '@shared/theme';
-import { type LanguageMode, type MessageKey } from '@shared/i18n';
+import { type LanguageMode, type MessageKeyWithoutParams } from '@shared/i18n';
 
 export type SettingsSelectOption<Value extends string = string> = {
   value: Value;
-  labelKey: MessageKey;
+  labelKey: MessageKeyWithoutParams;
   disabled?: boolean;
 };
 
@@ -29,7 +29,7 @@ export const languageOptions = [
 
 export type SettingsTabOption = {
   value: string;
-  labelKey: MessageKey;
+  labelKey: MessageKeyWithoutParams;
 };
 
 export const tabOptions = [

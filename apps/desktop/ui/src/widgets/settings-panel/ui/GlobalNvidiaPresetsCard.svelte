@@ -11,7 +11,7 @@
     CardHeader,
     CardTitle,
   } from '@shared/ui';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     NvapiSettingGroup,
     type GlobalNvidiaPresetsContext,
@@ -26,7 +26,7 @@
   const { globalPresets }: Props = $props();
 
   // DLSS families rendered in the global settings card, in catalog order.
-  const families: { family: SettingFamily; titleKey: MessageKey }[] = [
+  const families: { family: SettingFamily; titleKey: MessageKeyWithoutParams }[] = [
     { family: 'sr', titleKey: 'settings.nvidia.global.familySr' },
     { family: 'fg', titleKey: 'settings.nvidia.global.familyFg' },
     { family: 'rr', titleKey: 'settings.nvidia.global.familyRr' },

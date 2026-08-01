@@ -5,7 +5,7 @@
   import type { Component } from 'svelte';
 
   import type { ScreenHandler, Screen } from '@app/navigation/screen';
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     Sidebar,
     SidebarContent,
@@ -28,7 +28,7 @@
 
   type NavigationItem = {
     screen: PrimaryScreen;
-    labelKey: MessageKey;
+    labelKey: MessageKeyWithoutParams;
     icon: Component;
   };
 

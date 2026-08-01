@@ -2,7 +2,7 @@
   import DownloadIcon from '@lucide/svelte/icons/download';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     Button,
     Dialog,
@@ -17,9 +17,9 @@
     open: boolean;
     busy: boolean;
     riskText: string;
-    titleKey: MessageKey;
-    bodyKey: MessageKey;
-    acceptKey: MessageKey;
+    titleKey: MessageKeyWithoutParams;
+    bodyKey: MessageKeyWithoutParams;
+    acceptKey: MessageKeyWithoutParams;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
   };

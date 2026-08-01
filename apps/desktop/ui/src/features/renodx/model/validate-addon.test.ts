@@ -15,7 +15,10 @@ describe('validateAddonFile', () => {
       expectedAddonName: null,
     });
     expect(v.error?.key).toBe('gameDetails.renodx.fileInstall.errorArch');
-    expect(v.error?.params).toEqual({ addon: '32-bit', game: '64-bit' });
+    expect(v.error).toEqual({
+      key: 'gameDetails.renodx.fileInstall.errorArch',
+      params: { addon: '32-bit', game: '64-bit' },
+    });
     expect(v.warning).toBeNull();
   });
 

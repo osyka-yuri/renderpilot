@@ -73,7 +73,6 @@ export function createOperationViewModel(
     ariaLabel: t('operation.itemAria', {
       kind: kindLabel,
       status: statusLabel,
-      createdAt: createdAtText,
     }),
     gameName,
     libraryType,

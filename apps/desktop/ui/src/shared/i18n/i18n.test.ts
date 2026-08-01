@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { getLocale, setLanguageMode, t, translateKey } from './index';
+import { getLocale, setLanguageMode, t, translateExternalMessage } from './index';
+import { interpolateMessage } from './messages/runtime';
 import { resolveLocale } from './locale';
 
 describe('i18n', () => {
@@ -31,7 +32,9 @@ describe('i18n', () => {
 
     it('leaves unknown placeholders untouched', async () => {
       await setLanguageMode('en');
-      expect(t('game.card.action.detailsAria', { other: 'x' })).toBe('Open details for {title}');
+      expect(interpolateMessage('Open details for {title}', { other: 'x' })).toBe(
+        'Open details for {title}',
+      );
     });
 
     it('selects English plural forms by count', async () => {
@@ -64,10 +67,13 @@ describe('i18n', () => {
     });
   });
 
-  describe('translateKey', () => {
+  describe('translateExternalMessage', () => {
     it('translates a known dynamic (backend) key instead of using the fallback', async () => {
       await setLanguageMode('ru');
-      const translated = translateKey('user_message.game_not_in_catalog', 'FALLBACK');
+      const translated = translateExternalMessage({
+        key: 'user_message.game_not_in_catalog',
+        fallback: 'FALLBACK',
+      });
 
       expect(translated).not.toBe('FALLBACK');
       expect(translated.length).toBeGreaterThan(0);
@@ -75,16 +81,22 @@ describe('i18n', () => {
 
     it('uses the NVAPI override for ru and the backend fallback for en', async () => {
       await setLanguageMode('ru');
-      const ruLabel = translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset');
+      const ruLabel = translateExternalMessage({
+        key: 'nvapi.dlss_sr_render_preset.label',
+        fallback: 'Render Preset',
+      });
       expect(ruLabel).not.toBe('Render Preset');
       expect(ruLabel.length).toBeGreaterThan(0);
 
       // English is intentionally omitted from the overrides, so the caller's
       // fallback (the backend dlss_settings.json text) is used.
       await setLanguageMode('en');
-      expect(translateKey('nvapi.dlss_sr_render_preset.label', 'Render Preset')).toBe(
-        'Render Preset',
-      );
+      expect(
+        translateExternalMessage({
+          key: 'nvapi.dlss_sr_render_preset.label',
+          fallback: 'Render Preset',
+        }),
+      ).toBe('Render Preset');
     });
 
     it('uses the Luma guidance override in every translated locale and the manifest fallback in English', async () => {
@@ -94,23 +106,40 @@ describe('i18n', () => {
 
       for (const locale of ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const) {
         await setLanguageMode(locale);
-        expect(translateKey(key, fallback)).not.toBe(fallback);
+        expect(translateExternalMessage({ key, fallback })).not.toBe(fallback);
       }
 
       await setLanguageMode('en');
-      expect(translateKey(key, fallback)).toBe(fallback);
+      expect(translateExternalMessage({ key, fallback })).toBe(fallback);
     });
 
     it('returns the fallback for an unknown key', async () => {
       await setLanguageMode('en');
-      expect(translateKey('does.not.exist', 'Fallback text')).toBe('Fallback text');
+      expect(translateExternalMessage({ key: 'does.not.exist', fallback: 'Fallback text' })).toBe(
+        'Fallback text',
+      );
     });
 
     it('interpolates the fallback when the key is missing', async () => {
       await setLanguageMode('en');
-      expect(translateKey('missing.key', '{action} failed', { action: 'Save' })).toBe(
-        'Save failed',
-      );
+      expect(
+        translateExternalMessage({
+          key: 'missing.key',
+          fallback: '{action} failed',
+          params: { action: 'Save' },
+        }),
+      ).toBe('Save failed');
+    });
+
+    it('returns an invalid external fallback without partial interpolation', async () => {
+      await setLanguageMode('en');
+      expect(
+        translateExternalMessage({
+          key: 'missing.key',
+          fallback: '{valid} then {bad-name}',
+          params: { valid: 'replaced' },
+        }),
+      ).toBe('{valid} then {bad-name}');
     });
   });
 

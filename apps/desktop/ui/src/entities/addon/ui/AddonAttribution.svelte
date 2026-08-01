@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { t, type MessageKey } from '@shared/i18n';
+  import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 
   type Props = {
-    textKey: MessageKey;
-    linkKey: MessageKey;
+    textKey: MessageKeyWithoutParams;
+    linkKey: MessageKeyWithoutParams;
     href: string;
     class?: string;
   };

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { AddonCardShell, AddonStateMessage } from '@entities/addon';
 
   import { getCardView } from '../model/card-view';
@@ -57,7 +57,10 @@
 
   const blacklistText = $derived(
     store.blacklistMessage
-      ? translateKey(store.blacklistMessage.id, store.blacklistMessage.fallback_text)
+      ? translateExternalMessage({
+          key: store.blacklistMessage.id,
+          fallback: store.blacklistMessage.fallback_text,
+        })
       : t('gameDetails.luma.blacklisted'),
   );
 
@@ -68,7 +71,10 @@
 
     const reason = store.outcome.reason.reason;
 
-    return translateKey(`gameDetails.luma.reason.${reason}`, reason.replace(/_/g, ' '));
+    return translateExternalMessage({
+      key: `gameDetails.luma.reason.${reason}`,
+      fallback: reason.replace(/_/g, ' '),
+    });
   });
 
   function retry(): void {

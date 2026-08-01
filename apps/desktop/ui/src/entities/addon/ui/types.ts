@@ -4,7 +4,7 @@
  * (TypeScript cannot re-export those reliably).
  */
 
-import type { ToolI18nPrefix } from '../model/presenters';
+import type { ToolI18nPrefix } from '../model/tool-message-key';
 import type { MatchConfidence } from '../model/types';
 
 /** Confidence badge vocabulary — same wire contract as {@link MatchConfidence}. */

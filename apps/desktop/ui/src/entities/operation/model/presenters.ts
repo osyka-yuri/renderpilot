@@ -1,10 +1,10 @@
 import { humanizeToken } from '@shared/text';
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyWithoutParams } from '@shared/i18n';
 import type { SwapPlan } from './types';
 
 export type OperationBadgeVariant = 'outline' | 'secondary' | 'destructive';
 
-const OPERATION_LABEL_KEYS: Partial<Record<string, MessageKey>> = {
+const OPERATION_LABEL_KEYS: Partial<Record<string, MessageKeyWithoutParams>> = {
   low: 'operation.label.low',
   medium: 'operation.label.medium',
   high: 'operation.label.high',

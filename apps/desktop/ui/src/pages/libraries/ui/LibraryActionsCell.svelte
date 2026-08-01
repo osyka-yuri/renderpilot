@@ -3,7 +3,6 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { Button, DownloadProgressBar, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
-  import { describeCommandError } from '@shared/api';
   import { t } from '@shared/i18n';
   import { toast } from 'svelte-sonner';
   import {
@@ -51,13 +50,8 @@
       if (await onDownload(packageId)) {
         toast.success(t('libraries.actions.downloadedToast', { version: row.release.version }));
       }
-    } catch (error) {
-      toast.error(
-        t('libraries.actions.failedToast', {
-          action: actionLabel,
-          error: describeCommandError(error),
-        }),
-      );
+    } catch {
+      toast.error(t('libraries.actions.failedToast', { action: actionLabel }));
     }
   }
 </script>

@@ -4,7 +4,7 @@ import {
   rollbackComponent,
 } from '@entities/operation';
 import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
-import { t, type MessageKey } from '@shared/i18n';
+import { t, type MessageKeyForParams, type MessageKeyWithoutParams } from '@shared/i18n';
 import { executeGraphicsSwap } from '@features/swap-graphics-component';
 import { clearDownloadProgress } from '@shared/lib';
 
@@ -33,8 +33,10 @@ type BatchOutcome = {
 };
 
 type BatchFailureMessages = {
-  titleKey: MessageKey;
-  descriptionKey: MessageKey;
+  titleKey: MessageKeyWithoutParams;
+  descriptionKey: MessageKeyForParams<
+    Readonly<{ failed: string | number; total: string | number }>
+  >;
 };
 
 export function createGameDetailsPageModel(deps: GameDetailsPageModelDeps) {

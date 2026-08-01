@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '@shared/i18n';
+  import { t, translateMessageRef } from '@shared/i18n';
   import { Button } from '@shared/ui';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
@@ -147,7 +147,7 @@
     {#if pendingError}
       <p class="flex items-center gap-1 text-sm text-destructive" aria-live="polite">
         <TriangleAlertIcon class="size-4 shrink-0" aria-hidden="true" />
-        {t(pendingError.key, pendingError.params)}
+        {translateMessageRef(pendingError)}
       </p>
 
       <div>
@@ -177,7 +177,7 @@
       {#if pendingWarning}
         <p class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
           <TriangleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
-          {t(pendingWarning.key, pendingWarning.params)}
+          {translateMessageRef(pendingWarning)}
         </p>
       {/if}
 

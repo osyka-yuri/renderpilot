@@ -1,4 +1,4 @@
-import type { MessageKey } from '@shared/i18n';
+import type { MessageKeyWithoutParams } from '@shared/i18n';
 
 import type { AppUpdateDialogState } from './types';
 
@@ -81,7 +81,7 @@ const DIALOG_PROJECTION = {
   },
 } as const satisfies Record<AppUpdateDialogState['phase'], DialogProjection>;
 
-const PHASE_STATUS_KEY: Record<UpdateProgressPhase, MessageKey> = {
+const PHASE_STATUS_KEY: Record<UpdateProgressPhase, MessageKeyWithoutParams> = {
   downloading: 'settings.about.updateDialog.downloading',
   'retrying-download': 'settings.about.updateDialog.downloading',
   verifying: 'settings.about.updateDialog.verifying',
@@ -89,13 +89,13 @@ const PHASE_STATUS_KEY: Record<UpdateProgressPhase, MessageKey> = {
   restarting: 'settings.about.updateDialog.restarting',
 };
 
-const FAILURE_TITLE_KEY: Record<UpdateFailureKind, MessageKey> = {
+const FAILURE_TITLE_KEY: Record<UpdateFailureKind, MessageKeyWithoutParams> = {
   'prepare-failed': 'settings.about.updateDialog.prepareErrorTitle',
   'install-failed': 'settings.about.updateDialog.installErrorTitle',
   'restart-required': 'settings.about.updateDialog.restartRequiredTitle',
 };
 
-const FAILURE_DESCRIPTION_KEY: Record<UpdateFailureKind, MessageKey> = {
+const FAILURE_DESCRIPTION_KEY: Record<UpdateFailureKind, MessageKeyWithoutParams> = {
   'prepare-failed': 'settings.about.updateDialog.prepareErrorDescription',
   'install-failed': 'settings.about.updateDialog.installErrorDescription',
   'restart-required': 'settings.about.updateDialog.restartRequiredDescription',
@@ -109,7 +109,7 @@ export function progressPhase(state: AppUpdateDialogState | null): UpdateProgres
   return state === null ? null : DIALOG_PROJECTION[state.phase].progress;
 }
 
-export function phaseStatusKey(phase: UpdateProgressPhase): MessageKey {
+export function phaseStatusKey(phase: UpdateProgressPhase): MessageKeyWithoutParams {
   return PHASE_STATUS_KEY[phase];
 }
 
@@ -117,11 +117,11 @@ export function failureKind(state: AppUpdateDialogState | null): UpdateFailureKi
   return state === null ? null : DIALOG_PROJECTION[state.phase].failure;
 }
 
-export function failureTitleKey(kind: UpdateFailureKind): MessageKey {
+export function failureTitleKey(kind: UpdateFailureKind): MessageKeyWithoutParams {
   return FAILURE_TITLE_KEY[kind];
 }
 
-export function failureDescriptionKey(kind: UpdateFailureKind): MessageKey {
+export function failureDescriptionKey(kind: UpdateFailureKind): MessageKeyWithoutParams {
   return FAILURE_DESCRIPTION_KEY[kind];
 }
 

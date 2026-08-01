@@ -9,9 +9,17 @@ import { getFallbackPack, getLocaleLoaders } from './packs/registry';
 import type { LocaleLoader, LocalePack } from './packs/types';
 import { lookupLocalePackMessage } from './lookup';
 import { LocaleLoadError } from './errors';
-import { interpolateMessage, renderMessage } from './format';
-import type { MessageKey } from './messages/en';
-import type { InterpolationParams } from './messages/types';
+import { interpolateMessage, renderMessage } from './messages/runtime';
+import type {
+  MessageKey,
+  MessageKeyWithoutParams,
+  MessageParams,
+  MessageRef,
+  ParameterizedMessageKey,
+} from './messages/en';
+import { MESSAGE_CONTRACT_VERSION } from './messages/generated/contract-version';
+import type { InterpolationParams } from './messages/model';
+import type { ExactMessageParams } from './messages/params';
 
 export { LocaleLoadError };
 
@@ -43,6 +51,23 @@ export type I18nRuntimeDependencies = Readonly<{
   applyDocumentLocale: (locale: Locale) => void;
 }>;
 
+export type ExternalMessageInput = Readonly<{
+  key: string;
+  fallback: string;
+  params?: InterpolationParams;
+}>;
+
+export function createMessageRef<const Key extends MessageKeyWithoutParams>(
+  key: Key,
+): MessageRef<Key>;
+export function createMessageRef<
+  const Key extends ParameterizedMessageKey,
+  const Params extends MessageParams<Key>,
+>(key: Key, params: ExactMessageParams<MessageParams<Key>, Params>): MessageRef<Key>;
+export function createMessageRef(key: MessageKey, params?: InterpolationParams) {
+  return params === undefined ? { key } : { key, params };
+}
+
 type ActiveTransition = Readonly<{
   mode: LanguageMode;
   promise: Promise<I18nSwitchResult>;
@@ -59,6 +84,8 @@ function createInitialState(fallbackPack: LocalePack): I18nRuntimeState {
 }
 
 export function createI18nRuntime(deps: I18nRuntimeDependencies) {
+  validatePack(deps.fallbackPack.locale, deps.fallbackPack);
+
   // These maps are opaque runtime caches, not render state. Locale activation
   // remains atomic through the single activePack state value.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -288,12 +315,25 @@ export function createI18nRuntime(deps: I18nRuntimeDependencies) {
       : renderMessage(value, params, activePack.locale);
   }
 
+  function t(key: MessageKeyWithoutParams): string;
+  function t<const Key extends ParameterizedMessageKey, const Params extends MessageParams<Key>>(
+    key: Key,
+    params: ExactMessageParams<MessageParams<Key>, Params>,
+  ): string;
   function t(key: MessageKey, params?: InterpolationParams): string {
     return translate(key, key, params);
   }
 
-  function translateKey(key: string, fallback: string, params?: InterpolationParams): string {
-    return translate(key, fallback, params);
+  function translateMessageRef(reference: MessageRef): string {
+    return translate(
+      reference.key,
+      reference.key,
+      'params' in reference ? reference.params : undefined,
+    );
+  }
+
+  function translateExternalMessage(message: ExternalMessageInput): string {
+    return translate(message.key, message.fallback, message.params);
   }
 
   function toLocaleLoadError(mode: LanguageMode, locale: Locale, cause: unknown): LocaleLoadError {
@@ -307,9 +347,9 @@ export function createI18nRuntime(deps: I18nRuntimeDependencies) {
     if (
       !isRecord(candidate) ||
       candidate.locale !== expectedLocale ||
+      candidate.contractVersion !== MESSAGE_CONTRACT_VERSION ||
       !isRecord(candidate.messages) ||
-      !Array.isArray(candidate.dynamicCatalogs) ||
-      !candidate.dynamicCatalogs.every(isRecord)
+      !Array.isArray(candidate.dynamicCatalogs)
     ) {
       throw new Error(`Invalid locale pack for "${expectedLocale}".`);
     }
@@ -325,7 +365,8 @@ export function createI18nRuntime(deps: I18nRuntimeDependencies) {
     initializeI18n,
     setLanguageMode,
     t,
-    translateKey,
+    translateMessageRef,
+    translateExternalMessage,
   };
 }
 
@@ -347,4 +388,5 @@ export const getLocale = productionRuntime.getLocale;
 export const initializeI18n = productionRuntime.initializeI18n;
 export const setLanguageMode = productionRuntime.setLanguageMode;
 export const t = productionRuntime.t;
-export const translateKey = productionRuntime.translateKey;
+export const translateMessageRef = productionRuntime.translateMessageRef;
+export const translateExternalMessage = productionRuntime.translateExternalMessage;

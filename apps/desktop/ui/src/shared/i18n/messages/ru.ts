@@ -1,11 +1,12 @@
-import type { MessageKey } from './en';
-import type { MessageValue } from './types';
+import type { EnglishCatalog } from './en';
+import { defineLocalizedCatalog } from './contract';
+import { plural } from './model';
 
 /**
- * Russian catalog. Typed as `Record<MessageKey, MessageValue>` so a missing or
- * stray key is a compile-time error against the English source of truth.
+ * Russian catalog. The localized contract rejects missing or stray keys and
+ * validates message tags, plural categories, arguments, and placeholders.
  */
-export const ru: Record<MessageKey, MessageValue> = {
+export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   // ── App shell / navigation ──
   'nav.games': 'Игры',
   'nav.libraries': 'Библиотеки',
@@ -77,12 +78,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'game.card.availableAddons': 'Доступные аддоны',
   'game.card.badge.upToDate': 'Актуально',
   'game.card.badge.updatesAvailable': 'Доступны обновления',
-  'game.card.badge.updatesAvailableCount': {
+  'game.card.badge.updatesAvailableCount': plural('count', {
     one: 'Доступно 1 обновление',
     few: 'Доступно {count} обновления',
     many: 'Доступно {count} обновлений',
     other: 'Доступно {count} обновлений',
-  },
+  }),
   'game.card.menu.ariaLabel': 'Параметры для {title}',
   'game.card.menu.favorite.add': 'Добавить в избранное',
   'game.card.menu.favorite.remove': 'Убрать из избранного',
@@ -110,18 +111,18 @@ export const ru: Record<MessageKey, MessageValue> = {
 
   // ── Games dashboard summary ──
   'game.dashboard.summary': 'Сводка',
-  'game.dashboard.games': {
+  'game.dashboard.games': plural('count', {
     one: '{count} игра',
     few: '{count} игры',
     many: '{count} игр',
     other: '{count} игр',
-  },
-  'game.dashboard.updates': {
+  }),
+  'game.dashboard.updates': plural('count', {
     one: '{count} обновление',
     few: '{count} обновления',
     many: '{count} обновлений',
     other: '{count} обновлений',
-  },
+  }),
 
   // ── Elevation banner ──
   'elevation.title': 'Требуются права администратора',
@@ -164,12 +165,12 @@ export const ru: Record<MessageKey, MessageValue> = {
     'RenderPilot будет использовать выбранную папку вместо текущей. Файлы игры останутся без изменений.',
   'addGame.replaceExistingRoot': 'Исправить путь',
   'addGame.rootCorrection.rollbackTitle': 'Сначала нужно откатить активные замены',
-  'addGame.rootCorrection.rollbackDescription': {
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
     one: 'Перед заменой корня RenderPilot должен откатить активную замену 1 компонента.',
     few: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонентов.',
     many: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонентов.',
     other: 'Перед заменой корня RenderPilot должен откатить активные замены {count} компонента.',
-  },
+  }),
   'addGame.rootCorrection.rollbackAndReplace': 'Откатить изменения и заменить корень',
   'addGame.rootCorrection.rollbackFailed':
     'Не удалось полностью откатить изменения компонентов. Текущий корень игры не изменён.',
@@ -184,18 +185,18 @@ export const ru: Record<MessageKey, MessageValue> = {
   'addGame.rescan': 'Пересканировать игру',
   'addGame.catalogBusy':
     'Сейчас выполняется другая операция с каталогом. Завершите её и повторите действие.',
-  'addGame.warning.legacyCardsConsolidated': {
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
     one: 'Объединена одна подтверждённо ложная устаревшая карточка игры.',
     few: 'Объединены {count} подтверждённо ложные устаревшие карточки игры.',
     many: 'Объединено {count} подтверждённо ложных устаревших карточек игры.',
     other: 'Объединено {count} подтверждённо ложной устаревшей карточки игры.',
-  },
-  'addGame.warning.legacyCardsRetained': {
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
     one: 'Сохранена одна устаревшая карточка: доказательств отдельной установки недостаточно.',
     few: 'Сохранены {count} устаревшие карточки: доказательств отдельных установок недостаточно.',
     many: 'Сохранено {count} устаревших карточек: доказательств отдельных установок недостаточно.',
     other: 'Сохранено {count} устаревшей карточки: доказательств отдельных установок недостаточно.',
-  },
+  }),
   'addGame.warning.recoveryBundleCreated':
     'Конфликтующее устаревшее состояние сохранено в пакете восстановления: {path}.',
   'addGame.warning.rootCorrectionHistoryArchived':
@@ -326,12 +327,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   // ── Game details: component version row ──
   'gameDetails.version.noReplacements': 'Нет альтернативных версий',
   'gameDetails.version.restoreOriginal': 'Восстановить исходный {fileName}',
-  'gameDetails.version.fileCount': {
+  'gameDetails.version.fileCount': plural('count', {
     one: '1 файл',
     few: '{count} файла',
     many: '{count} файлов',
     other: '{count} файла',
-  },
+  }),
 
   // ── Game details: vendor component card ──
   'gameDetails.vendor.description': 'Изменить версию компонента.',
@@ -359,12 +360,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'gameDetails.updateAll.upToDate': 'Все стабильные версии актуальны',
   'gameDetails.updateAll.partialFailure':
     'Часть обновлений не удалась ({count}). Проверьте детали и повторите.',
-  'gameDetails.updateAll.tooltip': {
+  'gameDetails.updateAll.tooltip': plural('count', {
     one: 'Обновить {count} компонент до последней стабильной версии',
     few: 'Обновить {count} компонента до последней стабильной версии',
     many: 'Обновить {count} компонентов до последней стабильной версии',
     other: 'Обновить {count} компонентов до последней стабильной версии',
-  },
+  }),
   // ── Game details: executable selector (shared) ──
   'gameDetails.executable.title': 'Исполняемый файл игры',
   'gameDetails.developerMode.requiredTitle': 'Режим разработчика Windows выключен',
@@ -494,18 +495,18 @@ export const ru: Record<MessageKey, MessageValue> = {
   'libraries.actions.downloadAll': 'Скачать последние',
   'libraries.actions.downloadAllCount': 'Скачать последние ({count})',
   'libraries.actions.downloadAllUpToDate': 'Все последние версии уже скачаны',
-  'libraries.actions.downloadAllTooltip': {
+  'libraries.actions.downloadAllTooltip': plural('count', {
     one: 'Скачать {count} последнюю версию',
     few: 'Скачать {count} последние версии',
     many: 'Скачать {count} последних версий',
     other: 'Скачать {count} последних версий',
-  },
-  'libraries.actions.downloadAllDoneToast': {
+  }),
+  'libraries.actions.downloadAllDoneToast': plural('count', {
     one: 'Скачана {count} библиотека',
     few: 'Скачано {count} библиотеки',
     many: 'Скачано {count} библиотек',
     other: 'Скачано {count} библиотек',
-  },
+  }),
   'libraries.actions.downloadAllPartialToast': 'Скачано: {succeeded}, ошибок: {failed}',
   'libraries.actions.downloadAllNoneToast': 'Все последние версии уже скачаны',
 
@@ -540,19 +541,19 @@ export const ru: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'Изменение версии',
   'operation.duration': 'Выполнено за {seconds} с',
   'operation.filesUpdated.none': 'Файлы не обновлялись.',
-  'operation.filesUpdated.count': {
+  'operation.filesUpdated.count': plural('count', {
     one: 'Обновлён 1 файл.',
     few: 'Обновлено {count} файла.',
     many: 'Обновлено {count} файлов.',
     other: 'Обновлено {count} файлов.',
-  },
+  }),
   'operation.filesRestored.none': 'Файлы не восстанавливались.',
-  'operation.filesRestored.count': {
+  'operation.filesRestored.count': plural('count', {
     one: 'Восстановлен 1 файл.',
     few: 'Восстановлено {count} файла.',
     many: 'Восстановлено {count} файлов.',
     other: 'Восстановлено {count} файлов.',
-  },
+  }),
   'operation.itemAria': '{kind}, {status}',
 
   // ── Notifications (toasts) ──
@@ -584,12 +585,12 @@ export const ru: Record<MessageKey, MessageValue> = {
   'notify.statusWarning': 'Предупреждение',
 
   // ── Library scan ──
-  'scan.partialWarning': {
+  'scan.partialWarning': plural('count', {
     one: 'Не удалось просканировать 1 папку.',
     few: 'Не удалось просканировать {count} папки.',
     many: 'Не удалось просканировать {count} папок.',
     other: 'Не удалось просканировать {count} папок.',
-  },
+  }),
 
   // ── Background cover sync ──
   'coverSync.failed': 'Не удалось синхронизировать обложки.',
@@ -1004,4 +1005,4 @@ export const ru: Record<MessageKey, MessageValue> = {
   // ── Game details: Luma attribution ──
   'gameDetails.luma.attribution': 'Luma Framework от Filoppi.',
   'gameDetails.luma.attributionLink': 'Открыть проект',
-};
+});

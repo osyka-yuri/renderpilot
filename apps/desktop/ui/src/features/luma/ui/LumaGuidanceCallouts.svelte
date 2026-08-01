@@ -6,7 +6,7 @@
   import TerminalIcon from '@lucide/svelte/icons/terminal';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import WrenchIcon from '@lucide/svelte/icons/wrench';
-  import { t, translateKey, type MessageKey } from '@shared/i18n';
+  import { t, translateExternalMessage, type MessageKeyWithoutParams } from '@shared/i18n';
   import {
     Alert,
     AlertDescription,
@@ -31,7 +31,7 @@
     warning: 'gameDetails.luma.guidance.warning',
     compatibility: 'gameDetails.luma.guidance.compatibility',
     external_tool: 'gameDetails.luma.guidance.externalTool',
-  } as const satisfies Record<LumaGuidanceKind, MessageKey>;
+  } as const satisfies Record<LumaGuidanceKind, MessageKeyWithoutParams>;
 
   const ICONS = {
     game_setting: Settings2Icon,
@@ -52,7 +52,7 @@
   });
 
   function textFor(item: LumaGuidance): string {
-    return translateKey(item.id, item.fallback_text);
+    return translateExternalMessage({ key: item.id, fallback: item.fallback_text });
   }
 
   async function copy(item: LumaGuidance): Promise<void> {

@@ -5,7 +5,7 @@
     createConfidenceLabelKeys,
     createInstallableLabels,
   } from '@entities/addon';
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { Badge, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 
@@ -38,7 +38,12 @@
 
   const genericProfileLabel = $derived.by((): string | null => {
     const profile = store.genericProfile;
-    return profile ? translateKey(profile.message.id, profile.message.fallback_text) : null;
+    return profile
+      ? translateExternalMessage({
+          key: profile.message.id,
+          fallback: profile.message.fallback_text,
+        })
+      : null;
   });
 
   function onInstall(gid: string, force: boolean): void {

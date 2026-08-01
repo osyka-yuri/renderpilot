@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import type { MessageKey } from '@shared/i18n';
+  import type { MessageKeyWithoutParams } from '@shared/i18n';
   import {
     Card,
     CardContent,
@@ -37,8 +37,8 @@
     retrying: boolean;
     showAttribution: boolean;
     attribution: {
-      textKey: MessageKey;
-      linkKey: MessageKey;
+      textKey: MessageKeyWithoutParams;
+      linkKey: MessageKeyWithoutParams;
       href: string;
     };
     onRetry: () => void;

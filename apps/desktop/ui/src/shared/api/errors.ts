@@ -1,6 +1,6 @@
 import type { CommandErrorDto, CommandErrorSeverity, SuggestedActionDto } from './types';
 import { isString, isNonEmptyString, isRecord, isErrorLike } from '@shared/validation';
-import { translateKey } from '@shared/i18n';
+import { translateExternalMessage } from '@shared/i18n';
 
 const FALLBACK_CODE = 'command_failed';
 const FALLBACK_MESSAGE_KEY = 'errors.command_failed';
@@ -68,7 +68,7 @@ export function describeCommandError(error: unknown): string {
 export function describeCommandErrorBrief(error: unknown): string {
   const dto = normalizeCommandError(error).dto;
 
-  return translateKey(dto.messageKey, dto.details);
+  return translateExternalMessage({ key: dto.messageKey, fallback: dto.details });
 }
 
 /**
@@ -163,9 +163,12 @@ function createFallbackDto(details: string): CommandErrorDto {
 }
 
 function formatCommandError(error: CommandErrorDto): string {
-  const message = translateKey(error.messageKey, normalizeDetails(error.details));
+  const message = translateExternalMessage({
+    key: error.messageKey,
+    fallback: normalizeDetails(error.details),
+  });
   const actions = error.suggestedActions
-    .map((action) => translateKey(action.key, action.text))
+    .map((action) => translateExternalMessage({ key: action.key, fallback: action.text }))
     .filter(isNonEmptyString);
 
   if (actions.length === 0) {

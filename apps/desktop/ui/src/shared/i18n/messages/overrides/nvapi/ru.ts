@@ -1,6 +1,8 @@
-import type { MessageOverrides } from '../../types';
+import { defineLocalizedOverrides } from '../../contract';
 
-export const nvapiOverrides: MessageOverrides = {
+import type { NvapiSourceCatalog } from './contract.generated';
+
+export const nvapiOverrides = defineLocalizedOverrides<'ru', NvapiSourceCatalog>()({
   'nvapi.dlss_sr_render_preset.label': 'Пресет рендеринга',
   'nvapi.dlss_sr_render_preset.description':
     'Принудительно задает пресет DLSS. В некоторых играх также требуется изменить "Профиль пресета" (Model Preset Profile).',
@@ -98,4 +100,4 @@ export const nvapiOverrides: MessageOverrides = {
     'Заставляет игру использовать последнюю системную версию Ray Reconstruction.',
   'nvapi.dlss_rr_dll_override.value.off': 'Выкл',
   'nvapi.dlss_rr_dll_override.value.on': 'Вкл (последняя системная)',
-};
+});

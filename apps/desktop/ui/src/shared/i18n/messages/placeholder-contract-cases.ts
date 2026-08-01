@@ -1,0 +1,16 @@
+export const PLACEHOLDER_CONTRACT_CASES = [
+  { template: 'plain text', valid: true, placeholders: [] },
+  { template: '{name}', valid: true, placeholders: ['name'] },
+  { template: '{0}', valid: true, placeholders: ['0'] },
+  { template: '{_}', valid: true, placeholders: ['_'] },
+  { template: '{a}{b}', valid: true, placeholders: ['a', 'b'] },
+  { template: '{name} / {name}', valid: true, placeholders: ['name'] },
+  { template: '{}', valid: false, placeholders: [] },
+  { template: '{a-b}', valid: false, placeholders: [] },
+  { template: '{name.first}', valid: false, placeholders: [] },
+  { template: '{{name}}', valid: false, placeholders: [] },
+  { template: '{a{name}}', valid: false, placeholders: [] },
+  { template: '{name', valid: false, placeholders: [] },
+  { template: 'name}', valid: false, placeholders: [] },
+  { template: '{valid} then {bad-name}', valid: false, placeholders: [] },
+] as const;

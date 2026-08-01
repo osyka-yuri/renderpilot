@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AddonStateMessage } from '@entities/addon';
   import { openExternal } from '@shared/api';
-  import { t, translateKey } from '@shared/i18n';
+  import { t, translateExternalMessage } from '@shared/i18n';
   import { formatError, publishErrorNotification } from '@shared/notifications';
   import { Button } from '@shared/ui';
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
@@ -24,7 +24,7 @@
     const message = store.externalMessage;
 
     return message
-      ? translateKey(message.id, message.fallback_text)
+      ? translateExternalMessage({ key: message.id, fallback: message.fallback_text })
       : t('gameDetails.renodx.actionOpenExternal');
   });
 

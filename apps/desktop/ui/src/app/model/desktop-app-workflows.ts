@@ -112,8 +112,8 @@ type QueueBackgroundCoverSyncDeps = Pick<
 
 /** Coalesces background cover hydration through the process-wide UI queue. */
 export function queueBackgroundCoverSync(deps: QueueBackgroundCoverSyncDeps): void {
-  deps.coverSyncQueue.queue(deps.syncMissingCoversAfterCardsLoad, (error) => {
-    publishBackgroundCoverSyncFailureNotification(error);
+  deps.coverSyncQueue.queue(deps.syncMissingCoversAfterCardsLoad, () => {
+    publishBackgroundCoverSyncFailureNotification();
   });
 }
 

@@ -1,5 +1,5 @@
 import type { LocalePack } from './packs/types';
-import type { MessageValue } from './messages/types';
+import type { MessageValue } from './messages/model';
 
 /**
  * Looks up a key in the already committed pack and then in the eager English

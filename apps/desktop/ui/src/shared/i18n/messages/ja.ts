@@ -1,7 +1,8 @@
-import type { MessageKey } from './en';
-import type { MessageValue } from './types';
+import type { EnglishCatalog } from './en';
+import { defineLocalizedCatalog } from './contract';
+import { plural } from './model';
 
-export const ja: Record<MessageKey, MessageValue> = {
+export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'nav.games': 'ゲーム',
   'nav.libraries': 'ライブラリ',
   'nav.settings': '設定',
@@ -68,10 +69,9 @@ export const ja: Record<MessageKey, MessageValue> = {
   'game.card.availableAddons': '利用可能なアドオン',
   'game.card.badge.upToDate': '最新',
   'game.card.badge.updatesAvailable': '利用可能なアップデート',
-  'game.card.badge.updatesAvailableCount': {
-    one: '1件のアップデートが利用可能',
+  'game.card.badge.updatesAvailableCount': plural('count', {
     other: '{count}件のアップデートが利用可能',
-  },
+  }),
   'game.card.menu.ariaLabel': '{title} のオプション',
   'game.card.menu.favorite.add': 'お気に入りに追加',
   'game.card.menu.favorite.remove': 'お気に入りから削除',
@@ -97,8 +97,8 @@ export const ja: Record<MessageKey, MessageValue> = {
   'game.cover.menu.clearHint': 'デフォルトのカバー画像に戻します。',
 
   'game.dashboard.summary': 'ダッシュボード',
-  'game.dashboard.games': { one: '{count} 個のゲーム', other: '{count} 個のゲーム' },
-  'game.dashboard.updates': { one: '{count} 件のアップデート', other: '{count} 件のアップデート' },
+  'game.dashboard.games': plural('count', { other: '{count} 個のゲーム' }),
+  'game.dashboard.updates': plural('count', { other: '{count} 件のアップデート' }),
 
   'elevation.title': '管理者権限が必要です',
   'elevation.description': '一部の設定は管理者権限なしでは変更できません。',
@@ -139,8 +139,10 @@ export const ja: Record<MessageKey, MessageValue> = {
     'RenderPilot は現在のフォルダーの代わりに、選択したフォルダーを使用します。ゲームファイルは変更されません。',
   'addGame.replaceExistingRoot': 'パスを修正',
   'addGame.rootCorrection.rollbackTitle': '先に有効なコンポーネント変更を元に戻す必要があります',
-  'addGame.rootCorrection.rollbackDescription':
-    'カードのルートを置き換える前に、{count} 件のコンポーネント変更を元に戻す必要があります。',
+  'addGame.rootCorrection.rollbackDescription': plural('count', {
+    other:
+      'カードのルートを置き換える前に、{count} 件のコンポーネント変更を元に戻す必要があります。',
+  }),
   'addGame.rootCorrection.rollbackAndReplace': '変更を元に戻してルートを置き換える',
   'addGame.rootCorrection.rollbackFailed':
     'コンポーネントの変更を完全には元に戻せませんでした。現在のゲームルートは変更されていません。',
@@ -153,10 +155,13 @@ export const ja: Record<MessageKey, MessageValue> = {
     '保存済みのロールバック状態に対応するコンポーネントがありません。',
   'addGame.rescan': 'ゲームを再スキャン',
   'addGame.catalogBusy': '別のカタログ操作が実行中です。完了してからもう一度お試しください。',
-  'addGame.warning.legacyCardsConsolidated':
-    '誤って作成されたことが確認された従来のゲームカードを {count} 件統合しました。',
-  'addGame.warning.legacyCardsRetained':
-    '独立したインストールかどうかを判断できないため、従来のゲームカードを {count} 件保持しました。',
+  'addGame.warning.legacyCardsConsolidated': plural('count', {
+    other: '誤って作成されたことが確認された従来のゲームカードを {count} 件統合しました。',
+  }),
+  'addGame.warning.legacyCardsRetained': plural('count', {
+    other:
+      '独立したインストールかどうかを判断できないため、従来のゲームカードを {count} 件保持しました。',
+  }),
   'addGame.warning.recoveryBundleCreated':
     '競合する従来の状態を復旧パッケージ {path} に保存しました。',
   'addGame.warning.rootCorrectionHistoryArchived':
@@ -240,7 +245,7 @@ export const ja: Record<MessageKey, MessageValue> = {
 
   'gameDetails.version.noReplacements': '代替バージョンなし',
   'gameDetails.version.restoreOriginal': '元の {fileName} を復元',
-  'gameDetails.version.fileCount': { one: '1 個のファイル', other: '{count} 個のファイル' },
+  'gameDetails.version.fileCount': plural('count', { other: '{count} 個のファイル' }),
 
   'gameDetails.vendor.description': 'コンポーネントのバージョンを変更します。',
 
@@ -265,10 +270,9 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.updateAll.upToDate': 'すべての安定版は最新です',
   'gameDetails.updateAll.partialFailure':
     '一部の更新に失敗しました（{count}）。詳細を確認して再試行してください。',
-  'gameDetails.updateAll.tooltip': {
-    one: '{count} 個のコンポーネントを最新の安定版に更新します',
+  'gameDetails.updateAll.tooltip': plural('count', {
     other: '{count} 個のコンポーネントを最新の安定版に更新します',
-  },
+  }),
   'gameDetails.executable.title': 'ゲームの実行ファイル',
   'gameDetails.developerMode.requiredTitle': 'Windows の開発者モードが無効です',
   'gameDetails.developerMode.requiredDescription':
@@ -395,14 +399,12 @@ export const ja: Record<MessageKey, MessageValue> = {
   'libraries.actions.downloadAll': '最新をダウンロード',
   'libraries.actions.downloadAllCount': '最新をダウンロード（{count}）',
   'libraries.actions.downloadAllUpToDate': 'すべての最新バージョンはダウンロード済みです',
-  'libraries.actions.downloadAllTooltip': {
-    one: '{count} 個の最新バージョンをダウンロード',
+  'libraries.actions.downloadAllTooltip': plural('count', {
     other: '{count} 個の最新バージョンをダウンロード',
-  },
-  'libraries.actions.downloadAllDoneToast': {
-    one: '{count} 個のライブラリをダウンロードしました',
+  }),
+  'libraries.actions.downloadAllDoneToast': plural('count', {
     other: '{count} 個のライブラリをダウンロードしました',
-  },
+  }),
   'libraries.actions.downloadAllPartialToast': '{succeeded} 個ダウンロード、{failed} 個失敗',
   'libraries.actions.downloadAllNoneToast': 'すべての最新バージョンはダウンロード済みです',
 
@@ -433,15 +435,13 @@ export const ja: Record<MessageKey, MessageValue> = {
   'operation.label.replaceComponent': 'バージョン変更',
   'operation.duration': '{seconds}秒で完了',
   'operation.filesUpdated.none': '更新されたファイルはありません。',
-  'operation.filesUpdated.count': {
-    one: '1個のファイルが更新されました。',
+  'operation.filesUpdated.count': plural('count', {
     other: '{count}個のファイルが更新されました。',
-  },
+  }),
   'operation.filesRestored.none': '復元されたファイルはありません。',
-  'operation.filesRestored.count': {
-    one: '1個のファイルが復元されました。',
+  'operation.filesRestored.count': plural('count', {
     other: '{count}個のファイルが復元されました。',
-  },
+  }),
   'operation.itemAria': '{kind}、{status}',
 
   'notify.stalePlan': '操作プランが古くなっています。再試行してください。',
@@ -472,10 +472,9 @@ export const ja: Record<MessageKey, MessageValue> = {
   'notify.statusError': 'エラー',
   'notify.statusWarning': '警告',
 
-  'scan.partialWarning': {
-    one: '1つのフォルダをスキャンできませんでした。',
+  'scan.partialWarning': plural('count', {
     other: '{count}個のフォルダをスキャンできませんでした。',
-  },
+  }),
 
   'coverSync.failed': 'カバー画像の同期に失敗しました。',
   'coverSync.refreshFailed': 'カバー画像の同期に失敗しました。',
@@ -935,4 +934,4 @@ export const ja: Record<MessageKey, MessageValue> = {
   'gameDetails.luma.guidance.copy': 'コピー',
   'gameDetails.luma.guidance.copied': 'コピーしました',
   'gameDetails.luma.guidance.copyFailed': 'コピーできませんでした',
-};
+});
