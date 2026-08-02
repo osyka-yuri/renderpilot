@@ -25,8 +25,8 @@ const optionValidationCases = [
   {
     name: 'language',
     options: languageOptions,
-    validValues: ['system', 'en', 'ru'],
-    invalidValues: ['', 'english'],
+    validValues: ['system', 'en', 'zh-Hans', 'zh-Hant'],
+    invalidValues: ['', 'english', 'zh'],
   },
 ] as const satisfies readonly OptionValidationCase[];
 
@@ -66,13 +66,27 @@ describe('settings-page-model', () => {
   });
 
   describe('tabOptions', () => {
-    it('has exactly 3 tabs with non-empty label keys and unique values', () => {
+    it('has exactly 4 tabs with non-empty label keys and unique values', () => {
       expect(tabOptions.length).toBe(4);
       expectUniqueValues(tabOptions.map((t) => t.value));
       for (const tab of tabOptions) {
         expectNonEmptyString(tab.labelKey);
       }
     });
+  });
+
+  it('exposes every language in stable UI order', () => {
+    expect(languageOptions).toEqual([
+      { value: 'system', labelKey: 'settings.language.system' },
+      { value: 'en', labelKey: 'settings.language.en' },
+      { value: 'ru', labelKey: 'settings.language.ru' },
+      { value: 'es', labelKey: 'settings.language.es' },
+      { value: 'fr', labelKey: 'settings.language.fr' },
+      { value: 'de', labelKey: 'settings.language.de' },
+      { value: 'ja', labelKey: 'settings.language.ja' },
+      { value: 'zh-Hans', labelKey: 'settings.language.zhHans' },
+      { value: 'zh-Hant', labelKey: 'settings.language.zhHant' },
+    ]);
   });
 
   describe('settings tab memory', () => {

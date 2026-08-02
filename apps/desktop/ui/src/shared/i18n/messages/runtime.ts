@@ -1,6 +1,6 @@
 import { createPluralRules } from '@shared/intl';
 
-import type { Locale } from '../locale';
+import type { Locale } from '../locale-model';
 import type { InterpolationParams, MessageValue } from './model';
 import { analyzeMessageTemplate, type MessageTemplateAnalysis } from './template';
 

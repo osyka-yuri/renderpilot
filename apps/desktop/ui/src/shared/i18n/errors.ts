@@ -1,4 +1,4 @@
-import type { LanguageMode, Locale } from './locale';
+import type { LanguageMode, Locale } from './locale-model';
 
 export class LocaleLoadError extends Error {
   readonly code = 'i18n_locale_load_failed';

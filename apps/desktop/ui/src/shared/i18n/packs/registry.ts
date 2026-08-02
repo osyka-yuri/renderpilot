@@ -1,15 +1,16 @@
-import type { LAZY_LOCALES, Locale } from '../locale';
+import type { LazyLocale, Locale } from '../locale-model';
 import { enPack } from './en';
 import type { LocaleLoader, LocalePack } from './types';
 
 const lazyLocaleLoaders = {
   ru: () => import('./ru').then((module) => module.default),
   es: () => import('./es').then((module) => module.default),
-  zh: () => import('./zh').then((module) => module.default),
   fr: () => import('./fr').then((module) => module.default),
   de: () => import('./de').then((module) => module.default),
   ja: () => import('./ja').then((module) => module.default),
-} satisfies Record<(typeof LAZY_LOCALES)[number], LocaleLoader>;
+  'zh-Hans': () => import('./zh-Hans').then((module) => module.default),
+  'zh-Hant': () => import('./zh-Hant').then((module) => module.default),
+} satisfies Record<LazyLocale, LocaleLoader>;
 
 const localeLoaders = {
   en: () => Promise.resolve(enPack),

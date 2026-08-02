@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { getLocale, setLanguageMode, t, translateExternalMessage } from './index';
+import { LAZY_LOCALES } from './locale-model';
 import { interpolateMessage } from './messages/runtime';
 import { resolveLocale } from './locale';
 
@@ -104,7 +105,7 @@ describe('i18n', () => {
       const fallback =
         "Luma reserves the game's bundled DLSS library and restores it when removed.";
 
-      for (const locale of ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const) {
+      for (const locale of LAZY_LOCALES) {
         await setLanguageMode(locale);
         expect(translateExternalMessage({ key, fallback })).not.toBe(fallback);
       }

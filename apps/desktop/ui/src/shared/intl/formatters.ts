@@ -1,6 +1,6 @@
-export type IntlFormatterProvider<TFormatter> = (locale: string) => TFormatter;
+import { parseLocaleTag } from './locale-tag';
 
-const canonicalLocales = new Map<string, string>();
+export type IntlFormatterProvider<TFormatter> = (locale: string) => TFormatter;
 
 export function createNumberFormatter(
   options: Readonly<Intl.NumberFormatOptions> = {},
@@ -50,7 +50,7 @@ function createFormatterProvider<TOptions extends object, TFormatter>(
   const formatters = new Map<string, TFormatter>();
 
   return (locale) => {
-    const canonicalLocale = canonicalizeLocale(locale);
+    const canonicalLocale = parseLocaleTag(locale).tag;
     const cached = formatters.get(canonicalLocale);
     if (cached !== undefined) {
       return cached;
@@ -60,15 +60,4 @@ function createFormatterProvider<TOptions extends object, TFormatter>(
     formatters.set(canonicalLocale, formatter);
     return formatter;
   };
-}
-
-function canonicalizeLocale(locale: string): string {
-  const cached = canonicalLocales.get(locale);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const [canonicalLocale] = Intl.getCanonicalLocales(locale);
-  canonicalLocales.set(locale, canonicalLocale);
-  return canonicalLocale;
 }

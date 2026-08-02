@@ -63,6 +63,6 @@ const translations = {
   metroBorderless: '请使用无边框窗口模式。',
 } as const satisfies LumaGuidanceTranslations;
 
-export const lumaGuidanceOverrides = defineLocalizedOverrides<'zh', LumaSourceCatalog>()(
+export const lumaGuidanceOverrides = defineLocalizedOverrides<'zh-Hans', LumaSourceCatalog>()(
   expandLumaGuidanceTranslations(translations),
 );

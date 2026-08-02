@@ -18,7 +18,7 @@ import { parseJsonSource } from './i18n-contracts/parser.mjs';
 import { PLACEHOLDER_CONTRACT_CASES } from '../ui/src/shared/i18n/messages/placeholder-contract-cases.ts';
 
 const EXPECTED_CONTRACT_VERSION =
-  'i18n-v1:713b0b173a09d582ac22783a977ac74295d3aa5262710316e901e5c58d04b800';
+  'i18n-v1:1cec938f4c3bb6786ec3c6666913f9b270d1c1c208c40ecc659267141bc670bb';
 
 test('contract generation is deterministic and committed outputs are current', async () => {
   const first = await createI18nContractOutputs();

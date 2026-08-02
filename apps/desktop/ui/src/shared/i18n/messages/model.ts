@@ -1,4 +1,4 @@
-import type { Locale } from '../locale';
+import type { Locale } from '../locale-model';
 
 export type InterpolationValue = string | number;
 export type InterpolationParams = Readonly<Record<string, InterpolationValue>>;
@@ -32,7 +32,8 @@ export const PLURAL_CATEGORIES = {
   fr: ['one', 'many', 'other'],
   de: ['one', 'other'],
   ja: ['other'],
-  zh: ['other'],
+  'zh-Hans': ['other'],
+  'zh-Hant': ['other'],
 } as const satisfies Readonly<Record<Locale, readonly Intl.LDMLPluralRule[]>>;
 
 export type PluralCategoryFor<CurrentLocale extends Locale> =

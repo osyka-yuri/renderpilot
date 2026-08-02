@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { LAZY_LOCALES, type LazyLocale } from '../locale-model';
 import {
   expandLumaGuidanceTranslations,
   LUMA_GUIDANCE_GROUPS,
@@ -12,10 +13,18 @@ import { lumaGuidanceOverrides as es } from './overrides/luma/es';
 import { lumaGuidanceOverrides as fr } from './overrides/luma/fr';
 import { lumaGuidanceOverrides as ja } from './overrides/luma/ja';
 import { lumaGuidanceOverrides as ru } from './overrides/luma/ru';
-import { lumaGuidanceOverrides as zh } from './overrides/luma/zh';
+import { lumaGuidanceOverrides as zhHans } from './overrides/luma/zh-Hans';
+import { lumaGuidanceOverrides as zhHant } from './overrides/luma/zh-Hant';
 
-const nonEnglishLocales = ['ru', 'de', 'es', 'fr', 'ja', 'zh'] as const;
-const lumaGuidanceOverrides = { ru, de, es, fr, ja, zh } as const;
+const lumaGuidanceOverrides = {
+  ru,
+  de,
+  es,
+  fr,
+  ja,
+  'zh-Hans': zhHans,
+  'zh-Hant': zhHant,
+} as const satisfies Readonly<Record<LazyLocale, Readonly<Record<string, string>>>>;
 const lumaGuidanceKeys = Object.values(LUMA_GUIDANCE_GROUPS).flat();
 const lumaGuidanceGroups = Object.entries(LUMA_GUIDANCE_GROUPS) as [
   LumaGuidancePhrase,
@@ -30,7 +39,7 @@ describe('lumaGuidanceOverrides', () => {
     expect(new Set(lumaGuidanceKeys).size).toBe(lumaGuidanceKeys.length);
     expect(lumaGuidanceKeys.length).toBeGreaterThan(0);
 
-    for (const locale of nonEnglishLocales) {
+    for (const locale of LAZY_LOCALES) {
       const overrides = lumaGuidanceOverrides[locale];
 
       expect(overrides).toBeDefined();

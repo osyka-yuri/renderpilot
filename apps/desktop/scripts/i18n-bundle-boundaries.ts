@@ -1,4 +1,10 @@
-import { LAZY_LOCALES } from '../ui/src/shared/i18n/locale.ts';
+import { LAZY_LOCALES } from '../ui/src/shared/i18n/locale-model.ts';
+import {
+  isI18nOverrideModule,
+  localeModuleOwner,
+  MESSAGE_ROOT,
+  PACK_ROOT,
+} from './i18n-bundle-boundaries/locale-ownership.ts';
 
 export type BundleChunk = {
   type: 'chunk';
@@ -13,9 +19,6 @@ export type BundleChunk = {
 
 type BundleAsset = BundleChunk | { type: 'asset'; fileName: string; source?: unknown };
 export type OutputBundleLike = Record<string, BundleAsset>;
-
-const NON_ENGLISH_LOCALES = LAZY_LOCALES;
-const PACK_ROOT = '/ui/src/shared/i18n/packs/';
 
 function normalize(value: string): string {
   return value.replace(/\\/g, '/');
@@ -203,19 +206,10 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
   if (!initialModules.some((moduleId) => hasSourceSuffix(moduleId, englishPack))) {
     throw new Error('The eager English locale pack is missing from the initial module graph.');
   }
-  if (
-    !initialModules.some((moduleId) =>
-      hasSourceSuffix(moduleId, '/ui/src/shared/i18n/messages/en.ts'),
-    )
-  ) {
+  if (!initialModules.some((moduleId) => hasSourceSuffix(moduleId, `${MESSAGE_ROOT}en.ts`))) {
     throw new Error('The eager English message catalog is missing from the initial module graph.');
   }
 
-  const forbiddenInitialPatterns = [
-    new RegExp(`${PACK_ROOT}(?:${NON_ENGLISH_LOCALES.join('|')})\\.ts$`),
-    new RegExp(`/ui/src/shared/i18n/messages/(?:${NON_ENGLISH_LOCALES.join('|')})\\.ts$`),
-    /\/ui\/src\/shared\/i18n\/messages\/overrides\/(?:luma|nvapi)\//,
-  ];
   const leakedModules = [...initialChunks].flatMap((fileName) => {
     const chunk = bundle[fileName];
     if (!chunk || chunk.type !== 'chunk') {
@@ -223,9 +217,7 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
     }
 
     return Object.keys(chunk.modules)
-      .filter((moduleId) =>
-        forbiddenInitialPatterns.some((pattern) => pattern.test(normalize(moduleId))),
-      )
+      .filter((moduleId) => localeModuleOwner(moduleId) !== null || isI18nOverrideModule(moduleId))
       .map((moduleId) => ({ fileName, moduleId }));
   });
 
@@ -239,7 +231,7 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
 
   const dynamicChunks = dynamicReachable(bundle, initialChunks);
   const registryChunk = findChunkContainingModule(bundle, `${PACK_ROOT}registry.ts`);
-  for (const locale of NON_ENGLISH_LOCALES) {
+  for (const locale of LAZY_LOCALES) {
     const pack = findChunkByFacade(bundle, `${PACK_ROOT}${locale}.ts`);
 
     if (!pack.isDynamicEntry) {
@@ -254,6 +246,23 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
     if (!registryChunk.dynamicImports.includes(pack.fileName)) {
       throw new Error(
         `Locale pack ${locale} is not a direct dynamic import of the locale loader registry.`,
+      );
+    }
+
+    const localeGraph = new Set(
+      [...staticReachable(bundle, pack.fileName)].filter(
+        (graphFileName) => !initialChunks.has(graphFileName),
+      ),
+    );
+    const crossLocaleModules = moduleIds(bundle, localeGraph).filter((moduleId) => {
+      const owner = localeModuleOwner(moduleId);
+      return owner !== null && owner !== locale;
+    });
+    if (crossLocaleModules.length > 0) {
+      throw new Error(
+        `Locale graph ${locale} imports modules owned by another locale:\n${crossLocaleModules
+          .map((moduleId) => `- ${moduleId}`)
+          .join('\n')}`,
       );
     }
 

@@ -2,7 +2,7 @@ import type { EnglishCatalog } from './en';
 import { defineLocalizedCatalog } from './contract';
 import { plural } from './model';
 
-export const zh = defineLocalizedCatalog<'zh', EnglishCatalog>()({
+export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'nav.games': '游戏',
   'nav.libraries': '组件库',
   'nav.settings': '设置',
@@ -30,7 +30,8 @@ export const zh = defineLocalizedCatalog<'zh', EnglishCatalog>()({
   'settings.language.en': 'English',
   'settings.language.ru': 'Русский',
   'settings.language.es': 'Español',
-  'settings.language.zh': '中文',
+  'settings.language.zhHans': '简体中文',
+  'settings.language.zhHant': '繁體中文',
   'settings.language.fr': 'Français',
   'settings.language.de': 'Deutsch',
   'settings.language.ja': '日本語',

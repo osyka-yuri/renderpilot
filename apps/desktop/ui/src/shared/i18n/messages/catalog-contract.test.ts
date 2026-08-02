@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Locale } from '../locale';
+import type { LazyLocale } from '../locale-model';
 import { de } from './de';
 import { en } from './en';
 import { es } from './es';
@@ -9,7 +9,8 @@ import { ja } from './ja';
 import { PLURAL_CATEGORIES, type MessageDictionary, type MessageValue } from './model';
 import { ru } from './ru';
 import { analyzeMessageTemplate } from './runtime';
-import { zh } from './zh';
+import { zhHans } from './zh-Hans';
+import { zhHant } from './zh-Hant';
 
 const localizedCatalogs = {
   ru,
@@ -17,8 +18,9 @@ const localizedCatalogs = {
   fr,
   de,
   ja,
-  zh,
-} as const satisfies Readonly<Record<Exclude<Locale, 'en'>, MessageDictionary>>;
+  'zh-Hans': zhHans,
+  'zh-Hant': zhHant,
+} as const satisfies Readonly<Record<LazyLocale, MessageDictionary>>;
 const sourceCatalog: MessageDictionary = en;
 
 function placeholders(template: string): string[] {
@@ -35,7 +37,7 @@ function without(values: readonly string[], excluded: string): string[] {
 
 describe('localized catalog contract', () => {
   for (const [locale, catalog] of Object.entries(localizedCatalogs) as [
-    Exclude<Locale, 'en'>,
+    LazyLocale,
     Readonly<Partial<Record<string, MessageValue>>>,
   ][]) {
     it(`${locale} matches the English keys, tags, branches, and placeholders`, () => {

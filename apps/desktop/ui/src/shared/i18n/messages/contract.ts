@@ -1,4 +1,4 @@
-import type { Locale } from '../locale';
+import type { Locale } from '../locale-model';
 import type {
   MessageDictionary,
   MessageOverrides,

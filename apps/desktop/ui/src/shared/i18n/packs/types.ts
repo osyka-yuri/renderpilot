@@ -1,4 +1,4 @@
-import type { Locale } from '../locale';
+import type { Locale } from '../locale-model';
 import type { MESSAGE_CONTRACT_VERSION } from '../messages/generated/contract-version';
 import type { MessageOverrides, MessageValue } from '../messages/model';
 
