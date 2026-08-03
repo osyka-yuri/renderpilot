@@ -3024,6 +3024,7 @@ name = "renderpilot-api"
 version = "1.8.2"
 dependencies = [
  "http",
+ "log",
  "renderpilot-orchestration",
  "serde",
  "serde_json",

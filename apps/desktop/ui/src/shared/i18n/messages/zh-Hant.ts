@@ -103,6 +103,10 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'error.boundary.title': '出現了一些問題',
   'error.boundary.description': '此螢幕遇到意外錯誤。您可以重試，或切換到其他部分。',
   'error.boundary.reset': '重試',
+  'error.desktopTransportFailed': '桌面服務傳回了無效回應。請重試此操作。',
+  'error.unexpectedClient': '發生未預期的錯誤。請重試此操作。',
+  'error.localeLoadFailed': '無法載入所選語言。介面將繼續使用先前的語言。',
+  'error.recoveryBundlePath': '復原套件：{path}',
   'pageLoad.loading': '正在載入頁面…',
   'pageLoad.error.title': '無法開啟此頁面',
   'pageLoad.error.description': '頁面載入失敗。請重試或返回遊戲清單。',
@@ -180,6 +184,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
     '所有有效的執行檔似乎都是啟動器或輔助工具。請明確選擇要使用的檔案。',
   'addGame.warning.noReadableExecutable': '此資料夾不含可讀取的遊戲執行檔，因此無法單獨新增。',
   'addGame.warning.filesystemProbeError': '無法檢查安裝目錄的某些部分。請檢查檔案存取權限。',
+  'addGame.warning.unknown': '遊戲檢查傳回了此版本的 RenderPilot 無法顯示的警告。',
   'games.libraryActions': '操作',
   'games.search': '搜尋遊戲',
   'games.openFilters': '篩選',
@@ -426,19 +431,21 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'notify.statusWarning': '警告',
 
   'scan.partialWarning': plural('count', { other: '無法掃描 {count} 個資料夾。' }),
+  'scan.automaticFailed': '自動掃描遊戲庫失敗。遊戲清單仍已重新整理。',
 
   'coverSync.failed': '同步封面失敗。',
   'coverSync.refreshFailed': '同步封面失敗。',
+  'coverSync.failure.single': '無法下載 {title} 的封面：{message}',
+  'coverSync.failure.multiple': plural('count', {
+    other: '無法下載 {count} 個遊戲的封面。第一個錯誤：{summary}',
+  }),
+  'coverSync.failure.hint': '請檢查遊戲封面來源和 SteamGridDB 設定。',
 
   'nvidia.adminRequired': '需要系統管理員權限',
-  'nvidia.relaunchTo': '以系統管理員身分重新啟動以 {action}。',
-  'nvidia.action.changeSetting': '套用設定',
-  'nvidia.action.revertSetting': '還原設定',
   'nvidia.changeSettingFailed': '無法套用設定',
   'nvidia.revertDefaultFailed': '無法還原預設設定',
   'nvidia.revertBaselineFailed': '無法還原初始設定',
 
-  'indicator.relaunchToToggle': '以系統管理員身分重新啟動以切換 DLSS 指示器。',
   'indicator.changeFailed': '無法切換 DLSS 指示器',
 
   'libraries.column.version': '版本',
@@ -515,6 +522,16 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'user_message.stale_replacement_source':
     '無法套用此更新，因為原始檔已在 RenderPilot 以外遭到取代或修改。請重新選擇版本；可能需要再次下載。',
   'user_message.nvapi_requires_administrator': '需要系統管理員權限才能變更此設定。',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot 在重複的遊戲卡片中發現衝突的受管理狀態。未進行任何變更，並已建立復原套件。',
+  'user_message.rollback_also_failed':
+    '操作失敗，且 RenderPilot 無法完整還原先前的檔案狀態。重試前請檢查遊戲檔案。',
+  'user_message.elevation_cancelled': '系統管理員權限要求已取消。未進行任何變更。',
+  'user_message.elevation_policy_blocked':
+    'Windows 已封鎖系統管理員權限要求。請檢查系統原則後重試。',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot 無法以系統管理員權限重新啟動。請嘗試重新啟動應用程式。',
+  'user_message.elevation_unsupported': '此平台不支援以系統管理員權限重新啟動。',
 
   'suggested_action.refresh_games': '重新整理遊戲清單並重試。',
   'suggested_action.reload_game_details': '重新整理遊戲詳情並重試。',

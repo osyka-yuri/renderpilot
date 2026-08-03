@@ -95,7 +95,7 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
     }
 
     case 'start_background_refresh':
-      return { started: true };
+      return { started: true, partialFailureCount: 0 };
 
     case 'get_game_details':
       return mockGetGameDetails(readStringField(command, payload, 'gameId'));

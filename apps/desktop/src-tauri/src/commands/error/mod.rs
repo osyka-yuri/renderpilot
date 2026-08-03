@@ -1,616 +1,339 @@
-//! Facilitates the transformation of `ApiError` / `ServiceError` values into a stable, deterministic JSON payload for the desktop shell frontend.
+//! Stable, presentation-free error contract for the desktop IPC boundary.
 //!
-//! JSON Contract Specification:
-//! - `details`: Contains sanitized, user-facing fallback text, guaranteed to be free of sensitive system paths or internals.
-//! - `messageKey`: Provides a stable, unchanging localization key corresponding to the `details` string.
-//! - `debugDetails`: Serves exclusively for diagnostic purposes and is strictly stripped from release-mode JSON payloads.
+//! The frontend owns localized messages, severity, and suggested actions. Rust
+//! serializes only a machine code and explicitly allowlisted structured data.
 
 mod kind;
 mod mapping;
-mod strings;
 
 use serde::Serialize;
 
-pub(crate) use kind::CommandErrorKind;
-
-use strings::{SuggestedActions, UserMessage, user_message as user_messages};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CommandErrorSeverity {
-    Warning,
-    Error,
-}
+pub(crate) use kind::{CommandErrorKind, CommandErrorSeverity};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     code: &'static str,
-    severity: CommandErrorSeverity,
 
-    /// A stable, immutable localization key mapping to the sanitized user-facing fallback text provided in `details`.
-    message_key: &'static str,
-
-    /// Sanitized user-facing fallback text, scrubbed of internal technical context. Serialized as the JSON field `details`.
-    details: String,
+    #[serde(skip)]
+    kind: CommandErrorKind,
 
     /// Stable validation reason for typed errors such as `invalid_install_root`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'static str>,
+    reason_code: Option<&'static str>,
 
-    /// Published recovery artifact that the user may need after a fail-closed
-    /// managed cleanup. This is structured separately from debug diagnostics
-    /// and remains available in release builds.
+    /// Published recovery artifact retained after fail-closed managed cleanup.
     #[serde(skip_serializing_if = "Option::is_none")]
     recovery_bundle_path: Option<String>,
 
-    suggested_actions: SuggestedActions,
+    /// Backend-only diagnostic context. Never crosses the IPC boundary.
+    #[serde(skip)]
+    diagnostic: Option<CommandErrorDiagnostic>,
+
+    /// Guards boundary helpers against accidental duplicate registration.
+    #[serde(skip)]
+    diagnostic_recorded: bool,
+}
+
+#[derive(Debug, Clone)]
+struct CommandErrorDiagnostic {
+    detail: String,
+}
+
+#[derive(Clone, Copy)]
+struct CommandDiagnosticRecord<'error> {
+    severity: CommandErrorSeverity,
+    operation: &'static str,
+    code: &'static str,
+    detail: Option<&'error str>,
+}
+
+fn write_command_diagnostic(record: CommandDiagnosticRecord<'_>) {
+    match (record.severity, record.detail) {
+        (CommandErrorSeverity::Warning, Some(detail)) => log::warn!(
+            "Desktop command warning [operation={} code={}]: {detail}",
+            record.operation,
+            record.code
+        ),
+        (CommandErrorSeverity::Warning, None) => log::warn!(
+            "Desktop command warning [operation={} code={}]",
+            record.operation,
+            record.code
+        ),
+        (CommandErrorSeverity::Error, Some(detail)) => log::error!(
+            "Desktop command error [operation={} code={}]: {detail}",
+            record.operation,
+            record.code
+        ),
+        (CommandErrorSeverity::Error, None) => log::error!(
+            "Desktop command error [operation={} code={}]",
+            record.operation,
+            record.code
+        ),
+    }
 }
 
 impl CommandError {
-    pub(crate) fn new(kind: CommandErrorKind, user_message: UserMessage) -> Self {
-        let spec = kind.spec();
-
+    pub(crate) const fn new(kind: CommandErrorKind) -> Self {
         Self {
-            code: spec.code,
-            severity: spec.severity,
-            message_key: user_message.key(),
-            details: user_message.default_text().to_owned(),
-            reason: None,
+            code: kind.code(),
+            kind,
+            reason_code: None,
             recovery_bundle_path: None,
-            suggested_actions: spec.suggested_actions,
+            diagnostic: None,
+            diagnostic_recorded: false,
         }
     }
 
-    pub(crate) fn user_facing(kind: CommandErrorKind, user_message: UserMessage) -> Self {
-        Self::new(kind, user_message)
+    pub(crate) fn with_diagnostic(kind: CommandErrorKind, detail: impl std::fmt::Display) -> Self {
+        Self {
+            diagnostic: Some(CommandErrorDiagnostic {
+                detail: detail.to_string(),
+            }),
+            ..Self::new(kind)
+        }
+    }
+
+    /// Registers backend-only context once, at the command boundary where the
+    /// stable operation name is known. Mapping and serialization remain pure.
+    pub(super) fn recorded(self, operation: &'static str) -> Self {
+        self.recorded_with(operation, write_command_diagnostic)
+    }
+
+    fn recorded_with(
+        mut self,
+        operation: &'static str,
+        record: impl FnOnce(CommandDiagnosticRecord<'_>),
+    ) -> Self {
+        if self.diagnostic_recorded {
+            return self;
+        }
+
+        record(CommandDiagnosticRecord {
+            severity: self.kind.severity(),
+            operation,
+            code: self.code,
+            detail: self
+                .diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.detail.as_str()),
+        });
+        self.diagnostic_recorded = true;
+        self
     }
 
     pub(crate) fn task_failed(error: impl std::fmt::Display) -> Self {
-        log::error!("Command task failed: {error}");
-        Self::user_facing(
-            CommandErrorKind::CommandTaskFailed,
-            user_messages::COMMAND_TASK_FAILED,
-        )
+        Self::with_diagnostic(CommandErrorKind::CommandTaskFailed, error)
     }
 
     pub(crate) fn invalid_argument(name: &'static str, reason: &'static str) -> Self {
-        log::warn!("Invalid argument `{name}`: {reason}");
-        Self::user_facing(
+        Self::with_diagnostic(
             CommandErrorKind::InvalidArgument,
-            user_messages::INVALID_ARGUMENT,
+            format_args!("invalid argument `{name}`: {reason}"),
         )
     }
 
     pub(crate) fn invalid_id(
         kind: CommandErrorKind,
-        user_message: UserMessage,
         debug_label: &'static str,
         raw: impl std::fmt::Display,
     ) -> Self {
-        log::warn!("{debug_label}: {raw}");
-        Self::user_facing(kind, user_message)
+        Self::with_diagnostic(kind, format_args!("{debug_label}: {raw}"))
     }
 
-    fn with_reason(mut self, reason: &'static str) -> Self {
-        self.reason = Some(reason);
+    fn with_reason_code(mut self, reason_code: &'static str) -> Self {
+        if self.kind.allows_reason_code(reason_code) {
+            self.reason_code = Some(reason_code);
+        }
         self
     }
 
     fn with_recovery_bundle_path(mut self, path: String) -> Self {
-        self.recovery_bundle_path = Some(path);
+        if self.kind.allows_recovery_bundle_path() {
+            self.recovery_bundle_path = Some(path);
+        }
         self
-    }
-
-    /// Retrieves the sanitized text explicitly intended for UI consumption, serialized as the JSON field `details`.
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) fn user_message(&self) -> &str {
-        self.details.as_str()
-    }
-
-    /// Retrieves the robust localization key corresponding to the sanitized UI message.
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) fn message_key(&self) -> &'static str {
-        self.message_key
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use renderpilot_api::ApiError;
-    use renderpilot_orchestration::ServiceError;
-    use serde_json::json;
     use std::collections::BTreeSet;
 
-    #[test]
-    fn error_specs_have_valid_codes() {
-        for &kind in CommandErrorKind::ALL {
-            let spec = kind.spec();
+    use renderpilot_api::ApiError;
+    use renderpilot_orchestration::{InvalidInstallRootReason, ServiceError};
+    use serde_json::json;
 
-            assert!(!spec.code.is_empty(), "empty command error code");
-            assert_eq!(
-                spec.code,
-                spec.code.trim(),
-                "command error code has surrounding whitespace: {:?}",
-                spec.code,
-            );
-            assert!(
-                spec.code
-                    .chars()
-                    .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'),
-                "command error code contains unsupported characters: {}",
-                spec.code,
-            );
+    use super::*;
+
+    #[test]
+    fn plain_error_serializes_only_the_machine_code() {
+        let value = serde_json::to_value(CommandError::new(CommandErrorKind::GameNotFound))
+            .expect("serialize CommandError");
+        let keys = value
+            .as_object()
+            .expect("command error object")
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(keys, BTreeSet::from(["code"]));
+        assert_eq!(value.get("code"), Some(&json!("game_not_found")));
+        for forbidden in [
+            "messageKey",
+            "details",
+            "debugDetails",
+            "severity",
+            "suggestedActions",
+        ] {
+            assert!(value.get(forbidden).is_none(), "leaked field {forbidden}");
         }
     }
 
     #[test]
-    fn error_codes_are_unique() {
-        let mut seen = BTreeSet::new();
-
-        for &kind in CommandErrorKind::ALL {
-            let spec = kind.spec();
-
-            assert!(
-                seen.insert(spec.code),
-                "duplicate command error code: {}",
-                spec.code
-            );
-        }
-    }
-
-    #[test]
-    fn only_terminal_validation_errors_intentionally_omit_suggested_actions() {
-        for &kind in CommandErrorKind::ALL {
-            let spec = kind.spec();
-
-            if matches!(
-                kind,
-                CommandErrorKind::InvalidInstallRoot
-                    | CommandErrorKind::MultipleInstallsDetected
-                    | CommandErrorKind::StaleInstallInspection
-                    | CommandErrorKind::RootCorrectionCleanupRequired
-            ) {
-                assert!(spec.suggested_actions.is_empty());
-            } else {
-                assert!(
-                    !spec.suggested_actions.is_empty(),
-                    "missing suggested action for {}",
-                    spec.code
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn severity_serializes_as_snake_case() {
-        assert_eq!(
-            serde_json::to_value(CommandErrorSeverity::Warning).expect("serialize severity"),
-            json!("warning")
-        );
-
-        assert_eq!(
-            serde_json::to_value(CommandErrorSeverity::Error).expect("serialize severity"),
-            json!("error")
-        );
-    }
-
-    #[test]
-    fn command_error_json_includes_safe_details_and_message_key() {
-        let err = CommandError::user_facing(
-            CommandErrorKind::InvalidGameId,
-            strings::user_message::INVALID_GAME_REFERENCE,
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::INVALID_GAME_REFERENCE.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::INVALID_GAME_REFERENCE.key()))
-        );
-        assert_eq!(value.get("code"), Some(&json!("invalid_game_id")));
-    }
-
-    #[test]
-    fn command_failed_maps_technical_message_safely() {
-        let technical = "catalog error: permission denied on D:\\Games\\secret";
-        let err = CommandError::from(ApiError::Service(ServiceError::CommandFailed(
-            technical.into(),
+    fn invalid_install_root_carries_only_an_allowlisted_reason_code() {
+        let error = CommandError::from(ApiError::Service(ServiceError::invalid_install_root(
+            InvalidInstallRootReason::ContainsProvenInstall,
+            "private root D:\\Games\\secret",
         )));
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
+        let value = serde_json::to_value(error).expect("serialize CommandError");
 
         assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::OPERATION_COULD_NOT_COMPLETE.default_text()
-            ))
+            value,
+            json!({
+                "code": "invalid_install_root",
+                "reasonCode": "contains_proven_install",
+            })
         );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(
-                strings::user_message::OPERATION_COULD_NOT_COMPLETE.key()
-            ))
-        );
-        assert_ne!(value.get("details"), Some(&json!(technical)));
     }
 
     #[test]
-    fn service_error_categories_map_to_distinct_codes() {
-        // The whole point of carrying the category through ServiceError is that
-        // the frontend sees a specific code, not a generic `command_failed`.
+    fn recovery_bundle_is_structured_without_technical_details() {
+        let error = CommandError::from(ApiError::Service(ServiceError::ManagedCleanupAmbiguous {
+            game_id: "private-game".into(),
+            targets: vec!["D:\\Games\\secret".into()],
+            recovery_bundle_path: "C:\\Recovery\\bundle".into(),
+        }));
+        let value = serde_json::to_value(error).expect("serialize CommandError");
+
+        assert_eq!(
+            value,
+            json!({
+                "code": "managed_cleanup_ambiguous",
+                "recoveryBundlePath": "C:\\Recovery\\bundle",
+            })
+        );
+        assert!(!value.to_string().contains("D:\\\\Games"));
+    }
+
+    #[test]
+    fn typed_service_errors_do_not_collapse_to_command_failed() {
         let cases = [
             (
                 ServiceError::StorageFailed("db locked".into()),
                 "storage_failed",
             ),
             (
-                ServiceError::ProviderFailed("install failed".into()),
+                ServiceError::ProviderFailed("provider".into()),
                 "provider_failed",
             ),
             (
-                ServiceError::DetectionFailed("pe read failed".into()),
+                ServiceError::DetectionFailed("detector".into()),
                 "detection_failed",
             ),
             (
-                ServiceError::InvalidInput("bad id".into()),
+                ServiceError::InvalidInput("bad input".into()),
                 "invalid_argument",
             ),
             (
-                ServiceError::StaleReplacementSource,
-                "stale_replacement_source",
-            ),
-            (
-                ServiceError::GameRemovalCleanupFailed {
-                    game_id: "private-game".into(),
-                    action: "private-component rollback".into(),
-                    reason: "private path D:\\Games\\secret is unavailable".into(),
+                ServiceError::RollbackAlsoFailed {
+                    primary: "primary".into(),
+                    rollback: "rollback".into(),
                 },
-                "game_removal_cleanup_failed",
+                "rollback_also_failed",
             ),
         ];
 
         for (service_error, expected_code) in cases {
-            let err = CommandError::from(ApiError::Service(service_error));
-            let value = serde_json::to_value(&err).expect("serialize CommandError");
-            assert_eq!(
-                value.get("code"),
-                Some(&json!(expected_code)),
-                "unexpected code for mapped service error"
-            );
-            assert_ne!(
-                value.get("code"),
-                Some(&json!("command_failed")),
-                "category must not collapse into the generic command_failed code"
-            );
+            let value = serde_json::to_value(CommandError::from(ApiError::Service(service_error)))
+                .expect("serialize CommandError");
+            assert_eq!(value.get("code"), Some(&json!(expected_code)));
+            assert_ne!(value.get("code"), Some(&json!("command_failed")));
         }
     }
 
     #[test]
-    fn stale_replacement_source_maps_to_user_facing_recovery_message() {
-        let err = CommandError::from(ApiError::Service(ServiceError::StaleReplacementSource));
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
+    fn generic_command_failure_remains_the_explicit_catch_all() {
+        let value = serde_json::to_value(CommandError::from(ApiError::Service(
+            ServiceError::CommandFailed("opaque provider prose".into()),
+        )))
+        .expect("serialize CommandError");
+
+        assert_eq!(value, json!({ "code": "command_failed" }));
+        assert!(!value.to_string().contains("opaque provider prose"));
+    }
+
+    #[test]
+    fn elevation_outcomes_have_distinct_stable_codes() {
+        let codes = [
+            CommandErrorKind::ElevationCancelled.code(),
+            CommandErrorKind::ElevationPolicyBlocked.code(),
+            CommandErrorKind::ElevationRelaunchFailed.code(),
+            CommandErrorKind::ElevationUnsupported.code(),
+        ];
 
         assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(
-                strings::user_message::STALE_REPLACEMENT_SOURCE.key()
-            ))
+            codes.into_iter().collect::<BTreeSet<_>>().len(),
+            codes.len()
         );
         assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::STALE_REPLACEMENT_SOURCE.default_text()
-            ))
+            codes,
+            [
+                "elevation_cancelled",
+                "elevation_policy_blocked",
+                "elevation_relaunch_failed",
+                "elevation_unsupported",
+            ]
         );
     }
 
     #[test]
-    fn serialization_contract_has_stable_keys_for_user_facing_error() {
-        let err = CommandError::user_facing(
-            CommandErrorKind::SteamGridDbApiKeyMissing,
-            strings::user_message::STEAMGRIDDB_API_KEY_MISSING,
+    fn diagnostic_registration_never_changes_the_wire_contract() {
+        let error = CommandError::with_diagnostic(
+            CommandErrorKind::StorageFailed,
+            "private database path C:\\Users\\name\\catalog.db",
         );
+        let before = serde_json::to_value(&error).expect("serialize before recording");
+        let after = serde_json::to_value(error.recorded("contract_test"))
+            .expect("serialize after recording");
 
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        let object = value
-            .as_object()
-            .expect("CommandError should serialize as a JSON object");
-
-        let keys = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
-
-        assert_eq!(
-            keys,
-            BTreeSet::from([
-                "code",
-                "severity",
-                "messageKey",
-                "details",
-                "suggestedActions",
-            ])
-        );
+        assert_eq!(before, json!({ "code": "storage_failed" }));
+        assert_eq!(after, before);
     }
 
     #[test]
-    fn accessors_reflect_internal_state() {
-        let err = CommandError::user_facing(
-            CommandErrorKind::GameNotFound,
-            strings::user_message::GAME_NOT_IN_CATALOG,
-        );
+    fn diagnostic_registration_writes_to_the_sink_once() {
+        let error = CommandError::new(CommandErrorKind::ConfirmationTokenMismatch);
+        assert!(!error.diagnostic_recorded);
+        let mut record_count = 0;
 
-        assert_eq!(
-            err.user_message(),
-            strings::user_message::GAME_NOT_IN_CATALOG.default_text()
-        );
-        assert_eq!(
-            err.message_key(),
-            strings::user_message::GAME_NOT_IN_CATALOG.key()
-        );
+        let recorded = error.recorded_with("contract_test", |_| record_count += 1);
+        assert!(recorded.diagnostic_recorded);
+
+        let recorded_again = recorded.recorded_with("outer_boundary", |_| record_count += 1);
+        assert!(recorded_again.diagnostic_recorded);
+        assert_eq!(record_count, 1);
     }
 
     #[test]
-    fn task_failed_uses_safe_details() {
-        let err = CommandError::task_failed("worker crashed with private path");
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
+    fn structured_fields_are_fail_closed_against_the_generated_allowlist() {
+        let invalid = CommandError::new(CommandErrorKind::StorageFailed)
+            .with_reason_code("filesystem_root")
+            .with_recovery_bundle_path("C:\\private\\bundle".into());
 
         assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::COMMAND_TASK_FAILED.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::COMMAND_TASK_FAILED.key()))
-        );
-    }
-
-    #[test]
-    fn invalid_argument_uses_safe_details() {
-        let err = CommandError::invalid_argument("game_id", "must not be empty");
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(value.get("code"), Some(&json!("invalid_argument")));
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::INVALID_ARGUMENT.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::INVALID_ARGUMENT.key()))
-        );
-    }
-
-    #[test]
-    fn rejected_game_root_uses_specific_safe_user_message() {
-        let err = CommandError::from(ApiError::Service(ServiceError::invalid_install_root(
-            renderpilot_orchestration::InvalidInstallRootReason::FilesystemRoot,
-            "drive root D:/",
-        )));
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(value.get("code"), Some(&json!("invalid_install_root")));
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::INVALID_INSTALL_ROOT.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::INVALID_INSTALL_ROOT.key()))
-        );
-        assert_ne!(value.get("details"), Some(&json!("drive root D:/")));
-        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
-        assert_eq!(value.get("reason"), Some(&json!("filesystem_root")));
-    }
-
-    #[test]
-    fn rejected_parent_install_scope_uses_invalid_root_reason() {
-        let err = CommandError::from(ApiError::Service(ServiceError::invalid_install_root(
-            renderpilot_orchestration::InvalidInstallRootReason::ContainsProvenInstall,
-            "selected parent contains private game ids",
-        )));
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(value.get("code"), Some(&json!("invalid_install_root")));
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::INVALID_INSTALL_ROOT.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::INVALID_INSTALL_ROOT.key()))
-        );
-        assert_ne!(
-            value.get("details"),
-            Some(&json!("selected parent contains private game ids"))
-        );
-        assert_eq!(value.get("reason"), Some(&json!("contains_proven_install")));
-        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
-    }
-
-    #[test]
-    fn multiple_install_container_has_a_distinct_safe_error() {
-        let err = CommandError::from(ApiError::Service(ServiceError::MultipleInstallsDetected(
-            "private installation roots".to_owned(),
-        )));
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(
-            value.get("code"),
-            Some(&json!("multiple_installs_detected"))
-        );
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::MULTIPLE_INSTALLS_DETECTED.default_text()
-            ))
-        );
-        assert_ne!(
-            value.get("details"),
-            Some(&json!("private installation roots"))
-        );
-        assert_eq!(value.get("suggestedActions"), Some(&json!([])));
-    }
-
-    #[test]
-    fn root_correction_state_errors_are_typed_and_do_not_expose_catalog_ids() {
-        let rollback = CommandError::from(ApiError::Service(
-            ServiceError::RootCorrectionCleanupRequired {
-                game_id: "private-game".to_owned(),
-                component_ids: vec!["private-component".to_owned()],
-            },
-        ));
-        let blocked = CommandError::from(ApiError::Service(ServiceError::RootCorrectionBlocked {
-            game_id: "private-game".to_owned(),
-            blockers: vec!["pending_recovery".to_owned()],
-        }));
-
-        let rollback = serde_json::to_value(&rollback).expect("rollback error");
-        assert_eq!(
-            rollback.get("code"),
-            Some(&json!("root_correction_cleanup_required"))
-        );
-        assert_eq!(
-            rollback.get("details"),
-            Some(&json!(
-                strings::user_message::ROOT_CORRECTION_CLEANUP_REQUIRED.default_text()
-            ))
-        );
-        assert_eq!(rollback.get("suggestedActions"), Some(&json!([])));
-
-        let blocked = serde_json::to_value(&blocked).expect("blocked error");
-        assert_eq!(blocked.get("code"), Some(&json!("root_correction_blocked")));
-        assert_eq!(
-            blocked.get("details"),
-            Some(&json!(
-                strings::user_message::ROOT_CORRECTION_BLOCKED.default_text()
-            ))
-        );
-        assert!(
-            !blocked
-                .get("details")
-                .expect("details")
-                .as_str()
-                .expect("string")
-                .contains("private-game")
-        );
-    }
-
-    #[test]
-    fn game_removal_cleanup_error_is_specific_and_hides_diagnostics() {
-        let technical = "private path D:\\Games\\secret is unavailable";
-        let err = CommandError::from(ApiError::Service(ServiceError::GameRemovalCleanupFailed {
-            game_id: "private-game".to_owned(),
-            action: "private-component rollback".to_owned(),
-            reason: technical.to_owned(),
-        }));
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(
-            value.get("code"),
-            Some(&json!("game_removal_cleanup_failed"))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(
-                strings::user_message::GAME_REMOVAL_CLEANUP_FAILED.key()
-            ))
-        );
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::GAME_REMOVAL_CLEANUP_FAILED.default_text()
-            ))
-        );
-        assert_ne!(value.get("details"), Some(&json!(technical)));
-    }
-
-    #[test]
-    fn invalid_id_uses_safe_details() {
-        let err = CommandError::invalid_id(
-            CommandErrorKind::InvalidGameId,
-            strings::user_message::INVALID_GAME_REFERENCE,
-            "Invalid game id",
-            "raw-secret-game-id",
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(
-            value.get("details"),
-            Some(&json!(
-                strings::user_message::INVALID_GAME_REFERENCE.default_text()
-            ))
-        );
-        assert_eq!(
-            value.get("messageKey"),
-            Some(&json!(strings::user_message::INVALID_GAME_REFERENCE.key()))
-        );
-    }
-
-    #[test]
-    fn managed_cleanup_error_exposes_the_published_recovery_bundle_structurally() {
-        let recovery_bundle = r"C:\Recovery\renderpilot-bundle";
-        let err = CommandError::from(ApiError::Service(ServiceError::ManagedCleanupAmbiguous {
-            game_id: "private-game".to_owned(),
-            targets: vec!["private target".to_owned()],
-            recovery_bundle_path: recovery_bundle.to_owned(),
-        }));
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(value.get("code"), Some(&json!("managed_cleanup_ambiguous")));
-        assert_eq!(
-            value.get("recoveryBundlePath"),
-            Some(&json!(recovery_bundle))
-        );
-        assert!(
-            !value
-                .get("details")
-                .expect("details")
-                .as_str()
-                .expect("string")
-                .contains("private target"),
-            "technical conflict details must remain sanitized"
-        );
-    }
-
-    #[test]
-    fn suggested_actions_serialize_as_safe_user_facing_text() {
-        let err = CommandError::user_facing(
-            CommandErrorKind::InvalidGameId,
-            strings::user_message::INVALID_GAME_REFERENCE,
-        );
-
-        let value = serde_json::to_value(&err).expect("serialize CommandError");
-
-        assert_eq!(
-            value.get("suggestedActions"),
-            Some(&json!([{
-                "key": "suggested_action.refresh_games",
-                "text": "Refresh the games list and open the game again.",
-            }]))
+            serde_json::to_value(invalid).expect("serialize fail-closed error"),
+            json!({ "code": "storage_failed" })
         );
     }
 }

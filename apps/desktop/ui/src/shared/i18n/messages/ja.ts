@@ -110,6 +110,12 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'error.boundary.description':
     'この画面で予期しないエラーが発生しました。もう一度試すか、別のセクションに切り替えてください。',
   'error.boundary.reset': '再試行',
+  'error.desktopTransportFailed':
+    'デスクトップサービスから無効な応答が返されました。操作を再試行してください。',
+  'error.unexpectedClient': '予期しないエラーが発生しました。操作を再試行してください。',
+  'error.localeLoadFailed':
+    '選択した言語を読み込めませんでした。以前の言語が引き続き使用されます。',
+  'error.recoveryBundlePath': '復旧バンドル: {path}',
   'pageLoad.loading': 'ページを読み込んでいます…',
   'pageLoad.error.title': 'このページを開けませんでした',
   'pageLoad.error.description':
@@ -202,6 +208,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     '読み取り可能なゲーム実行ファイルがないため、このフォルダーを単独で追加することはできません。',
   'addGame.warning.filesystemProbeError':
     'インストールの一部を検査できませんでした。ファイルのアクセス権限を確認してください。',
+  'addGame.warning.unknown':
+    'ゲームの検査で、このバージョンのRenderPilotでは表示できない警告が発生しました。',
   'games.libraryActions': 'アクション',
   'games.search': 'ゲームを検索',
   'games.openFilters': 'フィルター',
@@ -476,20 +484,22 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'scan.partialWarning': plural('count', {
     other: '{count}個のフォルダをスキャンできませんでした。',
   }),
+  'scan.automaticFailed':
+    'ライブラリの自動スキャンに失敗しました。ゲームリストは更新されています。',
 
   'coverSync.failed': 'カバー画像の同期に失敗しました。',
   'coverSync.refreshFailed': 'カバー画像の同期に失敗しました。',
+  'coverSync.failure.single': '{title} のカバーをダウンロードできませんでした: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    other: '{count} 件のゲームのカバーをダウンロードできませんでした。最初のエラー: {summary}',
+  }),
+  'coverSync.failure.hint': 'ゲームのカバー画像ソースと SteamGridDB の設定を確認してください。',
 
   'nvidia.adminRequired': '管理者権限が必要です',
-  'nvidia.relaunchTo': '{action} には管理者として再起動してください。',
-  'nvidia.action.changeSetting': '設定を適用する',
-  'nvidia.action.revertSetting': '設定を元に戻す',
   'nvidia.changeSettingFailed': '設定の適用に失敗しました',
   'nvidia.revertDefaultFailed': 'デフォルト設定への復元に失敗しました',
   'nvidia.revertBaselineFailed': '初期設定への復元に失敗しました',
 
-  'indicator.relaunchToToggle':
-    'DLSS インジケーターを切り替えるには、管理者として再起動してください。',
   'indicator.changeFailed': 'DLSS インジケーターの切り替えに失敗しました',
 
   'libraries.column.version': 'バージョン',
@@ -572,6 +582,17 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'user_message.stale_replacement_source':
     'ソースファイルが RenderPilot の外で置き換えまたは変更されたため、この更新を適用できませんでした。バージョンを再度選択してください。ダウンロードが必要になる場合があります。',
   'user_message.nvapi_requires_administrator': 'この設定を変更するには管理者権限が必要です。',
+  'user_message.catalog_consolidation_blocked':
+    '重複するゲームカードで管理状態の競合が見つかりました。変更は行われず、復旧バンドルが作成されました。',
+  'user_message.rollback_also_failed':
+    '操作に失敗し、以前のファイル状態を完全に復元できませんでした。再試行する前にゲームファイルを確認してください。',
+  'user_message.elevation_cancelled': '管理者権限の要求がキャンセルされました。変更はありません。',
+  'user_message.elevation_policy_blocked':
+    'Windowsにより管理者権限の要求がブロックされました。システムポリシーを確認して再試行してください。',
+  'user_message.elevation_relaunch_failed':
+    '管理者権限でRenderPilotを再起動できませんでした。アプリを再起動してください。',
+  'user_message.elevation_unsupported':
+    'このプラットフォームでは管理者権限での再起動はサポートされていません。',
 
   'suggested_action.refresh_games': 'ゲームリストを更新して再試行してください。',
   'suggested_action.reload_game_details': 'ゲームの詳細を更新して再試行してください。',

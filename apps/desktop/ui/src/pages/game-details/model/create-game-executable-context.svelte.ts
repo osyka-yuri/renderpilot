@@ -1,4 +1,4 @@
-import { describeCommandErrorTechnical } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import {
   clearGameExecutableOverride,
   listGameExecutableCandidates,
@@ -56,7 +56,7 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
       if (activeGameId !== gameId) {
         return;
       }
-      loadError = describeCommandErrorTechnical(e);
+      loadError = formatPresentedError(e);
       effective = null;
       candidates = [];
     } finally {
@@ -80,7 +80,7 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
     try {
       await setGameExecutableOverride(gameId, absolutePath);
     } catch (e) {
-      loadError = describeCommandErrorTechnical(e);
+      loadError = formatPresentedError(e);
       return;
     }
     await reload(gameId);
@@ -94,7 +94,7 @@ export function createGameExecutableContext({ onChange }: CreateGameExecutableCo
     try {
       await clearGameExecutableOverride(gameId);
     } catch (e) {
-      loadError = describeCommandErrorTechnical(e);
+      loadError = formatPresentedError(e);
       return;
     }
     await reload(gameId);

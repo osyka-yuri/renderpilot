@@ -185,11 +185,29 @@
     </DialogHeader>
 
     <div class="grid max-h-[min(62vh,38rem)] gap-4 overflow-y-auto pe-1 text-sm">
-      {#if dialogState.kind === 'review' && dialogState.errorMessage !== null}
-        <Alert variant="destructive">
-          <TriangleAlertIcon />
+      {#if dialogState.kind === 'review' && dialogState.errorPresentation !== null}
+        <Alert
+          variant={dialogState.errorPresentation.severity === 'warning' ? 'warning' : 'destructive'}
+        >
+          <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>{t('addGame.cannotAddTitle')}</AlertTitle>
-          <AlertDescription>{dialogState.errorMessage}</AlertDescription>
+          <AlertDescription>
+            <p>{dialogState.errorPresentation.message}</p>
+            {#if dialogState.errorPresentation.suggestedActions.length > 0}
+              <ul>
+                {#each dialogState.errorPresentation.suggestedActions as action (action.code)}
+                  <li>{action.label}</li>
+                {/each}
+              </ul>
+            {/if}
+            {#if dialogState.errorPresentation.recoveryBundlePath !== undefined}
+              <p class="break-all">
+                {t('error.recoveryBundlePath', {
+                  path: dialogState.errorPresentation.recoveryBundlePath,
+                })}
+              </p>
+            {/if}
+          </AlertDescription>
         </Alert>
       {/if}
 

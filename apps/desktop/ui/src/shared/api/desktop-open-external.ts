@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-shell';
 import { isDesktopPreviewMode } from '@shared/api-preview';
+import { ClientError, reportClientError } from '@shared/errors';
 
 type OpenExternalOptions = {
   /** Browser-safe target used when the desktop runtime is unavailable. */
@@ -12,12 +13,18 @@ type OpenExternalOptions = {
  * fallback when supplied.
  */
 export async function openExternal(url: string, options: OpenExternalOptions = {}): Promise<void> {
-  if (isDesktopPreviewMode()) {
-    openBrowserWindow(options.previewUrl ?? url);
-    return;
-  }
+  try {
+    if (isDesktopPreviewMode()) {
+      openBrowserWindow(options.previewUrl ?? url);
+      return;
+    }
 
-  await open(url);
+    await open(url);
+  } catch (cause) {
+    const error = new ClientError('external_open_failed', cause);
+    reportClientError('open_external', error);
+    throw error;
+  }
 }
 
 function openBrowserWindow(url: string): void {

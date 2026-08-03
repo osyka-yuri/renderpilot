@@ -1,6 +1,6 @@
 import type { AutoScanResponse } from '@entities/game';
 import type { AddGameInspection, AddGameResult } from '@features/scan-libraries';
-import { DesktopCommandError } from '@shared/api';
+import { DesktopCommandError } from '@shared/errors';
 import { createGameSummaryFromDetails, getLatestOperationStatus } from '../build-game-summary';
 import {
   mockState,
@@ -28,14 +28,9 @@ export function mockInspectGameInstall(path: string): Promise<AddGameInspection>
     // invent an expansion from directory names; production returns one only
     // after InstallBoundaryAnalyzer proves the outer distribution root.
     if (!exists && contained.length > 0) {
-      throw new DesktopCommandError({
+      throw DesktopCommandError.fromDto({
         code: 'invalid_install_root',
-        severity: 'warning',
-        messageKey: 'user_message.invalid_install_root',
-        details:
-          'Choose the installation folder of one game. Drive roots, network share roots, and system folders cannot be added.',
-        reason: 'contains_proven_install',
-        suggestedActions: [],
+        reasonCode: 'contains_proven_install',
       });
     }
     const containing = exists ? undefined : findContainingManualGame(installKey);
@@ -121,8 +116,9 @@ export function mockInspectGameInstall(path: string): Promise<AddGameInspection>
       warnings: containing
         ? [
             {
+              contractStatus: 'known',
               code: 'inside_existing_install',
-              message: 'The selected folder belongs to an existing game.',
+              parameters: {},
             },
           ]
         : [],
@@ -208,7 +204,7 @@ export function mockScanAutoLibraries(): Promise<AutoScanResponse> {
       updatedGameIds: [...mockState.autoGameIds],
       changedGameIds: [...mockState.autoGameIds],
       removedGameIds: [],
-      errors: [],
+      partialFailureCount: 0,
     };
   });
 }

@@ -22,6 +22,14 @@ fn scan_auto_libraries_with_mode(
     };
 
     let changed_game_ids = result.delta.changed_game_ids();
+    for error in &result.errors {
+        log::warn!(
+            "Automatic library scan partial failure at {}: {}",
+            error.root,
+            error.message
+        );
+    }
+    let partial_failure_count = result.errors.len();
     AutoScanOutput {
         added_game_ids: result
             .delta
@@ -45,14 +53,7 @@ fn scan_auto_libraries_with_mode(
             .into_iter()
             .map(|game_id| game_id.as_str().to_owned())
             .collect(),
-        errors: result
-            .errors
-            .into_iter()
-            .map(|error| ScanErrorOutput {
-                root: error.root,
-                message: error.message,
-            })
-            .collect(),
+        partial_failure_count,
     }
 }
 
@@ -77,18 +78,8 @@ pub struct AutoScanOutput {
     pub changed_game_ids: Vec<String>,
     /// Games removed because an authoritative source no longer contains them.
     pub removed_game_ids: Vec<String>,
-    /// Per-root failures that did not prevent other sources from completing.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<ScanErrorOutput>,
-}
-
-/// Non-fatal failure for one automatic scan root.
-#[derive(Debug, serde::Serialize)]
-pub struct ScanErrorOutput {
-    /// Root that could not be scanned completely.
-    pub root: String,
-    /// User-safe diagnostic message.
-    pub message: String,
+    /// Count of per-root failures that did not prevent other sources from completing.
+    pub partial_failure_count: usize,
 }
 
 /// Reports that automatic discovery is unavailable on non-Windows platforms.
@@ -110,4 +101,30 @@ fn unsupported_platform_error() -> ApiError {
     ApiError::Service(renderpilot_orchestration::ServiceError::command_failed(
         "auto-scan is only supported on Windows",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::AutoScanOutput;
+
+    #[test]
+    fn auto_scan_serializes_only_the_partial_failure_count_for_zero_one_and_many() {
+        for count in [0, 1, 3] {
+            let value = serde_json::to_value(AutoScanOutput {
+                added_game_ids: vec![],
+                updated_game_ids: vec![],
+                changed_game_ids: vec![],
+                removed_game_ids: vec![],
+                partial_failure_count: count,
+            })
+            .expect("serialize auto-scan output");
+
+            assert_eq!(value.get("partialFailureCount"), Some(&json!(count)));
+            assert!(value.get("errors").is_none());
+            assert!(value.get("message").is_none());
+            assert!(!value.to_string().contains("root"));
+        }
+    }
 }

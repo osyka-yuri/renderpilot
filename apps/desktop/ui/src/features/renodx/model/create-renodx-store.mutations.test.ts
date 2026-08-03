@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@shared/notifications', () => ({
-  publishErrorNotification: vi.fn(),
+  publishPresentedErrorNotification: vi.fn(),
 }));
 
 vi.mock('@shared/lib', async (importOriginal) => {
@@ -10,7 +10,7 @@ vi.mock('@shared/lib', async (importOriginal) => {
 });
 
 import { clearDownloadProgress } from '@shared/lib';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { createRenoDxStore } from './create-renodx-store.svelte';
 import type { AvailabilityReport, RenoDxInstallState, RenoDxUpdateReport } from './types';
 import {
@@ -419,7 +419,7 @@ describe('createRenoDxStore', () => {
   });
 
   it('install() resolves false, clears busy, and notifies when the backend fails', async () => {
-    vi.mocked(publishErrorNotification).mockClear();
+    vi.mocked(publishPresentedErrorNotification).mockClear();
     const api = fakeApi({
       install: vi.fn(() => Promise.reject(new Error('boom'))),
     });
@@ -430,7 +430,7 @@ describe('createRenoDxStore', () => {
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
     expect(store.isInstalled).toBe(false);
-    expect(publishErrorNotification).toHaveBeenCalledTimes(1);
+    expect(publishPresentedErrorNotification).toHaveBeenCalledTimes(1);
   });
 
   it('installFromFile() resolves false and clears busy when the backend fails', async () => {

@@ -12,7 +12,11 @@ function flushTasks(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function createHarness(started = true, rejectedEvent: keyof CatalogEventPayloads | null = null) {
+function createHarness(
+  started = true,
+  rejectedEvent: keyof CatalogEventPayloads | null = null,
+  partialFailureCount = 0,
+) {
   const handlers = new Map<string, (payload: unknown) => void>();
   const stops = new Map<string, ReturnType<typeof vi.fn>>();
   const listenEvent: CatalogEventListener = (event, handler) => {
@@ -27,9 +31,10 @@ function createHarness(started = true, rejectedEvent: keyof CatalogEventPayloads
   const deps = {
     previewMode: false,
     listenEvent,
-    startBackgroundRefresh: vi.fn(() => Promise.resolve({ started })),
+    startBackgroundRefresh: vi.fn(() => Promise.resolve({ started, partialFailureCount })),
     startUpdater: vi.fn(),
     onCatalogDelta: vi.fn(),
+    onPartialScanFailures: vi.fn(),
     completeInitialCatalogSync: vi.fn(() => Promise.resolve()),
     enableCoverHydration: vi.fn(),
     reportError: vi.fn(),
@@ -89,6 +94,17 @@ describe('createInitialCatalogLifecycle', () => {
       forceCatalogRefresh: false,
     });
     expect(deps.enableCoverHydration).toHaveBeenCalledOnce();
+  });
+
+  it('reports partial scan failures from the completed background refresh', async () => {
+    const { deps } = createHarness(true, null, 2);
+    const lifecycle = createInitialCatalogLifecycle(deps);
+
+    lifecycle.startServices();
+    await flushTasks();
+
+    expect(deps.onPartialScanFailures).toHaveBeenCalledOnce();
+    expect(deps.onPartialScanFailures).toHaveBeenCalledWith(2);
   });
 
   it('uses completion fallback and enables covers when startup fails', async () => {

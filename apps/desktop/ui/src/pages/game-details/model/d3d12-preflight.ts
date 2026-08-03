@@ -1,6 +1,5 @@
 import type { SwapPlan, SwapPlanBlocker } from '@entities/operation';
-import { DesktopCommandError } from '@shared/api';
-import type { MessageKeyWithoutParams } from '@shared/i18n';
+import { ClientError } from '@shared/errors';
 import type { D3d12ExecutableAction } from '@shared/model';
 
 export const DEVELOPER_MODE_REQUIRED = 'developer_mode_required';
@@ -48,12 +47,9 @@ export function evaluateD3d12SwapPlan(plan: SwapPlan): D3d12PreflightResult<Prep
     ? firstNonBlank(plan.confirmation_token)
     : null;
   if (action?.requires_confirmation && confirmationToken === null) {
-    throw d3d12PreparationError(
-      'd3d12_confirmation_unavailable',
-      'gameDetails.d3d12.action.blocked',
-      'This D3D12 version cannot be applied in the current state.',
-      'The authoritative swap plan did not contain a confirmation token.',
-    );
+    throw new ClientError('d3d12_confirmation_unavailable', {
+      reason: 'missing_confirmation_token',
+    });
   }
 
   return {
@@ -96,38 +92,16 @@ function developerModeRecovery(
     : DEVELOPER_MODE_REQUIRED;
 }
 
-export function blockedSwapPreparationError(
-  blockers: readonly SwapPlanBlocker[],
-): DesktopCommandError {
+export function blockedSwapPreparationError(blockers: readonly SwapPlanBlocker[]): ClientError {
   const repairRequired = blockers.includes('d3d12_executable_repair_required');
-  return d3d12PreparationError(
+  return new ClientError(
     repairRequired ? 'd3d12_executable_repair_required' : 'd3d12_plan_blocked',
-    repairRequired ? 'gameDetails.d3d12.action.repair' : 'gameDetails.d3d12.action.blocked',
-    repairRequired
-      ? 'The EXE must be repaired before this D3D12 version can be applied.'
-      : 'This D3D12 version cannot be applied in the current state.',
-    blockers.length > 0 ? blockers.join(', ') : undefined,
+    blockers,
   );
 }
 
 function isDeveloperModeBlocker(blocker: SwapPlanBlocker): blocker is DeveloperModePlanBlocker {
   return blocker === DEVELOPER_MODE_REQUIRED || blocker === DEVELOPER_MODE_CHECK_UNAVAILABLE;
-}
-
-function d3d12PreparationError(
-  code: string,
-  messageKey: MessageKeyWithoutParams,
-  fallback: string,
-  debugDetails?: string,
-): DesktopCommandError {
-  return new DesktopCommandError({
-    code,
-    severity: 'error',
-    messageKey,
-    details: fallback,
-    suggestedActions: [],
-    debugDetails,
-  });
 }
 
 function firstNonBlank(...values: (string | null | undefined)[]): string | null {

@@ -60,20 +60,15 @@ pub enum ManifestKindStatus {
     Skipped,
     /// Kind loaded/fetched successfully.
     Ok,
-    /// Kind failed; message is user-safe / log-oriented.
-    Error {
-        /// Brief failure description.
-        message: String,
-    },
+    /// Kind failed. Technical detail is retained in backend logs.
+    Error,
 }
 
 impl ManifestKindStatus {
     fn from_result<T, E: std::fmt::Display>(result: &Result<T, E>) -> Self {
         match result {
             Ok(_) => Self::Ok,
-            Err(error) => Self::Error {
-                message: error.to_string(),
-            },
+            Err(_) => Self::Error,
         }
     }
 }
@@ -271,10 +266,19 @@ mod tests {
         let ok: Result<(), &str> = Ok(());
         let err: Result<(), &str> = Err("boom");
         assert_eq!(ManifestKindStatus::from_result(&ok), ManifestKindStatus::Ok);
-        assert_matches!(
+        assert_eq!(
             ManifestKindStatus::from_result(&err),
-            ManifestKindStatus::Error { message } if message.contains("boom")
+            ManifestKindStatus::Error
         );
+    }
+
+    #[test]
+    fn error_status_serializes_without_backend_prose() {
+        let value = serde_json::to_value(ManifestKindStatus::Error)
+            .expect("serialize manifest error status");
+
+        assert_eq!(value, serde_json::json!({ "status": "error" }));
+        assert!(value.get("message").is_none());
     }
 
     #[test]
@@ -297,15 +301,9 @@ mod tests {
         assert_eq!(report.outcome, ManifestRefreshOutcome::ForcedFetched);
         assert!(report.libraries_changed);
         assert_eq!(report.kinds.libraries, ManifestKindStatus::Ok);
-        assert_matches!(
-            report.kinds.renodx,
-            ManifestKindStatus::Error { message } if message.contains("renodx down")
-        );
+        assert_eq!(report.kinds.renodx, ManifestKindStatus::Error);
         assert_eq!(report.kinds.luma, ManifestKindStatus::Ok);
-        assert_matches!(
-            report.kinds.reshade,
-            ManifestKindStatus::Error { message } if message.contains("reshade down")
-        );
+        assert_eq!(report.kinds.reshade, ManifestKindStatus::Error);
     }
 
     #[test]

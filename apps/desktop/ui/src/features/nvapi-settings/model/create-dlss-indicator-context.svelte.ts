@@ -1,5 +1,6 @@
-import { describeCommandErrorTechnical } from '@shared/api';
-import { publishErrorNotification } from '@shared/notifications';
+import { formatPresentedError } from '@shared/error-presentation';
+import { ClientError, reportClientError } from '@shared/errors';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
 import { getDlssIndicatorState, setDlssIndicatorEnabled } from '../api/desktop';
 
@@ -33,7 +34,8 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
   let inFlight = false;
 
   function reportActionError(label: string, e: unknown): void {
-    publishErrorNotification(label, describeCommandErrorTechnical(e));
+    reportClientError('dlss_indicator_action', e);
+    publishPresentedErrorNotification(label, e);
   }
 
   // ── actions ──────────────────────────────────────────────────────
@@ -49,7 +51,7 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
       enabled = state.enabled;
       supported = state.supported;
     } catch (e) {
-      error = describeCommandErrorTechnical(e);
+      error = formatPresentedError(e);
     } finally {
       loaded = true;
       busy = false;
@@ -61,7 +63,7 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
     if (isElevated()) {
       return true;
     }
-    reportActionError(t('nvidia.adminRequired'), new Error(t('indicator.relaunchToToggle')));
+    reportActionError(t('nvidia.adminRequired'), new ClientError('nvapi_admin_required'));
     return false;
   }
 

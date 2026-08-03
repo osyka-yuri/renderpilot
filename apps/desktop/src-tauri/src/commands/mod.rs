@@ -1,7 +1,7 @@
 //! Tauri command handlers for the desktop frontend.
 //!
-//! Blocking catalog / filesystem work is dispatched via `run_desktop_command` to avoid
-//! stalling the async runtime.
+//! Blocking catalog / filesystem work is dispatched through `CommandBoundary`
+//! to avoid stalling the async runtime and to record mapped failures once.
 
 pub(crate) mod addon_catalog;
 mod app;
@@ -37,11 +37,12 @@ use validation::{require_non_empty_path, require_non_empty_string};
 
 /// Validates `game_id` and clones the managed orchestration context for a command.
 pub(crate) fn require_game_context(
+    boundary: &CommandBoundary,
     game_id: String,
     context: &tauri::State<'_, Arc<Context>>,
 ) -> Result<(String, Arc<Context>), CommandError> {
     Ok((
-        require_non_empty_string("game_id", game_id)?,
+        require_non_empty_string(boundary, "game_id", game_id)?,
         Arc::clone(context),
     ))
 }
@@ -104,25 +105,40 @@ pub(crate) fn download_progress_emitter(
     }
 }
 
-pub(crate) async fn run_desktop_command<F>(command: F) -> JsonCommandResult
-where
-    F: FnOnce() -> DesktopCommandResult + Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(command)
-        .await
-        .map_err(CommandError::task_failed)?
-        .map_err(CommandError::from)
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CommandBoundary {
+    operation: &'static str,
 }
 
-pub(crate) async fn run_desktop_async_command<F, Fut>(command: F) -> JsonCommandResult
-where
-    F: FnOnce() -> Fut + Send + 'static,
-    Fut: std::future::Future<Output = DesktopCommandResult> + Send + 'static,
-{
-    tauri::async_runtime::spawn(command())
-        .await
-        .map_err(CommandError::task_failed)?
-        .map_err(CommandError::from)
+impl CommandBoundary {
+    pub(crate) const fn new(operation: &'static str) -> Self {
+        Self { operation }
+    }
+
+    pub(crate) fn record(self, error: CommandError) -> CommandError {
+        error.recorded(self.operation)
+    }
+
+    pub(crate) async fn run<F>(self, command: F) -> JsonCommandResult
+    where
+        F: FnOnce() -> DesktopCommandResult + Send + 'static,
+    {
+        tauri::async_runtime::spawn_blocking(command)
+            .await
+            .map_err(|error| self.record(CommandError::task_failed(error)))?
+            .map_err(|error| self.record(CommandError::from(error)))
+    }
+
+    pub(crate) async fn run_async<F, Fut>(self, command: F) -> JsonCommandResult
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = DesktopCommandResult> + Send + 'static,
+    {
+        tauri::async_runtime::spawn(command())
+            .await
+            .map_err(|error| self.record(CommandError::task_failed(error)))?
+            .map_err(|error| self.record(CommandError::from(error)))
+    }
 }
 
 #[tauri::command]
@@ -130,10 +146,13 @@ pub async fn inspect_game_install(
     path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let path = require_non_empty_path(path)?;
+    let boundary = CommandBoundary::new("inspect_game_install");
+    let path = require_non_empty_path(&boundary, path)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::inspect_game_install(&context, &path)).await
+    boundary
+        .run(move || desktop::inspect_game_install(&context, &path))
+        .await
 }
 
 #[tauri::command]
@@ -145,23 +164,27 @@ pub async fn add_game(
     inspection_fingerprint: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let selected_root = require_non_empty_path(selected_root)?;
-    let chosen_executable = chosen_executable.map(require_non_empty_path).transpose()?;
+    let boundary = CommandBoundary::new("add_game");
+    let selected_root = require_non_empty_path(&boundary, selected_root)?;
+    let chosen_executable = chosen_executable
+        .map(|path| require_non_empty_path(&boundary, path))
+        .transpose()?;
     let inspection_fingerprint =
-        require_non_empty_string("inspection_fingerprint", inspection_fingerprint)?;
+        require_non_empty_string(&boundary, "inspection_fingerprint", inspection_fingerprint)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || {
-        desktop::add_game(
-            &context,
-            selected_root,
-            &root_choice,
-            allow_root_correction,
-            chosen_executable,
-            inspection_fingerprint,
-        )
-    })
-    .await
+    boundary
+        .run(move || {
+            desktop::add_game(
+                &context,
+                selected_root,
+                &root_choice,
+                allow_root_correction,
+                chosen_executable,
+                inspection_fingerprint,
+            )
+        })
+        .await
 }
 
 #[tauri::command]
@@ -169,15 +192,21 @@ pub async fn remove_game_from_catalog(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    run_desktop_command(move || desktop::remove_game_from_catalog(&context, game_id)).await
+    let boundary = CommandBoundary::new("remove_game_from_catalog");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    boundary
+        .run(move || desktop::remove_game_from_catalog(&context, game_id))
+        .await
 }
 
 #[tauri::command]
 pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("scan_auto_libraries");
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::scan_auto_libraries(&context)).await
+    boundary
+        .run(move || desktop::scan_auto_libraries(&context))
+        .await
 }
 
 /// Force-refreshes all remote CDN manifests (libraries, RenoDX, Luma, ReShade).
@@ -191,10 +220,11 @@ pub async fn scan_auto_libraries(context: tauri::State<'_, Arc<Context>>) -> Jso
 pub async fn refresh_remote_manifests(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("refresh_remote_manifests");
     let output = tauri::async_runtime::spawn(desktop::refresh_remote_manifests_forced_output())
         .await
-        .map_err(CommandError::task_failed)?
-        .map_err(CommandError::from)?;
+        .map_err(|error| boundary.record(CommandError::task_failed(error)))?
+        .map_err(|error| boundary.record(CommandError::from(error)))?;
     if output.library_catalog_refreshed {
         // The library catalog is an authoritative atomic file rather than a
         // SQLite table, so its revision must invalidate the card projection
@@ -212,14 +242,17 @@ pub async fn refresh_remote_manifests(
 pub async fn refresh_catalog_capabilities(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let refreshed =
-        match addon_catalog::refresh_catalog_addon_capabilities(Arc::clone(&context)).await {
-            Ok(refreshed) => refreshed,
-            Err(error) => {
-                log::warn!("failed to rebuild catalog add-on capabilities: {error}");
-                false
-            }
-        };
+    let refreshed = match addon_catalog::refresh_catalog_addon_capabilities(Arc::clone(&context))
+        .await
+    {
+        Ok(refreshed) => refreshed,
+        Err(error) => {
+            log::warn!(
+                "Desktop command warning [operation=refresh_catalog_capabilities code=capability_refresh_failed]: {error}"
+            );
+            false
+        }
+    };
     Ok(serde_json::json!({ "refreshed": refreshed }))
 }
 
@@ -228,6 +261,7 @@ pub async fn query_game_cards(
     query: QueryGameCardsDto,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("query_game_cards");
     let QueryGameCardsArgs {
         search_query,
         selected_libraries,
@@ -240,28 +274,29 @@ pub async fn query_game_cards(
         sort_direction,
         limit,
         offset,
-    } = query.into_desktop_args()?;
+    } = query.into_desktop_args(&boundary)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || {
-        desktop::query_game_cards(
-            &context,
-            desktop::QueryGameCardsRequest {
-                search_query,
-                selected_libraries,
-                selected_addons,
-                selected_launchers,
-                launcher_order,
-                show_hidden,
-                favorites_only,
-                sort_field,
-                sort_direction,
-                page_limit: limit,
-                page_offset: offset,
-            },
-        )
-    })
-    .await
+    boundary
+        .run(move || {
+            desktop::query_game_cards(
+                &context,
+                desktop::QueryGameCardsRequest {
+                    search_query,
+                    selected_libraries,
+                    selected_addons,
+                    selected_launchers,
+                    launcher_order,
+                    show_hidden,
+                    favorites_only,
+                    sort_field,
+                    sort_direction,
+                    page_limit: limit,
+                    page_offset: offset,
+                },
+            )
+        })
+        .await
 }
 
 #[tauri::command]
@@ -269,14 +304,17 @@ pub async fn bootstrap_games_catalog(
     limit: u32,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("bootstrap_games_catalog");
     if limit == 0 || limit > 10_000 {
-        return Err(CommandError::invalid_argument(
+        return Err(boundary.record(CommandError::invalid_argument(
             "limit",
             "must be between 1 and 10000",
-        ));
+        )));
     }
     let context = Arc::clone(&context);
-    run_desktop_command(move || desktop::bootstrap_games_catalog(&context, i64::from(limit))).await
+    boundary
+        .run(move || desktop::bootstrap_games_catalog(&context, i64::from(limit)))
+        .await
 }
 
 /// Starts non-critical catalog maintenance after the frontend's first catalog paint.
@@ -285,8 +323,11 @@ pub async fn start_background_refresh(
     context: tauri::State<'_, Arc<Context>>,
     app: tauri::AppHandle,
 ) -> JsonCommandResult {
-    let started = background_catalog_refresh::start(Arc::clone(&context), app).await;
-    Ok(serde_json::json!({ "started": started }))
+    let refresh = background_catalog_refresh::start(Arc::clone(&context), app).await;
+    Ok(serde_json::json!({
+        "started": refresh.started,
+        "partialFailureCount": refresh.partial_failure_count,
+    }))
 }
 
 #[tauri::command]
@@ -294,9 +335,12 @@ pub async fn get_game_details(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("get_game_details");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::get_game_details(&context, game_id)).await
+    boundary
+        .run(move || desktop::get_game_details(&context, game_id))
+        .await
 }
 
 #[tauri::command]
@@ -304,9 +348,12 @@ pub async fn fetch_game_cover(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("fetch_game_cover");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::fetch_game_cover(&context, game_id)).await
+    boundary
+        .run(move || desktop::fetch_game_cover(&context, game_id))
+        .await
 }
 
 #[tauri::command]
@@ -314,9 +361,12 @@ pub async fn clear_game_cover(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("clear_game_cover");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::clear_game_cover(&context, game_id)).await
+    boundary
+        .run(move || desktop::clear_game_cover(&context, game_id))
+        .await
 }
 
 #[tauri::command]
@@ -325,10 +375,13 @@ pub async fn set_game_cover(
     source_path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let source_path = require_non_empty_string("source_path", source_path)?;
+    let boundary = CommandBoundary::new("set_game_cover");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let source_path = require_non_empty_string(&boundary, "source_path", source_path)?;
 
-    run_desktop_command(move || desktop::set_game_cover(&context, game_id, source_path)).await
+    boundary
+        .run(move || desktop::set_game_cover(&context, game_id, source_path))
+        .await
 }
 
 #[tauri::command]
@@ -337,9 +390,12 @@ pub async fn set_game_favorite(
     is_favorite: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("set_game_favorite");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::set_game_favorite(&context, game_id, is_favorite)).await
+    boundary
+        .run(move || desktop::set_game_favorite(&context, game_id, is_favorite))
+        .await
 }
 
 #[tauri::command]
@@ -348,9 +404,12 @@ pub async fn set_game_hidden(
     is_hidden: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("set_game_hidden");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::set_game_hidden(&context, game_id, is_hidden)).await
+    boundary
+        .run(move || desktop::set_game_hidden(&context, game_id, is_hidden))
+        .await
 }
 
 #[tauri::command]
@@ -358,10 +417,13 @@ pub async fn get_catalog_setting(
     key: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let key = require_non_empty_string("key", key)?;
+    let boundary = CommandBoundary::new("get_catalog_setting");
+    let key = require_non_empty_string(&boundary, "key", key)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::get_catalog_setting(&context, key)).await
+    boundary
+        .run(move || desktop::get_catalog_setting(&context, key))
+        .await
 }
 
 #[tauri::command]
@@ -370,10 +432,13 @@ pub async fn set_catalog_setting(
     value: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let key = require_non_empty_string("key", key)?;
+    let boundary = CommandBoundary::new("set_catalog_setting");
+    let key = require_non_empty_string(&boundary, "key", key)?;
     let context = Arc::clone(&context);
 
-    run_desktop_command(move || desktop::set_catalog_setting(&context, key, value)).await
+    boundary
+        .run(move || desktop::set_catalog_setting(&context, key, value))
+        .await
 }
 
 #[tauri::command]
@@ -384,20 +449,22 @@ pub async fn apply_swap(
     confirmation_token: Option<String>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let component_id = require_non_empty_string("component_id", component_id)?;
-    let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+    let boundary = CommandBoundary::new("apply_swap");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let component_id = require_non_empty_string(&boundary, "component_id", component_id)?;
+    let artifact_id = require_non_empty_string(&boundary, "artifact_id", artifact_id)?;
 
-    run_desktop_command(move || {
-        desktop::apply_swap(
-            &context,
-            game_id,
-            component_id,
-            artifact_id,
-            confirmation_token.as_deref(),
-        )
-    })
-    .await
+    boundary
+        .run(move || {
+            desktop::apply_swap(
+                &context,
+                game_id,
+                component_id,
+                artifact_id,
+                confirmation_token.as_deref(),
+            )
+        })
+        .await
 }
 
 #[tauri::command]
@@ -407,10 +474,12 @@ pub async fn plan_swap(
     artifact_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let component_id = require_non_empty_string("component_id", component_id)?;
-    let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
-    run_desktop_command(move || desktop::plan_swap(&context, game_id, component_id, artifact_id))
+    let boundary = CommandBoundary::new("plan_swap");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let component_id = require_non_empty_string(&boundary, "component_id", component_id)?;
+    let artifact_id = require_non_empty_string(&boundary, "artifact_id", artifact_id)?;
+    boundary
+        .run(move || desktop::plan_swap(&context, game_id, component_id, artifact_id))
         .await
 }
 
@@ -420,10 +489,13 @@ pub async fn rollback_component(
     component_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let component_id = require_non_empty_string("component_id", component_id)?;
+    let boundary = CommandBoundary::new("rollback_component");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let component_id = require_non_empty_string(&boundary, "component_id", component_id)?;
 
-    run_desktop_command(move || desktop::rollback_component(&context, game_id, component_id)).await
+    boundary
+        .run(move || desktop::rollback_component(&context, game_id, component_id))
+        .await
 }
 
 #[tauri::command]
@@ -432,15 +504,20 @@ pub async fn plan_rollback(
     component_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
-    let component_id = require_non_empty_string("component_id", component_id)?;
-    run_desktop_command(move || desktop::plan_rollback(&context, game_id, component_id)).await
+    let boundary = CommandBoundary::new("plan_rollback");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let component_id = require_non_empty_string(&boundary, "component_id", component_id)?;
+    boundary
+        .run(move || desktop::plan_rollback(&context, game_id, component_id))
+        .await
 }
 
 #[tauri::command]
 pub async fn list_library_packages(context: tauri::State<'_, Arc<Context>>) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("list_library_packages");
     let context = Arc::clone(&context);
-    run_desktop_async_command(move || async move { desktop::list_library_packages(&context).await })
+    boundary
+        .run_async(move || async move { desktop::list_library_packages(&context).await })
         .await
 }
 
@@ -450,19 +527,21 @@ pub async fn download_library_package(
     package_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let package_id = require_non_empty_string("package_id", package_id)?;
+    let boundary = CommandBoundary::new("download_library_package");
+    let package_id = require_non_empty_string(&boundary, "package_id", package_id)?;
     let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, package_id.clone());
-        desktop::download_library_package(
-            &context,
-            package_id,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
+    boundary
+        .run_async(move || async move {
+            let emit = download_progress_emitter(app, package_id.clone());
+            desktop::download_library_package(
+                &context,
+                package_id,
+                Some(&emit as &desktop::ProgressObserver<'_>),
+            )
+            .await
+        })
         .await
-    })
-    .await
 }
 
 #[tauri::command]
@@ -471,19 +550,21 @@ pub async fn download_artifact(
     artifact_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let artifact_id = require_non_empty_string("artifact_id", artifact_id)?;
+    let boundary = CommandBoundary::new("download_artifact");
+    let artifact_id = require_non_empty_string(&boundary, "artifact_id", artifact_id)?;
     let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, artifact_id.clone());
-        desktop::download_artifact(
-            &context,
-            artifact_id,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
+    boundary
+        .run_async(move || async move {
+            let emit = download_progress_emitter(app, artifact_id.clone());
+            desktop::download_artifact(
+                &context,
+                artifact_id,
+                Some(&emit as &desktop::ProgressObserver<'_>),
+            )
+            .await
+        })
         .await
-    })
-    .await
 }
 
 #[tauri::command]
@@ -491,11 +572,13 @@ pub async fn delete_library_package(
     package_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let package_id = require_non_empty_string("package_id", package_id)?;
+    let boundary = CommandBoundary::new("delete_library_package");
+    let package_id = require_non_empty_string(&boundary, "package_id", package_id)?;
     let context = Arc::clone(&context);
 
-    run_desktop_async_command(move || async move {
-        desktop::delete_library_package(&context, package_id).await
-    })
-    .await
+    boundary
+        .run_async(
+            move || async move { desktop::delete_library_package(&context, package_id).await },
+        )
+        .await
 }

@@ -24,10 +24,6 @@ vi.mock('@features/cover-ops', () => ({
   publishCoverUpdatedNotification: vi.fn(),
 }));
 
-vi.mock('@shared/api', () => ({
-  describeCommandError: vi.fn((error: unknown) => String(error)),
-}));
-
 vi.mock('./games-page-cover-ops', () => ({
   focusMenuTrigger: vi.fn(),
   selectCoverFilePath: vi.fn(),

@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "commandErrors": [
+    {
+      "code": "invalid_argument",
+      "rustVariant": "InvalidArgument",
+      "messageKey": "user_message.invalid_argument",
+      "severity": "warning",
+      "actions": ["retry_after_required_data"]
+    },
+    {
+      "code": "invalid_install_root",
+      "rustVariant": "InvalidInstallRoot",
+      "messageKey": "user_message.invalid_install_root",
+      "severity": "warning",
+      "actions": [],
+      "reasonCodes": ["filesystem_root", "system_directory", "contains_proven_install"]
+    },
+    {
+      "code": "multiple_installs_detected",
+      "rustVariant": "MultipleInstallsDetected",
+      "messageKey": "user_message.multiple_installs_detected",
+      "severity": "warning",
+      "actions": []
+    },
+    {
+      "code": "stale_install_inspection",
+      "rustVariant": "StaleInstallInspection",
+      "messageKey": "user_message.stale_install_inspection",
+      "severity": "warning",
+      "actions": []
+    },
+    {
+      "code": "root_correction_cleanup_required",
+      "rustVariant": "RootCorrectionCleanupRequired",
+      "messageKey": "user_message.root_correction_cleanup_required",
+      "severity": "warning",
+      "actions": []
+    },
+    {
+      "code": "root_correction_blocked",
+      "rustVariant": "RootCorrectionBlocked",
+      "messageKey": "user_message.root_correction_blocked",
+      "severity": "warning",
+      "actions": ["reload_game_details"]
+    },
+    {
+      "code": "managed_cleanup_ambiguous",
+      "rustVariant": "ManagedCleanupAmbiguous",
+      "messageKey": "user_message.managed_cleanup_ambiguous",
+      "severity": "error",
+      "actions": ["reload_game_details"],
+      "recoveryBundlePath": true
+    },
+    {
+      "code": "catalog_consolidation_blocked",
+      "rustVariant": "CatalogConsolidationBlocked",
+      "messageKey": "user_message.catalog_consolidation_blocked",
+      "severity": "error",
+      "actions": ["refresh_or_scan_game_folder"],
+      "recoveryBundlePath": true
+    },
+    {
+      "code": "game_removal_cleanup_failed",
+      "rustVariant": "GameRemovalCleanupFailed",
+      "messageKey": "user_message.game_removal_cleanup_failed",
+      "severity": "error",
+      "actions": ["reload_game_details"]
+    },
+    {
+      "code": "invalid_game_id",
+      "rustVariant": "InvalidGameId",
+      "messageKey": "user_message.invalid_game_reference",
+      "severity": "warning",
+      "actions": ["refresh_games"]
+    },
+    {
+      "code": "invalid_component_id",
+      "rustVariant": "InvalidComponentId",
+      "messageKey": "user_message.invalid_component_reference",
+      "severity": "warning",
+      "actions": ["reload_game_details"]
+    },
+    {
+      "code": "invalid_artifact_id",
+      "rustVariant": "InvalidArtifactId",
+      "messageKey": "user_message.invalid_artifact_reference",
+      "severity": "warning",
+      "actions": ["refresh_candidates"]
+    },
+    {
+      "code": "stale_replacement_source",
+      "rustVariant": "StaleReplacementSource",
+      "messageKey": "user_message.stale_replacement_source",
+      "severity": "warning",
+      "actions": ["refresh_candidates"]
+    },
+    {
+      "code": "invalid_operation_id",
+      "rustVariant": "InvalidOperationId",
+      "messageKey": "user_message.invalid_operation_reference",
+      "severity": "warning",
+      "actions": ["rebuild_plan_or_reload_operations"]
+    },
+    {
+      "code": "serialization_failed",
+      "rustVariant": "SerializationFailed",
+      "messageKey": "user_message.response_serialization_failed",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "confirmation_token_mismatch",
+      "rustVariant": "ConfirmationTokenMismatch",
+      "messageKey": "user_message.plan_changed_rebuild",
+      "severity": "warning",
+      "actions": ["rebuild_operation_plan"]
+    },
+    {
+      "code": "game_not_found",
+      "rustVariant": "GameNotFound",
+      "messageKey": "user_message.game_not_in_catalog",
+      "severity": "warning",
+      "actions": ["refresh_or_scan_game_folder"]
+    },
+    {
+      "code": "operation_not_found",
+      "rustVariant": "OperationNotFound",
+      "messageKey": "user_message.operation_not_found",
+      "severity": "warning",
+      "actions": ["rebuild_plan_or_reload_operations"]
+    },
+    {
+      "code": "artifact_not_found",
+      "rustVariant": "ArtifactNotFound",
+      "messageKey": "user_message.artifact_not_found",
+      "severity": "warning",
+      "actions": ["refresh_candidates"]
+    },
+    {
+      "code": "component_not_found",
+      "rustVariant": "ComponentNotFound",
+      "messageKey": "user_message.component_not_found",
+      "severity": "warning",
+      "actions": ["reload_game_details"]
+    },
+    {
+      "code": "invalid_operation_state",
+      "rustVariant": "InvalidOperationState",
+      "messageKey": "user_message.invalid_operation_state",
+      "severity": "warning",
+      "actions": ["rebuild_plan_or_reload_operations"]
+    },
+    {
+      "code": "command_failed",
+      "rustVariant": "CommandFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "rollback_also_failed",
+      "rustVariant": "RollbackAlsoFailed",
+      "messageKey": "user_message.rollback_also_failed",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "storage_failed",
+      "rustVariant": "StorageFailed",
+      "messageKey": "user_message.storage_failed",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "provider_failed",
+      "rustVariant": "ProviderFailed",
+      "messageKey": "user_message.provider_failed",
+      "severity": "error",
+      "actions": ["retry_or_restart"]
+    },
+    {
+      "code": "detection_failed",
+      "rustVariant": "DetectionFailed",
+      "messageKey": "user_message.detection_failed",
+      "severity": "error",
+      "actions": ["refresh_or_scan_game_folder"]
+    },
+    {
+      "code": "command_task_failed",
+      "rustVariant": "CommandTaskFailed",
+      "messageKey": "user_message.command_task_failed",
+      "severity": "error",
+      "actions": ["retry_or_restart"]
+    },
+    {
+      "code": "steamgriddb_api_key_missing",
+      "rustVariant": "SteamGridDbApiKeyMissing",
+      "messageKey": "user_message.steamgriddb_api_key_missing",
+      "severity": "warning",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "unsupported_cover_image_type",
+      "rustVariant": "UnsupportedCoverImageType",
+      "messageKey": "user_message.unsupported_cover_image_type",
+      "severity": "warning",
+      "actions": ["retry_or_restart"]
+    },
+    {
+      "code": "cover_download_failed",
+      "rustVariant": "CoverDownloadFailed",
+      "messageKey": "user_message.cover_download_failed",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "cover_not_found",
+      "rustVariant": "CoverNotFound",
+      "messageKey": "user_message.cover_artwork_not_found",
+      "severity": "warning",
+      "actions": ["refresh_or_scan_game_folder"]
+    },
+    {
+      "code": "cover_io_error",
+      "rustVariant": "CoverIoError",
+      "messageKey": "user_message.cover_file_system_error",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "nvapi_requires_elevation",
+      "rustVariant": "NvapiRequiresElevation",
+      "messageKey": "user_message.nvapi_requires_administrator",
+      "severity": "warning",
+      "actions": ["relaunch_as_administrator"]
+    },
+    {
+      "code": "elevation_cancelled",
+      "rustVariant": "ElevationCancelled",
+      "messageKey": "user_message.elevation_cancelled",
+      "severity": "warning",
+      "actions": []
+    },
+    {
+      "code": "elevation_policy_blocked",
+      "rustVariant": "ElevationPolicyBlocked",
+      "messageKey": "user_message.elevation_policy_blocked",
+      "severity": "error",
+      "actions": ["retry_or_restart"]
+    },
+    {
+      "code": "elevation_relaunch_failed",
+      "rustVariant": "ElevationRelaunchFailed",
+      "messageKey": "user_message.elevation_relaunch_failed",
+      "severity": "error",
+      "actions": ["retry_or_restart"]
+    },
+    {
+      "code": "elevation_unsupported",
+      "rustVariant": "ElevationUnsupported",
+      "messageKey": "user_message.elevation_unsupported",
+      "severity": "error",
+      "actions": []
+    }
+  ],
+  "suggestedActions": [
+    { "code": "refresh_games", "messageKey": "suggested_action.refresh_games" },
+    { "code": "reload_game_details", "messageKey": "suggested_action.reload_game_details" },
+    { "code": "refresh_candidates", "messageKey": "suggested_action.refresh_candidates" },
+    {
+      "code": "rebuild_plan_or_reload_operations",
+      "messageKey": "suggested_action.rebuild_plan_or_reload_operations"
+    },
+    {
+      "code": "retry_after_required_data",
+      "messageKey": "suggested_action.retry_after_required_data"
+    },
+    { "code": "inspect_logs", "messageKey": "suggested_action.inspect_logs" },
+    { "code": "retry_or_restart", "messageKey": "suggested_action.retry_or_restart" },
+    {
+      "code": "rebuild_operation_plan",
+      "messageKey": "suggested_action.rebuild_operation_plan"
+    },
+    {
+      "code": "refresh_or_scan_game_folder",
+      "messageKey": "suggested_action.refresh_or_scan_game_folder"
+    },
+    {
+      "code": "relaunch_as_administrator",
+      "messageKey": "suggested_action.relaunch_as_administrator"
+    }
+  ]
+}

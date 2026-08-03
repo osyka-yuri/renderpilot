@@ -112,6 +112,13 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'error.boundary.description':
     'Auf diesem Bildschirm ist ein unerwarteter Fehler aufgetreten. Versuchen Sie es erneut oder wechseln Sie in einen anderen Bereich.',
   'error.boundary.reset': 'Erneut versuchen',
+  'error.desktopTransportFailed':
+    'Der Desktop-Dienst hat eine ungültige Antwort zurückgegeben. Versuchen Sie die Aktion erneut.',
+  'error.unexpectedClient':
+    'Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie die Aktion erneut.',
+  'error.localeLoadFailed':
+    'Die ausgewählte Sprache konnte nicht geladen werden. Die vorherige Sprache bleibt aktiv.',
+  'error.recoveryBundlePath': 'Wiederherstellungspaket: {path}',
   'pageLoad.loading': 'Seite wird geladen…',
   'pageLoad.error.title': 'Diese Seite konnte nicht geöffnet werden',
   'pageLoad.error.description':
@@ -211,6 +218,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Dieser Ordner kann nicht separat hinzugefügt werden, da er keine lesbare Spiel-Programmdatei enthält.',
   'addGame.warning.filesystemProbeError':
     'Ein Teil der Installation konnte nicht geprüft werden. Überprüfen Sie die Dateizugriffsrechte.',
+  'addGame.warning.unknown':
+    'Bei der Spielprüfung ist eine Warnung aufgetreten, die diese RenderPilot-Version nicht anzeigen kann.',
   'games.libraryActions': 'Aktionen',
   'games.search': 'Spiele suchen',
   'games.openFilters': 'Filter',
@@ -499,20 +508,25 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     one: '1 Ordner konnte nicht gescannt werden.',
     other: '{count} Ordner konnten nicht gescannt werden.',
   }),
+  'scan.automaticFailed':
+    'Die automatische Bibliothekssuche ist fehlgeschlagen. Die Spieleliste wurde trotzdem aktualisiert.',
 
   'coverSync.failed': 'Cover konnten nicht synchronisiert werden.',
   'coverSync.refreshFailed': 'Cover konnten nicht synchronisiert werden.',
+  'coverSync.failure.single':
+    'Das Cover für {title} konnte nicht heruntergeladen werden: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'Cover für {count} Spiel konnten nicht heruntergeladen werden. Erster Fehler: {summary}',
+    other:
+      'Cover für {count} Spiele konnten nicht heruntergeladen werden. Erster Fehler: {summary}',
+  }),
+  'coverSync.failure.hint': 'Prüfen Sie die Cover-Quellen und die SteamGridDB-Einstellungen.',
 
   'nvidia.adminRequired': 'Administratorrechte erforderlich',
-  'nvidia.relaunchTo': 'Starten Sie als Administrator neu, um {action}.',
-  'nvidia.action.changeSetting': 'Einstellungen anzuwenden',
-  'nvidia.action.revertSetting': 'Einstellungen zurückzusetzen',
   'nvidia.changeSettingFailed': 'Einstellungen konnten nicht angewendet werden',
   'nvidia.revertDefaultFailed': 'Standardeinstellungen konnten nicht wiederhergestellt werden',
   'nvidia.revertBaselineFailed': 'Anfangseinstellungen konnten nicht wiederhergestellt werden',
 
-  'indicator.relaunchToToggle':
-    'Starten Sie als Administrator neu, um den DLSS-Indikator umzuschalten.',
   'indicator.changeFailed': 'DLSS-Indikator konnte nicht umgeschaltet werden',
 
   'libraries.column.version': 'Version',
@@ -569,6 +583,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Bereinigen Sie den aktiven Spielzustand in der vorhandenen Karte, bevor Sie den Stammordner ändern.',
   'user_message.managed_cleanup_ambiguous':
     'RenderPilot hat sich überschneidende verwaltete Änderungen gefunden, deren sichere Rücksetzreihenfolge nicht belegt werden kann. Es wurde nichts geändert und ein Wiederherstellungspaket wurde erstellt.',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot hat widersprüchliche verwaltete Zustände in doppelten Spielkarten gefunden. Es wurde nichts geändert und ein Wiederherstellungspaket erstellt.',
   'user_message.game_removal_cleanup_failed':
     'RenderPilot konnte die ursprünglichen Spieldateien nicht wiederherstellen. Die Karte wurde daher nicht entfernt. Prüfen Sie die Spieldateien und versuchen Sie es erneut.',
   'user_message.invalid_game_reference': 'Spiel nicht gefunden.',
@@ -583,6 +599,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'user_message.component_not_found': 'Komponente nicht gefunden.',
   'user_message.invalid_operation_state': 'Diese Aktion ist derzeit nicht verfügbar.',
   'user_message.operation_could_not_complete': 'Aktion konnte nicht abgeschlossen werden.',
+  'user_message.rollback_also_failed':
+    'Die Aktion ist fehlgeschlagen und RenderPilot konnte den vorherigen Dateistand nicht vollständig wiederherstellen. Prüfen Sie die Spieldateien, bevor Sie es erneut versuchen.',
   'user_message.command_task_failed': 'Befehl konnte nicht ausgeführt werden.',
   'user_message.storage_failed':
     'Der Katalog der App konnte nicht gelesen oder geschrieben werden.',
@@ -599,6 +617,14 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Dieses Update konnte nicht angewendet werden, weil die Quelldatei außerhalb von RenderPilot ersetzt oder geändert wurde. Bitte wählen Sie die Version erneut — möglicherweise ist ein Download erforderlich.',
   'user_message.nvapi_requires_administrator':
     'Zum Ändern dieser Einstellung sind Administratorrechte erforderlich.',
+  'user_message.elevation_cancelled':
+    'Die Administratoranforderung wurde abgebrochen. Es wurden keine Änderungen vorgenommen.',
+  'user_message.elevation_policy_blocked':
+    'Windows hat die Administratoranforderung blockiert. Prüfen Sie die Systemrichtlinie und versuchen Sie es erneut.',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot konnte nicht mit Administratorrechten neu gestartet werden. Starten Sie die App erneut.',
+  'user_message.elevation_unsupported':
+    'Ein Neustart mit Administratorrechten wird auf dieser Plattform nicht unterstützt.',
 
   'suggested_action.refresh_games':
     'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',

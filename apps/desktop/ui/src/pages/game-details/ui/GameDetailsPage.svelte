@@ -25,9 +25,9 @@
   import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
   import Loader2Icon from '@lucide/svelte/icons/loader-2';
   import { t } from '@shared/i18n';
-  import { describeCommandErrorTechnical } from '@shared/api';
+  import { reportClientError } from '@shared/errors';
   import { sumDownloadFractions } from '@shared/lib';
-  import { publishErrorNotification } from '@shared/notifications';
+  import { publishPresentedErrorNotification } from '@shared/notifications';
   import type { SettingFamily } from '@features/nvapi-settings';
   import { RenoDxCard, createRenoDxStore } from '@features/renodx';
   import { LumaCard, createLumaStore } from '@features/luma';
@@ -180,14 +180,13 @@
 
   function reportUpdateAllError(error: unknown): void {
     const failureCount = error instanceof UpdateAllError ? error.failures.length : 1;
-    const technical = describeCommandErrorTechnical(
-      error instanceof UpdateAllError ? error.failures[0].error : error,
-    );
-    publishErrorNotification(
+    const primaryError =
+      error instanceof UpdateAllError ? (error.failures[0]?.error ?? error) : error;
+    publishPresentedErrorNotification(
       t('gameDetails.updateAll.partialFailure', { count: failureCount }),
-      technical,
+      primaryError,
     );
-    console.warn('Update-all workflow failed after attempting eligible updates', error);
+    reportClientError('update_all_workflow', primaryError);
   }
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));

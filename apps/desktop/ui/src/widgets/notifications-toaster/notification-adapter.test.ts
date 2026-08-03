@@ -28,6 +28,7 @@ describe('notification-adapter', () => {
       severity: 'error',
       title: 'Error',
       description: 'Missing file',
+      details: ['Inspect the logs.', 'Recovery bundle: C:/Recovery/bundle'],
       important: true,
     };
 
@@ -40,7 +41,8 @@ describe('notification-adapter', () => {
     expect(title).toBe('Error');
     expect(options).toMatchObject({
       id: 'desktop-status',
-      description: 'Missing file',
+      description: 'Missing file\nInspect the logs.\nRecovery bundle: C:/Recovery/bundle',
+      descriptionClass: 'whitespace-pre-line',
       important: true,
     });
 

@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 use super::{
+    CommandBoundary,
     error::CommandError,
     validation::{reject_empty_items, trim_string, trim_string_vec},
 };
@@ -127,20 +128,26 @@ pub(crate) struct QueryGameCardsArgs {
 }
 
 impl QueryGameCardsDto {
-    pub(super) fn into_desktop_args(self) -> Result<QueryGameCardsArgs, CommandError> {
+    pub(super) fn into_desktop_args(
+        self,
+        boundary: &CommandBoundary,
+    ) -> Result<QueryGameCardsArgs, CommandError> {
         let search_query = trim_string(&self.search_query);
         let selected_libraries = trim_string_vec(self.selected_libraries);
         let selected_addons = trim_string_vec(self.selected_addons);
         let selected_launchers = trim_string_vec(self.selected_launchers);
         let launcher_order = trim_string_vec(self.launcher_order);
 
-        reject_empty_items("selected_libraries", &selected_libraries)?;
-        reject_empty_items("selected_addons", &selected_addons)?;
-        reject_empty_items("selected_launchers", &selected_launchers)?;
-        reject_empty_items("launcher_order", &launcher_order)?;
+        reject_empty_items(boundary, "selected_libraries", &selected_libraries)?;
+        reject_empty_items(boundary, "selected_addons", &selected_addons)?;
+        reject_empty_items(boundary, "selected_launchers", &selected_launchers)?;
+        reject_empty_items(boundary, "launcher_order", &launcher_order)?;
 
         let (sort_field, sort_direction) = self.sort.into_api_values();
-        let (limit, offset) = self.page.into_api_values()?;
+        let (limit, offset) = self
+            .page
+            .into_api_values()
+            .map_err(|error| boundary.record(error))?;
 
         Ok(QueryGameCardsArgs {
             search_query,

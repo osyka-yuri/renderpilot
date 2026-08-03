@@ -1,60 +1,91 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { configureErrorDiagnosticSink, type ErrorDiagnosticEvent } from '@shared/diagnostics';
 import { t } from '@shared/i18n';
 
-import { formatAddGameWarning } from './add-game-warning';
+import {
+  formatAddGameWarning,
+  normalizeAddGameWarnings,
+  presentAddGameWarning,
+} from './add-game-warning';
 
-describe('formatAddGameWarning', () => {
-  it('translates a known warning without parameters', () => {
-    expect(
-      formatAddGameWarning({
-        code: 'probe_incomplete',
-        message: 'Backend fallback.',
-      }),
-    ).toBe(t('addGame.warning.probeIncomplete'));
+describe('add-game warning contract', () => {
+  const events: ErrorDiagnosticEvent[] = [];
+
+  beforeEach(() => {
+    events.length = 0;
+    configureErrorDiagnosticSink({ report: (event) => events.push(event) });
   });
 
-  it('translates structured numeric and interpolation parameters', () => {
-    expect(
-      formatAddGameWarning({
-        code: 'legacy_cards_consolidated',
-        message: 'Backend fallback.',
-        parameters: { count: 2 },
-      }),
-    ).toBe(t('addGame.warning.legacyCardsConsolidated', { count: 2 }));
-    expect(
-      formatAddGameWarning({
-        code: 'recovery_bundle_created',
-        message: 'Backend fallback.',
-        parameters: { path: 'C:/catalog/recovery.bundle' },
-      }),
-    ).toBe(t('addGame.warning.recoveryBundleCreated', { path: 'C:/catalog/recovery.bundle' }));
+  afterEach(() => {
+    configureErrorDiagnosticSink(null);
   });
 
-  it('preserves the original backend fallback for malformed structured warnings', () => {
-    const fallback = 'Fallback with {backend-braces}.';
+  it('normalizes and translates known warnings once at the response boundary', () => {
+    const warnings = normalizeAddGameWarnings(
+      [
+        { code: 'filesystem_probe_error' },
+        { code: 'legacy_cards_consolidated', parameters: { count: 2 } },
+        {
+          code: 'recovery_bundle_created',
+          parameters: { path: ' C:/catalog/recovery.bundle ' },
+        },
+      ],
+      'inspect_game_install',
+    );
 
-    expect(
-      formatAddGameWarning({
-        code: 'legacy_cards_retained',
-        message: fallback,
-        parameters: { count: '2' },
-      }),
-    ).toBe(fallback);
-    expect(
-      formatAddGameWarning({
-        code: 'root_correction_history_archived',
-        message: fallback,
-        parameters: { unrelated: 'value' },
-      }),
-    ).toBe(fallback);
+    expect(warnings.map(formatAddGameWarning)).toEqual([
+      t('addGame.warning.filesystemProbeError'),
+      t('addGame.warning.legacyCardsConsolidated', { count: 2 }),
+      t('addGame.warning.recoveryBundleCreated', { path: 'C:/catalog/recovery.bundle' }),
+    ]);
+    expect(events).toEqual([]);
   });
 
-  it('preserves the fallback for forward-compatible warning codes', () => {
-    expect(
-      formatAddGameWarning({
-        code: 'future_warning',
-        message: 'A warning from a newer backend.',
-      }),
-    ).toBe('A warning from a newer backend.');
+  it('strips arbitrary data from unknown and malformed warnings', () => {
+    const warnings = normalizeAddGameWarnings(
+      [
+        { code: 'future_warning', parameters: { secret: 'PRIVATE' } },
+        { code: 'legacy_cards_retained', parameters: { count: '2', secret: 'PRIVATE' } },
+        { details: 'PRIVATE' },
+      ],
+      'inspect_game_install',
+    );
+
+    expect(warnings).toEqual([
+      { contractStatus: 'unknown', code: 'future_warning', parameters: {} },
+      { contractStatus: 'malformed', code: 'legacy_cards_retained', parameters: {} },
+      { contractStatus: 'malformed', code: 'invalid_add_game_warning', parameters: {} },
+    ]);
+    expect(JSON.stringify(warnings)).not.toContain('PRIVATE');
+    expect(warnings.map(presentAddGameWarning).map(({ message }) => message)).toEqual([
+      t('addGame.warning.unknown'),
+      t('addGame.warning.unknown'),
+      t('addGame.warning.unknown'),
+    ]);
+    expect(events).toEqual([
+      expect.objectContaining({ code: 'future_warning', contractStatus: 'unknown' }),
+      expect.objectContaining({ code: 'legacy_cards_retained', contractStatus: 'malformed' }),
+      expect.objectContaining({ code: 'invalid_add_game_warning', contractStatus: 'malformed' }),
+    ]);
+  });
+
+  it('rejects unsafe paths and extra fields before presentation', () => {
+    const warnings = normalizeAddGameWarnings(
+      [
+        {
+          code: 'recovery_bundle_created',
+          parameters: { path: 'C:/Recovery/bundle\nPRIVATE' },
+        },
+        { code: 'filesystem_probe_error', unexpected: true },
+      ],
+      'add_game',
+    );
+
+    expect(warnings.every(({ contractStatus }) => contractStatus === 'malformed')).toBe(true);
+    expect(warnings.map(formatAddGameWarning)).toEqual([
+      t('addGame.warning.unknown'),
+      t('addGame.warning.unknown'),
+    ]);
+    expect(events).toHaveLength(2);
   });
 });

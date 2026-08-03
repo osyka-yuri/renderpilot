@@ -8,7 +8,7 @@ import {
   publishRollbackCompletedNotification,
 } from '@entities/operation';
 import { publishCommandErrorNotification, publishErrorNotification } from '@shared/notifications';
-import { DesktopCommandError } from '@shared/api';
+import { DesktopCommandError } from '@shared/errors';
 import {
   createGameDetailsPageModel,
   type GameDetailsPageModelDeps,
@@ -138,13 +138,8 @@ describe('createGameDetailsPageModel', () => {
   });
 
   it('reloads details on single-swap failure so stale candidates clear (error bubbles to runExclusive)', async () => {
-    const commandError = new DesktopCommandError({
+    const commandError = DesktopCommandError.fromDto({
       code: 'stale_replacement_source',
-      severity: 'warning',
-      messageKey: 'user_message.stale_replacement_source',
-      details:
-        'This update could not be applied because the source file was replaced or modified outside RenderPilot.',
-      suggestedActions: [],
     });
     vi.mocked(applySwap).mockRejectedValue(commandError);
     const { model, reloadGameDetails } = createModel();
@@ -220,13 +215,8 @@ describe('createGameDetailsPageModel', () => {
     });
 
     it('isolates a failed plugin: notifies applied count and surfaces the typed error', async () => {
-      const commandError = new DesktopCommandError({
+      const commandError = DesktopCommandError.fromDto({
         code: 'stale_replacement_source',
-        severity: 'warning',
-        messageKey: 'user_message.stale_replacement_source',
-        details:
-          'This update could not be applied because the source file was replaced or modified outside RenderPilot.',
-        suggestedActions: [],
       });
       vi.mocked(applySwap)
         .mockResolvedValueOnce(createApplySwapResult())

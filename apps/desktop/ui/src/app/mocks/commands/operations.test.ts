@@ -68,7 +68,7 @@ describe('preview operation commands', () => {
         gameId: request.gameId,
         componentId: request.componentId,
       }),
-    ).rejects.toMatchObject({ dto: { code: 'rollback_not_available' } });
+    ).rejects.toMatchObject({ dto: { code: 'invalid_argument' } });
 
     await mockInvoker<ApplySwapResult>('apply_swap', request);
     const rolledBack = await mockInvoker<RollbackComponentResult>('rollback_component', {
@@ -82,7 +82,7 @@ describe('preview operation commands', () => {
         gameId: request.gameId,
         componentId: request.componentId,
       }),
-    ).rejects.toMatchObject({ dto: { code: 'rollback_not_available' } });
+    ).rejects.toMatchObject({ dto: { code: 'invalid_argument' } });
   });
 
   it('enforces and advances the D3D12 confirmation state', async () => {

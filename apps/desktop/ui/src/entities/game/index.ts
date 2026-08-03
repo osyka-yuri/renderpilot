@@ -55,7 +55,6 @@ export type {
   GameCandidate,
   CoordinatedCandidateOption,
   D3d12ExecutableStatus,
-  ScanError,
   AutoScanResponse,
 } from './model/types';
 

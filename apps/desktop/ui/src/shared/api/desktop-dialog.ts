@@ -1,5 +1,6 @@
 import { open, type DialogFilter } from '@tauri-apps/plugin-dialog';
 import { isDesktopPreviewMode } from '@shared/api-preview';
+import { ClientError, reportClientError } from '@shared/errors';
 
 export type { DialogFilter };
 
@@ -24,10 +25,12 @@ export async function openFilePicker(
     return null;
   }
 
-  const selected = await open({
-    multiple: false,
-    filters: options.filters,
-  });
+  const selected = await openDialogSafely('open_file_picker', () =>
+    open({
+      multiple: false,
+      filters: options.filters,
+    }),
+  );
 
   return typeof selected === 'string' ? selected : null;
 }
@@ -41,11 +44,26 @@ export async function openFolderPicker(options: FolderPickerOptions = {}): Promi
     return null;
   }
 
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: options.title,
-  });
+  const selected = await openDialogSafely('open_folder_picker', () =>
+    open({
+      directory: true,
+      multiple: false,
+      title: options.title,
+    }),
+  );
 
   return typeof selected === 'string' ? selected : null;
+}
+
+async function openDialogSafely<T>(
+  operation: 'open_file_picker' | 'open_folder_picker',
+  task: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await task();
+  } catch (cause) {
+    const error = new ClientError('dialog_open_failed', cause);
+    reportClientError(operation, error);
+    throw error;
+  }
 }

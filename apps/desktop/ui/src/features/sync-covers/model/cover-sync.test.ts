@@ -19,6 +19,7 @@ import {
   STEAMGRIDDB_SETTING_KEY,
 } from '@entities/settings';
 import { LAUNCHER_STEAM, LAUNCHER_GOG, type GameSummary, createGameSummary } from '@entities/game';
+import { t } from '@shared/i18n';
 
 describe('cover-sync', () => {
   describe('catalogSettingHasSteamGridDbKey', () => {
@@ -429,8 +430,12 @@ describe('cover-sync', () => {
         { gameId: 'g1', title: 'Game One', message: 'Not found' },
       ]);
 
-      expect(result).toContain('Game One');
-      expect(result).toContain('Not found');
+      expect(result).toBe(
+        `${t('coverSync.failure.single', {
+          title: 'Game One',
+          message: 'Not found',
+        })}\n${t('coverSync.failure.hint')}`,
+      );
     });
 
     it('formats multiple failures', () => {
@@ -439,8 +444,12 @@ describe('cover-sync', () => {
         { gameId: 'g2', title: 'Game Two', message: 'Timeout' },
       ]);
 
-      expect(result).toContain('2 games');
-      expect(result).toContain('Game One');
+      expect(result).toBe(
+        `${t('coverSync.failure.multiple', {
+          count: 2,
+          summary: 'Game One: Not found',
+        })}\n${t('coverSync.failure.hint')}`,
+      );
     });
   });
 });

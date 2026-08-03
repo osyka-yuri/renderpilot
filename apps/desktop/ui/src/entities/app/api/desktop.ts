@@ -28,6 +28,11 @@ export async function requestAdminRelaunch(): Promise<{
   return invokeDesktop<{ relaunched: boolean; noop?: boolean }>('request_admin_relaunch');
 }
 
-export async function startBackgroundRefresh(): Promise<{ started: boolean }> {
-  return invokeDesktop<{ started: boolean }>('start_background_refresh');
+export async function startBackgroundRefresh(): Promise<{
+  started: boolean;
+  partialFailureCount: number;
+}> {
+  return invokeDesktop<{ started: boolean; partialFailureCount: number }>(
+    'start_background_refresh',
+  );
 }

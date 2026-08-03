@@ -25,6 +25,7 @@ import type {
   I18nSwitchResult,
 } from './runtime-types';
 import { observeSystemLanguage, resolveLocale } from './system-language';
+import { reportErrorDiagnostic } from '@shared/diagnostics';
 
 export { LocaleLoadError };
 export type {
@@ -60,6 +61,7 @@ export function createI18nRuntime(deps: I18nRuntimeDependencies) {
       observeSystemLanguage: deps.observeSystemLanguage,
       getLoadedPack: packLoader.getLoadedPack,
       loadPack: packLoader.loadPack,
+      reportLoadError: deps.onLocaleLoadError ?? ignoreLocaleLoadError,
     },
     {
       getState: () => state,
@@ -136,6 +138,20 @@ const productionRuntime = createI18nRuntime({
       document.documentElement.lang = locale;
     }
   },
+  onLocaleLoadError: (error, operation) => {
+    reportErrorDiagnostic(
+      {
+        source: 'i18n',
+        operation,
+        code: error.code,
+        contractStatus: 'known',
+        severity: 'warning',
+        locale: error.locale,
+        mode: error.mode,
+      },
+      error.cause,
+    );
+  },
 });
 
 export const getI18nState = productionRuntime.getState;
@@ -145,3 +161,7 @@ export const setLanguageMode = productionRuntime.setLanguageMode;
 export const t = productionRuntime.t;
 export const translateMessageRef = productionRuntime.translateMessageRef;
 export const translateExternalMessage = productionRuntime.translateExternalMessage;
+
+function ignoreLocaleLoadError(): void {
+  return;
+}

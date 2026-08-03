@@ -6,7 +6,9 @@
  * re-verify manually.
  */
 
-import { describeCommandErrorBrief } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
+import { reportClientError } from '@shared/errors';
+import { t } from '@shared/i18n';
 import { runWithConcurrency } from '@shared/concurrency';
 import { isDefined } from '@shared/validation';
 import { type CoverRemotePolicy } from '@entities/settings';
@@ -133,6 +135,7 @@ export async function runCoverFetchBatch<TResult>(
       result = await options.fetchCover(gameId);
       downloaded = true;
     } catch (error: unknown) {
+      reportClientError('cover_sync_fetch', error);
       failuresByInputIndex[index] = createCoverFetchFailure(game, error);
     } finally {
       notifyLifecycleHook(options.onGameEnd, gameId);
@@ -168,7 +171,7 @@ function notifyLifecycleHook<TArgs extends readonly unknown[]>(
   try {
     hook(...args);
   } catch (error: unknown) {
-    console.error('Cover sync lifecycle hook threw.', error);
+    reportClientError('cover_sync_lifecycle_hook', error);
   }
 }
 
@@ -176,15 +179,9 @@ function createCoverFetchFailure(game: GameSummary, error: unknown): CoverFetchF
   return {
     gameId: game.game_id,
     title: getGameTitleOrId(game),
-    message: describeCommandErrorBrief(error),
+    message: formatPresentedError(error),
   };
 }
-
-/**
- * User-facing hint appended to every cover-sync banner. Surfaced in one place
- * so wording can evolve without touching every banner branch.
- */
-const COVER_SYNC_SETTINGS_HINT = 'Check Game artwork sources and SteamGridDB settings.';
 
 /** User-visible banner when some automatic cover downloads failed.
  *
@@ -203,10 +200,15 @@ export function formatCoverSyncBanner(failures: readonly CoverFetchFailure[]): s
   const first = failures[0];
 
   if (failures.length === 1) {
-    return `Could not download a cover for ${first.title}: ${first.message}. ${COVER_SYNC_SETTINGS_HINT}`;
+    return `${t('coverSync.failure.single', {
+      title: first.title,
+      message: first.message,
+    })}\n${t('coverSync.failure.hint')}`;
   }
 
   const summary = `${first.title}: ${first.message}`;
-
-  return `Could not download covers for ${failures.length} games. First failure: ${summary}. ${COVER_SYNC_SETTINGS_HINT}`;
+  return `${t('coverSync.failure.multiple', {
+    count: failures.length,
+    summary,
+  })}\n${t('coverSync.failure.hint')}`;
 }

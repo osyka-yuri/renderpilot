@@ -1,5 +1,6 @@
 import type { AddonStoreLike } from '@entities/addon';
 import { isMutationFailure } from '@entities/addon';
+import { ClientError } from '@shared/errors';
 
 import type { BulkSwapHandler } from './create-game-details-page-model';
 import type { SwapRequest } from './swap-request';
@@ -56,7 +57,7 @@ export async function runUpdateAll({
         // Errors are usually notified inside the store and not rethrown.
         const result = await store.update(gameId);
         if (isMutationFailure(result)) {
-          failures.push({ step, error: new Error(`${step} update failed`) });
+          failures.push({ step, error: new ClientError('update_all_step_failed', { step }) });
         }
       } catch (error) {
         failures.push({ step, error });

@@ -8,22 +8,19 @@ use std::sync::Arc;
 use renderpilot_api as desktop;
 use renderpilot_orchestration::Context;
 
-use super::{
-    JsonCommandResult, download_progress_emitter, require_game_context, run_desktop_async_command,
-    run_desktop_command,
-};
+use super::{CommandBoundary, JsonCommandResult, download_progress_emitter, require_game_context};
 
 #[tauri::command]
 pub async fn luma_availability(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("luma_availability");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_async_command(
-        move || async move { desktop::luma_availability(&context, game_id).await },
-    )
-    .await
+    boundary
+        .run_async(move || async move { desktop::luma_availability(&context, game_id).await })
+        .await
 }
 
 #[tauri::command]
@@ -33,19 +30,21 @@ pub async fn luma_install(
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("luma_install");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::luma_install(
-            &context,
-            game_id,
-            confirm_anticheat,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
+    boundary
+        .run_async(move || async move {
+            let emit = download_progress_emitter(app, game_id.clone());
+            desktop::luma_install(
+                &context,
+                game_id,
+                confirm_anticheat,
+                Some(&emit as &desktop::ProgressObserver<'_>),
+            )
+            .await
+        })
         .await
-    })
-    .await
 }
 
 #[tauri::command]
@@ -53,9 +52,12 @@ pub async fn luma_uninstall(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("luma_uninstall");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
-    run_desktop_command(move || desktop::luma_uninstall(&context, game_id)).await
+    boundary
+        .run(move || desktop::luma_uninstall(&context, game_id))
+        .await
 }
 
 #[tauri::command]
@@ -64,13 +66,13 @@ pub async fn luma_check_update(
     deep: Option<bool>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("luma_check_update");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let deep = deep.unwrap_or(false);
 
-    run_desktop_async_command(move || async move {
-        desktop::luma_check_update(&context, game_id, deep).await
-    })
-    .await
+    boundary
+        .run_async(move || async move { desktop::luma_check_update(&context, game_id, deep).await })
+        .await
 }
 
 #[tauri::command]
@@ -80,18 +82,20 @@ pub async fn luma_update(
     force_full: Option<bool>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let (game_id, context) = require_game_context(game_id, &context)?;
+    let boundary = CommandBoundary::new("luma_update");
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let force_full = force_full.unwrap_or(false);
 
-    run_desktop_async_command(move || async move {
-        let emit = download_progress_emitter(app, game_id.clone());
-        desktop::luma_update(
-            &context,
-            game_id,
-            force_full,
-            Some(&emit as &desktop::ProgressObserver<'_>),
-        )
+    boundary
+        .run_async(move || async move {
+            let emit = download_progress_emitter(app, game_id.clone());
+            desktop::luma_update(
+                &context,
+                game_id,
+                force_full,
+                Some(&emit as &desktop::ProgressObserver<'_>),
+            )
+            .await
+        })
         .await
-    })
-    .await
 }

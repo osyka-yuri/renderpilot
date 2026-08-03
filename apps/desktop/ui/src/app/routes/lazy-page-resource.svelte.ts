@@ -1,3 +1,5 @@
+import { reportClientError } from '@shared/errors';
+
 export type LazyPageState<TComponent> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
@@ -56,11 +58,11 @@ export function createLazyPageResource<TComponent>(
       .catch((error: unknown) => {
         if (foregroundRequested) {
           state = { status: 'error', error };
-          console.error(`Failed to load ${options.id} page.`, error);
+          reportClientError('lazy_page_load', error);
         } else {
           preloadBlocked = true;
           state = { status: 'idle' };
-          console.warn(`Failed to preload ${options.id} page.`, error);
+          reportClientError('lazy_page_preload', error, 'warning');
         }
       })
       .finally(() => {

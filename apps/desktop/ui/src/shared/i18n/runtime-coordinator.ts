@@ -38,6 +38,10 @@ export type I18nCoordinatorDependencies = Readonly<{
   observeSystemLanguage: (listener: () => void) => () => void;
   getLoadedPack: (locale: Locale) => LocalePack | undefined;
   loadPack: (locale: Locale) => Promise<LocalePack>;
+  reportLoadError: (
+    error: LocaleLoadError,
+    operation: 'initialize_locale' | 'switch_locale' | 'system_language_change',
+  ) => void;
 }>;
 
 export type I18nCoordinatorHost = Readonly<{
@@ -107,6 +111,7 @@ export function createI18nCoordinator(
         }
 
         const error = toLocaleLoadError(storedMode, targetLocale, cause);
+        deps.reportLoadError(error, 'initialize_locale');
         try {
           host.activatePack(deps.fallbackPack);
         } catch {
@@ -233,6 +238,10 @@ export function createI18nCoordinator(
 
   function publishTransitionFailure(transition: ActiveTransition, cause: unknown): void {
     const error = toLocaleLoadError(transition.request.mode, transition.request.locale, cause);
+    deps.reportLoadError(
+      error,
+      transition.userOperation === null ? 'system_language_change' : 'switch_locale',
+    );
     const current = host.getState();
     publishState(createErrorState(current.activeMode, current.activeLocale, error));
     rejectUserOperation(transition.userOperation, error);

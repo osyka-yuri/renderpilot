@@ -56,8 +56,8 @@
   async function openKeyPage(): Promise<void> {
     try {
       await openExternal(STEAM_GRID_DB_KEY_PAGE_URL);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // `openExternal` already emitted one safe diagnostic.
     }
   }
 </script>

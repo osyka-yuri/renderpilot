@@ -11,6 +11,7 @@
   } from '@shared/ui';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
   import { t } from '@shared/i18n';
+  import { reportClientError } from '@shared/errors';
 
   type Props = {
     /** Content protected by the boundary. */
@@ -20,9 +21,7 @@
   const { children }: Props = $props();
 
   function reportError(error: unknown): void {
-    // Surface the crash for diagnostics; the `failed` snippet renders the
-    // recoverable fallback UI so a render error never white-screens the app.
-    console.error('Unhandled UI error caught by ErrorBoundary:', error);
+    reportClientError('ui_error_boundary', error);
   }
 </script>
 

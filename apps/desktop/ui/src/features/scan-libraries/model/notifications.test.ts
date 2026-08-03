@@ -56,8 +56,8 @@ describe('scan-libraries notifications', () => {
       recoveryBundlePath: 'C:/catalog/recovery/test.bundle',
       warnings: [
         {
+          contractStatus: 'known',
           code: 'legacy_cards_consolidated',
-          message: 'Backend fallback.',
           parameters: { count: 1 },
         },
       ],
@@ -66,16 +66,19 @@ describe('scan-libraries notifications', () => {
     expect(getActiveNotifications()).toEqual([
       expect.objectContaining({
         severity: 'warning',
-        description: `${t('addGame.warning.legacyCardsConsolidated', {
+        description: t('addGame.warning.legacyCardsConsolidated', {
           count: 1,
-        })}\n${t('addGame.warning.recoveryBundleFallback', {
-          path: 'C:/catalog/recovery/test.bundle',
-        })}`,
+        }),
+        details: [
+          t('addGame.warning.recoveryBundleFallback', {
+            path: 'C:/catalog/recovery/test.bundle',
+          }),
+        ],
       }),
     ]);
   });
 
-  it('preserves the backend fallback for forward-compatible warning codes', () => {
+  it('uses a localized generic message for forward-compatible warning codes', () => {
     publishAddGameWarnings({
       gameId: 'game:test',
       effectiveRoot: 'C:/Games/Test',
@@ -84,13 +87,13 @@ describe('scan-libraries notifications', () => {
       detectedLibraryCount: 1,
       consolidatedGameIds: [],
       recoveryBundlePath: null,
-      warnings: [{ code: 'future_warning', message: 'A warning from a newer backend.' }],
+      warnings: [{ contractStatus: 'unknown', code: 'future_warning', parameters: {} }],
     });
 
     expect(getActiveNotifications()).toEqual([
       expect.objectContaining({
         severity: 'warning',
-        description: 'A warning from a newer backend.',
+        description: t('addGame.warning.unknown'),
       }),
     ]);
   });

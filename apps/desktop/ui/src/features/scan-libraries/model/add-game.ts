@@ -1,3 +1,5 @@
+import type { NormalizedAddGameWarning } from './add-game-warning';
+
 export type RootRecommendationConfidence = 'authoritative' | 'suggested';
 export type InstallBoundaryKind =
   | 'single_install'
@@ -38,12 +40,6 @@ export type ExecutableInspection = {
   validWindowsPe: boolean;
   rejectionKind: string | null;
   rejectionToken: string | null;
-};
-
-export type AddGameWarning = {
-  code: string;
-  message: string;
-  parameters?: Record<string, string | number>;
 };
 
 export type RootCorrectionStatus = 'ready' | 'cleanup_required' | 'blocked';
@@ -90,7 +86,7 @@ export type AddGameInspection = {
   requiresExplicitExecutable: boolean;
   rootCorrection: RootCorrectionAssessment | null;
   decision: AddGameDecision;
-  warnings: AddGameWarning[];
+  warnings: NormalizedAddGameWarning[];
 };
 
 export type AddGameRootChoice = 'selected' | 'recommended';
@@ -128,7 +124,7 @@ export type AddGameResult = {
   detectedLibraryCount: number;
   consolidatedGameIds: string[];
   recoveryBundlePath: string | null;
-  warnings: AddGameWarning[];
+  warnings: NormalizedAddGameWarning[];
 };
 
 export type AddGameConfirmation = {

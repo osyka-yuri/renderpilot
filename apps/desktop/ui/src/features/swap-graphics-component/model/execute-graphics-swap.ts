@@ -1,5 +1,6 @@
 import { applySwap, type ApplySwapResult } from '@entities/operation';
 import { downloadArtifact, type LibraryPackageState } from '@entities/library';
+import { ClientError } from '@shared/errors';
 
 export type ExecuteGraphicsSwapInput = {
   gameId: string;
@@ -60,7 +61,7 @@ async function ensureArtifactDownloaded(
   const libraryState = await downloadArtifact(artifactId);
 
   if (!libraryState.artifact_id) {
-    throw new Error('Downloaded artifact did not return an artifact id');
+    throw new ClientError('graphics_swap_response_invalid', libraryState);
   }
 
   return libraryState.artifact_id;

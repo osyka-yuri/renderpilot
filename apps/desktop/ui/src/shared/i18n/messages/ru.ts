@@ -135,6 +135,12 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'error.boundary.description':
     'На этом экране произошла непредвиденная ошибка. Попробуйте ещё раз или перейдите в другой раздел.',
   'error.boundary.reset': 'Повторить',
+  'error.desktopTransportFailed':
+    'Служба приложения вернула некорректный ответ. Повторите действие.',
+  'error.unexpectedClient': 'Произошла непредвиденная ошибка. Повторите действие.',
+  'error.localeLoadFailed':
+    'Не удалось загрузить выбранный язык. Интерфейс остался на предыдущем языке.',
+  'error.recoveryBundlePath': 'Пакет восстановления: {path}',
   'pageLoad.loading': 'Загрузка страницы…',
   'pageLoad.error.title': 'Не удалось открыть страницу',
   'pageLoad.error.description':
@@ -236,6 +242,8 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Эту папку нельзя добавить отдельно: в ней не найден исполняемый файл игры.',
   'addGame.warning.filesystemProbeError':
     'Часть установки не удалось проверить. Проверьте права доступа к файлам.',
+  'addGame.warning.unknown':
+    'При проверке игры обнаружено предупреждение, которое эта версия RenderPilot не может отобразить.',
   'games.libraryActions': 'Действия',
   'games.search': 'Поиск игр',
   'games.openFilters': 'Фильтры',
@@ -592,23 +600,28 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     many: 'Не удалось просканировать {count} папок.',
     other: 'Не удалось просканировать {count} папок.',
   }),
+  'scan.automaticFailed':
+    'Не удалось выполнить автоматическое сканирование библиотек. Список игр всё равно был обновлён.',
 
   // ── Background cover sync ──
   'coverSync.failed': 'Не удалось синхронизировать обложки.',
   'coverSync.refreshFailed': 'Не удалось синхронизировать обложки.',
+  'coverSync.failure.single': 'Не удалось загрузить обложку для «{title}»: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'Не удалось загрузить обложки для {count} игры. Первая ошибка: {summary}',
+    few: 'Не удалось загрузить обложки для {count} игр. Первая ошибка: {summary}',
+    many: 'Не удалось загрузить обложки для {count} игр. Первая ошибка: {summary}',
+    other: 'Не удалось загрузить обложки для {count} игры. Первая ошибка: {summary}',
+  }),
+  'coverSync.failure.hint': 'Проверьте источники обложек игр и настройки SteamGridDB.',
 
   // ── NVIDIA driver context (toasts) ──
   'nvidia.adminRequired': 'Требуются права администратора',
-  'nvidia.relaunchTo': 'Перезапустите приложение от имени администратора, чтобы {action}.',
-  'nvidia.action.changeSetting': 'применить настройки',
-  'nvidia.action.revertSetting': 'сбросить настройки',
   'nvidia.changeSettingFailed': 'Не удалось применить настройки',
   'nvidia.revertDefaultFailed': 'Не удалось сбросить настройки',
   'nvidia.revertBaselineFailed': 'Не удалось восстановить исходные настройки',
 
   // ── DLSS indicator context (toasts) ──
-  'indicator.relaunchToToggle':
-    'Перезапустите приложение от имени администратора для переключения индикатора.',
   'indicator.changeFailed': 'Не удалось переключить индикатор DLSS',
 
   // ── Libraries table ──
@@ -665,6 +678,8 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Перед изменением корня устраните активное состояние в существующей карточке игры.',
   'user_message.managed_cleanup_ambiguous':
     'RenderPilot обнаружил пересекающиеся изменения, безопасный порядок отката которых нельзя доказать. Ничего не изменено; создан пакет восстановления.',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot обнаружил конфликтующее управляемое состояние у дубликатов карточек игр. Ничего не изменено; создан пакет восстановления.',
   'user_message.game_removal_cleanup_failed':
     'RenderPilot не удалось восстановить исходные файлы игры, поэтому карточка не удалена. Проверьте файлы игры и повторите попытку.',
   'user_message.invalid_game_reference': 'Игра не найдена.',
@@ -679,6 +694,8 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'user_message.component_not_found': 'Компонент не найден.',
   'user_message.invalid_operation_state': 'Это действие сейчас недоступно.',
   'user_message.operation_could_not_complete': 'Не удалось выполнить действие.',
+  'user_message.rollback_also_failed':
+    'Действие завершилось ошибкой, и RenderPilot не смог полностью восстановить предыдущее состояние файлов. Перед повторной попыткой проверьте файлы игры.',
   'user_message.command_task_failed': 'Не удалось выполнить команду.',
   'user_message.storage_failed': 'Не удалось прочитать или записать каталог приложения.',
   'user_message.provider_failed': 'Не удалось получить данные из источника.',
@@ -692,6 +709,13 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Не удалось применить обновление: исходный файл был заменён или изменён вне RenderPilot. Выберите версию снова — может потребоваться загрузка.',
   'user_message.nvapi_requires_administrator':
     'Для изменения этой настройки требуются права администратора.',
+  'user_message.elevation_cancelled': 'Запрос прав администратора отменён. Изменения не вносились.',
+  'user_message.elevation_policy_blocked':
+    'Windows заблокировала запрос прав администратора. Проверьте системную политику и повторите попытку.',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot не удалось перезапустить с правами администратора. Попробуйте перезапустить приложение.',
+  'user_message.elevation_unsupported':
+    'Перезапуск с правами администратора не поддерживается на этой платформе.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Обновите список игр и попробуйте снова.',

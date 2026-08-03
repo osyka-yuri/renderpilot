@@ -36,6 +36,223 @@ export function sortRecord(record) {
   );
 }
 
+const MACHINE_CODE_PATTERN = /^[a-z][a-z0-9_]*$/;
+const MAX_MACHINE_CODE_LENGTH = 64;
+const RUST_VARIANT_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
+const WARNING_PARAMETER_TYPES = new Set(['positive_integer', 'non_blank_string']);
+
+function assertUniqueByCode(entries, context) {
+  if (!Array.isArray(entries)) {
+    fail(`${context} must be an array`);
+  }
+
+  const seen = new Set();
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      fail(`${context} entries must be objects`);
+    }
+    assertMachineCode(entry.code, `${context} code`);
+    if (seen.has(entry.code)) {
+      fail(`${context} contains duplicate code ${entry.code}`);
+    }
+    seen.add(entry.code);
+  }
+}
+
+function assertExactKeys(value, allowedKeys, context) {
+  const unknownKeys = Object.keys(value).filter((key) => !allowedKeys.includes(key));
+  if (unknownKeys.length > 0) {
+    fail(`${context} contains unknown field ${JSON.stringify(unknownKeys[0])}`);
+  }
+}
+
+function isMachineCode(value) {
+  return (
+    typeof value === 'string' &&
+    value.length <= MAX_MACHINE_CODE_LENGTH &&
+    MACHINE_CODE_PATTERN.test(value)
+  );
+}
+
+function assertMachineCode(value, context) {
+  if (!isMachineCode(value)) {
+    fail(`${context} has invalid machine code ${JSON.stringify(value)}`);
+  }
+}
+
+function assertCatalogMessage(english, key, context, expectedParameters) {
+  if (typeof key !== 'string' || !Object.hasOwn(english, key)) {
+    fail(`${context} references missing English message ${JSON.stringify(key)}`);
+  }
+
+  const message = english[key];
+  const actualParameters = new Set(
+    message.kind === 'string'
+      ? message.placeholders
+      : [message.argument, ...Object.values(message.branches).flat()],
+  );
+  const expected = new Set(expectedParameters);
+  if (
+    actualParameters.size !== expected.size ||
+    [...actualParameters].some((parameter) => !expected.has(parameter))
+  ) {
+    fail(
+      `${context} parameters ${JSON.stringify([...expected].sort())} do not match English message ${key} parameters ${JSON.stringify([...actualParameters].sort())}`,
+    );
+  }
+}
+
+/** Validates the presentation-neutral desktop command-error manifest. */
+export function validateDesktopCommandErrorContract(value, english) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    fail('desktop command error contract must be an object');
+  }
+  assertExactKeys(
+    value,
+    ['schemaVersion', 'commandErrors', 'suggestedActions'],
+    'desktop command error contract',
+  );
+  if (value.schemaVersion !== 1) {
+    fail(
+      `desktop command error contract has unsupported schemaVersion ${JSON.stringify(value.schemaVersion)}`,
+    );
+  }
+
+  assertUniqueByCode(value.commandErrors, 'desktop commandErrors');
+  assertUniqueByCode(value.suggestedActions, 'desktop suggestedActions');
+
+  const actionCodes = new Set(value.suggestedActions.map(({ code }) => code));
+  const actions = {};
+  for (const action of value.suggestedActions) {
+    assertExactKeys(action, ['code', 'messageKey'], `suggested action ${action.code}`);
+    assertCatalogMessage(english, action.messageKey, `suggested action ${action.code}`, []);
+    actions[action.code] = { messageKey: action.messageKey };
+  }
+
+  const commandErrors = {};
+  const rustVariants = new Set();
+  for (const error of value.commandErrors) {
+    assertExactKeys(
+      error,
+      [
+        'code',
+        'rustVariant',
+        'messageKey',
+        'severity',
+        'actions',
+        'reasonCodes',
+        'recoveryBundlePath',
+      ],
+      `desktop command error ${error.code}`,
+    );
+    if (typeof error.rustVariant !== 'string' || !RUST_VARIANT_PATTERN.test(error.rustVariant)) {
+      fail(
+        `desktop command error ${error.code} has invalid rustVariant ${JSON.stringify(error.rustVariant)}`,
+      );
+    }
+    if (rustVariants.has(error.rustVariant)) {
+      fail(`desktop commandErrors contains duplicate rustVariant ${error.rustVariant}`);
+    }
+    rustVariants.add(error.rustVariant);
+    if (error.severity !== 'warning' && error.severity !== 'error') {
+      fail(
+        `desktop command error ${error.code} has invalid severity ${JSON.stringify(error.severity)}`,
+      );
+    }
+    if (!Array.isArray(error.actions) || error.actions.some((code) => !actionCodes.has(code))) {
+      fail(`desktop command error ${error.code} references an unknown suggested action`);
+    }
+    if (new Set(error.actions).size !== error.actions.length) {
+      fail(`desktop command error ${error.code} contains duplicate suggested actions`);
+    }
+    assertCatalogMessage(english, error.messageKey, `desktop command error ${error.code}`, []);
+
+    const reasonCodes = error.reasonCodes ?? [];
+    if (
+      !Array.isArray(reasonCodes) ||
+      reasonCodes.some((code) => !isMachineCode(code)) ||
+      new Set(reasonCodes).size !== reasonCodes.length
+    ) {
+      fail(`desktop command error ${error.code} has invalid or duplicate reasonCodes`);
+    }
+    if (error.recoveryBundlePath !== undefined && error.recoveryBundlePath !== true) {
+      fail(`desktop command error ${error.code} recoveryBundlePath must be true when present`);
+    }
+    if (error.recoveryBundlePath === true && error.severity !== 'error') {
+      fail(`desktop command error ${error.code} exposes a recovery path but is not an error`);
+    }
+
+    commandErrors[error.code] = {
+      rustVariant: error.rustVariant,
+      messageKey: error.messageKey,
+      severity: error.severity,
+      actions: [...error.actions],
+      reasonCodes: [...reasonCodes],
+      recoveryBundlePath: error.recoveryBundlePath === true,
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    commandErrors: sortRecord(commandErrors),
+    suggestedActions: sortRecord(actions),
+  };
+}
+
+/** Validates the feature-local add-game warning manifest. */
+export function validateAddGameWarningContract(value, english) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    fail('add-game warning contract must be an object');
+  }
+  assertExactKeys(value, ['schemaVersion', 'addGameWarnings'], 'add-game warning contract');
+  if (value.schemaVersion !== 1) {
+    fail(
+      `add-game warning contract has unsupported schemaVersion ${JSON.stringify(value.schemaVersion)}`,
+    );
+  }
+
+  assertUniqueByCode(value.addGameWarnings, 'add-game warnings');
+  const addGameWarnings = {};
+  for (const warning of value.addGameWarnings) {
+    assertExactKeys(
+      warning,
+      ['code', 'messageKey', 'parameters'],
+      `add-game warning ${warning.code}`,
+    );
+    if (
+      warning.parameters === null ||
+      typeof warning.parameters !== 'object' ||
+      Array.isArray(warning.parameters)
+    ) {
+      fail(`add-game warning ${warning.code} parameters must be an object`);
+    }
+    for (const [name, type] of Object.entries(warning.parameters)) {
+      assertMachineCode(name, `add-game warning ${warning.code} parameter`);
+      assertPlaceholderName(name, `add-game warning ${warning.code} parameter`);
+      if (!WARNING_PARAMETER_TYPES.has(type)) {
+        fail(
+          `add-game warning ${warning.code} parameter ${name} has invalid type ${JSON.stringify(type)}`,
+        );
+      }
+    }
+    assertCatalogMessage(
+      english,
+      warning.messageKey,
+      `add-game warning ${warning.code}`,
+      Object.keys(warning.parameters),
+    );
+    addGameWarnings[warning.code] = {
+      messageKey: warning.messageKey,
+      parameters: sortRecord(warning.parameters),
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    addGameWarnings: sortRecord(addGameWarnings),
+  };
+}
+
 export function validateEnglishContract(entries) {
   const messages = {};
   for (const [key, value] of entries) {

@@ -121,6 +121,12 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'error.boundary.description':
     'Cet écran a rencontré une erreur inattendue. Réessayez ou passez à une autre section.',
   'error.boundary.reset': 'Réessayer',
+  'error.desktopTransportFailed':
+    'Le service de bureau a renvoyé une réponse non valide. Réessayez l’action.',
+  'error.unexpectedClient': 'Une erreur inattendue est survenue. Réessayez l’action.',
+  'error.localeLoadFailed':
+    'La langue sélectionnée n’a pas pu être chargée. La langue précédente reste active.',
+  'error.recoveryBundlePath': 'Paquet de récupération : {path}',
   'pageLoad.loading': 'Chargement de la page…',
   'pageLoad.error.title': "Impossible d'ouvrir cette page",
   'pageLoad.error.description': "La page n'a pas pu être chargée. Réessayez ou revenez aux jeux.",
@@ -221,6 +227,8 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
     'Ce dossier ne peut pas être ajouté séparément, car il ne contient aucun exécutable de jeu lisible.',
   'addGame.warning.filesystemProbeError':
     'Une partie de l’installation n’a pas pu être inspectée. Vérifiez les autorisations d’accès aux fichiers.',
+  'addGame.warning.unknown':
+    'L’inspection du jeu a produit un avertissement que cette version de RenderPilot ne peut pas afficher.',
   'games.libraryActions': 'Actions',
   'games.search': 'Rechercher des jeux',
   'games.openFilters': 'Filtres',
@@ -515,20 +523,24 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
     many: 'Impossible d’analyser {count} dossiers.',
     other: 'Impossible d’analyser {count} dossiers.',
   }),
+  'scan.automaticFailed':
+    'L’analyse automatique des bibliothèques a échoué. La liste des jeux a tout de même été actualisée.',
 
   'coverSync.failed': 'Échec de la synchronisation des jaquettes.',
   'coverSync.refreshFailed': 'Échec de la synchronisation des jaquettes.',
+  'coverSync.failure.single': 'Impossible de télécharger la jaquette de {title} : {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'Impossible de télécharger les jaquettes de {count} jeu. Première erreur : {summary}',
+    many: 'Impossible de télécharger les jaquettes de {count} jeux. Première erreur : {summary}',
+    other: 'Impossible de télécharger les jaquettes de {count} jeux. Première erreur : {summary}',
+  }),
+  'coverSync.failure.hint': 'Vérifiez les sources des jaquettes et les paramètres SteamGridDB.',
 
   'nvidia.adminRequired': 'Privilèges d’administrateur requis',
-  'nvidia.relaunchTo': 'Redémarrez en tant qu’administrateur pour {action}.',
-  'nvidia.action.changeSetting': 'appliquer les paramètres',
-  'nvidia.action.revertSetting': 'rétablir les paramètres',
   'nvidia.changeSettingFailed': 'Échec de l’application des paramètres',
   'nvidia.revertDefaultFailed': 'Échec de la restauration des paramètres par défaut',
   'nvidia.revertBaselineFailed': 'Échec de la restauration des paramètres initiaux',
 
-  'indicator.relaunchToToggle':
-    'Redémarrez en tant qu’administrateur pour basculer l’indicateur DLSS.',
   'indicator.changeFailed': 'Échec de la bascule de l’indicateur DLSS',
 
   'libraries.column.version': 'Version',
@@ -614,6 +626,18 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
     'Cette mise à jour n’a pas pu être appliquée car le fichier source a été remplacé ou modifié en dehors de RenderPilot. Sélectionnez à nouveau la version — un téléchargement peut être nécessaire.',
   'user_message.nvapi_requires_administrator':
     'Les droits d’administrateur sont requis pour modifier ce paramètre.',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot a détecté des états gérés conflictuels dans des fiches de jeu en double. Rien n’a été modifié et un paquet de récupération a été créé.',
+  'user_message.rollback_also_failed':
+    'L’action a échoué et RenderPilot n’a pas pu restaurer complètement l’état précédent des fichiers. Vérifiez les fichiers du jeu avant de réessayer.',
+  'user_message.elevation_cancelled':
+    'La demande de droits d’administrateur a été annulée. Aucune modification n’a été effectuée.',
+  'user_message.elevation_policy_blocked':
+    'Windows a bloqué la demande de droits d’administrateur. Vérifiez la stratégie système et réessayez.',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot n’a pas pu redémarrer avec les droits d’administrateur. Essayez de redémarrer l’application.',
+  'user_message.elevation_unsupported':
+    'Le redémarrage avec les droits d’administrateur n’est pas pris en charge sur cette plateforme.',
 
   'suggested_action.refresh_games': 'Actualisez la liste des jeux et réessayez.',
   'suggested_action.reload_game_details': 'Actualisez les détails du jeu et réessayez.',

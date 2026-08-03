@@ -419,7 +419,17 @@ describe('createGamesPageQueryScheduler', () => {
 
         expect(queryGameCardsFn).toHaveBeenCalledTimes(1);
         expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to query game cards.', error);
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[RenderPilot diagnostic]',
+          {
+            source: 'client-boundary',
+            operation: 'query_game_cards',
+            code: 'unexpected_client_error',
+            contractStatus: 'malformed',
+            severity: 'error',
+          },
+          error,
+        );
       } finally {
         consoleErrorSpy.mockRestore();
       }

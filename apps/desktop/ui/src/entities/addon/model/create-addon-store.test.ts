@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageKey } from '@shared/i18n';
 
 vi.mock('@shared/notifications', () => ({
-  publishErrorNotification: vi.fn(),
+  publishPresentedErrorNotification: vi.fn(),
 }));
 
 vi.mock('@shared/lib', async (importOriginal) => {
@@ -11,7 +11,7 @@ vi.mock('@shared/lib', async (importOriginal) => {
 });
 
 import { clearDownloadProgress } from '@shared/lib';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 
 import { isMutationSuccess } from './busy-mutation';
 import { createAddonStore } from './create-addon-store.svelte';
@@ -179,7 +179,10 @@ describe('createAddonStore', () => {
 
     expect(store.loadError).not.toBeNull();
     expect(store.loaded).toBe(false);
-    expect(publishErrorNotification).toHaveBeenCalledWith('Could not check', 'boom');
+    expect(publishPresentedErrorNotification).toHaveBeenCalledWith(
+      'Could not check',
+      expect.any(Error),
+    );
   });
 
   it('does not probe updates after a failed reload of a retained installed state', async () => {
@@ -196,7 +199,7 @@ describe('createAddonStore', () => {
     await store.retry('game1');
 
     expect(store.isInstalled).toBe(true);
-    expect(store.loadError).toBe('offline');
+    expect(store.loadError).toBe('Something unexpected went wrong. Try the action again.');
     expect(api.checkUpdate).not.toHaveBeenCalled();
   });
 
@@ -217,7 +220,7 @@ describe('createAddonStore', () => {
     const retry = store.retry('game1');
 
     expect(store.loading).toBe(true);
-    expect(store.loadError).toBe('boom');
+    expect(store.loadError).toBe('Something unexpected went wrong. Try the action again.');
 
     resolveRetry(NOT_INSTALLED_AVAILABILITY);
     await retry;
@@ -285,7 +288,7 @@ describe('createAddonStore', () => {
     expect(store.isInstalled).toBe(true);
     expect(afterCommit).toHaveBeenCalledTimes(1);
     expect(onExclusivityChange).toHaveBeenCalledWith('g1');
-    expect(publishErrorNotification).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
@@ -605,7 +608,7 @@ describe('createAddonStore', () => {
     const ok = await mutation;
 
     expect(ok).toBe('failed');
-    expect(publishErrorNotification).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
     expect(store.busy).toBe(false);
   });
 
@@ -633,10 +636,10 @@ describe('createAddonStore', () => {
     });
 
     expect(ok).toBe('failed');
-    expect(publishErrorNotification).toHaveBeenCalledTimes(1);
-    expect(publishErrorNotification).toHaveBeenCalledWith(
+    expect(publishPresentedErrorNotification).toHaveBeenCalledTimes(1);
+    expect(publishPresentedErrorNotification).toHaveBeenCalledWith(
       'RenoDX installation failed',
-      'install failed',
+      expect.any(Error),
     );
   });
 

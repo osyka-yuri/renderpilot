@@ -1,59 +1,172 @@
-import { t, type MessageKeyWithoutParams } from '@shared/i18n';
+import { reportErrorDiagnostic, type ErrorContractStatus } from '@shared/diagnostics';
+import { t, translateExternalMessage } from '@shared/i18n';
+import { isPlainObject } from '@shared/validation';
+import { ADD_GAME_WARNING_CONTRACT, type AddGameWarningCode } from './generated/add-game-warnings';
 
-import type { AddGameWarning } from './add-game';
+type WarningParameters = Readonly<Record<string, string | number>>;
+type EmptyWarningParameters = Readonly<Record<string, never>>;
 
-const plainWarningKeyByCode: Readonly<Partial<Record<string, MessageKeyWithoutParams>>> = {
-  unsupported_platform: 'addGame.warning.unsupportedPlatform',
-  probe_incomplete: 'addGame.warning.probeIncomplete',
-  parent_probe_incomplete: 'addGame.warning.parentProbeIncomplete',
-  inside_existing_install: 'addGame.warning.insideExistingInstall',
-  narrows_existing_install: 'addGame.warning.narrowsExistingInstall',
-  multiple_proven_installs: 'addGame.warning.multipleProvenInstalls',
-  contains_proven_install: 'addGame.warning.containsProvenInstall',
-  multiple_installs_suspected: 'addGame.warning.multipleInstallsSuspected',
-  explicit_executable_required: 'addGame.warning.explicitExecutableRequired',
-  no_readable_executable: 'addGame.warning.noReadableExecutable',
-  filesystem_probe_error: 'addGame.warning.filesystemProbeError',
-};
+export type NormalizedAddGameWarning =
+  | Readonly<{
+      contractStatus: 'known';
+      code: AddGameWarningCode;
+      parameters: WarningParameters;
+    }>
+  | Readonly<{
+      contractStatus: Exclude<ErrorContractStatus, 'known'>;
+      code: string;
+      parameters: EmptyWarningParameters;
+    }>;
 
-function numericParameter(warning: AddGameWarning, name: string): number | null {
-  const value = warning.parameters?.[name];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+const EMPTY_PARAMETERS: EmptyWarningParameters = Object.freeze({});
+
+/** Formats a structured backend warning without ever presenting backend prose. */
+export function formatAddGameWarning(warning: NormalizedAddGameWarning): string {
+  return presentAddGameWarning(warning).message;
 }
 
-function interpolationParameter(warning: AddGameWarning, name: string): string | number | null {
-  const value = warning.parameters?.[name];
-  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
-    ? value
-    : null;
+export type PresentedAddGameWarning = Readonly<{
+  code: string;
+  message: string;
+  contractStatus: ErrorContractStatus;
+}>;
+
+/** Pure warning projection. Diagnostics belong to the command-response boundary. */
+export function presentAddGameWarning(warning: NormalizedAddGameWarning): PresentedAddGameWarning {
+  if (warning.contractStatus !== 'known') {
+    return {
+      code: warning.code,
+      message: t('addGame.warning.unknown'),
+      contractStatus: warning.contractStatus,
+    };
+  }
+
+  const spec = ADD_GAME_WARNING_CONTRACT[warning.code];
+  return {
+    code: warning.code,
+    message: translateExternalMessage({
+      key: spec.messageKey,
+      fallback: t('addGame.warning.unknown'),
+      ...(Object.keys(warning.parameters).length === 0 ? {} : { params: warning.parameters }),
+    }),
+    contractStatus: 'known',
+  };
 }
 
-/** Formats a structured backend warning in the active UI locale. */
-export function formatAddGameWarning(warning: AddGameWarning): string {
-  switch (warning.code) {
-    case 'legacy_cards_consolidated': {
-      const count = numericParameter(warning, 'count');
-      return count === null
-        ? warning.message
-        : t('addGame.warning.legacyCardsConsolidated', { count });
+/** Reports each malformed/unknown warning once when a desktop response enters the feature. */
+export function normalizeAddGameWarnings(
+  warnings: readonly unknown[],
+  operation: 'inspect_game_install' | 'add_game',
+): NormalizedAddGameWarning[] {
+  return warnings.map((warning) => {
+    const normalized = normalizeAddGameWarning(warning);
+    if (normalized.contractStatus !== 'known') {
+      reportErrorDiagnostic({
+        source: 'client-boundary',
+        operation,
+        code: normalized.code,
+        contractStatus: normalized.contractStatus,
+        severity: 'warning',
+      });
     }
-    case 'legacy_cards_retained': {
-      const count = numericParameter(warning, 'count');
-      return count === null ? warning.message : t('addGame.warning.legacyCardsRetained', { count });
-    }
-    case 'recovery_bundle_created': {
-      const path = interpolationParameter(warning, 'path');
-      return path === null ? warning.message : t('addGame.warning.recoveryBundleCreated', { path });
-    }
-    case 'root_correction_history_archived': {
-      const path = interpolationParameter(warning, 'path');
-      return path === null
-        ? warning.message
-        : t('addGame.warning.rootCorrectionHistoryArchived', { path });
-    }
-    default: {
-      const key = plainWarningKeyByCode[warning.code];
-      return key === undefined ? warning.message : t(key);
+    return normalized;
+  });
+}
+
+function normalizeAddGameWarning(value: unknown): NormalizedAddGameWarning {
+  if (!isPlainObject(value) || !isSafeMachineCode(value.code)) {
+    return malformedWarning('invalid_add_game_warning');
+  }
+
+  const code = value.code;
+  const allowedKeys = new Set(['code', 'parameters']);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+    return malformedWarning(code);
+  }
+
+  if (!isAddGameWarningCode(code)) {
+    return 'parameters' in value && !isPlainObject(value.parameters)
+      ? malformedWarning(code)
+      : unknownWarning(code);
+  }
+
+  const parameters = validateParameters(
+    value.parameters,
+    ADD_GAME_WARNING_CONTRACT[code].parameters,
+  );
+  return parameters === null
+    ? malformedWarning(code)
+    : { contractStatus: 'known', code, parameters: Object.freeze(parameters) };
+}
+
+function unknownWarning(code: string): NormalizedAddGameWarning {
+  return { contractStatus: 'unknown', code, parameters: EMPTY_PARAMETERS };
+}
+
+function malformedWarning(code: string): NormalizedAddGameWarning {
+  return { contractStatus: 'malformed', code, parameters: EMPTY_PARAMETERS };
+}
+
+function isAddGameWarningCode(code: string): code is AddGameWarningCode {
+  return Object.prototype.hasOwnProperty.call(ADD_GAME_WARNING_CONTRACT, code);
+}
+
+function validateParameters(
+  input: unknown,
+  contract: Readonly<Record<string, 'positive_integer' | 'non_blank_string'>>,
+): Record<string, string | number> | null {
+  const source = input ?? {};
+  if (!isPlainObject(source)) {
+    return null;
+  }
+  const expectedNames = Object.keys(contract);
+  if (
+    Object.keys(source).length !== expectedNames.length ||
+    Object.keys(source).some((name) => !Object.prototype.hasOwnProperty.call(contract, name))
+  ) {
+    return null;
+  }
+
+  const output: Record<string, string | number> = {};
+  for (const name of expectedNames) {
+    const value = source[name];
+    switch (contract[name]) {
+      case 'positive_integer':
+        if (!Number.isSafeInteger(value) || typeof value !== 'number' || value <= 0) {
+          return null;
+        }
+        output[name] = value;
+        break;
+      case 'non_blank_string': {
+        if (typeof value !== 'string') {
+          return null;
+        }
+        const normalized = value.trim();
+        if (
+          normalized.length === 0 ||
+          normalized.length > 4096 ||
+          containsControlCharacter(normalized)
+        ) {
+          return null;
+        }
+        output[name] = normalized;
+        break;
+      }
     }
   }
+  return output;
+}
+
+function isSafeMachineCode(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value);
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x1f || codePoint === 0x7f) {
+      return true;
+    }
+  }
+  return false;
 }

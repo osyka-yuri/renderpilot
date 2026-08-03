@@ -1,9 +1,9 @@
-import type { ScanError } from '@entities/game';
 import { scanAutoLibraries } from '../api/desktop';
-import { describeCommandErrorBrief } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
+import { t } from '@shared/i18n';
 
 export type ScanLibrariesResult =
-  | { kind: 'ok'; errors: readonly ScanError[] }
+  | { kind: 'ok'; partialFailureCount: number }
   | { kind: 'error'; message: string };
 
 /**
@@ -14,11 +14,11 @@ export async function scanAutoLibrariesWithErrorRecovery(): Promise<ScanLibrarie
   try {
     const scanResult = await scanAutoLibraries();
 
-    return { kind: 'ok', errors: scanResult.errors ?? [] };
+    return { kind: 'ok', partialFailureCount: scanResult.partialFailureCount };
   } catch (error) {
     return {
       kind: 'error',
-      message: `Automatic library scan failed; your game list was still refreshed. ${describeCommandErrorBrief(error)}`,
+      message: `${t('scan.automaticFailed')} ${formatPresentedError(error)}`,
     };
   }
 }

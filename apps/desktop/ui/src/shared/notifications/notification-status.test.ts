@@ -63,11 +63,7 @@ describe('notification-status', () => {
 
   it('publishes command errors through the normalized status flow', () => {
     publishCommandErrorNotification({
-      code: 'catalog_partial_scan',
-      severity: 'warning',
-      messageKey: 'warnings.catalog_partial_scan',
-      details: 'Some folders could not be scanned.',
-      suggestedActions: [],
+      code: 'multiple_installs_detected',
     });
 
     expect(getActiveNotifications()).toEqual([
@@ -75,9 +71,32 @@ describe('notification-status', () => {
         id: STATUS_NOTIFICATION_ID,
         severity: 'warning',
         title: t('notify.statusWarning'),
-        description: 'Some folders could not be scanned.',
+        description: t('user_message.multiple_installs_detected'),
         important: false,
       },
+    ]);
+  });
+
+  it('keeps command actions as structured status details', () => {
+    publishCommandErrorNotification({ code: 'storage_failed' });
+
+    expect(getActiveNotifications()).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        description: t('user_message.storage_failed'),
+        details: [t('suggested_action.inspect_logs')],
+      }),
+    ]);
+  });
+
+  it('trims details and drops empty entries before publication', () => {
+    publishStatusNotification(' Warning ', 'warning', [' first detail ', '   ', 'second detail']);
+
+    expect(getActiveNotifications()).toEqual([
+      expect.objectContaining({
+        description: 'Warning',
+        details: ['first detail', 'second detail'],
+      }),
     ]);
   });
 

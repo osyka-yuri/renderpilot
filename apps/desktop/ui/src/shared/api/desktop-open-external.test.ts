@@ -62,6 +62,8 @@ describe('openExternal', () => {
       throw new Error('browser handoff failed');
     });
 
-    await expect(openExternal('https://example.test')).rejects.toThrow('browser handoff failed');
+    await expect(openExternal('https://example.test')).rejects.toMatchObject({
+      code: 'external_open_failed',
+    });
   });
 });

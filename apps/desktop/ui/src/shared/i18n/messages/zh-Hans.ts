@@ -103,6 +103,10 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'error.boundary.title': '出现了一些问题',
   'error.boundary.description': '此屏幕遇到意外错误。您可以重试，或切换到其他部分。',
   'error.boundary.reset': '重试',
+  'error.desktopTransportFailed': '桌面服务返回了无效响应。请重试此操作。',
+  'error.unexpectedClient': '发生意外错误。请重试此操作。',
+  'error.localeLoadFailed': '无法加载所选语言。界面将继续使用之前的语言。',
+  'error.recoveryBundlePath': '恢复包：{path}',
   'pageLoad.loading': '正在加载页面…',
   'pageLoad.error.title': '无法打开此页面',
   'pageLoad.error.description': '页面加载失败。请重试或返回游戏列表。',
@@ -182,6 +186,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'addGame.warning.noReadableExecutable':
     '此文件夹不包含可读取的游戏可执行文件，因此无法单独添加。',
   'addGame.warning.filesystemProbeError': '无法检查安装目录的某些部分。请检查文件访问权限。',
+  'addGame.warning.unknown': '游戏检查返回了此版本的 RenderPilot 无法显示的警告。',
   'games.libraryActions': '操作',
   'games.search': '搜索游戏',
   'games.openFilters': '筛选',
@@ -429,19 +434,21 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'notify.statusWarning': '警告',
 
   'scan.partialWarning': plural('count', { other: '无法扫描 {count} 个文件夹。' }),
+  'scan.automaticFailed': '自动扫描游戏库失败。游戏列表仍已刷新。',
 
   'coverSync.failed': '同步封面失败。',
   'coverSync.refreshFailed': '同步封面失败。',
+  'coverSync.failure.single': '无法下载 {title} 的封面：{message}',
+  'coverSync.failure.multiple': plural('count', {
+    other: '无法下载 {count} 个游戏的封面。首个错误：{summary}',
+  }),
+  'coverSync.failure.hint': '请检查游戏封面来源和 SteamGridDB 设置。',
 
   'nvidia.adminRequired': '需要管理员权限',
-  'nvidia.relaunchTo': '以管理员身份重新启动以 {action}。',
-  'nvidia.action.changeSetting': '应用设置',
-  'nvidia.action.revertSetting': '还原设置',
   'nvidia.changeSettingFailed': '无法应用设置',
   'nvidia.revertDefaultFailed': '无法恢复默认设置',
   'nvidia.revertBaselineFailed': '无法恢复初始设置',
 
-  'indicator.relaunchToToggle': '以管理员身份重新启动以切换 DLSS 指示器。',
   'indicator.changeFailed': '无法切换 DLSS 指示器',
 
   'libraries.column.version': '版本',
@@ -517,6 +524,15 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'user_message.stale_replacement_source':
     '无法应用此更新，因为源文件已在 RenderPilot 外部被替换或修改。请重新选择版本——可能需要重新下载。',
   'user_message.nvapi_requires_administrator': '需要管理员权限才能更改此设置。',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot 在重复的游戏卡片中发现了冲突的托管状态。未进行任何更改，并已创建恢复包。',
+  'user_message.rollback_also_failed':
+    '操作失败，且 RenderPilot 无法完全恢复之前的文件状态。重试前请检查游戏文件。',
+  'user_message.elevation_cancelled': '管理员权限请求已取消。未进行任何更改。',
+  'user_message.elevation_policy_blocked': 'Windows 阻止了管理员权限请求。请检查系统策略后重试。',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot 无法以管理员权限重新启动。请尝试重新启动应用。',
+  'user_message.elevation_unsupported': '此平台不支持以管理员权限重新启动。',
 
   'suggested_action.refresh_games': '刷新游戏列表并重试。',
   'suggested_action.reload_game_details': '刷新游戏详情并重试。',

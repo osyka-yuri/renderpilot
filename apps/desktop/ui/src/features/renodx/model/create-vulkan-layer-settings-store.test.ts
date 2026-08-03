@@ -13,7 +13,7 @@ import {
 } from './create-vulkan-layer-settings-store.svelte';
 
 vi.mock('@shared/notifications', () => ({
-  publishErrorNotification: vi.fn(),
+  publishPresentedErrorNotification: vi.fn(),
 }));
 
 vi.mock('@shared/lib', async (importOriginal) => {

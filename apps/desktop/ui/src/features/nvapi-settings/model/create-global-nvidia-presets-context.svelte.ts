@@ -1,5 +1,5 @@
 import { t } from '@shared/i18n';
-import { describeCommandErrorTechnical } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import {
   listGlobalNvapiSettingStates,
   revertGlobalNvapiSetting,
@@ -46,7 +46,7 @@ export function createGlobalNvidiaPresetsContext({
     try {
       store.setStates(await listGlobalNvapiSettingStates());
     } catch (e) {
-      store.setLoadError(describeCommandErrorTechnical(e));
+      store.setLoadError(formatPresentedError(e));
       store.setStates([]);
     } finally {
       loaded = true;
@@ -56,7 +56,7 @@ export function createGlobalNvidiaPresetsContext({
   }
 
   async function setValue(key: string, wire: string): Promise<void> {
-    if (!store.ensureElevated(t('nvidia.action.changeSetting'))) {
+    if (!store.ensureElevated()) {
       return;
     }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
@@ -65,7 +65,7 @@ export function createGlobalNvidiaPresetsContext({
   }
 
   async function revertDefault(key: string): Promise<void> {
-    if (!store.ensureElevated(t('nvidia.action.revertSetting'))) {
+    if (!store.ensureElevated()) {
       return;
     }
     await store.runWrite(key, t('nvidia.revertDefaultFailed'), () =>

@@ -1,22 +1,26 @@
 use std::path::PathBuf;
 
-use super::error::CommandError;
+use super::{CommandBoundary, CommandError};
 
 pub(super) fn require_non_empty_string(
+    boundary: &CommandBoundary,
     name: &'static str,
     value: impl Into<String>,
 ) -> Result<String, CommandError> {
     let value = value.into().trim().to_owned();
 
     if value.is_empty() {
-        return Err(CommandError::invalid_argument(name, "must not be empty"));
+        return Err(boundary.record(CommandError::invalid_argument(name, "must not be empty")));
     }
 
     Ok(value)
 }
 
-pub(super) fn require_non_empty_path(path: String) -> Result<PathBuf, CommandError> {
-    let path = require_non_empty_string("path", path)?;
+pub(super) fn require_non_empty_path(
+    boundary: &CommandBoundary,
+    path: String,
+) -> Result<PathBuf, CommandError> {
+    let path = require_non_empty_string(boundary, "path", path)?;
     Ok(PathBuf::from(path))
 }
 
@@ -32,14 +36,15 @@ pub(super) fn trim_string_vec(values: Vec<String>) -> Vec<String> {
 }
 
 pub(super) fn reject_empty_items(
+    boundary: &CommandBoundary,
     name: &'static str,
     values: &[String],
 ) -> Result<(), CommandError> {
     if values.iter().any(|value| value.is_empty()) {
-        return Err(CommandError::invalid_argument(
+        return Err(boundary.record(CommandError::invalid_argument(
             name,
             "items must not be empty",
-        ));
+        )));
     }
 
     Ok(())

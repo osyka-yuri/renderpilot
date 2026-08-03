@@ -14,12 +14,17 @@ export {
 } from './notification-status';
 
 export {
-  formatError,
   publishErrorNotification,
   publishInfoNotification,
   publishSuccessNotification,
   publishWarningNotification,
 } from './notification-helpers';
+
+export {
+  getPresentedErrorNotificationContent,
+  publishPresentedErrorNotification,
+  type PresentedErrorNotificationContent,
+} from './presented-error-notification';
 
 export type {
   Notification,

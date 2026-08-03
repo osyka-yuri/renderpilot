@@ -1,5 +1,6 @@
 import { setCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import { ALL_ADDON_CAPABILITIES, type EffectiveGamesFilters } from '@entities/game';
+import { reportClientError } from '@shared/errors';
 import { createGamesFilterPersistence, type PersistedGamesFilters } from './index-internal';
 import {
   hasFilterIndicator as checkHasFilterIndicator,
@@ -79,7 +80,7 @@ export function createGamesFiltersModel(input: GamesFiltersModelInput) {
       commitPreferences(value);
     } catch (error: unknown) {
       if (!isDisposed()) {
-        console.error('Failed to load persisted game filters.', error);
+        reportClientError('load_persisted_game_filters', error);
         commitPreferences(null);
       }
     }

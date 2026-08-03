@@ -26,7 +26,7 @@ import {
   type AddGameInspection,
   type AddGameResult,
 } from '@features/scan-libraries';
-import { describeCommandErrorBrief } from '@shared/api';
+import { ClientError } from '@shared/errors';
 import { t } from '@shared/i18n';
 import { publishSuccessNotification } from '@shared/notifications';
 
@@ -156,8 +156,8 @@ async function prepareAutoLibraryScan(): Promise<boolean> {
     return true;
   }
 
-  if (scanResult.errors.length > 0) {
-    publishPartialLibraryScanWarning(scanResult.errors.length);
+  if (scanResult.partialFailureCount > 0) {
+    publishPartialLibraryScanWarning(scanResult.partialFailureCount);
   }
 
   return true;
@@ -169,12 +169,8 @@ async function forceRemoteManifestsBestEffort(
 ): Promise<void> {
   try {
     await force();
-  } catch (error) {
-    // Silent for UX; keep a brief log for diagnostics. Disk scan must continue.
-    console.error(
-      `Remote manifest refresh failed; continuing with library scan. ${describeCommandErrorBrief(error)}`,
-      error,
-    );
+  } catch {
+    // `invokeDesktop` already emitted one safe diagnostic. Disk scan continues.
   }
 }
 
@@ -184,11 +180,8 @@ async function refreshCatalogCapabilitiesBestEffort(
 ): Promise<void> {
   try {
     await refresh();
-  } catch (error) {
-    console.error(
-      `Catalog capability refresh failed; keeping the previous snapshot. ${describeCommandErrorBrief(error)}`,
-      error,
-    );
+  } catch {
+    // `invokeDesktop` already emitted one safe diagnostic; keep the previous snapshot.
   }
 }
 
@@ -290,7 +283,7 @@ export async function rollbackRootCorrectionComponents(
 }
 
 function asThrowable(error: unknown): Error {
-  return error instanceof Error ? error : new Error(describeCommandErrorBrief(error));
+  return error instanceof Error ? error : new ClientError('unexpected_client_error', error);
 }
 
 export type RemoveGameAndRefreshDeps = Pick<

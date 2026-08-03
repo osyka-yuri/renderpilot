@@ -10,7 +10,7 @@ import { availability, fakeApi } from '../model/renodx-store-test-fixtures';
 import { createRenoDxStore } from '../model/create-renodx-store.svelte';
 
 const openExternal = vi.hoisted(() => vi.fn<(url: string) => Promise<void>>());
-const publishErrorNotification = vi.hoisted(() => vi.fn());
+const publishPresentedErrorNotification = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -18,7 +18,7 @@ vi.mock('@shared/api', async (importOriginal) => ({
 }));
 vi.mock('@shared/notifications', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  publishErrorNotification,
+  publishPresentedErrorNotification,
 }));
 
 import RenoDxExternalView from './RenoDxExternalView.svelte';
@@ -29,7 +29,7 @@ describe('RenoDxExternalView', () => {
 
   beforeEach(() => {
     openExternal.mockReset();
-    publishErrorNotification.mockReset();
+    publishPresentedErrorNotification.mockReset();
     target = document.createElement('div');
     document.body.append(target);
   });
@@ -78,9 +78,9 @@ describe('RenoDxExternalView', () => {
 
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith('https://discord.gg/example');
-      expect(publishErrorNotification).toHaveBeenCalledWith(
+      expect(publishPresentedErrorNotification).toHaveBeenCalledWith(
         'Open the RenoDX Discord',
-        'popup blocked',
+        expect.any(Error),
       );
     });
   });

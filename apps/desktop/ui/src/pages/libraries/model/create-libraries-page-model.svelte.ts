@@ -12,7 +12,8 @@ import {
   shouldShowPackageDisplayName,
   shouldDeleteLibraryPackage,
 } from './libraries-page-model';
-import { describeCommandError } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
+import { reportClientError } from '@shared/errors';
 import { runWithConcurrency } from '@shared/concurrency';
 import { clearDownloadProgress, sumDownloadFractions } from '@shared/lib';
 import { createDisposableRequestChannel } from '@shared/requests';
@@ -317,7 +318,7 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
     } catch (error) {
       if (isModelActive()) {
         if (options.suppressErrorBanner) {
-          console.error(`${options.failureContext}:`, error);
+          reportClientError('library_package_mutation', error);
         } else {
           setError(options.failureContext, error);
         }
@@ -409,8 +410,8 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
   }
 
   function setError(context: string, error: unknown): void {
-    errorMessage = `${context}: ${describeCommandError(error)}`;
-    console.error(`${context}:`, error);
+    errorMessage = `${context}: ${formatPresentedError(error)}`;
+    reportClientError('libraries_page_operation', error);
   }
 
   return {

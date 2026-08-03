@@ -67,3 +67,40 @@ export function renderContractVersion(version) {
 export const MESSAGE_CONTRACT_VERSION = ${JSON.stringify(version)} as const;
 `;
 }
+
+export function renderDesktopCommandErrorContract(contract) {
+  const frontendContract = {
+    schemaVersion: contract.schemaVersion,
+    commandErrors: Object.fromEntries(
+      Object.entries(contract.commandErrors).map(([code, spec]) => [
+        code,
+        {
+          messageKey: spec.messageKey,
+          severity: spec.severity,
+          actions: spec.actions,
+          reasonCodes: spec.reasonCodes,
+          recoveryBundlePath: spec.recoveryBundlePath,
+        },
+      ]),
+    ),
+    suggestedActions: contract.suggestedActions,
+  };
+
+  return `${GENERATED_HEADER}
+export const DESKTOP_COMMAND_ERROR_CONTRACT = ${JSON.stringify(frontendContract, null, 2)} as const;
+
+export const COMMAND_ERROR_CONTRACT = DESKTOP_COMMAND_ERROR_CONTRACT.commandErrors;
+export const SUGGESTED_ACTION_CONTRACT = DESKTOP_COMMAND_ERROR_CONTRACT.suggestedActions;
+
+export type CommandErrorCode = keyof typeof COMMAND_ERROR_CONTRACT;
+export type SuggestedActionCode = keyof typeof SUGGESTED_ACTION_CONTRACT;
+`;
+}
+
+export function renderAddGameWarningContract(contract) {
+  return `${GENERATED_HEADER}
+export const ADD_GAME_WARNING_CONTRACT = ${JSON.stringify(contract.addGameWarnings, null, 2)} as const;
+
+export type AddGameWarningCode = keyof typeof ADD_GAME_WARNING_CONTRACT;
+`;
+}

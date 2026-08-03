@@ -1,4 +1,5 @@
 import type { CatalogDelta, CatalogSyncState } from '@entities/game';
+import { reportClientError } from '@shared/errors';
 
 type StopListener = () => void;
 
@@ -19,9 +20,10 @@ export type InitialCatalogSyncCompletion = {
 export type InitialCatalogLifecycleDeps = {
   previewMode: boolean;
   listenEvent: CatalogEventListener;
-  startBackgroundRefresh: () => Promise<{ started: boolean }>;
+  startBackgroundRefresh: () => Promise<{ started: boolean; partialFailureCount: number }>;
   startUpdater: () => void;
   onCatalogDelta: (delta: CatalogDelta) => void;
+  onPartialScanFailures: (count: number) => void;
   completeInitialCatalogSync: (completion: InitialCatalogSyncCompletion) => Promise<void>;
   enableCoverHydration: () => void;
   reportError?: (message: string, error: unknown) => void;
@@ -36,8 +38,8 @@ export function createInitialCatalogLifecycle(deps: InitialCatalogLifecycleDeps)
 
   const reportError =
     deps.reportError ??
-    ((message: string, error: unknown) => {
-      console.error(message, error);
+    ((_message: string, error: unknown) => {
+      reportClientError('initial_catalog_lifecycle', error);
     });
 
   const retainListener = (
@@ -104,7 +106,8 @@ export function createInitialCatalogLifecycle(deps: InitialCatalogLifecycleDeps)
           return;
         }
         try {
-          await deps.startBackgroundRefresh();
+          const refresh = await deps.startBackgroundRefresh();
+          reportPartialScanFailuresIfActive(refresh.partialFailureCount);
           // The command resolves after the backend coordinator has attempted
           // both delta and ready publication. This fallback also covers a
           // sync-state listener or ready-event failure and is idempotent with
@@ -125,6 +128,12 @@ export function createInitialCatalogLifecycle(deps: InitialCatalogLifecycleDeps)
       // The backend command resolves only after startup cover GC, so cover
       // downloads cannot race an orphan snapshot captured before bootstrap.
       deps.enableCoverHydration();
+    }
+  }
+
+  function reportPartialScanFailuresIfActive(count: number): void {
+    if (!disposed && count > 0) {
+      deps.onPartialScanFailures(count);
     }
   }
 

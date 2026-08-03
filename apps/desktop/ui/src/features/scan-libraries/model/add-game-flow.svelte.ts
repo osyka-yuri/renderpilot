@@ -1,3 +1,5 @@
+import type { PresentedError } from '@shared/error-presentation';
+
 import type { AddGameConfirmation, AddGameInspection, AddGameResult } from './add-game';
 import { automaticAddGameConfirmation } from './add-game';
 
@@ -8,7 +10,7 @@ export type AddGameFlowState =
   | {
       kind: 'review';
       inspection: AddGameInspection;
-      errorMessage: string | null;
+      errorPresentation: PresentedError | null;
     }
   | {
       kind: 'submitting';
@@ -29,6 +31,10 @@ export type AddGameSubmitOutcome =
 
 export type AddGameRollbackOutcome = { kind: 'completed' } | { kind: 'failed'; error: unknown };
 
+type InlineInspectionOutcome =
+  | { kind: 'completed'; inspection: AddGameInspection }
+  | { kind: 'failed'; error: unknown };
+
 export type AddGameFlowDeps = {
   chooseFolder: () => Promise<string | null>;
   inspect: (selectedRoot: string) => Promise<AddGameInspection>;
@@ -37,10 +43,10 @@ export type AddGameFlowDeps = {
     confirmation: AddGameConfirmation,
   ) => Promise<AddGameSubmitOutcome>;
   rollback: (gameId: string, componentIds: string[]) => Promise<AddGameRollbackOutcome>;
-  describeError: (error: unknown) => string;
+  presentError: (error: unknown) => PresentedError;
+  presentCatalogBusyError: () => PresentedError;
   publishError: (error: unknown) => void;
   requiresReinspection: (error: unknown) => boolean;
-  catalogBusyMessage: () => string;
 };
 
 export type AddGameFlow = ReturnType<typeof createAddGameFlow>;
@@ -76,7 +82,7 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
         return;
       }
       if (inspection.decision.kind !== 'automatic') {
-        state = { kind: 'review', inspection, errorMessage: null };
+        state = { kind: 'review', inspection, errorPresentation: null };
         return;
       }
       await submitInspection(
@@ -120,32 +126,20 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
         return;
       }
 
-      const error = outcome.kind === 'failed' ? outcome.error : null;
-      if (!reviewed && error !== null && !deps.requiresReinspection(error)) {
-        deps.publishError(error);
+      if (!reviewed && outcome.kind === 'failed' && !deps.requiresReinspection(outcome.error)) {
+        deps.publishError(outcome.error);
         state = { kind: 'idle' };
         return;
       }
 
       const reinspection =
-        error !== null && deps.requiresReinspection(error)
+        outcome.kind === 'failed' && deps.requiresReinspection(outcome.error)
           ? await inspectInline(inspection.selectedRoot)
           : null;
       if (!isCurrent(request)) {
         return;
       }
-      state = {
-        kind: 'review',
-        inspection: reinspection?.inspection ?? inspection,
-        errorMessage:
-          reinspection?.inspection !== undefined
-            ? null
-            : reinspection?.error !== undefined
-              ? deps.describeError(reinspection.error)
-              : error === null
-                ? deps.catalogBusyMessage()
-                : deps.describeError(error),
-      };
+      state = selectReviewState(deps, inspection, outcome, reinspection);
     } catch (error) {
       if (!isCurrent(request)) {
         return;
@@ -154,7 +148,7 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
         state = {
           kind: 'review',
           inspection,
-          errorMessage: deps.describeError(error),
+          errorPresentation: deps.presentError(error),
         };
       } else {
         deps.publishError(error);
@@ -187,14 +181,21 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
       if (!isCurrent(request)) {
         return;
       }
-      if (rollback.kind === 'failed' || reinspection.inspection === undefined) {
+      if (rollback.kind === 'failed') {
+        const latestInspection =
+          reinspection.kind === 'completed' ? reinspection.inspection : inspection;
         state = {
           kind: 'review',
-          inspection: reinspection.inspection ?? inspection,
-          errorMessage:
-            rollback.kind === 'failed'
-              ? deps.describeError(rollback.error)
-              : deps.describeError(reinspection.error),
+          inspection: latestInspection,
+          errorPresentation: deps.presentError(rollback.error),
+        };
+        return;
+      }
+      if (reinspection.kind === 'failed') {
+        state = {
+          kind: 'review',
+          inspection,
+          errorPresentation: deps.presentError(reinspection.error),
         };
         return;
       }
@@ -202,7 +203,7 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
         state = {
           kind: 'review',
           inspection: reinspection.inspection,
-          errorMessage: null,
+          errorPresentation: null,
         };
         return;
       }
@@ -214,18 +215,16 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
       state = {
         kind: 'review',
         inspection,
-        errorMessage: deps.describeError(error),
+        errorPresentation: deps.presentError(error),
       };
     }
   }
 
-  async function inspectInline(
-    selectedRoot: string,
-  ): Promise<{ inspection?: AddGameInspection; error?: unknown }> {
+  async function inspectInline(selectedRoot: string): Promise<InlineInspectionOutcome> {
     try {
-      return { inspection: await deps.inspect(selectedRoot) };
+      return { kind: 'completed', inspection: await deps.inspect(selectedRoot) };
     } catch (error) {
-      return { error };
+      return { kind: 'failed', error };
     }
   }
 
@@ -247,4 +246,30 @@ export function createAddGameFlow(deps: AddGameFlowDeps) {
     rollbackAndConfirm,
     close,
   };
+}
+
+function selectReviewState(
+  deps: AddGameFlowDeps,
+  inspection: AddGameInspection,
+  outcome: Extract<AddGameSubmitOutcome, { kind: 'busy' | 'failed' }>,
+  reinspection: InlineInspectionOutcome | null,
+): Extract<AddGameFlowState, { kind: 'review' }> {
+  if (reinspection?.kind === 'completed') {
+    return { kind: 'review', inspection: reinspection.inspection, errorPresentation: null };
+  }
+  if (reinspection?.kind === 'failed') {
+    return {
+      kind: 'review',
+      inspection,
+      errorPresentation: deps.presentError(reinspection.error),
+    };
+  }
+  if (outcome.kind === 'busy') {
+    return {
+      kind: 'review',
+      inspection,
+      errorPresentation: deps.presentCatalogBusyError(),
+    };
+  }
+  return { kind: 'review', inspection, errorPresentation: deps.presentError(outcome.error) };
 }

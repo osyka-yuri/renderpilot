@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@shared/notifications', () => ({
-  publishErrorNotification: vi.fn(),
+  publishPresentedErrorNotification: vi.fn(),
 }));
 
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { createLumaStore } from './create-luma-store.svelte';
 import type { LumaUpdateReport } from './types';
 import {
@@ -146,7 +146,7 @@ describe('createLumaStore', () => {
   });
 
   it('install() resolves false, clears busy, and notifies when the backend fails', async () => {
-    vi.mocked(publishErrorNotification).mockClear();
+    vi.mocked(publishPresentedErrorNotification).mockClear();
     const api = fakeApi({ install: vi.fn(() => Promise.reject(new Error('boom'))) });
     const store = createLumaStore({ api });
 
@@ -155,7 +155,7 @@ describe('createLumaStore', () => {
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
     expect(store.isInstalled).toBe(false);
-    expect(publishErrorNotification).toHaveBeenCalledTimes(1);
+    expect(publishPresentedErrorNotification).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces an available update for an installed game', async () => {
@@ -279,7 +279,7 @@ describe('createLumaStore', () => {
   });
 
   it('repair() resolves false, clears busy, and notifies when the backend fails', async () => {
-    vi.mocked(publishErrorNotification).mockClear();
+    vi.mocked(publishPresentedErrorNotification).mockClear();
     const api = fakeApi({
       getAvailability: vi.fn(() => Promise.resolve(INSTALLED)),
       update: vi.fn(() => Promise.reject(new Error('boom'))),
@@ -291,7 +291,7 @@ describe('createLumaStore', () => {
 
     expect(ok).toBe('failed');
     expect(store.busy).toBe(false);
-    expect(publishErrorNotification).toHaveBeenCalledTimes(1);
+    expect(publishPresentedErrorNotification).toHaveBeenCalledTimes(1);
   });
 
   it('uninstall() refreshes to not-installed', async () => {

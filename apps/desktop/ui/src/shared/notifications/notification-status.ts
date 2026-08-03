@@ -1,6 +1,6 @@
-import { normalizeCommandError } from '@shared/api';
 import { t } from '@shared/i18n';
 import { dismissNotification, publishNotification } from './notification-center';
+import { getPresentedErrorNotificationContent } from './presented-error-notification';
 
 export const STATUS_NOTIFICATION_ID = 'desktop-status';
 
@@ -11,6 +11,7 @@ function statusTitle(severity: 'error' | 'warning'): string {
 export function publishStatusNotification(
   message: string,
   severity: 'error' | 'warning',
+  details: readonly string[] = [],
 ): string | null {
   const description = normalizeOptionalText(message);
 
@@ -24,6 +25,7 @@ export function publishStatusNotification(
     severity,
     title: statusTitle(severity),
     description,
+    details,
     important: severity === 'error',
   });
 }
@@ -33,9 +35,8 @@ export function clearStatusNotification(): void {
 }
 
 export function publishCommandErrorNotification(error: unknown): string | null {
-  const normalizedError = normalizeCommandError(error);
-
-  return publishStatusNotification(normalizedError.message, normalizedError.dto.severity);
+  const content = getPresentedErrorNotificationContent(error);
+  return publishStatusNotification(content.description, content.severity, content.details);
 }
 
 function normalizeOptionalText(value?: string): string | undefined {

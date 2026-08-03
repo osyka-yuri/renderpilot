@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "addGameWarnings": [
+    {
+      "code": "legacy_cards_consolidated",
+      "messageKey": "addGame.warning.legacyCardsConsolidated",
+      "parameters": { "count": "positive_integer" }
+    },
+    {
+      "code": "legacy_cards_retained",
+      "messageKey": "addGame.warning.legacyCardsRetained",
+      "parameters": { "count": "positive_integer" }
+    },
+    {
+      "code": "recovery_bundle_created",
+      "messageKey": "addGame.warning.recoveryBundleCreated",
+      "parameters": { "path": "non_blank_string" }
+    },
+    {
+      "code": "root_correction_history_archived",
+      "messageKey": "addGame.warning.rootCorrectionHistoryArchived",
+      "parameters": { "path": "non_blank_string" }
+    },
+    {
+      "code": "filesystem_probe_error",
+      "messageKey": "addGame.warning.filesystemProbeError",
+      "parameters": {}
+    },
+    {
+      "code": "inside_existing_install",
+      "messageKey": "addGame.warning.insideExistingInstall",
+      "parameters": {}
+    },
+    {
+      "code": "narrows_existing_install",
+      "messageKey": "addGame.warning.narrowsExistingInstall",
+      "parameters": {}
+    },
+    {
+      "code": "multiple_proven_installs",
+      "messageKey": "addGame.warning.multipleProvenInstalls",
+      "parameters": {}
+    },
+    {
+      "code": "contains_proven_install",
+      "messageKey": "addGame.warning.containsProvenInstall",
+      "parameters": {}
+    },
+    {
+      "code": "explicit_executable_required",
+      "messageKey": "addGame.warning.explicitExecutableRequired",
+      "parameters": {}
+    },
+    {
+      "code": "no_readable_executable",
+      "messageKey": "addGame.warning.noReadableExecutable",
+      "parameters": {}
+    }
+  ]
+}

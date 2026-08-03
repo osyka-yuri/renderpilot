@@ -14,8 +14,8 @@
   async function openDonatePage(): Promise<void> {
     try {
       await openExternal(DONATE_URL);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // `openExternal` already emitted one safe diagnostic.
     }
   }
 

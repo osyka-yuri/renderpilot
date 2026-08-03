@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { PresentedError } from '@shared/error-presentation';
 
 import type { AddGameInspection } from './add-game';
 import {
@@ -75,7 +76,7 @@ describe('add-game flow', () => {
       deps({
         inspect: vi.fn(() => Promise.resolve(inspected)),
         rollback,
-        describeError: (error) => (error as Error).message,
+        presentError: (error) => presented((error as Error).message),
       }),
     );
     await flow.chooseFolder();
@@ -87,10 +88,10 @@ describe('add-game flow', () => {
     });
 
     expect(rollback).toHaveBeenCalledWith('game:cleanup', ['component:a']);
-    expect(flow.state).toMatchObject({
-      kind: 'review',
-      errorMessage: 'rollback failed',
-    });
+    expect(flow.state.kind).toBe('review');
+    expect(flow.state.kind === 'review' ? flow.state.errorPresentation?.message : null).toBe(
+      'rollback failed',
+    );
   });
 
   it('returns to idle and publishes a rejected folder-picker error', async () => {
@@ -114,7 +115,7 @@ describe('add-game flow', () => {
     const flow = createAddGameFlow(
       deps({
         submit: () => Promise.reject(failure),
-        describeError: (error) => (error as Error).message,
+        presentError: (error) => presented((error as Error).message),
       }),
     );
     await flow.chooseFolder();
@@ -125,9 +126,107 @@ describe('add-game flow', () => {
       chosenExecutable: null,
     });
 
-    expect(flow.state).toMatchObject({
+    expect(flow.state.kind).toBe('review');
+    expect(flow.state.kind === 'review' ? flow.state.errorPresentation?.message : null).toBe(
+      'submit rejected',
+    );
+  });
+
+  it('returns a reviewed busy submission to review with the catalog warning', async () => {
+    const presentCatalogBusyError = vi.fn(() => presented('catalog busy', 'warning'));
+    const flow = createAddGameFlow(
+      deps({
+        submit: () => Promise.resolve({ kind: 'busy' }),
+        presentCatalogBusyError,
+      }),
+    );
+    await flow.chooseFolder();
+
+    await flow.confirm(confirmation());
+
+    expect(presentCatalogBusyError).toHaveBeenCalledOnce();
+    expect(flow.state.kind).toBe('review');
+    expect(flow.state.kind === 'review' ? flow.state.errorPresentation : null).toEqual(
+      presented('catalog busy', 'warning'),
+    );
+  });
+
+  it('preserves a failed outcome with a null error instead of treating it as busy', async () => {
+    const presentError = vi.fn((error: unknown) =>
+      presented(error === null ? 'null error' : 'error'),
+    );
+    const presentCatalogBusyError = vi.fn(() => presented('catalog busy', 'warning'));
+    const flow = createAddGameFlow(
+      deps({
+        submit: () => Promise.resolve({ kind: 'failed', error: null }),
+        presentError,
+        presentCatalogBusyError,
+      }),
+    );
+    await flow.chooseFolder();
+
+    await flow.confirm(confirmation());
+
+    expect(presentError).toHaveBeenCalledWith(null);
+    expect(presentCatalogBusyError).not.toHaveBeenCalled();
+    expect(flow.state.kind === 'review' ? flow.state.errorPresentation?.message : null).toBe(
+      'null error',
+    );
+  });
+
+  it('uses a completed reinspection after a stale reviewed submission', async () => {
+    const initial = inspection('D:/Games/Stale');
+    const refreshed = inspection('D:/Games/Stale', { catalogGeneration: 2 });
+    const inspect = vi
+      .fn<(root: string) => Promise<AddGameInspection>>()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(refreshed);
+    const flow = createAddGameFlow(
+      deps({
+        inspect,
+        submit: () => Promise.resolve({ kind: 'failed', error: new Error('stale') }),
+        requiresReinspection: () => true,
+      }),
+    );
+    await flow.chooseFolder();
+
+    await flow.confirm(confirmation());
+
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(inspect).toHaveBeenLastCalledWith('D:/Games/Stale');
+    expect(flow.state).toEqual({
       kind: 'review',
-      errorMessage: 'submit rejected',
+      inspection: refreshed,
+      errorPresentation: null,
+    });
+  });
+
+  it('keeps the prior inspection and presents a failed reinspection', async () => {
+    const initial = inspection('D:/Games/Stale');
+    const reinspectionError = new Error('reinspection failed');
+    const inspect = vi
+      .fn<(root: string) => Promise<AddGameInspection>>()
+      .mockResolvedValueOnce(initial)
+      .mockRejectedValueOnce(reinspectionError);
+    const presentError = vi.fn((error: unknown) => presented((error as Error).message));
+    const flow = createAddGameFlow(
+      deps({
+        inspect,
+        submit: () => Promise.resolve({ kind: 'failed', error: new Error('stale') }),
+        presentError,
+        requiresReinspection: () => true,
+      }),
+    );
+    await flow.chooseFolder();
+
+    await flow.confirm(confirmation());
+
+    expect(presentError).toHaveBeenCalledOnce();
+    expect(presentError).toHaveBeenCalledWith(reinspectionError);
+    expect(flow.state).toEqual({
+      kind: 'review',
+      inspection: initial,
+      errorPresentation: presented('reinspection failed'),
     });
   });
 
@@ -150,7 +249,7 @@ describe('add-game flow', () => {
       deps({
         inspect: () => Promise.resolve(inspected),
         rollback: () => Promise.reject(failure),
-        describeError: (error) => (error as Error).message,
+        presentError: (error) => presented((error as Error).message),
       }),
     );
     await flow.chooseFolder();
@@ -161,10 +260,10 @@ describe('add-game flow', () => {
       chosenExecutable: null,
     });
 
-    expect(flow.state).toMatchObject({
-      kind: 'review',
-      errorMessage: 'rollback rejected',
-    });
+    expect(flow.state.kind).toBe('review');
+    expect(flow.state.kind === 'review' ? flow.state.errorPresentation?.message : null).toBe(
+      'rollback rejected',
+    );
   });
 });
 
@@ -174,11 +273,29 @@ function deps(overrides: Partial<AddGameFlowDeps> = {}): AddGameFlowDeps {
     inspect: (root) => Promise.resolve(inspection(root)),
     submit: () => Promise.resolve({ kind: 'busy' }),
     rollback: () => Promise.resolve({ kind: 'completed' }),
-    describeError: String,
+    presentError: (error) => presented(String(error)),
+    presentCatalogBusyError: () => presented('catalog busy', 'warning'),
     publishError: vi.fn(),
     requiresReinspection: () => false,
-    catalogBusyMessage: () => 'catalog busy',
     ...overrides,
+  };
+}
+
+function presented(message: string, severity: 'error' | 'warning' = 'error'): PresentedError {
+  return {
+    code: 'test_error',
+    severity,
+    message,
+    suggestedActions: [],
+    contractStatus: 'known',
+  };
+}
+
+function confirmation() {
+  return {
+    rootChoice: 'selected' as const,
+    allowRootCorrection: false,
+    chosenExecutable: null,
   };
 }
 

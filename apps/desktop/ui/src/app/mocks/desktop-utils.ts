@@ -103,7 +103,7 @@ export type DesktopCommandResultMap = {
   refresh_catalog_capabilities: { refreshed: boolean };
   query_game_cards: GameCardsResult;
   bootstrap_games_catalog: GamesCatalogBootstrap;
-  start_background_refresh: { started: boolean };
+  start_background_refresh: { started: boolean; partialFailureCount: number };
   get_game_details: GameDetails;
   fetch_game_cover: CoverArtworkResult;
   clear_game_cover: { cleared: boolean };

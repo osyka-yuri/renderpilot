@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@shared/notifications', () => ({
-  publishErrorNotification: vi.fn(),
+  publishPresentedErrorNotification: vi.fn(),
 }));
 
 import { createLumaStore } from './create-luma-store.svelte';

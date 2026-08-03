@@ -1,9 +1,7 @@
 //! App lifecycle Tauri commands (init snapshot, elevation).
 
-use renderpilot_api::ApiError;
-use renderpilot_orchestration::ServiceError;
-
-use super::{CommandError, JsonCommandResult};
+use super::error::CommandErrorKind;
+use super::{CommandBoundary, CommandError, JsonCommandResult};
 
 /// Returns the `AppInitializationState` snapshot computed at startup.
 /// Synchronous: the state is already in managed memory, no I/O.
@@ -20,10 +18,10 @@ pub fn get_app_initialization_state(
 }
 
 /// Relaunches the app elevated via `ShellExecuteW(verb="runas")` and exits this process.
-/// Returns `CommandFailed` if the user declines the UAC prompt or policy blocks elevation;
-/// the frontend shows a non-fatal toast in that case.
+/// Returns a stable elevation-specific machine code when relaunch cannot proceed.
 #[tauri::command]
 pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult {
+    let boundary = CommandBoundary::new("request_admin_relaunch");
     #[cfg(windows)]
     {
         use crate::elevation::{
@@ -34,21 +32,24 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
                 app.exit(0);
                 Ok(serde_json::json!({ "relaunched": true }))
             }
-            ElevationStartupDecision::UserCancelled => Err(CommandError::from(ApiError::Service(
-                ServiceError::CommandFailed("UAC consent was declined".to_owned()),
-            ))),
-            ElevationStartupDecision::PolicyBlocked(code) => Err(CommandError::from(
-                ApiError::Service(ServiceError::CommandFailed(format!(
-                    "OS denied the elevation request (ShellExecute code {code})"
-                ))),
-            )),
+            ElevationStartupDecision::UserCancelled => {
+                Err(boundary.record(CommandError::with_diagnostic(
+                    CommandErrorKind::ElevationCancelled,
+                    "UAC consent was declined",
+                )))
+            }
+            ElevationStartupDecision::PolicyBlocked(code) => {
+                Err(boundary.record(CommandError::with_diagnostic(
+                    CommandErrorKind::ElevationPolicyBlocked,
+                    format_args!("OS denied the elevation request (ShellExecute code {code})"),
+                )))
+            }
             // UserRequest never suppresses on a live handoff; keep exhaustiveness.
             ElevationStartupDecision::SkippedRecentHandoff => {
                 debug_assert!(false, "UserRequest must not skip elevation handoff");
-                Err(CommandError::from(ApiError::Service(
-                    ServiceError::CommandFailed(
-                        "elevation relaunch was unexpectedly skipped".to_owned(),
-                    ),
+                Err(boundary.record(CommandError::with_diagnostic(
+                    CommandErrorKind::ElevationRelaunchFailed,
+                    "elevation relaunch was unexpectedly skipped",
                 )))
             }
         }
@@ -56,10 +57,9 @@ pub async fn request_admin_relaunch(app: tauri::AppHandle) -> JsonCommandResult 
     #[cfg(not(windows))]
     {
         let _ = app;
-        Err(CommandError::from(ApiError::Service(
-            ServiceError::CommandFailed(
-                "administrator relaunch is only supported on Windows".to_owned(),
-            ),
+        Err(boundary.record(CommandError::with_diagnostic(
+            CommandErrorKind::ElevationUnsupported,
+            "administrator relaunch is only supported on Windows",
         )))
     }
 }

@@ -687,6 +687,11 @@ describe('runtime coordinator integration', () => {
     });
     expect(test.systemObserverCount).toBe(1);
     expect(test.persistedModes).toEqual([]);
+    expect(test.loadErrorReports).toHaveLength(1);
+    expect(test.loadErrorReports[0]).toMatchObject({
+      operation: 'system_language_change',
+      error: { code: 'i18n_locale_load_failed', mode: 'system', locale: 'ru' },
+    });
 
     test.setSystemLocale('ru');
     await vi.waitFor(() => {
@@ -695,5 +700,56 @@ describe('runtime coordinator integration', () => {
     expect(loader).toHaveBeenCalledTimes(2);
     expect(test.runtime.getState().status).toBe('ready');
     expect(test.persistedModes).toEqual([]);
+    expect(test.loadErrorReports).toHaveLength(1);
+  });
+
+  it('reports a winning startup locale failure exactly once', async () => {
+    const cause = new Error('private startup locale cause');
+    const test = createTestRuntime({
+      storedMode: 'ru',
+      loaders: { ru: () => Promise.reject(cause) },
+    });
+
+    const result = await test.runtime.initializeI18n();
+
+    expect(result.fallbackUsed).toBe(true);
+    expect(test.loadErrorReports).toHaveLength(1);
+    expect(test.loadErrorReports[0]?.operation).toBe('initialize_locale');
+    expect(test.loadErrorReports[0]?.error).toMatchObject({
+      code: 'i18n_locale_load_failed',
+      mode: 'ru',
+      locale: 'ru',
+      cause,
+    });
+  });
+
+  it('reports an explicit locale failure once but never reports a superseded transition', async () => {
+    const firstRussianLoad = deferred<LocalePack>();
+    const test = createTestRuntime({
+      loaders: { ru: () => firstRussianLoad.promise },
+    });
+    await test.runtime.initializeI18n();
+
+    const superseded = test.runtime.setLanguageMode('ru');
+    const winning = test.runtime.setLanguageMode('fr');
+    firstRussianLoad.reject(new Error('superseded private cause'));
+
+    await expect(superseded).resolves.toMatchObject({ outcome: 'superseded' });
+    await expect(winning).resolves.toMatchObject({ outcome: 'applied', locale: 'fr' });
+    expect(test.loadErrorReports).toEqual([]);
+
+    const failure = new Error('winning private cause');
+    const failing = createTestRuntime({
+      loaders: { ru: () => Promise.reject(failure) },
+    });
+    await failing.runtime.initializeI18n();
+    await expect(failing.runtime.setLanguageMode('ru')).rejects.toMatchObject({ cause: failure });
+    expect(failing.loadErrorReports).toHaveLength(1);
+    expect(failing.loadErrorReports[0]?.operation).toBe('switch_locale');
+    expect(failing.loadErrorReports[0]?.error).toMatchObject({
+      cause: failure,
+      locale: 'ru',
+      mode: 'ru',
+    });
   });
 });

@@ -1,4 +1,5 @@
 import type { LanguageMode, Locale } from './locale-model';
+import type { LocaleLoadError } from './errors';
 import { MESSAGE_CONTRACT_VERSION } from './messages/generated/contract-version';
 import type { LocalePack } from './packs/types';
 import { createI18nRuntime } from './runtime.svelte';
@@ -56,6 +57,10 @@ export function createTestRuntime(options: {
   const persistedModes: LanguageMode[] = [];
   const documentLocales: Locale[] = [];
   const systemLanguageListeners = new Set<() => void>();
+  const loadErrorReports: {
+    error: LocaleLoadError;
+    operation: 'initialize_locale' | 'switch_locale' | 'system_language_change';
+  }[] = [];
   const loaders = {
     en: () => Promise.resolve(enPack),
     ru: () => Promise.resolve(pack('ru', { nav: 'Games' })),
@@ -86,6 +91,9 @@ export function createTestRuntime(options: {
       documentLocale = locale;
       documentLocales.push(locale);
     },
+    onLocaleLoadError: (error, operation) => {
+      loadErrorReports.push({ error, operation });
+    },
   });
 
   return {
@@ -98,6 +106,7 @@ export function createTestRuntime(options: {
     },
     persistedModes,
     documentLocales,
+    loadErrorReports,
     setSystemLocale(locale: Locale) {
       currentSystemLocale = locale;
       for (const listener of [...systemLanguageListeners]) {

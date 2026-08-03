@@ -8,7 +8,10 @@
   } from '@entities/addon';
   import { openExternal } from '@shared/api';
   import { t, translateExternalMessage } from '@shared/i18n';
-  import { publishErrorNotification, formatError } from '@shared/notifications';
+  import {
+    publishErrorNotification,
+    publishPresentedErrorNotification,
+  } from '@shared/notifications';
   import { Button } from '@shared/ui';
 
   import type { RenoDxStore } from '../model/create-renodx-store.svelte';
@@ -67,7 +70,7 @@
   const confirmOpen = $derived(pendingFilePath !== null);
 
   function reportError(title: string, error: unknown): void {
-    publishErrorNotification(title, formatError(error));
+    publishPresentedErrorNotification(title, error);
   }
 
   async function openExternalLink(): Promise<void> {

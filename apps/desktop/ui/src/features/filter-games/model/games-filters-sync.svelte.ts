@@ -1,3 +1,4 @@
+import { reportClientError } from '@shared/errors';
 import { shouldQueueAvailabilityPersist, syncGamesFilterState } from './games-filter-controller';
 import type { GamesFiltersStore } from './games-filters-store.svelte';
 import type { PersistedGamesFilters } from './index-internal';
@@ -77,7 +78,7 @@ export function setupGamesFiltersSync(
         },
       })
       .catch((error: unknown) => {
-        console.error('Failed to persist adjusted game filters.', error);
+        reportClientError('persist_adjusted_game_filters', error);
       })
       .finally(() => {
         if (availabilityPersistSnapshot === persistResult.nextSnapshot) {
@@ -119,7 +120,7 @@ export function setupGamesFiltersSync(
 
     if (appliedChanged) {
       void persistence.persistFilters(ctx).catch((error: unknown) => {
-        console.error('Failed to persist user filter action.', error);
+        reportClientError('persist_user_filter_action', error);
       });
     } else if (searchChanged) {
       persistence.queueSearchPersist(ctx);

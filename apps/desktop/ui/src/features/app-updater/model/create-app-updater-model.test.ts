@@ -392,8 +392,18 @@ describe('createAppUpdaterModel', () => {
       expect(handle.install).not.toHaveBeenCalled();
       expect(model.dialog?.phase).toBe('prepare-failed');
       expect(error).toHaveBeenCalledWith(
-        'Failed to wait before retrying update download after attempt 1:',
-        waitError,
+        '[RenderPilot diagnostic]',
+        {
+          source: 'client-boundary',
+          operation: 'updater_retry_wait_failed',
+          code: 'updater_retry_wait_failed',
+          contractStatus: 'known',
+          severity: 'error',
+        },
+        expect.objectContaining({
+          code: 'updater_retry_wait_failed',
+          cause: waitError,
+        }),
       );
       warn.mockRestore();
       error.mockRestore();

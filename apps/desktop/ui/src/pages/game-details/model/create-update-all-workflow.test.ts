@@ -224,7 +224,7 @@ describe('createUpdateAllWorkflow', () => {
     expect(workflow.developerModeOpen).toBe(false);
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]?.[0]).toMatchObject({
-      dto: { code: 'd3d12_executable_repair_required' },
+      code: 'd3d12_executable_repair_required',
     });
   });
 

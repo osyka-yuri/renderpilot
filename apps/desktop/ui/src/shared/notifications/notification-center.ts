@@ -48,13 +48,26 @@ export function clearAllNotifications(): void {
 }
 
 function createNotification(input: NotificationInput): Notification {
+  const details = normalizeDetails(input.details);
   return {
     id: input.id ?? createNotificationId(),
     severity: input.severity,
     title: normalizeRequiredText(input.title, 'Notification title'),
     description: normalizeOptionalText(input.description),
+    ...(details === undefined ? {} : { details }),
     important: input.important,
   };
+}
+
+function normalizeDetails(values?: readonly string[]): readonly string[] | undefined {
+  if (values === undefined) {
+    return undefined;
+  }
+
+  const details = values
+    .map((value) => normalizeOptionalText(value))
+    .filter((value): value is string => value !== undefined);
+  return details.length === 0 ? undefined : details;
 }
 
 function createNotificationId(): string {

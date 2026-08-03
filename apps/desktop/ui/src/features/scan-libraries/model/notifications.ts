@@ -24,5 +24,7 @@ export function publishAddGameWarnings(result: AddGameResult): string | null {
   ) {
     messages.push(t('addGame.warning.recoveryBundleFallback', { path: recoveryBundlePath }));
   }
-  return messages.length === 0 ? null : publishStatusNotification(messages.join('\n'), 'warning');
+  return messages.length === 0
+    ? null
+    : publishStatusNotification(messages[0], 'warning', messages.slice(1));
 }

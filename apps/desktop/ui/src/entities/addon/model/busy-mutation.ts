@@ -1,6 +1,6 @@
-import { describeCommandErrorTechnical } from '@shared/api';
+import { reportClientError } from '@shared/errors';
 import { t, type MessageKeyWithoutParams } from '@shared/i18n';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { clearDownloadProgress } from '@shared/lib';
 
 import {
@@ -124,7 +124,7 @@ export async function runBusyMutation<
       nextState = await fn();
     } catch (error) {
       if (mutationToken === ctx.getCore().requestId) {
-        publishErrorNotification(t(options.errorKey), describeCommandErrorTechnical(error));
+        publishPresentedErrorNotification(t(options.errorKey), error);
       }
       return 'failed';
     }
@@ -139,7 +139,7 @@ export async function runBusyMutation<
         try {
           ctx.notifyExclusivityChange(gameId);
         } catch (error) {
-          console.warn('Add-on exclusivity refresh failed after a committed mutation', error);
+          reportClientError('addon_exclusivity_refresh', error, 'warning');
         }
       }
       return 'ok';
@@ -161,20 +161,20 @@ export async function runBusyMutation<
     try {
       await options.afterCommit?.(token);
     } catch (error) {
-      console.warn('Add-on post-commit refresh failed', error);
+      reportClientError('addon_post_commit_refresh', error, 'warning');
     }
     if (token === ctx.getCore().requestId && ctx.onMutationSideEffect) {
       try {
         await ctx.onMutationSideEffect(gameId, token);
       } catch (error) {
-        console.warn('Add-on post-mutation side effect failed', error);
+        reportClientError('addon_post_mutation_side_effect', error, 'warning');
       }
     }
     if (options.notifyExclusivity && token === ctx.getCore().requestId) {
       try {
         ctx.notifyExclusivityChange(gameId);
       } catch (error) {
-        console.warn('Add-on exclusivity refresh failed after a committed mutation', error);
+        reportClientError('addon_exclusivity_refresh', error, 'warning');
       }
     }
     // Backend mutation already committed; post-commit hooks are best-effort.

@@ -1,7 +1,7 @@
-import { describeCommandErrorTechnical } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import { parseHttpDateTimestamp } from '@shared/date';
 import { t, type MessageKeyWithoutParams } from '@shared/i18n';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 
 import {
   runBusyMutation as runBusyMutationImpl,
@@ -169,9 +169,9 @@ export function createAddonStore<
       if (token !== core.requestId) {
         return;
       }
-      const loadError = describeCommandErrorTechnical(error);
+      const loadError = formatPresentedError(error);
       core = withLoadError(core, loadError);
-      publishErrorNotification(t(messages.loadFailed), loadError);
+      publishPresentedErrorNotification(t(messages.loadFailed), error);
     } finally {
       if (token === core.requestId) {
         core = withLoading(core, false);

@@ -30,6 +30,10 @@ export type I18nRuntimeDependencies = Readonly<{
   resolveMode: (mode: LanguageMode) => Locale;
   observeSystemLanguage: (listener: () => void) => () => void;
   applyDocumentLocale: (locale: Locale) => void;
+  onLocaleLoadError?: (
+    error: LocaleLoadError,
+    operation: 'initialize_locale' | 'switch_locale' | 'system_language_change',
+  ) => void;
 }>;
 
 export type ExternalMessageInput = Readonly<{

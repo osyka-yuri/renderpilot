@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Button } from '@shared/ui';
   import { requestAdminRelaunch } from '@entities/app';
-  import { describeCommandErrorTechnical } from '@shared/api';
-  import { publishErrorNotification } from '@shared/notifications';
+  import { publishPresentedErrorNotification } from '@shared/notifications';
   import { t } from '@shared/i18n';
   import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
   import XIcon from '@lucide/svelte/icons/x';
@@ -37,7 +36,7 @@
       // failure (cancel UAC, OS policy) it rejects with a CommandError.
       await requestAdminRelaunch();
     } catch (e) {
-      publishErrorNotification(t('elevation.relaunchFailed'), describeCommandErrorTechnical(e));
+      publishPresentedErrorNotification(t('elevation.relaunchFailed'), e);
     } finally {
       busy = false;
     }

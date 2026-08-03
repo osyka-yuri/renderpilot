@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllNotifications, getActiveNotifications } from './notification-center';
-import {
-  formatError,
-  publishInfoNotification,
-  publishSuccessNotification,
-} from './notification-helpers';
+import { publishInfoNotification, publishSuccessNotification } from './notification-helpers';
 
 describe('notification-helpers', () => {
   beforeEach(() => {
@@ -48,28 +44,5 @@ describe('notification-helpers', () => {
     expect(() => publishSuccessNotification('   ')).toThrow(
       new RangeError('Notification title must not be empty.'),
     );
-  });
-});
-
-describe('formatError', () => {
-  it('extracts the message property from Error instances', () => {
-    const error = new Error('something broke');
-
-    expect(formatError(error)).toBe('something broke');
-  });
-
-  it('returns the string unchanged for string input', () => {
-    expect(formatError('plain text')).toBe('plain text');
-  });
-
-  it('stringifies non-Error, non-string values', () => {
-    expect(formatError(42)).toBe('42');
-    expect(formatError(null)).toBe('null');
-    expect(formatError(undefined)).toBe('undefined');
-  });
-
-  it('handles Error subclasses correctly', () => {
-    expect(formatError(new RangeError('out of range'))).toBe('out of range');
-    expect(formatError(new TypeError('wrong type'))).toBe('wrong type');
   });
 });

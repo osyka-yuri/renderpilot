@@ -5,6 +5,7 @@ import {
   type AddonCapability,
   type GameSummary,
 } from '@entities/game';
+import { reportClientError } from '@shared/errors';
 import { createRequestChannel, type RequestChannel } from '@shared/requests';
 
 export function buildGameCardsQueryKey(
@@ -221,7 +222,7 @@ export function createGamesPageQueryScheduler(options: SchedulerOptions = {}) {
       sinks.setNextOffset?.(result.nextOffset);
     } catch (error: unknown) {
       if (requests.isActive(requestId) && desiredRequestKey === snapshot.requestKey) {
-        console.error('Failed to query game cards.', error);
+        reportClientError('query_game_cards', error);
       }
     } finally {
       const isCurrentRequest = requests.isActive(requestId);

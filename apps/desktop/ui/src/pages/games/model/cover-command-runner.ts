@@ -4,7 +4,7 @@ import {
   setGameCover,
   type CoverArtworkResult,
 } from '@entities/game';
-import { describeCommandError } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import {
   publishCoverDownloadedNotification,
   publishCoverOperationErrorNotification,
@@ -47,7 +47,7 @@ export function createCoverCommandRunner(deps: CoverCommandRunnerDeps) {
       onClearError: deps.getOnClearError(),
       onSuccess,
       onCoverError: publishCoverOperationErrorNotification,
-      describeError: describeCommandError,
+      describeError: formatPresentedError,
       focusMenuTrigger: (id) => {
         focusMenuTrigger(deps.getActionMenuRefs(), id);
       },

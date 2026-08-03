@@ -1,5 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { listen } from '@tauri-apps/api/event';
+import { reportClientError } from '@shared/errors';
 
 export type DownloadProgress = {
   id: string;
@@ -30,7 +31,7 @@ function ensureListener(): void {
   listen<DownloadProgress>(DOWNLOAD_PROGRESS_EVENT, (event) => {
     progressMap.set(event.payload.id, { ...event.payload, seq: ++seq });
   }).catch((err: unknown) => {
-    console.error('[download-progress] Failed to start listener:', err);
+    reportClientError('download_progress_listener', err);
     // Allow retrying on the next call to ensureListener (e.g. next component mount).
     listenerStarted = false;
   });

@@ -51,10 +51,11 @@
     AddGameDialog,
     createAddGameFlow,
     inspectGameInstall,
+    publishPartialLibraryScanWarning,
     selectGameInstallFolder,
   } from '@features/scan-libraries';
-  import { describeCommandErrorBrief, normalizeCommandError } from '@shared/api';
-  import { t } from '@shared/i18n';
+  import { presentError } from '@shared/error-presentation';
+  import { ClientError, getErrorCode, reportClientError } from '@shared/errors';
   import { publishCommandErrorNotification } from '@shared/notifications';
 
   import LazyPage from './LazyPage.svelte';
@@ -151,24 +152,27 @@
           },
         },
       );
-      return result === true
-        ? { kind: 'completed' as const }
-        : {
-            kind: 'failed' as const,
-            error: rollbackError ?? new Error(t('addGame.rootCorrection.rollbackFailed')),
-          };
+      if (result === true) {
+        return { kind: 'completed' as const };
+      }
+
+      const error = rollbackError ?? new ClientError('add_game_rollback_failed');
+      if (rollbackError === null) {
+        reportClientError('rollback_root_correction', error);
+      }
+      return { kind: 'failed' as const, error };
     },
-    describeError: describeCommandErrorBrief,
+    presentError,
+    presentCatalogBusyError: () => presentError(new ClientError('add_game_catalog_busy')),
     publishError: publishCommandErrorNotification,
     requiresReinspection: (error) => {
-      const code = normalizeCommandError(error).dto.code;
+      const code = getErrorCode(error);
       return (
         code === 'root_correction_cleanup_required' ||
         code === 'root_correction_blocked' ||
         code === 'stale_install_inspection'
       );
     },
-    catalogBusyMessage: () => t('addGame.catalogBusy'),
   });
 
   function preloadPage(screen: Screen): void {
@@ -219,7 +223,7 @@
           await gamesSession.refreshCatalog();
         }
       } catch (error: unknown) {
-        console.error('Failed to read catalog after background refresh.', error);
+        reportClientError('catalog_read_after_background_refresh', error);
       } finally {
         if (!isDisposed()) {
           gamesSession.completeInitialCatalogSync();
@@ -241,6 +245,7 @@
           void gamesSession.refreshCatalog();
         }
       },
+      onPartialScanFailures: publishPartialLibraryScanWarning,
       completeInitialCatalogSync,
       enableCoverHydration: () => {
         backgroundCoverHydrationEnabled = true;
@@ -259,7 +264,7 @@
         catalogLifecycle.startServices();
       },
       async (error: unknown) => {
-        console.error('Failed to bootstrap games catalog.', error);
+        reportClientError('bootstrap_games_catalog', error);
         try {
           await gamesSession.loadFilterPreferences(isDisposed);
           if (!isDisposed()) {
@@ -303,7 +308,7 @@
     if (removalError !== null) {
       throw removalError instanceof Error
         ? removalError
-        : new Error(describeCommandErrorBrief(removalError));
+        : new ClientError('unexpected_client_error', removalError);
     }
     return removed;
   }

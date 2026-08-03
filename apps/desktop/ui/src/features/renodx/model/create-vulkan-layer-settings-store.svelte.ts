@@ -1,6 +1,6 @@
-import { describeCommandErrorTechnical } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import { t } from '@shared/i18n';
-import { publishErrorNotification } from '@shared/notifications';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { CATALOG_SETTING_KEYS, getCatalogSetting, setCatalogSetting } from '@entities/settings';
 import { clearDownloadProgress } from '@shared/lib';
 import { renodxApi, type RenoDxApi } from '../api/desktop';
@@ -115,8 +115,8 @@ export function createVulkanLayerSettingsStore(
       if (token !== requestId) {
         return;
       }
-      error = describeCommandErrorTechnical(loadError);
-      publishErrorNotification(t('settings.renodx.vulkan.loadError'), error);
+      error = formatPresentedError(loadError);
+      publishPresentedErrorNotification(t('settings.renodx.vulkan.loadError'), loadError);
     } finally {
       if (token === requestId) {
         loading = false;
@@ -132,10 +132,7 @@ export function createVulkanLayerSettingsStore(
         selectedChannel,
       );
     } catch (saveError) {
-      publishErrorNotification(
-        t('settings.renodx.vulkan.saveError'),
-        describeCommandErrorTechnical(saveError),
-      );
+      publishPresentedErrorNotification(t('settings.renodx.vulkan.saveError'), saveError);
     }
   }
 
@@ -154,10 +151,7 @@ export function createVulkanLayerSettingsStore(
       applyReport(next, selectedChannel);
       return true;
     } catch (applyError) {
-      publishErrorNotification(
-        t('settings.renodx.vulkan.applyError'),
-        describeCommandErrorTechnical(applyError),
-      );
+      publishPresentedErrorNotification(t('settings.renodx.vulkan.applyError'), applyError);
       return false;
     } finally {
       busy = false;
@@ -175,9 +169,9 @@ export function createVulkanLayerSettingsStore(
       applyReport(next, selectedChannel);
       return true;
     } catch (removeError) {
-      publishErrorNotification(
+      publishPresentedErrorNotification(
         t('gameDetails.renodx.vulkanLayer.removeError'),
-        describeCommandErrorTechnical(removeError),
+        removeError,
       );
       return false;
     } finally {

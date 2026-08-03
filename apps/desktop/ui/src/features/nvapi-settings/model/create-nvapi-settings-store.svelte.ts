@@ -1,6 +1,6 @@
 import { SvelteSet } from 'svelte/reactivity';
-import { describeCommandErrorTechnical } from '@shared/api';
-import { publishErrorNotification } from '@shared/notifications';
+import { ClientError, reportClientError } from '@shared/errors';
+import { publishPresentedErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
 import type { DllInfoDto, NvapiWarning, SettingFamily, SettingStateResponse } from './types';
 
@@ -105,14 +105,15 @@ export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStor
   }
 
   function reportActionError(label: string, error: unknown): void {
-    publishErrorNotification(label, describeCommandErrorTechnical(error));
+    reportClientError('nvapi_settings_action', error);
+    publishPresentedErrorNotification(label, error);
   }
 
-  function ensureElevated(action: string): boolean {
+  function ensureElevated(): boolean {
     if (isElevated()) {
       return true;
     }
-    reportActionError(t('nvidia.adminRequired'), new Error(t('nvidia.relaunchTo', { action })));
+    reportActionError(t('nvidia.adminRequired'), new ClientError('nvapi_admin_required'));
     return false;
   }
 

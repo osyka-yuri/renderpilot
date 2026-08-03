@@ -145,9 +145,7 @@ describe('D3D12 operation preparation', () => {
     });
 
     await expect(prepareD3d12Swap('game', 'component', 'artifact', deps)).rejects.toMatchObject({
-      dto: {
-        code: 'd3d12_confirmation_unavailable',
-      },
+      code: 'd3d12_confirmation_unavailable',
     });
   });
 

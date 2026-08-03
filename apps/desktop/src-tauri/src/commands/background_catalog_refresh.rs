@@ -120,6 +120,7 @@ impl CatalogRefreshIssue {
 struct CatalogRefreshOutcome {
     delta: Option<CatalogDelta>,
     issues: Vec<CatalogRefreshIssue>,
+    partial_failure_count: usize,
 }
 
 trait CatalogRefreshPhases {
@@ -184,16 +185,12 @@ impl CatalogRefreshPhases for DesktopCatalogRefreshPhases {
 async fn coordinate_catalog_refresh(phases: &impl CatalogRefreshPhases) -> CatalogRefreshOutcome {
     let mut delta = CatalogDeltaBuilder::default();
     let mut issues = Vec::new();
+    let mut partial_failure_count = 0;
 
     let (scan, remote_catalog) = join(phases.scan(), phases.refresh_remote_catalog()).await;
     match scan {
         Ok(scan) => {
-            if !scan.errors.is_empty() {
-                issues.push(CatalogRefreshIssue::new(
-                    CatalogRefreshPhase::Scan,
-                    format!("completed with {} partial error(s)", scan.errors.len()),
-                ));
-            }
+            partial_failure_count = scan.partial_failure_count;
             delta.record_scan(scan);
         }
         Err(error) => issues.push(CatalogRefreshIssue::new(CatalogRefreshPhase::Scan, error)),
@@ -239,6 +236,7 @@ async fn coordinate_catalog_refresh(phases: &impl CatalogRefreshPhases) -> Catal
         return CatalogRefreshOutcome {
             delta: None,
             issues,
+            partial_failure_count,
         };
     }
 
@@ -254,6 +252,7 @@ async fn coordinate_catalog_refresh(phases: &impl CatalogRefreshPhases) -> Catal
                 return CatalogRefreshOutcome {
                     delta: None,
                     issues,
+                    partial_failure_count,
                 };
             }
         },
@@ -262,6 +261,7 @@ async fn coordinate_catalog_refresh(phases: &impl CatalogRefreshPhases) -> Catal
     CatalogRefreshOutcome {
         delta: delta.finish(revision),
         issues,
+        partial_failure_count,
     }
 }
 
@@ -302,16 +302,24 @@ fn publish_catalog_refresh(outcome: CatalogRefreshOutcome, sink: &impl CatalogRe
     }
 }
 
-async fn run(context: Arc<Context>, app: &tauri::AppHandle) {
+async fn run(context: Arc<Context>, app: &tauri::AppHandle) -> usize {
     let phases = DesktopCatalogRefreshPhases { context };
     let outcome = coordinate_catalog_refresh(&phases).await;
+    let partial_failure_count = outcome.partial_failure_count;
     publish_catalog_refresh(outcome, &TauriCatalogRefreshEventSink { app });
+    partial_failure_count
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct StartupExecution {
     started: bool,
+    partial_failure_count: usize,
     cover_gc_error: Option<String>,
+}
+
+pub(super) struct BackgroundRefreshStart {
+    pub(super) started: bool,
+    pub(super) partial_failure_count: usize,
 }
 
 async fn execute_startup<Claim, CoverGc, CoverGcFuture, Refresh, RefreshFuture>(
@@ -324,24 +332,26 @@ where
     CoverGc: FnOnce() -> CoverGcFuture,
     CoverGcFuture: Future<Output = Result<(), String>>,
     Refresh: FnOnce() -> RefreshFuture,
-    RefreshFuture: Future<Output = ()>,
+    RefreshFuture: Future<Output = usize>,
 {
     if !claim() {
         return StartupExecution {
             started: false,
+            partial_failure_count: 0,
             cover_gc_error: None,
         };
     }
 
     let cover_gc_error = cover_gc().await.err();
-    refresh().await;
+    let partial_failure_count = refresh().await;
     StartupExecution {
         started: true,
+        partial_failure_count,
         cover_gc_error,
     }
 }
 
-pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> bool {
+pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> BackgroundRefreshStart {
     let claim_context = Arc::clone(&context);
     let cover_context = Arc::clone(&context);
     let refresh_context = Arc::clone(&context);
@@ -354,16 +364,17 @@ pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> bool 
             .await
             .map_err(|error| format!("worker failed: {error}"))
         },
-        move || async move {
-            run(refresh_context, &app).await;
-        },
+        move || async move { run(refresh_context, &app).await },
     )
     .await;
 
     if let Some(error) = execution.cover_gc_error {
         log::warn!("background cover GC failed: {error}");
     }
-    execution.started
+    BackgroundRefreshStart {
+        started: execution.started,
+        partial_failure_count: execution.partial_failure_count,
+    }
 }
 
 #[cfg(test)]
@@ -386,7 +397,7 @@ mod tests {
             updated_game_ids: Vec::new(),
             changed_game_ids: changed.iter().map(|id| (*id).to_owned()).collect(),
             removed_game_ids: removed.iter().map(|id| (*id).to_owned()).collect(),
-            errors: Vec::new(),
+            partial_failure_count: 0,
         }
     }
 
@@ -425,6 +436,7 @@ mod tests {
         remote_started: AtomicBool,
         invalidations: AtomicUsize,
         events: Mutex<Vec<&'static str>>,
+        partial_failure_count: usize,
     }
 
     impl MockPhases {
@@ -436,7 +448,13 @@ mod tests {
                 remote_started: AtomicBool::new(false),
                 invalidations: AtomicUsize::new(0),
                 events: Mutex::new(Vec::new()),
+                partial_failure_count: 0,
             }
+        }
+
+        fn with_partial_failures(mut self, count: usize) -> Self {
+            self.partial_failure_count = count;
+            self
         }
 
         fn fails(&self, bit: u8) -> bool {
@@ -476,9 +494,13 @@ mod tests {
             if self.fails(0) {
                 Err("scan failed".to_owned())
             } else if self.reports_changes {
-                Ok(scan(&["scan"], &[]))
+                let mut output = scan(&["scan"], &[]);
+                output.partial_failure_count = self.partial_failure_count;
+                Ok(output)
             } else {
-                Ok(scan(&[], &[]))
+                let mut output = scan(&[], &[]);
+                output.partial_failure_count = self.partial_failure_count;
+                Ok(output)
             }
         }
 
@@ -564,10 +586,21 @@ mod tests {
             CatalogRefreshOutcome {
                 delta: None,
                 issues: Vec::new(),
+                partial_failure_count: 0,
             }
         );
         assert_eq!(phases.invalidations.load(Ordering::Relaxed), 0);
         assert!(phases.recorded_events().contains(&"validation"));
+    }
+
+    #[test]
+    fn per_root_scan_failures_are_not_logged_again_by_the_coordinator() {
+        let phases = MockPhases::new(0, false, false).with_partial_failures(2);
+        let outcome = tauri::async_runtime::block_on(coordinate_catalog_refresh(&phases));
+
+        assert!(outcome.issues.is_empty());
+        assert!(outcome.delta.is_none());
+        assert_eq!(outcome.partial_failure_count, 2);
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]
@@ -634,6 +667,7 @@ mod tests {
             skipped,
             StartupExecution {
                 started: false,
+                partial_failure_count: 0,
                 cover_gc_error: None,
             }
         );
@@ -655,6 +689,7 @@ mod tests {
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .push("refresh");
+                3
             },
         ));
 
@@ -662,6 +697,7 @@ mod tests {
             started,
             StartupExecution {
                 started: true,
+                partial_failure_count: 3,
                 cover_gc_error: Some("gc failed".to_owned()),
             }
         );

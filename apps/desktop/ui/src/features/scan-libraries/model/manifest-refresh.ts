@@ -1,8 +1,5 @@
 /** Per-kind status from a coordinated remote-manifest refresh (serde-aligned). */
-export type ManifestKindStatus =
-  | { status: 'skipped' }
-  | { status: 'ok' }
-  | { status: 'error'; message: string };
+export type ManifestKindStatus = { status: 'skipped' } | { status: 'ok' } | { status: 'error' };
 
 /** High-level outcome of a coordinated remote-manifest refresh. */
 export type ManifestRefreshOutcome =

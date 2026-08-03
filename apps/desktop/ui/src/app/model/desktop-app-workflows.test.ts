@@ -7,7 +7,9 @@ import type { AddGameInspection } from '@features/scan-libraries';
 import type { OpenDesktopGameDeps } from './desktop-app-workflows';
 
 const scanMocks = vi.hoisted(() => ({
-  scanAutoLibrariesWithErrorRecovery: vi.fn(() => Promise.resolve({ kind: 'ok', errors: [] })),
+  scanAutoLibrariesWithErrorRecovery: vi.fn(() =>
+    Promise.resolve({ kind: 'ok', partialFailureCount: 0 }),
+  ),
   refreshRemoteManifests: vi.fn(() => Promise.resolve()),
   refreshCatalogCapabilities: vi.fn(() => Promise.resolve({ refreshed: true })),
   publishAutomaticLibraryScanFailedNotification: vi.fn(),
@@ -394,7 +396,7 @@ describe('desktop-app-workflows', () => {
       vi.clearAllMocks();
       scanMocks.scanAutoLibrariesWithErrorRecovery.mockResolvedValue({
         kind: 'ok',
-        errors: [],
+        partialFailureCount: 0,
       });
       scanMocks.refreshRemoteManifests.mockResolvedValue(undefined);
       scanMocks.refreshCatalogCapabilities.mockResolvedValue({ refreshed: true });

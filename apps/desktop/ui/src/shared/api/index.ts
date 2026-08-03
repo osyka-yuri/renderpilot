@@ -1,11 +1,3 @@
-export type { CommandErrorDto, CommandErrorSeverity } from './types';
-export {
-  DesktopCommandError,
-  describeCommandError,
-  describeCommandErrorBrief,
-  describeCommandErrorTechnical,
-  normalizeCommandError,
-} from './errors';
 export { invokeDesktop } from './desktop-transport';
 export {
   openFilePicker,

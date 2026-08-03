@@ -1,6 +1,7 @@
 import { toast } from 'svelte-sonner';
 
 import { t } from '@shared/i18n';
+import { ClientError, reportClientError } from '@shared/errors';
 import { createDisposableRequestChannel } from '@shared/requests';
 
 import type { AppUpdateHandle, AppUpdaterGateway } from '../api/app-updater-gateway';
@@ -61,7 +62,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     return !operations.isDisposed() && operations.isActive(id);
   }
 
-  async function closeHandle(handle: AppUpdateHandle | null, context: string): Promise<void> {
+  async function closeHandle(handle: AppUpdateHandle | null): Promise<void> {
     if (!handle) {
       return;
     }
@@ -70,14 +71,14 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       await handle.close();
     } catch (error) {
       // Resource cleanup must never strand the UI in an old updater state.
-      console.warn(`Failed to close updater resource after ${context}`, error);
+      reportClientError('updater_close_resource', new ClientError('updater_cleanup_failed', error));
     }
   }
 
-  async function releasePendingHandle(context: string): Promise<void> {
+  async function releasePendingHandle(): Promise<void> {
     const handle = pendingUpdate;
     pendingUpdate = null;
-    await closeHandle(handle, context);
+    await closeHandle(handle);
   }
 
   function takePendingHandle(expected: AppUpdateHandle): AppUpdateHandle | null {
@@ -108,7 +109,10 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
         appVersion = version;
       }
     } catch (error) {
-      console.warn('Failed to get app version', error);
+      reportClientError(
+        'updater_get_app_version',
+        new ClientError('updater_version_read_failed', error),
+      );
     }
   }
 
@@ -118,7 +122,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     try {
       const handle = await gateway.checkForUpdate();
       if (!isCurrentOperation(id)) {
-        await closeHandle(handle, 'a stale background update check');
+        await closeHandle(handle);
         return;
       }
 
@@ -127,13 +131,17 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       }
 
       const offer = toOffer(handle);
-      await closeHandle(handle, 'a background update check');
+      await closeHandle(handle);
       if (isCurrentOperation(id)) {
         showNotice(offer);
       }
     } catch (error) {
       if (isCurrentOperation(id)) {
-        console.warn('Failed to check for updates in the background', error);
+        reportClientError(
+          'updater_background_check',
+          new ClientError('updater_check_failed', error),
+          'warning',
+        );
       }
     }
   }
@@ -150,7 +158,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     try {
       const handle = await gateway.checkForUpdate();
       if (!isCurrentOperation(id)) {
-        await closeHandle(handle, 'a stale interactive update check');
+        await closeHandle(handle);
         return;
       }
 
@@ -161,9 +169,9 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       }
 
       const offer = toOffer(handle);
-      await releasePendingHandle('replacing an interactive update session');
+      await releasePendingHandle();
       if (!isCurrentOperation(id)) {
-        await closeHandle(handle, 'a stale interactive update check');
+        await closeHandle(handle);
         return;
       }
 
@@ -171,7 +179,10 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       showNotice(offer);
       dialog = { phase: 'available', offer };
     } catch (error) {
-      console.error('Failed to check for updates:', error);
+      reportClientError(
+        'updater_interactive_check',
+        new ClientError('updater_check_failed', error),
+      );
       if (isCurrentOperation(id)) {
         notice = previousNotice;
         notifyError(t('settings.about.updateCheckError'));
@@ -189,7 +200,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     try {
       await gateway.relaunch();
     } catch (error) {
-      console.error('Failed to relaunch application:', error);
+      reportClientError('updater_relaunch', new ClientError('updater_relaunch_failed', error));
       if (isCurrentOperation(id)) {
         dialog = { phase: 'restart-required', offer };
       }
@@ -250,12 +261,12 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     try {
       await handle.install();
     } catch (error) {
-      console.error('Failed to install update:', error);
+      reportClientError('updater_install', new ClientError('updater_install_failed', error));
       if (isCurrentOperation(id)) {
         pendingUpdate = handle;
         dialog = { phase: 'install-failed', offer };
       } else {
-        await closeHandle(handle, 'a failed installation after disposal');
+        await closeHandle(handle);
       }
       return;
     }
@@ -279,23 +290,17 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
   }
 
   function showDownloadFailure(offer: AppUpdateOffer, failure: DownloadRetryFailure): void {
-    const message =
-      failure.reason === 'download'
-        ? `Failed to download or verify update after ${failure.attempts} attempts:`
-        : `Failed to wait before retrying update download after attempt ${failure.attempts}:`;
-    console.error(message, failure.error);
+    const code =
+      failure.reason === 'download' ? 'updater_download_failed' : 'updater_retry_wait_failed';
+    reportClientError(code, new ClientError(code, failure.error));
     dialog = { phase: 'prepare-failed', offer };
   }
 
-  function showDownloadRetry(
-    offer: AppUpdateOffer,
-    failedAttempt: number,
-    totalAttempts: number,
-    error: unknown,
-  ): void {
-    console.warn(
-      `Update download attempt ${failedAttempt} of ${totalAttempts} failed; retrying.`,
-      error,
+  function showDownloadRetry(offer: AppUpdateOffer, error: unknown): void {
+    reportClientError(
+      'updater_download_retry',
+      new ClientError('updater_download_failed', error),
+      'warning',
     );
     dialog = { phase: 'retrying-download', offer };
   }
@@ -313,8 +318,8 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       onProgress: (progress) => {
         showDownloadProgress(offer, progress);
       },
-      onRetryScheduled: ({ failedAttempt, totalAttempts, error }) => {
-        showDownloadRetry(offer, failedAttempt, totalAttempts, error);
+      onRetryScheduled: ({ error }) => {
+        showDownloadRetry(offer, error);
       },
     });
 
@@ -379,7 +384,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     }
 
     const id = beginOperation();
-    await releasePendingHandle('dismissing the update dialog');
+    await releasePendingHandle();
     if (!isCurrentOperation(id)) {
       return;
     }
@@ -430,7 +435,7 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
     operations.invalidate();
     notice = null;
     clearDialog();
-    await releasePendingHandle('disposing the app updater');
+    await releasePendingHandle();
   }
 
   return {

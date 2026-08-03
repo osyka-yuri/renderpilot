@@ -5,7 +5,7 @@ import {
   isDesktopPreviewMode,
   type DesktopCommandPayload,
 } from '@shared/api-preview';
-import { normalizeCommandError } from './errors';
+import { normalizeDesktopCommandError, reportDesktopCommandError } from '@shared/errors';
 
 function normalizeCommandPayload(payload: unknown): DesktopCommandPayload | undefined {
   if (payload === undefined) {
@@ -28,8 +28,10 @@ async function invokeTauriCommand<T>(command: string, payload?: DesktopCommandPa
 }
 
 export async function invokeDesktop<T>(command: string, payload?: unknown): Promise<T> {
+  let operation = 'invoke_desktop';
   try {
     const safeCommand = requireNonBlankString(command, 'command');
+    operation = safeCommand;
     const safePayload = normalizeCommandPayload(payload);
 
     if (isDesktopPreviewMode()) {
@@ -38,6 +40,8 @@ export async function invokeDesktop<T>(command: string, payload?: unknown): Prom
 
     return await invokeTauriCommand<T>(safeCommand, safePayload);
   } catch (error) {
-    throw normalizeCommandError(error);
+    const normalized = normalizeDesktopCommandError(error);
+    reportDesktopCommandError(operation, normalized, error);
+    throw normalized;
   }
 }

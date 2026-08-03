@@ -2,7 +2,7 @@
   import { AddonStateMessage } from '@entities/addon';
   import { openExternal } from '@shared/api';
   import { t, translateExternalMessage } from '@shared/i18n';
-  import { formatError, publishErrorNotification } from '@shared/notifications';
+  import { publishPresentedErrorNotification } from '@shared/notifications';
   import { Button } from '@shared/ui';
   import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
@@ -39,7 +39,7 @@
     try {
       await openExternal(url);
     } catch (error) {
-      publishErrorNotification(externalLabel, formatError(error));
+      publishPresentedErrorNotification(externalLabel, error);
     }
   }
 </script>

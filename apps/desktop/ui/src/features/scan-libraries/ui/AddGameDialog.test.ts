@@ -66,12 +66,13 @@ describe('AddGameDialog', () => {
           },
           warnings: [
             {
+              contractStatus: 'known',
               code: 'inside_existing_install',
-              message: 'Backend fallback must not be rendered.',
+              parameters: {},
             },
           ],
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
     });
@@ -115,13 +116,14 @@ describe('AddGameDialog', () => {
           },
           warnings: [
             {
+              contractStatus: 'known',
               code: 'inside_existing_install',
-              message: 'Backend fallback must not be rendered.',
+              parameters: {},
             },
           ],
           decision: { kind: 'unavailable', reasons: ['inside_existing_install'] },
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
     });
     await render();
@@ -156,7 +158,7 @@ describe('AddGameDialog', () => {
           },
           warnings: [],
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
     });
     await render();
@@ -200,16 +202,18 @@ describe('AddGameDialog', () => {
           },
           warnings: [
             {
+              contractStatus: 'unknown',
               code: 'multiple_installs_suspected',
-              message: 'Backend multiple-install fallback must not be rendered.',
+              parameters: {},
             },
             {
+              contractStatus: 'known',
               code: 'contains_proven_install',
-              message: 'Backend proven-install fallback must not be rendered.',
+              parameters: {},
             },
           ],
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
     });
     await render();
@@ -250,7 +254,7 @@ describe('AddGameDialog', () => {
           },
           decision: correctionDecision(),
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
       onRollbackAndConfirm,
@@ -288,7 +292,7 @@ describe('AddGameDialog', () => {
           },
           decision: correctionDecision(),
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
     });
@@ -331,7 +335,7 @@ describe('AddGameDialog', () => {
             ],
           },
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
     });
@@ -366,7 +370,7 @@ describe('AddGameDialog', () => {
           },
           decision: { kind: 'unavailable', reasons: ['root_correction_blocked'] },
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
     });
     await render();
@@ -428,7 +432,7 @@ describe('AddGameDialog', () => {
             ],
           },
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
     });
@@ -469,8 +473,9 @@ describe('AddGameDialog', () => {
           executables: [],
           warnings: [
             {
+              contractStatus: 'known',
               code: 'no_readable_executable',
-              message: 'Backend fallback must not be rendered.',
+              parameters: {},
             },
           ],
           decision: {
@@ -479,7 +484,7 @@ describe('AddGameDialog', () => {
             options: [{ rootChoice: 'recommended', catalogAction: 'add' }],
           },
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
       onConfirm,
     });
@@ -501,11 +506,11 @@ describe('AddGameDialog', () => {
         kind: 'review',
         inspection: inspection({
           warnings: [
-            { code: 'filesystem_probe_error', message: 'First backend fallback.' },
-            { code: 'filesystem_probe_error', message: 'Second backend fallback.' },
+            { contractStatus: 'known', code: 'filesystem_probe_error', parameters: {} },
+            { contractStatus: 'known', code: 'filesystem_probe_error', parameters: {} },
           ],
         }),
-        errorMessage: null,
+        errorPresentation: null,
       },
     });
     await render();
@@ -518,6 +523,45 @@ describe('AddGameDialog', () => {
       expect(warning.getAttribute('data-slot')).toBe('alert');
       expect(warning.textContent).toContain(t('addGame.warning.filesystemProbeError'));
     }
+  });
+
+  it('renders error actions and recovery paths as structured presentation data', async () => {
+    const recoveryBundlePath = 'C:/Recovery/catalog-consolidation.bundle';
+    component = mountDialog({
+      state: {
+        kind: 'review',
+        inspection: inspection(),
+        errorPresentation: {
+          code: 'catalog_consolidation_blocked',
+          severity: 'error',
+          message: t('user_message.catalog_consolidation_blocked'),
+          suggestedActions: [
+            {
+              code: 'refresh_or_scan_game_folder',
+              label: t('suggested_action.refresh_or_scan_game_folder'),
+            },
+          ],
+          recoveryBundlePath,
+          contractStatus: 'known',
+        },
+      },
+    });
+    await render();
+
+    const alert = document.body.querySelector('[data-slot="alert"]');
+    const actions = alert?.querySelector('ul');
+    expect(alert?.querySelector('[data-slot="alert-title"]')?.textContent).toBe(
+      t('addGame.cannotAddTitle'),
+    );
+    expect(alert?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(actions?.querySelectorAll('li')).toHaveLength(1);
+    expect(actions?.classList.contains('list-disc')).toBe(false);
+    expect(document.body.textContent).toContain(t('user_message.catalog_consolidation_blocked'));
+    expect(document.body.textContent).toContain(t('suggested_action.refresh_or_scan_game_folder'));
+    expect(document.body.textContent).toContain(
+      t('error.recoveryBundlePath', { path: recoveryBundlePath }),
+    );
+    expect(document.body.textContent).not.toContain('PRIVATE backend prose');
   });
 
   function mountDialog(overrides: DialogTestProps) {

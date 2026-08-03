@@ -314,8 +314,7 @@ const fn unavailable_reason(reason: catalog::AddGameUnavailableReason) -> &'stat
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AddGameWarningOutput {
-    code: String,
-    message: String,
+    code: &'static str,
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     parameters: std::collections::BTreeMap<String, AddGameWarningParameterOutput>,
 }
@@ -327,88 +326,96 @@ enum AddGameWarningParameterOutput {
     Number(usize),
 }
 
-impl From<catalog::AddGameWarning> for AddGameWarningOutput {
-    fn from(value: catalog::AddGameWarning) -> Self {
-        let mut parameters = std::collections::BTreeMap::new();
-        let (code, message) = match value {
-            catalog::AddGameWarning::LegacyCardsConsolidated { count } => {
-                parameters.insert(
-                    "count".to_owned(),
-                    AddGameWarningParameterOutput::Number(count),
-                );
-                (
-                    "legacy_cards_consolidated",
-                    format!("consolidated {count} proven false legacy game card(s)"),
-                )
-            }
-            catalog::AddGameWarning::LegacyCardsRetained { count } => {
-                parameters.insert(
-                    "count".to_owned(),
-                    AddGameWarningParameterOutput::Number(count),
-                );
-                (
-                    "legacy_cards_retained",
-                    format!(
-                        "retained {count} legacy card(s) because independent-install evidence was inconclusive"
-                    ),
-                )
-            }
-            catalog::AddGameWarning::RecoveryBundleCreated { path } => {
-                let message =
-                    format!("catalog state excluded by root correction was preserved in {path}");
-                parameters.insert(
-                    "path".to_owned(),
-                    AddGameWarningParameterOutput::Text(path),
-                );
-                ("recovery_bundle_created", message)
-            }
-            catalog::AddGameWarning::RootCorrectionHistoryArchived { path } => {
-                let message =
-                    format!("operation history excluded by root correction was preserved in {path}");
-                parameters.insert(
-                    "path".to_owned(),
-                    AddGameWarningParameterOutput::Text(path),
-                );
-                ("root_correction_history_archived", message)
-            }
-            catalog::AddGameWarning::FilesystemProbeError => (
-                "filesystem_probe_error",
-                "the selected folder could not be inspected completely".to_owned(),
-            ),
-            catalog::AddGameWarning::InsideExistingInstall => (
-                "inside_existing_install",
-                "the selected folder belongs to an existing game; use that game root".to_owned(),
-            ),
-            catalog::AddGameWarning::NarrowsExistingInstall => (
-                "narrows_existing_install",
-                "the existing manual root appears to contain multiple game folders; confirming will correct that card to the selected folder".to_owned(),
-            ),
-            catalog::AddGameWarning::MultipleProvenInstalls => (
-                "multiple_proven_installs",
-                "the selected folder contains multiple proven game installations".to_owned(),
-            ),
-            catalog::AddGameWarning::ContainsProvenInstall => (
-                "contains_proven_install",
-                "the selected folder contains a proven game installation; use its exact root"
-                    .to_owned(),
-            ),
-            catalog::AddGameWarning::ExplicitExecutableRequired => (
-                "explicit_executable_required",
-                "all valid executables look like launchers or helpers; choose one explicitly"
-                    .to_owned(),
-            ),
-            catalog::AddGameWarning::NoReadableExecutable => (
-                "no_readable_executable",
-                "the selected folder cannot be added separately because it has no readable Windows PE executable".to_owned(),
-            ),
-        };
-        Self {
-            code: code.to_owned(),
-            message,
-            parameters,
+/// Defines the exhaustive domain-to-wire mapping and its contract samples together.
+///
+/// Adding a domain variant makes the generated `match` non-exhaustive; adding its
+/// arm automatically adds it to the manifest parity test, so the test fixture
+/// cannot silently drift behind the production serializer.
+macro_rules! define_add_game_warning_wire_contract {
+    ($(
+        $pattern:pat => {
+            sample: $sample:expr,
+            code: $code:literal
+            $(, $parameter_name:literal => $parameter_value:expr)* $(,)?
         }
-    }
+    ),+ $(,)?) => {
+        impl From<catalog::AddGameWarning> for AddGameWarningOutput {
+            fn from(value: catalog::AddGameWarning) -> Self {
+                match value {
+                    $(
+                        $pattern => {
+                            let parameters: std::collections::BTreeMap<
+                                String,
+                                AddGameWarningParameterOutput,
+                            > = [$(
+                                ($parameter_name.to_owned(), $parameter_value),
+                            )*]
+                            .into_iter()
+                            .collect();
+                            Self { code: $code, parameters }
+                        }
+                    )+
+                }
+            }
+        }
+
+        #[cfg(test)]
+        fn add_game_warning_contract_samples() -> Vec<catalog::AddGameWarning> {
+            vec![$($sample),+]
+        }
+    };
 }
+
+define_add_game_warning_wire_contract!(
+    catalog::AddGameWarning::LegacyCardsConsolidated { count } => {
+        sample: catalog::AddGameWarning::LegacyCardsConsolidated { count: 2 },
+        code: "legacy_cards_consolidated",
+        "count" => AddGameWarningParameterOutput::Number(count),
+    },
+    catalog::AddGameWarning::LegacyCardsRetained { count } => {
+        sample: catalog::AddGameWarning::LegacyCardsRetained { count: 3 },
+        code: "legacy_cards_retained",
+        "count" => AddGameWarningParameterOutput::Number(count),
+    },
+    catalog::AddGameWarning::RecoveryBundleCreated { path } => {
+        sample: catalog::AddGameWarning::RecoveryBundleCreated { path: "C:/recovery".into() },
+        code: "recovery_bundle_created",
+        "path" => AddGameWarningParameterOutput::Text(path),
+    },
+    catalog::AddGameWarning::RootCorrectionHistoryArchived { path } => {
+        sample: catalog::AddGameWarning::RootCorrectionHistoryArchived { path: "C:/history".into() },
+        code: "root_correction_history_archived",
+        "path" => AddGameWarningParameterOutput::Text(path),
+    },
+    catalog::AddGameWarning::FilesystemProbeError => {
+        sample: catalog::AddGameWarning::FilesystemProbeError,
+        code: "filesystem_probe_error",
+    },
+    catalog::AddGameWarning::InsideExistingInstall => {
+        sample: catalog::AddGameWarning::InsideExistingInstall,
+        code: "inside_existing_install",
+    },
+    catalog::AddGameWarning::NarrowsExistingInstall => {
+        sample: catalog::AddGameWarning::NarrowsExistingInstall,
+        code: "narrows_existing_install",
+    },
+    catalog::AddGameWarning::MultipleProvenInstalls => {
+        sample: catalog::AddGameWarning::MultipleProvenInstalls,
+        code: "multiple_proven_installs",
+    },
+    catalog::AddGameWarning::ContainsProvenInstall => {
+        sample: catalog::AddGameWarning::ContainsProvenInstall,
+        code: "contains_proven_install",
+    },
+    catalog::AddGameWarning::ExplicitExecutableRequired => {
+        sample: catalog::AddGameWarning::ExplicitExecutableRequired,
+        code: "explicit_executable_required",
+    },
+    catalog::AddGameWarning::NoReadableExecutable => {
+        sample: catalog::AddGameWarning::NoReadableExecutable,
+        code: "no_readable_executable",
+    },
+);
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -476,6 +483,12 @@ const fn boundary_evidence(value: catalog::InstallBoundaryEvidence) -> &'static 
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        path::PathBuf,
+    };
+
     use serde_json::json;
 
     use super::*;
@@ -545,5 +558,90 @@ mod tests {
                 "reasons": ["multiple_installs", "root_correction_blocked"]
             })
         );
+    }
+
+    #[test]
+    fn add_game_warning_wire_contract_matches_the_shared_manifest() {
+        let actual_entries = add_game_warning_contract_samples()
+            .into_iter()
+            .map(AddGameWarningOutput::from)
+            .map(|warning| {
+                let parameters = warning
+                    .parameters
+                    .into_iter()
+                    .map(|(name, value)| {
+                        let parameter_type = match value {
+                            AddGameWarningParameterOutput::Text(value) => {
+                                assert!(!value.trim().is_empty());
+                                "non_blank_string"
+                            }
+                            AddGameWarningParameterOutput::Number(value) => {
+                                assert!(value > 0);
+                                "positive_integer"
+                            }
+                        };
+                        (name, parameter_type)
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                (warning.code, parameters)
+            })
+            .collect::<Vec<_>>();
+        let unique_actual_codes = actual_entries
+            .iter()
+            .map(|(code, _)| *code)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_actual_codes.len(),
+            actual_entries.len(),
+            "warning samples must contain each domain variant exactly once"
+        );
+        let actual = actual_entries.into_iter().collect::<BTreeMap<_, _>>();
+
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/contracts/add-game-warnings.json");
+        let manifest: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(path).expect("read add-game warning contract"),
+        )
+        .expect("parse add-game warning contract");
+        let expected_entries = manifest["addGameWarnings"]
+            .as_array()
+            .expect("addGameWarnings array")
+            .iter()
+            .map(|entry| {
+                let code = entry["code"].as_str().expect("warning code");
+                let parameters = entry["parameters"]
+                    .as_object()
+                    .expect("warning parameters")
+                    .iter()
+                    .map(|(name, parameter_type)| {
+                        (
+                            name.clone(),
+                            parameter_type.as_str().expect("warning parameter type"),
+                        )
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                (code, parameters)
+            })
+            .collect::<Vec<_>>();
+        let unique_expected_codes = expected_entries
+            .iter()
+            .map(|(code, _)| *code)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_expected_codes.len(),
+            expected_entries.len(),
+            "warning manifest must not contain duplicate codes"
+        );
+        let expected = expected_entries.into_iter().collect::<BTreeMap<_, _>>();
+
+        assert_eq!(actual, expected);
+        for warning in actual.keys() {
+            let serialized = serde_json::to_value(AddGameWarningOutput {
+                code: warning,
+                parameters: BTreeMap::new(),
+            })
+            .expect("serialize add-game warning");
+            assert!(serialized.get("message").is_none());
+        }
     }
 }

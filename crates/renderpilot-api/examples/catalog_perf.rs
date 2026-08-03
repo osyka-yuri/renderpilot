@@ -78,7 +78,7 @@ fn measure_scan(database: &PathBuf, background: bool) -> Result<(), Box<dyn std:
             "scan_changed={} scan_removed={} scan_errors={} changed_ids={:?}",
             output.changed_game_ids.len(),
             output.removed_game_ids.len(),
-            output.errors.len(),
+            output.partial_failure_count,
             output.changed_game_ids,
         );
     } else {

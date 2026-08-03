@@ -4,7 +4,7 @@ import type {
   RollbackPlan,
   SwapPlan,
 } from '@entities/operation';
-import { DesktopCommandError } from '@shared/api';
+import { DesktopCommandError, type CommandErrorCode } from '@shared/errors';
 import type { D3d12ExecutableAction } from '@shared/model';
 import {
   captureComponentBaseline,
@@ -247,10 +247,7 @@ function requireMockRollbackBaseline(
   component: ReturnType<typeof requireComponent>,
 ): void {
   if (!component.rollback_available || !hasComponentBaseline(gameId, component.id)) {
-    throw mockCommandError(
-      'rollback_not_available',
-      `No rollback baseline exists for mock component ${component.id}.`,
-    );
+    throw mockCommandError('invalid_argument');
   }
 }
 
@@ -262,20 +259,13 @@ function validateMockSwapConfirmation(
   confirmationToken: string | null,
 ): void {
   if (action?.kind === 'repair_required') {
-    throw mockCommandError(
-      'd3d12_executable_repair_required',
-      'The mock D3D12 executable state requires repair.',
-    );
+    throw mockCommandError('invalid_argument');
   }
   if (
     action?.requires_confirmation &&
     confirmationToken !== mockConfirmationToken(gameId, componentId, artifactId, action)
   ) {
-    throw mockCommandError(
-      'confirmation_token_mismatch',
-      'The mock D3D12 confirmation token is missing or stale.',
-      'notify.stalePlan',
-    );
+    throw mockCommandError('confirmation_token_mismatch');
   }
 }
 
@@ -319,10 +309,7 @@ function applyMockExecutableAction(
 ): void {
   const status = component.d3d12_executable_status;
   if (!status || (action.kind !== 'patch' && action.kind !== 'restore')) {
-    throw mockCommandError(
-      'd3d12_execution_context_incomplete',
-      'The mock D3D12 executable status is unavailable.',
-    );
+    throw mockCommandError('invalid_operation_state');
   }
   component.d3d12_executable_status = {
     ...status,
@@ -384,12 +371,6 @@ function mockManagedRollbackAction(
   };
 }
 
-function mockCommandError(code: string, details: string, messageKey = 'errors.command_failed') {
-  return new DesktopCommandError({
-    code,
-    severity: 'error',
-    messageKey,
-    details,
-    suggestedActions: [],
-  });
+function mockCommandError(code: CommandErrorCode): DesktopCommandError {
+  return DesktopCommandError.fromDto({ code });
 }

@@ -1,4 +1,4 @@
-import { describeCommandErrorTechnical } from '@shared/api';
+import { formatPresentedError } from '@shared/error-presentation';
 import { t } from '@shared/i18n';
 import {
   createNvapiSettingsStore,
@@ -57,7 +57,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
       if (activeGameId !== gameId) {
         return;
       }
-      store.setLoadError(describeCommandErrorTechnical(e));
+      store.setLoadError(formatPresentedError(e));
       store.setStates([]);
     } finally {
       if (activeGameId === gameId) {
@@ -72,7 +72,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   }
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
-    if (!gameId || !store.ensureElevated(t('nvidia.action.changeSetting'))) {
+    if (!gameId || !store.ensureElevated()) {
       return;
     }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
@@ -85,7 +85,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     key: string,
     target: 'predefined' | 'baseline',
   ): Promise<void> {
-    if (!gameId || !store.ensureElevated(t('nvidia.action.revertSetting'))) {
+    if (!gameId || !store.ensureElevated()) {
       return;
     }
     const label =

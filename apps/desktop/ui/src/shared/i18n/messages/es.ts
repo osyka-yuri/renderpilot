@@ -121,6 +121,12 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'error.boundary.description':
     'Esta pantalla encontró un error inesperado. Vuelve a intentarlo o cambia a otra sección.',
   'error.boundary.reset': 'Reintentar',
+  'error.desktopTransportFailed':
+    'El servicio de escritorio devolvió una respuesta no válida. Vuelve a intentar la acción.',
+  'error.unexpectedClient': 'Se produjo un error inesperado. Vuelve a intentar la acción.',
+  'error.localeLoadFailed':
+    'No se pudo cargar el idioma seleccionado. El idioma anterior sigue activo.',
+  'error.recoveryBundlePath': 'Paquete de recuperación: {path}',
   'pageLoad.loading': 'Cargando página…',
   'pageLoad.error.title': 'No se pudo abrir esta página',
   'pageLoad.error.description':
@@ -222,6 +228,8 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'Esta carpeta no se puede añadir por separado porque no contiene ningún ejecutable de juego legible.',
   'addGame.warning.filesystemProbeError':
     'No se pudo inspeccionar parte de la instalación. Comprueba los permisos de acceso a los archivos.',
+  'addGame.warning.unknown':
+    'La inspección del juego produjo una advertencia que esta versión de RenderPilot no puede mostrar.',
   'games.libraryActions': 'Acciones',
   'games.search': 'Buscar juegos',
   'games.openFilters': 'Filtros',
@@ -516,19 +524,25 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     many: 'No se pudieron escanear {count} carpetas.',
     other: 'No se pudieron escanear {count} carpetas.',
   }),
+  'scan.automaticFailed':
+    'El análisis automático de bibliotecas falló. La lista de juegos se actualizó de todos modos.',
 
   'coverSync.failed': 'No se pudieron sincronizar las carátulas.',
   'coverSync.refreshFailed': 'No se pudieron sincronizar las carátulas.',
+  'coverSync.failure.single': 'No se pudo descargar la carátula de {title}: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'No se pudieron descargar las carátulas de {count} juego. Primer error: {summary}',
+    many: 'No se pudieron descargar las carátulas de {count} juegos. Primer error: {summary}',
+    other: 'No se pudieron descargar las carátulas de {count} juegos. Primer error: {summary}',
+  }),
+  'coverSync.failure.hint':
+    'Comprueba las fuentes de carátulas de los juegos y la configuración de SteamGridDB.',
 
   'nvidia.adminRequired': 'Se requieren privilegios de administrador',
-  'nvidia.relaunchTo': 'Reinicia como administrador para {action}.',
-  'nvidia.action.changeSetting': 'aplicar configuraciones',
-  'nvidia.action.revertSetting': 'revertir configuraciones',
   'nvidia.changeSettingFailed': 'No se pudieron aplicar las configuraciones',
   'nvidia.revertDefaultFailed': 'No se pudieron restaurar las configuraciones por defecto',
   'nvidia.revertBaselineFailed': 'No se pudieron restaurar las configuraciones iniciales',
 
-  'indicator.relaunchToToggle': 'Reinicia como administrador para alternar el indicador DLSS.',
   'indicator.changeFailed': 'No se pudo alternar el indicador DLSS',
 
   'libraries.column.version': 'Versión',
@@ -613,6 +627,18 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'No se pudo aplicar esta actualización porque el archivo de origen se reemplazó o modificó fuera de RenderPilot. Vuelva a seleccionar la versión; es posible que se necesite una descarga.',
   'user_message.nvapi_requires_administrator':
     'Se requieren derechos de administrador para cambiar esta configuración.',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot encontró estados administrados en conflicto en fichas de juego duplicadas. No se cambió nada y se creó un paquete de recuperación.',
+  'user_message.rollback_also_failed':
+    'La acción falló y RenderPilot no pudo restaurar por completo el estado anterior de los archivos. Comprueba los archivos del juego antes de volver a intentarlo.',
+  'user_message.elevation_cancelled':
+    'Se canceló la solicitud de administrador. No se realizó ningún cambio.',
+  'user_message.elevation_policy_blocked':
+    'Windows bloqueó la solicitud de administrador. Comprueba la directiva del sistema y vuelve a intentarlo.',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot no pudo reiniciarse con derechos de administrador. Prueba a reiniciar la aplicación.',
+  'user_message.elevation_unsupported':
+    'El reinicio con derechos de administrador no es compatible con esta plataforma.',
 
   'suggested_action.refresh_games': 'Actualiza la lista de juegos y vuelve a intentarlo.',
   'suggested_action.reload_game_details': 'Actualiza los detalles del juego y vuelve a intentarlo.',

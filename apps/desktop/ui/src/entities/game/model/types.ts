@@ -249,19 +249,10 @@ export type GameDetails = {
   addon_capabilities: AddonCapability[];
 };
 
-export type ScanError = {
-  root: string;
-  message: string;
-};
-
 export type AutoScanResponse = {
   addedGameIds: string[];
   updatedGameIds: string[];
   changedGameIds: string[];
   removedGameIds: string[];
-  /**
-   * Explicitly omitted during serialization by the Rust backend when the collection is empty.
-   * Clients must robustly handle absence by substituting an empty array `[]`.
-   */
-  errors?: ScanError[];
+  partialFailureCount: number;
 };

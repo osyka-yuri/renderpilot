@@ -4,6 +4,7 @@ import {
   isPersistedSnapshotStillCurrent,
   type GamesFilterState,
 } from './games-filter-state';
+import { reportClientError } from '@shared/errors';
 
 const DEFAULT_SEARCH_PERSIST_DEBOUNCE_MS = 300;
 
@@ -22,7 +23,7 @@ export type GamesFilterPersistenceOptions = {
 };
 
 function defaultPersistErrorHandler(error: unknown): void {
-  console.error('Failed to persist game filters.', error);
+  reportClientError('persist_game_filters', error);
 }
 
 export function createGamesFilterPersistence(options: GamesFilterPersistenceOptions) {
@@ -40,7 +41,7 @@ export function createGamesFilterPersistence(options: GamesFilterPersistenceOpti
     try {
       onPersistError(error);
     } catch (handlerError) {
-      console.error('Failed to handle game filters persist error.', handlerError);
+      reportClientError('game_filter_persist_error_handler', handlerError);
     }
   }
 

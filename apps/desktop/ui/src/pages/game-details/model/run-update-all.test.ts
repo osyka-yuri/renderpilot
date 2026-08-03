@@ -130,5 +130,8 @@ describe('runUpdateAll', () => {
       'libraries',
       'renodx',
     ]);
+    expect((error as UpdateAllError).failures[1]?.error).toMatchObject({
+      code: 'update_all_step_failed',
+    });
   });
 });

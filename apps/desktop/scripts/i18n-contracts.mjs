@@ -14,12 +14,16 @@ import {
 import {
   analyzeMessageTemplate,
   validateEnglishContract,
+  validateAddGameWarningContract,
+  validateDesktopCommandErrorContract,
   validateLumaContract,
   validateNvapiContract,
   validatePluralCategories,
 } from './i18n-contracts/validator.mjs';
 import {
   renderContractVersion,
+  renderAddGameWarningContract,
+  renderDesktopCommandErrorContract,
   renderLumaContract,
   renderNvapiContract,
 } from './i18n-contracts/renderer.mjs';
@@ -36,12 +40,22 @@ const INPUTS = {
     REPOSITORY_ROOT,
     'crates/renderpilot-orchestration/src/dlss/bundled/dlss_settings.json',
   ),
+  desktopCommandErrors: path.join(REPOSITORY_ROOT, 'data/contracts/desktop-command-errors.json'),
+  addGameWarnings: path.join(REPOSITORY_ROOT, 'data/contracts/add-game-warnings.json'),
 };
 
 const OUTPUTS = {
   contractVersion: path.join(APP_ROOT, 'ui/src/shared/i18n/messages/generated/contract-version.ts'),
   luma: path.join(APP_ROOT, 'ui/src/shared/i18n/messages/overrides/luma/schema.ts'),
   nvapi: path.join(APP_ROOT, 'ui/src/shared/i18n/messages/overrides/nvapi/contract.generated.ts'),
+  desktopCommandErrors: path.join(
+    APP_ROOT,
+    'ui/src/shared/errors/generated/desktop-command-errors.ts',
+  ),
+  addGameWarnings: path.join(
+    APP_ROOT,
+    'ui/src/features/scan-libraries/model/generated/add-game-warnings.ts',
+  ),
 };
 
 function withInputContext(filePath, operation) {
@@ -80,6 +94,18 @@ export function parseNvapiContract(value) {
   return parseValidatedNvapiContract(value).sourceCatalog;
 }
 
+export function parseDesktopCommandErrorContract(value, english) {
+  return withInputContext(INPUTS.desktopCommandErrors, () =>
+    validateDesktopCommandErrorContract(value, english),
+  );
+}
+
+export function parseAddGameWarningContract(value, english) {
+  return withInputContext(INPUTS.addGameWarnings, () =>
+    validateAddGameWarningContract(value, english),
+  );
+}
+
 function parseValidatedNvapiContract(value) {
   return withInputContext(INPUTS.nvapi, () => validateNvapiContract(parseNvapiSource(value)));
 }
@@ -91,11 +117,20 @@ export function formatGeneratedSource(filePath, source, configPath = FORMAT_CONF
 }
 
 export async function createI18nContractOutputs() {
-  const [englishText, messageModelText, lumaText, nvapiText] = await Promise.all([
+  const [
+    englishText,
+    messageModelText,
+    lumaText,
+    nvapiText,
+    desktopCommandErrorsText,
+    addGameWarningsText,
+  ] = await Promise.all([
     readFile(INPUTS.english, 'utf8'),
     readFile(INPUTS.messageModel, 'utf8'),
     readFile(INPUTS.luma, 'utf8'),
     readFile(INPUTS.nvapi, 'utf8'),
+    readFile(INPUTS.desktopCommandErrors, 'utf8'),
+    readFile(INPUTS.addGameWarnings, 'utf8'),
   ]);
 
   const english = parseEnglishContract(englishText);
@@ -104,7 +139,20 @@ export async function createI18nContractOutputs() {
   const nvapi = parseValidatedNvapiContract(
     withInputContext(INPUTS.nvapi, () => parseJsonSource(nvapiText)),
   );
-  const contract = createSemanticContract({ english, pluralCategories, luma, nvapi });
+  const desktopCommandErrors = parseDesktopCommandErrorContract(
+    withInputContext(INPUTS.desktopCommandErrors, () => parseJsonSource(desktopCommandErrorsText)),
+    english,
+  );
+  const addGameWarnings = parseAddGameWarningContract(
+    withInputContext(INPUTS.addGameWarnings, () => parseJsonSource(addGameWarningsText)),
+    english,
+  );
+  const contract = createSemanticContract({
+    english,
+    pluralCategories,
+    luma,
+    nvapi,
+  });
 
   return new Map(
     await Promise.all(
@@ -112,6 +160,8 @@ export async function createI18nContractOutputs() {
         [OUTPUTS.contractVersion, renderContractVersion(createContractVersion(contract))],
         [OUTPUTS.luma, renderLumaContract(luma)],
         [OUTPUTS.nvapi, renderNvapiContract(nvapi.sourceCatalog)],
+        [OUTPUTS.desktopCommandErrors, renderDesktopCommandErrorContract(desktopCommandErrors)],
+        [OUTPUTS.addGameWarnings, renderAddGameWarningContract(addGameWarnings)],
       ].map(async ([filePath, source]) => [
         filePath,
         await formatGeneratedSource(filePath, source),

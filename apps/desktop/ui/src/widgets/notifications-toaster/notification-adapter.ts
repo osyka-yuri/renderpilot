@@ -2,9 +2,13 @@ import { toast, type ExternalToast } from 'svelte-sonner';
 import { dismissNotification, type Notification } from '@shared/notifications';
 
 export function publishSonnerNotification(notification: Notification): void {
+  const description = [notification.description, ...(notification.details ?? [])]
+    .filter((value): value is string => value !== undefined)
+    .join('\n');
   const options: ExternalToast = {
     id: notification.id,
-    description: notification.description,
+    description: description.length === 0 ? undefined : description,
+    descriptionClass: notification.details === undefined ? undefined : 'whitespace-pre-line',
     important: notification.important,
     onDismiss: () => {
       dismissNotification(notification.id);

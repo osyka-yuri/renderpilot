@@ -1,7 +1,9 @@
 import { invokeDesktop } from '@shared/api';
-import { requireNonBlankString } from '@shared/validation';
+import { ClientError, reportClientError } from '@shared/errors';
+import { isPlainObject, requireNonBlankString } from '@shared/validation';
 import type { AutoScanResponse } from '@entities/game';
 import type { AddGameInspection, AddGameRequest, AddGameResult } from '../model/add-game';
+import { normalizeAddGameWarnings } from '../model/add-game-warning';
 import type { ManifestRefreshReport } from '../model/manifest-refresh';
 
 export async function scanAutoLibraries(): Promise<AutoScanResponse> {
@@ -9,13 +11,13 @@ export async function scanAutoLibraries(): Promise<AutoScanResponse> {
 }
 
 export async function inspectGameInstall(path: string): Promise<AddGameInspection> {
-  return invokeDesktop<AddGameInspection>('inspect_game_install', {
+  return invokeWithNormalizedWarnings<AddGameInspection>('inspect_game_install', {
     path: requireNonBlankString(path, 'path'),
   });
 }
 
 export async function addGame(request: AddGameRequest): Promise<AddGameResult> {
-  return invokeDesktop<AddGameResult>('add_game', {
+  return invokeWithNormalizedWarnings<AddGameResult>('add_game', {
     selectedRoot: requireNonBlankString(request.selectedRoot, 'selectedRoot'),
     rootChoice: request.rootChoice,
     allowRootCorrection: request.allowRootCorrection,
@@ -25,6 +27,25 @@ export async function addGame(request: AddGameRequest): Promise<AddGameResult> {
       'inspectionFingerprint',
     ),
   });
+}
+
+async function invokeWithNormalizedWarnings<
+  Result extends { warnings: ReturnType<typeof normalizeAddGameWarnings> },
+>(
+  operation: 'inspect_game_install' | 'add_game',
+  payload: Record<string, unknown>,
+): Promise<Result> {
+  const response = await invokeDesktop<unknown>(operation, payload);
+  if (!isPlainObject(response) || !Array.isArray(response.warnings)) {
+    const error = new ClientError('desktop_transport_failed', response);
+    reportClientError(operation, error);
+    throw error;
+  }
+
+  return {
+    ...response,
+    warnings: normalizeAddGameWarnings(response.warnings, operation),
+  } as Result;
 }
 
 /**

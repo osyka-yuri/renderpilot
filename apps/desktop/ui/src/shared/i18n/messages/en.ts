@@ -127,6 +127,12 @@ export const en = defineSourceCatalog({
   'error.boundary.description':
     'This screen ran into an unexpected error. You can try again, or switch to another section.',
   'error.boundary.reset': 'Try again',
+  'error.desktopTransportFailed':
+    'The desktop service returned an invalid response. Try the action again.',
+  'error.unexpectedClient': 'Something unexpected went wrong. Try the action again.',
+  'error.localeLoadFailed':
+    'The selected language could not be loaded. The previous language is still active.',
+  'error.recoveryBundlePath': 'Recovery bundle: {path}',
   'pageLoad.loading': 'Loading page…',
   'pageLoad.error.title': "Couldn't open this page",
   'pageLoad.error.description': 'The page could not be loaded. Try again or return to Games.',
@@ -221,6 +227,8 @@ export const en = defineSourceCatalog({
     'This folder cannot be added separately because it contains no readable game executable.',
   'addGame.warning.filesystemProbeError':
     'Part of the installation could not be inspected. Check file access permissions.',
+  'addGame.warning.unknown':
+    'The game was inspected with a warning that this version of RenderPilot cannot display.',
   'games.libraryActions': 'Actions',
   'games.search': 'Search games',
   'games.openFilters': 'Filters',
@@ -559,22 +567,25 @@ export const en = defineSourceCatalog({
     one: 'Could not scan 1 folder.',
     other: 'Could not scan {count} folders.',
   }),
+  'scan.automaticFailed': 'Automatic library scan failed. Your game list was still refreshed.',
 
   // ── Background cover sync ──
   'coverSync.failed': 'Failed to sync covers.',
   'coverSync.refreshFailed': 'Failed to sync covers.',
+  'coverSync.failure.single': 'Could not download a cover for {title}: {message}',
+  'coverSync.failure.multiple': plural('count', {
+    one: 'Could not download covers for {count} game. First failure: {summary}',
+    other: 'Could not download covers for {count} games. First failure: {summary}',
+  }),
+  'coverSync.failure.hint': 'Check Game artwork sources and SteamGridDB settings.',
 
   // ── NVIDIA driver context (toasts) ──
   'nvidia.adminRequired': 'Administrator privileges required',
-  'nvidia.relaunchTo': 'Restart as administrator to {action}.',
-  'nvidia.action.changeSetting': 'apply settings',
-  'nvidia.action.revertSetting': 'revert settings',
   'nvidia.changeSettingFailed': 'Failed to apply settings',
   'nvidia.revertDefaultFailed': 'Failed to restore default settings',
   'nvidia.revertBaselineFailed': 'Failed to restore initial settings',
 
   // ── DLSS indicator context (toasts) ──
-  'indicator.relaunchToToggle': 'Restart as administrator to toggle the DLSS indicator.',
   'indicator.changeFailed': 'Failed to toggle the DLSS indicator',
 
   // ── Libraries table ──
@@ -631,6 +642,8 @@ export const en = defineSourceCatalog({
     'Resolve the active game state from its existing card before changing the root.',
   'user_message.managed_cleanup_ambiguous':
     'RenderPilot found overlapping managed changes whose safe restore order cannot be proven. Nothing was changed and a recovery bundle was created.',
+  'user_message.catalog_consolidation_blocked':
+    'RenderPilot found conflicting managed state on duplicate game cards. Nothing was changed and a recovery bundle was created.',
   'user_message.game_removal_cleanup_failed':
     'RenderPilot could not restore the original game files, so the card was not removed. Check the game files and try again.',
   'user_message.invalid_game_reference': 'Game not found.',
@@ -645,6 +658,8 @@ export const en = defineSourceCatalog({
   'user_message.component_not_found': 'Component not found.',
   'user_message.invalid_operation_state': 'This action is currently unavailable.',
   'user_message.operation_could_not_complete': 'Failed to complete the action.',
+  'user_message.rollback_also_failed':
+    'The action failed, and RenderPilot could not fully restore the previous file state. Check the game files before trying again.',
   'user_message.command_task_failed': 'Failed to execute the command.',
   'user_message.storage_failed': 'The app could not read or write its catalog.',
   'user_message.provider_failed': 'A data source could not be read.',
@@ -659,6 +674,14 @@ export const en = defineSourceCatalog({
     'This update could not be applied because the source file was replaced or modified outside RenderPilot. Please select the version again — a download may be needed.',
   'user_message.nvapi_requires_administrator':
     'Administrator rights are required to change this setting.',
+  'user_message.elevation_cancelled':
+    'The administrator request was cancelled. No changes were made.',
+  'user_message.elevation_policy_blocked':
+    'Windows blocked the administrator request. Check system policy and try again.',
+  'user_message.elevation_relaunch_failed':
+    'RenderPilot could not restart with administrator rights. Try restarting the app.',
+  'user_message.elevation_unsupported':
+    'Restarting with administrator rights is not supported on this platform.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Refresh the games list and try again.',

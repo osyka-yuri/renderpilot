@@ -5,6 +5,7 @@ export type Notification = {
   severity: NotificationSeverity;
   title: string;
   description?: string;
+  details?: readonly string[];
   important?: boolean;
 };
 
@@ -23,6 +24,7 @@ export type NotificationInput = {
   severity: NotificationSeverity;
   title: string;
   description?: string;
+  details?: readonly string[];
   important?: boolean;
 };
 

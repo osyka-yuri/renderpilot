@@ -24,6 +24,7 @@ import {
 } from '@features/cover-ops';
 import { publishNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
+import { reportClientError } from '@shared/errors';
 import { SvelteMap } from 'svelte/reactivity';
 import { createGamesPageQueryScheduler } from './games-page-query-scheduler';
 import { createCoverCommandRunner } from './cover-command-runner';
@@ -227,7 +228,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
         );
       }
       publishNotification({ severity: 'error', title: t('notify.favoriteFailed') });
-      console.error('Failed to toggle favorite status', error);
+      reportClientError('toggle_game_favorite', error);
     } finally {
       favoriteMutations.finish(gameId, persistence);
     }
@@ -289,7 +290,7 @@ export function createGamesPageModel(input: GamesPageModelInput) {
         );
       }
       publishNotification({ severity: 'error', title: t('notify.hiddenFailed') });
-      console.error('Failed to toggle hidden status', error);
+      reportClientError('toggle_game_hidden', error);
     } finally {
       hiddenMutations.finish(gameId, persistence);
     }

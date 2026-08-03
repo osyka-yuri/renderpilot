@@ -9,10 +9,10 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import type { Component } from 'svelte';
 
-  import { describeCommandErrorBrief, normalizeCommandError } from '@shared/api';
+  import { formatPresentedError, presentError } from '@shared/error-presentation';
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
-  import { formatError, publishErrorNotification } from '@shared/notifications';
+  import { publishPresentedErrorNotification } from '@shared/notifications';
   import {
     Alert,
     AlertDescription,
@@ -193,7 +193,7 @@
     try {
       await action.handler();
     } catch (error) {
-      publishErrorNotification(t('notify.statusError'), formatError(error));
+      publishPresentedErrorNotification(t('notify.statusError'), error);
     }
   }
 
@@ -238,9 +238,9 @@
         removalError = t('notify.removeGameFailed');
       }
     } catch (error) {
-      const commandError = normalizeCommandError(error);
-      removalError = describeCommandErrorBrief(commandError);
-      removalRecoveryBundlePath = commandError.dto.recoveryBundlePath ?? null;
+      const presented = presentError(error);
+      removalError = formatPresentedError(error);
+      removalRecoveryBundlePath = presented.recoveryBundlePath ?? null;
     } finally {
       removing = false;
     }

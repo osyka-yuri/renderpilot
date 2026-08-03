@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 
-import { normalizeCommandError } from '@shared/api';
+import { DesktopCommandError } from '@shared/errors';
 import { t } from '@shared/i18n';
 import GameCardActionsMenu from './GameCardActionsMenu.svelte';
 
@@ -90,9 +90,10 @@ describe('GameCardActionsMenu catalog removal', () => {
 
     await vi.waitFor(() => {
       expect(document.querySelector('[data-removal-error]')?.textContent).toContain(
-        'rollback failed',
+        t('error.unexpectedClient'),
       );
     });
+    expect(document.body.textContent).not.toContain('rollback failed');
     expect(document.body.textContent).toContain(t('game.card.removeConfirm.description'));
   });
 
@@ -100,13 +101,9 @@ describe('GameCardActionsMenu catalog removal', () => {
     const recoveryBundlePath = 'C:/Recovery/renderpilot-bundle';
     const onRemoveFromCatalog = vi.fn(() =>
       Promise.reject(
-        normalizeCommandError({
+        DesktopCommandError.fromDto({
           code: 'managed_cleanup_ambiguous',
-          severity: 'error',
-          messageKey: 'user_message.managed_cleanup_ambiguous',
-          details: 'Cleanup could not be ordered safely.',
           recoveryBundlePath,
-          suggestedActions: [],
         }),
       ),
     );

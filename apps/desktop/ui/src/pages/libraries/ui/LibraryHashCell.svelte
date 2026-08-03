@@ -2,6 +2,7 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@shared/ui';
   import { t } from '@shared/i18n';
+  import { reportClientError } from '@shared/errors';
   import { toast } from 'svelte-sonner';
   import type { LibraryPackageRow } from '../model/libraries-page-model';
 
@@ -56,7 +57,7 @@
       toast.success(t('libraries.hash.copiedToast'));
       scheduleReset(2000);
     } catch (error) {
-      console.error('Failed to copy DLL SHA-256 hash:', error);
+      reportClientError('copy_library_hash', error);
 
       copyStatus = 'failed';
       toast.error(t('libraries.hash.failed'));
