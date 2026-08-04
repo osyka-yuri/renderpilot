@@ -339,7 +339,10 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
   function applyPackageMutation(mutation: LibraryPackageMutation): void {
     const previousIndex = packages.findIndex((row) => row.package_id === mutation.package_id);
     if (mutation.package === null) {
-      commitPackages(packages.filter((_, index) => index !== previousIndex));
+      if (previousIndex < 0) {
+        return;
+      }
+      commitPackages(packages.toSpliced(previousIndex, 1));
       return;
     }
     const replacement = mutation.package;
@@ -347,7 +350,7 @@ export function createLibrariesPageModel(options: LibrariesPageModelOptions = {}
       commitPackages([...packages, replacement]);
       return;
     }
-    commitPackages(packages.map((row, index) => (index === previousIndex ? replacement : row)));
+    commitPackages(packages.with(previousIndex, replacement));
   }
 
   function commitPackages(nextPackages: readonly LibraryPackageSummary[]): void {

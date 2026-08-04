@@ -24,9 +24,7 @@ export function interpolateMessage(template: string, params?: InterpolationParam
       if (token.kind === 'text') {
         return token.value;
       }
-      return Object.prototype.hasOwnProperty.call(params, token.name)
-        ? String(params[token.name])
-        : `{${token.name}}`;
+      return Object.hasOwn(params, token.name) ? String(params[token.name]) : `{${token.name}}`;
     })
     .join('');
 }

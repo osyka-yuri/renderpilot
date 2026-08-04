@@ -3,6 +3,8 @@
 mod commands;
 #[cfg(windows)]
 mod elevation;
+#[cfg(windows)]
+mod webview_runtime;
 
 use std::sync::Arc;
 
@@ -100,6 +102,11 @@ pub fn run() {
     #[cfg(feature = "portable")]
     apply_portable_mode();
 
+    let context = tauri::generate_context!();
+
+    #[cfg(windows)]
+    webview_runtime::enforce_minimum_version(&context);
+
     #[cfg(windows)]
     apply_webview2_elevation_workaround();
 
@@ -109,7 +116,7 @@ pub fn run() {
         return;
     }
 
-    if let Err(error) = run_desktop_shell(init_state) {
+    if let Err(error) = run_desktop_shell(init_state, context) {
         exit_with_startup_error(error);
     }
 }
@@ -239,8 +246,11 @@ fn compute_initialization_state() -> AppInitializationState {
 }
 
 /// Builds and runs the Tauri application.
-fn run_desktop_shell(init_state: AppInitializationState) -> tauri::Result<()> {
-    create_desktop_builder(init_state).run(tauri::generate_context!())
+fn run_desktop_shell(
+    init_state: AppInitializationState,
+    context: tauri::Context<Wry>,
+) -> tauri::Result<()> {
+    create_desktop_builder(init_state).run(context)
 }
 
 /// Creates the Tauri builder used by the desktop shell.

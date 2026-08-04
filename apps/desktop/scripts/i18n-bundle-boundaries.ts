@@ -21,7 +21,7 @@ type BundleAsset = BundleChunk | { type: 'asset'; fileName: string; source?: unk
 export type OutputBundleLike = Record<string, BundleAsset>;
 
 function normalize(value: string): string {
-  return value.replace(/\\/g, '/');
+  return value.replaceAll('\\', '/');
 }
 
 function hasSourceSuffix(value: string, suffix: string): boolean {
@@ -139,10 +139,13 @@ function dynamicReachable(bundle: OutputBundleLike, roots: Set<string>): Set<str
 }
 
 function moduleIds(bundle: OutputBundleLike, chunkNames: Set<string>): string[] {
-  return [...chunkNames].flatMap((fileName) => {
-    const chunk = bundle[fileName];
-    return chunk?.type === 'chunk' ? Object.keys(chunk.modules) : [];
-  });
+  return chunkNames
+    .values()
+    .flatMap((fileName) => {
+      const chunk = bundle[fileName];
+      return chunk?.type === 'chunk' ? Object.keys(chunk.modules) : [];
+    })
+    .toArray();
 }
 
 function findChunkByFacade(bundle: OutputBundleLike, suffix: string): BundleChunk {
@@ -196,10 +199,9 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
     throw new Error('Expected index.html to contain textual HTML source.');
   }
   const modulePreloads = modulePreloadReferences(indexHtmlSource);
-  const initialChunks = new Set([
-    ...staticReachable(bundle, bootstrap.fileName),
-    ...staticReachable(bundle, desktopApp.fileName),
-  ]);
+  const initialChunks = staticReachable(bundle, bootstrap.fileName).union(
+    staticReachable(bundle, desktopApp.fileName),
+  );
   const initialModules = moduleIds(bundle, initialChunks);
 
   const englishPack = `${PACK_ROOT}en.ts`;
@@ -210,16 +212,21 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
     throw new Error('The eager English message catalog is missing from the initial module graph.');
   }
 
-  const leakedModules = [...initialChunks].flatMap((fileName) => {
-    const chunk = bundle[fileName];
-    if (!chunk || chunk.type !== 'chunk') {
-      return [];
-    }
+  const leakedModules = initialChunks
+    .values()
+    .flatMap((fileName) => {
+      const chunk = bundle[fileName];
+      if (!chunk || chunk.type !== 'chunk') {
+        return [];
+      }
 
-    return Object.keys(chunk.modules)
-      .filter((moduleId) => localeModuleOwner(moduleId) !== null || isI18nOverrideModule(moduleId))
-      .map((moduleId) => ({ fileName, moduleId }));
-  });
+      return Object.keys(chunk.modules)
+        .filter(
+          (moduleId) => localeModuleOwner(moduleId) !== null || isI18nOverrideModule(moduleId),
+        )
+        .map((moduleId) => ({ fileName, moduleId }));
+    })
+    .toArray();
 
   if (leakedModules.length > 0) {
     throw new Error(
@@ -249,11 +256,7 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
       );
     }
 
-    const localeGraph = new Set(
-      [...staticReachable(bundle, pack.fileName)].filter(
-        (graphFileName) => !initialChunks.has(graphFileName),
-      ),
-    );
+    const localeGraph = staticReachable(bundle, pack.fileName).difference(initialChunks);
     const crossLocaleModules = moduleIds(bundle, localeGraph).filter((moduleId) => {
       const owner = localeModuleOwner(moduleId);
       return owner !== null && owner !== locale;

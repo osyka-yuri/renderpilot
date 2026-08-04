@@ -80,7 +80,7 @@ export function compareVersionDesc(left: string, right: string): number {
 }
 
 /** Keeps the first spelling of each trailing-zero-equivalent version. */
-export function collapseEquivalentVersions(versions: string[]): string[] {
+export function collapseEquivalentVersions(versions: readonly string[]): string[] {
   const kept: string[] = [];
   for (const version of versions) {
     if (!kept.some((existing) => versionsEqual(existing, version))) {

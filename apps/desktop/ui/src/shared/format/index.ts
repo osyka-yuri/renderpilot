@@ -1,4 +1,5 @@
 export { formatBytes } from './bytes';
+export { formatCompactDurationSeconds } from './duration';
 export {
   formatLocalDateTime,
   formatLocalShortDate,

@@ -23,7 +23,7 @@ import {
   shouldCloseOpenMenu,
 } from '@features/cover-ops';
 import { publishNotification } from '@shared/notifications';
-import { t } from '@shared/i18n';
+import { getLocale, t } from '@shared/i18n';
 import { reportClientError } from '@shared/errors';
 import { SvelteMap } from 'svelte/reactivity';
 import { createGamesPageQueryScheduler } from './games-page-query-scheduler';
@@ -63,7 +63,8 @@ export function createGamesPageModel(input: GamesPageModelInput) {
     getAvailableAddons: () => ALL_ADDON_CAPABILITIES,
     getAvailableLaunchers: () => ALL_KNOWN_LAUNCHERS,
   });
-  const gameItems = $derived(catalogSession.games.map((game) => toGameCardViewModel(game)));
+  const locale = $derived(getLocale());
+  const gameItems = $derived(catalogSession.games.map((game) => toGameCardViewModel(game, locale)));
 
   const coverCommandRunner = createCoverCommandRunner({
     getManualCoverBusyFor: () => manualCoverBusyFor,

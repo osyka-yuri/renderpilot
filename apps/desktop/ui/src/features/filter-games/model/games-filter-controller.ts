@@ -4,7 +4,6 @@ import {
   hasPartialAddonSelection,
   hasPartialLibrarySelection,
   hasPartialLauncherSelection,
-  normalizeAddonCapabilities,
 } from '@entities/game';
 import { getCatalogSetting, GAMES_FILTERS_CATALOG_SETTING_KEY } from '@entities/settings';
 import {
@@ -108,10 +107,7 @@ export function hasFilterIndicator(
   return (
     searchQuery.trim().length > 0 ||
     hasPartialLibrarySelection(appliedLibraries, availableLibraries) ||
-    hasPartialAddonSelection(
-      normalizeAddonCapabilities(appliedAddons),
-      normalizeAddonCapabilities(availableAddons),
-    ) ||
+    hasPartialAddonSelection(appliedAddons, availableAddons) ||
     hasPartialLauncherSelection(appliedLaunchers, availableLaunchers)
   );
 }

@@ -36,5 +36,5 @@ function localeModuleSuffixes(locale: LazyLocale): readonly string[] {
 }
 
 function normalize(value: string): string {
-  return value.replace(/\\/g, '/');
+  return value.replaceAll('\\', '/');
 }

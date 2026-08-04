@@ -1,6 +1,9 @@
 {
   "name": "renderpilot-desktop-ui",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "packageManager": "pnpm@11.18.0",
   "type": "module",
   "scripts": {
@@ -50,7 +53,7 @@
     "@sveltejs/vite-plugin-svelte": "7.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "2.11.4",
-    "@types/node": "26.1.2",
+    "@types/node": "24.13.3",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",

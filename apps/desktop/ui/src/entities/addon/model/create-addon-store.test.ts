@@ -117,13 +117,10 @@ describe('createAddonStore', () => {
   });
 
   it('discards a stale load when a newer load starts', async () => {
-    let releaseSlow: (report: TestAvailabilityReport) => void = () => undefined;
-    const slow = new Promise<TestAvailabilityReport>((resolve) => {
-      releaseSlow = resolve;
-    });
+    const slow = Promise.withResolvers<TestAvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) =>
-        gameId === 'slow' ? slow : Promise.resolve({ state: INSTALLED, label: 'fast' }),
+        gameId === 'slow' ? slow.promise : Promise.resolve({ state: INSTALLED, label: 'fast' }),
       ),
     });
     const { store } = createTestStore(api);
@@ -132,20 +129,17 @@ describe('createAddonStore', () => {
     await store.load('fast');
     expect(store.isInstalled).toBe(true);
 
-    releaseSlow({ state: NOT_INSTALLED, label: 'stale' });
+    slow.resolve({ state: NOT_INSTALLED, label: 'stale' });
     await slowLoad;
 
     expect(store.isInstalled).toBe(true);
   });
 
   it('clears install chrome while loading a different game', async () => {
-    let releaseG2: (report: TestAvailabilityReport) => void = () => undefined;
-    const g2Load = new Promise<TestAvailabilityReport>((resolve) => {
-      releaseG2 = resolve;
-    });
+    const g2Load = Promise.withResolvers<TestAvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) =>
-        gameId === 'g2' ? g2Load : Promise.resolve(INSTALLED_AVAILABILITY),
+        gameId === 'g2' ? g2Load.promise : Promise.resolve(INSTALLED_AVAILABILITY),
       ),
     });
     const { store } = createTestStore(api);
@@ -161,7 +155,7 @@ describe('createAddonStore', () => {
       expect(store.isInstalled).toBe(false);
     });
 
-    releaseG2(NOT_INSTALLED_AVAILABILITY);
+    g2Load.resolve(NOT_INSTALLED_AVAILABILITY);
     await pending;
 
     expect(store.loading).toBe(false);
@@ -204,15 +198,12 @@ describe('createAddonStore', () => {
   });
 
   it('keeps a failed availability state visible while an explicit retry is in progress', async () => {
-    let resolveRetry: (report: TestAvailabilityReport) => void = () => undefined;
-    const retryResponse = new Promise<TestAvailabilityReport>((resolve) => {
-      resolveRetry = resolve;
-    });
+    const retryResponse = Promise.withResolvers<TestAvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi
         .fn()
         .mockRejectedValueOnce(new Error('boom'))
-        .mockReturnValueOnce(retryResponse),
+        .mockReturnValueOnce(retryResponse.promise),
     });
     const { store } = createTestStore(api);
 
@@ -222,7 +213,7 @@ describe('createAddonStore', () => {
     expect(store.loading).toBe(true);
     expect(store.loadError).toBe('Something unexpected went wrong. Try the action again.');
 
-    resolveRetry(NOT_INSTALLED_AVAILABILITY);
+    retryResponse.resolve(NOT_INSTALLED_AVAILABILITY);
     await retry;
 
     expect(store.loaded).toBe(true);
@@ -324,11 +315,8 @@ describe('createAddonStore', () => {
   });
 
   it('keeps busy until the complete post-commit sequence settles', async () => {
-    let releaseHook: () => void = () => undefined;
-    const hook = new Promise<void>((resolve) => {
-      releaseHook = resolve;
-    });
-    const afterCommit = vi.fn(() => hook);
+    const hook = Promise.withResolvers<undefined>();
+    const afterCommit = vi.fn(() => hook.promise);
     const { store } = createTestStore();
 
     const mutation = store.runBusyMutation('g1', () => Promise.resolve(INSTALLED), {
@@ -340,21 +328,18 @@ describe('createAddonStore', () => {
     });
     expect(store.busy).toBe(true);
 
-    releaseHook();
+    hook.resolve(undefined);
     await mutation;
 
     expect(store.busy).toBe(false);
   });
 
   it('invalidates a load that was already in flight when a mutation starts', async () => {
-    let releaseLoad: (report: TestAvailabilityReport) => void = () => undefined;
-    const staleLoad = new Promise<TestAvailabilityReport>((resolve) => {
-      releaseLoad = resolve;
-    });
+    const staleLoad = Promise.withResolvers<TestAvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi
         .fn()
-        .mockReturnValueOnce(staleLoad)
+        .mockReturnValueOnce(staleLoad.promise)
         .mockResolvedValueOnce(INSTALLED_AVAILABILITY),
     });
     const { store, getLabel } = createTestStore(api);
@@ -363,7 +348,7 @@ describe('createAddonStore', () => {
     const ok = await store.runBusyMutation('g1', () => Promise.resolve(INSTALLED), {
       errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
     });
-    releaseLoad({ state: NOT_INSTALLED, label: 'stale' });
+    staleLoad.resolve({ state: NOT_INSTALLED, label: 'stale' });
     await load;
 
     expect(ok).toBe('ok');
@@ -373,10 +358,7 @@ describe('createAddonStore', () => {
   });
 
   it('discards a mutation that finishes after navigating to another game', async () => {
-    let releaseInstall: (state: TestState) => void = () => undefined;
-    const pendingInstall = new Promise<TestState>((resolve) => {
-      releaseInstall = resolve;
-    });
+    const pendingInstall = Promise.withResolvers<TestState>();
     const onExclusivityChange = vi.fn();
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) =>
@@ -395,7 +377,7 @@ describe('createAddonStore', () => {
       buildProbeFailureReport: () => ({ addon: null, host: null, overall: 'unknown' }),
     });
 
-    const mutation = store.runBusyMutation('g1', () => pendingInstall, {
+    const mutation = store.runBusyMutation('g1', () => pendingInstall.promise, {
       errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
       notifyExclusivity: true,
     });
@@ -407,7 +389,7 @@ describe('createAddonStore', () => {
     expect(store.busy).toBe(false);
     expect(store.isInstalled).toBe(false);
 
-    releaseInstall(INSTALLED);
+    pendingInstall.resolve(INSTALLED);
     const ok = await mutation;
 
     // Backend committed; paint discarded for g1 -- still `ok` for bulk callers.
@@ -419,17 +401,14 @@ describe('createAddonStore', () => {
   });
 
   it('probeUpdates marks freshness checking before host refresh resolves', async () => {
-    let releaseRefresh: (report: TestAvailabilityReport) => void = () => undefined;
-    const pendingRefresh = new Promise<TestAvailabilityReport>((resolve) => {
-      releaseRefresh = resolve;
-    });
+    const pendingRefresh = Promise.withResolvers<TestAvailabilityReport>();
     let refreshCalls = 0;
     const api = fakeApi({
       getAvailability: vi.fn(() => {
         refreshCalls += 1;
         // First call is post-commit host refresh; second would be unrelated.
         if (refreshCalls === 1) {
-          return pendingRefresh;
+          return pendingRefresh.promise;
         }
         return Promise.resolve(INSTALLED_AVAILABILITY);
       }),
@@ -456,7 +435,7 @@ describe('createAddonStore', () => {
       expect(store.updateProbing).toBe(true);
       expect(store.freshness).toBe('checking');
     });
-    releaseRefresh(INSTALLED_AVAILABILITY);
+    pendingRefresh.resolve(INSTALLED_AVAILABILITY);
     await mutation;
 
     expect(store.freshness).toBe('current');
@@ -594,17 +573,14 @@ describe('createAddonStore', () => {
   });
 
   it('does not publish mutation errors after the request was superseded by load', async () => {
-    let rejectInstall: (error: Error) => void = () => undefined;
-    const pendingInstall = new Promise<TestState>((_resolve, reject) => {
-      rejectInstall = reject;
-    });
+    const pendingInstall = Promise.withResolvers<TestState>();
     const { store } = createTestStore();
 
-    const mutation = store.runBusyMutation('g1', () => pendingInstall, {
+    const mutation = store.runBusyMutation('g1', () => pendingInstall.promise, {
       errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
     });
     await store.load('g2');
-    rejectInstall(new Error('install failed late'));
+    pendingInstall.reject(new Error('install failed late'));
     const ok = await mutation;
 
     expect(ok).toBe('failed');

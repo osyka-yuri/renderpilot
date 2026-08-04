@@ -18,27 +18,9 @@ type SetCatalogSettingMock = ReturnType<
 
 type PersistResult = { saved: boolean };
 
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-};
-
 type PersistedFiltersSnapshot = {
   searchQuery?: unknown;
 };
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-
-  return { promise, resolve, reject };
-}
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
@@ -167,7 +149,7 @@ describe('games-filter-persistence', () => {
   });
 
   it('deduplicates concurrent persist requests while write is in flight', async () => {
-    const write = createDeferred<PersistResult>();
+    const write = Promise.withResolvers<PersistResult>();
     setCatalogSettingMock.mockReturnValue(write.promise);
 
     const persistence = createPersistence();
@@ -187,8 +169,8 @@ describe('games-filter-persistence', () => {
   });
 
   it('runs another persist pass when state changes and persist is requested during in-flight write', async () => {
-    const firstWrite = createDeferred<PersistResult>();
-    const secondWrite = createDeferred<PersistResult>();
+    const firstWrite = Promise.withResolvers<PersistResult>();
+    const secondWrite = Promise.withResolvers<PersistResult>();
 
     setCatalogSettingMock
       .mockReturnValueOnce(firstWrite.promise)
@@ -218,7 +200,7 @@ describe('games-filter-persistence', () => {
   });
 
   it('does not commit stale snapshot when state changed during in-flight save', async () => {
-    const write = createDeferred<PersistResult>();
+    const write = Promise.withResolvers<PersistResult>();
     setCatalogSettingMock.mockReturnValueOnce(write.promise);
 
     const persistence = createPersistence();
@@ -295,7 +277,7 @@ describe('games-filter-persistence', () => {
   });
 
   it('does not commit finished in-flight persist after dispose', async () => {
-    const write = createDeferred<PersistResult>();
+    const write = Promise.withResolvers<PersistResult>();
     setCatalogSettingMock.mockReturnValueOnce(write.promise);
 
     const persistence = createPersistence();

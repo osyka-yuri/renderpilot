@@ -22,11 +22,13 @@ export type StreamlineVersionOption = {
   allDownloaded: boolean;
 };
 
+type VersionRange = Readonly<{ min: string; max: string }>;
+
 export type StreamlineVersionModel = {
   options: StreamlineVersionOption[];
   currentVersion: string | null;
   isMixed: boolean;
-  versionRange: { min: string; max: string } | null;
+  versionRange: VersionRange | null;
   totalCount: number;
 };
 
@@ -36,8 +38,8 @@ export type StreamlineVersionModel = {
  * never infers a cohort from a display version or candidate order.
  */
 export function buildStreamlineVersionModel(
-  components: GameLibraryComponent[],
-  groupsById: Record<string, GameCandidateGroup | null>,
+  components: readonly GameLibraryComponent[],
+  groupsById: Readonly<Record<string, GameCandidateGroup | null>>,
   coordinatedOptions: readonly CoordinatedCandidateOption[] = [],
 ): StreamlineVersionModel {
   const reports = components.map((component) => groupsById[component.id]?.version_report);
@@ -63,7 +65,7 @@ export function buildStreamlineVersionModel(
 
 function resolveOption(
   option: CoordinatedCandidateOption,
-  groupsById: Record<string, GameCandidateGroup | null>,
+  groupsById: Readonly<Record<string, GameCandidateGroup | null>>,
   componentIds: ReadonlySet<string>,
 ): StreamlineVersionOption | null {
   if (option.items.length !== componentIds.size) {
@@ -110,11 +112,11 @@ function resolveOption(
 type InstalledVersionSummary = {
   currentVersion: string | null;
   isMixed: boolean;
-  versionRange: { min: string; max: string } | null;
+  versionRange: VersionRange | null;
 };
 
 function summarizeInstalledVersions(
-  reports: (GameCandidateGroup['version_report'] | undefined)[],
+  reports: readonly (GameCandidateGroup['version_report'] | undefined)[],
 ): InstalledVersionSummary {
   const knownVersions: string[] = [];
   const rangeVersions: string[] = [];
@@ -150,11 +152,21 @@ function summarizeInstalledVersions(
   return { currentVersion, isMixed, versionRange };
 }
 
-function mixedVersionRange(versions: string[]): { min: string; max: string } | null {
-  const distinct = collapseEquivalentVersions(versions);
-  if (distinct.length < 2) {
+function mixedVersionRange(versions: readonly string[]): VersionRange | null {
+  if (versions.length === 0) {
     return null;
   }
-  const sorted = [...distinct].sort(compareVersionAsc);
-  return { min: sorted[0], max: sorted[sorted.length - 1] };
+
+  let min = versions[0];
+  let max = versions[0];
+  for (let index = 1; index < versions.length; index += 1) {
+    const version = versions[index];
+    if (compareVersionAsc(version, min) < 0) {
+      min = version;
+    } else if (compareVersionAsc(version, max) > 0) {
+      max = version;
+    }
+  }
+
+  return compareVersionAsc(min, max) === 0 ? null : { min, max };
 }

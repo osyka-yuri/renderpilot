@@ -2,30 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createLazyPageResource } from './lazy-page-resource.svelte';
 
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-};
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-
-  return { promise, resolve, reject };
-}
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('createLazyPageResource', () => {
   it('deduplicates concurrent requests and caches the loaded component', async () => {
-    const pending = createDeferred<string>();
+    const pending = Promise.withResolvers<string>();
     const loader = vi.fn(() => pending.promise);
     const page = createLazyPageResource({ id: 'settings', loader });
 
@@ -51,7 +34,7 @@ describe('createLazyPageResource', () => {
 
   it('promotes an in-flight preload to a foreground failure', async () => {
     const error = new Error('missing chunk');
-    const pending = createDeferred<string>();
+    const pending = Promise.withResolvers<string>();
     const loader = vi.fn(() => pending.promise);
     const logError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const page = createLazyPageResource({ id: 'details', loader });

@@ -31,7 +31,7 @@
 
   // Supported values first, preserving catalog order within each group.
   const orderedValues = $derived(
-    [...state.available_values].sort((a, b) => {
+    state.available_values.toSorted((a, b) => {
       if (a.supported !== b.supported) {
         return a.supported ? -1 : 1;
       }

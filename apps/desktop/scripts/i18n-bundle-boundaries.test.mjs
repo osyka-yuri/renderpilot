@@ -4,7 +4,7 @@ import test from 'node:test';
 import { LAZY_LOCALES } from '../ui/src/shared/i18n/locale-model.ts';
 import { assertI18nBundleBoundaries } from './i18n-bundle-boundaries.ts';
 
-const LOCALES = [...LAZY_LOCALES];
+const LOCALES = LAZY_LOCALES;
 
 function chunk(fileName, overrides = {}) {
   return {

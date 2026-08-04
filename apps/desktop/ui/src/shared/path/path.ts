@@ -1,6 +1,6 @@
 export function fileNameFromPath(path: string): string {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const fileName = normalizedPath.split('/').filter(Boolean).pop();
+  const normalizedPath = path.replaceAll('\\', '/');
+  const fileName = normalizedPath.split('/').filter(Boolean).at(-1);
 
   return fileName ?? path;
 }
@@ -38,7 +38,7 @@ export function sharedParentPath(paths: readonly string[]): string | null {
 }
 
 function pathComparisonKey(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
+  const normalized = path.replaceAll('\\', '/');
   const isWindowsPath = /^[a-z]:\//i.test(normalized) || normalized.startsWith('//');
 
   return isWindowsPath ? normalized.toLowerCase() : normalized;

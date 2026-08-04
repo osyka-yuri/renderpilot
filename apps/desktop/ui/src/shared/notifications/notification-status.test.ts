@@ -56,7 +56,7 @@ describe('notification-status', () => {
     publishStatusNotification('   ', 'warning');
 
     expect(getActiveNotifications()).toEqual([]);
-    expect(events[events.length - 1]).toEqual({ type: 'dismissed', id: STATUS_NOTIFICATION_ID });
+    expect(events.at(-1)).toEqual({ type: 'dismissed', id: STATUS_NOTIFICATION_ID });
 
     unsubscribe();
   });

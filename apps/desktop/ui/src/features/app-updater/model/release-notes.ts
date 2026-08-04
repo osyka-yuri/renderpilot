@@ -54,7 +54,7 @@ export function parseReleaseNotes(input: string): ReleaseNotesDocument {
   }
 
   let truncated = false;
-  let text = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  let text = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
 
   if (text.length === 0) {
     return EMPTY_DOCUMENT;
@@ -273,7 +273,7 @@ function mergeAdjacentText(segments: ReleaseNotesInline[]): ReleaseNotesInline[]
 
   const merged: ReleaseNotesInline[] = [];
   for (const segment of segments) {
-    const last = merged.length > 0 ? merged[merged.length - 1] : undefined;
+    const last = merged.at(-1);
     if (last && segment.type === 'text' && last.type === 'text') {
       last.value += segment.value;
     } else {

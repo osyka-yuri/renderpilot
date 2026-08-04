@@ -1,5 +1,6 @@
 import { normalizeUniqueTrimmedStrings } from '@shared/text';
 import { ADDON_DISPLAY_NAME, ALL_ADDON_KINDS } from '@shared/model';
+import { hasPartialNormalizedSelection } from './selection-predicates';
 import type { AddonCapability } from './types';
 
 export const ALL_ADDON_CAPABILITIES: readonly AddonCapability[] = ALL_ADDON_KINDS;
@@ -19,13 +20,11 @@ export function addonCapabilityLabel(capability: AddonCapability): string {
 }
 
 export function hasPartialAddonSelection(
-  selected: readonly AddonCapability[],
-  available: readonly AddonCapability[] = ALL_ADDON_CAPABILITIES,
+  selected: readonly string[],
+  available: readonly string[] = ALL_ADDON_CAPABILITIES,
 ): boolean {
-  if (available.length === 0) {
-    return false;
-  }
-
-  const availableSet = new Set(available);
-  return selected.filter((capability) => availableSet.has(capability)).length < available.length;
+  return hasPartialNormalizedSelection(
+    normalizeAddonCapabilities(selected),
+    normalizeAddonCapabilities(available),
+  );
 }

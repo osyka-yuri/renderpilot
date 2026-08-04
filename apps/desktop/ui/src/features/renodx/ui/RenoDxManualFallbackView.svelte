@@ -28,7 +28,7 @@
 
     return translateExternalMessage({
       key: `gameDetails.renodx.reason.${reason}`,
-      fallback: reason.replace(/_/g, ' '),
+      fallback: reason.replaceAll('_', ' '),
     });
   });
 </script>

@@ -1,4 +1,5 @@
-import { humanizeToken } from '@shared/text';
+import { humanizeToken, takeGraphemePrefix } from '@shared/text';
+import type { Locale } from '@shared/i18n';
 
 const LAUNCHER_LABELS: Record<string, string> = {
   NativeWindows: 'Native Windows',
@@ -24,7 +25,7 @@ const DEFAULT_TITLE_MONOGRAM = 'RP';
 const MONOGRAM_SINGLE_WORD_LENGTH = 2;
 const MONOGRAM_WORDS_LIMIT = 2;
 
-export function titleMonogram(title: string): string {
+export function titleMonogram(title: string, locale: Locale): string {
   const words = getTitleWords(title);
 
   if (words.length === 0) {
@@ -32,20 +33,16 @@ export function titleMonogram(title: string): string {
   }
 
   if (words.length === 1) {
-    return takeFirstCharacters(words[0], MONOGRAM_SINGLE_WORD_LENGTH).toUpperCase();
+    return takeGraphemePrefix(words[0], MONOGRAM_SINGLE_WORD_LENGTH, locale).toUpperCase();
   }
 
   return words
     .slice(0, MONOGRAM_WORDS_LIMIT)
-    .map((word) => takeFirstCharacters(word, 1))
+    .map((word) => takeGraphemePrefix(word, 1, locale))
     .join('')
     .toUpperCase();
 }
 
 function getTitleWords(title: string): string[] {
   return title.trim().split(/\s+/).filter(Boolean);
-}
-
-function takeFirstCharacters(value: string, count: number): string {
-  return Array.from(value).slice(0, count).join('');
 }

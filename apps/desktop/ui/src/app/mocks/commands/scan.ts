@@ -172,29 +172,46 @@ export function mockAddGame(
   });
 }
 
-function findContainedManualGames(
-  selectedInstallKey: string,
-): { installKey: string; gameId: string }[] {
-  const prefix = `${selectedInstallKey.replace(/\/+$/, '')}/`;
-  return [...mockState.manualGameIdByInstallPath.entries()]
-    .filter(([installKey, gameId]) => {
-      return installKey.startsWith(prefix) && findGameSummary(gameId) !== undefined;
-    })
-    .map(([installKey, gameId]) => ({ installKey, gameId }));
-}
+type ManualGameInstall = Readonly<{
+  installKey: string;
+  gameId: string;
+}>;
 
-function findContainingManualGame(
-  selectedInstallKey: string,
-): { installKey: string; gameId: string } | undefined {
-  return [...mockState.manualGameIdByInstallPath.entries()]
+function findContainedManualGames(selectedInstallKey: string): ManualGameInstall[] {
+  return mockState.manualGameIdByInstallPath
+    .entries()
     .filter(([installKey, gameId]) => {
       return (
-        selectedInstallKey.startsWith(`${installKey.replace(/\/+$/, '')}/`) &&
+        isStrictDescendantOf(installKey, selectedInstallKey) &&
         findGameSummary(gameId) !== undefined
       );
     })
-    .sort(([left], [right]) => right.length - left.length)
-    .map(([installKey, gameId]) => ({ installKey, gameId }))[0];
+    .map(([installKey, gameId]) => ({ installKey, gameId }))
+    .toArray();
+}
+
+function findContainingManualGame(selectedInstallKey: string): ManualGameInstall | undefined {
+  let bestMatch: ManualGameInstall | undefined;
+
+  for (const [installKey, gameId] of mockState.manualGameIdByInstallPath) {
+    if (!isStrictDescendantOf(selectedInstallKey, installKey)) {
+      continue;
+    }
+    if (bestMatch !== undefined && installKey.length <= bestMatch.installKey.length) {
+      continue;
+    }
+    if (findGameSummary(gameId) === undefined) {
+      continue;
+    }
+
+    bestMatch = { installKey, gameId };
+  }
+
+  return bestMatch;
+}
+
+function isStrictDescendantOf(installKey: string, ancestorInstallKey: string): boolean {
+  return installKey.startsWith(`${ancestorInstallKey}/`);
 }
 
 export function mockScanAutoLibraries(): Promise<AutoScanResponse> {

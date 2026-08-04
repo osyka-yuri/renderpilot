@@ -1,4 +1,5 @@
 import type { AddonCapability, GameSummary } from './types';
+import type { Locale } from '@shared/i18n';
 import type { BadgeVariant } from '@shared/ui';
 import { gameCoverAssetSrcWithVersion } from './cover-urls';
 import {
@@ -34,7 +35,7 @@ export type GameCardViewModel = {
 
 type CoverViewData = Pick<GameCardViewModel, 'coverSrc' | 'hasCover'>;
 
-export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
+export function toGameCardViewModel(game: GameSummary, locale: Locale): GameCardViewModel {
   const cover = getCoverViewData(game);
 
   return {
@@ -43,7 +44,7 @@ export function toGameCardViewModel(game: GameSummary): GameCardViewModel {
     launcher: game.launcher,
     installPath: game.install_path,
     canRemoveFromCatalog: game.can_remove_from_catalog,
-    monogram: titleMonogram(game.title),
+    monogram: titleMonogram(game.title, locale),
     updateBadge: getUpdateBadge(game),
     libraries: [...game.library_tags],
     addons: [...game.addon_capabilities],

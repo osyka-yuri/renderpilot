@@ -548,7 +548,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'operation.label.failed': 'Ошибка',
   'operation.label.rolledBack': 'Откат',
   'operation.label.replaceComponent': 'Изменение версии',
-  'operation.duration': 'Выполнено за {seconds} с',
+  'operation.duration': 'Выполнено за {duration}',
   'operation.filesUpdated.none': 'Файлы не обновлялись.',
   'operation.filesUpdated.count': plural('count', {
     one: 'Обновлён 1 файл.',

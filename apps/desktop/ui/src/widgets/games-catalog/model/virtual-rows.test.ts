@@ -94,7 +94,7 @@ function group(launcher: LauncherGroup['launcher'], ids: string[]): LauncherGrou
 function card(id: string): GameCardState {
   return {
     id,
-    game: toGameCardViewModel(createGameSummary({ game_id: id, title: id })),
+    game: toGameCardViewModel(createGameSummary({ game_id: id, title: id }), 'en'),
     isCoverBusy: false,
     isBackgroundCoverFetching: false,
     isMenuDisabled: false,

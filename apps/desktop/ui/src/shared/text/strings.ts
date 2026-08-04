@@ -24,7 +24,7 @@ export function shallowStringArrayEqual(
 
 export function humanizeToken(value: string, extraWords?: Set<string>): string {
   const spaced = value
-    .replace(/_/g, ' ')
+    .replaceAll('_', ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .trim();

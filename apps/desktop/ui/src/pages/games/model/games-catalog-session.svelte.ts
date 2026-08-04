@@ -52,15 +52,11 @@ export class GamesCatalogSessionState {
 
   insertCard(card: GameSummary, index: number): void {
     const insertionIndex = Math.min(Math.max(index, 0), this.games.length);
-    this.games = [
-      ...this.games.slice(0, insertionIndex),
-      card,
-      ...this.games.slice(insertionIndex),
-    ];
+    this.games = this.games.toSpliced(insertionIndex, 0, card);
   }
 
   sortCards(compare: (left: GameSummary, right: GameSummary) => number): void {
-    this.games = [...this.games].sort(compare);
+    this.games = this.games.toSorted(compare);
   }
 
   setCatalogRevision(revision: number): void {

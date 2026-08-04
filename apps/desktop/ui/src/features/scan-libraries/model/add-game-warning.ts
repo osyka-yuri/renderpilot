@@ -108,7 +108,7 @@ function malformedWarning(code: string): NormalizedAddGameWarning {
 }
 
 function isAddGameWarningCode(code: string): code is AddGameWarningCode {
-  return Object.prototype.hasOwnProperty.call(ADD_GAME_WARNING_CONTRACT, code);
+  return Object.hasOwn(ADD_GAME_WARNING_CONTRACT, code);
 }
 
 function validateParameters(
@@ -122,7 +122,7 @@ function validateParameters(
   const expectedNames = Object.keys(contract);
   if (
     Object.keys(source).length !== expectedNames.length ||
-    Object.keys(source).some((name) => !Object.prototype.hasOwnProperty.call(contract, name))
+    Object.keys(source).some((name) => !Object.hasOwn(contract, name))
   ) {
     return null;
   }

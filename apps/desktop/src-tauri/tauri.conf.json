@@ -21,6 +21,7 @@
     ],
     "publisher": "osyka-yuri",
     "windows": {
+      "minimumWebview2Version": "136.0.3240.44",
       "nsis": {
         "installMode": "both",
         "installerIcon": "icons/icon.ico",

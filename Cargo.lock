@@ -3073,6 +3073,8 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-shell",
  "tauri-plugin-updater",
+ "webview2-com-sys",
+ "windows-core 0.61.2",
  "windows-sys 0.61.2",
  "winreg 0.56.0",
 ]

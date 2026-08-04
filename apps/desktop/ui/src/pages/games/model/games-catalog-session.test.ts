@@ -50,4 +50,21 @@ describe('GamesCatalogSessionState', () => {
     session.completeInitialSync();
     expect(session.syncState).toBe('ready');
   });
+
+  it('sorts and inserts without mutating the borrowed source array', () => {
+    const alpha = createGameSummary({ game_id: 'alpha', title: 'Alpha' });
+    const bravo = createGameSummary({ game_id: 'bravo', title: 'Bravo' });
+    const source: readonly ReturnType<typeof createGameSummary>[] = [bravo, alpha];
+    const session = new GamesCatalogSessionState();
+
+    session.replaceItems(source);
+    session.sortCards((left, right) => left.title.localeCompare(right.title));
+
+    expect(source.map((game) => game.game_id)).toEqual(['bravo', 'alpha']);
+    expect(session.games.map((game) => game.game_id)).toEqual(['alpha', 'bravo']);
+
+    session.insertCard(createGameSummary({ game_id: 'middle' }), 1);
+    expect(source.map((game) => game.game_id)).toEqual(['bravo', 'alpha']);
+    expect(session.games.map((game) => game.game_id)).toEqual(['alpha', 'middle', 'bravo']);
+  });
 });

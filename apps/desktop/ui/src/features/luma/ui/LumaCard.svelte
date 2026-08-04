@@ -73,7 +73,7 @@
 
     return translateExternalMessage({
       key: `gameDetails.luma.reason.${reason}`,
-      fallback: reason.replace(/_/g, ' '),
+      fallback: reason.replaceAll('_', ' '),
     });
   });
 

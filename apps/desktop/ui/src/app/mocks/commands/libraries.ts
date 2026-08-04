@@ -26,9 +26,7 @@ export function mockDeleteLibraryPackage(packageId: string): Promise<LibraryPack
     const packageIndex = requirePackageIndex(packageId, 'packageId');
     const current = mockState.libraryPackages[packageIndex];
     if (current.availability === 'local_only') {
-      mockState.libraryPackages = mockState.libraryPackages.filter(
-        (_, index) => index !== packageIndex,
-      );
+      mockState.libraryPackages = mockState.libraryPackages.toSpliced(packageIndex, 1);
       return clone({ package_id: current.package_id, package: null });
     }
     const next = updateLibraryPackage(packageIndex, false);
@@ -39,7 +37,8 @@ export function mockDeleteLibraryPackage(packageId: string): Promise<LibraryPack
 export function mockDownloadArtifact(artifactId: string): Promise<LibraryPackageState> {
   return resolveMock(() => {
     const normalizedArtifactId = requireNonEmptyText(artifactId, 'artifactId');
-    const candidate = [...mockState.detailsByGameId.values()]
+    const candidate = mockState.detailsByGameId
+      .values()
       .flatMap((details) => details.candidate_groups)
       .flatMap((group) => group.candidates)
       .find((item) => item.artifact_id === normalizedArtifactId);
@@ -84,9 +83,7 @@ function updateLibraryPackage(
     ...current,
     local_state: isDownloaded ? ('verified' as const) : ('absent' as const),
   };
-  mockState.libraryPackages = mockState.libraryPackages.map((item, index) =>
-    index === packageIndex ? next : item,
-  );
+  mockState.libraryPackages = mockState.libraryPackages.with(packageIndex, next);
 
   return next;
 }

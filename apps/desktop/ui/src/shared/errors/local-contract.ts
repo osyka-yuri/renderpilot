@@ -94,5 +94,5 @@ export const LOCAL_ERROR_CONTRACT = {
 export type LocalErrorCode = keyof typeof LOCAL_ERROR_CONTRACT;
 
 export function isLocalErrorCode(code: string): code is LocalErrorCode {
-  return Object.prototype.hasOwnProperty.call(LOCAL_ERROR_CONTRACT, code);
+  return Object.hasOwn(LOCAL_ERROR_CONTRACT, code);
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createDateTimeFormatter,
+  createDurationFormatter,
   createListFormatter,
   createNumberFormatter,
   createPluralRules,
   createRelativeTimeFormatter,
+  createSegmenter,
 } from './formatters';
 
 describe('Intl formatter providers', () => {
@@ -36,11 +38,15 @@ describe('Intl formatter providers', () => {
     const dateTime = createDateTimeFormatter({ timeZone: 'UTC' });
     const relativeTime = createRelativeTimeFormatter({ numeric: 'auto' });
     const list = createListFormatter({ type: 'conjunction' });
+    const duration = createDurationFormatter({ style: 'narrow' });
     const pluralRules = createPluralRules({ type: 'cardinal' });
+    const segmenter = createSegmenter({ granularity: 'grapheme' });
 
     expect(dateTime('fr')).toBe(dateTime('fr'));
     expect(relativeTime('ru')).toBe(relativeTime('ru'));
     expect(list('ja')).toBe(list('ja'));
+    expect(duration('en')).toBe(duration('en'));
     expect(pluralRules('de')).toBe(pluralRules('de'));
+    expect(segmenter('ZH-hans')).toBe(segmenter('zh-Hans'));
   });
 });

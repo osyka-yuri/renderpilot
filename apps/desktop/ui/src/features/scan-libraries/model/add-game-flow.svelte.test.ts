@@ -10,7 +10,7 @@ import {
 
 describe('add-game flow', () => {
   it('drops an inspection response after close and can be opened again', async () => {
-    const firstInspection = deferred<AddGameInspection>();
+    const firstInspection = Promise.withResolvers<AddGameInspection>();
     const inspect = vi
       .fn<(root: string) => Promise<AddGameInspection>>()
       .mockImplementationOnce(() => firstInspection.promise)
@@ -34,7 +34,7 @@ describe('add-game flow', () => {
   });
 
   it('ignores a stale submit response after the dialog is closed', async () => {
-    const submission = deferred<AddGameSubmitOutcome>();
+    const submission = Promise.withResolvers<AddGameSubmitOutcome>();
     const flow = createAddGameFlow(
       deps({
         submit: vi.fn(() => submission.promise),
@@ -326,15 +326,4 @@ function inspection(
     warnings: [],
     ...overrides,
   };
-}
-
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-} {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
 }

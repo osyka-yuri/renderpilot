@@ -516,7 +516,7 @@ export const en = defineSourceCatalog({
   'operation.label.failed': 'Failed',
   'operation.label.rolledBack': 'Rolled Back',
   'operation.label.replaceComponent': 'Change Version',
-  'operation.duration': 'Finished in {seconds}s',
+  'operation.duration': 'Finished in {duration}',
   'operation.filesUpdated.none': 'No files updated.',
   'operation.filesUpdated.count': plural('count', {
     one: '1 file updated.',

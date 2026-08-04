@@ -33,7 +33,7 @@ describe('GameCard details navigation intent', () => {
     component = mount(GameCard, {
       target,
       props: {
-        game: toGameCardViewModel(createGameSummary()),
+        game: toGameCardViewModel(createGameSummary(), 'en'),
         onPreloadDetails,
         onOpenDetails,
       },

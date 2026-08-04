@@ -50,7 +50,7 @@ export function expandLumaGuidanceTranslations<
     readonly LumaGuidanceKey[],
   ][]) {
     for (const id of ids) {
-      if (Object.prototype.hasOwnProperty.call(expanded, id)) {
+      if (Object.hasOwn(expanded, id)) {
         throw new Error(\`Duplicate Luma guidance ID: \${id}\`);
       }
       expanded[id] = localized[phrase];

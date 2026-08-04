@@ -13,13 +13,8 @@ describe('createExclusiveTaskRunner', () => {
   it('returns null when already busy', async () => {
     const runner = createExclusiveTaskRunner();
 
-    let resolveTask = (_value: number): void => {
-      throw new Error('resolveTask not set');
-    };
-    const task = () =>
-      new Promise<number>((resolve) => {
-        resolveTask = resolve;
-      });
+    const pendingTask = Promise.withResolvers<number>();
+    const task = () => pendingTask.promise;
 
     const first = runner.run(task);
     const second = runner.run(() => Promise.resolve(99));
@@ -27,7 +22,7 @@ describe('createExclusiveTaskRunner', () => {
     expect(runner.busy).toBe(true);
     expect(await second).toBeNull();
 
-    resolveTask(1);
+    pendingTask.resolve(1);
     expect(await first).toBe(1);
     expect(runner.busy).toBe(false);
   });

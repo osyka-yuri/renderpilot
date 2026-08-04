@@ -61,7 +61,9 @@ type SchedulerOptions = {
 const EMPTY_REQUEST_KEY = '';
 
 function normalizeSemanticSelection<T extends string>(values: readonly T[]): T[] {
-  return [...new Set(values)].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  return Array.from(new Set(values)).sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
 }
 
 function createRequestKey(

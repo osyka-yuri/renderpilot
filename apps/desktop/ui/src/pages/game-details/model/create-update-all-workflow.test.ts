@@ -262,13 +262,8 @@ describe('createUpdateAllWorkflow', () => {
 
   it('discards an in-flight plan when the selected game changes during preparation', async () => {
     let gameId = 'game-a';
-    let resolvePreparation!: (prepared: { kind: 'ready'; value: PreparedSwap[] }) => void;
-    const prepare = vi.fn(
-      () =>
-        new Promise<{ kind: 'ready'; value: PreparedSwap[] }>((resolve) => {
-          resolvePreparation = resolve;
-        }),
-    );
+    const preparation = Promise.withResolvers<{ kind: 'ready'; value: PreparedSwap[] }>();
+    const prepare = vi.fn(() => preparation.promise);
     const run = vi.fn(() => Promise.resolve());
     const workflow = createUpdateAllWorkflow({
       getGameId: () => gameId,
@@ -284,7 +279,7 @@ describe('createUpdateAllWorkflow', () => {
 
     const start = workflow.start();
     gameId = 'game-b';
-    resolvePreparation({
+    preparation.resolve({
       kind: 'ready',
       value: [preparedItem('game-a-token')],
     });

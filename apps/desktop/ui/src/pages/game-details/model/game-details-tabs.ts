@@ -52,23 +52,13 @@ export function createVendorTabs(details: GameDetails | null): VendorTab[] {
     return [];
   }
 
-  const byVendor = libraryVendorOrder.reduce(
-    (acc, key) => {
-      acc[key] = [];
-      return acc;
-    },
-    {} as Record<LibraryVendorKey, GameLibraryComponent[]>,
+  const byVendor = Map.groupBy(details.components, (component) =>
+    libraryVendorKey(component.technology),
   );
-
-  for (const component of details.components) {
-    const key = libraryVendorKey(component.technology);
-    byVendor[key].push(component);
-  }
 
   return libraryVendorOrder
     .map((key) => {
-      const components = byVendor[key];
-      components.sort(compareComponents);
+      const components = byVendor.get(key)?.toSorted(compareComponents) ?? [];
 
       return {
         key,

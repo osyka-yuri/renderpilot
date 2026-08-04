@@ -34,11 +34,27 @@ export function createListFormatter(
   });
 }
 
+export function createDurationFormatter(
+  options: Readonly<Intl.DurationFormatOptions> = {},
+): IntlFormatterProvider<Intl.DurationFormat> {
+  return createFormatterProvider(options, (locale, optionsSnapshot) => {
+    return new Intl.DurationFormat(locale, optionsSnapshot);
+  });
+}
+
 export function createPluralRules(
   options: Readonly<Intl.PluralRulesOptions> = {},
 ): IntlFormatterProvider<Intl.PluralRules> {
   return createFormatterProvider(options, (locale, optionsSnapshot) => {
     return new Intl.PluralRules(locale, optionsSnapshot);
+  });
+}
+
+export function createSegmenter(
+  options: Readonly<Intl.SegmenterOptions> = {},
+): IntlFormatterProvider<Intl.Segmenter> {
+  return createFormatterProvider(options, (locale, optionsSnapshot) => {
+    return new Intl.Segmenter(locale, optionsSnapshot);
   });
 }
 

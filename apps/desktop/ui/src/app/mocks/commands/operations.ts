@@ -236,7 +236,7 @@ export function mockPlanRollback(gameId: string, componentId: string): Promise<R
     return clone({
       game_id: normalizedGameId,
       component_id: normalizedComponentId,
-      affected_files: [...new Set(affectedFiles)].sort(),
+      affected_files: Array.from(new Set(affectedFiles)).sort(),
       d3d12_executable_action: executableAction,
     } satisfies RollbackPlan);
   });

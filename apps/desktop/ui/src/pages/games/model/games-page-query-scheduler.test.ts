@@ -18,28 +18,6 @@ import type { AddonCapability } from '@entities/game';
 type QueryGameCardsFn = typeof queryGameCards;
 type Scheduler = ReturnType<typeof createGamesPageQueryScheduler>;
 
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve(value: T): void;
-  reject(error: unknown): void;
-};
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-
-  return {
-    promise,
-    resolve,
-    reject,
-  };
-}
-
 function createQueryGameCardsMock() {
   return vi.fn<QueryGameCardsFn>();
 }
@@ -276,7 +254,7 @@ describe('createGamesPageQueryScheduler', () => {
     });
 
     it('does not overwrite newer results when an older query resolves later', async () => {
-      const staleResult = createDeferred<GameCardsResult>();
+      const staleResult = Promise.withResolvers<GameCardsResult>();
       const queryGameCardsFn = createQueryGameCardsMock();
 
       queryGameCardsFn.mockReturnValueOnce(staleResult.promise);
@@ -315,7 +293,7 @@ describe('createGamesPageQueryScheduler', () => {
     });
 
     it('does not start the same active query twice', async () => {
-      const result = createDeferred<GameCardsResult>();
+      const result = Promise.withResolvers<GameCardsResult>();
       const queryGameCardsFn = createQueryGameCardsMock();
 
       queryGameCardsFn.mockReturnValue(result.promise);
@@ -436,7 +414,7 @@ describe('createGamesPageQueryScheduler', () => {
     });
 
     it('does not log stale request errors', async () => {
-      const staleResult = createDeferred<GameCardsResult>();
+      const staleResult = Promise.withResolvers<GameCardsResult>();
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       const queryGameCardsFn = createQueryGameCardsMock();
 
@@ -524,7 +502,7 @@ describe('createGamesPageQueryScheduler', () => {
 
   describe('canRunGamesQuery', () => {
     it('returns false for active query and true again for a different query', async () => {
-      const result = createDeferred<GameCardsResult>();
+      const result = Promise.withResolvers<GameCardsResult>();
       const queryGameCardsFn = createQueryGameCardsMock();
 
       queryGameCardsFn.mockReturnValueOnce(result.promise);

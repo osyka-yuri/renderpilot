@@ -55,13 +55,8 @@ describe('DeveloperModeRequirementDialog', () => {
   });
 
   it('presents a concise requirement, restart caveat, status check, and cancellation', async () => {
-    let resolveOpen: (() => void) | undefined;
-    openDeveloperModeSettings.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveOpen = resolve;
-        }),
-    );
+    const opening = Promise.withResolvers<undefined>();
+    openDeveloperModeSettings.mockImplementationOnce(() => opening.promise);
     const onRetry = vi.fn();
     const onCancel = vi.fn();
     component = mount(DeveloperModeRequirementDialogTestHost, {
@@ -89,7 +84,7 @@ describe('DeveloperModeRequirementDialog', () => {
       expect(findButton('Check status').disabled).toBe(true);
     });
 
-    resolveOpen?.();
+    opening.resolve(undefined);
     await vi.waitFor(() => {
       expect(findButton('Check status').disabled).toBe(false);
     });
@@ -166,13 +161,8 @@ describe('DeveloperModeRequirementDialog', () => {
   });
 
   it('keeps cancellation available while Windows Settings is opening', async () => {
-    let rejectOpen: ((error: Error) => void) | undefined;
-    openDeveloperModeSettings.mockImplementationOnce(
-      () =>
-        new Promise<void>((_resolve, reject) => {
-          rejectOpen = reject;
-        }),
-    );
+    const opening = Promise.withResolvers<undefined>();
+    openDeveloperModeSettings.mockImplementationOnce(() => opening.promise);
     const onCancel = vi.fn();
     component = mount(DeveloperModeRequirementDialogTestHost, {
       target,
@@ -190,7 +180,7 @@ describe('DeveloperModeRequirementDialog', () => {
     findButton('Cancel').click();
     expect(onCancel).toHaveBeenCalledOnce();
 
-    rejectOpen?.(new Error('late failure'));
+    opening.reject(new Error('late failure'));
     await vi.waitFor(() => {
       expect(openDeveloperModeSettings).toHaveBeenCalledOnce();
     });

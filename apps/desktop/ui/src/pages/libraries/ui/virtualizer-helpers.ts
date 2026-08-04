@@ -31,11 +31,10 @@ export function getBottomVirtualPadding(
   items: readonly VirtualPaddingItem[],
   totalSize: number,
 ): number {
-  if (items.length === 0) {
+  const lastItem = items.at(-1);
+  if (lastItem === undefined) {
     return 0;
   }
-
-  const lastItem = items[items.length - 1];
 
   return Math.max(totalSize - lastItem.end, 0);
 }

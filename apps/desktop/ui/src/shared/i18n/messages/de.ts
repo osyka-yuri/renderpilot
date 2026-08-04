@@ -463,7 +463,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'operation.label.failed': 'Fehlgeschlagen',
   'operation.label.rolledBack': 'Zurückgesetzt',
   'operation.label.replaceComponent': 'Version ändern',
-  'operation.duration': 'Abgeschlossen in {seconds}s',
+  'operation.duration': 'Abgeschlossen in {duration}',
   'operation.filesUpdated.none': 'Keine Dateien aktualisiert.',
   'operation.filesUpdated.count': plural('count', {
     one: '1 Datei aktualisiert.',

@@ -80,7 +80,7 @@ export function sortGameCards(
   cards: readonly GameSummary[],
   sort: GameCardsQuery['sort'],
 ): GameSummary[] {
-  return [...cards].sort((left, right) => {
+  return cards.toSorted((left, right) => {
     const favoriteDiff = Number(right.is_favorite) - Number(left.is_favorite);
     if (favoriteDiff !== 0) {
       return favoriteDiff;

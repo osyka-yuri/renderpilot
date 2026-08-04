@@ -1,5 +1,6 @@
 import { humanizeToken } from '@shared/text';
-import { t, type MessageKeyWithoutParams } from '@shared/i18n';
+import { formatCompactDurationSeconds } from '@shared/format';
+import { t, type Locale, type MessageKeyWithoutParams } from '@shared/i18n';
 import type { SwapPlan } from './types';
 
 export type OperationBadgeVariant = 'outline' | 'secondary' | 'destructive';
@@ -98,14 +99,24 @@ export function formatRestoredFilesSummary(itemCount: number): string {
 export function getCompletedDurationText(
   createdAt: number,
   completedAt: number | null,
+  locale: Locale,
 ): string | null {
-  if (completedAt === null) {
+  if (completedAt === null || !Number.isFinite(createdAt) || !Number.isFinite(completedAt)) {
     return null;
   }
 
-  const durationSeconds = Math.max(0, Math.round((completedAt - createdAt) / 1000));
+  const durationMilliseconds = completedAt - createdAt;
+  if (!Number.isFinite(durationMilliseconds)) {
+    return null;
+  }
 
-  return t('operation.duration', { seconds: durationSeconds });
+  const durationSeconds = Math.max(0, Math.round(durationMilliseconds / 1000));
+  const duration = formatCompactDurationSeconds(durationSeconds, locale);
+  if (duration === null) {
+    return null;
+  }
+
+  return t('operation.duration', { duration });
 }
 
 function formatAffectedFilesSummary(itemCount: number, verb: 'updated' | 'restored'): string {

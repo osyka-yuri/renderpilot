@@ -149,20 +149,17 @@ describe('createGamesPageModel', () => {
   });
 
   it('rolls back only the failed optimistic field and preserves concurrent card patches', async () => {
-    let rejectFavorite: (error: Error) => void = () => undefined;
+    const favoriteWrite = Promise.withResolvers<undefined>();
     const model = createGamesPageModel(
       createInput({
-        setFavorite: () =>
-          new Promise((_, reject) => {
-            rejectFavorite = reject;
-          }),
+        setFavorite: () => favoriteWrite.promise,
       }),
     );
     model.applyBootstrap(bootstrap(1, [createStubGame('game-1', 'First')]));
 
     const mutation = model.toggleFavorite('game-1', true);
     model.patchCover('game-1', 42);
-    rejectFavorite(new Error('write failed'));
+    favoriteWrite.reject(new Error('write failed'));
     await mutation;
 
     expect(model.games[0]).toMatchObject({
@@ -186,17 +183,14 @@ describe('createGamesPageModel', () => {
   });
 
   it('serializes same-game writes and rolls a failed trailing favorite back to the confirmed value', async () => {
-    const pending: {
-      value: boolean;
-      resolve: () => void;
-      reject: (error: Error) => void;
-    }[] = [];
+    const pending: (PromiseWithResolvers<undefined> & { value: boolean })[] = [];
     const model = createGamesPageModel(
       createInput({
-        setFavorite: (_gameId, value) =>
-          new Promise<void>((resolve, reject) => {
-            pending.push({ value, resolve, reject });
-          }),
+        setFavorite: (_gameId, value) => {
+          const write = Promise.withResolvers<undefined>();
+          pending.push({ ...write, value });
+          return write.promise;
+        },
       }),
     );
     model.applyBootstrap(bootstrap(1, [createStubGame('game-1', 'First')]));
@@ -205,7 +199,7 @@ describe('createGamesPageModel', () => {
     const second = model.toggleFavorite('game-1', false);
     expect(pending.map(({ value }) => value)).toEqual([true]);
 
-    pending[0].resolve();
+    pending[0].resolve(undefined);
     await vi.waitFor(() => {
       expect(pending.map(({ value }) => value)).toEqual([true, false]);
     });
@@ -216,13 +210,14 @@ describe('createGamesPageModel', () => {
   });
 
   it('restores the confirmed card when repeated queued hidden writes both fail', async () => {
-    const pending: { reject: (error: Error) => void }[] = [];
+    const pending: PromiseWithResolvers<undefined>[] = [];
     const model = createGamesPageModel(
       createInput({
-        setHidden: () =>
-          new Promise<void>((_resolve, reject) => {
-            pending.push({ reject });
-          }),
+        setHidden: () => {
+          const write = Promise.withResolvers<undefined>();
+          pending.push(write);
+          return write.promise;
+        },
       }),
     );
     model.applyBootstrap(bootstrap(1, [createStubGame('game-1', 'First')]));

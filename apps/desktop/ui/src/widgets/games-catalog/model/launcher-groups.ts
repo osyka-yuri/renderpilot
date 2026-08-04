@@ -85,30 +85,12 @@ function groupGamesByLauncher(
     return [];
   }
 
-  const gamesByLauncher = createGamesByLauncherIndex(games);
+  const gamesByLauncher = Map.groupBy(games, (game) => game.launcher);
   const launchers = getLaunchersInDisplayOrder(gamesByLauncher, launcherOrder);
 
   return launchers.map((launcher) =>
     createLauncherGameGroup(launcher, gamesByLauncher.get(launcher) ?? []),
   );
-}
-
-function createGamesByLauncherIndex(
-  games: readonly GameCardViewModel[],
-): Map<Launcher, GameCardViewModel[]> {
-  const gamesByLauncher = new Map<Launcher, GameCardViewModel[]>();
-
-  for (const game of games) {
-    const groupGames = gamesByLauncher.get(game.launcher);
-
-    if (groupGames) {
-      groupGames.push(game);
-    } else {
-      gamesByLauncher.set(game.launcher, [game]);
-    }
-  }
-
-  return gamesByLauncher;
 }
 
 function getLaunchersInDisplayOrder(

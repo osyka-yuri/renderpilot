@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Locale } from './locale-model';
 import { createLocalePackLoader } from './locale-pack-loader';
 import type { LocaleLoader, LocalePack } from './packs/types';
-import { deferred, pack } from './runtime.test-support';
+import { pack } from './runtime.test-support';
 
 function createLoaders(
   overrides: Partial<Record<Locale, LocaleLoader>> = {},
@@ -23,7 +23,7 @@ function createLoaders(
 
 describe('createLocalePackLoader', () => {
   it('deduplicates in-flight loads and caches successful packs', async () => {
-    const russian = deferred<LocalePack>();
+    const russian = Promise.withResolvers<LocalePack>();
     const loader = vi.fn(() => russian.promise);
     const fallbackPack = pack('en', { nav: 'Games' });
     const repository = createLocalePackLoader(fallbackPack, createLoaders({ ru: loader }));
@@ -39,6 +39,27 @@ describe('createLocalePackLoader', () => {
     await expect(repository.loadPack('ru')).resolves.toBe(russianPack);
     expect(repository.getLoadedPack('ru')).toBe(russianPack);
     expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers the in-flight load before invoking the loader in a microtask', async () => {
+    let reentrantLoad: Promise<LocalePack> | undefined;
+    const russianPack = pack('ru', { nav: 'Игры' });
+    const loader = vi.fn(() => {
+      reentrantLoad = repository.loadPack('ru');
+      return Promise.resolve(russianPack);
+    });
+    const repository = createLocalePackLoader(
+      pack('en', { nav: 'Games' }),
+      createLoaders({ ru: loader }),
+    );
+
+    const firstLoad = repository.loadPack('ru');
+    expect(loader).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    expect(loader).toHaveBeenCalledOnce();
+    expect(reentrantLoad).toBe(firstLoad);
+    await expect(firstLoad).resolves.toBe(russianPack);
   });
 
   it('removes failed loads so a later request can retry', async () => {

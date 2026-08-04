@@ -42,15 +42,6 @@ vi.mock('@app/routes/DesktopApp.svelte', () => ({
   default: 'DesktopApp',
 }));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-
-  return { promise, resolve };
-}
-
 const initState: AppInitializationState = {
   isElevated: true,
   elevationSupported: true,
@@ -93,7 +84,7 @@ describe('bootstrap', () => {
   });
 
   it('keeps the skeleton until startup resolves, then mounts and publishes one locale error', async () => {
-    const startup = deferred<{
+    const startup = Promise.withResolvers<{
       i18n: I18nInitializationResult;
       desktopAppModule: { default: string };
       initialization: AppInitializationState;

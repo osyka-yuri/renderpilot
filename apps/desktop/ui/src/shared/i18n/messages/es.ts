@@ -475,7 +475,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'operation.label.failed': 'Fallido',
   'operation.label.rolledBack': 'Revertido',
   'operation.label.replaceComponent': 'Cambiar versión',
-  'operation.duration': 'Finalizado en {seconds}s',
+  'operation.duration': 'Finalizado en {duration}',
   'operation.filesUpdated.none': 'Ningún archivo actualizado.',
   'operation.filesUpdated.count': plural('count', {
     one: '1 archivo actualizado.',

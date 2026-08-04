@@ -69,6 +69,7 @@ export function createOperationViewModel(
     completedDurationText: getCompletedDurationText(
       operation.created_at,
       operation.completed_at ?? null,
+      locale,
     ),
     ariaLabel: t('operation.itemAria', {
       kind: kindLabel,

@@ -33,7 +33,7 @@ const lumaGuidanceGroups = Object.entries(LUMA_GUIDANCE_GROUPS) as [
 
 describe('lumaGuidanceOverrides', () => {
   it('expands every current guidance ID exactly once for each translated locale', () => {
-    const expectedKeys = [...lumaGuidanceKeys].sort();
+    const expectedKeys = lumaGuidanceKeys.toSorted();
 
     // Uniqueness is the contract; length is free to grow with the catalogue.
     expect(new Set(lumaGuidanceKeys).size).toBe(lumaGuidanceKeys.length);

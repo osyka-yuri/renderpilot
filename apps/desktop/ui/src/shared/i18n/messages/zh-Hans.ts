@@ -400,7 +400,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'operation.label.failed': '失败',
   'operation.label.rolledBack': '已回滚',
   'operation.label.replaceComponent': '更改版本',
-  'operation.duration': '在 {seconds} 秒内完成',
+  'operation.duration': '在 {duration}内完成',
   'operation.filesUpdated.none': '没有更新的文件。',
   'operation.filesUpdated.count': plural('count', { other: '更新了 {count} 个文件。' }),
   'operation.filesRestored.none': '没有恢复的文件。',

@@ -110,15 +110,13 @@ jobs:
       # Build the portable exe via the Tauri CLI so that TAURI_ENV_DEBUG and
       # other required env vars are set correctly — plain `cargo build` skips
       # this and leaves Tauri in dev mode, causing "page not found" at runtime.
-      # The config is written to a file first to avoid PowerShell stripping
-      # double quotes when passing inline JSON through pnpm to the Tauri CLI.
+      # --no-bundle skips installer packaging while preserving the canonical
+      # Tauri config consumed by the runtime contract and application build.
       - name: Build portable exe
         working-directory: apps/desktop
         shell: pwsh
         run: |
-          '{"bundle":{"active":false}}' | Set-Content -Path portable-config.json -Encoding utf8
-          pnpm tauri build --features portable --config portable-config.json
-          Remove-Item portable-config.json
+          pnpm tauri build --features portable --no-bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}

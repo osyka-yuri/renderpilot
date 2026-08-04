@@ -4,19 +4,6 @@ import type { AppUpdateDownloadEvent } from '../api/app-updater-gateway';
 import { downloadWithRetries, type DownloadRetryScheduled } from './download-retry';
 import type { DownloadProgressState } from './progress';
 
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-};
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
 const ACTIVE = () => true;
 
 describe('downloadWithRetries', () => {
@@ -61,8 +48,8 @@ describe('downloadWithRetries', () => {
   });
 
   it('ignores queued events from a failed attempt during backoff and the next attempt', async () => {
-    const retryWait = deferred<undefined>();
-    const secondDownload = deferred<undefined>();
+    const retryWait = Promise.withResolvers<undefined>();
+    const secondDownload = Promise.withResolvers<undefined>();
     const progress = vi.fn();
     let attempts = 0;
     let firstAttemptEvent: ((event: AppUpdateDownloadEvent) => void) | undefined;
@@ -137,7 +124,7 @@ describe('downloadWithRetries', () => {
   });
 
   it('cancels without another attempt when the operation becomes inactive during backoff', async () => {
-    const retryWait = deferred<undefined>();
+    const retryWait = Promise.withResolvers<undefined>();
     let active = true;
     const downloadAttempt = vi.fn(() => Promise.reject(new Error('network')));
 

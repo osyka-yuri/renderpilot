@@ -31,33 +31,22 @@ export function buildLibraryFilterOptions(values: readonly string[]): LibraryFil
 export function groupLibraryFilterOptions(
   options: readonly LibraryFilterOption[],
 ): GroupedLibraryFilterOptions[] {
-  const groupsByVendor = new Map<LibraryFilterVendorKey, GroupedLibraryFilterOptions>(
-    libraryVendorOrder.map((vendorKey) => [
-      vendorKey,
-      {
-        vendorKey,
-        vendorLabel: vendorLabelForLibraryVendorKey(vendorKey),
-        options: [],
-      },
-    ]),
-  );
-
-  for (const option of options) {
-    const group = groupsByVendor.get(option.vendorKey);
-
-    if (group) {
-      group.options.push(option);
-    }
-  }
+  const groupsByVendor = Map.groupBy(options, (option) => option.vendorKey);
 
   return libraryVendorOrder.flatMap((vendorKey) => {
-    const group = groupsByVendor.get(vendorKey);
+    const vendorOptions = groupsByVendor.get(vendorKey);
 
-    if (!group || group.options.length === 0) {
+    if (!vendorOptions || vendorOptions.length === 0) {
       return [];
     }
 
-    return [group];
+    return [
+      {
+        vendorKey,
+        vendorLabel: vendorLabelForLibraryVendorKey(vendorKey),
+        options: vendorOptions,
+      },
+    ];
   });
 }
 

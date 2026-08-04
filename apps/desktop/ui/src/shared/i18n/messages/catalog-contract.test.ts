@@ -28,7 +28,7 @@ function placeholders(template: string): string[] {
   if (!analysis.valid) {
     throw new Error(`Invalid message template: ${JSON.stringify(template)}`);
   }
-  return [...analysis.placeholders].sort();
+  return analysis.placeholders.toSorted();
 }
 
 function without(values: readonly string[], excluded: string): string[] {
@@ -63,9 +63,7 @@ describe('localized catalog contract', () => {
         expect(candidate.argument).toBe(sourceValue.argument);
 
         if (sourceValue.kind === 'plural' && candidate.kind === 'plural') {
-          expect(Object.keys(candidate.forms).sort()).toEqual(
-            [...PLURAL_CATEGORIES[locale]].sort(),
-          );
+          expect(Object.keys(candidate.forms).sort()).toEqual(PLURAL_CATEGORIES[locale].toSorted());
           for (const [category, template] of Object.entries(candidate.forms)) {
             const sourceTemplate = sourceValue.forms[category] ?? sourceValue.forms.other;
             expect(without(placeholders(template), sourceValue.argument)).toEqual(

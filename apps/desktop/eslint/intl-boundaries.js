@@ -25,13 +25,13 @@ export function createIntlBoundariesRule({ projectRoot, sourceRoot }) {
       type: 'problem',
       docs: {
         description:
-          'Keep runtime Intl access in shared/intl and expose semantic formatting through shared/format.',
+          'Keep Intl construction in shared/intl and expose it through semantic shared APIs.',
       },
       schema: [],
       messages: {
-        directIntl: 'Use the runtime Intl API only in shared/intl; use @shared/format.',
+        directIntl: 'Use Intl runtime APIs only in shared/intl; use a semantic shared API.',
         directIntlImport:
-          'Import @shared/intl only from shared/format or shared/i18n; UI consumers must use @shared/format.',
+          'Import @shared/intl only from shared/format, shared/i18n, or shared/text; UI consumers must use a semantic shared API.',
         localeMethod:
           'Do not format values with toLocale* directly; use the @shared/format semantic API.',
       },
@@ -43,7 +43,8 @@ export function createIntlBoundariesRule({ projectRoot, sourceRoot }) {
       const mayImportIntl =
         ownsIntlConstruction ||
         isInsideSharedSegment(filename, 'format') ||
-        isInsideSharedSegment(filename, 'i18n');
+        isInsideSharedSegment(filename, 'i18n') ||
+        isInsideSharedSegment(filename, 'text');
       const sourceCode = context.sourceCode;
 
       function staticPropertyName(node) {

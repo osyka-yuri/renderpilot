@@ -6,7 +6,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
+import tauriConfig from './src-tauri/tauri.conf.json' with { type: 'json' };
 import { i18nBundleBoundaryPlugin } from './scripts/i18n-bundle-boundary-plugin';
+import { edgeBuildTarget } from './scripts/webview-runtime-contract';
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');
@@ -15,8 +17,10 @@ const DEV_SERVER_PORT = 1420;
 const DEV_SERVER_HMR_PORT = 1421;
 
 const TAURI_SOURCE_GLOB = '**/src-tauri/**';
-const TEST_FILE_GLOBS = ['ui/src/**/*.test.ts', 'eslint/**/*.test.js'];
+const TEST_FILE_GLOBS = ['ui/src/**/*.test.ts', 'scripts/**/*.test.ts', 'eslint/**/*.test.js'];
 const TEST_SETUP_FILE = './ui/test-setup.ts';
+
+const WEBVIEW_BUILD_TARGET = edgeBuildTarget(tauriConfig.bundle.windows.minimumWebview2Version);
 
 const LAYER_ALIAS_PATHS = {
   '@app': 'app',
@@ -77,6 +81,7 @@ export default defineConfig({
 
   build: {
     manifest: true,
+    target: WEBVIEW_BUILD_TARGET,
   },
 
   test: {

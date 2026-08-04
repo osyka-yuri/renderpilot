@@ -397,7 +397,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'operation.label.failed': '失敗',
   'operation.label.rolledBack': '已復原',
   'operation.label.replaceComponent': '變更版本',
-  'operation.duration': '在 {seconds} 秒內完成',
+  'operation.duration': '在 {duration}內完成',
   'operation.filesUpdated.none': '沒有更新的檔案。',
   'operation.filesUpdated.count': plural('count', { other: '更新了 {count} 個檔案。' }),
   'operation.filesRestored.none': '沒有還原任何檔案。',

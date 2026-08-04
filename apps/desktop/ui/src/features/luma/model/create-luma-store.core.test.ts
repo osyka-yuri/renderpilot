@@ -250,13 +250,10 @@ describe('createLumaStore', () => {
   });
 
   it('discards a stale load when gameId changes mid-request', async () => {
-    let releaseGame1: (report: AvailabilityReport) => void = () => undefined;
-    const slowGame1 = new Promise<AvailabilityReport>((resolve) => {
-      releaseGame1 = resolve;
-    });
+    const slowGame1 = Promise.withResolvers<AvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) =>
-        gameId === 'game1' ? slowGame1 : Promise.resolve(INSTALLED),
+        gameId === 'game1' ? slowGame1.promise : Promise.resolve(INSTALLED),
       ),
     });
     const store = createLumaStore({ api });
@@ -265,7 +262,7 @@ describe('createLumaStore', () => {
     await store.load('game2'); // newer, resolves first → installed
     expect(store.isInstalled).toBe(true);
 
-    releaseGame1(NOT_INSTALLED_SAFE);
+    slowGame1.resolve(NOT_INSTALLED_SAFE);
     await load1;
 
     // game2's state must survive; the stale game1 response is dropped.

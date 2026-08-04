@@ -224,7 +224,7 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
 
 function readBooleanField(command: DesktopCommand, payload: unknown, field: string): boolean {
   const record = readPayloadRecord(command, payload);
-  if (!Object.prototype.hasOwnProperty.call(record, field)) {
+  if (!Object.hasOwn(record, field)) {
     throw new Error(`Mock invoker: Missing required field "${field}" in payload for "${command}".`);
   }
   const value = record[field];

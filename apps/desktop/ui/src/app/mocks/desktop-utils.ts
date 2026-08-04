@@ -229,7 +229,7 @@ export function readOptionalStringField(
   field: string,
 ): string | null {
   const record = readPayloadRecord(command, payload);
-  if (!Object.prototype.hasOwnProperty.call(record, field) || record[field] === null) {
+  if (!Object.hasOwn(record, field) || record[field] === null) {
     return null;
   }
   return readStringFieldFromRecord(command, record, field);
@@ -278,7 +278,7 @@ function readStringFieldFromRecord(
 }
 
 function readRequiredField(command: DesktopCommand, record: PayloadRecord, field: string): unknown {
-  if (!Object.prototype.hasOwnProperty.call(record, field)) {
+  if (!Object.hasOwn(record, field)) {
     throw new Error(`Mock invoker: Missing required field "${field}" in payload for "${command}".`);
   }
 
@@ -304,7 +304,7 @@ export function lastPathSegment(path: string): string {
 }
 
 export function normalizeInstallPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
+  const normalized = path.replaceAll('\\', '/').trim().replace(/\/+$/, '');
 
   if (!normalized) {
     throw new Error('Mock preview manual scan path is required.');
@@ -314,7 +314,7 @@ export function normalizeInstallPath(path: string): string {
 }
 
 export function normalizeCoverSourcePath(sourcePath: string): string {
-  const normalized = sourcePath.replace(/\\/g, '/').trim();
+  const normalized = sourcePath.replaceAll('\\', '/').trim();
 
   if (!normalized) {
     throw new Error('Mock preview cover source path is required.');
@@ -340,7 +340,7 @@ export function collectAvailableLibraries(cards: readonly GameSummary[]): string
     }
   }
 
-  return [...values].sort((left, right) => left.localeCompare(right));
+  return Array.from(values).sort((left, right) => left.localeCompare(right));
 }
 
 export function collectAvailableLaunchers(cards: readonly GameSummary[]): string[] {
@@ -354,7 +354,7 @@ export function collectAvailableLaunchers(cards: readonly GameSummary[]): string
     }
   }
 
-  return [...values].sort((left, right) => left.localeCompare(right));
+  return Array.from(values).sort((left, right) => left.localeCompare(right));
 }
 
 export function compareCards(

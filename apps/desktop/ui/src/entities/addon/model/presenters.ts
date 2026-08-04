@@ -140,7 +140,7 @@ function riskFallbackKey(severity: RiskSeverity, keys: RiskFallbackKeys): Messag
  * the dotted namespace and turns underscores into spaces (`a.b.foo_bar` → `foo bar`).
  */
 function humanizeMessageKey(key: string): string {
-  return key.replace(/^.*\./, '').replace(/_/g, ' ');
+  return key.replace(/^.*\./, '').replaceAll('_', ' ');
 }
 
 /**

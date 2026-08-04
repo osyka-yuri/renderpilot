@@ -2,9 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createD3d12PreflightFlow } from './create-d3d12-preflight-flow.svelte';
 
+type ReadyResult = { kind: 'ready'; value: string };
+type BlockedResult = {
+  kind: 'blocked';
+  blockers: ['developer_mode_required'];
+  recovery: 'developer_mode_required';
+};
+
 describe('createD3d12PreflightFlow', () => {
   it('keeps the captured pending value and closes recovery after a successful retry', async () => {
-    let resolveRetry!: (value: { kind: 'ready'; value: string }) => void;
+    const retryResult = Promise.withResolvers<ReadyResult>();
     const prepare = vi
       .fn()
       .mockResolvedValueOnce({
@@ -12,12 +19,7 @@ describe('createD3d12PreflightFlow', () => {
         blockers: ['developer_mode_required' as const],
         recovery: 'developer_mode_required' as const,
       })
-      .mockImplementationOnce(
-        () =>
-          new Promise<{ kind: 'ready'; value: string }>((resolve) => {
-            resolveRetry = resolve;
-          }),
-      );
+      .mockImplementationOnce(() => retryResult.promise);
     const onReady = vi.fn();
     const flow = createD3d12PreflightFlow({
       prepare,
@@ -34,7 +36,7 @@ describe('createD3d12PreflightFlow', () => {
     expect(flow.developerModeRetrying).toBe(true);
     expect(flow.developerModeStillDisabledAfterRetry).toBe(false);
 
-    resolveRetry({ kind: 'ready', value: 'fresh' });
+    retryResult.resolve({ kind: 'ready', value: 'fresh' });
     await retry;
 
     expect(prepare).toHaveBeenLastCalledWith({ gameId: 'game' });
@@ -45,13 +47,8 @@ describe('createD3d12PreflightFlow', () => {
   });
 
   it('does not finish start before an asynchronous ready handler completes', async () => {
-    let resolveReady!: () => void;
-    const onReady = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveReady = resolve;
-        }),
-    );
+    const readyHandler = Promise.withResolvers<undefined>();
+    const onReady = vi.fn(() => readyHandler.promise);
     const flow = createD3d12PreflightFlow({
       prepare: vi.fn().mockResolvedValue({ kind: 'ready' as const, value: 'fresh' }),
       isCurrent: () => true,
@@ -70,7 +67,7 @@ describe('createD3d12PreflightFlow', () => {
     expect(settled).toBe(false);
     expect(flow.planning).toBe(true);
 
-    resolveReady();
+    readyHandler.resolve(undefined);
     await start;
 
     expect(settled).toBe(true);
@@ -105,12 +102,8 @@ describe('createD3d12PreflightFlow', () => {
   });
 
   it('reports a disabled retry only after the retry result arrives', async () => {
-    let resolveRetry!: (value: {
-      kind: 'blocked';
-      blockers: ['developer_mode_required'];
-      recovery: 'developer_mode_required';
-    }) => void;
-    let resolveNextRetry!: (value: { kind: 'ready'; value: string }) => void;
+    const retryResult = Promise.withResolvers<BlockedResult>();
+    const nextRetryResult = Promise.withResolvers<ReadyResult>();
     const prepare = vi
       .fn()
       .mockResolvedValueOnce({
@@ -118,22 +111,8 @@ describe('createD3d12PreflightFlow', () => {
         blockers: ['developer_mode_required' as const],
         recovery: 'developer_mode_required' as const,
       })
-      .mockImplementationOnce(
-        () =>
-          new Promise<{
-            kind: 'blocked';
-            blockers: ['developer_mode_required'];
-            recovery: 'developer_mode_required';
-          }>((resolve) => {
-            resolveRetry = resolve;
-          }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise<{ kind: 'ready'; value: string }>((resolve) => {
-            resolveNextRetry = resolve;
-          }),
-      );
+      .mockImplementationOnce(() => retryResult.promise)
+      .mockImplementationOnce(() => nextRetryResult.promise);
     const flow = createD3d12PreflightFlow({
       prepare,
       isCurrent: () => true,
@@ -147,7 +126,7 @@ describe('createD3d12PreflightFlow', () => {
     expect(flow.developerModeRetrying).toBe(true);
     expect(flow.developerModeStillDisabledAfterRetry).toBe(false);
 
-    resolveRetry({
+    retryResult.resolve({
       kind: 'blocked',
       blockers: ['developer_mode_required'],
       recovery: 'developer_mode_required',
@@ -161,7 +140,7 @@ describe('createD3d12PreflightFlow', () => {
     expect(flow.developerModeRetrying).toBe(true);
     expect(flow.developerModeStillDisabledAfterRetry).toBe(true);
 
-    resolveNextRetry({ kind: 'ready', value: 'fresh' });
+    nextRetryResult.resolve({ kind: 'ready', value: 'fresh' });
     await nextRetry;
 
     expect(flow.developerModeOpen).toBe(false);
@@ -169,7 +148,7 @@ describe('createD3d12PreflightFlow', () => {
   });
 
   it('allows cancellation during retry and ignores its late result', async () => {
-    let resolveRetry!: (value: { kind: 'ready'; value: string }) => void;
+    const retryResult = Promise.withResolvers<ReadyResult>();
     const prepare = vi
       .fn()
       .mockResolvedValueOnce({
@@ -177,12 +156,7 @@ describe('createD3d12PreflightFlow', () => {
         blockers: ['developer_mode_required' as const],
         recovery: 'developer_mode_required' as const,
       })
-      .mockImplementationOnce(
-        () =>
-          new Promise<{ kind: 'ready'; value: string }>((resolve) => {
-            resolveRetry = resolve;
-          }),
-      );
+      .mockImplementationOnce(() => retryResult.promise);
     const onReady = vi.fn();
     const onCancel = vi.fn();
     const flow = createD3d12PreflightFlow({
@@ -196,7 +170,7 @@ describe('createD3d12PreflightFlow', () => {
     await flow.start('pending');
     const retry = flow.retry();
     flow.cancel();
-    resolveRetry({ kind: 'ready', value: 'late' });
+    retryResult.resolve({ kind: 'ready', value: 'late' });
     await retry;
 
     expect(onCancel).toHaveBeenCalledWith('pending');
@@ -206,15 +180,10 @@ describe('createD3d12PreflightFlow', () => {
   });
 
   it('does not let an older generation clear newer recovery state', async () => {
-    let resolveFirst!: (value: { kind: 'ready'; value: string }) => void;
+    const firstResult = Promise.withResolvers<ReadyResult>();
     const prepare = vi
       .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<{ kind: 'ready'; value: string }>((resolve) => {
-            resolveFirst = resolve;
-          }),
-      )
+      .mockImplementationOnce(() => firstResult.promise)
       .mockResolvedValueOnce({
         kind: 'blocked' as const,
         blockers: ['developer_mode_required' as const],
@@ -233,7 +202,7 @@ describe('createD3d12PreflightFlow', () => {
     await flow.start('second');
     expect(flow.pendingRecovery).toBe('second');
 
-    resolveFirst({ kind: 'ready', value: 'late' });
+    firstResult.resolve({ kind: 'ready', value: 'late' });
     await first;
 
     expect(onReady).not.toHaveBeenCalled();
@@ -243,11 +212,7 @@ describe('createD3d12PreflightFlow', () => {
 
   it('closes recovery and unlocks retry when its owner becomes stale', async () => {
     let current = true;
-    let resolveRetry!: (value: {
-      kind: 'blocked';
-      blockers: ['developer_mode_required'];
-      recovery: 'developer_mode_required';
-    }) => void;
+    const retryResult = Promise.withResolvers<BlockedResult>();
     const prepare = vi
       .fn()
       .mockResolvedValueOnce({
@@ -255,16 +220,7 @@ describe('createD3d12PreflightFlow', () => {
         blockers: ['developer_mode_required' as const],
         recovery: 'developer_mode_required' as const,
       })
-      .mockImplementationOnce(
-        () =>
-          new Promise<{
-            kind: 'blocked';
-            blockers: ['developer_mode_required'];
-            recovery: 'developer_mode_required';
-          }>((resolve) => {
-            resolveRetry = resolve;
-          }),
-      );
+      .mockImplementationOnce(() => retryResult.promise);
     const flow = createD3d12PreflightFlow({
       prepare,
       isCurrent: () => current,
@@ -275,7 +231,7 @@ describe('createD3d12PreflightFlow', () => {
     await flow.start('pending');
     const retry = flow.retry();
     current = false;
-    resolveRetry({
+    retryResult.resolve({
       kind: 'blocked',
       blockers: ['developer_mode_required'],
       recovery: 'developer_mode_required',

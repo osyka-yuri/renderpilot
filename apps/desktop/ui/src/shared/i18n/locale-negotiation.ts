@@ -26,7 +26,7 @@ export function negotiateLocale(languageTags: readonly string[]): Locale {
 
 function matchSupportedLocale(languageTag: string): Locale | null {
   try {
-    const parsed = parseLocaleTag(languageTag.replace(/_/gu, '-'));
+    const parsed = parseLocaleTag(languageTag.replaceAll('_', '-'));
     if (parsed.language !== 'zh') {
       return NON_CHINESE_LOCALES[parsed.language] ?? null;
     }

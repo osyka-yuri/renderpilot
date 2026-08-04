@@ -120,4 +120,16 @@ describe('sortGameCards', () => {
     const sorted = sortGameCards(cards, { field: 'risk', direction: 'asc' });
     expect(sorted.map((card) => card.game_id)).toEqual(['safe', 'high', 'blocked']);
   });
+
+  it('does not mutate readonly mock input while sorting', () => {
+    const cards = [
+      createGameSummary({ game_id: 'bravo', title: 'Bravo' }),
+      createGameSummary({ game_id: 'alpha', title: 'Alpha' }),
+    ] as const;
+
+    expect(
+      sortGameCards(cards, { field: 'title', direction: 'asc' }).map(({ game_id }) => game_id),
+    ).toEqual(['alpha', 'bravo']);
+    expect(cards.map(({ game_id }) => game_id)).toEqual(['bravo', 'alpha']);
+  });
 });

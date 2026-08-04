@@ -13,6 +13,7 @@ describe('game-card-view-model', () => {
       makeGameSummary({
         library_tags: ['steam', 'intel_xell', 'amd_fsr_frame_generation', 'dlss_super_resolution'],
       }),
+      'en',
     );
 
     expect(viewModel.libraries).toEqual([
@@ -25,10 +26,12 @@ describe('game-card-view-model', () => {
 
   it('carries the backend removal capability into the card actions', () => {
     expect(
-      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: true })).canRemoveFromCatalog,
+      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: true }), 'en')
+        .canRemoveFromCatalog,
     ).toBe(true);
     expect(
-      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: false })).canRemoveFromCatalog,
+      toGameCardViewModel(makeGameSummary({ can_remove_from_catalog: false }), 'en')
+        .canRemoveFromCatalog,
     ).toBe(false);
   });
 });

@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2025",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "ES2021.Intl", "ES2022.Error", "DOM", "DOM.Iterable"],
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -29,6 +29,7 @@
     "ui/src/**/*.svelte.ts",
     "ui/src/**/*.d.ts",
     "ui/src/**/*.svelte",
+    "scripts/**/*.ts",
     "vite.config.ts"
   ]
 }

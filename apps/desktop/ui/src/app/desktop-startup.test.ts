@@ -3,15 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { I18nInitializationResult } from '@shared/i18n';
 import { loadDesktopStartup } from './desktop-startup';
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-
-  return { promise, resolve };
-}
-
 const englishInitialization: I18nInitializationResult = {
   activeMode: 'en',
   activeLocale: 'en',
@@ -21,10 +12,10 @@ const englishInitialization: I18nInitializationResult = {
 
 describe('loadDesktopStartup', () => {
   it('applies theme and prepares preview before starting all pre-mount work in parallel', async () => {
-    const preview = deferred<undefined>();
-    const i18n = deferred<I18nInitializationResult>();
-    const desktopApp = deferred<{ default: string }>();
-    const initialization = deferred<{ isElevated: boolean }>();
+    const preview = Promise.withResolvers<undefined>();
+    const i18n = Promise.withResolvers<I18nInitializationResult>();
+    const desktopApp = Promise.withResolvers<{ default: string }>();
+    const initialization = Promise.withResolvers<{ isElevated: boolean }>();
     const events: string[] = [];
 
     const startup = loadDesktopStartup({

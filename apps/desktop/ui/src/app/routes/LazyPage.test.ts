@@ -28,13 +28,10 @@ describe('LazyPage', () => {
   });
 
   it('renders a status while loading and then renders the typed page snippet', async () => {
-    let resolvePage!: (page: typeof TestPage) => void;
+    const pendingPage = Promise.withResolvers<typeof TestPage>();
     const page = createLazyPageResource({
       id: 'settings',
-      loader: () =>
-        new Promise<typeof TestPage>((resolve) => {
-          resolvePage = resolve;
-        }),
+      loader: () => pendingPage.promise,
     });
 
     component = mount(LazyPageTestHost, {
@@ -45,10 +42,7 @@ describe('LazyPage', () => {
 
     expect(target.querySelector('[role="status"]')?.textContent).toContain('Loading page');
 
-    await vi.waitFor(() => {
-      expect(resolvePage).toBeTypeOf('function');
-    });
-    resolvePage(TestPage);
+    pendingPage.resolve(TestPage);
     await vi.waitFor(() => {
       flushSync();
       expect(target.querySelector('[data-testid="loaded-page"]')?.textContent).toBe(

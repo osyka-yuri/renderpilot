@@ -9,15 +9,12 @@ describe('createOptimisticBooleanMutationQueue', () => {
     const queue = createOptimisticBooleanMutationQueue();
     const card = createGameSummary({ game_id: 'game', is_favorite: false });
     const calls: string[] = [];
-    let releaseFirst!: () => void;
-    const firstWrite = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const firstWrite = Promise.withResolvers<undefined>();
 
     const first = queue.begin('game', card, 0, 'request', false, true);
     const firstOperation = queue.enqueue('game', async () => {
       calls.push('first');
-      await firstWrite;
+      await firstWrite.promise;
     });
     const second = queue.begin('game', card, 0, 'request', true, false);
     const secondPersist = vi.fn(() => {
@@ -32,7 +29,7 @@ describe('createOptimisticBooleanMutationQueue', () => {
     expect(queue.isLatest('game', second.token)).toBe(true);
     expect(secondPersist).not.toHaveBeenCalled();
 
-    releaseFirst();
+    firstWrite.resolve(undefined);
     await Promise.all([firstOperation, secondOperation]);
     expect(calls).toEqual(['first', 'second']);
   });

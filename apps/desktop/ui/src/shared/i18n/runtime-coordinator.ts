@@ -377,12 +377,7 @@ function isSameTransitionRequest(first: TransitionRequest, second: TransitionReq
 }
 
 function createUserOperation(initialRequest: TransitionRequest): UserOperation {
-  let resolve!: (result: I18nSwitchResult) => void;
-  let reject!: (error: LocaleLoadError) => void;
-  const promise = new Promise<I18nSwitchResult>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
+  const { promise, resolve, reject } = Promise.withResolvers<I18nSwitchResult>();
 
   return { initialRequest, promise, resolve, reject, settled: false };
 }

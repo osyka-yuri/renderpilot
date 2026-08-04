@@ -442,7 +442,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'operation.label.failed': '失敗',
   'operation.label.rolledBack': 'ロールバック済み',
   'operation.label.replaceComponent': 'バージョン変更',
-  'operation.duration': '{seconds}秒で完了',
+  'operation.duration': '{duration}で完了',
   'operation.filesUpdated.none': '更新されたファイルはありません。',
   'operation.filesUpdated.count': plural('count', {
     other: '{count}個のファイルが更新されました。',

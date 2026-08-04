@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { LocalePack } from './packs/types';
-import { createTestRuntime, deferred, pack } from './runtime.test-support';
+import { createTestRuntime, pack } from './runtime.test-support';
 
 describe('runtime coordinator integration', () => {
   it('initializes the saved locale before exposing a ready state', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'ru',
       loaders: {
@@ -36,8 +36,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('keeps the active pack and applies only the latest request', async () => {
-    const ru = deferred<LocalePack>();
-    const zhHant = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
+    const zhHant = Promise.withResolvers<LocalePack>();
     const ruLoader = vi.fn(() => ru.promise);
     const test = createTestRuntime({
       loaders: {
@@ -76,7 +76,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('deduplicates same-locale imports and caches successful packs', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const loader = vi.fn(() => ru.promise);
     const test = createTestRuntime({ loaders: { ru: loader } });
 
@@ -167,7 +167,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('supersedes a pending import immediately when the active pack is selected', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       loaders: {
         ru: () => ru.promise,
@@ -200,8 +200,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('does not publish a superseded failure into runtime state', async () => {
-    const ru = deferred<LocalePack>();
-    const zhHant = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
+    const zhHant = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       loaders: {
         ru: () => ru.promise,
@@ -234,7 +234,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('shares one locale import across different modes while the last mode wins', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const loader = vi.fn(() => ru.promise);
     const test = createTestRuntime({
       systemLocale: 'ru',
@@ -375,7 +375,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('initializes idempotently with one loader invocation and one commit', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const loader = vi.fn(() => ru.promise);
     const test = createTestRuntime({
       storedMode: 'ru',
@@ -396,7 +396,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('observes live system language changes atomically without rewriting the preference', async () => {
-    const ru = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'system',
       loaders: { ru: () => ru.promise },
@@ -450,8 +450,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('reconciles the current system locale after an explicit switch fails', async () => {
-    const ru = deferred<LocalePack>();
-    const fr = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
+    const fr = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'system',
       loaders: {
@@ -486,7 +486,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('gives an immediate rejection-handler retry priority over system reconciliation', async () => {
-    const firstRussianLoad = deferred<LocalePack>();
+    const firstRussianLoad = Promise.withResolvers<LocalePack>();
     const russianLoader = vi
       .fn<() => Promise<LocalePack>>()
       .mockImplementationOnce(() => firstRussianLoad.promise)
@@ -523,8 +523,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('retargets startup to the latest system locale before publishing readiness', async () => {
-    const ru = deferred<LocalePack>();
-    const fr = deferred<LocalePack>();
+    const ru = Promise.withResolvers<LocalePack>();
+    const fr = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'system',
       systemLocale: 'ru',
@@ -552,8 +552,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('carries the user persistence intent across a system-language retarget race', async () => {
-    const fr = deferred<LocalePack>();
-    const de = deferred<LocalePack>();
+    const fr = Promise.withResolvers<LocalePack>();
+    const de = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'en',
       systemLocale: 'fr',
@@ -587,8 +587,8 @@ describe('runtime coordinator integration', () => {
   });
 
   it('reports the winning failure when a language event retargets a user system switch', async () => {
-    const fr = deferred<LocalePack>();
-    const de = deferred<LocalePack>();
+    const fr = Promise.withResolvers<LocalePack>();
+    const de = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       storedMode: 'en',
       systemLocale: 'fr',
@@ -724,7 +724,7 @@ describe('runtime coordinator integration', () => {
   });
 
   it('reports an explicit locale failure once but never reports a superseded transition', async () => {
-    const firstRussianLoad = deferred<LocalePack>();
+    const firstRussianLoad = Promise.withResolvers<LocalePack>();
     const test = createTestRuntime({
       loaders: { ru: () => firstRussianLoad.promise },
     });

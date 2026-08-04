@@ -112,4 +112,37 @@ describe('buildStreamlineVersionModel', () => {
     expect(model.isMixed).toBe(true);
     expect(model.versionRange).toEqual({ min: '2.4.0', max: '2.9.0' });
   });
+
+  it('finds mixed version bounds in one pass regardless of component order', () => {
+    const components = Object.freeze([
+      component('newest'),
+      component('oldest'),
+      component('middle'),
+    ]);
+    const groupsById = {
+      newest: group('newest', STREAMLINE, '2.10.0', []),
+      oldest: group('oldest', STREAMLINE, '2.3.0', []),
+      middle: group('middle', STREAMLINE, '2.7.0', []),
+    };
+
+    const model = buildStreamlineVersionModel(components, groupsById, []);
+
+    expect(model.isMixed).toBe(true);
+    expect(model.versionRange).toEqual({ min: '2.3.0', max: '2.10.0' });
+    expect(components.map(({ id }) => id)).toEqual(['newest', 'oldest', 'middle']);
+  });
+
+  it('does not report a range for trailing-zero-equivalent versions', () => {
+    const components = [component('short'), component('expanded')];
+    const groupsById = {
+      short: group('short', STREAMLINE, '2.4', []),
+      expanded: group('expanded', STREAMLINE, '2.4.0', []),
+    };
+
+    const model = buildStreamlineVersionModel(components, groupsById, []);
+
+    expect(model.currentVersion).toBe('2.4');
+    expect(model.isMixed).toBe(false);
+    expect(model.versionRange).toBeNull();
+  });
 });

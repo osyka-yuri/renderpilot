@@ -1,5 +1,6 @@
 import type { GameSummary } from './types';
 import { normalizeUniqueTrimmedStrings } from '@shared/text';
+import { hasPartialNormalizedSelection } from './selection-predicates';
 
 export const ALL_KNOWN_LAUNCHERS = [
   'Steam',
@@ -27,36 +28,15 @@ export function extractAvailableLaunchersFromCards(cards: readonly GameSummary[]
     }
   }
 
-  return [...launchers].sort((left, right) => left.localeCompare(right));
+  return Array.from(launchers).sort((left, right) => left.localeCompare(right));
 }
 
 export function hasPartialLauncherSelection(
   selectedLaunchers: readonly string[],
   availableLauncherValues: readonly string[],
 ): boolean {
-  const availableLaunchers = normalizeLauncherValues(availableLauncherValues);
-
-  if (availableLaunchers.length === 0) {
-    return false;
-  }
-
-  const selectedAvailableLaunchers = intersectNormalizedLaunchers(
+  return hasPartialNormalizedSelection(
     normalizeLauncherValues(selectedLaunchers),
-    availableLaunchers,
+    normalizeLauncherValues(availableLauncherValues),
   );
-
-  return selectedAvailableLaunchers.length < availableLaunchers.length;
-}
-
-function intersectNormalizedLaunchers(
-  selection: readonly string[],
-  available: readonly string[],
-): string[] {
-  if (available.length === 0) {
-    return [];
-  }
-
-  const allowedLaunchers = new Set(available);
-
-  return selection.filter((launcher) => allowedLaunchers.has(launcher));
 }

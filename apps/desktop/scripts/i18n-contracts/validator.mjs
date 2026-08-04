@@ -6,9 +6,7 @@ function fail(message) {
 
 export function analyzeMessageTemplate(template) {
   const analysis = analyzeSharedMessageTemplate(template);
-  return analysis.valid
-    ? { valid: true, placeholders: [...analysis.placeholders] }
-    : { valid: false, placeholders: [] };
+  return { valid: analysis.valid, placeholders: analysis.placeholders };
 }
 
 function messagePlaceholders(template, context) {
@@ -16,7 +14,7 @@ function messagePlaceholders(template, context) {
   if (!analysis.valid) {
     fail(`${context} contains invalid placeholder syntax`);
   }
-  return [...analysis.placeholders].sort();
+  return analysis.placeholders.toSorted();
 }
 
 function assertPlaceholderName(value, context) {
@@ -40,6 +38,7 @@ const MACHINE_CODE_PATTERN = /^[a-z][a-z0-9_]*$/;
 const MAX_MACHINE_CODE_LENGTH = 64;
 const RUST_VARIANT_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
 const WARNING_PARAMETER_TYPES = new Set(['positive_integer', 'non_blank_string']);
+const PLURAL_CATEGORIES = new Set(['zero', 'one', 'two', 'few', 'many', 'other']);
 
 function assertUniqueByCode(entries, context) {
   if (!Array.isArray(entries)) {
@@ -92,12 +91,9 @@ function assertCatalogMessage(english, key, context, expectedParameters) {
       : [message.argument, ...Object.values(message.branches).flat()],
   );
   const expected = new Set(expectedParameters);
-  if (
-    actualParameters.size !== expected.size ||
-    [...actualParameters].some((parameter) => !expected.has(parameter))
-  ) {
+  if (actualParameters.size !== expected.size || !actualParameters.isSubsetOf(expected)) {
     fail(
-      `${context} parameters ${JSON.stringify([...expected].sort())} do not match English message ${key} parameters ${JSON.stringify([...actualParameters].sort())}`,
+      `${context} parameters ${JSON.stringify(Array.from(expected).sort())} do not match English message ${key} parameters ${JSON.stringify(Array.from(actualParameters).sort())}`,
     );
   }
 }
@@ -275,7 +271,7 @@ export function validateEnglishContract(entries) {
     if (duplicateValues(branchNames).length > 0) {
       fail(`English message ${key} contains duplicate branches`);
     }
-    const sortedBranchNames = [...branchNames].sort();
+    const sortedBranchNames = branchNames.toSorted();
     if (value.helper === 'plural' && sortedBranchNames.join(',') !== 'one,other') {
       fail(`English message ${key} plural branches must be exactly one and other`);
     }
@@ -312,9 +308,7 @@ export function validatePluralCategories(entries) {
     if (
       uniqueCategories.size !== values.length ||
       !uniqueCategories.has('other') ||
-      [...uniqueCategories].some(
-        (category) => !['zero', 'one', 'two', 'few', 'many', 'other'].includes(category),
-      )
+      !uniqueCategories.isSubsetOf(PLURAL_CATEGORIES)
     ) {
       fail(`PLURAL_CATEGORIES.${locale} contains invalid or duplicate categories`);
     }
@@ -358,7 +352,7 @@ export function validateLumaContract(entries) {
   if (Object.keys(groups).length === 0) {
     fail('Luma contract must contain at least one phrase');
   }
-  return { groups, ids: [...ids].sort() };
+  return { groups, ids: Array.from(ids).sort() };
 }
 
 function nonEmptyString(value, context) {

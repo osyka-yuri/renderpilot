@@ -130,12 +130,8 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('shares one in-flight promise across repeated start calls', async () => {
-    let resolvePackages!: (packages: LibraryPackagesOutput) => void;
-    mocks.listLibraryPackages.mockReturnValue(
-      new Promise<LibraryPackagesOutput>((resolve) => {
-        resolvePackages = resolve;
-      }),
-    );
+    const packages = Promise.withResolvers<LibraryPackagesOutput>();
+    mocks.listLibraryPackages.mockReturnValue(packages.promise);
     const model = createLibrariesPageModel({ cache });
 
     const firstStart = model.start();
@@ -144,7 +140,7 @@ describe('createLibrariesPageModel', () => {
     expect(secondStart).toBe(firstStart);
     expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);
 
-    resolvePackages(output([]));
+    packages.resolve(output([]));
     await firstStart;
   });
 
@@ -220,6 +216,19 @@ describe('createLibrariesPageModel', () => {
     expect(model.packages[0].local_state).toBe('absent');
   });
 
+  it('treats deletion of an unknown mutation package as an explicit no-op', async () => {
+    const model = await loadedModel([
+      packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1', isDownloaded: true }),
+    ]);
+    const before = model.packages;
+    mocks.deleteLibraryPackage.mockResolvedValue({ package_id: 'unknown', package: null });
+
+    await expect(model.handleDelete('dlss-1')).resolves.toBe(true);
+
+    expect(model.packages).toBe(before);
+    expect(model.packages.map(({ package_id }) => package_id)).toEqual(['dlss-1']);
+  });
+
   it('deletes a registration by logical package id', async () => {
     const model = await loadedModel([
       {
@@ -256,13 +265,12 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'c', lib: 'technology_c', version: '1' }),
       packageFixture({ id: 'd', lib: 'technology_d', version: '1' }),
     ]);
-    const resolvers: Record<string, (value: LibraryPackageMutation) => void> = {};
-    mocks.downloadLibraryPackage.mockImplementation(
-      (id) =>
-        new Promise<LibraryPackageMutation>((resolve) => {
-          resolvers[id] = resolve;
-        }),
-    );
+    const downloads: Record<string, PromiseWithResolvers<LibraryPackageMutation>> = {};
+    mocks.downloadLibraryPackage.mockImplementation((id) => {
+      const download = Promise.withResolvers<LibraryPackageMutation>();
+      downloads[id] = download;
+      return download.promise;
+    });
 
     const bulk = model.downloadAllLatest();
 
@@ -271,12 +279,12 @@ describe('createLibrariesPageModel', () => {
     expect(mocks.downloadLibraryPackage.mock.calls.flat()).not.toContain('d');
 
     for (const id of ['a', 'b', 'c']) {
-      resolvers[id](mutation(id, true));
+      downloads[id].resolve(mutation(id, true));
     }
     await vi.waitFor(() => {
-      expect(resolvers.d).toBeTypeOf('function');
+      expect(downloads.d).toBeDefined();
     });
-    resolvers.d(mutation('d', true));
+    downloads.d.resolve(mutation('d', true));
 
     await expect(bulk).resolves.toEqual({ succeeded: 4, failed: 0, skipped: 0 });
     expect(mocks.downloadLibraryPackage.mock.calls.map(([id]) => id).sort()).toEqual([
@@ -339,17 +347,13 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('drops a package list that resolves after the model is disposed', async () => {
-    let resolvePackages!: (packages: LibraryPackagesOutput) => void;
-    mocks.listLibraryPackages.mockReturnValue(
-      new Promise<LibraryPackagesOutput>((resolve) => {
-        resolvePackages = resolve;
-      }),
-    );
+    const packages = Promise.withResolvers<LibraryPackagesOutput>();
+    mocks.listLibraryPackages.mockReturnValue(packages.promise);
     const model = createLibrariesPageModel({ cache });
     const loading = model.start();
 
     model.dispose();
-    resolvePackages(
+    packages.resolve(
       output(packagesOf([packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })])),
     );
     await loading;
@@ -375,13 +379,9 @@ describe('createLibrariesPageModel', () => {
   });
 
   it('does not let an older package request overwrite a newer result', async () => {
-    let resolveFirst!: (packages: LibraryPackagesOutput) => void;
+    const firstRequest = Promise.withResolvers<LibraryPackagesOutput>();
     mocks.listLibraryPackages
-      .mockReturnValueOnce(
-        new Promise<LibraryPackagesOutput>((resolve) => {
-          resolveFirst = resolve;
-        }),
-      )
+      .mockReturnValueOnce(firstRequest.promise)
       .mockResolvedValueOnce(
         output(packagesOf([packageFixture({ id: 'new', lib: 'nvngx_dlss', version: '2' })])),
       );
@@ -389,7 +389,7 @@ describe('createLibrariesPageModel', () => {
 
     const older = model.start();
     model.requestCatalogRefresh(1);
-    resolveFirst(
+    firstRequest.resolve(
       output(packagesOf([packageFixture({ id: 'old', lib: 'nvngx_dlss', version: '1' })])),
     );
     await older;
@@ -403,13 +403,12 @@ describe('createLibrariesPageModel', () => {
       packageFixture({ id: 'a', lib: 'nvngx_dlss', version: '1' }),
       packageFixture({ id: 'b', lib: 'nvngx_dlssg', version: '1' }),
     ]);
-    const resolvers: Record<string, (value: LibraryPackageMutation) => void> = {};
-    mocks.downloadLibraryPackage.mockImplementation(
-      (id) =>
-        new Promise<LibraryPackageMutation>((resolve) => {
-          resolvers[id] = resolve;
-        }),
-    );
+    const downloads: Record<string, PromiseWithResolvers<LibraryPackageMutation>> = {};
+    mocks.downloadLibraryPackage.mockImplementation((id) => {
+      const download = Promise.withResolvers<LibraryPackageMutation>();
+      downloads[id] = download;
+      return download.promise;
+    });
     mocks.sumDownloadFractions.mockReturnValue(0.5);
 
     const done = model.downloadAllLatest();
@@ -419,8 +418,8 @@ describe('createLibrariesPageModel', () => {
     expect(model.bulkProgressValue).toBeCloseTo(0.5);
     expect(mocks.sumDownloadFractions).toHaveBeenCalledWith(['a', 'b']);
 
-    resolvers.a(mutation('a', true));
-    resolvers.b(mutation('b', true));
+    downloads.a.resolve(mutation('a', true));
+    downloads.b.resolve(mutation('b', true));
     await done;
     expect(model.bulkProgressValue).toBe(0);
   });
@@ -479,12 +478,8 @@ describe('createLibrariesPageModel', () => {
   it('deduplicates refresh generations and runs a queued refresh after a mutation', async () => {
     const specs = [packageFixture({ id: 'dlss-1', lib: 'nvngx_dlss', version: '1' })];
     const model = await loadedModel(specs);
-    let resolveDownload!: (value: LibraryPackageMutation) => void;
-    mocks.downloadLibraryPackage.mockReturnValue(
-      new Promise<LibraryPackageMutation>((resolve) => {
-        resolveDownload = resolve;
-      }),
-    );
+    const pendingDownload = Promise.withResolvers<LibraryPackageMutation>();
+    mocks.downloadLibraryPackage.mockReturnValue(pendingDownload.promise);
     mocks.listLibraryPackages.mockClear();
     mocks.listLibraryPackages.mockResolvedValue(output(packagesOf(specs)));
 
@@ -493,7 +488,7 @@ describe('createLibrariesPageModel', () => {
     model.requestCatalogRefresh(1);
     expect(mocks.listLibraryPackages).not.toHaveBeenCalled();
 
-    resolveDownload(mutation('dlss-1', true));
+    pendingDownload.resolve(mutation('dlss-1', true));
     await download;
     await vi.waitFor(() => {
       expect(mocks.listLibraryPackages).toHaveBeenCalledTimes(1);

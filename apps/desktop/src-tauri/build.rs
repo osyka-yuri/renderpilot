@@ -14,12 +14,31 @@
 
 #[path = "build-support/desktop_error_contract.rs"]
 mod desktop_error_contract;
+#[path = "build-support/webview_runtime_contract.rs"]
+mod webview_runtime_contract;
 
 use std::{env, fs, path::PathBuf};
 
 fn main() {
     generate_desktop_error_contract();
+    generate_webview_runtime_contract();
     tauri_build::build();
+}
+
+fn generate_webview_runtime_contract() {
+    let manifest_dir = PathBuf::from(
+        env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be available"),
+    );
+    let config_path = manifest_dir.join("tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", config_path.display());
+
+    let source = fs::read_to_string(&config_path).expect("Tauri config must be read");
+    let contract = webview_runtime_contract::parse_contract(&source)
+        .expect("Tauri runtime contract must be valid");
+    let generated = webview_runtime_contract::render_contract(&contract);
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR must be available"))
+        .join("webview_runtime_contract.rs");
+    fs::write(output, generated).expect("WebView2 runtime contract must be generated");
 }
 
 fn generate_desktop_error_contract() {

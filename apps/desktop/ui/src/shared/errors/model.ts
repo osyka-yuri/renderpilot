@@ -108,7 +108,7 @@ export function getErrorSeverity(error: unknown): ErrorSeverity {
 }
 
 export function isCommandErrorCode(code: string): code is CommandErrorCode {
-  return Object.prototype.hasOwnProperty.call(COMMAND_ERROR_CONTRACT, code);
+  return Object.hasOwn(COMMAND_ERROR_CONTRACT, code);
 }
 
 type ParsedCommandError = Readonly<{

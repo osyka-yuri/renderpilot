@@ -173,7 +173,7 @@
   });
 
   $effect(() => {
-    const lastVisible = renderedRows[renderedRows.length - 1]?.virtualRow.index ?? -1;
+    const lastVisible = renderedRows.at(-1)?.virtualRow.index ?? -1;
     if (shouldLoadMoreRows(rows.length, lastVisible)) {
       onLoadMore();
     }

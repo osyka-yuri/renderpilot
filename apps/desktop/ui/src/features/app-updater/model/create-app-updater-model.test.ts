@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppUpdateDownloadEvent, AppUpdateHandle } from '../api/app-updater-gateway';
-import { createGateway, createHandle, createModel, deferred } from './app-updater-test-fixtures';
+import { createGateway, createHandle, createModel } from './app-updater-test-fixtures';
 import type { AppUpdaterModel } from './types';
 
 describe('createAppUpdaterModel', () => {
@@ -36,8 +36,8 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('runs its startup probes only once, including concurrent start calls', async () => {
-      const version = deferred<string>();
-      const update = deferred<AppUpdateHandle | null>();
+      const version = Promise.withResolvers<string>();
+      const update = Promise.withResolvers<AppUpdateHandle | null>();
       const getCurrentVersion = vi.fn(() => version.promise);
       const checkForUpdate = vi.fn(() => update.promise);
       const gateway = createGateway({
@@ -73,8 +73,8 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('does not lose the app version when a manual check supersedes startup', async () => {
-      const version = deferred<string>();
-      const backgroundCheck = deferred<AppUpdateHandle | null>();
+      const version = Promise.withResolvers<string>();
+      const backgroundCheck = Promise.withResolvers<AppUpdateHandle | null>();
       const gateway = createGateway({
         getCurrentVersion: vi.fn(() => version.promise),
         checkForUpdate: vi
@@ -95,8 +95,8 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('closes a stale background handle when manual checking begins', async () => {
-      const backgroundCheck = deferred<AppUpdateHandle | null>();
-      const manualCheck = deferred<AppUpdateHandle | null>();
+      const backgroundCheck = Promise.withResolvers<AppUpdateHandle | null>();
+      const manualCheck = Promise.withResolvers<AppUpdateHandle | null>();
       const staleHandle = createHandle({ version: '1.1.0' });
       const liveHandle = createHandle({ version: '1.2.0' });
       const gateway = createGateway({
@@ -206,7 +206,7 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('ignores duplicate interactive checks', async () => {
-      const check = deferred<AppUpdateHandle | null>();
+      const check = Promise.withResolvers<AppUpdateHandle | null>();
       const checkForUpdate = vi.fn(() => check.promise);
       const { model } = createModel(createGateway({ checkForUpdate }));
 
@@ -410,7 +410,7 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('does not start another download after disposal during a retry delay', async () => {
-      const retryWait = deferred<undefined>();
+      const retryWait = Promise.withResolvers<undefined>();
       const handle = createHandle({
         downloadImpl: () => Promise.reject(new Error('network')),
       });
@@ -515,7 +515,7 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('ignores dialog dismissal during an active download', async () => {
-      const download = deferred<undefined>();
+      const download = Promise.withResolvers<undefined>();
       const handle = createHandle({ downloadImpl: () => download.promise });
       const { model } = createModel(
         createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
@@ -534,7 +534,7 @@ describe('createAppUpdaterModel', () => {
 
     it('ignores stale progress and installation completion after disposal', async () => {
       let emit!: (event: AppUpdateDownloadEvent) => void;
-      const download = deferred<undefined>();
+      const download = Promise.withResolvers<undefined>();
       const handle = createHandle({
         downloadImpl: (onEvent) => {
           emit = onEvent;
@@ -584,7 +584,7 @@ describe('createAppUpdaterModel', () => {
     });
 
     it('releases an installation handle only when installation fails after disposal', async () => {
-      const installation = deferred<undefined>();
+      const installation = Promise.withResolvers<undefined>();
       const handle = createHandle({ installImpl: () => installation.promise });
       const { model } = createModel(
         createGateway({ checkForUpdate: vi.fn(() => Promise.resolve(handle)) }),
@@ -609,7 +609,7 @@ describe('createAppUpdaterModel', () => {
 
   describe('disposal', () => {
     it('closes a stale interactive result after disposal', async () => {
-      const check = deferred<AppUpdateHandle | null>();
+      const check = Promise.withResolvers<AppUpdateHandle | null>();
       const handle = createHandle();
       const { model } = createModel(createGateway({ checkForUpdate: vi.fn(() => check.promise) }));
 

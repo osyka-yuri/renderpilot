@@ -16,6 +16,7 @@ const featureFile = path.join(projectRoot, sourceRoot, 'features/example/model/v
 const intlFile = path.join(projectRoot, sourceRoot, 'shared/intl/formatters.ts');
 const formatFile = path.join(projectRoot, sourceRoot, 'shared/format/numbers.ts');
 const i18nFile = path.join(projectRoot, sourceRoot, 'shared/i18n/format.ts');
+const textFile = path.join(projectRoot, sourceRoot, 'shared/text/graphemes.ts');
 
 const ruleTester = new RuleTester({
   languageOptions: {
@@ -37,6 +38,10 @@ ruleTester.run('intl-boundaries', createIntlBoundariesRule({ projectRoot, source
     {
       filename: i18nFile,
       code: "import { createPluralRules } from '@/shared/intl/formatters';",
+    },
+    {
+      filename: textFile,
+      code: "import { createSegmenter } from '@shared/intl';",
     },
     {
       filename: featureFile,
@@ -66,6 +71,16 @@ ruleTester.run('intl-boundaries', createIntlBoundariesRule({ projectRoot, source
     },
   ],
   invalid: [
+    {
+      filename: featureFile,
+      code: "const segmenter = new Intl.Segmenter('en');",
+      errors: [{ messageId: 'directIntl' }],
+    },
+    {
+      filename: featureFile,
+      code: "const segmenter = new globalThis.Intl['Segmenter']('en');",
+      errors: [{ messageId: 'directIntl' }],
+    },
     {
       filename: featureFile,
       code: "const formatter = new Intl.NumberFormat('en');",

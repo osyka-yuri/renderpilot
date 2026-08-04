@@ -1,5 +1,6 @@
 import { normalizeUniqueTrimmedStrings } from '@shared/text';
 import { AMD_FSR_ALIAS_TAGS } from '@shared/graphics';
+import { hasPartialNormalizedSelection } from './selection-predicates';
 
 export function normalizeLibraryValues(values: readonly string[]): string[] {
   return normalizeUniqueTrimmedStrings(values);
@@ -30,18 +31,10 @@ export function hasPartialLibrarySelection(
   selectedLibraries: readonly string[],
   availableLibraryValues: readonly string[],
 ): boolean {
-  const availableLibraries = normalizeLibraryValues(availableLibraryValues);
-
-  if (availableLibraries.length === 0) {
-    return false;
-  }
-
-  const selectedAvailableLibraries = intersectNormalizedLibraries(
+  return hasPartialNormalizedSelection(
     normalizeLibraryValues(selectedLibraries),
-    availableLibraries,
+    normalizeLibraryValues(availableLibraryValues),
   );
-
-  return selectedAvailableLibraries.length < availableLibraries.length;
 }
 
 function intersectNormalizedLibraries(

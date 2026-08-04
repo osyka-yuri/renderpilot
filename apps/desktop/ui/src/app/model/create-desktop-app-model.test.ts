@@ -63,18 +63,15 @@ describe('createDesktopAppModel', () => {
 
   it('runExclusive returns null when busy', async () => {
     const model = createDesktopAppModel();
-    let releaseFirst: (value: string) => void = () => undefined;
-    const firstPromise = new Promise<string>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const first = Promise.withResolvers<string>();
 
-    void model.runExclusive(() => firstPromise);
+    void model.runExclusive(() => first.promise);
     expect(model.busy).toBe(true);
 
     const result = await model.runExclusive(() => Promise.resolve('skipped'));
     expect(result).toBeNull();
 
-    releaseFirst('done');
+    first.resolve('done');
   });
 
   it('runExclusive can route a scoped workflow error to an inline handler', async () => {

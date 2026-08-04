@@ -55,9 +55,9 @@ if (!bootstrapDynamicImports.has(desktopAppKey)) {
 // DesktopApp is dynamically imported by the tiny bootstrap entry but awaited
 // unconditionally before mount, so its complete static graph is part of the
 // critical initial route for both leak detection and the size budget.
-const initialKeys = new Set([...staticGraph(entryKeys[0]), ...staticGraph(desktopAppKey)]);
+const initialKeys = staticGraph(entryKeys[0]).union(staticGraph(desktopAppKey));
 const initialDynamicTargets = new Set(
-  [...initialKeys].flatMap((key) => manifest[key]?.dynamicImports ?? []),
+  initialKeys.values().flatMap((key) => manifest[key]?.dynamicImports ?? []),
 );
 const localePackKeys = new Map(
   entries.flatMap(([key]) => {
@@ -86,7 +86,7 @@ if (initialBytes > INITIAL_JS_BUDGET_BYTES) {
 
 const localeSizes = [];
 for (const [locale, packKey] of localePackKeys) {
-  const localeKeys = [...staticGraph(packKey)].filter((dependency) => !initialKeys.has(dependency));
+  const localeKeys = staticGraph(packKey).difference(initialKeys);
   localeSizes.push(`${locale} ${await jsBytes(localeKeys)}`);
 }
 
@@ -105,7 +105,7 @@ for (const [screen, sourceSuffix] of Object.entries(LAZY_PAGE_ENTRIES)) {
     throw new Error(`Lazy page ${screen} is not dynamically reachable from the app shell: ${key}`);
   }
 
-  const routeKeys = [...staticGraph(key)].filter((dependency) => !initialKeys.has(dependency));
+  const routeKeys = staticGraph(key).difference(initialKeys);
   const routeBytes = await jsBytes(routeKeys);
   if (routeBytes > ROUTE_JS_BUDGET_BYTES) {
     throw new Error(

@@ -527,10 +527,7 @@ describe('createRenoDxStore', () => {
     // open. Before it resolves, the user switches to game2 and load() completes.
     // The stale game1 refresh landing afterward must not clobber game2's freshly
     // loaded host state, even though install() correctly waits for post-commit.
-    let releaseGame1Refresh: (report: AvailabilityReport) => void = () => undefined;
-    const slowGame1Refresh = new Promise<AvailabilityReport>((resolve) => {
-      releaseGame1Refresh = resolve;
-    });
+    const slowGame1Refresh = Promise.withResolvers<AvailabilityReport>();
     let getAvailabilityCalls = 0;
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) => {
@@ -538,7 +535,7 @@ describe('createRenoDxStore', () => {
         // Call 1: game1's initial load(). Call 2: game1's post-install refresh
         // (held open). Call 3: game2's load().
         if (getAvailabilityCalls === 2) {
-          return slowGame1Refresh;
+          return slowGame1Refresh.promise;
         }
         return Promise.resolve(gameId === 'game2' ? INSTALLED : NOT_INSTALLED_SAFE);
       }),
@@ -555,7 +552,7 @@ describe('createRenoDxStore', () => {
     expect(store.hostDetection).toBe('present');
 
     // Now let the stale game1 refresh resolve with a different host state.
-    releaseGame1Refresh(NOT_INSTALLED_SAFE);
+    slowGame1Refresh.resolve(NOT_INSTALLED_SAFE);
     await installDone;
 
     // game2's freshly loaded host state must survive the late game1 refresh.
@@ -565,13 +562,10 @@ describe('createRenoDxStore', () => {
   it('discards a stale load when gameId changes mid-request', async () => {
     // game1's availability never resolves until we release it; game2's resolves
     // immediately. The late game1 result must not overwrite game2's state.
-    let releaseGame1: (report: AvailabilityReport) => void = () => undefined;
-    const slowGame1 = new Promise<AvailabilityReport>((resolve) => {
-      releaseGame1 = resolve;
-    });
+    const slowGame1 = Promise.withResolvers<AvailabilityReport>();
     const api = fakeApi({
       getAvailability: vi.fn((gameId: string) =>
-        gameId === 'game1' ? slowGame1 : Promise.resolve(INSTALLED),
+        gameId === 'game1' ? slowGame1.promise : Promise.resolve(INSTALLED),
       ),
     });
     const store = createRenoDxStore({ api });
@@ -581,7 +575,7 @@ describe('createRenoDxStore', () => {
     expect(store.isInstalled).toBe(true);
 
     // Now resolve the stale game1 load with a different (not-installed) result.
-    releaseGame1(NOT_INSTALLED_SAFE);
+    slowGame1.resolve(NOT_INSTALLED_SAFE);
     await load1;
 
     // game2's state must survive; the stale game1 response is dropped.
