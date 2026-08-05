@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -15,12 +15,15 @@ import {
   parseLumaContract,
   parseNvapiContract,
   parsePluralCategories,
+  validateExternalCatalogBoundaries,
 } from './i18n-contracts.mjs';
 import { parseJsonSource } from './i18n-contracts/parser.mjs';
+import { createContractVersion, createSemanticContract } from './i18n-contracts/contract.mjs';
+import { validateEditorialPolicy } from './i18n-contracts/validator.mjs';
 import { PLACEHOLDER_CONTRACT_CASES } from '../ui/src/shared/i18n/messages/placeholder-contract-cases.ts';
 
 const EXPECTED_CONTRACT_VERSION =
-  'i18n-v1:5352aae56d869c0e279987a232fa42b7fc7cdf0b55cf326c1eba2c3d181e611a';
+  'i18n-v2:1055b05e078557ad57510a8a0f3b28f6f994283208fdd785e038afb39b951060';
 
 test('contract generation is deterministic and committed outputs are current', async () => {
   const first = await createI18nContractOutputs();
@@ -299,6 +302,27 @@ test('contract records use locale-independent ordinal key order', () => {
   assert.deepEqual(Object.keys(contract), ['a-b', 'a.b', 'a_b']);
 });
 
+test('contract version changes when an external key or reviewed source changes', () => {
+  const createVersion = (sourceCatalog) =>
+    createContractVersion(
+      createSemanticContract({
+        english: {},
+        pluralCategories: {},
+        luma: { sourceCatalog },
+        nvapi: { sourceCatalog: {} },
+      }),
+    );
+
+  assert.notEqual(
+    createVersion({ 'luma.game.warning': 'Original.' }),
+    createVersion({ 'luma.game.warning': 'Changed.' }),
+  );
+  assert.notEqual(
+    createVersion({ 'luma.game.warning': 'Original.' }),
+    createVersion({ 'luma.game.other': 'Original.' }),
+  );
+});
+
 test('generated source formatting honors file-specific oxfmt overrides', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'renderpilot-i18n-contracts-'));
   const configPath = path.join(directory, '.oxfmtrc.json');
@@ -331,21 +355,82 @@ test('plural category parser rejects duplicates and missing other', () => {
   );
 });
 
-test('dynamic registry parsers reject duplicate source identifiers', () => {
+test('Luma contract enforces strict source-bound phrase records', () => {
+  const phrase = {
+    key: 'warning',
+    sourceText: 'Careful.',
+    messages: [{ id: 'luma.game.warning', context: 'guidance.warning' }],
+  };
+  const valid = { schemaVersion: 1, phrases: [phrase] };
+
+  assert.deepEqual(parseLumaContract(valid).sourceCatalog, {
+    'luma.game.warning': 'Careful.',
+  });
   assert.throws(
     () =>
       parseLumaContract({
-        bundledDlss: ['luma.game.bundled_dlss'],
-        reservedDlss: ['luma.game.bundled_dlss'],
+        ...valid,
+        phrases: [
+          phrase,
+          {
+            ...phrase,
+            sourceText: 'Different.',
+            messages: [{ id: 'luma.other.warning', context: 'guidance.warning' }],
+          },
+        ],
+      }),
+    /duplicate Luma phrase key/,
+  );
+  assert.throws(
+    () =>
+      parseLumaContract({
+        ...valid,
+        phrases: [phrase, { ...phrase, key: 'other', sourceText: 'Different.' }],
       }),
     /duplicate Luma message ID/,
   );
   assert.throws(
     () =>
+      parseLumaContract({
+        ...valid,
+        phrases: [
+          phrase,
+          {
+            ...phrase,
+            key: 'other',
+            messages: [{ id: 'luma.other.warning', context: 'guidance.warning' }],
+          },
+        ],
+      }),
+    /duplicate Luma source text/,
+  );
+  assert.throws(
+    () =>
+      parseLumaContract({
+        ...valid,
+        phrases: [{ ...phrase, messages: [{ ...phrase.messages[0], context: 'unknown' }] }],
+      }),
+    /invalid context/,
+  );
+  assert.throws(
+    () => parseLumaContract({ ...valid, phrases: [{ ...phrase, unexpected: true }] }),
+    /unknown field/,
+  );
+  assert.throws(
+    () => parseLumaContract({ ...valid, phrases: [{ ...phrase, sourceText: 'Value {name}' }] }),
+    /must not contain placeholders/,
+  );
+});
+
+test('NVAPI contract rejects duplicate identifiers, invalid shapes, and placeholders', () => {
+  assert.throws(
+    () =>
       parseNvapiContract({
+        schema_version: 1,
         settings: [
           {
             key: 'preset',
+            family: 'sr',
             label: 'Preset',
             values: [
               { wire: 'a', label: 'A' },
@@ -359,15 +444,132 @@ test('dynamic registry parsers reject duplicate source identifiers', () => {
   assert.throws(
     () =>
       parseNvapiContract({
-        settings: [{ key: 'preset', label: 'Preset', values: { wire: 'not-an-array' } }],
+        schema_version: 1,
+        settings: [
+          { key: 'preset', family: 'sr', label: 'Preset', values: { wire: 'not-an-array' } },
+        ],
       }),
     /values must be an array/,
   );
   assert.throws(
     () =>
       parseNvapiContract({
-        settings: [{ key: 'preset', label: 'Preset {bad-name}' }],
+        schema_version: 1,
+        settings: [{ key: 'preset', family: 'sr', label: 'Preset {bad-name}' }],
       }),
     /dlss_settings\.json: nvapi\.preset\.label contains invalid placeholder syntax/,
+  );
+  assert.throws(
+    () =>
+      parseNvapiContract({
+        schema_version: 1,
+        settings: [{ key: 'preset', family: 'sr', label: 'Preset {name}' }],
+      }),
+    /must not contain placeholders/,
+  );
+});
+
+test('static, Luma, and NVAPI message key spaces may not overlap', () => {
+  assert.throws(
+    () =>
+      validateExternalCatalogBoundaries(
+        { 'luma.game.warning': { kind: 'string', placeholders: [] } },
+        { sourceCatalog: { 'luma.game.warning': 'Warning.' } },
+        { sourceCatalog: {} },
+      ),
+    /shared by English and Luma/,
+  );
+  assert.throws(
+    () =>
+      validateExternalCatalogBoundaries(
+        {},
+        { sourceCatalog: { 'external.same': 'Luma.' } },
+        { sourceCatalog: { 'external.same': 'NVAPI.' } },
+      ),
+    /shared by Luma and NVAPI/,
+  );
+});
+
+test('editorial policy rejects malformed and stale machine-readable rules', async () => {
+  const [policyText, englishText, nvapiText] = await Promise.all([
+    readFile(new URL('../data/i18n-editorial-policy.json', import.meta.url), 'utf8'),
+    readFile(new URL('../ui/src/shared/i18n/messages/en.ts', import.meta.url), 'utf8'),
+    readFile(
+      new URL(
+        '../../../crates/renderpilot-orchestration/src/dlss/bundled/dlss_settings.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ]);
+  const policy = parseJsonSource(policyText);
+  const dependencies = {
+    english: parseEnglishContract(englishText),
+    nvapi: { sourceCatalog: parseNvapiContract(parseJsonSource(nvapiText)) },
+  };
+  const invalidPolicy = (mutate) => {
+    const value = structuredClone(policy);
+    mutate(value);
+    return value;
+  };
+
+  assert.equal(validateEditorialPolicy(policy, dependencies), policy);
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => (value.schemaVersion = 99)),
+        dependencies,
+      ),
+    /unsupported schemaVersion 99/,
+  );
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => (value.nvidiaSources.ru = 'http://www.nvidia.com/ru-ru/')),
+        dependencies,
+      ),
+    /must use an official HTTPS URL/,
+  );
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => {
+          value.localeTypography.de.quotationMarks.close =
+            value.localeTypography.de.quotationMarks.open;
+        }),
+        dependencies,
+      ),
+    /quotation marks are invalid/,
+  );
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => {
+          value.localeTypography.fr.forbiddenQuoteMarks.push(
+            value.localeTypography.fr.quotationMarks.open,
+          );
+        }),
+        dependencies,
+      ),
+    /forbids its approved quotation marks/,
+  );
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => value.technicalOnlyStaticKeys.push('missing.static.key')),
+        dependencies,
+      ),
+    /technical-only static key is not in the English catalog/,
+  );
+  assert.throws(
+    () =>
+      validateEditorialPolicy(
+        invalidPolicy((value) => {
+          const [source] = Object.keys(value.nvapiSemanticTranslations.ru);
+          delete value.nvapiSemanticTranslations.de[source];
+        }),
+        dependencies,
+      ),
+    /NVAPI semantic translations for de is missing field/,
   );
 });

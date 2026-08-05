@@ -1,103 +1,109 @@
-import { defineLocalizedOverrides } from '../../contract';
+import { defineLocalizedCatalog } from '../../contract';
+import {
+  expandNvapiTranslations,
+  type NvapiSourceCatalog,
+  type NvapiTranslations,
+} from './contract.generated';
 
-import type { NvapiSourceCatalog } from './contract.generated';
+const translations = {
+  'Render Preset': 'Пресет рендеринга',
+  "Forces a specific DLSS Super Resolution preset. Some games may require 'Forced Model Preset Profile' to apply custom presets.":
+    'Принудительно задаёт пресет DLSS Super Resolution. В некоторых играх для применения пользовательских пресетов также может потребоваться «Принудительный профиль пресета модели».',
+  'Off (game default)': 'Выкл. (как в игре)',
+  'Preset A (CNN)': 'Пресет A (CNN)',
+  'Preset B (CNN)': 'Пресет B (CNN)',
+  'Preset C (CNN)': 'Пресет C (CNN)',
+  'Preset D (CNN)': 'Пресет D (CNN)',
+  'Preset E (CNN)': 'Пресет E (CNN)',
+  'Preset F (CNN)': 'Пресет F (CNN)',
+  'Preset G (unused)': 'Пресет G (не используется)',
+  'Preset H (unused)': 'Пресет H (не используется)',
+  'Preset I (unused)': 'Пресет I (не используется)',
+  'Preset J (Transformer Gen 1)': 'Пресет J (Transformer Gen 1)',
+  'Preset K (Transformer Gen 1)': 'Пресет K (Transformer Gen 1)',
+  'Preset L (Transformer Gen 2)': 'Пресет L (Transformer Gen 2)',
+  'Preset M (Transformer Gen 2)': 'Пресет M (Transformer Gen 2)',
+  'Preset N (unused)': 'Пресет N (не используется)',
+  'Preset O (unused)': 'Пресет O (не используется)',
+  Recommended: 'Рекомендуется',
+  'Forced Quality Level': 'Принудительный уровень качества',
+  'Overrides the in-game DLSS Super Resolution quality selection.':
+    'Переопределяет выбранный в игре уровень качества DLSS Super Resolution.',
+  Performance: 'Производительность',
+  Balanced: 'Баланс',
+  Quality: 'Качество',
+  'N/A': 'Н/Д',
+  'Ultra Performance': 'Ультрапроизводительность',
+  Custom: 'Пользовательский',
+  'Forced Scaling Ratio': 'Принудительный коэффициент масштабирования',
+  "Sets a custom render-resolution ratio. Requires 'Forced Quality Level' to be set to Custom.":
+    'Задаёт пользовательский коэффициент разрешения рендеринга. Для параметра «Принудительный уровень качества» требуется значение «Пользовательский».',
+  Off: 'Выкл.',
+  '33% (Ultra Performance)': '33% (ультрапроизводительность)',
+  '50% (Performance)': '50% (производительность)',
+  '58% (Balanced)': '58% (баланс)',
+  '67% (Quality)': '67% (качество)',
+  '77% (Ultra Quality)': '77% (ультракачество)',
+  'Enable DLL Override': 'Включить переопределение DLL',
+  'Forces the game to use the latest DLSS-SR version installed system-wide. Supported by most DLSS 2+ titles.':
+    'Принудительно использует в игре новейшую установленную в системе версию DLSS-SR. Поддерживается большинством игр с DLSS 2 и новее.',
+  'On (use latest installed)': 'Вкл. (использовать новейшую установленную)',
+  'Forced Model Preset Profile': 'Принудительный профиль пресета модели',
+  "Allows applying a custom preset in games where 'Render Preset' has no effect by default.":
+    'Позволяет применять пользовательский пресет в играх, где «Пресет рендеринга» по умолчанию не действует.',
+  'Force DLAA (full-resolution)': 'Принудительный DLAA (полное разрешение)',
+  'Renders every DLSS quality mode at full resolution, acting as an anti-aliasing solution (DLAA).':
+    'Рендерит каждый режим качества DLSS в полном разрешении, используя его как средство сглаживания (DLAA).',
+  On: 'Вкл.',
+  'Remap Performance to Ultra Performance':
+    'Переназначить «Производительность» на «Ультрапроизводительность»',
+  'Forces the Performance quality mode to use the Ultra Performance rendering path.':
+    'Принудительно использует путь рендеринга «Ультрапроизводительность» для режима качества «Производительность».',
+  'Forces a specific DLSS Frame Generation preset.':
+    'Принудительно задаёт определённый пресет DLSS Frame Generation.',
+  'Preset A': 'Пресет A',
+  'Preset B': 'Пресет B',
+  'Preset C (unused)': 'Пресет C (не используется)',
+  'Preset D (unused)': 'Пресет D (не используется)',
+  'Preset E (unused)': 'Пресет E (не используется)',
+  'Preset F (unused)': 'Пресет F (не используется)',
+  'Preset J (unused)': 'Пресет J (не используется)',
+  'Preset K (unused)': 'Пресет K (не используется)',
+  'Preset L (unused)': 'Пресет L (не используется)',
+  'Preset M (unused)': 'Пресет M (не используется)',
+  'Forced Mode': 'Принудительный режим',
+  'Sets the Frame Generation mode. Dynamic mode requires driver 595.97 or newer.':
+    'Задаёт режим Frame Generation. Для динамического режима требуется драйвер версии 595.97 или новее.',
+  Fixed: 'Фиксированный',
+  Dynamic: 'Динамический',
+  'Forces the game to use the latest DLSS-FG version installed system-wide. Supported by most DLSS 3 titles.':
+    'Принудительно использует в игре новейшую установленную в системе версию DLSS-FG. Поддерживается большинством игр с DLSS 3.',
+  'Multi-Frame Generation — Fixed Count': 'Multi Frame Generation — фиксированное количество',
+  'Sets a fixed number of generated frames per rendered frame.':
+    'Задаёт фиксированное количество сгенерированных кадров на каждый отрендеренный кадр.',
+  'Multi-Frame Generation — Dynamic Count': 'Multi Frame Generation — динамическое количество',
+  'Sets an upper limit on generated frames when Frame Generation is in Dynamic mode.':
+    'Задаёт верхний предел количества генерируемых кадров, когда Frame Generation работает в динамическом режиме.',
+  'Up to 2x': 'До 2x',
+  'Up to 3x': 'До 3x',
+  'Up to 4x': 'До 4x',
+  'Up to 5x': 'До 5x',
+  'Up to 6x': 'До 6x',
+  'Multi-Frame Generation — Target Dynamic Frame Rate':
+    'Multi Frame Generation — целевая динамическая частота кадров',
+  'Sets the target frame rate that Dynamic Frame Generation aims to maintain.':
+    'Задаёт целевую частоту кадров, которую стремится поддерживать динамическая Frame Generation.',
+  'Max Refresh Rate': 'Максимальная частота обновления',
+  'Forces a specific DLSS Ray Reconstruction preset.':
+    'Принудительно задаёт определённый пресет DLSS Ray Reconstruction.',
+  'Preset D (Transformer Gen 1)': 'Пресет D (Transformer Gen 1)',
+  'Preset E (Transformer Gen 1)': 'Пресет E (Transformer Gen 1)',
+  'Overrides the in-game DLSS Ray Reconstruction quality selection.':
+    'Переопределяет выбранный в игре уровень качества DLSS Ray Reconstruction.',
+  'Forces the game to use the latest DLSS-RR version installed system-wide. Supported by most Ray Reconstruction titles.':
+    'Принудительно использует в игре новейшую установленную в системе версию DLSS-RR. Поддерживается большинством игр с Ray Reconstruction.',
+} as const satisfies NvapiTranslations;
 
-export const nvapiOverrides = defineLocalizedOverrides<'ru', NvapiSourceCatalog>()({
-  'nvapi.dlss_sr_render_preset.label': 'Пресет рендеринга',
-  'nvapi.dlss_sr_render_preset.description':
-    'Принудительно задает пресет DLSS. В некоторых играх также требуется изменить "Профиль пресета" (Model Preset Profile).',
-  'nvapi.dlss_sr_render_preset.value.default': 'Выкл (как в игре)',
-  'nvapi.dlss_sr_render_preset.value.recommended': 'Рекомендовано',
-
-  'nvapi.dlss_sr_quality_level.label': 'Уровень качества',
-  'nvapi.dlss_sr_quality_level.description':
-    'Переопределяет выбранный в игре уровень качества DLSS.',
-  'nvapi.dlss_sr_quality_level.value.custom': 'Свой',
-  'nvapi.dlss_sr_quality_level.value.na': 'Н/Д',
-
-  'nvapi.dlss_sr_scaling_ratio.label': 'Масштаб рендеринга',
-  'nvapi.dlss_sr_scaling_ratio.description':
-    'Задает свой масштаб (разрешение) для рендеринга. Требует установить "Уровень качества" в режим "Свой".',
-
-  'nvapi.dlss_sr_dll_override.label': 'Переопределение версии DLL',
-  'nvapi.dlss_sr_dll_override.description':
-    'Заставляет игру использовать последнюю системную версию DLSS.',
-  'nvapi.dlss_sr_dll_override.value.off': 'Выкл',
-  'nvapi.dlss_sr_dll_override.value.on': 'Вкл (последняя системная)',
-
-  'nvapi.dlss_sr_model_preset_profile.label': 'Профиль пресета',
-  'nvapi.dlss_sr_model_preset_profile.description':
-    'Позволяет применить кастомный пресет в играх, где настройка "Пресет рендеринга" не работает сама по себе.',
-  'nvapi.dlss_sr_model_preset_profile.value.na': 'Н/Д',
-  'nvapi.dlss_sr_model_preset_profile.value.recommended': 'Рекомендовано',
-  'nvapi.dlss_sr_model_preset_profile.value.custom': 'Свой',
-
-  'nvapi.dlss_sr_override_dlaa.label': 'Принудительный DLAA',
-  'nvapi.dlss_sr_override_dlaa.description':
-    'Заставляет все режимы качества DLSS рендериться в полном разрешении (как DLAA).',
-  'nvapi.dlss_sr_override_dlaa.value.off': 'Выкл',
-  'nvapi.dlss_sr_override_dlaa.value.on': 'Вкл',
-
-  'nvapi.dlss_sr_override_perf_to_ultraperf.label': 'Performance в Ultra Performance',
-  'nvapi.dlss_sr_override_perf_to_ultraperf.description':
-    'Заставляет режим качества "Performance" использовать алгоритм рендеринга "Ultra Performance".',
-  'nvapi.dlss_sr_override_perf_to_ultraperf.value.off': 'Выкл',
-  'nvapi.dlss_sr_override_perf_to_ultraperf.value.on': 'Вкл',
-
-  'nvapi.dlss_fg_render_preset.label': 'Пресет рендеринга',
-  'nvapi.dlss_fg_render_preset.description':
-    'Принудительно задает пресет генерации кадров (Frame Generation).',
-  'nvapi.dlss_fg_render_preset.value.default': 'Выкл (как в игре)',
-  'nvapi.dlss_fg_render_preset.value.recommended': 'Рекомендовано',
-
-  'nvapi.dlss_fg_mode.label': 'Режим работы',
-  'nvapi.dlss_fg_mode.description':
-    'Устанавливает режим генерации кадров. Для динамического режима требуется драйвер 595.97 и новее.',
-  'nvapi.dlss_fg_mode.value.na': 'Н/Д',
-  'nvapi.dlss_fg_mode.value.fixed': 'Фиксированный',
-  'nvapi.dlss_fg_mode.value.dynamic': 'Динамический',
-
-  'nvapi.dlss_fg_dll_override.label': 'Переопределение версии DLL',
-  'nvapi.dlss_fg_dll_override.description':
-    'Заставляет игру использовать последнюю системную версию Frame Generation.',
-  'nvapi.dlss_fg_dll_override.value.off': 'Выкл',
-  'nvapi.dlss_fg_dll_override.value.on': 'Вкл (последняя системная)',
-
-  'nvapi.dlss_mfg_fixed_count.label': 'Генерация кадров — Фиксированное кол-во',
-  'nvapi.dlss_mfg_fixed_count.description':
-    'Задает точное количество генерируемых кадров на каждый отрисованный кадр.',
-  'nvapi.dlss_mfg_fixed_count.value.na': 'Н/Д',
-
-  'nvapi.dlss_mfg_dynamic_count.label': 'Генерация кадров — Динамическое кол-во',
-  'nvapi.dlss_mfg_dynamic_count.description':
-    'Устанавливает верхний предел генерации кадров для динамического режима.',
-  'nvapi.dlss_mfg_dynamic_count.value.na': 'Н/Д',
-
-  'nvapi.dlss_mfg_target_frame_rate.label': 'Генерация кадров — Целевая частота (FPS)',
-  'nvapi.dlss_mfg_target_frame_rate.description':
-    'Задает частоту кадров, которую будет пытаться поддерживать динамический режим.',
-  'nvapi.dlss_mfg_target_frame_rate.value.na': 'Н/Д',
-  'nvapi.dlss_mfg_target_frame_rate.value.max_refresh': 'Макс. частота обновления монитора',
-
-  'nvapi.dlss_rr_render_preset.label': 'Пресет рендеринга',
-  'nvapi.dlss_rr_render_preset.description':
-    'Принудительно задает пресет реконструкции лучей (Ray Reconstruction).',
-  'nvapi.dlss_rr_render_preset.value.default': 'Выкл (как в игре)',
-  'nvapi.dlss_rr_render_preset.value.recommended': 'Рекомендовано',
-
-  'nvapi.dlss_rr_quality_level.label': 'Уровень качества',
-  'nvapi.dlss_rr_quality_level.description':
-    'Переопределяет выбранный в игре уровень качества Ray Reconstruction.',
-  'nvapi.dlss_rr_quality_level.value.custom': 'Свой',
-  'nvapi.dlss_rr_quality_level.value.na': 'Н/Д',
-
-  'nvapi.dlss_rr_scaling_ratio.label': 'Масштаб рендеринга',
-  'nvapi.dlss_rr_scaling_ratio.description':
-    'Задает свой масштаб (разрешение) для рендеринга. Требует установить "Уровень качества" в режим "Свой".',
-
-  'nvapi.dlss_rr_dll_override.label': 'Переопределение версии DLL',
-  'nvapi.dlss_rr_dll_override.description':
-    'Заставляет игру использовать последнюю системную версию Ray Reconstruction.',
-  'nvapi.dlss_rr_dll_override.value.off': 'Выкл',
-  'nvapi.dlss_rr_dll_override.value.on': 'Вкл (последняя системная)',
-});
+export const nvapiOverrides = defineLocalizedCatalog<'ru', NvapiSourceCatalog>()(
+  expandNvapiTranslations(translations),
+);

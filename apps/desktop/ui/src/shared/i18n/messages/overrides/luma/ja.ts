@@ -1,7 +1,7 @@
-import { defineLocalizedOverrides } from '../../contract';
+import { defineLocalizedCatalog } from '../../contract';
 import {
-  expandLumaGuidanceTranslations,
-  type LumaGuidanceTranslations,
+  expandLumaTranslations,
+  type LumaMessageTranslations,
   type LumaSourceCatalog,
 } from './schema';
 
@@ -17,6 +17,7 @@ const translations = {
   edithFinchExit:
     'DLAA は追加の変更なしで動作しますが、終了後にゲームが完全に閉じないことがあります。OptiScaler で解決できる場合があります。',
   dlssNoHdr: 'DLSS のみ（現時点では HDR 非対応）。',
+  fallout4DlssGtaoOnly: '現在、このプロファイルがサポートするのは DLSS と GTAO のみです。',
   kh3Txaa: '事前にゲーム内で「TXAA」を選択してください。',
   aceFxaaHigh: '事前にゲーム内で AA を「FXAA High」に選択してください。',
   tetrisFxaa6: '事前にゲーム内で AA を「FXAA:6」、レンダリングスケールを 100% に設定してください。',
@@ -50,7 +51,6 @@ const translations = {
   kakarotBdzKfix:
     'ゲーム設定で TAA を選択し、Legacy 版では BDZKFix、HD 版ではその更新フォークを使用してください。',
   preyData: 'Prey 用の追加 Luma データファイルは、アドオンと同じ場所に置いてください。',
-  bundledDlss: 'Luma はゲームに同梱された DLSS ライブラリを退避し、削除時に復元します。',
   daymareOptiscalerUuu:
     'Luma は単体では動作しますが、OptiScaler または UUU と併用するとクラッシュします。',
   smtLyallFix: "TAA を強制するには Lyall's Fix が必要です。",
@@ -71,8 +71,23 @@ const translations = {
   heavyRainSteamUltrawide:
     'ウルトラワイドは Steam 経由で起動した場合にのみ動作することがあります。',
   metroBorderless: 'ボーダーレスウィンドウモードを使用してください。',
-} as const satisfies LumaGuidanceTranslations;
+  dlssOnlyNoHdr: 'このプロファイルは DLSS 対応のみを追加します。HDR は現在サポートされていません。',
+  biomutantAaHighOrMax: 'ゲーム設定で AA を「High」または「Max」にしてください。',
+  blairWitchTxaaFull: 'ゲーム設定で TXAA、解像度スケーリングを「Full」にしてください。',
+  flickeringIssues: 'ちらつきの問題が発生する可能性があります。',
+  brambleEpicVram:
+    'Epic 品質では VRAM が徐々に埋まり、カクつきが発生することがあります。Luma の有効中に High と Epic を何度も切り替えないでください。',
+  daemonDlaaReset:
+    'レベルの読み込みやグラフィック設定の変更により r.TemporalAASamples=1 が強制され、DLAA が無効になります。',
+  easyAntiCheatBlocked: 'Easy Anti-Cheat によってブロックされています。',
+  echoDlaaAutoExposure:
+    '最初のレベル以降は DLAA が機能しません。AutoExposure: On では光源が明滅し、AutoExposure: Off ではアンチエイリアス品質が大幅に低下します。',
+  dx11BootFailure: 'DX11 では起動しません。',
+  rainCodeAaHighMaxResolution:
+    'ゲーム設定で AA 品質を「High」にし、解像度スライダーを最大にしてください。',
+  roboquestTaaQuality3: 'ゲーム設定で TAA、Quality を「3」にしてください。',
+} as const satisfies LumaMessageTranslations;
 
-export const lumaGuidanceOverrides = defineLocalizedOverrides<'ja', LumaSourceCatalog>()(
-  expandLumaGuidanceTranslations(translations),
+export const lumaOverrides = defineLocalizedCatalog<'ja', LumaSourceCatalog>()(
+  expandLumaTranslations(translations),
 );

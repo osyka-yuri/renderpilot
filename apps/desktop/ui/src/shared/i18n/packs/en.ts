@@ -6,7 +6,7 @@ export const enPack = {
   locale: 'en',
   contractVersion: MESSAGE_CONTRACT_VERSION,
   messages: en,
-  dynamicCatalogs: [],
+  externalMessages: {},
 } as const satisfies LocalePack;
 
 export default enPack;

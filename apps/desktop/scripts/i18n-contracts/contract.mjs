@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 
-export const CONTRACT_SCHEMA_VERSION = 1;
+export const CONTRACT_SCHEMA_VERSION = 2;
 
 export function createSemanticContract({ english, pluralCategories, luma, nvapi }) {
   return {
     schemaVersion: CONTRACT_SCHEMA_VERSION,
     english,
     pluralCategories,
-    dynamic: {
-      luma: Object.fromEntries(luma.ids.map((id) => [id, []])),
-      nvapi: nvapi.messages,
+    externalSources: {
+      luma: luma.sourceCatalog,
+      nvapi: nvapi.sourceCatalog,
     },
   };
 }

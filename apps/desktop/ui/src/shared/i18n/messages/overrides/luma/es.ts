@@ -1,7 +1,7 @@
-import { defineLocalizedOverrides } from '../../contract';
+import { defineLocalizedCatalog } from '../../contract';
 import {
-  expandLumaGuidanceTranslations,
-  type LumaGuidanceTranslations,
+  expandLumaTranslations,
+  type LumaMessageTranslations,
   type LumaSourceCatalog,
 } from './schema';
 
@@ -17,6 +17,7 @@ const translations = {
   edithFinchExit:
     'DLAA funciona sin cambios adicionales, pero es posible que el juego no se cierre por completo al salir. OptiScaler puede resolverlo.',
   dlssNoHdr: 'Solo DLSS (sin HDR por ahora).',
+  fallout4DlssGtaoOnly: 'Actualmente, este perfil solo admite DLSS y GTAO.',
   kh3Txaa: 'Antes, selecciona «TXAA» en el juego.',
   aceFxaaHigh: 'Antes, selecciona AA «FXAA High» en el juego.',
   tetrisFxaa6: 'Antes, selecciona AA «FXAA:6» y escala de renderizado al 100 % en el juego.',
@@ -51,7 +52,6 @@ const translations = {
   kakarotBdzKfix:
     'En los ajustes del juego, selecciona TAA y usa BDZKFix para la versión Legacy o su fork actualizado para la versión HD.',
   preyData: 'Mantén los archivos de datos adicionales de Luma para Prey junto al add-on.',
-  bundledDlss: 'Luma reserva la biblioteca DLSS incluida con el juego y la restaura al eliminarse.',
   daymareOptiscalerUuu:
     'Luma funciona por sí solo, pero se bloquea al combinarse con OptiScaler o UUU.',
   smtLyallFix: "Se necesita Lyall's Fix para forzar TAA.",
@@ -73,8 +73,24 @@ const translations = {
   heavyRainSteamUltrawide:
     'El modo ultrapanorámico podría funcionar solo al iniciar mediante Steam.',
   metroBorderless: 'Usa el modo ventana sin bordes.',
-} as const satisfies LumaGuidanceTranslations;
+  dlssOnlyNoHdr:
+    'Este perfil solo añade compatibilidad con DLSS; HDR no es compatible actualmente.',
+  biomutantAaHighOrMax: 'En los ajustes del juego, usa AA «High» o «Max».',
+  blairWitchTxaaFull: 'En los ajustes del juego, usa TXAA y escala de resolución «Full».',
+  flickeringIssues: 'Parece haber problemas de parpadeo.',
+  brambleEpicVram:
+    'La calidad Epic puede llenar progresivamente la VRAM y provocar tirones. Evita cambiar repetidamente entre High y Epic mientras Luma esté activo.',
+  daemonDlaaReset:
+    'Cargar un nivel o cambiar los ajustes gráficos fuerza r.TemporalAASamples=1 y desactiva DLAA.',
+  easyAntiCheatBlocked: 'Bloqueado por Easy Anti-Cheat.',
+  echoDlaaAutoExposure:
+    'DLAA deja de funcionar tras el primer nivel. Con AutoExposure: On, las fuentes de luz parpadean; con AutoExposure: Off, el antialiasing empeora mucho.',
+  dx11BootFailure: 'No se inicia con DX11.',
+  rainCodeAaHighMaxResolution:
+    'En los ajustes del juego, usa calidad de AA «High» y pon el control de resolución al máximo.',
+  roboquestTaaQuality3: 'En los ajustes del juego, usa TAA y calidad «3».',
+} as const satisfies LumaMessageTranslations;
 
-export const lumaGuidanceOverrides = defineLocalizedOverrides<'es', LumaSourceCatalog>()(
-  expandLumaGuidanceTranslations(translations),
+export const lumaOverrides = defineLocalizedCatalog<'es', LumaSourceCatalog>()(
+  expandLumaTranslations(translations),
 );

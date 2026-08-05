@@ -12,7 +12,7 @@ type TestMessage = {
 export function pack(
   locale: Locale,
   messages: TestMessage,
-  dynamicCatalogs: LocalePack['dynamicCatalogs'] = [],
+  externalMessages: LocalePack['externalMessages'] = {},
 ): LocalePack {
   return {
     locale,
@@ -21,7 +21,7 @@ export function pack(
       'nav.games': messages.nav,
       ...(messages.dynamic ? { 'dynamic.key': messages.dynamic } : {}),
     },
-    dynamicCatalogs,
+    externalMessages,
   };
 }
 

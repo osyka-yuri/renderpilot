@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 2,
+  "nvidiaFamilyTerms": {
+    "ru": {
+      "superResolution": "Super Resolution",
+      "frameGeneration": "Frame Generation",
+      "multiFrameGeneration": "Multi Frame Generation",
+      "rayReconstruction": "Ray Reconstruction"
+    },
+    "de": {
+      "superResolution": "Superhohe Auflösung",
+      "frameGeneration": "Frame-Erstellung",
+      "multiFrameGeneration": "Multi Frame Generation",
+      "rayReconstruction": "Strahlenrekonstruktion"
+    },
+    "es": {
+      "superResolution": "Superresolución",
+      "frameGeneration": "Generación de fotogramas",
+      "multiFrameGeneration": "Generación de fotogramas múltiples",
+      "rayReconstruction": "Reconstrucción de rayos"
+    },
+    "fr": {
+      "superResolution": "Super Résolution",
+      "frameGeneration": "Génération d’images",
+      "multiFrameGeneration": "Génération multi-images",
+      "rayReconstruction": "Reconstruction de rayons"
+    },
+    "ja": {
+      "superResolution": "超解像度",
+      "frameGeneration": "フレーム生成",
+      "multiFrameGeneration": "マルチフレーム生成",
+      "rayReconstruction": "レイ再構成"
+    },
+    "zh-Hans": {
+      "superResolution": "超分辨率",
+      "frameGeneration": "帧生成",
+      "multiFrameGeneration": "多帧生成",
+      "rayReconstruction": "光线重建"
+    },
+    "zh-Hant": {
+      "superResolution": "超解析度",
+      "frameGeneration": "畫格生成",
+      "multiFrameGeneration": "多畫格生成",
+      "rayReconstruction": "光線重建"
+    }
+  },
+  "nvidiaSources": {
+    "ru": "https://www.nvidia.com/ru-ru/geforce/technologies/dlss/",
+    "de": "https://www.nvidia.com/de-de/geforce/technologies/dlss/",
+    "es": "https://www.nvidia.com/es-es/geforce/technologies/dlss/",
+    "fr": "https://www.nvidia.com/fr-fr/geforce/technologies/dlss/",
+    "ja": "https://www.nvidia.com/ja-jp/geforce/technologies/dlss/",
+    "zh-Hans": "https://www.nvidia.cn/geforce/technologies/dlss/",
+    "zh-Hant": "https://www.nvidia.com/zh-tw/geforce/technologies/dlss/"
+  },
+  "launcherProductNames": {
+    "steam": "Steam",
+    "gog": "GOG Galaxy",
+    "epic": "Epic Games Launcher",
+    "ea": "EA app",
+    "ubisoft": "Ubisoft Connect"
+  },
+  "protectedTokens": [
+    "NVIDIA",
+    "DLSS",
+    "DLAA",
+    "FSR",
+    "HDR",
+    "TAA",
+    "FXAA",
+    "TXAA",
+    "VRAM",
+    "CNN",
+    "GTAO",
+    "OptiScaler",
+    "UUU",
+    "Arise-SDK",
+    "Easy Anti-Cheat",
+    "Gold Filter Restoration",
+    "Xbox",
+    "DX9",
+    "DX11",
+    "Engine.ini",
+    "-dx11",
+    "-nod3d9ex",
+    "r.motionblur.amount=0",
+    "r.TemporalAASamples=1",
+    "[SystemSettings]",
+    "r.DefaultFeature.AntiAliasing=2",
+    "r.PostProcessAAQuality=4",
+    "UseUE4TAA = true",
+    "AutoExposure: On",
+    "AutoExposure: Off",
+    "AutoExposure:On",
+    "High Anti-aliasing Type",
+    "Temporal Anti Aliasing"
+  ],
+  "technicalOnlyStaticKeys": [
+    "gameDetails.luma.channel.nightly",
+    "gameDetails.luma.channel.stable",
+    "gameDetails.luma.features.dlssFsr",
+    "gameDetails.luma.features.hdr",
+    "gameDetails.luma.generic.engineUnity",
+    "gameDetails.luma.generic.engineUnreal",
+    "gameDetails.luma.title",
+    "gameDetails.renodx.channel.nightly",
+    "gameDetails.renodx.channel.stable",
+    "gameDetails.renodx.component.dlssFix",
+    "gameDetails.renodx.title",
+    "libraries.documents.formatPdf",
+    "settings.catalog.source.gog.title",
+    "settings.catalog.source.steam.title",
+    "settings.catalog.source.steamgriddb.title",
+    "settings.language.de",
+    "settings.language.en",
+    "settings.language.es",
+    "settings.language.fr",
+    "settings.tabs.nvidia",
+    "settings.tabs.renodx"
+  ],
+  "nvapiVerbatimValues": [
+    "DLAA",
+    "40%",
+    "45%",
+    "60%",
+    "70%",
+    "85%",
+    "90%",
+    "100% (DLAA)",
+    "2x",
+    "3x",
+    "4x",
+    "5x",
+    "6x",
+    "60 FPS",
+    "72 FPS",
+    "90 FPS",
+    "100 FPS",
+    "120 FPS",
+    "144 FPS",
+    "165 FPS",
+    "175 FPS",
+    "180 FPS",
+    "200 FPS",
+    "240 FPS",
+    "280 FPS",
+    "360 FPS",
+    "480 FPS",
+    "500 FPS"
+  ],
+  "nvapiSemanticTranslations": {
+    "ru": {
+      "Render Preset": "Пресет рендеринга",
+      "Forced Model Preset Profile": "Принудительный профиль пресета модели",
+      "Forced Quality Level": "Принудительный уровень качества",
+      "Forced Scaling Ratio": "Принудительный коэффициент масштабирования",
+      "Enable DLL Override": "Включить переопределение DLL",
+      "Off": "Выкл.",
+      "N/A": "Н/Д",
+      "Off (game default)": "Выкл. (как в игре)",
+      "Recommended": "Рекомендуется",
+      "Custom": "Пользовательский",
+      "Preset G (unused)": "Пресет G (не используется)"
+    },
+    "de": {
+      "Render Preset": "Rendering-Preset",
+      "Forced Model Preset Profile": "Erzwungenes Modell-Preset-Profil",
+      "Forced Quality Level": "Erzwungene Qualitätsstufe",
+      "Forced Scaling Ratio": "Erzwungenes Skalierungsverhältnis",
+      "Enable DLL Override": "DLL-Überschreibung aktivieren",
+      "Off": "Aus",
+      "N/A": "k. A.",
+      "Off (game default)": "Aus (Spielstandard)",
+      "Recommended": "Empfohlen",
+      "Custom": "Benutzerdefiniert",
+      "Preset G (unused)": "Voreinstellung G (nicht verwendet)"
+    },
+    "es": {
+      "Render Preset": "Preajuste de renderizado",
+      "Forced Model Preset Profile": "Perfil de preajuste de modelo forzado",
+      "Forced Quality Level": "Nivel de calidad forzado",
+      "Forced Scaling Ratio": "Relación de escalado forzada",
+      "Enable DLL Override": "Activar sustitución de DLL",
+      "Off": "Desactivado",
+      "N/A": "No disponible",
+      "Off (game default)": "Desactivado (valor del juego)",
+      "Recommended": "Recomendado",
+      "Custom": "Personalizado",
+      "Preset G (unused)": "Preajuste G (no utilizado)"
+    },
+    "fr": {
+      "Render Preset": "Préréglage de rendu",
+      "Forced Model Preset Profile": "Profil de préréglage de modèle forcé",
+      "Forced Quality Level": "Niveau de qualité forcé",
+      "Forced Scaling Ratio": "Rapport de mise à l’échelle forcé",
+      "Enable DLL Override": "Activer le remplacement de DLL",
+      "Off": "Désactivé",
+      "N/A": "N/D",
+      "Off (game default)": "Désactivé (valeur du jeu)",
+      "Recommended": "Recommandé",
+      "Custom": "Personnalisé",
+      "Preset G (unused)": "Préréglage G (inutilisé)"
+    },
+    "ja": {
+      "Render Preset": "レンダリングプリセット",
+      "Forced Model Preset Profile": "モデルプリセットプロファイルを強制",
+      "Forced Quality Level": "品質レベルを強制",
+      "Forced Scaling Ratio": "スケーリング比率を強制",
+      "Enable DLL Override": "DLL オーバーライドを有効化",
+      "Off": "オフ",
+      "N/A": "該当なし",
+      "Off (game default)": "オフ（ゲームの既定値）",
+      "Recommended": "推奨",
+      "Custom": "カスタム",
+      "Preset G (unused)": "プリセット G（未使用）"
+    },
+    "zh-Hans": {
+      "Render Preset": "渲染预设",
+      "Forced Model Preset Profile": "强制模型预设配置文件",
+      "Forced Quality Level": "强制质量级别",
+      "Forced Scaling Ratio": "强制缩放比例",
+      "Enable DLL Override": "开启 DLL 覆盖",
+      "Off": "关闭",
+      "N/A": "不适用",
+      "Off (game default)": "关闭（游戏默认值）",
+      "Recommended": "推荐",
+      "Custom": "自定义",
+      "Preset G (unused)": "预设 G（未使用）"
+    },
+    "zh-Hant": {
+      "Render Preset": "算繪預設集",
+      "Forced Model Preset Profile": "強制模型預設集設定檔",
+      "Forced Quality Level": "強制品質等級",
+      "Forced Scaling Ratio": "強制縮放比例",
+      "Enable DLL Override": "啟用 DLL 覆寫",
+      "Off": "停用",
+      "N/A": "不適用",
+      "Off (game default)": "停用（遊戲預設值）",
+      "Recommended": "建議",
+      "Custom": "自訂",
+      "Preset G (unused)": "預設集 G（未使用）"
+    }
+  },
+  "localeTypography": {
+    "ru": {
+      "quotationMarks": { "open": "«", "close": "»", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "„", "“", "”", "「", "」"],
+      "forbiddenPunctuation": ["..."],
+      "sentenceTerminator": ".",
+      "requiredScript": "Cyrillic"
+    },
+    "de": {
+      "quotationMarks": { "open": "„", "close": "“", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "«", "»", "”", "「", "」"],
+      "forbiddenPunctuation": ["..."],
+      "sentenceTerminator": ".",
+      "requiredScript": null
+    },
+    "es": {
+      "quotationMarks": { "open": "«", "close": "»", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "„", "“", "”", "「", "」"],
+      "forbiddenPunctuation": ["..."],
+      "sentenceTerminator": ".",
+      "requiredScript": null
+    },
+    "fr": {
+      "quotationMarks": { "open": "«", "close": "»", "innerSpacing": true },
+      "forbiddenQuoteMarks": ["\"", "„", "“", "”", "「", "」"],
+      "forbiddenPunctuation": ["..."],
+      "sentenceTerminator": ".",
+      "requiredScript": null
+    },
+    "ja": {
+      "quotationMarks": { "open": "「", "close": "」", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "«", "»", "„", "“", "”"],
+      "forbiddenPunctuation": ["...", "——"],
+      "sentenceTerminator": "。",
+      "requiredScript": "Japanese"
+    },
+    "zh-Hans": {
+      "quotationMarks": { "open": "“", "close": "”", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "«", "»", "„", "「", "」"],
+      "forbiddenPunctuation": ["...", "——"],
+      "sentenceTerminator": "。",
+      "requiredScript": "Han"
+    },
+    "zh-Hant": {
+      "quotationMarks": { "open": "「", "close": "」", "innerSpacing": false },
+      "forbiddenQuoteMarks": ["\"", "«", "»", "„", "“", "”"],
+      "forbiddenPunctuation": ["...", "——"],
+      "sentenceTerminator": "。",
+      "requiredScript": "Han"
+    }
+  },
+  "chineseScriptRules": {
+    "zh-Hans": {
+      "forbiddenTerms": ["畫格", "解析度", "預設集", "驅動程式", "啟用", "停用"]
+    },
+    "zh-Hant": {
+      "forbiddenTerms": [
+        "插件",
+        "匹配",
+        "封禁",
+        "封號",
+        "全屏",
+        "訪問",
+        "單個",
+        "驅動器",
+        "快捷方式",
+        "批處理",
+        "列表",
+        "跟蹤",
+        "宿主",
+        "槽位",
+        "可執行檔案",
+        "重置",
+        "不可用",
+        "共享",
+        "帧",
+        "分辨率",
+        "预设",
+        "驱动程序",
+        "启用",
+        "禁用"
+      ]
+    }
+  }
+}

@@ -1,4 +1,9 @@
 import { analyzeMessageTemplate as analyzeSharedMessageTemplate } from '../../ui/src/shared/i18n/messages/template.ts';
+import {
+  ExternalContractValidationError,
+  projectSupportedNvapiCatalog,
+  validateLumaContract as validateLumaContractCore,
+} from '../external-contract-core.mjs';
 
 function fail(message) {
   throw new Error(`i18n contract generation failed: ${message}`);
@@ -58,11 +63,26 @@ function assertUniqueByCode(entries, context) {
   }
 }
 
-function assertExactKeys(value, allowedKeys, context) {
+function assertAllowedKeys(value, allowedKeys, context) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    fail(`${context} must be an object`);
+  }
   const unknownKeys = Object.keys(value).filter((key) => !allowedKeys.includes(key));
   if (unknownKeys.length > 0) {
     fail(`${context} contains unknown field ${JSON.stringify(unknownKeys[0])}`);
   }
+}
+
+function assertKeys(value, requiredKeys, optionalKeys, context) {
+  assertAllowedKeys(value, [...requiredKeys, ...optionalKeys], context);
+  const missingKeys = requiredKeys.filter((key) => !Object.hasOwn(value, key));
+  if (missingKeys.length > 0) {
+    fail(`${context} is missing field ${JSON.stringify(missingKeys[0])}`);
+  }
+}
+
+function assertExactKeys(value, keys, context) {
+  assertKeys(value, keys, [], context);
 }
 
 function isMachineCode(value) {
@@ -128,17 +148,10 @@ export function validateDesktopCommandErrorContract(value, english) {
   const commandErrors = {};
   const rustVariants = new Set();
   for (const error of value.commandErrors) {
-    assertExactKeys(
+    assertKeys(
       error,
-      [
-        'code',
-        'rustVariant',
-        'messageKey',
-        'severity',
-        'actions',
-        'reasonCodes',
-        'recoveryBundlePath',
-      ],
+      ['code', 'rustVariant', 'messageKey', 'severity', 'actions'],
+      ['reasonCodes', 'recoveryBundlePath'],
       `desktop command error ${error.code}`,
     );
     if (typeof error.rustVariant !== 'string' || !RUST_VARIANT_PATTERN.test(error.rustVariant)) {
@@ -317,42 +330,15 @@ export function validatePluralCategories(entries) {
   return sortRecord(categories);
 }
 
-function assertIdentifier(value, context) {
-  if (!/^[a-z][A-Za-z0-9]*$/.test(value)) {
-    fail(`${context} has invalid identifier ${JSON.stringify(value)}`);
-  }
-}
-
-function assertMessageId(value, prefix, context) {
-  if (
-    typeof value !== 'string' ||
-    !new RegExp(`^${prefix}\\.[a-z0-9-]+\\.[a-z0-9_]+$`).test(value)
-  ) {
-    fail(`${context} has invalid message ID ${JSON.stringify(value)}`);
-  }
-}
-
-export function validateLumaContract(entries) {
-  const groups = {};
-  const ids = new Set();
-  for (const [phrase, phraseIds] of entries) {
-    assertIdentifier(phrase, 'Luma phrase');
-    if (!Array.isArray(phraseIds) || phraseIds.length === 0) {
-      fail(`Luma phrase ${phrase} must contain at least one message ID`);
+export function validateLumaContract(value) {
+  try {
+    return validateLumaContractCore(value);
+  } catch (cause) {
+    if (cause instanceof ExternalContractValidationError) {
+      fail(cause.message);
     }
-    groups[phrase] = phraseIds.map((id) => {
-      assertMessageId(id, 'luma', `Luma phrase ${phrase}`);
-      if (ids.has(id)) {
-        fail(`duplicate Luma message ID ${id}`);
-      }
-      ids.add(id);
-      return id;
-    });
+    throw cause;
   }
-  if (Object.keys(groups).length === 0) {
-    fail('Luma contract must contain at least one phrase');
-  }
-  return { groups, ids: Array.from(ids).sort() };
 }
 
 function nonEmptyString(value, context) {
@@ -362,50 +348,235 @@ function nonEmptyString(value, context) {
   return value;
 }
 
-export function validateNvapiContract(settings) {
-  const sourceCatalog = {};
-  const messages = {};
-  const settingKeys = new Set();
+export function validateNvapiContract(value) {
+  try {
+    return projectSupportedNvapiCatalog(value);
+  } catch (cause) {
+    if (cause instanceof ExternalContractValidationError) {
+      fail(cause.message);
+    }
+    throw cause;
+  }
+}
 
-  const addMessage = (key, value) => {
-    sourceCatalog[key] = nonEmptyString(value, key);
-    messages[key] = messagePlaceholders(sourceCatalog[key], key);
-  };
-
-  for (const setting of settings) {
-    if (!setting || typeof setting !== 'object') {
-      fail('NVAPI setting must be an object');
-    }
-    const settingKey = nonEmptyString(setting.key, 'NVAPI setting key');
-    if (!/^[a-z0-9_]+$/.test(settingKey) || settingKeys.has(settingKey)) {
-      fail(`invalid or duplicate NVAPI setting key ${settingKey}`);
-    }
-    settingKeys.add(settingKey);
-    const prefix = `nvapi.${settingKey}`;
-    addMessage(`${prefix}.label`, setting.label);
-    if (setting.description !== undefined) {
-      addMessage(`${prefix}.description`, setting.description);
-    }
-    if (setting.values !== undefined && !Array.isArray(setting.values)) {
-      fail(`${settingKey}.values must be an array`);
-    }
-
-    const wires = new Set();
-    for (const option of setting.values ?? []) {
-      if (!option || typeof option !== 'object') {
-        fail(`${settingKey}.values must contain objects`);
+export function validateExternalCatalogBoundaries(english, luma, nvapi) {
+  const owners = [
+    ['English', Object.keys(english)],
+    ['Luma', Object.keys(luma.sourceCatalog)],
+    ['NVAPI', Object.keys(nvapi.sourceCatalog)],
+  ];
+  const seen = new Map();
+  for (const [owner, keys] of owners) {
+    for (const key of keys) {
+      const previous = seen.get(key);
+      if (previous !== undefined) {
+        fail(`message key ${key} is shared by ${previous} and ${owner}`);
       }
-      const wire = nonEmptyString(option.wire, `${settingKey}.value.wire`);
-      if (!/^[a-z0-9_]+$/.test(wire) || wires.has(wire)) {
-        fail(`invalid or duplicate wire value ${settingKey}.${wire}`);
-      }
-      wires.add(wire);
-      addMessage(`${prefix}.value.${wire}`, option.label);
+      seen.set(key, owner);
+    }
+  }
+}
+
+const NON_ENGLISH_LOCALES = ['ru', 'de', 'es', 'fr', 'ja', 'zh-Hans', 'zh-Hant'];
+const NVIDIA_FAMILY_TERM_KEYS = [
+  'superResolution',
+  'frameGeneration',
+  'multiFrameGeneration',
+  'rayReconstruction',
+];
+const REQUIRED_SCRIPT_VALUES = new Set([null, 'Cyrillic', 'Japanese', 'Han']);
+const LAUNCHER_KEYS = ['steam', 'gog', 'epic', 'ea', 'ubisoft'];
+
+function assertUniqueNonEmptyStrings(values, context) {
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    values.some((entry) => typeof entry !== 'string' || entry.trim() === '') ||
+    new Set(values).size !== values.length
+  ) {
+    fail(`${context} must contain unique non-empty strings`);
+  }
+}
+
+export function validateEditorialPolicy(value, { english, nvapi }) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('editorial policy must be an object');
+  }
+  assertExactKeys(
+    value,
+    [
+      'schemaVersion',
+      'nvidiaFamilyTerms',
+      'nvidiaSources',
+      'launcherProductNames',
+      'protectedTokens',
+      'technicalOnlyStaticKeys',
+      'nvapiVerbatimValues',
+      'nvapiSemanticTranslations',
+      'localeTypography',
+      'chineseScriptRules',
+    ],
+    'editorial policy',
+  );
+  if (value.schemaVersion !== 2) {
+    fail(`editorial policy has unsupported schemaVersion ${JSON.stringify(value.schemaVersion)}`);
+  }
+
+  for (const field of [
+    'nvidiaFamilyTerms',
+    'nvidiaSources',
+    'nvapiSemanticTranslations',
+    'localeTypography',
+  ]) {
+    if (!value[field] || typeof value[field] !== 'object' || Array.isArray(value[field])) {
+      fail(`editorial policy ${field} must be an object`);
+    }
+    assertExactKeys(value[field], NON_ENGLISH_LOCALES, `editorial policy ${field}`);
+  }
+  assertExactKeys(
+    value.launcherProductNames,
+    LAUNCHER_KEYS,
+    'editorial policy launcherProductNames',
+  );
+  for (const [launcher, productName] of Object.entries(value.launcherProductNames)) {
+    nonEmptyString(productName, `editorial policy launcher product ${launcher}`);
+  }
+  for (const locale of NON_ENGLISH_LOCALES) {
+    const terms = value.nvidiaFamilyTerms[locale];
+    assertExactKeys(terms, NVIDIA_FAMILY_TERM_KEYS, `editorial policy terms for ${locale}`);
+    for (const [key, term] of Object.entries(terms)) {
+      nonEmptyString(term, `editorial policy ${locale}.${key}`);
+    }
+    if (new Set(Object.values(terms)).size !== NVIDIA_FAMILY_TERM_KEYS.length) {
+      fail(`editorial policy NVIDIA family terms for ${locale} must be distinct`);
+    }
+    const nvidiaSource = nonEmptyString(
+      value.nvidiaSources[locale],
+      `editorial policy ${locale} NVIDIA source`,
+    );
+    let sourceUrl;
+    try {
+      sourceUrl = new URL(nvidiaSource);
+    } catch {
+      fail(`editorial policy ${locale} NVIDIA source must be a valid URL`);
+    }
+    if (
+      sourceUrl.protocol !== 'https:' ||
+      (sourceUrl.hostname !== 'www.nvidia.cn' && !sourceUrl.hostname.endsWith('.nvidia.com'))
+    ) {
+      fail(`editorial policy ${locale} NVIDIA source must use an official HTTPS URL`);
+    }
+    const typography = value.localeTypography[locale];
+    assertExactKeys(
+      typography,
+      [
+        'quotationMarks',
+        'forbiddenQuoteMarks',
+        'forbiddenPunctuation',
+        'sentenceTerminator',
+        'requiredScript',
+      ],
+      `editorial policy typography for ${locale}`,
+    );
+    assertExactKeys(
+      typography.quotationMarks,
+      ['open', 'close', 'innerSpacing'],
+      `editorial policy quotation marks for ${locale}`,
+    );
+    const openQuote = nonEmptyString(
+      typography.quotationMarks.open,
+      `editorial policy ${locale} opening quotation mark`,
+    );
+    const closeQuote = nonEmptyString(
+      typography.quotationMarks.close,
+      `editorial policy ${locale} closing quotation mark`,
+    );
+    if (openQuote === closeQuote || typeof typography.quotationMarks.innerSpacing !== 'boolean') {
+      fail(`editorial policy ${locale} quotation marks are invalid`);
+    }
+    assertUniqueNonEmptyStrings(
+      typography.forbiddenQuoteMarks,
+      `editorial policy ${locale} forbiddenQuoteMarks`,
+    );
+    if (
+      typography.forbiddenQuoteMarks.includes(openQuote) ||
+      typography.forbiddenQuoteMarks.includes(closeQuote)
+    ) {
+      fail(`editorial policy ${locale} forbids its approved quotation marks`);
+    }
+    assertUniqueNonEmptyStrings(
+      typography.forbiddenPunctuation,
+      `editorial policy ${locale} forbiddenPunctuation`,
+    );
+    nonEmptyString(typography.sentenceTerminator, `editorial policy ${locale} sentenceTerminator`);
+    if (!REQUIRED_SCRIPT_VALUES.has(typography.requiredScript)) {
+      fail(`editorial policy ${locale} has invalid requiredScript`);
     }
   }
 
-  return {
-    sourceCatalog: sortRecord(sourceCatalog),
-    messages: sortRecord(messages),
-  };
+  for (const [field, values] of [
+    ['protectedTokens', value.protectedTokens],
+    ['technicalOnlyStaticKeys', value.technicalOnlyStaticKeys],
+    ['nvapiVerbatimValues', value.nvapiVerbatimValues],
+  ]) {
+    assertUniqueNonEmptyStrings(values, `editorial policy ${field}`);
+  }
+
+  for (const key of value.technicalOnlyStaticKeys) {
+    if (!Object.hasOwn(english, key)) {
+      fail(`editorial policy technical-only static key is not in the English catalog: ${key}`);
+    }
+  }
+  for (const launcher of LAUNCHER_KEYS) {
+    const key = `gameDetails.luma.launchArgs.instructions.${launcher}`;
+    if (!Object.hasOwn(english, key)) {
+      fail(`editorial policy launcher key is not in the English catalog: ${key}`);
+    }
+  }
+
+  const nvapiSources = new Set(Object.values(nvapi.sourceCatalog));
+  for (const source of value.nvapiVerbatimValues) {
+    if (!nvapiSources.has(source)) {
+      fail(`editorial policy NVAPI verbatim value is not in the source catalog: ${source}`);
+    }
+  }
+
+  const semanticSources = Object.keys(value.nvapiSemanticTranslations[NON_ENGLISH_LOCALES[0]]);
+  assertUniqueNonEmptyStrings(semanticSources, 'editorial policy NVAPI semantic sources');
+  for (const source of semanticSources) {
+    if (!nvapiSources.has(source)) {
+      fail(`editorial policy NVAPI semantic source is not in the source catalog: ${source}`);
+    }
+    if (value.nvapiVerbatimValues.includes(source)) {
+      fail(`editorial policy NVAPI semantic source is also marked verbatim: ${source}`);
+    }
+  }
+  for (const locale of NON_ENGLISH_LOCALES) {
+    const translations = value.nvapiSemanticTranslations[locale];
+    assertExactKeys(
+      translations,
+      semanticSources,
+      `editorial policy NVAPI semantic translations for ${locale}`,
+    );
+    const localizedValues = Object.values(translations);
+    for (const [source, translation] of Object.entries(translations)) {
+      nonEmptyString(translation, `editorial policy ${locale} NVAPI translation for ${source}`);
+    }
+    if (new Set(localizedValues).size !== localizedValues.length) {
+      fail(`editorial policy NVAPI semantic translations for ${locale} must be distinct`);
+    }
+  }
+
+  assertExactKeys(
+    value.chineseScriptRules,
+    ['zh-Hans', 'zh-Hant'],
+    'editorial policy chineseScriptRules',
+  );
+  for (const locale of ['zh-Hans', 'zh-Hant']) {
+    const rule = value.chineseScriptRules[locale];
+    assertExactKeys(rule, ['forbiddenTerms'], `editorial policy ${locale} script rules`);
+    assertUniqueNonEmptyStrings(rule.forbiddenTerms, `editorial policy ${locale} forbiddenTerms`);
+  }
+
+  return value;
 }

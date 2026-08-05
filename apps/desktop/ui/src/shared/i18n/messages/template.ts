@@ -26,7 +26,7 @@ function isPlaceholderCharacter(character: string): boolean {
   );
 }
 
-/** Parses the authored `{name}` grammar shared by runtime and code generation. */
+/** Parses the authored `{name}` grammar shared by runtime and build-time tooling. */
 export function analyzeMessageTemplate(template: string): MessageTemplateAnalysis {
   const tokens: MessageTemplateToken[] = [];
   const placeholders: string[] = [];

@@ -57,9 +57,9 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.nvidia.global.systemWide': 'システム全体',
   'settings.nvidia.global.adminRequired':
     'これらの設定を変更するには、管理者としてアプリを再起動してください。',
-  'settings.nvidia.global.familySr': 'DLSS スーパーレゾリューション',
+  'settings.nvidia.global.familySr': 'DLSS 超解像度',
   'settings.nvidia.global.familyFg': 'DLSS フレーム生成',
-  'settings.nvidia.global.familyRr': 'DLSS レイ再構築',
+  'settings.nvidia.global.familyRr': 'DLSS レイ再構成',
   'settings.nvidia.unsupported.title': 'NVIDIA GPU が検出されませんでした',
   'settings.nvidia.unsupported.description':
     'これらの設定には対応する NVIDIA グラフィックスカードが必要です。',
@@ -124,7 +124,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'pageLoad.error.backToGames': 'ゲーム一覧に戻る',
 
   'games.addGame': 'ゲームを追加',
-  'games.addingGame': 'ゲームを追加中...',
+  'games.addingGame': 'ゲームを追加中…',
   'games.chooseInstallFolder': 'ゲームのインストールフォルダーを選択',
   'addGame.title': 'ゲームを追加',
   'addGame.cannotAddTitle': 'ゲームを追加できませんでした',
@@ -214,7 +214,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'games.search': 'ゲームを検索',
   'games.openFilters': 'フィルター',
   'games.openFiltersActive': 'フィルター（適用中）',
-  'games.loading': '読み込み中...',
+  'games.loading': '読み込み中…',
   'games.empty.title': 'ゲームが見つかりません',
   'games.empty.description': 'ゲームを追加するとダッシュボードに表示されます。',
   'games.filterEmpty.title': '一致する結果がありません',
@@ -376,7 +376,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
 
   'operations.title': '操作履歴',
   'operations.subtitleGame': '{title} のアクティビティ',
-  'operations.loading': '読み込み中...',
+  'operations.loading': '読み込み中…',
   'operations.empty': '履歴はまだありません',
   'operations.gameName': 'ゲーム',
   'operations.date': '日付',
@@ -610,7 +610,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.about.title': 'アップデート',
   'settings.about.description': 'アプリケーションのアップデートを確認します。',
   'settings.about.version.title': 'アプリのバージョン',
-  'settings.about.version.loading': '読み込み中...',
+  'settings.about.version.loading': '読み込み中…',
   'settings.about.checkForUpdates': 'アップデートを確認',
   'settings.about.updateInProgress': '更新中…',
   'settings.about.updateAvailable': 'アップデートがあります',
@@ -808,8 +808,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.renodx.component.addonFileInstall':
     'ファイルからインストール — アップデート追跡なし',
   'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
-  'gameDetails.renodx.component.dlssFixDesc': 'DLSS Frame Generation 使用時のちらつきを修正',
-  'gameDetails.renodx.component.dlssFixOffer': '利用可能 — DLSS Frame Generation のちらつきを防止',
+  'gameDetails.renodx.component.dlssFixDesc': 'DLSS フレーム生成使用時のちらつきを修正',
+  'gameDetails.renodx.component.dlssFixOffer': '利用可能 — DLSS フレーム生成のちらつきを防止',
   'gameDetails.renodx.component.dlssFixHint':
     'ReShade 全般で動作し、RenoDX 専用ではありません。ReShade をフレーム生成フレームではなくゲーム本来のフレームに描画させ、ゲームが Streamline を正しく実装している場合は DLSS（アップスケーリング）を ReShade から隠します。',
   'gameDetails.renodx.attribution': 'RenoDX by clshortfuse。',

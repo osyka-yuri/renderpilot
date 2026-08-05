@@ -80,7 +80,7 @@ describe('createLocalePackLoader', () => {
   it.each([
     {
       name: 'malformed shape',
-      candidate: { locale: 'ru', messages: {}, dynamicCatalogs: null },
+      candidate: { locale: 'ru', messages: {}, externalMessages: null },
     },
     {
       name: 'stale contract',

@@ -25,6 +25,13 @@ export type MessageValue = string | PluralMessage | SelectMessage;
 export type MessageDictionary = Readonly<Record<string, MessageValue>>;
 export type MessageOverrides = Readonly<Partial<Record<string, MessageValue>>>;
 
+export type ExternalMessage = Readonly<{
+  source: string;
+  translation: string;
+}>;
+
+export type ExternalMessageCatalog = Readonly<Partial<Record<string, ExternalMessage>>>;
+
 export const PLURAL_CATEGORIES = {
   en: ['one', 'other'],
   ru: ['one', 'few', 'many', 'other'],

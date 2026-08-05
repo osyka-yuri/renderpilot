@@ -264,15 +264,25 @@ describe('runtime coordinator integration', () => {
     expect(test.persistedModes).toEqual(['ru']);
   });
 
-  it('preserves dynamic catalog precedence inside the active pack', async () => {
+  it('preserves static precedence and requires an exact source for external messages', async () => {
     const test = createTestRuntime({
       loaders: {
         ru: () =>
           Promise.resolve(
-            pack('ru', { nav: 'Игры', dynamic: 'static wins' }, [
-              { 'dynamic.key': 'dynamic fallback' },
-              { 'other.key': 'dynamic value' },
-            ]),
+            pack(
+              'ru',
+              { nav: 'Игры', dynamic: 'static wins' },
+              {
+                'dynamic.key': {
+                  source: 'reviewed source',
+                  translation: 'external translation',
+                },
+                'other.key': {
+                  source: 'caller fallback',
+                  translation: 'dynamic value',
+                },
+              },
+            ),
           ),
       },
     });
@@ -287,6 +297,9 @@ describe('runtime coordinator integration', () => {
     expect(
       test.runtime.translateExternalMessage({ key: 'other.key', fallback: 'caller fallback' }),
     ).toBe('dynamic value');
+    expect(
+      test.runtime.translateExternalMessage({ key: 'other.key', fallback: 'changed source' }),
+    ).toBe('changed source');
     expect(
       test.runtime.translateExternalMessage({
         key: 'english.only',

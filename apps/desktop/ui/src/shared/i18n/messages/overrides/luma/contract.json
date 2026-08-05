@@ -1,207 +1,767 @@
 {
-  "sherlockDx11Performance": ["luma.sherlock-holmes-chapter-one.warning"],
-  "guiltyGearStriveAa": ["luma.guilty-gear-strive.warning"],
-  "manualLaunchArgument": [
-    "luma.abiotic-factor.launch_argument",
-    "luma.dead-island-2.launch_argument",
-    "luma.gylt.launch_argument",
-    "luma.hellblade-senuas-sacrifice.launch_argument",
-    "luma.life-is-strange-true-colors.launch_argument",
-    "luma.psychonauts-2.launch_argument",
-    "luma.redout.launch_argument",
-    "luma.redout-2.launch_argument",
-    "luma.the-ascent.launch_argument",
-    "luma.the-dark-pictures-man-of-medan.launch_argument",
-    "luma.witch-it.launch_argument",
-    "luma.sherlock-holmes-chapter-one.launch_argument",
-    "luma.song-of-nunu.launch_argument"
-  ],
-  "manualEngineIni": [
-    "luma.ace-combat-7.engine_ini",
-    "luma.ancestors-legacy.engine_ini",
-    "luma.circus-electrique.engine_ini",
-    "luma.cygni-all-guns-blazing.engine_ini",
-    "luma.dnf-duel.engine_ini",
-    "luma.dragon-quest-11-s.engine_ini",
-    "luma.just-die-already.engine_ini",
-    "luma.kingdom-hearts-3.engine_ini",
-    "luma.mothergunship.engine_ini",
-    "luma.project-wingman.engine_ini",
-    "luma.remnant-from-the-ashes.engine_ini",
-    "luma.styx-shards-of-darkness.engine_ini",
-    "luma.tekken-7.engine_ini",
-    "luma.tetris-effect-connected.engine_ini",
-    "luma.tribes-of-midgard.engine_ini",
-    "luma.warhammer-40000-boltgun.engine_ini",
-    "luma.what-remains-of-edith-finch.engine_ini"
-  ],
-  "publicMatchmaking": ["luma.cod-black-ops-3.warning"],
-  "edithFinchExit": ["luma.what-remains-of-edith-finch.compatibility"],
-  "dlssNoHdr": [
-    "luma.greedfall.warning",
-    "luma.batman-arkham-knight.warning",
-    "luma.deus-ex-mankind-divided.warning"
-  ],
-  "kh3Txaa": ["luma.kingdom-hearts-3.game_setting"],
-  "aceFxaaHigh": ["luma.ace-combat-7.game_setting"],
-  "tetrisFxaa6": ["luma.tetris-effect-connected.game_setting"],
-  "projectWingmanFxaa": ["luma.project-wingman.game_setting"],
-  "dnfCharacterSelection": ["luma.dnf-duel.game_setting"],
-  "tekkenNoD3D9Ex": ["luma.tekken-7.game_setting"],
-  "scornOptiscaler": ["luma.scorn.warning"],
-  "hatsuneExclusiveFullscreen": ["luma.hatsune-miku-project-diva-mega-mix-plus.warning"],
-  "deadlineUltra": ["luma.deadline-delivery.game_setting"],
-  "filamentAaHigh": ["luma.filament.game_setting"],
-  "aaHigh": ["luma.kao-the-kangaroo.game_setting", "luma.submerged-hidden-depths.game_setting"],
-  "mutantMotionBlur": ["luma.mutant-year-zero-road-to-eden.game_setting"],
-  "supralandTaa": ["luma.supraland.game_setting"],
-  "scarletNexusTxaa": ["luma.scarlet-nexus.game_setting"],
-  "closeToSunAa4x": ["luma.close-to-the-sun.game_setting"],
-  "darksidersAaEpic": ["luma.darksiders-3.game_setting"],
-  "codeVeinAaHighest": ["luma.code-vein.game_setting"],
-  "orcsAaHigh": ["luma.orcs-must-die-3.game_setting"],
-  "clashAaVeryHigh": ["luma.clash-artifacts-of-chaos.game_setting"],
-  "vampyrTxaa6x": ["luma.vampyr.game_setting"],
-  "crashAaMedium": ["luma.crash-bandicoot-4.game_setting"],
-  "callSeaEpic": ["luma.call-of-the-sea.game_setting"],
-  "spiritNorthUltra": ["luma.spirit-of-the-north.game_setting"],
-  "goatHighAa": ["luma.goat-simulator-3.game_setting"],
-  "crabHighAntialiasing": ["luma.crab-champions.game_setting"],
-  "spyroHighTaa": ["luma.spyro-reignited-trilogy.game_setting"],
-  "dieYoungTaa": ["luma.die-young.game_setting"],
-  "kakarotBdzKfix": ["luma.dragon-ball-z-kakarot.game_setting"],
-  "preyData": ["luma.prey-2017.prey_extra_data"],
-  "bundledDlss": [
-    "luma.cod-black-ops-3.bundled_dlss",
-    "luma.dishonored-2.bundled_dlss",
-    "luma.final-fantasy-7-remake.bundled_dlss",
-    "luma.granblue-fantasy-relink.bundled_dlss",
-    "luma.greedfall.bundled_dlss",
-    "luma.just-cause-3.bundled_dlss",
-    "luma.mafia-3.bundled_dlss",
-    "luma.persona-5-royal.bundled_dlss",
-    "luma.prey-2017.bundled_dlss",
-    "luma.watch-dogs-2.bundled_dlss",
-    "luma.quantum-break.bundled_dlss",
-    "luma.mass-effect-andromeda.bundled_dlss",
-    "luma.abiotic-factor.bundled_dlss",
-    "luma.abzu.bundled_dlss",
-    "luma.ace-combat-7.bundled_dlss",
-    "luma.agony-unrated.bundled_dlss",
-    "luma.alchemy-garden.bundled_dlss",
-    "luma.aliens-fireteam-elite.bundled_dlss",
-    "luma.ancestors-the-humankind-odyssey.bundled_dlss",
-    "luma.ancestors-legacy.bundled_dlss",
-    "luma.ashen.bundled_dlss",
-    "luma.bloodstained-ritual-of-the-night.bundled_dlss",
-    "luma.call-of-the-sea.bundled_dlss",
-    "luma.chess-ultra.bundled_dlss",
-    "luma.circus-electrique.bundled_dlss",
-    "luma.code-vein.bundled_dlss",
-    "luma.coral-island.bundled_dlss",
-    "luma.crab-champions.bundled_dlss",
-    "luma.crash-bandicoot-4.bundled_dlss",
-    "luma.clash-artifacts-of-chaos.bundled_dlss",
-    "luma.close-to-the-sun.bundled_dlss",
-    "luma.cygni-all-guns-blazing.bundled_dlss",
-    "luma.darksiders-3.bundled_dlss",
-    "luma.daymare-1998.bundled_dlss",
-    "luma.dead-island-2.bundled_dlss",
-    "luma.deadline-delivery.bundled_dlss",
-    "luma.desolate.bundled_dlss",
-    "luma.devils-hunt.bundled_dlss",
-    "luma.die-young.bundled_dlss",
-    "luma.dnf-duel.bundled_dlss",
-    "luma.dragon-ball-z-kakarot.bundled_dlss",
-    "luma.dragon-quest-11-s.bundled_dlss",
-    "luma.eriksholm-the-stolen-dream.bundled_dlss",
-    "luma.filament.bundled_dlss",
-    "luma.ghostrunner.bundled_dlss",
-    "luma.goat-simulator-3.bundled_dlss",
-    "luma.grounded.bundled_dlss",
-    "luma.guilty-gear-strive.bundled_dlss",
-    "luma.gylt.bundled_dlss",
-    "luma.hellblade-senuas-sacrifice.bundled_dlss",
-    "luma.it-takes-two.bundled_dlss",
-    "luma.just-die-already.bundled_dlss",
-    "luma.kao-the-kangaroo.bundled_dlss",
-    "luma.kingdom-hearts-3.bundled_dlss",
-    "luma.layers-of-fear-2.bundled_dlss",
-    "luma.life-is-strange-2.bundled_dlss",
-    "luma.life-is-strange-true-colors.bundled_dlss",
-    "luma.little-nightmares.bundled_dlss",
-    "luma.maneater.bundled_dlss",
-    "luma.mothergunship.bundled_dlss",
-    "luma.mordhau.bundled_dlss",
-    "luma.mutant-year-zero-road-to-eden.bundled_dlss",
-    "luma.orcs-must-die-3.bundled_dlss",
-    "luma.project-wingman.bundled_dlss",
-    "luma.psychonauts-2.bundled_dlss",
-    "luma.redeemer-enhanced-edition.bundled_dlss",
-    "luma.redout.bundled_dlss",
-    "luma.redout-2.bundled_dlss",
-    "luma.relicta.bundled_dlss",
-    "luma.remnant-from-the-ashes.bundled_dlss",
-    "luma.ruiner.bundled_dlss",
-    "luma.scarlet-nexus.bundled_dlss",
-    "luma.scorn.bundled_dlss",
-    "luma.selfloss.bundled_dlss",
-    "luma.shin-megami-tensei-5-vengeance.bundled_dlss",
-    "luma.shenmue-3.bundled_dlss",
-    "luma.snake-pass.bundled_dlss",
-    "luma.spirit-of-the-north.bundled_dlss",
-    "luma.spyro-reignited-trilogy.bundled_dlss",
-    "luma.star-wars-jedi-fallen-order.bundled_dlss",
-    "luma.state-of-decay-2.bundled_dlss",
-    "luma.steel-rats.bundled_dlss",
-    "luma.stray.bundled_dlss",
-    "luma.styx-shards-of-darkness.bundled_dlss",
-    "luma.submerged-hidden-depths.bundled_dlss",
-    "luma.succubus.bundled_dlss",
-    "luma.supraland.bundled_dlss",
-    "luma.tales-of-arise.bundled_dlss",
-    "luma.tandem-a-tale-of-shadows.bundled_dlss",
-    "luma.tekken-7.bundled_dlss",
-    "luma.tell-me-why.bundled_dlss",
-    "luma.tetris-effect-connected.bundled_dlss",
-    "luma.the-ascent.bundled_dlss",
-    "luma.the-awesome-adventures-of-captain-spirit.bundled_dlss",
-    "luma.the-dark-pictures-man-of-medan.bundled_dlss",
-    "luma.the-gunk.bundled_dlss",
-    "luma.the-pathless.bundled_dlss",
-    "luma.the-sinking-city.bundled_dlss",
-    "luma.tiny-tinas-wonderlands.bundled_dlss",
-    "luma.trek-to-yomi.bundled_dlss",
-    "luma.tribes-of-midgard.bundled_dlss",
-    "luma.tyrants-realm.bundled_dlss",
-    "luma.vampyr.bundled_dlss",
-    "luma.warhammer-40000-boltgun.bundled_dlss",
-    "luma.weird-west.bundled_dlss",
-    "luma.what-remains-of-edith-finch.bundled_dlss",
-    "luma.witch-it.bundled_dlss",
-    "luma.sherlock-holmes-chapter-one.bundled_dlss",
-    "luma.song-of-nunu.bundled_dlss",
-    "luma.batman-arkham-knight.bundled_dlss",
-    "luma.blue-reflection-second-light.bundled_dlss",
-    "luma.deus-ex-mankind-divided.bundled_dlss",
-    "luma.fallout-4.bundled_dlss",
-    "luma.kingdom-come-deliverance.bundled_dlss",
-    "luma.metaphor-refantazio.bundled_dlss",
-    "luma.monster-hunter-world.bundled_dlss",
-    "luma.mortal-kombat-11.bundled_dlss",
-    "luma.the-evil-within-2.bundled_dlss"
-  ],
-  "daymareOptiscalerUuu": ["luma.daymare-1998.compatibility"],
-  "smtLyallFix": ["luma.shin-megami-tensei-5-vengeance.warning"],
-  "deusExBorisEnb": ["luma.deus-ex-human-revolution.compatibility"],
-  "xboxStore": ["luma.inside.compatibility", "luma.lara-croft-temple-of-osiris.compatibility"],
-  "massEffectNativeAa": ["luma.mass-effect-andromeda.compatibility"],
-  "metaphorNativeAa": ["luma.metaphor-refantazio.compatibility"],
-  "itTakesTwoTitle": ["luma.it-takes-two.warning"],
-  "talesAriseSdk": ["luma.tales-of-arise.warning"],
-  "metroWindowed": ["luma.metro-2033-redux.warning"],
-  "edithFinch4k": ["luma.what-remains-of-edith-finch.warning"],
-  "sinkingCityOriginal": ["luma.the-sinking-city.warning"],
-  "heavyRainSteamUltrawide": ["luma.heavy-rain.warning"],
-  "metroBorderless": ["luma.metro-2033-redux.windowed_borderless_only"]
+  "schemaVersion": 1,
+  "phrases": [
+    {
+      "key": "sherlockDx11Performance",
+      "sourceText": "-dx11 launch argument Issues Poor CPU performance in DX11 mode. DLAA with AutoExposure:On have jagged edges on grass.",
+      "messages": [
+        {
+          "id": "luma.sherlock-holmes-chapter-one.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "guiltyGearStriveAa",
+      "sourceText": "AA does not work in character selection screen. In-game: AA \"Temporal Anti Aliasing\" Modify Engine.ini [SystemSettings] r.DefaultFeature.AntiAliasing=2 r.PostProcessAAQuality=4",
+      "messages": [
+        {
+          "id": "luma.guilty-gear-strive.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "manualLaunchArgument",
+      "sourceText": "Add this launch argument manually.",
+      "messages": [
+        {
+          "id": "luma.abiotic-factor.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.dead-island-2.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.gylt.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.hellblade-senuas-sacrifice.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.life-is-strange-true-colors.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.psychonauts-2.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.redout.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.redout-2.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.the-ascent.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.the-dark-pictures-man-of-medan.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.witch-it.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.sherlock-holmes-chapter-one.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.song-of-nunu.launch_argument",
+          "context": "guidance.launch_argument"
+        },
+        {
+          "id": "luma.littlenightmaresenhancededition.launch_argument",
+          "context": "guidance.launch_argument"
+        }
+      ]
+    },
+    {
+      "key": "manualEngineIni",
+      "sourceText": "Apply the following settings manually in Engine.ini.",
+      "messages": [
+        {
+          "id": "luma.ace-combat-7.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.ancestors-legacy.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.circus-electrique.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.cygni-all-guns-blazing.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.dnf-duel.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.dragon-quest-11-s.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.just-die-already.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.kingdom-hearts-3.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.mothergunship.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.project-wingman.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.remnant-from-the-ashes.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.styx-shards-of-darkness.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.tekken-7.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.tetris-effect-connected.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.tribes-of-midgard.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.warhammer-40000-boltgun.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.what-remains-of-edith-finch.engine_ini",
+          "context": "guidance.engine_ini"
+        }
+      ]
+    },
+    {
+      "key": "publicMatchmaking",
+      "sourceText": "Avoid official public matchmaking while Luma is installed. This may result in a ban.",
+      "messages": [
+        {
+          "id": "luma.cod-black-ops-3.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "edithFinchExit",
+      "sourceText": "DLAA works without extra changes, but the game may not fully close after exit. OptiScaler can resolve the exit issue.",
+      "messages": [
+        {
+          "id": "luma.what-remains-of-edith-finch.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "dlssNoHdr",
+      "sourceText": "DLSS only (no HDR atm)",
+      "messages": [
+        {
+          "id": "luma.greedfall.warning",
+          "context": "guidance.warning"
+        },
+        {
+          "id": "luma.batman-arkham-knight.warning",
+          "context": "guidance.warning"
+        },
+        {
+          "id": "luma.deus-ex-mankind-divided.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "fallout4DlssGtaoOnly",
+      "sourceText": "This profile currently supports only DLSS and GTAO.",
+      "messages": [
+        {
+          "id": "luma.fallout-4.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "kh3Txaa",
+      "sourceText": "Follow this in-game prerequisite: \"TXAA\".",
+      "messages": [
+        {
+          "id": "luma.kingdom-hearts-3.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "aceFxaaHigh",
+      "sourceText": "Follow this in-game prerequisite: AA \"FXAA High\".",
+      "messages": [
+        {
+          "id": "luma.ace-combat-7.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "tetrisFxaa6",
+      "sourceText": "Follow this in-game prerequisite: AA \"FXAA:6\" and Rendering Scale 100%.",
+      "messages": [
+        {
+          "id": "luma.tetris-effect-connected.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "projectWingmanFxaa",
+      "sourceText": "Follow this in-game prerequisite: AA \"FXAA\".",
+      "messages": [
+        {
+          "id": "luma.project-wingman.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "dnfCharacterSelection",
+      "sourceText": "Follow this in-game prerequisite: AA does not work in character selection screen.",
+      "messages": [
+        {
+          "id": "luma.dnf-duel.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "tekkenNoD3D9Ex",
+      "sourceText": "Follow this in-game prerequisite: Use -nod3d9ex launch argument.",
+      "messages": [
+        {
+          "id": "luma.tekken-7.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "scornOptiscaler",
+      "sourceText": "Has native support of FSR 2.1, so DLSS or any other upscaler can be added via OptiScaler.",
+      "messages": [
+        {
+          "id": "luma.scorn.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "hatsuneExclusiveFullscreen",
+      "sourceText": "If bugged, don't use Exclusive Fullscreen. Press (ALT + ENTER) to exit it.",
+      "messages": [
+        {
+          "id": "luma.hatsune-miku-project-diva-mega-mix-plus.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "deadlineUltra",
+      "sourceText": "In the game settings, use: \"Ultra\".",
+      "messages": [
+        {
+          "id": "luma.deadline-delivery.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "filamentAaHigh",
+      "sourceText": "In the game settings, use: AA \"High\" or \"Very High\".",
+      "messages": [
+        {
+          "id": "luma.filament.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "aaHigh",
+      "sourceText": "In the game settings, use: AA \"High\".",
+      "messages": [
+        {
+          "id": "luma.kao-the-kangaroo.game_setting",
+          "context": "guidance.game_setting"
+        },
+        {
+          "id": "luma.submerged-hidden-depths.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "mutantMotionBlur",
+      "sourceText": "In the game settings, use: AA \"High\". Recommended to use r.motionblur.amount=0 via Engine.ini for motion clarity.",
+      "messages": [
+        {
+          "id": "luma.mutant-year-zero-road-to-eden.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "supralandTaa",
+      "sourceText": "In the game settings, use: AA \"Temporal Anti Aliasing\".",
+      "messages": [
+        {
+          "id": "luma.supraland.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "scarletNexusTxaa",
+      "sourceText": "In the game settings, use: AA \"TXAA\".",
+      "messages": [
+        {
+          "id": "luma.scarlet-nexus.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "closeToSunAa4x",
+      "sourceText": "In the game settings, use: AA 4X.",
+      "messages": [
+        {
+          "id": "luma.close-to-the-sun.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "darksidersAaEpic",
+      "sourceText": "In the game settings, use: AA Epic.",
+      "messages": [
+        {
+          "id": "luma.darksiders-3.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "codeVeinAaHighest",
+      "sourceText": "In the game settings, use: AA Highest.",
+      "messages": [
+        {
+          "id": "luma.code-vein.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "orcsAaHigh",
+      "sourceText": "In the game settings, use: AA quality \"High\".",
+      "messages": [
+        {
+          "id": "luma.orcs-must-die-3.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "clashAaVeryHigh",
+      "sourceText": "In the game settings, use: AA quality \"Very High\".",
+      "messages": [
+        {
+          "id": "luma.clash-artifacts-of-chaos.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "vampyrTxaa6x",
+      "sourceText": "In the game settings, use: AA TXAA 6X.",
+      "messages": [
+        {
+          "id": "luma.vampyr.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "crashAaMedium",
+      "sourceText": "In the game settings, use: at least Medium (2x) Antialiasing Quality.",
+      "messages": [
+        {
+          "id": "luma.crash-bandicoot-4.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "callSeaEpic",
+      "sourceText": "In the game settings, use: Global quality \"Epic\".",
+      "messages": [
+        {
+          "id": "luma.call-of-the-sea.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "spiritNorthUltra",
+      "sourceText": "In the game settings, use: Graphics Quality \"Ultra\".",
+      "messages": [
+        {
+          "id": "luma.spirit-of-the-north.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "goatHighAa",
+      "sourceText": "In the game settings, use: High AA.",
+      "messages": [
+        {
+          "id": "luma.goat-simulator-3.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "crabHighAntialiasing",
+      "sourceText": "In the game settings, use: High Anti-aliasing Type.",
+      "messages": [
+        {
+          "id": "luma.crab-champions.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "spyroHighTaa",
+      "sourceText": "In the game settings, use: High TAA.",
+      "messages": [
+        {
+          "id": "luma.spyro-reignited-trilogy.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "dieYoungTaa",
+      "sourceText": "In the game settings, use: TAA \"High\" or \"Epic\".",
+      "messages": [
+        {
+          "id": "luma.die-young.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "kakarotBdzKfix",
+      "sourceText": "In the game settings, use: TAA + use BDZKFix for the Legacy version/its updated fork for the HD version.",
+      "messages": [
+        {
+          "id": "luma.dragon-ball-z-kakarot.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "preyData",
+      "sourceText": "Keep Prey's additional Luma data files together with the add-on.",
+      "messages": [
+        {
+          "id": "luma.prey-2017.prey_extra_data",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "daymareOptiscalerUuu",
+      "sourceText": "Luma works on its own but crashes when combined with OptiScaler or UUU.",
+      "messages": [
+        {
+          "id": "luma.daymare-1998.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "smtLyallFix",
+      "sourceText": "Needs Lyall's Fix to force TAA.",
+      "messages": [
+        {
+          "id": "luma.shin-megami-tensei-5-vengeance.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "deusExBorisEnb",
+      "sourceText": "Not compatible with Boris ENB (DX9). Works on DE and original Edition. The Gold Filter Restoration mod is redundant with this",
+      "messages": [
+        {
+          "id": "luma.deus-ex-human-revolution.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "xboxStore",
+      "sourceText": "Not compatible with Xbox Store version",
+      "messages": [
+        {
+          "id": "luma.inside.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.lara-croft-temple-of-osiris.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "massEffectNativeAa",
+      "sourceText": "Only DLAA / FSR 3 Native AA modes are available; this is not DLSS or FSR super-resolution.",
+      "messages": [
+        {
+          "id": "luma.mass-effect-andromeda.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "metaphorNativeAa",
+      "sourceText": "Only DLAA / FSR Native AA modes are available; this is not DLSS or FSR super-resolution.",
+      "messages": [
+        {
+          "id": "luma.metaphor-refantazio.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "itTakesTwoTitle",
+      "sourceText": "Only works on the title screen sequence",
+      "messages": [
+        {
+          "id": "luma.it-takes-two.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "talesAriseSdk",
+      "sourceText": "Requires Arise-SDK, UseUE4TAA = true",
+      "messages": [
+        {
+          "id": "luma.tales-of-arise.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "metroWindowed",
+      "sourceText": "Requires using windowed/borderless windowed modes, either via mods or setting fullscreen off in the game's config file.",
+      "messages": [
+        {
+          "id": "luma.metro-2033-redux.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "edithFinch4k",
+      "sourceText": "The game is broken at 4K. Set Effects to Low before applying the manual Engine.ini settings.",
+      "messages": [
+        {
+          "id": "luma.what-remains-of-edith-finch.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "sinkingCityOriginal",
+      "sourceText": "The original works. Remastered unknown.",
+      "messages": [
+        {
+          "id": "luma.the-sinking-city.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "heavyRainSteamUltrawide",
+      "sourceText": "Ultrawide might only work on Steam",
+      "messages": [
+        {
+          "id": "luma.heavy-rain.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "metroBorderless",
+      "sourceText": "Use borderless windowed mode.",
+      "messages": [
+        {
+          "id": "luma.metro-2033-redux.windowed_borderless_only",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "dlssOnlyNoHdr",
+      "sourceText": "This profile adds DLSS support only; HDR is not currently supported.",
+      "messages": [
+        {
+          "id": "luma.middle-earth-shadow-of-war.dlss-only",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "biomutantAaHighOrMax",
+      "sourceText": "In the game settings, use: AA \"High\" or \"Max\".",
+      "messages": [
+        {
+          "id": "luma.biomutant.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "blairWitchTxaaFull",
+      "sourceText": "In the game settings, use: TXAA, res. scalability \"Full\".",
+      "messages": [
+        {
+          "id": "luma.blairwitch.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "flickeringIssues",
+      "sourceText": "Seems to have flickering issues",
+      "messages": [
+        {
+          "id": "luma.borderlands-3.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "brambleEpicVram",
+      "sourceText": "Epic quality can steadily fill VRAM and cause stuttering. Avoid repeatedly switching between High and Epic while Luma is active.",
+      "messages": [
+        {
+          "id": "luma.bramblethemountainking.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "daemonDlaaReset",
+      "sourceText": "Loading a level or changing graphics settings forces r.TemporalAASamples=1 and disables DLAA.",
+      "messages": [
+        {
+          "id": "luma.daemonxmachina.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "easyAntiCheatBlocked",
+      "sourceText": "blocked by Easy Anti-Cheat",
+      "messages": [
+        {
+          "id": "luma.deceiveinc.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.hellletloose.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.narutotoborutoshinobistriker.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.predecessor.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "echoDlaaAutoExposure",
+      "sourceText": "DLAA stopped working after first level. While its working with AutoExposure: On light sources are strobing, with AutoExposure: Off antialiasing became much worse.",
+      "messages": [
+        {
+          "id": "luma.echo.warning",
+          "context": "guidance.warning"
+        }
+      ]
+    },
+    {
+      "key": "dx11BootFailure",
+      "sourceText": "Doesn't boot in DX11",
+      "messages": [
+        {
+          "id": "luma.littlenightmaresiii.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.persona-3reload.compatibility",
+          "context": "guidance.compatibility"
+        },
+        {
+          "id": "luma.theouterworldsspacerschoiceedition.compatibility",
+          "context": "guidance.compatibility"
+        }
+      ]
+    },
+    {
+      "key": "rainCodeAaHighMaxResolution",
+      "sourceText": "In the game settings, use: AA quality \"High\", resolution slider at max.",
+      "messages": [
+        {
+          "id": "luma.masterdetectivearchivesraincodeplus.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "roboquestTaaQuality3",
+      "sourceText": "In the game settings, use: TAA, Quality \"3\".",
+      "messages": [
+        {
+          "id": "luma.roboquest.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    }
+  ]
 }

@@ -7,8 +7,6 @@ import { formatGeneratedSource as formatSource } from './i18n-contracts/formatte
 import {
   parseEnglishSource,
   parseJsonSource,
-  parseLumaSource,
-  parseNvapiSource,
   parsePluralCategorySource,
 } from './i18n-contracts/parser.mjs';
 import {
@@ -18,6 +16,8 @@ import {
   validateDesktopCommandErrorContract,
   validateLumaContract,
   validateNvapiContract,
+  validateExternalCatalogBoundaries,
+  validateEditorialPolicy,
   validatePluralCategories,
 } from './i18n-contracts/validator.mjs';
 import {
@@ -42,6 +42,7 @@ const INPUTS = {
   ),
   desktopCommandErrors: path.join(REPOSITORY_ROOT, 'data/contracts/desktop-command-errors.json'),
   addGameWarnings: path.join(REPOSITORY_ROOT, 'data/contracts/add-game-warnings.json'),
+  editorialPolicy: path.join(APP_ROOT, 'data/i18n-editorial-policy.json'),
 };
 
 const OUTPUTS = {
@@ -87,7 +88,7 @@ export function parsePluralCategories(sourceText) {
 }
 
 export function parseLumaContract(value) {
-  return withInputContext(INPUTS.luma, () => validateLumaContract(parseLumaSource(value)));
+  return withInputContext(INPUTS.luma, () => validateLumaContract(value));
 }
 
 export function parseNvapiContract(value) {
@@ -107,10 +108,10 @@ export function parseAddGameWarningContract(value, english) {
 }
 
 function parseValidatedNvapiContract(value) {
-  return withInputContext(INPUTS.nvapi, () => validateNvapiContract(parseNvapiSource(value)));
+  return withInputContext(INPUTS.nvapi, () => validateNvapiContract(value));
 }
 
-export { analyzeMessageTemplate };
+export { analyzeMessageTemplate, validateExternalCatalogBoundaries };
 
 export function formatGeneratedSource(filePath, source, configPath = FORMAT_CONFIG) {
   return formatSource(filePath, source, configPath, APP_ROOT);
@@ -124,6 +125,7 @@ export async function createI18nContractOutputs() {
     nvapiText,
     desktopCommandErrorsText,
     addGameWarningsText,
+    editorialPolicyText,
   ] = await Promise.all([
     readFile(INPUTS.english, 'utf8'),
     readFile(INPUTS.messageModel, 'utf8'),
@@ -131,6 +133,7 @@ export async function createI18nContractOutputs() {
     readFile(INPUTS.nvapi, 'utf8'),
     readFile(INPUTS.desktopCommandErrors, 'utf8'),
     readFile(INPUTS.addGameWarnings, 'utf8'),
+    readFile(INPUTS.editorialPolicy, 'utf8'),
   ]);
 
   const english = parseEnglishContract(englishText);
@@ -147,6 +150,10 @@ export async function createI18nContractOutputs() {
     withInputContext(INPUTS.addGameWarnings, () => parseJsonSource(addGameWarningsText)),
     english,
   );
+  const editorialPolicy = withInputContext(INPUTS.editorialPolicy, () =>
+    validateEditorialPolicy(parseJsonSource(editorialPolicyText), { english, nvapi }),
+  );
+  validateExternalCatalogBoundaries(english, luma, nvapi);
   const contract = createSemanticContract({
     english,
     pluralCategories,
@@ -159,7 +166,14 @@ export async function createI18nContractOutputs() {
       [
         [OUTPUTS.contractVersion, renderContractVersion(createContractVersion(contract))],
         [OUTPUTS.luma, renderLumaContract(luma)],
-        [OUTPUTS.nvapi, renderNvapiContract(nvapi.sourceCatalog)],
+        [
+          OUTPUTS.nvapi,
+          renderNvapiContract(
+            nvapi.sourceCatalog,
+            editorialPolicy.nvapiVerbatimValues,
+            nvapi.settingCount,
+          ),
+        ],
         [OUTPUTS.desktopCommandErrors, renderDesktopCommandErrorContract(desktopCommandErrors)],
         [OUTPUTS.addGameWarnings, renderAddGameWarningContract(addGameWarnings)],
       ].map(async ([filePath, source]) => [

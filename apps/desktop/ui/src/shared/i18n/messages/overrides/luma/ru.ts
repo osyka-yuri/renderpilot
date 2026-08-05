@@ -1,7 +1,7 @@
-import { defineLocalizedOverrides } from '../../contract';
+import { defineLocalizedCatalog } from '../../contract';
 import {
-  expandLumaGuidanceTranslations,
-  type LumaGuidanceTranslations,
+  expandLumaTranslations,
+  type LumaMessageTranslations,
   type LumaSourceCatalog,
 } from './schema';
 
@@ -17,6 +17,7 @@ const translations = {
   edithFinchExit:
     'DLAA работает без дополнительных изменений, но игра может не завершаться полностью после выхода. OptiScaler может устранить эту проблему.',
   dlssNoHdr: 'Только DLSS (HDR пока не поддерживается).',
+  fallout4DlssGtaoOnly: 'Сейчас этот профиль поддерживает только DLSS и GTAO.',
   kh3Txaa: 'В игре предварительно выберите «TXAA».',
   aceFxaaHigh: 'В игре предварительно выберите AA «FXAA High».',
   tetrisFxaa6: 'В игре предварительно выберите AA «FXAA:6» и масштаб рендеринга 100%.',
@@ -50,8 +51,6 @@ const translations = {
   kakarotBdzKfix:
     'В настройках игры выберите TAA и используйте BDZKFix для Legacy-версии либо его обновлённый форк для HD-версии.',
   preyData: 'Дополнительные файлы данных Luma для Prey должны оставаться рядом с аддоном.',
-  bundledDlss:
-    'Luma резервирует встроенную библиотеку DLSS игры и восстанавливает её при удалении.',
   daymareOptiscalerUuu: 'Luma работает сама по себе, но вылетает вместе с OptiScaler или UUU.',
   smtLyallFix: "Для принудительного TAA требуется Lyall's Fix.",
   deusExBorisEnb:
@@ -70,8 +69,23 @@ const translations = {
   sinkingCityOriginal: 'Оригинальная версия работает. Совместимость ремастера неизвестна.',
   heavyRainSteamUltrawide: 'Ультраширокий режим может работать только при запуске через Steam.',
   metroBorderless: 'Используйте безрамочный оконный режим.',
-} as const satisfies LumaGuidanceTranslations;
+  dlssOnlyNoHdr: 'Этот профиль добавляет только поддержку DLSS; HDR сейчас не поддерживается.',
+  biomutantAaHighOrMax: 'В настройках игры выберите AA «High» или «Max».',
+  blairWitchTxaaFull: 'В настройках игры выберите TXAA и масштаб разрешения «Full».',
+  flickeringIssues: 'Возможны проблемы с мерцанием.',
+  brambleEpicVram:
+    'Качество Epic может постепенно заполнить VRAM и вызвать подтормаживания. Пока Luma активна, не переключайтесь многократно между High и Epic.',
+  daemonDlaaReset:
+    'Загрузка уровня или изменение настроек графики принудительно задаёт r.TemporalAASamples=1 и отключает DLAA.',
+  easyAntiCheatBlocked: 'Заблокировано системой Easy Anti-Cheat.',
+  echoDlaaAutoExposure:
+    'После первого уровня DLAA перестаёт работать. При AutoExposure: On источники света мерцают, а при AutoExposure: Off качество сглаживания значительно ухудшается.',
+  dx11BootFailure: 'Не запускается в DX11.',
+  rainCodeAaHighMaxResolution:
+    'В настройках игры выберите качество AA «High» и установите ползунок разрешения на максимум.',
+  roboquestTaaQuality3: 'В настройках игры выберите TAA и качество «3».',
+} as const satisfies LumaMessageTranslations;
 
-export const lumaGuidanceOverrides = defineLocalizedOverrides<'ru', LumaSourceCatalog>()(
-  expandLumaGuidanceTranslations(translations),
+export const lumaOverrides = defineLocalizedCatalog<'ru', LumaSourceCatalog>()(
+  expandLumaTranslations(translations),
 );

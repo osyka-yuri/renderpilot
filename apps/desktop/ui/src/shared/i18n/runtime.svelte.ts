@@ -1,7 +1,7 @@
 import { LocaleLoadError } from './errors';
 import { persistLanguageMode, readStoredLanguageMode } from './language-mode-storage';
 import type { Locale } from './locale-model';
-import { lookupLocalePackMessage } from './lookup';
+import { lookupExternalMessage, lookupLocalePackMessage } from './lookup';
 import type {
   MessageKey,
   MessageKeyWithoutParams,
@@ -112,7 +112,15 @@ export function createI18nRuntime(deps: I18nRuntimeDependencies) {
   }
 
   function translateExternalMessage(message: ExternalMessageInput): string {
-    return translate(message.key, message.fallback, message.params);
+    const value = lookupExternalMessage(
+      message.key,
+      message.fallback,
+      activePack,
+      deps.fallbackPack,
+    );
+    return value === undefined
+      ? interpolateMessage(message.fallback, message.params)
+      : renderMessage(value, message.params, activePack.locale);
   }
 
   return {

@@ -80,17 +80,17 @@ describe('i18n', () => {
       expect(translated.length).toBeGreaterThan(0);
     });
 
-    it('uses the NVAPI override for ru and the backend fallback for en', async () => {
-      await setLanguageMode('ru');
-      const ruLabel = translateExternalMessage({
-        key: 'nvapi.dlss_sr_render_preset.label',
-        fallback: 'Render Preset',
-      });
-      expect(ruLabel).not.toBe('Render Preset');
-      expect(ruLabel.length).toBeGreaterThan(0);
+    it('uses the NVAPI translation in every translated locale and the backend fallback in English', async () => {
+      for (const locale of LAZY_LOCALES) {
+        await setLanguageMode(locale);
+        const label = translateExternalMessage({
+          key: 'nvapi.dlss_sr_render_preset.label',
+          fallback: 'Render Preset',
+        });
+        expect(label).not.toBe('Render Preset');
+        expect(label.length).toBeGreaterThan(0);
+      }
 
-      // English is intentionally omitted from the overrides, so the caller's
-      // fallback (the backend dlss_settings.json text) is used.
       await setLanguageMode('en');
       expect(
         translateExternalMessage({
@@ -100,10 +100,10 @@ describe('i18n', () => {
       ).toBe('Render Preset');
     });
 
-    it('uses the Luma guidance override in every translated locale and the manifest fallback in English', async () => {
-      const key = 'luma.cod-black-ops-3.bundled_dlss';
+    it('uses the Luma message translation in every translated locale and the manifest fallback in English', async () => {
+      const key = 'luma.cod-black-ops-3.warning';
       const fallback =
-        "Luma reserves the game's bundled DLSS library and restores it when removed.";
+        'Avoid official public matchmaking while Luma is installed. This may result in a ban.';
 
       for (const locale of LAZY_LOCALES) {
         await setLanguageMode(locale);
@@ -112,6 +112,38 @@ describe('i18n', () => {
 
       await setLanguageMode('en');
       expect(translateExternalMessage({ key, fallback })).toBe(fallback);
+    });
+
+    it('fails closed when a known producer changes its source text', async () => {
+      await setLanguageMode('ru');
+      expect(
+        translateExternalMessage({
+          key: 'nvapi.dlss_sr_render_preset.label',
+          fallback: 'Render Preset (changed upstream)',
+        }),
+      ).toBe('Render Preset (changed upstream)');
+    });
+
+    it('uses the backend fallback for a runtime-only NVAPI key', async () => {
+      await setLanguageMode('ja');
+      expect(
+        translateExternalMessage({
+          key: 'nvapi.future_setting.label',
+          fallback: 'Future Setting',
+        }),
+      ).toBe('Future Setting');
+    });
+
+    it('keeps parameterized static messages available through the external API', async () => {
+      await setLanguageMode('ru');
+      const path = 'C:\\recovery\\bundle';
+      const translated = translateExternalMessage({
+        key: 'addGame.warning.recoveryBundleCreated',
+        fallback: 'Recovery bundle: {path}',
+        params: { path },
+      });
+      expect(translated).toContain(path);
+      expect(translated).not.toBe(`Recovery bundle: ${path}`);
     });
 
     it('returns the fallback for an unknown key', async () => {

@@ -114,7 +114,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'pageLoad.error.backToGames': '返回游戏列表',
 
   'games.addGame': '添加游戏',
-  'games.addingGame': '正在添加游戏...',
+  'games.addingGame': '正在添加游戏…',
   'games.chooseInstallFolder': '选择游戏安装文件夹',
   'addGame.title': '添加游戏',
   'addGame.cannotAddTitle': '无法添加游戏',
@@ -191,7 +191,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'games.search': '搜索游戏',
   'games.openFilters': '筛选',
   'games.openFiltersActive': '筛选（已启用）',
-  'games.loading': '正在加载...',
+  'games.loading': '正在加载…',
   'games.empty.title': '未找到游戏',
   'games.empty.description': '添加游戏后，它会显示在仪表板中。',
   'games.filterEmpty.title': '未找到匹配项',
@@ -339,7 +339,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
 
   'operations.title': '操作历史',
   'operations.subtitleGame': '{title} 的活动',
-  'operations.loading': '正在加载...',
+  'operations.loading': '正在加载…',
   'operations.empty': '暂无历史记录',
   'operations.gameName': '游戏',
   'operations.date': '日期',
@@ -522,7 +522,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'user_message.cover_artwork_not_found': '未找到此游戏的封面。',
   'user_message.cover_file_system_error': '将封面保存到磁盘失败。',
   'user_message.stale_replacement_source':
-    '无法应用此更新，因为源文件已在 RenderPilot 外部被替换或修改。请重新选择版本——可能需要重新下载。',
+    '无法应用此更新，因为源文件已在 RenderPilot 外部被替换或修改。请重新选择版本，必要时重新下载。',
   'user_message.nvapi_requires_administrator': '需要管理员权限才能更改此设置。',
   'user_message.catalog_consolidation_blocked':
     'RenderPilot 在重复的游戏卡片中发现了冲突的托管状态。未进行任何更改，并已创建恢复包。',
@@ -548,7 +548,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'settings.about.title': '更新',
   'settings.about.description': '检查应用程序更新。',
   'settings.about.version.title': '应用版本',
-  'settings.about.version.loading': '加载中...',
+  'settings.about.version.loading': '加载中…',
   'settings.about.checkForUpdates': '检查更新',
   'settings.about.updateInProgress': '正在更新…',
   'settings.about.updateAvailable': '有可用更新',
@@ -726,8 +726,8 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.renodx.component.addonDisabled': '已安装，但在 ReShade.ini 中被禁用',
   'gameDetails.renodx.component.addonFileInstall': '从文件安装 — 不追踪更新',
   'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
-  'gameDetails.renodx.component.dlssFixDesc': '修复 DLSS Frame Generation 的闪烁',
-  'gameDetails.renodx.component.dlssFixOffer': '可用 — 防止 DLSS Frame Generation 闪烁',
+  'gameDetails.renodx.component.dlssFixDesc': '修复 DLSS 帧生成的闪烁',
+  'gameDetails.renodx.component.dlssFixOffer': '可用 — 防止 DLSS 帧生成闪烁',
   'gameDetails.renodx.component.dlssFixHint':
     '这是通用的 ReShade 修复，并非 RenoDX 专用。它让 ReShade 在游戏的原生帧上绘制，而不是帧生成帧，并在游戏正确实现 Streamline 时对 ReShade 隐藏 DLSS（超分辨率）。',
   'gameDetails.renodx.attribution': 'RenoDX 由 clshortfuse 开发。',
@@ -735,8 +735,8 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
   'gameDetails.addon.riskSafe': '未检测到反作弊 — 安装是安全的。',
   'gameDetails.addon.riskWarn': '检测到反作弊 — 安装可能导致封号。',
-  'addon.risk.sp_safe': '未发现已知的反作弊签名——安装 {addonName} 可能是安全的，但无法保证。',
-  'addon.risk.anticheat_detected': '检测到反作弊签名——安装 {addonName} 可能导致封号。',
+  'addon.risk.sp_safe': '未发现已知的反作弊签名。安装 {addonName} 可能是安全的，但无法保证。',
+  'addon.risk.anticheat_detected': '检测到反作弊签名。安装 {addonName} 可能导致封号。',
   'gameDetails.addon.confirmAccept': '仍然安装',
   'gameDetails.addon.confirmBody':
     '此游戏使用反作弊系统。ReShade 插件可能触发它并导致封号。请自行承担风险后继续。',

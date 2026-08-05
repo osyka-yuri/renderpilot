@@ -54,7 +54,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
     '透過 NVIDIA 基礎設定檔，套用於所有沒有個別覆寫設定的遊戲的預設值。',
   'settings.nvidia.global.systemWide': '套用至所有遊戲',
   'settings.nvidia.global.adminRequired': '請以系統管理員身分重新啟動應用程式，以變更這些設定。',
-  'settings.nvidia.global.familySr': 'DLSS 超高解析度',
+  'settings.nvidia.global.familySr': 'DLSS 超解析度',
   'settings.nvidia.global.familyFg': 'DLSS 畫格生成',
   'settings.nvidia.global.familyRr': 'DLSS 光線重建',
   'settings.nvidia.unsupported.title': '未偵測到 NVIDIA 顯示卡',
@@ -728,7 +728,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.component.dlssFixDesc': '修復 DLSS 畫格生成造成的閃爍',
   'gameDetails.renodx.component.dlssFixOffer': '可用 — 防止 DLSS 畫格生成造成閃爍',
   'gameDetails.renodx.component.dlssFixHint':
-    '這是通用的 ReShade 修復，並非 RenoDX 專用。它會讓 ReShade 繪製在遊戲的原生畫格上，而非畫格生成所產生的畫格；當遊戲正確實作 Streamline 時，也會向 ReShade 隱藏 DLSS 超高解析度。',
+    '這是通用的 ReShade 修復，並非 RenoDX 專用。它會讓 ReShade 繪製在遊戲的原生畫格上，而非畫格生成所產生的畫格；當遊戲正確實作 Streamline 時，也會向 ReShade 隱藏 DLSS 超解析度。',
   'gameDetails.renodx.attribution': 'RenoDX 由 clshortfuse 開發。',
   'gameDetails.renodx.attributionLink': '檢視專案',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──

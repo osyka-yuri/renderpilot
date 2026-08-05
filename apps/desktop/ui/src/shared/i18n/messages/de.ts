@@ -57,9 +57,9 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'settings.nvidia.global.systemWide': 'Systemweit',
   'settings.nvidia.global.adminRequired':
     'Starte die App als Administrator neu, um diese Einstellungen zu ändern.',
-  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
-  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
-  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.global.familySr': 'DLSS Superhohe Auflösung',
+  'settings.nvidia.global.familyFg': 'DLSS Frame-Erstellung',
+  'settings.nvidia.global.familyRr': 'DLSS Strahlenrekonstruktion',
   'settings.nvidia.unsupported.title': 'Keine NVIDIA-GPU erkannt',
   'settings.nvidia.unsupported.description':
     'Diese Einstellungen erfordern eine unterstützte NVIDIA-Grafikkarte.',
@@ -127,7 +127,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'pageLoad.error.backToGames': 'Zurück zu den Spielen',
 
   'games.addGame': 'Spiel hinzufügen',
-  'games.addingGame': 'Spiel wird hinzugefügt...',
+  'games.addingGame': 'Spiel wird hinzugefügt…',
   'games.chooseInstallFolder': 'Installationsordner des Spiels auswählen',
   'addGame.title': 'Spiel hinzufügen',
   'addGame.cannotAddTitle': 'Das Spiel konnte nicht hinzugefügt werden',
@@ -224,7 +224,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'games.search': 'Spiele suchen',
   'games.openFilters': 'Filter',
   'games.openFiltersActive': 'Filter (aktiv)',
-  'games.loading': 'Laden...',
+  'games.loading': 'Laden…',
   'games.empty.title': 'Keine Spiele gefunden',
   'games.empty.description': 'Fügen Sie ein Spiel hinzu, damit es im Dashboard angezeigt wird.',
   'games.filterEmpty.title': 'Keine Treffer gefunden',
@@ -394,7 +394,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   // ── Operations page ──
   'operations.title': 'Vorgangsjournal',
   'operations.subtitleGame': 'Aktivitäten für {title}',
-  'operations.loading': 'Laden...',
+  'operations.loading': 'Laden…',
   'operations.empty': 'Noch kein Verlauf vorhanden',
   'operations.gameName': 'Spiel',
   'operations.date': 'Datum',
@@ -648,7 +648,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'settings.about.title': 'Updates',
   'settings.about.description': 'Nach Updates für die Anwendung suchen.',
   'settings.about.version.title': 'App-Version',
-  'settings.about.version.loading': 'Wird geladen...',
+  'settings.about.version.loading': 'Wird geladen…',
   'settings.about.checkForUpdates': 'Nach Updates suchen',
   'settings.about.updateInProgress': 'Wird aktualisiert…',
   'settings.about.updateAvailable': 'Update verfügbar',
@@ -845,9 +845,9 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.renodx.component.addonFileInstall':
     'Aus Datei installiert — nicht auf Updates überwacht',
   'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
-  'gameDetails.renodx.component.dlssFixDesc': 'Behebt Flackern bei DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixDesc': 'Behebt Flackern bei der DLSS Frame-Erstellung',
   'gameDetails.renodx.component.dlssFixOffer':
-    'Verfügbar — verhindert Flackern bei DLSS Frame Generation',
+    'Verfügbar — verhindert Flackern bei der DLSS Frame-Erstellung',
   'gameDetails.renodx.component.dlssFixHint':
     'Ein allgemeiner ReShade-Fix, nicht RenoDX-spezifisch. ReShade zeichnet auf den nativen Frames des Spiels statt auf den Frame-Generation-Frames und blendet DLSS-Upscaling vor ReShade aus, wenn das Spiel Streamline korrekt umsetzt.',
   'gameDetails.renodx.attribution': 'RenoDX von clshortfuse.',

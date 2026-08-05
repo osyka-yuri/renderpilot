@@ -57,9 +57,9 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.nvidia.global.systemWide': 'En todo el sistema',
   'settings.nvidia.global.adminRequired':
     'Reinicia la aplicación como administrador para cambiar estos ajustes.',
-  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
-  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
-  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.global.familySr': 'DLSS Superresolución',
+  'settings.nvidia.global.familyFg': 'DLSS Generación de fotogramas',
+  'settings.nvidia.global.familyRr': 'DLSS Reconstrucción de rayos',
   'settings.nvidia.unsupported.title': 'No se detectó ninguna GPU NVIDIA',
   'settings.nvidia.unsupported.description':
     'Estos ajustes requieren una tarjeta gráfica NVIDIA compatible.',
@@ -135,7 +135,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'pageLoad.error.backToGames': 'Volver a Juegos',
 
   'games.addGame': 'Añadir juego',
-  'games.addingGame': 'Añadiendo juego...',
+  'games.addingGame': 'Añadiendo juego…',
   'games.chooseInstallFolder': 'Elegir carpeta de instalación del juego',
   'addGame.title': 'Añadir juego',
   'addGame.cannotAddTitle': 'No se pudo añadir el juego',
@@ -234,7 +234,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'games.search': 'Buscar juegos',
   'games.openFilters': 'Filtros',
   'games.openFiltersActive': 'Filtros (activos)',
-  'games.loading': 'Cargando...',
+  'games.loading': 'Cargando…',
   'games.empty.title': 'No se encontraron juegos',
   'games.empty.description': 'Añade un juego para mostrarlo en el panel.',
   'games.filterEmpty.title': 'No se encontraron coincidencias',
@@ -405,7 +405,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
 
   'operations.title': 'Historial',
   'operations.subtitleGame': 'Actividad de {title}',
-  'operations.loading': 'Cargando...',
+  'operations.loading': 'Cargando…',
   'operations.empty': 'Aún no hay historial',
   'operations.gameName': 'Juego',
   'operations.date': 'Fecha',
@@ -656,7 +656,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.about.title': 'Actualizaciones',
   'settings.about.description': 'Buscar actualizaciones de la aplicación.',
   'settings.about.version.title': 'Versión de la aplicación',
-  'settings.about.version.loading': 'Cargando...',
+  'settings.about.version.loading': 'Cargando…',
   'settings.about.checkForUpdates': 'Buscar actualizaciones',
   'settings.about.updateInProgress': 'Actualizando…',
   'settings.about.updateAvailable': 'Actualización disponible',
@@ -852,11 +852,12 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.renodx.component.addonFileInstall':
     'Instalado desde un archivo — sin seguimiento de actualizaciones',
   'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
-  'gameDetails.renodx.component.dlssFixDesc': 'Corrige el parpadeo con DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixDesc':
+    'Corrige el parpadeo con DLSS Generación de fotogramas',
   'gameDetails.renodx.component.dlssFixOffer':
-    'Disponible — evita el parpadeo con DLSS Frame Generation',
+    'Disponible — evita el parpadeo con DLSS Generación de fotogramas',
   'gameDetails.renodx.component.dlssFixHint':
-    'Una corrección general de ReShade, no específica de RenoDX. Hace que ReShade dibuje sobre los fotogramas nativos del juego en lugar de los de Frame Generation, y oculta el escalado DLSS a ReShade cuando el juego implementa Streamline correctamente.',
+    'Una corrección general de ReShade, no específica de RenoDX. Hace que ReShade dibuje sobre los fotogramas nativos del juego en lugar de los de Generación de fotogramas, y oculta el escalado DLSS a ReShade cuando el juego implementa Streamline correctamente.',
   'gameDetails.renodx.attribution': 'RenoDX por clshortfuse.',
   'gameDetails.renodx.attributionLink': 'Ver proyecto',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──

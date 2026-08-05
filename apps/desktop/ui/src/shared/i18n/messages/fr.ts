@@ -57,9 +57,9 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'settings.nvidia.global.systemWide': 'À l’échelle du système',
   'settings.nvidia.global.adminRequired':
     'Redémarrez l’application en tant qu’administrateur pour modifier ces paramètres.',
-  'settings.nvidia.global.familySr': 'DLSS Super Resolution',
-  'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
-  'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
+  'settings.nvidia.global.familySr': 'DLSS Super Résolution',
+  'settings.nvidia.global.familyFg': 'DLSS Génération d’images',
+  'settings.nvidia.global.familyRr': 'DLSS Reconstruction de rayons',
   'settings.nvidia.unsupported.title': 'Aucun GPU NVIDIA détecté',
   'settings.nvidia.unsupported.description':
     'Ces paramètres nécessitent une carte graphique NVIDIA prise en charge.',
@@ -134,7 +134,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'pageLoad.error.backToGames': 'Retour aux jeux',
 
   'games.addGame': 'Ajouter un jeu',
-  'games.addingGame': 'Ajout du jeu...',
+  'games.addingGame': 'Ajout du jeu…',
   'games.chooseInstallFolder': 'Choisir le dossier d’installation du jeu',
   'addGame.title': 'Ajouter un jeu',
   'addGame.cannotAddTitle': 'Impossible d’ajouter le jeu',
@@ -233,7 +233,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'games.search': 'Rechercher des jeux',
   'games.openFilters': 'Filtres',
   'games.openFiltersActive': 'Filtres (actifs)',
-  'games.loading': 'Chargement...',
+  'games.loading': 'Chargement…',
   'games.empty.title': 'Aucun jeu trouvé',
   'games.empty.description': 'Ajoutez un jeu pour l’afficher dans le tableau de bord.',
   'games.filterEmpty.title': 'Aucun résultat',
@@ -404,7 +404,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
 
   'operations.title': 'Historique',
   'operations.subtitleGame': 'Activité pour {title}',
-  'operations.loading': 'Chargement...',
+  'operations.loading': 'Chargement…',
   'operations.empty': 'Aucun historique',
   'operations.gameName': 'Jeu',
   'operations.date': 'Date',
@@ -656,7 +656,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'settings.about.title': 'Mises à jour',
   'settings.about.description': 'Rechercher des mises à jour.',
   'settings.about.version.title': "Version de l'application",
-  'settings.about.version.loading': 'Chargement...',
+  'settings.about.version.loading': 'Chargement…',
   'settings.about.checkForUpdates': 'Rechercher des mises à jour',
   'settings.about.updateInProgress': 'Mise à jour…',
   'settings.about.updateAvailable': 'Mise à jour disponible',
@@ -854,11 +854,12 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.renodx.component.addonFileInstall':
     'Installé depuis un fichier — pas de suivi des mises à jour',
   'gameDetails.renodx.component.dlssFix': 'DLSS-Fix',
-  'gameDetails.renodx.component.dlssFixDesc': 'Corrige le scintillement avec DLSS Frame Generation',
+  'gameDetails.renodx.component.dlssFixDesc':
+    'Corrige le scintillement avec DLSS Génération d’images',
   'gameDetails.renodx.component.dlssFixOffer':
-    'Disponible — évite le scintillement avec DLSS Frame Generation',
+    'Disponible — évite le scintillement avec DLSS Génération d’images',
   'gameDetails.renodx.component.dlssFixHint':
-    "Un correctif ReShade général, pas spécifique à RenoDX. Il fait dessiner ReShade sur les images natives du jeu plutôt que sur celles de Frame Generation, et masque l'upscaling DLSS à ReShade lorsque le jeu implémente Streamline correctement.",
+    "Un correctif ReShade général, pas spécifique à RenoDX. Il fait dessiner ReShade sur les images natives du jeu plutôt que sur celles de la Génération d’images, et masque l'upscaling DLSS à ReShade lorsque le jeu implémente Streamline correctement.",
   'gameDetails.renodx.attribution': 'RenoDX par clshortfuse.',
   'gameDetails.renodx.attributionLink': 'Voir le projet',
   // ── Game details: shared add-on copy (RenoDX + Luma) ──
@@ -983,7 +984,7 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.luma.launchArgs.instructions.epic':
     'Si vous lancez le jeu via l’Epic Games Launcher, ajoutez-les ici : clic droit sur le jeu → Gérer → Arguments de ligne de commande supplémentaires.',
   'gameDetails.luma.launchArgs.instructions.ea':
-    'Si vous lancez le jeu via l’application EA, ajoutez-les ici : sélectionnez le jeu → Gérer → Voir les propriétés → Options de lancement avancées.',
+    'Si vous lancez le jeu via EA app, ajoutez-les ici : sélectionnez le jeu → Gérer → Voir les propriétés → Options de lancement avancées.',
   'gameDetails.luma.launchArgs.instructions.ubisoft':
     'Si vous lancez le jeu via Ubisoft Connect, ajoutez-les ici : sélectionnez le jeu → Propriétés → Ajouter des arguments de lancement.',
   'gameDetails.luma.launchArgs.instructions.other':

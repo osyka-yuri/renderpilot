@@ -60,7 +60,7 @@ function validateLocalePack(
     candidate.locale !== expectedLocale ||
     candidate.contractVersion !== MESSAGE_CONTRACT_VERSION ||
     !isRecord(candidate.messages) ||
-    !Array.isArray(candidate.dynamicCatalogs)
+    !isRecord(candidate.externalMessages)
   ) {
     throw new Error(`Invalid locale pack for "${expectedLocale}".`);
   }
