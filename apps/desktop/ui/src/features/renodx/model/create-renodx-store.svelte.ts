@@ -36,6 +36,8 @@ export type RenoDxStoreOptions = {
    * blocks Luma. Peer refreshes are page-owned and best-effort.
    */
   onExclusivityChange?: (gameId: string) => void;
+  /** Refreshes the details capability projection after install/uninstall. */
+  onGameDetailsInvalidate?: (gameId: string) => void | Promise<void>;
 };
 
 /**
@@ -45,6 +47,7 @@ export type RenoDxStoreOptions = {
 export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   const api = options.api ?? renodxApi;
   const onExclusivityChange = options.onExclusivityChange;
+  const onGameDetailsInvalidate = options.onGameDetailsInvalidate;
 
   let availabilitySnapshot = $state<AvailabilitySnapshot>({
     hostDetection: 'absent',
@@ -101,7 +104,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       manualInstall = report.manual_install;
       vulkanLayer = report.vulkan_layer;
     },
-    resetToolChrome: (_gameId) => {
+    resetToolState: (_gameId) => {
       availabilitySnapshot = {
         hostDetection: 'absent',
         hostFacts: defaultHostFacts(),
@@ -186,24 +189,30 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
 
   async function load(gameId: string): Promise<void> {
     dlssFixAvailable = false;
-    await core.load(gameId);
-    if (!core.loadError) {
-      await maybeProbeDlssFix(gameId, core.requestToken);
+    const loading = core.load(gameId);
+    const token = core.requestToken;
+    await loading;
+    if (core.isCurrentRequest(token) && !core.loadError) {
+      await maybeProbeDlssFix(gameId, token);
     }
   }
 
   async function retry(gameId: string): Promise<void> {
     dlssFixAvailable = false;
-    await core.retry(gameId);
-    if (!core.loadError) {
-      await maybeProbeDlssFix(gameId, core.requestToken);
+    const loading = core.retry(gameId);
+    const token = core.requestToken;
+    await loading;
+    if (core.isCurrentRequest(token) && !core.loadError) {
+      await maybeProbeDlssFix(gameId, token);
     }
   }
 
   async function checkForUpdates(gameId: string): Promise<void> {
     dlssFixAvailable = false;
-    await core.checkForUpdates(gameId);
-    await maybeProbeDlssFix(gameId, core.requestToken);
+    const checking = core.checkForUpdates(gameId);
+    const token = core.requestToken;
+    await checking;
+    await maybeProbeDlssFix(gameId, token);
   }
 
   async function refreshVulkanLayerStatus(token: number): Promise<void> {
@@ -227,12 +236,29 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     token: number,
     channel?: ReshadeChannel,
   ): Promise<void> {
+    if (!core.isCurrentRequest(token)) {
+      return;
+    }
     if (channel !== undefined) {
       selectedReshadeChannel = channel;
       await refreshVulkanLayerStatus(token);
     }
+    if (!core.isCurrentRequest(token)) {
+      return;
+    }
     dlssFixAvailable = false;
     await maybeProbeDlssFix(gameId, token);
+  }
+
+  async function afterCapabilityCommit(
+    gameId: string,
+    token: number,
+    channel?: ReshadeChannel,
+  ): Promise<void> {
+    await afterInstallLikeCommit(gameId, token, channel);
+    if (core.isCurrentRequest(token)) {
+      await onGameDetailsInvalidate?.(gameId);
+    }
   }
 
   async function install(
@@ -245,7 +271,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     }
     return core.runBusyMutation(gameId, () => api.install(gameId, channel, confirmAnticheat), {
       errorKey: 'gameDetails.renodx.installError',
-      afterCommit: (token) => afterInstallLikeCommit(gameId, token, channel),
+      afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
       notifyExclusivity: true,
     });
   }
@@ -264,7 +290,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       () => api.installFromFile(gameId, filePath, channel, confirmAnticheat),
       {
         errorKey: 'gameDetails.renodx.installError',
-        afterCommit: (token) => afterInstallLikeCommit(gameId, token, channel),
+        afterCommit: (token) => afterCapabilityCommit(gameId, token, channel),
         notifyExclusivity: true,
       },
     );
@@ -321,7 +347,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       errorKey: 'gameDetails.renodx.uninstallError',
       clearDownloadProgress: false,
       notifyExclusivity: true,
-      afterCommit: (token) => afterInstallLikeCommit(gameId, token),
+      afterCommit: (token) => afterCapabilityCommit(gameId, token),
     });
   }
 

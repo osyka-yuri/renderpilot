@@ -1,11 +1,12 @@
-import type { AddonStoreLike } from '@entities/addon';
-import { isMutationFailure } from '@entities/addon';
+import { isMutationFailure, type AddonMutationResult } from '@entities/addon';
 import { ClientError } from '@shared/errors';
 
 import type { BulkSwapHandler } from './create-game-details-page-model';
 import type { SwapRequest } from './swap-request';
 
-type UpdateStore = Pick<AddonStoreLike, 'update'>;
+type UpdateStore = {
+  update(gameId: string): Promise<AddonMutationResult>;
+};
 export type UpdateAllStep = 'libraries' | 'renodx' | 'luma';
 
 export type UpdateAllFailure = {

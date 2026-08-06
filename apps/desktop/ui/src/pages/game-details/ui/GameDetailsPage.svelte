@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { GameCandidateGroup, GameDetails, GameLibraryComponent } from '@entities/game';
   import {
-    createVendorTabs,
+    ADDONS_TAB_VALUE,
+    createGameDetailsTabs,
+    reconcileGameDetailsTabValue,
     NVIDIA_STREAMLINE_TECHNOLOGY,
     DLSS_FAMILY_CARDS,
   } from '../model/game-details-tabs';
@@ -29,17 +31,17 @@
   import { sumDownloadFractions } from '@shared/lib';
   import { publishPresentedErrorNotification } from '@shared/notifications';
   import type { SettingFamily } from '@features/nvapi-settings';
-  import { RenoDxCard, createRenoDxStore } from '@features/renodx';
-  import { LumaCard, createLumaStore } from '@features/luma';
+  import { RenoDxCard } from '@features/renodx';
+  import { LumaCard } from '@features/luma';
   import type {
     SwapHandler,
     RollbackHandler,
     BulkSwapHandler,
     BulkRollbackHandler,
   } from '../model/create-game-details-page-model';
-  import { createExclusiveAddonStores } from '@entities/addon';
   import { buildUpdateAllToLatestPlan } from '../model/update-all-to-latest';
   import { UpdateAllError } from '../model/run-update-all';
+  import { createGameAddonsContext } from '../model/create-game-addons-context.svelte';
   import { createUpdateAllWorkflow } from '../model/create-update-all-workflow.svelte';
   import { createNvidiaDriverContext } from '../model/create-nvidia-driver-context.svelte';
   import { createGameExecutableContext } from '../model/create-game-executable-context.svelte';
@@ -87,60 +89,33 @@
     onGameDetailsInvalidate = () => undefined,
   }: Props = $props();
 
-  const vendorTabs = $derived(createVendorTabs(details));
-  // The "Other" tab always hosts the RenoDX and Luma cards for the selected
-  // game. We render them unconditionally so the full availability logic inside
-  // each card can detect tracked installs, unmanaged files, orphans, etc.
-  // (addon_capabilities from the list is used for badges/filters, not to hide
-  // detail cards).
-  const OTHER_TAB = 'other';
+  const tabs = $derived(createGameDetailsTabs(details));
+  const vendorTabs = $derived(tabs.vendorTabs);
   const gameId = $derived(details?.game.identity.id ?? null);
   const executableLockReason = $derived(resolveExecutableLockReason(details?.components ?? []));
   // The game's launcher, for Luma's launcher-aware launch-args callout.
   const launcher = $derived(details?.game.identity.launcher ?? '');
 
-  // RenoDX and Luma are mutually exclusive per game. Stores are created once;
-  // the page loads every store for the selected game — not gated on
-  // addon_capabilities from the list — so each card can detect tracked installs,
-  // unmanaged files, orphans, and blocked_by_other_addon state. Successful
-  // install/uninstall mutations reload peer stores via createExclusiveAddonStores.
-  //
-  // Add another tool by adding a factory entry here + placing its card in the
-  // OTHER_TAB template below.
-  const {
-    stores: { renodx, luma },
-    list: addonStores,
-  } = createExclusiveAddonStores(
-    {
-      renodx: ({ onExclusivityChange }) => createRenoDxStore({ onExclusivityChange }),
-      luma: ({ onExclusivityChange }) =>
-        createLumaStore({ onExclusivityChange, onGameDetailsInvalidate }),
-    },
-    { shouldReloadPeers: (id) => !!gameId && id === gameId },
-  );
-
-  // Update availability is read from the list of stores for bulk operations.
+  const gameAddons = createGameAddonsContext({
+    getGameId: () => gameId,
+    getCapabilities: () => tabs.addonsTab?.capabilities ?? [],
+    onGameDetailsInvalidate: (id) => onGameDetailsInvalidate(id),
+  });
+  const { renodx, luma } = gameAddons.stores;
 
   // The single "update everything to its latest version" action. Spans every
   // vendor (NVIDIA/AMD/Intel) plus the Streamline bundle, RenoDX, and Luma, not
   // just the active tab, and reuses the existing bulk-swap path.
   const updatePlan = $derived(buildUpdateAllToLatestPlan(details));
-  const totalUpdateCount = $derived(
-    updatePlan.updateCount + addonStores.filter((s) => s.updateAvailable).length,
-  );
+  const totalUpdateCount = $derived(updatePlan.updateCount + gameAddons.updateCount);
   const nothingToUpdate = $derived(totalUpdateCount === 0);
 
-  const anyAddonBusy = $derived(addonStores.some((store) => store.busy));
   const updateAllWorkflow = createUpdateAllWorkflow({
     getGameId: () => gameId,
     getPlan: () => updatePlan,
-    getAddonUpdates: () =>
-      [
-        { step: 'renodx' as const, store: renodx },
-        { step: 'luma' as const, store: luma },
-      ].filter(({ store }) => store.updateAvailable),
+    getAddonUpdates: () => gameAddons.addonUpdates,
     hasUpdates: () => !nothingToUpdate,
-    isBusy: () => busy || anyAddonBusy,
+    isBusy: () => busy || gameAddons.busy,
     onBulkSwap: (items) => onBulkSwap(items),
     onError: reportUpdateAllError,
   });
@@ -167,9 +142,10 @@
 
   onDestroy(() => {
     updateAllWorkflow.destroy();
+    gameAddons.destroy();
   });
   // Shared exclusive gate for Luma/RenoDX cards (peer mutations + Update-all).
-  const exclusiveBusy = $derived(busy || anyAddonBusy || updatingAll || planningUpdateAll);
+  const exclusiveBusy = $derived(busy || gameAddons.busy || updatingAll || planningUpdateAll);
   const showProgress = $derived(updatingAll && pendingDownloadIds.length > 0);
   const downloadCount = $derived(pendingDownloadIds.length);
   const downloadValue = $derived(showProgress ? sumDownloadFractions(pendingDownloadIds) : 0);
@@ -191,38 +167,16 @@
 
   const hasNvidiaTab = $derived(vendorTabs.some((tab) => tab.key === 'nvidia'));
 
-  // The page owns the addon stores' load (the cards render from them), so their
-  // update status feeds "Update all". We load all for the selected game so full
-  // on-disk / availability detection can happen (including unmanaged or orphaned
-  // installs not present in caps).
-  $effect(() => {
-    const id = gameId;
-
-    if (!id) {
-      return;
-    }
-
-    untrack(() => {
-      for (const store of addonStores) {
-        void store.load(id);
-      }
-    });
-  });
-
-  // The active vendor tab is user-controlled state, not derived: a post-swap
+  // The active tab is user-controlled state, not derived: a post-swap
   // details reload re-derives `tabs`, and a hardcoded `value={tabs[0].key}`
-  // would snap the user back to the first vendor (NVIDIA) every time. Reconcile
+  // would snap the user back to the first tab every time. Reconcile
   // only when the set of available tabs changes — keep the current selection if
-  // that vendor still has components, otherwise fall back to the first tab.
-  let selectedVendor = $state('');
+  // it is still available, otherwise fall back to the first tab.
+  let selectedTab = $state('');
   $effect(() => {
-    // Vendor tabs come and go with the game's components. The Other tab (RenoDX + Luma)
-    // is always present for the selected game.
-    const keys = [...vendorTabs.map((tab) => tab.key as string), OTHER_TAB];
+    const available = tabs.values;
     untrack(() => {
-      if (!keys.includes(selectedVendor)) {
-        selectedVendor = keys[0];
-      }
+      selectedTab = reconcileGameDetailsTabValue(selectedTab, available);
     });
   });
 
@@ -318,16 +272,20 @@
     </Card>
   {:else if gameId}
     <!-- Match Settings/Libraries: sticky tab chrome, scroll only inside TabsContent. -->
-    <Tabs bind:value={selectedVendor} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <Tabs bind:value={selectedTab} class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <TabsList>
-          {#each vendorTabs as tab (tab.key)}
-            <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
-          {/each}
-          <TabsTrigger value={OTHER_TAB}>{t('gameDetails.otherTab')}</TabsTrigger>
-        </TabsList>
+        {#if tabs.values.length > 0}
+          <TabsList>
+            {#each vendorTabs as tab (tab.key)}
+              <TabsTrigger value={tab.key}>{tab.label}</TabsTrigger>
+            {/each}
+            {#if tabs.addonsTab}
+              <TabsTrigger value={tabs.addonsTab.value}>{t('gameDetails.otherTab')}</TabsTrigger>
+            {/if}
+          </TabsList>
+        {/if}
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="ml-auto flex flex-wrap items-center gap-2">
           {#if showProgress && downloadCount > 0}
             <div class="w-16">
               <Progress
@@ -347,7 +305,7 @@
                   disabled={updatingAll ||
                     planningUpdateAll ||
                     busy ||
-                    anyAddonBusy ||
+                    gameAddons.busy ||
                     nothingToUpdate}
                   aria-busy={updatingAll || planningUpdateAll}
                   onclick={handleUpdateAll}
@@ -444,20 +402,26 @@
         </TabsContent>
       {/each}
 
-      <TabsContent value={OTHER_TAB} class="min-h-0 flex-1 overflow-hidden">
-        <ScrollArea class="h-full">
-          <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3 p-1">
-            <RenoDxCard
-              {gameId}
-              busy={exclusiveBusy}
-              store={renodx}
-              {onOpenRenoDxSettings}
-              {onPreloadRenoDxSettings}
-            />
-            <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
-          </div>
-        </ScrollArea>
-      </TabsContent>
+      {#if tabs.addonsTab}
+        <TabsContent value={ADDONS_TAB_VALUE} class="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea class="h-full">
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,50rem),1fr))] gap-3 p-1">
+              {#if gameAddons.isEnabled('renodx')}
+                <RenoDxCard
+                  {gameId}
+                  busy={exclusiveBusy}
+                  store={renodx}
+                  {onOpenRenoDxSettings}
+                  {onPreloadRenoDxSettings}
+                />
+              {/if}
+              {#if gameAddons.isEnabled('luma')}
+                <LumaCard {gameId} busy={exclusiveBusy} {launcher} store={luma} />
+              {/if}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      {/if}
     </Tabs>
   {/if}
 </section>

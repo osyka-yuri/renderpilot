@@ -115,6 +115,47 @@ describe('createLumaStore', () => {
     expect(store.externalRequirement?.kind).toBe('dgvoodoo2');
   });
 
+  it('deactivate() clears retained profile metadata before same-game reactivation', async () => {
+    const installable: AvailabilityReport = {
+      ...INSTALLED,
+      outcome: {
+        ...INSTALLABLE_OUTCOME,
+        features: { dlss_fsr: 'supported', hdr: 'unsupported' },
+        guidance: [{ id: 'g1', kind: 'warning', fallback_text: 'do not retain me' }],
+        external_requirement: DGVOODOO_REQUIREMENT,
+      },
+      vcredist_present: false,
+      install_torn: true,
+    };
+    const drifted: AvailabilityReport = {
+      ...INSTALLED,
+      outcome: { kind: 'unsupported' },
+    };
+    const getAvailability = vi
+      .fn()
+      .mockResolvedValueOnce(installable)
+      .mockResolvedValueOnce(drifted);
+    const store = createLumaStore({ api: fakeApi({ getAvailability }) });
+
+    await store.load('steam:403640');
+    store.deactivate();
+
+    expect(store.loaded).toBe(false);
+    expect(store.isInstalled).toBe(false);
+    expect(store.isInstallable).toBe(false);
+    expect(store.features).toBeNull();
+    expect(store.guidance).toEqual([]);
+    expect(store.externalRequirement).toBeNull();
+    expect(store.vcredistPresent).toBeNull();
+    expect(store.installTorn).toBe(false);
+
+    await store.load('steam:403640');
+    expect(store.isInstalled).toBe(true);
+    expect(store.features).toBeNull();
+    expect(store.guidance).toEqual([]);
+    expect(store.externalRequirement).toBeNull();
+  });
+
   it('surfaces an external requirement from the installable outcome', async () => {
     const report: AvailabilityReport = {
       ...NOT_INSTALLED_SAFE,

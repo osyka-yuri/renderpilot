@@ -164,6 +164,39 @@ describe('createRenoDxStore', () => {
     expect(store.selectedReshadeChannel).toBe('nightly');
   });
 
+  it('deactivate() clears shared and RenoDX-specific state', async () => {
+    const report: AvailabilityReport = {
+      ...INSTALLED,
+      host_detection: 'present',
+      host_facts: PRESENT_HOST_FACTS,
+      reshade_stable_supported: false,
+      renodx_addon: {
+        present_on_disk: true,
+        expected_path: 'C:\\Games\\Game\\renodx.addon64',
+        discovered_path: 'C:\\Games\\Game\\renodx.addon64',
+        enabled_by_config: true,
+        load_mode: 'auto_search',
+      },
+    };
+    const store = createRenoDxStore({
+      api: fakeApi({ getAvailability: vi.fn(() => Promise.resolve(report)) }),
+    });
+    await store.load('steam:1091500');
+
+    store.deactivate();
+
+    expect(store.loaded).toBe(false);
+    expect(store.isInstalled).toBe(false);
+    expect(store.isInstallable).toBe(false);
+    expect(store.hostDetection).toBe('absent');
+    expect(store.hostFacts).toEqual(DEFAULT_HOST_FACTS);
+    expect(store.renodxAddon).toBeNull();
+    expect(store.reshadeStableSupported).toBe(true);
+    expect(store.selectedReshadeChannel).toBe('stable');
+    expect(store.vulkanLayer).toBeNull();
+    expect(store.dlssFixAvailable).toBe(false);
+  });
+
   it('uses the backend selected channel rather than the detected channel', async () => {
     const detectedNightlyDx: AvailabilityReport = {
       ...NOT_INSTALLED_SAFE,

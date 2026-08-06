@@ -137,6 +137,23 @@ export function beginRequest<TState, TUpdateReport>(
 }
 
 /**
+ * Deactivates a store without starting another availability request.
+ *
+ * Advancing the request token makes every in-flight load, probe, or mutation
+ * stale. The visible core is reset as well, so a later reactivation always
+ * starts from an honest empty state instead of retaining another game's data.
+ */
+export function withDeactivation<TState extends AddonInstallStateBase, TUpdateReport>(
+  core: AddonCoreSnapshot<TState, TUpdateReport>,
+): AddonCoreSnapshot<TState, TUpdateReport> {
+  const reset = createInitialAddonCoreSnapshot<TState, TUpdateReport>();
+  return {
+    ...reset,
+    requestId: nextRequestId(core.requestId),
+  };
+}
+
+/**
  * Starts a load and invalidates every in-flight request (including mutations).
  * Clears `busy` so navigation / reload owns the UI chrome: a discarded mutation
  * cannot leave the spinner stuck after its token is superseded.

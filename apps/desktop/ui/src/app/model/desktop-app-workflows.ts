@@ -1,4 +1,5 @@
 import type { WorkspaceScreen } from '@app/navigation/workspace';
+import type { SelectedWorkspaceTarget } from '@app/navigation/selection';
 import {
   getGameDetails,
   normalizeSelectableGameId,
@@ -46,7 +47,17 @@ export async function loadAndPresentGameDetails<RequestToken>(
   deps: LoadAndPresentGameDetailsDeps<RequestToken>,
 ): Promise<void> {
   const requestToken = deps.beginDetailsRequest();
-  const details = await (deps.getGameDetails ?? getGameDetails)(gameId);
+
+  let details: GameDetails;
+  try {
+    details = await (deps.getGameDetails ?? getGameDetails)(gameId);
+  } catch (error) {
+    // A superseded request no longer owns either UI state or error reporting.
+    if (!deps.isDetailsRequestActive(requestToken)) {
+      return;
+    }
+    throw error;
+  }
 
   if (!deps.isDetailsRequestActive(requestToken)) {
     return;
@@ -127,7 +138,7 @@ export function queueBackgroundCoverSync(deps: QueueBackgroundCoverSyncDeps): vo
 export async function runCatalogRefreshWithCoverSync(
   prepareRefresh: () => Promise<boolean>,
   deps: CatalogRefreshWithCoverSyncDeps,
-): Promise<void> {
+): Promise<boolean> {
   const refreshed = await deps.runExclusive(async () => {
     const shouldRefresh = await prepareRefresh();
 
@@ -142,6 +153,8 @@ export async function runCatalogRefreshWithCoverSync(
   if (refreshed === true) {
     queueBackgroundCoverSync(deps);
   }
+
+  return refreshed === true;
 }
 
 /**
@@ -197,8 +210,8 @@ export type UserCatalogRefreshDeps = CatalogRefreshWithCoverSyncDeps & {
  * libraries, then refresh cards + cover sync. Manifest failures never abort
  * the disk scan. Force runs inside the exclusive catalog lock.
  */
-export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<void> {
-  await runCatalogRefreshWithCoverSync(async () => {
+export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promise<boolean> {
+  return runCatalogRefreshWithCoverSync(async () => {
     await forceRemoteManifestsBestEffort(deps.refreshRemoteManifests);
     const shouldRefresh = await prepareAutoLibraryScan();
     if (shouldRefresh) {
@@ -206,6 +219,35 @@ export async function runUserCatalogRefresh(deps: UserCatalogRefreshDeps): Promi
     }
     return shouldRefresh;
   }, deps);
+}
+
+export type RefreshCatalogAndSelectedDetailsDeps = {
+  refreshCatalog: () => Promise<boolean>;
+  markCatalogRefreshed: () => void;
+  resolveSelectedTarget: () => SelectedWorkspaceTarget | null;
+  refreshSelectedDetails: (target: SelectedWorkspaceTarget) => Promise<void>;
+};
+
+/**
+ * Refreshes catalog-owned UI first, then passively reconciles the selected game.
+ * The catalog completion marker intentionally survives a later details failure.
+ */
+export async function refreshCatalogAndSelectedDetails(
+  deps: RefreshCatalogAndSelectedDetailsDeps,
+): Promise<boolean> {
+  const refreshed = await deps.refreshCatalog();
+  if (!refreshed) {
+    return false;
+  }
+
+  deps.markCatalogRefreshed();
+
+  const target = deps.resolveSelectedTarget();
+  if (target !== null) {
+    await deps.refreshSelectedDetails(target);
+  }
+
+  return true;
 }
 
 export type SubmitAddGameDeps = CatalogRefreshWithCoverSyncDeps;

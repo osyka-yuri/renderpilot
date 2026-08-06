@@ -23,7 +23,6 @@ export { addonCoreApi, mergeAddonApis } from './model/addon-core-api';
 export { commonOutcomeApi, hostSnapshotApi } from './model/addon-outcome-api.svelte';
 
 export { createExclusiveAddonStores } from './model/create-exclusive-addon-stores';
-export type { AddonStoreLike } from './model/create-exclusive-addon-stores';
 
 export { defaultHostFacts, mapAvailabilitySnapshot } from './model/store-helpers';
 

@@ -1,4 +1,9 @@
-import type { GameDetails, GameLibraryComponent } from '@entities/game';
+import {
+  canonicalAddonCapabilities,
+  type AddonCapability,
+  type GameDetails,
+  type GameLibraryComponent,
+} from '@entities/game';
 import {
   libraryVendorOrder,
   libraryVendorKey,
@@ -8,6 +13,7 @@ import {
 import type { SettingFamily } from '@features/nvapi-settings';
 
 export const NVIDIA_STREAMLINE_TECHNOLOGY = 'nvidia_streamline';
+export const ADDONS_TAB_VALUE = 'addons';
 
 // Each DLSS DLL family is its own card (physical DLL swap + NVAPI driver
 // overrides), exactly like Super Resolution — keyed off the component's
@@ -37,9 +43,22 @@ function compareComponents(a: GameLibraryComponent, b: GameLibraryComponent): nu
 }
 
 export type VendorTab = {
-  key: LibraryVendorKey;
-  label: string;
-  components: GameLibraryComponent[];
+  readonly key: LibraryVendorKey;
+  readonly label: string;
+  readonly components: readonly GameLibraryComponent[];
+};
+
+type AddonsTab = {
+  readonly value: typeof ADDONS_TAB_VALUE;
+  readonly capabilities: readonly AddonCapability[];
+};
+
+type GameDetailsTabValue = LibraryVendorKey | typeof ADDONS_TAB_VALUE;
+
+type GameDetailsTabs = {
+  readonly vendorTabs: readonly VendorTab[];
+  readonly addonsTab: AddonsTab | null;
+  readonly values: readonly GameDetailsTabValue[];
 };
 
 /**
@@ -47,7 +66,7 @@ export type VendorTab = {
  * vendor-specific tabs. Sorts tabs according to a predefined vendor order,
  * and components within tabs by technology importance.
  */
-export function createVendorTabs(details: GameDetails | null): VendorTab[] {
+export function createVendorTabs(details: GameDetails | null): readonly VendorTab[] {
   if (!details) {
     return [];
   }
@@ -67,4 +86,40 @@ export function createVendorTabs(details: GameDetails | null): VendorTab[] {
       };
     })
     .filter((tab) => tab.components.length > 0);
+}
+
+/**
+ * Builds the complete tab model from the details read model. Add-on
+ * capabilities are canonicalized independently of backend ordering so the
+ * tab contents, store lifecycle, and update workflow can share one stable
+ * source of truth.
+ */
+export function createGameDetailsTabs(details: GameDetails | null): GameDetailsTabs {
+  const vendorTabs = createVendorTabs(details);
+  const capabilities = canonicalAddonCapabilities(details?.addon_capabilities ?? []);
+  const addonsTab: AddonsTab | null =
+    capabilities.length > 0
+      ? {
+          value: ADDONS_TAB_VALUE,
+          capabilities,
+        }
+      : null;
+
+  return {
+    vendorTabs,
+    addonsTab,
+    values: [...vendorTabs.map((tab) => tab.key), ...(addonsTab ? [addonsTab.value] : [])],
+  };
+}
+
+/** Keeps a valid user selection, otherwise resolves a deterministic fallback. */
+export function reconcileGameDetailsTabValue(
+  current: string,
+  available: readonly GameDetailsTabValue[],
+): GameDetailsTabValue | '' {
+  const selected = available.find((value) => value === current);
+  if (selected) {
+    return selected;
+  }
+  return available[0] ?? '';
 }

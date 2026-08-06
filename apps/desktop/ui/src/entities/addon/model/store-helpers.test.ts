@@ -11,6 +11,7 @@ import {
   mapHostSnapshotCore,
   materializeMutationCommit,
   withBusy,
+  withDeactivation,
   withLoadBegin,
   withLoadSuccess,
   withMutationCommit,
@@ -231,6 +232,27 @@ describe('AddonCoreSnapshot transitions', () => {
 
     const retry = withLoadBegin(prior, true);
     expect(retry.next.loadError).toBe('previous failure');
+  });
+
+  it('withDeactivation resets state and advances the request token', () => {
+    const prior = {
+      ...createInitialAddonCoreSnapshot<AddonInstallStateBase, FreshnessSource>(),
+      state: installed,
+      loaded: true,
+      busy: true,
+      loadError: 'stale',
+      updateReport: currentReport,
+      requestId: 4,
+    };
+
+    const next = withDeactivation(prior);
+
+    expect(next).toEqual({
+      ...createInitialAddonCoreSnapshot<AddonInstallStateBase, FreshnessSource>(),
+      requestId: 5,
+    });
+    expect(prior.requestId).toBe(4);
+    expect(prior.state).toBe(installed);
   });
 
   it('withLoadBegin clears install chrome on navigation load', () => {

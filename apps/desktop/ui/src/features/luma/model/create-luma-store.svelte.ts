@@ -109,7 +109,7 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
       // (load-only path already assigns outcome via applyLoadReport).
       applyOutcome(report);
     },
-    resetToolChrome: (gameId) => {
+    resetToolState: (gameId) => {
       availabilitySnapshot = {
         hostDetection: 'absent',
         hostFacts: defaultHostFacts(),
@@ -121,7 +121,7 @@ export function createLumaStore(options: LumaStoreOptions = {}) {
       outcome = null;
       // Same-game reload keeps retained profile meta so installable features
       // survive resolution drift. Switching games drops it immediately.
-      if (lastLoadGameId !== null && lastLoadGameId !== gameId) {
+      if (gameId === null || (lastLoadGameId !== null && lastLoadGameId !== gameId)) {
         retainedProfileMeta = null;
       }
       lastLoadGameId = gameId;

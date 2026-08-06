@@ -14,6 +14,7 @@ export {
 export {
   ALL_ADDON_CAPABILITIES,
   addonCapabilityLabel,
+  canonicalAddonCapabilities,
   hasPartialAddonSelection,
   isAddonCapability,
   normalizeAddonCapabilities,

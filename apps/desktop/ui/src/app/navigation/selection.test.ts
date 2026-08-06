@@ -10,7 +10,10 @@ import {
 } from '@entities/game';
 import {
   isGameSelected,
+  resolveSelectedGameCatalogDeltaAction,
   resolveSelectedGameDetails,
+  resolveSelectedWorkspaceTarget,
+  resolveSelectedWorkspaceTargetForGame,
   type ResolveSelectedGameDetailsInput,
   workspaceShellGameTitle,
 } from './selection';
@@ -316,6 +319,68 @@ describe('selection helpers', () => {
       expect(isGameSelected(DEFAULT_GAME_ID, DEFAULT_GAME_ID)).toBe(true);
       expect(isGameSelected(DEFAULT_GAME_ID, 'manual:OTHER')).toBe(false);
       expect(isGameSelected(null, DEFAULT_GAME_ID)).toBe(false);
+    });
+  });
+
+  describe('selected workspace synchronization', () => {
+    it('resolves a normalized target only for visible workspace screens', () => {
+      expect(resolveSelectedWorkspaceTarget(DETAILS_SCREEN, `  ${DEFAULT_GAME_ID}  `)).toEqual({
+        gameId: DEFAULT_GAME_ID,
+        screen: DETAILS_SCREEN,
+      });
+      expect(resolveSelectedWorkspaceTarget(OPERATIONS_SCREEN, DEFAULT_GAME_ID)).toEqual({
+        gameId: DEFAULT_GAME_ID,
+        screen: OPERATIONS_SCREEN,
+      });
+      expect(resolveSelectedWorkspaceTarget(GAMES_SCREEN, DEFAULT_GAME_ID)).toBeNull();
+      expect(resolveSelectedWorkspaceTarget(DETAILS_SCREEN, null)).toBeNull();
+      expect(resolveSelectedWorkspaceTarget(DETAILS_SCREEN, '   ')).toBeNull();
+    });
+
+    it('resolves the current workspace for the same game across workspace tabs', () => {
+      expect(
+        resolveSelectedWorkspaceTargetForGame(OPERATIONS_SCREEN, DEFAULT_GAME_ID, DEFAULT_GAME_ID),
+      ).toEqual({ gameId: DEFAULT_GAME_ID, screen: OPERATIONS_SCREEN });
+      expect(
+        resolveSelectedWorkspaceTargetForGame(GAMES_SCREEN, DEFAULT_GAME_ID, DEFAULT_GAME_ID),
+      ).toBeNull();
+      expect(
+        resolveSelectedWorkspaceTargetForGame(DETAILS_SCREEN, 'manual:OTHER', DEFAULT_GAME_ID),
+      ).toBeNull();
+    });
+
+    it('reloads changed selected details and ignores unrelated deltas', () => {
+      expect(
+        resolveSelectedGameCatalogDeltaAction(DETAILS_SCREEN, DEFAULT_GAME_ID, {
+          changedGameIds: [DEFAULT_GAME_ID],
+          removedGameIds: [],
+        }),
+      ).toEqual({ kind: 'reload', gameId: DEFAULT_GAME_ID, screen: DETAILS_SCREEN });
+
+      expect(
+        resolveSelectedGameCatalogDeltaAction(DETAILS_SCREEN, DEFAULT_GAME_ID, {
+          changedGameIds: ['manual:OTHER'],
+          removedGameIds: [],
+        }),
+      ).toEqual({ kind: 'none' });
+    });
+
+    it('clears a removed selected game instead of attempting a reload', () => {
+      expect(
+        resolveSelectedGameCatalogDeltaAction(OPERATIONS_SCREEN, DEFAULT_GAME_ID, {
+          changedGameIds: [DEFAULT_GAME_ID],
+          removedGameIds: [DEFAULT_GAME_ID],
+        }),
+      ).toEqual({ kind: 'clear' });
+    });
+
+    it('does not synchronize a hidden workspace', () => {
+      expect(
+        resolveSelectedGameCatalogDeltaAction(GAMES_SCREEN, DEFAULT_GAME_ID, {
+          changedGameIds: [DEFAULT_GAME_ID],
+          removedGameIds: [],
+        }),
+      ).toEqual({ kind: 'none' });
     });
   });
 });

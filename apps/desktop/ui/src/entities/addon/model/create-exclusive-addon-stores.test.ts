@@ -8,6 +8,7 @@ function makeStore(id: string) {
     busy: false,
     updateAvailable: false,
     load: vi.fn((_gameId: string) => Promise.resolve()),
+    deactivate: vi.fn(),
     update: vi.fn((_gameId: string) => Promise.resolve('ok' as const)),
   };
 }
@@ -30,8 +31,9 @@ describe('createExclusiveAddonStores', () => {
     expect(luma.load).toHaveBeenCalledWith('game-1');
   });
 
-  it('skips peer reload when shouldReloadPeers returns false', () => {
+  it('reloads only peers accepted by the key-aware predicate', () => {
     const luma = makeStore('luma');
+    const third = makeStore('third');
     let exclusivityHandler: ((gameId: string) => void) | undefined;
 
     createExclusiveAddonStores(
@@ -41,13 +43,15 @@ describe('createExclusiveAddonStores', () => {
           return makeStore('renodx');
         },
         luma: () => luma,
+        third: () => third,
       },
-      { shouldReloadPeers: () => false },
+      { shouldReloadPeer: (gameId, peer) => gameId === 'game-1' && peer === 'luma' },
     );
 
     exclusivityHandler?.('game-1');
 
-    expect(luma.load).not.toHaveBeenCalled();
+    expect(luma.load).toHaveBeenCalledWith('game-1');
+    expect(third.load).not.toHaveBeenCalled();
   });
 
   it('reloadPeers skips the excluded store', () => {

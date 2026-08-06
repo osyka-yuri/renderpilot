@@ -63,6 +63,7 @@ export function addonCoreApi<
     get requestToken() {
       return core.requestToken;
     },
+    deactivate: core.deactivate,
   };
 }
 

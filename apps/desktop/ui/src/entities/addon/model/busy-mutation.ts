@@ -25,8 +25,8 @@ export type PostMutationProbe = 'never' | 'passive';
 
 /**
  * Outcome of a store mutation (`install` / `update` / `uninstall`, ...).
- * Soft no-ops (busy, not eligible) are `skipped` so bulk workflows do not
- * treat them as user-visible failures.
+ * Soft no-ops and discarded stale failures are `skipped` so bulk workflows do
+ * not treat work no longer owned by the current UI as a user-visible failure.
  */
 export type AddonMutationResult = 'ok' | 'skipped' | 'failed';
 
@@ -114,6 +114,7 @@ export async function runBusyMutation<
   // owner becomes the commit token; a superseding load leaves a stale owner
   // and already cleared busy via withLoadBegin.
   let busyOwnerToken = mutationToken;
+  let backendCommitted = false;
   if (options.clearDownloadProgress !== false) {
     clearDownloadProgress([gameId]);
   }
@@ -123,25 +124,20 @@ export async function runBusyMutation<
     try {
       nextState = await fn();
     } catch (error) {
-      if (mutationToken === ctx.getCore().requestId) {
-        publishPresentedErrorNotification(t(options.errorKey), error);
+      if (mutationToken !== ctx.getCore().requestId) {
+        return 'skipped';
       }
+
+      publishPresentedErrorNotification(t(options.errorKey), error);
       return 'failed';
     }
+    backendCommitted = true;
 
     // Load (or another request) superseded this mutation -- discard the paint
     // so game A cannot land on the store after the user navigated to game B.
-    // Backend already committed: still notify peers so exclusivity badges update.
     // Report `ok` so bulk update-all does not treat a successful backend
     // commit as a user-visible failure when paint was discarded.
     if (mutationToken !== ctx.getCore().requestId) {
-      if (options.notifyExclusivity) {
-        try {
-          ctx.notifyExclusivityChange(gameId);
-        } catch (error) {
-          reportClientError('addon_exclusivity_refresh', error, 'warning');
-        }
-      }
       return 'ok';
     }
 
@@ -158,28 +154,37 @@ export async function runBusyMutation<
     if (shouldProbe) {
       await ctx.probeUpdateStatus(gameId, token, 'passive');
     }
-    try {
-      await options.afterCommit?.(token);
-    } catch (error) {
-      reportClientError('addon_post_commit_refresh', error, 'warning');
+    if (token === ctx.getCore().requestId && options.afterCommit) {
+      try {
+        await options.afterCommit(token);
+      } catch (error) {
+        if (token === ctx.getCore().requestId) {
+          reportClientError('addon_post_commit_refresh', error, 'warning');
+        }
+      }
     }
     if (token === ctx.getCore().requestId && ctx.onMutationSideEffect) {
       try {
         await ctx.onMutationSideEffect(gameId, token);
       } catch (error) {
-        reportClientError('addon_post_mutation_side_effect', error, 'warning');
+        if (token === ctx.getCore().requestId) {
+          reportClientError('addon_post_mutation_side_effect', error, 'warning');
+        }
       }
     }
-    if (options.notifyExclusivity && token === ctx.getCore().requestId) {
+    // Backend mutation already committed; post-commit hooks are best-effort.
+    return 'ok';
+  } finally {
+    // A successful capability mutation must notify peers even when navigation or
+    // teardown made its UI work stale. Page-owned predicates prevent peer I/O
+    // after the owning context is destroyed.
+    if (backendCommitted && options.notifyExclusivity) {
       try {
         ctx.notifyExclusivityChange(gameId);
       } catch (error) {
         reportClientError('addon_exclusivity_refresh', error, 'warning');
       }
     }
-    // Backend mutation already committed; post-commit hooks are best-effort.
-    return 'ok';
-  } finally {
     if (busyOwnerToken === ctx.getCore().requestId) {
       ctx.setCore(withBusy(ctx.getCore(), false));
     }

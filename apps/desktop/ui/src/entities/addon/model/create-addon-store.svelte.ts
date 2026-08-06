@@ -14,6 +14,7 @@ import {
   beginRequest,
   createInitialAddonCoreSnapshot,
   deriveFreshness,
+  withDeactivation,
   withLoadBegin,
   withLoadError,
   withLoadSuccess,
@@ -54,12 +55,11 @@ export type CreateAddonStoreConfig<
   /** Tool-specific host snapshot refresh after a mutation (local scan). */
   applyHostRefresh: (report: TAvailabilityReport) => void;
   /**
-   * Clears tool-owned chrome (outcome, host snapshot, ...) when a navigation load
-   * begins. Receives the game id being loaded so tools can retain same-game
-   * caches (e.g. Luma profile meta) while dropping cross-game state.
-   * Not called for same-game retry, which retains prior chrome.
+   * Clears tool-owned state when navigation starts or the store is deactivated.
+   * A normalized game id permits same-game cache retention; `null` requires a
+   * complete reset. Explicit retry retains the current tool state.
    */
-  resetToolChrome?: (gameId: string) => void;
+  resetToolState?: (gameId: string | null) => void;
   buildUpdateReportForInstall: (nextState: TState) => TUpdateReport | null;
   buildProbeFailureReport: () => TUpdateReport;
   /** Tool-specific tracked sources for the untracked freshness branch (e.g. dgvoodoo, dlssFix). */
@@ -107,7 +107,7 @@ export function createAddonStore<
     onExclusivityChange,
     applyLoadReport,
     applyHostRefresh,
-    resetToolChrome,
+    resetToolState,
     buildUpdateReportForInstall,
     buildProbeFailureReport,
     freshnessExtraSources,
@@ -149,16 +149,17 @@ export function createAddonStore<
   }
 
   async function loadAvailability(gameId: string, preserveLoadError: boolean): Promise<void> {
+    const normalizedGameId = gameId.trim();
     const { next, token } = withLoadBegin(core, preserveLoadError);
     core = next;
     // Navigation loads clear tool chrome so outcome flags from the previous game
     // cannot drive the card while the new game's availability is in flight.
     if (!preserveLoadError) {
-      resetToolChrome?.(gameId);
+      resetToolState?.(normalizedGameId);
     }
     let succeeded = false;
     try {
-      const report = await api.getAvailability(gameId);
+      const report = await api.getAvailability(normalizedGameId);
       if (token !== core.requestId) {
         return;
       }
@@ -181,11 +182,17 @@ export function createAddonStore<
     if (!succeeded) {
       return;
     }
-    await probeUpdateStatus(gameId, token, 'passive');
+    await probeUpdateStatus(normalizedGameId, token, 'passive');
   }
 
   async function load(gameId: string): Promise<void> {
     await loadAvailability(gameId, false);
+  }
+
+  /** Invalidates pending work and clears core state without issuing I/O. */
+  function deactivate(): void {
+    core = withDeactivation(core);
+    resetToolState?.(null);
   }
 
   /** Keeps the previous failure visible while this explicit retry is in progress. */
@@ -333,6 +340,7 @@ export function createAddonStore<
       return core.requestId;
     },
     load,
+    deactivate,
     retry,
     checkForUpdates,
     isCurrentRequest,

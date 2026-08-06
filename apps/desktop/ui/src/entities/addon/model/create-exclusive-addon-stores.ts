@@ -1,13 +1,8 @@
-import type { AddonMutationResult } from './busy-mutation';
-
-export type AddonStoreLike = {
+type ReloadableAddonStore = {
   load(gameId: string): Promise<void>;
-  update(gameId: string): Promise<AddonMutationResult>;
-  busy: boolean;
-  updateAvailable: boolean;
 };
 
-type AddonStoreFactory<T extends AddonStoreLike> = (opts: {
+type AddonStoreFactory<T extends ReloadableAddonStore> = (opts: {
   onExclusivityChange: (gameId: string) => void;
 }) => T;
 
@@ -15,23 +10,22 @@ type AddonStoreFactory<T extends AddonStoreLike> = (opts: {
  * Creates mutually exclusive per-game add-on stores and wires peer reloads
  * after install/uninstall mutations flip the exclusivity block.
  */
-export function createExclusiveAddonStores<T extends Record<string, AddonStoreLike>>(
+export function createExclusiveAddonStores<T extends Record<string, ReloadableAddonStore>>(
   factories: { [K in keyof T]: AddonStoreFactory<T[K]> },
   options?: {
-    shouldReloadPeers?: (changedGameId: string) => boolean;
+    shouldReloadPeer?: (changedGameId: string, peer: keyof T) => boolean;
   },
 ): {
   stores: T;
-  list: AddonStoreLike[];
-  reloadPeers(gameId: string, exclude?: AddonStoreLike): void;
+  reloadPeers(gameId: string, exclude?: ReloadableAddonStore): void;
 } {
   const storeEntries = Object.keys(factories) as (keyof T)[];
   const stores = {} as T;
-  const list: AddonStoreLike[] = [];
 
-  const reloadPeers = (gameId: string, exclude?: AddonStoreLike): void => {
-    for (const store of list) {
-      if (store !== exclude) {
+  const reloadPeers = (gameId: string, exclude?: ReloadableAddonStore): void => {
+    for (const key of storeEntries) {
+      const store = stores[key];
+      if (store !== exclude && (options?.shouldReloadPeer?.(gameId, key) ?? true)) {
         void store.load(gameId);
       }
     }
@@ -40,14 +34,11 @@ export function createExclusiveAddonStores<T extends Record<string, AddonStoreLi
   for (const key of storeEntries) {
     const store = factories[key]({
       onExclusivityChange: (changedGameId) => {
-        if (options?.shouldReloadPeers?.(changedGameId) ?? true) {
-          reloadPeers(changedGameId, store);
-        }
+        reloadPeers(changedGameId, store);
       },
     });
     stores[key] = store;
-    list.push(store);
   }
 
-  return { stores, list, reloadPeers };
+  return { stores, reloadPeers };
 }

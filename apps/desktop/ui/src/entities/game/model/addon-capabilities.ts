@@ -15,6 +15,12 @@ export function normalizeAddonCapabilities(values: readonly string[]): AddonCapa
   return normalizeUniqueTrimmedStrings(values).filter(isAddonCapability);
 }
 
+/** Returns the supported capability set in stable product-defined order. */
+export function canonicalAddonCapabilities(values: readonly string[]): readonly AddonCapability[] {
+  const normalized = new Set(normalizeAddonCapabilities(values));
+  return ALL_ADDON_CAPABILITIES.filter((capability) => normalized.has(capability));
+}
+
 export function addonCapabilityLabel(capability: AddonCapability): string {
   return ADDON_DISPLAY_NAME[capability];
 }

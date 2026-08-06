@@ -4,7 +4,14 @@
   import DesktopShell from '@app/layout/DesktopShell.svelte';
   import type { Screen } from '@app/navigation/screen';
   import type { WorkspaceScreen } from '@app/navigation/workspace';
-  import { isGameSelected, workspaceShellGameTitle } from '@app/navigation/selection';
+  import {
+    isGameSelected,
+    resolveSelectedGameCatalogDeltaAction,
+    resolveSelectedWorkspaceTarget,
+    resolveSelectedWorkspaceTargetForGame,
+    type SelectedWorkspaceTarget,
+    workspaceShellGameTitle,
+  } from '@app/navigation/selection';
   import {
     bootstrapGamesCatalog,
     type CatalogDelta,
@@ -33,6 +40,7 @@
     loadAndPresentGameDetails,
     openDesktopGame,
     queueBackgroundCoverSync,
+    refreshCatalogAndSelectedDetails,
     reloadSelectedGame as reloadSelectedGameWorkflow,
     runUserCatalogRefresh,
     rollbackRootCorrectionComponents,
@@ -40,6 +48,7 @@
     removeGameAndRefreshCards,
     syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
+  import { createSelectedGameDetailsRefresher } from '@app/model/create-selected-game-details-refresher';
   import { startBackgroundRefresh, type AppInitializationState } from '@entities/app';
   import { listen } from '@tauri-apps/api/event';
   import {
@@ -68,6 +77,14 @@
   const { initState }: Props = $props();
 
   const model = createDesktopAppModel(() => initState);
+  const selectedDetailsRefresher = createSelectedGameDetailsRefresher({
+    getGameDetails,
+    resolveCurrentTarget: (gameId) =>
+      resolveSelectedWorkspaceTargetForGame(model.screen, model.selectedGameId, gameId),
+    presentGameDetails: (details, target) => {
+      model.presentGameDetails(details, target.screen);
+    },
+  });
   const pages = createDesktopPageRegistry();
   const coverSyncQueue = createCoverSyncQueue();
   const appUpdater = createAppUpdaterModel({
@@ -203,6 +220,39 @@
     queueMissingCoverHydration();
   });
 
+  async function refreshSelectedGameDetails(
+    target: SelectedWorkspaceTarget,
+    operation: 'game_details_after_catalog_delta' | 'game_details_after_user_refresh',
+  ): Promise<void> {
+    try {
+      await selectedDetailsRefresher.refresh(target);
+    } catch (error: unknown) {
+      reportClientError(operation, error);
+    }
+  }
+
+  function handleCatalogDelta(delta: CatalogDelta): void {
+    if (!gamesSession.acceptCatalogDelta(delta)) {
+      return;
+    }
+
+    void gamesSession.refreshCatalog().catch((error: unknown) => {
+      reportClientError('catalog_read_after_delta', error);
+    });
+
+    const action = resolveSelectedGameCatalogDeltaAction(model.screen, model.selectedGameId, delta);
+    switch (action.kind) {
+      case 'none':
+        return;
+      case 'clear':
+        selectedDetailsRefresher.cancel();
+        model.clearSelection();
+        return;
+      case 'reload':
+        void refreshSelectedGameDetails(action, 'game_details_after_catalog_delta');
+    }
+  }
+
   onMount(() => {
     model.applyCurrentTheme();
 
@@ -240,11 +290,7 @@
       startUpdater: () => {
         void appUpdater.start();
       },
-      onCatalogDelta: (delta: CatalogDelta) => {
-        if (gamesSession.acceptCatalogDelta(delta)) {
-          void gamesSession.refreshCatalog();
-        }
-      },
+      onCatalogDelta: handleCatalogDelta,
       onPartialScanFailures: publishPartialLibraryScanWarning,
       completeInitialCatalogSync,
       enableCoverHydration: () => {
@@ -283,6 +329,7 @@
     return () => {
       stopThemeObserver();
       disposed = true;
+      selectedDetailsRefresher.dispose();
       catalogLifecycle.dispose();
       gamesSession.flushSearchPersist();
       gamesSession.dispose();
@@ -328,6 +375,8 @@
   }
 
   async function loadGameDetails(gameId: string, nextScreen: WorkspaceScreen): Promise<void> {
+    // Foreground navigation always wins over passive catalog-driven refreshes.
+    selectedDetailsRefresher.cancel();
     await loadAndPresentGameDetails(gameId, nextScreen, {
       getGameDetails,
       beginDetailsRequest: model.workspace.beginDetailsRequest,
@@ -353,14 +402,28 @@
     navigate('settings');
   }
 
-  async function handleRefresh(): Promise<void> {
-    isRefreshing = true;
-    try {
-      await runUserCatalogRefresh(catalogRefreshDeps());
-      refreshCounter++;
-    } finally {
-      isRefreshing = false;
+  function handleRefresh(): void {
+    if (isRefreshing) {
+      return;
     }
+
+    isRefreshing = true;
+    void refreshCatalogAndSelectedDetails({
+      refreshCatalog: () => runUserCatalogRefresh(catalogRefreshDeps()),
+      markCatalogRefreshed: () => {
+        refreshCounter++;
+      },
+      resolveSelectedTarget: () =>
+        resolveSelectedWorkspaceTarget(model.screen, model.selectedGameId),
+      refreshSelectedDetails: (target) =>
+        refreshSelectedGameDetails(target, 'game_details_after_user_refresh'),
+    })
+      .catch((error: unknown) => {
+        reportClientError('user_catalog_refresh', error);
+      })
+      .finally(() => {
+        isRefreshing = false;
+      });
   }
 </script>
 

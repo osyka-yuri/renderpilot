@@ -580,6 +580,8 @@ describe('createRenoDxStore', () => {
 
     // game2's state must survive; the stale game1 response is dropped.
     expect(store.isInstalled).toBe(true);
+    expect(api.dlssFixAvailability).toHaveBeenCalledOnce();
+    expect(api.dlssFixAvailability).toHaveBeenCalledWith('game2');
   });
 
   it('install() clears stale download progress before starting', async () => {

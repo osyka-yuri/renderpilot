@@ -33,6 +33,7 @@ import {
   loadAndPresentGameDetails,
   openDesktopGame,
   queueBackgroundCoverSync,
+  refreshCatalogAndSelectedDetails,
   reloadSelectedGame,
   removeGameAndRefreshCards,
   rollbackRootCorrectionComponents,
@@ -85,6 +86,22 @@ describe('desktop-app-workflows', () => {
     expect(presentGameDetails).not.toHaveBeenCalled();
   });
 
+  it('loadAndPresentGameDetails suppresses failures from superseded requests', async () => {
+    const pending = Promise.withResolvers<ReturnType<typeof createGameDetails>>();
+    let active = true;
+    const load = loadAndPresentGameDetails('game-1', 'details', {
+      getGameDetails: vi.fn(() => pending.promise),
+      beginDetailsRequest: () => 'request-1',
+      isDetailsRequestActive: () => active,
+      presentGameDetails: vi.fn(),
+    });
+
+    active = false;
+    pending.reject(new Error('late failure'));
+
+    await expect(load).resolves.toBeUndefined();
+  });
+
   it('openDesktopGame preloads the page before starting the exclusive details request', async () => {
     const calls: string[] = [];
     const preloadPage = vi.fn(() => {
@@ -132,7 +149,7 @@ describe('desktop-app-workflows', () => {
       void fn();
     });
 
-    await runCatalogRefreshWithCoverSync(() => Promise.resolve(true), {
+    const refreshed = await runCatalogRefreshWithCoverSync(() => Promise.resolve(true), {
       runExclusive: (task) => task(),
       refreshGameCards,
       coverSyncQueue: {
@@ -144,6 +161,7 @@ describe('desktop-app-workflows', () => {
     });
 
     expect(refreshGameCards).toHaveBeenCalledTimes(1);
+    expect(refreshed).toBe(true);
     expect(queue).toHaveBeenCalledTimes(1);
     expect(syncMissingCoversAfterCardsLoad).toHaveBeenCalledTimes(1);
   });
@@ -152,7 +170,7 @@ describe('desktop-app-workflows', () => {
     const refreshGameCards = vi.fn(() => Promise.resolve());
     const queue = vi.fn();
 
-    await runCatalogRefreshWithCoverSync(() => Promise.resolve(false), {
+    const refreshed = await runCatalogRefreshWithCoverSync(() => Promise.resolve(false), {
       runExclusive: (task) => task(),
       refreshGameCards,
       coverSyncQueue: {
@@ -165,6 +183,25 @@ describe('desktop-app-workflows', () => {
 
     expect(refreshGameCards).not.toHaveBeenCalled();
     expect(queue).not.toHaveBeenCalled();
+    expect(refreshed).toBe(false);
+  });
+
+  it('reports an uncompleted exclusive run as an unsuccessful catalog refresh', async () => {
+    const refreshGameCards = vi.fn(() => Promise.resolve());
+
+    const refreshed = await runCatalogRefreshWithCoverSync(() => Promise.resolve(true), {
+      runExclusive: () => Promise.resolve(null),
+      refreshGameCards,
+      coverSyncQueue: {
+        queue: vi.fn(),
+        setAutoFetching: vi.fn(),
+        autoFetchingIds: new Set<string>(),
+      } as never,
+      syncMissingCoversAfterCardsLoad: vi.fn(),
+    });
+
+    expect(refreshed).toBe(false);
+    expect(refreshGameCards).not.toHaveBeenCalled();
   });
 
   describe('submitAddGameAndRefreshCards', () => {
@@ -447,5 +484,63 @@ describe('desktop-app-workflows', () => {
       expect(scanMocks.scanAutoLibrariesWithErrorRecovery).toHaveBeenCalledTimes(1);
       expect(deps.refreshGameCards).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('marks catalog completion before a later passive details failure', async () => {
+    const calls: string[] = [];
+    const detailsFailure = new Error('details unavailable');
+
+    await expect(
+      refreshCatalogAndSelectedDetails({
+        refreshCatalog: () => {
+          calls.push('catalog');
+          return Promise.resolve(true);
+        },
+        markCatalogRefreshed: () => {
+          calls.push('counter');
+        },
+        resolveSelectedTarget: () => ({ gameId: 'game-1', screen: 'details' }),
+        refreshSelectedDetails: () => {
+          calls.push('details');
+          return Promise.reject(detailsFailure);
+        },
+      }),
+    ).rejects.toBe(detailsFailure);
+
+    expect(calls).toEqual(['catalog', 'counter', 'details']);
+  });
+
+  it('does not mark or refresh details when the catalog refresh did not complete', async () => {
+    const markCatalogRefreshed = vi.fn();
+    const refreshSelectedDetails = vi.fn(() => Promise.resolve());
+
+    const refreshed = await refreshCatalogAndSelectedDetails({
+      refreshCatalog: () => Promise.resolve(false),
+      markCatalogRefreshed,
+      resolveSelectedTarget: () => ({ gameId: 'game-1', screen: 'details' }),
+      refreshSelectedDetails,
+    });
+
+    expect(refreshed).toBe(false);
+    expect(markCatalogRefreshed).not.toHaveBeenCalled();
+    expect(refreshSelectedDetails).not.toHaveBeenCalled();
+  });
+
+  it('propagates an unexpected catalog failure before marking or refreshing details', async () => {
+    const failure = new Error('catalog unavailable');
+    const markCatalogRefreshed = vi.fn();
+    const refreshSelectedDetails = vi.fn(() => Promise.resolve());
+
+    await expect(
+      refreshCatalogAndSelectedDetails({
+        refreshCatalog: () => Promise.reject(failure),
+        markCatalogRefreshed,
+        resolveSelectedTarget: () => ({ gameId: 'game-1', screen: 'details' }),
+        refreshSelectedDetails,
+      }),
+    ).rejects.toBe(failure);
+
+    expect(markCatalogRefreshed).not.toHaveBeenCalled();
+    expect(refreshSelectedDetails).not.toHaveBeenCalled();
   });
 });

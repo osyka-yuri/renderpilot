@@ -64,7 +64,10 @@ function baseApi() {
   };
 }
 
-function createTestStore(api = fakeApi()) {
+function createTestStore(
+  api = fakeApi(),
+  resetToolState: (gameId: string | null) => void = vi.fn(),
+) {
   let label = 'initial';
   const store = createAddonStore<TestState, TestUpdateReport, TestAvailabilityReport>({
     api,
@@ -75,13 +78,14 @@ function createTestStore(api = fakeApi()) {
     applyHostRefresh: (report) => {
       label = `${report.label}-refreshed`;
     },
+    resetToolState,
     buildUpdateReportForInstall: (nextState) =>
       nextState.status === 'installed'
         ? { addon: 'current', host: 'current', overall: 'current' }
         : null,
     buildProbeFailureReport: () => ({ addon: null, host: null, overall: 'unknown' }),
   });
-  return { store, getLabel: () => label };
+  return { store, getLabel: () => label, resetToolState };
 }
 
 describe('createAddonStore', () => {
@@ -133,6 +137,57 @@ describe('createAddonStore', () => {
     await slowLoad;
 
     expect(store.isInstalled).toBe(true);
+  });
+
+  it('deactivate() discards an in-flight load without probing or publishing an error', async () => {
+    const pending = Promise.withResolvers<TestAvailabilityReport>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => pending.promise),
+    });
+    const { store, resetToolState } = createTestStore(api);
+
+    const load = store.load('game1');
+    expect(store.loading).toBe(true);
+
+    store.deactivate();
+    expect(store.loading).toBe(false);
+    expect(store.loaded).toBe(false);
+    expect(store.busy).toBe(false);
+    expect(resetToolState).toHaveBeenLastCalledWith(null);
+
+    pending.reject(new Error('late failure'));
+    await load;
+
+    expect(store.loadError).toBeNull();
+    expect(api.checkUpdate).not.toHaveBeenCalled();
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
+  });
+
+  it('normalizes navigation game ids before resetting tool state and issuing I/O', async () => {
+    const api = fakeApi();
+    const { store, resetToolState } = createTestStore(api);
+
+    await store.load('  game1  ');
+
+    expect(resetToolState).toHaveBeenCalledWith('game1');
+    expect(api.getAvailability).toHaveBeenCalledWith('game1');
+  });
+
+  it('deactivate() prevents a late successful load from restoring stale state', async () => {
+    const pending = Promise.withResolvers<TestAvailabilityReport>();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => pending.promise),
+    });
+    const { store } = createTestStore(api);
+
+    const load = store.load('game1');
+    store.deactivate();
+    pending.resolve(INSTALLED_AVAILABILITY);
+    await load;
+
+    expect(store.loaded).toBe(false);
+    expect(store.isInstalled).toBe(false);
+    expect(api.checkUpdate).not.toHaveBeenCalled();
   });
 
   it('clears install chrome while loading a different game', async () => {
@@ -400,6 +455,109 @@ describe('createAddonStore', () => {
     expect(onExclusivityChange).toHaveBeenCalledWith('g1');
   });
 
+  it('deactivation discards late mutation UI work but preserves the commit signal', async () => {
+    const pendingInstall = Promise.withResolvers<TestState>();
+    const afterCommit = vi.fn();
+    const onMutationSideEffect = vi.fn();
+    const onExclusivityChange = vi.fn();
+    const api = fakeApi();
+    const store = createAddonStore<TestState, TestUpdateReport, TestAvailabilityReport>({
+      api,
+      messages: { loadFailed: 'addon.availability.loadFailed' satisfies MessageKey },
+      onExclusivityChange,
+      onMutationSideEffect,
+      applyLoadReport: () => undefined,
+      applyHostRefresh: () => undefined,
+      buildUpdateReportForInstall: () => CURRENT_REPORT,
+      buildProbeFailureReport: () => ({ addon: null, host: null, overall: 'unknown' }),
+    });
+
+    const mutation = store.runBusyMutation('g1', () => pendingInstall.promise, {
+      errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
+      notifyExclusivity: true,
+      probeUpdates: true,
+      afterCommit,
+    });
+    store.deactivate();
+    pendingInstall.resolve(INSTALLED);
+
+    await expect(mutation).resolves.toBe('ok');
+    expect(store.loaded).toBe(false);
+    expect(store.isInstalled).toBe(false);
+    expect(api.getAvailability).not.toHaveBeenCalled();
+    expect(api.checkUpdate).not.toHaveBeenCalled();
+    expect(afterCommit).not.toHaveBeenCalled();
+    expect(onMutationSideEffect).not.toHaveBeenCalled();
+    expect(onExclusivityChange).toHaveBeenCalledWith('g1');
+  });
+
+  it('treats a late mutation failure after deactivation as discarded', async () => {
+    const pendingInstall = Promise.withResolvers<TestState>();
+    const onExclusivityChange = vi.fn();
+    const api = fakeApi();
+    const store = createAddonStore<TestState, TestUpdateReport, TestAvailabilityReport>({
+      api,
+      messages: { loadFailed: 'addon.availability.loadFailed' satisfies MessageKey },
+      onExclusivityChange,
+      applyLoadReport: () => undefined,
+      applyHostRefresh: () => undefined,
+      buildUpdateReportForInstall: () => CURRENT_REPORT,
+      buildProbeFailureReport: () => ({ addon: null, host: null, overall: 'unknown' }),
+    });
+
+    const mutation = store.runBusyMutation('g1', () => pendingInstall.promise, {
+      errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
+      notifyExclusivity: true,
+    });
+    store.deactivate();
+    pendingInstall.reject(new Error('late failure'));
+
+    await expect(mutation).resolves.toBe('skipped');
+    expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
+    expect(onExclusivityChange).not.toHaveBeenCalled();
+  });
+
+  it('deactivation during post-commit refresh blocks later probes and hooks but preserves the commit signal', async () => {
+    const pendingHostRefresh = Promise.withResolvers<TestAvailabilityReport>();
+    const afterCommit = vi.fn();
+    const onMutationSideEffect = vi.fn();
+    const onExclusivityChange = vi.fn();
+    const api = fakeApi({
+      getAvailability: vi.fn(() => pendingHostRefresh.promise),
+    });
+    const store = createAddonStore<TestState, TestUpdateReport, TestAvailabilityReport>({
+      api,
+      messages: { loadFailed: 'addon.availability.loadFailed' satisfies MessageKey },
+      onExclusivityChange,
+      onMutationSideEffect,
+      applyLoadReport: () => undefined,
+      applyHostRefresh: () => undefined,
+      buildUpdateReportForInstall: () => CURRENT_REPORT,
+      buildProbeFailureReport: () => ({ addon: null, host: null, overall: 'unknown' }),
+    });
+
+    const mutation = store.runBusyMutation('g1', () => Promise.resolve(INSTALLED), {
+      errorKey: 'gameDetails.renodx.installError' satisfies MessageKey,
+      notifyExclusivity: true,
+      probeUpdates: true,
+      afterCommit,
+    });
+    await vi.waitFor(() => {
+      expect(api.getAvailability).toHaveBeenCalledWith('g1');
+    });
+
+    store.deactivate();
+    pendingHostRefresh.resolve(INSTALLED_AVAILABILITY);
+    await expect(mutation).resolves.toBe('ok');
+
+    expect(store.loaded).toBe(false);
+    expect(store.isInstalled).toBe(false);
+    expect(api.checkUpdate).not.toHaveBeenCalled();
+    expect(afterCommit).not.toHaveBeenCalled();
+    expect(onMutationSideEffect).not.toHaveBeenCalled();
+    expect(onExclusivityChange).toHaveBeenCalledWith('g1');
+  });
+
   it('probeUpdates marks freshness checking before host refresh resolves', async () => {
     const pendingRefresh = Promise.withResolvers<TestAvailabilityReport>();
     let refreshCalls = 0;
@@ -572,7 +730,7 @@ describe('createAddonStore', () => {
     expect(api.checkUpdate).toHaveBeenCalledWith('g1', 'passive');
   });
 
-  it('does not publish mutation errors after the request was superseded by load', async () => {
+  it('discards mutation errors after the request was superseded by load', async () => {
     const pendingInstall = Promise.withResolvers<TestState>();
     const { store } = createTestStore();
 
@@ -583,7 +741,7 @@ describe('createAddonStore', () => {
     pendingInstall.reject(new Error('install failed late'));
     const ok = await mutation;
 
-    expect(ok).toBe('failed');
+    expect(ok).toBe('skipped');
     expect(publishPresentedErrorNotification).not.toHaveBeenCalled();
     expect(store.busy).toBe(false);
   });
