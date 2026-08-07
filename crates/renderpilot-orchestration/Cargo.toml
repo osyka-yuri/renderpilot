@@ -9,6 +9,11 @@ description = "Orchestration layer for RenderPilot — typed feature results and
 [lints]
 workspace = true
 
+[features]
+# Deliberately opt-in cooperative fallback for local development hosts other
+# than the supported Windows and Linux production targets.
+development-host-fallback = []
+
 [dependencies]
 renderpilot-application = { path = "../renderpilot-application" }
 renderpilot-detection = { path = "../renderpilot-detection" }
@@ -31,6 +36,12 @@ ulid = "3"
 urlencoding = "2"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 zstd = { version = "0.13", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Wdk_Storage_FileSystem"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.1.4", features = ["fs"] }
 
 [dev-dependencies]
 renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite", features = ["test-instrumentation"] }

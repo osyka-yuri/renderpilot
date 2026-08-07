@@ -1,14 +1,15 @@
-//! The public content-delivery host and a generic, host-pinned JSON-manifest cache.
+//! The public content-delivery host and generic JSON-manifest fetch policy.
 //!
 //! RenderPilot serves its manifests (the graphics-library catalogue, the RenoDX
 //! overrides document, ...) from one anonymous CDN bucket. This module owns the
 //! single host literal -- [`CDN_HOST`] -- so URL construction ([`cdn_url`]) and the
-//! host-pinning check in `libraries::validate` can never desync, and a generic
-//! [`get_or_fetch`] cache that every manifest reuses: download (HTTPS, size-capped),
-//! strip any UTF-8 BOM, parse + validate, and cache under the app data dir with an
-//! optional TTL, a stale-on-failure offline fallback, and corrupt-file quarantine.
+//! host-pinning check in `libraries::validate` can never desync. It also owns the
+//! network and TTL policy for generic manifest caches. The filesystem transaction,
+//! corruption quarantine, and atomic cache publication primitives live in
+//! [`crate::fs`].
 
 use std::fs;
+#[cfg(test)]
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -46,21 +47,30 @@ enum CachedManifest<T> {
     Fresh(T),
     /// Present and parsed but past the TTL -- usable as an offline fallback.
     Stale(T),
-    /// No cache on disk.
+    /// No cache on disk. The production observation path uses
+    /// [`crate::fs::CacheObservation::Absent`]; this variant supports the
+    /// direct filesystem classifier tests below.
+    #[cfg(test)]
     Absent,
 }
 
 /// Returns the cached manifest if fresh; otherwise refreshes from the CDN, falling
-/// back to a stale cache when the network is unavailable, and quarantining (rather
-/// than deleting) a corrupt cache so a clean copy can be written while the bad one
-/// remains for diagnosis. A network failure with no cache surfaces as an error.
+/// back to a stale cache when the network is unavailable. Corrupt cache files are
+/// quarantined by the generic filesystem abstraction before the refresh attempt.
 pub(crate) async fn get_or_fetch<T, F>(spec: &CdnManifestSpec, parse: F) -> Result<T, ServiceError>
 where
     F: Fn(&[u8]) -> Result<T, ServiceError>,
 {
-    match read_cached(spec, &parse) {
-        Ok(CachedManifest::Fresh(manifest)) => Ok(manifest),
-        Ok(CachedManifest::Stale(stale)) => match fetch(spec, &parse).await {
+    let observed = observe_cached(spec, &parse)?;
+    match observed {
+        crate::fs::CacheObservation::Valid {
+            value: CachedManifest::Fresh(manifest),
+            ..
+        } => Ok(manifest),
+        crate::fs::CacheObservation::Valid {
+            generation,
+            value: CachedManifest::Stale(stale),
+        } => match fetch_observed(spec, &parse, &generation).await {
             Ok(fresh) => Ok(fresh),
             Err(error) => {
                 log::warn!(
@@ -70,20 +80,40 @@ where
                 Ok(stale)
             }
         },
-        Ok(CachedManifest::Absent) => fetch(spec, &parse).await,
-        Err(error) => {
+        #[cfg(test)]
+        crate::fs::CacheObservation::Valid {
+            generation,
+            value: CachedManifest::Absent,
+        } => fetch_observed(spec, &parse, &generation).await,
+        crate::fs::CacheObservation::Absent { generation } => {
+            fetch_observed(spec, &parse, &generation).await
+        }
+        crate::fs::CacheObservation::Invalid { generation, error } => {
             log::warn!(
                 "CDN manifest cache `{}` is unreadable ({error}); refreshing",
                 spec.file_name
             );
-            quarantine_corrupt(spec.file_name);
-            fetch(spec, &parse).await
+            fetch_observed(spec, &parse, &generation).await
         }
     }
 }
 
 /// Downloads, validates, and caches the manifest, returning the parsed value.
+/// It always captures the cache generation before starting network I/O, even
+/// when called directly rather than through [`get_or_fetch`].
 pub(crate) async fn fetch<T, F>(spec: &CdnManifestSpec, parse: F) -> Result<T, ServiceError>
+where
+    F: Fn(&[u8]) -> Result<T, ServiceError>,
+{
+    let observed = observe_cached(spec, &parse)?;
+    fetch_observed(spec, &parse, observed.generation()).await
+}
+
+async fn fetch_observed<T, F>(
+    spec: &CdnManifestSpec,
+    parse: &F,
+    observed_generation: &crate::fs::CacheGeneration,
+) -> Result<T, ServiceError>
 where
     F: Fn(&[u8]) -> Result<T, ServiceError>,
 {
@@ -91,21 +121,59 @@ where
         crate::net::download_limited_bytes(&spec.url, spec.max_size_bytes, "manifest fetch")
             .await?;
     let manifest = parse(strip_utf8_bom(&bytes))?;
-    crate::fs::write_file_atomically(&cache_path(spec.file_name)?, &bytes)?;
-    Ok(manifest)
+    let path = cache_path(spec.file_name)?;
+    commit_manifest_candidate_at(&path, observed_generation, &bytes, manifest, parse)
 }
 
 /// Classifies the on-disk cache without touching the network.
-fn read_cached<T, F>(spec: &CdnManifestSpec, parse: &F) -> Result<CachedManifest<T>, ServiceError>
+fn observe_cached<T, F>(
+    spec: &CdnManifestSpec,
+    parse: &F,
+) -> Result<crate::fs::CacheObservation<CachedManifest<T>>, ServiceError>
 where
     F: Fn(&[u8]) -> Result<T, ServiceError>,
 {
-    read_cached_at(&cache_path(spec.file_name)?, spec.ttl, parse)
+    let path = cache_path(spec.file_name)?;
+    observe_cached_at(&path, spec.ttl, parse)
+}
+
+fn observe_cached_at<T, F>(
+    path: &Path,
+    ttl: Option<Duration>,
+    parse: &F,
+) -> Result<crate::fs::CacheObservation<CachedManifest<T>>, ServiceError>
+where
+    F: Fn(&[u8]) -> Result<T, ServiceError>,
+{
+    crate::fs::observe_cache_file(path, |bytes, metadata| {
+        classify_cached_bytes(metadata, bytes, ttl, parse)
+    })
+}
+
+fn commit_manifest_candidate_at<T, F>(
+    path: &Path,
+    observed_generation: &crate::fs::CacheGeneration,
+    bytes: &[u8],
+    manifest: T,
+    parse: &F,
+) -> Result<T, ServiceError>
+where
+    F: Fn(&[u8]) -> Result<T, ServiceError>,
+{
+    let publication = crate::fs::commit_cache_candidate(
+        path,
+        observed_generation,
+        bytes,
+        crate::fs::MatchingCurrentPolicy::RefreshCandidate,
+        |current| parse(strip_utf8_bom(current)),
+    )?;
+    Ok(publication.into_candidate_or_current(manifest))
 }
 
 /// Reads, parses, and classifies the cache file at `path` by freshness. Split from
-/// [`read_cached`] so the classification can be exercised against an explicit temp
+/// [`observe_cached`] so the classification can be exercised against an explicit temp
 /// file without touching the process-wide app data dir.
+#[cfg(test)]
 fn read_cached_at<T, F>(
     path: &Path,
     ttl: Option<Duration>,
@@ -126,9 +194,20 @@ where
     };
 
     let bytes = crate::fs::read_file(path)?;
-    let manifest = parse(strip_utf8_bom(&bytes))?;
+    classify_cached_bytes(&metadata, &bytes, ttl, parse)
+}
 
-    if is_cache_expired(&metadata, ttl) {
+fn classify_cached_bytes<T, F>(
+    metadata: &fs::Metadata,
+    bytes: &[u8],
+    ttl: Option<Duration>,
+    parse: &F,
+) -> Result<CachedManifest<T>, ServiceError>
+where
+    F: Fn(&[u8]) -> Result<T, ServiceError>,
+{
+    let manifest = parse(strip_utf8_bom(bytes))?;
+    if is_cache_expired(metadata, ttl) {
         Ok(CachedManifest::Stale(manifest))
     } else {
         Ok(CachedManifest::Fresh(manifest))
@@ -149,60 +228,6 @@ fn is_cache_expired(metadata: &fs::Metadata, ttl: Option<Duration>) -> bool {
         .unwrap_or(false)
 }
 
-/// Renames a corrupt cache aside (`.corrupt`) so the next fetch writes a clean file
-/// while the bad document remains for diagnosis. Best-effort.
-fn quarantine_corrupt(file_name: &str) {
-    let Ok(path) = cache_path(file_name) else {
-        return;
-    };
-    quarantine_at(&path);
-}
-
-/// Renames the file at `path` to the first available append-sidecar
-/// (`manifest.json` -> `manifest.json.corrupt` ->
-/// `manifest.json.corrupt.1`). Best-effort.
-///
-/// Existing diagnostics are retained rather than overwritten, while repeated
-/// corrupt downloads are still removed from the cache path before the next
-/// fetch attempt.
-pub(crate) fn quarantine_at(path: &Path) {
-    let Ok(Some(quarantined)) = next_quarantine_path(path) else {
-        log::debug!(
-            "cdn cache quarantine: cannot derive an available sidecar path for `{}`",
-            path.display()
-        );
-        return;
-    };
-    if let Err(error) = fs::rename(path, &quarantined) {
-        log::debug!(
-            "cdn cache quarantine: could not rename `{}` to `{}`: {error}",
-            path.display(),
-            quarantined.display()
-        );
-    }
-}
-
-/// Finds the first unused quarantine sidecar without replacing an existing
-/// diagnostic. `None` would require exhausting every `u32` suffix.
-fn next_quarantine_path(path: &Path) -> Result<Option<PathBuf>, crate::fs::SidecarPathError> {
-    let base = crate::fs::with_added_extension(path, "corrupt")?;
-    if !base.exists() {
-        return Ok(Some(base));
-    }
-
-    let mut suffix = 1_u32;
-    loop {
-        let candidate = crate::fs::with_added_extension(&base, &suffix.to_string())?;
-        if !candidate.exists() {
-            return Ok(Some(candidate));
-        }
-        let Some(next) = suffix.checked_add(1) else {
-            return Ok(None);
-        };
-        suffix = next;
-    }
-}
-
 fn cache_path(file_name: &str) -> Result<PathBuf, ServiceError> {
     Ok(crate::app_dir::app_dir()?.join(file_name))
 }
@@ -211,6 +236,8 @@ fn cache_path(file_name: &str) -> Result<PathBuf, ServiceError> {
 mod tests {
     use std::assert_matches;
     use std::fs::OpenOptions;
+    #[cfg(not(target_os = "linux"))]
+    use std::sync::{Arc, Barrier};
     use std::time::{Duration, SystemTime};
 
     use tempfile::tempdir;
@@ -348,43 +375,92 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
-    fn quarantine_renames_the_bad_file_aside() {
+    fn delayed_cdn_fetch_returns_the_newer_valid_winner_without_touching_its_mtime() {
         let dir = tempdir().expect("temp dir");
-        let path = write_cache(dir.path(), "bad");
-        quarantine_at(&path);
-        assert!(!path.exists(), "the corrupt file is moved aside");
-        assert!(
-            crate::fs::with_added_extension(&path, "corrupt")
-                .expect("cache has a file name")
-                .exists(),
-            "it is preserved as *.corrupt for diagnosis"
+        let path = write_cache(dir.path(), "seed");
+        let delayed =
+            observe_cached_at(&path, Some(TTL), &parse_doc).expect("observe delayed fetch");
+        let delayed_generation = delayed.generation().clone();
+        let barrier = Arc::new(Barrier::new(2));
+        let publisher_path = path.clone();
+        let publisher_barrier = Arc::clone(&barrier);
+
+        let publisher = std::thread::spawn(move || {
+            publisher_barrier.wait();
+            let observed = observe_cached_at(&publisher_path, Some(TTL), &parse_doc)
+                .expect("observe newer fetch");
+            commit_manifest_candidate_at(
+                &publisher_path,
+                observed.generation(),
+                b"new",
+                Doc("new".to_owned()),
+                &parse_doc,
+            )
+            .expect("publish newer manifest")
+        });
+
+        barrier.wait();
+        assert_eq!(
+            publisher.join().expect("newer fetch completes first"),
+            Doc("new".to_owned())
+        );
+        let winner_mtime = fs::metadata(&path)
+            .expect("newer manifest metadata")
+            .modified()
+            .expect("newer manifest mtime");
+
+        let returned = commit_manifest_candidate_at(
+            &path,
+            &delayed_generation,
+            b"old",
+            Doc("old".to_owned()),
+            &parse_doc,
+        )
+        .expect("delayed fetch observes winner");
+
+        assert_eq!(returned, Doc("new".to_owned()));
+        assert_eq!(fs::read_to_string(&path).expect("read winner"), "new");
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("winner metadata after delayed commit")
+                .modified()
+                .expect("winner mtime after delayed commit"),
+            winner_mtime,
+            "the losing delayed fetch must not reset the winner TTL"
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn repeated_quarantine_keeps_each_diagnostic_and_clears_the_cache_path() {
+    fn linux_cache_refresh_returns_fetched_candidate_without_touching_stale_cache() {
         let dir = tempdir().expect("temp dir");
-        let path = write_cache(dir.path(), "newly-corrupt");
-        let quarantined =
-            crate::fs::with_added_extension(&path, "corrupt").expect("cache has a file name");
-        fs::write(&quarantined, "first-corrupt").expect("write prior diagnostic");
+        let path = write_cache(dir.path(), "stale-a");
+        age_file(&path, TTL + Duration::from_hours(1));
+        let observed =
+            observe_cached_at(&path, Some(TTL), &parse_doc).expect("observe stale cache A");
+        let stale_metadata = fs::metadata(&path).expect("snapshot stale cache A metadata");
 
-        quarantine_at(&path);
+        let returned = commit_manifest_candidate_at(
+            &path,
+            observed.generation(),
+            b"fetched-c",
+            Doc("fetched-c".to_owned()),
+            &parse_doc,
+        )
+        .expect("Linux keeps the validated fetched candidate in memory");
 
+        assert_eq!(returned, Doc("fetched-c".to_owned()));
+        assert_eq!(fs::read(&path).expect("read stale cache A"), b"stale-a");
+        let retained = fs::metadata(&path).expect("read stale cache A metadata");
+        assert_eq!(retained.len(), stale_metadata.len());
         assert_eq!(
-            fs::read_to_string(&quarantined).expect("read prior diagnostic"),
-            "first-corrupt"
-        );
-        let repeated =
-            crate::fs::with_added_extension(&quarantined, "1").expect("quarantine has a file name");
-        assert_eq!(
-            fs::read_to_string(&repeated).expect("read repeated diagnostic"),
-            "newly-corrupt"
-        );
-        assert!(
-            !path.exists(),
-            "the corrupt cache path is cleared for a retry"
+            retained.modified().expect("read stale cache A mtime"),
+            stale_metadata
+                .modified()
+                .expect("read stale cache A snapshot mtime"),
+            "the unpublished CDN candidate must not refresh stale cache A"
         );
     }
 }

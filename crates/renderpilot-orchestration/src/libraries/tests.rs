@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
+#[cfg(not(target_os = "linux"))]
+use std::sync::Barrier;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use renderpilot_application::ArtifactRepository;
@@ -923,16 +925,85 @@ fn identical_catalog_activation_does_not_replace_the_authoritative_file() {
             .expect("validated catalog");
 
     assert!(super::catalog::save_catalog(&storage, &catalog).expect("first activation"));
+    let mtime = std::fs::metadata(storage.catalog_cache_path())
+        .expect("authoritative catalog metadata")
+        .modified()
+        .expect("authoritative catalog mtime");
     assert!(!super::catalog::save_catalog(&storage, &catalog).expect("identical activation"));
+    assert_eq!(
+        std::fs::metadata(storage.catalog_cache_path())
+            .expect("catalog metadata after identical activation")
+            .modified()
+            .expect("catalog mtime after identical activation"),
+        mtime,
+        "equal serialized catalog bytes must remain an activation no-op"
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn delayed_catalog_activation_returns_the_newer_valid_winner_without_replacing_it() {
+    let directory = tempfile::tempdir().expect("catalog storage");
+    let storage = super::storage::LibraryStorage::from_root(directory.path().join("libraries"));
+    let delayed_catalog =
+        super::resolved::ValidatedCatalog::new(complete_catalog(package("nvidia_streamline")))
+            .expect("delayed catalog");
+    super::catalog::save_catalog(&storage, &delayed_catalog).expect("seed catalog cache");
+    let delayed = super::catalog::observe_catalog(&storage).expect("observe delayed refresh");
+    let delayed_generation = delayed.generation().clone();
+
+    let mut newer_raw = complete_catalog(package("nvidia_streamline"));
+    newer_raw.generated_at = "2026-08-05T00:00:00Z".to_owned();
+    let newer_catalog =
+        super::resolved::ValidatedCatalog::new(newer_raw).expect("newer validated catalog");
+    let barrier = Arc::new(Barrier::new(2));
+    let publisher_storage = storage.clone();
+    let publisher_barrier = Arc::clone(&barrier);
+
+    let publisher = std::thread::spawn(move || {
+        publisher_barrier.wait();
+        let observed =
+            super::catalog::observe_catalog(&publisher_storage).expect("observe newer refresh");
+        super::catalog::commit_catalog(&publisher_storage, observed.generation(), &newer_catalog)
+            .expect("publish newer catalog")
+    });
+
+    barrier.wait();
+    assert!(matches!(
+        publisher.join().expect("newer refresh completes first"),
+        crate::fs::CachePublication::Published
+    ));
+    let winner_mtime = std::fs::metadata(storage.catalog_cache_path())
+        .expect("newer catalog metadata")
+        .modified()
+        .expect("newer catalog mtime");
+
+    let delayed_result =
+        super::catalog::commit_catalog(&storage, &delayed_generation, &delayed_catalog)
+            .expect("delayed refresh observes winner");
+    let crate::fs::CachePublication::Current(winner) = delayed_result else {
+        panic!("the newer valid catalog must win the delayed activation race");
+    };
+
+    assert_eq!(winner.as_catalog().generated_at, "2026-08-05T00:00:00Z");
+    assert_eq!(
+        std::fs::metadata(storage.catalog_cache_path())
+            .expect("winner metadata after delayed activation")
+            .modified()
+            .expect("winner mtime after delayed activation"),
+        winner_mtime,
+        "the loser reports changed=false without touching the winner"
+    );
 }
 
 #[test]
-fn invalid_last_known_good_is_quarantined_after_refresh_failure() {
+fn invalid_last_known_good_quarantine_preserves_platform_retirement_contract() {
     let directory = tempfile::tempdir().expect("catalog storage");
     let storage = super::storage::LibraryStorage::from_root(directory.path().join("libraries"));
     let path = storage.catalog_cache_path();
     std::fs::create_dir_all(path.parent().expect("catalog parent")).expect("catalog parent");
-    std::fs::write(&path, b"{invalid cache").expect("invalid cache");
+    let rejected_bytes = b"{invalid cache";
+    std::fs::write(&path, rejected_bytes).expect("invalid cache");
 
     let error = super::catalog::complete_refresh(
         &storage,
@@ -942,11 +1013,23 @@ fn invalid_last_known_good_is_quarantined_after_refresh_failure() {
     .expect_err("invalid cache cannot be used as last-known-good");
 
     assert!(error.to_string().contains("remote unavailable"));
-    assert!(!path.exists());
+    let diagnostic_path =
+        crate::fs::with_added_extension(&path, "corrupt").expect("quarantine path");
+    assert_eq!(
+        std::fs::read(&diagnostic_path).expect("read rejected-cache diagnostic"),
+        rejected_bytes,
+        "the diagnostic must retain the exact rejected cache bytes"
+    );
+    #[cfg(windows)]
     assert!(
-        crate::fs::with_added_extension(&path, "corrupt")
-            .expect("quarantine path")
-            .is_file()
+        !path.exists(),
+        "Windows retires the active invalid cache after publishing its diagnostic"
+    );
+    #[cfg(not(windows))]
+    assert_eq!(
+        std::fs::read(&path).expect("read retained active invalid cache"),
+        rejected_bytes,
+        "Linux and fallback targets retain the active invalid cache after diagnostic publication"
     );
 }
 
