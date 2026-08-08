@@ -48,7 +48,10 @@ pub(super) struct LibraryStorage {
 impl LibraryStorage {
     pub(super) fn discover() -> Result<Self, ServiceError> {
         Ok(Self {
-            root: crate::app_dir::app_dir()?.join(LIBRARIES_DIR_NAME),
+            root: crate::portable::runtime_paths().map_or_else(
+                || crate::app_dir::app_dir().map(|path| path.join(LIBRARIES_DIR_NAME)),
+                |paths| Ok(paths.libraries_root.clone()),
+            )?,
         })
     }
 

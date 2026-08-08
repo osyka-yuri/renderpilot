@@ -19,3 +19,8 @@ pub use repositories::{
     GameMutationCommit, InstalledAddonMutation, PendingFileMutationRow, PendingFileMutationState,
 };
 pub use repositories::{ScanWriteReport, ScanWriteUnit, SqliteStorage};
+pub use schema::portable_catalog::{
+    PortableCatalogSchemaError, PortableCatalogSchemaErrorKind, PortableCatalogSchemaReport,
+    PortableCatalogSchemaTransition, inspect_portable_catalog_schema,
+    transition_portable_catalog_schema,
+};

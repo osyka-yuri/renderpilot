@@ -37,6 +37,9 @@ pub fn catalog_database_path() -> Result<PathBuf, ServiceError> {
 }
 
 fn catalog_db_path() -> Result<PathBuf, ServiceError> {
+    if let Some(paths) = crate::portable::runtime_paths() {
+        return Ok(paths.catalog_db_path.clone());
+    }
     catalog_db_path_from_env(|name| env::var_os(name))
 }
 

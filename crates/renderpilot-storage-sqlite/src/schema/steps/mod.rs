@@ -9,6 +9,8 @@ mod v11_to_v12;
 mod v12_to_v13;
 mod v13_to_v14;
 mod v14_to_v15;
+mod v15_to_v16;
+mod v4_to_v8;
 mod v8_to_v9;
 mod v9_to_v10;
 
@@ -21,8 +23,15 @@ use super::version;
 
 type StepFn = fn(&Connection) -> AppResult<()>;
 
+pub(in crate::schema) const MINIMUM_PORTABLE_SCHEMA_VERSION: i32 = v4_to_v8::SOURCE_VERSION;
+
 /// Ordered upgrade edges: `(from_version, to_version, apply)`.
 const STEPS: &[(i32, i32, StepFn)] = &[
+    (
+        v4_to_v8::SOURCE_VERSION,
+        v4_to_v8::TARGET_VERSION,
+        v4_to_v8::apply,
+    ),
     (8, 9, v8_to_v9::apply),
     (9, 10, v9_to_v10::apply),
     (10, 11, v10_to_v11::apply),
@@ -33,6 +42,11 @@ const STEPS: &[(i32, i32, StepFn)] = &[
         v14_to_v15::SOURCE_VERSION,
         v14_to_v15::TARGET_VERSION,
         v14_to_v15::apply,
+    ),
+    (
+        v15_to_v16::SOURCE_VERSION,
+        v15_to_v16::TARGET_VERSION,
+        v15_to_v16::apply,
     ),
 ];
 
@@ -85,6 +99,7 @@ mod tests {
 
     #[test]
     fn can_upgrade_from_known_released_versions() {
+        assert!(can_upgrade_from(4));
         assert!(can_upgrade_from(8));
         assert!(can_upgrade_from(9));
         assert!(can_upgrade_from(11));
@@ -93,6 +108,8 @@ mod tests {
     #[test]
     fn can_upgrade_from_rejects_current_and_unknown() {
         assert!(!can_upgrade_from(CURRENT_SCHEMA_VERSION));
+        assert!(!can_upgrade_from(3));
+        assert!(!can_upgrade_from(5));
         assert!(!can_upgrade_from(7));
         assert!(!can_upgrade_from(0));
         assert!(!can_upgrade_from(999));

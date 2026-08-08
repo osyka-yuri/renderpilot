@@ -4,9 +4,10 @@
 //! database, downloaded library archives, and cached manifests all hang off it.
 //!
 //! Resolution order:
-//! 1. `RENDERPILOT_APP_DIR` (portable-mode override set by the launcher)
-//! 2. Windows: `%LOCALAPPDATA%\RenderPilot`, then `%APPDATA%\RenderPilot`
-//! 3. Unix: `$XDG_DATA_HOME/RenderPilot`, then `$HOME/.local/share/RenderPilot`
+//! 1. authenticated portable [`crate::portable::RuntimePathsV1`]
+//! 2. `RENDERPILOT_APP_DIR` compatibility override for ordinary launches
+//! 3. Windows: `%LOCALAPPDATA%\RenderPilot`, then `%APPDATA%\RenderPilot`
+//! 4. Unix: `$XDG_DATA_HOME/RenderPilot`, then `$HOME/.local/share/RenderPilot`
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -17,6 +18,9 @@ const APP_DIR_NAME: &str = "RenderPilot";
 
 /// The application data directory (honouring portable mode).
 pub(crate) fn app_dir() -> Result<PathBuf, ServiceError> {
+    if let Some(path) = crate::portable::portable_data_root() {
+        return Ok(path.to_owned());
+    }
     resolve_app_dir(|name| std::env::var_os(name))
 }
 

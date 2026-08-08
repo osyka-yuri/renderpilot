@@ -7,16 +7,57 @@ use crate::error::storage_error;
 
 use super::contract::{CONTRACT_TABLES, REQUIRED_INDEXES, REQUIRED_TABLES, REQUIRED_TRIGGERS};
 use super::ddl::pending_file_mutations;
+use super::ddl::portable_path_tags;
 use super::objects::{SchemaObjectKind, object_exists};
 
 pub(super) fn catalog_schema_is_valid(connection: &Connection) -> AppResult<bool> {
-    Ok(validate_violations(connection)?.is_empty())
+    if !validate_violations(connection, true, ConstraintValidation::Probe)?.is_empty() {
+        return Ok(false);
+    }
+
+    portable_path_tags::validate(connection).map(|()| true)
 }
 
 pub(super) fn validate_catalog_schema(connection: &Connection) -> AppResult<()> {
-    let violations = validate_violations(connection)?;
+    validate_catalog_schema_with_portable_path_tags(connection, true, ConstraintValidation::Probe)
+}
+
+pub(in crate::schema) fn validate_catalog_schema_observational(
+    connection: &Connection,
+) -> AppResult<()> {
+    validate_catalog_schema_with_portable_path_tags(
+        connection,
+        true,
+        ConstraintValidation::Observational,
+    )
+}
+
+pub(in crate::schema) fn validate_catalog_schema_before_portable_path_tags_observational(
+    connection: &Connection,
+) -> AppResult<()> {
+    validate_catalog_schema_with_portable_path_tags(
+        connection,
+        false,
+        ConstraintValidation::Observational,
+    )
+}
+
+fn validate_catalog_schema_with_portable_path_tags(
+    connection: &Connection,
+    require_portable_path_tags: bool,
+    constraint_validation: ConstraintValidation,
+) -> AppResult<()> {
+    let violations = validate_violations(
+        connection,
+        require_portable_path_tags,
+        constraint_validation,
+    )?;
     if violations.is_empty() {
-        return Ok(());
+        return if require_portable_path_tags {
+            portable_path_tags::validate(connection)
+        } else {
+            Ok(())
+        };
     }
 
     Err(storage_error(format!(
@@ -49,39 +90,60 @@ pub(super) fn validate_database_integrity(connection: &Connection) -> AppResult<
     Ok(())
 }
 
-fn validate_violations(connection: &Connection) -> AppResult<Vec<String>> {
+fn validate_violations(
+    connection: &Connection,
+    require_portable_path_tags: bool,
+    constraint_validation: ConstraintValidation,
+) -> AppResult<Vec<String>> {
     let mut violations = Vec::new();
 
     collect_missing_object_violations(
         connection,
         SchemaObjectKind::Table,
         REQUIRED_TABLES,
+        require_portable_path_tags,
         &mut violations,
     )?;
     collect_missing_object_violations(
         connection,
         SchemaObjectKind::Index,
         REQUIRED_INDEXES,
+        true,
         &mut violations,
     )?;
     collect_missing_object_violations(
         connection,
         SchemaObjectKind::Trigger,
         REQUIRED_TRIGGERS,
+        true,
         &mut violations,
     )?;
 
-    violations.extend(physical_column_mismatches(connection)?);
-    violations.extend(constraint_mismatches(connection)?);
+    violations.extend(physical_column_mismatches_for(
+        connection,
+        require_portable_path_tags,
+    )?);
+    violations.extend(constraint_mismatches(connection, constraint_validation)?);
 
     Ok(violations)
 }
 
 /// Exact physical-column contract: each contracted table must have precisely the
 /// expected column set (no missing names, no unexpected extras).
+#[cfg(test)]
 pub(super) fn physical_column_mismatches(connection: &Connection) -> AppResult<Vec<String>> {
+    physical_column_mismatches_for(connection, true)
+}
+
+fn physical_column_mismatches_for(
+    connection: &Connection,
+    require_portable_path_tags: bool,
+) -> AppResult<Vec<String>> {
     let mut mismatches = Vec::new();
     for &(table_name, expected_columns) in CONTRACT_TABLES {
+        if !require_portable_path_tags && table_name == portable_path_tags::TABLE_NAME {
+            continue;
+        }
         let live = super::pragma_column_names(connection, table_name)?;
 
         for column in expected_columns {
@@ -98,10 +160,25 @@ pub(super) fn physical_column_mismatches(connection: &Connection) -> AppResult<V
     Ok(mismatches)
 }
 
+#[derive(Clone, Copy)]
+enum ConstraintValidation {
+    Probe,
+    Observational,
+}
+
 /// Semantic CHECK probes that column lists cannot express.
-fn constraint_mismatches(connection: &Connection) -> AppResult<Vec<String>> {
+fn constraint_mismatches(
+    connection: &Connection,
+    constraint_validation: ConstraintValidation,
+) -> AppResult<Vec<String>> {
     let mut mismatches = Vec::new();
-    if !pending_file_mutations::allows_preparing(connection)? {
+    let allows_preparing = match constraint_validation {
+        ConstraintValidation::Probe => pending_file_mutations::allows_preparing(connection)?,
+        ConstraintValidation::Observational => {
+            pending_file_mutations::allows_preparing_observational(connection)?
+        }
+    };
+    if !allows_preparing {
         mismatches.push(
             "pending_file_mutations.state must accept 'preparing' (CHECK constraint)".to_owned(),
         );
@@ -113,9 +190,13 @@ fn collect_missing_object_violations(
     connection: &Connection,
     object_kind: SchemaObjectKind,
     object_names: &[&str],
+    require_portable_path_tags: bool,
     violations: &mut Vec<String>,
 ) -> AppResult<()> {
     for &object_name in object_names {
+        if !require_portable_path_tags && object_name == portable_path_tags::TABLE_NAME {
+            continue;
+        }
         if !object_exists(connection, object_kind, object_name)? {
             violations.push(format!("{} {object_name}", object_kind.sqlite_type()));
         }

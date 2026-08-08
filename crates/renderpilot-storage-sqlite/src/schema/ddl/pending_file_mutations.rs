@@ -5,7 +5,7 @@
 //! `preparing`.
 
 use renderpilot_application::AppResult;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::error::storage_context;
 
@@ -117,6 +117,31 @@ pub(in crate::schema) fn allows_preparing(connection: &Connection) -> AppResult<
             error,
         )),
     }
+}
+
+/// Read-only form of [`allows_preparing`] for validators that must never write.
+pub(in crate::schema) fn allows_preparing_observational(
+    connection: &Connection,
+) -> AppResult<bool> {
+    let Some(sql) = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [TABLE_NAME],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|error| storage_context("could not read pending_file_mutations DDL", error))?
+        .flatten()
+    else {
+        return Ok(false);
+    };
+    let normalized = sql
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+
+    Ok(normalized.contains("check(statein('preparing','prepared','committed'))"))
 }
 
 fn create_fresh(connection: &Connection) -> AppResult<()> {

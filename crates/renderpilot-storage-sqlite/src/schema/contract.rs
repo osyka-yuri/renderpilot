@@ -26,6 +26,7 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "game_ui_state",
     "profile_addon_capabilities",
     "scan_source_checkpoints",
+    "portable_path_tags",
 ];
 
 /// Every named index created by the baseline (excluding auto-indexes).

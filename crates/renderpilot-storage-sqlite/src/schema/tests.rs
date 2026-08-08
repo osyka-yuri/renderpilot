@@ -1225,7 +1225,7 @@ fn apply_backs_up_file_database_before_upgrade_that_requires_rebuild() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-migration-v15.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v16.") && name.ends_with(".bak"))
         })
         .collect();
     assert_eq!(
@@ -1248,7 +1248,7 @@ fn apply_backs_up_file_database_before_upgrade_that_requires_rebuild() {
 }
 
 #[test]
-fn apply_backs_up_file_database_before_v15_migration() {
+fn apply_backs_up_file_database_before_v15_and_v16_migrations() {
     let dir = std::env::temp_dir().join(format!(
         "renderpilot-schema-v15-backup-{}",
         std::process::id()
@@ -1259,13 +1259,14 @@ fn apply_backs_up_file_database_before_v15_migration() {
 
     {
         let mut connection = Connection::open(&db_path).expect("open file db");
-        apply(&mut connection).expect("v15 baseline");
+        apply(&mut connection).expect("current baseline");
         seed_v14_migration_aggregate(&connection);
         connection
             .execute_batch(REDUCE_TECHNOLOGY_COLUMNS_TO_V14)
             .expect("reduce physical schema to v14");
         apply(&mut connection).expect("migrate file database");
-        assert_eq!(user_version(&connection), 15);
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        ddl::portable_path_tags::validate(&connection).expect("canonical v16 path tags");
     }
 
     let backups: Vec<PathBuf> = fs::read_dir(&dir)
@@ -1275,7 +1276,7 @@ fn apply_backs_up_file_database_before_v15_migration() {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains(".pre-migration-v15.") && name.ends_with(".bak"))
+                .is_some_and(|name| name.contains(".pre-migration-v16.") && name.ends_with(".bak"))
         })
         .collect();
     assert_eq!(backups.len(), 1, "expected one pre-migration backup");

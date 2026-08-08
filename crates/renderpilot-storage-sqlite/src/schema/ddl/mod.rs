@@ -11,6 +11,7 @@
 
 pub(super) mod common;
 pub(super) mod pending_file_mutations;
+pub(super) mod portable_path_tags;
 pub(super) mod profile_addon_capabilities;
 pub(super) mod scan_source_checkpoints;
 pub(super) mod shared_artifacts;
@@ -40,6 +41,7 @@ pub(super) fn compose_baseline() -> String {
     let shared_table = shared_artifacts::create_table_sql();
     let shared_trigger = shared_artifacts::touch_trigger_sql();
     let profile_capabilities = profile_addon_capabilities::baseline_sql();
+    let portable_path_tags = portable_path_tags::baseline_sql();
     let scan_checkpoints = scan_source_checkpoints::baseline_sql();
 
     let mut sql = String::with_capacity(
@@ -49,6 +51,7 @@ pub(super) fn compose_baseline() -> String {
             + shared_table.len()
             + shared_trigger.len()
             + profile_capabilities.len()
+            + portable_path_tags.len()
             + scan_checkpoints.len()
             + 8,
     );
@@ -63,6 +66,8 @@ pub(super) fn compose_baseline() -> String {
     sql.push_str(&shared_trigger);
     sql.push('\n');
     sql.push_str(profile_capabilities);
+    sql.push('\n');
+    sql.push_str(portable_path_tags);
     sql.push('\n');
     sql.push_str(scan_checkpoints);
     sql.push('\n');

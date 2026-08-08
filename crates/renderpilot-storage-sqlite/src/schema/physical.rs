@@ -328,6 +328,13 @@ pub mod scan_source_checkpoints {
     pub const ALL: &[&str] = &[SOURCE_KEY, FINGERPRINT, UPDATED_AT];
 }
 
+pub mod portable_path_tags {
+    pub const TAG: &str = "tag";
+    pub const KIND: &str = "kind";
+    pub const VALUE: &str = "value";
+    pub const ALL: &[&str] = &[TAG, KIND, VALUE];
+}
+
 /// Tables covered by the physical-column contract (exact set equality vs
 /// `PRAGMA table_info` after migration).
 ///
@@ -356,4 +363,5 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
         profile_addon_capabilities::ALL,
     ),
     ("scan_source_checkpoints", scan_source_checkpoints::ALL),
+    ("portable_path_tags", portable_path_tags::ALL),
 ];

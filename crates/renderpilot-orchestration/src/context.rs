@@ -28,7 +28,10 @@ impl Context {
     /// Opens the application context and initializes shared storage.
     pub fn open() -> Result<Self, ServiceError> {
         let storage = open_catalog_storage()?;
-        let root = crate::app_dir::app_dir()?.join("file-transactions");
+        let root = crate::portable::runtime_paths().map_or_else(
+            || crate::app_dir::app_dir().map(|path| path.join("file-transactions")),
+            |paths| Ok(paths.file_transactions_root.clone()),
+        )?;
         Ok(Self::from_storage_with_mutation_root(storage, root))
     }
 

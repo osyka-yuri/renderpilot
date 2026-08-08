@@ -25,12 +25,15 @@ mod contract;
 mod ddl;
 mod objects;
 pub(crate) mod physical;
+pub(crate) mod portable_catalog;
 mod pragmas;
 mod rebuild;
 mod steps;
 mod validation;
 mod version;
 
+#[cfg(test)]
+mod portable_catalog_tests;
 #[cfg(test)]
 mod tests;
 
@@ -53,7 +56,10 @@ use self::version::database_has_user_schema;
 //            scan source checkpoints (one release boundary).
 //   13 → 14: canonical installation identity + explicit root authority.
 //   14 → 15: generalize stored library classification columns to `technology`.
-const CURRENT_SCHEMA_VERSION: i32 = 15;
+//   15 → 16: records the portable-runtime path-tag/receipt boundary. Existing
+//             game install paths are external data and are intentionally not
+//             rebased by catalog schema migration.
+const CURRENT_SCHEMA_VERSION: i32 = 16;
 
 pub(super) fn pragma_column_names(
     connection: &Connection,
