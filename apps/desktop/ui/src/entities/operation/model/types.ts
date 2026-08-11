@@ -18,7 +18,6 @@ export type SwapPlan = {
   original_sha256: string | null;
   replacement_sha256: string | null;
   risk_level: string;
-  requires_elevation: boolean;
   blockers: SwapPlanBlocker[];
   warnings: string[];
   files: SwapPlanFile[];

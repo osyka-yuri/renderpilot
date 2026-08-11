@@ -127,8 +127,8 @@ export async function getDlssIndicatorState(): Promise<DlssIndicatorState> {
 
 /**
  * Enables or disables the system-wide DLSS indicator overlay. Writing the
- * registry value requires an elevated process; the backend surfaces a
- * "Relaunch as administrator" error otherwise.
+ * registry value. Backend failures are surfaced through the standard command
+ * error notification path.
  */
 export async function setDlssIndicatorEnabled(enabled: boolean): Promise<DlssIndicatorState> {
   return invokeDesktop<DlssIndicatorState>('set_dlss_indicator_enabled', { enabled });

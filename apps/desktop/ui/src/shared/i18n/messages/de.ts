@@ -46,8 +46,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'settings.nvidia.indicator.description':
     'Zeigt ein Overlay mit der aktiven DLSS-Version und den Einstellungen während des Spiels.',
   'settings.nvidia.indicator.systemWide': 'Systemweit',
-  'settings.nvidia.indicator.adminRequired':
-    'Starten Sie die App als Administrator neu, um diese Einstellung zu ändern.',
   'settings.nvidia.indicator.overlayTitle': 'Bildschirm-Overlay',
   'settings.nvidia.indicator.overlayDescription': 'Gilt für alle Spiele auf diesem PC.',
   'settings.nvidia.indicator.toggleAria': 'DLSS-Indikator umschalten',
@@ -55,8 +53,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'settings.nvidia.global.description':
     'Standardwerte für jedes Spiel ohne spielspezifische Überschreibung, über das NVIDIA-Basisprofil.',
   'settings.nvidia.global.systemWide': 'Systemweit',
-  'settings.nvidia.global.adminRequired':
-    'Starte die App als Administrator neu, um diese Einstellungen zu ändern.',
   'settings.nvidia.global.familySr': 'DLSS Superhohe Auflösung',
   'settings.nvidia.global.familyFg': 'DLSS Frame-Erstellung',
   'settings.nvidia.global.familyRr': 'DLSS Strahlenrekonstruktion',
@@ -102,12 +98,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'game.dashboard.games': plural('count', { one: '{count} Spiel', other: '{count} Spiele' }),
   'game.dashboard.updates': plural('count', { one: '{count} Update', other: '{count} Updates' }),
 
-  'elevation.title': 'Administratorrechte erforderlich',
-  'elevation.description':
-    'Einige Einstellungen können nicht ohne Administratorrechte geändert werden.',
-  'elevation.relaunch': 'Als Administrator neu starten',
-  'elevation.relaunchFailed': 'Konnte nicht als Administrator neu gestartet werden',
-  'elevation.dismiss': 'Ausblenden',
   'error.boundary.title': 'Etwas ist schiefgelaufen',
   'error.boundary.description':
     'Auf diesem Bildschirm ist ein unerwarteter Fehler aufgetreten. Versuchen Sie es erneut oder wechseln Sie in einen anderen Bereich.',
@@ -273,8 +263,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': 'Ändern Sie die DLSS-Version.',
   'gameDetails.dlss.libraryFileLabel': 'Dateiversion',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA-Profil-Überschreibungen',
-  'gameDetails.dlss.adminRequired':
-    'Starten Sie die App als Administrator neu, um diese Einstellungen zu ändern.',
 
   'gameDetails.streamline.description': 'Streamline-Plugins verwalten.',
   'gameDetails.streamline.versionTitle': 'Globale Streamline-Version',
@@ -522,7 +510,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   }),
   'coverSync.failure.hint': 'Prüfen Sie die Cover-Quellen und die SteamGridDB-Einstellungen.',
 
-  'nvidia.adminRequired': 'Administratorrechte erforderlich',
   'nvidia.changeSettingFailed': 'Einstellungen konnten nicht angewendet werden',
   'nvidia.revertDefaultFailed': 'Standardeinstellungen konnten nicht wiederhergestellt werden',
   'nvidia.revertBaselineFailed': 'Anfangseinstellungen konnten nicht wiederhergestellt werden',
@@ -615,16 +602,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Cover konnte nicht auf der Festplatte gespeichert werden.',
   'user_message.stale_replacement_source':
     'Dieses Update konnte nicht angewendet werden, weil die Quelldatei außerhalb von RenderPilot ersetzt oder geändert wurde. Bitte wählen Sie die Version erneut — möglicherweise ist ein Download erforderlich.',
-  'user_message.nvapi_requires_administrator':
-    'Zum Ändern dieser Einstellung sind Administratorrechte erforderlich.',
-  'user_message.elevation_cancelled':
-    'Die Administratoranforderung wurde abgebrochen. Es wurden keine Änderungen vorgenommen.',
-  'user_message.elevation_policy_blocked':
-    'Windows hat die Administratoranforderung blockiert. Prüfen Sie die Systemrichtlinie und versuchen Sie es erneut.',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot konnte nicht mit Administratorrechten neu gestartet werden. Starten Sie die App erneut.',
-  'user_message.elevation_unsupported':
-    'Ein Neustart mit Administratorrechten wird auf dieser Plattform nicht unterstützt.',
+  'user_message.access_denied':
+    'Zugriff verweigert. Überprüfen Sie Ihre Berechtigungen und versuchen Sie es erneut.',
 
   'suggested_action.refresh_games':
     'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',
@@ -642,8 +621,6 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'Bitte starten Sie die Aktion neu.',
   'suggested_action.refresh_or_scan_game_folder':
     'Aktualisieren Sie die Liste oder scannen Sie den Ordner erneut.',
-  'suggested_action.relaunch_as_administrator':
-    'Starten Sie die App als Administrator neu und versuchen Sie es erneut.',
 
   'settings.about.title': 'Updates',
   'settings.about.description': 'Nach Updates für die Anwendung suchen.',
@@ -676,7 +653,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'settings.about.updateDialog.verifying': 'Update wird überprüft…',
   'settings.about.updateDialog.verifyingDescription': 'Das heruntergeladene Paket wird geprüft.',
   'settings.about.updateDialog.installing':
-    'Update wird installiert… Die App wird geschlossen; der Installer kann kurz erscheinen.',
+    'Update wird angewendet… Die App wird geschlossen und automatisch neu gestartet.',
   'settings.about.updateDialog.restarting': 'Anwendung wird neu gestartet…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Download oder Überprüfung fehlgeschlagen',
@@ -684,7 +661,7 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Das Update konnte nicht heruntergeladen oder überprüft werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.',
   'settings.about.updateDialog.installErrorTitle': 'Installation fehlgeschlagen',
   'settings.about.updateDialog.installErrorDescription':
-    'Das Update konnte nicht installiert werden. Sie können es erneut versuchen.',
+    'Das Update konnte nicht installiert werden. Starten Sie RenderPilot normal neu und versuchen Sie es erneut; Windows fordert bei Bedarf Administratorrechte an.',
   'settings.about.updateDialog.restartRequiredTitle': 'Neustart erforderlich',
   'settings.about.updateDialog.restartRequiredDescription':
     'Das Update wurde installiert, aber die Anwendung konnte nicht automatisch neu gestartet werden. Starten Sie RenderPilot manuell neu, um das Update abzuschließen.',

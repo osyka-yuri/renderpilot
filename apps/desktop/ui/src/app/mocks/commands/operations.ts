@@ -132,7 +132,6 @@ export function mockPlanSwap(
       original_sha256: null,
       replacement_sha256: candidate.sha256,
       risk_level: action?.kind === 'repair_required' ? 'blocked' : 'low',
-      requires_elevation: false,
       blockers: action?.kind === 'repair_required' ? ['d3d12_executable_repair_required'] : [],
       warnings: [],
       files: [

@@ -18,18 +18,13 @@ import {
  * calls {@link reload} so every setting re-reads from the new profile's exe.
  *
  * The settings half is delegated to the shared {@link createNvapiSettingsStore}
- * (family grouping, warnings, optimistic writes, elevation gating).
+ * (family grouping, warnings, optimistic writes).
  */
 
 export type NvidiaDriverContext = ReturnType<typeof createNvidiaDriverContext>;
 
-export type CreateNvidiaDriverContextOptions = {
-  /** Whether NVAPI writes can succeed in this process (admin). */
-  isElevated: () => boolean;
-};
-
-export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverContextOptions) {
-  const store = createNvapiSettingsStore({ isElevated });
+export function createNvidiaDriverContext() {
+  const store = createNvapiSettingsStore();
 
   // Guards a stale in-flight reload from overwriting a newer game's state.
   let activeGameId: string | null = $state(null);
@@ -72,7 +67,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
   }
 
   async function setValue(gameId: string, key: string, wire: string): Promise<void> {
-    if (!gameId || !store.ensureElevated()) {
+    if (!gameId) {
       return;
     }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
@@ -85,7 +80,7 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     key: string,
     target: 'predefined' | 'baseline',
   ): Promise<void> {
-    if (!gameId || !store.ensureElevated()) {
+    if (!gameId) {
       return;
     }
     const label =
@@ -118,9 +113,6 @@ export function createNvidiaDriverContext({ isElevated }: CreateNvidiaDriverCont
     },
     get profileWarnings() {
       return store.profileWarnings;
-    },
-    get canWrite() {
-      return store.canWrite;
     },
     isPending: (key: string) => store.isPending(key),
     settingsForFamily: store.settingsForFamily,

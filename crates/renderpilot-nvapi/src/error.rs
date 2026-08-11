@@ -8,7 +8,7 @@ use std::{error::Error, fmt};
 
 /// An argument's structure version is not supported.
 pub const NVAPI_INCOMPATIBLE_STRUCT_VERSION: i32 = -9;
-/// The application requires Administrator privileges.
+/// The driver rejected the caller's privilege level.
 pub const NVAPI_INVALID_USER_PRIVILEGE: i32 = -137;
 /// The requested setting is not present in the profile.
 pub const NVAPI_SETTING_NOT_FOUND: i32 = -160;
@@ -38,7 +38,7 @@ pub enum NvapiError {
     SetSettingFailed(i32),
     /// Failed to delete a setting from a profile.
     DeleteSettingFailed(i32),
-    /// Administrator privileges are required to modify DRS settings.
+    /// The driver rejected the caller's privilege level for a DRS mutation.
     InvalidUserPrivilege,
     /// Failed to save DRS settings.
     SaveSettingsFailed(i32),
@@ -94,7 +94,7 @@ impl fmt::Display for NvapiError {
             Self::InvalidUserPrivilege => {
                 write!(
                     formatter,
-                    "Administrator privileges are required to modify DRS settings"
+                    "NVAPI rejected the caller's DRS mutation privilege"
                 )
             }
             Self::SaveSettingsFailed(status) => {

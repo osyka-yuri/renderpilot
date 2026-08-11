@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ClientError, DesktopCommandError } from '@shared/errors';
+import { DesktopCommandError } from '@shared/errors';
 import { t } from '@shared/i18n';
 
 import { clearAllNotifications, getActiveNotifications } from './notification-center';
@@ -13,13 +13,15 @@ describe('presented-error-notification', () => {
     clearAllNotifications();
   });
 
-  it('preserves local warning severity and suggested actions', () => {
-    const content = getPresentedErrorNotificationContent(new ClientError('nvapi_admin_required'));
+  it('presents access-denied backend errors with their recovery action', () => {
+    const content = getPresentedErrorNotificationContent(
+      DesktopCommandError.fromDto({ code: 'access_denied' }),
+    );
 
     expect(content).toEqual({
-      severity: 'warning',
-      description: t('user_message.nvapi_requires_administrator'),
-      details: [t('suggested_action.relaunch_as_administrator')],
+      severity: 'error',
+      description: t('user_message.access_denied'),
+      details: [t('suggested_action.inspect_logs')],
     });
   });
 

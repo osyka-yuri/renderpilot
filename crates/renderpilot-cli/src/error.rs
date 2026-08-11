@@ -103,7 +103,7 @@ const fn service_error_category(error: &ServiceError) -> ErrorCategory {
         | ServiceError::CoverDownloadFailed(_)
         | ServiceError::CoverNotFound
         | ServiceError::CoverIo(_)
-        | ServiceError::NvapiRequiresElevation => ErrorCategory::Runtime,
+        | ServiceError::AccessDenied { .. } => ErrorCategory::Runtime,
         _ => ErrorCategory::Usage,
     }
 }
@@ -257,7 +257,10 @@ mod tests {
             CliError::Service(ServiceError::CoverDownloadFailed("timeout".into())),
             CliError::Service(ServiceError::CoverNotFound),
             CliError::Service(ServiceError::CoverIo("permission denied".into())),
-            CliError::Service(ServiceError::NvapiRequiresElevation),
+            CliError::Service(ServiceError::AccessDenied {
+                operation: "updating NVAPI DRS settings".into(),
+                detail: "NVAPI reported invalid user privilege".into(),
+            }),
         ];
 
         for error in errors {
@@ -269,7 +272,10 @@ mod tests {
     fn runtime_errors_do_not_include_help_hint() {
         let errors = [
             CliError::Service(ServiceError::command_failed("scan failed")),
-            CliError::Service(ServiceError::NvapiRequiresElevation),
+            CliError::Service(ServiceError::AccessDenied {
+                operation: "updating the DLSS indicator".into(),
+                detail: "Windows returned ERROR_ACCESS_DENIED (5)".into(),
+            }),
         ];
 
         for error in errors {

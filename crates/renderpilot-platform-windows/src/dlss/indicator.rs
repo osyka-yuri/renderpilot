@@ -8,10 +8,10 @@
 //!   ShowDlssIndicator : REG_DWORD = 0x400   (on; absent or 0 = off)
 //! ```
 //!
-//! Reading the value needs no special rights; writing under `HKLM\SOFTWARE`
-//! requires an elevated process (see the desktop elevation flow). NVIDIA stores
-//! this in the 64-bit registry view, so we pin `KEY_WOW64_64KEY` for both read
-//! and write to stay consistent regardless of the host process bitness.
+//! Reading the value needs no special rights; a denied write under
+//! `HKLM\SOFTWARE` is reported to the caller as `ERROR_ACCESS_DENIED`. NVIDIA
+//! stores this in the 64-bit registry view, so we pin `KEY_WOW64_64KEY` for both
+//! read and write to stay consistent regardless of the host process bitness.
 
 use std::io;
 
@@ -48,8 +48,8 @@ pub fn read_dlss_indicator_enabled() -> io::Result<bool> {
 /// Enables or disables the DLSS indicator overlay machine-wide.
 ///
 /// Enabling writes `ShowDlssIndicator = 0x400`; disabling deletes the value so
-/// the key returns to its pristine default. Requires an elevated process —
-/// without it the write fails with `ERROR_ACCESS_DENIED` (`raw_os_error()` 5).
+/// the key returns to its pristine default. Insufficient write access fails
+/// with `ERROR_ACCESS_DENIED` (`raw_os_error()` 5).
 pub fn set_dlss_indicator_enabled(enabled: bool) -> io::Result<()> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let (key, _disposition) =

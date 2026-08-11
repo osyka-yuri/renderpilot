@@ -34,7 +34,6 @@
   } from '@widgets/settings-panel';
 
   type Props = {
-    isElevated?: boolean;
     themeMode?: ThemeMode;
     languageMode?: LanguageMode;
     languageBusy?: boolean;
@@ -46,7 +45,6 @@
   };
 
   const {
-    isElevated = false,
     themeMode = 'system',
     languageMode = 'system',
     languageBusy = false,
@@ -58,8 +56,8 @@
   }: Props = $props();
 
   const model = createSettingsPanelModel();
-  const dlssIndicator = createDlssIndicatorContext({ isElevated: () => isElevated });
-  const globalPresets = createGlobalNvidiaPresetsContext({ isElevated: () => isElevated });
+  const dlssIndicator = createDlssIndicatorContext();
+  const globalPresets = createGlobalNvidiaPresetsContext();
 
   const localizedThemeOptions = $derived(
     themeOptions.map((option) => ({ value: option.value, label: t(option.labelKey) })),

@@ -46,8 +46,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.nvidia.indicator.description':
     'ゲームプレイ中に、アクティブな DLSS バージョンと設定を含むオーバーレイを表示します。',
   'settings.nvidia.indicator.systemWide': 'システム全体',
-  'settings.nvidia.indicator.adminRequired':
-    'この設定を変更するには、アプリを管理者として再起動してください。',
   'settings.nvidia.indicator.overlayTitle': '画面オーバーレイ',
   'settings.nvidia.indicator.overlayDescription': 'この PC 上のすべてのゲームに適用されます。',
   'settings.nvidia.indicator.toggleAria': 'DLSS インジケーターの切り替え',
@@ -55,8 +53,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.nvidia.global.description':
     'NVIDIA ベースプロファイルを介して、ゲーム固有の上書きがないすべてのゲームに適用される既定値です。',
   'settings.nvidia.global.systemWide': 'システム全体',
-  'settings.nvidia.global.adminRequired':
-    'これらの設定を変更するには、管理者としてアプリを再起動してください。',
   'settings.nvidia.global.familySr': 'DLSS 超解像度',
   'settings.nvidia.global.familyFg': 'DLSS フレーム生成',
   'settings.nvidia.global.familyRr': 'DLSS レイ再構成',
@@ -101,11 +97,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'game.dashboard.games': plural('count', { other: '{count} 個のゲーム' }),
   'game.dashboard.updates': plural('count', { other: '{count} 件のアップデート' }),
 
-  'elevation.title': '管理者権限が必要です',
-  'elevation.description': '一部の設定は管理者権限なしでは変更できません。',
-  'elevation.relaunch': '管理者として再起動',
-  'elevation.relaunchFailed': '管理者として再起動できませんでした',
-  'elevation.dismiss': '閉じる',
   'error.boundary.title': '問題が発生しました',
   'error.boundary.description':
     'この画面で予期しないエラーが発生しました。もう一度試すか、別のセクションに切り替えてください。',
@@ -262,8 +253,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': 'DLSS バージョンを変更します。',
   'gameDetails.dlss.libraryFileLabel': 'ファイルバージョン',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA プロファイルの上書き',
-  'gameDetails.dlss.adminRequired':
-    'これらの設定を変更するには、アプリを管理者として再起動してください。',
 
   'gameDetails.streamline.description': 'Streamline プラグインを管理します。',
   'gameDetails.streamline.versionTitle': 'グローバル Streamline バージョン',
@@ -495,7 +484,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   }),
   'coverSync.failure.hint': 'ゲームのカバー画像ソースと SteamGridDB の設定を確認してください。',
 
-  'nvidia.adminRequired': '管理者権限が必要です',
   'nvidia.changeSettingFailed': '設定の適用に失敗しました',
   'nvidia.revertDefaultFailed': 'デフォルト設定への復元に失敗しました',
   'nvidia.revertBaselineFailed': '初期設定への復元に失敗しました',
@@ -581,18 +569,11 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'user_message.cover_file_system_error': 'カバー画像をディスクに保存できませんでした。',
   'user_message.stale_replacement_source':
     'ソースファイルが RenderPilot の外で置き換えまたは変更されたため、この更新を適用できませんでした。バージョンを再度選択してください。ダウンロードが必要になる場合があります。',
-  'user_message.nvapi_requires_administrator': 'この設定を変更するには管理者権限が必要です。',
   'user_message.catalog_consolidation_blocked':
     '重複するゲームカードで管理状態の競合が見つかりました。変更は行われず、復旧バンドルが作成されました。',
   'user_message.rollback_also_failed':
     '操作に失敗し、以前のファイル状態を完全に復元できませんでした。再試行する前にゲームファイルを確認してください。',
-  'user_message.elevation_cancelled': '管理者権限の要求がキャンセルされました。変更はありません。',
-  'user_message.elevation_policy_blocked':
-    'Windowsにより管理者権限の要求がブロックされました。システムポリシーを確認して再試行してください。',
-  'user_message.elevation_relaunch_failed':
-    '管理者権限でRenderPilotを再起動できませんでした。アプリを再起動してください。',
-  'user_message.elevation_unsupported':
-    'このプラットフォームでは管理者権限での再起動はサポートされていません。',
+  'user_message.access_denied': 'アクセスが拒否されました。権限を確認して再試行してください。',
 
   'suggested_action.refresh_games': 'ゲームリストを更新して再試行してください。',
   'suggested_action.reload_game_details': 'ゲームの詳細を更新して再試行してください。',
@@ -604,8 +585,6 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'アクションをやり直してください。',
   'suggested_action.refresh_or_scan_game_folder':
     'リストを更新するか、フォルダを再スキャンしてください。',
-  'suggested_action.relaunch_as_administrator':
-    'アプリを管理者として再起動して再試行してください。',
 
   'settings.about.title': 'アップデート',
   'settings.about.description': 'アプリケーションのアップデートを確認します。',
@@ -638,7 +617,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'settings.about.updateDialog.verifyingDescription':
     'ダウンロードしたパッケージを確認しています。',
   'settings.about.updateDialog.installing':
-    'アップデートをインストール中… アプリは終了し、インストーラーが短く表示される場合があります。',
+    'アップデートを適用中… アプリは終了し、自動的に再起動します。',
   'settings.about.updateDialog.restarting': 'アプリを再起動中…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'ダウンロードまたは検証に失敗しました',
@@ -646,7 +625,7 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
     'アップデートをダウンロードまたは検証できませんでした。接続を確認して再試行してください。',
   'settings.about.updateDialog.installErrorTitle': 'インストールに失敗しました',
   'settings.about.updateDialog.installErrorDescription':
-    'アップデートをインストールできませんでした。再試行できます。',
+    'アップデートをインストールできませんでした。RenderPilot を通常どおり再起動してから再試行してください。必要な場合は Windows が管理者の承認を求めます。',
   'settings.about.updateDialog.restartRequiredTitle': '再起動が必要です',
   'settings.about.updateDialog.restartRequiredDescription':
     'アップデートはインストールされましたが、アプリを自動で再起動できませんでした。RenderPilot を手動で再起動して更新を完了してください。',

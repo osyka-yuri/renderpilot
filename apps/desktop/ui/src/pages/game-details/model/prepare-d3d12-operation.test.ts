@@ -202,7 +202,6 @@ function swapPlan(): SwapPlan {
     original_sha256: null,
     replacement_sha256: 'b'.repeat(64),
     risk_level: 'medium',
-    requires_elevation: false,
     blockers: [],
     warnings: [],
     files: [],

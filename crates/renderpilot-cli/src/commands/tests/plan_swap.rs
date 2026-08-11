@@ -88,7 +88,7 @@ fn plan_swap_renders_operation_plan_json() {
     );
     assert_eq!(json["replacement_version"], "3.7.0");
     assert_eq!(json["risk_level"], "medium");
-    assert_eq!(json["requires_elevation"], false);
+    assert!(json.get("requires_elevation").is_none());
     assert_eq!(json["artifact_id"], "artifact:dlss-3.7");
     assert!(
         json["operation_id"]

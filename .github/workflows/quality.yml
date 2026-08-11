@@ -75,6 +75,21 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      - name: Test Windows manifest selector and source contracts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $selectorTest = Join-Path $env:RUNNER_TEMP "renderpilot-windows-manifest-selector-tests.exe"
+          rustc --edition=2024 --test apps/desktop/src-tauri/build-support/windows_manifest.rs -o $selectorTest
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows manifest selector test compilation failed with exit code $LASTEXITCODE."
+          }
+          & $selectorTest
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows manifest selector tests failed with exit code $LASTEXITCODE."
+          }
+          ./apps/desktop/scripts/verify-windows-manifest.test.ps1
+
       - name: Run tests
         run: cargo test --workspace --all-features --locked --no-fail-fast
         # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;

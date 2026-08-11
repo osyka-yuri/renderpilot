@@ -39,10 +39,16 @@ pub fn install_layer(dll_bytes: &[u8]) -> Result<(), ServiceError> {
     vulkan_layer::install(&WindowsLayerRegistry, &dir, dll_bytes).map_err(|error| {
         let msg = match error {
             LayerInstallError::PermissionDenied => {
-                "the ReShade shared Vulkan layer is not writable - run RenderPilot as administrator to install the Vulkan layer".to_owned()
+                return ServiceError::AccessDenied {
+                    operation: "installing the shared ReShade Vulkan layer".to_owned(),
+                    detail: "the ProgramData layer path is not writable".to_owned(),
+                };
             }
             LayerInstallError::RegistryScopeNotWritable => {
-                "the loader registry is not writable - run RenderPilot as administrator to install the Vulkan layer".to_owned()
+                return ServiceError::AccessDenied {
+                    operation: "registering the shared ReShade Vulkan layer".to_owned(),
+                    detail: "the HKLM loader registry scope is not writable".to_owned(),
+                };
             }
             LayerInstallError::Io(error) => {
                 format!("failed to install the shared Vulkan layer: {error}")

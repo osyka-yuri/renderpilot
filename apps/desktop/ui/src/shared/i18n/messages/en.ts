@@ -58,8 +58,6 @@ export const en = defineSourceCatalog({
   'settings.nvidia.indicator.description':
     'Show an overlay with the active DLSS version and settings during gameplay.',
   'settings.nvidia.indicator.systemWide': 'System-wide',
-  'settings.nvidia.indicator.adminRequired':
-    'Restart the app as administrator to change this setting.',
   'settings.nvidia.indicator.overlayTitle': 'On-screen overlay',
   'settings.nvidia.indicator.overlayDescription': 'Applies to all games on this PC.',
   'settings.nvidia.indicator.toggleAria': 'Toggle DLSS indicator',
@@ -67,8 +65,6 @@ export const en = defineSourceCatalog({
   'settings.nvidia.global.description':
     'Defaults applied to every game that has no game-specific override, via the NVIDIA base profile.',
   'settings.nvidia.global.systemWide': 'System-wide',
-  'settings.nvidia.global.adminRequired':
-    'Restart the app as administrator to change these settings.',
   'settings.nvidia.global.familySr': 'DLSS Super Resolution',
   'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
   'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
@@ -117,12 +113,6 @@ export const en = defineSourceCatalog({
   'game.dashboard.games': plural('count', { one: '{count} game', other: '{count} games' }),
   'game.dashboard.updates': plural('count', { one: '{count} update', other: '{count} updates' }),
 
-  // ── Elevation banner ──
-  'elevation.title': 'Administrator privileges required',
-  'elevation.description': 'Some settings cannot be changed without administrator rights.',
-  'elevation.relaunch': 'Restart as administrator',
-  'elevation.relaunchFailed': 'Could not restart as administrator',
-  'elevation.dismiss': 'Dismiss',
   'error.boundary.title': 'Something went wrong',
   'error.boundary.description':
     'This screen ran into an unexpected error. You can try again, or switch to another section.',
@@ -296,7 +286,7 @@ export const en = defineSourceCatalog({
   'settings.about.updateDialog.verifying': 'Verifying update…',
   'settings.about.updateDialog.verifyingDescription': 'Checking the downloaded package.',
   'settings.about.updateDialog.installing':
-    'Installing update… The app will close; the installer may appear briefly.',
+    'Applying update… The app will close and restart automatically.',
   'settings.about.updateDialog.restarting': 'Restarting application…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Download or verification failed',
@@ -304,7 +294,7 @@ export const en = defineSourceCatalog({
     'The update could not be downloaded or verified. Check your connection and try again.',
   'settings.about.updateDialog.installErrorTitle': 'Installation failed',
   'settings.about.updateDialog.installErrorDescription':
-    'The update could not be installed. You can try again.',
+    'The update could not be installed. Relaunch RenderPilot normally and try again; Windows will request administrator approval if needed.',
   'settings.about.updateDialog.restartRequiredTitle': 'Restart required',
   'settings.about.updateDialog.restartRequiredDescription':
     'The update was installed, but the application could not restart automatically. Restart RenderPilot manually to finish the update.',
@@ -332,7 +322,6 @@ export const en = defineSourceCatalog({
   'gameDetails.dlss.descriptionSwapOnly': 'Change the DLSS version.',
   'gameDetails.dlss.libraryFileLabel': 'File version',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA profile overrides',
-  'gameDetails.dlss.adminRequired': 'Restart the app as administrator to change these settings.',
 
   // ── Game details: Streamline card ──
   'gameDetails.streamline.description': 'Manage Streamline plugins.',
@@ -580,7 +569,6 @@ export const en = defineSourceCatalog({
   'coverSync.failure.hint': 'Check Game artwork sources and SteamGridDB settings.',
 
   // ── NVIDIA driver context (toasts) ──
-  'nvidia.adminRequired': 'Administrator privileges required',
   'nvidia.changeSettingFailed': 'Failed to apply settings',
   'nvidia.revertDefaultFailed': 'Failed to restore default settings',
   'nvidia.revertBaselineFailed': 'Failed to restore initial settings',
@@ -672,16 +660,7 @@ export const en = defineSourceCatalog({
   'user_message.cover_file_system_error': 'Failed to save the cover to disk.',
   'user_message.stale_replacement_source':
     'This update could not be applied because the source file was replaced or modified outside RenderPilot. Please select the version again — a download may be needed.',
-  'user_message.nvapi_requires_administrator':
-    'Administrator rights are required to change this setting.',
-  'user_message.elevation_cancelled':
-    'The administrator request was cancelled. No changes were made.',
-  'user_message.elevation_policy_blocked':
-    'Windows blocked the administrator request. Check system policy and try again.',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot could not restart with administrator rights. Try restarting the app.',
-  'user_message.elevation_unsupported':
-    'Restarting with administrator rights is not supported on this platform.',
+  'user_message.access_denied': 'Access was denied. Check your permissions and try again.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Refresh the games list and try again.',
@@ -693,7 +672,6 @@ export const en = defineSourceCatalog({
   'suggested_action.retry_or_restart': 'If the problem persists, try restarting the app.',
   'suggested_action.rebuild_operation_plan': 'Please restart the action.',
   'suggested_action.refresh_or_scan_game_folder': 'Refresh the list or scan the folder again.',
-  'suggested_action.relaunch_as_administrator': 'Restart the app as administrator and try again.',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description':

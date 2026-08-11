@@ -14,5 +14,10 @@ export {
   type CodedError,
   type CommandErrorDto,
 } from './model';
-export { isLocalErrorCode, LOCAL_ERROR_CONTRACT, type LocalErrorCode } from './local-contract';
+export {
+  isLocalErrorCode,
+  LOCAL_ERROR_CONTRACT,
+  type LocalErrorCode,
+  type LocalErrorSpec,
+} from './local-contract';
 export { reportClientError, reportDesktopCommandError } from './report';

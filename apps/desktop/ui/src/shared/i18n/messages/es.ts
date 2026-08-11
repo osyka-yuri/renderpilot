@@ -46,8 +46,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.nvidia.indicator.description':
     'Muestra una superposición con la versión y configuración activa de DLSS durante el juego.',
   'settings.nvidia.indicator.systemWide': 'En todo el sistema',
-  'settings.nvidia.indicator.adminRequired':
-    'Reinicia la aplicación como administrador para cambiar esta configuración.',
   'settings.nvidia.indicator.overlayTitle': 'Superposición en pantalla',
   'settings.nvidia.indicator.overlayDescription': 'Se aplica a todos los juegos en esta PC.',
   'settings.nvidia.indicator.toggleAria': 'Alternar indicador DLSS',
@@ -55,8 +53,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.nvidia.global.description':
     'Valores predeterminados aplicados a cada juego sin anulación específica, mediante el perfil base de NVIDIA.',
   'settings.nvidia.global.systemWide': 'En todo el sistema',
-  'settings.nvidia.global.adminRequired':
-    'Reinicia la aplicación como administrador para cambiar estos ajustes.',
   'settings.nvidia.global.familySr': 'DLSS Superresolución',
   'settings.nvidia.global.familyFg': 'DLSS Generación de fotogramas',
   'settings.nvidia.global.familyRr': 'DLSS Reconstrucción de rayos',
@@ -111,12 +107,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     other: '{count} actualizaciones',
   }),
 
-  'elevation.title': 'Se requieren privilegios de administrador',
-  'elevation.description':
-    'Algunas configuraciones no se pueden cambiar sin derechos de administrador.',
-  'elevation.relaunch': 'Reiniciar como administrador',
-  'elevation.relaunchFailed': 'No se pudo reiniciar como administrador',
-  'elevation.dismiss': 'Descartar',
   'error.boundary.title': 'Algo salió mal',
   'error.boundary.description':
     'Esta pantalla encontró un error inesperado. Vuelve a intentarlo o cambia a otra sección.',
@@ -284,8 +274,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': 'Cambiar la versión de DLSS.',
   'gameDetails.dlss.libraryFileLabel': 'Versión del archivo',
   'gameDetails.dlss.driverOverridesLabel': 'Anulaciones de perfil de NVIDIA',
-  'gameDetails.dlss.adminRequired':
-    'Reinicia la aplicación como administrador para cambiar esta configuración.',
 
   'gameDetails.streamline.description': 'Administrar complementos de Streamline.',
   'gameDetails.streamline.versionTitle': 'Versión global de Streamline',
@@ -538,7 +526,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'coverSync.failure.hint':
     'Comprueba las fuentes de carátulas de los juegos y la configuración de SteamGridDB.',
 
-  'nvidia.adminRequired': 'Se requieren privilegios de administrador',
   'nvidia.changeSettingFailed': 'No se pudieron aplicar las configuraciones',
   'nvidia.revertDefaultFailed': 'No se pudieron restaurar las configuraciones por defecto',
   'nvidia.revertBaselineFailed': 'No se pudieron restaurar las configuraciones iniciales',
@@ -625,20 +612,12 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'user_message.cover_file_system_error': 'Error al guardar la carátula en el disco.',
   'user_message.stale_replacement_source':
     'No se pudo aplicar esta actualización porque el archivo de origen se reemplazó o modificó fuera de RenderPilot. Vuelva a seleccionar la versión; es posible que se necesite una descarga.',
-  'user_message.nvapi_requires_administrator':
-    'Se requieren derechos de administrador para cambiar esta configuración.',
   'user_message.catalog_consolidation_blocked':
     'RenderPilot encontró estados administrados en conflicto en fichas de juego duplicadas. No se cambió nada y se creó un paquete de recuperación.',
   'user_message.rollback_also_failed':
     'La acción falló y RenderPilot no pudo restaurar por completo el estado anterior de los archivos. Comprueba los archivos del juego antes de volver a intentarlo.',
-  'user_message.elevation_cancelled':
-    'Se canceló la solicitud de administrador. No se realizó ningún cambio.',
-  'user_message.elevation_policy_blocked':
-    'Windows bloqueó la solicitud de administrador. Comprueba la directiva del sistema y vuelve a intentarlo.',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot no pudo reiniciarse con derechos de administrador. Prueba a reiniciar la aplicación.',
-  'user_message.elevation_unsupported':
-    'El reinicio con derechos de administrador no es compatible con esta plataforma.',
+  'user_message.access_denied':
+    'Se denegó el acceso. Comprueba tus permisos y vuelve a intentarlo.',
 
   'suggested_action.refresh_games': 'Actualiza la lista de juegos y vuelve a intentarlo.',
   'suggested_action.reload_game_details': 'Actualiza los detalles del juego y vuelve a intentarlo.',
@@ -650,8 +629,6 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'suggested_action.rebuild_operation_plan': 'Por favor, reinicia la acción.',
   'suggested_action.refresh_or_scan_game_folder':
     'Actualiza la lista o escanea la carpeta de nuevo.',
-  'suggested_action.relaunch_as_administrator':
-    'Reinicia la aplicación como administrador y vuelve a intentarlo.',
 
   'settings.about.title': 'Actualizaciones',
   'settings.about.description': 'Buscar actualizaciones de la aplicación.',
@@ -684,7 +661,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'settings.about.updateDialog.verifying': 'Verificando actualización…',
   'settings.about.updateDialog.verifyingDescription': 'Comprobando el paquete descargado.',
   'settings.about.updateDialog.installing':
-    'Instalando actualización… La app se cerrará; el instalador puede aparecer un momento.',
+    'Aplicando actualización… La aplicación se cerrará y reiniciará automáticamente.',
   'settings.about.updateDialog.restarting': 'Reiniciando la aplicación…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Error de descarga o verificación',
@@ -692,7 +669,7 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'No se pudo descargar o verificar la actualización. Comprueba la conexión e inténtalo de nuevo.',
   'settings.about.updateDialog.installErrorTitle': 'Error de instalación',
   'settings.about.updateDialog.installErrorDescription':
-    'No se pudo instalar la actualización. Puedes intentarlo de nuevo.',
+    'No se pudo instalar la actualización. Reinicia RenderPilot normalmente y vuelve a intentarlo; Windows solicitará permisos de administrador si son necesarios.',
   'settings.about.updateDialog.restartRequiredTitle': 'Reinicio necesario',
   'settings.about.updateDialog.restartRequiredDescription':
     'La actualización se instaló, pero la aplicación no pudo reiniciarse automáticamente. Reinicia RenderPilot manualmente para finalizar la actualización.',

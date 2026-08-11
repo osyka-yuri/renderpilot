@@ -395,7 +395,6 @@ function previewSwapPlan(
     original_sha256: null,
     replacement_sha256: null,
     risk_level: blockers.length > 0 ? 'blocked' : 'low',
-    requires_elevation: false,
     blockers,
     warnings: [],
     files: [],

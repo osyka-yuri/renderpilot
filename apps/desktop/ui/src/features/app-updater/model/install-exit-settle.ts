@@ -1,24 +1,11 @@
-/**
- * Wall-clock settle after a busy-phase assignment so Svelte can paint before
- * Windows `update.install()` calls process::exit(0). ~450ms is enough for one
- * committed frame without feeling like a long artificial delay.
- */
-const INSTALL_EXIT_PAINT_MS = 450;
+import { tick } from 'svelte';
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-/** Two animation frames (or a macrotask) so layout can commit. */
+/** Waits for Svelte state flush and one browser paint opportunity. */
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
+        resolve();
       });
       return;
     }
@@ -27,10 +14,11 @@ function waitForNextPaint(): Promise<void> {
 }
 
 /**
- * Production settle before Windows `update.install()` may exit the process.
+ * Lifecycle-based settle before Windows may exit the process. There is no
+ * wall-clock timeout: readiness follows Svelte's flush and the browser frame.
  * Overridable via `CreateAppUpdaterModelOptions.settleUiBeforeInstallExit`.
  */
 export async function settleUiBeforeInstallExit(): Promise<void> {
+  await tick();
   await waitForNextPaint();
-  await delay(INSTALL_EXIT_PAINT_MS);
 }

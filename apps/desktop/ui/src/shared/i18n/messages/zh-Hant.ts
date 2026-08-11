@@ -45,7 +45,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'settings.nvidia.indicator.title': 'DLSS 指示器',
   'settings.nvidia.indicator.description': '在遊戲中顯示包含目前使用之 DLSS 版本與設定的疊加層。',
   'settings.nvidia.indicator.systemWide': '套用至整個系統',
-  'settings.nvidia.indicator.adminRequired': '請以系統管理員身分重新啟動應用程式，以變更此設定。',
   'settings.nvidia.indicator.overlayTitle': '螢幕疊加層',
   'settings.nvidia.indicator.overlayDescription': '適用於此電腦上的所有遊戲。',
   'settings.nvidia.indicator.toggleAria': '切換 DLSS 指示器',
@@ -53,7 +52,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'settings.nvidia.global.description':
     '透過 NVIDIA 基礎設定檔，套用於所有沒有個別覆寫設定的遊戲的預設值。',
   'settings.nvidia.global.systemWide': '套用至所有遊戲',
-  'settings.nvidia.global.adminRequired': '請以系統管理員身分重新啟動應用程式，以變更這些設定。',
   'settings.nvidia.global.familySr': 'DLSS 超解析度',
   'settings.nvidia.global.familyFg': 'DLSS 畫格生成',
   'settings.nvidia.global.familyRr': 'DLSS 光線重建',
@@ -95,11 +93,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'game.dashboard.games': plural('count', { other: '{count} 個遊戲' }),
   'game.dashboard.updates': plural('count', { other: '{count} 個更新' }),
 
-  'elevation.title': '需要系統管理員權限',
-  'elevation.description': '部分設定需要系統管理員權限才能變更。',
-  'elevation.relaunch': '以系統管理員身分重新啟動',
-  'elevation.relaunchFailed': '無法以系統管理員身分重新啟動',
-  'elevation.dismiss': '忽略',
   'error.boundary.title': '出現了一些問題',
   'error.boundary.description': '此螢幕遇到意外錯誤。您可以重試，或切換到其他部分。',
   'error.boundary.reset': '重試',
@@ -233,7 +226,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': '變更 DLSS 版本。',
   'gameDetails.dlss.libraryFileLabel': '檔案版本',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 設定檔覆寫',
-  'gameDetails.dlss.adminRequired': '請以系統管理員身分重新啟動應用程式，以變更這些設定。',
 
   'gameDetails.streamline.description': '管理 Streamline 外掛程式。',
   'gameDetails.streamline.versionTitle': '全域 Streamline 版本',
@@ -441,7 +433,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   }),
   'coverSync.failure.hint': '請檢查遊戲封面來源和 SteamGridDB 設定。',
 
-  'nvidia.adminRequired': '需要系統管理員權限',
   'nvidia.changeSettingFailed': '無法套用設定',
   'nvidia.revertDefaultFailed': '無法還原預設設定',
   'nvidia.revertBaselineFailed': '無法還原初始設定',
@@ -521,17 +512,11 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'user_message.cover_file_system_error': '將封面儲存到磁碟失敗。',
   'user_message.stale_replacement_source':
     '無法套用此更新，因為原始檔已在 RenderPilot 以外遭到取代或修改。請重新選擇版本；可能需要再次下載。',
-  'user_message.nvapi_requires_administrator': '需要系統管理員權限才能變更此設定。',
   'user_message.catalog_consolidation_blocked':
     'RenderPilot 在重複的遊戲卡片中發現衝突的受管理狀態。未進行任何變更，並已建立復原套件。',
   'user_message.rollback_also_failed':
     '操作失敗，且 RenderPilot 無法完整還原先前的檔案狀態。重試前請檢查遊戲檔案。',
-  'user_message.elevation_cancelled': '系統管理員權限要求已取消。未進行任何變更。',
-  'user_message.elevation_policy_blocked':
-    'Windows 已封鎖系統管理員權限要求。請檢查系統原則後重試。',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot 無法以系統管理員權限重新啟動。請嘗試重新啟動應用程式。',
-  'user_message.elevation_unsupported': '此平台不支援以系統管理員權限重新啟動。',
+  'user_message.access_denied': '存取遭拒。請檢查權限後再試。',
 
   'suggested_action.refresh_games': '重新整理遊戲清單並重試。',
   'suggested_action.reload_game_details': '重新整理遊戲詳情並重試。',
@@ -542,7 +527,6 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'suggested_action.retry_or_restart': '如果問題仍然存在，請嘗試重新啟動應用程式。',
   'suggested_action.rebuild_operation_plan': '請重新開始操作。',
   'suggested_action.refresh_or_scan_game_folder': '重新整理清單或再次掃描資料夾。',
-  'suggested_action.relaunch_as_administrator': '以系統管理員身分重新啟動應用程式並重試。',
 
   'settings.about.title': '更新',
   'settings.about.description': '檢查應用程式更新。',
@@ -573,15 +557,15 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'settings.about.updateDialog.downloadingBytesTotal': '{received} / {total}',
   'settings.about.updateDialog.verifying': '正在驗證更新…',
   'settings.about.updateDialog.verifyingDescription': '正在檢查已下載的安裝包。',
-  'settings.about.updateDialog.installing':
-    '正在安裝更新… 應用程式將關閉；安裝程式可能會短暫出現。',
+  'settings.about.updateDialog.installing': '正在套用更新… 應用程式將關閉並自動重新啟動。',
   'settings.about.updateDialog.restarting': '正在重新啟動應用程式…',
 
   'settings.about.updateDialog.prepareErrorTitle': '下載或驗證失敗',
   'settings.about.updateDialog.prepareErrorDescription':
     '無法下載或驗證更新。請檢查網路連線後重試。',
   'settings.about.updateDialog.installErrorTitle': '安裝失敗',
-  'settings.about.updateDialog.installErrorDescription': '無法安裝更新。你可以重試。',
+  'settings.about.updateDialog.installErrorDescription':
+    '無法安裝更新。請正常重新啟動 RenderPilot 後再試；如有需要，Windows 會要求系統管理員核准。',
   'settings.about.updateDialog.restartRequiredTitle': '需要重新啟動',
   'settings.about.updateDialog.restartRequiredDescription':
     '更新已安裝，但應用程式無法自動重新啟動。請手動重新啟動 RenderPilot 以完成更新。',

@@ -5,7 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { I18nInitializationResult } from '@shared/i18n';
-import type { AppInitializationState } from '@entities/app';
 
 const mocks = vi.hoisted(() => ({
   mount: vi.fn(),
@@ -13,7 +12,6 @@ const mocks = vi.hoisted(() => ({
   readStoredThemeMode: vi.fn(() => 'dark'),
   isDesktopPreviewMode: vi.fn(() => false),
   initializeI18n: vi.fn(),
-  getAppInitializationState: vi.fn(),
   publishCommandErrorNotification: vi.fn(),
   loadDesktopStartup: vi.fn(),
 }));
@@ -32,22 +30,12 @@ vi.mock('@shared/i18n', () => ({
 vi.mock('@shared/notifications', () => ({
   publishCommandErrorNotification: mocks.publishCommandErrorNotification,
 }));
-vi.mock('@entities/app', () => ({
-  getAppInitializationState: mocks.getAppInitializationState,
-}));
 vi.mock('./desktop-startup', () => ({
   loadDesktopStartup: mocks.loadDesktopStartup,
 }));
 vi.mock('@app/routes/DesktopApp.svelte', () => ({
   default: 'DesktopApp',
 }));
-
-const initState: AppInitializationState = {
-  isElevated: true,
-  elevationSupported: true,
-  elevationUserDeclined: false,
-  elevationAttempted: true,
-};
 
 function createLocaleLoadError(): NonNullable<I18nInitializationResult['error']> {
   const cause = new Error('chunk missing');
@@ -73,7 +61,6 @@ describe('bootstrap', () => {
     mocks.readStoredThemeMode.mockReset().mockReturnValue('dark');
     mocks.isDesktopPreviewMode.mockReset().mockReturnValue(false);
     mocks.initializeI18n.mockReset();
-    mocks.getAppInitializationState.mockReset();
     mocks.publishCommandErrorNotification.mockReset();
     mocks.loadDesktopStartup.mockReset();
   });
@@ -87,7 +74,6 @@ describe('bootstrap', () => {
     const startup = Promise.withResolvers<{
       i18n: I18nInitializationResult;
       desktopAppModule: { default: string };
-      initialization: AppInitializationState;
     }>();
     const localeError = createLocaleLoadError();
 
@@ -108,7 +94,6 @@ describe('bootstrap', () => {
         error: localeError,
       },
       desktopAppModule: { default: 'DesktopApp' },
-      initialization: initState,
     });
     await importBootstrap;
 
@@ -119,7 +104,6 @@ describe('bootstrap', () => {
     expect(mocks.mount).toHaveBeenCalledOnce();
     expect(mocks.mount).toHaveBeenCalledWith('DesktopApp', {
       target: document.getElementById('app'),
-      props: { initState },
     });
     expect(mocks.publishCommandErrorNotification).toHaveBeenCalledOnce();
     expect(mocks.publishCommandErrorNotification).toHaveBeenCalledWith(localeError);

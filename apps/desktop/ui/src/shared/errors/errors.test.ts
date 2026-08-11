@@ -31,6 +31,17 @@ describe('desktop error model and presenter', () => {
     );
   });
 
+  it('classifies a shared updater command code as known transport data', () => {
+    const error = normalizeDesktopCommandError({ code: 'app_update_check_failed' });
+
+    expect(error.contractStatus).toBe('known');
+    expect(presentError(error)).toMatchObject({
+      code: 'app_update_check_failed',
+      severity: 'error',
+      message: t('user_message.operation_could_not_complete'),
+    });
+  });
+
   it('accepts only structured fields allowed for the known code', () => {
     const invalidRoot = presentError({
       code: 'invalid_install_root',

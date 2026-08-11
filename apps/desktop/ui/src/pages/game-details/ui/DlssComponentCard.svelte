@@ -44,13 +44,7 @@
   const dllInfo = $derived(nvidia.dllInfoForFamily(family));
 
   function rowDisabled(state: SettingStateResponse): boolean {
-    return (
-      busy ||
-      nvidia.busy ||
-      !nvidia.canWrite ||
-      nvidia.isPending(state.setting_key) ||
-      !state.has_profile_for_exe
-    );
+    return busy || nvidia.busy || nvidia.isPending(state.setting_key) || !state.has_profile_for_exe;
   }
 </script>
 
@@ -99,8 +93,6 @@
         <NvapiSettingGroup
           {settings}
           {warnings}
-          canWrite={nvidia.canWrite}
-          adminMessage={t('gameDetails.dlss.adminRequired')}
           {rowDisabled}
           onChange={(key: string, wire: string) => {
             void nvidia.setValue(gameId, key, wire);

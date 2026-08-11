@@ -194,6 +194,69 @@
       "actions": ["retry_or_restart"]
     },
     {
+      "code": "app_update_apply_failed",
+      "rustVariant": "AppUpdateApplyFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_check_failed",
+      "rustVariant": "AppUpdateCheckFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_download_failed",
+      "rustVariant": "AppUpdateDownloadFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_install_failed",
+      "rustVariant": "AppUpdateInstallFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_invalid_session",
+      "rustVariant": "AppUpdateInvalidSession",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_invalid_state",
+      "rustVariant": "AppUpdateInvalidState",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_session_active",
+      "rustVariant": "AppUpdateSessionActive",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_state_failed",
+      "rustVariant": "AppUpdateStateFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
+      "code": "app_update_supervisor_failed",
+      "rustVariant": "AppUpdateSupervisorFailed",
+      "messageKey": "user_message.operation_could_not_complete",
+      "severity": "error",
+      "actions": ["inspect_logs"]
+    },
+    {
       "code": "steamgriddb_api_key_missing",
       "rustVariant": "SteamGridDbApiKeyMissing",
       "messageKey": "user_message.steamgriddb_api_key_missing",
@@ -229,39 +292,11 @@
       "actions": ["inspect_logs"]
     },
     {
-      "code": "nvapi_requires_elevation",
-      "rustVariant": "NvapiRequiresElevation",
-      "messageKey": "user_message.nvapi_requires_administrator",
-      "severity": "warning",
-      "actions": ["relaunch_as_administrator"]
-    },
-    {
-      "code": "elevation_cancelled",
-      "rustVariant": "ElevationCancelled",
-      "messageKey": "user_message.elevation_cancelled",
-      "severity": "warning",
-      "actions": []
-    },
-    {
-      "code": "elevation_policy_blocked",
-      "rustVariant": "ElevationPolicyBlocked",
-      "messageKey": "user_message.elevation_policy_blocked",
+      "code": "access_denied",
+      "rustVariant": "AccessDenied",
+      "messageKey": "user_message.access_denied",
       "severity": "error",
-      "actions": ["retry_or_restart"]
-    },
-    {
-      "code": "elevation_relaunch_failed",
-      "rustVariant": "ElevationRelaunchFailed",
-      "messageKey": "user_message.elevation_relaunch_failed",
-      "severity": "error",
-      "actions": ["retry_or_restart"]
-    },
-    {
-      "code": "elevation_unsupported",
-      "rustVariant": "ElevationUnsupported",
-      "messageKey": "user_message.elevation_unsupported",
-      "severity": "error",
-      "actions": []
+      "actions": ["inspect_logs"]
     }
   ],
   "suggestedActions": [
@@ -285,10 +320,6 @@
     {
       "code": "refresh_or_scan_game_folder",
       "messageKey": "suggested_action.refresh_or_scan_game_folder"
-    },
-    {
-      "code": "relaunch_as_administrator",
-      "messageKey": "suggested_action.relaunch_as_administrator"
     }
   ]
 }

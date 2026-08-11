@@ -42,15 +42,6 @@
   </CardHeader>
 
   <CardContent class="grid gap-2">
-    {#if !dlssIndicator.canWrite}
-      <Alert variant="warning" size="sm" role="note">
-        <TriangleAlertIcon aria-hidden="true" />
-        <AlertDescription>
-          {t('settings.nvidia.indicator.adminRequired')}
-        </AlertDescription>
-      </Alert>
-    {/if}
-
     {#if dlssIndicator.error}
       <Alert variant="destructive" size="sm" role="alert">
         <TriangleAlertIcon aria-hidden="true" />
@@ -67,7 +58,7 @@
         <ItemActions>
           <Switch
             checked={dlssIndicator.enabled}
-            disabled={!dlssIndicator.canWrite || dlssIndicator.busy}
+            disabled={dlssIndicator.busy}
             aria-label={t('settings.nvidia.indicator.toggleAria')}
             onCheckedChange={(checked: boolean) => {
               void dlssIndicator.setEnabled(checked);

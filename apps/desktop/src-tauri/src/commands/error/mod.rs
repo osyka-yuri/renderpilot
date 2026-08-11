@@ -274,27 +274,18 @@ mod tests {
     }
 
     #[test]
-    fn elevation_outcomes_have_distinct_stable_codes() {
-        let codes = [
-            CommandErrorKind::ElevationCancelled.code(),
-            CommandErrorKind::ElevationPolicyBlocked.code(),
-            CommandErrorKind::ElevationRelaunchFailed.code(),
-            CommandErrorKind::ElevationUnsupported.code(),
-        ];
+    fn access_denied_keeps_backend_diagnostics_off_the_wire() {
+        let value = serde_json::to_value(CommandError::from(ApiError::Service(
+            ServiceError::AccessDenied {
+                operation: "updating private NVAPI setting".into(),
+                detail: "NVAPI reported invalid user privilege for C:\\Users\\name".into(),
+            },
+        )))
+        .expect("serialize CommandError");
 
-        assert_eq!(
-            codes.into_iter().collect::<BTreeSet<_>>().len(),
-            codes.len()
-        );
-        assert_eq!(
-            codes,
-            [
-                "elevation_cancelled",
-                "elevation_policy_blocked",
-                "elevation_relaunch_failed",
-                "elevation_unsupported",
-            ]
-        );
+        assert_eq!(value, json!({ "code": "access_denied" }));
+        assert!(!value.to_string().contains("private"));
+        assert!(!value.to_string().contains("C:\\\\Users"));
     }
 
     #[test]
@@ -309,6 +300,19 @@ mod tests {
 
         assert_eq!(before, json!({ "code": "storage_failed" }));
         assert_eq!(after, before);
+    }
+
+    #[test]
+    fn updater_diagnostic_details_never_serialize() {
+        let error = CommandError::with_diagnostic(
+            CommandErrorKind::AppUpdateSupervisorFailed,
+            "private supervisor pipe at C:\\Users\\name",
+        );
+        let value = serde_json::to_value(error.recorded("app_update_apply"))
+            .expect("serialize updater error");
+
+        assert_eq!(value, json!({ "code": "app_update_supervisor_failed" }));
+        assert!(!value.to_string().contains("private"));
     }
 
     #[test]

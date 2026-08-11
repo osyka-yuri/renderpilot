@@ -23,9 +23,9 @@
   import { getCatalogSetting } from '@entities/settings';
   import { observeSystemTheme } from '@shared/theme';
   import { isDesktopPreviewMode } from '@shared/api-preview';
+  import { invokeDesktop } from '@shared/api';
   import { ErrorBoundary } from '@shared/ui';
   import { NotificationsToaster } from '@widgets/notifications-toaster';
-  import { ElevationBanner } from '@widgets/elevation-banner';
   import { createCoverSyncQueue } from '@features/sync-covers';
   import { createGameDetailsPageModel } from '@pages/game-details';
   import { GamesPage as GamesScreen, createGamesPageModel } from '@pages/games';
@@ -49,7 +49,7 @@
     syncMissingCoversAfterCardsLoad,
   } from '@app/model/desktop-app-workflows';
   import { createSelectedGameDetailsRefresher } from '@app/model/create-selected-game-details-refresher';
-  import { startBackgroundRefresh, type AppInitializationState } from '@entities/app';
+  import { startBackgroundRefresh } from '@entities/app';
   import { listen } from '@tauri-apps/api/event';
   import {
     AppUpdateDialog,
@@ -70,13 +70,7 @@
   import LazyPage from './LazyPage.svelte';
   import { createDesktopPageRegistry } from './desktop-page-registry.svelte';
 
-  type Props = {
-    initState: AppInitializationState;
-  };
-
-  const { initState }: Props = $props();
-
-  const model = createDesktopAppModel(() => initState);
+  const model = createDesktopAppModel();
   const selectedDetailsRefresher = createSelectedGameDetailsRefresher({
     getGameDetails,
     resolveCurrentTarget: (gameId) =>
@@ -254,83 +248,101 @@
   }
 
   onMount(() => {
-    model.applyCurrentTheme();
-
-    const stopThemeObserver = observeSystemTheme(() => {
-      model.applyCurrentTheme();
-    });
-
     let disposed = false;
+    let stopThemeObserver: (() => void) | null = null;
+    let disposeCatalogLifecycle: (() => void) | null = null;
     const isDisposed = () => disposed;
-    const completeInitialCatalogSync = async ({
-      forceCatalogRefresh,
-    }: InitialCatalogSyncCompletion) => {
-      if (disposed) {
+
+    void (async () => {
+      try {
+        // This is a no-op outside portable builds. In a portable trial it is
+        // the first semantic boundary after the actual bundled UI is visible.
+        await invokeDesktop('portable_trial_ready');
+      } catch (error: unknown) {
+        reportClientError('portable_trial_ready', error);
         return;
       }
-      try {
-        if (forceCatalogRefresh || gamesSession.catalogSize === 0) {
-          await gamesSession.refreshCatalog();
-        }
-      } catch (error: unknown) {
-        reportClientError('catalog_read_after_background_refresh', error);
-      } finally {
-        if (!isDisposed()) {
-          gamesSession.completeInitialCatalogSync();
-        }
+      if (isDisposed()) {
+        return;
       }
-    };
-    const catalogLifecycle = createInitialCatalogLifecycle({
-      previewMode: isDesktopPreviewMode(),
-      listenEvent: (event, onPayload) =>
-        listen<CatalogEventPayloads[typeof event]>(event, ({ payload }) => {
-          onPayload(payload);
-        }),
-      startBackgroundRefresh,
-      startUpdater: () => {
-        void appUpdater.start();
-      },
-      onCatalogDelta: handleCatalogDelta,
-      onPartialScanFailures: publishPartialLibraryScanWarning,
-      completeInitialCatalogSync,
-      enableCoverHydration: () => {
-        backgroundCoverHydrationEnabled = true;
-      },
-    });
-    void bootstrapGamesCatalog().then(
-      async (bootstrap) => {
+
+      model.applyCurrentTheme();
+      stopThemeObserver = observeSystemTheme(() => {
+        model.applyCurrentTheme();
+      });
+      const completeInitialCatalogSync = async ({
+        forceCatalogRefresh,
+      }: InitialCatalogSyncCompletion) => {
         if (isDisposed()) {
           return;
         }
-        gamesSession.applyBootstrap(bootstrap);
-        if (gamesSession.pendingCatalogDelta !== null) {
-          await gamesSession.refreshCatalog();
-        }
-        await tick();
-        catalogLifecycle.startServices();
-      },
-      async (error: unknown) => {
-        reportClientError('bootstrap_games_catalog', error);
         try {
-          await gamesSession.loadFilterPreferences(isDisposed);
-          if (!isDisposed()) {
-            await model.runExclusive(refreshGameCards);
+          if (forceCatalogRefresh || gamesSession.catalogSize === 0) {
+            await gamesSession.refreshCatalog();
           }
+        } catch (error: unknown) {
+          reportClientError('catalog_read_after_background_refresh', error);
         } finally {
           if (!isDisposed()) {
-            gamesSession.completeBootstrapRecovery();
-            await tick();
-            catalogLifecycle.startServices();
+            gamesSession.completeInitialCatalogSync();
           }
         }
-      },
-    );
+      };
+      const catalogLifecycle = createInitialCatalogLifecycle({
+        previewMode: isDesktopPreviewMode(),
+        listenEvent: (event, onPayload) =>
+          listen<CatalogEventPayloads[typeof event]>(event, ({ payload }) => {
+            onPayload(payload);
+          }),
+        startBackgroundRefresh,
+        startUpdater: () => {
+          void appUpdater.start();
+        },
+        onCatalogDelta: handleCatalogDelta,
+        onPartialScanFailures: publishPartialLibraryScanWarning,
+        completeInitialCatalogSync,
+        enableCoverHydration: () => {
+          backgroundCoverHydrationEnabled = true;
+        },
+      });
+      disposeCatalogLifecycle = () => {
+        catalogLifecycle.dispose();
+      };
+      void bootstrapGamesCatalog().then(
+        async (bootstrap) => {
+          if (isDisposed()) {
+            return;
+          }
+          gamesSession.applyBootstrap(bootstrap);
+          if (gamesSession.pendingCatalogDelta !== null) {
+            await gamesSession.refreshCatalog();
+          }
+          await tick();
+          catalogLifecycle.startServices();
+        },
+        async (error: unknown) => {
+          reportClientError('bootstrap_games_catalog', error);
+          try {
+            await gamesSession.loadFilterPreferences(isDisposed);
+            if (!isDisposed()) {
+              await model.runExclusive(refreshGameCards);
+            }
+          } finally {
+            if (!isDisposed()) {
+              gamesSession.completeBootstrapRecovery();
+              await tick();
+              catalogLifecycle.startServices();
+            }
+          }
+        },
+      );
+    })();
 
     return () => {
-      stopThemeObserver();
       disposed = true;
+      stopThemeObserver?.();
       selectedDetailsRefresher.dispose();
-      catalogLifecycle.dispose();
+      disposeCatalogLifecycle?.();
       gamesSession.flushSearchPersist();
       gamesSession.dispose();
       void appUpdater.dispose();
@@ -465,9 +477,6 @@
   updateOpening={appUpdater.settingsAction === 'checking'}
   onOpenUpdate={() => void appUpdater.openAvailableUpdate()}
 >
-  {#snippet banner()}
-    <ElevationBanner isElevated={model.isElevated} elevationSupported={model.elevationSupported} />
-  {/snippet}
   <ErrorBoundary>
     {#if model.screen === 'details'}
       <LazyPage
@@ -480,7 +489,6 @@
           <GameDetailsScreen
             details={model.selectedDetails}
             busy={model.busy}
-            isElevated={model.isElevated}
             onSwap={gameDetailsModel.handleSwap}
             onRollback={gameDetailsModel.handleRollback}
             onBulkSwap={gameDetailsModel.handleBulkSwap}
@@ -519,7 +527,6 @@
       >
         {#snippet children(SettingsScreen)}
           <SettingsScreen
-            isElevated={model.isElevated}
             themeMode={model.themeMode}
             languageMode={model.languageMode}
             languageBusy={model.languageBusy}

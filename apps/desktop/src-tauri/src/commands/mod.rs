@@ -4,7 +4,7 @@
 //! to avoid stalling the async runtime and to record mapped failures once.
 
 pub(crate) mod addon_catalog;
-mod app;
+mod app_update;
 mod background_catalog_refresh;
 mod error;
 mod luma;
@@ -13,7 +13,7 @@ mod query_game_cards;
 mod renodx;
 mod validation;
 
-pub use app::*;
+pub use app_update::*;
 pub use error::CommandError;
 pub use luma::*;
 pub use nvapi::*;
@@ -119,10 +119,22 @@ impl CommandBoundary {
         error.recorded(self.operation)
     }
 
+    fn require_portable_commit(self) -> Result<(), CommandError> {
+        #[cfg(all(windows, feature = "portable"))]
+        crate::portable_runtime::activation::require_committed().map_err(|error| {
+            self.record(CommandError::with_diagnostic(
+                error::CommandErrorKind::CommandFailed,
+                error,
+            ))
+        })?;
+        Ok(())
+    }
+
     pub(crate) async fn run<F>(self, command: F) -> JsonCommandResult
     where
         F: FnOnce() -> DesktopCommandResult + Send + 'static,
     {
+        self.require_portable_commit()?;
         tauri::async_runtime::spawn_blocking(command)
             .await
             .map_err(|error| self.record(CommandError::task_failed(error)))?
@@ -134,6 +146,7 @@ impl CommandBoundary {
         F: FnOnce() -> Fut + Send + 'static,
         Fut: std::future::Future<Output = DesktopCommandResult> + Send + 'static,
     {
+        self.require_portable_commit()?;
         tauri::async_runtime::spawn(command())
             .await
             .map_err(|error| self.record(CommandError::task_failed(error)))?

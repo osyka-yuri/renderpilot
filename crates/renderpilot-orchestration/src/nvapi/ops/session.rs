@@ -7,7 +7,10 @@ use crate::ServiceError;
 
 pub(super) fn map_nvapi_write_error(error: NvapiError, label: &'static str) -> ServiceError {
     match error {
-        NvapiError::InvalidUserPrivilege => ServiceError::NvapiRequiresElevation,
+        NvapiError::InvalidUserPrivilege => ServiceError::AccessDenied {
+            operation: format!("NVAPI DRS {label}"),
+            detail: "NVAPI reported invalid user privilege".to_owned(),
+        },
         other => ServiceError::command_failed(format!("{label}: {other}")),
     }
 }
@@ -40,4 +43,20 @@ pub(super) fn warning_to_service_error(warning: NvapiWarningDto) -> ServiceError
         other => return ServiceError::command_failed(format!("DRS session failed: {other:?}")),
     };
     ServiceError::command_failed(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_user_privilege_is_an_access_denied_error() {
+        assert_eq!(
+            map_nvapi_write_error(NvapiError::InvalidUserPrivilege, "save failed"),
+            ServiceError::AccessDenied {
+                operation: "NVAPI DRS save failed".to_owned(),
+                detail: "NVAPI reported invalid user privilege".to_owned(),
+            }
+        );
+    }
 }

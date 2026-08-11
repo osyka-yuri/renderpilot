@@ -16,21 +16,14 @@ import {
  * Unlike the per-game NVIDIA driver context this targets the base profile
  * (`_GLOBAL_DRIVER_PROFILE_`), so there is no executable selection and no
  * per-game baseline. It composes the shared {@link createNvapiSettingsStore}
- * for everything else (family grouping, warnings, optimistic writes, elevation
- * gating) and is loaded once when the Settings → NVIDIA tab is first shown.
+ * for everything else (family grouping, warnings, optimistic writes) and is
+ * loaded once when the Settings → NVIDIA tab is first shown.
  */
 
 export type GlobalNvidiaPresetsContext = ReturnType<typeof createGlobalNvidiaPresetsContext>;
 
-export type CreateGlobalNvidiaPresetsContextOptions = {
-  /** Whether NVAPI writes can succeed in this process (admin). */
-  isElevated: () => boolean;
-};
-
-export function createGlobalNvidiaPresetsContext({
-  isElevated,
-}: CreateGlobalNvidiaPresetsContextOptions) {
-  const store: NvapiSettingsStore = createNvapiSettingsStore({ isElevated });
+export function createGlobalNvidiaPresetsContext() {
+  const store: NvapiSettingsStore = createNvapiSettingsStore();
 
   let loaded = $state(false);
   // Plain (non-reactive) re-entrancy guard for the one-shot load.
@@ -56,18 +49,12 @@ export function createGlobalNvidiaPresetsContext({
   }
 
   async function setValue(key: string, wire: string): Promise<void> {
-    if (!store.ensureElevated()) {
-      return;
-    }
     await store.runWrite(key, t('nvidia.changeSettingFailed'), () =>
       setGlobalNvapiSettingValue(key, wire),
     );
   }
 
   async function revertDefault(key: string): Promise<void> {
-    if (!store.ensureElevated()) {
-      return;
-    }
     await store.runWrite(key, t('nvidia.revertDefaultFailed'), () =>
       revertGlobalNvapiSetting(key, 'predefined'),
     );
@@ -91,9 +78,6 @@ export function createGlobalNvidiaPresetsContext({
     },
     get profileWarnings() {
       return store.profileWarnings;
-    },
-    get canWrite() {
-      return store.canWrite;
     },
     isPending: (key: string) => store.isPending(key),
     settingsForFamily: store.settingsForFamily,

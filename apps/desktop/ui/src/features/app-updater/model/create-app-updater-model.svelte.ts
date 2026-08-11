@@ -4,7 +4,11 @@ import { t } from '@shared/i18n';
 import { ClientError, reportClientError } from '@shared/errors';
 import { createDisposableRequestChannel } from '@shared/requests';
 
-import type { AppUpdateHandle, AppUpdaterGateway } from '../api/app-updater-gateway';
+import type {
+  AppUpdateHandle,
+  AppUpdateInstallOutcome,
+  AppUpdaterGateway,
+} from '../api/app-updater-gateway';
 import { canDismissDialog } from './dialog-view';
 import {
   downloadWithRetries,
@@ -29,8 +33,8 @@ export type CreateAppUpdaterModelOptions = {
   notifyError?: (message: string) => void;
   /**
    * Yields so the dialog can paint completed download / installing state before
-   * Windows `update.install()` exits the process. Defaults to production settle;
-   * tests inject a no-op.
+   * the native apply boundary may exit the process. Defaults to production
+   * settle; tests inject a no-op.
    */
   settleUiBeforeInstallExit?: () => Promise<void>;
   /** Overrides the automatic download-retry delay in tests. */
@@ -218,8 +222,8 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
   }
 
   /**
-   * Paint a completed (100%) busy frame then installing before Windows
-   * `install()` may exit. Uses `verifying` (not `downloading`) so status does
+   * Paint a completed (100%) busy frame then installing before the native
+   * apply boundary may exit. Uses `verifying` (not `downloading`) so status does
    * not regress after network finish. When Finished already left us on
    * verifying, snap progress without an extra settle.
    */
@@ -258,8 +262,9 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       return;
     }
 
+    let outcome: AppUpdateInstallOutcome;
     try {
-      await handle.install();
+      outcome = await handle.install();
     } catch (error) {
       reportClientError('updater_install', new ClientError('updater_install_failed', error));
       if (isCurrentOperation(id)) {
@@ -275,9 +280,13 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       return;
     }
 
-    // Windows: tauri-plugin-updater launches NSIS then process::exit(0), so this
-    // never runs. Non-Windows: install returns and we relaunch the app here.
     notice = null;
+    if (outcome.type === 'native-exit') {
+      // Rust owns process exit after acknowledging the supervisor handoff. Keep
+      // installing visible and never race that native lifecycle transition.
+      return;
+    }
+
     await relaunchOrRequireRestart(id, offer);
   }
 
@@ -366,6 +375,12 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
   }
 
   async function checkForUpdates(): Promise<void> {
+    // The Rust boundary permits only one native check at a time. If startup is
+    // already probing in the background, let it finish before creating the
+    // interactive session instead of surfacing a transient busy error.
+    if (startup) {
+      await startup;
+    }
     await startInteractiveCheck();
   }
 
@@ -410,11 +425,16 @@ export function createAppUpdaterModel(options: CreateAppUpdaterModelOptions): Ap
       return;
     }
 
+    const currentDialog = dialog;
+    if (currentDialog.phase !== 'prepare-failed' && currentDialog.phase !== 'install-failed') {
+      return;
+    }
+
     const id = beginOperation();
-    if (dialog.phase === 'prepare-failed') {
-      await runDownloadAndInstall(id, dialog.offer);
-    } else if (dialog.phase === 'install-failed') {
-      await runInstallOnly(id, dialog.offer);
+    if (currentDialog.phase === 'prepare-failed') {
+      await runDownloadAndInstall(id, currentDialog.offer);
+    } else {
+      await runInstallOnly(id, currentDialog.offer);
     }
   }
 

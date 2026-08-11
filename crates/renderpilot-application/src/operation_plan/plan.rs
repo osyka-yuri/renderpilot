@@ -25,7 +25,6 @@ pub struct OperationPlan {
     original_sha256: Option<Sha256Hash>,
     replacement_sha256: Option<Sha256Hash>,
     risk_level: OperationPlanRiskLevel,
-    requires_elevation: bool,
     artifact_id: ArtifactId,
     blockers: Vec<OperationPlanBlocker>,
     warnings: Vec<OperationPlanWarning>,
@@ -46,7 +45,6 @@ impl OperationPlan {
             blockers,
             warnings,
             risk_level,
-            requires_elevation,
         } = assessment;
         let OperationPlanIdentity {
             operation_id,
@@ -66,7 +64,6 @@ impl OperationPlan {
             original_sha256: target_file.sha256().cloned(),
             replacement_sha256: Some(artifact.sha256().clone()),
             risk_level,
-            requires_elevation,
             artifact_id: artifact.id().clone(),
             blockers,
             warnings,
@@ -138,11 +135,7 @@ impl OperationPlan {
     }
 
     fn recalculate_risk(&mut self) {
-        self.risk_level = OperationPlanRiskLevel::from_findings(
-            &self.blockers,
-            &self.warnings,
-            self.requires_elevation,
-        );
+        self.risk_level = OperationPlanRiskLevel::from_findings(&self.blockers, &self.warnings);
     }
 
     /// Returns the generated operation identifier.
@@ -203,11 +196,6 @@ impl OperationPlan {
     /// Returns the derived risk level of this plan.
     pub fn risk_level(&self) -> OperationPlanRiskLevel {
         self.risk_level
-    }
-
-    /// Returns whether the target path likely requires elevation.
-    pub const fn requires_elevation(&self) -> bool {
-        self.requires_elevation
     }
 
     /// Returns the selected artifact identifier.

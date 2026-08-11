@@ -54,8 +54,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'settings.nvidia.indicator.title': 'Индикатор DLSS',
   'settings.nvidia.indicator.description': 'Показывать версию и настройки DLSS поверх игры.',
   'settings.nvidia.indicator.systemWide': 'Глобально',
-  'settings.nvidia.indicator.adminRequired':
-    'Перезапустите приложение от имени администратора для изменения этой настройки.',
   'settings.nvidia.indicator.overlayTitle': 'Экранный оверлей',
   'settings.nvidia.indicator.overlayDescription': 'Применяется ко всем играм на этом ПК.',
   'settings.nvidia.indicator.toggleAria': 'Переключить индикатор DLSS',
@@ -63,8 +61,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'settings.nvidia.global.description':
     'Значения по умолчанию для всех игр без индивидуальных настроек — через базовый профиль NVIDIA.',
   'settings.nvidia.global.systemWide': 'Для всей системы',
-  'settings.nvidia.global.adminRequired':
-    'Перезапустите приложение от имени администратора, чтобы изменить эти настройки.',
   'settings.nvidia.global.familySr': 'DLSS Super Resolution',
   'settings.nvidia.global.familyFg': 'DLSS Frame Generation',
   'settings.nvidia.global.familyRr': 'DLSS Ray Reconstruction',
@@ -125,12 +121,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     other: '{count} обновлений',
   }),
 
-  // ── Elevation banner ──
-  'elevation.title': 'Требуются права администратора',
-  'elevation.description': 'Для изменения некоторых настроек требуются права администратора.',
-  'elevation.relaunch': 'Перезапустить от имени администратора',
-  'elevation.relaunchFailed': 'Не удалось перезапустить от имени администратора',
-  'elevation.dismiss': 'Скрыть',
   'error.boundary.title': 'Что-то пошло не так',
   'error.boundary.description':
     'На этом экране произошла непредвиденная ошибка. Попробуйте ещё раз или перейдите в другой раздел.',
@@ -310,7 +300,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'settings.about.updateDialog.verifying': 'Проверка обновления…',
   'settings.about.updateDialog.verifyingDescription': 'Проверяется загруженный пакет.',
   'settings.about.updateDialog.installing':
-    'Установка обновления… Приложение закроется; может кратко появиться установщик.',
+    'Применение обновления… Приложение закроется и перезапустится автоматически.',
   'settings.about.updateDialog.restarting': 'Перезапуск приложения…',
 
   'settings.about.updateDialog.prepareErrorTitle': 'Ошибка загрузки или проверки',
@@ -318,7 +308,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Не удалось загрузить или проверить обновление. Проверьте подключение и попробуйте снова.',
   'settings.about.updateDialog.installErrorTitle': 'Ошибка установки',
   'settings.about.updateDialog.installErrorDescription':
-    'Не удалось установить обновление. Вы можете попробовать снова.',
+    'Не удалось установить обновление. Перезапустите RenderPilot обычным способом и повторите попытку; при необходимости Windows запросит права администратора.',
   'settings.about.updateDialog.restartRequiredTitle': 'Требуется перезапуск',
   'settings.about.updateDialog.restartRequiredDescription':
     'Обновление установлено, но приложение не удалось перезапустить автоматически. Перезапустите RenderPilot вручную, чтобы завершить обновление.',
@@ -351,8 +341,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': 'Изменить версию DLSS.',
   'gameDetails.dlss.libraryFileLabel': 'Версия файла',
   'gameDetails.dlss.driverOverridesLabel': 'Настройки драйвера NVIDIA',
-  'gameDetails.dlss.adminRequired':
-    'Перезапустите приложение от имени администратора для изменения этих настроек.',
 
   // ── Game details: Streamline card ──
   'gameDetails.streamline.description': 'Управление плагинами Streamline.',
@@ -616,7 +604,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'coverSync.failure.hint': 'Проверьте источники обложек игр и настройки SteamGridDB.',
 
   // ── NVIDIA driver context (toasts) ──
-  'nvidia.adminRequired': 'Требуются права администратора',
   'nvidia.changeSettingFailed': 'Не удалось применить настройки',
   'nvidia.revertDefaultFailed': 'Не удалось сбросить настройки',
   'nvidia.revertBaselineFailed': 'Не удалось восстановить исходные настройки',
@@ -707,15 +694,7 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'user_message.cover_file_system_error': 'Не удалось сохранить обложку на диск.',
   'user_message.stale_replacement_source':
     'Не удалось применить обновление: исходный файл был заменён или изменён вне RenderPilot. Выберите версию снова — может потребоваться загрузка.',
-  'user_message.nvapi_requires_administrator':
-    'Для изменения этой настройки требуются права администратора.',
-  'user_message.elevation_cancelled': 'Запрос прав администратора отменён. Изменения не вносились.',
-  'user_message.elevation_policy_blocked':
-    'Windows заблокировала запрос прав администратора. Проверьте системную политику и повторите попытку.',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot не удалось перезапустить с правами администратора. Попробуйте перезапустить приложение.',
-  'user_message.elevation_unsupported':
-    'Перезапуск с правами администратора не поддерживается на этой платформе.',
+  'user_message.access_denied': 'Доступ запрещён. Проверьте разрешения и повторите попытку.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Обновите список игр и попробуйте снова.',
@@ -729,8 +708,6 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
     'Если проблема сохраняется, попробуйте перезапустить приложение.',
   'suggested_action.rebuild_operation_plan': 'Пожалуйста, начните действие заново.',
   'suggested_action.refresh_or_scan_game_folder': 'Обновите список или отсканируйте папку заново.',
-  'suggested_action.relaunch_as_administrator':
-    'Перезапустите приложение от имени администратора и попробуйте снова.',
   // ── Game details: RenoDX ──
   'gameDetails.renodx.title': 'RenoDX HDR',
   'gameDetails.renodx.description': 'Добавьте HDR и тон-маппинг в игру через ReShade-аддон RenoDX.',

@@ -1,5 +1,5 @@
 import { SvelteSet } from 'svelte/reactivity';
-import { ClientError, reportClientError } from '@shared/errors';
+import { reportClientError } from '@shared/errors';
 import { publishPresentedErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
 import type { DllInfoDto, NvapiWarning, SettingFamily, SettingStateResponse } from './types';
@@ -9,8 +9,8 @@ import type { DllInfoDto, NvapiWarning, SettingFamily, SettingStateResponse } fr
  *
  * Owns the live `SettingStateResponse[]`, the in-flight write set, and all of
  * the logic that does not depend on *where* the settings live (per-game profile
- * vs. the global base profile): family grouping, warning classification,
- * optimistic per-setting writes, and elevation gating. The per-game and global
+ * vs. the global base profile): family grouping, warning classification, and
+ * optimistic per-setting writes. The per-game and global
  * contexts compose this store and only add what differs (executable selection
  * for per-game; nothing extra for global), so none of this logic is duplicated.
  */
@@ -38,12 +38,7 @@ function distinctWarnings(values: NvapiWarning[]): NvapiWarning[] {
 
 export type NvapiSettingsStore = ReturnType<typeof createNvapiSettingsStore>;
 
-export type CreateNvapiSettingsStoreOptions = {
-  /** Whether NVAPI writes can succeed in this process (admin). */
-  isElevated: () => boolean;
-};
-
-export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStoreOptions) {
+export function createNvapiSettingsStore() {
   // ── reactive state ───────────────────────────────────────────────
   let states: SettingStateResponse[] = $state([]);
   let busy = $state(false);
@@ -109,14 +104,6 @@ export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStor
     publishPresentedErrorNotification(label, error);
   }
 
-  function ensureElevated(): boolean {
-    if (isElevated()) {
-      return true;
-    }
-    reportActionError(t('nvidia.adminRequired'), new ClientError('nvapi_admin_required'));
-    return false;
-  }
-
   // Runs a per-setting write, marking it pending and patching the returned
   // fresh state in place (or surfacing the error as a toast).
   async function runWrite(
@@ -154,9 +141,6 @@ export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStor
     get profileWarnings() {
       return profileWarnings;
     },
-    get canWrite() {
-      return isElevated();
-    },
     isPending: (key: string) => pending.has(key),
     settingsForFamily,
     familyWarnings,
@@ -168,7 +152,6 @@ export function createNvapiSettingsStore({ isElevated }: CreateNvapiSettingsStor
     clearAll,
     patch,
     reportActionError,
-    ensureElevated,
     runWrite,
   };
 }

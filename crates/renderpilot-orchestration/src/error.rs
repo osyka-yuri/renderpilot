@@ -140,8 +140,13 @@ pub enum ServiceError {
     CoverNotFound,
     /// Local filesystem error while reading or writing cover files.
     CoverIo(String),
-    /// An NVAPI write was attempted without administrator privileges.
-    NvapiRequiresElevation,
+    /// The operating system denied an operation that requires additional access.
+    AccessDenied {
+        /// The attempted operation.
+        operation: String,
+        /// Backend-only diagnostic detail from the failing platform boundary.
+        detail: String,
+    },
 }
 
 impl fmt::Display for ServiceError {
@@ -236,8 +241,9 @@ impl fmt::Display for ServiceError {
             }
             Self::CoverNotFound => formatter.write_str("cover artwork was not found"),
             Self::CoverIo(message) => write!(formatter, "cover file error: {message}"),
-            Self::NvapiRequiresElevation => formatter
-                .write_str("administrator privileges are required to modify NVAPI settings"),
+            Self::AccessDenied { operation, detail } => {
+                write!(formatter, "access denied while {operation}: {detail}")
+            }
         }
     }
 }
@@ -412,7 +418,10 @@ mod tests {
             ServiceError::CoverDownloadFailed("timeout".to_owned()),
             ServiceError::CoverNotFound,
             ServiceError::CoverIo("permission denied".to_owned()),
-            ServiceError::NvapiRequiresElevation,
+            ServiceError::AccessDenied {
+                operation: "updating NVAPI DRS settings".to_owned(),
+                detail: "NVAPI reported invalid user privilege".to_owned(),
+            },
         ];
 
         for err in &errors {

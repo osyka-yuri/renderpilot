@@ -10,6 +10,7 @@ import {
   LOCAL_ERROR_CONTRACT,
   normalizeDesktopCommandError,
   SUGGESTED_ACTION_CONTRACT,
+  type LocalErrorSpec,
   type SuggestedActionCode,
 } from '@shared/errors';
 import { t, translateExternalMessage } from '@shared/i18n';
@@ -48,12 +49,12 @@ export function presentError(error: unknown): PresentedError {
   }
 
   if (isLocalErrorCode(code)) {
-    const spec = LOCAL_ERROR_CONTRACT[code];
+    const spec: LocalErrorSpec = LOCAL_ERROR_CONTRACT[code];
     return {
       code,
       severity: spec.severity,
       message: t(spec.messageKey),
-      suggestedActions: presentActions('actions' in spec ? spec.actions : []),
+      suggestedActions: presentActions(spec.actions ?? []),
       contractStatus: getErrorContractStatus(normalized),
     };
   }

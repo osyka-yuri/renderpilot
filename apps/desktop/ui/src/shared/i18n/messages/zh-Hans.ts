@@ -45,7 +45,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'settings.nvidia.indicator.title': 'DLSS 指示器',
   'settings.nvidia.indicator.description': '在游戏过程中显示包含活动 DLSS 版本和设置的叠加层。',
   'settings.nvidia.indicator.systemWide': '系统全局',
-  'settings.nvidia.indicator.adminRequired': '以管理员身份重新启动应用程序以更改此设置。',
   'settings.nvidia.indicator.overlayTitle': '屏幕叠加层',
   'settings.nvidia.indicator.overlayDescription': '适用于此电脑上的所有游戏。',
   'settings.nvidia.indicator.toggleAria': '切换 DLSS 指示器',
@@ -53,7 +52,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'settings.nvidia.global.description':
     '通过 NVIDIA 基础配置文件，应用于所有没有单独覆盖设置的游戏的默认值。',
   'settings.nvidia.global.systemWide': '全局生效',
-  'settings.nvidia.global.adminRequired': '以管理员身份重新启动应用以更改这些设置。',
   'settings.nvidia.global.familySr': 'DLSS 超分辨率',
   'settings.nvidia.global.familyFg': 'DLSS 帧生成',
   'settings.nvidia.global.familyRr': 'DLSS 光线重建',
@@ -95,11 +93,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'game.dashboard.games': plural('count', { other: '{count} 个游戏' }),
   'game.dashboard.updates': plural('count', { other: '{count} 个更新' }),
 
-  'elevation.title': '需要管理员权限',
-  'elevation.description': '需要管理员权限才能更改某些设置。',
-  'elevation.relaunch': '以管理员身份重新启动',
-  'elevation.relaunchFailed': '无法以管理员身份重新启动',
-  'elevation.dismiss': '忽略',
   'error.boundary.title': '出现了一些问题',
   'error.boundary.description': '此屏幕遇到意外错误。您可以重试，或切换到其他部分。',
   'error.boundary.reset': '重试',
@@ -235,7 +228,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.dlss.descriptionSwapOnly': '更改 DLSS 版本。',
   'gameDetails.dlss.libraryFileLabel': '文件版本',
   'gameDetails.dlss.driverOverridesLabel': 'NVIDIA 配置文件覆盖',
-  'gameDetails.dlss.adminRequired': '以管理员身份重新启动应用程序以更改这些设置。',
 
   'gameDetails.streamline.description': '管理 Streamline 插件。',
   'gameDetails.streamline.versionTitle': '全局 Streamline 版本',
@@ -444,7 +436,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   }),
   'coverSync.failure.hint': '请检查游戏封面来源和 SteamGridDB 设置。',
 
-  'nvidia.adminRequired': '需要管理员权限',
   'nvidia.changeSettingFailed': '无法应用设置',
   'nvidia.revertDefaultFailed': '无法恢复默认设置',
   'nvidia.revertBaselineFailed': '无法恢复初始设置',
@@ -523,16 +514,11 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'user_message.cover_file_system_error': '将封面保存到磁盘失败。',
   'user_message.stale_replacement_source':
     '无法应用此更新，因为源文件已在 RenderPilot 外部被替换或修改。请重新选择版本，必要时重新下载。',
-  'user_message.nvapi_requires_administrator': '需要管理员权限才能更改此设置。',
   'user_message.catalog_consolidation_blocked':
     'RenderPilot 在重复的游戏卡片中发现了冲突的托管状态。未进行任何更改，并已创建恢复包。',
   'user_message.rollback_also_failed':
     '操作失败，且 RenderPilot 无法完全恢复之前的文件状态。重试前请检查游戏文件。',
-  'user_message.elevation_cancelled': '管理员权限请求已取消。未进行任何更改。',
-  'user_message.elevation_policy_blocked': 'Windows 阻止了管理员权限请求。请检查系统策略后重试。',
-  'user_message.elevation_relaunch_failed':
-    'RenderPilot 无法以管理员权限重新启动。请尝试重新启动应用。',
-  'user_message.elevation_unsupported': '此平台不支持以管理员权限重新启动。',
+  'user_message.access_denied': '访问被拒绝。请检查权限后重试。',
 
   'suggested_action.refresh_games': '刷新游戏列表并重试。',
   'suggested_action.reload_game_details': '刷新游戏详情并重试。',
@@ -543,7 +529,6 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'suggested_action.retry_or_restart': '如果问题仍然存在，请尝试重新启动应用程序。',
   'suggested_action.rebuild_operation_plan': '请重新开始操作。',
   'suggested_action.refresh_or_scan_game_folder': '刷新列表或重新扫描文件夹。',
-  'suggested_action.relaunch_as_administrator': '以管理员身份重新启动应用程序并重试。',
 
   'settings.about.title': '更新',
   'settings.about.description': '检查应用程序更新。',
@@ -574,14 +559,15 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'settings.about.updateDialog.downloadingBytesTotal': '{received} / {total}',
   'settings.about.updateDialog.verifying': '正在验证更新…',
   'settings.about.updateDialog.verifyingDescription': '正在检查已下载的安装包。',
-  'settings.about.updateDialog.installing': '正在安装更新… 应用将关闭；安装程序可能会短暂出现。',
+  'settings.about.updateDialog.installing': '正在应用更新… 应用将关闭并自动重启。',
   'settings.about.updateDialog.restarting': '正在重启应用…',
 
   'settings.about.updateDialog.prepareErrorTitle': '下载或验证失败',
   'settings.about.updateDialog.prepareErrorDescription':
     '无法下载或验证更新。请检查网络连接后重试。',
   'settings.about.updateDialog.installErrorTitle': '安装失败',
-  'settings.about.updateDialog.installErrorDescription': '无法安装更新。你可以重试。',
+  'settings.about.updateDialog.installErrorDescription':
+    '无法安装更新。请正常重启 RenderPilot 后重试；如有需要，Windows 会请求管理员批准。',
   'settings.about.updateDialog.restartRequiredTitle': '需要重启',
   'settings.about.updateDialog.restartRequiredDescription':
     '更新已安装，但应用无法自动重启。请手动重启 RenderPilot 以完成更新。',

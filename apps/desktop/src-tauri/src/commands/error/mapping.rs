@@ -148,7 +148,10 @@ impl CommandError {
             }
             ServiceError::CoverNotFound => Self::new(Kind::CoverNotFound),
             ServiceError::CoverIo(message) => Self::with_diagnostic(Kind::CoverIoError, message),
-            ServiceError::NvapiRequiresElevation => Self::new(Kind::NvapiRequiresElevation),
+            ServiceError::AccessDenied { operation, detail } => Self::with_diagnostic(
+                Kind::AccessDenied,
+                format_args!("access denied while {operation}: {detail}"),
+            ),
         }
     }
 }

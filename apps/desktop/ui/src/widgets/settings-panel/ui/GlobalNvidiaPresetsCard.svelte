@@ -33,9 +33,7 @@
   ];
 
   function rowDisabled(state: SettingStateResponse): boolean {
-    return (
-      !globalPresets.canWrite || globalPresets.busy || globalPresets.isPending(state.setting_key)
-    );
+    return globalPresets.busy || globalPresets.isPending(state.setting_key);
   }
 </script>
 
@@ -57,14 +55,6 @@
       <Alert variant="destructive" size="sm" role="alert">
         <TriangleAlertIcon aria-hidden="true" />
         <AlertDescription>{globalPresets.loadError}</AlertDescription>
-      </Alert>
-    {/if}
-
-    <!-- One card-level admin notice instead of one per family group. -->
-    {#if globalPresets.hasStates && !globalPresets.canWrite}
-      <Alert variant="warning" size="sm" role="note">
-        <TriangleAlertIcon aria-hidden="true" />
-        <AlertDescription>{t('settings.nvidia.global.adminRequired')}</AlertDescription>
       </Alert>
     {/if}
 
@@ -94,9 +84,6 @@
           <NvapiSettingGroup
             {settings}
             warnings={globalPresets.familyWarnings(family)}
-            canWrite={globalPresets.canWrite}
-            adminMessage={t('settings.nvidia.global.adminRequired')}
-            showAdminWarning={false}
             {rowDisabled}
             onChange={(key: string, wire: string) => {
               void globalPresets.setValue(key, wire);

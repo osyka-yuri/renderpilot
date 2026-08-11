@@ -1,35 +1,28 @@
 use renderpilot_domain::{
-    ArtifactId, ComponentFile, LibraryArtifact, LibraryComponent, PathRef, Swappability,
+    ArtifactId, ComponentFile, LibraryArtifact, LibraryComponent, Swappability,
 };
 
 use crate::{AppError, AppResult};
 
 use super::{OperationPlanBlocker, OperationPlanRiskLevel, OperationPlanWarning};
 
-const PROTECTED_WINDOWS_ROOTS: [&str; 3] = ["program files", "program files (x86)", "windows"];
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OperationPlanAssessment {
     pub(crate) blockers: Vec<OperationPlanBlocker>,
     pub(crate) warnings: Vec<OperationPlanWarning>,
     pub(crate) risk_level: OperationPlanRiskLevel,
-    pub(crate) requires_elevation: bool,
 }
 
 impl OperationPlanAssessment {
     pub(crate) fn assess(component: &LibraryComponent, artifact: &LibraryArtifact) -> Self {
         let blockers = collect_blockers(component, artifact);
         let warnings = collect_warnings(component, artifact);
-        let requires_elevation = component_requires_elevation(component);
-
-        let risk_level =
-            OperationPlanRiskLevel::from_findings(&blockers, &warnings, requires_elevation);
+        let risk_level = OperationPlanRiskLevel::from_findings(&blockers, &warnings);
 
         Self {
             blockers,
             warnings,
             risk_level,
-            requires_elevation,
         }
     }
 }
@@ -88,13 +81,6 @@ fn artifact_matches_active_bundle(
     }
 }
 
-fn component_requires_elevation(component: &LibraryComponent) -> bool {
-    component
-        .files()
-        .iter()
-        .any(|file| path_requires_elevation(file.path()))
-}
-
 fn primary_version_unknown(component: &LibraryComponent) -> bool {
     component
         .files()
@@ -109,39 +95,6 @@ pub(crate) fn primary_component_file(component: &LibraryComponent) -> AppResult<
             component.id().as_str()
         ))
     })
-}
-
-fn path_requires_elevation(path: &PathRef) -> bool {
-    let Some(tail) = normalized_windows_drive_tail(path) else {
-        return false;
-    };
-
-    PROTECTED_WINDOWS_ROOTS
-        .iter()
-        .any(|root| is_same_or_child_path(&tail, root))
-}
-
-fn normalized_windows_drive_tail(path: &PathRef) -> Option<String> {
-    let normalized = path.as_str().replace('\\', "/").to_ascii_lowercase();
-    let (drive, tail) = normalized.split_once(":/")?;
-
-    let is_drive_letter = drive.len() == 1
-        && drive
-            .as_bytes()
-            .first()
-            .is_some_and(|byte| byte.is_ascii_alphabetic());
-
-    if !is_drive_letter {
-        return None;
-    }
-
-    Some(tail.trim_start_matches('/').to_owned())
-}
-
-fn is_same_or_child_path(path_tail: &str, root: &str) -> bool {
-    path_tail
-        .strip_prefix(root)
-        .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with('/'))
 }
 
 fn swappability_blocker(swappability: Swappability) -> Option<OperationPlanBlocker> {

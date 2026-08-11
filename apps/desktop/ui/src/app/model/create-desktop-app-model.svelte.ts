@@ -2,7 +2,6 @@ import type { Screen } from '@app/navigation/screen';
 import type { WorkspaceScreen } from '@app/navigation/workspace';
 import { isWorkspaceScreen } from '@app/navigation/workspace';
 import { resolveSelectedGameDetails } from '@app/navigation/selection';
-import { DEFAULT_APP_INITIALIZATION, type AppInitializationState } from '@entities/app';
 import type { GameDetails } from '@entities/game';
 import { ignoreError } from '@shared/callbacks';
 import { clearStatusNotification, publishCommandErrorNotification } from '@shared/notifications';
@@ -24,19 +23,13 @@ export type RunExclusiveOptions = {
 /**
  * Root desktop application model.
  *
- * The default initialization snapshot keeps tests and pre-shell callers safe;
- * production bootstrap passes the explicit backend snapshot.
- *
  * Public surface style:
  * - **Flat getters** for template-friendly reads (screen, busy, theme, …)
  * - **Nested `workspace`** for details mutations and request tokens.
  *
  * Plan APIs live only on `workspace` — the root model does not re-wrap them.
  */
-export function createDesktopAppModel(
-  getInitialization: () => AppInitializationState = () => DEFAULT_APP_INITIALIZATION,
-) {
-  const initialization = getInitialization();
+export function createDesktopAppModel() {
   let screen = $state<Screen>('games');
 
   const workspace = createGameWorkspaceModel();
@@ -191,18 +184,6 @@ export function createDesktopAppModel(
     },
     get languageBusy() {
       return i18nState.status === 'loading';
-    },
-    get isElevated() {
-      return initialization.isElevated;
-    },
-    get elevationSupported() {
-      return initialization.elevationSupported;
-    },
-    get elevationUserDeclined() {
-      return initialization.elevationUserDeclined;
-    },
-    get elevationAttempted() {
-      return initialization.elevationAttempted;
     },
     get selectedDetails() {
       return selectedDetails;

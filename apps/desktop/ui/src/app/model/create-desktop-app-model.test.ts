@@ -19,20 +19,6 @@ describe('createDesktopAppModel', () => {
     expect(model.currentPlan).toBeNull();
   });
 
-  it('exposes the full initialization elevation snapshot', () => {
-    const model = createDesktopAppModel(() => ({
-      isElevated: false,
-      elevationSupported: true,
-      elevationUserDeclined: true,
-      elevationAttempted: true,
-    }));
-
-    expect(model.isElevated).toBe(false);
-    expect(model.elevationSupported).toBe(true);
-    expect(model.elevationUserDeclined).toBe(true);
-    expect(model.elevationAttempted).toBe(true);
-  });
-
   it('clears the active status notification', () => {
     const clearStatusNotificationSpy = vi
       .spyOn(notificationsModule, 'clearStatusNotification')
@@ -214,7 +200,6 @@ function swapPlan(overrides: Partial<SwapPlan> = {}): SwapPlan {
     original_sha256: null,
     replacement_sha256: null,
     risk_level: 'low',
-    requires_elevation: false,
     blockers: [],
     warnings: [],
     files: [],

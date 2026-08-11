@@ -58,11 +58,6 @@
   type Props = {
     details?: GameDetails | null;
     busy?: boolean;
-    /**
-     * Whether the process is running elevated; controls NVAPI write
-     * affordances (setting Select / revert buttons) inside the DLSS cards.
-     */
-    isElevated?: boolean;
     onSwap?: SwapHandler;
     onRollback?: RollbackHandler;
     onBulkSwap?: BulkSwapHandler;
@@ -77,7 +72,6 @@
   const {
     details = null,
     busy = false,
-    isElevated = true,
     onSwap = () => undefined,
     onRollback = () => undefined,
     onBulkSwap = () => undefined,
@@ -200,7 +194,7 @@
   // Owns every DLSS setting's live state plus the profile executable
   // selection. One reload covers both, so changing the executable refreshes
   // every family card's values.
-  const nvidia = createNvidiaDriverContext({ isElevated: () => isElevated });
+  const nvidia = createNvidiaDriverContext();
 
   // The executable is a game-level identity feeding both the NVIDIA profile target
   // and the RenoDX install location, so it lives above the tabs in its own context.

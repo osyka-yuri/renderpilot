@@ -25,7 +25,6 @@ impl OperationPlanRiskLevel {
     pub(crate) fn from_findings(
         blockers: &[OperationPlanBlocker],
         warnings: &[OperationPlanWarning],
-        requires_elevation: bool,
     ) -> Self {
         if !blockers.is_empty() {
             return Self::Blocked;
@@ -39,7 +38,7 @@ impl OperationPlanRiskLevel {
             return Self::High;
         }
 
-        if requires_elevation || !warnings.is_empty() {
+        if !warnings.is_empty() {
             return Self::Medium;
         }
 

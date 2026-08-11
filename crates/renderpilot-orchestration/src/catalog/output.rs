@@ -289,8 +289,6 @@ pub struct SwapPlanOutput {
     pub replacement_sha256: Option<String>,
     /// Derived risk level.
     pub risk_level: String,
-    /// Whether target writes are likely to require elevation.
-    pub requires_elevation: bool,
     /// Selected artifact id.
     pub artifact_id: String,
     /// Findings that prevent apply.
@@ -363,7 +361,6 @@ impl From<&OperationPlan> for SwapPlanOutput {
                 .replacement_sha256()
                 .map(|hash| hash.as_str().to_owned()),
             risk_level: plan.risk_level().as_str().to_owned(),
-            requires_elevation: plan.requires_elevation(),
             artifact_id: plan.artifact_id().as_str().to_owned(),
             blockers: plan
                 .blockers()

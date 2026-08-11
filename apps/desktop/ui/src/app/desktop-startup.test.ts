@@ -11,11 +11,10 @@ const englishInitialization: I18nInitializationResult = {
 };
 
 describe('loadDesktopStartup', () => {
-  it('applies theme and prepares preview before starting all pre-mount work in parallel', async () => {
+  it('applies theme and prepares preview before starting pre-mount work in parallel', async () => {
     const preview = Promise.withResolvers<undefined>();
     const i18n = Promise.withResolvers<I18nInitializationResult>();
     const desktopApp = Promise.withResolvers<{ default: string }>();
-    const initialization = Promise.withResolvers<{ isElevated: boolean }>();
     const events: string[] = [];
 
     const startup = loadDesktopStartup({
@@ -32,10 +31,6 @@ describe('loadDesktopStartup', () => {
         events.push('desktop');
         return desktopApp.promise;
       },
-      loadInitialization: () => {
-        events.push('backend');
-        return initialization.promise;
-      },
     });
     const mount = vi.fn();
     void startup.then(mount);
@@ -45,7 +40,7 @@ describe('loadDesktopStartup', () => {
 
     preview.resolve(undefined);
     await vi.waitFor(() => {
-      expect(events).toEqual(['theme', 'preview', 'i18n', 'desktop', 'backend']);
+      expect(events).toEqual(['theme', 'preview', 'i18n', 'desktop']);
     });
 
     i18n.resolve(englishInitialization);
@@ -53,11 +48,9 @@ describe('loadDesktopStartup', () => {
     await Promise.resolve();
     expect(mount).not.toHaveBeenCalled();
 
-    initialization.resolve({ isElevated: true });
     await expect(startup).resolves.toEqual({
       i18n: englishInitialization,
       desktopAppModule: { default: 'DesktopApp' },
-      initialization: { isElevated: true },
     });
     expect(mount).toHaveBeenCalledTimes(1);
   });

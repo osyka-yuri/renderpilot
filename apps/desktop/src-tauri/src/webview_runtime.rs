@@ -1,10 +1,16 @@
 #![cfg(windows)]
 #![expect(
     unsafe_code,
-    reason = "Win32 WebView2 version comparison and the pre-WebView update prompt require FFI"
+    reason = "WebView2 version comparison, pre-WebView update prompt, and startup data-path setup require controlled unsafe calls"
 )]
 
-use std::{cmp::Ordering, fmt::Display, process};
+use std::{
+    cmp::Ordering,
+    ffi::OsString,
+    fmt::Display,
+    path::{Path, PathBuf},
+    process,
+};
 
 use tauri::Wry;
 use webview2_com_sys::Microsoft::Web::WebView2::Win32::CompareBrowserVersions;
@@ -20,6 +26,63 @@ const DOWNLOAD_URL: &str = "https://developer.microsoft.com/en-us/microsoft-edge
 const INCOMPATIBLE_RUNTIME_EXIT_CODE: i32 = 2;
 
 include!(concat!(env!("OUT_DIR"), "/webview_runtime_contract.rs"));
+
+/// Pins the WebView2 user-data folder before Tauri creates a WebView.
+///
+/// The authenticated portable runtime path takes precedence. Installed builds
+/// retain the existing compatible `%LOCALAPPDATA%\\RenderPilot\\WebView2`
+/// fallback without making runtime privilege a startup concern.
+pub(crate) fn configure_user_data_path() {
+    #[cfg(feature = "portable")]
+    if let Some(paths) = renderpilot_orchestration::portable::runtime_paths() {
+        // SAFETY: portable RuntimePathsV1 was installed single-assignment
+        // before logger, data, WebView, Tauri, and Context initialization.
+        unsafe {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &paths.webview2_root);
+        }
+        return;
+    }
+
+    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none()
+        && std::env::var_os("LOCALAPPDATA").is_some()
+    {
+        // SAFETY: single-threaded during startup, before any plugin init.
+        unsafe {
+            std::env::set_var(
+                "WEBVIEW2_USER_DATA_FOLDER",
+                installed_webview2_data_root().join("WebView2"),
+            );
+        }
+    }
+}
+
+fn installed_webview2_data_root() -> PathBuf {
+    resolve_installed_data_root(
+        std::env::var_os(renderpilot_orchestration::portable::APP_DIR_ENV),
+        std::env::var_os("LOCALAPPDATA"),
+        &std::env::temp_dir(),
+    )
+}
+
+fn resolve_installed_data_root(
+    app_dir_env: Option<OsString>,
+    local_appdata: Option<OsString>,
+    temp_dir: &Path,
+) -> PathBuf {
+    if let Some(app_dir) = app_dir_env {
+        let path = PathBuf::from(app_dir);
+        if !path.as_os_str().is_empty() {
+            return path;
+        }
+    }
+    if let Some(local) = local_appdata {
+        let path = PathBuf::from(local);
+        if !path.as_os_str().is_empty() {
+            return path.join("RenderPilot");
+        }
+    }
+    temp_dir.join("RenderPilot")
+}
 
 pub(crate) fn enforce_minimum_version(context: &tauri::Context<Wry>) {
     let minimum_version = match configured_minimum_version(context) {
@@ -175,8 +238,35 @@ fn to_wide(value: &str) -> Vec<u16> {
 mod tests {
     use super::{
         CONFIGURED_MINIMUM_WEBVIEW2_VERSION as MINIMUM_VERSION, compare_browser_versions,
-        installed_runtime_version, is_supported, resolve_minimum_version, to_wide,
+        installed_runtime_version, is_supported, resolve_installed_data_root,
+        resolve_minimum_version, to_wide,
     };
+    use std::{ffi::OsString, path::Path};
+
+    #[test]
+    fn installed_data_root_preserves_compatible_resolution_order() {
+        let temp = Path::new("C:\\temp");
+        assert_eq!(
+            resolve_installed_data_root(
+                Some(OsString::from("D:\\portable\\data")),
+                Some(OsString::from("C:\\Users\\me\\AppData\\Local")),
+                temp,
+            ),
+            Path::new("D:\\portable\\data")
+        );
+        assert_eq!(
+            resolve_installed_data_root(
+                None,
+                Some(OsString::from("C:\\Users\\me\\AppData\\Local")),
+                temp,
+            ),
+            Path::new("C:\\Users\\me\\AppData\\Local\\RenderPilot")
+        );
+        assert_eq!(
+            resolve_installed_data_root(None, None, temp),
+            Path::new("C:\\temp\\RenderPilot")
+        );
+    }
 
     #[test]
     fn generated_version_is_the_fallback_when_tauri_omits_the_runtime_value() {

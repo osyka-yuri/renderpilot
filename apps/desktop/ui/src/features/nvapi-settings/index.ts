@@ -34,19 +34,16 @@ export type {
 export {
   createDlssIndicatorContext,
   type DlssIndicatorContext,
-  type CreateDlssIndicatorContextOptions,
 } from './model/create-dlss-indicator-context.svelte';
 
 export {
   createNvapiSettingsStore,
   type NvapiSettingsStore,
-  type CreateNvapiSettingsStoreOptions,
 } from './model/create-nvapi-settings-store.svelte';
 
 export {
   createGlobalNvidiaPresetsContext,
   type GlobalNvidiaPresetsContext,
-  type CreateGlobalNvidiaPresetsContextOptions,
 } from './model/create-global-nvidia-presets-context.svelte';
 
 // UI

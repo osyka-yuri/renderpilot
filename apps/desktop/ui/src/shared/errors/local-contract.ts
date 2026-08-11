@@ -1,7 +1,7 @@
 import type { MessageKeyWithoutParams } from '@shared/i18n';
 import type { SuggestedActionCode } from './generated/desktop-command-errors';
 
-type LocalErrorSpec = Readonly<{
+export type LocalErrorSpec = Readonly<{
   messageKey: MessageKeyWithoutParams;
   severity: 'warning' | 'error';
   actions?: readonly SuggestedActionCode[];
@@ -35,11 +35,6 @@ export const LOCAL_ERROR_CONTRACT = {
   add_game_catalog_busy: {
     messageKey: 'addGame.catalogBusy',
     severity: 'warning',
-  },
-  nvapi_admin_required: {
-    messageKey: 'user_message.nvapi_requires_administrator',
-    severity: 'warning',
-    actions: ['relaunch_as_administrator'],
   },
   graphics_swap_response_invalid: {
     messageKey: 'error.desktopTransportFailed',

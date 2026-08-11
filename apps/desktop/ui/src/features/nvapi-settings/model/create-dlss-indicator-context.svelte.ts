@@ -1,5 +1,5 @@
 import { formatPresentedError } from '@shared/error-presentation';
-import { ClientError, reportClientError } from '@shared/errors';
+import { reportClientError } from '@shared/errors';
 import { publishPresentedErrorNotification } from '@shared/notifications';
 import { t } from '@shared/i18n';
 import { getDlssIndicatorState, setDlssIndicatorEnabled } from '../api/desktop';
@@ -10,19 +10,13 @@ import { getDlssIndicatorState, setDlssIndicatorEnabled } from '../api/desktop';
  * Unlike the per-game NVIDIA driver context this is **global, not per-game**: the
  * indicator is a single machine-wide registry value the NGX runtime reads for
  * every DLSS title, so there is no `gameId` and it is loaded once when the
- * Settings → NVIDIA tab is first shown. Reading the value works unprivileged;
- * writing it needs an elevated process, so `setEnabled` is gated on `isElevated`
- * and reverts its optimistic flip if the backend rejects the write.
+ * Settings → NVIDIA tab is first shown. `setEnabled` reverts its optimistic
+ * flip if the backend rejects the write.
  */
 
 export type DlssIndicatorContext = ReturnType<typeof createDlssIndicatorContext>;
 
-export type CreateDlssIndicatorContextOptions = {
-  /** Whether registry writes can succeed in this process (admin). */
-  isElevated: () => boolean;
-};
-
-export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorContextOptions) {
+export function createDlssIndicatorContext() {
   // ── reactive state ───────────────────────────────────────────────
   let enabled = $state(false);
   let supported = $state(true);
@@ -59,22 +53,10 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
     }
   }
 
-  function ensureElevated(): boolean {
-    if (isElevated()) {
-      return true;
-    }
-    reportActionError(t('nvidia.adminRequired'), new ClientError('nvapi_admin_required'));
-    return false;
-  }
-
   async function setEnabled(next: boolean): Promise<void> {
     if (busy || next === enabled) {
       return;
     }
-    if (!ensureElevated()) {
-      return;
-    }
-
     const previous = enabled;
     // Optimistic: reflect the new state immediately, revert if the write fails.
     enabled = next;
@@ -107,9 +89,6 @@ export function createDlssIndicatorContext({ isElevated }: CreateDlssIndicatorCo
     },
     get error() {
       return error;
-    },
-    get canWrite() {
-      return isElevated();
     },
     // actions
     load,

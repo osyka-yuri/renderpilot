@@ -53,7 +53,6 @@ fn builds_valid_swap_plan_for_swappable_component() {
     );
 
     assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Low);
-    assert!(!plan.requires_elevation());
     assert!(plan.blockers().is_empty());
     assert!(plan.warnings().is_empty());
 }
@@ -533,127 +532,6 @@ fn standalone_dxc_plan_replaces_only_dxcompiler() {
             .all(|file| !file.target_path().as_str().ends_with("dxil.dll")),
         "the operation must preserve the game's standalone DXC layout"
     );
-}
-
-#[test]
-fn protected_windows_paths_require_elevation() {
-    let component = sample_component(
-        "component:game-a:dlss",
-        "game:a",
-        LibraryTechnology::DlssSuperResolution,
-        Swappability::Swappable,
-        "C:/Program Files/GameA/nvngx_dlss.dll",
-        Some("3.5.0"),
-        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    );
-    let artifact = sample_artifact(
-        "artifact:dlss-3.7",
-        LibraryTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss.dll",
-        Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    );
-
-    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
-
-    assert!(plan.requires_elevation());
-    assert_eq!(plan.risk_level(), OperationPlanRiskLevel::Medium);
-}
-
-#[test]
-fn protected_windows_paths_are_case_insensitive() {
-    let component = sample_component(
-        "component:game-a:dlss",
-        "game:a",
-        LibraryTechnology::DlssSuperResolution,
-        Swappability::Swappable,
-        "D:/proGRAM fileS (x86)/GameA/nvngx_dlss.dll",
-        Some("3.5.0"),
-        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    );
-    let artifact = sample_artifact(
-        "artifact:dlss-3.7",
-        LibraryTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss.dll",
-        Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    );
-
-    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
-
-    assert!(plan.requires_elevation());
-}
-
-#[test]
-fn protected_windows_backslash_paths_require_elevation() {
-    let component = sample_component(
-        "component:game-a:dlss",
-        "game:a",
-        LibraryTechnology::DlssSuperResolution,
-        Swappability::Swappable,
-        "C:\\Windows\\System32\\nvngx_dlss.dll",
-        Some("3.5.0"),
-        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    );
-    let artifact = sample_artifact(
-        "artifact:dlss-3.7",
-        LibraryTechnology::DlssSuperResolution,
-        "D:\\Library\\nvngx_dlss.dll",
-        Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    );
-
-    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
-
-    assert!(plan.requires_elevation());
-}
-
-#[test]
-fn similar_but_unprotected_windows_roots_do_not_require_elevation() {
-    let component = sample_component(
-        "component:game-a:dlss",
-        "game:a",
-        LibraryTechnology::DlssSuperResolution,
-        Swappability::Swappable,
-        "C:/Program Files Games/GameA/nvngx_dlss.dll", // prefix match, but not identical directory
-        Some("3.5.0"),
-        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    );
-    let artifact = sample_artifact(
-        "artifact:dlss-3.7",
-        LibraryTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss.dll",
-        Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    );
-
-    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
-
-    assert!(!plan.requires_elevation());
-}
-
-#[test]
-fn non_windows_paths_do_not_require_elevation() {
-    let component = sample_component(
-        "component:game-a:dlss",
-        "game:a",
-        LibraryTechnology::DlssSuperResolution,
-        Swappability::Swappable,
-        "/usr/local/games/GameA/nvngx_dlss.dll", // Unix path
-        Some("3.5.0"),
-        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    );
-    let artifact = sample_artifact(
-        "artifact:dlss-3.7",
-        LibraryTechnology::DlssSuperResolution,
-        "D:/Library/nvngx_dlss.dll",
-        Some("3.7.0"),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    );
-
-    let plan = build_swap_operation_plan(&component, &artifact).expect("plan should build");
-
-    assert!(!plan.requires_elevation());
 }
 
 #[test]

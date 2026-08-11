@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import type {
   AppUpdateDownloadEvent,
   AppUpdateHandle,
+  AppUpdateInstallOutcome,
   AppUpdateMetadata,
   AppUpdaterGateway,
 } from '../api/app-updater-gateway';
@@ -20,7 +21,7 @@ export type MockUpdateHandle = AppUpdateHandle & {
 export function createHandle(
   overrides: Partial<AppUpdateMetadata> & {
     downloadImpl?: (onEvent: (event: AppUpdateDownloadEvent) => void) => Promise<void>;
-    installImpl?: () => Promise<void>;
+    installImpl?: () => Promise<AppUpdateInstallOutcome>;
   } = {},
 ): MockUpdateHandle {
   const {
@@ -30,7 +31,7 @@ export function createHandle(
       onEvent({ type: 'finished' });
       return Promise.resolve();
     },
-    installImpl = () => Promise.resolve(),
+    installImpl = () => Promise.resolve({ type: 'installed' }),
     ...metadataOverrides
   } = overrides;
 

@@ -1,15 +1,16 @@
 //! Tauri desktop entry point for RenderPilot.
 
 mod commands;
-#[cfg(windows)]
-mod elevation;
+#[cfg(all(windows, feature = "portable"))]
+mod portable_runtime;
+#[cfg(all(windows, feature = "portable"))]
+mod updater_signature;
 #[cfg(windows)]
 mod webview_runtime;
 
 use std::sync::Arc;
 
 use renderpilot_orchestration::Context;
-use serde::Serialize;
 use tauri::{Builder, Manager, Wry};
 
 const APP_NAME: &str = "RenderPilot";
@@ -17,90 +18,22 @@ const STARTUP_FAILURE_EXIT_CODE: i32 = 1;
 
 type DesktopBuilder = Builder<Wry>;
 
-/// Initialization snapshot computed once at process start.
-///
-/// Exposed to the UI via the `get_app_initialization_state` Tauri command.
-/// Only the boolean projection is part of the IPC contract — everything
-/// else is internal to the startup flow.
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AppInitializationState {
-    /// `true` if the current process is running with administrator rights.
-    pub is_elevated: bool,
-    /// `false` on non-Windows platforms; UI hides the elevation banner.
-    pub elevation_supported: bool,
-    /// Degraded unelevated mode after cancel, policy block, or live handoff skip.
-    /// IPC name kept for compatibility; not only a literal UAC cancel.
-    /// Banner visibility still keys off `!is_elevated && elevation_supported`.
-    pub elevation_user_declined: bool,
-    /// Startup auto-elevation was attempted or skipped due to a live handoff
-    /// marker (file-based anti-loop). Does not mean UserRequest was shown.
-    pub elevation_attempted: bool,
-    /// Internal-only: `true` if an elevated relaunch is starting and the
-    /// current (un-elevated) process should return from `run` immediately.
-    /// Never serialized.
-    #[serde(skip)]
-    pub relaunch_in_progress: bool,
-}
-
-impl AppInitializationState {
-    /// Running elevated — no further action needed.
-    #[cfg(windows)]
-    fn elevated() -> Self {
-        Self {
-            is_elevated: true,
-            elevation_supported: true,
-            elevation_user_declined: false,
-            elevation_attempted: false,
-            relaunch_in_progress: false,
-        }
-    }
-
-    /// Degraded unelevated mode after cancel, policy block, or live handoff skip.
-    /// Field `elevation_user_declined` remains the IPC name for the banner flag.
-    #[cfg(windows)]
-    fn declined() -> Self {
-        Self {
-            is_elevated: false,
-            elevation_supported: true,
-            elevation_user_declined: true,
-            elevation_attempted: true,
-            relaunch_in_progress: false,
-        }
-    }
-
-    /// Elevated relaunch is starting; current (un-elevated) process should exit.
-    #[cfg(windows)]
-    fn relaunching() -> Self {
-        Self {
-            is_elevated: false,
-            elevation_supported: true,
-            elevation_user_declined: false,
-            elevation_attempted: true,
-            relaunch_in_progress: true,
-        }
-    }
-
-    /// Non-Windows platform — elevation concept does not apply.
-    #[cfg(not(windows))]
-    fn unsupported() -> Self {
-        Self {
-            is_elevated: true,
-            elevation_supported: false,
-            elevation_user_declined: false,
-            elevation_attempted: false,
-            relaunch_in_progress: false,
-        }
-    }
-}
-
 /// Runs the desktop shell.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    #[cfg(all(windows, feature = "portable"))]
+    let portable_startup = match portable_runtime::bootstrap::dispatch_before_desktop() {
+        Ok(portable_runtime::bootstrap::EarlyDispatch::DirectLaunchExit) => return,
+        Ok(portable_runtime::bootstrap::EarlyDispatch::App(startup)) => startup,
+        Err(error) => exit_with_portable_startup_error("bootstrap", &error),
+    };
 
-    #[cfg(feature = "portable")]
-    apply_portable_mode();
+    #[cfg(all(windows, feature = "portable"))]
+    if let Err(error) = portable_runtime::runtime_paths::install_from_startup(&portable_startup) {
+        exit_with_portable_startup_error("runtime-path installation", &error);
+    }
+
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let context = tauri::generate_context!();
 
@@ -108,169 +41,86 @@ pub fn run() {
     webview_runtime::enforce_minimum_version(&context);
 
     #[cfg(windows)]
-    apply_webview2_elevation_workaround();
+    webview_runtime::configure_user_data_path();
 
-    let init_state = compute_initialization_state();
-    if init_state.relaunch_in_progress {
-        // Elevated copy is starting; exit the un-elevated process cleanly.
-        return;
-    }
-
-    if let Err(error) = run_desktop_shell(init_state, context) {
-        exit_with_startup_error(error);
+    if let Err(error) = run_desktop_shell(context) {
+        exit_with_startup_error(&error);
     }
 }
 
-/// Redirects all persistent data to `<exe_dir>/data` by setting
-/// `RENDERPILOT_APP_DIR` and `WEBVIEW2_USER_DATA_FOLDER` before any other
-/// subsystem initialises.  Both env vars are idempotent — they are only set
-/// when not already present, so the user can still override them manually.
-#[cfg(feature = "portable")]
-#[expect(
-    unsafe_code,
-    reason = "std::env::set_var is unsafe in edition 2024; only called single-threaded at process start"
-)]
-fn apply_portable_mode() {
-    use renderpilot_orchestration::portable::APP_DIR_ENV;
-
-    if std::env::var_os(APP_DIR_ENV).is_some() {
-        return; // already set (e.g. by the user)
-    }
-
-    let exe = match std::env::current_exe() {
-        Ok(path) => path,
+/// Stable raw portable-supervisor entry point. It never initializes desktop
+/// logging, storage, WebView2, Tauri, or GUI before supervisor authority exists.
+#[cfg(all(windows, feature = "portable"))]
+pub fn run_portable_supervisor() -> std::process::ExitCode {
+    let args = std::env::args_os().collect::<Vec<_>>();
+    match portable_runtime::supervisor::dispatch_raw_or_supervisor(&args) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            log::warn!(
-                "Portable mode: could not resolve exe path, falling back to standard data directory: {error}"
-            );
-            return;
-        }
-    };
-    let Some(exe_dir) = exe.parent() else {
-        log::warn!(
-            "Portable mode: exe has no parent directory, falling back to standard data directory"
-        );
-        return;
-    };
-
-    let data_dir = exe_dir.join("data");
-
-    // SAFETY: single-threaded during startup, before any plugin or thread init.
-    unsafe {
-        std::env::set_var(APP_DIR_ENV, &data_dir);
-    }
-
-    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
-        // SAFETY: same as above.
-        unsafe {
-            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", data_dir.join("WebView2"));
+            eprintln!("{APP_NAME}: portable supervisor failed: {error}");
+            std::process::ExitCode::FAILURE
         }
     }
 }
 
-/// Pins the WebView2 user data folder to `%LOCALAPPDATA%\RenderPilot\WebView2`
-/// so elevated and non-elevated sessions of the app share a cache and don't
-/// fight over default per-user state directories (which has caused blank-window
-/// regressions in elevated processes). Idempotent: only sets the env var if
-/// the user has not provided one.
-#[cfg(windows)]
-#[expect(
-    unsafe_code,
-    reason = "std::env::set_var is unsafe in edition 2024; only called single-threaded at process start"
-)]
-fn apply_webview2_elevation_workaround() {
-    if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none()
-        && std::env::var_os("LOCALAPPDATA").is_some()
-    {
-        let path = elevation::renderpilot_local_data_dir().join("WebView2");
-        // SAFETY: single-threaded during startup, before any plugin init.
-        unsafe {
-            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", path);
-        }
-    }
-}
-
-#[cfg(windows)]
-fn compute_initialization_state() -> AppInitializationState {
-    use elevation::{ElevationState, clear_elevation_handoff_marker, current_elevation};
-
-    // Already running elevated — clear any handoff marker from the unelevated
-    // parent so a later NSIS `/ARGS` restart is not mistaken for a failed
-    // elevation attempt, then proceed normally.
-    if matches!(current_elevation(), ElevationState::Elevated) {
-        clear_elevation_handoff_marker();
-        return AppInitializationState::elevated();
-    }
-
-    resolve_unelevated_startup()
-}
-
-/// Unelevated process startup policy.
+/// Verifies one updater artifact with the exact effective build-time key.
 ///
-/// **Debug:** skips auto-relaunch. `cargo tauri dev` owns the Vite server as a
-/// sibling of this process; exiting to hand off elevation would tear Vite down
-/// and leave the elevated copy on a blank `localhost` window. The in-app
-/// elevation banner and "Relaunch as administrator" still work.
-///
-/// **Release:** attempts UAC auto-relaunch (handoff anti-loop is inside
-/// [`elevation::attempt_self_relaunch_elevated`]).
-#[cfg(windows)]
-fn resolve_unelevated_startup() -> AppInitializationState {
-    // Keep both arms in one function so release-only triggers stay type-checked
-    // and variant-used in debug builds (avoids cfg-split dead_code noise).
-    if cfg!(debug_assertions) {
-        return AppInitializationState {
-            is_elevated: false,
-            elevation_supported: true,
-            elevation_user_declined: false,
-            elevation_attempted: false,
-            relaunch_in_progress: false,
-        };
-    }
-
-    use elevation::{
-        ElevationRelaunchTrigger, ElevationStartupDecision, attempt_self_relaunch_elevated,
-    };
-
-    match attempt_self_relaunch_elevated(ElevationRelaunchTrigger::StartupAuto) {
-        ElevationStartupDecision::Relaunched => AppInitializationState::relaunching(),
-        ElevationStartupDecision::UserCancelled
-        | ElevationStartupDecision::PolicyBlocked(_)
-        | ElevationStartupDecision::SkippedRecentHandoff => AppInitializationState::declined(),
-    }
-}
-
-#[cfg(not(windows))]
-fn compute_initialization_state() -> AppInitializationState {
-    AppInitializationState::unsupported()
+/// This tooling API is excluded from both distributed application variants.
+#[cfg(all(windows, feature = "updater-artifact-verify"))]
+#[doc(hidden)]
+pub fn verify_updater_artifact(
+    artifact: &std::path::Path,
+    signature: &std::path::Path,
+) -> Result<(), String> {
+    updater_signature::verify_files(artifact, signature)
 }
 
 /// Builds and runs the Tauri application.
-fn run_desktop_shell(
-    init_state: AppInitializationState,
-    context: tauri::Context<Wry>,
-) -> tauri::Result<()> {
-    create_desktop_builder(init_state).run(context)
+fn run_desktop_shell(context: tauri::Context<Wry>) -> tauri::Result<()> {
+    create_desktop_builder().run(context)
 }
 
 /// Creates the Tauri builder used by the desktop shell.
-fn create_desktop_builder(init_state: AppInitializationState) -> DesktopBuilder {
+fn create_desktop_builder() -> DesktopBuilder {
     configure_cover_protocol(configure_commands(configure_plugins(Builder::default()))).setup(
         move |app| {
-            app.manage(init_state);
-            // Propagate (don't panic) so a catalog-open failure routes through the
-            // graceful `exit_with_startup_error` path like any other startup error.
-            let context = Arc::new(Context::open()?);
-            app.manage(context);
-            log::info!(
-                "Started with is_elevated={}, user_declined={}, attempted={}",
-                init_state.is_elevated,
-                init_state.elevation_user_declined,
-                init_state.elevation_attempted
-            );
+            app.manage(commands::AppUpdateState::default());
+            #[cfg(not(all(windows, feature = "portable")))]
+            {
+                // Propagate (don't panic) so a catalog-open failure routes through the
+                // graceful `exit_with_startup_error` path like any other startup error.
+                let context = Arc::new(Context::open()?);
+                app.manage(context);
+            }
             Ok(())
         },
     )
+}
+
+/// Completes a portable trial only after the visible compiled UI has called
+/// the request-only readiness command. Context creation is deliberately after
+/// the supervisor's durable CommitPermit, never during TrialReadOnly.
+#[cfg(all(windows, feature = "portable"))]
+pub(crate) fn complete_portable_activation(app: &tauri::AppHandle) -> Result<(), String> {
+    let result = portable_runtime::activation::prove_visible_and_commit(app, || {
+        let context = Arc::new(Context::open().map_err(|error| {
+            portable_runtime::error::PortableRuntimeError::new(
+                "portable_context",
+                error.to_string(),
+            )
+        })?);
+        if !app.manage(context) {
+            return Err(portable_runtime::error::PortableRuntimeError::new(
+                "portable_context",
+                "portable Context was already installed",
+            ));
+        }
+        Ok(())
+    });
+    if let Err(error) = result {
+        app.exit(STARTUP_FAILURE_EXIT_CODE);
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 fn configure_cover_protocol(builder: DesktopBuilder) -> DesktopBuilder {
@@ -383,19 +233,33 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::luma_uninstall,
         commands::luma_check_update,
         commands::luma_update,
-        // App initialization / elevation
-        commands::get_app_initialization_state,
-        commands::request_admin_relaunch,
+        // Application updater (Rust-owned trust boundary)
+        commands::app_update_check,
+        commands::app_update_download,
+        commands::app_update_apply,
+        commands::app_update_close,
+        commands::portable_trial_ready,
     ])
 }
 
+#[cfg(all(windows, feature = "portable"))]
+mod updater_contract {
+    include!(concat!(env!("OUT_DIR"), "/updater_contract.rs"));
+}
+
 /// Reports a startup failure and terminates the process.
-// Diverging sink: consuming the error by value is the point.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "startup failure sink consumes the error by value before process exit"
-)]
-fn exit_with_startup_error(error: tauri::Error) -> ! {
+fn exit_with_startup_error(error: &tauri::Error) -> ! {
     eprintln!("{APP_NAME}: failed to run desktop shell: {error}");
+    std::process::exit(STARTUP_FAILURE_EXIT_CODE);
+}
+
+/// Stops a managed portable App before logger, Tauri, WebView2, or any ordinary
+/// desktop runtime has been initialized.
+#[cfg(all(windows, feature = "portable"))]
+fn exit_with_portable_startup_error(
+    stage: &str,
+    error: &portable_runtime::error::PortableRuntimeError,
+) -> ! {
+    eprintln!("{APP_NAME}: portable App {stage} failed: {error}");
     std::process::exit(STARTUP_FAILURE_EXIT_CODE);
 }
