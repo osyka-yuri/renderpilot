@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-08-12
+
+### Added
+
+- **Ogg and Vorbis support**: RenderPilot can now detect and update compatible Ogg and Vorbis libraries while preserving existing layouts and leaving uncertain installations unchanged.
+
+### Changed
+
+- **Windows launch authorization**: Official Windows builds now request administrator permission before launch. If permission is declined, RenderPilot does not start or change files.
+- **Portable application updates**: Portable builds can now download and apply signed updates without reinstalling. Updates are verified before activation, keep user data with the portable folder, and recover safely after an interrupted attempt. Installer builds continue to use the standard Windows installer.
+- **Safer library updates**: Automatic update selection is now more consistent across single-file and multi-file libraries, including coordinated Streamline releases.
+- **Stronger package validation**: RenderPilot distinguishes compatible library releases more reliably and verifies every file before applying a change.
+- **Clearer errors and recovery guidance**: Desktop errors now use consistent localized messages and suggested actions without exposing internal diagnostic details.
+- **Languages and translations**: System and manually selected languages are restored more reliably. Simplified and Traditional Chinese are now separate options, with more consistent Luma and NVIDIA translations.
+- **Interface details**: Durations follow the selected locale, and game monograms handle international names more accurately.
+- **WebView2 requirement**: RenderPilot now requires Microsoft Edge WebView2 Runtime 136 or newer and checks it before opening the interface.
+- **Documentation and downloads**: The project now has a product-focused README, separate user and developer guides, and a stable installer asset prepared for direct downloads.
+
+### Compatibility
+
+- **Portable updates from earlier 1.x versions**: Close RenderPilot and replace the portable executable once with the 1.9.0 version. Keep the adjacent `data` folder unchanged; its data is migrated on first launch, and later portable updates can be installed from the application.
+- **Local data upgrade**: The first launch upgrades existing RenderPilot 1.x data automatically and creates a verified backup. Earlier RenderPilot versions cannot reuse the upgraded database without restoring that backup.
+
 ## [1.8.2] - 2026-07-30
 
 ### Fixed
@@ -236,3 +259,13 @@ All notable changes to this project will be documented in this file.
 - **Error Handling**: Improved error propagation boundaries and significantly reduced allocations during processing.
 - **Tooling**: Enforced Rust ownership and memory lints workspace-wide for better long-term code quality.
 - **Docs**: Updated `README.md` to perfectly align with current architecture, features, and technology stack. Fixed all `rustdoc` warnings.
+
+## [1.0.0] - 2026-06-08
+
+### Added
+
+- **Initial release**: Introduced the local-first Windows desktop application and CLI for discovering installed games, inspecting their rendering libraries, and applying reversible library swaps with an SQLite-backed operation journal.
+- **Game and library discovery**: Added automatic Steam, Epic, GOG, EA App, and Ubisoft Connect discovery, manual-folder scans, a downloadable library catalog, game covers, favorites, hidden games, search, filters, and launcher grouping.
+- **Rendering technologies**: Added management for NVIDIA DLSS and Streamline, AMD FSR including coordinated FSR 3.1-to-4 transitions, Intel XeSS, and Microsoft DirectStorage, with artifact validation, backups, rollback, and interrupted-operation recovery.
+- **NVIDIA integration**: Added per-game DLSS driver settings through NVAPI and the system-wide DLSS indicator toggle, with elevation support where required.
+- **Desktop experience**: Added light, dark, and system themes, seven interface languages, Windows installers, portable mode, and the initial signed-update/release pipeline.
