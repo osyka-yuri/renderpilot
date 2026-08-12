@@ -23,6 +23,8 @@ jobs:
   release:
     name: Build and publish
     needs: quality
+    environment:
+      name: release-publication
     permissions:
       contents: write
     runs-on: windows-latest
@@ -48,9 +50,11 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Read and validate app version
-        id: version
+      - name: Read release context
+        id: release_context
         shell: pwsh
+        env:
+          RENDERPILOT_RAW_REF_NAME: ${{ github.ref_name }}
         run: |
           $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
           $package = $metadata.packages |
@@ -62,12 +66,35 @@ jobs:
 
           $version = $package.version
           $expectedTag = "v$version"
-          $actualTag = "${{ github.ref_name }}"
-          if ($actualTag -ne $expectedTag) {
+          $actualTag = $env:RENDERPILOT_RAW_REF_NAME
+          if ($actualTag -cne $expectedTag) {
             throw "Release tag $actualTag does not match Cargo version $expectedTag."
           }
 
+          $targetCommit = git rev-parse --verify --end-of-options "$actualTag^{}"
+          if ($LASTEXITCODE -ne 0 -or $targetCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Could not resolve release tag $actualTag to its target commit."
+          }
+          $publishedAt = git show -s --format=%cI $targetCommit
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($publishedAt)) {
+            throw "Could not read the stable release-tag commit timestamp."
+          }
+
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $pattern = "(?s)## \[$version\].*?(?=(?:`r?`n## \[)|$)"
+          if ($changelog -match $pattern) {
+            $body = $matches[0].Trim()
+          } else {
+            $body = "See the assets to download this version and install."
+          }
+          $changelogPath = Join-Path $env:RUNNER_TEMP "renderpilot-release-changelog.md"
+          [IO.File]::WriteAllText($changelogPath, $body, [Text.UTF8Encoding]::new($false))
+
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "tag=$actualTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "commit=$targetCommit" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "published_at=$publishedAt" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "changelog_path=$changelogPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -76,59 +103,60 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
-      # Note: `tauri-action` executes the frontend build via its `beforeBuildCommand`.
-      - name: Extract Changelog
-        id: changelog
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          $changelog = Get-Content CHANGELOG.md -Raw
-          $pattern = "(?s)## \[$version\].*?(?=(?:`r?`n## \[)|$)"
-          if ($changelog -match $pattern) {
-            $body = $matches[0].Trim()
-          } else {
-            $body = "See the assets to download this version and install."
-          }
-          "body<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Build and create release
+      # tauri-action is deliberately limited to signing/building this run's
+      # artifacts. All GitHub release mutation is create-only below.
+      - name: Build signed installer artifacts
+        id: tauri_build
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RENDERPILOT_WINDOWS_MANIFEST: production
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
-          tagName: v__VERSION__
-          releaseName: "RenderPilot v__VERSION__"
-          releaseBody: ${{ steps.changelog.outputs.body }}
-          releaseDraft: true
-          prerelease: false
+          uploadUpdaterJson: false
 
-      # Build the portable exe via the Tauri CLI so that TAURI_ENV_DEBUG and
-      # other required env vars are set correctly — plain `cargo build` skips
-      # this and leaves Tauri in dev mode, causing "page not found" at runtime.
-      # --no-bundle skips installer packaging while preserving the canonical
-      # Tauri config consumed by the runtime contract and application build.
-      - name: Build portable exe
-        working-directory: apps/desktop
+      - name: Verify standard App Windows manifest
         shell: pwsh
         run: |
-          pnpm tauri build --features portable --no-bundle
+          ./apps/desktop/scripts/verify-windows-manifest.ps1 `
+            -Path (Join-Path $env:GITHUB_WORKSPACE "target\release\renderpilot-desktop.exe") `
+            -ExpectedExecutionLevel requireAdministrator
+
+      # The release builder produces the non-runnable signed RPU, embeds those
+      # exact public bytes in the stable raw supervisor SFX, signs the raw
+      # manual artifact, and packages its byte-identical ZIP entry.
+      - name: Build and validate portable RPU and raw supervisor artifacts
+        shell: pwsh
         env:
+          RENDERPILOT_RELEASE_VERSION: ${{ steps.release_context.outputs.version }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-
-      - name: Package portable zip
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path RenderPilot
-          Copy-Item target\release\renderpilot-desktop.exe RenderPilot\renderpilot-desktop.exe
-          Compress-Archive -Path RenderPilot -DestinationPath "RenderPilot-${{ steps.version.outputs.version }}-portable.zip"
+          ./apps/desktop/scripts/release-portable-artifacts.ps1 `
+            -Version $env:RENDERPILOT_RELEASE_VERSION
 
-      - name: Upload portable zip to release
-        run: gh release upload ${{ github.ref_name }} "RenderPilot-${{ steps.version.outputs.version }}-portable.zip" --clobber
+      - name: Publish and verify release assets
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RENDERPILOT_TAURI_ARTIFACT_PATHS: ${{ steps.tauri_build.outputs.artifactPaths }}
+          RENDERPILOT_RELEASE_VERSION: ${{ steps.release_context.outputs.version }}
+          RENDERPILOT_RELEASE_TAG: ${{ steps.release_context.outputs.tag }}
+          RENDERPILOT_RELEASE_REPOSITORY: ${{ github.repository }}
+          RENDERPILOT_RELEASE_COMMIT: ${{ steps.release_context.outputs.commit }}
+          RENDERPILOT_RELEASE_EVENT_SHA: ${{ github.sha }}
+          RENDERPILOT_RELEASE_RUN_ID: ${{ github.run_id }}
+          RENDERPILOT_RELEASE_PUBLISHED_AT: ${{ steps.release_context.outputs.published_at }}
+          RENDERPILOT_RELEASE_CHANGELOG_PATH: ${{ steps.release_context.outputs.changelog_path }}
+        run: |
+          ./apps/desktop/scripts/publish-release-assets.ps1 `
+            -Version $env:RENDERPILOT_RELEASE_VERSION `
+            -Tag $env:RENDERPILOT_RELEASE_TAG `
+            -Repository $env:RENDERPILOT_RELEASE_REPOSITORY `
+            -Commit $env:RENDERPILOT_RELEASE_COMMIT `
+            -GitHubSha $env:RENDERPILOT_RELEASE_EVENT_SHA `
+            -RunId $env:RENDERPILOT_RELEASE_RUN_ID `
+            -PublishedAt $env:RENDERPILOT_RELEASE_PUBLISHED_AT `
+            -ChangelogPath $env:RENDERPILOT_RELEASE_CHANGELOG_PATH `
+            -TauriArtifactPathsJson $env:RENDERPILOT_TAURI_ARTIFACT_PATHS

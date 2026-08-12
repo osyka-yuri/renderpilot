@@ -75,6 +75,11 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      - name: Test portable release ZIP packaging policy
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./apps/desktop/scripts/release-portable-artifacts.test.ps1
+
       - name: Test Windows manifest selector and source contracts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -89,6 +94,11 @@ jobs:
             throw "Windows manifest selector tests failed with exit code $LASTEXITCODE."
           }
           ./apps/desktop/scripts/verify-windows-manifest.test.ps1
+
+      - name: Test release GitHub client behavior
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./apps/desktop/scripts/release-github-client.test.ps1
 
       - name: Run tests
         run: cargo test --workspace --all-features --locked --no-fail-fast
