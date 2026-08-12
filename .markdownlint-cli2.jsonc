@@ -1,0 +1,20 @@
+{
+  "config": {
+    "default": true,
+    // Do not enforce an arbitrary source line length.
+    "MD013": false
+  },
+  "overrides": [
+    {
+      // The product header uses centered HTML and contains its H1 inside a div.
+      "filter": ["README.md"],
+      "combine": "merge",
+      "config": {
+        "MD033": {
+          "allowed_elements": ["a", "div", "h1", "h3", "img", "p", "strong"]
+        },
+        "MD041": false
+      }
+    }
+  ]
+}

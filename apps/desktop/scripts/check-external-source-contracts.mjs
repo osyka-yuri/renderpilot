@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { parseExternalSourceCheckArguments } from './external-source-check/arguments.mjs';
 import {
@@ -8,7 +7,7 @@ import {
   verifyNvapiSourceContract,
 } from './external-source-contracts.mjs';
 
-const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const APP_ROOT = path.resolve(import.meta.dirname, '..');
 const REPOSITORY_ROOT = path.resolve(APP_ROOT, '..', '..');
 
 async function readJson(filePath) {

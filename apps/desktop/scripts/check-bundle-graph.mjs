@@ -1,8 +1,8 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-const root = process.cwd();
-const dist = path.join(root, 'dist');
+const APP_ROOT = path.resolve(import.meta.dirname, '..');
+const dist = path.join(APP_ROOT, 'dist');
 const manifest = JSON.parse(await readFile(path.join(dist, '.vite', 'manifest.json'), 'utf8'));
 
 const INITIAL_JS_BUDGET_BYTES = 1_500_000;
@@ -38,9 +38,13 @@ if (entryKeys.length !== 1) {
 const staticGraph = (rootKey) => {
   const keys = new Set();
   const visit = (key) => {
-    if (keys.has(key)) return;
+    if (keys.has(key)) {
+      return;
+    }
     keys.add(key);
-    for (const dependency of manifest[key]?.imports ?? []) visit(dependency);
+    for (const dependency of manifest[key]?.imports ?? []) {
+      visit(dependency);
+    }
   };
   visit(rootKey);
   return keys;

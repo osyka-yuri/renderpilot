@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   objectLiteralEntries,
@@ -17,7 +16,7 @@ import {
 export const REVIEW_LOCALES = ['ru', 'de', 'es', 'fr', 'ja', 'zh-Hans', 'zh-Hant'];
 export const REVIEW_FORMATS = ['tsv', 'json'];
 
-const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const APP_ROOT = path.resolve(import.meta.dirname, '../..');
 
 function fail(message) {
   throw new Error(`i18n review failed: ${message}`);

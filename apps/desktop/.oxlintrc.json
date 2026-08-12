@@ -27,10 +27,7 @@
   ],
   "overrides": [
     {
-      "files": ["ui/src/**/*.{ts,tsx,mts,cts}"],
-      "env": {
-        "browser": true
-      },
+      "files": ["ui/src/**/*.{ts,tsx,mts,cts}", "scripts/**/*.ts"],
       "rules": {
         // Core correctness.
         "for-direction": "error",
@@ -218,6 +215,18 @@
         "eqeqeq": ["error", "always", { "null": "ignore" }],
         "no-console": ["warn", { "allow": ["warn", "error"] }],
         "curly": ["error", "all"]
+      }
+    },
+    {
+      "files": ["ui/src/**/*.{ts,tsx,mts,cts}"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": ["scripts/**/*.ts"],
+      "env": {
+        "node": true
       }
     },
     {

@@ -17,8 +17,13 @@ export type BundleChunk = {
   modules: Record<string, unknown>;
 };
 
-type BundleAsset = BundleChunk | { type: 'asset'; fileName: string; source?: unknown };
-export type OutputBundleLike = Record<string, BundleAsset>;
+type BundleOutputAsset = { type: 'asset'; fileName: string; source?: unknown };
+type BundleEntry = BundleChunk | BundleOutputAsset;
+export type OutputBundleLike = Partial<Record<string, BundleEntry>>;
+
+function isBundleChunk(entry: BundleEntry | undefined): entry is BundleChunk {
+  return entry?.type === 'chunk';
+}
 
 function normalize(value: string): string {
   return value.replaceAll('\\', '/');
@@ -38,9 +43,9 @@ function modulePreloadReferences(html: string): ReadonlySet<string> {
     const attributeSource = match[0].slice('<link'.length, -1);
 
     for (const attribute of attributeSource.matchAll(attributePattern)) {
-      const name = attribute[1].toLowerCase();
-      const value = attribute[2] ?? attribute[3] ?? attribute[4];
-      if (value !== undefined) {
+      const name = attribute.at(1)?.toLowerCase();
+      const value = attribute.at(2) ?? attribute.at(3) ?? attribute.at(4);
+      if (name !== undefined && value !== undefined) {
         attributes.set(name, value);
       }
     }
@@ -89,7 +94,7 @@ function staticReachable(bundle: OutputBundleLike, rootFileName: string): Set<st
     }
 
     const chunk = bundle[fileName];
-    if (!chunk || chunk.type !== 'chunk') {
+    if (chunk?.type !== 'chunk') {
       return;
     }
 
@@ -111,7 +116,7 @@ function dynamicReachable(bundle: OutputBundleLike, roots: Set<string>): Set<str
     }
 
     const chunk = bundle[fileName];
-    if (!chunk || chunk.type !== 'chunk') {
+    if (chunk?.type !== 'chunk') {
       return;
     }
 
@@ -126,7 +131,7 @@ function dynamicReachable(bundle: OutputBundleLike, roots: Set<string>): Set<str
 
   for (const root of roots) {
     const chunk = bundle[root];
-    if (!chunk || chunk.type !== 'chunk') {
+    if (chunk?.type !== 'chunk') {
       continue;
     }
 
@@ -151,7 +156,7 @@ function moduleIds(bundle: OutputBundleLike, chunkNames: Set<string>): string[] 
 function findChunkByFacade(bundle: OutputBundleLike, suffix: string): BundleChunk {
   const matches = Object.values(bundle).filter(
     (asset): asset is BundleChunk =>
-      asset.type === 'chunk' &&
+      isBundleChunk(asset) &&
       asset.facadeModuleId !== null &&
       hasSourceSuffix(asset.facadeModuleId, suffix),
   );
@@ -166,7 +171,7 @@ function findChunkByFacade(bundle: OutputBundleLike, suffix: string): BundleChun
 function findChunkContainingModule(bundle: OutputBundleLike, suffix: string): BundleChunk {
   const matches = Object.values(bundle).filter(
     (asset): asset is BundleChunk =>
-      asset.type === 'chunk' &&
+      isBundleChunk(asset) &&
       Object.keys(asset.modules).some((moduleId) => hasSourceSuffix(moduleId, suffix)),
   );
 
@@ -178,7 +183,7 @@ function findChunkContainingModule(bundle: OutputBundleLike, suffix: string): Bu
 }
 
 export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
-  const chunks = Object.values(bundle).filter((asset) => asset.type === 'chunk');
+  const chunks = Object.values(bundle).filter(isBundleChunk);
   const entries = chunks.filter((chunk) => chunk.isEntry);
 
   if (entries.length !== 1) {
@@ -188,8 +193,8 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
   const bootstrap = entries[0];
   const desktopApp = findChunkByFacade(bundle, '/ui/src/app/routes/DesktopApp.svelte');
   const indexHtml = Object.values(bundle).find(
-    (asset): asset is Extract<BundleAsset, { type: 'asset' }> =>
-      asset.type === 'asset' && asset.fileName === 'index.html',
+    (asset): asset is BundleOutputAsset =>
+      asset?.type === 'asset' && asset.fileName === 'index.html',
   );
   if (indexHtml === undefined) {
     throw new Error('Expected index.html in the generated bundle.');
@@ -216,7 +221,7 @@ export function assertI18nBundleBoundaries(bundle: OutputBundleLike): void {
     .values()
     .flatMap((fileName) => {
       const chunk = bundle[fileName];
-      if (!chunk || chunk.type !== 'chunk') {
+      if (chunk?.type !== 'chunk') {
         return [];
       }
 

@@ -24,8 +24,12 @@ export function parseReviewArguments(args) {
       fail();
     }
     seenOptions.add(option);
-    if (option === '--locale') locale = value;
-    if (option === '--format') format = value;
+    if (option === '--locale') {
+      locale = value;
+    }
+    if (option === '--format') {
+      format = value;
+    }
   }
 
   if (locale === undefined || !REVIEW_FORMATS.includes(format)) {

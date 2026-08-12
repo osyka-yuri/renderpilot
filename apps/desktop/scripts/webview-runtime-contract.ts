@@ -29,8 +29,8 @@ export function parseWebViewRuntimeContract(value: unknown): WebViewRuntimeContr
     return component;
   });
 
-  const major = components[0];
-  if (major === undefined || major === 0) {
+  const [major] = components;
+  if (major === 0) {
     throw new TypeError(`${CONFIG_PATH} major component must be positive.`);
   }
 

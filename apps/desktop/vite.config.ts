@@ -1,6 +1,5 @@
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
@@ -10,7 +9,7 @@ import tauriConfig from './src-tauri/tauri.conf.json' with { type: 'json' };
 import { i18nBundleBoundaryPlugin } from './scripts/i18n-bundle-boundary-plugin';
 import { edgeBuildTarget } from './scripts/webview-runtime-contract';
 
-const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = import.meta.dirname;
 const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');
 
 const DEV_SERVER_PORT = 1420;

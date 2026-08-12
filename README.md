@@ -1,230 +1,86 @@
 <div align="center">
-  <img src="apps/desktop/public/icon.svg" alt="RenderPilot Logo" width="128" height="128" />
-
+  <img src="apps/desktop/public/icon.svg" alt="RenderPilot logo" width="112" height="112">
   <h1>RenderPilot</h1>
-
-  <p><strong>Manage, update, and swap PC game rendering libraries — DLSS, FSR, XeSS and more — from a single interface.</strong></p>
-
-  <div>
-    <a href="https://boosty.to/osyka.yuri/donate"><img src="https://img.shields.io/badge/☕_Support_on-Boosty-F15C22?style=for-the-badge&labelColor=1c1c1c" alt="Support on Boosty"/></a>
-    <img src="https://img.shields.io/badge/License-GPLv3-4a9eff?style=for-the-badge&labelColor=1c1c1c" alt="License" />
-  </div>
-
-  <div style="margin-top: 10px;">
-    <img src="https://img.shields.io/badge/Tauri-2.11.5-24c8db?style=for-the-badge&logo=tauri&logoColor=white&labelColor=1c1c1c" alt="Tauri" />
-    <img src="https://img.shields.io/badge/Svelte-5.56.7-ff3e00?style=for-the-badge&logo=svelte&logoColor=white&labelColor=1c1c1c" alt="Svelte" />
-    <img src="https://img.shields.io/badge/Rust-1.97.1-ce4a00?style=for-the-badge&logo=rust&logoColor=white&labelColor=1c1c1c" alt="Rust" />
-    <img src="https://img.shields.io/badge/Platform-Windows-0078d4?style=for-the-badge&logo=windows&logoColor=white&labelColor=1c1c1c" alt="Windows" />
-  </div>
+  <p><strong>Keep PC game rendering libraries current, compatible, and reversible from one Windows app.</strong></p>
+  <p>RenderPilot finds supported games, shows the rendering components they use, and helps you update, downgrade, or restore them without manually working through game folders.</p>
+  <h3><a href="https://github.com/osyka-yuri/renderpilot/releases/latest">Download for Windows</a></h3>
+  <p>
+    <a href="https://github.com/osyka-yuri/renderpilot/releases/latest">Portable build</a>
+    · <a href="https://github.com/osyka-yuri/renderpilot/releases">All releases</a>
+  </p>
+  <p>
+    <a href="https://github.com/osyka-yuri/renderpilot/releases/latest"><img src="https://img.shields.io/github/v/release/osyka-yuri/renderpilot?display_name=tag&sort=semver&style=flat-square" alt="Latest RenderPilot release"></a>
+    <img src="https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows11&logoColor=white" alt="Windows x64">
+    <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-GPLv3-4a9eff?style=flat-square" alt="GPLv3 license"></a>
+  </p>
+  <p>Official downloads are published only through GitHub Releases.</p>
 </div>
 
-<br />
+![RenderPilot library catalog showing detected games, installed rendering components, available versions, and reversible update controls](docs/screenshot.webp)
 
-<div align="center">
-  <img src="docs/screenshot.webp" alt="RenderPilot Screenshot" width="90%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" />
-</div>
+## What RenderPilot does
 
-RenderPilot automatically scans your installed games, identifies their rendering libraries and runtimes, and lets you upgrade, downgrade, or swap supported packages in one click. It can also install supported rendering add-ons: RenoDX for HDR and Luma Framework for DirectX 11 upscaling, HDR, and shader replacement. All processing happens locally — no telemetry or cloud accounts required.
+RenderPilot brings the rendering libraries used by your games into one focused catalog. It is useful when you want newer upscaling or frame-generation components, need to return to a known-working version, or simply want a clear view of what is installed.
 
-## ✨ Features
+- **Finds your games.** Scan supported launchers, add your own folders, and keep manually installed titles in the same library.
+- **Manages rendering components.** Review DLSS, FSR, XeSS, DirectStorage, D3D12, OpenVR, Ogg/Vorbis, and other supported libraries without hunting for individual files.
+- **Updates, downgrades, and restores.** Choose an available version, review the planned changes, and return to the original files when needed.
+- **Supports RenoDX and Luma.** Install, inspect, update, or remove supported add-ons for HDR, upscaling, and shader features.
+- **Controls NVIDIA DLSS settings.** Adjust supported Super Resolution, Frame Generation, and Ray Reconstruction settings for individual games.
+- **Keeps your library local.** No account is required, and RenderPilot does not collect telemetry.
 
-- **🔍 Automatic Game Detection:** Scans your system (Steam, Epic, GOG, EA App, Ubisoft Connect, or any custom folder) and recognizes DLSS, FSR, XeSS, DirectStorage, DXC, D3D12 Agility SDK, OpenVR, and related libraries across all detected titles.
-- **🔄 One-Click Library Management:** Upgrade to the latest compatible version, select another available release, or restore the original files without editing game directories manually.
-- **🧩 Guarded D3D12 Agility Updates:** Keeps `D3D12Core.dll` and the selected game's `D3D12SDKVersion` in sync. A fresh preflight reports whether the executable needs no change, a managed patch, an original restore, or manual repair. The first managed patch and a user-selected restore require state-bound confirmation; stale or ambiguous game state fails closed.
-- **📦 Centralized Catalog:** Browse available library versions and supported add-on profiles pulled from continuously updated manifests.
-- **🛡️ Safe Rollback:** Original baselines are captured once, immutable sidecars are SHA-256 verified before use, and a rollback preflight lists every affected path. Interrupted operations are recovered from the durable journal without silently replacing the original baseline.
-- **💾 Local-First:** Game scans, installed state, and rollback records live in a local SQLite database. Refreshing remote manifests, downloading libraries or add-ons, fetching covers, and checking updates require a network connection.
-- **⚡ Native Desktop Shell:** A Tauri window fronts a Rust backend; file mutations, catalog state, and network work stay outside the webview.
-- **🎮 Game Covers & Artwork:** Automatically fetch game covers from SteamGridDB or set custom artwork from your files.
-- **🔧 NVIDIA Driver-Level Settings:** Manage the full range of DLSS Super Resolution, Frame Generation, and Ray Reconstruction driver settings (including presets) per game via NVAPI.
-- **🌈 One-Click HDR (RenoDX):** Add HDR to supported games through the RenoDX ReShade add-on. RenderPilot detects the game, installs the add-on (and an add-on-enabled ReShade host when one is missing), and can fully reverse the change. Each game shows a confidence badge and an anti-cheat risk note, with per-game update checks; add-ons distributed off-GitHub can be installed from a file you downloaded (file picker or drag-and-drop), and an optional DLSS Frame Generation fix stops ReShade drawing over generated frames.
-- **🌌 Luma Framework:** Install, update, and remove Luma Framework for supported DirectX 11 games. Luma provides DLSS/FSR upscaling, HDR, and shader replacement; new managed installs use the nightly ReShade host. The game-specific UI surfaces any required launch arguments, Visual C++ runtime, or dgVoodoo2 dependency. Luma and RenoDX are mutually exclusive for a game.
-- **📟 DLSS Indicator Overlay:** Toggle the built-in NVIDIA DLSS indicator to see which upscaler version is active in real-time.
-- **🏷️ Advanced Game Filtering:** Filter by library or launcher, search by name, mark favorites, hide games — organize your catalog your way.
-- **📋 Operation Journal:** Review every library swap and rollback in a detailed history log.
-- **💻 CLI Tool:** Automate library management from the terminal — scan, compare candidates, plan and apply swaps, rollback, and audit your game library.
-- **🎨 Theme Support:** Light, dark, and system-following themes with persistent preference.
-- **🔄 App Updater:** Built-in update mechanism to keep RenderPilot current.
+RenoDX, Luma, ReShade, and the libraries managed by RenderPilot are independent third-party projects. Their licenses, compatibility requirements, and risks still apply; RenderPilot does not replace their documentation or guarantees.
 
-## 🛠️ Supported Technologies
+## How it works
 
-|                                                            Vendor                                                            | Technologies                                                                                            |
-| :--------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------ |
-|     <img src="https://img.shields.io/badge/NVIDIA-76b900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA" />      | DLSS Super Resolution · Frame Generation · Ray Reconstruction · Streamline                              |
-|          <img src="https://img.shields.io/badge/AMD-ed1c24?style=flat-square&logo=amd&logoColor=white" alt="AMD" />          | FSR (Upscaler, Loader, Radiance Cache) · FSR Frame Generation · FSR Ray Regeneration                    |
-|       <img src="https://img.shields.io/badge/Intel-0071c5?style=flat-square&logo=intel&logoColor=white" alt="Intel" />       | XeSS · XeFG · Xe Low Latency                                                                            |
-| <img src="https://img.shields.io/badge/Microsoft-0078d4?style=flat-square&logo=microsoft&logoColor=white" alt="Microsoft" /> | DirectStorage · DirectX Shader Compiler (DXC) · D3D12 Agility SDK                                       |
-|       <img src="https://img.shields.io/badge/Valve-1b2838?style=flat-square&logo=steam&logoColor=white" alt="Valve" />       | OpenVR loader                                                                                           |
-|          <img src="https://img.shields.io/badge/ReShade-e8a33d?style=flat-square&logoColor=black" alt="ReShade" />           | RenoDX HDR add-on · Luma Framework (DX11 DLSS/FSR, HDR, shader replacement) · DLSS Frame Generation fix |
+1. **Scan games.** Let RenderPilot inspect supported launcher libraries, or select a folder yourself.
+2. **Review changes.** Compare the installed state with compatible choices and see which files an operation will affect.
+3. **Update or restore.** Apply the selected change, or roll the game back to its saved original files.
 
-**Supported Launchers:** Steam, Epic Games Store, GOG, EA App, Ubisoft Connect — plus any manual folder you choose.
+RenderPilot checks the game again immediately before changing it. Clear operations can proceed directly; ambiguous, stale, or higher-risk situations stop for review or require explicit confirmation. You stay in control of the game root, executable, selected version, and add-on actions.
 
-## 🚀 Getting Started
+## Safety and privacy
 
-### Prerequisites
+Rendering-library changes can affect whether a game starts, how it renders, or whether online protections accept its files. RenderPilot is designed to make those changes visible and recoverable.
 
-- [Rust](https://www.rust-lang.org/tools/install) (MSRV 1.97; the development toolchain is pinned to 1.97.1 in `rust-toolchain.toml`)
-- [Node.js](https://nodejs.org/) 24 (the CI pin; Vite also requires Node 20.19+ or 22.12+)
-- [pnpm](https://pnpm.io/installation) 11 (CI uses 11.11.0)
-- Windows C++ Build Tools and WebView2 Runtime
+- Original files are backed up for rollback, and saved backups are verified before they are used.
+- The current game state is checked again before a change is applied, so an older plan cannot silently overwrite newer files.
+- Interrupted supported operations can be detected and recovered when RenderPilot starts again.
+- RenoDX, Luma, ReShade, and similar modifications show anti-cheat warnings where relevant. Avoid them in protected multiplayer games unless the game and service explicitly allow them.
+- Detection, catalog state, operation history, settings, and backups remain on your computer. RenderPilot has no account system or telemetry.
+- A network connection is used only when requesting remote catalogs, libraries or add-ons, artwork, and application updates. Previously cached information remains available when a source cannot be reached.
 
-### Build from Source
+Read [Data, network access, recovery, and troubleshooting](docs/user/data-and-troubleshooting.md) before changing a sensitive installation.
 
-**Desktop app:**
+## Supported ecosystem
 
-```bash
-git clone https://github.com/osyka-yuri/renderpilot.git
-cd renderpilot/apps/desktop
-pnpm install --frozen-lockfile
-pnpm tauri dev
-```
+| Group | Supported components |
+| --- | --- |
+| NVIDIA | DLSS Super Resolution, Frame Generation, Ray Reconstruction, Streamline, and per-game DLSS settings |
+| AMD | FSR upscaling, Frame Generation, Ray Regeneration, loader, and radiance components |
+| Intel | XeSS, XeSS Frame Generation, and Xe Low Latency |
+| Other | DirectStorage, Microsoft DXC, D3D12 Agility SDK, OpenVR, and Xiph Ogg/Vorbis |
 
-**CLI tool:**
+Launcher discovery supports **Steam, Epic Games, GOG, EA App/Origin, and Ubisoft Connect**. You can also add manual folders, including games installed outside a launcher. Detection and compatibility depend on the files and executable that are present; RenderPilot asks you to review uncertain matches rather than treating every similarly named file as interchangeable.
 
-```bash
-cargo build -p renderpilot-cli
-cargo run -p renderpilot-cli -- --help
-```
+## Get started
 
-The CLI also exposes `add-game <install-root>`, `list-artifacts`, `list-operations`,
-`candidates`, `plan-swap`, `apply`, `plan-rollback`, `rollback`, and
-`renodx`/`luma` status, uninstall, and update-check commands. Run
-`renderpilot --help` for the exact argument grammar (or run
-`cargo run -p renderpilot-cli -- --help` from the repository root).
+RenderPilot supports **Windows x64** and uses **Microsoft Edge WebView2** for its interface. Current installers require WebView2 runtime version 136.0.3240.44 or later; Windows normally maintains this runtime for you.
 
-`plan-swap` returns typed JSON containing blockers, warnings, the complete file
-mutation list, an optional D3D12 executable action, and a fresh
-`confirmation_token`. When that action sets `requires_confirmation` to `true`,
-pass the token unchanged to `apply --confirmation-token`. Apply rebuilds the
-authoritative preflight and rejects the request if any confirmation-bound state
-has changed. `plan-rollback` provides the equivalent affected-file preview for
-managed rollback.
+The **installer** is the recommended choice. It integrates the app with Windows, supports in-app updates, and offers an explicit data-removal choice during uninstall. Download the installer from the [latest release](https://github.com/osyka-yuri/renderpilot/releases/latest). Windows requests administrator approval before it creates the installed app process; if you decline, RenderPilot does not start or make any changes. After approval, scan your launchers.
 
-## 🏗️ Architecture
+The **portable build** is an alternative for keeping the executable and RenderPilot data together in one folder. Extract the complete ZIP before starting it. Windows requires administrator approval before it creates the portable supervisor process; if you decline, no RenderPilot process starts and portable state remains unopened. The portable build does not turn managed game changes into portable files.
 
-RenderPilot follows a **hexagonal (ports & adapters) architecture** in Rust with a Svelte 5 frontend, organized as a Cargo workspace. The Rust core owns state and side effects; the webview and CLI are delivery mechanisms.
+See the [installation guide](docs/user/installation.md) for WebView2, Windows launch authorization, updates, portable storage, and uninstall behavior. Continue with the [user guide](docs/README.md#user-guide) for scanning, version management, add-ons, NVIDIA settings, artwork, and recovery.
 
-> **Layering note:** `renderpilot-api` is a GUI presentation facade, not the application core: it converts typed orchestration results into JSON for Tauri commands. `renderpilot-application` owns dependency-inverted ports and pure shared application logic. End-to-end feature flows live in `renderpilot-orchestration`; its feature modules compose SQLite, detection, Windows, and NVAPI adapters around a shared `Context`.
+## Documentation and project
 
-```mermaid
-flowchart LR
-    subgraph ENTRY["Entry points"]
-        UI["Svelte UI"]
-        DESKTOP["renderpilot-desktop<br/>Tauri shell + bootstrap"]
-        CLI["renderpilot-cli"]
-        UI -->|"Tauri IPC"| DESKTOP
-    end
+- [User guide](docs/README.md#user-guide) — installation, game discovery, safe library operations, add-ons, settings, and troubleshooting.
+- [Developer documentation](docs/README.md#developer-guide) — workspace setup, architecture, storage, contracts, localization, quality gates, and releases.
+- [Advanced CLI](docs/development/cli.md) — a source-only maintenance and diagnostics tool; no standalone CLI binary is published.
+- [Contributing](CONTRIBUTING.md) — the shortest path from a local checkout to a reviewable change.
+- [Issues](https://github.com/osyka-yuri/renderpilot/issues) and [changelog](CHANGELOG.md) — report problems and review release history.
+- [Support development on Boosty](https://boosty.to/osyka.yuri/donate) — an optional way to support the project.
+- [GNU GPLv3 license](LICENSE.txt) — terms for using, modifying, and distributing RenderPilot.
 
-    subgraph DELIVERY["Presentation"]
-        API["renderpilot-api<br/>typed GUI facade"]
-    end
-
-    subgraph CORE["Core and use cases"]
-        ORCH["renderpilot-orchestration<br/>Context + feature flows"]
-        APP["renderpilot-application<br/>ports + pure logic"]
-        DOMAIN["renderpilot-domain<br/>stable domain types"]
-        ORCH --> APP --> DOMAIN
-    end
-
-    subgraph ADAPTERS["Driven adapters"]
-        DETECT["renderpilot-detection"]
-        SQLITE["renderpilot-storage-sqlite"]
-        WINDOWS["renderpilot-platform-windows"]
-        NVAPI["renderpilot-nvapi"]
-    end
-
-    DESKTOP --> API --> ORCH
-    DESKTOP -. "owns shared Context" .-> ORCH
-    CLI --> ORCH
-    ORCH --> DETECT
-    ORCH --> SQLITE
-    ORCH --> WINDOWS
-    ORCH --> NVAPI
-    DETECT -. "implements application ports" .-> APP
-    SQLITE -. "implements application ports" .-> APP
-    WINDOWS -. "implements application ports" .-> APP
-```
-
-Solid arrows show the primary runtime composition and dependency direction. Dashed arrows show an adapter implementing an application port or the desktop shell bootstrapping the shared `Context`; the diagram intentionally omits test-only dependencies and individual feature-module calls.
-
-### Crates
-
-| Crate                                      | Layer                         | Purpose                                                                                                                                                                                                                                                      |
-| :----------------------------------------- | :---------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `renderpilot-domain`                       | **Core**                      | Pure domain types — enums, validated IDs, value objects, immutable component rollback baselines, and the shared D3D12 executable identity. Minimal deps (`serde`, `sha2`).                                                                                   |
-| `renderpilot-application`                  | **Application core**          | Port traits, persistence records, candidate matching, swap-plan building, and pure compatibility policy including D3D12 action selection and confirmation fingerprinting. No external I/O.                                                                   |
-| `renderpilot-detection`                    | **Adapter**                   | Filesystem scanner — PE/version/export inspection, anti-cheat evidence, and glob-based library pattern matching against a bundled JSON catalog. Implements `ComponentDetector`.                                                                              |
-| `renderpilot-storage-sqlite`               | **Adapter**                   | SQLite persistence — implements all `*Repository` traits. Atomic scan writes, WAL mode, schema migrations, and private wire encoding for typed rollback baselines.                                                                                           |
-| `renderpilot-platform-windows`             | **Adapter**                   | Windows platform — launcher install discovery (Steam, Epic, GOG, EA, Ubisoft), manual-folder scanning, executable detection, Registry helpers, DLSS indicator toggle, and Vulkan layer support for RenoDX. Implements the game-source port for manual scans. |
-| `renderpilot-nvapi`                        | **Adapter**                   | NVAPI FFI bindings via runtime `libloading` — reads/writes NVIDIA Driver Settings (DRS profiles). Gracefully degrades on non-NVIDIA hardware.                                                                                                                |
-| `renderpilot-orchestration`                | **Orchestration / use cases** | Composes the core with adapters and owns end-to-end feature flows, including catalog preflight/execution/recovery, D3D12 executable coordination, covers, DLSS, libraries, NVAPI, and add-ons (shared ReShade, RenoDX, Luma).                                |
-| `renderpilot-api`                          | **Presentation facade**       | Reuses the shared serializable orchestration outputs for Tauri command handlers and exposes the cover-response helper used by the desktop `rp-cover://` protocol.                                                                                            |
-| `renderpilot-cli`                          | **Presentation**              | Binary (`renderpilot`) — argument parsing, JSON/text output, scans, candidate and operation queries, typed swap/rollback preflights, apply/rollback, and RenoDX/Luma status, uninstall, and update checks.                                                   |
-| `renderpilot-desktop` (in `apps/desktop/`) | **Shell**                     | Tauri 2 desktop app — constructs the shared context, exposes IPC command handlers, and owns UAC elevation, portable mode, and updater integration.                                                                                                           |
-
-### Frontend
-
-The Svelte 5 frontend lives in `apps/desktop/` with source under `ui/src/` and follows **Feature-Sliced Design**:
-
-```
-ui/src/
-  app/          — Shell, navigation, routes, global app model
-  pages/        — Full screens: games catalog, game details, libraries, operations, settings
-  features/     — Use cases: scan, swap, covers (fetch/sync/custom), NVAPI settings, RenoDX/Luma add-ons, filters, SteamGridDB key, updater
-  entities/     — Business entities: game, component, library, operation, settings, addon, app
-  widgets/      — Composable UI: games grid, header, notifications, settings panels
-  shared/       — UI primitives and segments: i18n (7 locales: en, ru, es, fr, de, zh, ja), theme, requests, paths, and validators
-```
-
-Powered by Svelte 5 runes (`$state`, `$derived`, `$effect`), Tailwind CSS 4, bits-ui, Lucide icons, `@tanstack/svelte-virtual`, `@tanstack/table-core`, and `@tauri-apps/api` for IPC. ESLint's boundary rules enforce public slice APIs and reject deep imports; the frontend is tested with Vitest and type-checked with `svelte-check`.
-
-### Key Decisions
-
-- **Stable string enums** — `stable_enum!` macro generates synchronized `serde::Deserialize`/`Serialize`, `Display`, and `FromStr` for wire-stable enums (`Launcher`, `ComponentKind`, `AddonKind`, …). A few domain enums (notably `GraphicsTechnology`) use equivalent hand-written serde renames instead.
-- **Validation at boundaries** — IDs, paths, and versions are validated on construction; invalid domain state is unrepresentable.
-- **Error propagation chain** — `AppError` → `ServiceError` → `ApiError` → `CommandError`, each layer adding context.
-- **Atomic scan writes** — game + components + artifacts persisted in a single SQLite transaction.
-- **Immutable rollback baselines** — original file and D3D12 executable identities are captured once and cannot be replaced by later operations; only the expected active identity advances after a verified mutation.
-- **D3D12 aggregate safety** — `D3D12Core.dll` and its selected EXE are planned, mutated, recovered, and rolled back as one managed unit. Downgrades below the original SDK line, ambiguous executable selection, altered sidecars, and inconsistent pairs are rejected.
-- **Fresh confirmation preflight** — the confirmation token lives on the latest swap plan and is bound to the relevant paths, hashes, SDK lines, component files, and artifact. Apply recomputes that state instead of trusting a stale preview.
-- **Versioned add-on catalogues** — Luma, RenoDX, and shared ReShade data are loaded from `addons/v1/*.json` into versioned cache files. Catalogue text uses a stable localization `id`, while the reviewed English `fallback_text` remains mandatory and is the source of truth when no local override exists.
-- **Shared ReShade host, isolated add-ons** — RenoDX and Luma reuse shared ReShade-host and filesystem-install primitives but are mutually exclusive per game; managed Luma installs use the nightly ReShade host.
-- **Portable mode** — `RENDERPILOT_APP_DIR` env var + `portable` feature stores all data in `<exe_dir>/data/`.
-- **UAC elevation** — release builds may self-relaunch with admin rights for NVAPI writes; dev builds expose an in-app relaunch action, with a handoff sentinel to prevent loops.
-
-## ✅ Quality Gates
-
-The reusable [quality workflow](.github/workflows/quality.yml) is the source of
-truth. Rust checks run on Ubuntu and Windows; the desktop UI checks run on
-Ubuntu.
-
-From the repository root:
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked --no-fail-fast
-cargo doc --workspace --no-deps --locked
-```
-
-Rustdoc warnings are denied in CI. For the desktop UI:
-
-```bash
-cd apps/desktop
-pnpm run format:check
-pnpm run lint
-pnpm test
-pnpm run build
-```
-
-The final command runs both `svelte-check` and the production Vite build.
-
-## 📄 License
-
-Licensed under the [GNU General Public License v3.0](LICENSE.txt).
-
-## ☕ Support
-
-**If RenderPilot saves you time, consider supporting its development:**
-
-<a href="https://boosty.to/osyka.yuri/donate"><img src="https://img.shields.io/badge/☕_Support_on-Boosty-F15C22?style=for-the-badge&labelColor=1c1c1c" alt="Support on Boosty"/></a>
+For installation and update safety, download RenderPilot only from this repository's GitHub Releases page. Third-party components remain subject to their own licenses and support policies.

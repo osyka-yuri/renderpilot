@@ -1,6 +1,5 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { createContractVersion, createSemanticContract } from './i18n-contracts/contract.mjs';
 import { formatGeneratedSource as formatSource } from './i18n-contracts/formatter.mjs';
@@ -28,7 +27,7 @@ import {
   renderNvapiContract,
 } from './i18n-contracts/renderer.mjs';
 
-const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const APP_ROOT = path.resolve(import.meta.dirname, '..');
 const REPOSITORY_ROOT = path.resolve(APP_ROOT, '..', '..');
 const FORMAT_CONFIG = path.join(APP_ROOT, '.oxfmtrc.json');
 

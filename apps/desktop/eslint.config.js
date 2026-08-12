@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
@@ -15,7 +14,7 @@ import tseslint from 'typescript-eslint';
 import { createIntlBoundariesRule } from './eslint/intl-boundaries.js';
 import svelteConfig from './svelte.config.js';
 
-const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = import.meta.dirname;
 
 const SOURCE_ROOT = 'ui/src';
 const TAILWIND_ENTRY_POINT = `${SOURCE_ROOT}/shared/theme/global.css`;
@@ -115,7 +114,7 @@ function scopeConfigs(configs, files) {
 const SOURCE_FILE_GLOBS = sourceFiles(SOURCE_SCRIPT_EXTENSIONS);
 const JAVASCRIPT_FILE_GLOBS = sourceFiles(JAVASCRIPT_EXTENSIONS);
 const TYPESCRIPT_FILE_GLOBS = sourceFiles(TYPESCRIPT_EXTENSIONS);
-const TOOLING_JAVASCRIPT_FILE_GLOBS = ['eslint/**/*.js'];
+const TOOLING_JAVASCRIPT_FILE_GLOBS = ['eslint/**/*.js', 'scripts/**/*.mjs'];
 
 const SVELTE_COMPONENT_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte`];
 const SVELTE_TYPESCRIPT_MODULE_FILE_GLOBS = [`${SOURCE_ROOT}/**/*.svelte.ts`];
@@ -127,9 +126,11 @@ const SVELTE_FILE_GLOBS = [...SVELTE_COMPONENT_FILE_GLOBS, ...SVELTE_MODULE_FILE
 
 /*
  * Lint ownership:
- * - Oxlint owns ordinary TypeScript, including its type-aware rules.
- * - ESLint owns Svelte components and Svelte TypeScript modules because it
- *   understands templates and compiler semantics such as runes.
+ * - Oxlint owns ordinary TypeScript in the application and Node tooling,
+ *   including its type-aware rules.
+ * - ESLint owns JavaScript tooling with Node runtime globals.
+ * - ESLint also owns Svelte components and Svelte TypeScript modules because
+ *   it understands templates and compiler semantics such as runes.
  * - ESLint also owns project-specific architecture, Tailwind, and import
  *   rules that cannot be expressed faithfully in Oxlint.
  */
@@ -566,9 +567,9 @@ const fsdBoundariesSettings = {
 
 /**
  * ESLint flat config:
- * - Oxlint owns native and type-aware rules for ordinary TypeScript;
+ * - Oxlint owns native and type-aware rules for ordinary application and tooling TypeScript;
  * - strict type-aware ESLint rules stay enabled only for Svelte sources;
- * - JS plus architecture, Tailwind, and import rules stay in ESLint;
+ * - JavaScript tooling plus architecture, Tailwind, and import rules stay in ESLint;
  * - Svelte recommended + formatter compatibility;
  * - Tailwind CSS v4 linting through better-tailwindcss recommended preset;
  * - cn/clsx/cx/cva Tailwind class detection through better-tailwindcss selectors;
@@ -607,6 +608,18 @@ export default defineConfig([
     languageOptions: {
       globals: {
         ...globals.browser,
+      },
+    },
+  },
+
+  {
+    name: 'project/node-tooling-globals',
+
+    files: TOOLING_JAVASCRIPT_FILE_GLOBS,
+
+    languageOptions: {
+      globals: {
+        ...globals.node,
       },
     },
   },
@@ -677,7 +690,33 @@ export default defineConfig([
 
     rules: {
       'no-unused-vars': ['error', UNUSED_VALUE_OPTIONS],
+    },
+  },
+
+  {
+    name: 'project/javascript-import-boundaries',
+
+    files: JAVASCRIPT_FILE_GLOBS,
+
+    rules: {
       'no-restricted-imports': fsdRestrictedImportsRule,
+    },
+  },
+
+  {
+    name: 'project/node-tooling-rules',
+
+    files: TOOLING_JAVASCRIPT_FILE_GLOBS,
+
+    rules: {
+      curly: ['error', 'all'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-var': 'error',
+      'object-shorthand': ['error', 'always'],
+      'prefer-const': ['error', { destructuring: 'all' }],
+      'prefer-object-spread': 'error',
+      'prefer-rest-params': 'error',
+      'prefer-spread': 'error',
     },
   },
 
@@ -895,7 +934,7 @@ export default defineConfig([
   {
     name: 'project/formatter-safe-overrides',
 
-    files: ESLINT_BASE_FILE_GLOBS,
+    files: [...ESLINT_BASE_FILE_GLOBS, ...TOOLING_JAVASCRIPT_FILE_GLOBS],
 
     rules: {
       /*
