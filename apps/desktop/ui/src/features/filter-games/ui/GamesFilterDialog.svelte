@@ -8,6 +8,7 @@
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    ScrollArea,
     Separator,
     buttonVariants,
   } from '@shared/ui';
@@ -79,30 +80,40 @@
     {/if}
   </div>
 
-  <DialogContent class="sm:max-w-lg">
+  <DialogContent
+    class="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+  >
     <DialogHeader>
       <DialogTitle>{t('filters.title')}</DialogTitle>
     </DialogHeader>
 
-    <LauncherFilterSection
-      options={launcherFilterOptions}
-      {draftLaunchers}
-      {draftLauncherOrder}
-      onLaunchersChange={onDraftLaunchersChange}
-      onOrderChange={onDraftLauncherOrderChange}
-    />
+    <ScrollArea type="auto" class="min-h-0">
+      <div class="grid gap-4">
+        <LauncherFilterSection
+          options={launcherFilterOptions}
+          {draftLaunchers}
+          {draftLauncherOrder}
+          onLaunchersChange={onDraftLaunchersChange}
+          onOrderChange={onDraftLauncherOrderChange}
+        />
 
-    <Separator />
+        <Separator />
 
-    <LibraryFilterSection
-      groupedOptions={groupedLibraryFilterOptions}
-      {draftLibraries}
-      onLibrariesChange={onDraftLibrariesChange}
-    />
+        <LibraryFilterSection
+          groupedOptions={groupedLibraryFilterOptions}
+          {draftLibraries}
+          onLibrariesChange={onDraftLibrariesChange}
+        />
 
-    <Separator />
+        <Separator />
 
-    <AddonFilterSection options={addonOptions} {draftAddons} onAddonsChange={onDraftAddonsChange} />
+        <AddonFilterSection
+          options={addonOptions}
+          {draftAddons}
+          onAddonsChange={onDraftAddonsChange}
+        />
+      </div>
+    </ScrollArea>
 
     <DialogFooter>
       <Button
