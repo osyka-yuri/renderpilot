@@ -21,6 +21,7 @@ type DialogTestProps = {
 describe('AddGameDialog', () => {
   let target: HTMLDivElement;
   let component: Record<string, never> | undefined;
+  let initialBodyStyle: string;
 
   beforeEach(() => {
     vi.stubGlobal(
@@ -33,15 +34,20 @@ describe('AddGameDialog', () => {
     );
     target = document.createElement('div');
     document.body.append(target);
+    initialBodyStyle = document.body.style.cssText;
   });
 
   afterEach(async () => {
-    if (component) {
-      await unmount(component);
-      component = undefined;
+    const mountedComponent = component;
+    component = undefined;
+    try {
+      if (mountedComponent) {
+        await closeAndUnmountDialog(mountedComponent, initialBodyStyle);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      document.body.replaceChildren();
     }
-    vi.unstubAllGlobals();
-    document.body.replaceChildren();
   });
 
   it('offers an explicit identity-preserving correction for an oversized manual root', async () => {
@@ -581,6 +587,26 @@ describe('AddGameDialog', () => {
 async function render(): Promise<void> {
   flushSync();
   await tick();
+}
+
+async function closeAndUnmountDialog(
+  component: Record<string, never>,
+  initialBodyStyle: string,
+): Promise<void> {
+  try {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+    // bits-ui restores its body scroll lock asynchronously after the dialog closes.
+    await waitForBodyStyle(initialBodyStyle);
+  } finally {
+    await unmount(component);
+  }
+}
+
+async function waitForBodyStyle(expectedCssText: string): Promise<void> {
+  await vi.waitFor(() => {
+    expect(document.body.style.cssText).toBe(expectedCssText);
+  });
 }
 
 function inspection(overrides: Partial<AddGameInspection> = {}): AddGameInspection {
