@@ -57,6 +57,12 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@b20dedce73af6905cdc30d6611090c9b67557c8d # v2.85.12
+        with:
+          tool: nextest@0.9.143
+          fallback: none
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -100,10 +106,17 @@ jobs:
         shell: pwsh
         run: ./apps/desktop/scripts/release-github-client.test.ps1
 
-      - name: Run tests
-        run: cargo test --workspace --all-features --locked --no-fail-fast
+      - name: Run tests with nextest
+        run: cargo nextest run --profile ci --workspace --all-features --locked
         # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;
         # Clippy above still denies Rust warnings for every test target.
+        env:
+          CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
+
+      # Nextest does not run Rust documentation tests, so preserve them as a
+      # separate Cargo gate on every supported CI platform.
+      - name: Run doctests
+        run: cargo test --workspace --all-features --locked --doc --no-fail-fast
         env:
           CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
 
