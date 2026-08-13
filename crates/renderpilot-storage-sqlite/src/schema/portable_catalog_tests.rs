@@ -2,17 +2,25 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::{
-    PortableCatalogSchemaErrorKind, PortableCatalogSchemaTransition,
+    PortableCatalogSchemaErrorKind, PortableCatalogSchemaTransition, SqliteStorage,
     inspect_portable_catalog_schema, transition_portable_catalog_schema,
 };
 
-use super::{CURRENT_SCHEMA_VERSION, apply, ddl::portable_path_tags, steps, version};
+use super::{
+    CURRENT_SCHEMA_VERSION, apply,
+    ddl::portable_path_tags,
+    portable_catalog::{initialize_fresh_portable_catalog, validate_current_portable_catalog},
+    steps, version,
+};
 
 static NEXT_TEMP_CATALOG: AtomicU64 = AtomicU64::new(0);
 const RELEASED_V4_SCHEMA: &str = include_str!("../../tests/fixtures/catalog-v4.sql");
@@ -247,6 +255,285 @@ fn absent_unknown_future_and_malformed_catalogs_are_not_mutated() {
         before,
         "malformed catalog must remain byte-stable"
     );
+}
+
+#[test]
+fn strict_fresh_portable_open_initializes_once_and_supports_a_repository_operation() {
+    let catalog = TemporaryCatalog::new("strict-fresh-success");
+
+    let storage = SqliteStorage::open_fresh_portable(&catalog.path)
+        .expect("initialize an absent fresh portable catalog");
+    storage
+        .set_setting("portable.marker", "fresh")
+        .expect("write through the returned storage handle");
+    assert_eq!(
+        storage
+            .get_setting("portable.marker")
+            .expect("read through the returned storage handle"),
+        Some("fresh".to_owned())
+    );
+    assert_eq!(storage.journal_mode().expect("journal mode"), "wal");
+    drop(storage);
+
+    assert_eq!(
+        Connection::open(&catalog.path)
+            .expect("open initialized catalog")
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+            .expect("current portable schema version"),
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_no_backups(&catalog.directory);
+}
+
+#[test]
+fn strict_fresh_portable_open_rejects_existing_or_contaminated_catalogs_without_backups() {
+    let zero_with_user_object = TemporaryCatalog::new("strict-fresh-user-object");
+    Connection::open(&zero_with_user_object.path)
+        .expect("open zero version catalog")
+        .execute_batch("CREATE TABLE foreign_state (id INTEGER PRIMARY KEY)")
+        .expect("add foreign user object");
+
+    let current = TemporaryCatalog::new("strict-fresh-current");
+    prepare_current_catalog(&current.path);
+    let legacy = TemporaryCatalog::new("strict-fresh-legacy");
+    prepare_v15_catalog(&legacy.path);
+
+    for catalog in [&zero_with_user_object, &current, &legacy] {
+        let before = fs::read(&catalog.path).expect("read catalog before rejected fresh open");
+        SqliteStorage::open_fresh_portable(&catalog.path)
+            .expect_err("fresh portable open must reject an existing catalog");
+        assert_eq!(
+            fs::read(&catalog.path).expect("read catalog after rejected fresh open"),
+            before,
+            "rejected fresh open must not repair, migrate, or rewrite the catalog"
+        );
+        assert_no_backups(&catalog.directory);
+    }
+}
+
+#[test]
+fn strict_current_portable_open_requires_the_exact_current_catalog_and_preserves_marker_data() {
+    let current = TemporaryCatalog::new("strict-current-success");
+    prepare_current_catalog(&current.path);
+    let fixture = SqliteStorage::open(&current.path).expect("open current fixture");
+    fixture
+        .set_setting("portable.marker", "preserved")
+        .expect("write marker fixture");
+    drop(fixture);
+
+    let storage = SqliteStorage::open_current_portable(&current.path)
+        .expect("open exact current portable catalog");
+    assert_eq!(
+        storage.get_setting("portable.marker").expect("read marker"),
+        Some("preserved".to_owned())
+    );
+    assert_eq!(storage.journal_mode().expect("journal mode"), "wal");
+    drop(storage);
+    assert_no_backups(&current.directory);
+}
+
+#[test]
+fn g_obs_02_strict_current_validation_is_authorizer_observational() {
+    let current = TemporaryCatalog::new("strict-current-observational");
+    prepare_current_catalog(&current.path);
+    {
+        let connection = Connection::open(&current.path).expect("open current fixture");
+        connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('portable.marker', 'preserved')",
+                [],
+            )
+            .expect("write marker fixture");
+
+        let denied = install_observational_authorizer(&connection);
+        validate_current_portable_catalog(&connection)
+            .expect("strict current validation must not execute a mutation");
+        assert_eq!(
+            denied.load(Ordering::Relaxed),
+            0,
+            "strict current validation must not attempt a denied mutation"
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'portable.marker'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("read preserved marker"),
+            "preserved"
+        );
+        assert_eq!(
+            version::read(&connection).expect("read preserved schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
+    }
+    assert_no_backups(&current.directory);
+
+    let zero = TemporaryCatalog::new("strict-current-zero-observational");
+    drop(Connection::open(&zero.path).expect("create zero-version catalog"));
+    let legacy = TemporaryCatalog::new("strict-current-legacy-observational");
+    prepare_v15_catalog(&legacy.path);
+    let future = TemporaryCatalog::new("strict-current-future-observational");
+    prepare_current_catalog(&future.path);
+    set_version(&future.path, CURRENT_SCHEMA_VERSION + 1);
+    let malformed = TemporaryCatalog::new("strict-current-malformed-observational");
+    prepare_current_catalog(&malformed.path);
+    Connection::open(&malformed.path)
+        .expect("open malformed current catalog")
+        .execute_batch("DROP TABLE games;")
+        .expect("remove required current table");
+
+    for catalog in [&zero, &legacy, &future, &malformed] {
+        let before = fs::read(&catalog.path).expect("read invalid catalog before validation");
+        let connection = Connection::open(&catalog.path).expect("open invalid catalog");
+        let denied = install_observational_authorizer(&connection);
+
+        validate_current_portable_catalog(&connection)
+            .expect_err("strict current validation must reject invalid catalogs");
+        assert_eq!(
+            denied.load(Ordering::Relaxed),
+            0,
+            "invalid strict-current catalog must not attempt a denied mutation"
+        );
+        drop(connection);
+        assert_eq!(
+            fs::read(&catalog.path).expect("read invalid catalog after validation"),
+            before,
+            "invalid strict-current validation must not mutate the catalog"
+        );
+        assert_no_backups(&catalog.directory);
+    }
+}
+
+#[test]
+fn strict_current_portable_open_rejects_missing_zero_legacy_future_and_malformed_catalogs() {
+    let missing = TemporaryCatalog::new("strict-current-missing");
+    assert!(SqliteStorage::open_current_portable(&missing.path).is_err());
+    assert!(
+        !missing.path.exists(),
+        "current open must not create a catalog"
+    );
+
+    let zero = TemporaryCatalog::new("strict-current-zero");
+    drop(Connection::open(&zero.path).expect("create zero version catalog"));
+    let legacy = TemporaryCatalog::new("strict-current-legacy");
+    prepare_v15_catalog(&legacy.path);
+    let future = TemporaryCatalog::new("strict-current-future");
+    prepare_current_catalog(&future.path);
+    set_version(&future.path, CURRENT_SCHEMA_VERSION + 1);
+    let malformed = TemporaryCatalog::new("strict-current-malformed");
+    prepare_current_catalog(&malformed.path);
+    Connection::open(&malformed.path)
+        .expect("open malformed current catalog")
+        .execute_batch("DROP TABLE games;")
+        .expect("remove required current table");
+
+    for catalog in [&zero, &legacy, &future, &malformed] {
+        let before = fs::read(&catalog.path).expect("read rejected current catalog");
+        SqliteStorage::open_current_portable(&catalog.path)
+            .expect_err("current portable open must reject a non-exact catalog");
+        assert_eq!(
+            fs::read(&catalog.path).expect("read catalog after rejected current open"),
+            before,
+            "rejected current open must remain observational"
+        );
+        assert_no_backups(&catalog.directory);
+    }
+}
+
+#[test]
+fn fresh_portable_initialization_rolls_back_after_begin_and_can_retry() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+    let catalog = TemporaryCatalog::new("strict-fresh-rollback");
+    let mut connection = Connection::open_with_flags(
+        &catalog.path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .expect("open fresh fixture connection");
+    connection
+        .authorizer(Some(|context: AuthContext<'_>| match context.action {
+            AuthAction::CreateTable { .. } => Authorization::Deny,
+            _ => Authorization::Allow,
+        }))
+        .expect("install post-begin failure authorizer");
+    initialize_fresh_portable_catalog(&mut connection)
+        .expect_err("authorizer must fail fresh baseline after BEGIN IMMEDIATE");
+    connection
+        .authorizer(None::<fn(AuthContext<'_>) -> Authorization>)
+        .expect("remove failure authorizer");
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+            .expect("read rolled-back version"),
+        0
+    );
+    let user_objects: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'index', 'view', 'trigger') AND name NOT LIKE 'sqlite_%'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read rolled-back objects");
+    assert_eq!(
+        user_objects, 0,
+        "failed fresh initialization must roll back"
+    );
+    drop(connection);
+
+    let retried = SqliteStorage::open_fresh_portable(&catalog.path)
+        .expect("fresh initialization must be retryable after rollback");
+    assert_eq!(
+        retried
+            .get_setting("portable.marker")
+            .expect("read empty retry catalog"),
+        None
+    );
+    drop(retried);
+    assert_no_backups(&catalog.directory);
+}
+
+fn assert_no_backups(directory: &Path) {
+    assert!(
+        fs::read_dir(directory)
+            .expect("read portable catalog directory")
+            .flatten()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "bak")),
+        "strict portable opens must not create general schema backups"
+    );
+}
+
+fn install_observational_authorizer(connection: &Connection) -> Arc<AtomicU64> {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+    let denied = Arc::new(AtomicU64::new(0));
+    let denied_actions = Arc::clone(&denied);
+    connection
+        .authorizer(Some(move |context: AuthContext<'_>| match context.action {
+            AuthAction::Read { .. }
+            | AuthAction::Select
+            | AuthAction::Pragma {
+                pragma_value: None, ..
+            }
+            | AuthAction::Pragma {
+                pragma_name:
+                    "table_info" | "table_xinfo" | "table_list" | "index_info" | "index_xinfo"
+                    | "index_list" | "foreign_key_list" | "foreign_key_check" | "integrity_check",
+                ..
+            }
+            | AuthAction::Function { .. } => Authorization::Allow,
+            _ => {
+                denied_actions.fetch_add(1, Ordering::Relaxed);
+                Authorization::Deny
+            }
+        }))
+        .expect("install observational SQLite authorizer");
+
+    denied
 }
 
 fn prepare_current_catalog(path: &Path) {

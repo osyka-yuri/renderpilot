@@ -23,6 +23,7 @@ pub const APP_DIR_ENV: &str = "RENDERPILOT_APP_DIR";
 
 /// Immutable durable locations for one authenticated portable App start.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimePathsV1 {
     /// Stable raw-supervisor directory.
     pub portable_root: PathBuf,

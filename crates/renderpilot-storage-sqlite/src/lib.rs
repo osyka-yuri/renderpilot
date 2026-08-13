@@ -24,3 +24,8 @@ pub use schema::portable_catalog::{
     PortableCatalogSchemaTransition, inspect_portable_catalog_schema,
     transition_portable_catalog_schema,
 };
+pub use schema::{
+    CURRENT_PORTABLE_SCHEMA_VERSION, MINIMUM_PORTABLE_SCHEMA_VERSION,
+    PORTABLE_APP_SESSION_PROTOCOL, PORTABLE_RUNTIME_RELEASE_CONTRACT_VERSION,
+    PORTABLE_SUPERVISOR_CAPABILITY,
+};

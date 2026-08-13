@@ -56,6 +56,9 @@ fn rpsx1_rejects_out_of_bounds_or_wrong_digest_overlays() {
 
 #[test]
 fn packaging_contract_keeps_rpu_grammar_and_effective_trust_inputs_closed() {
+    // Archive rejection branches and compile-time updater wiring are artifact
+    // contracts: deterministic unit fixtures cannot observe every rejected
+    // byte shape or build-support constant without duplicating production code.
     let rpu = include_str!("../rpu.rs");
     for required in [
         "archive.len() != 2",
@@ -65,8 +68,9 @@ fn packaging_contract_keeps_rpu_grammar_and_effective_trust_inputs_closed() {
         "entry.compression() != zip::CompressionMethod::Stored",
         "manifest.platform != \"windows-x86_64-portable\"",
         "manifest.portable_role != \"app\"",
-        "manifest.minimum_schema != MINIMUM_SCHEMA",
-        "manifest.maximum_schema != MAXIMUM_SCHEMA",
+        "manifest.minimum_supervisor_protocol != PORTABLE_SUPERVISOR_CAPABILITY",
+        "manifest.app_session_protocol != PORTABLE_APP_SESSION_PROTOCOL",
+        "schema_range_is_supported(manifest.minimum_schema, manifest.maximum_schema)",
         "manifest.app_sha256 != sha256_hex(&app_bytes)",
         "canonical_version(&manifest.version)?",
         "pub fn verify_rpu_expected",
@@ -89,7 +93,28 @@ fn packaging_contract_keeps_rpu_grammar_and_effective_trust_inputs_closed() {
 }
 
 #[test]
+fn stable_supervisor_accepts_future_generation_schema_capabilities() {
+    use crate::portable_runtime::rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, schema_range_is_supported};
+
+    assert!(schema_range_is_supported(MINIMUM_SCHEMA, MAXIMUM_SCHEMA));
+    assert!(schema_range_is_supported(
+        MINIMUM_SCHEMA,
+        MAXIMUM_SCHEMA + 1
+    ));
+    assert!(!schema_range_is_supported(
+        MINIMUM_SCHEMA + 1,
+        MAXIMUM_SCHEMA + 1
+    ));
+    assert!(!schema_range_is_supported(
+        MINIMUM_SCHEMA,
+        MINIMUM_SCHEMA - 1
+    ));
+}
+
+#[test]
 fn release_supervisor_uses_the_silent_windows_subsystem() {
+    // The subsystem selector exists only in the produced Windows executable,
+    // so this source-level assertion is the bounded deterministic observation.
     let source = include_str!("../../bin/portable_supervisor.rs");
     assert!(source.contains(
         "#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = \"windows\")]"

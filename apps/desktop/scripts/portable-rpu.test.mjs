@@ -11,6 +11,12 @@ import {
   parseRpsx1,
   validatePortableRpuArtifacts,
 } from './portable-rpu.mjs';
+import {
+  CURRENT_PORTABLE_SCHEMA,
+  MINIMUM_PORTABLE_SCHEMA,
+  PORTABLE_APP_SESSION_PROTOCOL,
+  PORTABLE_SUPERVISOR_CAPABILITY,
+} from './portable-runtime-release-contract.mjs';
 
 const VERSION = '1.9.0';
 const ZIP_ENTRY = 'RenderPilot/renderpilot-desktop.exe';
@@ -84,9 +90,10 @@ function manifest(app, overrides = {}) {
     version: VERSION,
     app_sha256: sha256(app),
     app_length: app.length,
-    minimum_supervisor_protocol: 1,
-    minimum_schema: 4,
-    maximum_schema: 16,
+    minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
+    app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL,
+    minimum_schema: MINIMUM_PORTABLE_SCHEMA,
+    maximum_schema: CURRENT_PORTABLE_SCHEMA,
     portable_role: 'app',
     ...overrides,
   };
@@ -184,18 +191,53 @@ test('RPU rejects empty malformed noncanonical and context-mismatched versions',
   });
 });
 
-test('RPU rejects signed schema ranges outside the exact 4 to 16 contract', async () => {
+test('RPU rejects signed schema ranges outside the release schema contract', async () => {
   for (const overrides of [
-    { minimum_schema: 4, maximum_schema: 15 },
-    { minimum_schema: 16, maximum_schema: 16 },
-    { minimum_schema: 3, maximum_schema: 16 },
-    { minimum_schema: 4, maximum_schema: 17 },
+    {
+      minimum_schema: MINIMUM_PORTABLE_SCHEMA,
+      maximum_schema: CURRENT_PORTABLE_SCHEMA - 1,
+    },
+    {
+      minimum_schema: CURRENT_PORTABLE_SCHEMA,
+      maximum_schema: CURRENT_PORTABLE_SCHEMA,
+    },
+    {
+      minimum_schema: MINIMUM_PORTABLE_SCHEMA - 1,
+      maximum_schema: CURRENT_PORTABLE_SCHEMA,
+    },
+    {
+      minimum_schema: MINIMUM_PORTABLE_SCHEMA,
+      maximum_schema: CURRENT_PORTABLE_SCHEMA + 1,
+    },
   ]) {
     const rpu = rpuWith(overrides);
     await withArtifact({ rpu }, async (paths) => {
       await assert.rejects(
         validatePortableRpuArtifacts(paths),
         /does not authenticate its exact stored App image/,
+      );
+    });
+  }
+});
+
+test('RPU rejects a mismatched supervisor capability or App session identity', async () => {
+  for (const overrides of [
+    { minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY - 1 },
+    { minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY + 1 },
+    { app_session_protocol: 'renderpilot-portable-app-session-v0' },
+  ]) {
+    const rpu = rpuWith(overrides);
+    await withArtifact({ rpu }, async (paths) => {
+      await assert.rejects(
+        validatePortableRpuArtifacts({
+          rawPath: paths.rawPath,
+          rpuPath: paths.rpuPath,
+          signaturePath: paths.signaturePath,
+          zipPath: paths.zipPath,
+          zipEntry: ZIP_ENTRY,
+          expectedVersion: VERSION,
+        }),
+        /Portable RPU manifest does not authenticate its exact stored App image/,
       );
     });
   }

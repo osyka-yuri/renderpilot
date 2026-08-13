@@ -25,6 +25,12 @@ import {
 } from './release-manifest-policy.mjs';
 import { validatePortableArtifacts } from './release-manifest-portable.mjs';
 import { extractZipEntry } from './release-manifest-zip.mjs';
+import {
+  CURRENT_PORTABLE_SCHEMA,
+  MINIMUM_PORTABLE_SCHEMA,
+  PORTABLE_APP_SESSION_PROTOCOL,
+  PORTABLE_SUPERVISOR_CAPABILITY,
+} from './portable-runtime-release-contract.mjs';
 
 const VERSION = '1.9.0';
 const REPOSITORY = 'osyka-yuri/renderpilot';
@@ -76,9 +82,10 @@ function createPortableRpu(app, version = VERSION) {
   const manifest = {
     app_length: app.length,
     app_sha256: createHash('sha256').update(app).digest('hex'),
-    maximum_schema: 16,
-    minimum_schema: 4,
-    minimum_supervisor_protocol: 1,
+    maximum_schema: CURRENT_PORTABLE_SCHEMA,
+    minimum_schema: MINIMUM_PORTABLE_SCHEMA,
+    minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
+    app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL,
     platform: 'windows-x86_64-portable',
     portable_role: 'app',
     protocol: 'renderpilot-portable-rpu-v1',

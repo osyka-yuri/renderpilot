@@ -7,10 +7,13 @@ use std::{error::Error, fmt, path::Path};
 
 use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
-use super::{CURRENT_SCHEMA_VERSION, backup, ddl::portable_path_tags, steps, validation, version};
+use super::{
+    CURRENT_PORTABLE_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION, MINIMUM_PORTABLE_SCHEMA_VERSION,
+    backup, ddl::portable_path_tags, steps, validation, version,
+};
 
-const CURRENT_PORTABLE_SCHEMA_VERSION: u32 = CURRENT_SCHEMA_VERSION as u32;
-const MINIMUM_PORTABLE_SCHEMA_VERSION: u32 = steps::MINIMUM_PORTABLE_SCHEMA_VERSION as u32;
+const _: () =
+    assert!(MINIMUM_PORTABLE_SCHEMA_VERSION as i32 == steps::MINIMUM_PORTABLE_SCHEMA_VERSION);
 
 /// Observed portable-catalog schema facts after exact validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -144,7 +147,7 @@ pub fn inspect_portable_catalog_schema(path: &Path) -> Result<u32, PortableCatal
         }
         version => {
             return Err(unsupported_version(
-                "portable inspection supports released v1.x schemas v4 through v16",
+                "portable inspection supports the released portable schema range",
                 version,
             ));
         }
@@ -170,6 +173,56 @@ pub fn transition_portable_catalog_schema(
             upgrade_after_snapshot(path)
         }
     }
+}
+
+/// Applies exactly the current baseline to an empty portable catalog on the
+/// caller's already-open connection. This is deliberately separate from the
+/// general schema application path: it never backs up, repairs, rebuilds, or
+/// infers a historical schema.
+pub(crate) fn initialize_fresh_portable_catalog(
+    connection: &mut Connection,
+) -> Result<(), PortableCatalogSchemaError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| {
+            PortableCatalogSchemaError::with_source(
+                PortableCatalogSchemaErrorKind::Ddl,
+                "could not begin fresh portable catalog transaction",
+                error,
+            )
+        })?;
+    require_empty_fresh_catalog(&transaction)?;
+    super::rebuild::apply_baseline(&transaction).map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Ddl,
+            "could not apply fresh portable catalog baseline",
+            error,
+        )
+    })?;
+    version::write(&transaction, CURRENT_SCHEMA_VERSION).map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Ddl,
+            "could not write fresh portable catalog version",
+            error,
+        )
+    })?;
+    validate_v16(&transaction)?;
+    transaction.commit().map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::Ddl,
+            "could not commit fresh portable catalog baseline",
+            error,
+        )
+    })?;
+    validate_current_portable_catalog(connection)
+}
+
+/// Validates an already-current portable catalog on an already-open
+/// connection. It performs no schema transition or catalog repair.
+pub(crate) fn validate_current_portable_catalog(
+    connection: &Connection,
+) -> Result<(), PortableCatalogSchemaError> {
+    inspect_v16(connection).map(|_| ())
 }
 
 fn open_existing_read_only(path: &Path) -> Result<Connection, PortableCatalogSchemaError> {
@@ -198,13 +251,46 @@ fn inspect_v16(
     let source_version = read_version(connection)?;
     if source_version != CURRENT_PORTABLE_SCHEMA_VERSION {
         return Err(unsupported_version(
-            "v16 validation requires the current portable catalog version",
+            "current portable catalog validation requires the current schema version",
             source_version,
         ));
     }
 
     validate_v16(connection)?;
     Ok(report(source_version))
+}
+
+fn require_empty_fresh_catalog(connection: &Connection) -> Result<(), PortableCatalogSchemaError> {
+    let observed_version = read_version(connection)?;
+    if observed_version != 0 {
+        return Err(unsupported_version(
+            "fresh portable catalog initialization requires user_version zero",
+            observed_version,
+        ));
+    }
+    let user_objects: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master \
+             WHERE type IN ('table', 'index', 'view', 'trigger') \
+             AND name NOT LIKE 'sqlite_%'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            PortableCatalogSchemaError::with_source(
+                PortableCatalogSchemaErrorKind::TransitionPrecondition,
+                "could not inspect fresh portable catalog objects",
+                error,
+            )
+        })?;
+    if user_objects != 0 {
+        return Err(PortableCatalogSchemaError::message(
+            PortableCatalogSchemaErrorKind::TransitionPrecondition,
+            "fresh portable catalog contained user SQLite objects",
+            "fresh portable catalog must not contain user SQLite objects".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn upgrade_after_snapshot(
@@ -219,7 +305,7 @@ fn upgrade_after_snapshot(
     }
     let Some(source_schema) = supported_upgrade_source(source_version) else {
         return Err(unsupported_version(
-            "portable upgrade supports released v1.x schemas v4 through v16",
+            "portable upgrade supports the released portable schema range",
             source_version,
         ));
     };
@@ -335,14 +421,14 @@ fn validate_v16(connection: &Connection) -> Result<(), PortableCatalogSchemaErro
     validation::validate_catalog_schema_observational(connection).map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::Validation,
-            "v16 schema or portable path-tag validation failed",
+            "current portable schema or portable path-tag validation failed",
             error,
         )
     })?;
     validation::validate_database_integrity(connection).map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::Validation,
-            "v16 integrity validation failed",
+            "current portable schema integrity validation failed",
             error,
         )
     })

@@ -12,27 +12,21 @@ use crate::commands::{CommandError, error::CommandErrorKind};
 pub(super) fn check(session_id: &str) -> UpdateResult<Option<AppUpdateMetadata>> {
     let response = crate::portable_runtime::activation::request_update(
         session_id,
-        crate::portable_runtime::app_protocol::PortableUpdateRequest::Check,
+        crate::portable_runtime::app_protocol::PortableUpdateRequest::check(),
     )
     .map_err(map_error)?;
-    let crate::portable_runtime::app_protocol::PortableUpdateResponse::Check {
-        available,
-        current_version,
-        version,
-        date,
-        body,
-    } = response
+    let crate::portable_runtime::app_protocol::PortableUpdateResponse::Check(response) = response
     else {
         return Err(CommandError::with_diagnostic(
             CommandErrorKind::AppUpdateCheckFailed,
             "supervisor returned an invalid check response",
         ));
     };
-    Ok(available.then_some(AppUpdateMetadata {
-        current_version,
-        version,
-        date,
-        body,
+    Ok(response.available.then_some(AppUpdateMetadata {
+        current_version: response.current_version,
+        version: response.version,
+        date: response.date,
+        body: response.body,
     }))
 }
 
@@ -44,12 +38,11 @@ pub(super) fn download(
     session::require_portable(state, &session_id, false)?;
     let response = crate::portable_runtime::activation::request_update(
         &session_id,
-        crate::portable_runtime::app_protocol::PortableUpdateRequest::Download,
+        crate::portable_runtime::app_protocol::PortableUpdateRequest::download(),
     )
     .map_err(map_error)?;
-    let crate::portable_runtime::app_protocol::PortableUpdateResponse::Downloaded {
-        content_length,
-    } = response
+    let crate::portable_runtime::app_protocol::PortableUpdateResponse::Downloaded(response) =
+        response
     else {
         return Err(CommandError::with_diagnostic(
             CommandErrorKind::AppUpdateDownloadFailed,
@@ -57,10 +50,10 @@ pub(super) fn download(
         ));
     };
     let _ = on_event.send(AppUpdateDownloadEvent::Started {
-        content_length: Some(content_length),
+        content_length: Some(response.content_length),
     });
     let _ = on_event.send(AppUpdateDownloadEvent::Progress {
-        chunk_length: usize::try_from(content_length).unwrap_or(usize::MAX),
+        chunk_length: usize::try_from(response.content_length).unwrap_or(usize::MAX),
     });
     let _ = on_event.send(AppUpdateDownloadEvent::Finished);
     *session::lock(state)? = UpdateSession::Downloaded { id: session_id };
@@ -71,11 +64,11 @@ pub(super) fn apply(state: &AppUpdateState, session_id: &str) -> UpdateResult<()
     session::require_portable(state, session_id, true)?;
     match crate::portable_runtime::activation::request_update(
         session_id,
-        crate::portable_runtime::app_protocol::PortableUpdateRequest::Apply,
+        crate::portable_runtime::app_protocol::PortableUpdateRequest::apply(),
     )
     .map_err(map_error)?
     {
-        crate::portable_runtime::app_protocol::PortableUpdateResponse::ApplyAccepted => Ok(()),
+        crate::portable_runtime::app_protocol::PortableUpdateResponse::ApplyAccepted(_) => Ok(()),
         _ => Err(CommandError::with_diagnostic(
             CommandErrorKind::AppUpdateApplyFailed,
             "supervisor did not accept the staged portable update",

@@ -13,11 +13,22 @@ use super::{
 mod activation;
 mod admission;
 mod compatibility;
+mod compatibility_support;
 mod faults;
 mod job;
+mod journal_outbox;
 mod packaging;
+mod protocol;
 mod publication;
-mod recovery;
+mod recovery_lineage;
+mod recovery_matrix;
+mod recovery_selection;
+mod recovery_snapshot;
+mod recovery_support;
+mod recovery_validation;
+mod relocation;
+mod snapshot;
+mod update_apply;
 
 static NEXT_TEMP_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -73,8 +84,29 @@ pub(super) fn supervisor_session(seed: char) -> SupervisorSessionAuthority {
     SupervisorSessionAuthority::for_test(seed)
 }
 
+pub(super) fn test_generation_store_root(journal: &Path) -> PathBuf {
+    let update_root = journal
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("test journal has canonical update-root ancestry");
+    let isolated_root = if update_root.file_name().is_some_and(|name| name == "update") {
+        update_root
+            .parent()
+            .expect("test update root has an isolated sandbox parent")
+    } else {
+        update_root
+    };
+    isolated_root.join("generation-store")
+}
+
 pub(super) fn append_journal(path: &Path, entry: JournalEntry) -> Result<JournalEntry> {
-    append_normal(path, entry, &supervisor_session('1'))
+    append_normal(
+        path,
+        &test_generation_store_root(path),
+        entry,
+        &supervisor_session('1'),
+    )
 }
 
 pub(super) fn error_code<T>(result: Result<T>) -> &'static str {

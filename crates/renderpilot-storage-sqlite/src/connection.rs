@@ -8,7 +8,7 @@ use std::{
 };
 
 use renderpilot_application::{AppError, AppResult};
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, OpenFlags, Transaction};
 
 use crate::error::{storage_context, storage_error};
 use crate::repositories::SqliteStorage;
@@ -88,10 +88,50 @@ impl SqliteStorage {
         Self::from_connection(connection, ConnectionOptions::transient_database())
     }
 
+    /// Opens one freshly created portable catalog after the supervisor issued
+    /// its durable CommitPermit. This is intentionally not the general schema
+    /// opener: it accepts only an empty SQLite catalog and initializes it once
+    /// through the portable catalog boundary on this exact connection.
+    pub fn open_fresh_portable(path: impl AsRef<Path>) -> AppResult<Self> {
+        let path = path.as_ref();
+        let mut connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+        )
+        .map_err(|error| storage_context("failed to open fresh portable sqlite catalog", error))?;
+        configure_portable_pre_transaction(&connection)?;
+        schema::portable_catalog::initialize_fresh_portable_catalog(&mut connection).map_err(
+            |error| storage_context("failed to initialize fresh portable sqlite catalog", error),
+        )?;
+        configure_portable_post_commit(&connection)?;
+        Self::finalize_connection(connection)
+    }
+
+    /// Opens one already-current portable catalog after the supervisor issued
+    /// its durable CommitPermit. It never creates, migrates, repairs, backs up,
+    /// or reopens the catalog.
+    pub fn open_current_portable(path: impl AsRef<Path>) -> AppResult<Self> {
+        let path = path.as_ref();
+        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+            .map_err(|error| {
+                storage_context("failed to open current portable sqlite catalog", error)
+            })?;
+        configure_portable_pre_transaction(&connection)?;
+        schema::portable_catalog::validate_current_portable_catalog(&connection).map_err(
+            |error| storage_context("failed to validate current portable sqlite catalog", error),
+        )?;
+        configure_portable_post_commit(&connection)?;
+        Self::finalize_connection(connection)
+    }
+
     fn from_connection(mut connection: Connection, options: ConnectionOptions) -> AppResult<Self> {
         configure_connection(&connection, options)?;
         schema::apply(&mut connection)?;
 
+        Self::finalize_connection(connection)
+    }
+
+    fn finalize_connection(connection: Connection) -> AppResult<Self> {
         let catalog_generation = Arc::new(AtomicU64::new(0));
         let hook_generation = Arc::clone(&catalog_generation);
         connection
@@ -215,6 +255,16 @@ fn configure_connection(connection: &Connection, options: ConnectionOptions) -> 
     set_synchronous_normal(connection)?;
 
     Ok(())
+}
+
+fn configure_portable_pre_transaction(connection: &Connection) -> AppResult<()> {
+    set_busy_timeout(connection, SQLITE_BUSY_TIMEOUT)?;
+    enable_foreign_keys(connection)
+}
+
+fn configure_portable_post_commit(connection: &Connection) -> AppResult<()> {
+    enable_wal_journal_mode(connection)?;
+    set_synchronous_normal(connection)
 }
 
 fn set_busy_timeout(connection: &Connection, timeout: Duration) -> AppResult<()> {

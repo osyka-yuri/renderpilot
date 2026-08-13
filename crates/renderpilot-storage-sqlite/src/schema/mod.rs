@@ -5,13 +5,9 @@
 //! Unknown or corrupt shapes rebuild from the composed baseline after a
 //! file-backed backup before rebuilds and non-additive migrations.
 //!
-//! Healthy CURRENT catalogs take a read-only keep path (validate only). Soft-heal
-//! of WIP `pending_file_mutations` CHECK shapes runs only when validation fails.
-//!
-//! **Soft-heal exit strategy:** the CHECK reshape for state `preparing` exists
-//! only to recover developer / pre-release DBs from the WIP shape. After one
-//! released schema cycle past v10, treat a wrong CHECK as Rebuild-only and
-//! delete the soft-heal path.
+//! Healthy CURRENT catalogs take a validation-only keep path. A malformed
+//! CURRENT catalog is backed up, then reset transactionally from the composed
+//! baseline.
 
 use std::collections::HashSet;
 
@@ -19,6 +15,11 @@ use renderpilot_application::AppResult;
 use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::storage_context;
+
+include!(concat!(
+    env!("OUT_DIR"),
+    "/portable_runtime_release_contract.rs"
+));
 
 pub(crate) mod backup;
 mod contract;
@@ -37,10 +38,11 @@ mod portable_catalog_tests;
 #[cfg(test)]
 mod tests;
 
-use self::ddl::pending_file_mutations;
 use self::pragmas::ForeignKeysState;
 use self::rebuild::{apply_baseline, reset_catalog_schema};
-use self::validation::{catalog_schema_is_valid, validate_catalog_schema};
+use self::validation::{
+    catalog_schema_is_valid, catalog_schema_is_valid_observational, validate_catalog_schema,
+};
 use self::version::database_has_user_schema;
 
 // Schema version history:
@@ -59,8 +61,6 @@ use self::version::database_has_user_schema;
 //   15 → 16: records the portable-runtime path-tag/receipt boundary. Existing
 //             game install paths are external data and are intentionally not
 //             rebased by catalog schema migration.
-const CURRENT_SCHEMA_VERSION: i32 = 16;
-
 pub(super) fn pragma_column_names(
     connection: &Connection,
     table_name: &str,
@@ -82,17 +82,21 @@ pub(super) fn pragma_column_names(
 /// upgraded linearly or rebuilt from the baseline (with pre-rebuild backup for
 /// file-backed databases).
 pub(crate) fn apply(connection: &mut Connection) -> AppResult<()> {
+    let plan = classify(connection)?;
+
+    if plan == Plan::Keep {
+        return Ok(());
+    }
+
     let foreign_keys = ForeignKeysState::capture_and_disable(connection)?;
-    let result = apply_plan(connection);
+    let result = apply_plan(connection, plan);
 
     foreign_keys.restore(connection, result)
 }
 
-fn apply_plan(connection: &mut Connection) -> AppResult<()> {
-    let plan = classify(connection)?;
-
+fn apply_plan(connection: &mut Connection, plan: Plan) -> AppResult<()> {
     match plan {
-        Plan::Keep => apply_keep(connection, false),
+        Plan::Keep => Ok(()),
         Plan::ApplyBaseline => apply_with_transaction(connection, |tx| {
             apply_baseline(tx)?;
             version::write(tx, CURRENT_SCHEMA_VERSION)?;
@@ -102,15 +106,10 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
             backup::backup_before_migration(connection, CURRENT_SCHEMA_VERSION)?;
             apply_with_transaction(connection, |tx| {
                 steps::run_from(tx, from)?;
-                // A pre-release v10 database can carry the old CHECK that
-                // rejects `preparing`. Heal that known shape before validating
-                // the complete current contract, still inside this transaction.
-                pending_file_mutations::ensure_correct_shape(tx)?;
                 if !catalog_schema_is_valid(tx)? {
-                    // Any other malformed historical shape follows the
-                    // documented rebuild policy. The pre-migration backup was
-                    // already created, and a failure below rolls this entire
-                    // upgrade/rebuild transaction back to the original schema.
+                    // The pre-migration backup is already complete. Reset in
+                    // this transaction only when the completed linear chain
+                    // does not satisfy the exact current contract.
                     reset_catalog_schema(tx)?;
                 }
                 validate_catalog_schema(tx)?;
@@ -122,27 +121,6 @@ fn apply_plan(connection: &mut Connection) -> AppResult<()> {
             apply_with_transaction(connection, reset_catalog_schema)
         }
     }
-}
-
-fn apply_keep(connection: &mut Connection, backup_already_created: bool) -> AppResult<()> {
-    if catalog_schema_is_valid(connection)? {
-        return Ok(());
-    }
-
-    // Soft-heal WIP catalogs originating from v10 with a CHECK that rejects
-    // `preparing`, without wiping the rest of the catalog.
-    apply_with_transaction(connection, |tx| {
-        pending_file_mutations::ensure_correct_shape(tx)
-    })?;
-
-    if catalog_schema_is_valid(connection)? {
-        return Ok(());
-    }
-
-    if !backup_already_created {
-        backup::backup_before_rebuild(connection)?;
-    }
-    apply_with_transaction(connection, reset_catalog_schema)
 }
 
 fn apply_with_transaction(
@@ -174,7 +152,11 @@ fn classify(connection: &Connection) -> AppResult<Plan> {
     let schema_version = version::read(connection)?;
 
     if schema_version == CURRENT_SCHEMA_VERSION {
-        return Ok(Plan::Keep);
+        return if catalog_schema_is_valid_observational(connection)? {
+            Ok(Plan::Keep)
+        } else {
+            Ok(Plan::Rebuild)
+        };
     }
     if schema_version == 0 {
         return if database_has_user_schema(connection)? {

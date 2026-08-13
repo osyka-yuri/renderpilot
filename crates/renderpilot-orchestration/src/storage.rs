@@ -20,8 +20,7 @@ const CATALOG_DB_FILE_NAME: &str = "catalog.db";
 pub fn open_catalog_storage() -> Result<SqliteStorage, ServiceError> {
     let path = catalog_db_path()?;
 
-    validate_catalog_db_path(&path)?;
-    ensure_catalog_directory(&path)?;
+    prepare_catalog_path(&path)?;
 
     SqliteStorage::open(&path).map_err(|error| {
         ServiceError::command_failed(format!(
@@ -29,6 +28,24 @@ pub fn open_catalog_storage() -> Result<SqliteStorage, ServiceError> {
             path.display()
         ))
     })
+}
+
+/// Returns the process-authenticated portable catalog and file-transaction
+/// roots after validating their fixed relationship and preparing only the
+/// catalog parent. Portable callers select one strict storage constructor;
+/// they never route through the general catalog opener.
+pub(crate) fn prepare_portable_catalog_after_commit() -> Result<(PathBuf, PathBuf), ServiceError> {
+    let paths = crate::portable::runtime_paths().ok_or_else(|| {
+        ServiceError::command_failed("authenticated portable runtime paths were not installed")
+    })?;
+    paths.validate().map_err(|detail| {
+        ServiceError::command_failed(format!("invalid portable runtime paths: {detail}"))
+    })?;
+    prepare_catalog_path(&paths.catalog_db_path)?;
+    Ok((
+        paths.catalog_db_path.clone(),
+        paths.file_transactions_root.clone(),
+    ))
 }
 
 /// Resolved absolute or relative path to the SQLite catalog file.
@@ -92,6 +109,11 @@ fn validate_catalog_db_path(path: &Path) -> Result<(), ServiceError> {
             path.display()
         ))),
     }
+}
+
+fn prepare_catalog_path(path: &Path) -> Result<(), ServiceError> {
+    validate_catalog_db_path(path)?;
+    ensure_catalog_directory(path)
 }
 
 fn ensure_catalog_directory(path: &Path) -> Result<(), ServiceError> {

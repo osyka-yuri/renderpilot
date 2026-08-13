@@ -7,7 +7,7 @@ use semver::Version;
 use super::{
     epoch_namespace::establish_epoch,
     error::{PortableRuntimeError, Result},
-    generation::{load_selected, publish},
+    generation::{InitialSelectedGeneration, inspect_initial_selection, publish},
     health::validate_selected_app,
     process_admission::AdmissionLock,
     random::hex_32,
@@ -56,6 +56,7 @@ fn run_supervisor() -> Result<()> {
     let _epoch = establish_epoch(&authority_root, &epoch)?;
     let selection_root = selection_root(&generation_store);
     recover_prior_transactions(
+        &generation_store,
         &update_root,
         &root.join("data").join("catalog.db"),
         &selection_root,
@@ -121,21 +122,37 @@ fn select_initial_generation(
         .map_err(|error| PortableRuntimeError::new("portable_rpu_manifest", error.to_string()))?;
 
     if let Some(record) = existing_selection {
-        let stored = load_selected(generation_store, &record.generation_sha256)?;
-        let selected_version = Version::parse(&stored.version).map_err(|error| {
-            PortableRuntimeError::new("portable_generation_receipt", error.to_string())
-        })?;
-        if selected_version >= embedded_version {
-            return Ok(CurrentGeneration {
-                generation_root: stored.generation_root,
-                app: stored.app,
-                generation_sha256: stored.rpu_sha256,
-                version: stored.version,
-                minimum_schema: stored.minimum_schema,
-                maximum_schema: stored.maximum_schema,
-                selection_predecessor_generation_sha256: Some(record.generation_sha256),
-                quiesced_predecessor_generation_sha256: None,
-            });
+        match inspect_initial_selection(generation_store, &record.generation_sha256)? {
+            InitialSelectedGeneration::Current(stored) => {
+                let selected_version = Version::parse(&stored.version).map_err(|error| {
+                    PortableRuntimeError::new("portable_generation_receipt", error.to_string())
+                })?;
+                if selected_version >= embedded_version {
+                    return Ok(CurrentGeneration {
+                        generation_root: stored.generation_root,
+                        app: stored.app,
+                        generation_sha256: stored.rpu_sha256,
+                        version: stored.version,
+                        minimum_supervisor_protocol: stored.minimum_supervisor_protocol,
+                        app_session_protocol: stored.app_session_protocol,
+                        minimum_schema: stored.minimum_schema,
+                        maximum_schema: stored.maximum_schema,
+                        selection_predecessor_generation_sha256: Some(record.generation_sha256),
+                        quiesced_predecessor_generation_sha256: None,
+                    });
+                }
+            }
+            InitialSelectedGeneration::LegacyV2Metadata(legacy) => {
+                let selected_version = Version::parse(&legacy.version).map_err(|error| {
+                    PortableRuntimeError::new("portable_generation_receipt", error.to_string())
+                })?;
+                if selected_version >= embedded_version {
+                    return Err(PortableRuntimeError::new(
+                        "portable_full_package_upgrade_required",
+                        "selected legacy portable generation requires a newer full package",
+                    ));
+                }
+            }
         }
         return publish_embedded_generation(generation_store, rpu, Some(record.generation_sha256));
     }
@@ -155,6 +172,8 @@ fn publish_embedded_generation(
         app,
         generation_sha256: rpu.rpu_sha256,
         version: rpu.manifest.version,
+        minimum_supervisor_protocol: rpu.manifest.minimum_supervisor_protocol,
+        app_session_protocol: rpu.manifest.app_session_protocol,
         minimum_schema: rpu.manifest.minimum_schema,
         maximum_schema: rpu.manifest.maximum_schema,
         selection_predecessor_generation_sha256,
@@ -174,6 +193,8 @@ fn publish_next_generation(
         app,
         generation_sha256: staged.rpu_sha256,
         version: staged.manifest.version,
+        minimum_supervisor_protocol: staged.manifest.minimum_supervisor_protocol,
+        app_session_protocol: staged.manifest.app_session_protocol,
         minimum_schema: staged.manifest.minimum_schema,
         maximum_schema: staged.manifest.maximum_schema,
         selection_predecessor_generation_sha256: Some(previous.generation_sha256.clone()),

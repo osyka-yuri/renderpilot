@@ -22,7 +22,13 @@ The completed operation journal is best-effort, informational history. Failure t
 
 ## SQLite and migrations
 
-The current schema version is 16. Migrations are linear and validated. Portable startup accepts the released 1.x schema boundaries v4 and v8 through v16, applies the complete declared chain in one transaction after a verified snapshot, and never falls back to rebuilding user data. Unreleased gaps, older schemas, and databases from a newer schema are rejected. Before a general-storage migration or required rebuild, storage uses SQLite's online backup API and validates the backup. Schema changes must update the declared version, migration step, physical contract, repository behavior, and tests together.
+The portable runtime release contract declares the current schema and its released compatibility floor. Declared migration steps define the supported intermediate schemas. Unreleased gaps, schemas below the floor, and databases from a newer schema are rejected.
+
+A current portable catalog is validated without a snapshot or mutation. An older supported catalog is changed only after the supervisor has committed a verified snapshot and issued an authenticated migration permit; the signed App generation then applies its complete schema chain in one transaction. An absent catalog, or an empty SQLite v0 catalog without user objects, is initialized only after durable activation commit. A v0 catalog containing user objects is malformed and is rejected.
+
+The stable supervisor owns snapshots, journals, receipts, publication, selection, and recovery. The signed App generation owns schema inspection and its schema-specific migration chain. This separation lets a compatible installed supervisor run a later signed generation without granting either process the other's authority. Portable migration never falls back to rebuilding user data. General, nonportable storage may rebuild a malformed schema only after creating and validating an SQLite backup.
+
+Schema changes must update the shared release contract, migration steps, physical contract, repository behavior, and tests together.
 
 The database holds catalog entities, scan state, operation and pending-mutation records, add-on capabilities and installations, cover metadata, and related settings. A scan persists its game, components, and artifacts in one transaction. SQLite runs in WAL mode, and typed rollback baselines use a private storage encoding behind repository contracts. Large library payloads and covers live in filesystem storage rather than SQLite.
 
@@ -37,5 +43,6 @@ Portable startup derives the data root beside the raw supervisor and passes the 
 - [Catalog execution](../../crates/renderpilot-orchestration/src/catalog/execute/mod.rs)
 - [Game mutation lock](../../crates/renderpilot-orchestration/src/game_mutation_lock.rs)
 - [Baseline handling](../../crates/renderpilot-orchestration/src/coordinated_files/baseline.rs)
-- [Schema version](../../crates/renderpilot-storage-sqlite/src/schema/version.rs)
+- [Portable runtime release contract](../../data/contracts/portable-runtime-release.json)
+- [Storage contract projection](../../crates/renderpilot-storage-sqlite/build.rs)
 - [Portable layout](../../crates/renderpilot-orchestration/src/portable.rs)

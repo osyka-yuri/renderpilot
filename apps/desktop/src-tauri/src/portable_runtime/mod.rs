@@ -5,6 +5,7 @@
 //! resume mode, UI confirmation, or self-replacement path exists here.
 
 pub mod activation;
+pub mod app_catalog_migration;
 pub mod app_process;
 pub mod app_protocol;
 pub mod bootstrap;

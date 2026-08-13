@@ -101,13 +101,25 @@ fn create_desktop_builder() -> DesktopBuilder {
 /// the supervisor's durable CommitPermit, never during TrialReadOnly.
 #[cfg(all(windows, feature = "portable"))]
 pub(crate) fn complete_portable_activation(app: &tauri::AppHandle) -> Result<(), String> {
-    let result = portable_runtime::activation::prove_visible_and_commit(app, || {
-        let context = Arc::new(Context::open().map_err(|error| {
-            portable_runtime::error::PortableRuntimeError::new(
-                "portable_context",
-                error.to_string(),
-            )
-        })?);
+    let result = portable_runtime::activation::prove_visible_and_commit(app, |catalog| {
+        let context = Arc::new(match catalog {
+            portable_runtime::app_catalog_migration::CatalogClassification::Fresh => {
+                Context::open_fresh_portable_after_commit().map_err(|error| {
+                    portable_runtime::error::PortableRuntimeError::new(
+                        "portable_fresh_catalog_commit",
+                        error.to_string(),
+                    )
+                })?
+            }
+            portable_runtime::app_catalog_migration::CatalogClassification::Existing { .. } => {
+                Context::open_current_portable_after_commit().map_err(|error| {
+                    portable_runtime::error::PortableRuntimeError::new(
+                        "portable_context",
+                        error.to_string(),
+                    )
+                })?
+            }
+        });
         if !app.manage(context) {
             return Err(portable_runtime::error::PortableRuntimeError::new(
                 "portable_context",

@@ -32,7 +32,8 @@ use windows_sys::Win32::{
 
 use super::{
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableStartupV3, read_message, reader, write_message,
+        AppControlMessage, AppStatusMessage, PortableAppSessionV1, read_message, reader,
+        write_message,
     },
     error::{PortableRuntimeError, Result},
     win32::{
@@ -59,7 +60,7 @@ pub struct TrialProcess {
 }
 
 impl TrialProcess {
-    pub fn spawn(app: &Path, job: &KillOnCloseJob, startup: &PortableStartupV3) -> Result<Self> {
+    pub fn spawn(app: &Path, job: &KillOnCloseJob, startup: &PortableAppSessionV1) -> Result<Self> {
         let (control_read, control_write) = private_pipe()?;
         let (status_read, status_write) = private_pipe()?;
         let child_handles = [
@@ -144,12 +145,9 @@ impl TrialProcess {
             control: control_write,
             status: reader(status_read),
         };
-        write_message(
-            &mut child.control,
-            &AppControlMessage::Startup(Box::new(startup.clone())),
-        )?;
+        write_message(&mut child.control, &startup_control_message(startup))?;
         match read_message::<AppStatusMessage>(&mut child.status)? {
-            AppStatusMessage::TrialHello { challenge } if challenge == startup.challenge => {}
+            AppStatusMessage::TrialHello(hello) if hello.challenge == startup.challenge => {}
             _ => {
                 return Err(PortableRuntimeError::new(
                     "portable_app_protocol",
@@ -167,26 +165,21 @@ impl TrialProcess {
         read_message(&mut self.status)
     }
 
-    pub fn wait_trial_ready(&mut self, startup: &PortableStartupV3) -> Result<()> {
+    pub fn wait_trial_ready(&mut self, startup: &PortableAppSessionV1) -> Result<u32> {
         match self.receive()? {
-            AppStatusMessage::TrialReady {
-                transcript_sha256,
-                runtime_paths_sha256,
-                schema_observed,
-                db_query_only: true,
-                webview_profile_ready: true,
-                ui_bundle_ready: true,
-                visible_window_ready: true,
-                event_loop_roundtrip: true,
-                supervisor_session_transcript_sha256,
-                ..
-            } if transcript_sha256 == startup.transcript_sha256()?
-                && runtime_paths_sha256 == startup.runtime_paths_sha256()?
-                && supervisor_session_transcript_sha256
-                    == startup.supervisor_session_transcript_sha256
-                && schema_observation_supported(startup, schema_observed) =>
+            AppStatusMessage::TrialReady(ready)
+                if ready.db_query_only
+                    && ready.webview_profile_ready
+                    && ready.ui_bundle_ready
+                    && ready.visible_window_ready
+                    && ready.event_loop_roundtrip
+                    && ready.transcript_sha256 == startup.transcript_sha256()?
+                    && ready.runtime_paths_sha256 == startup.runtime_paths_sha256()?
+                    && ready.supervisor_session_transcript_sha256
+                        == startup.supervisor_session_transcript_sha256
+                    && schema_observation_supported(startup, ready.schema_observed) =>
             {
-                Ok(())
+                Ok(ready.schema_observed)
             }
             _ => Err(PortableRuntimeError::new(
                 "portable_app_protocol",
@@ -211,11 +204,16 @@ impl TrialProcess {
     }
 }
 
+pub(super) fn startup_control_message(startup: &PortableAppSessionV1) -> AppControlMessage {
+    AppControlMessage::startup(startup.clone())
+}
+
 pub(crate) fn schema_observation_supported(
-    startup: &PortableStartupV3,
+    startup: &PortableAppSessionV1,
     schema_observed: u32,
 ) -> bool {
-    schema_observed == 0 || schema_observed == startup.maximum_schema
+    schema_observed == 0
+        || (schema_observed >= startup.minimum_schema && schema_observed <= startup.maximum_schema)
 }
 
 fn private_pipe() -> Result<(File, File)> {

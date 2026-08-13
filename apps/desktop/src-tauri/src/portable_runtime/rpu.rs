@@ -13,13 +13,21 @@ use super::{
 };
 
 pub const RPU_PROTOCOL: &str = "renderpilot-portable-rpu-v1";
-pub const SUPERVISOR_PROTOCOL: u16 = 1;
-pub const MINIMUM_SCHEMA: u32 = 4;
-pub const MAXIMUM_SCHEMA: u32 = 16;
+/// Oldest catalog schema shipped by a public RenderPilot 1.x release.
+///
+/// This is a stable compatibility floor, not the schema compiled into the
+/// supervisor. Every portable App generation retains the complete migration
+/// chain from this floor to its own current schema.
+pub use renderpilot_storage_sqlite::{
+    CURRENT_PORTABLE_SCHEMA_VERSION as MAXIMUM_SCHEMA,
+    MINIMUM_PORTABLE_SCHEMA_VERSION as MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL,
+    PORTABLE_SUPERVISOR_CAPABILITY,
+};
 const FOOTER_MAGIC: &[u8; 5] = b"RPSX1";
 const FOOTER_LEN: usize = 102;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RpuManifest {
     pub protocol: String,
     pub platform: String,
@@ -27,6 +35,7 @@ pub struct RpuManifest {
     pub app_sha256: String,
     pub app_length: u64,
     pub minimum_supervisor_protocol: u16,
+    pub app_session_protocol: String,
     pub minimum_schema: u32,
     pub maximum_schema: u32,
     pub portable_role: String,
@@ -168,9 +177,9 @@ pub fn verify_rpu(bytes: &[u8], encoded_signature: &str) -> Result<VerifiedRpu> 
     if manifest.protocol != RPU_PROTOCOL
         || manifest.platform != "windows-x86_64-portable"
         || manifest.portable_role != "app"
-        || manifest.minimum_supervisor_protocol > SUPERVISOR_PROTOCOL
-        || manifest.minimum_schema != MINIMUM_SCHEMA
-        || manifest.maximum_schema != MAXIMUM_SCHEMA
+        || manifest.minimum_supervisor_protocol != PORTABLE_SUPERVISOR_CAPABILITY
+        || manifest.app_session_protocol != PORTABLE_APP_SESSION_PROTOCOL
+        || !schema_range_is_supported(manifest.minimum_schema, manifest.maximum_schema)
         || manifest.app_length != app_bytes.len() as u64
         || manifest.app_sha256 != sha256_hex(&app_bytes)
     {
@@ -184,6 +193,14 @@ pub fn verify_rpu(bytes: &[u8], encoded_signature: &str) -> Result<VerifiedRpu> 
         manifest,
         app_bytes,
     })
+}
+
+/// Validates a signed App generation's schema capability without binding the
+/// stable supervisor to that generation's current schema.
+pub fn schema_range_is_supported(minimum_schema: u32, maximum_schema: u32) -> bool {
+    minimum_schema == MINIMUM_SCHEMA
+        && maximum_schema >= minimum_schema
+        && i32::try_from(maximum_schema).is_ok()
 }
 
 /// Verifies a signed RPU and binds its canonical manifest version to the

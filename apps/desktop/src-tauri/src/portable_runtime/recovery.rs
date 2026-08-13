@@ -5,8 +5,9 @@ use super::{
     cleanup::{cleanup_snapshot_after_terminal, cleanup_staging_after_terminal},
     error::{PortableRuntimeError, Result},
     journal::{
-        JournalAppendKind, JournalEntry, JournalPhase, append_recovery, journal_path,
-        plan_recovery, read_entries, terminal_receipt_exists, write_terminal_receipt,
+        JournalAppendKind, JournalEntry, JournalPhase, aborted_before_origin,
+        append_recovery_with_outbox, journal_path, plan_recovery, read_entries,
+        reconcile_operation_outbox, terminal_receipt_exists, write_terminal_receipt,
     },
     selection::{
         SelectionRecord, SelectionState, SelectionTip, append_cleared,
@@ -34,11 +35,13 @@ pub fn recovery_action(journal_path: &Path) -> Result<RecoveryAction> {
 /// never restores the catalog or selection and records a permit replay marker
 /// for the next authenticated activation cycle.
 pub(in crate::portable_runtime) fn recover_prior_transactions(
+    generation_store_root: &Path,
     update_root: &Path,
     catalog: &Path,
     selection_root: &Path,
     authority: &SupervisorSessionAuthority,
 ) -> Result<()> {
+    reconcile_operation_outbox(generation_store_root, update_root)?;
     let transactions = update_root.join("transactions");
     let entries = match std::fs::read_dir(&transactions) {
         Ok(entries) => entries,
@@ -61,6 +64,12 @@ pub(in crate::portable_runtime) fn recover_prior_transactions(
             ));
         }
         let journal = journal_path(update_root, &transaction);
+        if aborted_before_origin(generation_store_root, &journal)? {
+            // An authenticated origin intent proves this is the exact
+            // pre-Prepared abort shape. Recovery neither fabricates nor
+            // deletes a journal for it.
+            continue;
+        }
         if !journal.exists() {
             return Err(PortableRuntimeError::new(
                 "portable_recovery_namespace",
@@ -68,15 +77,22 @@ pub(in crate::portable_runtime) fn recover_prior_transactions(
             ));
         }
         match recovery_action(&journal)? {
-            RecoveryAction::RollBackPreCommit => {
-                rollback_precommit(&journal, catalog, selection_root, authority)?
-            }
+            RecoveryAction::RollBackPreCommit => rollback_precommit(
+                &journal,
+                generation_store_root,
+                catalog,
+                selection_root,
+                authority,
+            )?,
             RecoveryAction::RollForwardCommitted => {
-                roll_forward_committed(&journal, selection_root, authority)?
+                roll_forward_committed(&journal, generation_store_root, selection_root, authority)?
             }
-            RecoveryAction::FinalizeTerminalReceipt => {
-                complete_terminal_receipt(&journal, selection_root, authority)?
-            }
+            RecoveryAction::FinalizeTerminalReceipt => complete_terminal_receipt(
+                &journal,
+                generation_store_root,
+                selection_root,
+                authority,
+            )?,
             RecoveryAction::NeedsManualRecovery => {
                 return Err(PortableRuntimeError::new(
                     "portable_recovery_manual",
@@ -92,6 +108,7 @@ pub(in crate::portable_runtime) fn recover_prior_transactions(
 
 fn complete_terminal_receipt(
     journal: &Path,
+    generation_store_root: &Path,
     selection_root: &Path,
     authority: &SupervisorSessionAuthority,
 ) -> Result<()> {
@@ -125,6 +142,7 @@ fn complete_terminal_receipt(
         last.phase,
         "terminal-receipt-finalization",
         last.selection_record_sha256.clone(),
+        generation_store_root,
         authority,
     )?;
     write_terminal_receipt(journal, authority)
@@ -132,6 +150,7 @@ fn complete_terminal_receipt(
 
 fn rollback_precommit(
     journal: &Path,
+    generation_store_root: &Path,
     catalog: &Path,
     selection_root: &Path,
     authority: &SupervisorSessionAuthority,
@@ -152,6 +171,7 @@ fn rollback_precommit(
             JournalPhase::RollingBack,
             "precommit-rollback",
             rollback_selection_hash.clone(),
+            generation_store_root,
             authority,
         )?;
     }
@@ -181,6 +201,7 @@ fn rollback_precommit(
         JournalPhase::RolledBack,
         "precommit-rollback-complete",
         rollback_selection_hash,
+        generation_store_root,
         authority,
     )?;
     write_terminal_receipt(journal, authority)?;
@@ -386,6 +407,7 @@ fn append_selection_compensation(
 
 fn roll_forward_committed(
     journal: &Path,
+    generation_store_root: &Path,
     selection_root: &Path,
     authority: &SupervisorSessionAuthority,
 ) -> Result<()> {
@@ -401,6 +423,7 @@ fn roll_forward_committed(
             JournalPhase::CommitObserved,
             "committed-permit-replay-required",
             last.selection_record_sha256.clone(),
+            generation_store_root,
             authority,
         )?;
     }
@@ -475,6 +498,7 @@ fn append_recovery_phase(
     phase: JournalPhase,
     transcript: &str,
     selection_record_sha256: Option<String>,
+    generation_store_root: &Path,
     authority: &SupervisorSessionAuthority,
 ) -> Result<()> {
     let transition = plan_recovery(journal)?.ok_or_else(|| {
@@ -489,8 +513,9 @@ fn append_recovery_phase(
             "recovery transition target did not match the requested phase",
         ));
     }
-    append_recovery(
+    append_recovery_with_outbox(
         journal,
+        generation_store_root,
         JournalEntry {
             protocol: 0,
             sequence: 0,

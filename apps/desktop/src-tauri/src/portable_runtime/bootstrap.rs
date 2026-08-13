@@ -12,7 +12,7 @@ use std::{
 use super::{
     activation::install_trial_session,
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableStartupV3, read_message, write_message,
+        AppControlMessage, AppStatusMessage, PortableAppSessionV1, read_message, write_message,
     },
     error::{PortableRuntimeError, Result},
 };
@@ -23,7 +23,7 @@ const STATUS_ARGUMENT: &str = "--renderpilot-status-handle=";
 
 pub enum EarlyDispatch {
     DirectLaunchExit,
-    App(Box<PortableStartupV3>),
+    App(Box<PortableAppSessionV1>),
 }
 
 /// Must be called before logger, filesystem, WebView2, Tauri, or GUI startup.
@@ -38,7 +38,7 @@ pub fn dispatch_before_desktop() -> Result<EarlyDispatch> {
     Ok(EarlyDispatch::DirectLaunchExit)
 }
 
-fn receive_app_startup(args: &[OsString]) -> Result<PortableStartupV3> {
+fn receive_app_startup(args: &[OsString]) -> Result<PortableAppSessionV1> {
     let control = parse_handle(args.get(2), CONTROL_ARGUMENT)?;
     let status = parse_handle(args.get(3), STATUS_ARGUMENT)?;
     if control == status {
@@ -57,16 +57,14 @@ fn receive_app_startup(args: &[OsString]) -> Result<PortableStartupV3> {
         _ => {
             return Err(PortableRuntimeError::new(
                 "portable_startup_invalid",
-                "first App message was not PortableStartupV3",
+                "first App message was not PortableAppSessionV1",
             ));
         }
     };
     startup.validate()?;
     write_message(
         &mut status,
-        &AppStatusMessage::TrialHello {
-            challenge: startup.challenge.clone(),
-        },
+        &AppStatusMessage::trial_hello(startup.challenge.clone()),
     )?;
     install_trial_session(control, status, startup.clone())?;
     Ok(startup)

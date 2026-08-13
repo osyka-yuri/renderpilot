@@ -18,6 +18,7 @@ use windows_sys::Win32::{
 use super::{
     error::{PortableRuntimeError, Result},
     provenance::{self, SealDomain},
+    random::hex_32,
     signature::{sha256_file, sha256_hex},
     win32::process::path_wide_nul,
 };
@@ -118,6 +119,18 @@ pub fn load_committed(
     Ok(receipt)
 }
 
+/// Revalidates the immutable backup immediately before a caller relies on it
+/// as rollback authority for a destructive transition.
+pub fn verify_unchanged(receipt: &SnapshotReceipt) -> Result<()> {
+    if sha256_file(&receipt.backup_path)? != receipt.backup_sha256 {
+        return Err(PortableRuntimeError::new(
+            "portable_migration_backup",
+            "backup changed before migration",
+        ));
+    }
+    Ok(())
+}
+
 pub fn restore(receipt: &SnapshotReceipt, catalog: &Path) -> Result<()> {
     if sha256_file(&receipt.backup_path)? != receipt.backup_sha256 {
         return Err(PortableRuntimeError::new(
@@ -131,16 +144,13 @@ pub fn restore(receipt: &SnapshotReceipt, catalog: &Path) -> Result<()> {
         PortableRuntimeError::new("portable_snapshot", "catalog had no parent directory")
     })?;
     std::fs::create_dir_all(parent)?;
+    // A restoration is an immutable attempt, too.  Never reuse or remove a
+    // stranded candidate from an interrupted predecessor.
     let temp = parent.join(format!(
-        ".renderpilot-restore-{}.tmp",
-        receipt.transaction_id
+        ".renderpilot-restore-{}.{}.tmp",
+        receipt.transaction_id,
+        hex_32()?
     ));
-    if temp.exists() {
-        return Err(PortableRuntimeError::new(
-            "portable_snapshot_restore",
-            "existing restore nonce file was retained; no raw-path cleanup is authorized",
-        ));
-    }
     let bytes = std::fs::read(&receipt.backup_path)?;
     let mut file = OpenOptions::new()
         .create_new(true)

@@ -6,11 +6,12 @@ use super::{
     app_process::TrialProcess,
     app_protocol::{
         AppControlMessage, AppStatusMessage, PortableUpdateRequest, PortableUpdateResponse,
+        UpdateRequest,
     },
     error::{PortableRuntimeError, Result},
     request_gate::RequestGate,
     rpu::{VerifiedRpu, canonical_version},
-    staging::stage_verified_rpu_expected,
+    staging::{StagedVerifiedRpu, stage_verified_rpu_expected},
 };
 
 const PORTABLE_PLATFORM: &str = "windows-x86_64-portable";
@@ -24,7 +25,7 @@ const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VE
 #[derive(Default)]
 pub struct SupervisorUpdateState {
     offer: Option<UpdateOffer>,
-    staged: Option<VerifiedRpu>,
+    staged: Option<StagedVerifiedRpu>,
     gate: RequestGate,
 }
 
@@ -32,6 +33,49 @@ impl SupervisorUpdateState {
     pub fn is_uncertain(&self) -> bool {
         self.gate.is_uncertain()
     }
+
+    #[cfg(test)]
+    pub(super) fn stage_for_test(&mut self, staged: StagedVerifiedRpu) {
+        self.staged = Some(staged);
+    }
+}
+
+/// The update portion of the private App/supervisor transport.  Keeping this
+/// narrow lets deterministic tests script only the request/reply boundary;
+/// production continues to use the inherited private pipes through
+/// `TrialProcess`.
+pub(super) trait UpdateSink {
+    fn receive_update_request(&mut self) -> Result<UpdateRequest>;
+    fn send_update_response(
+        &mut self,
+        request_id: String,
+        response: PortableUpdateResponse,
+    ) -> Result<()>;
+}
+
+impl UpdateSink for TrialProcess {
+    fn receive_update_request(&mut self) -> Result<UpdateRequest> {
+        let AppStatusMessage::UpdateRequest(request) = self.receive()? else {
+            return Err(PortableRuntimeError::new(
+                "portable_update_protocol",
+                "expected authenticated update request",
+            ));
+        };
+        Ok(request)
+    }
+
+    fn send_update_response(
+        &mut self,
+        request_id: String,
+        response: PortableUpdateResponse,
+    ) -> Result<()> {
+        self.send(&AppControlMessage::update_response(request_id, response))
+    }
+}
+
+enum RequestDisposition {
+    Reply(PortableUpdateResponse),
+    ApplyReady(VerifiedRpu),
 }
 
 struct UpdateOffer {
@@ -67,38 +111,46 @@ pub fn serve_one(
     current_version: &str,
     update_root: &std::path::Path,
 ) -> Result<Option<VerifiedRpu>> {
-    let AppStatusMessage::UpdateRequest {
-        request_id,
-        request,
-    } = trial.receive()?
-    else {
-        return Err(PortableRuntimeError::new(
-            "portable_update_protocol",
-            "expected authenticated update request",
-        ));
-    };
+    serve_one_with_sink(trial, state, current_version, update_root)
+}
 
-    let response = match request {
-        PortableUpdateRequest::Check => check_update(state, current_version),
-        PortableUpdateRequest::Download => download_update(state, update_root),
-        PortableUpdateRequest::Apply => accept_apply(state)?,
-    };
-
-    let accepted = matches!(response, PortableUpdateResponse::ApplyAccepted);
-    if let Err(error) = trial.send(&AppControlMessage::UpdateResponse {
-        request_id,
-        response,
-    }) {
-        if accepted {
-            state.gate.close_uncertain();
+pub(super) fn serve_one_with_sink(
+    sink: &mut impl UpdateSink,
+    state: &mut SupervisorUpdateState,
+    current_version: &str,
+    update_root: &std::path::Path,
+) -> Result<Option<VerifiedRpu>> {
+    let request = sink.receive_update_request()?;
+    let request_id = request.request_id;
+    let disposition = match request.request {
+        PortableUpdateRequest::Check(_) => {
+            RequestDisposition::Reply(check_update(state, current_version))
         }
-        return Err(error);
+        PortableUpdateRequest::Download(_) => {
+            RequestDisposition::Reply(download_update(state, update_root))
+        }
+        PortableUpdateRequest::Apply(_) => accept_apply(state),
+    };
+
+    match disposition {
+        RequestDisposition::Reply(response) => {
+            sink.send_update_response(request_id, response)?;
+            Ok(None)
+        }
+        RequestDisposition::ApplyReady(verified) => {
+            // `verified` exists only after Apply consumed and revalidated the
+            // non-Clone staged capability. Constructing/sending acceptance is
+            // deliberately the next step, so a failed revalidation can only
+            // produce a recoverable rejection.
+            let response = PortableUpdateResponse::apply_accepted();
+            if let Err(error) = sink.send_update_response(request_id, response) {
+                state.gate.close_uncertain();
+                return Err(error);
+            }
+            state.gate.close_recoverable();
+            Ok(Some(verified))
+        }
     }
-    if accepted {
-        state.gate.close_recoverable();
-        return Ok(state.staged.take());
-    }
-    Ok(None)
 }
 
 fn check_update(
@@ -113,19 +165,17 @@ fn check_update(
                 state.staged = None;
             }
             let offer = state.offer.as_ref();
-            PortableUpdateResponse::Check {
+            PortableUpdateResponse::check(
                 available,
-                current_version: current_version.to_owned(),
-                version: offer
+                current_version,
+                offer
                     .map(|offer| offer.version.clone())
                     .unwrap_or_else(|| current_version.to_owned()),
-                date: offer.and_then(|offer| offer.date.clone()),
-                body: offer.map(|offer| offer.body.clone()).unwrap_or_default(),
-            }
+                offer.and_then(|offer| offer.date.clone()),
+                offer.map(|offer| offer.body.clone()).unwrap_or_default(),
+            )
         }
-        Err(error) => PortableUpdateResponse::Rejected {
-            code: error.code().to_owned(),
-        },
+        Err(error) => PortableUpdateResponse::rejected(error.code()),
     }
 }
 
@@ -134,32 +184,34 @@ fn download_update(
     update_root: &std::path::Path,
 ) -> PortableUpdateResponse {
     let Some(offer) = state.offer.as_ref() else {
-        return PortableUpdateResponse::Rejected {
-            code: "portable_update_offer_missing".to_owned(),
-        };
+        return PortableUpdateResponse::rejected("portable_update_offer_missing");
     };
     match download_and_stage(update_root, offer) {
         Ok((length, staged)) => {
             state.staged = Some(staged);
-            PortableUpdateResponse::Downloaded {
-                content_length: length,
-            }
+            PortableUpdateResponse::downloaded(length)
         }
-        Err(error) => PortableUpdateResponse::Rejected {
-            code: error.code().to_owned(),
-        },
+        Err(error) => PortableUpdateResponse::rejected(error.code()),
     }
 }
 
-fn accept_apply(state: &mut SupervisorUpdateState) -> Result<PortableUpdateResponse> {
-    state.gate.begin()?;
-    if state.staged.is_some() {
-        return Ok(PortableUpdateResponse::ApplyAccepted);
+fn accept_apply(state: &mut SupervisorUpdateState) -> RequestDisposition {
+    if let Err(error) = state.gate.begin() {
+        return RequestDisposition::Reply(PortableUpdateResponse::rejected(error.code()));
     }
-    state.gate.close_recoverable();
-    Ok(PortableUpdateResponse::Rejected {
-        code: "portable_update_stage_missing".to_owned(),
-    })
+    let Some(staged) = state.staged.take() else {
+        state.gate.close_recoverable();
+        return RequestDisposition::Reply(PortableUpdateResponse::rejected(
+            "portable_update_stage_missing",
+        ));
+    };
+    match staged.into_verified() {
+        Ok(verified) => RequestDisposition::ApplyReady(verified),
+        Err(error) => {
+            state.gate.close_recoverable();
+            RequestDisposition::Reply(PortableUpdateResponse::rejected(error.code()))
+        }
+    }
 }
 
 fn fetch_offer(current_version: &str) -> Result<Option<UpdateOffer>> {
@@ -218,7 +270,7 @@ fn fetch_offer(current_version: &str) -> Result<Option<UpdateOffer>> {
 fn download_and_stage(
     update_root: &std::path::Path,
     offer: &UpdateOffer,
-) -> Result<(u64, VerifiedRpu)> {
+) -> Result<(u64, StagedVerifiedRpu)> {
     let response = http_client(DOWNLOAD_TIMEOUT)?
         .get(&offer.url)
         .send()
@@ -232,9 +284,9 @@ fn download_and_stage(
         "portable_update_download",
         "portable RPU exceeded maximum size",
     )?;
-    let (_, verified) =
+    let staged =
         stage_verified_rpu_expected(update_root, &bytes, &offer.signature, &offer.version)?;
-    Ok((bytes.len() as u64, verified))
+    Ok((bytes.len() as u64, staged))
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client> {

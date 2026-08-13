@@ -1,157 +1,162 @@
-use std::path::Path;
+//! Stable-supervisor migration authority.
+//!
+//! This module deliberately contains no App schema transition or exact catalog
+//! inspection. The signed App owns those release-specific operations; the
+//! stable supervisor owns only observation, snapshots, journal intent, and
+//! sealed receipts that bind its own rollback authority to the App report.
 
-use serde::{Deserialize, Serialize};
+use std::{io::Write, path::Path};
+
+use rusqlite::{Connection, OpenFlags};
+use serde::Serialize;
 
 use super::{
+    app_protocol::CatalogMigrationReport,
     error::{PortableRuntimeError, Result},
     provenance::{self, SealDomain},
     signature::sha256_file,
     snapshot::SnapshotReceipt,
 };
 
-pub const PORTABLE_SCHEMA_VERSION: u32 = 16;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MigrationReceipt {
-    pub source_version: u32,
-    pub target_version: u32,
-    pub catalog_sha256: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub backup_sha256: Option<String>,
-    /// The portable data root is represented relative to the moved root; game
-    /// installation values remain external and UI-only values remain virtual.
-    pub portable_data_path_tag: String,
-    pub external_paths_preserved: bool,
-    pub virtual_paths_omitted: bool,
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct SupervisorMigrationReceipt<'a> {
+    protocol: u16,
+    snapshot_receipt_sha256: &'a str,
+    snapshot_catalog_sha256: &'a str,
+    snapshot_backup_sha256: &'a str,
+    app_report: &'a CatalogMigrationReport,
 }
 
-/// The supervisor owns the bounded released-v1.x→current migration. It delegates every
-/// schema inspection, DDL, checkpoint, and validation operation to the
-/// storage crate's approved crate-root API; portable orchestration never
-/// performs private SQL migrations.
-pub fn migrate_to_current(
-    catalog: &Path,
-    snapshot: &SnapshotReceipt,
-    receipt_path: &Path,
-) -> Result<MigrationReceipt> {
-    let source = read_schema_version(catalog)?;
-    if source == PORTABLE_SCHEMA_VERSION {
-        return validate_current_schema_with_backup(catalog, Some(&snapshot.backup_sha256));
-    }
-    if sha256_file(&snapshot.backup_path)? != snapshot.backup_sha256 {
-        return Err(PortableRuntimeError::new(
-            "portable_migration_backup",
-            "backup changed before migration",
-        ));
-    }
-    let object_id = format!("migration:{}", snapshot.transaction_id);
-    let migration_intent =
-        format!("upgrade-v{source}-to-v{PORTABLE_SCHEMA_VERSION}-after-snapshot");
+/// Reads only SQLite's public schema marker. This generic observation lets a
+/// stable supervisor admit later App generations without owning their schema
+/// chain.
+pub fn read_catalog_schema(path: &Path) -> Result<u32> {
+    let connection = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))?;
+    connection
+        .execute_batch("PRAGMA query_only = ON;")
+        .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))?;
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))?;
+    u32::try_from(version).map_err(|_| {
+        PortableRuntimeError::new(
+            "portable_schema_unsupported",
+            "catalog schema version was negative",
+        )
+    })
+}
+
+pub fn begin_supervised_migration(
+    transaction_id: &str,
+    source_schema: u32,
+    target_schema: u32,
+) -> Result<()> {
     provenance::intent(
         SealDomain::Migration,
-        &object_id,
-        migration_intent.as_bytes(),
-    )?;
-    let report = renderpilot_storage_sqlite::transition_portable_catalog_schema(
-        catalog,
-        renderpilot_storage_sqlite::PortableCatalogSchemaTransition::UpgradeToCurrentAfterSnapshot,
+        &migration_object_id(transaction_id),
+        format!("upgrade-v{source_schema}-to-v{target_schema}-after-snapshot").as_bytes(),
     )
-    .map_err(|error| storage_error(&error))?;
-    let receipt = receipt_from_report(catalog, report, Some(snapshot.backup_sha256.clone()))?;
-    if receipt.target_version != PORTABLE_SCHEMA_VERSION {
+}
+
+/// Verifies the App's opaque report against generic SQLite and digest facts.
+/// Exact table/trigger semantics remain in the App-generation boundary.
+pub fn verify_generation_report(
+    catalog: &Path,
+    source_schema: u32,
+    target_schema: u32,
+    report: &CatalogMigrationReport,
+) -> Result<()> {
+    if report.source_version != source_schema
+        || report.target_version != target_schema
+        || !is_sha256(&report.catalog_sha256)
+        || read_catalog_schema(catalog)? != target_schema
+        || sha256_file(catalog)? != report.catalog_sha256
+    {
         return Err(PortableRuntimeError::new(
             "portable_migration_validation",
-            "storage migration did not report schema v16",
+            "App migration report did not match the supervised catalog transition",
         ));
     }
+    validate_database_integrity(catalog)
+}
+
+/// Seals a supervisor-owned receipt that records both rollback digests and the
+/// independently verified App report. The App never receives these digests.
+pub fn commit_supervised_migration(
+    receipt_path: &Path,
+    transaction_id: &str,
+    snapshot: &SnapshotReceipt,
+    report: &CatalogMigrationReport,
+) -> Result<()> {
+    let object_id = migration_object_id(transaction_id);
+    let receipt = SupervisorMigrationReceipt {
+        protocol: 1,
+        snapshot_receipt_sha256: &snapshot.receipt_sha256,
+        snapshot_catalog_sha256: &snapshot.catalog_sha256,
+        snapshot_backup_sha256: &snapshot.backup_sha256,
+        app_report: report,
+    };
     write_sealed_receipt(receipt_path, &object_id, &receipt)?;
     provenance::observe(
         SealDomain::Migration,
         &object_id,
-        receipt.catalog_sha256.as_bytes(),
-    )?;
-    Ok(receipt)
-}
-
-pub fn read_schema_version(path: &Path) -> Result<u32> {
-    renderpilot_storage_sqlite::inspect_portable_catalog_schema(path)
-        .map_err(|error| storage_error(&error))
-}
-
-/// Validates an already-current catalog without allocating rollback state.
-/// A schema-16 launch is observational and therefore has no backup receipt.
-pub fn validate_current_schema(catalog: &Path) -> Result<MigrationReceipt> {
-    validate_current_schema_with_backup(catalog, None)
-}
-
-fn validate_current_schema_with_backup(
-    catalog: &Path,
-    backup_sha256: Option<&str>,
-) -> Result<MigrationReceipt> {
-    let report = renderpilot_storage_sqlite::transition_portable_catalog_schema(
-        catalog,
-        renderpilot_storage_sqlite::PortableCatalogSchemaTransition::ValidateCurrent,
+        report.catalog_sha256.as_bytes(),
     )
-    .map_err(|error| storage_error(&error))?;
-    let receipt = receipt_from_report(catalog, report, backup_sha256.map(str::to_owned))?;
-    if receipt.source_version != PORTABLE_SCHEMA_VERSION
-        || receipt.target_version != PORTABLE_SCHEMA_VERSION
-    {
+}
+
+fn validate_database_integrity(path: &Path) -> Result<()> {
+    let connection =
+        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
+            PortableRuntimeError::new("portable_migration_validation", error.to_string())
+        })?;
+    let integrity: String = connection
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(|error| {
+            PortableRuntimeError::new("portable_migration_validation", error.to_string())
+        })?;
+    if integrity != "ok" {
         return Err(PortableRuntimeError::new(
-            "portable_schema_unsupported",
-            "storage validation did not report exact portable schema v16",
+            "portable_migration_validation",
+            format!("migrated catalog failed integrity_check: {integrity}"),
         ));
     }
-    Ok(receipt)
+    Ok(())
 }
 
-fn receipt_from_report(
-    catalog: &Path,
-    report: renderpilot_storage_sqlite::PortableCatalogSchemaReport,
-    backup_sha256: Option<String>,
-) -> Result<MigrationReceipt> {
-    Ok(MigrationReceipt {
-        source_version: report.source_version,
-        target_version: report.target_version,
-        catalog_sha256: sha256_file(catalog)?,
-        backup_sha256,
-        portable_data_path_tag: report.portable_data_path_tag,
-        external_paths_preserved: report.external_paths_preserved,
-        virtual_paths_omitted: report.virtual_paths_omitted,
-    })
+fn migration_object_id(transaction_id: &str) -> String {
+    format!("migration:{transaction_id}")
 }
 
 fn write_sealed_receipt(
     receipt_path: &Path,
     object_id: &str,
-    receipt: &MigrationReceipt,
+    receipt: &impl Serialize,
 ) -> Result<()> {
     let plaintext = serde_json::to_vec(receipt).map_err(|error| {
         PortableRuntimeError::new("portable_migration_receipt", error.to_string())
     })?;
     let bytes = provenance::seal(SealDomain::Migration, object_id, &plaintext)?;
     let parent = receipt_path.parent().ok_or_else(|| {
-        PortableRuntimeError::new("portable_migration_receipt", "receipt had no parent")
+        PortableRuntimeError::new(
+            "portable_migration_receipt",
+            "migration receipt had no parent",
+        )
     })?;
     std::fs::create_dir_all(parent)?;
     let mut file = std::fs::OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(receipt_path)?;
-    use std::io::Write as _;
     file.write_all(&bytes)?;
     file.sync_all()?;
     Ok(())
 }
 
-fn storage_error(
-    error: &renderpilot_storage_sqlite::PortableCatalogSchemaError,
-) -> PortableRuntimeError {
-    let code = match error.kind() {
-        renderpilot_storage_sqlite::PortableCatalogSchemaErrorKind::UnsupportedVersion => {
-            "portable_schema_unsupported"
-        }
-        _ => "portable_schema_storage",
-    };
-    PortableRuntimeError::new(code, error.to_string())
+fn is_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }

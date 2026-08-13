@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusqlite::Connection;
 
@@ -133,27 +135,53 @@ fn apply_is_idempotent() {
 }
 
 #[test]
-fn apply_keep_preserves_catalog_rows_on_healthy_current() {
-    let mut connection = open_test_connection();
-    apply(&mut connection).expect("initial");
-    connection
-        .execute(
-            "INSERT INTO settings (key, value) VALUES ('keep_marker', 'alive')",
-            [],
-        )
-        .expect("marker");
+fn g_obs_01_healthy_current_apply_is_authorizer_observational() {
+    let dir = std::env::temp_dir().join(format!(
+        "renderpilot-schema-healthy-current-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("temp dir");
+    let db_path = dir.join("catalog.db");
 
-    apply(&mut connection).expect("healthy keep must not wipe");
+    {
+        let mut connection = Connection::open(&db_path).expect("open file db");
+        apply(&mut connection).expect("initial");
+        connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('keep_marker', 'alive')",
+                [],
+            )
+            .expect("marker");
 
-    let marker: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM settings WHERE key = 'keep_marker'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("count");
-    assert_eq!(marker, 1);
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        let denied = install_observational_authorizer(&connection);
+        apply(&mut connection).expect("healthy keep must not execute a mutation");
+        assert_eq!(
+            denied.load(Ordering::Relaxed),
+            0,
+            "healthy current validation must not attempt a denied mutation"
+        );
+
+        let marker: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'keep_marker'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(marker, 1);
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+    }
+
+    let backups: Vec<PathBuf> = fs::read_dir(&dir)
+        .expect("list temp")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "bak"))
+        .collect();
+    assert!(backups.is_empty(), "healthy current keep must not back up");
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -943,54 +971,92 @@ fn v10_migration_removes_only_legacy_manifest_registrations() {
 }
 
 #[test]
-fn apply_heals_v10_pending_mutations_that_reject_preparing_without_wipe() {
-    let mut connection = open_test_connection();
-    apply(&mut connection).expect("initial migration should succeed");
-    connection
-        .execute(
-            "
-            INSERT INTO settings (key, value)
-            VALUES ('keep_me', 'alive')
-            ",
-            [],
-        )
-        .expect("marker setting should insert");
-    connection
-        .execute_batch(LEGACY_PENDING_WITHOUT_PREPARING)
-        .expect("legacy WIP pending_file_mutations shape");
-    connection
-        .execute_batch(
-            r#"
-            INSERT INTO pending_file_mutations
-                (id, game_id, feature, subject_id, state, manifest_json)
-            VALUES
-                ('tx-legacy', 'steam:1', 'catalog_swap', NULL, 'prepared',
-                 '{"format_version":1,"roots":[],"transaction_dir":"x","snapshots":[]}');
-            PRAGMA user_version = 10;
-            "#,
-        )
-        .expect("seed legacy prepared row");
+fn apply_backs_up_and_rebuilds_malformed_current_pending_mutations() {
+    let dir = std::env::temp_dir().join(format!(
+        "renderpilot-schema-malformed-current-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("temp dir");
+    let db_path = dir.join("catalog.db");
 
-    apply(&mut connection).expect("current schema should soft-heal pending table");
+    {
+        let mut connection = Connection::open(&db_path).expect("open file db");
+        apply(&mut connection).expect("initial migration should succeed");
+        connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('keep_me', 'alive')",
+                [],
+            )
+            .expect("marker setting should insert");
+        connection
+            .execute_batch(LEGACY_PENDING_WITHOUT_PREPARING)
+            .expect("malformed current pending_file_mutations shape");
+        connection
+            .execute(
+                r#"
+                INSERT INTO pending_file_mutations
+                    (id, game_id, feature, subject_id, state, manifest_json)
+                VALUES
+                    ('tx-malformed-current', 'steam:1', 'catalog_swap', NULL, 'prepared',
+                     '{"format_version":1,"roots":[],"transaction_dir":"x","snapshots":[]}')
+                "#,
+                [],
+            )
+            .expect("seed malformed current row");
 
-    assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
-    assert_preparing_state_is_accepted(&connection);
-    let kept: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM pending_file_mutations WHERE id = 'tx-legacy'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("legacy prepared row");
-    assert_eq!(kept, 1);
-    let marker: i64 = connection
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        apply(&mut connection).expect("malformed current schema should rebuild");
+
+        assert_eq!(user_version(&connection), CURRENT_SCHEMA_VERSION);
+        assert_catalog_schema_exists(&connection);
+        assert_preparing_state_is_accepted(&connection);
+        let marker: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'keep_me'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("settings should be readable after rebuild");
+        assert_eq!(marker, 0);
+    }
+
+    let backups: Vec<PathBuf> = fs::read_dir(&dir)
+        .expect("list temp")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(".pre-rebuild.") && name.ends_with(".bak"))
+        })
+        .collect();
+    assert_eq!(
+        backups.len(),
+        1,
+        "malformed current schema needs one backup"
+    );
+
+    let backup = Connection::open(&backups[0]).expect("open original backup");
+    assert_eq!(user_version(&backup), CURRENT_SCHEMA_VERSION);
+    let marker: i64 = backup
         .query_row(
             "SELECT COUNT(*) FROM settings WHERE key = 'keep_me'",
             [],
             |row| row.get(0),
         )
-        .expect("catalog rows must survive soft-heal");
+        .expect("marker in original backup");
     assert_eq!(marker, 1);
+    let preserved_mutation: i64 = backup
+        .query_row(
+            "SELECT COUNT(*) FROM pending_file_mutations WHERE id = 'tx-malformed-current'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("malformed row in original backup");
+    assert_eq!(preserved_mutation, 1);
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -1182,7 +1248,7 @@ fn compose_baseline_is_non_empty_and_includes_shared_fragments() {
 }
 
 #[test]
-fn apply_backs_up_file_database_before_upgrade_that_requires_rebuild() {
+fn apply_backs_up_malformed_stamped_v10_before_post_upgrade_rebuild() {
     let dir =
         std::env::temp_dir().join(format!("renderpilot-schema-backup-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
@@ -1235,6 +1301,7 @@ fn apply_backs_up_file_database_before_upgrade_that_requires_rebuild() {
     );
 
     let backup = Connection::open(&backups[0]).expect("open backup");
+    assert_eq!(user_version(&backup), 10);
     let restored: i64 = backup
         .query_row(
             "SELECT COUNT(*) FROM settings WHERE key = 'marker'",
@@ -1488,6 +1555,35 @@ fn assert_technology_trigger_rejects_mismatch(connection: &Connection, suffix: &
 
 fn open_test_connection() -> Connection {
     Connection::open_in_memory().expect("sqlite should open")
+}
+
+fn install_observational_authorizer(connection: &Connection) -> Arc<AtomicU64> {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+    let denied = Arc::new(AtomicU64::new(0));
+    let denied_actions = Arc::clone(&denied);
+    connection
+        .authorizer(Some(move |context: AuthContext<'_>| match context.action {
+            AuthAction::Read { .. }
+            | AuthAction::Select
+            | AuthAction::Pragma {
+                pragma_value: None, ..
+            }
+            | AuthAction::Pragma {
+                pragma_name:
+                    "table_info" | "table_xinfo" | "table_list" | "index_info" | "index_xinfo"
+                    | "index_list" | "foreign_key_list" | "foreign_key_check" | "integrity_check",
+                ..
+            }
+            | AuthAction::Function { .. } => Authorization::Allow,
+            _ => {
+                denied_actions.fetch_add(1, Ordering::Relaxed);
+                Authorization::Deny
+            }
+        }))
+        .expect("install observational SQLite authorizer");
+
+    denied
 }
 
 fn assert_catalog_schema_exists(connection: &Connection) {

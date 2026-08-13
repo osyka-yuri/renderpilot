@@ -1,6 +1,7 @@
 use std::{
     fs::File,
-    io::BufReader,
+    io::{BufRead, BufReader, Write},
+    path::Path,
     sync::{
         Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
@@ -10,9 +11,13 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 use super::{
+    app_catalog_migration::{
+        CatalogClassification, classify_catalog, execute_generation_migration,
+    },
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableStartupV3, PortableUpdateRequest,
-        PortableUpdateResponse, committed_sequence_for_selection, read_message, write_message,
+        ActivationPermit, AppControlMessage, AppStatusMessage, CommitPermit, PortableAppSessionV1,
+        PortableUpdateRequest, PortableUpdateResponse, TrialReady,
+        committed_sequence_for_selection, read_message, write_message,
     },
     error::{PortableRuntimeError, Result},
     runtime_paths,
@@ -22,7 +27,7 @@ struct AppSession {
     control: Mutex<BufReader<File>>,
     status: Mutex<File>,
     exchange: Mutex<()>,
-    startup: PortableStartupV3,
+    startup: PortableAppSessionV1,
 }
 
 static SESSION: OnceLock<AppSession> = OnceLock::new();
@@ -31,7 +36,7 @@ static COMMITTED: AtomicBool = AtomicBool::new(false);
 pub fn install_trial_session(
     control: File,
     status: File,
-    startup: PortableStartupV3,
+    startup: PortableAppSessionV1,
 ) -> Result<()> {
     SESSION
         .set(AppSession {
@@ -58,13 +63,14 @@ pub fn is_committed() -> bool {
 /// and Commit permits.
 pub fn prove_visible_and_commit<T>(
     app: &AppHandle,
-    commit: impl FnOnce() -> Result<T>,
+    commit: impl FnOnce(CatalogClassification) -> Result<T>,
 ) -> Result<T> {
     let session = session()?;
     let _exchange = session.exchange.lock().map_err(|_| {
         PortableRuntimeError::new("portable_activation", "portable protocol exchange poisoned")
     })?;
-    let schema_observed = query_only_schema()?;
+    let catalog = query_only_catalog()?;
+    let schema_observed = catalog.schema_observed();
     let paths = runtime_paths::current()?;
     std::fs::create_dir_all(&paths.webview2_root)?;
     let window = app.get_webview_window("main").ok_or_else(|| {
@@ -88,7 +94,7 @@ pub fn prove_visible_and_commit<T>(
         })?;
         write_message(
             &mut *status,
-            &AppStatusMessage::TrialReady {
+            &AppStatusMessage::trial_ready(TrialReady {
                 transcript_sha256: session.startup.transcript_sha256()?,
                 runtime_paths_sha256: session.startup.runtime_paths_sha256()?,
                 schema_observed,
@@ -101,102 +107,69 @@ pub fn prove_visible_and_commit<T>(
                     .startup
                     .supervisor_session_transcript_sha256
                     .clone(),
-            },
+            }),
         )?;
     }
-    let permit = read_control(session)?;
-    let (
-        activation_nonce,
-        selection_record_sha256,
-        journal_sequence,
-        supervisor_session_transcript_sha256,
-    ) = match permit {
-        AppControlMessage::ActivationPermit {
-            activation_nonce,
-            selection_record_sha256,
-            journal_sequence,
-            supervisor_session_transcript_sha256,
-        } => (
-            activation_nonce,
-            selection_record_sha256,
-            journal_sequence,
-            supervisor_session_transcript_sha256,
-        ),
-        _ => {
-            return Err(PortableRuntimeError::new(
-                "portable_activation",
-                "expected ActivationPermit",
-            ));
-        }
-    };
-    if supervisor_session_transcript_sha256 != session.startup.supervisor_session_transcript_sha256
-    {
-        return Err(PortableRuntimeError::new(
-            "portable_activation",
-            "ActivationPermit did not carry the startup binding transcript",
-        ));
+    if let CatalogClassification::Existing { schema } = catalog {
+        let mut control = session.control.lock().map_err(|_| {
+            PortableRuntimeError::new("portable_activation", "control pipe poisoned")
+        })?;
+        let mut status = session.status.lock().map_err(|_| {
+            PortableRuntimeError::new("portable_activation", "status pipe poisoned")
+        })?;
+        exchange_catalog_migration(
+            &session.startup,
+            &paths.catalog_db_path,
+            schema,
+            &mut *control,
+            &mut *status,
+        )?;
     }
+
+    let activation_permit = accept_activation_permit(read_control(session)?, &session.startup)?;
+    let activation_nonce = activation_permit.activation_nonce;
+    let selection_record_sha256 = activation_permit.selection_record_sha256;
+    let journal_sequence = activation_permit.journal_sequence;
     {
         let mut status = session.status.lock().map_err(|_| {
             PortableRuntimeError::new("portable_activation", "status pipe poisoned")
         })?;
         write_message(
             &mut *status,
-            &AppStatusMessage::ActivationAck {
+            &AppStatusMessage::activation_ack(
                 activation_nonce,
-                selection_record_sha256: selection_record_sha256.clone(),
-                visible_window_ready: true,
-                event_loop_roundtrip: true,
-                supervisor_session_transcript_sha256: session
-                    .startup
-                    .supervisor_session_transcript_sha256
-                    .clone(),
-            },
+                selection_record_sha256.clone(),
+                true,
+                true,
+                session.startup.supervisor_session_transcript_sha256.clone(),
+            ),
         )?;
     }
-    let expected_committed_journal_sequence = committed_sequence_for_selection(journal_sequence)?;
-    let permit = read_control(session)?;
-    let (committed_journal_sequence, permit_nonce) = match permit {
-        AppControlMessage::CommitPermit {
-            selection_record_sha256: selected,
-            committed_journal_sequence,
-            permit_nonce,
-            supervisor_session_transcript_sha256,
-        } if selected == selection_record_sha256
-            && committed_journal_sequence == expected_committed_journal_sequence
-            && permit_nonce == session.startup.commit_permit_nonce
-            && supervisor_session_transcript_sha256
-                == session.startup.supervisor_session_transcript_sha256 =>
-        {
-            (committed_journal_sequence, permit_nonce)
-        }
-        _ => {
-            return Err(PortableRuntimeError::new(
-                "portable_activation",
-                "CommitPermit did not match the authenticated activation",
-            ));
-        }
-    };
+    let commit_permit = accept_commit_permit(
+        read_control(session)?,
+        &selection_record_sha256,
+        journal_sequence,
+        &session.startup,
+    )?;
+    let committed_journal_sequence = commit_permit.committed_journal_sequence;
+    let permit_nonce = commit_permit.permit_nonce;
 
     // The permit authorizes durable App initialization, but observation is
     // truthful only after that initialization succeeds. Ordinary commands
     // remain gated until the exact Context is installed and the ack is flushed.
-    let committed = commit()?;
+    let committed = commit(catalog)?;
     let mut status = session
         .status
         .lock()
         .map_err(|_| PortableRuntimeError::new("portable_activation", "status pipe poisoned"))?;
     write_message(
         &mut *status,
-        &AppStatusMessage::CommitAck {
+        &AppStatusMessage::commit_ack(
             selection_record_sha256,
             committed_journal_sequence,
             permit_nonce,
-            supervisor_session_transcript_sha256: session
-                .startup
-                .supervisor_session_transcript_sha256
-                .clone(),
-        },
+            session.startup.supervisor_session_transcript_sha256.clone(),
+        ),
     )?;
     COMMITTED.store(true, Ordering::Release);
     Ok(committed)
@@ -221,22 +194,10 @@ pub fn request_update(
         })?;
         write_message(
             &mut *status,
-            &AppStatusMessage::UpdateRequest {
-                request_id: request_id.to_owned(),
-                request,
-            },
+            &AppStatusMessage::update_request(request_id, request),
         )?;
     }
-    match read_control(session)? {
-        AppControlMessage::UpdateResponse {
-            request_id: received,
-            response,
-        } if received == request_id => Ok(response),
-        _ => Err(PortableRuntimeError::new(
-            "portable_update_protocol",
-            "supervisor update response did not match request",
-        )),
-    }
+    accept_update_response(read_control(session)?, request_id)
 }
 
 pub fn require_committed() -> Result<()> {
@@ -264,20 +225,120 @@ fn read_control(session: &AppSession) -> Result<AppControlMessage> {
     read_message(&mut *control)
 }
 
-fn query_only_schema() -> Result<u32> {
-    let paths = runtime_paths::current()?;
-    if !paths.catalog_db_path.exists() {
-        return Ok(0);
+pub(super) fn accept_activation_permit(
+    message: AppControlMessage,
+    startup: &PortableAppSessionV1,
+) -> Result<ActivationPermit> {
+    match message {
+        AppControlMessage::ActivationPermit(permit)
+            if permit.supervisor_session_transcript_sha256
+                == startup.supervisor_session_transcript_sha256 =>
+        {
+            Ok(permit)
+        }
+        AppControlMessage::ActivationPermit(_) => Err(PortableRuntimeError::new(
+            "portable_activation",
+            "ActivationPermit did not carry the startup binding transcript",
+        )),
+        _ => Err(PortableRuntimeError::new(
+            "portable_activation",
+            "expected ActivationPermit",
+        )),
     }
-    let connection = rusqlite::Connection::open_with_flags(
-        &paths.catalog_db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+}
+
+pub(super) fn accept_commit_permit(
+    message: AppControlMessage,
+    selection_record_sha256: &str,
+    selection_journal_sequence: u64,
+    startup: &PortableAppSessionV1,
+) -> Result<CommitPermit> {
+    let expected_committed_journal_sequence =
+        committed_sequence_for_selection(selection_journal_sequence)?;
+    match message {
+        AppControlMessage::CommitPermit(permit)
+            if permit.selection_record_sha256 == selection_record_sha256
+                && permit.committed_journal_sequence == expected_committed_journal_sequence
+                && permit.permit_nonce == startup.commit_permit_nonce
+                && permit.supervisor_session_transcript_sha256
+                    == startup.supervisor_session_transcript_sha256 =>
+        {
+            Ok(permit)
+        }
+        _ => Err(PortableRuntimeError::new(
+            "portable_activation",
+            "CommitPermit did not match the authenticated activation",
+        )),
+    }
+}
+
+pub(super) fn accept_update_response(
+    message: AppControlMessage,
+    request_id: &str,
+) -> Result<PortableUpdateResponse> {
+    match message {
+        AppControlMessage::UpdateResponse(response) if response.request_id == request_id => {
+            Ok(response.response)
+        }
+        _ => Err(PortableRuntimeError::new(
+            "portable_update_protocol",
+            "supervisor update response did not match request",
+        )),
+    }
+}
+
+pub(super) fn exchange_catalog_migration(
+    startup: &PortableAppSessionV1,
+    catalog: &Path,
+    schema_observed: u32,
+    control: &mut impl BufRead,
+    status: &mut impl Write,
+) -> Result<()> {
+    let (
+        operation,
+        source_schema,
+        target_schema,
+        permit_nonce,
+        supervisor_session_transcript_sha256,
+    ) = match read_message(control)? {
+        AppControlMessage::MigrationPermit(permit) => (
+            permit.operation,
+            permit.source_schema,
+            permit.target_schema,
+            permit.permit_nonce,
+            permit.supervisor_session_transcript_sha256,
+        ),
+        _ => {
+            return Err(PortableRuntimeError::new(
+                "portable_migration_contract",
+                "expected MigrationPermit for an existing catalog",
+            ));
+        }
+    };
+    if source_schema != schema_observed
+        || target_schema != startup.maximum_schema
+        || permit_nonce != startup.migration_permit_nonce
+        || supervisor_session_transcript_sha256 != startup.supervisor_session_transcript_sha256
+    {
+        return Err(PortableRuntimeError::new(
+            "portable_migration_contract",
+            "MigrationPermit did not match the authenticated trial",
+        ));
+    }
+    let snapshot_receipt_sha256 = operation.snapshot_receipt_sha256().map(str::to_owned);
+    let report = execute_generation_migration(catalog, source_schema, target_schema, &operation)?;
+    write_message(
+        status,
+        &AppStatusMessage::migration_ack(
+            report,
+            snapshot_receipt_sha256,
+            permit_nonce,
+            startup.supervisor_session_transcript_sha256.clone(),
+        ),
     )
-    .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))?;
-    connection
-        .execute_batch("PRAGMA query_only = ON;")
-        .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))?;
-    connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map_err(|error| PortableRuntimeError::new("portable_trial_db", error.to_string()))
+}
+
+fn query_only_catalog() -> Result<CatalogClassification> {
+    let paths = runtime_paths::current()?;
+    classify_catalog(&paths.catalog_db_path)
 }

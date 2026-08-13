@@ -21,6 +21,119 @@ function Get-RenderPilotSha256 {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Get-RenderPilotPortableRuntimeReleaseContract {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepositoryRoot)
+
+    $path = Join-Path $RepositoryRoot "data\contracts\portable-runtime-release.json"
+    Get-RenderPilotPortableRuntimeReleaseContractFromJson -Json (
+        Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+    )
+}
+
+function Get-RenderPilotPortableRuntimeReleaseContractFromJson {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Json)
+
+    $document = [System.Text.Json.JsonDocument]::Parse($Json)
+    try {
+        $root = $document.RootElement
+        if ($root.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) {
+            throw "Portable runtime release contract must be a JSON object."
+        }
+        $contract = [System.Collections.Generic.Dictionary[string, System.Text.Json.JsonElement]]::new(
+            [System.StringComparer]::Ordinal
+        )
+        foreach ($property in $root.EnumerateObject()) {
+            if (-not $contract.TryAdd($property.Name, $property.Value)) {
+                throw "Portable runtime release contract has duplicate fields."
+            }
+        }
+        $expectedFields = @(
+            "appSessionProtocol",
+            "contractVersion",
+            "currentSchema",
+            "minimumPortableSchema",
+            "supervisorCapability"
+        )
+        if ($contract.Count -ne $expectedFields.Count) {
+            throw "Portable runtime release contract has unsupported fields."
+        }
+        foreach ($field in $expectedFields) {
+            if (-not $contract.ContainsKey($field)) {
+                throw "Portable runtime release contract has unsupported fields."
+            }
+        }
+        $integerFields = @("contractVersion", "supervisorCapability", "minimumPortableSchema", "currentSchema")
+        foreach ($field in $integerFields) {
+            $value = $contract[$field]
+            $raw = $value.GetRawText()
+            $parsed = [int64]0
+            if (
+                $value.ValueKind -ne [System.Text.Json.JsonValueKind]::Number -or
+                $raw -notmatch '^(?:0|[1-9][0-9]*)$' -or
+                -not $value.TryGetInt64([ref] $parsed)
+            ) {
+                throw "Portable runtime release contract field $field must be an exact JSON integer."
+            }
+        }
+        $contractVersion = [int64] $contract.contractVersion.GetInt64()
+        $supervisorCapability = [int64] $contract.supervisorCapability.GetInt64()
+        $appSessionProtocol = if ($contract.appSessionProtocol.ValueKind -eq [System.Text.Json.JsonValueKind]::String) {
+            $contract.appSessionProtocol.GetString()
+        }
+        else {
+            $null
+        }
+        $minimumSchema = [int64] $contract.minimumPortableSchema.GetInt64()
+        $currentSchema = [int64] $contract.currentSchema.GetInt64()
+        if (
+            $appSessionProtocol -isnot [string] -or
+            $contractVersion -ne 1 -or
+            $supervisorCapability -le 0 -or
+            $supervisorCapability -gt [uint16]::MaxValue -or
+            $appSessionProtocol -cne "renderpilot-portable-app-session-v1" -or
+            $minimumSchema -le 0 -or
+            $minimumSchema -gt $currentSchema -or
+            $currentSchema -gt [int]::MaxValue
+        ) {
+            throw "Portable runtime release contract has an unsupported version or range."
+        }
+        [pscustomobject]@{
+            SupervisorCapability = [uint16] $supervisorCapability
+            AppSessionProtocol = $appSessionProtocol
+            MinimumSchema = [int] $minimumSchema
+            CurrentSchema = [int] $currentSchema
+        }
+    }
+    finally {
+        $document.Dispose()
+    }
+}
+
+function New-RenderPilotPortableRpuManifest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Version,
+        [Parameter(Mandatory)] [psobject] $RuntimeRelease,
+        [Parameter(Mandatory)] [string] $AppSha256,
+        [Parameter(Mandatory)] [Int64] $AppLength
+    )
+
+    [ordered]@{
+        protocol = "renderpilot-portable-rpu-v1"
+        platform = "windows-x86_64-portable"
+        version = $Version
+        app_sha256 = $AppSha256.ToLowerInvariant()
+        app_length = $AppLength
+        minimum_supervisor_protocol = $RuntimeRelease.SupervisorCapability
+        app_session_protocol = $RuntimeRelease.AppSessionProtocol
+        minimum_schema = $RuntimeRelease.MinimumSchema
+        maximum_schema = $RuntimeRelease.CurrentSchema
+        portable_role = "app"
+    }
+}
+
 function New-RenderPilotUniqueStagingRoot {
     [CmdletBinding()]
     param(

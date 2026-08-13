@@ -3,7 +3,7 @@ use std::path::Path;
 use renderpilot_orchestration::portable::{RuntimePathsV1, install_runtime_paths};
 
 use super::{
-    app_protocol::PortableStartupV3,
+    app_protocol::PortableAppSessionV1,
     error::{PortableRuntimeError, Result},
 };
 
@@ -16,7 +16,7 @@ const DB_ENV: &str = "RENDERPILOT_DB_PATH";
     unsafe_code,
     reason = "startup runs before threads and replaces ambient portable path inputs with authenticated projections"
 )]
-pub fn install_from_startup(startup: &PortableStartupV3) -> Result<()> {
+pub fn install_from_startup(startup: &PortableAppSessionV1) -> Result<()> {
     startup.validate()?;
     let executable = std::env::current_exe()?;
     let executable_root = executable.parent().ok_or_else(|| {
@@ -38,7 +38,7 @@ pub fn install_from_startup(startup: &PortableStartupV3) -> Result<()> {
     {
         return Err(PortableRuntimeError::new(
             "portable_runtime_paths",
-            "App image/root/generation identity did not match startup v3 binding",
+            "App image/root/generation identity did not match the App-session v1 binding",
         ));
     }
     let paths = startup.runtime_paths.clone();

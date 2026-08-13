@@ -4,6 +4,12 @@ import process from 'node:process';
 import { fail, sha256 } from './release-manifest-common.mjs';
 import { extractExactZipEntries, extractZipEntry } from './release-manifest-zip.mjs';
 import { validateTauriSignature } from './release-signature.mjs';
+import {
+  CURRENT_PORTABLE_SCHEMA,
+  MINIMUM_PORTABLE_SCHEMA,
+  PORTABLE_APP_SESSION_PROTOCOL,
+  PORTABLE_SUPERVISOR_CAPABILITY,
+} from './portable-runtime-release-contract.mjs';
 
 export const RPSX1_MAGIC = Buffer.from('RPSX1', 'ascii');
 export const RPSX1_VERSION = 1;
@@ -138,6 +144,7 @@ function validatePortableRpuBytes(rpu, expectedVersion) {
     'app_sha256',
     'app_length',
     'minimum_supervisor_protocol',
+    'app_session_protocol',
     'minimum_schema',
     'maximum_schema',
     'portable_role',
@@ -152,11 +159,12 @@ function validatePortableRpuBytes(rpu, expectedVersion) {
     manifest.platform !== 'windows-x86_64-portable' ||
     manifest.portable_role !== 'app' ||
     !Number.isInteger(manifest.minimum_supervisor_protocol) ||
-    manifest.minimum_supervisor_protocol > 1 ||
+    manifest.minimum_supervisor_protocol !== PORTABLE_SUPERVISOR_CAPABILITY ||
+    manifest.app_session_protocol !== PORTABLE_APP_SESSION_PROTOCOL ||
     !Number.isInteger(manifest.minimum_schema) ||
     !Number.isInteger(manifest.maximum_schema) ||
-    manifest.minimum_schema !== 4 ||
-    manifest.maximum_schema !== 16 ||
+    manifest.minimum_schema !== MINIMUM_PORTABLE_SCHEMA ||
+    manifest.maximum_schema !== CURRENT_PORTABLE_SCHEMA ||
     manifest.app_length !== app.length ||
     manifest.app_sha256 !== sha256(app)
   ) {

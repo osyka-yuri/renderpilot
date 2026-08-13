@@ -18,6 +18,14 @@ pub(super) fn catalog_schema_is_valid(connection: &Connection) -> AppResult<bool
     portable_path_tags::validate(connection).map(|()| true)
 }
 
+pub(super) fn catalog_schema_is_valid_observational(connection: &Connection) -> AppResult<bool> {
+    if !validate_violations(connection, true, ConstraintValidation::Observational)?.is_empty() {
+        return Ok(false);
+    }
+
+    portable_path_tags::validate(connection).map(|()| true)
+}
+
 pub(super) fn validate_catalog_schema(connection: &Connection) -> AppResult<()> {
     validate_catalog_schema_with_portable_path_tags(connection, true, ConstraintValidation::Probe)
 }

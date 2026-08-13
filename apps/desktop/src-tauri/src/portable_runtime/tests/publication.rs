@@ -1,15 +1,15 @@
-use std::{fs, io::Write, path::Path};
+use std::{fs, path::Path};
 
 use serde::Serialize;
 
-use super::{append_journal as append, error_code, hash, journal_entry, temp_root};
+use super::{error_code, hash, temp_root};
 use crate::portable_runtime::{
-    generation::{load_selected, publish},
-    journal::{JournalPhase, journal_path, read_entries},
+    generation::{InitialSelectedGeneration, inspect_initial_selection, load_selected, publish},
     provenance::{self, SealDomain},
     publication::publish_bytes_no_replace,
     rpu::{
-        MAXIMUM_SCHEMA, MINIMUM_SCHEMA, RPU_PROTOCOL, RpuManifest, SUPERVISOR_PROTOCOL, VerifiedRpu,
+        MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL,
+        PORTABLE_SUPERVISOR_CAPABILITY, RPU_PROTOCOL, RpuManifest, VerifiedRpu,
     },
     selection::{
         SELECTION_PROTOCOL, SelectionRecord, SelectionRecordV2, SelectionRecordV3, SelectionState,
@@ -30,54 +30,6 @@ fn publish_sealed_selection_record(root: &Path, record: &impl Serialize) {
     .expect("seal selection fixture");
     fs::create_dir_all(root).expect("create selection root");
     fs::write(root.join(format!("{hash}.json")), bytes).expect("write selection fixture");
-}
-
-#[test]
-fn journal_retains_a_torn_tail_and_rejects_semantic_repair() {
-    let root = temp_root("journal-torn-tail");
-    let transaction = hash('1');
-    let journal = journal_path(root.path(), &transaction);
-    let mut prepared = journal_entry(JournalPhase::Prepared);
-    prepared.transaction_id = transaction.clone();
-    append(&journal, prepared).expect("append valid head");
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&journal)
-        .expect("open journal tail");
-    file.write_all(b"{\"sequence\":2,\"phase\":")
-        .expect("write torn tail");
-    file.sync_all().expect("sync torn-tail fixture");
-    drop(file);
-    let retained = std::fs::read(&journal).expect("read retained torn journal");
-
-    assert_eq!(
-        error_code(read_entries(&journal)),
-        "portable_journal_invalid"
-    );
-    assert_eq!(
-        error_code(append(&journal, {
-            let mut entry = journal_entry(JournalPhase::GenerationPublished);
-            entry.transaction_id = transaction;
-            entry
-        })),
-        "portable_journal_invalid"
-    );
-    assert_eq!(
-        std::fs::read(&journal).expect("reread retained torn journal"),
-        retained
-    );
-}
-
-#[test]
-fn journal_rejects_an_entry_bound_to_a_different_transaction_directory() {
-    let root = temp_root("journal-transaction-binding");
-    let journal = journal_path(root.path(), &hash('1'));
-
-    assert_eq!(
-        error_code(append(&journal, journal_entry(JournalPhase::Prepared))),
-        "portable_journal_path"
-    );
-    assert!(!journal.exists());
 }
 
 #[test]
@@ -124,9 +76,10 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
             version: "1.9.1".to_owned(),
             app_sha256: sha256_hex(&app),
             app_length: app.len() as u64,
-            minimum_supervisor_protocol: SUPERVISOR_PROTOCOL,
+            minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
+            app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
             minimum_schema: MINIMUM_SCHEMA,
-            maximum_schema: MAXIMUM_SCHEMA,
+            maximum_schema: MAXIMUM_SCHEMA + 1,
             portable_role: "app".to_owned(),
         },
         app_bytes: app,
@@ -136,16 +89,98 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
     std::fs::create_dir_all(&stale).expect("create interrupted pending generation");
     std::fs::write(stale.join("partial"), b"incomplete").expect("write interrupted generation");
 
-    assert_eq!(
-        error_code(publish(&store, &rpu)),
-        "portable_generation_pending"
-    );
+    publish(&store, &rpu).expect("fresh retry ignores a retained older attempt");
     assert!(stale.exists(), "ambient interrupted state is retained");
+    assert!(
+        store.join("objects").join(&rpu_sha256).is_dir(),
+        "the new nonce attempt atomically published the immutable winner"
+    );
 
     let clean_store = root.path().join("clean-store");
     publish(&clean_store, &rpu).expect("publish complete generation");
+    publish(&clean_store, &rpu).expect("occupied exact immutable generation is idempotent");
     let stored = load_selected(&clean_store, &rpu_sha256).expect("load complete generation");
     assert_eq!(stored.version, "1.9.1");
+    assert_eq!(stored.maximum_schema, MAXIMUM_SCHEMA + 1);
+
+    let mismatched_app = vec![0_u8; 0x46];
+    let mismatched = VerifiedRpu {
+        manifest: RpuManifest {
+            protocol: RPU_PROTOCOL.to_owned(),
+            platform: "windows-x86_64-portable".to_owned(),
+            version: "1.9.2".to_owned(),
+            app_sha256: sha256_hex(&mismatched_app),
+            app_length: mismatched_app.len() as u64,
+            minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
+            app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
+            minimum_schema: MINIMUM_SCHEMA,
+            maximum_schema: MAXIMUM_SCHEMA + 1,
+            portable_role: "app".to_owned(),
+        },
+        app_bytes: mismatched_app,
+        rpu_sha256: rpu_sha256.clone(),
+    };
+    assert_eq!(
+        error_code(publish(&clean_store, &mismatched)),
+        "portable_app_identity",
+        "occupied identity only succeeds for the exact signed RPU descriptor"
+    );
+
+    let legacy_plaintext = serde_json::to_vec(&serde_json::json!({
+        "protocol": 2,
+        "rpu_sha256": rpu_sha256,
+        "version": "1.9.1",
+        "app_sha256": sha256_hex(&std::fs::read(&stored.app).expect("read legacy App fixture")),
+        "minimum_schema": 4,
+        "maximum_schema": 16,
+    }))
+    .expect("encode legacy generation receipt");
+    let legacy_receipt = provenance::seal(
+        SealDomain::Object,
+        &format!("object:{}", stored.rpu_sha256),
+        &legacy_plaintext,
+    )
+    .expect("seal legacy generation receipt");
+    std::fs::write(
+        stored.generation_root.join("generation.json"),
+        legacy_receipt,
+    )
+    .expect("replace test-only receipt with authenticated v2 metadata");
+    assert_eq!(
+        error_code(load_selected(&clean_store, &stored.rpu_sha256)),
+        "portable_generation_receipt"
+    );
+    assert!(matches!(
+        inspect_initial_selection(&clean_store, &stored.rpu_sha256)
+            .expect("inspect authenticated legacy selection"),
+        InitialSelectedGeneration::LegacyV2Metadata(metadata)
+            if metadata.version == "1.9.1"
+    ));
+
+    let incompatible_legacy_plaintext = serde_json::to_vec(&serde_json::json!({
+        "protocol": 2,
+        "rpu_sha256": rpu_sha256,
+        "version": "1.9.1",
+        "app_sha256": sha256_hex(&std::fs::read(&stored.app).expect("read legacy App fixture")),
+        "minimum_schema": 4,
+        "maximum_schema": 17,
+    }))
+    .expect("encode incompatible legacy generation receipt");
+    let incompatible_legacy_receipt = provenance::seal(
+        SealDomain::Object,
+        &format!("object:{}", stored.rpu_sha256),
+        &incompatible_legacy_plaintext,
+    )
+    .expect("seal incompatible legacy generation receipt");
+    std::fs::write(
+        stored.generation_root.join("generation.json"),
+        incompatible_legacy_receipt,
+    )
+    .expect("replace receipt with incompatible legacy metadata");
+    assert_eq!(
+        error_code(inspect_initial_selection(&clean_store, &stored.rpu_sha256)),
+        "portable_generation_receipt"
+    );
 
     let selection_root = clean_store.join("selection");
     append_selected(&selection_root, &rpu_sha256, &hash('a'), 1)

@@ -44,6 +44,33 @@ impl Context {
         Ok(Self::from_storage_with_mutation_root(storage, root))
     }
 
+    /// Opens the exact empty portable catalog after the supervisor's durable
+    /// CommitPermit. The strict storage constructor owns fresh initialization;
+    /// this context only uses the authenticated file-transaction root.
+    pub fn open_fresh_portable_after_commit() -> Result<Self, ServiceError> {
+        let (catalog, file_mutation_root) =
+            crate::storage::prepare_portable_catalog_after_commit()?;
+        let storage = SqliteStorage::open_fresh_portable(&catalog)
+            .map_err(|error| ServiceError::command_failed(error.to_string()))?;
+        Ok(Self::from_storage_with_mutation_root(
+            storage,
+            file_mutation_root,
+        ))
+    }
+
+    /// Opens the exact already-current portable catalog after the supervisor's
+    /// durable CommitPermit without entering the general migration/rebuild path.
+    pub fn open_current_portable_after_commit() -> Result<Self, ServiceError> {
+        let (catalog, file_mutation_root) =
+            crate::storage::prepare_portable_catalog_after_commit()?;
+        let storage = SqliteStorage::open_current_portable(&catalog)
+            .map_err(|error| ServiceError::command_failed(error.to_string()))?;
+        Ok(Self::from_storage_with_mutation_root(
+            storage,
+            file_mutation_root,
+        ))
+    }
+
     /// Creates a [`Context`] from an existing storage connection, for tests.
     ///
     /// The file-mutation root is a fresh, nondeterministic temp directory

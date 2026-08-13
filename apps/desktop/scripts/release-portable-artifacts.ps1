@@ -26,6 +26,7 @@ $desktop = Join-Path $repository "apps\desktop"
 if (-not (Test-Path -LiteralPath (Join-Path $desktop "src-tauri\Cargo.toml") -PathType Leaf)) {
     throw "RenderPilot desktop manifest was not found under $repository."
 }
+$runtimeRelease = Get-RenderPilotPortableRuntimeReleaseContract -RepositoryRoot $repository
 
 $temporaryRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
     [IO.Path]::GetTempPath()
@@ -80,17 +81,12 @@ $portableExecutable = Join-Path $artifacts "RenderPilot_${Version}_x64-portable.
 $portableRawSignature = "$portableExecutable.sig"
 $portableZip = Join-Path $artifacts "RenderPilot_${Version}_x64-portable.zip"
 $appHash = Get-RenderPilotSha256 -Path $portableSource
-$rpuManifest = [ordered]@{
-    protocol = "renderpilot-portable-rpu-v1"
-    platform = "windows-x86_64-portable"
-    version = $Version
-    app_sha256 = $appHash.ToLowerInvariant()
-    app_length = [IO.FileInfo]::new($portableSource).Length
-    minimum_supervisor_protocol = 1
-    minimum_schema = 4
-    maximum_schema = 16
-    portable_role = "app"
-} | ConvertTo-Json -Compress
+$rpuManifest = New-RenderPilotPortableRpuManifest `
+    -Version $Version `
+    -RuntimeRelease $runtimeRelease `
+    -AppSha256 $appHash `
+    -AppLength ([IO.FileInfo]::new($portableSource).Length) |
+    ConvertTo-Json -Compress
 New-RenderPilotPortableRpu -App $portableSource -ManifestJson $rpuManifest -Destination $portableRpu
 
 Push-Location $desktop

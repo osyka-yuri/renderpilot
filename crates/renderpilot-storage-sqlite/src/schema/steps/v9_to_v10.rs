@@ -1,4 +1,5 @@
-//! Additive upgrade: managed_files + crash-recoverable file mutations.
+//! Additive released v9→v10 upgrade: managed files + crash-recoverable file
+//! mutations.
 
 use renderpilot_application::AppResult;
 use rusqlite::Connection;
@@ -16,9 +17,9 @@ pub(super) fn apply(connection: &Connection) -> AppResult<()> {
          CHECK (json_valid(managed_files_json)) CHECK (json_type(managed_files_json) = 'array')",
     )?;
 
-    // Ensure correct shape (not bare IF NOT EXISTS): WIP catalogs may already
-    // have a table whose CHECK rejects `preparing`.
-    pending_file_mutations::ensure_correct_shape(connection)?;
+    // Released v9 has no pending-mutations table. This edge is the only
+    // historical upgrade owner for creating its canonical v10 DDL.
+    pending_file_mutations::create_for_released_v9_to_v10(connection)?;
 
     version::write(connection, 10)
 }

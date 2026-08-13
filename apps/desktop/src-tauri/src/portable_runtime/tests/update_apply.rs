@@ -1,0 +1,280 @@
+use std::{
+    collections::VecDeque,
+    path::Path,
+    sync::{Arc, Mutex},
+};
+
+use super::temp_root;
+use crate::portable_runtime::{
+    app_protocol::{PortableUpdateRequest, PortableUpdateResponse, UpdateRequest},
+    error::{PortableRuntimeError, Result},
+    rpu::{
+        MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL,
+        PORTABLE_SUPERVISOR_CAPABILITY, RPU_PROTOCOL, RpuManifest, VerifiedRpu,
+    },
+    signature::sha256_hex,
+    staging::staged_for_apply_test,
+    supervisor_updates::{SupervisorUpdateState, UpdateSink, serve_one_with_sink},
+};
+
+type Trace = Arc<Mutex<Vec<&'static str>>>;
+
+struct ScriptedSink {
+    requests: VecDeque<UpdateRequest>,
+    responses: Vec<PortableUpdateResponse>,
+    trace: Trace,
+    fail_apply_acceptance: bool,
+}
+
+impl ScriptedSink {
+    fn applies(trace: Trace, count: usize, fail_apply_acceptance: bool) -> Self {
+        Self {
+            requests: (0..count)
+                .map(|index| UpdateRequest {
+                    request_id: format!("apply-{index}"),
+                    request: PortableUpdateRequest::apply(),
+                })
+                .collect(),
+            responses: Vec::new(),
+            trace,
+            fail_apply_acceptance,
+        }
+    }
+}
+
+impl UpdateSink for ScriptedSink {
+    fn receive_update_request(&mut self) -> Result<UpdateRequest> {
+        self.requests.pop_front().ok_or_else(|| {
+            PortableRuntimeError::new("portable_update_test", "script exhausted before Apply")
+        })
+    }
+
+    fn send_update_response(
+        &mut self,
+        _request_id: String,
+        response: PortableUpdateResponse,
+    ) -> Result<()> {
+        let accepted = matches!(&response, PortableUpdateResponse::ApplyAccepted(_));
+        self.trace
+            .lock()
+            .expect("test trace lock")
+            .push(if accepted { "apply_accepted" } else { "reply" });
+        self.responses.push(response);
+        if accepted && self.fail_apply_acceptance {
+            return Err(PortableRuntimeError::new(
+                "portable_update_test_sink",
+                "scripted acceptance write failure",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn trace() -> Trace {
+    Arc::new(Mutex::new(Vec::new()))
+}
+
+fn trace_values(trace: &Trace) -> Vec<&'static str> {
+    trace.lock().expect("test trace lock").clone()
+}
+
+fn response_code(response: &PortableUpdateResponse) -> &str {
+    let PortableUpdateResponse::Rejected(rejected) = response else {
+        panic!("expected recoverable Apply rejection, got {response:?}");
+    };
+    &rejected.code
+}
+
+fn verified_rpu() -> VerifiedRpu {
+    let app_bytes = b"MZ scripted portable App".to_vec();
+    VerifiedRpu {
+        manifest: RpuManifest {
+            protocol: RPU_PROTOCOL.to_owned(),
+            platform: "windows-x86_64-portable".to_owned(),
+            version: "2.0.0".to_owned(),
+            app_sha256: sha256_hex(&app_bytes),
+            app_length: app_bytes.len() as u64,
+            minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
+            app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
+            minimum_schema: MINIMUM_SCHEMA,
+            maximum_schema: MAXIMUM_SCHEMA,
+            portable_role: "app".to_owned(),
+        },
+        app_bytes,
+        rpu_sha256: "a".repeat(64),
+    }
+}
+
+fn install_staged(
+    state: &mut SupervisorUpdateState,
+    canonical_path: &Path,
+    staged_bytes: &[u8],
+    trace: Trace,
+) {
+    state.stage_for_test(staged_for_apply_test(
+        canonical_path.to_owned(),
+        staged_bytes,
+        verified_rpu(),
+        trace,
+    ));
+}
+
+fn serve_apply(
+    sink: &mut ScriptedSink,
+    state: &mut SupervisorUpdateState,
+    update_root: &Path,
+) -> Result<Option<VerifiedRpu>> {
+    serve_one_with_sink(sink, state, "1.0.0", update_root)
+}
+
+#[test]
+fn g_apl_01_missing_and_second_apply_remain_recoverable_rejections() {
+    let root = temp_root("apply-missing");
+    let trace = trace();
+    let mut sink = ScriptedSink::applies(Arc::clone(&trace), 2, false);
+    let mut state = SupervisorUpdateState::default();
+
+    assert!(
+        serve_apply(&mut sink, &mut state, root.path())
+            .expect("missing staged capability is replied to")
+            .is_none()
+    );
+    assert_eq!(
+        response_code(&sink.responses[0]),
+        "portable_update_stage_missing"
+    );
+    assert!(!state.is_uncertain());
+
+    assert!(
+        serve_apply(&mut sink, &mut state, root.path())
+            .expect("second Apply keeps the App session recoverable")
+            .is_none()
+    );
+    assert_eq!(response_code(&sink.responses[1]), "portable_request_closed");
+    assert!(!state.is_uncertain());
+    assert_eq!(trace_values(&trace), ["reply", "reply"]);
+}
+
+#[test]
+fn g_apl_02_mutated_or_replaced_staged_bytes_are_consumed_before_rejection() {
+    for replacement in [false, true] {
+        let root = temp_root(if replacement {
+            "apply-replaced"
+        } else {
+            "apply-mutated"
+        });
+        let canonical_path = root.path().join("staged.rpu");
+        let original = b"verified staged bytes";
+        std::fs::write(&canonical_path, original).expect("write staged RPU");
+        let trace = trace();
+        let mut state = SupervisorUpdateState::default();
+        install_staged(&mut state, &canonical_path, original, Arc::clone(&trace));
+        if replacement {
+            std::fs::remove_file(&canonical_path).expect("remove original staged RPU");
+            std::fs::write(&canonical_path, b"replacement staged bytes")
+                .expect("replace staged RPU");
+        } else {
+            std::fs::write(&canonical_path, b"mutated staged bytes").expect("mutate staged RPU");
+        }
+        let mut sink = ScriptedSink::applies(Arc::clone(&trace), 2, false);
+
+        assert!(
+            serve_apply(&mut sink, &mut state, root.path())
+                .expect("tampered stage is replied to")
+                .is_none()
+        );
+        assert_eq!(response_code(&sink.responses[0]), "portable_stage_identity");
+        assert_eq!(trace_values(&trace), ["staged_reread", "reply"]);
+
+        assert!(
+            serve_apply(&mut sink, &mut state, root.path())
+                .expect("consumed staged capability cannot produce another RPU")
+                .is_none()
+        );
+        assert_eq!(response_code(&sink.responses[1]), "portable_request_closed");
+        assert!(!state.is_uncertain());
+    }
+}
+
+#[test]
+fn g_apl_03_unreadable_staged_bytes_are_rejected_without_acceptance() {
+    let root = temp_root("apply-unreadable");
+    let canonical_path = root.path().join("staged.rpu");
+    let original = b"verified staged bytes";
+    std::fs::write(&canonical_path, original).expect("write staged RPU");
+    let trace = trace();
+    let mut state = SupervisorUpdateState::default();
+    install_staged(&mut state, &canonical_path, original, Arc::clone(&trace));
+    std::fs::remove_file(&canonical_path).expect("remove staged RPU");
+    std::fs::create_dir(&canonical_path).expect("replace staged RPU with unreadable directory");
+    let mut sink = ScriptedSink::applies(Arc::clone(&trace), 1, false);
+
+    assert!(
+        serve_apply(&mut sink, &mut state, root.path())
+            .expect("unreadable stage is replied to")
+            .is_none()
+    );
+    assert_eq!(response_code(&sink.responses[0]), "portable_runtime_io");
+    assert_eq!(trace_values(&trace), ["staged_reread", "reply"]);
+    assert!(!state.is_uncertain());
+}
+
+#[test]
+fn g_apl_04_reread_precedes_exactly_one_acceptance_and_send_failure_is_uncertain() {
+    let success_root = temp_root("apply-success");
+    let success_path = success_root.path().join("staged.rpu");
+    let original = b"verified staged bytes";
+    std::fs::write(&success_path, original).expect("write staged RPU");
+    let success_trace = trace();
+    let mut success_state = SupervisorUpdateState::default();
+    install_staged(
+        &mut success_state,
+        &success_path,
+        original,
+        Arc::clone(&success_trace),
+    );
+    let mut success_sink = ScriptedSink::applies(Arc::clone(&success_trace), 2, false);
+
+    let returned = serve_apply(&mut success_sink, &mut success_state, success_root.path())
+        .expect("fully reread stage may be accepted")
+        .expect("accepted Apply returns the exact verified RPU once");
+    assert_eq!(returned.manifest.version, "2.0.0");
+    assert_eq!(
+        trace_values(&success_trace),
+        ["staged_reread", "apply_accepted"]
+    );
+    assert!(!success_state.is_uncertain());
+    assert!(
+        serve_apply(&mut success_sink, &mut success_state, success_root.path())
+            .expect("the consumed capability cannot be accepted twice")
+            .is_none()
+    );
+    assert_eq!(
+        response_code(&success_sink.responses[1]),
+        "portable_request_closed"
+    );
+
+    let failed_root = temp_root("apply-acceptance-write-failure");
+    let failed_path = failed_root.path().join("staged.rpu");
+    std::fs::write(&failed_path, original).expect("write staged RPU");
+    let failed_trace = trace();
+    let mut failed_state = SupervisorUpdateState::default();
+    install_staged(
+        &mut failed_state,
+        &failed_path,
+        original,
+        Arc::clone(&failed_trace),
+    );
+    let mut failed_sink = ScriptedSink::applies(Arc::clone(&failed_trace), 1, true);
+
+    let error = match serve_apply(&mut failed_sink, &mut failed_state, failed_root.path()) {
+        Err(error) => error,
+        Ok(_) => panic!("failed acceptance delivery must not release an RPU"),
+    };
+    assert_eq!(error.code(), "portable_update_test_sink");
+    assert_eq!(
+        trace_values(&failed_trace),
+        ["staged_reread", "apply_accepted"]
+    );
+    assert!(failed_state.is_uncertain());
+}

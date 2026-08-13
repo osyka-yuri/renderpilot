@@ -1,126 +1,137 @@
-use std::fs;
-
-use renderpilot_orchestration::portable::RuntimePathsV1;
-use renderpilot_storage_sqlite::SqliteStorage;
 use rusqlite::Connection;
 
-use super::{error_code, supervisor_session, temp_root};
+use super::{error_code, hash, temp_root};
 use crate::portable_runtime::{
-    journal::journal_path,
-    migration::{PORTABLE_SCHEMA_VERSION, migrate_to_current},
-    snapshot,
-    supervisor_activation::migrate_if_existing,
+    app_catalog_migration::{CatalogClassification, classify_catalog},
+    app_protocol::{
+        AppControlMessage, AppStatusMessage, CatalogMigrationOperation, CatalogMigrationReport,
+    },
+    journal::{JournalPhase, read_entries},
+    rpu::MAXIMUM_SCHEMA as PORTABLE_SCHEMA_VERSION,
+    signature::sha256_file,
 };
 
-const RELEASED_V4_SCHEMA: &str = include_str!(
-    "../../../../../../crates/renderpilot-storage-sqlite/tests/fixtures/catalog-v4.sql"
-);
-
-fn catalog_with_version(path: &std::path::Path, version: u32) {
-    if version == 15 {
-        let storage = SqliteStorage::open(path).expect("create exact current catalog fixture");
-        drop(storage);
-        Connection::open(path)
-            .expect("open current catalog for v15 fixture")
-            .execute_batch("DROP TABLE portable_path_tags; PRAGMA user_version = 15;")
-            .expect("reduce current catalog to the exact v15 boundary");
-        return;
-    }
-    let connection = Connection::open(path).expect("create SQLite fixture");
-    connection
-        .execute_batch(&format!(
-            "PRAGMA user_version = {version}; CREATE TABLE legacy(id INTEGER);"
-        ))
-        .expect("write legacy schema fixture");
-}
-
-fn user_version(path: &std::path::Path) -> u32 {
-    let connection = Connection::open(path).expect("open SQLite fixture");
-    connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .expect("read schema version")
-}
-
-fn catalog_v4_with_user_data(path: &std::path::Path) {
-    let connection = Connection::open(path).expect("create released v4 catalog");
-    connection
-        .execute_batch(RELEASED_V4_SCHEMA)
-        .expect("apply released v4 schema");
-    connection
-        .execute_batch(
-            "
-            PRAGMA user_version = 4;
-            INSERT INTO games (
-                id,
-                title,
-                launcher,
-                platform,
-                runtime,
-                install_path,
-                executable_candidates_json
-            ) VALUES (
-                'preserved-game',
-                'Preserved game',
-                'manual',
-                'windows',
-                'native',
-                'C:/Games/Preserved',
-                '[]'
-            );
-            ",
-        )
-        .expect("stamp v4 and insert user data");
-}
+use super::compatibility_support::{
+    PreparedMigrationHandshake, ScriptedMigrationTrial, catalog_v4_with_user_data,
+    catalog_with_version, create_current_catalog, create_data_root, in_process_future_trial,
+    migrate_through_protocol, portable_paths, user_version,
+};
 
 #[test]
-fn runtime_paths_stay_under_the_stable_portable_root_after_unicode_move() {
-    let root = temp_root("unicode-move");
-    let portable_root = root.path().join("РендерПилот-移動");
-    let generation = portable_root
-        .join(".renderpilot-generations/v1/objects")
-        .join("a".repeat(64));
-    let app = generation.join("renderpilot-app.exe");
-    let paths = RuntimePathsV1::from_portable_root(portable_root.clone(), &generation, &app)
-        .expect("derive moved portable paths");
-    paths
-        .validate()
-        .expect("all durable paths remain contained");
-    assert_eq!(paths.data_root, portable_root.join("data"));
-    assert!(paths.catalog_db_path.starts_with(&portable_root));
-    assert!(paths.webview2_root.starts_with(&portable_root));
-    assert_eq!(paths.selected_app_executable, app);
+fn migration_handshake_refuses_scripted_send_receive_and_wrong_ack_failures() {
+    let root = temp_root("scripted-migration-handshake");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    create_current_catalog(&paths.catalog_db_path);
 
-    let source = include_str!("../runtime_paths.rs");
-    let install = source
-        .find("install_runtime_paths(paths)")
-        .expect("typed path install");
-    let ambient = source
-        .find("std::env::set_var")
-        .expect("ambient replacement");
-    assert!(
-        install < ambient,
-        "typed paths install before ambient compatibility projection"
+    let handshake = PreparedMigrationHandshake::new(&paths, &hash('9'), PORTABLE_SCHEMA_VERSION)
+        .expect("prepare current-schema handshake");
+    let report = CatalogMigrationReport {
+        source_version: PORTABLE_SCHEMA_VERSION,
+        target_version: PORTABLE_SCHEMA_VERSION,
+        catalog_sha256: sha256_file(&paths.catalog_db_path).expect("hash current catalog"),
+    };
+    let mut wrong_ack = ScriptedMigrationTrial {
+        fail_send: false,
+        fail_receive: false,
+        response: Some(AppStatusMessage::migration_ack(
+            report,
+            None,
+            hash('8'),
+            handshake.supervisor_session.transcript_sha256().to_owned(),
+        )),
+        sent: None,
+    };
+    assert_eq!(
+        error_code(handshake.prepare_catalog(&paths, &mut wrong_ack, PORTABLE_SCHEMA_VERSION)),
+        "portable_migration_contract"
     );
-    assert!(source.contains("WEBVIEW2_USER_DATA_FOLDER"));
-    assert!(source.contains("RENDERPILOT_DB_PATH"));
+    assert!(matches!(
+        wrong_ack.sent.as_ref(),
+        Some(AppControlMessage::MigrationPermit(permit))
+            if matches!(permit.operation, CatalogMigrationOperation::ValidateCurrent(_))
+    ));
+
+    let mut send_failure = ScriptedMigrationTrial {
+        fail_send: true,
+        fail_receive: false,
+        response: None,
+        sent: None,
+    };
+    assert_eq!(
+        error_code(handshake.prepare_catalog(&paths, &mut send_failure, PORTABLE_SCHEMA_VERSION)),
+        "portable_migration_test"
+    );
+
+    let mut receive_failure = ScriptedMigrationTrial {
+        fail_send: false,
+        fail_receive: true,
+        response: None,
+        sent: None,
+    };
+    assert_eq!(
+        error_code(handshake.prepare_catalog(
+            &paths,
+            &mut receive_failure,
+            PORTABLE_SCHEMA_VERSION
+        )),
+        "portable_migration_test"
+    );
 }
 
 #[test]
-fn schema_15_to_current_writes_exact_path_tags_backup_and_idempotent_receipt() {
-    let root = temp_root("schema-15-16");
-    let catalog = root.path().join("catalog.db");
-    let update = root.path().join("update");
-    catalog_with_version(&catalog, 15);
-    let snapshot = snapshot::create(&catalog, &update, "migration").expect("create backup receipt");
-    let receipt = root.path().join("migration/receipt.json");
+fn fresh_catalog_classification_rejects_zero_version_user_objects_before_trial_ready() {
+    let root = temp_root("fresh-catalog-classification");
+    let absent = root.path().join("absent.db");
+    assert!(matches!(
+        classify_catalog(&absent).expect("absent catalog is fresh"),
+        CatalogClassification::Fresh
+    ));
 
-    let first =
-        migrate_to_current(&catalog, &snapshot, &receipt).expect("migrate supported schema");
+    let empty = root.path().join("empty.db");
+    drop(Connection::open(&empty).expect("create zero-version SQLite catalog"));
+    assert!(matches!(
+        classify_catalog(&empty).expect("empty zero-version catalog is fresh"),
+        CatalogClassification::Fresh
+    ));
+
+    let contaminated = root.path().join("contaminated.db");
+    let connection = Connection::open(&contaminated).expect("create contaminated SQLite catalog");
+    connection
+        .execute_batch("CREATE TABLE user_state (id INTEGER PRIMARY KEY)")
+        .expect("create user SQLite object");
+    drop(connection);
+    assert_eq!(
+        error_code(classify_catalog(&contaminated)),
+        "portable_fresh_catalog"
+    );
+}
+
+#[test]
+fn schema_15_to_current_runs_the_wire_protocol_and_writes_exact_path_tags() {
+    let root = temp_root("schema-15-current");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    catalog_with_version(&paths.catalog_db_path, 15);
+    let transaction = hash('3');
+
+    let first = migrate_through_protocol(&paths, 15, &transaction)
+        .expect("migrate supported schema through the exact wire protocol");
     assert_eq!(first.source_version, 15);
     assert_eq!(first.target_version, PORTABLE_SCHEMA_VERSION);
-    assert!(receipt.is_file());
-    assert_eq!(user_version(&catalog), 16);
-    let tags = Connection::open(&catalog)
+    assert!(
+        paths
+            .update_root
+            .join("transactions")
+            .join(&transaction)
+            .join("migration-receipt.json")
+            .is_file()
+    );
+    assert_eq!(
+        user_version(&paths.catalog_db_path),
+        PORTABLE_SCHEMA_VERSION
+    );
+    let tags = Connection::open(&paths.catalog_db_path)
         .expect("open migrated catalog")
         .prepare("SELECT tag, kind, value FROM portable_path_tags ORDER BY tag")
         .expect("read tags")
@@ -154,37 +165,25 @@ fn schema_15_to_current_writes_exact_path_tags_backup_and_idempotent_receipt() {
             ),
         ]
     );
-    let second =
-        migrate_to_current(&catalog, &snapshot, &receipt).expect("schema 16 replay is idempotent");
-    assert_eq!(second.target_version, PORTABLE_SCHEMA_VERSION);
 }
 
 #[test]
 fn released_v4_catalog_migrates_through_the_supervisor_boundary() {
     let root = temp_root("schema-4-current");
-    let catalog = root.path().join("catalog.db");
-    let update = root.path().join("update");
-    catalog_v4_with_user_data(&catalog);
-    let snapshot = snapshot::create(&catalog, &update, "migration").expect("create v4 backup");
-    let receipt_path = root.path().join("migration/receipt.json");
-
-    let receipt =
-        migrate_to_current(&catalog, &snapshot, &receipt_path).expect("migrate released v4");
-
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    catalog_v4_with_user_data(&paths.catalog_db_path);
+    let receipt = migrate_through_protocol(&paths, 4, &hash('4'))
+        .expect("migrate released v4 through the exact wire protocol");
     assert_eq!(receipt.source_version, 4);
     assert_eq!(receipt.target_version, PORTABLE_SCHEMA_VERSION);
     assert_eq!(
-        receipt.backup_sha256.as_deref(),
-        Some(snapshot.backup_sha256.as_str())
-    );
-    assert!(receipt_path.is_file());
-    assert_eq!(
-        Connection::open(&catalog)
+        Connection::open(&paths.catalog_db_path)
             .expect("open migrated catalog")
             .query_row(
                 "SELECT title FROM games WHERE id = 'preserved-game'",
                 [],
-                |row| row.get::<_, String>(0),
+                |row| row.get::<_, String>(0)
             )
             .expect("read preserved v4 game"),
         "Preserved game"
@@ -193,165 +192,109 @@ fn released_v4_catalog_migrates_through_the_supervisor_boundary() {
 
 #[test]
 fn current_schema_launch_does_not_allocate_a_rollback_snapshot() {
-    let root = temp_root("schema-16-no-snapshot");
-    let portable_root = root.path().join("portable");
-    let generation = portable_root.join("generation");
-    let app = generation.join("renderpilot-app.exe");
-    let paths = RuntimePathsV1::from_portable_root(portable_root, &generation, &app)
-        .expect("derive portable paths");
-    fs::create_dir_all(&paths.data_root).expect("create data root");
-    catalog_with_version(&paths.catalog_db_path, 15);
-    let initial = snapshot::create(&paths.catalog_db_path, &paths.update_root, "initial")
-        .expect("create migration backup");
-    migrate_to_current(
-        &paths.catalog_db_path,
-        &initial,
-        &paths
-            .update_root
-            .join("transactions/initial/migration.json"),
-    )
-    .expect("migrate fixture to current schema");
-
-    migrate_if_existing(
-        &journal_path(&paths.update_root, "current"),
-        &paths,
-        "current",
-        &"a".repeat(64),
-        None,
-        &supervisor_session('1'),
-    )
-    .expect("validate current schema without migration");
-
+    let root = temp_root("schema-current-no-snapshot");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    create_current_catalog(&paths.catalog_db_path);
+    let transaction = hash('6');
+    let report = migrate_through_protocol(&paths, PORTABLE_SCHEMA_VERSION, &transaction)
+        .expect("validate current schema through the exact wire protocol");
+    assert_eq!(report.source_version, PORTABLE_SCHEMA_VERSION);
+    assert_eq!(report.target_version, PORTABLE_SCHEMA_VERSION);
     assert!(
         !paths
             .update_root
-            .join("transactions/current/snapshot")
+            .join("transactions")
+            .join(&transaction)
+            .join("snapshot")
             .exists(),
-        "ordinary schema-16 launches must not accumulate full catalog copies"
+        "ordinary current-schema launches must not accumulate full catalog copies"
     );
-}
-
-#[test]
-fn snapshot_includes_committed_wal_rows_and_restores_a_standalone_database() {
-    let root = temp_root("snapshot-wal");
-    let catalog = root.path().join("catalog.db");
-    let update = root.path().join("update");
-    let connection = Connection::open(&catalog).expect("create WAL catalog");
-    connection
-        .execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA wal_autocheckpoint = 0;
-             CREATE TABLE fixture(value TEXT NOT NULL);
-             PRAGMA wal_checkpoint(TRUNCATE);
-             INSERT INTO fixture(value) VALUES ('committed-in-wal');",
-        )
-        .expect("write committed WAL fixture");
     assert!(
-        std::path::PathBuf::from(format!("{}-wal", catalog.display())).is_file(),
-        "fixture must exercise a live WAL"
+        !paths
+            .update_root
+            .join("transactions")
+            .join(&transaction)
+            .join("migration-receipt.json")
+            .exists(),
+        "observational validation must not create a migration receipt"
     );
-
-    let receipt = snapshot::create(&catalog, &update, "wal").expect("snapshot WAL catalog");
-    drop(connection);
-    Connection::open(&catalog)
-        .expect("open live catalog")
-        .execute("UPDATE fixture SET value = 'after-snapshot'", [])
-        .expect("mutate live catalog");
-    snapshot::restore(&receipt, &catalog).expect("restore online backup");
-
-    let restored: String = Connection::open(&catalog)
-        .expect("open restored catalog")
-        .query_row("SELECT value FROM fixture", [], |row| row.get(0))
-        .expect("read restored WAL value");
-    assert_eq!(restored, "committed-in-wal");
 }
 
 #[test]
-fn snapshot_restore_neutralizes_crash_surviving_wal_before_main_replacement() {
-    let root = temp_root("snapshot-stale-wal");
-    let catalog = root.path().join("catalog.db");
-    let update = root.path().join("update");
-    let wal = std::path::PathBuf::from({
-        let mut value = catalog.as_os_str().to_owned();
-        value.push("-wal");
-        value
-    });
-    let connection = Connection::open(&catalog).expect("create WAL rollback fixture");
-    connection
-        .execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA wal_autocheckpoint = 0;
-             CREATE TABLE fixture(value TEXT NOT NULL);
-             INSERT INTO fixture(value) VALUES ('snapshot');
-             PRAGMA wal_checkpoint(TRUNCATE);",
+fn stable_supervisor_accepts_a_real_future_generation_migration() {
+    let root = temp_root("future-generation-migration");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    create_current_catalog(&paths.catalog_db_path);
+    Connection::open(&paths.catalog_db_path)
+        .expect("open current catalog fixture")
+        .execute(
+            "INSERT INTO games (id, title, launcher, platform, runtime, install_path, install_key, root_authority, executable_candidates_json)
+             VALUES (?1, ?2, 'manual', 'windows', 'native', ?3, ?4, 'user_confirmed', '[]')",
+            ("future-migration-game", "Future Migration Game", "C:/Games/FutureMigration", "c:/games/futuremigration"),
         )
-        .expect("create checkpointed snapshot value");
-    let receipt =
-        snapshot::create(&catalog, &update, "stale-wal").expect("snapshot checkpointed value");
-    let main_before_failed_migration = fs::read(&catalog).expect("capture pre-WAL main bytes");
+        .expect("insert user data before future migration");
 
-    connection
-        .execute("UPDATE fixture SET value = 'failed-migration'", [])
-        .expect("commit failed-migration WAL frame");
-    let crash_wal = fs::read(&wal).expect("capture live WAL before simulated crash");
+    let catalog_before = sha256_file(&paths.catalog_db_path).expect("hash current catalog");
+    let future_schema = PORTABLE_SCHEMA_VERSION + 1;
+    let transaction = hash('8');
+    let handshake = PreparedMigrationHandshake::new(&paths, &transaction, future_schema)
+        .expect("prepare current supervisor for a future generation");
+    let mut trial = in_process_future_trial(&handshake, &paths, PORTABLE_SCHEMA_VERSION);
+    handshake
+        .prepare_catalog(&paths, &mut trial, PORTABLE_SCHEMA_VERSION)
+        .expect("current supervisor accepts the future App migration");
+    let report = trial.last_report.expect("future App sends its report");
+    assert_eq!(report.source_version, PORTABLE_SCHEMA_VERSION);
+    assert_eq!(report.target_version, future_schema);
+    assert_ne!(report.catalog_sha256, catalog_before);
+    assert_eq!(user_version(&paths.catalog_db_path), future_schema);
+    let migrated = Connection::open(&paths.catalog_db_path).expect("open future catalog");
+    let (title, sort_title): (String, String) = migrated
+        .query_row(
+            "SELECT title, future_sort_title FROM games WHERE id = 'future-migration-game'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read user data transformed by the future migration");
+    assert_eq!(title, "Future Migration Game");
+    assert_eq!(sort_title, "future migration game");
+    drop(migrated);
+    let transaction_root = paths.update_root.join("transactions").join(&transaction);
+    let snapshot_catalog = transaction_root.join("snapshot/catalog.db");
+    assert_eq!(user_version(&snapshot_catalog), PORTABLE_SCHEMA_VERSION);
     assert!(
-        crash_wal.len() > 32,
-        "fixture must contain committed WAL frames"
+        Connection::open(&snapshot_catalog)
+            .expect("open pre-migration snapshot")
+            .prepare("SELECT future_sort_title FROM games")
+            .is_err(),
+        "the future column must exist only in the migrated live catalog"
     );
-    drop(connection);
-
-    // Recreate the durable state left by a process crash: the old main file
-    // plus committed migration frames that never reached the final checkpoint.
-    fs::write(&catalog, main_before_failed_migration).expect("restore crash-time main file");
-    fs::write(&wal, crash_wal).expect("restore crash-surviving WAL");
-
-    snapshot::restore(&receipt, &catalog).expect("restore after neutralizing stale WAL");
-    let restored: String = Connection::open(&catalog)
-        .expect("open rolled-back catalog")
-        .query_row("SELECT value FROM fixture", [], |row| row.get(0))
-        .expect("read rolled-back value");
-    assert_eq!(restored, "snapshot");
-}
-
-#[test]
-fn unsupported_and_malformed_schemas_fail_closed_without_inference() {
-    let root = temp_root("schema-closed");
-    for (name, version, expected) in [
-        ("pre-v1", 3, "portable_schema_unsupported"),
-        ("malformed-supported", 14, "portable_schema_storage"),
-        ("future", 17, "portable_schema_unsupported"),
-    ] {
-        let catalog = root.path().join(format!("{name}.db"));
-        catalog_with_version(&catalog, version);
-        let snapshot = snapshot::create(&catalog, &root.path().join(name), "migration")
-            .expect("create backup for unsupported schema");
-        assert_eq!(
-            error_code(migrate_to_current(
-                &catalog,
-                &snapshot,
-                &root.path().join(format!("{name}.json"))
-            )),
-            expected
-        );
-        assert_eq!(user_version(&catalog), version);
-    }
-
-    let catalog = root.path().join("backup-mismatch.db");
-    catalog_with_version(&catalog, 15);
-    let snapshot = snapshot::create(&catalog, &root.path().join("backup"), "migration")
-        .expect("create immutable backup receipt");
-    fs::write(&snapshot.backup_path, b"tampered backup").expect("tamper isolated fixture");
+    assert!(transaction_root.join("snapshot-receipt.json").is_file());
+    assert!(transaction_root.join("migration-receipt.json").is_file());
     assert_eq!(
-        error_code(migrate_to_current(
-            &catalog,
-            &snapshot,
-            &root.path().join("bad-receipt.json")
-        )),
-        "portable_migration_backup"
+        read_entries(&handshake.journal)
+            .expect("read accepted future migration journal")
+            .last()
+            .map(|entry| entry.phase),
+        Some(JournalPhase::MigrationCommitted)
     );
-    assert_eq!(user_version(&catalog), 15);
+}
+
+#[test]
+fn unsupported_schema_fails_closed_without_inference() {
+    let root = temp_root("schema-closed");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    catalog_with_version(&paths.catalog_db_path, 14);
+    assert_eq!(
+        error_code(migrate_through_protocol(&paths, 14, &hash('7'))),
+        "portable_storage_schema"
+    );
+    assert_eq!(user_version(&paths.catalog_db_path), 14);
     assert!(
-        !Connection::open(&catalog)
+        !Connection::open(&paths.catalog_db_path)
             .expect("open unchanged catalog")
             .prepare("SELECT tag FROM portable_path_tags")
             .is_ok(),

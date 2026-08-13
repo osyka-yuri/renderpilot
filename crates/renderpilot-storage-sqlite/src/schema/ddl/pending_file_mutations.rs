@@ -1,8 +1,7 @@
 //! Canonical DDL for `pending_file_mutations`.
 //!
-//! Single source of truth for baseline composition, v9→v10 upgrades, and
-//! soft-heal of WIP catalogs that stamped v10 with a CHECK that rejected
-//! `preparing`.
+//! Single source of truth for baseline composition and the released v9→v10
+//! upgrade.
 
 use renderpilot_application::AppResult;
 use rusqlite::{Connection, OptionalExtension};
@@ -13,7 +12,6 @@ use super::super::objects::{SchemaObjectKind, object_exists};
 use super::common::MS_UNIXEPOCH_DEFAULT;
 
 const TABLE_NAME: &str = "pending_file_mutations";
-const TEMP_TABLE_NAME: &str = "pending_file_mutations_new";
 
 /// Column definitions and CHECKs shared by all CREATE variants.
 fn table_body() -> String {
@@ -67,20 +65,14 @@ pub(super) fn baseline_sql() -> String {
     )
 }
 
-/// Ensures the live table accepts `preparing` (and exists).
+/// Creates the canonical table and index for the released v9→v10 transition.
 ///
-/// - Missing → create full DDL.
-/// - Present with correct CHECK → no-op.
-/// - Present with legacy CHECK (`prepared`/`committed` only) → recreate and
-///   copy surviving rows. Does not bump `user_version`.
-pub(in crate::schema) fn ensure_correct_shape(connection: &Connection) -> AppResult<()> {
-    if !object_exists(connection, SchemaObjectKind::Table, TABLE_NAME)? {
-        return create_fresh(connection);
-    }
-    if allows_preparing(connection)? {
-        return Ok(());
-    }
-    recreate_preserving_rows(connection)
+/// Released v9 catalogs do not contain this table. Any other shape is handled
+/// by the general schema policy rather than repaired at this historical edge.
+/// A preexisting table is left untouched so post-upgrade validation can decide
+/// whether the whole catalog needs its backed reset.
+pub(in crate::schema) fn create_for_released_v9_to_v10(connection: &Connection) -> AppResult<()> {
+    create_canonical(connection)
 }
 
 /// Probe used by schema contract validation.
@@ -144,35 +136,12 @@ pub(in crate::schema) fn allows_preparing_observational(
     Ok(normalized.contains("check(statein('preparing','prepared','committed'))"))
 }
 
-fn create_fresh(connection: &Connection) -> AppResult<()> {
+fn create_canonical(connection: &Connection) -> AppResult<()> {
     connection
         .execute_batch(&format!(
             "{};\n{};",
-            create_table_sql(TABLE_NAME, false),
+            create_table_sql(TABLE_NAME, true),
             CREATE_INDEX_SQL
         ))
         .map_err(|error| storage_context("could not create pending_file_mutations", error))
-}
-
-fn recreate_preserving_rows(connection: &Connection) -> AppResult<()> {
-    connection
-        .execute_batch(&format!("DROP TABLE IF EXISTS {TEMP_TABLE_NAME};"))
-        .map_err(|error| {
-            storage_context("could not prepare pending_file_mutations rebuild", error)
-        })?;
-
-    connection
-        .execute_batch(&format!(
-            "{create_temp};\n\
-             INSERT INTO {TEMP_TABLE_NAME}\n\
-                 (id, game_id, feature, subject_id, state, manifest_json, created_at, updated_at)\n\
-             SELECT id, game_id, feature, subject_id, state, manifest_json, created_at, updated_at\n\
-               FROM {TABLE_NAME}\n\
-              WHERE state IN ('prepared', 'committed', 'preparing');\n\
-             DROP TABLE {TABLE_NAME};\n\
-             ALTER TABLE {TEMP_TABLE_NAME} RENAME TO {TABLE_NAME};\n\
-             {CREATE_INDEX_SQL};",
-            create_temp = create_table_sql(TEMP_TABLE_NAME, false),
-        ))
-        .map_err(|error| storage_context("could not rebuild pending_file_mutations", error))
 }
