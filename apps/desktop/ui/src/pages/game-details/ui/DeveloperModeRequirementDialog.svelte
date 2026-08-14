@@ -49,31 +49,30 @@
   const unavailable = $derived(blocker === DEVELOPER_MODE_CHECK_UNAVAILABLE);
   const actionsBusy = $derived(retrying || openingExternalTarget);
   const previewMode = isDesktopPreviewMode();
-  const copy = $derived.by(
-    (): DialogCopy =>
-      unavailable
-        ? {
-            title: 'gameDetails.developerMode.checkTitle',
-            description: 'gameDetails.developerMode.checkDescription',
-            guidance: null,
-            openAction: null,
-            openFailed: null,
-            retryAction: 'gameDetails.developerMode.retryCheck',
-          }
-        : {
-            title: 'gameDetails.developerMode.requiredTitle',
-            description: 'gameDetails.developerMode.requiredDescription',
-            guidance: previewMode
-              ? 'gameDetails.developerMode.previewGuidance'
-              : 'gameDetails.developerMode.enableGuidance',
-            openAction: previewMode
-              ? 'gameDetails.developerMode.openDocumentation'
-              : 'gameDetails.developerMode.openSettings',
-            openFailed: previewMode
-              ? 'gameDetails.developerMode.documentationOpenFailed'
-              : 'gameDetails.developerMode.settingsOpenFailed',
-            retryAction: 'gameDetails.developerMode.checkStatus',
-          },
+  const copy = $derived.by((): DialogCopy =>
+    unavailable
+      ? {
+          title: 'gameDetails.developerMode.checkTitle',
+          description: 'gameDetails.developerMode.checkDescription',
+          guidance: null,
+          openAction: null,
+          openFailed: null,
+          retryAction: 'gameDetails.developerMode.retryCheck',
+        }
+      : {
+          title: 'gameDetails.developerMode.requiredTitle',
+          description: 'gameDetails.developerMode.requiredDescription',
+          guidance: previewMode
+            ? 'gameDetails.developerMode.previewGuidance'
+            : 'gameDetails.developerMode.enableGuidance',
+          openAction: previewMode
+            ? 'gameDetails.developerMode.openDocumentation'
+            : 'gameDetails.developerMode.openSettings',
+          openFailed: previewMode
+            ? 'gameDetails.developerMode.documentationOpenFailed'
+            : 'gameDetails.developerMode.settingsOpenFailed',
+          retryAction: 'gameDetails.developerMode.checkStatus',
+        },
   );
 
   $effect(() => {

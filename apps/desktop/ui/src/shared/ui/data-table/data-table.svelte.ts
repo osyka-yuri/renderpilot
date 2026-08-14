@@ -1,80 +1,118 @@
 import {
+  batch,
+  createAtom,
+  useSelector,
+  type Atom,
+  type AtomOptions,
+} from '@tanstack/svelte-store';
+import {
+  constructTable,
   type RowData,
+  type Table,
+  type TableFeatures,
   type TableOptions,
-  type TableOptionsResolved,
-  type TableState,
-  type Updater,
-  createTable,
 } from '@tanstack/table-core';
+import type { TableReactivityBindings } from '@tanstack/table-core/reactivity';
+import { untrack } from 'svelte';
+
+type SvelteTableOptions<TFeatures extends TableFeatures, TData extends RowData> = Omit<
+  TableOptions<TFeatures, TData>,
+  'features'
+>;
 
 /**
- * Creates a reactive TanStack table object for Svelte.
- *
- * Keeps TanStack's internal table state in Svelte state, while still allowing
- * externally controlled state via `options.state`.
+ * Creates a stable v9 TanStack table object for Svelte rune components.
  */
-export function createSvelteTable<TData extends RowData>(options: TableOptions<TData>) {
-  const defaultOptions = {
-    state: {},
-    onStateChange: noop,
-    renderFallbackValue: null,
-    mergeOptions: (
-      defaultOptions: TableOptions<TData>,
-      nextOptions: Partial<TableOptions<TData>>,
-    ): TableOptions<TData> => {
-      return mergeObjects(defaultOptions, nextOptions);
-    },
-  } satisfies Partial<TableOptionsResolved<TData>>;
-
-  const resolvedOptions = mergeObjects(defaultOptions, options) as TableOptionsResolved<TData>;
-
-  const table = createTable(resolvedOptions);
-  let state = $state<TableState>(table.initialState);
-
-  const tableState = mergeObjects(
-    () => state,
-    () => options.state ?? {},
-  );
-
-  const tableOptions = mergeObjects(resolvedOptions, {
-    state: tableState,
-    onStateChange: handleStateChange,
-  }) as TableOptionsResolved<TData>;
-
-  function handleStateChange(updater: Updater<TableState>): void {
-    state = applyTableStateUpdater(updater, state);
-    options.onStateChange?.(updater);
+export function createSvelteTable<TFeatures extends TableFeatures, TData extends RowData>(
+  features: TFeatures,
+  options: SvelteTableOptions<TFeatures, TData>,
+): Table<TFeatures, TData> {
+  const svelteFeatures = {
+    ...features,
+    coreReactivityFeature: createSvelteReactivityBindings(),
+  } as TFeatures;
+  const tableOptions = createTableOptions(svelteFeatures, options);
+  const table = constructTable(tableOptions);
+  const optionsStore = table.optionsStore;
+  if (optionsStore === undefined) {
+    throw new Error('Svelte table construction requires an options store.');
   }
 
-  function syncOptions(): void {
-    table.setOptions(() => tableOptions);
-  }
+  const optionSnapshot = useSelector(optionsStore);
+  const stateSnapshot = useSelector(table.store);
+  let revision = $state(0);
 
-  syncOptions();
-
-  $effect.pre(() => {
-    syncOptions();
+  $effect(() => {
+    void optionSnapshot.current;
+    void stateSnapshot.current;
+    revision = untrack(() => revision) + 1;
   });
 
-  return table;
+  $effect.pre(() => {
+    trackOptionValues(options);
+    const nextOptions = createTableOptions(svelteFeatures, options);
+
+    untrack(() => {
+      table.setOptions(() => nextOptions);
+    });
+  });
+
+  return new Proxy(table, {
+    get(target, key): unknown {
+      // Reading through the table facade subscribes the caller to both option
+      // publication and feature-state writes through the official Svelte store
+      // bridge, while the underlying table instance remains stable.
+      void revision;
+
+      const value: unknown = Reflect.get(target, key, target);
+      if (typeof value !== 'function') {
+        return value;
+      }
+
+      const boundValue: (...args: unknown[]) => unknown = (...args) =>
+        Reflect.apply(value, target, args) as unknown;
+      return boundValue;
+    },
+  });
 }
 
-function noop(): void {
-  return undefined;
-}
-
-function applyTableStateUpdater(
-  updater: Updater<TableState>,
-  currentState: TableState,
-): TableState {
-  if (typeof updater === 'function') {
-    return updater(currentState);
-  }
-
+function createSvelteReactivityBindings(): TableReactivityBindings {
   return {
-    ...currentState,
-    ...updater,
+    createOptionsStore: true,
+    wrapExternalAtoms: false,
+    addSubscription: () => {
+      throw new Error('Svelte table reactivity does not support external subscriptions.');
+    },
+    unmount: () => undefined,
+    batch,
+    schedule: queueMicrotask,
+    untrack,
+    createWritableAtom: <T>(initialValue: T, atomOptions?: AtomOptions<T>): Atom<T> =>
+      createAtom(initialValue, atomOptions),
+    createReadonlyAtom: <T>(resolve: () => T, atomOptions?: AtomOptions<T>) =>
+      createAtom(resolve, atomOptions),
   };
+}
+
+function createTableOptions<TFeatures extends TableFeatures, TData extends RowData>(
+  features: TFeatures,
+  options: SvelteTableOptions<TFeatures, TData>,
+): TableOptions<TFeatures, TData> {
+  return mergeObjects({ features }, options) as TableOptions<TFeatures, TData>;
+}
+
+function trackOptionValues(options: object): void {
+  for (const key of Reflect.ownKeys(options)) {
+    const value = readProperty(options, key);
+
+    if (key !== 'state' || typeof value !== 'object' || value === null) {
+      continue;
+    }
+
+    for (const stateKey of Reflect.ownKeys(value)) {
+      readProperty(value, stateKey);
+    }
+  }
 }
 
 type MaybeThunk<T extends object> = T | null | undefined | (() => T | null | undefined);

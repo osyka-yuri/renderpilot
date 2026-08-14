@@ -3,6 +3,7 @@
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { cn } from '@shared/classnames';
   import { t } from '@shared/i18n';
+  import { type SortableTableFeatures } from '@shared/ui';
   import type { Column } from '@tanstack/table-core';
   import type { LibraryPackageRow } from '../model/libraries-page-model';
 
@@ -10,7 +11,7 @@
 
   type Props = {
     label: string;
-    column: Column<LibraryPackageRow>;
+    column: Column<SortableTableFeatures, LibraryPackageRow>;
     class?: string;
   };
 

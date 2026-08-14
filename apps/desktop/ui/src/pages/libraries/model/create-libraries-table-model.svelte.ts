@@ -1,14 +1,8 @@
 import { createVirtualizer } from '@tanstack/svelte-virtual';
 import { untrack } from 'svelte';
 import { get } from 'svelte/store';
-import {
-  getCoreRowModel,
-  getSortedRowModel,
-  type ColumnDef,
-  type Row,
-  type SortingState,
-} from '@tanstack/table-core';
-import { createSvelteTable } from '@shared/ui';
+import { type ColumnDef, type Row, type SortingState } from '@tanstack/table-core';
+import { createSvelteTable, sortableTableFeatures } from '@shared/ui';
 import type { LibraryPackageRow } from './libraries-page-model';
 import { resetVirtualizerAfterLayout } from '../ui/virtualizer-helpers';
 
@@ -19,7 +13,7 @@ const ROW_OVERSCAN = 12;
 
 type LibrariesTableModelProps = {
   getEntries: () => LibraryPackageRow[];
-  getColumns: () => ColumnDef<LibraryPackageRow>[];
+  getColumns: () => ColumnDef<typeof sortableTableFeatures, LibraryPackageRow>[];
   getActiveVendor: () => string | undefined;
   getActiveType: () => string | undefined;
   getShowPackageDisplayName: () => boolean;
@@ -50,27 +44,23 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
     });
   }
 
-  const table = $derived(
-    createSvelteTable({
-      get data() {
-        return props.getEntries();
+  const table = createSvelteTable(sortableTableFeatures, {
+    get data() {
+      return props.getEntries();
+    },
+    get columns() {
+      return props.getColumns();
+    },
+    state: {
+      get sorting() {
+        return sorting;
       },
-      get columns() {
-        return props.getColumns();
-      },
-      state: {
-        get sorting() {
-          return sorting;
-        },
-      },
-      onSortingChange: (updater) => {
-        sorting = typeof updater === 'function' ? updater(sorting) : updater;
-        scheduleVirtualizerReset(getVirtualizerResetKey());
-      },
-      getCoreRowModel: getCoreRowModel(),
-      getSortedRowModel: getSortedRowModel(),
-    }),
-  );
+    },
+    onSortingChange: (updater) => {
+      sorting = typeof updater === 'function' ? updater(sorting) : updater;
+      scheduleVirtualizerReset(getVirtualizerResetKey());
+    },
+  });
 
   const tableRows = $derived(table.getRowModel().rows);
 
@@ -90,9 +80,9 @@ export function createLibrariesTableModel(props: LibrariesTableModelProps) {
   });
 
   function getRowByIndex(
-    rows: Row<LibraryPackageRow>[],
+    rows: Row<typeof sortableTableFeatures, LibraryPackageRow>[],
     index: number,
-  ): Row<LibraryPackageRow> | undefined {
+  ): Row<typeof sortableTableFeatures, LibraryPackageRow> | undefined {
     if (index < 0 || index >= rows.length) {
       return undefined;
     }

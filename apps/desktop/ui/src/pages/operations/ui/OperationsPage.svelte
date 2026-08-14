@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type ColumnDef, getCoreRowModel } from '@tanstack/table-core';
+  import type { ColumnDef } from '@tanstack/table-core';
 
   import type { GameSummary } from '@entities/game';
   import { getLocale, t } from '@shared/i18n';
@@ -16,6 +16,7 @@
     TableHeader,
     TableRow,
     createSvelteTable,
+    coreTableFeatures,
     FlexRender,
     renderSnippet,
   } from '@shared/ui';
@@ -54,8 +55,8 @@
 
   const hasOperations = $derived(operations.length > 0);
 
-  const columns = $derived.by((): ColumnDef<OperationViewModel>[] => {
-    const baseColumns: ColumnDef<OperationViewModel>[] = [
+  const columns = $derived.by((): ColumnDef<typeof coreTableFeatures, OperationViewModel>[] => {
+    const baseColumns: ColumnDef<typeof coreTableFeatures, OperationViewModel>[] = [
       {
         id: 'date',
         header: () => t('operations.date'),
@@ -97,14 +98,13 @@
     ];
   });
 
-  const table = createSvelteTable({
+  const table = createSvelteTable(coreTableFeatures, {
     get data() {
       return operations;
     },
     get columns() {
       return columns;
     },
-    getCoreRowModel: getCoreRowModel(),
   });
 </script>
 

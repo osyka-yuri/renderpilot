@@ -6,8 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
 import tauriConfig from './src-tauri/tauri.conf.json' with { type: 'json' };
-import { i18nBundleBoundaryPlugin } from './scripts/i18n-bundle-boundary-plugin';
-import { edgeBuildTarget } from './scripts/webview-runtime-contract';
+import { i18nBundleBoundaryPlugin } from './scripts/i18n-bundle-boundary-plugin.ts';
+import { edgeBuildTarget } from './scripts/webview-runtime-contract.ts';
 
 const PROJECT_ROOT = import.meta.dirname;
 const UI_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'ui/src');

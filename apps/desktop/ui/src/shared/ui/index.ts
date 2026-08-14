@@ -130,7 +130,16 @@ export {
 export { Toggle, toggleVariants } from './toggle';
 export { ToggleGroup, ToggleGroupItem } from './toggle-group';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
-export { FlexRender, renderComponent, renderSnippet, createSvelteTable } from './data-table';
+export {
+  FlexRender,
+  renderComponent,
+  renderSnippet,
+  createSvelteTable,
+  coreTableFeatures,
+  sortableTableFeatures,
+  type CoreTableFeatures,
+  type SortableTableFeatures,
+} from './data-table';
 export { RadioGroup, RadioGroupItem } from './radio-group';
 export {
   AlertDialog,

@@ -1,4 +1,6 @@
 allowBuilds:
   unrs-resolver: true
+configDependencies:
+  '@pnpm/pacquet': 0.11.12
 patchedDependencies:
   bits-ui@2.18.1: patches/bits-ui@2.18.1.patch

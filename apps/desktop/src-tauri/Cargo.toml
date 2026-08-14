@@ -32,17 +32,17 @@ rusqlite = { version = "0.40", features = ["backup", "bundled"], optional = true
 reqwest = { version = "0.13.4", features = ["blocking"], optional = true }
 zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
 tauri = { version = "2.11.5", features = [] }
-tauri-plugin-dialog = "2.7.1"
+tauri-plugin-dialog = "2.7.2"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-process = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
-base64 = { version = "0.23.0", optional = true, default-features = false, features = ["std"] }
+base64 = { version = "0.23.1", optional = true, default-features = false, features = ["std"] }
 minisign-verify = { version = "0.2.5", optional = true }
 renderpilot-storage-sqlite = { path = "../../../crates/renderpilot-storage-sqlite", optional = true }
-webview2-com-sys = "0.38"
+webview2-com-sys = "0.39.1"
 winreg = "0.56"
-windows-core = "0.61"
+windows-core = "0.62.2"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",

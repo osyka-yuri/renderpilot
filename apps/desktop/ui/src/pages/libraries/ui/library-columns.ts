@@ -1,8 +1,9 @@
+import { sortFn_alphanumeric, sortFn_basic } from '@tanstack/table-core';
 import type { ColumnDef } from '@tanstack/table-core';
 
 import { formatBytes } from '@shared/format';
 import { getLocale, t } from '@shared/i18n';
-import { renderComponent } from '@shared/ui';
+import { renderComponent, type SortableTableFeatures } from '@shared/ui';
 import {
   compareReleaseVersions,
   formatSignedDate,
@@ -45,12 +46,12 @@ export function createLibraryColumns(
   onDelete: (packageId: string) => Promise<boolean>,
   showPackageDisplayName: () => boolean,
   onShowLegalDocuments: (row: LibraryPackageRow) => void,
-): ColumnDef<LibraryPackageRow>[] {
+): ColumnDef<SortableTableFeatures, LibraryPackageRow>[] {
   const columnsById = {
     version: {
       id: 'version',
       accessorFn: (row) => row.release.version,
-      sortingFn: (left, right) =>
+      sortFn: (left, right) =>
         compareReleaseVersions(left.original.release.version, right.original.release.version),
       header: ({ column }) =>
         renderComponent(SortHeader, { label: t('libraries.column.version'), column }),
@@ -70,6 +71,7 @@ export function createLibraryColumns(
       id: 'signed',
       accessorFn: (row) =>
         row.primary_signature.status === 'signed' ? row.primary_signature.signed_at : '',
+      sortFn: sortFn_alphanumeric,
       header: ({ column }) =>
         renderComponent(SortHeader, {
           label: t('libraries.column.signed'),
@@ -81,6 +83,7 @@ export function createLibraryColumns(
     size: {
       id: 'size',
       accessorFn: (row) => row.size_bytes,
+      sortFn: sortFn_basic,
       header: ({ column }) =>
         renderComponent(SortHeader, {
           label: t('libraries.column.size'),
@@ -112,7 +115,7 @@ export function createLibraryColumns(
           onDelete,
         }),
     },
-  } satisfies Record<LibraryColumnId, ColumnDef<LibraryPackageRow>>;
+  } satisfies Record<LibraryColumnId, ColumnDef<SortableTableFeatures, LibraryPackageRow>>;
 
   return LIBRARY_COLUMN_LAYOUT.map(({ id }) => columnsById[id]);
 }

@@ -1,4 +1,4 @@
-import { assertI18nBundleBoundaries, type OutputBundleLike } from './i18n-bundle-boundaries';
+import { assertI18nBundleBoundaries, type OutputBundleLike } from './i18n-bundle-boundaries.ts';
 
 export function i18nBundleBoundaryPlugin() {
   return {

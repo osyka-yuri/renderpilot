@@ -89,12 +89,10 @@ describe('createUpdateAllWorkflow', () => {
       prepare: vi.fn((_gameId: string, items: readonly PlannedSwap[]) =>
         Promise.resolve({
           kind: 'ready' as const,
-          value: items.map(
-            (item): PreparedSwap => ({
-              request: { ...item.target },
-              d3d12ExecutableAction: null,
-            }),
-          ),
+          value: items.map((item): PreparedSwap => ({
+            request: { ...item.target },
+            d3d12ExecutableAction: null,
+          })),
         }),
       ),
       run: vi.fn(() => Promise.reject(new Error('failed'))),
