@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2026-08-14
+
+### Added
+
+- **Portable backend diagnostics**: Portable builds now keep bounded diagnostic logs under `data/logs/portable` for supervisor startup, updates and recovery, application commands, and background work. Logs are separated by process role and session, rotate automatically, and use fixed error categories instead of storing raw paths or internal error messages. If diagnostics cannot be written, the original operation continues normally.
+
+### Changed
+
+- **Portable startup, updates, and recovery**: Reworked the portable runtime so the shipped application, active generation, and preserved data are authenticated as one session before normal startup continues. Catalog upgrades are created from a verified snapshot and committed before the data is opened for regular use, while interrupted activation, update, or recovery work can be retried without discarding user data.
+
+### Fixed
+
+- **Portable shutdown**: Closing the portable application now finishes cleanly instead of showing an error after exit.
+- **Game filters on smaller windows**: The filter dialog now stays within the available viewport. Filter sections scroll independently while the title and action buttons remain accessible.
+
+### Compatibility
+
+- **One-time portable package upgrade**: Portable copies running 1.9.0 must be fully closed and updated once with the complete portable package for this release. Keep the existing data and recovery folders. The 1.9.0 in-app updater cannot perform this transition; later compatible portable updates work normally.
+
+### Changed (Refactoring & Maintenance)
+
+- **Desktop data tables**: Migrated the shared Libraries and Operations table foundation to TanStack Table v9 while preserving sorting, column visibility, virtualized rows, reactive updates, and stable table state.
+- **Quality tooling and dependencies**: Updated Rust and frontend dependencies and regenerated both lockfiles. Rust CI now runs tests with cargo-nextest, with broader regression coverage for dialog lifecycles and data-table behavior.
+
 ## [1.9.0] - 2026-08-12
 
 ### Added
