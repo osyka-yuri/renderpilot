@@ -6,11 +6,15 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 import { getDefaultSelectors } from 'eslint-plugin-better-tailwindcss/defaults';
 import boundaries from 'eslint-plugin-boundaries';
-import { strict as boundariesStrict } from 'eslint-plugin-boundaries/config';
 import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+import {
+  createFsdBoundariesConfig,
+  FSD_ALIAS_PREFIXES,
+  FSD_SLICED_LAYERS,
+} from './eslint/fsd-boundaries.js';
 import { createIntlBoundariesRule } from './eslint/intl-boundaries.js';
 import svelteConfig from './svelte.config.js';
 
@@ -39,24 +43,6 @@ const RESOLVER_EXTENSIONS = [
   ...SOURCE_SCRIPT_EXTENSIONS.map((extension) => `.${extension}`),
   ...SVELTE_MODULE_EXTENSIONS.map((extension) => `.${extension}`),
   '.css',
-];
-
-const FSD_PUBLIC_API_CATEGORY = 'public-api';
-const FSD_INTERNAL_CATEGORY = 'internal';
-
-const FSD_SLICED_LAYERS = ['pages', 'widgets', 'features', 'entities'];
-
-const FSD_ALIAS_PREFIXES = [
-  '@/pages',
-  '@/widgets',
-  '@/features',
-  '@/entities',
-  '@/shared',
-  '@pages',
-  '@widgets',
-  '@features',
-  '@entities',
-  '@shared',
 ];
 
 const GLOBAL_IGNORES = [
@@ -144,21 +130,14 @@ const TEST_FILE_GLOBS = [
   `${SOURCE_ROOT}/**/*.{test,spec}.{${toBraceGlob(SOURCE_SCRIPT_EXTENSIONS)}}`,
 ];
 
-const ARCHITECTURE_IMPORT_TARGET_GLOBS = [
-  `${SOURCE_ROOT}/**/*.{${toBraceGlob([...SOURCE_SCRIPT_EXTENSIONS, 'css'])}}`,
-];
-
-const FSD_ENTRY_POINT_GLOBS = [
-  `${SOURCE_ROOT}/main.{js,ts}`,
-  `${SOURCE_ROOT}/App.svelte`,
-  `${SOURCE_ROOT}/app.d.ts`,
-  `${SOURCE_ROOT}/vite-env.d.ts`,
-];
-
-const FSD_PUBLIC_API_FILE_NAMES = [
-  ...SOURCE_SCRIPT_EXTENSIONS.map((extension) => `index.${extension}`),
-  ...SVELTE_MODULE_EXTENSIONS.map((extension) => `index.${extension}`),
-];
+const fsdBoundariesConfig = createFsdBoundariesConfig({
+  rootPath: PROJECT_ROOT,
+  sourceRoot: SOURCE_ROOT,
+  publicApiExtensions: [...SOURCE_SCRIPT_EXTENSIONS, ...SVELTE_MODULE_EXTENSIONS],
+  targetExtensions: [...SOURCE_SCRIPT_EXTENSIONS, ...SVELTE_MODULE_EXTENSIONS, 'css'],
+  resolverExtensions: RESOLVER_EXTENSIONS,
+  typescriptConfigPath: path.resolve(PROJECT_ROOT, TYPESCRIPT_CONFIG),
+});
 
 const eslintBaseConfigs = scopeConfigs(
   [js.configs.recommended],
@@ -259,172 +238,6 @@ const tailwindClassSelectors = [
     ],
   },
 ];
-
-function createPublicApiPatterns(layerRoot) {
-  return FSD_PUBLIC_API_FILE_NAMES.map((fileName) => `${layerRoot}/*/${fileName}`);
-}
-
-function createSlicedLayerElements(layer) {
-  const layerRoot = `${SOURCE_ROOT}/${layer}`;
-
-  return [
-    {
-      type: layer,
-      category: FSD_PUBLIC_API_CATEGORY,
-      pattern: createPublicApiPatterns(layerRoot),
-      mode: 'full',
-      capture: ['slice'],
-    },
-    {
-      type: layer,
-      category: FSD_INTERNAL_CATEGORY,
-      pattern: `${layerRoot}/*`,
-      mode: 'folder',
-      capture: ['slice'],
-    },
-  ];
-}
-
-const fsdElements = [
-  {
-    type: 'app',
-    category: FSD_INTERNAL_CATEGORY,
-    pattern: `${SOURCE_ROOT}/app`,
-    mode: 'folder',
-  },
-
-  ...FSD_SLICED_LAYERS.flatMap(createSlicedLayerElements),
-
-  {
-    type: 'shared',
-    category: FSD_PUBLIC_API_CATEGORY,
-    pattern: createPublicApiPatterns(`${SOURCE_ROOT}/shared`),
-    mode: 'full',
-    capture: ['segment'],
-  },
-  {
-    type: 'shared',
-    category: FSD_INTERNAL_CATEGORY,
-    pattern: `${SOURCE_ROOT}/shared/*`,
-    mode: 'folder',
-    capture: ['segment'],
-  },
-];
-
-function publicApiOf(type) {
-  return {
-    type,
-    category: FSD_PUBLIC_API_CATEGORY,
-  };
-}
-
-function internalOf(type) {
-  return {
-    type,
-    category: FSD_INTERNAL_CATEGORY,
-  };
-}
-
-function sameInternalSliceOf(type) {
-  return {
-    type,
-    category: FSD_INTERNAL_CATEGORY,
-    captured: {
-      slice: '{{ from.captured.slice }}',
-    },
-  };
-}
-
-const sameSharedSegmentInternal = {
-  type: 'shared',
-  category: FSD_INTERNAL_CATEGORY,
-  captured: {
-    segment: '{{ from.captured.segment }}',
-  },
-};
-
-function createDependencyRule(from, to) {
-  return {
-    from,
-    allow: {
-      to,
-    },
-  };
-}
-
-const publicApisAvailableForLayer = {
-  pages: [
-    publicApiOf('widgets'),
-    publicApiOf('features'),
-    publicApiOf('entities'),
-    publicApiOf('shared'),
-  ],
-  widgets: [publicApiOf('features'), publicApiOf('entities'), publicApiOf('shared')],
-  features: [publicApiOf('entities'), publicApiOf('shared')],
-  entities: [publicApiOf('shared')],
-};
-
-function createSlicedLayerDependencyRules(layer) {
-  return [
-    /*
-     * Public API must be a thin local facade.
-     * It should re-export local implementation, not compose lower layers.
-     */
-    createDependencyRule(publicApiOf(layer), [sameInternalSliceOf(layer)]),
-
-    /*
-     * Internal files may use their own slice internals and public APIs of lower layers.
-     * Importing the same slice through its own public API is intentionally disallowed:
-     * use relative imports inside the slice to avoid circular barrels.
-     */
-    createDependencyRule(internalOf(layer), [
-      sameInternalSliceOf(layer),
-      ...publicApisAvailableForLayer[layer],
-    ]),
-  ];
-}
-
-const fsdDependencyRules = [
-  createDependencyRule(internalOf('app'), [
-    internalOf('app'),
-    publicApiOf('pages'),
-    publicApiOf('widgets'),
-    publicApiOf('features'),
-    publicApiOf('entities'),
-    publicApiOf('shared'),
-  ]),
-
-  ...FSD_SLICED_LAYERS.flatMap(createSlicedLayerDependencyRules),
-
-  /*
-   * Shared segment public APIs should also stay thin local facades.
-   */
-  createDependencyRule(publicApiOf('shared'), [sameSharedSegmentInternal]),
-
-  /*
-   * Shared internals may use their own segment internals and other shared segment
-   * public APIs. They may not import entities/features/widgets/pages/app.
-   */
-  createDependencyRule(internalOf('shared'), [sameSharedSegmentInternal, publicApiOf('shared')]),
-];
-
-const fsdBoundariesRules = {
-  'boundaries/no-unknown-files': 'error',
-  'boundaries/no-unknown': 'error',
-  'boundaries/no-ignored': 'error',
-
-  'boundaries/dependencies': [
-    'error',
-    {
-      default: 'disallow',
-      checkUnknownLocals: true,
-      checkInternals: true,
-      message:
-        'FSD violation: "{{ from.type }}" cannot import "{{ to.type }}". Use public APIs between slices/layers and relative imports inside the same slice or shared segment.',
-      rules: fsdDependencyRules,
-    },
-  ],
-};
 
 function createLayerRootAliasRestrictions(layer) {
   return [
@@ -539,32 +352,6 @@ const localArchitecturePlugin = {
   },
 };
 
-const fsdBoundariesSettings = {
-  ...boundariesStrict.settings,
-
-  'boundaries/root-path': PROJECT_ROOT,
-  'boundaries/include': ARCHITECTURE_IMPORT_TARGET_GLOBS,
-  'boundaries/ignore': FSD_ENTRY_POINT_GLOBS,
-
-  /*
-   * Prefer modern Handlebars templates:
-   * "{{ from.captured.slice }}" instead of legacy captured shortcuts.
-   */
-  'boundaries/legacy-templates': false,
-
-  'import/resolver': {
-    typescript: {
-      alwaysTryTypes: true,
-      project: [TYPESCRIPT_CONFIG],
-    },
-    node: {
-      extensions: RESOLVER_EXTENSIONS,
-    },
-  },
-
-  'boundaries/elements': fsdElements,
-};
-
 /**
  * ESLint flat config:
  * - Oxlint owns native and type-aware rules for ordinary application and tooling TypeScript;
@@ -576,7 +363,7 @@ const fsdBoundariesSettings = {
  * - strict FSD topology through eslint-plugin-boundaries;
  * - public API import enforcement;
  * - public API files are treated as thin local facades;
- * - bootstrap files are intentionally excluded from FSD import restrictions;
+ * - designated foundation entry points are excluded from FSD import restrictions;
  * - formatter compatibility is applied through eslint-config-prettier as the final override.
  */
 export default defineConfig([
@@ -821,7 +608,7 @@ export default defineConfig([
   {
     name: 'project/foundation-entry-points',
 
-    files: FSD_ENTRY_POINT_GLOBS,
+    files: fsdBoundariesConfig.entryPointGlobs,
 
     rules: {
       /*
@@ -899,15 +686,15 @@ export default defineConfig([
     name: 'project/strict-fsd-boundaries',
 
     files: SOURCE_FILE_GLOBS,
-    ignores: FSD_ENTRY_POINT_GLOBS,
+    ignores: fsdBoundariesConfig.entryPointGlobs,
 
     plugins: {
       boundaries,
     },
 
-    settings: fsdBoundariesSettings,
+    settings: fsdBoundariesConfig.settings,
 
-    rules: fsdBoundariesRules,
+    rules: fsdBoundariesConfig.rules,
   },
 
   {

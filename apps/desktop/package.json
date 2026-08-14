@@ -62,7 +62,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
-    "eslint-plugin-boundaries": "^6.0.2",
+    "eslint-plugin-boundaries": "^7.2.0",
     "eslint-plugin-svelte": "^3.23.0",
     "globals": "^17.11.0",
     "jsdom": "^30.0.1",
