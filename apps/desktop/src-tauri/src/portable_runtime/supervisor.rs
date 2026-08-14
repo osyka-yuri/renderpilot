@@ -22,7 +22,7 @@ use super::{
     supervisor_activation::{
         ActivationContext, CurrentGeneration, activate_generation_with_diagnostics,
     },
-    supervisor_updates::{SupervisorUpdateState, serve_one},
+    supervisor_updates::{SupervisorUpdateEvent, SupervisorUpdateState, serve_one},
     win32::job::KillOnCloseJob,
 };
 use crate::diagnostics::{PortableFailureSite, PortableMilestone};
@@ -179,8 +179,9 @@ fn run_supervisor_lifecycle(
                 &current.version,
                 update_root,
             ) {
-                Ok(Some(staged)) => break Some(staged),
-                Ok(None) => continue,
+                Ok(SupervisorUpdateEvent::ApplyReady(staged)) => break Some(*staged),
+                Ok(SupervisorUpdateEvent::Continue) => continue,
+                Ok(SupervisorUpdateEvent::AppStatusClosed) => break None,
                 Err(_error) if updates.is_uncertain() => {
                     observe(
                         diagnostics,
@@ -188,10 +189,6 @@ fn run_supervisor_lifecycle(
                         activated.trial.wait_for_exit(),
                     )?;
                     retain_uncertain_authority()
-                }
-                Err(error) if error.code() == "portable_runtime_io" => {
-                    report_error(diagnostics, PortableFailureSite::UpdateService, &error);
-                    break None;
                 }
                 Err(error) => {
                     report_error(diagnostics, PortableFailureSite::UpdateService, &error);
@@ -202,7 +199,7 @@ fn run_supervisor_lifecycle(
         observe(
             diagnostics,
             PortableFailureSite::ControlledExit,
-            activated.trial.wait_for_exit(),
+            activated.trial.wait_for_successful_exit(),
         )?;
         if let Some(staged) = staged {
             current = observe(

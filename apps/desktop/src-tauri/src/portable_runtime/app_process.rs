@@ -22,8 +22,8 @@ use windows_sys::Win32::{
         Pipes::CreatePipe,
         Threading::{
             CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
-            DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, INFINITE,
-            InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess,
+            INFINITE, InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
             PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION, ResumeThread, STARTUPINFOEXW,
             STARTUPINFOW, UpdateProcThreadAttribute, WaitForSingleObject,
         },
@@ -32,8 +32,8 @@ use windows_sys::Win32::{
 
 use super::{
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableAppSessionV1, read_message, reader,
-        write_message,
+        AppControlMessage, AppStatusMessage, PortableAppSessionV1, read_message,
+        read_message_or_eof, reader, write_message,
     },
     error::{PortableRuntimeError, Result},
     win32::{
@@ -165,6 +165,10 @@ impl TrialProcess {
         read_message(&mut self.status)
     }
 
+    pub fn receive_or_eof(&mut self) -> Result<Option<AppStatusMessage>> {
+        read_message_or_eof(&mut self.status)
+    }
+
     pub fn wait_trial_ready(&mut self, startup: &PortableAppSessionV1) -> Result<u32> {
         match self.receive()? {
             AppStatusMessage::TrialReady(ready)
@@ -202,6 +206,34 @@ impl TrialProcess {
         }
         Ok(())
     }
+
+    pub fn wait_for_successful_exit(&self) -> Result<()> {
+        self.wait_for_exit()?;
+        validate_successful_exit_code(process_exit_code_after_wait(&self.process)?)
+    }
+}
+
+fn process_exit_code_after_wait(process: &OwnedHandle) -> Result<u32> {
+    let mut exit_code = 0;
+    // SAFETY: `process` is a live retained process handle. The caller waits
+    // for it before interpreting the returned code as terminal.
+    if unsafe { GetExitCodeProcess(process.raw(), &raw mut exit_code) } == 0 {
+        return Err(PortableRuntimeError::new(
+            "portable_app_wait",
+            format!("GetExitCodeProcess failed: {}", unsafe { GetLastError() }),
+        ));
+    }
+    Ok(exit_code)
+}
+
+fn validate_successful_exit_code(exit_code: u32) -> Result<()> {
+    if exit_code == 0 {
+        return Ok(());
+    }
+    Err(PortableRuntimeError::new(
+        "portable_app_exit",
+        format!("App exited with code {exit_code}"),
+    ))
 }
 
 pub(super) fn startup_control_message(startup: &PortableAppSessionV1) -> AppControlMessage {
@@ -403,6 +435,21 @@ mod tests {
             unsafe { WaitForSingleObject(process.raw(), 30_000) },
             WAIT_OBJECT_0,
             "child process did not exit"
+        );
+        assert_eq!(
+            process_exit_code_after_wait(&process).expect("child exit code"),
+            0
+        );
+    }
+
+    #[test]
+    fn only_zero_is_a_successful_app_exit_code() {
+        validate_successful_exit_code(0).expect("zero exit code");
+        assert_eq!(
+            validate_successful_exit_code(1)
+                .expect_err("nonzero exit must remain fatal")
+                .code(),
+            "portable_app_exit"
         );
     }
 }

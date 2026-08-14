@@ -146,22 +146,37 @@ pub fn write_message(writer: &mut impl Write, message: &impl Serialize) -> Resul
     Ok(())
 }
 
-pub fn read_message<T: for<'de> Deserialize<'de>>(reader: &mut impl BufRead) -> Result<T> {
+pub fn read_message_or_eof<T: for<'de> Deserialize<'de>>(
+    reader: &mut impl BufRead,
+) -> Result<Option<T>> {
     let mut frame = Vec::with_capacity(FRAME_READ_LIMIT);
     let bytes_read = reader
         .take(FRAME_READ_LIMIT as u64)
         .read_until(b'\n', &mut frame)?;
-    if bytes_read == 0 || frame.len() > MAX_FRAME_BYTES || frame.last() != Some(&b'\n') {
+    if bytes_read == 0 {
+        return Ok(None);
+    }
+    if frame.len() > MAX_FRAME_BYTES || frame.last() != Some(&b'\n') {
         return Err(PortableRuntimeError::new(
             "portable_protocol_invalid",
-            "empty, oversized, or unterminated protocol message",
+            "oversized or unterminated protocol message",
         ));
     }
     preflight_json_without_duplicate_keys(&frame).map_err(|error| {
         PortableRuntimeError::new("portable_protocol_invalid", error.to_string())
     })?;
     serde_json::from_slice(&frame)
+        .map(Some)
         .map_err(|error| PortableRuntimeError::new("portable_protocol_invalid", error.to_string()))
+}
+
+pub fn read_message<T: for<'de> Deserialize<'de>>(reader: &mut impl BufRead) -> Result<T> {
+    read_message_or_eof(reader)?.ok_or_else(|| {
+        PortableRuntimeError::new(
+            "portable_protocol_closed",
+            "protocol channel closed before the required message",
+        )
+    })
 }
 
 pub fn reader(file: std::fs::File) -> BufReader<std::fs::File> {

@@ -14,7 +14,9 @@ use crate::portable_runtime::{
     },
     signature::sha256_hex,
     staging::staged_for_apply_test,
-    supervisor_updates::{SupervisorUpdateState, UpdateSink, serve_one_with_sink},
+    supervisor_updates::{
+        SupervisorUpdateEvent, SupervisorUpdateState, UpdateSink, serve_one_with_sink,
+    },
 };
 
 type Trace = Arc<Mutex<Vec<&'static str>>>;
@@ -24,6 +26,8 @@ struct ScriptedSink {
     responses: Vec<PortableUpdateResponse>,
     trace: Trace,
     fail_apply_acceptance: bool,
+    close_when_exhausted: bool,
+    receive_failure_code: Option<&'static str>,
 }
 
 impl ScriptedSink {
@@ -38,15 +42,25 @@ impl ScriptedSink {
             responses: Vec::new(),
             trace,
             fail_apply_acceptance,
+            close_when_exhausted: false,
+            receive_failure_code: None,
         }
     }
 }
 
 impl UpdateSink for ScriptedSink {
-    fn receive_update_request(&mut self) -> Result<UpdateRequest> {
-        self.requests.pop_front().ok_or_else(|| {
-            PortableRuntimeError::new("portable_update_test", "script exhausted before Apply")
-        })
+    fn receive_update_request_or_eof(&mut self) -> Result<Option<UpdateRequest>> {
+        if let Some(code) = self.receive_failure_code {
+            return Err(PortableRuntimeError::new(code, "scripted receive failure"));
+        }
+        match self.requests.pop_front() {
+            Some(request) => Ok(Some(request)),
+            None if self.close_when_exhausted => Ok(None),
+            None => Err(PortableRuntimeError::new(
+                "portable_update_test",
+                "script exhausted before the expected request",
+            )),
+        }
     }
 
     fn send_update_response(
@@ -123,8 +137,49 @@ fn serve_apply(
     sink: &mut ScriptedSink,
     state: &mut SupervisorUpdateState,
     update_root: &Path,
-) -> Result<Option<VerifiedRpu>> {
+) -> Result<SupervisorUpdateEvent> {
     serve_one_with_sink(sink, state, "1.0.0", update_root)
+}
+
+fn expect_continue(result: Result<SupervisorUpdateEvent>, context: &str) {
+    assert!(
+        matches!(
+            result.unwrap_or_else(|error| panic!("{context}: {error}")),
+            SupervisorUpdateEvent::Continue
+        ),
+        "{context}"
+    );
+}
+
+fn expect_apply_ready(result: Result<SupervisorUpdateEvent>, context: &str) -> VerifiedRpu {
+    match result.unwrap_or_else(|error| panic!("{context}: {error}")) {
+        SupervisorUpdateEvent::ApplyReady(verified) => *verified,
+        SupervisorUpdateEvent::Continue | SupervisorUpdateEvent::AppStatusClosed => {
+            panic!("{context}: expected ApplyReady")
+        }
+    }
+}
+
+#[test]
+fn message_boundary_eof_is_typed_but_receive_failures_remain_errors() {
+    let root = temp_root("update-terminal-read");
+    let mut state = SupervisorUpdateState::default();
+    let trace = trace();
+    let mut closed = ScriptedSink::applies(Arc::clone(&trace), 0, false);
+    closed.close_when_exhausted = true;
+    assert!(matches!(
+        serve_one_with_sink(&mut closed, &mut state, "1.0.0", root.path())
+            .expect("EOF between messages is a terminal channel state"),
+        SupervisorUpdateEvent::AppStatusClosed
+    ));
+
+    let mut failed = ScriptedSink::applies(trace, 0, false);
+    failed.receive_failure_code = Some("portable_runtime_io");
+    let error = match serve_one_with_sink(&mut failed, &mut state, "1.0.0", root.path()) {
+        Err(error) => error,
+        Ok(_) => panic!("I/O failure must not become a clean close"),
+    };
+    assert_eq!(error.code(), "portable_runtime_io");
 }
 
 #[test]
@@ -134,10 +189,9 @@ fn g_apl_01_missing_and_second_apply_remain_recoverable_rejections() {
     let mut sink = ScriptedSink::applies(Arc::clone(&trace), 2, false);
     let mut state = SupervisorUpdateState::default();
 
-    assert!(
-        serve_apply(&mut sink, &mut state, root.path())
-            .expect("missing staged capability is replied to")
-            .is_none()
+    expect_continue(
+        serve_apply(&mut sink, &mut state, root.path()),
+        "missing staged capability is replied to",
     );
     assert_eq!(
         response_code(&sink.responses[0]),
@@ -145,10 +199,9 @@ fn g_apl_01_missing_and_second_apply_remain_recoverable_rejections() {
     );
     assert!(!state.is_uncertain());
 
-    assert!(
-        serve_apply(&mut sink, &mut state, root.path())
-            .expect("second Apply keeps the App session recoverable")
-            .is_none()
+    expect_continue(
+        serve_apply(&mut sink, &mut state, root.path()),
+        "second Apply keeps the App session recoverable",
     );
     assert_eq!(response_code(&sink.responses[1]), "portable_request_closed");
     assert!(!state.is_uncertain());
@@ -178,18 +231,16 @@ fn g_apl_02_mutated_or_replaced_staged_bytes_are_consumed_before_rejection() {
         }
         let mut sink = ScriptedSink::applies(Arc::clone(&trace), 2, false);
 
-        assert!(
-            serve_apply(&mut sink, &mut state, root.path())
-                .expect("tampered stage is replied to")
-                .is_none()
+        expect_continue(
+            serve_apply(&mut sink, &mut state, root.path()),
+            "tampered stage is replied to",
         );
         assert_eq!(response_code(&sink.responses[0]), "portable_stage_identity");
         assert_eq!(trace_values(&trace), ["staged_reread", "reply"]);
 
-        assert!(
-            serve_apply(&mut sink, &mut state, root.path())
-                .expect("consumed staged capability cannot produce another RPU")
-                .is_none()
+        expect_continue(
+            serve_apply(&mut sink, &mut state, root.path()),
+            "consumed staged capability cannot produce another RPU",
         );
         assert_eq!(response_code(&sink.responses[1]), "portable_request_closed");
         assert!(!state.is_uncertain());
@@ -209,10 +260,9 @@ fn g_apl_03_unreadable_staged_bytes_are_rejected_without_acceptance() {
     std::fs::create_dir(&canonical_path).expect("replace staged RPU with unreadable directory");
     let mut sink = ScriptedSink::applies(Arc::clone(&trace), 1, false);
 
-    assert!(
-        serve_apply(&mut sink, &mut state, root.path())
-            .expect("unreadable stage is replied to")
-            .is_none()
+    expect_continue(
+        serve_apply(&mut sink, &mut state, root.path()),
+        "unreadable stage is replied to",
     );
     assert_eq!(response_code(&sink.responses[0]), "portable_runtime_io");
     assert_eq!(trace_values(&trace), ["staged_reread", "reply"]);
@@ -235,19 +285,19 @@ fn g_apl_04_reread_precedes_exactly_one_acceptance_and_send_failure_is_uncertain
     );
     let mut success_sink = ScriptedSink::applies(Arc::clone(&success_trace), 2, false);
 
-    let returned = serve_apply(&mut success_sink, &mut success_state, success_root.path())
-        .expect("fully reread stage may be accepted")
-        .expect("accepted Apply returns the exact verified RPU once");
+    let returned = expect_apply_ready(
+        serve_apply(&mut success_sink, &mut success_state, success_root.path()),
+        "fully reread stage may be accepted exactly once",
+    );
     assert_eq!(returned.manifest.version, "2.0.0");
     assert_eq!(
         trace_values(&success_trace),
         ["staged_reread", "apply_accepted"]
     );
     assert!(!success_state.is_uncertain());
-    assert!(
-        serve_apply(&mut success_sink, &mut success_state, success_root.path())
-            .expect("the consumed capability cannot be accepted twice")
-            .is_none()
+    expect_continue(
+        serve_apply(&mut success_sink, &mut success_state, success_root.path()),
+        "the consumed capability cannot be accepted twice",
     );
     assert_eq!(
         response_code(&success_sink.responses[1]),

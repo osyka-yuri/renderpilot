@@ -13,7 +13,8 @@ use crate::portable_runtime::{
     app_protocol::{
         AppControlMessage, AppStatusMessage, CatalogMigrationOperation, CatalogMigrationReport,
         CommittedSelectionStartupMode, PortableAppSessionV1, PortableUpdateRequest,
-        PortableUpdateResponse, StartupMode, TrialReady, read_message, write_message,
+        PortableUpdateResponse, StartupMode, TrialReady, read_message, read_message_or_eof,
+        write_message,
     },
     rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL},
 };
@@ -295,11 +296,16 @@ fn bounded_reader_preserves_the_newline_frame_and_never_consumes_beyond_the_prob
         read_message(&mut Cursor::new(exact)).expect("newline-inclusive maximum frame fits");
     assert!(value.is_null());
 
+    assert!(
+        read_message_or_eof::<serde_json::Value>(&mut Cursor::new(Vec::<u8>::new()))
+            .expect("message-boundary EOF is a typed stream state")
+            .is_none()
+    );
     assert_eq!(
         error_code(read_message::<serde_json::Value>(&mut Cursor::new(
             Vec::<u8>::new()
         ))),
-        "portable_protocol_invalid"
+        "portable_protocol_closed"
     );
     assert_eq!(
         error_code(read_message::<serde_json::Value>(&mut Cursor::new(b"null"))),

@@ -4,4 +4,4 @@ pub mod dto;
 pub mod framing;
 
 pub use dto::*;
-pub use framing::{read_message, reader, write_message};
+pub use framing::{read_message, read_message_or_eof, reader, write_message};

@@ -45,7 +45,7 @@ impl SupervisorUpdateState {
 /// production continues to use the inherited private pipes through
 /// `TrialProcess`.
 pub(super) trait UpdateSink {
-    fn receive_update_request(&mut self) -> Result<UpdateRequest>;
+    fn receive_update_request_or_eof(&mut self) -> Result<Option<UpdateRequest>>;
     fn send_update_response(
         &mut self,
         request_id: String,
@@ -54,14 +54,17 @@ pub(super) trait UpdateSink {
 }
 
 impl UpdateSink for TrialProcess {
-    fn receive_update_request(&mut self) -> Result<UpdateRequest> {
-        let AppStatusMessage::UpdateRequest(request) = self.receive()? else {
+    fn receive_update_request_or_eof(&mut self) -> Result<Option<UpdateRequest>> {
+        let Some(message) = self.receive_or_eof()? else {
+            return Ok(None);
+        };
+        let AppStatusMessage::UpdateRequest(request) = message else {
             return Err(PortableRuntimeError::new(
                 "portable_update_protocol",
                 "expected authenticated update request",
             ));
         };
-        Ok(request)
+        Ok(Some(request))
     }
 
     fn send_update_response(
@@ -76,6 +79,12 @@ impl UpdateSink for TrialProcess {
 enum RequestDisposition {
     Reply(PortableUpdateResponse),
     ApplyReady(VerifiedRpu),
+}
+
+pub(super) enum SupervisorUpdateEvent {
+    Continue,
+    ApplyReady(Box<VerifiedRpu>),
+    AppStatusClosed,
 }
 
 struct UpdateOffer {
@@ -105,12 +114,12 @@ struct LatestPlatform {
 /// Receives one App-owned DTO through the inherited private pipes. Every
 /// network byte and durable updater write is performed synchronously by the
 /// live supervisor while it retains D18 and the child job.
-pub fn serve_one(
+pub(super) fn serve_one(
     trial: &mut TrialProcess,
     state: &mut SupervisorUpdateState,
     current_version: &str,
     update_root: &std::path::Path,
-) -> Result<Option<VerifiedRpu>> {
+) -> Result<SupervisorUpdateEvent> {
     serve_one_with_sink(trial, state, current_version, update_root)
 }
 
@@ -119,8 +128,10 @@ pub(super) fn serve_one_with_sink(
     state: &mut SupervisorUpdateState,
     current_version: &str,
     update_root: &std::path::Path,
-) -> Result<Option<VerifiedRpu>> {
-    let request = sink.receive_update_request()?;
+) -> Result<SupervisorUpdateEvent> {
+    let Some(request) = sink.receive_update_request_or_eof()? else {
+        return Ok(SupervisorUpdateEvent::AppStatusClosed);
+    };
     let request_id = request.request_id;
     let disposition = match request.request {
         PortableUpdateRequest::Check(_) => {
@@ -135,7 +146,7 @@ pub(super) fn serve_one_with_sink(
     match disposition {
         RequestDisposition::Reply(response) => {
             sink.send_update_response(request_id, response)?;
-            Ok(None)
+            Ok(SupervisorUpdateEvent::Continue)
         }
         RequestDisposition::ApplyReady(verified) => {
             // `verified` exists only after Apply consumed and revalidated the
@@ -148,7 +159,7 @@ pub(super) fn serve_one_with_sink(
                 return Err(error);
             }
             state.gate.close_recoverable();
-            Ok(Some(verified))
+            Ok(SupervisorUpdateEvent::ApplyReady(Box::new(verified)))
         }
     }
 }

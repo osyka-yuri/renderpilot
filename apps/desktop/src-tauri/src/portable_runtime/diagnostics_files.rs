@@ -395,7 +395,9 @@ pub(super) fn failure_class(error: &PortableRuntimeError) -> PortableFailureClas
         "portable_supervisor_session" | "portable_root" | "portable_admission_handle" => {
             PortableFailureClass::Authority
         }
-        "portable_process" | "portable_activation" => PortableFailureClass::Process,
+        "portable_process" | "portable_activation" | "portable_app_exit" => {
+            PortableFailureClass::Process
+        }
         code if code.starts_with("portable_catalog_")
             || code.starts_with("portable_migration_")
             || code == "portable_context" =>
@@ -575,6 +577,10 @@ mod tests {
         assert_eq!(
             failure_class(&PortableRuntimeError::new("portable_runtime_io", "detail")),
             PortableFailureClass::Io
+        );
+        assert_eq!(
+            failure_class(&PortableRuntimeError::new("portable_app_exit", "detail")),
+            PortableFailureClass::Process
         );
         assert_eq!(
             failure_class(&PortableRuntimeError::new("unknown_future_code", "detail")),
