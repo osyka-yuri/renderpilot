@@ -4,6 +4,13 @@ use std::future::Future;
 use std::sync::Arc;
 use std::{collections::BTreeSet, fmt};
 
+use crate::{
+    backend_diagnostics,
+    diagnostic_event::{
+        BackendDiagnosticEvent, CatalogRefreshPhase as DiagnosticCatalogRefreshPhase,
+        CoverGcOperation, EventPublicationOperation,
+    },
+};
 use futures_util::future::join;
 use renderpilot_api::{self as desktop, AutoScanOutput, ValidatedCatalogRefreshOutput};
 use renderpilot_orchestration::Context;
@@ -98,6 +105,18 @@ impl fmt::Display for CatalogRefreshPhase {
             Self::LiveValidation => "live catalog validation",
             Self::Revision => "durable catalog rebuild",
         })
+    }
+}
+
+impl CatalogRefreshPhase {
+    const fn diagnostic_phase(self) -> DiagnosticCatalogRefreshPhase {
+        match self {
+            Self::Scan => DiagnosticCatalogRefreshPhase::Scan,
+            Self::RemoteCatalog => DiagnosticCatalogRefreshPhase::RemoteCatalog,
+            Self::Capabilities => DiagnosticCatalogRefreshPhase::Capabilities,
+            Self::LiveValidation => DiagnosticCatalogRefreshPhase::LiveValidation,
+            Self::Revision => DiagnosticCatalogRefreshPhase::Revision,
+        }
     }
 }
 
@@ -291,14 +310,23 @@ impl CatalogRefreshEventSink for TauriCatalogRefreshEventSink<'_> {
 fn publish_catalog_refresh(outcome: CatalogRefreshOutcome, sink: &impl CatalogRefreshEventSink) {
     for issue in outcome.issues {
         log::warn!("background {} issue: {}", issue.phase, issue.message);
+        backend_diagnostics::record(BackendDiagnosticEvent::catalog_issue(
+            issue.phase.diagnostic_phase(),
+        ));
     }
     if let Some(delta) = outcome.delta
         && let Err(error) = sink.emit_delta(delta)
     {
         log::warn!("failed to publish catalog delta: {error}");
+        backend_diagnostics::record(BackendDiagnosticEvent::event_publication_failure(
+            EventPublicationOperation::CatalogDelta,
+        ));
     }
     if let Err(error) = sink.emit_ready() {
         log::warn!("failed to publish catalog sync state: {error}");
+        backend_diagnostics::record(BackendDiagnosticEvent::event_publication_failure(
+            EventPublicationOperation::CatalogSyncState,
+        ));
     }
 }
 
@@ -359,10 +387,11 @@ pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> Backg
         move || claim_context.begin_background_refresh(),
         move || async move {
             tauri::async_runtime::spawn_blocking(move || {
-                desktop::gc_cover_orphans_on_startup(&cover_context);
+                desktop::try_gc_cover_orphans_on_startup(&cover_context)
             })
             .await
-            .map_err(|error| format!("worker failed: {error}"))
+            .map_err(|error| format!("worker failed: {error}"))?
+            .map_err(|error| error.to_string())
         },
         move || async move { run(refresh_context, &app).await },
     )
@@ -370,6 +399,9 @@ pub(super) async fn start(context: Arc<Context>, app: tauri::AppHandle) -> Backg
 
     if let Some(error) = execution.cover_gc_error {
         log::warn!("background cover GC failed: {error}");
+        backend_diagnostics::record(BackendDiagnosticEvent::cover_gc_failure(
+            CoverGcOperation::StartupCoverGc,
+        ));
     }
     BackgroundRefreshStart {
         started: execution.started,

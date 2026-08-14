@@ -38,8 +38,17 @@ pub(crate) mod scan;
 pub(crate) mod utils;
 
 /// Best-effort cleanup of orphaned files in the catalog `covers/` directory.
+pub fn try_gc_cover_orphans_on_startup(
+    context: &renderpilot_orchestration::Context,
+) -> Result<(), ApiError> {
+    covers::try_gc_orphans_on_startup(context)
+}
+
+/// Best-effort legacy startup cleanup wrapper.
 pub fn gc_cover_orphans_on_startup(context: &renderpilot_orchestration::Context) {
-    covers::gc_orphans_on_startup(context);
+    if let Err(error) = try_gc_cover_orphans_on_startup(context) {
+        log::warn!("startup cover orphan cleanup failed: {error}");
+    }
 }
 
 pub use self::catalog::{
@@ -47,7 +56,10 @@ pub use self::catalog::{
     get_catalog_setting, get_game_details, query_game_cards, refresh_catalog_snapshot_revision,
     refresh_validated_catalog_snapshot, set_catalog_setting, set_game_favorite, set_game_hidden,
 };
-pub use self::covers::{clear_game_cover, fetch_game_cover, set_game_cover};
+pub use self::covers::{
+    ClearGameCoverOutput, clear_game_cover, clear_game_cover_with_observation, fetch_game_cover,
+    set_game_cover,
+};
 pub use self::dlss_indicator::{get_dlss_indicator_state, set_dlss_indicator_enabled};
 pub use self::libraries::{
     DownloadProgress, LibraryCatalogStatus, LibraryLegalDocumentFormat, LibraryLegalDocumentKind,

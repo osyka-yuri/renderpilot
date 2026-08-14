@@ -36,6 +36,15 @@ pub struct CoverMutationOutput {
     pub updated_at_ms: i64,
 }
 
+/// Result of a successful cover clear. The mutation itself is durable even
+/// when its best-effort orphan pass fails, and the caller owns the one allowed
+/// warning/diagnostic observation of that soft issue.
+#[derive(Debug)]
+pub struct ClearGameCoverObservation {
+    /// A nonfatal orphan-cleanup failure after the durable clear completed.
+    pub cleanup_issue: Option<ServiceError>,
+}
+
 pub use fs_ops::{gc_orphan_cover_files, unlink_cover_file_best_effort};
 pub use paths::MAX_COVER_BYTES;
 pub(crate) use paths::covers_directory;
@@ -80,9 +89,17 @@ impl<'a> CoverCatalog<'a> {
     }
 }
 
+/// Attempts the startup orphan pass. The caller decides how its soft failure
+/// is observed, while the legacy wrapper keeps its void best-effort contract.
+pub fn try_gc_orphan_cover_files_startup(context: &crate::Context) -> Result<(), ServiceError> {
+    CoverCatalog::new(context).and_then(|catalog| catalog.gc_orphans())
+}
+
 /// Removes orphan cover files from disk at application startup, best-effort.
 pub fn gc_orphan_cover_files_startup(context: &crate::Context) {
-    let _ = CoverCatalog::new(context).and_then(|catalog| catalog.gc_orphans());
+    if let Err(error) = try_gc_orphan_cover_files_startup(context) {
+        log::warn!("startup cover orphan cleanup failed: {error}");
+    }
 }
 
 /// Downloads cover artwork using the configured provider chain, then stores it for the game.
@@ -126,7 +143,10 @@ pub fn set_game_cover_from_file(
 }
 
 /// Removes stored cover metadata and deletes the associated cover file from disk.
-pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<(), ServiceError> {
+pub fn clear_game_cover_with_observation(
+    context: &crate::Context,
+    game_id: &GameId,
+) -> Result<ClearGameCoverObservation, ServiceError> {
     let catalog = CoverCatalog::new(context)?;
     catalog.require_game(game_id)?;
 
@@ -139,10 +159,19 @@ pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<()
         unlink_cover_file_best_effort(&catalog.catalog_path, Some(record.file_name.as_str()));
     }
 
-    if let Err(error) = catalog.gc_orphans() {
+    let cleanup_issue = catalog.gc_orphans().err();
+
+    Ok(ClearGameCoverObservation { cleanup_issue })
+}
+
+/// Legacy clear contract. Existing callers retain its result shape and its
+/// console detail; new callers can observe the soft issue without duplicate
+/// durable logging.
+pub fn clear_game_cover(context: &crate::Context, game_id: &GameId) -> Result<(), ServiceError> {
+    let observation = clear_game_cover_with_observation(context, game_id)?;
+    if let Some(error) = observation.cleanup_issue {
         log::warn!("cover was cleared but orphan cleanup failed: {error}");
     }
-
     Ok(())
 }
 
@@ -186,4 +215,17 @@ fn cover_len_exceeds_limit(len: usize) -> bool {
 
 fn cover_too_large() -> ServiceError {
     ServiceError::CoverDownloadFailed("cover file exceeds maximum size".into())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn observation_and_legacy_cover_cleanup_contracts_remain_additive() {
+        let source = include_str!("mod.rs");
+        assert!(source.contains("pub fn try_gc_orphan_cover_files_startup("));
+        assert!(source.contains("pub fn gc_orphan_cover_files_startup("));
+        assert!(source.contains("pub struct ClearGameCoverObservation"));
+        assert!(source.contains("pub fn clear_game_cover_with_observation("));
+        assert!(source.contains("pub fn clear_game_cover(context:"));
+    }
 }

@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use crate::diagnostic_event::CommandOperation;
 use renderpilot_api as desktop;
 use renderpilot_orchestration::Context;
 
@@ -16,7 +17,7 @@ pub async fn renodx_availability(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_availability");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxAvailability);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -32,7 +33,7 @@ pub async fn renodx_install(
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_install");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxInstall);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let reshade_channel = require_non_empty_string(&boundary, "reshade_channel", reshade_channel)?;
 
@@ -60,7 +61,7 @@ pub async fn renodx_install_from_file(
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_install_from_file");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxInstallFromFile);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let file_path = require_non_empty_string(&boundary, "file_path", file_path)?;
     let reshade_channel = require_non_empty_string(&boundary, "reshade_channel", reshade_channel)?;
@@ -88,7 +89,7 @@ pub async fn renodx_switch_reshade_channel(
     reshade_channel: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_switch_reshade_channel");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxSwitchReshadeChannel);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let reshade_channel = require_non_empty_string(&boundary, "reshade_channel", reshade_channel)?;
 
@@ -111,7 +112,7 @@ pub async fn renodx_uninstall(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_uninstall");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxUninstall);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -121,7 +122,7 @@ pub async fn renodx_uninstall(
 
 #[tauri::command]
 pub async fn renodx_vulkan_layer_status() -> JsonCommandResult {
-    CommandBoundary::new("renodx_vulkan_layer_status")
+    CommandBoundary::new(CommandOperation::RenodxVulkanLayerStatus)
         .run(desktop::renodx_vulkan_layer_status)
         .await
 }
@@ -130,7 +131,7 @@ pub async fn renodx_vulkan_layer_status() -> JsonCommandResult {
 pub async fn renodx_vulkan_layer_management_status(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_vulkan_layer_management_status");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxVulkanLayerManagementStatus);
     let context = Arc::clone(&context);
 
     boundary
@@ -146,7 +147,7 @@ pub async fn renodx_apply_vulkan_layer(
     reshade_channel: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_apply_vulkan_layer");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxApplyVulkanLayer);
     let reshade_channel = require_non_empty_string(&boundary, "reshade_channel", reshade_channel)?;
     let context = Arc::clone(&context);
 
@@ -167,7 +168,7 @@ pub async fn renodx_apply_vulkan_layer(
 pub async fn renodx_remove_vulkan_layer(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_remove_vulkan_layer");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxRemoveVulkanLayer);
     let context = Arc::clone(&context);
 
     boundary
@@ -180,7 +181,7 @@ pub async fn renodx_check_update(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_check_update");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxCheckUpdate);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -194,7 +195,7 @@ pub async fn renodx_update(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_update");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxUpdate);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -218,7 +219,7 @@ pub async fn renodx_install_dlss_fix(
     app: tauri::AppHandle,
     game_id: String,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_install_dlss_fix");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxInstallDlssFix);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let progress = download_progress_emitter(app, game_id.clone());
 
@@ -234,7 +235,7 @@ pub async fn renodx_uninstall_dlss_fix(
     context: tauri::State<'_, Arc<Context>>,
     game_id: String,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_uninstall_dlss_fix");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxUninstallDlssFix);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -247,7 +248,7 @@ pub async fn renodx_dlss_fix_availability(
     context: tauri::State<'_, Arc<Context>>,
     game_id: String,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("renodx_dlss_fix_availability");
+    let boundary = CommandBoundary::new(CommandOperation::RenodxDlssFixAvailability);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary

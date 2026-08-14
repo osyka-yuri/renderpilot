@@ -1,26 +1,50 @@
 use std::fs;
 
 use super::{error_code, hash, temp_root};
-use crate::portable_runtime::{epoch_namespace::establish_epoch, process_admission::AdmissionLock};
+use crate::portable_runtime::{
+    epoch_namespace::establish_epoch,
+    process_admission::AdmissionLock,
+    root_authority::{PortableRootAuthority, SupervisorRootBinding},
+    supervisor::authority::SupervisorSessionAuthority,
+};
 
 #[test]
-fn admission_is_single_owner_and_uses_the_fixed_lock_leaf() {
-    let root = temp_root("admission-owner");
-    let authority = root.path().join("authority");
-    establish_epoch(&authority, &hash('a')).expect("create a valid epoch namespace");
+fn admission_requires_a_supervisor_root_binding_without_a_joined_lock_path() {
+    let source = include_str!("../process_admission.rs");
+    assert!(source.contains("pub fn acquire(binding: &SupervisorRootBinding) -> Result<Self>"));
+    assert!(source.contains("acquire_supervisor_admission(binding)?"));
+    assert!(!source.contains("join(\"admission.lock\")"));
+    assert!(!source.contains("pub fn release"));
 
-    let first = AdmissionLock::acquire(&authority).expect("first supervisor owns admission");
-    assert_eq!(
-        error_code(AdmissionLock::acquire(&authority)),
-        "portable_runtime_io",
-        "a second supervisor must not acquire the retained share-zero lock"
+    let object_source = include_str!("../win32/object/admission.rs");
+    assert!(object_source.contains("RelativeFileOpen::ExclusiveOpenOrCreateReadDataAndAttributes"));
+    assert!(!object_source.contains("GENERIC_READ"));
+    assert!(!object_source.contains("GENERIC_WRITE"));
+}
+
+#[test]
+fn retained_binding_excludes_a_second_supervisor_and_releases_on_drop() {
+    let root = temp_root("admission-owner");
+    let root_authority = PortableRootAuthority::open(root.path()).expect("retained root");
+    let binding = SupervisorRootBinding::bind(
+        SupervisorSessionAuthority::for_root_test(root_authority.identity()),
+        root_authority.clone(),
+    )
+    .expect("matching root binding");
+
+    let first = AdmissionLock::acquire(&binding).expect("first supervisor owns admission");
+    assert!(
+        AdmissionLock::acquire(&binding).is_err(),
+        "a second supervisor cannot acquire the retained share-zero lock"
     );
     drop(first);
-    AdmissionLock::acquire(&authority).expect("authority is released only at owner teardown");
+    AdmissionLock::acquire(&binding).expect("admission becomes available only after drop");
 
-    let source = include_str!("../process_admission.rs");
-    assert!(source.contains("authority_root.join(\"admission.lock\")"));
-    assert!(!source.contains("pub fn release"));
+    assert!(
+        SupervisorRootBinding::bind(SupervisorSessionAuthority::for_test('c'), root_authority)
+            .is_err(),
+        "a mismatched protocol root identity cannot bind an App-capable root"
+    );
 }
 
 #[test]

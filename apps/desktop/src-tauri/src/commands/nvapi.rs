@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use crate::diagnostic_event::CommandOperation;
 use renderpilot_api as desktop;
 use renderpilot_orchestration::Context;
 
@@ -14,7 +15,7 @@ use super::{CommandBoundary, CommandError, JsonCommandResult, require_game_conte
 
 #[tauri::command]
 pub async fn list_nvapi_supported_settings(game_id: String) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("list_nvapi_supported_settings");
+    let boundary = CommandBoundary::new(CommandOperation::ListNvapiSupportedSettings);
     let game_id = require_non_empty_string(&boundary, "game_id", game_id)?;
     boundary
         .run(move || desktop::list_nvapi_supported_settings(game_id))
@@ -26,7 +27,7 @@ pub async fn list_nvapi_setting_states(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("list_nvapi_setting_states");
+    let boundary = CommandBoundary::new(CommandOperation::ListNvapiSettingStates);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     boundary
         .run(move || desktop::list_nvapi_setting_states(&context, game_id))
@@ -38,7 +39,7 @@ pub async fn list_game_executable_candidates(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("list_game_executable_candidates");
+    let boundary = CommandBoundary::new(CommandOperation::ListGameExecutableCandidates);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     boundary
         .run(move || desktop::list_game_executable_candidates(&context, game_id))
@@ -50,7 +51,7 @@ pub async fn resolve_game_executable(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("resolve_game_executable");
+    let boundary = CommandBoundary::new(CommandOperation::ResolveGameExecutable);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     boundary
         .run(move || desktop::resolve_game_executable(&context, game_id))
@@ -63,7 +64,7 @@ pub async fn set_game_executable_override(
     absolute_path: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("set_game_executable_override");
+    let boundary = CommandBoundary::new(CommandOperation::SetGameExecutableOverride);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let absolute_path = require_non_empty_string(&boundary, "absolute_path", absolute_path)?;
     let refresh_context = Arc::clone(&context);
@@ -92,7 +93,7 @@ pub async fn clear_game_executable_override(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("clear_game_executable_override");
+    let boundary = CommandBoundary::new(CommandOperation::ClearGameExecutableOverride);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let refresh_context = Arc::clone(&context);
     let changed_game_id =
@@ -121,7 +122,7 @@ pub async fn get_nvapi_setting_state(
     setting_key: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("get_nvapi_setting_state");
+    let boundary = CommandBoundary::new(CommandOperation::GetNvapiSettingState);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let setting_key = require_non_empty_string(&boundary, "setting_key", setting_key)?;
     boundary
@@ -136,7 +137,7 @@ pub async fn set_nvapi_setting_value(
     value: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("set_nvapi_setting_value");
+    let boundary = CommandBoundary::new(CommandOperation::SetNvapiSettingValue);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let setting_key = require_non_empty_string(&boundary, "setting_key", setting_key)?;
     let value = require_non_empty_string(&boundary, "value", value)?;
@@ -152,7 +153,7 @@ pub async fn revert_nvapi_setting(
     target: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("revert_nvapi_setting");
+    let boundary = CommandBoundary::new(CommandOperation::RevertNvapiSetting);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let setting_key = require_non_empty_string(&boundary, "setting_key", setting_key)?;
     let target = require_non_empty_string(&boundary, "target", target)?;
@@ -171,7 +172,7 @@ pub async fn revert_nvapi_setting(
 pub async fn list_global_nvapi_setting_states(
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("list_global_nvapi_setting_states");
+    let boundary = CommandBoundary::new(CommandOperation::ListGlobalNvapiSettingStates);
     let context = Arc::clone(&context);
     boundary
         .run(move || desktop::list_global_nvapi_setting_states(&context))
@@ -185,7 +186,7 @@ pub async fn set_global_nvapi_setting_value(
     value: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("set_global_nvapi_setting_value");
+    let boundary = CommandBoundary::new(CommandOperation::SetGlobalNvapiSettingValue);
     let setting_key = require_non_empty_string(&boundary, "setting_key", setting_key)?;
     let value = require_non_empty_string(&boundary, "value", value)?;
     let context = Arc::clone(&context);
@@ -201,7 +202,7 @@ pub async fn revert_global_nvapi_setting(
     target: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("revert_global_nvapi_setting");
+    let boundary = CommandBoundary::new(CommandOperation::RevertGlobalNvapiSetting);
     let setting_key = require_non_empty_string(&boundary, "setting_key", setting_key)?;
     let target = require_non_empty_string(&boundary, "target", target)?;
     let context = Arc::clone(&context);
@@ -217,7 +218,7 @@ pub async fn revert_global_nvapi_setting(
 /// Reads whether the global NVIDIA DLSS indicator overlay is currently enabled.
 #[tauri::command]
 pub async fn get_dlss_indicator_state() -> JsonCommandResult {
-    CommandBoundary::new("get_dlss_indicator_state")
+    CommandBoundary::new(CommandOperation::GetDlssIndicatorState)
         .run(renderpilot_api::get_dlss_indicator_state)
         .await
 }
@@ -225,7 +226,7 @@ pub async fn get_dlss_indicator_state() -> JsonCommandResult {
 /// Enables or disables the global NVIDIA DLSS indicator overlay (requires admin).
 #[tauri::command]
 pub async fn set_dlss_indicator_enabled(enabled: bool) -> JsonCommandResult {
-    CommandBoundary::new("set_dlss_indicator_enabled")
+    CommandBoundary::new(CommandOperation::SetDlssIndicatorEnabled)
         .run(move || renderpilot_api::set_dlss_indicator_enabled(enabled))
         .await
 }

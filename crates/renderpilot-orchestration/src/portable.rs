@@ -99,6 +99,7 @@ impl RuntimePathsV1 {
             &self.webview2_root,
         ];
         if self.portable_root.as_os_str().is_empty()
+            || self.data_root != self.portable_root.join("data")
             || under_data
                 .iter()
                 .any(|path| !path.starts_with(&self.data_root))
@@ -140,4 +141,27 @@ pub fn has_runtime_paths() -> bool {
 
 pub(crate) fn portable_data_root() -> Option<&'static Path> {
     runtime_paths().map(|paths| paths.data_root.as_path())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::RuntimePathsV1;
+
+    #[test]
+    fn runtime_paths_reject_a_data_root_that_is_not_the_exact_portable_data_leaf() {
+        let root = PathBuf::from(r"C:\portable");
+        let generation = root
+            .join(".renderpilot-generations")
+            .join("v1")
+            .join("objects")
+            .join("a".repeat(64));
+        let app = generation.join("renderpilot-app.exe");
+        let mut paths = RuntimePathsV1::from_portable_root(root, &generation, &app)
+            .expect("derive valid portable paths");
+        paths.data_root = PathBuf::from(r"C:\portable\data-alias");
+
+        assert!(paths.validate().is_err());
+    }
 }

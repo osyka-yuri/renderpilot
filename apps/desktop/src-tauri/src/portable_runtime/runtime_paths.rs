@@ -1,52 +1,101 @@
-use std::path::Path;
+use std::sync::OnceLock;
 
 use renderpilot_orchestration::portable::{RuntimePathsV1, install_runtime_paths};
 
 use super::{
     app_protocol::PortableAppSessionV1,
     error::{PortableRuntimeError, Result},
+    image_authority::SelectedGenerationImage,
+    root_authority::PortableRootAuthority,
+    win32::object::running_app_identity,
 };
 
 const WEBVIEW_ENV: &str = "WEBVIEW2_USER_DATA_FOLDER";
 const DB_ENV: &str = "RENDERPILOT_DB_PATH";
 
-/// Installs the authenticated portable path authority before logger, Tauri,
-/// WebView2, SQLite, or any application context can be created.
+/// The sole App-side authority publication.  `RuntimePathsV1` remains the
+/// unchanged orchestration compatibility projection, but it is never the
+/// authority source by itself.
+#[derive(Debug)]
+pub(crate) struct AuthenticatedAppRuntime {
+    paths: RuntimePathsV1,
+    root: PortableRootAuthority,
+    _selected_generation: SelectedGenerationImage,
+}
+
+impl AuthenticatedAppRuntime {
+    pub(crate) fn paths(&self) -> &RuntimePathsV1 {
+        &self.paths
+    }
+
+    pub(crate) fn root(&self) -> &PortableRootAuthority {
+        &self.root
+    }
+}
+
+static AUTHENTICATED_APP_RUNTIME: OnceLock<AuthenticatedAppRuntime> = OnceLock::new();
+
+/// Validates startup, obtains retained root/generation/App capabilities, and
+/// publishes authority before the compatibility path projection and env vars.
 #[expect(
     unsafe_code,
-    reason = "startup runs before threads and replaces ambient portable path inputs with authenticated projections"
+    reason = "startup runs before threads and projects authenticated paths into legacy environment compatibility variables"
 )]
 pub fn install_from_startup(startup: &PortableAppSessionV1) -> Result<()> {
     startup.validate()?;
-    let executable = std::env::current_exe()?;
-    let executable_root = executable.parent().ok_or_else(|| {
-        PortableRuntimeError::new("portable_runtime_paths", "portable App image had no parent")
-    })?;
-    let paths = &startup.runtime_paths;
-    let portable_root_identity =
-        super::win32::directory::directory_identity_digest_no_reparse(&paths.portable_root)?;
-    let executable_root_identity =
-        super::win32::directory::directory_identity_digest_no_reparse(executable_root)?;
-    let selected_generation_identity =
-        super::win32::directory::directory_identity_digest_no_reparse(
-            &paths.selected_generation_root,
-        )?;
-    if portable_root_identity != startup.portable_root_identity
-        || executable_root_identity != startup.generation_root_identity
-        || selected_generation_identity != startup.generation_root_identity
-        || !same_executable_identity(&executable, &paths.selected_app_executable)?
+    startup
+        .runtime_paths
+        .validate()
+        .map_err(|detail| PortableRuntimeError::new("portable_runtime_paths", detail))?;
+    let root = PortableRootAuthority::open(&startup.runtime_paths.portable_root)?;
+    if root.identity().as_str() != startup.portable_root_identity {
+        return Err(PortableRuntimeError::new(
+            "portable_runtime_paths",
+            "retained portable root identity did not match the signed startup binding",
+        ));
+    }
+    let selected_generation = SelectedGenerationImage::open(&root, &startup.generation_sha256)?;
+    if selected_generation.generation_identity().as_str() != startup.generation_root_identity {
+        return Err(PortableRuntimeError::new(
+            "portable_runtime_paths",
+            "retained selected generation identity did not match startup",
+        ));
+    }
+    let running = running_app_identity(&std::env::current_exe()?)?;
+    if &running != selected_generation.app().identity() {
+        return Err(PortableRuntimeError::new(
+            "portable_runtime_paths",
+            "running App identity differed from retained selected App image",
+        ));
+    }
+    if AUTHENTICATED_APP_RUNTIME.get().is_some()
+        || renderpilot_orchestration::portable::runtime_paths().is_some()
     {
         return Err(PortableRuntimeError::new(
             "portable_runtime_paths",
-            "App image/root/generation identity did not match the App-session v1 binding",
+            "portable App runtime authority was already published",
         ));
     }
     let paths = startup.runtime_paths.clone();
+    AUTHENTICATED_APP_RUNTIME
+        .set(AuthenticatedAppRuntime {
+            paths: paths.clone(),
+            root,
+            _selected_generation: selected_generation,
+        })
+        .map_err(|_| {
+            PortableRuntimeError::new(
+                "portable_runtime_paths",
+                "atomic authenticated runtime publication raced",
+            )
+        })?;
+    // The compatibility cell has already been proven empty; the only permitted
+    // projection is the exact authority tuple's unmodified RuntimePathsV1.
     install_runtime_paths(paths)
         .map_err(|detail| PortableRuntimeError::new("portable_runtime_paths", detail))?;
     let paths = current()?;
-    // SAFETY: this is the authenticated child entry before logger/WebView/Tauri
-    // initialization and no thread has yet been started.
+    // SAFETY: the authenticated portable child has not initialized logger,
+    // WebView2, Tauri, or worker threads yet.
     unsafe {
         std::env::set_var(
             renderpilot_orchestration::portable::APP_DIR_ENV,
@@ -58,40 +107,50 @@ pub fn install_from_startup(startup: &PortableAppSessionV1) -> Result<()> {
     Ok(())
 }
 
-fn same_executable_identity(actual: &Path, selected: &Path) -> Result<bool> {
-    let actual = super::win32::directory::file_identity_digest_no_reparse(actual)?;
-    let selected = super::win32::directory::file_identity_digest_no_reparse(selected)?;
-    Ok(actual == selected)
-}
-
-pub fn current() -> Result<&'static RuntimePathsV1> {
-    renderpilot_orchestration::portable::runtime_paths().ok_or_else(|| {
+pub(crate) fn current_runtime() -> Result<&'static AuthenticatedAppRuntime> {
+    AUTHENTICATED_APP_RUNTIME.get().ok_or_else(|| {
         PortableRuntimeError::new(
             "portable_runtime_paths_missing",
-            "portable startup was not installed",
+            "portable authenticated App runtime was not installed",
         )
     })
 }
 
+pub fn current() -> Result<&'static RuntimePathsV1> {
+    Ok(current_runtime()?.paths())
+}
+
+pub(crate) fn current_root() -> Result<&'static PortableRootAuthority> {
+    Ok(current_runtime()?.root())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::same_executable_identity;
-
     #[test]
-    fn executable_identity_accepts_a_verbatim_path_alias() {
-        let executable = std::env::current_exe().expect("current test executable");
-        let alias = match executable.strip_prefix(r"\\?\") {
-            Ok(path) => path.to_owned(),
-            Err(_) => {
-                let mut alias = std::ffi::OsString::from(r"\\?\");
-                alias.push(executable.as_os_str());
-                alias.into()
-            }
-        };
-
-        assert_ne!(executable, alias);
-        assert!(
-            same_executable_identity(&executable, &alias).expect("compare executable identities")
-        );
+    fn authenticated_runtime_publishes_before_projection_and_environment() {
+        let source = include_str!("runtime_paths.rs");
+        let capabilities = source
+            .find("let root = PortableRootAuthority::open")
+            .expect("retained root");
+        let empty = source
+            .find("AUTHENTICATED_APP_RUNTIME.get().is_some()")
+            .expect("both cells checked");
+        let publish = source
+            .find("AUTHENTICATED_APP_RUNTIME\n        .set")
+            .expect("authority publication");
+        let projection = source
+            .find("install_runtime_paths(paths)")
+            .expect("compatibility projection");
+        let environment = source
+            .find("std::env::set_var")
+            .expect("environment projection");
+        assert!(capabilities < empty && empty < publish && publish < projection);
+        assert!(projection < environment);
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source");
+        assert!(!production.contains("directory_identity_digest_no_reparse"));
+        assert!(!production.contains("file_identity_digest_no_reparse"));
     }
 }

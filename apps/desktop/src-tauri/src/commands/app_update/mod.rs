@@ -11,6 +11,7 @@ mod installed;
 mod portable;
 mod session;
 
+use crate::diagnostic_event::CommandOperation;
 use dto::UpdateResult;
 pub use dto::{AppUpdateApplyResponse, AppUpdateCheckResponse, AppUpdateDownloadEvent};
 pub(crate) use session::AppUpdateState;
@@ -24,7 +25,7 @@ pub async fn app_update_check(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppUpdateState>,
 ) -> UpdateResult<Option<AppUpdateCheckResponse>> {
-    let boundary = CommandBoundary::new("app_update_check");
+    let boundary = CommandBoundary::new(CommandOperation::AppUpdateCheck);
     async {
         portable_request_open()?;
         let attempt = CheckAttempt::start(&state, random_id)?;
@@ -68,7 +69,7 @@ pub async fn app_update_download(
     on_event: Channel<AppUpdateDownloadEvent>,
     state: tauri::State<'_, AppUpdateState>,
 ) -> UpdateResult<()> {
-    let boundary = CommandBoundary::new("app_update_download");
+    let boundary = CommandBoundary::new(CommandOperation::AppUpdateDownload);
     async {
         portable_request_open()?;
 
@@ -92,7 +93,7 @@ pub async fn app_update_apply(
     state: tauri::State<'_, AppUpdateState>,
     app: tauri::AppHandle,
 ) -> UpdateResult<AppUpdateApplyResponse> {
-    let boundary = CommandBoundary::new("app_update_apply");
+    let boundary = CommandBoundary::new(CommandOperation::AppUpdateApply);
     async {
         portable_request_open()?;
 
@@ -123,7 +124,7 @@ pub fn app_update_close(
     session_id: String,
     state: tauri::State<'_, AppUpdateState>,
 ) -> UpdateResult<()> {
-    let boundary = CommandBoundary::new("app_update_close");
+    let boundary = CommandBoundary::new(CommandOperation::AppUpdateClose);
     session::close(&state, &session_id).map_err(|error| boundary.record(error))
 }
 
@@ -174,10 +175,12 @@ mod tests {
 
     #[test]
     fn updater_boundary_registers_diagnostics_without_expanding_the_wire_shape() {
-        let error = CommandBoundary::new("app_update_check").record(CommandError::with_diagnostic(
-            CommandErrorKind::AppUpdateCheckFailed,
-            "private updater detail",
-        ));
+        let error = CommandBoundary::new(CommandOperation::AppUpdateCheck).record(
+            CommandError::with_diagnostic(
+                CommandErrorKind::AppUpdateCheckFailed,
+                "private updater detail",
+            ),
+        );
 
         assert_eq!(
             serde_json::to_value(error).expect("serialize updater command error"),

@@ -13,20 +13,27 @@
 use std::{
     fs::{File, OpenOptions},
     io::Write,
+    os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use windows_sys::Win32::Storage::FileSystem::{GetVolumeInformationW, GetVolumePathNameW};
+use windows_sys::Win32::{
+    Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation},
+    Storage::FileSystem::{
+        FILE_FLAG_OPEN_REPARSE_POINT, GetVolumeInformationW, GetVolumePathNameW,
+    },
+};
 
 use super::{
     error::{PortableRuntimeError, Result},
     random::{bytes_32, hex},
     signature::sha256_hex,
     win32::{
-        directory::verify_directory_no_reparse, file::open_share_zero, process::path_wide_nul,
+        directory::{verify_admission_handle, verify_directory_no_reparse},
+        process::path_wide_nul,
     },
 };
 
@@ -98,7 +105,7 @@ pub(super) fn install(authority_root: &Path) -> Result<()> {
     let anchor = provenance_root(authority_root);
     std::fs::create_dir_all(&anchor)?;
     verify_directory_no_reparse(&anchor)?;
-    let lock = open_share_zero(&anchor.join(LOCK_FILE))?;
+    let lock = open_provenance_lock(&anchor.join(LOCK_FILE))?;
     let master_key = load_or_create_master_key(&anchor)?;
     let (generation, head_sha256) = load_head(&anchor, &master_key)?;
     AUTHORITY
@@ -119,6 +126,28 @@ pub(super) fn install(authority_root: &Path) -> Result<()> {
 
 fn provenance_root(authority_root: &Path) -> PathBuf {
     authority_root.join(PROVENANCE_DIRECTORY)
+}
+
+/// The provenance anchor alone retains this path-based share-zero lock. It is
+/// intentionally not a reusable Win32 authority API.
+fn open_provenance_lock(path: &Path) -> Result<File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    verify_admission_handle(file.as_raw_handle().cast())?;
+    // SAFETY: provenance retains this one file handle and clearing inheritance
+    // neither transfers nor duplicates ownership.
+    if unsafe { SetHandleInformation(file.as_raw_handle(), HANDLE_FLAG_INHERIT, 0) } == 0 {
+        return Err(PortableRuntimeError::new(
+            "portable_provenance",
+            "provenance lock inheritance could not be cleared",
+        ));
+    }
+    Ok(file)
 }
 
 /// Seals a complete canonical payload.  Creating an envelope records the

@@ -53,6 +53,9 @@ pub struct StoredGeneration {
     pub generation_root: PathBuf,
     pub app: PathBuf,
     pub rpu_sha256: String,
+    /// Already signed and receipt-validated; propagated only so activation can
+    /// compare retained App capability bytes without reopening its path.
+    pub app_sha256: String,
     pub version: String,
     pub minimum_supervisor_protocol: u16,
     pub app_session_protocol: String,
@@ -190,6 +193,7 @@ pub fn load_selected(
         generation_root,
         app,
         rpu_sha256: receipt.rpu_sha256,
+        app_sha256: receipt.app_sha256,
         version: receipt.version,
         minimum_supervisor_protocol: receipt.minimum_supervisor_protocol,
         app_session_protocol: receipt.app_session_protocol,
@@ -227,6 +231,7 @@ pub fn inspect_initial_selection(
             generation_root,
             app,
             rpu_sha256: receipt.rpu_sha256,
+            app_sha256: receipt.app_sha256,
             version: receipt.version,
             minimum_supervisor_protocol: receipt.minimum_supervisor_protocol,
             app_session_protocol: receipt.app_session_protocol,

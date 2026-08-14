@@ -3,15 +3,13 @@
 //! The Windows application manifest owns process elevation. This capability
 //! only fences one supervisor session and cannot be minted by the managed App.
 
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 
 use crate::portable_runtime::{
     error::{PortableRuntimeError, Result},
     random::hex_32,
     signature::sha256_hex,
-    win32::directory::{directory_identity_digest_no_reparse, file_identity_digest_no_reparse},
+    win32::object::ObjectIdentity,
 };
 
 const SUPERVISOR_SESSION_PROTOCOL: u16 = 3;
@@ -33,14 +31,18 @@ pub(in crate::portable_runtime) struct SupervisorSessionAuthority {
 }
 
 impl SupervisorSessionAuthority {
-    /// Sole production constructor. Visibility is restricted to the parent
-    /// `supervisor` module, so the managed-App bootstrap cannot mint authority.
-    pub(super) fn mint(executable: &Path, portable_root: &Path) -> Result<Self> {
+    /// Sole production constructor.  It accepts already-measured retained
+    /// capabilities only; this pure protocol role performs no path opens or
+    /// identity probes of its own.
+    pub(super) fn mint(
+        raw_image_identity: &ObjectIdentity,
+        portable_root_identity: &ObjectIdentity,
+    ) -> Result<Self> {
         let record = SupervisorSessionRecordV3 {
             protocol: SUPERVISOR_SESSION_PROTOCOL,
             session_nonce: hex_32()?,
-            raw_image_identity: file_identity_digest_no_reparse(executable)?,
-            portable_root_identity: directory_identity_digest_no_reparse(portable_root)?,
+            raw_image_identity: raw_image_identity.as_str().to_owned(),
+            portable_root_identity: portable_root_identity.as_str().to_owned(),
         };
         record.validate()?;
         let transcript_sha256 = record.transcript_sha256()?;
@@ -68,19 +70,29 @@ impl SupervisorSessionAuthority {
         }
     }
 
+    #[cfg(test)]
+    pub(in crate::portable_runtime) fn for_root_test(root: &ObjectIdentity) -> Self {
+        let record = SupervisorSessionRecordV3 {
+            protocol: SUPERVISOR_SESSION_PROTOCOL,
+            session_nonce: "a".repeat(64),
+            raw_image_identity: "b".repeat(64),
+            portable_root_identity: root.as_str().to_owned(),
+        };
+        let transcript_sha256 = record
+            .transcript_sha256()
+            .expect("test supervisor root binding must be valid");
+        Self {
+            record,
+            transcript_sha256,
+        }
+    }
+
     pub(in crate::portable_runtime) fn transcript_sha256(&self) -> &str {
         &self.transcript_sha256
     }
 
     pub(in crate::portable_runtime) fn portable_root_identity(&self) -> &str {
         &self.record.portable_root_identity
-    }
-
-    pub(in crate::portable_runtime) fn verify_generation_before_decode(
-        &self,
-        generation_root: &Path,
-    ) -> Result<String> {
-        directory_identity_digest_no_reparse(generation_root)
     }
 }
 

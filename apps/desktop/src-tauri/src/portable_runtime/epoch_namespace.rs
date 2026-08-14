@@ -62,12 +62,6 @@ pub fn establish_epoch(authority_root: &Path, epoch: &str) -> Result<PathBuf> {
     Ok(epoch_root)
 }
 
-pub fn validate_authority_namespace(authority_root: &Path) -> Result<()> {
-    ensure_plain_directory(authority_root)?;
-    let scan = stable_scan_skipping(authority_root, &SCAN_SKIPS)?;
-    require_known_entries_skipping(authority_root, &scan, &AUTHORITY_ENTRIES, &SCAN_SKIPS)
-}
-
 fn canonical_epoch(epoch: &str) -> bool {
     epoch.len() == 64
         && epoch

@@ -2,6 +2,10 @@
 
 use std::sync::Arc;
 
+use crate::{
+    backend_diagnostics,
+    diagnostic_event::{BackendDiagnosticEvent, CapabilityOperation},
+};
 use renderpilot_orchestration::Context;
 use renderpilot_orchestration::addons::capabilities;
 use renderpilot_orchestration::domain::GameId;
@@ -42,12 +46,54 @@ pub(crate) async fn refresh_game_catalog_addon_capabilities(
     match refresh {
         Ok(Ok(changed)) => changed,
         Ok(Err(error)) => {
-            log::warn!("failed to refresh game add-on capabilities: {error}");
+            report_game_capability_refresh_failure(GameCapabilityRefreshFailure::Service, &error);
             false
         }
         Err(error) => {
-            log::warn!("game capability task failed: {error}");
+            report_game_capability_refresh_failure(GameCapabilityRefreshFailure::Task, &error);
             false
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GameCapabilityRefreshFailure {
+    Service,
+    Task,
+}
+
+impl GameCapabilityRefreshFailure {
+    const fn console_prefix(self) -> &'static str {
+        match self {
+            Self::Service => "failed to refresh game add-on capabilities",
+            Self::Task => "game capability task failed",
+        }
+    }
+}
+
+fn report_game_capability_refresh_failure(
+    failure: GameCapabilityRefreshFailure,
+    error: &impl std::fmt::Display,
+) {
+    log::warn!("{}: {error}", failure.console_prefix());
+    backend_diagnostics::record(BackendDiagnosticEvent::capability_failure(
+        CapabilityOperation::RefreshGameCatalogAddonCapabilities,
+    ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GameCapabilityRefreshFailure;
+
+    #[test]
+    fn per_game_capability_failures_keep_distinct_console_classification() {
+        assert_eq!(
+            GameCapabilityRefreshFailure::Service.console_prefix(),
+            "failed to refresh game add-on capabilities"
+        );
+        assert_eq!(
+            GameCapabilityRefreshFailure::Task.console_prefix(),
+            "game capability task failed"
+        );
     }
 }

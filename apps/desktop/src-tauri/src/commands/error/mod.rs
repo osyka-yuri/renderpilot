@@ -3,14 +3,14 @@
 //! The frontend owns localized messages, severity, and suggested actions. Rust
 //! serializes only a machine code and explicitly allowlisted structured data.
 
-mod kind;
 mod mapping;
 
 use serde::Serialize;
 
-pub(crate) use kind::{CommandErrorKind, CommandErrorSeverity};
+pub(crate) use crate::command_error_contract::{CommandErrorKind, CommandErrorSeverity};
+use crate::{backend_diagnostics, diagnostic_event::CommandOperation};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     code: &'static str,
@@ -43,7 +43,7 @@ struct CommandErrorDiagnostic {
 #[derive(Clone, Copy)]
 struct CommandDiagnosticRecord<'error> {
     severity: CommandErrorSeverity,
-    operation: &'static str,
+    operation: CommandOperation,
     code: &'static str,
     detail: Option<&'error str>,
 }
@@ -52,22 +52,22 @@ fn write_command_diagnostic(record: CommandDiagnosticRecord<'_>) {
     match (record.severity, record.detail) {
         (CommandErrorSeverity::Warning, Some(detail)) => log::warn!(
             "Desktop command warning [operation={} code={}]: {detail}",
-            record.operation,
+            record.operation.code(),
             record.code
         ),
         (CommandErrorSeverity::Warning, None) => log::warn!(
             "Desktop command warning [operation={} code={}]",
-            record.operation,
+            record.operation.code(),
             record.code
         ),
         (CommandErrorSeverity::Error, Some(detail)) => log::error!(
             "Desktop command error [operation={} code={}]: {detail}",
-            record.operation,
+            record.operation.code(),
             record.code
         ),
         (CommandErrorSeverity::Error, None) => log::error!(
             "Desktop command error [operation={} code={}]",
-            record.operation,
+            record.operation.code(),
             record.code
         ),
     }
@@ -96,13 +96,13 @@ impl CommandError {
 
     /// Registers backend-only context once, at the command boundary where the
     /// stable operation name is known. Mapping and serialization remain pure.
-    pub(super) fn recorded(self, operation: &'static str) -> Self {
+    pub(super) fn recorded(self, operation: CommandOperation) -> Self {
         self.recorded_with(operation, write_command_diagnostic)
     }
 
     fn recorded_with(
         mut self,
-        operation: &'static str,
+        operation: CommandOperation,
         record: impl FnOnce(CommandDiagnosticRecord<'_>),
     ) -> Self {
         if self.diagnostic_recorded {
@@ -118,6 +118,9 @@ impl CommandError {
                 .as_ref()
                 .map(|diagnostic| diagnostic.detail.as_str()),
         });
+        backend_diagnostics::record(
+            crate::diagnostic_event::BackendDiagnosticEvent::command_failure(operation, self.kind),
+        );
         self.diagnostic_recorded = true;
         self
     }
@@ -165,6 +168,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::diagnostic_event::CommandOperation;
 
     #[test]
     fn plain_error_serializes_only_the_machine_code() {
@@ -295,7 +299,7 @@ mod tests {
             "private database path C:\\Users\\name\\catalog.db",
         );
         let before = serde_json::to_value(&error).expect("serialize before recording");
-        let after = serde_json::to_value(error.recorded("contract_test"))
+        let after = serde_json::to_value(error.recorded(CommandOperation::ClearGameCover))
             .expect("serialize after recording");
 
         assert_eq!(before, json!({ "code": "storage_failed" }));
@@ -308,7 +312,7 @@ mod tests {
             CommandErrorKind::AppUpdateSupervisorFailed,
             "private supervisor pipe at C:\\Users\\name",
         );
-        let value = serde_json::to_value(error.recorded("app_update_apply"))
+        let value = serde_json::to_value(error.recorded(CommandOperation::AppUpdateApply))
             .expect("serialize updater error");
 
         assert_eq!(value, json!({ "code": "app_update_supervisor_failed" }));
@@ -321,10 +325,11 @@ mod tests {
         assert!(!error.diagnostic_recorded);
         let mut record_count = 0;
 
-        let recorded = error.recorded_with("contract_test", |_| record_count += 1);
+        let recorded = error.recorded_with(CommandOperation::ClearGameCover, |_| record_count += 1);
         assert!(recorded.diagnostic_recorded);
 
-        let recorded_again = recorded.recorded_with("outer_boundary", |_| record_count += 1);
+        let recorded_again =
+            recorded.recorded_with(CommandOperation::ClearGameCover, |_| record_count += 1);
         assert!(recorded_again.diagnostic_recorded);
         assert_eq!(record_count, 1);
     }

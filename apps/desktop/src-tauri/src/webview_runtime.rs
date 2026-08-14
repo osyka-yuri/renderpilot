@@ -89,6 +89,7 @@ pub(crate) fn enforce_minimum_version(context: &tauri::Context<Wry>) {
         Ok(version) => version,
         Err(error) => {
             log::error!("invalid WebView2 runtime contract: {error}");
+            flush_portable_webview_exit_diagnostic();
             process::exit(INCOMPATIBLE_RUNTIME_EXIT_CODE);
         }
     };
@@ -112,8 +113,31 @@ pub(crate) fn enforce_minimum_version(context: &tauri::Context<Wry>) {
         open_download_page();
     }
 
+    flush_portable_webview_exit_diagnostic();
     process::exit(INCOMPATIBLE_RUNTIME_EXIT_CODE);
 }
+
+/// A portable App may terminate after stderr logging but before Tauri owns the
+/// event loop. Record only a fixed phase/code and synchronously close the
+/// bounded file before the direct process exit.
+#[cfg(feature = "portable")]
+fn flush_portable_webview_exit_diagnostic() {
+    let error = crate::portable_runtime::error::PortableRuntimeError::new(
+        "portable_webview_runtime",
+        "WebView2 startup contract was not satisfied",
+    );
+    crate::portable_runtime::diagnostics_files::app_failure(
+        crate::diagnostics::PortableFailureSite::WebviewRuntime,
+        &error,
+    );
+    crate::portable_runtime::diagnostics_files::app_milestone(
+        crate::diagnostics::PortableMilestone::ControlledExit,
+    );
+    crate::portable_runtime::diagnostics_files::shutdown_app();
+}
+
+#[cfg(not(feature = "portable"))]
+fn flush_portable_webview_exit_diagnostic() {}
 
 fn configured_minimum_version(context: &tauri::Context<Wry>) -> Result<&str, String> {
     let runtime_value = context

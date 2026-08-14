@@ -59,20 +59,6 @@ pub fn stable_scan(path: &Path) -> Result<NamespaceScan> {
     stable_scan_skipping(path, &[])
 }
 
-/// Returns the stable NT file identity of a directory after opening its leaf
-/// with `OPEN_REPARSE_POINT`.  Callers use this instead of textual paths when
-/// binding portable-root and selected-generation authority.
-pub fn directory_identity_digest_no_reparse(path: &Path) -> Result<String> {
-    identity_digest_no_reparse(path, EntryKind::Directory)
-}
-
-/// Returns the stable NT file identity of an ordinary file after a no-follow
-/// open.  A reparse point, unexpected object type, or a hard-linked authority
-/// file fails closed.
-pub fn file_identity_digest_no_reparse(path: &Path) -> Result<String> {
-    identity_digest_no_reparse(path, EntryKind::File)
-}
-
 /// Re-opens an authority directory solely to prove its leaf is still a plain
 /// directory.  The caller must separately retain any exclusive lock it owns.
 pub fn verify_directory_no_reparse(path: &Path) -> Result<()> {
@@ -270,53 +256,6 @@ fn verify_entry_leaf(path: &Path, expected: EntryKind) -> Result<()> {
         ));
     }
     let result = verify_handle(handle, expected);
-    unsafe {
-        let _ = CloseHandle(handle);
-    }
-    result
-}
-
-fn identity_digest_no_reparse(path: &Path, expected: EntryKind) -> Result<String> {
-    let wide = path_wide_nul(path);
-    let handle = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            std::ptr::null(),
-            OPEN_EXISTING,
-            FILE_FLAG_OPEN_REPARSE_POINT
-                | if expected == EntryKind::Directory {
-                    FILE_FLAG_BACKUP_SEMANTICS
-                } else {
-                    0
-                },
-            std::ptr::null_mut(),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(PortableRuntimeError::new(
-            "portable_namespace_unopenable",
-            "authority identity leaf could not be opened without following links",
-        ));
-    }
-    let result = (|| {
-        verify_handle(handle, expected)?;
-        let mut info = BY_HANDLE_FILE_INFORMATION::default();
-        if unsafe { GetFileInformationByHandle(handle, &raw mut info) } == 0 {
-            return Err(PortableRuntimeError::new(
-                "portable_namespace_unopenable",
-                "could not read authority identity metadata",
-            ));
-        }
-        Ok(crate::portable_runtime::signature::sha256_hex(
-            format!(
-                "renderpilot-portable-file-id-v1\\0{}\\0{}\\0{}",
-                info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow
-            )
-            .as_bytes(),
-        ))
-    })();
     unsafe {
         let _ = CloseHandle(handle);
     }

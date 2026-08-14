@@ -1,3 +1,9 @@
+//! Generated, presentation-free command error identifiers.
+//!
+//! This neutral module is deliberately below both the command boundary and the
+//! diagnostics bridge, so a durable diagnostic can carry only the generated
+//! error kind without creating a dependency cycle.
+
 include!(concat!(env!("OUT_DIR"), "/desktop_error_kinds.rs"));
 
 #[cfg(test)]

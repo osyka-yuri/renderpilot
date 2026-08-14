@@ -1,6 +1,11 @@
 //! Tauri desktop entry point for RenderPilot.
 
+mod backend_diagnostics;
+mod command_error_contract;
 mod commands;
+mod diagnostic_event;
+#[cfg(all(windows, feature = "portable"))]
+mod diagnostics;
 #[cfg(all(windows, feature = "portable"))]
 mod portable_runtime;
 #[cfg(all(windows, feature = "portable"))]
@@ -35,10 +40,18 @@ pub fn run() {
 
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    #[cfg(all(windows, feature = "portable"))]
+    portable_runtime::diagnostics_files::install_app(&portable_startup);
+
     let context = tauri::generate_context!();
 
     #[cfg(windows)]
     webview_runtime::enforce_minimum_version(&context);
+
+    #[cfg(all(windows, feature = "portable"))]
+    portable_runtime::diagnostics_files::app_milestone(
+        diagnostics::PortableMilestone::WebviewRuntimeReady,
+    );
 
     #[cfg(windows)]
     webview_runtime::configure_user_data_path();
@@ -57,6 +70,7 @@ pub fn run_portable_supervisor() -> std::process::ExitCode {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{APP_NAME}: portable supervisor failed: {error}");
+            portable_runtime::win32::show_portable_supervisor_failure(&error);
             std::process::ExitCode::FAILURE
         }
     }
@@ -76,7 +90,25 @@ pub fn verify_updater_artifact(
 
 /// Builds and runs the Tauri application.
 fn run_desktop_shell(context: tauri::Context<Wry>) -> tauri::Result<()> {
-    create_desktop_builder().run(context)
+    let app = create_desktop_builder().build(context)?;
+    app.run(|_handle, _event| {
+        #[cfg(all(windows, feature = "portable"))]
+        match _event {
+            tauri::RunEvent::Ready => {
+                portable_runtime::diagnostics_files::app_milestone(
+                    diagnostics::PortableMilestone::DesktopShellReady,
+                );
+            }
+            tauri::RunEvent::Exit => {
+                portable_runtime::diagnostics_files::app_milestone(
+                    diagnostics::PortableMilestone::ControlledExit,
+                );
+                portable_runtime::diagnostics_files::shutdown_app();
+            }
+            _ => {}
+        }
+    });
+    Ok(())
 }
 
 /// Creates the Tauri builder used by the desktop shell.
@@ -129,6 +161,10 @@ pub(crate) fn complete_portable_activation(app: &tauri::AppHandle) -> Result<(),
         Ok(())
     });
     if let Err(error) = result {
+        portable_runtime::diagnostics_files::app_failure(
+            crate::diagnostics::PortableFailureSite::ActivationCommit,
+            &error,
+        );
         app.exit(STARTUP_FAILURE_EXIT_CODE);
         return Err(error.to_string());
     }
@@ -261,6 +297,21 @@ mod updater_contract {
 
 /// Reports a startup failure and terminates the process.
 fn exit_with_startup_error(error: &tauri::Error) -> ! {
+    #[cfg(all(windows, feature = "portable"))]
+    {
+        let diagnostic = portable_runtime::error::PortableRuntimeError::new(
+            "portable_desktop_shell",
+            error.to_string(),
+        );
+        portable_runtime::diagnostics_files::app_failure(
+            crate::diagnostics::PortableFailureSite::DesktopShell,
+            &diagnostic,
+        );
+        portable_runtime::diagnostics_files::app_milestone(
+            crate::diagnostics::PortableMilestone::ControlledExit,
+        );
+        portable_runtime::diagnostics_files::shutdown_app();
+    }
     eprintln!("{APP_NAME}: failed to run desktop shell: {error}");
     std::process::exit(STARTUP_FAILURE_EXIT_CODE);
 }

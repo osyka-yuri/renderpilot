@@ -12,7 +12,6 @@ use std::{
 use windows_sys::Win32::{
     Foundation::{
         ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS, GENERIC_READ, GENERIC_WRITE, GetLastError,
-        HANDLE_FLAG_INHERIT, SetHandleInformation,
     },
     Storage::FileSystem::{
         DELETE, FILE_DISPOSITION_INFO, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE,
@@ -23,8 +22,10 @@ use windows_sys::Win32::{
 
 use crate::portable_runtime::{
     error::{PortableRuntimeError, Result},
-    win32::{directory::verify_admission_handle, process::path_wide_nul},
+    win32::process::path_wide_nul,
 };
+
+const FILE_DISPOSITION_INFO_BYTES: u32 = std::mem::size_of::<FILE_DISPOSITION_INFO>() as u32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NoReplacePublication {
@@ -58,41 +59,13 @@ pub fn discard_exact_file(file: &File) -> Result<()> {
             file.as_raw_handle(),
             FileDispositionInfo,
             (&raw const disposition).cast(),
-            u32::try_from(std::mem::size_of::<FILE_DISPOSITION_INFO>())
-                .expect("FILE_DISPOSITION_INFO fits in a Win32 buffer length"),
+            FILE_DISPOSITION_INFO_BYTES,
         )
     } == 0
     {
         return Err(std::io::Error::last_os_error().into());
     }
     Ok(())
-}
-
-/// Opens an existing or new protocol file with no sharing and no inherited
-/// handle. The retained `File` is the admission authority itself.
-pub fn open_share_zero(path: &Path) -> Result<File> {
-    let parent = path.parent().ok_or_else(|| {
-        PortableRuntimeError::new("portable_admission_path", "admission file had no parent")
-    })?;
-    std::fs::create_dir_all(parent)?;
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .share_mode(0)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(path)?;
-    let raw = file.as_raw_handle().cast();
-    verify_admission_handle(raw)?;
-    // SAFETY: `raw` is the live file owned by `file`; clearing inheritance does
-    // not transfer or duplicate it.
-    if unsafe { SetHandleInformation(raw, HANDLE_FLAG_INHERIT, 0) } == 0 {
-        return Err(PortableRuntimeError::new(
-            "portable_admission_handle",
-            "could not clear admission handle inheritance",
-        ));
-    }
-    Ok(file)
 }
 
 /// Atomically makes a fully prepared same-volume file or directory visible

@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use crate::diagnostic_event::CommandOperation;
 use renderpilot_api as desktop;
 use renderpilot_orchestration::Context;
 
@@ -15,7 +16,7 @@ pub async fn luma_availability(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("luma_availability");
+    let boundary = CommandBoundary::new(CommandOperation::LumaAvailability);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -30,7 +31,7 @@ pub async fn luma_install(
     confirm_anticheat: bool,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("luma_install");
+    let boundary = CommandBoundary::new(CommandOperation::LumaInstall);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -52,7 +53,7 @@ pub async fn luma_uninstall(
     game_id: String,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("luma_uninstall");
+    let boundary = CommandBoundary::new(CommandOperation::LumaUninstall);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
 
     boundary
@@ -66,7 +67,7 @@ pub async fn luma_check_update(
     deep: Option<bool>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("luma_check_update");
+    let boundary = CommandBoundary::new(CommandOperation::LumaCheckUpdate);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let deep = deep.unwrap_or(false);
 
@@ -82,7 +83,7 @@ pub async fn luma_update(
     force_full: Option<bool>,
     context: tauri::State<'_, Arc<Context>>,
 ) -> JsonCommandResult {
-    let boundary = CommandBoundary::new("luma_update");
+    let boundary = CommandBoundary::new(CommandOperation::LumaUpdate);
     let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
     let force_full = force_full.unwrap_or(false);
 

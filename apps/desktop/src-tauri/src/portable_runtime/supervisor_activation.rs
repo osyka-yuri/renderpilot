@@ -9,6 +9,7 @@ use super::{
         StartupMode, committed_sequence_for_selection,
     },
     cleanup::cleanup_snapshot_after_terminal,
+    diagnostics_files::PortableDiagnosticSession,
     error::{PortableRuntimeError, Result},
     journal::{
         JournalAppendKind, JournalEntry, JournalPhase, append_normal_with_outbox, journal_path,
@@ -28,11 +29,13 @@ use super::{
 };
 
 use super::supervisor::authority::SupervisorSessionAuthority;
+use crate::diagnostics::{PortableFailureSite, PortableMilestone};
 
 pub(super) struct CurrentGeneration {
     pub(super) generation_root: std::path::PathBuf,
     pub(super) app: std::path::PathBuf,
     pub(super) generation_sha256: String,
+    pub(super) app_sha256: String,
     pub(super) version: String,
     pub(super) minimum_supervisor_protocol: u16,
     pub(super) app_session_protocol: String,
@@ -61,11 +64,34 @@ pub(super) struct ActivationContext<'a> {
     pub(super) epoch: &'a str,
     pub(super) supervisor_session: &'a SupervisorSessionAuthority,
     pub(super) generation_root_identity: &'a str,
+    pub(super) portable_root_identity: &'a str,
 }
 
-pub(super) fn activate_generation(
+pub(super) fn activate_generation_with_diagnostics(
     context: ActivationContext<'_>,
     current: &CurrentGeneration,
+    mut diagnostics: Option<&mut PortableDiagnosticSession>,
+) -> Result<ActivatedTrial> {
+    let mut site = PortableFailureSite::ActivationStart;
+    if let Some(diagnostics) = diagnostics.as_deref_mut() {
+        let status = diagnostics.milestone(PortableMilestone::ActivationStarted);
+        super::diagnostics_files::report_emit_failure(status);
+    }
+    let result = activate_generation_inner(context, current, &mut site, &mut diagnostics);
+    if let Err(error) = &result
+        && let Some(diagnostics) = &mut diagnostics
+    {
+        let status = diagnostics.failure(site, super::diagnostics_files::failure_class(error));
+        super::diagnostics_files::report_emit_failure(status);
+    }
+    result
+}
+
+fn activate_generation_inner(
+    context: ActivationContext<'_>,
+    current: &CurrentGeneration,
+    site: &mut PortableFailureSite,
+    diagnostics: &mut Option<&mut PortableDiagnosticSession>,
 ) -> Result<ActivatedTrial> {
     let ActivationContext {
         root,
@@ -75,6 +101,7 @@ pub(super) fn activate_generation(
         epoch,
         supervisor_session,
         generation_root_identity,
+        portable_root_identity,
     } = context;
     if current.minimum_supervisor_protocol != PORTABLE_SUPERVISOR_CAPABILITY
         || current.app_session_protocol != PORTABLE_APP_SESSION_PROTOCOL
@@ -137,9 +164,7 @@ pub(super) fn activate_generation(
         maximum_schema: current.maximum_schema,
         transaction_id: transaction.clone(),
         supervisor_session_transcript_sha256: supervisor_session.transcript_sha256().to_owned(),
-        portable_root_identity: super::win32::directory::directory_identity_digest_no_reparse(
-            root,
-        )?,
+        portable_root_identity: portable_root_identity.to_owned(),
         generation_root_identity: generation_root_identity.to_owned(),
         mode: StartupMode::activation_trial(),
         runtime_paths: paths.clone(),
@@ -159,7 +184,12 @@ pub(super) fn activate_generation(
         supervisor_session,
         generation_store_root: &paths.generation_store_root,
     })?;
+    *site = PortableFailureSite::ActivationReady;
     let schema_observed = trial.wait_trial_ready(&startup)?;
+    if let Some(diagnostics) = diagnostics.as_deref_mut() {
+        let status = diagnostics.milestone(PortableMilestone::ActivationReady);
+        super::diagnostics_files::report_emit_failure(status);
+    }
     append_entry(JournalAppend {
         path: &journal,
         phase: JournalPhase::TrialReady,
@@ -171,6 +201,11 @@ pub(super) fn activate_generation(
         supervisor_session,
         generation_store_root: &paths.generation_store_root,
     })?;
+    *site = PortableFailureSite::ActivationMigration;
+    if let Some(diagnostics) = diagnostics.as_deref_mut() {
+        let status = diagnostics.milestone(PortableMilestone::ActivationMigration);
+        super::diagnostics_files::report_emit_failure(status);
+    }
     prepare_catalog(
         CatalogPreparationContext::new(
             &startup,
@@ -185,6 +220,7 @@ pub(super) fn activate_generation(
     )?;
     // Each activation owns a fresh normal v3 selection, even if it activates
     // the same generation as the last completed supervisor session.
+    *site = PortableFailureSite::ActivationCommit;
     let selection_journal_sequence = super::journal::read_entries(&journal)?.len() as u64 + 1;
     let (_path, selection_hash) = append_selected(
         selection_root,
@@ -299,6 +335,10 @@ pub(super) fn activate_generation(
     })?;
     write_terminal_receipt(&journal, supervisor_session)?;
     cleanup_snapshot_after_terminal(&journal)?;
+    if let Some(diagnostics) = diagnostics.as_deref_mut() {
+        let status = diagnostics.milestone(PortableMilestone::ActivationCommitted);
+        super::diagnostics_files::report_emit_failure(status);
+    }
     Ok(ActivatedTrial { trial, journal })
 }
 

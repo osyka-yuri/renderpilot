@@ -5,19 +5,27 @@ use std::{ffi::OsString, path::Path};
 use semver::Version;
 
 use super::{
+    diagnostics_files::{
+        PortableDiagnosticSession, open_supervisor, report_diagnostics_failure, report_failure,
+    },
     epoch_namespace::establish_epoch,
     error::{PortableRuntimeError, Result},
     generation::{InitialSelectedGeneration, inspect_initial_selection, publish},
-    health::validate_selected_app,
+    health::{validate_retained_selected_app, validate_selected_app},
+    image_authority::{RawSupervisorImage, SelectedGenerationImage},
     process_admission::AdmissionLock,
     random::hex_32,
     recovery::{recover_prior_transactions, recovery_action},
+    root_authority::{PortableRootAuthority, SupervisorRootBinding},
     rpu::{VerifiedRpu, embedded_rpu, verify_rpu_expected},
     selection::{current_selection, selection_root},
-    supervisor_activation::{ActivationContext, CurrentGeneration, activate_generation},
+    supervisor_activation::{
+        ActivationContext, CurrentGeneration, activate_generation_with_diagnostics,
+    },
     supervisor_updates::{SupervisorUpdateState, serve_one},
     win32::job::KillOnCloseJob,
 };
+use crate::diagnostics::{PortableFailureSite, PortableMilestone};
 
 use self::authority::SupervisorSessionAuthority;
 
@@ -30,84 +38,214 @@ pub fn dispatch_raw_or_supervisor(args: &[OsString]) -> Result<()> {
 }
 
 fn run_supervisor() -> Result<()> {
-    let raw = std::env::current_exe()?;
-    let root = raw
+    let raw_path = std::env::current_exe()?;
+    let raw_name = raw_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            PortableRuntimeError::new("portable_root", "raw supervisor name was not an ASCII leaf")
+        })?;
+    let root_path = raw_path
         .parent()
         .ok_or_else(|| PortableRuntimeError::new("portable_root", "raw supervisor had no parent"))?
         .to_owned();
-    let authority = SupervisorSessionAuthority::mint(&raw, &root)?;
-    if super::win32::directory::directory_identity_digest_no_reparse(&root)?
-        != authority.portable_root_identity()
-    {
-        return Err(PortableRuntimeError::new(
-            "portable_supervisor_session",
-            "portable root identity changed after supervisor admission",
-        ));
-    }
-    let raw_bytes = std::fs::read(&raw)?;
-    let embedded = embedded_rpu(&raw_bytes)?;
-    let rpu = verify_rpu_expected(embedded.rpu, embedded.signature, env!("CARGO_PKG_VERSION"))?;
-    let generation_store = root.join(".renderpilot-generations").join("v1");
-    let update_root = root.join(".renderpilot-update").join("v2");
-    let authority_root = root.join(".renderpilot-runtime-authority").join("v1");
-    let _admission = AdmissionLock::acquire(&authority_root)?;
-    super::provenance::install(&authority_root)?;
-    let epoch = hex_32()?;
-    let _epoch = establish_epoch(&authority_root, &epoch)?;
-    let selection_root = selection_root(&generation_store);
-    recover_prior_transactions(
+    let generation_store = root_path.join(".renderpilot-generations").join("v1");
+    let update_root = root_path.join(".renderpilot-update").join("v2");
+    let authority_root = root_path.join(".renderpilot-runtime-authority").join("v1");
+    let root = PortableRootAuthority::open(&root_path)?;
+    let mut raw_image = RawSupervisorImage::open(&root, raw_name)?;
+    let authority = SupervisorSessionAuthority::mint(raw_image.identity(), root.identity())?;
+    let binding = SupervisorRootBinding::bind(authority, root)?;
+    let _admission = AdmissionLock::acquire(&binding)?;
+    let mut diagnostics = match open_supervisor(binding.root().clone(), binding.authority()) {
+        Ok(session) => Some(session),
+        Err(_) => {
+            report_diagnostics_failure();
+            None
+        }
+    };
+    let result = run_supervisor_lifecycle(
+        &mut raw_image,
+        &root_path,
+        &binding,
         &generation_store,
         &update_root,
-        &root.join("data").join("catalog.db"),
-        &selection_root,
-        &authority,
+        &authority_root,
+        &mut diagnostics,
+    );
+    if let Some(session) = diagnostics {
+        // `_admission` was acquired first and still outlives this explicit
+        // close plus exact-handle retention.
+        session.close();
+    }
+    result
+}
+
+fn run_supervisor_lifecycle(
+    raw_image: &mut RawSupervisorImage,
+    root: &Path,
+    binding: &SupervisorRootBinding,
+    generation_store: &Path,
+    update_root: &Path,
+    authority_root: &Path,
+    diagnostics: &mut Option<PortableDiagnosticSession>,
+) -> Result<()> {
+    let raw_bytes = observe(
+        diagnostics,
+        PortableFailureSite::RpuVerify,
+        raw_image.rpu_bytes(),
     )?;
-    let mut current = select_initial_generation(&generation_store, &selection_root, rpu)?;
-    let job = KillOnCloseJob::create()?;
+    let embedded = observe(
+        diagnostics,
+        PortableFailureSite::RpuVerify,
+        embedded_rpu(&raw_bytes),
+    )?;
+    let rpu = observe(
+        diagnostics,
+        PortableFailureSite::RpuVerify,
+        verify_rpu_expected(embedded.rpu, embedded.signature, env!("CARGO_PKG_VERSION")),
+    )?;
+    info(diagnostics, PortableMilestone::RpuVerified);
+    observe(
+        diagnostics,
+        PortableFailureSite::Recovery,
+        super::provenance::install(authority_root),
+    )?;
+    let epoch = observe(diagnostics, PortableFailureSite::Recovery, hex_32())?;
+    let _epoch = observe(
+        diagnostics,
+        PortableFailureSite::Recovery,
+        establish_epoch(authority_root, &epoch),
+    )?;
+    let selection_root = selection_root(generation_store);
+    observe(
+        diagnostics,
+        PortableFailureSite::Recovery,
+        recover_prior_transactions(
+            generation_store,
+            update_root,
+            &root.join("data").join("catalog.db"),
+            &selection_root,
+            binding.authority(),
+        ),
+    )?;
+    info(diagnostics, PortableMilestone::RecoveryComplete);
+    let mut current = observe(
+        diagnostics,
+        PortableFailureSite::GenerationSelect,
+        select_initial_generation(generation_store, &selection_root, rpu),
+    )?;
+    info(diagnostics, PortableMilestone::GenerationSelected);
+    let job = observe(
+        diagnostics,
+        PortableFailureSite::ActivationStart,
+        KillOnCloseJob::create(),
+    )?;
     loop {
         // `current` changes after every accepted update. Bind each activation
         // to the generation selected for this iteration, never to the identity
         // captured for the previous App image.
-        let generation_identity =
-            authority.verify_generation_before_decode(&current.generation_root)?;
-        let mut activated = activate_generation(
+        let mut selected_image = observe(
+            diagnostics,
+            PortableFailureSite::ActivationStart,
+            SelectedGenerationImage::open(binding.root(), &current.generation_sha256),
+        )?;
+        let generation_identity = selected_image.generation_identity().as_str().to_owned();
+        observe(
+            diagnostics,
+            PortableFailureSite::ActivationStart,
+            validate_retained_selected_app(selected_image.app_mut(), &current.app_sha256),
+        )?;
+        let mut activated = activate_generation_with_diagnostics(
             ActivationContext {
-                root: &root,
-                update_root: &update_root,
+                root,
+                update_root,
                 selection_root: &selection_root,
                 job: &job,
                 epoch: &epoch,
-                supervisor_session: &authority,
+                supervisor_session: binding.authority(),
                 generation_root_identity: &generation_identity,
+                portable_root_identity: binding.root().identity().as_str(),
             },
             &current,
+            diagnostics.as_mut(),
         )?;
         let mut updates = SupervisorUpdateState::default();
+        info(diagnostics, PortableMilestone::UpdateServiceStarted);
         let staged = loop {
             match serve_one(
                 &mut activated.trial,
                 &mut updates,
                 &current.version,
-                &update_root,
+                update_root,
             ) {
                 Ok(Some(staged)) => break Some(staged),
                 Ok(None) => continue,
                 Err(_error) if updates.is_uncertain() => {
-                    activated.trial.wait_for_exit()?;
+                    observe(
+                        diagnostics,
+                        PortableFailureSite::UpdateService,
+                        activated.trial.wait_for_exit(),
+                    )?;
                     retain_uncertain_authority()
                 }
-                Err(error) if error.code() == "portable_runtime_io" => break None,
-                Err(error) => return Err(error),
+                Err(error) if error.code() == "portable_runtime_io" => {
+                    report_error(diagnostics, PortableFailureSite::UpdateService, &error);
+                    break None;
+                }
+                Err(error) => {
+                    report_error(diagnostics, PortableFailureSite::UpdateService, &error);
+                    return Err(error);
+                }
             }
         };
-        activated.trial.wait_for_exit()?;
+        observe(
+            diagnostics,
+            PortableFailureSite::ControlledExit,
+            activated.trial.wait_for_exit(),
+        )?;
         if let Some(staged) = staged {
-            current = publish_next_generation(&generation_store, staged, current)?;
+            current = observe(
+                diagnostics,
+                PortableFailureSite::GenerationSelect,
+                publish_next_generation(generation_store, staged, current),
+            )?;
+            info(diagnostics, PortableMilestone::GenerationSelected);
             continue;
         }
         let _ = recovery_action(&activated.journal);
+        info(diagnostics, PortableMilestone::ControlledExit);
         return Ok(());
     }
+}
+
+fn observe<T>(
+    diagnostics: &mut Option<PortableDiagnosticSession>,
+    site: PortableFailureSite,
+    result: Result<T>,
+) -> Result<T> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            report_error(diagnostics, site, &error);
+            Err(error)
+        }
+    }
+}
+
+fn info(diagnostics: &mut Option<PortableDiagnosticSession>, milestone: PortableMilestone) {
+    if let Some(session) = diagnostics.as_mut() {
+        let status = session.milestone(milestone);
+        super::diagnostics_files::report_emit_failure(status);
+    }
+}
+
+fn report_error(
+    diagnostics: &mut Option<PortableDiagnosticSession>,
+    site: PortableFailureSite,
+    failure: &PortableRuntimeError,
+) {
+    report_failure(diagnostics, site, failure);
 }
 
 fn select_initial_generation(
@@ -132,6 +270,7 @@ fn select_initial_generation(
                         generation_root: stored.generation_root,
                         app: stored.app,
                         generation_sha256: stored.rpu_sha256,
+                        app_sha256: stored.app_sha256,
                         version: stored.version,
                         minimum_supervisor_protocol: stored.minimum_supervisor_protocol,
                         app_session_protocol: stored.app_session_protocol,
@@ -171,6 +310,7 @@ fn publish_embedded_generation(
         generation_root,
         app,
         generation_sha256: rpu.rpu_sha256,
+        app_sha256: rpu.manifest.app_sha256,
         version: rpu.manifest.version,
         minimum_supervisor_protocol: rpu.manifest.minimum_supervisor_protocol,
         app_session_protocol: rpu.manifest.app_session_protocol,
@@ -192,6 +332,7 @@ fn publish_next_generation(
         generation_root,
         app,
         generation_sha256: staged.rpu_sha256,
+        app_sha256: staged.manifest.app_sha256,
         version: staged.manifest.version,
         minimum_supervisor_protocol: staged.manifest.minimum_supervisor_protocol,
         app_session_protocol: staged.manifest.app_session_protocol,
@@ -205,5 +346,30 @@ fn publish_next_generation(
 fn retain_uncertain_authority() -> ! {
     loop {
         std::thread::park_timeout(std::time::Duration::from_secs(60));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn supervisor_orders_root_image_binding_admission_diagnostics_and_close() {
+        let source = include_str!("supervisor.rs");
+        let root = source
+            .find("PortableRootAuthority::open")
+            .expect("retained root");
+        let image = source.find("RawSupervisorImage::open").expect("raw image");
+        let mint = source
+            .find("SupervisorSessionAuthority::mint")
+            .expect("pure session mint");
+        let binding = source
+            .find("SupervisorRootBinding::bind")
+            .expect("root binding");
+        let admission = source.find("AdmissionLock::acquire").expect("admission");
+        let diagnostics = source
+            .find("let mut diagnostics = match open_supervisor")
+            .expect("diagnostics");
+        let close = source.find("session.close();").expect("diagnostics close");
+        assert!(root < image && image < mint && mint < binding && binding < admission);
+        assert!(admission < diagnostics && diagnostics < close);
     }
 }
