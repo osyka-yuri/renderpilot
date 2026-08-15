@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
-  "supervisorCapability": 2,
-  "appSessionProtocol": "renderpilot-portable-app-session-v1",
+  "supervisorCapability": 3,
+  "appSessionProtocol": "renderpilot-portable-app-session-v2",
   "minimumPortableSchema": 4,
   "currentSchema": 16
 }

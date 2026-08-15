@@ -198,9 +198,7 @@ pub fn verify_rpu(bytes: &[u8], encoded_signature: &str) -> Result<VerifiedRpu> 
 /// Validates a signed App generation's schema capability without binding the
 /// stable supervisor to that generation's current schema.
 pub fn schema_range_is_supported(minimum_schema: u32, maximum_schema: u32) -> bool {
-    minimum_schema == MINIMUM_SCHEMA
-        && maximum_schema >= minimum_schema
-        && i32::try_from(maximum_schema).is_ok()
+    minimum_schema == MINIMUM_SCHEMA && maximum_schema == MAXIMUM_SCHEMA
 }
 
 /// Verifies a signed RPU and binds its canonical manifest version to the

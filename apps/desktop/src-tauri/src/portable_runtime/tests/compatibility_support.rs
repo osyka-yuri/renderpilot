@@ -9,21 +9,21 @@ use std::{
 
 use renderpilot_orchestration::portable::RuntimePathsV1;
 use renderpilot_storage_sqlite::SqliteStorage;
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::Connection;
 
 use super::{append_journal, hash, journal_entry, supervisor_session};
 use crate::portable_runtime::{
     activation::exchange_catalog_migration,
     app_protocol::{
-        AppControlMessage, AppStatusMessage, CatalogMigrationOperation, CatalogMigrationReport,
-        PortableAppSessionV1, StartupMode, read_message, write_message,
+        AppControlMessage, AppStatusMessage, CatalogMigrationReport, PortableAppSessionV2,
+        StartupMode, read_message, write_message,
     },
     error::{PortableRuntimeError, Result},
     journal::{JournalPhase, journal_path, read_entries},
     rpu::{
         MAXIMUM_SCHEMA as PORTABLE_SCHEMA_VERSION, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL,
     },
-    signature::{sha256_file, sha256_hex},
+    signature::sha256_hex,
     supervisor::authority::SupervisorSessionAuthority,
     supervisor_activation::{CatalogMigrationTrial, CatalogPreparationContext, prepare_catalog},
 };
@@ -33,7 +33,7 @@ pub(super) const RELEASED_V4_SCHEMA: &str = include_str!(
 );
 
 type MigrationExchange = fn(
-    &PortableAppSessionV1,
+    &PortableAppSessionV2,
     &Path,
     u32,
     &mut BufReader<Cursor<Vec<u8>>>,
@@ -41,7 +41,7 @@ type MigrationExchange = fn(
 ) -> Result<()>;
 
 pub(super) struct InProcessMigrationTrial<'a, Exchange> {
-    startup: &'a PortableAppSessionV1,
+    startup: &'a PortableAppSessionV2,
     catalog: &'a Path,
     schema_observed: u32,
     exchange: Exchange,
@@ -52,7 +52,7 @@ pub(super) struct InProcessMigrationTrial<'a, Exchange> {
 impl<Exchange> CatalogMigrationTrial for InProcessMigrationTrial<'_, Exchange>
 where
     Exchange: Fn(
-        &PortableAppSessionV1,
+        &PortableAppSessionV2,
         &Path,
         u32,
         &mut BufReader<Cursor<Vec<u8>>>,
@@ -129,7 +129,7 @@ impl CatalogMigrationTrial for ScriptedMigrationTrial {
 }
 
 pub(super) struct PreparedMigrationHandshake {
-    pub(super) startup: PortableAppSessionV1,
+    pub(super) startup: PortableAppSessionV2,
     pub(super) journal: PathBuf,
     generation: String,
     previous: String,
@@ -145,7 +145,7 @@ impl PreparedMigrationHandshake {
         let generation = hash('a');
         let previous = hash('b');
         let supervisor_session = supervisor_session('1');
-        let startup = PortableAppSessionV1 {
+        let startup = PortableAppSessionV2 {
             app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
             epoch: hash('c'),
             generation_sha256: generation.clone(),
@@ -248,105 +248,14 @@ pub(super) fn in_process_current_trial<'a>(
     }
 }
 
-pub(super) fn in_process_future_trial<'a>(
-    handshake: &'a PreparedMigrationHandshake,
-    paths: &'a RuntimePathsV1,
-    schema_observed: u32,
-) -> InProcessMigrationTrial<'a, MigrationExchange> {
-    InProcessMigrationTrial {
-        startup: &handshake.startup,
-        catalog: &paths.catalog_db_path,
-        schema_observed,
-        exchange: exchange_future_catalog_migration,
-        pending_status: None,
-        last_report: None,
-    }
-}
-
 fn exchange_current_catalog_migration(
-    startup: &PortableAppSessionV1,
+    startup: &PortableAppSessionV2,
     catalog: &Path,
     schema_observed: u32,
     control: &mut BufReader<Cursor<Vec<u8>>>,
     status: &mut Vec<u8>,
 ) -> Result<()> {
     exchange_catalog_migration(startup, catalog, schema_observed, control, status)
-}
-
-pub(super) fn exchange_future_catalog_migration(
-    startup: &PortableAppSessionV1,
-    catalog: &Path,
-    schema_observed: u32,
-    control: &mut BufReader<Cursor<Vec<u8>>>,
-    status: &mut Vec<u8>,
-) -> Result<()> {
-    let message = read_message(control)?;
-    let AppControlMessage::MigrationPermit(permit) = message else {
-        return Err(PortableRuntimeError::new(
-            "portable_future_migration_test",
-            "future App expected MigrationPermit",
-        ));
-    };
-    if permit.source_schema != schema_observed
-        || permit.target_schema != startup.maximum_schema
-        || permit.permit_nonce != startup.migration_permit_nonce
-        || permit.supervisor_session_transcript_sha256
-            != startup.supervisor_session_transcript_sha256
-    {
-        return Err(PortableRuntimeError::new(
-            "portable_future_migration_test",
-            "future App received a permit for a different trial",
-        ));
-    }
-    let CatalogMigrationOperation::UpgradeAfterSnapshot(operation) = permit.operation else {
-        return Err(PortableRuntimeError::new(
-            "portable_future_migration_test",
-            "future App requires a supervisor snapshot before upgrading",
-        ));
-    };
-
-    let mut connection =
-        Connection::open(catalog).map_err(|error| future_migration_error(&error))?;
-    let observed: u32 = connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map_err(|error| future_migration_error(&error))?;
-    if observed != schema_observed {
-        return Err(PortableRuntimeError::new(
-            "portable_future_migration_test",
-            "catalog changed after the future App reported TrialReady",
-        ));
-    }
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|error| future_migration_error(&error))?;
-    transaction
-        .execute_batch(
-            "ALTER TABLE games ADD COLUMN future_sort_title TEXT NOT NULL DEFAULT '';
-             UPDATE games SET future_sort_title = lower(title);",
-        )
-        .map_err(|error| future_migration_error(&error))?;
-    transaction
-        .pragma_update(None, "user_version", permit.target_schema)
-        .map_err(|error| future_migration_error(&error))?;
-    transaction
-        .commit()
-        .map_err(|error| future_migration_error(&error))?;
-    drop(connection);
-
-    let report = CatalogMigrationReport {
-        source_version: schema_observed,
-        target_version: startup.maximum_schema,
-        catalog_sha256: sha256_file(catalog)?,
-    };
-    write_message(
-        status,
-        &AppStatusMessage::migration_ack(
-            report,
-            Some(operation.snapshot_receipt_sha256),
-            permit.permit_nonce,
-            permit.supervisor_session_transcript_sha256,
-        ),
-    )
 }
 
 pub(super) fn portable_paths(root: &Path) -> RuntimePathsV1 {
@@ -401,10 +310,6 @@ pub(super) fn catalog_v4_with_user_data(path: &Path) {
             );",
         )
         .expect("stamp v4 and insert user data");
-}
-
-fn future_migration_error(error: &rusqlite::Error) -> PortableRuntimeError {
-    PortableRuntimeError::new("portable_future_migration_test", error.to_string())
 }
 
 pub(super) fn create_current_catalog(path: &Path) {

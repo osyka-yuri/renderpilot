@@ -1,6 +1,6 @@
 use crate::portable_runtime::{
     app_process::startup_control_message,
-    app_protocol::{AppControlMessage, PortableAppSessionV1, StartupMode},
+    app_protocol::{AppControlMessage, PortableAppSessionV2, StartupMode},
     rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL},
     win32::job::KillOnCloseJob,
 };
@@ -59,7 +59,7 @@ fn trial_startup_message_is_an_authenticated_startup_dto() {
         .join(".renderpilot-generations/v1/objects")
         .join(super::hash('a'));
     let app = generation.join("renderpilot-app.exe");
-    let startup = PortableAppSessionV1 {
+    let startup = PortableAppSessionV2 {
         app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
         epoch: super::hash('b'),
         generation_sha256: super::hash('c'),

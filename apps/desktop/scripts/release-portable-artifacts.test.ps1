@@ -77,29 +77,31 @@ try {
     $runtimeRelease = Get-RenderPilotPortableRuntimeReleaseContract -RepositoryRoot $repository
     Assert-RenderPilotTrue `
         -Condition (
-            $runtimeRelease.SupervisorCapability -eq 2 -and
-            $runtimeRelease.AppSessionProtocol -ceq "renderpilot-portable-app-session-v1" -and
-            $runtimeRelease.MinimumSchema -gt 0 -and
-            $runtimeRelease.MinimumSchema -le $runtimeRelease.CurrentSchema
+            $runtimeRelease.SupervisorCapability -eq 3 -and
+            $runtimeRelease.AppSessionProtocol -ceq "renderpilot-portable-app-session-v2" -and
+            $runtimeRelease.MinimumSchema -eq 4 -and
+            $runtimeRelease.CurrentSchema -eq 16
         ) `
         -Description "PowerShell must load the valid shared portable runtime release contract"
 
     $validContractJson = @'
-{"contractVersion":1,"supervisorCapability":2,"appSessionProtocol":"renderpilot-portable-app-session-v1","minimumPortableSchema":4,"currentSchema":2147483647}
+{"contractVersion":1,"supervisorCapability":3,"appSessionProtocol":"renderpilot-portable-app-session-v2","minimumPortableSchema":4,"currentSchema":16}
 '@
     $parsedContract = Get-RenderPilotPortableRuntimeReleaseContractFromJson -Json $validContractJson
-    Assert-RenderPilotEqual -Actual $parsedContract.CurrentSchema -Expected ([int]::MaxValue) `
-        -Description "PowerShell contract parser must accept the exact i32 maximum"
+    Assert-RenderPilotEqual -Actual $parsedContract.CurrentSchema -Expected 16 `
+        -Description "PowerShell contract parser must accept the native schema epoch"
     foreach ($invalidContractJson in @(
         $validContractJson.Replace('"contractVersion":1', '"contractVersion":1.0'),
-        $validContractJson.Replace('"supervisorCapability":2', '"supervisorCapability":2e0'),
-        $validContractJson.Replace('"currentSchema":2147483647', '"currentSchema":2147483648'),
+        $validContractJson.Replace('"supervisorCapability":3', '"supervisorCapability":3e0'),
+        $validContractJson.Replace('"supervisorCapability":3', '"supervisorCapability":2'),
+        $validContractJson.Replace('"appSessionProtocol":"renderpilot-portable-app-session-v2"', '"appSessionProtocol":"renderpilot-portable-app-session-v1"'),
+        $validContractJson.Replace('"currentSchema":16', '"currentSchema":17'),
         $validContractJson.Replace('"minimumPortableSchema":4', '"minimumPortableSchema":"4"'),
         $validContractJson.Replace('"minimumPortableSchema":4,', ''),
-        $validContractJson.Replace('"currentSchema":2147483647', '"currentSchema":16,"unknown":1'),
-        $validContractJson.Replace('"currentSchema":2147483647', '"currentSchema":16,"currentSchema":2147483647'),
-        $validContractJson.Replace('"currentSchema":2147483647', '"\u0063urrentSchema":16,"currentSchema":2147483647'),
-        $validContractJson.Replace('"currentSchema":2147483647', '"CurrentSchema":2147483647')
+        $validContractJson.Replace('"currentSchema":16', '"currentSchema":16,"unknown":1'),
+        $validContractJson.Replace('"currentSchema":16', '"currentSchema":15,"currentSchema":16'),
+        $validContractJson.Replace('"currentSchema":16', '"\u0063urrentSchema":15,"currentSchema":16'),
+        $validContractJson.Replace('"currentSchema":16', '"CurrentSchema":16')
     )) {
         Assert-RenderPilotThrows -Description "PowerShell contract parser must reject invalid wire input" -Action {
             Get-RenderPilotPortableRuntimeReleaseContractFromJson -Json $invalidContractJson | Out-Null
@@ -108,7 +110,7 @@ try {
 
     $manifestRuntimeRelease = [pscustomobject]@{
         SupervisorCapability = [uint16] 7
-        AppSessionProtocol = "renderpilot-portable-app-session-v1"
+        AppSessionProtocol = "renderpilot-portable-app-session-v2"
         MinimumSchema = [int] 4
         CurrentSchema = [int] 16
     }
@@ -123,14 +125,14 @@ try {
         -Description "portable RPU manifest must normalize the App SHA-256"
     Assert-RenderPilotEqual -Actual $manifest.minimum_supervisor_protocol -Expected ([uint16] 7) `
         -Description "portable RPU manifest must retain supervisor capability"
-    Assert-RenderPilotEqual -Actual $manifest.app_session_protocol -Expected "renderpilot-portable-app-session-v1" `
+    Assert-RenderPilotEqual -Actual $manifest.app_session_protocol -Expected "renderpilot-portable-app-session-v2" `
         -Description "portable RPU manifest must retain the App session protocol"
     Assert-RenderPilotEqual -Actual $manifest.minimum_schema -Expected 4 `
         -Description "portable RPU manifest must retain its minimum schema"
     Assert-RenderPilotEqual -Actual $manifest.maximum_schema -Expected 16 `
         -Description "portable RPU manifest must retain its maximum schema"
     Assert-RenderPilotEqual -Actual ($manifest | ConvertTo-Json -Compress) `
-        -Expected '{"protocol":"renderpilot-portable-rpu-v1","platform":"windows-x86_64-portable","version":"9.8.7","app_sha256":"abcdef0123456789","app_length":4242,"minimum_supervisor_protocol":7,"app_session_protocol":"renderpilot-portable-app-session-v1","minimum_schema":4,"maximum_schema":16,"portable_role":"app"}' `
+        -Expected '{"protocol":"renderpilot-portable-rpu-v1","platform":"windows-x86_64-portable","version":"9.8.7","app_sha256":"abcdef0123456789","app_length":4242,"minimum_supervisor_protocol":7,"app_session_protocol":"renderpilot-portable-app-session-v2","minimum_schema":4,"maximum_schema":16,"portable_role":"app"}' `
         -Description "portable RPU manifest JSON must preserve the complete wire contract"
 
     $releaseScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot "release-portable-artifacts.ps1") -Raw

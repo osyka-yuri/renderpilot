@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use semver::Version;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -17,10 +18,37 @@ use super::{
 };
 
 const APP_NAME: &str = "renderpilot-app.exe";
-// The v2 receipt format was released only by v1.9.0. It is metadata for the
-// one-time full-package replacement reducer, not a generic compatibility lane.
-const LEGACY_V2_MINIMUM_SCHEMA: u32 = 4;
-const LEGACY_V2_MAXIMUM_SCHEMA: u32 = 16;
+
+/// Exact historical metadata accepted only by the initial full-package
+/// reducer. These are singular contracts, not an extensible compatibility
+/// registry; their release versions remain authenticated data rather than
+/// becoming part of type or function names.
+struct ReleasedPredecessorContract {
+    version: &'static str,
+    minimum_schema: u32,
+    maximum_schema: u32,
+}
+
+struct SessionBoundPredecessorContract {
+    released: ReleasedPredecessorContract,
+    supervisor_capability: u16,
+    app_session_protocol: &'static str,
+}
+
+const RECEIPT_V2_PREDECESSOR: ReleasedPredecessorContract = ReleasedPredecessorContract {
+    version: "1.9.0",
+    minimum_schema: 4,
+    maximum_schema: 16,
+};
+const RECEIPT_V3_PREDECESSOR: SessionBoundPredecessorContract = SessionBoundPredecessorContract {
+    released: ReleasedPredecessorContract {
+        version: "1.9.1",
+        minimum_schema: 4,
+        maximum_schema: 16,
+    },
+    supervisor_capability: 2,
+    app_session_protocol: "renderpilot-portable-app-session-v1",
+};
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -63,13 +91,15 @@ pub struct StoredGeneration {
     pub maximum_schema: u32,
 }
 
-pub struct LegacyGenerationV2Metadata {
-    pub version: String,
+/// A sealed predecessor proof that may authorize only publication of the
+/// embedded native generation. Its App image is never launchable.
+pub struct MetadataOnlyPredecessor {
+    pub version: Version,
 }
 
 pub enum InitialSelectedGeneration {
     Current(StoredGeneration),
-    LegacyV2Metadata(LegacyGenerationV2Metadata),
+    MetadataOnly(MetadataOnlyPredecessor),
 }
 
 /// Publishes one immutable generation. Existing generations are revalidated;
@@ -226,6 +256,14 @@ pub fn inspect_initial_selection(
         let receipt: GenerationReceiptV3 = serde_json::from_slice(&plaintext).map_err(|error| {
             PortableRuntimeError::new("portable_generation_receipt", error.to_string())
         })?;
+        if receipt.minimum_supervisor_protocol == RECEIPT_V3_PREDECESSOR.supervisor_capability
+            && receipt.app_session_protocol == RECEIPT_V3_PREDECESSOR.app_session_protocol
+        {
+            let version = validate_receipt_v3_predecessor(&receipt, generation_sha256, &app)?;
+            return Ok(InitialSelectedGeneration::MetadataOnly(
+                MetadataOnlyPredecessor { version },
+            ));
+        }
         validate_current_receipt(&receipt, generation_sha256, &app)?;
         return Ok(InitialSelectedGeneration::Current(StoredGeneration {
             generation_root,
@@ -244,22 +282,23 @@ pub fn inspect_initial_selection(
             serde_json::from_slice(&plaintext).map_err(|error| {
                 PortableRuntimeError::new("portable_generation_receipt", error.to_string())
             })?;
-        canonical_version(&receipt.version)?;
+        let version = validate_released_predecessor(
+            &RECEIPT_V2_PREDECESSOR,
+            &receipt.version,
+            receipt.minimum_schema,
+            receipt.maximum_schema,
+        )?;
         if receipt.protocol != 2
             || receipt.rpu_sha256 != generation_sha256
             || receipt.app_sha256 != sha256_file(&app)?
-            || receipt.minimum_schema != LEGACY_V2_MINIMUM_SCHEMA
-            || receipt.maximum_schema != LEGACY_V2_MAXIMUM_SCHEMA
         {
             return Err(PortableRuntimeError::new(
                 "portable_generation_receipt",
-                "legacy immutable generation metadata was invalid",
+                "metadata-only predecessor receipt was invalid",
             ));
         }
-        return Ok(InitialSelectedGeneration::LegacyV2Metadata(
-            LegacyGenerationV2Metadata {
-                version: receipt.version,
-            },
+        return Ok(InitialSelectedGeneration::MetadataOnly(
+            MetadataOnlyPredecessor { version },
         ));
     }
     Err(PortableRuntimeError::new(
@@ -320,4 +359,48 @@ fn validate_current_receipt(
         ));
     }
     Ok(())
+}
+
+fn validate_receipt_v3_predecessor(
+    receipt: &GenerationReceiptV3,
+    generation_sha256: &str,
+    app: &Path,
+) -> Result<Version> {
+    let version = validate_released_predecessor(
+        &RECEIPT_V3_PREDECESSOR.released,
+        &receipt.version,
+        receipt.minimum_schema,
+        receipt.maximum_schema,
+    )?;
+    if receipt.protocol != 3
+        || receipt.rpu_sha256 != generation_sha256
+        || receipt.app_sha256 != sha256_file(app)?
+        || receipt.minimum_supervisor_protocol != RECEIPT_V3_PREDECESSOR.supervisor_capability
+        || receipt.app_session_protocol != RECEIPT_V3_PREDECESSOR.app_session_protocol
+    {
+        return Err(PortableRuntimeError::new(
+            "portable_generation_receipt",
+            "metadata-only predecessor receipt was invalid",
+        ));
+    }
+    Ok(version)
+}
+
+fn validate_released_predecessor(
+    contract: &ReleasedPredecessorContract,
+    version: &str,
+    minimum_schema: u32,
+    maximum_schema: u32,
+) -> Result<Version> {
+    let parsed = canonical_version(version)?;
+    if version != contract.version
+        || minimum_schema != contract.minimum_schema
+        || maximum_schema != contract.maximum_schema
+    {
+        return Err(PortableRuntimeError::new(
+            "portable_generation_receipt",
+            "metadata-only predecessor contract did not match a released identity",
+        ));
+    }
+    Ok(parsed)
 }

@@ -6,15 +6,14 @@ use crate::portable_runtime::{
     app_protocol::{
         AppControlMessage, AppStatusMessage, CatalogMigrationOperation, CatalogMigrationReport,
     },
-    journal::{JournalPhase, read_entries},
     rpu::MAXIMUM_SCHEMA as PORTABLE_SCHEMA_VERSION,
     signature::sha256_file,
 };
 
 use super::compatibility_support::{
     PreparedMigrationHandshake, ScriptedMigrationTrial, catalog_v4_with_user_data,
-    catalog_with_version, create_current_catalog, create_data_root, in_process_future_trial,
-    migrate_through_protocol, portable_paths, user_version,
+    catalog_with_version, create_current_catalog, create_data_root, migrate_through_protocol,
+    portable_paths, user_version,
 };
 
 #[test]
@@ -222,63 +221,18 @@ fn current_schema_launch_does_not_allocate_a_rollback_snapshot() {
 }
 
 #[test]
-fn stable_supervisor_accepts_a_real_future_generation_migration() {
+fn native_epoch_rejects_a_future_generation_schema_capability() {
     let root = temp_root("future-generation-migration");
     let paths = portable_paths(root.path());
     create_data_root(&paths);
-    create_current_catalog(&paths.catalog_db_path);
-    Connection::open(&paths.catalog_db_path)
-        .expect("open current catalog fixture")
-        .execute(
-            "INSERT INTO games (id, title, launcher, platform, runtime, install_path, install_key, root_authority, executable_candidates_json)
-             VALUES (?1, ?2, 'manual', 'windows', 'native', ?3, ?4, 'user_confirmed', '[]')",
-            ("future-migration-game", "Future Migration Game", "C:/Games/FutureMigration", "c:/games/futuremigration"),
-        )
-        .expect("insert user data before future migration");
+    let handshake =
+        PreparedMigrationHandshake::new(&paths, &hash('8'), PORTABLE_SCHEMA_VERSION + 1)
+            .expect("construct crossed-epoch startup evidence");
 
-    let catalog_before = sha256_file(&paths.catalog_db_path).expect("hash current catalog");
-    let future_schema = PORTABLE_SCHEMA_VERSION + 1;
-    let transaction = hash('8');
-    let handshake = PreparedMigrationHandshake::new(&paths, &transaction, future_schema)
-        .expect("prepare current supervisor for a future generation");
-    let mut trial = in_process_future_trial(&handshake, &paths, PORTABLE_SCHEMA_VERSION);
-    handshake
-        .prepare_catalog(&paths, &mut trial, PORTABLE_SCHEMA_VERSION)
-        .expect("current supervisor accepts the future App migration");
-    let report = trial.last_report.expect("future App sends its report");
-    assert_eq!(report.source_version, PORTABLE_SCHEMA_VERSION);
-    assert_eq!(report.target_version, future_schema);
-    assert_ne!(report.catalog_sha256, catalog_before);
-    assert_eq!(user_version(&paths.catalog_db_path), future_schema);
-    let migrated = Connection::open(&paths.catalog_db_path).expect("open future catalog");
-    let (title, sort_title): (String, String) = migrated
-        .query_row(
-            "SELECT title, future_sort_title FROM games WHERE id = 'future-migration-game'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .expect("read user data transformed by the future migration");
-    assert_eq!(title, "Future Migration Game");
-    assert_eq!(sort_title, "future migration game");
-    drop(migrated);
-    let transaction_root = paths.update_root.join("transactions").join(&transaction);
-    let snapshot_catalog = transaction_root.join("snapshot/catalog.db");
-    assert_eq!(user_version(&snapshot_catalog), PORTABLE_SCHEMA_VERSION);
-    assert!(
-        Connection::open(&snapshot_catalog)
-            .expect("open pre-migration snapshot")
-            .prepare("SELECT future_sort_title FROM games")
-            .is_err(),
-        "the future column must exist only in the migrated live catalog"
-    );
-    assert!(transaction_root.join("snapshot-receipt.json").is_file());
-    assert!(transaction_root.join("migration-receipt.json").is_file());
     assert_eq!(
-        read_entries(&handshake.journal)
-            .expect("read accepted future migration journal")
-            .last()
-            .map(|entry| entry.phase),
-        Some(JournalPhase::MigrationCommitted)
+        error_code(handshake.startup.validate()),
+        "portable_startup_invalid",
+        "a successor cannot turn the native exact schema epoch into a range"
     );
 }
 

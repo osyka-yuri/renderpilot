@@ -12,20 +12,20 @@ use crate::portable_runtime::{
     app_protocol::framing::MAX_FRAME_BYTES,
     app_protocol::{
         AppControlMessage, AppStatusMessage, CatalogMigrationOperation, CatalogMigrationReport,
-        CommittedSelectionStartupMode, PortableAppSessionV1, PortableUpdateRequest,
-        PortableUpdateResponse, StartupMode, TrialReady, read_message, read_message_or_eof,
-        write_message,
+        CommittedSelectionStartupMode, PortableAppSessionV2, PortableUpdateEvent,
+        PortableUpdateRequest, PortableUpdateResponse, StartupMode, TrialReady, read_message,
+        read_message_or_eof, write_message,
     },
     rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL},
 };
 
-fn startup() -> PortableAppSessionV1 {
+fn startup() -> PortableAppSessionV2 {
     let portable_root = PathBuf::from(r"C:\portable");
     let generation = portable_root
         .join(".renderpilot-generations/v1/objects")
         .join(hash('a'));
     let app = generation.join("renderpilot-app.exe");
-    PortableAppSessionV1 {
+    PortableAppSessionV2 {
         app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
         epoch: hash('b'),
         generation_sha256: hash('c'),
@@ -156,6 +156,18 @@ fn canonical_dto_variants_have_golden_flat_json_and_round_trip() {
         AppControlMessage::update_response("request", PortableUpdateResponse::apply_accepted()),
         r#"{"type":"update_response","request_id":"request","response":{"result":"apply_accepted"}}"#,
     );
+    assert_wire_round_trip(
+        AppControlMessage::update_event("request", PortableUpdateEvent::download_started(Some(42))),
+        r#"{"type":"update_event","request_id":"request","event":{"kind":"download_started","content_length":42}}"#,
+    );
+    assert_wire_round_trip(
+        AppControlMessage::update_event("request", PortableUpdateEvent::download_progress(7)),
+        r#"{"type":"update_event","request_id":"request","event":{"kind":"download_progress","chunk_length":7}}"#,
+    );
+    assert_wire_round_trip(
+        AppControlMessage::update_event("request", PortableUpdateEvent::download_finished()),
+        r#"{"type":"update_event","request_id":"request","event":{"kind":"download_finished"}}"#,
+    );
 
     assert_wire_round_trip(
         AppStatusMessage::trial_hello("challenge"),
@@ -221,6 +233,7 @@ fn decoded_preflight_rejects_duplicate_keys_at_every_protocol_depth() {
         r#"{"type":"migration_permit","operation":{"operation":"validate_current","operation":"validate_current"},"source_schema":15,"target_schema":16,"permit_nonce":"permit","supervisor_session_transcript_sha256":"session"}"#.to_owned(),
         r#"{"type":"update_request","request_id":"request","request":{"action":"check","action":"check"}}"#.to_owned(),
         r#"{"type":"update_response","request_id":"request","response":{"result":"rejected","code":"one","code":"two"}}"#.to_owned(),
+        r#"{"type":"update_event","request_id":"request","event":{"kind":"download_progress","chunk_length":1,"chunk_length":2}}"#.to_owned(),
         r#"{"one":{"two":{"three":1,"three":2}}}"#.to_owned(),
     ];
     for duplicate in duplicates {
@@ -252,6 +265,7 @@ fn derived_payloads_reject_unknown_fields_at_every_protocol_depth() {
         r#"{"type":"migration_permit","operation":{"operation":"validate_current","extra":true},"source_schema":15,"target_schema":16,"permit_nonce":"permit","supervisor_session_transcript_sha256":"session"}"#.to_owned(),
         r#"{"type":"update_request","request_id":"request","request":{"action":"check","extra":true}}"#.to_owned(),
         r#"{"type":"update_response","request_id":"request","response":{"result":"rejected","code":"x","extra":true}}"#.to_owned(),
+        r#"{"type":"update_event","request_id":"request","event":{"kind":"download_progress","chunk_length":1,"extra":true}}"#.to_owned(),
     ];
     for unknown in unknowns {
         assert_eq!(

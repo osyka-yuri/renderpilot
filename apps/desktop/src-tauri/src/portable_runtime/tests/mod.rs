@@ -18,6 +18,7 @@ mod faults;
 mod job;
 mod journal_outbox;
 mod packaging;
+mod predecessor_compatibility;
 mod protocol;
 mod publication;
 mod recovery_lineage;
@@ -29,6 +30,8 @@ mod recovery_validation;
 mod relocation;
 mod snapshot;
 mod update_apply;
+mod update_download;
+mod update_exchange;
 
 static NEXT_TEMP_ROOT: AtomicU64 = AtomicU64::new(0);
 

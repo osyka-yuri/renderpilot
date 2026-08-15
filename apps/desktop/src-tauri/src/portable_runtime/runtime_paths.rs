@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use renderpilot_orchestration::portable::{RuntimePathsV1, install_runtime_paths};
 
 use super::{
-    app_protocol::PortableAppSessionV1,
+    app_protocol::PortableAppSessionV2,
     error::{PortableRuntimeError, Result},
     image_authority::SelectedGenerationImage,
     root_authority::PortableRootAuthority,
@@ -41,7 +41,7 @@ static AUTHENTICATED_APP_RUNTIME: OnceLock<AuthenticatedAppRuntime> = OnceLock::
     unsafe_code,
     reason = "startup runs before threads and projects authenticated paths into legacy environment compatibility variables"
 )]
-pub fn install_from_startup(startup: &PortableAppSessionV1) -> Result<()> {
+pub fn install_from_startup(startup: &PortableAppSessionV2) -> Result<()> {
     startup.validate()?;
     startup
         .runtime_paths

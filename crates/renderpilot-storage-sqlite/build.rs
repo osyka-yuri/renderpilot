@@ -31,11 +31,10 @@ fn main() {
         "portable runtime release contract version must be supported"
     );
     assert!(
-        contract.supervisor_capability > 0
-            && contract.app_session_protocol == "renderpilot-portable-app-session-v1"
-            && contract.minimum_portable_schema > 0
-            && contract.minimum_portable_schema <= contract.current_schema
-            && i32::try_from(contract.current_schema).is_ok(),
+        contract.supervisor_capability == 3
+            && contract.app_session_protocol == "renderpilot-portable-app-session-v2"
+            && contract.minimum_portable_schema == 4
+            && contract.current_schema == 16,
         "portable runtime release contract range must be valid"
     );
 

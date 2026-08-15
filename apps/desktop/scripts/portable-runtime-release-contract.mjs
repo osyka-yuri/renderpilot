@@ -59,12 +59,10 @@ export function parsePortableRuntimeReleaseContract(source) {
   };
   if (
     contract.contractVersion !== 1 ||
-    contract.supervisorCapability <= 0 ||
-    contract.supervisorCapability > 0xffff ||
-    contract.appSessionProtocol !== 'renderpilot-portable-app-session-v1' ||
-    contract.minimumPortableSchema <= 0 ||
-    contract.minimumPortableSchema > contract.currentSchema ||
-    contract.currentSchema > 0x7fffffff
+    contract.supervisorCapability !== 3 ||
+    contract.appSessionProtocol !== 'renderpilot-portable-app-session-v2' ||
+    contract.minimumPortableSchema !== 4 ||
+    contract.currentSchema !== 16
   ) {
     fail('Portable runtime release contract has an unsupported shape or range.');
   }

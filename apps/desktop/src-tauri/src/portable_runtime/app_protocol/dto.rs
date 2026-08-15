@@ -1,4 +1,6 @@
 use renderpilot_orchestration::portable::RuntimePathsV1;
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::portable_runtime::{
@@ -93,7 +95,7 @@ pub struct CatalogMigrationReport {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PortableAppSessionV1 {
+pub struct PortableAppSessionV2 {
     pub app_session_protocol: String,
     pub epoch: String,
     pub generation_sha256: String,
@@ -112,7 +114,7 @@ pub struct PortableAppSessionV1 {
     pub commit_permit_nonce: String,
 }
 
-impl PortableAppSessionV1 {
+impl PortableAppSessionV2 {
     pub fn validate(&self) -> Result<()> {
         if self.app_session_protocol != PORTABLE_APP_SESSION_PROTOCOL
             || !is_sha256(&self.generation_sha256)
@@ -129,7 +131,7 @@ impl PortableAppSessionV1 {
         {
             return Err(PortableRuntimeError::new(
                 "portable_startup_invalid",
-                "startup record did not satisfy PortableAppSessionV1",
+                "startup record did not satisfy PortableAppSessionV2",
             ));
         }
         self.runtime_paths
@@ -152,19 +154,19 @@ impl PortableAppSessionV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckPortableUpdateRequest {}
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DownloadPortableUpdateRequest {}
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApplyPortableUpdateRequest {}
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PortableUpdateRequest {
     Check(CheckPortableUpdateRequest),
@@ -282,22 +284,55 @@ pub struct CommitPermit {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateResponse {
-    pub request_id: String,
+    pub request_id: Arc<str>,
     pub response: PortableUpdateResponse,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub enum PortableUpdateEvent {
+    #[serde(rename = "download_started")]
+    Started { content_length: Option<u64> },
+    #[serde(rename = "download_progress")]
+    Progress { chunk_length: u64 },
+    #[serde(rename = "download_finished")]
+    Finished {},
+}
+
+impl PortableUpdateEvent {
+    pub const fn download_started(content_length: Option<u64>) -> Self {
+        Self::Started { content_length }
+    }
+
+    pub const fn download_progress(chunk_length: u64) -> Self {
+        Self::Progress { chunk_length }
+    }
+
+    pub const fn download_finished() -> Self {
+        Self::Finished {}
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateEvent {
+    pub request_id: Arc<str>,
+    pub event: PortableUpdateEvent,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AppControlMessage {
-    Startup(Box<PortableAppSessionV1>),
+    Startup(Box<PortableAppSessionV2>),
     MigrationPermit(MigrationPermit),
     ActivationPermit(ActivationPermit),
     CommitPermit(CommitPermit),
+    UpdateEvent(UpdateEvent),
     UpdateResponse(UpdateResponse),
 }
 
 impl AppControlMessage {
-    pub fn startup(startup: PortableAppSessionV1) -> Self {
+    pub fn startup(startup: PortableAppSessionV2) -> Self {
         Self::Startup(Box::new(startup))
     }
 
@@ -346,12 +381,19 @@ impl AppControlMessage {
     }
 
     pub fn update_response(
-        request_id: impl Into<String>,
+        request_id: impl Into<Arc<str>>,
         response: PortableUpdateResponse,
     ) -> Self {
         Self::UpdateResponse(UpdateResponse {
             request_id: request_id.into(),
             response,
+        })
+    }
+
+    pub fn update_event(request_id: impl Into<Arc<str>>, event: PortableUpdateEvent) -> Self {
+        Self::UpdateEvent(UpdateEvent {
+            request_id: request_id.into(),
+            event,
         })
     }
 }
@@ -407,7 +449,7 @@ pub struct CommitAck {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateRequest {
-    pub request_id: String,
+    pub request_id: Arc<str>,
     pub request: PortableUpdateRequest,
 }
 
@@ -477,7 +519,7 @@ impl AppStatusMessage {
         })
     }
 
-    pub fn update_request(request_id: impl Into<String>, request: PortableUpdateRequest) -> Self {
+    pub fn update_request(request_id: impl Into<Arc<str>>, request: PortableUpdateRequest) -> Self {
         Self::UpdateRequest(UpdateRequest {
             request_id: request_id.into(),
             request,

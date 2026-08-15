@@ -4,26 +4,25 @@ use renderpilot_orchestration::portable::RuntimePathsV1;
 
 use super::{error_code, hash, temp_root};
 use crate::portable_runtime::{
-    activation::{accept_activation_permit, accept_commit_permit, accept_update_response},
+    activation::{accept_activation_permit, accept_commit_permit},
     app_process::schema_observation_supported,
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableAppSessionV1, PortableUpdateRequest,
-        PortableUpdateResponse, StartupMode, committed_sequence_for_selection, read_message,
-        write_message,
+        AppControlMessage, AppStatusMessage, PortableAppSessionV2, PortableUpdateRequest,
+        StartupMode, committed_sequence_for_selection, read_message, write_message,
     },
     request_gate::RequestGate,
     rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL},
     supervisor_activation::{activation_ack_matches, commit_ack_matches},
 };
 
-fn startup() -> PortableAppSessionV1 {
+fn startup() -> PortableAppSessionV2 {
     let root = temp_root("startup-paths");
     let portable_root = root.path().join("Переносимый root");
     let generation = portable_root
         .join(".renderpilot-generations/v1/objects")
         .join(hash('a'));
     let app = generation.join("renderpilot-app.exe");
-    PortableAppSessionV1 {
+    PortableAppSessionV2 {
         app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
         epoch: hash('b'),
         generation_sha256: hash('c'),
@@ -53,16 +52,13 @@ fn trial_schema_observation_is_bound_to_the_signed_startup_contract() {
         assert!(!schema_observation_supported(&startup, schema));
     }
 
-    let mut future_generation = startup;
-    future_generation.maximum_schema = MAXIMUM_SCHEMA + 1;
-    assert!(schema_observation_supported(
-        &future_generation,
-        MAXIMUM_SCHEMA
-    ));
-    assert!(schema_observation_supported(
-        &future_generation,
-        MAXIMUM_SCHEMA + 1
-    ));
+    let mut crossed_epoch = startup;
+    crossed_epoch.maximum_schema = MAXIMUM_SCHEMA + 1;
+    assert_eq!(
+        error_code(crossed_epoch.validate()),
+        "portable_startup_invalid",
+        "the App must not turn an exact native epoch into a future compatibility lane"
+    );
 }
 
 #[test]
@@ -173,26 +169,6 @@ fn supervisor_accepts_only_exact_visible_and_commit_acknowledgements() {
         &hash('d'),
         &hash('c')
     ));
-}
-
-#[test]
-fn update_response_requires_a_committed_request_context() {
-    let response = accept_update_response(
-        AppControlMessage::update_response("request", PortableUpdateResponse::apply_accepted()),
-        "request",
-    )
-    .expect("matching supervisor response");
-    assert!(matches!(response, PortableUpdateResponse::ApplyAccepted(_)));
-    assert_eq!(
-        error_code(accept_update_response(
-            AppControlMessage::update_response(
-                "different",
-                PortableUpdateResponse::apply_accepted()
-            ),
-            "request",
-        )),
-        "portable_update_protocol"
-    );
 }
 
 #[test]

@@ -15,19 +15,35 @@ use super::{
         CatalogClassification, classify_catalog, execute_generation_migration,
     },
     app_protocol::{
-        ActivationPermit, AppControlMessage, AppStatusMessage, CommitPermit, PortableAppSessionV1,
-        PortableUpdateRequest, PortableUpdateResponse, TrialReady,
-        committed_sequence_for_selection, read_message, write_message,
+        ActivationPermit, AppControlMessage, AppStatusMessage, CommitPermit, PortableAppSessionV2,
+        TrialReady, committed_sequence_for_selection, read_message, write_message,
     },
     error::{PortableRuntimeError, Result},
     runtime_paths,
 };
 
-struct AppSession {
+pub(super) mod update_exchange;
+
+pub use update_exchange::{PortableDownloadEvent, request_download_update, request_update};
+
+pub(super) struct AppSession {
     control: Mutex<BufReader<File>>,
     status: Mutex<File>,
     exchange: Mutex<()>,
-    startup: PortableAppSessionV1,
+    exchange_fenced: AtomicBool,
+    startup: PortableAppSessionV2,
+}
+
+impl AppSession {
+    pub(super) fn new(control: File, status: File, startup: PortableAppSessionV2) -> Self {
+        Self {
+            control: Mutex::new(BufReader::new(control)),
+            status: Mutex::new(status),
+            exchange: Mutex::new(()),
+            exchange_fenced: AtomicBool::new(false),
+            startup,
+        }
+    }
 }
 
 static SESSION: OnceLock<AppSession> = OnceLock::new();
@@ -36,15 +52,10 @@ static COMMITTED: AtomicBool = AtomicBool::new(false);
 pub fn install_trial_session(
     control: File,
     status: File,
-    startup: PortableAppSessionV1,
+    startup: PortableAppSessionV2,
 ) -> Result<()> {
     SESSION
-        .set(AppSession {
-            control: Mutex::new(BufReader::new(control)),
-            status: Mutex::new(status),
-            exchange: Mutex::new(()),
-            startup,
-        })
+        .set(AppSession::new(control, status, startup))
         .map_err(|_| {
             PortableRuntimeError::new(
                 "portable_activation",
@@ -175,31 +186,6 @@ pub fn prove_visible_and_commit<T>(
     Ok(committed)
 }
 
-/// A committed App can request one serialized supervisor-owned updater
-/// operation at a time. The App owns only this authenticated DTO round-trip;
-/// all network, staging, selection, journaling, and process replacement remain
-/// in the supervisor.
-pub fn request_update(
-    request_id: &str,
-    request: PortableUpdateRequest,
-) -> Result<PortableUpdateResponse> {
-    require_committed()?;
-    let session = session()?;
-    let _exchange = session.exchange.lock().map_err(|_| {
-        PortableRuntimeError::new("portable_activation", "portable protocol exchange poisoned")
-    })?;
-    {
-        let mut status = session.status.lock().map_err(|_| {
-            PortableRuntimeError::new("portable_activation", "status pipe poisoned")
-        })?;
-        write_message(
-            &mut *status,
-            &AppStatusMessage::update_request(request_id, request),
-        )?;
-    }
-    accept_update_response(read_control(session)?, request_id)
-}
-
 pub fn require_committed() -> Result<()> {
     if is_committed() || SESSION.get().is_none() {
         Ok(())
@@ -227,7 +213,7 @@ fn read_control(session: &AppSession) -> Result<AppControlMessage> {
 
 pub(super) fn accept_activation_permit(
     message: AppControlMessage,
-    startup: &PortableAppSessionV1,
+    startup: &PortableAppSessionV2,
 ) -> Result<ActivationPermit> {
     match message {
         AppControlMessage::ActivationPermit(permit)
@@ -251,7 +237,7 @@ pub(super) fn accept_commit_permit(
     message: AppControlMessage,
     selection_record_sha256: &str,
     selection_journal_sequence: u64,
-    startup: &PortableAppSessionV1,
+    startup: &PortableAppSessionV2,
 ) -> Result<CommitPermit> {
     let expected_committed_journal_sequence =
         committed_sequence_for_selection(selection_journal_sequence)?;
@@ -272,23 +258,8 @@ pub(super) fn accept_commit_permit(
     }
 }
 
-pub(super) fn accept_update_response(
-    message: AppControlMessage,
-    request_id: &str,
-) -> Result<PortableUpdateResponse> {
-    match message {
-        AppControlMessage::UpdateResponse(response) if response.request_id == request_id => {
-            Ok(response.response)
-        }
-        _ => Err(PortableRuntimeError::new(
-            "portable_update_protocol",
-            "supervisor update response did not match request",
-        )),
-    }
-}
-
 pub(super) fn exchange_catalog_migration(
-    startup: &PortableAppSessionV1,
+    startup: &PortableAppSessionV2,
     catalog: &Path,
     schema_observed: u32,
     control: &mut impl BufRead,

@@ -90,12 +90,10 @@ function Get-RenderPilotPortableRuntimeReleaseContractFromJson {
         if (
             $appSessionProtocol -isnot [string] -or
             $contractVersion -ne 1 -or
-            $supervisorCapability -le 0 -or
-            $supervisorCapability -gt [uint16]::MaxValue -or
-            $appSessionProtocol -cne "renderpilot-portable-app-session-v1" -or
-            $minimumSchema -le 0 -or
-            $minimumSchema -gt $currentSchema -or
-            $currentSchema -gt [int]::MaxValue
+            $supervisorCapability -cne 3 -or
+            $appSessionProtocol -cne "renderpilot-portable-app-session-v2" -or
+            $minimumSchema -cne 4 -or
+            $currentSchema -cne 16
         ) {
             throw "Portable runtime release contract has an unsupported version or range."
         }

@@ -32,7 +32,7 @@ use windows_sys::Win32::{
 
 use super::{
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableAppSessionV1, read_message,
+        AppControlMessage, AppStatusMessage, PortableAppSessionV2, read_message,
         read_message_or_eof, reader, write_message,
     },
     error::{PortableRuntimeError, Result},
@@ -60,7 +60,7 @@ pub struct TrialProcess {
 }
 
 impl TrialProcess {
-    pub fn spawn(app: &Path, job: &KillOnCloseJob, startup: &PortableAppSessionV1) -> Result<Self> {
+    pub fn spawn(app: &Path, job: &KillOnCloseJob, startup: &PortableAppSessionV2) -> Result<Self> {
         let (control_read, control_write) = private_pipe()?;
         let (status_read, status_write) = private_pipe()?;
         let child_handles = [
@@ -169,7 +169,7 @@ impl TrialProcess {
         read_message_or_eof(&mut self.status)
     }
 
-    pub fn wait_trial_ready(&mut self, startup: &PortableAppSessionV1) -> Result<u32> {
+    pub fn wait_trial_ready(&mut self, startup: &PortableAppSessionV2) -> Result<u32> {
         match self.receive()? {
             AppStatusMessage::TrialReady(ready)
                 if ready.db_query_only
@@ -236,12 +236,12 @@ fn validate_successful_exit_code(exit_code: u32) -> Result<()> {
     ))
 }
 
-pub(super) fn startup_control_message(startup: &PortableAppSessionV1) -> AppControlMessage {
+pub(super) fn startup_control_message(startup: &PortableAppSessionV2) -> AppControlMessage {
     AppControlMessage::startup(startup.clone())
 }
 
 pub(crate) fn schema_observation_supported(
-    startup: &PortableAppSessionV1,
+    startup: &PortableAppSessionV2,
     schema_observed: u32,
 ) -> bool {
     schema_observed == 0

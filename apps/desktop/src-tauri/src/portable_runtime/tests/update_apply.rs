@@ -6,7 +6,9 @@ use std::{
 
 use super::temp_root;
 use crate::portable_runtime::{
-    app_protocol::{PortableUpdateRequest, PortableUpdateResponse, UpdateRequest},
+    app_protocol::{
+        PortableUpdateEvent, PortableUpdateRequest, PortableUpdateResponse, UpdateRequest,
+    },
     error::{PortableRuntimeError, Result},
     rpu::{
         MAXIMUM_SCHEMA, MINIMUM_SCHEMA, PORTABLE_APP_SESSION_PROTOCOL,
@@ -15,7 +17,8 @@ use crate::portable_runtime::{
     signature::sha256_hex,
     staging::staged_for_apply_test,
     supervisor_updates::{
-        SupervisorUpdateEvent, SupervisorUpdateState, UpdateSink, serve_one_with_sink,
+        SupervisorUpdateEvent, SupervisorUpdateState, UpdateSink, deliver_downloaded_for_test,
+        serve_one_with_sink,
     },
 };
 
@@ -24,8 +27,10 @@ type Trace = Arc<Mutex<Vec<&'static str>>>;
 struct ScriptedSink {
     requests: VecDeque<UpdateRequest>,
     responses: Vec<PortableUpdateResponse>,
+    events: Vec<(Arc<str>, PortableUpdateEvent)>,
     trace: Trace,
     fail_apply_acceptance: bool,
+    fail_download_delivery: bool,
     close_when_exhausted: bool,
     receive_failure_code: Option<&'static str>,
 }
@@ -35,13 +40,33 @@ impl ScriptedSink {
         Self {
             requests: (0..count)
                 .map(|index| UpdateRequest {
-                    request_id: format!("apply-{index}"),
+                    request_id: format!("apply-{index}").into(),
                     request: PortableUpdateRequest::apply(),
                 })
                 .collect(),
             responses: Vec::new(),
+            events: Vec::new(),
             trace,
             fail_apply_acceptance,
+            fail_download_delivery: false,
+            close_when_exhausted: false,
+            receive_failure_code: None,
+        }
+    }
+
+    fn downloads(trace: Trace, count: usize) -> Self {
+        Self {
+            requests: (0..count)
+                .map(|index| UpdateRequest {
+                    request_id: format!("download-{index}").into(),
+                    request: PortableUpdateRequest::download(),
+                })
+                .collect(),
+            responses: Vec::new(),
+            events: Vec::new(),
+            trace,
+            fail_apply_acceptance: false,
+            fail_download_delivery: false,
             close_when_exhausted: false,
             receive_failure_code: None,
         }
@@ -65,10 +90,11 @@ impl UpdateSink for ScriptedSink {
 
     fn send_update_response(
         &mut self,
-        _request_id: String,
+        _request_id: Arc<str>,
         response: PortableUpdateResponse,
     ) -> Result<()> {
         let accepted = matches!(&response, PortableUpdateResponse::ApplyAccepted(_));
+        let downloaded = matches!(&response, PortableUpdateResponse::Downloaded(_));
         self.trace
             .lock()
             .expect("test trace lock")
@@ -80,6 +106,21 @@ impl UpdateSink for ScriptedSink {
                 "scripted acceptance write failure",
             ));
         }
+        if downloaded && self.fail_download_delivery {
+            return Err(PortableRuntimeError::new(
+                "portable_update_test_sink",
+                "scripted downloaded write failure",
+            ));
+        }
+        Ok(())
+    }
+
+    fn send_update_event(
+        &mut self,
+        request_id: Arc<str>,
+        event: PortableUpdateEvent,
+    ) -> Result<()> {
+        self.events.push((request_id, event));
         Ok(())
     }
 }
@@ -327,4 +368,52 @@ fn g_apl_04_reread_precedes_exactly_one_acceptance_and_send_failure_is_uncertain
         ["staged_reread", "apply_accepted"]
     );
     assert!(failed_state.is_uncertain());
+}
+
+#[test]
+fn failed_download_revokes_an_older_stage_and_terminal_delivery_owns_new_stage_installation() {
+    let root = temp_root("download-stage-lifetime");
+    let canonical_path = root.path().join("staged.rpu");
+    std::fs::write(&canonical_path, b"previous staged bytes").expect("write previous stage");
+    let trace = trace();
+    let mut state = SupervisorUpdateState::default();
+    install_staged(
+        &mut state,
+        &canonical_path,
+        b"previous staged bytes",
+        Arc::clone(&trace),
+    );
+    assert!(state.has_staged());
+
+    let mut sink = ScriptedSink::downloads(Arc::clone(&trace), 1);
+    expect_continue(
+        serve_one_with_sink(&mut sink, &mut state, "1.0.0", root.path()),
+        "a failed new download must reply recoverably",
+    );
+    assert_eq!(
+        response_code(&sink.responses[0]),
+        "portable_update_offer_missing"
+    );
+    assert!(
+        sink.events.is_empty(),
+        "missing offers reject before Started"
+    );
+    assert!(
+        !state.has_staged(),
+        "SIG-01: a failed new Download cannot retain an earlier Apply capability"
+    );
+
+    let fresh_path = root.path().join("fresh.rpu");
+    std::fs::write(&fresh_path, b"fresh staged bytes").expect("write fresh stage");
+    let staged = staged_for_apply_test(
+        fresh_path,
+        b"fresh staged bytes",
+        verified_rpu(),
+        Arc::clone(&trace),
+    );
+    sink.fail_download_delivery = true;
+    let error = deliver_downloaded_for_test(&mut sink, &mut state, "download-1".into(), 18, staged)
+        .expect_err("a failed terminal Downloaded delivery cannot install a capability");
+    assert_eq!(error.code(), "portable_update_test_sink");
+    assert!(!state.has_staged());
 }

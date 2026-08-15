@@ -1,26 +1,28 @@
-use std::{collections::BTreeMap, io::Read, time::Duration};
+use std::{collections::BTreeMap, io::Read, sync::Arc, time::Duration};
 
 use serde::Deserialize;
 
 use super::{
     app_process::TrialProcess,
     app_protocol::{
-        AppControlMessage, AppStatusMessage, PortableUpdateRequest, PortableUpdateResponse,
-        UpdateRequest,
+        AppControlMessage, AppStatusMessage, PortableUpdateEvent, PortableUpdateRequest,
+        PortableUpdateResponse, UpdateRequest,
     },
     error::{PortableRuntimeError, Result},
     request_gate::RequestGate,
     rpu::{VerifiedRpu, canonical_version},
-    staging::{StagedVerifiedRpu, stage_verified_rpu_expected},
+    staging::StagedVerifiedRpu,
 };
 
 const PORTABLE_PLATFORM: &str = "windows-x86_64-portable";
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
-const MAX_RPU_BYTES: u64 = 1024 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
-const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+pub(super) mod download;
+
+use download::{DownloadStageError, download_and_stage};
 
 #[derive(Default)]
 pub struct SupervisorUpdateState {
@@ -38,6 +40,11 @@ impl SupervisorUpdateState {
     pub(super) fn stage_for_test(&mut self, staged: StagedVerifiedRpu) {
         self.staged = Some(staged);
     }
+
+    #[cfg(test)]
+    pub(super) fn has_staged(&self) -> bool {
+        self.staged.is_some()
+    }
 }
 
 /// The update portion of the private App/supervisor transport.  Keeping this
@@ -48,9 +55,11 @@ pub(super) trait UpdateSink {
     fn receive_update_request_or_eof(&mut self) -> Result<Option<UpdateRequest>>;
     fn send_update_response(
         &mut self,
-        request_id: String,
+        request_id: Arc<str>,
         response: PortableUpdateResponse,
     ) -> Result<()>;
+    fn send_update_event(&mut self, request_id: Arc<str>, event: PortableUpdateEvent)
+    -> Result<()>;
 }
 
 impl UpdateSink for TrialProcess {
@@ -69,15 +78,27 @@ impl UpdateSink for TrialProcess {
 
     fn send_update_response(
         &mut self,
-        request_id: String,
+        request_id: Arc<str>,
         response: PortableUpdateResponse,
     ) -> Result<()> {
         self.send(&AppControlMessage::update_response(request_id, response))
+    }
+
+    fn send_update_event(
+        &mut self,
+        request_id: Arc<str>,
+        event: PortableUpdateEvent,
+    ) -> Result<()> {
+        self.send(&AppControlMessage::update_event(request_id, event))
     }
 }
 
 enum RequestDisposition {
     Reply(PortableUpdateResponse),
+    Downloaded {
+        content_length: u64,
+        staged: StagedVerifiedRpu,
+    },
     ApplyReady(VerifiedRpu),
 }
 
@@ -138,7 +159,7 @@ pub(super) fn serve_one_with_sink(
             RequestDisposition::Reply(check_update(state, current_version))
         }
         PortableUpdateRequest::Download(_) => {
-            RequestDisposition::Reply(download_update(state, update_root))
+            download_update(sink, state, update_root, &request_id)?
         }
         PortableUpdateRequest::Apply(_) => accept_apply(state),
     };
@@ -146,6 +167,13 @@ pub(super) fn serve_one_with_sink(
     match disposition {
         RequestDisposition::Reply(response) => {
             sink.send_update_response(request_id, response)?;
+            Ok(SupervisorUpdateEvent::Continue)
+        }
+        RequestDisposition::Downloaded {
+            content_length,
+            staged,
+        } => {
+            deliver_downloaded(sink, state, request_id, content_length, staged)?;
             Ok(SupervisorUpdateEvent::Continue)
         }
         RequestDisposition::ApplyReady(verified) => {
@@ -162,6 +190,34 @@ pub(super) fn serve_one_with_sink(
             Ok(SupervisorUpdateEvent::ApplyReady(Box::new(verified)))
         }
     }
+}
+
+fn deliver_downloaded(
+    sink: &mut impl UpdateSink,
+    state: &mut SupervisorUpdateState,
+    request_id: Arc<str>,
+    content_length: u64,
+    staged: StagedVerifiedRpu,
+) -> Result<()> {
+    // The stage is a linear capability. It remains local until the terminal
+    // Downloaded frame is actually accepted by the App pipe.
+    sink.send_update_response(
+        request_id,
+        PortableUpdateResponse::downloaded(content_length),
+    )?;
+    state.staged = Some(staged);
+    Ok(())
+}
+
+#[cfg(test)]
+pub(super) fn deliver_downloaded_for_test(
+    sink: &mut impl UpdateSink,
+    state: &mut SupervisorUpdateState,
+    request_id: Arc<str>,
+    content_length: u64,
+    staged: StagedVerifiedRpu,
+) -> Result<()> {
+    deliver_downloaded(sink, state, request_id, content_length, staged)
 }
 
 fn check_update(
@@ -191,18 +247,30 @@ fn check_update(
 }
 
 fn download_update(
+    sink: &mut impl UpdateSink,
     state: &mut SupervisorUpdateState,
     update_root: &std::path::Path,
-) -> PortableUpdateResponse {
+    request_id: &Arc<str>,
+) -> Result<RequestDisposition> {
+    // A new Download revokes any earlier apply capability before it inspects
+    // an offer or begins network I/O.
+    state.staged = None;
     let Some(offer) = state.offer.as_ref() else {
-        return PortableUpdateResponse::rejected("portable_update_offer_missing");
+        return Ok(RequestDisposition::Reply(PortableUpdateResponse::rejected(
+            "portable_update_offer_missing",
+        )));
     };
-    match download_and_stage(update_root, offer) {
-        Ok((length, staged)) => {
-            state.staged = Some(staged);
-            PortableUpdateResponse::downloaded(length)
-        }
-        Err(error) => PortableUpdateResponse::rejected(error.code()),
+    match download_and_stage(update_root, offer, &mut |event| {
+        sink.send_update_event(Arc::clone(request_id), event)
+    }) {
+        Ok((content_length, staged)) => Ok(RequestDisposition::Downloaded {
+            content_length,
+            staged,
+        }),
+        Err(DownloadStageError::EventTransport(error)) => Err(error),
+        Err(DownloadStageError::Operation(error)) => Ok(RequestDisposition::Reply(
+            PortableUpdateResponse::rejected(error.code()),
+        )),
     }
 }
 
@@ -276,28 +344,6 @@ fn fetch_offer(current_version: &str) -> Result<Option<UpdateOffer>> {
         url: platform.url,
         signature: platform.signature,
     }))
-}
-
-fn download_and_stage(
-    update_root: &std::path::Path,
-    offer: &UpdateOffer,
-) -> Result<(u64, StagedVerifiedRpu)> {
-    let response = http_client(DOWNLOAD_TIMEOUT)?
-        .get(&offer.url)
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|error| {
-            PortableRuntimeError::new("portable_update_download", error.to_string())
-        })?;
-    let bytes = read_limited_response(
-        response,
-        MAX_RPU_BYTES,
-        "portable_update_download",
-        "portable RPU exceeded maximum size",
-    )?;
-    let staged =
-        stage_verified_rpu_expected(update_root, &bytes, &offer.signature, &offer.version)?;
-    Ok((bytes.len() as u64, staged))
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client> {

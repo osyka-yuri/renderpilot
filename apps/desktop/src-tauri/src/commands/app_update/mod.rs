@@ -75,7 +75,7 @@ pub async fn app_update_download(
 
         #[cfg(all(windows, feature = "portable"))]
         {
-            portable::download(&state, session_id, &on_event)
+            portable::download(&state, &session_id, &on_event)
         }
 
         #[cfg(not(all(windows, feature = "portable")))]

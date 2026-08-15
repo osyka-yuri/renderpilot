@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use super::{error_code, hash, temp_root};
 use crate::portable_runtime::{
-    generation::{InitialSelectedGeneration, inspect_initial_selection, load_selected, publish},
+    generation::{load_selected, publish},
     provenance::{self, SealDomain},
     publication::publish_bytes_no_replace,
     rpu::{
@@ -79,7 +79,7 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
             minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
             app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
             minimum_schema: MINIMUM_SCHEMA,
-            maximum_schema: MAXIMUM_SCHEMA + 1,
+            maximum_schema: MAXIMUM_SCHEMA,
             portable_role: "app".to_owned(),
         },
         app_bytes: app,
@@ -101,7 +101,7 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
     publish(&clean_store, &rpu).expect("occupied exact immutable generation is idempotent");
     let stored = load_selected(&clean_store, &rpu_sha256).expect("load complete generation");
     assert_eq!(stored.version, "1.9.1");
-    assert_eq!(stored.maximum_schema, MAXIMUM_SCHEMA + 1);
+    assert_eq!(stored.maximum_schema, MAXIMUM_SCHEMA);
 
     let mismatched_app = vec![0_u8; 0x46];
     let mismatched = VerifiedRpu {
@@ -114,7 +114,7 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
             minimum_supervisor_protocol: PORTABLE_SUPERVISOR_CAPABILITY,
             app_session_protocol: PORTABLE_APP_SESSION_PROTOCOL.to_owned(),
             minimum_schema: MINIMUM_SCHEMA,
-            maximum_schema: MAXIMUM_SCHEMA + 1,
+            maximum_schema: MAXIMUM_SCHEMA,
             portable_role: "app".to_owned(),
         },
         app_bytes: mismatched_app,
@@ -124,62 +124,6 @@ fn generation_and_selection_become_visible_only_after_complete_publication() {
         error_code(publish(&clean_store, &mismatched)),
         "portable_app_identity",
         "occupied identity only succeeds for the exact signed RPU descriptor"
-    );
-
-    let legacy_plaintext = serde_json::to_vec(&serde_json::json!({
-        "protocol": 2,
-        "rpu_sha256": rpu_sha256,
-        "version": "1.9.1",
-        "app_sha256": sha256_hex(&std::fs::read(&stored.app).expect("read legacy App fixture")),
-        "minimum_schema": 4,
-        "maximum_schema": 16,
-    }))
-    .expect("encode legacy generation receipt");
-    let legacy_receipt = provenance::seal(
-        SealDomain::Object,
-        &format!("object:{}", stored.rpu_sha256),
-        &legacy_plaintext,
-    )
-    .expect("seal legacy generation receipt");
-    std::fs::write(
-        stored.generation_root.join("generation.json"),
-        legacy_receipt,
-    )
-    .expect("replace test-only receipt with authenticated v2 metadata");
-    assert_eq!(
-        error_code(load_selected(&clean_store, &stored.rpu_sha256)),
-        "portable_generation_receipt"
-    );
-    assert!(matches!(
-        inspect_initial_selection(&clean_store, &stored.rpu_sha256)
-            .expect("inspect authenticated legacy selection"),
-        InitialSelectedGeneration::LegacyV2Metadata(metadata)
-            if metadata.version == "1.9.1"
-    ));
-
-    let incompatible_legacy_plaintext = serde_json::to_vec(&serde_json::json!({
-        "protocol": 2,
-        "rpu_sha256": rpu_sha256,
-        "version": "1.9.1",
-        "app_sha256": sha256_hex(&std::fs::read(&stored.app).expect("read legacy App fixture")),
-        "minimum_schema": 4,
-        "maximum_schema": 17,
-    }))
-    .expect("encode incompatible legacy generation receipt");
-    let incompatible_legacy_receipt = provenance::seal(
-        SealDomain::Object,
-        &format!("object:{}", stored.rpu_sha256),
-        &incompatible_legacy_plaintext,
-    )
-    .expect("seal incompatible legacy generation receipt");
-    std::fs::write(
-        stored.generation_root.join("generation.json"),
-        incompatible_legacy_receipt,
-    )
-    .expect("replace receipt with incompatible legacy metadata");
-    assert_eq!(
-        error_code(inspect_initial_selection(&clean_store, &stored.rpu_sha256)),
-        "portable_generation_receipt"
     );
 
     let selection_root = clean_store.join("selection");

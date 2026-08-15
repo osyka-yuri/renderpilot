@@ -13,7 +13,7 @@ use crate::diagnostics::{
 };
 
 use super::{
-    app_protocol::PortableAppSessionV1,
+    app_protocol::PortableAppSessionV2,
     error::{PortableRuntimeError, Result},
     root_authority::PortableRootAuthority,
     supervisor::authority::SupervisorSessionAuthority,
@@ -157,7 +157,7 @@ pub(super) fn open_supervisor(
 }
 
 /// Opens the App observer only from the atomically authenticated runtime root.
-pub(super) fn open_app(startup: &PortableAppSessionV1) -> Result<PortableDiagnosticSession> {
+pub(super) fn open_app(startup: &PortableAppSessionV2) -> Result<PortableDiagnosticSession> {
     let runtime = super::runtime_paths::current_runtime()?;
     let root = super::runtime_paths::current_root()?;
     if runtime.paths() != &startup.runtime_paths
@@ -447,7 +447,7 @@ pub(super) fn report_emit_failure(status: DiagnosticEmitStatus) {
     }
 }
 
-pub(crate) fn install_app(startup: &PortableAppSessionV1) {
+pub(crate) fn install_app(startup: &PortableAppSessionV2) {
     let state = APP_DIAGNOSTICS.get_or_init(|| Mutex::new(AppDiagnosticObserver::Uninitialized));
     let Ok(mut slot) = state.lock() else {
         report_diagnostics_failure();

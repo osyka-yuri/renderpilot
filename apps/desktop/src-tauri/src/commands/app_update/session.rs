@@ -79,22 +79,20 @@ impl<'state> CheckAttempt<'state> {
     }
 
     pub(super) fn finish_idle(self) -> UpdateResult<()> {
-        self.finish(UpdateSession::Idle)
+        self.finish(|_| UpdateSession::Idle)
     }
 
     #[cfg(all(windows, feature = "portable"))]
     pub(super) fn finish_portable(self) -> UpdateResult<()> {
-        let id = self.id.clone();
-        self.finish(UpdateSession::Checked { id })
+        self.finish(|id| UpdateSession::Checked { id })
     }
 
     #[cfg(not(all(windows, feature = "portable")))]
     pub(super) fn finish_installed(self, update: tauri_plugin_updater::Update) -> UpdateResult<()> {
-        let id = self.id.clone();
-        self.finish(UpdateSession::Checked { id, update })
+        self.finish(|id| UpdateSession::Checked { id, update })
     }
 
-    fn finish(mut self, next: UpdateSession) -> UpdateResult<()> {
+    fn finish(mut self, make_next: impl FnOnce(String) -> UpdateSession) -> UpdateResult<()> {
         let mut session = lock(self.state)?;
         if !matches!(
             &*session,
@@ -105,7 +103,8 @@ impl<'state> CheckAttempt<'state> {
                 "updater check attempt was no longer current",
             ));
         }
-        *session = next;
+        let id = std::mem::take(&mut self.id);
+        *session = make_next(id);
         self.armed = false;
         Ok(())
     }
@@ -182,6 +181,22 @@ pub(super) fn require_portable(
     }
 }
 
+#[cfg(all(windows, feature = "portable"))]
+pub(super) fn complete_portable_download(state: &AppUpdateState, id: &str) -> UpdateResult<()> {
+    let mut session = lock(state)?;
+    let completed_id = match &mut *session {
+        UpdateSession::Checked { id: actual } if actual == id => std::mem::take(actual),
+        _ => {
+            return Err(CommandError::with_diagnostic(
+                CommandErrorKind::AppUpdateInvalidState,
+                "portable updater download completion was no longer current",
+            ));
+        }
+    };
+    *session = UpdateSession::Downloaded { id: completed_id };
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,7 +236,7 @@ mod tests {
         let attempt =
             CheckAttempt::start(&state, || Ok("finished".to_owned())).expect("start attempt");
         attempt
-            .finish(UpdateSession::Checking {
+            .finish(|_| UpdateSession::Checking {
                 attempt_id: "final-state".to_owned(),
             })
             .expect("finish attempt");
@@ -245,6 +260,29 @@ mod tests {
         assert!(matches!(
             &*lock(&state).expect("lock state"),
             UpdateSession::Checking { attempt_id } if attempt_id == "current"
+        ));
+    }
+
+    #[cfg(all(windows, feature = "portable"))]
+    #[test]
+    fn portable_download_completion_requires_the_current_checked_capability() {
+        let state = AppUpdateState::default();
+        *lock(&state).expect("seed checked session") = UpdateSession::Checked {
+            id: "first".to_owned(),
+        };
+        complete_portable_download(&state, "first").expect("complete matching download");
+        assert!(matches!(
+            &*lock(&state).expect("read completed state"),
+            UpdateSession::Downloaded { id } if id == "first"
+        ));
+
+        *lock(&state).expect("simulate close and new check") = UpdateSession::Checked {
+            id: "second".to_owned(),
+        };
+        assert!(complete_portable_download(&state, "first").is_err());
+        assert!(matches!(
+            &*lock(&state).expect("read newer state"),
+            UpdateSession::Checked { id } if id == "second"
         ));
     }
 }

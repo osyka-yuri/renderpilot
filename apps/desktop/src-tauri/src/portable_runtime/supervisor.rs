@@ -18,7 +18,7 @@ use super::{
     recovery::{recover_prior_transactions, recovery_action},
     root_authority::{PortableRootAuthority, SupervisorRootBinding},
     rpu::{VerifiedRpu, embedded_rpu, verify_rpu_expected},
-    selection::{current_selection, selection_root},
+    selection::{SelectionRecord, current_selection, read_selection, selection_root},
     supervisor_activation::{
         ActivationContext, CurrentGeneration, activate_generation_with_diagnostics,
     },
@@ -245,7 +245,7 @@ fn report_error(
     report_failure(diagnostics, site, failure);
 }
 
-fn select_initial_generation(
+pub(super) fn select_initial_generation(
     generation_store: &Path,
     selection_root: &Path,
     rpu: VerifiedRpu,
@@ -278,22 +278,52 @@ fn select_initial_generation(
                     });
                 }
             }
-            InitialSelectedGeneration::LegacyV2Metadata(legacy) => {
-                let selected_version = Version::parse(&legacy.version).map_err(|error| {
-                    PortableRuntimeError::new("portable_generation_receipt", error.to_string())
-                })?;
-                if selected_version >= embedded_version {
+            InitialSelectedGeneration::MetadataOnly(predecessor) => {
+                require_metadata_only_predecessor_tip(
+                    selection_root,
+                    &record.generation_sha256,
+                    &record.record_sha256,
+                )?;
+                if predecessor.version >= embedded_version {
                     return Err(PortableRuntimeError::new(
                         "portable_full_package_upgrade_required",
-                        "selected legacy portable generation requires a newer full package",
+                        "metadata-only predecessor requires a newer full package",
                     ));
                 }
+                return publish_embedded_generation(
+                    generation_store,
+                    rpu,
+                    Some(record.generation_sha256),
+                );
             }
         }
         return publish_embedded_generation(generation_store, rpu, Some(record.generation_sha256));
     }
 
     publish_embedded_generation(generation_store, rpu, None)
+}
+
+fn require_metadata_only_predecessor_tip(
+    selection_root: &Path,
+    generation_sha256: &str,
+    record_sha256: &str,
+) -> Result<()> {
+    let tip = read_selection(selection_root)?.pop().ok_or_else(|| {
+        PortableRuntimeError::new(
+            "portable_selection_invalid",
+            "released predecessor had no validated selection tip",
+        )
+    })?;
+    if tip.record_sha256 != record_sha256
+        || tip.selected_generation_sha256() != Some(generation_sha256)
+        || !matches!(tip.record, SelectionRecord::V3(_))
+    {
+        return Err(PortableRuntimeError::new(
+            "portable_selection_invalid",
+            "metadata-only predecessor required an exact protocol-3 selection tip",
+        ));
+    }
+    Ok(())
 }
 
 fn publish_embedded_generation(

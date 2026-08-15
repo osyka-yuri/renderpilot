@@ -5,7 +5,7 @@ use std::path::Path;
 use super::{
     app_process::TrialProcess,
     app_protocol::{
-        AppControlMessage, AppStatusMessage, CatalogMigrationOperation, PortableAppSessionV1,
+        AppControlMessage, AppStatusMessage, CatalogMigrationOperation, PortableAppSessionV2,
         StartupMode, committed_sequence_for_selection,
     },
     cleanup::cleanup_snapshot_after_terminal,
@@ -156,7 +156,7 @@ fn activate_generation_inner(
             generation_store_root: &paths.generation_store_root,
         })?;
     }
-    let startup = PortableAppSessionV1 {
+    let startup = PortableAppSessionV2 {
         app_session_protocol: current.app_session_protocol.clone(),
         epoch: epoch.to_owned(),
         generation_sha256: current.generation_sha256.clone(),
@@ -395,7 +395,7 @@ impl CatalogMigrationTrial for TrialProcess {
 
 #[derive(Clone, Copy)]
 pub(super) struct CatalogPreparationContext<'a> {
-    startup: &'a PortableAppSessionV1,
+    startup: &'a PortableAppSessionV2,
     journal: &'a Path,
     paths: &'a renderpilot_orchestration::portable::RuntimePathsV1,
     generation: &'a str,
@@ -405,7 +405,7 @@ pub(super) struct CatalogPreparationContext<'a> {
 
 impl<'a> CatalogPreparationContext<'a> {
     pub(super) fn new(
-        startup: &'a PortableAppSessionV1,
+        startup: &'a PortableAppSessionV2,
         journal: &'a Path,
         paths: &'a renderpilot_orchestration::portable::RuntimePathsV1,
         generation: &'a str,
