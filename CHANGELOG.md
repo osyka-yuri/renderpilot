@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.2] - 2026-08-15
+
+### Fixed
+
+- **Portable update progress**: The download indicator now advances throughout a portable update instead of appearing frozen until RenderPilot restarts.
+
+### Compatibility
+
+- **Manual update from portable 1.9.1**: Portable 1.9.1 requires a one-time manual update. Fully close RenderPilot and extract the complete 1.9.2 package into the existing portable folder, replacing files when prompted. Do not delete the folder first. Future updates can be installed normally from the application.
+
 ## [1.9.1] - 2026-08-14
 
 ### Added
