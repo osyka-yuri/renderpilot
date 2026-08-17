@@ -7,7 +7,11 @@ mod xiph_grouping;
 #[cfg(test)]
 mod tests;
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use renderpilot_application::{AppResult, ComponentDetector};
 use renderpilot_domain::{
@@ -17,14 +21,15 @@ use renderpilot_domain::{
 use serde::Serialize;
 
 use crate::{
-    FileCacheKey, LibraryPatternError, LibraryPatternSet, PatternPlatform, VersionDetectionStatus,
-    file_metadata::{DetectedFileMetadata, FileHashCache, try_read_detected_file_metadata},
+    FileIdentityProbeResult, FileObservation, FileObservationSource, LibraryPatternError,
+    LibraryPatternSet, PatternPlatform, StrongFileCacheKey, VersionDetectionStatus,
+    file_metadata::{DetectedFileMetadata, try_read_detected_file_metadata},
 };
 
 use self::classification::LibraryFileClassification;
 use self::paths::{
-    cached_files_under_root, file_name_for_matching, install_root_path, path_ref_from_path,
-    sort_detected_library_files, sorted_unique_paths,
+    file_name_for_matching, install_root_path, path_ref_from_path, sort_detected_library_files,
+    sorted_unique_paths,
 };
 use self::scan::{WalkCompleteness, collect_files_filtered};
 
@@ -48,30 +53,34 @@ pub struct DetectedLibraryFile {
     version: Option<Version>,
     status: VersionDetectionStatus,
     sha256: Sha256Hash,
-    cache_key: FileCacheKey,
+    observation: Option<FileObservation>,
     #[serde(skip)]
     runtime_target: Option<RuntimeTarget>,
     #[serde(skip)]
     pe_compatibility: Option<PeCompatibilityProfile>,
 }
 
+/// Complete persisted facts eligible for a zero-content-read reuse after a
+/// fresh strong identity lease proves the exact object is unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FastCachedDetectionReport {
-    libraries: Vec<DetectedLibraryFile>,
-    detectable_count: usize,
+pub struct ReusableFileMetadata {
+    /// Stable observation recorded for the exact normalized path.
+    pub observation: FileObservation,
+    /// Observed file version; `None` is an observed lack of version metadata.
+    pub version: Option<Version>,
+    /// Runtime fact extracted from the original stable object, when applicable.
+    pub runtime_target: Option<RuntimeTarget>,
+    /// Strict PE compatibility fact from the original stable object, when applicable.
+    pub pe_compatibility: Option<PeCompatibilityProfile>,
 }
 
-impl FastCachedDetectionReport {
-    pub fn libraries(&self) -> &[DetectedLibraryFile] {
-        &self.libraries
-    }
-
-    pub fn into_libraries(self) -> Vec<DetectedLibraryFile> {
-        self.libraries
-    }
-
-    pub fn detectable_count(&self) -> usize {
-        self.detectable_count
+impl ReusableFileMetadata {
+    fn matches(&self, path: &PathRef, identity: &StrongFileCacheKey) -> bool {
+        self.observation.path == *path
+            && self.observation.identity_kind == identity.kind
+            && self.observation.object_identity == identity.object_identity
+            && self.observation.change_token == identity.change_token
+            && self.observation.size == identity.size
     }
 }
 
@@ -80,9 +89,32 @@ impl DetectedLibraryFile {
         file_name: String,
         file_path: PathRef,
         classification: LibraryFileClassification,
-        metadata: DetectedFileMetadata,
+        mut metadata: DetectedFileMetadata,
         runtime_target: Option<RuntimeTarget>,
         pe_compatibility: Option<PeCompatibilityProfile>,
+    ) -> Self {
+        let observation = FileObservation::from_metadata(file_path.clone(), &mut metadata);
+        Self {
+            file_name,
+            file_path,
+            technology: classification.technology,
+            kind: classification.kind,
+            detection_confidence: classification.confidence,
+            swappability: classification.swappability,
+            version: metadata.pe.version,
+            status: metadata.status,
+            sha256: metadata.sha256,
+            observation,
+            runtime_target,
+            pe_compatibility,
+        }
+    }
+
+    fn from_reusable(
+        file_name: String,
+        file_path: PathRef,
+        classification: LibraryFileClassification,
+        reusable: &ReusableFileMetadata,
     ) -> Self {
         Self {
             file_name,
@@ -91,12 +123,15 @@ impl DetectedLibraryFile {
             kind: classification.kind,
             detection_confidence: classification.confidence,
             swappability: classification.swappability,
-            version: metadata.version,
-            status: metadata.status,
-            sha256: metadata.sha256,
-            cache_key: metadata.cache_key,
-            runtime_target,
-            pe_compatibility,
+            version: reusable.version.clone(),
+            status: match reusable.version {
+                Some(_) => VersionDetectionStatus::KnownVersion,
+                None => VersionDetectionStatus::UnknownVersion,
+            },
+            sha256: reusable.observation.sha256.clone(),
+            observation: Some(reusable.observation.clone()),
+            runtime_target: reusable.runtime_target.clone(),
+            pe_compatibility: reusable.pe_compatibility.clone(),
         }
     }
 
@@ -145,18 +180,18 @@ impl DetectedLibraryFile {
         &self.sha256
     }
 
-    /// Returns the cache key derived from path, size, modification time, and hash.
-    pub fn cache_key(&self) -> &FileCacheKey {
-        &self.cache_key
+    /// Returns the strong observation that produced this detection.
+    pub fn observation(&self) -> Option<&FileObservation> {
+        self.observation.as_ref()
     }
 
     /// Returns runtime facts extracted while the file was detected.
-    pub(crate) fn runtime_target(&self) -> Option<&RuntimeTarget> {
+    pub fn runtime_target(&self) -> Option<&RuntimeTarget> {
         self.runtime_target.as_ref()
     }
 
     /// Returns strict PE compatibility facts extracted during detection.
-    pub(crate) fn pe_compatibility(&self) -> Option<&PeCompatibilityProfile> {
+    pub fn pe_compatibility(&self) -> Option<&PeCompatibilityProfile> {
         self.pe_compatibility.as_ref()
     }
 
@@ -185,11 +220,12 @@ pub enum DetectionConfidence {
 }
 
 /// Component detector that classifies files by data-driven library patterns.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct LibraryPatternComponentDetector {
     patterns: LibraryPatternSet,
     platform: PatternPlatform,
     max_depth: Option<usize>,
+    observation_source: Arc<dyn FileObservationSource>,
 }
 
 impl LibraryPatternComponentDetector {
@@ -199,6 +235,7 @@ impl LibraryPatternComponentDetector {
             patterns,
             platform,
             max_depth: None,
+            observation_source: Arc::new(crate::file_observation::SystemFileObservationSource),
         }
     }
 
@@ -211,6 +248,16 @@ impl LibraryPatternComponentDetector {
     /// Sets the maximum recursion depth used when scanning a game folder.
     pub fn with_max_depth(mut self, max_depth: usize) -> Self {
         self.max_depth = Some(max_depth);
+        self
+    }
+
+    /// Uses a Send+Sync observation source for deterministic test scenarios.
+    #[cfg(any(test, feature = "test-instrumentation"))]
+    pub fn with_file_observation_source(
+        mut self,
+        observation_source: Arc<dyn FileObservationSource>,
+    ) -> Self {
+        self.observation_source = observation_source;
         self
     }
 
@@ -234,67 +281,21 @@ impl LibraryPatternComponentDetector {
         &self,
         game: &GameInstallation,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
-        self.detect_library_files_with_optional_cache(game, None)
-    }
-
-    /// Like [`Self::detect_library_files`], but skips hashing when size/mtime match `cache`.
-    pub fn detect_library_files_with_cache(
-        &self,
-        game: &GameInstallation,
-        cache: &FileHashCache,
-    ) -> AppResult<Vec<DetectedLibraryFile>> {
-        self.detect_library_files_with_optional_cache(game, Some(cache))
-    }
-
-    /// Fast scan mode that ONLY checks the file paths present in the cache.
-    /// It completely skips full file system traversal (`collect_files`).
-    ///
-    /// Cached entries whose underlying file no longer exists are silently
-    /// dropped — the cache is treated as a hint, not a source of truth.
-    pub fn detect_library_files_fast_cached(
-        &self,
-        game: &GameInstallation,
-        cache: &FileHashCache,
-    ) -> AppResult<Vec<DetectedLibraryFile>> {
-        let root = install_root_path(game);
-        let files = cached_files_under_root(cache, &root);
-
-        self.detect_library_files_from_paths(files, Some(cache))
-    }
-
-    /// Fast scan with completeness evidence for fallback decisions in higher layers.
-    pub fn detect_library_files_fast_cached_with_evidence(
-        &self,
-        game: &GameInstallation,
-        cache: &FileHashCache,
-    ) -> AppResult<FastCachedDetectionReport> {
-        let libraries = self.detect_library_files_fast_cached(game, cache)?;
-        let detectable_count = self.count_detectable_library_files(game)?;
-
-        Ok(FastCachedDetectionReport {
-            libraries,
-            detectable_count,
-        })
-    }
-
-    /// Returns how many on-disk files under `game` currently match any
-    /// configured library pattern for this detector platform.
-    ///
-    /// This check does not read PE metadata or hash file contents, so it is
-    /// cheap enough to validate whether a fast cache-only result is complete.
-    pub fn count_detectable_library_files(&self, game: &GameInstallation) -> AppResult<usize> {
         let files = self.collect_candidate_library_paths(game)?;
-        Ok(self.count_detectable_from_paths(files))
+        self.detect_library_files_from_paths(files, None)
     }
 
-    fn detect_library_files_with_optional_cache(
+    /// Detects native libraries using only same-game persisted facts whose
+    /// strong identity is reproved through an identity-only lease. A mismatch
+    /// falls back to one full stable-object read; an unstable probe fails the
+    /// scan closed rather than publishing a partial result.
+    pub fn detect_library_files_with_reuse(
         &self,
         game: &GameInstallation,
-        cache: Option<&FileHashCache>,
+        reusable: &HashMap<String, ReusableFileMetadata>,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let files = self.collect_candidate_library_paths(game)?;
-
-        self.detect_library_files_from_paths(files, cache)
+        self.detect_library_files_from_paths(files, Some(reusable))
     }
 
     fn collect_candidate_library_paths(&self, game: &GameInstallation) -> AppResult<Vec<PathBuf>> {
@@ -319,26 +320,15 @@ impl LibraryPatternComponentDetector {
         Ok(sorted_unique_paths(report.into_files()))
     }
 
-    fn count_detectable_from_paths(&self, paths: Vec<PathBuf>) -> usize {
-        paths
-            .into_iter()
-            .filter(|path| {
-                file_name_for_matching(path)
-                    .and_then(|name| self.classify_file_name(name))
-                    .is_some()
-            })
-            .count()
-    }
-
     fn detect_library_files_from_paths(
         &self,
         files: Vec<PathBuf>,
-        cache: Option<&FileHashCache>,
+        reusable: Option<&HashMap<String, ReusableFileMetadata>>,
     ) -> AppResult<Vec<DetectedLibraryFile>> {
         let mut detected = Vec::new();
 
         for file in files {
-            let Some(library) = self.detect_library_file(&file, cache)? else {
+            let Some(library) = self.detect_library_file(&file, reusable)? else {
                 continue;
             };
 
@@ -353,7 +343,7 @@ impl LibraryPatternComponentDetector {
     fn detect_library_file(
         &self,
         file: &Path,
-        cache: Option<&FileHashCache>,
+        reusable: Option<&HashMap<String, ReusableFileMetadata>>,
     ) -> AppResult<Option<DetectedLibraryFile>> {
         let Some(file_name) = file_name_for_matching(file) else {
             return Ok(None);
@@ -364,6 +354,36 @@ impl LibraryPatternComponentDetector {
         };
 
         let file_path = path_ref_from_path(file)?;
+        if let Some(reusable) = reusable.and_then(|facts| facts.get(file_path.as_str())) {
+            match self.observation_source.probe_identity(file)? {
+                FileIdentityProbeResult::Available(identity)
+                    if reusable.matches(&file_path, &identity) =>
+                {
+                    return Ok(Some(DetectedLibraryFile::from_reusable(
+                        file_name.to_owned(),
+                        file_path,
+                        classification,
+                        reusable,
+                    )));
+                }
+                FileIdentityProbeResult::Available(_) => {}
+                FileIdentityProbeResult::Missing => return Ok(None),
+                FileIdentityProbeResult::Uncacheable => {}
+                FileIdentityProbeResult::Unavailable => {
+                    return Err(renderpilot_application::AppError::detection_failed(
+                        format!(
+                            "file identity lease was unavailable or unstable for {}",
+                            file.display()
+                        ),
+                    ));
+                }
+            }
+        }
+        let Some(metadata) =
+            try_read_detected_file_metadata(file, self.observation_source.as_ref())?
+        else {
+            return Ok(None);
+        };
         let inspection = matches!(
             classification.technology,
             LibraryTechnology::MicrosoftDxc
@@ -371,24 +391,14 @@ impl LibraryPatternComponentDetector {
                 | LibraryTechnology::OpenVr
                 | LibraryTechnology::XiphVorbis
         )
-        .then(|| crate::inspect_pe(file))
-        .flatten();
-        let observed_version = inspection
-            .as_ref()
-            .map(|inspection| inspection.version.clone());
-        let Some(metadata) =
-            try_read_detected_file_metadata(file, &file_path, cache, observed_version)?
-        else {
-            return Ok(None);
-        };
+        .then_some(&metadata.pe);
 
-        let runtime_target =
-            runtime_target_from_inspection(classification.technology, inspection.as_ref());
+        let runtime_target = runtime_target_from_inspection(classification.technology, inspection);
         let pe_compatibility = matches!(
             classification.technology,
             LibraryTechnology::OpenVr | LibraryTechnology::XiphVorbis
         )
-        .then(|| inspection.as_ref()?.compatibility_profile())
+        .then(|| inspection?.compatibility_profile())
         .flatten();
 
         Ok(Some(DetectedLibraryFile::from_parts(

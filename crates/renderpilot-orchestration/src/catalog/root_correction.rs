@@ -286,7 +286,7 @@ mod tests {
         GameRuntime, InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, PathRef,
         Platform, RootAuthority, Sha256Hash, Swappability,
     };
-    use renderpilot_storage_sqlite::{PendingFileMutationRow, PendingFileMutationState};
+    use renderpilot_storage_sqlite::BeginFileMutationPreparation;
 
     use super::{
         RootCorrectionBlockerKind, RootCorrectionCleanupAction, RootCorrectionStatus, assess,
@@ -501,13 +501,12 @@ mod tests {
         fixture
             .context
             .storage()
-            .prepare_file_mutation(&PendingFileMutationRow {
+            .begin_file_mutation_preparation(&BeginFileMutationPreparation {
                 id: "mutation:pending".to_owned(),
                 game_id: fixture.game.id().clone(),
                 feature: "test".to_owned(),
                 subject_id: None,
-                state: PendingFileMutationState::Preparing,
-                manifest_json: "{}".to_owned(),
+                initial_manifest_json: "{}".to_owned(),
             })
             .expect("pending mutation");
         fixture

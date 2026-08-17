@@ -6,45 +6,8 @@ use std::path::{Path, PathBuf};
 use renderpilot_application::AppResult;
 use renderpilot_domain::{GameInstallation, PathRef};
 
-use crate::error::detection_error;
-use crate::file_metadata::FileHashCache;
-
 use super::DetectedLibraryFile;
-
-/// Returns cached file paths that lexically belong under `root`.
-///
-/// Existence is **not** verified here. [`crate::file_metadata::try_read_detected_file_metadata`]
-/// returns `Ok(None)` for missing files (stale cache entries), so those paths
-/// are skipped without failing the whole scan.
-pub(super) fn cached_files_under_root(cache: &FileHashCache, root: &Path) -> Vec<PathBuf> {
-    let scope = normalized_scope_prefix(root);
-
-    sorted_unique_paths(
-        cache
-            .keys()
-            .map(PathBuf::from)
-            .filter(|path| path_in_scope(path, &scope)),
-    )
-}
-
-fn path_in_scope(path: &Path, scope: &str) -> bool {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-
-    normalized == scope
-        || normalized
-            .strip_prefix(scope)
-            .is_some_and(|suffix| suffix.starts_with('/'))
-}
-
-fn normalized_scope_prefix(root: &Path) -> String {
-    let normalized = root.to_string_lossy().replace('\\', "/");
-
-    if normalized.ends_with('/') && normalized.len() > 1 {
-        normalized.trim_end_matches('/').to_owned()
-    } else {
-        normalized
-    }
-}
+use crate::error::detection_error;
 
 pub(super) fn sorted_unique_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
     let mut paths: Vec<_> = paths.into_iter().collect();

@@ -167,6 +167,66 @@ fn schema_15_to_current_runs_the_wire_protocol_and_writes_exact_path_tags() {
 }
 
 #[test]
+fn released_v16_catalog_migrates_through_the_app_session_fail_closed() {
+    let root = temp_root("schema-16-current");
+    let paths = portable_paths(root.path());
+    create_data_root(&paths);
+    catalog_with_version(&paths.catalog_db_path, 16);
+    Connection::open(&paths.catalog_db_path)
+        .expect("open released v16 catalog")
+        .execute(
+            "INSERT INTO games (id, title, launcher, platform, runtime, install_path, install_key, root_authority, executable_candidates_json)
+             VALUES (?1, ?2, 'manual', 'windows', 'native', ?3, ?4, 'user_confirmed', '[]')",
+            (
+                "v16-game",
+                "V16 game",
+                "C:/Games/V16",
+                "c:/games/v16",
+            ),
+        )
+        .expect("insert released v16 game");
+    let transaction = hash('5');
+
+    let report = migrate_through_protocol(&paths, 16, &transaction)
+        .expect("migrate released v16 through the authenticated App session");
+    assert_eq!(report.source_version, 16);
+    assert_eq!(report.target_version, PORTABLE_SCHEMA_VERSION);
+    assert_eq!(
+        user_version(&paths.catalog_db_path),
+        PORTABLE_SCHEMA_VERSION
+    );
+
+    let migrated = Connection::open(&paths.catalog_db_path).expect("open migrated v17 catalog");
+    let (readiness, epoch): (String, i64) = migrated
+        .query_row(
+            "SELECT readiness, authority_epoch FROM catalog_scan_authority WHERE game_id = 'v16-game'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read fail-closed authority seeded for the v16 game");
+    assert_eq!(readiness, "never_completed");
+    assert_eq!(epoch, 0);
+    for obsolete in ["file_hash_cache", "scan_source_checkpoints"] {
+        let exists: bool = migrated
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+                [obsolete],
+                |row| row.get(0),
+            )
+            .expect("inspect obsolete v16 scan table");
+        assert!(!exists, "{obsolete} must not survive the v17 migration");
+    }
+    drop(migrated);
+
+    let snapshot_catalog = paths
+        .update_root
+        .join("transactions")
+        .join(transaction)
+        .join("snapshot/catalog.db");
+    assert_eq!(user_version(&snapshot_catalog), 16);
+}
+
+#[test]
 fn released_v4_catalog_migrates_through_the_supervisor_boundary() {
     let root = temp_root("schema-4-current");
     let paths = portable_paths(root.path());

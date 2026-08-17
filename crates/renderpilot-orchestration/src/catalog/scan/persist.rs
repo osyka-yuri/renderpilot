@@ -2,13 +2,14 @@
 
 use std::collections::HashSet;
 
-use renderpilot_detection::DetectedLibraryFile;
+use renderpilot_detection::{DetectedLibraryFile, FILE_OBSERVATION_ALGORITHM_REVISION};
 use renderpilot_domain::{
     GameId, GameInstallation, InstallKey, Launcher, LibraryComponent, RootAuthority,
     normalized_path_key,
 };
 use renderpilot_storage_sqlite::{
-    ComponentRekey, ConsolidationPlan, ConsolidationSource, ScanWriteUnit, SqliteStorage,
+    AuthorityCas, CatalogReadiness, CompleteScanWriteUnit, ComponentRekey, ConsolidationPlan,
+    ConsolidationSource, ObservationOwner, SqliteStorage, StoredFileObservation,
 };
 
 use crate::ServiceError;
@@ -24,6 +25,10 @@ pub(super) struct PersistScanRequest<'a> {
     pub game: GameInstallation,
     pub libraries: Vec<DetectedLibraryFile>,
     pub components: &'a [LibraryComponent],
+    /// Readiness captured before the stable filesystem traversal.
+    pub initial_readiness: CatalogReadiness,
+    /// Compare-and-swap token captured with `initial_readiness`.
+    pub authority: AuthorityCas,
     pub prune_empty_operations: bool,
     pub root_correction_recovery_bundle_path: Option<String>,
     pub prefetched_catalog_index: Option<&'a CatalogInstallIndex>,
@@ -38,6 +43,8 @@ pub(super) fn persist_scan_result(
         game,
         libraries,
         components,
+        initial_readiness,
+        authority,
         prune_empty_operations,
         root_correction_recovery_bundle_path,
         prefetched_catalog_index,
@@ -55,6 +62,7 @@ pub(super) fn persist_scan_result(
     let existed = catalog_index.contains_install_path_str(game.install_path().as_str());
     let game = reconcile_game_with_catalog(catalog_index, game);
     let artifacts = build_library_artifacts(game.id(), &libraries)?;
+    let observations = build_game_observations(game.id(), &libraries)?;
     let mut changed = catalog_index.card_facts_changed(&game, components, &artifacts);
     let (consolidation_plan, retained_candidate_game_ids) =
         prove_consolidation_plan(catalog_index, &game, components, consolidation_candidates);
@@ -88,12 +96,14 @@ pub(super) fn persist_scan_result(
             .map(|path| path.to_string_lossy().to_string()),
         ..ScanConsolidationOutcome::default()
     };
-    if changed || !consolidation_plan.is_empty() {
-        let report = storage.save_install_scan_with_consolidation(
-            ScanWriteUnit {
+    if changed || !consolidation_plan.is_empty() || initial_readiness.ready_projection().is_none() {
+        let report = storage.save_complete_install_scan_with_consolidation(
+            CompleteScanWriteUnit {
                 game: &game,
                 components,
                 artifacts: &artifacts,
+                observations: &observations,
+                authority,
                 prune_empty_operations,
             },
             &consolidation_plan,
@@ -111,6 +121,9 @@ pub(super) fn persist_scan_result(
                 );
             }
         }
+    }
+    if !changed && consolidation_plan.is_empty() && initial_readiness.ready_projection().is_some() {
+        storage.replace_complete_game_observations(game.id(), &observations, authority)?;
     }
 
     let generation_before_recovery = storage.catalog_generation();
@@ -130,6 +143,48 @@ pub(super) fn persist_scan_result(
             CatalogScanChange::Added
         },
     })
+}
+
+fn build_game_observations(
+    game_id: &GameId,
+    libraries: &[DetectedLibraryFile],
+) -> Result<Vec<StoredFileObservation>, ServiceError> {
+    libraries
+        .iter()
+        .filter_map(|library| {
+            library
+                .observation()
+                .map(|observation| (library, observation))
+        })
+        .map(|(library, observation)| {
+            let runtime_json = library
+                .runtime_target()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|error| ServiceError::command_failed(error.to_string()))?;
+            let pe_json = library
+                .pe_compatibility()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|error| ServiceError::command_failed(error.to_string()))?;
+            Ok(StoredFileObservation {
+                owner: ObservationOwner::Game(game_id.clone()),
+                normalized_path: observation.path.clone(),
+                identity_kind: observation.identity_kind.clone(),
+                object_identity: observation.object_identity.clone(),
+                change_token: observation.change_token.clone(),
+                size: observation.size,
+                algorithm_revision: u32::from(FILE_OBSERVATION_ALGORITHM_REVISION),
+                sha256: observation.sha256.clone(),
+                version_observed: true,
+                version: library.version().cloned(),
+                runtime_observed: true,
+                runtime_json,
+                pe_observed: true,
+                pe_json,
+            })
+        })
+        .collect()
 }
 
 fn prove_consolidation_plan(

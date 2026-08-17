@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use renderpilot_storage_sqlite::PendingFileMutationRow;
+use renderpilot_storage_sqlite::{PendingFileMutationRow, PreparedRestoreFence};
 use serde::{Deserialize, Serialize};
 
 use crate::ServiceError;
@@ -42,7 +42,11 @@ pub(super) fn deserialize_manifest(
     })
 }
 
-pub(super) fn restore_manifest(manifest: &FileMutationManifest) -> Result<(), ServiceError> {
+/// Restores only after storage minted a fence for this exact Prepared row.
+pub(super) fn restore_manifest(
+    manifest: &FileMutationManifest,
+    _fence: &PreparedRestoreFence,
+) -> Result<(), ServiceError> {
     for before in manifest.snapshots.iter().rev() {
         let path = Path::new(&before.path);
         match &before.snapshot {

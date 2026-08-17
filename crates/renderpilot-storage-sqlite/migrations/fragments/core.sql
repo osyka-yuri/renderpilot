@@ -362,36 +362,6 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_settings_updated_at
     ON settings(updated_at DESC);
 
--- File hash cache
-CREATE TABLE IF NOT EXISTS file_hash_cache (
-    path        TEXT    PRIMARY KEY NOT NULL,
-    size        INTEGER NOT NULL,
-    modified_at INTEGER NOT NULL,
-    sha256      TEXT    NOT NULL,
-    version     TEXT,
-    created_at  INTEGER NOT NULL DEFAULT (
-        CAST(unixepoch('subsec') * 1000 AS INTEGER)
-    ),
-    updated_at  INTEGER NOT NULL DEFAULT (
-        CAST(unixepoch('subsec') * 1000 AS INTEGER)
-    ),
-
-    CHECK (length(trim(path)) > 0),
-    CHECK (instr(path, char(0)) = 0),
-    CHECK (instr(path, '\') = 0),
-    CHECK (size >= 0),
-    CHECK (modified_at >= 0),
-    CHECK (length(sha256) = 64),
-    CHECK (lower(sha256) = sha256),
-    CHECK (sha256 NOT GLOB '*[^0-9a-f]*'),
-    CHECK (version IS NULL OR length(trim(version)) > 0),
-    CHECK (created_at >= 0),
-    CHECK (updated_at >= created_at)
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_file_hash_cache_updated_at
-    ON file_hash_cache(updated_at DESC);
-
 -- NVAPI executable overrides + setting baselines
 CREATE TABLE IF NOT EXISTS nvapi_executable_overrides (
     game_id           TEXT    PRIMARY KEY NOT NULL,
@@ -579,19 +549,6 @@ BEGIN
            OLD.updated_at + 1
        )
      WHERE key = NEW.key;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_file_hash_cache_touch_updated_at
-AFTER UPDATE ON file_hash_cache
-FOR EACH ROW
-WHEN NEW.updated_at = OLD.updated_at
-BEGIN
-    UPDATE file_hash_cache
-       SET updated_at = max(
-           CAST(unixepoch('subsec') * 1000 AS INTEGER),
-           OLD.updated_at + 1
-       )
-     WHERE path = NEW.path;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_nvapi_executable_overrides_touch_updated_at

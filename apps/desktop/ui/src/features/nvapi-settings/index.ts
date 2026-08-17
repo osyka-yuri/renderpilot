@@ -19,6 +19,7 @@ export {
 // Types
 export type {
   BaselineDto,
+  CatalogReadiness,
   DllInfoDto,
   DlssIndicatorState,
   EffectiveExecutable,

@@ -318,9 +318,13 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': '還原初始值',
   'gameDetails.nvapi.alreadyBaseline': '已處於初始值',
   'gameDetails.nvapi.noBaseline': '未儲存初始值',
+  'gameDetails.nvapi.versionUnavailable': 'DLSS 版本無法使用',
 
   'gameDetails.nvapi.warning.noDll': '在安裝目錄中未偵測到 DLSS DLL。',
   'gameDetails.nvapi.warning.noManifest': '清單中沒有該 DLL 版本的資料。',
+  'gameDetails.nvapi.warning.dllVersionUnknown': '已找到 DLSS DLL，但其版本無法使用。',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    '遊戲目錄尚未就緒。變更依賴 DLL 的 NVIDIA 設定前，請重新掃描遊戲。',
   'gameDetails.nvapi.warning.noExecutable': '找不到此遊戲的執行檔。',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI 無法使用。',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI 初始化失敗。',
@@ -517,6 +521,7 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'user_message.rollback_also_failed':
     '操作失敗，且 RenderPilot 無法完整還原先前的檔案狀態。重試前請檢查遊戲檔案。',
   'user_message.access_denied': '存取遭拒。請檢查權限後再試。',
+  'user_message.nvapi_catalog_not_ready': '變更依賴 DLL 的 NVIDIA 設定前，請重新掃描遊戲。',
 
   'suggested_action.refresh_games': '重新整理遊戲清單並重試。',
   'suggested_action.reload_game_details': '重新整理遊戲詳情並重試。',

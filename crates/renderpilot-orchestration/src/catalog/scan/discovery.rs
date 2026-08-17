@@ -58,25 +58,23 @@ const AUTO_SCAN_MAX_WORKERS: usize = 4;
 ///
 /// Performance: a single [`AutoScanBatch`] is opened up-front and reused for
 /// every install directory. This avoids per-game SQLite open / WAL pragma /
-/// migrations, per-game `SELECT FROM file_hash_cache`, and per-game
-/// pattern-detector construction.
+/// migrations and per-game pattern-detector construction. Each installation
+/// still performs an authoritative traversal; launcher checkpoints never skip
+/// scan detection.
 pub fn scan_auto_libraries(context: &crate::Context) -> AutoScanDiscoveryResult {
-    scan_auto_libraries_with_checkpoints(context, false)
+    scan_auto_libraries_impl(context)
 }
 
-/// Background variant that may skip Steam installs whose authoritative
-/// appmanifest fingerprint is unchanged. All other sources remain full scans.
+/// Background variant of [`scan_auto_libraries`]. It retains the same
+/// authoritative traversal and only differs in its caller's scheduling.
 pub fn scan_auto_libraries_background(context: &crate::Context) -> AutoScanDiscoveryResult {
-    scan_auto_libraries_with_checkpoints(context, true)
+    scan_auto_libraries_impl(context)
 }
 
-fn scan_auto_libraries_with_checkpoints(
-    context: &crate::Context,
-    allow_checkpoint_skip: bool,
-) -> AutoScanDiscoveryResult {
+fn scan_auto_libraries_impl(context: &crate::Context) -> AutoScanDiscoveryResult {
     let _scan_guard = context.catalog_scan_guard();
     let (library_root_keys, authoritative_root_keys, install_path_keys, installs) =
-        discover_normalized_auto_scan_inputs(allow_checkpoint_skip);
+        discover_normalized_auto_scan_inputs();
 
     let mut scan = AutoScanAccumulator::default();
 
@@ -149,12 +147,10 @@ fn refresh_confirmed_manual_roots(context: &crate::Context, scan: &mut AutoScanA
 #[derive(Debug)]
 struct AutoScanInstall {
     install: renderpilot_platform_windows::game_libraries::DiscoveredInstall,
-    allow_checkpoint_skip: bool,
 }
 
-fn discover_normalized_auto_scan_inputs(
-    use_checkpoints: bool,
-) -> (Vec<String>, Vec<String>, Vec<String>, Vec<AutoScanInstall>) {
+fn discover_normalized_auto_scan_inputs()
+-> (Vec<String>, Vec<String>, Vec<String>, Vec<AutoScanInstall>) {
     use renderpilot_platform_windows::game_libraries::DiscoveredGameSources;
 
     let DiscoveredGameSources {
@@ -177,10 +173,7 @@ fn discover_normalized_auto_scan_inputs(
         .collect::<Vec<_>>();
     let installs = installs
         .into_iter()
-        .map(|install| AutoScanInstall {
-            allow_checkpoint_skip: use_checkpoints,
-            install,
-        })
+        .map(|install| AutoScanInstall { install })
         .collect();
 
     (
@@ -197,9 +190,8 @@ fn discover_normalized_auto_scan_inputs(
 /// scan calls into the same [`AutoScanBatch`], whose `SqliteStorage` already
 /// serialises concurrent writes through its internal `Mutex<Connection>`.
 /// File walking and SHA-256 work fan out across workers; the only contention
-/// points are (1) the SQLite mutex during `save_scan_result` /
-/// `save_file_hash_cache`, and (2) the result accumulator, both held briefly
-/// per scan.
+/// points are (1) the SQLite mutex during the short CAS publication, and (2)
+/// the result accumulator, both held briefly per scan.
 fn scan_install_paths_in_parallel(
     batch: &AutoScanBatch<'_>,
     installs: &[AutoScanInstall],
@@ -222,8 +214,7 @@ fn scan_install_paths_in_parallel(
                         break;
                     };
 
-                    let outcome =
-                        scan_auto_in_batch(batch, &install.install, install.allow_checkpoint_skip);
+                    let outcome = scan_auto_in_batch(batch, &install.install);
 
                     // Held only for the few microseconds it takes to record
                     // the per-scan outcome. The heavy work (file walk,
@@ -375,11 +366,14 @@ fn normalized_path_string(path: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::{
         AUTO_SCAN_MAX_WORKERS, AutoScanAccumulator, ScanErrorOutput,
-        effective_worker_count_with_cpu,
+        effective_worker_count_with_cpu, refresh_confirmed_manual_roots,
     };
-    use renderpilot_domain::GameId;
+    use renderpilot_domain::{GameId, RootAuthority};
+    use renderpilot_nvapi::{DlssDllKind, DlssVersion};
 
     #[test]
     fn worker_count_is_bounded_by_install_count_cpu_and_cap() {
@@ -400,7 +394,7 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
 
         assert_send_sync::<crate::Context>();
-        assert_send_sync::<renderpilot_detection::FileHashCache>();
+        assert_send_sync::<renderpilot_detection::FileObservation>();
         assert_send_sync::<renderpilot_detection::LibraryPatternComponentDetector>();
         assert_send_sync::<crate::catalog::auto_scan::AutoScanBatch<'_>>();
     }
@@ -440,5 +434,52 @@ mod tests {
         assert_eq!(output.delta.updated_game_ids.len(), 1);
         assert_eq!(output.errors[0].root, "a");
         assert_eq!(output.errors[1].root, "z");
+    }
+
+    #[test]
+    fn automatic_confirmed_root_refresh_traverses_after_external_replacement_without_input_change()
+    {
+        let root = tempfile::tempdir().expect("game root");
+        let dll = root.path().join("nvngx_dlss.dll");
+        fs::write(
+            &dll,
+            crate::addons::test_support::build_nvidia_dlss_pe([1, 0, 0, 0]),
+        )
+        .expect("write A");
+        let context = crate::Context::from_storage(
+            renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("storage"),
+        );
+        let game_id = GameId::new("manual:automatic-confirmed-root").expect("game id");
+        super::super::scan_explicit_install(
+            &context,
+            root.path().to_path_buf(),
+            game_id.clone(),
+            RootAuthority::UserConfirmed,
+            None,
+            super::super::ExplicitRootChange::Unchanged,
+            &[],
+        )
+        .expect("initial scan");
+
+        fs::write(
+            &dll,
+            crate::addons::test_support::build_nvidia_dlss_pe([2, 0, 0, 0]),
+        )
+        .expect("external replacement");
+        let mut scan = AutoScanAccumulator::default();
+        refresh_confirmed_manual_roots(&context, &mut scan);
+
+        assert!(scan.errors.is_empty());
+        assert_eq!(scan.delta.updated_game_ids, vec![game_id.clone()]);
+        let setting_context = crate::nvapi::resolve::build_setting_context_with_context(
+            &context,
+            root.path(),
+            game_id.as_str(),
+        )
+        .expect("catalog projection after automatic refresh");
+        assert_eq!(
+            setting_context.dlls[&DlssDllKind::Sr].version,
+            Some(DlssVersion::new(2, 0, 0, 0))
+        );
     }
 }

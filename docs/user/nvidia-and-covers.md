@@ -8,6 +8,8 @@ On supported NVIDIA systems, RenderPilot can read and manage driver-level settin
 
 Review the selected executable and current value before applying an override. Driver updates, NVIDIA profile changes, or game updates may alter effective behavior. Return a setting to its default when troubleshooting differences between RenderPilot, the game menu, and the driver.
 
+RenderPilot reads DLL availability and version details from its game catalog rather than scanning the game folder during an NVIDIA settings request. A background catalog refresh normally keeps this current; you can also use **Rescan game** after repairing or changing game files. The UI distinguishes three cases: **DLL not found** means a completed scan found no matching DLL, **version unavailable** means a DLL was found but its version resource could not be read, and **catalog not ready** means the game has not completed a scan or its prior scan was invalidated. While the catalog is not ready, live NVIDIA driver values remain visible, but DLL-dependent changes and reverts stay disabled until a rescan completes.
+
 The NVIDIA DLSS indicator can also be toggled to display the active upscaler information in a supported game. It is a diagnostic overlay, not a compatibility test, and still depends on the driver, game, and installed DLSS component.
 
 ## Covers

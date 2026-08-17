@@ -12,6 +12,7 @@
   import { Card, CardContent, CardDescription, CardHeader, CardTitle, ItemGroup } from '@shared/ui';
   import { t } from '@shared/i18n';
   import ComponentVersionRow from './ComponentVersionRow.svelte';
+  import { displayDllLabel, isDllDependentCatalogBlocked } from './DlssComponentCard.model';
 
   type Props = {
     gameId: string;
@@ -42,9 +43,18 @@
   const settings = $derived(nvidia.settingsForFamily(family));
   const warnings = $derived(nvidia.familyWarnings(family));
   const dllInfo = $derived(nvidia.dllInfoForFamily(family));
+  const dllLabel = $derived(
+    dllInfo === null ? null : displayDllLabel(dllInfo, t('gameDetails.nvapi.versionUnavailable')),
+  );
 
   function rowDisabled(state: SettingStateResponse): boolean {
-    return busy || nvidia.busy || nvidia.isPending(state.setting_key) || !state.has_profile_for_exe;
+    return (
+      busy ||
+      nvidia.busy ||
+      nvidia.isPending(state.setting_key) ||
+      !state.has_profile_for_exe ||
+      isDllDependentCatalogBlocked(state)
+    );
   }
 </script>
 
@@ -62,9 +72,11 @@
       {#if dllInfo}
         <div class="shrink-0 text-right text-xs text-muted-foreground">
           <div class="font-medium text-foreground">
-            {dllInfo.manifest_label ?? `DLSS ${dllInfo.version}`}
+            {dllLabel}
           </div>
-          <div>v{dllInfo.version}</div>
+          {#if dllInfo.version !== null}
+            <div>v{dllInfo.version}</div>
+          {/if}
         </div>
       {/if}
     </div>

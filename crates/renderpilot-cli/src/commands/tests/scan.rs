@@ -475,5 +475,5 @@ fn seed_legacy_child(
         PathRef::new(path_string(component_path)).expect("component path"),
     ));
     fixture.store_game(&game);
-    fixture.store_components(game.id(), &[component]);
+    fixture.store_complete_components(game.id(), &[component]);
 }

@@ -14,7 +14,7 @@ fn list_operations_renders_item_counts_from_aggregate_entries() {
     let game = sample_game("manual:C:/Games/GameA", "Game A", "C:/Games/GameA");
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[
             sample_component(

@@ -5,7 +5,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use renderpilot_storage_sqlite::{PendingFileMutationRow, PendingFileMutationState, SqliteStorage};
+use renderpilot_domain::GameId;
+use renderpilot_storage_sqlite::{BeginFileMutationPreparation, SqliteStorage};
 
 use super::manifest::{
     FileBeforeSnapshot, FileMutationManifest, MANIFEST_FORMAT_VERSION, cleanup_manifest,
@@ -19,6 +20,8 @@ use crate::{Context, ServiceError};
 /// (game directory and optional external add-on roots).
 pub(crate) struct DurableFileTransaction {
     id: String,
+    game_id: GameId,
+    transaction_root: PathBuf,
     manifest: FileMutationManifest,
 }
 
@@ -51,13 +54,12 @@ impl DurableFileTransaction {
         let initial_json = serialize_manifest(&initial_manifest)?;
         context
             .storage()
-            .prepare_file_mutation(&PendingFileMutationRow {
+            .begin_file_mutation_preparation(&BeginFileMutationPreparation {
                 id: id.clone(),
                 game_id: guard.game_id().clone(),
                 feature: feature.to_owned(),
                 subject_id: subject_id.map(str::to_owned),
-                state: PendingFileMutationState::Preparing,
-                manifest_json: initial_json,
+                initial_manifest_json: initial_json,
             })?;
 
         // Scoped so preparation errors run cleanup before returning.
@@ -75,6 +77,8 @@ impl DurableFileTransaction {
                 .finish_preparing_file_mutation(&id, &manifest_json)?;
             Ok(Self {
                 id: id.clone(),
+                game_id: guard.game_id().clone(),
+                transaction_root: context.file_mutation_root().to_path_buf(),
                 manifest,
             })
         })();
@@ -95,12 +99,14 @@ impl DurableFileTransaction {
         &self.id
     }
 
-    /// Restores the exact before-state. The prepared row is deleted before
-    /// best-effort directory cleanup, so recovery never misreads a completed
-    /// rollback as a successful feature commit.
+    /// Restores the exact before-state after durably fencing catalog authority.
+    /// A restore error deliberately retains both the Prepared row and matching
+    /// invalidation token for retry/recovery.
     pub(crate) fn rollback(self, storage: &SqliteStorage) -> Result<(), ServiceError> {
-        restore_manifest(&self.manifest)?;
-        storage.delete_pending_file_mutation(&self.id)?;
+        super::recover::validate_manifest_scope(&self.manifest, &self.transaction_root)?;
+        let fence = storage.fence_prepared_file_mutation_restore(&self.game_id, &self.id)?;
+        restore_manifest(&self.manifest, &fence)?;
+        storage.complete_prepared_file_mutation_restore(&fence)?;
         if let Err(error) = cleanup_manifest(&self.manifest) {
             log::warn!("rolled-back file transaction left cleanup for the orphan sweep: {error}");
         }
@@ -110,8 +116,9 @@ impl DurableFileTransaction {
     /// Cleans snapshots after the feature commit atomically marked this row
     /// `Committed`.
     pub(crate) fn cleanup_committed(self, storage: &SqliteStorage) -> Result<(), ServiceError> {
+        super::recover::validate_manifest_scope(&self.manifest, &self.transaction_root)?;
         cleanup_manifest(&self.manifest)?;
-        storage.delete_pending_file_mutation(&self.id)?;
+        storage.cleanup_committed_file_mutation(&self.id)?;
         Ok(())
     }
 
@@ -253,8 +260,9 @@ fn cleanup_preparing(
     id: &str,
     transaction_dir: &Path,
 ) -> Result<(), ServiceError> {
-    storage.delete_pending_file_mutation(id)?;
-    super::remove_dir_if_exists(transaction_dir)
+    super::remove_dir_if_exists(transaction_dir)?;
+    storage.abandon_file_mutation_preparation(id)?;
+    Ok(())
 }
 
 fn validate_required_text(field: &str, value: &str) -> Result<(), ServiceError> {

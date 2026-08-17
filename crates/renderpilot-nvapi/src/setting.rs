@@ -160,13 +160,31 @@ pub struct NvapiValueOption {
 // Context + state
 // -----------------------------------------------------------------------------
 
+/// Readiness of the catalog projection supplied to an NVAPI operation.
+///
+/// This deliberately records whether a per-game DLL projection is authoritative.
+/// An empty ready projection means no DLL was found; an unready projection must
+/// never be treated as an empty one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogReadiness {
+    /// The global driver profile has no game catalog dependency.
+    NotApplicable,
+    /// A completed catalog scan produced the current per-game projection.
+    Ready,
+    /// The game has never completed a scan or its projection was invalidated.
+    NotReady,
+}
+
 /// DLL discovered in a game install directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DllInfo {
     /// Absolute path to the DLL file.
     pub path: PathBuf,
-    /// Version read from the PE `VS_VERSION_INFO` resource.
-    pub version: DlssVersion,
+    /// Version read from the PE `VS_VERSION_INFO` resource, when available.
+    ///
+    /// `None` means the DLL is present in a ready catalog projection but its
+    /// version resource could not be read. It is not evidence of DLL absence.
+    pub version: Option<DlssVersion>,
 }
 
 /// Per-operation context built once at the start of a CLI call and
@@ -179,6 +197,8 @@ pub struct SettingContext {
     pub game_install_dir: PathBuf,
     /// DLLs detected in the install directory, keyed by family.
     pub dlls: HashMap<DlssDllKind, DllInfo>,
+    /// Whether the DLL map is an authoritative completed catalog projection.
+    pub catalog_readiness: CatalogReadiness,
     /// Executable file name (basename only) that NVAPI should be
     /// queried for. `None` if no executable could be resolved.
     pub effective_exe: Option<String>,

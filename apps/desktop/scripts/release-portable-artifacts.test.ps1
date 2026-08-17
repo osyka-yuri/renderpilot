@@ -80,28 +80,28 @@ try {
             $runtimeRelease.SupervisorCapability -eq 3 -and
             $runtimeRelease.AppSessionProtocol -ceq "renderpilot-portable-app-session-v2" -and
             $runtimeRelease.MinimumSchema -eq 4 -and
-            $runtimeRelease.CurrentSchema -eq 16
+            $runtimeRelease.CurrentSchema -eq 17
         ) `
         -Description "PowerShell must load the valid shared portable runtime release contract"
 
     $validContractJson = @'
-{"contractVersion":1,"supervisorCapability":3,"appSessionProtocol":"renderpilot-portable-app-session-v2","minimumPortableSchema":4,"currentSchema":16}
+{"contractVersion":1,"supervisorCapability":3,"appSessionProtocol":"renderpilot-portable-app-session-v2","minimumPortableSchema":4,"currentSchema":17}
 '@
     $parsedContract = Get-RenderPilotPortableRuntimeReleaseContractFromJson -Json $validContractJson
-    Assert-RenderPilotEqual -Actual $parsedContract.CurrentSchema -Expected 16 `
+    Assert-RenderPilotEqual -Actual $parsedContract.CurrentSchema -Expected 17 `
         -Description "PowerShell contract parser must accept the native schema epoch"
     foreach ($invalidContractJson in @(
         $validContractJson.Replace('"contractVersion":1', '"contractVersion":1.0'),
         $validContractJson.Replace('"supervisorCapability":3', '"supervisorCapability":3e0'),
         $validContractJson.Replace('"supervisorCapability":3', '"supervisorCapability":2'),
         $validContractJson.Replace('"appSessionProtocol":"renderpilot-portable-app-session-v2"', '"appSessionProtocol":"renderpilot-portable-app-session-v1"'),
-        $validContractJson.Replace('"currentSchema":16', '"currentSchema":17'),
+        $validContractJson.Replace('"currentSchema":17', '"currentSchema":18'),
         $validContractJson.Replace('"minimumPortableSchema":4', '"minimumPortableSchema":"4"'),
         $validContractJson.Replace('"minimumPortableSchema":4,', ''),
-        $validContractJson.Replace('"currentSchema":16', '"currentSchema":16,"unknown":1'),
-        $validContractJson.Replace('"currentSchema":16', '"currentSchema":15,"currentSchema":16'),
-        $validContractJson.Replace('"currentSchema":16', '"\u0063urrentSchema":15,"currentSchema":16'),
-        $validContractJson.Replace('"currentSchema":16', '"CurrentSchema":16')
+        $validContractJson.Replace('"currentSchema":17', '"currentSchema":17,"unknown":1'),
+        $validContractJson.Replace('"currentSchema":17', '"currentSchema":16,"currentSchema":17'),
+        $validContractJson.Replace('"currentSchema":17', '"\u0063urrentSchema":16,"currentSchema":17'),
+        $validContractJson.Replace('"currentSchema":17', '"CurrentSchema":17')
     )) {
         Assert-RenderPilotThrows -Description "PowerShell contract parser must reject invalid wire input" -Action {
             Get-RenderPilotPortableRuntimeReleaseContractFromJson -Json $invalidContractJson | Out-Null

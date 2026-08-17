@@ -26,6 +26,7 @@ const CATALOG_PROJECTION_TABLES: &[&str] = &[
     "installed_addons",
     "profile_addon_capabilities",
     "library_artifacts",
+    "catalog_scan_authority",
 ];
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

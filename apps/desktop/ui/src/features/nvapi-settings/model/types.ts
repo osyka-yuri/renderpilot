@@ -61,14 +61,19 @@ export type BaselineDto = {
 
 export type DllInfoDto = {
   kind: string;
-  version: string;
+  version: string | null;
   path: string;
   manifest_label: string | null;
 };
 
+/** Authority of the catalog DLL projection supplied for this setting. */
+export type CatalogReadiness = 'notApplicable' | 'ready' | 'notReady';
+
 export type NvapiWarning =
   | 'noDll'
   | 'noManifest'
+  | 'dllVersionUnknown'
+  | 'catalogNotReady'
   | 'noExecutable'
   | 'nvapiUnavailable'
   | 'nvapiInitFailed'
@@ -78,6 +83,7 @@ export type SettingStateResponse = {
   setting_key: string;
   setting_label: string;
   value_type: string;
+  dll_kind: string | null;
   family: string | null;
   category: string | null;
   description: string | null;
@@ -91,6 +97,7 @@ export type SettingStateResponse = {
   effective_exe_source: 'auto' | 'override' | null;
   has_profile_for_exe: boolean;
   nvapi_available: boolean;
+  catalog_readiness: CatalogReadiness;
   available_values: ValueOption[];
   dll_info: DllInfoDto | null;
   warnings: NvapiWarning[];

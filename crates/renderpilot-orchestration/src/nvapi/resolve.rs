@@ -4,7 +4,8 @@ use crate::ServiceError;
 use crate::dlss::installed::installed_dlls_from_components;
 use renderpilot_application::{ComponentRepository, GameRepository};
 use renderpilot_domain::GameId;
-use renderpilot_nvapi::setting::SettingContext;
+use renderpilot_nvapi::setting::{CatalogReadiness as NvapiCatalogReadiness, SettingContext};
+use renderpilot_storage_sqlite::CatalogReadiness;
 
 #[cfg(windows)]
 use renderpilot_platform_windows::{ExecutableCandidate, detect_executable_candidates};
@@ -139,9 +140,11 @@ pub fn stored_override_path(
         .map(|row| PathBuf::from(row.selected_path)))
 }
 
-/// Builds the NVAPI [`SettingContext`] for a game: detected DLSS DLLs and
-/// effective executable, using an already-open storage connection.
-pub fn build_setting_context_with_context(
+/// Builds the NVAPI [`SettingContext`] for a game from the reconciled catalog
+/// projection and effective executable, using an already-open storage
+/// connection. An incomplete or invalidated catalog never projects its prior
+/// component rows as a DLL absence.
+pub(crate) fn build_setting_context_with_context(
     context: &crate::Context,
     install_dir: &Path,
     game_id: &str,
@@ -151,15 +154,29 @@ pub fn build_setting_context_with_context(
     let override_path = stored_override_path(context, game_id)?;
     let effective_exe = pick_effective_exe(install_dir, override_path.as_deref());
 
-    // Reuse the global catalog's scan instead of walking the install dir again:
-    // detection already found every DLSS DLL (to depth 12) and stored its version.
+    // Reuse only a completed global catalog projection instead of walking the
+    // install dir again. Invalidated and never-completed projections fail
+    // closed so stale component rows can never become a false `NoDll` result.
     let game = GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
-    let components = context.storage().list_components_for_game(&game)?;
-    let dlls = installed_dlls_from_components(&components);
+    let readiness = context.storage().catalog_readiness(&game)?;
+    let (catalog_readiness, dlls) = match readiness {
+        CatalogReadiness::Complete(_) => {
+            let components = context.storage().list_components_for_game(&game)?;
+            (
+                NvapiCatalogReadiness::Ready,
+                installed_dlls_from_components(&components, install_dir),
+            )
+        }
+        CatalogReadiness::NeverCompleted { .. } | CatalogReadiness::Invalidated { .. } => (
+            NvapiCatalogReadiness::NotReady,
+            std::collections::HashMap::new(),
+        ),
+    };
 
     Ok(SettingContext {
         game_install_dir: install_dir.to_path_buf(),
         dlls,
+        catalog_readiness,
         effective_exe,
     })
 }
@@ -169,10 +186,11 @@ pub fn build_setting_context_with_context(
 /// There is no game, executable, or install directory, so DLL detection is
 /// empty — which means per-version preset constraints are skipped and every
 /// catalog value is offered (a global setting cannot be tied to one game's DLL).
-pub fn global_setting_context() -> SettingContext {
+pub(crate) fn global_setting_context() -> SettingContext {
     SettingContext {
         game_install_dir: std::path::PathBuf::new(),
         dlls: std::collections::HashMap::new(),
+        catalog_readiness: NvapiCatalogReadiness::NotApplicable,
         effective_exe: None,
     }
 }
@@ -278,7 +296,7 @@ mod tests {
     };
     use renderpilot_storage_sqlite::SqliteStorage;
 
-    use super::{global_setting_context, set_executable_override};
+    use super::{NvapiCatalogReadiness, global_setting_context, set_executable_override};
 
     #[test]
     fn global_context_has_no_game_dll_or_exe() {
@@ -286,6 +304,7 @@ mod tests {
         // catalog value on the global profile; assert them at the source.
         let ctx = global_setting_context();
         assert!(ctx.dlls.is_empty());
+        assert_eq!(ctx.catalog_readiness, NvapiCatalogReadiness::NotApplicable);
         assert!(ctx.effective_exe.is_none());
         assert_eq!(ctx.game_install_dir.as_os_str().len(), 0);
     }

@@ -1,4 +1,4 @@
-use renderpilot_orchestration::application::InstalledAddonRepository;
+use renderpilot_orchestration::application::{GameRepository, InstalledAddonRepository};
 use renderpilot_orchestration::domain::{
     AddonKind, GameId, InstalledAddon, PathRef, TrackedSource, TrackedSourceRole,
 };
@@ -102,6 +102,21 @@ fn luma_uninstall_clears_the_record() {
             .get_installed_addon(&luma.game_id())
             .expect("query")
             .is_none()
+    );
+    assert!(
+        fixture
+            .storage()
+            .find_game(&luma.game_id())
+            .expect("game query")
+            .is_none(),
+        "orphan uninstall must not synthesize a catalog game"
+    );
+    assert!(
+        fixture
+            .storage()
+            .catalog_readiness(&luma.game_id())
+            .is_err(),
+        "orphan uninstall must not synthesize scan authority"
     );
 }
 

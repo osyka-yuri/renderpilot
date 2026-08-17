@@ -83,7 +83,7 @@ pub(super) fn store_single_file_fsr_component(
     version: &str,
     bytes: &[u8],
 ) {
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             FSR_COMPONENT_ID,
@@ -120,7 +120,7 @@ pub(super) fn store_written_fsr_bundle_component<'a>(
         .map(|(path, version, sha)| (path.as_str(), *version, sha.as_str()))
         .collect();
 
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_bundle_component(
             FSR_COMPONENT_ID,
@@ -171,7 +171,7 @@ pub(super) fn setup_applied_scenario(name: &str) -> AppliedScenario {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",

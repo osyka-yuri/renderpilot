@@ -10,15 +10,18 @@ mod repositories;
 mod schema;
 mod sqlite_clock;
 
-pub use repositories::file_hash_cache::FileHashCacheRow;
+#[cfg(test)]
+pub use repositories::ScanWriteUnit;
 pub use repositories::game_covers::{DeletedGameInfo, GameCoverRecord};
 pub use repositories::game_ui_state::GameUiStateRow;
 pub use repositories::{
+    AuthorityCas, BeginFileMutationPreparation, CatalogReadiness, CatalogReadyProjection,
     ComponentBaselineMutation, ComponentRekey, ConsolidatedScanWriteReport,
     ConsolidationConflictSummary, ConsolidationPlan, ConsolidationReport, ConsolidationSource,
-    GameMutationCommit, InstalledAddonMutation, PendingFileMutationRow, PendingFileMutationState,
+    GameMutationCommit, InstalledAddonMutation, ObservationOwner, PendingFileMutationRow,
+    PendingFileMutationState, PreparedRestoreFence, StoredFileObservation,
 };
-pub use repositories::{ScanWriteReport, ScanWriteUnit, SqliteStorage};
+pub use repositories::{CompleteScanWriteUnit, ScanWriteReport, SqliteStorage};
 pub use schema::portable_catalog::{
     PortableCatalogSchemaError, PortableCatalogSchemaErrorKind, PortableCatalogSchemaReport,
     PortableCatalogSchemaTransition, inspect_portable_catalog_schema,

@@ -427,9 +427,14 @@ export const en = defineSourceCatalog({
   'gameDetails.nvapi.restoreBaseline': 'Restore baseline',
   'gameDetails.nvapi.alreadyBaseline': 'Already at baseline',
   'gameDetails.nvapi.noBaseline': 'No baseline saved',
+  'gameDetails.nvapi.versionUnavailable': 'DLSS version unavailable',
 
   'gameDetails.nvapi.warning.noDll': 'No DLSS DLL detected in the install directory.',
   'gameDetails.nvapi.warning.noManifest': 'Manifest has no entry for this DLL version.',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'A DLSS DLL was found, but its version is unavailable.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'The game catalog is not ready. Rescan the game before changing DLL-dependent NVIDIA settings.',
   'gameDetails.nvapi.warning.noExecutable': 'No executable resolved for this game.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI unavailable.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI initialize failed.',
@@ -661,6 +666,8 @@ export const en = defineSourceCatalog({
   'user_message.stale_replacement_source':
     'This update could not be applied because the source file was replaced or modified outside RenderPilot. Please select the version again — a download may be needed.',
   'user_message.access_denied': 'Access was denied. Check your permissions and try again.',
+  'user_message.nvapi_catalog_not_ready':
+    'Rescan the game before changing DLL-dependent NVIDIA settings.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Refresh the games list and try again.',

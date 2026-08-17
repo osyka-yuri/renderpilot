@@ -11,4 +11,4 @@ mod operations;
 mod plan_swap;
 mod renodx;
 mod scan;
-mod scan_file_hash_cache;
+mod scan_file_observations;

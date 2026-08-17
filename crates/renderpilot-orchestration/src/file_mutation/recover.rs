@@ -30,11 +30,18 @@ pub(crate) fn recover_pending(
         match row.state {
             PendingFileMutationState::Preparing => {
                 cleanup_manifest(&manifest)?;
-                context.storage().delete_pending_file_mutation(&row.id)?;
+                context
+                    .storage()
+                    .abandon_file_mutation_preparation(&row.id)?;
             }
             PendingFileMutationState::Prepared => {
-                restore_manifest(&manifest)?;
-                context.storage().delete_pending_file_mutation(&row.id)?;
+                let fence = context
+                    .storage()
+                    .fence_prepared_file_mutation_restore(guard.game_id(), &row.id)?;
+                restore_manifest(&manifest, &fence)?;
+                context
+                    .storage()
+                    .complete_prepared_file_mutation_restore(&fence)?;
                 if let Err(error) = cleanup_manifest(&manifest) {
                     log::warn!(
                         "recovered file transaction {} left orphan cleanup: {error}",
@@ -44,14 +51,14 @@ pub(crate) fn recover_pending(
             }
             PendingFileMutationState::Committed => {
                 cleanup_manifest(&manifest)?;
-                context.storage().delete_pending_file_mutation(&row.id)?;
+                context.storage().cleanup_committed_file_mutation(&row.id)?;
             }
         }
     }
     sweep_orphan_transaction_dirs(context)
 }
 
-fn validate_manifest_scope(
+pub(super) fn validate_manifest_scope(
     manifest: &FileMutationManifest,
     transaction_root: &std::path::Path,
 ) -> Result<(), ServiceError> {

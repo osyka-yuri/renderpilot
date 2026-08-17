@@ -8,10 +8,9 @@
 //! PE version, and persisted it, so we read that instead of duplicating the scan.
 
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 
-use renderpilot_domain::{LibraryComponent, LibraryTechnology, Version};
+use renderpilot_domain::{LibraryComponent, LibraryTechnology, Version, normalized_path_key};
 use renderpilot_nvapi::setting::DllInfo;
 use renderpilot_nvapi::{DlssDllKind, DlssVersion};
 
@@ -42,17 +41,35 @@ fn dlss_version_from_domain(version: &Version) -> DlssVersion {
     DlssVersion::new(part(0), part(1), part(2), part(3))
 }
 
+fn strip_root(file_path: &str, root: &str) -> Option<String> {
+    file_path
+        .strip_prefix(root)
+        .and_then(|path| path.strip_prefix('/'))
+        .map(|path| path.to_owned())
+}
+
+fn relative_install_path(file_path: &str, install_root: &std::path::Path) -> Option<String> {
+    let normalized_file = renderpilot_domain::normalized_path_key(file_path);
+    let canonical_root = crate::paths::canonicalize_best_effort(install_root);
+    let canonical_root = crate::paths::normalized_key(&canonical_root);
+    let raw_root = crate::paths::normalized_key(install_root);
+
+    strip_root(&normalized_file, canonical_root.trim_end_matches('/'))
+        .or_else(|| strip_root(&normalized_file, raw_root.trim_end_matches('/')))
+}
+
 /// Builds the per-family DLL map from catalogued components.
 ///
-/// For each DLSS family it keeps the shallowest catalogued copy that has a known
-/// version, mirroring the previous filesystem walk's "sort by `(depth, path)`,
-/// first readable version wins" rule. A copy whose version was never resolved is
-/// skipped; a family with no usable copy is simply absent from the map (treated
-/// downstream as "DLL not present", imposing no preset constraints).
+/// Only files inside `install_root` participate. For each DLSS family, a known
+/// version always wins over an unknown version; within that partition, the
+/// shallowest normalized relative path wins, with the normalized path as a
+/// deterministic tie-breaker. A family with only unknown versions is present
+/// with `DllInfo::version == None`, not absent.
 pub fn installed_dlls_from_components(
     components: &[LibraryComponent],
+    install_root: &std::path::Path,
 ) -> HashMap<DlssDllKind, DllInfo> {
-    let mut best: HashMap<DlssDllKind, (usize, DllInfo)> = HashMap::new();
+    let mut best: HashMap<DlssDllKind, (bool, usize, String, DllInfo)> = HashMap::new();
 
     for component in components {
         let Some(kind) = dlss_dll_kind_for_technology(component.technology()) else {
@@ -68,35 +85,36 @@ pub fn installed_dlls_from_components(
                 continue;
             }
 
-            let Some(version) = file.version() else {
+            let Some(relative_path) = relative_install_path(file.path().as_str(), install_root)
+            else {
                 continue;
             };
 
-            let path = file.path().as_str();
-            // Catalog paths are forward-slash normalized, so the separator count
-            // orders identically to the old install-relative recursion depth.
-            let depth = path.bytes().filter(|&byte| byte == b'/').count();
+            let normalized_path = normalized_path_key(file.path().as_str());
+            let depth = relative_path.bytes().filter(|&byte| byte == b'/').count();
             let info = DllInfo {
-                path: PathBuf::from(path),
-                version: dlss_version_from_domain(version),
+                path: PathBuf::from(file.path().as_str()),
+                version: file.version().map(dlss_version_from_domain),
             };
 
-            match best.entry(kind) {
-                Entry::Occupied(mut existing) => {
-                    let (existing_depth, existing_info) = existing.get();
-                    if (depth, &info.path) < (*existing_depth, &existing_info.path) {
-                        existing.insert((depth, info));
-                    }
+            // `false` sorts before `true`, so versioned candidates are always
+            // considered before unknown-version candidates.
+            let is_unknown = info.version.is_none();
+            let replace = match best.get(&kind) {
+                Some((unknown, existing_depth, existing_path, _)) => {
+                    (is_unknown, depth, normalized_path.as_str())
+                        < (*unknown, *existing_depth, existing_path.as_str())
                 }
-                Entry::Vacant(slot) => {
-                    slot.insert((depth, info));
-                }
+                None => true,
+            };
+            if replace {
+                best.insert(kind, (is_unknown, depth, normalized_path, info));
             }
         }
     }
 
     best.into_iter()
-        .map(|(kind, (_depth, info))| (kind, info))
+        .map(|(kind, (_, _, _, info))| (kind, info))
         .collect()
 }
 
@@ -156,12 +174,12 @@ mod tests {
             ),
         ];
 
-        let dlls = installed_dlls_from_components(&components);
+        let dlls = installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"));
 
         assert_eq!(dlls.len(), 3);
         assert_eq!(
             dlls[&DlssDllKind::Sr].version,
-            DlssVersion::new(3, 7, 20, 0)
+            Some(DlssVersion::new(3, 7, 20, 0))
         );
         assert_eq!(
             dlls[&DlssDllKind::Sr].path,
@@ -169,11 +187,11 @@ mod tests {
         );
         assert_eq!(
             dlls[&DlssDllKind::FrameGen].version,
-            DlssVersion::new(3, 8, 0, 0)
+            Some(DlssVersion::new(3, 8, 0, 0))
         );
         assert_eq!(
             dlls[&DlssDllKind::RayReconstruction].version,
-            DlssVersion::new(3, 5, 0, 0)
+            Some(DlssVersion::new(3, 5, 0, 0))
         );
     }
 
@@ -186,7 +204,10 @@ mod tests {
             Some("2.0.0.0"),
         )];
 
-        assert!(installed_dlls_from_components(&components).is_empty());
+        assert!(
+            installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -206,7 +227,7 @@ mod tests {
             ),
         ];
 
-        let dlls = installed_dlls_from_components(&components);
+        let dlls = installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"));
 
         assert_eq!(dlls.len(), 1);
         assert_eq!(
@@ -215,12 +236,12 @@ mod tests {
         );
         assert_eq!(
             dlls[&DlssDllKind::Sr].version,
-            DlssVersion::new(3, 7, 20, 0)
+            Some(DlssVersion::new(3, 7, 20, 0))
         );
     }
 
     #[test]
-    fn copies_without_a_version_are_skipped() {
+    fn versioned_copy_wins_over_a_shallower_unknown_copy() {
         let components = [
             // Shallowest copy has no version: it must not shadow a deeper, versioned one.
             dlss_component(
@@ -237,7 +258,7 @@ mod tests {
             ),
         ];
 
-        let dlls = installed_dlls_from_components(&components);
+        let dlls = installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"));
 
         assert_eq!(dlls.len(), 1);
         assert_eq!(
@@ -247,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn family_with_no_versioned_copy_is_absent() {
+    fn family_with_no_versioned_copy_is_present_with_unknown_version() {
         let components = [dlss_component(
             "sr_no_version",
             LibraryTechnology::DlssSuperResolution,
@@ -255,7 +276,47 @@ mod tests {
             None,
         )];
 
-        assert!(installed_dlls_from_components(&components).is_empty());
+        let dlls = installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"));
+        assert_eq!(dlls[&DlssDllKind::Sr].version, None);
+    }
+
+    #[test]
+    fn files_outside_the_normalized_install_root_are_ignored() {
+        let components = [dlss_component(
+            "outside",
+            LibraryTechnology::DlssSuperResolution,
+            "C:/Games/Other/nvngx_dlss.dll",
+            Some("3.7.20.0"),
+        )];
+
+        assert!(
+            installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn normalized_path_breaks_same_depth_ties_deterministically() {
+        let components = [
+            dlss_component(
+                "z",
+                LibraryTechnology::DlssSuperResolution,
+                "C:/Games/G/Z/nvngx_dlss.dll",
+                Some("3.7.20.0"),
+            ),
+            dlss_component(
+                "a",
+                LibraryTechnology::DlssSuperResolution,
+                "C:/Games/G/A/nvngx_dlss.dll",
+                Some("3.7.20.0"),
+            ),
+        ];
+
+        let dlls = installed_dlls_from_components(&components, std::path::Path::new("C:/Games/G"));
+        assert_eq!(
+            dlls[&DlssDllKind::Sr].path,
+            PathBuf::from("C:/Games/G/A/nvngx_dlss.dll")
+        );
     }
 
     #[test]
@@ -271,6 +332,30 @@ mod tests {
         assert_eq!(
             dlss_version_from_domain(&Version::parse("3.7.20.0.99").unwrap()),
             DlssVersion::new(3, 7, 20, 0)
+        );
+    }
+
+    #[test]
+    fn matches_canonical_file_path_against_uncanonicalized_root_alias() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let canonical_root = crate::paths::canonicalize_best_effort(temp.path());
+        let canonical_dll = canonical_root.join("nvngx_dlss.dll");
+        let components = [dlss_component(
+            "sr",
+            LibraryTechnology::DlssSuperResolution,
+            &canonical_dll.to_string_lossy().replace('\\', "/"),
+            Some("3.7.20.0"),
+        )];
+
+        let dlls = installed_dlls_from_components(&components, temp.path());
+        assert_eq!(dlls.len(), 1);
+        assert_eq!(
+            dlls[&DlssDllKind::Sr].version,
+            Some(DlssVersion::new(3, 7, 20, 0))
+        );
+        assert_eq!(
+            dlls[&DlssDllKind::Sr].path,
+            PathBuf::from(canonical_dll.to_string_lossy().replace('\\', "/"))
         );
     }
 }

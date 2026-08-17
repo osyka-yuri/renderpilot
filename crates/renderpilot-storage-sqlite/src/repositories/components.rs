@@ -73,7 +73,18 @@ impl ComponentRepository for SqliteStorage {
         components: &[LibraryComponent],
     ) -> AppResult<()> {
         self.with_transaction(|transaction| {
-            replace_components_for_game_within_transaction(transaction, game_id, components)
+            super::observations::assert_no_pending_file_mutations_within_transaction(
+                transaction,
+                game_id,
+            )?;
+            replace_components_for_game_within_transaction(transaction, game_id, components)?;
+            super::observations::invalidate_game_authority_within_transaction(
+                transaction,
+                game_id,
+                "component_repository_replacement",
+                None,
+            )?;
+            Ok(())
         })
     }
 

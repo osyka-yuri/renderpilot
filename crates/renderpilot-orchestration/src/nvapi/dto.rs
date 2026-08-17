@@ -82,12 +82,25 @@ pub struct BaselineDto {
 pub struct DllInfoDto {
     /// DLL kind tag (`"sr"`, `"fg"`, `"rr"`).
     pub kind: String,
-    /// DLL version string.
-    pub version: String,
+    /// DLL version string, or `null` when the ready catalog observed the DLL
+    /// but could not read its version resource.
+    pub version: Option<String>,
     /// Absolute path with forward slashes.
     pub path: String,
     /// Human-readable label from the preset manifest for this DLL version.
     pub manifest_label: Option<String>,
+}
+
+/// Whether a game's DLL projection is authoritative for this response.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CatalogReadinessDto {
+    /// Global/base profile: no game catalog applies.
+    NotApplicable,
+    /// A completed catalog scan produced the DLL projection.
+    Ready,
+    /// The game has never completed a scan or its prior projection was invalidated.
+    NotReady,
 }
 
 /// Full serializable response for a single NVAPI setting's live state.
@@ -99,6 +112,8 @@ pub struct SettingStateResponse {
     pub setting_label: String,
     /// Value type string: `"dword"` or `"wstring"`.
     pub value_type: String,
+    /// DLL family whose version constrains this setting, when any.
+    pub dll_kind: Option<String>,
     /// Grouping family for the UI: `"sr"` / `"fg"` / `"rr"` (or `None`).
     pub family: Option<String>,
     /// Human-readable family label derived from `family` (display only).
@@ -126,6 +141,8 @@ pub struct SettingStateResponse {
     /// Whether NVAPI (the NVIDIA driver) is present on this machine. When false the
     /// UI hides driver-profile affordances and keeps only the on-disk DLL swap.
     pub nvapi_available: bool,
+    /// Authority of the catalog DLL projection used for this response.
+    pub catalog_readiness: CatalogReadinessDto,
     /// All selectable values, each marked as supported or not.
     pub available_values: Vec<ValueOptionDto>,
     /// Info about the DLSS DLL detected in the install directory.
@@ -142,6 +159,11 @@ pub enum NvapiWarningDto {
     NoDll,
     /// Manifest has no entry for this DLL version.
     NoManifest,
+    /// A ready catalog found the DLL but its version resource was unavailable.
+    DllVersionUnknown,
+    /// The catalog projection is incomplete or invalidated; DLL-dependent
+    /// writes are blocked until a rescan completes.
+    CatalogNotReady,
     /// No executable resolved for this game.
     NoExecutable,
     /// NVAPI unavailable.

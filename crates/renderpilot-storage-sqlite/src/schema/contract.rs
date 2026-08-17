@@ -20,12 +20,12 @@ pub(super) const REQUIRED_TABLES: &[&str] = &[
     "operations",
     "operation_items",
     "settings",
-    "file_hash_cache",
+    "catalog_scan_authority",
+    "file_observations",
     "nvapi_executable_overrides",
     "nvapi_setting_baselines",
     "game_ui_state",
     "profile_addon_capabilities",
-    "scan_source_checkpoints",
     "portable_path_tags",
 ];
 
@@ -53,7 +53,9 @@ pub(super) const REQUIRED_INDEXES: &[&str] = &[
     "idx_operation_items_artifact_id",
     "idx_operation_items_status",
     "idx_settings_updated_at",
-    "idx_file_hash_cache_updated_at",
+    "idx_catalog_scan_authority_readiness",
+    "idx_file_observations_game_path",
+    "idx_file_observations_artifact_path",
     "idx_profile_addon_capabilities_kind",
 ];
 
@@ -68,13 +70,12 @@ pub(super) const REQUIRED_TRIGGERS: &[&str] = &[
     "trg_operations_touch_updated_at",
     "trg_operation_items_touch_updated_at",
     "trg_settings_touch_updated_at",
-    "trg_file_hash_cache_touch_updated_at",
+    "trg_games_create_scan_authority",
     "trg_nvapi_executable_overrides_touch_updated_at",
     "trg_game_ui_state_touch_updated_at",
     "trg_installed_addons_touch_updated_at",
     "trg_shared_artifacts_touch_updated_at",
     "trg_profile_addon_capabilities_touch_updated_at",
-    "trg_scan_source_checkpoints_touch_updated_at",
 ];
 
 /// Exact physical-column contract for every catalog table.
@@ -100,4 +101,6 @@ pub(super) const CONSOLIDATION_POLICIES: &[(&str, &str)] = &[
     ("nvapi_setting_baselines", "destination_wins_per_setting"),
     ("game_ui_state", "merge_boolean_flags"),
     ("profile_addon_capabilities", "destination_wins_per_kind"),
+    ("catalog_scan_authority", "cascade_game"),
+    ("file_observations", "cascade_owner"),
 ];

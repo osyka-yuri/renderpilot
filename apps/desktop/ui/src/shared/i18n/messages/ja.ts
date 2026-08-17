@@ -355,9 +355,14 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': '初期値に戻す',
   'gameDetails.nvapi.alreadyBaseline': '既に初期値です',
   'gameDetails.nvapi.noBaseline': '初期値が保存されていません',
+  'gameDetails.nvapi.versionUnavailable': 'DLSS バージョンを取得できません',
 
   'gameDetails.nvapi.warning.noDll': 'インストールディレクトリに DLSS DLL が見つかりません。',
   'gameDetails.nvapi.warning.noManifest': 'マニフェストにこの DLL バージョンのデータがありません。',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'DLSS DLL は見つかりましたが、そのバージョンを取得できません。',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'ゲームカタログの準備ができていません。DLL に依存する NVIDIA 設定を変更する前にゲームを再スキャンしてください。',
   'gameDetails.nvapi.warning.noExecutable': 'このゲームの実行可能ファイルが見つかりません。',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI が利用できません。',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI の初期化に失敗しました。',
@@ -574,6 +579,8 @@ export const ja = defineLocalizedCatalog<'ja', EnglishCatalog>()({
   'user_message.rollback_also_failed':
     '操作に失敗し、以前のファイル状態を完全に復元できませんでした。再試行する前にゲームファイルを確認してください。',
   'user_message.access_denied': 'アクセスが拒否されました。権限を確認して再試行してください。',
+  'user_message.nvapi_catalog_not_ready':
+    'DLL に依存する NVIDIA 設定を変更する前にゲームを再スキャンしてください。',
 
   'suggested_action.refresh_games': 'ゲームリストを更新して再試行してください。',
   'suggested_action.reload_game_details': 'ゲームの詳細を更新して再試行してください。',

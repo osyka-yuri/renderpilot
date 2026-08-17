@@ -3,12 +3,18 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use renderpilot_detection::NVNGX_DLSS_FILE_NAME;
-use renderpilot_nvapi::{DlssDllKind, DlssVersion, SettingContext, setting::DllInfo};
+use renderpilot_nvapi::{
+    CatalogReadiness, DlssDllKind, DlssVersion, NvapiSetting, SettingContext, setting::DllInfo,
+};
 
-use super::assemble::{build_available_values, known_preset_set, supported_preset_set};
+use super::assemble::{
+    assemble_response, build_available_values, known_preset_set, supported_preset_set,
+};
+use super::live::LiveRead;
 use super::target::{SettingTarget, WriteOp};
-use super::write::{resolve_revert_op, validate_value_supported};
+use super::write::{ensure_dll_setting_catalog_ready, resolve_revert_op, validate_value_supported};
 use crate::dlss::settings_catalog::{self, CatalogSetting};
+use crate::nvapi::dto::{CatalogReadinessDto, NvapiWarningDto};
 
 #[test]
 fn sr_dll_file_name_matches_detection_constant() {
@@ -22,14 +28,139 @@ fn ctx_with_sr_dll(version: DlssVersion) -> SettingContext {
         DlssDllKind::Sr,
         DllInfo {
             path: PathBuf::from("nvngx_dlss.dll"),
-            version,
+            version: Some(version),
         },
     );
     SettingContext {
         game_install_dir: PathBuf::from("/tmp"),
         dlls,
+        catalog_readiness: CatalogReadiness::Ready,
         effective_exe: Some("game.exe".to_owned()),
     }
+}
+
+#[test]
+fn unknown_dll_version_leaves_version_specific_validation_permissive() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.dlls.get_mut(&DlssDllKind::Sr).expect("SR DLL").version = None;
+    let preset_a = def
+        .values
+        .iter()
+        .find(|value| value.wire == "a")
+        .unwrap()
+        .dword;
+
+    assert!(validate_value_supported(&setting, preset_a, &ctx).is_ok());
+}
+
+#[test]
+fn unready_catalog_rejects_dll_dependent_mutations() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.catalog_readiness = CatalogReadiness::NotReady;
+
+    assert_eq!(
+        ensure_dll_setting_catalog_ready(&setting, &ctx),
+        Err(crate::ServiceError::NvapiCatalogNotReady)
+    );
+}
+
+#[test]
+fn unready_catalog_response_never_projects_stale_dll_state() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.catalog_readiness = CatalogReadiness::NotReady;
+    ctx.dlls.clear();
+    let storage = renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite storage");
+
+    let response = assemble_response(
+        &setting,
+        &ctx,
+        &storage,
+        &SettingTarget::Game {
+            game_id: "steam:unready",
+        },
+        LiveRead::unset(setting.default_dword()),
+    )
+    .expect("response");
+
+    assert_eq!(response.catalog_readiness, CatalogReadinessDto::NotReady);
+    assert!(response.dll_info.is_none());
+    assert_eq!(response.warnings, vec![NvapiWarningDto::CatalogNotReady]);
+}
+
+#[test]
+fn unready_catalog_suppresses_a_secondary_live_warning() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.catalog_readiness = CatalogReadiness::NotReady;
+    let storage = renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite storage");
+
+    let response = assemble_response(
+        &setting,
+        &ctx,
+        &storage,
+        &SettingTarget::Game {
+            game_id: "steam:unready-live-warning",
+        },
+        LiveRead::unavailable(setting.default_dword(), Some(NvapiWarningDto::NoExecutable)),
+    )
+    .expect("response");
+
+    assert_eq!(response.warnings, vec![NvapiWarningDto::CatalogNotReady]);
+}
+
+#[test]
+fn ready_catalog_without_a_detected_dll_reports_only_no_dll() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.dlls.clear();
+    let storage = renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite storage");
+
+    let response = assemble_response(
+        &setting,
+        &ctx,
+        &storage,
+        &SettingTarget::Game {
+            game_id: "steam:ready-no-dll",
+        },
+        LiveRead::unset(setting.default_dword()),
+    )
+    .expect("response");
+
+    assert_eq!(response.catalog_readiness, CatalogReadinessDto::Ready);
+    assert!(response.dll_info.is_none());
+    assert_eq!(response.warnings, vec![NvapiWarningDto::NoDll]);
+}
+
+#[test]
+fn ready_unknown_dll_version_is_present_and_warned_without_no_manifest() {
+    let def = settings_catalog::find("dlss_sr_render_preset").expect("catalog has SR preset");
+    let setting = CatalogSetting::new(def);
+    let mut ctx = ctx_with_sr_dll(DlssVersion::new(310, 1, 0, 0));
+    ctx.dlls.get_mut(&DlssDllKind::Sr).expect("SR DLL").version = None;
+    let storage = renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("sqlite storage");
+
+    let response = assemble_response(
+        &setting,
+        &ctx,
+        &storage,
+        &SettingTarget::Game {
+            game_id: "steam:unknown-version",
+        },
+        LiveRead::unset(setting.default_dword()),
+    )
+    .expect("response");
+
+    assert_eq!(response.catalog_readiness, CatalogReadinessDto::Ready);
+    assert_eq!(response.dll_info.expect("present DLL").version, None);
+    assert_eq!(response.warnings, vec![NvapiWarningDto::DllVersionUnknown]);
 }
 
 /// On DLSS 4 the SR manifest only supports presets {0, 6, 10, 11}, but the

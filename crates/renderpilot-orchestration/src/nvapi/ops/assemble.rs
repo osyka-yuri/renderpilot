@@ -3,11 +3,13 @@
 use std::collections::HashSet;
 
 use renderpilot_nvapi::Nvapi;
-use renderpilot_nvapi::setting::{NvapiSetting, NvapiValueOption, SettingContext};
+use renderpilot_nvapi::setting::{
+    CatalogReadiness as NvapiCatalogReadiness, NvapiSetting, NvapiValueOption, SettingContext,
+};
 
 use super::super::dto::{
-    BaselineDto, DllInfoDto, NvapiWarningDto, SettingStateResponse, ValueDescriptorDto,
-    ValueOptionDto, category_for_family, value_type_str,
+    BaselineDto, CatalogReadinessDto, DllInfoDto, NvapiWarningDto, SettingStateResponse,
+    ValueDescriptorDto, ValueOptionDto, category_for_family, value_type_str,
 };
 use super::live::LiveRead;
 use super::target::SettingTarget;
@@ -46,13 +48,25 @@ pub(super) fn assemble_response(
     // DLL-version warnings only make sense for a specific game's install. The
     // global base profile is intentionally DLL-independent, so suppress them.
     if target.game_id().is_some() && setting.dll_kind().is_some() {
-        if dll_info.is_none() {
-            warnings.push(NvapiWarningDto::NoDll);
-        } else if supported_set.is_empty() {
-            warnings.push(NvapiWarningDto::NoManifest);
+        match ctx.catalog_readiness {
+            NvapiCatalogReadiness::NotReady => warnings.push(NvapiWarningDto::CatalogNotReady),
+            NvapiCatalogReadiness::Ready => match dll_info.as_ref() {
+                None => warnings.push(NvapiWarningDto::NoDll),
+                Some(info) if info.version.is_none() => {
+                    warnings.push(NvapiWarningDto::DllVersionUnknown);
+                }
+                Some(_) if supported_set.is_empty() => warnings.push(NvapiWarningDto::NoManifest),
+                Some(_) => {}
+            },
+            NvapiCatalogReadiness::NotApplicable => {}
         }
     }
-    if let Some(warning) = live.warning {
+    // An invalidated catalog is terminal for DLL-dependent settings. Do not
+    // append a live-driver warning: consumers must receive the single,
+    // actionable CatalogNotReady fact and wait for a complete rescan.
+    if !matches!(ctx.catalog_readiness, NvapiCatalogReadiness::NotReady)
+        && let Some(warning) = live.warning
+    {
         warnings.push(warning);
     }
 
@@ -70,6 +84,9 @@ pub(super) fn assemble_response(
         setting_key: setting.key().to_owned(),
         setting_label: setting.label().to_owned(),
         value_type: value_type_str(setting.value_type()).to_owned(),
+        dll_kind: setting
+            .dll_kind()
+            .map(|kind| kind.manifest_tag().to_owned()),
         family: setting.family().map(str::to_owned),
         category: setting.family().and_then(category_for_family),
         description: setting.description().map(str::to_owned),
@@ -95,6 +112,7 @@ pub(super) fn assemble_response(
         // Session-level: identical on every row. Drives UI gating of the NVIDIA
         // driver-profile affordances. `Nvapi::get()` is cached, so this is cheap.
         nvapi_available: Nvapi::get().is_some(),
+        catalog_readiness: catalog_readiness_dto(ctx.catalog_readiness),
         available_values: build_available_values(setting, ctx, &supported_set, &known_set),
         dll_info,
         warnings,
@@ -117,11 +135,12 @@ fn build_dll_info(setting: &dyn NvapiSetting, ctx: &SettingContext) -> Option<Dl
     let kind = setting.dll_kind()?;
     let info = ctx.dlls.get(&kind)?;
     let manifest = bundled_manifest(kind);
-    let label =
-        resolve_entry(manifest, &info.version).map(|e: &VersionSupportEntry| e.label.clone());
+    let label = info.version.as_ref().and_then(|version| {
+        resolve_entry(manifest, version).map(|e: &VersionSupportEntry| e.label.clone())
+    });
     Some(DllInfoDto {
         kind: kind.manifest_tag().to_owned(),
-        version: info.version.to_string(),
+        version: info.version.map(|version| version.to_string()),
         path: info.path.to_string_lossy().replace('\\', "/"),
         manifest_label: label,
     })
@@ -138,11 +157,22 @@ pub(super) fn supported_preset_set(
     let Some(info) = ctx.dlls.get(&kind) else {
         return HashSet::new();
     };
+    let Some(version) = info.version else {
+        return HashSet::new();
+    };
     let manifest = bundled_manifest(kind);
-    supported_presets_for(manifest, &info.version)
+    supported_presets_for(manifest, &version)
         .iter()
         .copied()
         .collect()
+}
+
+fn catalog_readiness_dto(readiness: NvapiCatalogReadiness) -> CatalogReadinessDto {
+    match readiness {
+        NvapiCatalogReadiness::NotApplicable => CatalogReadinessDto::NotApplicable,
+        NvapiCatalogReadiness::Ready => CatalogReadinessDto::Ready,
+        NvapiCatalogReadiness::NotReady => CatalogReadinessDto::NotReady,
+    }
 }
 
 /// DWORD values the preset manifest explicitly manages.

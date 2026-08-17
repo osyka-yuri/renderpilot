@@ -1,8 +1,13 @@
 use std::fs;
 use std::path::Path;
 
-use renderpilot_domain::GameId;
-use renderpilot_storage_sqlite::{PendingFileMutationRow, PendingFileMutationState};
+use renderpilot_application::GameRepository;
+use renderpilot_domain::{
+    GameId, GameIdentity, GameInstallation, GameRuntime, Launcher, PathRef, Platform,
+};
+use renderpilot_storage_sqlite::{
+    BeginFileMutationPreparation, CatalogReadiness, GameMutationCommit, InstalledAddonMutation,
+};
 
 use super::manifest::{FileMutationManifest, MANIFEST_FORMAT_VERSION, serialize_manifest};
 use super::*;
@@ -13,11 +18,22 @@ fn scope(root: &Path) -> MutationScope {
     MutationScope::single(root).expect("scope")
 }
 
+fn store_game(context: &Context, game_id: GameId, root: &Path) {
+    let game = GameInstallation::new(
+        GameIdentity::new(game_id, "File mutation test", Launcher::Manual).expect("identity"),
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        PathRef::new(root.to_string_lossy().replace('\\', "/")).expect("root"),
+    );
+    context.storage().upsert_game(&game).expect("store game");
+}
+
 #[test]
 fn prepared_recovery_restores_existing_and_removes_created_files() {
     let root = tempfile::tempdir().expect("game");
     let context = Context::open_at(root.path().join("catalog.db")).expect("context");
     let game_id = GameId::new("manual:test").expect("id");
+    store_game(&context, game_id.clone(), root.path());
     let guard = crate::game_mutation_lock::try_lock(&game_id).expect("guard");
     let existing = root.path().join("original.dll");
     let created = root.path().join("created.dll");
@@ -32,6 +48,18 @@ fn prepared_recovery_restores_existing_and_removes_created_files() {
         [existing.clone(), created.clone()],
     )
     .expect("prepare");
+    assert_eq!(
+        context
+            .storage()
+            .catalog_readiness(&game_id)
+            .expect("readiness"),
+        CatalogReadiness::Invalidated {
+            authority_epoch: 1,
+            reason: "prepared_file_mutation".to_owned(),
+            mutation_token: Some(mutation.id().to_owned()),
+        },
+        "the prepared durable marker must invalidate before the caller's first filesystem write"
+    );
     fs::write(&existing, b"after").expect("mutate");
     fs::write(&created, b"new").expect("create");
     drop(mutation);
@@ -71,6 +99,39 @@ fn transaction_accepts_an_explicit_external_addon_root() {
 }
 
 #[test]
+fn pre_catalog_prepared_recovery_restores_without_creating_catalog_authority() {
+    let root = tempfile::tempdir().expect("game");
+    let context = Context::open_at(root.path().join("catalog.db")).expect("context");
+    let game_id = GameId::new("manual:pre-catalog-recovery").expect("id");
+    let guard = crate::game_mutation_lock::try_lock(&game_id).expect("guard");
+    let live = root.path().join("addon.dll");
+    fs::write(&live, b"before").expect("seed");
+
+    let mutation = DurableFileTransaction::prepare(
+        &context,
+        &guard,
+        &scope(root.path()),
+        "test",
+        None,
+        [live.clone()],
+    )
+    .expect("prepare without catalog");
+    fs::write(&live, b"after").expect("mutate");
+    drop(mutation);
+
+    recover_pending(&context, &guard).expect("recover without catalog");
+    assert_eq!(fs::read(live).expect("read"), b"before");
+    assert!(context.storage().catalog_readiness(&game_id).is_err());
+    assert!(
+        context
+            .storage()
+            .pending_file_mutations_for_game(&game_id)
+            .expect("pending rows")
+            .is_empty()
+    );
+}
+
+#[test]
 fn preparing_recovery_never_restores_partial_snapshots() {
     let root = tempfile::tempdir().expect("game");
     let context = Context::open_at(root.path().join("catalog.db")).expect("context");
@@ -81,13 +142,12 @@ fn preparing_recovery_never_restores_partial_snapshots() {
     fs::create_dir_all(&transaction_dir).expect("transaction dir");
     context
         .storage()
-        .prepare_file_mutation(&PendingFileMutationRow {
+        .begin_file_mutation_preparation(&BeginFileMutationPreparation {
             id: id.to_owned(),
             game_id: game_id.clone(),
             feature: "test".to_owned(),
             subject_id: None,
-            state: PendingFileMutationState::Preparing,
-            manifest_json: serialize_manifest(&FileMutationManifest {
+            initial_manifest_json: serialize_manifest(&FileMutationManifest {
                 format_version: MANIFEST_FORMAT_VERSION,
                 roots: vec![
                     std::fs::canonicalize(root.path())
@@ -135,7 +195,13 @@ fn committed_recovery_only_cleans_snapshots() {
     fs::write(&live, b"committed").expect("mutate");
     context
         .storage()
-        .mark_file_mutation_committed(mutation.id())
+        .commit_game_mutation(GameMutationCommit {
+            game_id: &game_id,
+            component_set: None,
+            baseline_mutations: &[],
+            addon: InstalledAddonMutation::Keep,
+            mutation_id: Some(mutation.id()),
+        })
         .expect("commit row");
     drop(mutation);
 
@@ -148,6 +214,64 @@ fn committed_recovery_only_cleans_snapshots() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn missing_snapshot_stops_before_row_cleanup_and_retains_prepared_invalidation() {
+    let root = tempfile::tempdir().expect("game");
+    let context = Context::open_at(root.path().join("catalog.db")).expect("context");
+    let game_id = GameId::new("manual:missing-snapshot").expect("id");
+    store_game(&context, game_id.clone(), root.path());
+    let guard = crate::game_mutation_lock::try_lock(&game_id).expect("guard");
+    let live = root.path().join("nvngx_dlss.dll");
+    fs::write(&live, b"before").expect("seed");
+
+    let mutation = DurableFileTransaction::prepare(
+        &context,
+        &guard,
+        &scope(root.path()),
+        "test",
+        None,
+        [live.clone()],
+    )
+    .expect("prepare");
+    let mutation_id = mutation.id().to_owned();
+    let row = context
+        .storage()
+        .get_pending_file_mutation(&mutation_id)
+        .expect("row")
+        .expect("prepared row");
+    let manifest = super::manifest::deserialize_manifest(&row).expect("manifest");
+    let snapshot = manifest.snapshots[0]
+        .snapshot
+        .as_ref()
+        .expect("before snapshot");
+    fs::remove_file(snapshot).expect("remove snapshot");
+    fs::write(&live, b"after").expect("mutate");
+    drop(mutation);
+
+    recover_pending(&context, &guard).expect_err("missing snapshot must stop recovery");
+    assert_eq!(
+        context
+            .storage()
+            .get_pending_file_mutation(&mutation_id)
+            .expect("row")
+            .expect("prepared row")
+            .state,
+        renderpilot_storage_sqlite::PendingFileMutationState::Prepared
+    );
+    assert_eq!(
+        context
+            .storage()
+            .catalog_readiness(&game_id)
+            .expect("readiness"),
+        CatalogReadiness::Invalidated {
+            authority_epoch: 1,
+            reason: "prepared_file_mutation".to_owned(),
+            mutation_token: Some(mutation_id),
+        }
+    );
+    assert_eq!(fs::read(live).expect("live bytes"), b"after");
 }
 
 #[test]
@@ -176,7 +300,13 @@ fn commit_or_rollback_cleans_on_success_and_restores_on_failure() {
             || {
                 context
                     .storage()
-                    .mark_file_mutation_committed(&mutation_id)
+                    .commit_game_mutation(GameMutationCommit {
+                        game_id: &game_id,
+                        component_set: None,
+                        baseline_mutations: &[],
+                        addon: InstalledAddonMutation::Keep,
+                        mutation_id: Some(&mutation_id),
+                    })
                     .map_err(ServiceError::from)?;
                 Ok::<(), ServiceError>(())
             },
@@ -281,13 +411,12 @@ fn orphan_sweep_preserves_claimed_directories_and_removes_unclaimed_ones() {
     fs::create_dir_all(&orphan).expect("orphan");
     context
         .storage()
-        .prepare_file_mutation(&PendingFileMutationRow {
+        .begin_file_mutation_preparation(&BeginFileMutationPreparation {
             id: "claimed".to_owned(),
             game_id: GameId::new("manual:other-game").expect("other"),
             feature: "test".to_owned(),
             subject_id: None,
-            state: PendingFileMutationState::Preparing,
-            manifest_json: serialize_manifest(&FileMutationManifest {
+            initial_manifest_json: serialize_manifest(&FileMutationManifest {
                 format_version: MANIFEST_FORMAT_VERSION,
                 roots: vec![
                     std::fs::canonicalize(root.path())

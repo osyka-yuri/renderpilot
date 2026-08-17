@@ -370,10 +370,15 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': 'Anfangswert wiederherstellen',
   'gameDetails.nvapi.alreadyBaseline': 'Bereits auf Anfangswert',
   'gameDetails.nvapi.noBaseline': 'Kein Anfangswert gespeichert',
+  'gameDetails.nvapi.versionUnavailable': 'DLSS-Version nicht verfügbar',
 
   'gameDetails.nvapi.warning.noDll': 'Keine DLSS-DLL im Installationsverzeichnis gefunden.',
   'gameDetails.nvapi.warning.noManifest':
     'Das Manifest enthält keinen Eintrag für diese DLL-Version.',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'Eine DLSS-DLL wurde gefunden, aber ihre Version ist nicht verfügbar.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'Der Spielkatalog ist nicht bereit. Scannen Sie das Spiel erneut, bevor Sie DLL-abhängige NVIDIA-Einstellungen ändern.',
   'gameDetails.nvapi.warning.noExecutable': 'Keine ausführbare Datei für dieses Spiel gefunden.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI nicht verfügbar.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI-Initialisierung fehlgeschlagen.',
@@ -604,6 +609,8 @@ export const de = defineLocalizedCatalog<'de', EnglishCatalog>()({
     'Dieses Update konnte nicht angewendet werden, weil die Quelldatei außerhalb von RenderPilot ersetzt oder geändert wurde. Bitte wählen Sie die Version erneut — möglicherweise ist ein Download erforderlich.',
   'user_message.access_denied':
     'Zugriff verweigert. Überprüfen Sie Ihre Berechtigungen und versuchen Sie es erneut.',
+  'user_message.nvapi_catalog_not_ready':
+    'Scannen Sie das Spiel erneut, bevor Sie DLL-abhängige NVIDIA-Einstellungen ändern.',
 
   'suggested_action.refresh_games':
     'Aktualisieren Sie die Spieleliste und versuchen Sie es erneut.',

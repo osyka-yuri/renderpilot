@@ -152,6 +152,7 @@ impl CommandError {
                 Kind::AccessDenied,
                 format_args!("access denied while {operation}: {detail}"),
             ),
+            ServiceError::NvapiCatalogNotReady => Self::new(Kind::NvapiCatalogNotReady),
         }
     }
 }

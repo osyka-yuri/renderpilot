@@ -10,6 +10,7 @@
 //! SQL snapshot of CURRENT.
 
 pub(super) mod common;
+pub(super) mod observations;
 pub(super) mod pending_file_mutations;
 pub(super) mod portable_path_tags;
 pub(super) mod profile_addon_capabilities;
@@ -42,7 +43,7 @@ pub(super) fn compose_baseline() -> String {
     let shared_trigger = shared_artifacts::touch_trigger_sql();
     let profile_capabilities = profile_addon_capabilities::baseline_sql();
     let portable_path_tags = portable_path_tags::baseline_sql();
-    let scan_checkpoints = scan_source_checkpoints::baseline_sql();
+    let observations = observations::SQL;
 
     let mut sql = String::with_capacity(
         BASELINE_HEADER.len()
@@ -52,7 +53,7 @@ pub(super) fn compose_baseline() -> String {
             + shared_trigger.len()
             + profile_capabilities.len()
             + portable_path_tags.len()
-            + scan_checkpoints.len()
+            + observations.len()
             + 8,
     );
     sql.push_str(BASELINE_HEADER.trim_start());
@@ -69,7 +70,7 @@ pub(super) fn compose_baseline() -> String {
     sql.push('\n');
     sql.push_str(portable_path_tags);
     sql.push('\n');
-    sql.push_str(scan_checkpoints);
+    sql.push_str(observations);
     sql.push('\n');
     sql
 }

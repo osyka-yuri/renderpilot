@@ -18,7 +18,7 @@ fn candidates_show_newer_update_for_same_technology_only() {
 
     fixture.store_game(&game_a);
     fixture.store_game(&game_b);
-    fixture.store_components(
+    fixture.store_complete_components(
         game_a.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -85,7 +85,7 @@ fn candidates_offer_streamline_bundle_swap() {
 
     fixture.store_game(&game_a);
     fixture.store_game(&game_b);
-    fixture.store_components(
+    fixture.store_complete_components(
         game_a.id(),
         &[sample_component(
             "component:game-a:streamline",
@@ -141,7 +141,7 @@ fn candidates_serialize_mixed_and_unknown_version_reports() {
 
     fixture.store_game(&game);
     fixture.store_game(&library);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[
             sample_bundle_component(

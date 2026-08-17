@@ -37,7 +37,7 @@ fn first_swap_replaces_stale_backup_so_rollback_restores_current_original() {
     let game_id = format!("manual:{install_path}");
     let game = sample_game(&game_id, "Game", &install_path);
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:dlss",

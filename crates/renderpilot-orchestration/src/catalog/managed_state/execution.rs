@@ -44,7 +44,7 @@ impl ManagedCleanupPlan {
                     )
                 }
                 ManagedInverseAction::RestoreNvapi => {
-                    crate::nvapi::ops::restore_game_baselines(context, game_id.as_str())
+                    crate::nvapi::ops::restore_game_baselines(context, guard, game_id.as_str())
                 }
             };
             result.map_err(|error| ServiceError::GameRemovalCleanupFailed {

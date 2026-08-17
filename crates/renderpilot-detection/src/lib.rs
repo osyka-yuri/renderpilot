@@ -7,6 +7,7 @@ mod anticheat;
 mod dlss_binary;
 mod error;
 mod file_metadata;
+mod file_observation;
 mod filesystem_detector;
 mod glob;
 mod normalize;
@@ -20,13 +21,16 @@ pub use anticheat::{
 };
 pub use dlss_binary::{DlssBinaryError, DlssBinaryInfo, NVNGX_DLSS_FILE_NAME};
 pub use error::LibraryPatternError;
-pub use file_metadata::{
-    FileCacheKey, FileHashCache, VersionDetectionStatus, sha256_bytes, sha256_file,
+pub use file_metadata::{FileObservation, VersionDetectionStatus, sha256_bytes, sha256_file};
+pub use file_observation::{
+    FILE_OBSERVATION_ALGORITHM_REVISION, FileIdentityProbeResult, FileObservationResult,
+    FileObservationSource, StableFileSnapshot, StrongFileCacheKey, StrongFileIdentity,
+    SystemFileObservationSource,
 };
 pub use filesystem_detector::{
     DetectedLibraryFile, DetectionConfidence, InstallTreeCompleteness, InstallTreeReport,
-    InstallTreeWalker, InstallWalkMode, LibraryPatternComponentDetector, WalkDiagnostic,
-    WalkDiagnosticKind, group_into_artifacts, group_into_components,
+    InstallTreeWalker, InstallWalkMode, LibraryPatternComponentDetector, ReusableFileMetadata,
+    WalkDiagnostic, WalkDiagnosticKind, group_into_artifacts, group_into_components,
 };
 pub use pattern::{
     CandidateFileExtensions, LibraryPattern, LibraryPatternMatch, LibraryPatternSet, PatternKind,

@@ -62,7 +62,7 @@ export function parsePortableRuntimeReleaseContract(source) {
     contract.supervisorCapability !== 3 ||
     contract.appSessionProtocol !== 'renderpilot-portable-app-session-v2' ||
     contract.minimumPortableSchema !== 4 ||
-    contract.currentSchema !== 16
+    contract.currentSchema !== 17
   ) {
     fail('Portable runtime release contract has an unsupported shape or range.');
   }

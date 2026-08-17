@@ -1,0 +1,428 @@
+use renderpilot_application::{
+    AppError, AppErrorKind, ComponentRepository, GameRepository, OperationItemRecord,
+    OperationJournalEntry, OperationKind, OperationRecord, OperationRepository, OperationStatus,
+    UnixTimestampMillis,
+};
+use renderpilot_domain::{
+    ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
+    GameIdentity, GameInstallation, GameRuntime, Launcher, LibraryArtifact, LibraryComponent,
+    LibraryTechnology, OperationId, PathRef, Platform, Sha256Hash, Swappability,
+};
+
+use super::SqliteStorage;
+
+const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+const GAME_EXISTING: &str = "game:existing";
+const GAME_MISSING: &str = "game:missing";
+const GAME_SCAN_ROLLBACK: &str = "game:scan-rollback";
+
+const COMPONENT_EXISTING: &str = "component:existing";
+const COMPONENT_MISSING: &str = "component:missing";
+const COMPONENT_ORPHAN: &str = "component:orphan";
+const COMPONENT_SECOND: &str = "component:second";
+const COMPONENT_SCAN_ROLLBACK: &str = "component:scan-rollback";
+
+const OPERATION_EXISTING: &str = "operation:existing";
+const OPERATION_NEW: &str = "operation:new";
+
+#[test]
+fn catalog_generation_ignores_preferences_but_tracks_card_facts() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let initial = storage.catalog_generation();
+
+    storage
+        .set_setting("games_filters_v3", r#"{"searchQuery":"doom"}"#)
+        .expect("preference write");
+    assert_eq!(
+        storage.catalog_generation(),
+        initial,
+        "search preference writes must not rebuild the catalog snapshot"
+    );
+
+    storage
+        .upsert_game(&sample_game("game:generation"))
+        .expect("game write");
+    assert!(storage.catalog_generation() > initial);
+}
+
+#[test]
+fn save_scan_result_rolls_back_game_and_components_when_artifact_insert_fails() {
+    let fixture = StorageFixture::new();
+
+    let game = sample_game(GAME_SCAN_ROLLBACK);
+    let component = sample_component(COMPONENT_SCAN_ROLLBACK, game.id().as_str());
+
+    let invalid_artifact = sample_artifact(
+        "artifact:bad-source-game",
+        "C:/Games/Test/nvngx_dlss.dll",
+        HASH_A,
+    )
+    .with_source_game_id(game_id(GAME_MISSING));
+
+    let error = fixture
+        .storage
+        .save_scan_result(&game, &[component], &[invalid_artifact])
+        .expect_err("invalid artifact FK should fail the whole scan transaction");
+
+    assert_storage_failed(&error);
+    fixture.assert_game_absent(game.id());
+    fixture.assert_components_empty(game.id());
+}
+
+#[test]
+fn save_scan_write_unit_reports_written_counts() {
+    let fixture = StorageFixture::new();
+    let game = sample_game(GAME_EXISTING);
+    let component = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let artifact = sample_artifact(
+        "artifact:count-report",
+        "C:/Games/Test/nvngx_dlss.dll",
+        HASH_A,
+    )
+    .with_source_game_id(game.id().clone());
+
+    let report = fixture
+        .storage
+        .save_scan_write_unit(super::ScanWriteUnit {
+            game: &game,
+            components: &[component],
+            artifacts: &[artifact],
+            prune_empty_operations: false,
+        })
+        .expect("scan write unit should persist");
+
+    assert_eq!(report.game_rows_written(), 1);
+    assert_eq!(report.components_written(), 1);
+    assert_eq!(report.artifacts_written(), 1);
+}
+
+#[test]
+fn replace_components_for_game_keeps_existing_rows_when_replacement_fails() {
+    let fixture = StorageFixture::new();
+
+    let game = sample_game(GAME_EXISTING);
+    let existing_component = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let invalid_component = sample_component(COMPONENT_ORPHAN, GAME_MISSING);
+
+    fixture.store_game(&game);
+    fixture.replace_components(game.id(), std::slice::from_ref(&existing_component));
+
+    let error = fixture
+        .storage
+        .replace_components_for_game(game.id(), &[invalid_component])
+        .expect_err("invalid replacement should fail");
+
+    assert_storage_failed(&error);
+    fixture.assert_components(game.id(), &[existing_component]);
+}
+
+#[test]
+fn save_operation_entry_rolls_back_item_replace_on_insert_failure() {
+    let fixture = StorageFixture::new();
+
+    let game = sample_game(GAME_EXISTING);
+    let component = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let operation = sample_operation(OPERATION_EXISTING, game.id().as_str());
+    let existing_item = sample_operation_item(OPERATION_EXISTING, COMPONENT_EXISTING);
+
+    fixture.store_game(&game);
+    fixture.replace_components(game.id(), &[component]);
+    fixture.save_operation_entry_parts(&operation, std::slice::from_ref(&existing_item));
+
+    let invalid_item = sample_operation_item(OPERATION_EXISTING, COMPONENT_MISSING);
+
+    let invalid_entry = OperationJournalEntry::try_new(operation.clone(), vec![invalid_item])
+        .expect("journal entry should be valid");
+
+    let error = fixture
+        .storage
+        .save_operation_entry(&invalid_entry)
+        .expect_err("foreign-key violation should fail");
+
+    assert_storage_failed(&error);
+    fixture.assert_operation_items(&operation.id, &[existing_item]);
+}
+
+#[test]
+fn save_operation_entry_rolls_back_operation_when_items_fail() {
+    let fixture = StorageFixture::new();
+
+    let game = sample_game(GAME_EXISTING);
+    let component = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let operation = sample_operation(OPERATION_NEW, game.id().as_str());
+    let invalid_item = sample_operation_item(OPERATION_NEW, COMPONENT_MISSING);
+
+    fixture.store_game(&game);
+    fixture.replace_components(game.id(), &[component]);
+
+    let entry = OperationJournalEntry::try_new(operation.clone(), vec![invalid_item])
+        .expect("journal entry should be valid");
+
+    let error = fixture
+        .storage
+        .save_operation_entry(&entry)
+        .expect_err("foreign-key violation should fail");
+
+    assert_storage_failed(&error);
+    fixture.assert_operation_absent(&operation.id);
+}
+
+#[test]
+fn list_operation_entries_for_game_returns_full_entries_in_stable_order() {
+    let fixture = StorageFixture::new();
+
+    let game = sample_game(GAME_EXISTING);
+    let component_a = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let component_b = sample_component(COMPONENT_SECOND, game.id().as_str());
+    let operation_a = sample_operation(OPERATION_EXISTING, game.id().as_str());
+    let operation_b = sample_operation(OPERATION_NEW, game.id().as_str());
+    let operation_a_items = vec![
+        sample_operation_item(OPERATION_EXISTING, COMPONENT_EXISTING),
+        sample_operation_item(OPERATION_EXISTING, COMPONENT_SECOND),
+    ];
+    let operation_b_items = vec![sample_operation_item(OPERATION_NEW, COMPONENT_SECOND)];
+
+    fixture.store_game(&game);
+    fixture.replace_components(game.id(), &[component_a, component_b]);
+    fixture.save_operation_entry_parts(&operation_b, &operation_b_items);
+    fixture.save_operation_entry_parts(&operation_a, &operation_a_items);
+
+    let entries = fixture
+        .storage
+        .list_operation_entries_for_game(game.id())
+        .expect("operation entries should list");
+
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].operation(), &operation_b);
+    assert_eq!(entries[0].items(), operation_b_items.as_slice());
+    assert_eq!(entries[1].operation(), &operation_a);
+    assert_eq!(entries[1].items(), operation_a_items.as_slice());
+}
+
+#[test]
+fn root_correction_prunes_only_operation_headers_left_without_items() {
+    let fixture = StorageFixture::new();
+    let game = sample_game(GAME_EXISTING);
+    let removed = sample_component(COMPONENT_EXISTING, game.id().as_str());
+    let retained = sample_component(COMPONENT_SECOND, game.id().as_str());
+    let removed_operation = sample_operation(OPERATION_EXISTING, game.id().as_str());
+    let retained_operation = sample_operation(OPERATION_NEW, game.id().as_str());
+
+    fixture.store_game(&game);
+    fixture.replace_components(game.id(), &[removed, retained.clone()]);
+    fixture.save_operation_entry_parts(
+        &removed_operation,
+        &[sample_operation_item(
+            OPERATION_EXISTING,
+            COMPONENT_EXISTING,
+        )],
+    );
+    fixture.save_operation_entry_parts(
+        &retained_operation,
+        &[sample_operation_item(OPERATION_NEW, COMPONENT_SECOND)],
+    );
+
+    fixture
+        .storage
+        .save_scan_write_unit(super::ScanWriteUnit {
+            game: &game,
+            components: std::slice::from_ref(&retained),
+            artifacts: &[],
+            prune_empty_operations: true,
+        })
+        .expect("root correction scan");
+
+    fixture.assert_operation_absent(&removed_operation.id);
+    assert!(
+        fixture
+            .storage
+            .find_operation_entry(&retained_operation.id)
+            .expect("retained operation query")
+            .is_some()
+    );
+}
+
+struct StorageFixture {
+    storage: SqliteStorage,
+}
+
+impl StorageFixture {
+    #[track_caller]
+    fn new() -> Self {
+        Self {
+            storage: SqliteStorage::in_memory().expect("in-memory sqlite should open"),
+        }
+    }
+
+    #[track_caller]
+    fn store_game(&self, game: &GameInstallation) {
+        self.storage
+            .upsert_game(game)
+            .expect("game should be stored");
+    }
+
+    #[track_caller]
+    fn replace_components(&self, game_id: &GameId, components: &[LibraryComponent]) {
+        self.storage
+            .replace_components_for_game(game_id, components)
+            .expect("component set should be stored");
+    }
+
+    #[track_caller]
+    fn save_operation_entry_parts(
+        &self,
+        operation: &OperationRecord,
+        items: &[OperationItemRecord],
+    ) {
+        let entry = OperationJournalEntry::try_new(operation.clone(), items.to_vec())
+            .expect("operation journal entry should be valid");
+        self.storage
+            .save_operation_entry(&entry)
+            .expect("operation journal entry should be stored");
+    }
+
+    #[track_caller]
+    fn assert_game_absent(&self, game_id: &GameId) {
+        assert_eq!(
+            self.storage
+                .find_game(game_id)
+                .expect("find_game should succeed"),
+            None,
+            "game row should be rolled back",
+        );
+    }
+
+    #[track_caller]
+    fn assert_operation_absent(&self, operation_id: &OperationId) {
+        assert_eq!(
+            self.storage
+                .find_operation_entry(operation_id)
+                .expect("find_operation_entry should succeed"),
+            None,
+            "operation row should be rolled back",
+        );
+    }
+
+    #[track_caller]
+    fn assert_components_empty(&self, game_id: &GameId) {
+        assert!(
+            self.storage
+                .list_components_for_game(game_id)
+                .expect("components should list")
+                .is_empty(),
+            "components should be rolled back",
+        );
+    }
+
+    #[track_caller]
+    fn assert_components(&self, game_id: &GameId, expected: &[LibraryComponent]) {
+        assert_eq!(
+            self.storage
+                .list_components_for_game(game_id)
+                .expect("components should list"),
+            expected,
+        );
+    }
+
+    #[track_caller]
+    fn assert_operation_items(&self, operation_id: &OperationId, expected: &[OperationItemRecord]) {
+        let entry = self
+            .storage
+            .find_operation_entry(operation_id)
+            .expect("find_operation_entry should succeed")
+            .expect("operation should exist");
+        assert_eq!(entry.items(), expected);
+    }
+}
+
+#[track_caller]
+fn assert_storage_failed(error: &AppError) {
+    assert_eq!(error.kind(), &AppErrorKind::StorageFailed);
+}
+
+fn sample_game(id: &str) -> GameInstallation {
+    let identity = GameIdentity::new(game_id(id), "Test Game", Launcher::Steam)
+        .expect("game identity should be valid");
+
+    GameInstallation::new(
+        identity,
+        Platform::Windows,
+        GameRuntime::NativeWindows,
+        path_ref("C:/Games/Test"),
+    )
+}
+
+fn sample_component(component_id: &str, game_id: &str) -> LibraryComponent {
+    LibraryComponent::new(
+        component_id_from(component_id),
+        game_id_from(game_id),
+        ComponentKind::NativeLibrary,
+        LibraryTechnology::DlssSuperResolution,
+        Swappability::Swappable,
+    )
+    .with_file(ComponentFile::new(component_path(component_id)))
+}
+
+fn sample_operation(operation_id: &str, game_id: &str) -> OperationRecord {
+    OperationRecord::new(
+        operation_id_from(operation_id),
+        game_id_from(game_id),
+        OperationKind::Scan,
+        OperationStatus::Planned,
+        UnixTimestampMillis::new(1).expect("timestamp should be valid"),
+    )
+}
+
+fn sample_operation_item(operation_id: &str, component_id: &str) -> OperationItemRecord {
+    OperationItemRecord::new(
+        operation_id_from(operation_id),
+        component_id_from(component_id),
+        component_path(component_id),
+        OperationStatus::Planned,
+    )
+}
+
+fn sample_artifact(id: &str, path: &str, sha256: &str) -> LibraryArtifact {
+    LibraryArtifact::new(
+        ArtifactId::new(id).expect("artifact id should be valid"),
+        LibraryTechnology::DlssSuperResolution,
+        "nvngx_dlss.dll",
+        vec![ComponentFile::new(path_ref(path)).with_sha256(sha256_hash(sha256))],
+        ArtifactTrustLevel::LocalObserved,
+    )
+    .expect("artifact should be valid")
+    .with_source("scan-folder")
+    .expect("artifact source should be valid")
+}
+
+fn component_path(component_id: &str) -> PathRef {
+    path_ref(format!(
+        "C:/Games/Test/{}.dll",
+        component_id.replace(':', "_"),
+    ))
+}
+
+fn game_id(id: &str) -> GameId {
+    GameId::new(id).expect("game id should be valid")
+}
+
+fn game_id_from(id: &str) -> GameId {
+    game_id(id)
+}
+
+fn component_id_from(id: &str) -> ComponentId {
+    ComponentId::new(id).expect("component id should be valid")
+}
+
+fn operation_id_from(id: &str) -> OperationId {
+    OperationId::new(id).expect("operation id should be valid")
+}
+
+fn path_ref(path: impl Into<String>) -> PathRef {
+    PathRef::new(path.into()).expect("path should be valid")
+}
+
+fn sha256_hash(value: &str) -> Sha256Hash {
+    Sha256Hash::new(value).expect("sha256 should be valid")
+}

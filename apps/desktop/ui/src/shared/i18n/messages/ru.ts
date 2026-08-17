@@ -448,9 +448,14 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': 'Восстановить исходное значение',
   'gameDetails.nvapi.alreadyBaseline': 'Уже установлено исходное значение',
   'gameDetails.nvapi.noBaseline': 'Исходное значение не сохранено',
+  'gameDetails.nvapi.versionUnavailable': 'Версия DLSS недоступна',
 
   'gameDetails.nvapi.warning.noDll': 'DLL-файл DLSS не найден в папке с игрой.',
   'gameDetails.nvapi.warning.noManifest': 'В манифесте нет данных для этой версии DLL.',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'DLL-файл DLSS найден, но определить его версию не удалось.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'Каталог игры не готов. Пересканируйте игру, прежде чем менять настройки NVIDIA, зависящие от DLL.',
   'gameDetails.nvapi.warning.noExecutable': 'Исполняемый файл для этой игры не найден.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI недоступен.',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'Ошибка инициализации NVAPI.',
@@ -695,6 +700,8 @@ export const ru = defineLocalizedCatalog<'ru', EnglishCatalog>()({
   'user_message.stale_replacement_source':
     'Не удалось применить обновление: исходный файл был заменён или изменён вне RenderPilot. Выберите версию снова — может потребоваться загрузка.',
   'user_message.access_denied': 'Доступ запрещён. Проверьте разрешения и повторите попытку.',
+  'user_message.nvapi_catalog_not_ready':
+    'Пересканируйте игру, прежде чем менять настройки NVIDIA, зависящие от DLL.',
 
   // ── Backend suggested actions ──
   'suggested_action.refresh_games': 'Обновите список игр и попробуйте снова.',

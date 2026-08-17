@@ -84,7 +84,7 @@ impl CatalogInstallIndex {
         self.by_install_path.get(&key)
     }
 
-    #[cfg(any(windows, test))]
+    #[cfg(test)]
     pub(crate) fn contains_install_path(&self, install_path: &std::path::Path) -> bool {
         self.contains_install_path_str(&install_path.to_string_lossy())
     }

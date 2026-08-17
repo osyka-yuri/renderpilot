@@ -381,10 +381,15 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': 'Restaurar valor inicial',
   'gameDetails.nvapi.alreadyBaseline': 'Ya en el valor inicial',
   'gameDetails.nvapi.noBaseline': 'Ningún valor inicial guardado',
+  'gameDetails.nvapi.versionUnavailable': 'Versión de DLSS no disponible',
 
   'gameDetails.nvapi.warning.noDll':
     'No se detectó ningún archivo DLL de DLSS en el directorio de instalación.',
   'gameDetails.nvapi.warning.noManifest': 'El manifiesto no tiene datos para esta versión de DLL.',
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'Se encontró una DLL de DLSS, pero su versión no está disponible.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'El catálogo del juego no está listo. Vuelve a analizar el juego antes de cambiar los ajustes de NVIDIA que dependen de DLL.',
   'gameDetails.nvapi.warning.noExecutable':
     'No se encontró ningún archivo ejecutable para este juego.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI no está disponible.',
@@ -618,6 +623,8 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
     'La acción falló y RenderPilot no pudo restaurar por completo el estado anterior de los archivos. Comprueba los archivos del juego antes de volver a intentarlo.',
   'user_message.access_denied':
     'Se denegó el acceso. Comprueba tus permisos y vuelve a intentarlo.',
+  'user_message.nvapi_catalog_not_ready':
+    'Vuelve a analizar el juego antes de cambiar los ajustes de NVIDIA que dependen de DLL.',
 
   'suggested_action.refresh_games': 'Actualiza la lista de juegos y vuelve a intentarlo.',
   'suggested_action.reload_game_details': 'Actualiza los detalles del juego y vuelve a intentarlo.',

@@ -30,7 +30,7 @@ fn apply_rejects_blocked_technology_mismatch_before_mutating_files() {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -94,7 +94,7 @@ fn apply_rejects_artifact_that_already_matches_current_component() {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -161,7 +161,7 @@ fn apply_swap_creates_sidecar_bak_and_updates_catalog() {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -264,7 +264,7 @@ fn apply_swap_preserves_sibling_components_for_same_game() {
     let game = sample_game(&game_id, "Game With Two Components", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[
             sample_component(
@@ -370,7 +370,7 @@ fn apply_succeeds_without_prior_sidecar_and_creates_sidecar_bak() {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -445,7 +445,7 @@ fn apply_rejects_a_target_changed_after_plan_swap_without_mutating_it() {
     let game = sample_game(&game_id, "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",

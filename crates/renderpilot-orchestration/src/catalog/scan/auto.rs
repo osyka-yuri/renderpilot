@@ -1,20 +1,17 @@
-use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
+use renderpilot_detection::LibraryPatternComponentDetector;
 use renderpilot_domain::{GameId, RootAuthority};
 use renderpilot_platform_windows::{ManualFolderGameSource, game_libraries::DiscoveredInstall};
 
 use crate::ServiceError;
 use crate::catalog::ScanFolderCatalogResult;
 
-use super::scan_plan::DetectionMode;
 use super::scan_source_impl;
 
 /// Per-install auto-scan using a shared open catalog, detector, and full
-/// `file_hash_cache` prefetch
-/// (see [`open_auto_scan_batch`](crate::catalog::auto_scan::open_auto_scan_batch)).
+/// catalog index.
 pub(crate) fn scan_auto_in_shared_batch(
     context: &crate::Context,
     detector: &LibraryPatternComponentDetector,
-    prefetched_cache: &FileHashCache,
     catalog_index: &super::reconcile::CatalogInstallIndex,
     install: &DiscoveredInstall,
 ) -> Result<Vec<ScanFolderCatalogResult>, ServiceError> {
@@ -31,10 +28,6 @@ pub(crate) fn scan_auto_in_shared_batch(
     scan_source_impl(
         super::ScanInputs { context, detector },
         &source,
-        // A checkpoint miss still requires one complete metadata walk. The
-        // launcher identity itself was already resolved during discovery.
-        DetectionMode::FullCached,
-        Some(prefetched_cache),
         Some(catalog_index),
         super::ExplicitRootChange::Unchanged,
         &[],

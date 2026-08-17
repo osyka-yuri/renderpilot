@@ -2,29 +2,24 @@
 //!
 //! ## Modules
 //!
-//! - `detect` -- library-file detection modes + hash-cache I/O glue
+//! - `detect` -- complete stable-object library detection
 //! - `reconcile` -- catalog identity merge for stable game ids
 //! - `persist` -- write one explicit installation scan unit
-//! - `hash_cache` -- populate/load/save `file_hash_cache` (crate-visible for
-//!   auto_scan batch prefetch)
-//! - existing: `discovery`, `paths`, `prune`, `recovery`, `scan_plan`, `auto`
+//! - existing: `discovery`, `paths`, `prune`, `recovery`, `auto`
 //!
 //! ## Dependency rules
 //!
 //! ```text
 //! mod (scan_impl) -> detect, persist
-//! detect          -> hash_cache, scan_plan
+//! detect          -> detection
 //! persist         -> reconcile, recovery
 //! ```
 
 mod detect;
-// crate-visible for auto_scan batch prefetch (hard path).
-pub(crate) mod hash_cache;
 mod persist;
 mod prune;
 mod reconcile;
 mod recovery;
-mod scan_plan;
 
 #[cfg(windows)]
 mod auto;
@@ -42,10 +37,10 @@ pub(crate) use reconcile::CatalogInstallIndex;
 use std::path::PathBuf;
 
 use renderpilot_application::{AppError, GameRepository, OperationRepository};
-use renderpilot_detection::{FileHashCache, LibraryPatternComponentDetector};
+use renderpilot_detection::LibraryPatternComponentDetector;
 use renderpilot_domain::{GameId, LibraryComponent, RootAuthority};
 use renderpilot_platform_windows::ManualFolderGameSource;
-use scan_plan::DetectionMode;
+use renderpilot_storage_sqlite::{AuthorityCas, CatalogReadiness};
 
 use crate::ServiceError;
 
@@ -88,8 +83,6 @@ pub(super) fn scan_explicit_install(
             detector: &detector,
         },
         &source,
-        DetectionMode::FullCached,
-        None,
         None,
         root_change,
         consolidation_candidates,
@@ -106,8 +99,6 @@ struct ScanInputs<'a> {
 fn scan_source_impl(
     inputs: ScanInputs<'_>,
     source: &ManualFolderGameSource,
-    detection_mode: DetectionMode,
-    prefetched_cache: Option<&FileHashCache>,
     catalog_index: Option<&reconcile::CatalogInstallIndex>,
     root_change: ExplicitRootChange,
     consolidation_candidates: &[GameId],
@@ -115,7 +106,16 @@ fn scan_source_impl(
     let storage = inputs.context.storage();
     let detector = inputs.detector;
 
-    let selected_game = source.discover_game()?;
+    let owned_catalog_index;
+    let catalog_index = match catalog_index {
+        Some(index) => index,
+        None => {
+            owned_catalog_index = reconcile::CatalogInstallIndex::load(storage)?;
+            &owned_catalog_index
+        }
+    };
+    let selected_game =
+        reconcile::reconcile_game_with_catalog(catalog_index, source.discover_game()?);
     let mut affected_ids = consolidation_candidates.to_vec();
     affected_ids.push(selected_game.id().clone());
     let _guards =
@@ -123,13 +123,12 @@ fn scan_source_impl(
     if root_change != ExplicitRootChange::Unchanged {
         ensure_root_change_not_blocked_before_scan(inputs.context, &selected_game)?;
     }
-    let libraries = detect_libraries(
-        storage,
-        detector,
-        &selected_game,
-        detection_mode,
-        prefetched_cache,
-    )?;
+    let initial_readiness = match storage.find_game(selected_game.id())? {
+        Some(_) => storage.catalog_readiness(selected_game.id())?,
+        None => CatalogReadiness::NeverCompleted { authority_epoch: 0 },
+    };
+    let authority = AuthorityCas::new(initial_readiness.authority_epoch());
+    let libraries = detect_libraries(storage, detector, &selected_game)?;
     let components = reconcile::build_library_components(&selected_game, &libraries)?;
     if root_change != ExplicitRootChange::Unchanged {
         ensure_root_change_preserves_state(inputs.context, &selected_game, &components)?;
@@ -146,9 +145,11 @@ fn scan_source_impl(
             game: selected_game,
             libraries,
             components: &components,
+            initial_readiness,
+            authority,
             prune_empty_operations: root_change == ExplicitRootChange::Narrowed,
             root_correction_recovery_bundle_path,
-            prefetched_catalog_index: catalog_index,
+            prefetched_catalog_index: Some(catalog_index),
             consolidation_candidates,
         },
     )
@@ -258,4 +259,106 @@ fn assess_root_change(
         &executable_basenames,
         prospective_components,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, fs::FileTimes, time::SystemTime};
+
+    use renderpilot_domain::{GameId, RootAuthority};
+    use renderpilot_nvapi::{DlssDllKind, DlssVersion};
+
+    use super::{ExplicitRootChange, scan_explicit_install};
+
+    fn assert_catalogued_sr_version(
+        context: &crate::Context,
+        root: &std::path::Path,
+        game_id: &GameId,
+        expected: DlssVersion,
+    ) {
+        let setting_context = crate::nvapi::resolve::build_setting_context_with_context(
+            context,
+            root,
+            game_id.as_str(),
+        )
+        .expect("catalog projection");
+        assert_eq!(
+            setting_context.catalog_readiness,
+            renderpilot_nvapi::CatalogReadiness::Ready
+        );
+        assert_eq!(
+            setting_context.dlls[&DlssDllKind::Sr].version,
+            Some(expected)
+        );
+    }
+
+    fn scan_fixture(context: &crate::Context, root: &std::path::Path, game_id: &GameId) {
+        scan_explicit_install(
+            context,
+            root.to_path_buf(),
+            game_id.clone(),
+            RootAuthority::UserConfirmed,
+            None,
+            ExplicitRootChange::Unchanged,
+            &[],
+        )
+        .expect("complete explicit scan");
+    }
+
+    #[test]
+    fn complete_scan_persistence_and_nvapi_projection_follow_external_same_size_a_b_a_replacement()
+    {
+        let root = tempfile::tempdir().expect("game root");
+        let dll = root.path().join("nvngx_dlss.dll");
+        let a = crate::addons::test_support::build_nvidia_dlss_pe([1, 0, 0, 0]);
+        let b = crate::addons::test_support::build_nvidia_dlss_pe([2, 0, 0, 0]);
+        assert_eq!(a.len(), b.len(), "fixture replacement must be same size");
+        fs::write(&dll, &a).expect("write A");
+        let mtime = fs::metadata(&dll)
+            .expect("A metadata")
+            .modified()
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+
+        let context = crate::Context::from_storage(
+            renderpilot_storage_sqlite::SqliteStorage::in_memory().expect("storage"),
+        );
+        let game_id = GameId::new("manual:scan-projection-a-b-a").expect("game id");
+        scan_fixture(&context, root.path(), &game_id);
+        assert_catalogued_sr_version(
+            &context,
+            root.path(),
+            &game_id,
+            DlssVersion::new(1, 0, 0, 0),
+        );
+
+        fs::write(&dll, &b).expect("write B");
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&dll)
+            .expect("open B for timestamp restoration")
+            .set_times(FileTimes::new().set_modified(mtime))
+            .expect("restore A timestamp on B");
+        scan_fixture(&context, root.path(), &game_id);
+        assert_catalogued_sr_version(
+            &context,
+            root.path(),
+            &game_id,
+            DlssVersion::new(2, 0, 0, 0),
+        );
+
+        fs::write(&dll, &a).expect("restore A bytes");
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&dll)
+            .expect("open restored A for timestamp restoration")
+            .set_times(FileTimes::new().set_modified(mtime))
+            .expect("restore A timestamp");
+        scan_fixture(&context, root.path(), &game_id);
+        assert_catalogued_sr_version(
+            &context,
+            root.path(),
+            &game_id,
+            DlssVersion::new(1, 0, 0, 0),
+        );
+    }
 }

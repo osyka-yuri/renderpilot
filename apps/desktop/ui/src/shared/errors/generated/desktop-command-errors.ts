@@ -220,6 +220,13 @@ export const DESKTOP_COMMAND_ERROR_CONTRACT = {
       reasonCodes: [],
       recoveryBundlePath: false,
     },
+    nvapi_catalog_not_ready: {
+      messageKey: 'user_message.nvapi_catalog_not_ready',
+      severity: 'warning',
+      actions: ['refresh_or_scan_game_folder'],
+      reasonCodes: [],
+      recoveryBundlePath: false,
+    },
     operation_not_found: {
       messageKey: 'user_message.operation_not_found',
       severity: 'warning',

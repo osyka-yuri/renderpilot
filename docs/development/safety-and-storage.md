@@ -28,9 +28,11 @@ A current portable catalog is validated without a snapshot or mutation. An older
 
 The stable supervisor owns snapshots, journals, receipts, publication, selection, and recovery. The signed App generation owns schema inspection and its schema-specific migration chain. This separation lets a compatible installed supervisor run a later signed generation without granting either process the other's authority. Portable migration never falls back to rebuilding user data. General, nonportable storage may rebuild a malformed schema only after creating and validating an SQLite backup.
 
-Schema changes must update the shared release contract, migration steps, physical contract, repository behavior, and tests together.
+The current release contract targets schema v17. Its v16→v17 step replaces weak global scan caches with owner-scoped file observations and typed, fail-closed scan authority. Schema changes must update the shared release contract, migration steps, physical contract, repository behavior, and tests together.
 
 The database holds catalog entities, scan state, operation and pending-mutation records, add-on capabilities and installations, cover metadata, and related settings. A scan persists its game, components, and artifacts in one transaction. SQLite runs in WAL mode, and typed rollback baselines use a private storage encoding behind repository contracts. Large library payloads and covers live in filesystem storage rather than SQLite.
+
+Catalog scans always traverse each authoritative installation root so an unchanged launcher manifest cannot hide an external DLL replacement. On a supported local filesystem, a warm scan re-proves the owner-scoped strong identity without reading or hashing file contents; unsupported, remote, or discontinuous identity sources deliberately fall back to one stable full read and publish no reusable key. Automatic scans use at most four workers. Local library verification loads artifact observations with one batch query and publishes all successfully verified owner scopes in one transaction.
 
 ## Storage locations
 

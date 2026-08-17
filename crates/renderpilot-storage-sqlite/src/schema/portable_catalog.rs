@@ -140,8 +140,9 @@ pub fn inspect_portable_catalog_schema(path: &Path) -> Result<u32, PortableCatal
     let connection = open_existing_read_only(path)?;
     let source_version = read_version(&connection)?;
     match source_version {
-        CURRENT_PORTABLE_SCHEMA_VERSION => validate_v16(&connection)?,
-        15 => validate_v15_precondition(&connection)?,
+        CURRENT_PORTABLE_SCHEMA_VERSION => validate_current(&connection)?,
+        15 => validate_legacy_precondition(&connection, false)?,
+        16 => validate_legacy_precondition(&connection, true)?,
         version if supported_upgrade_source(version).is_some() => {
             validate_integrity_precondition(&connection)?;
         }
@@ -167,7 +168,7 @@ pub fn transition_portable_catalog_schema(
     match transition {
         PortableCatalogSchemaTransition::ValidateCurrent => {
             let connection = open_existing_read_only(path)?;
-            inspect_v16(&connection)
+            inspect_current(&connection)
         }
         PortableCatalogSchemaTransition::UpgradeToCurrentAfterSnapshot => {
             upgrade_after_snapshot(path)
@@ -206,7 +207,7 @@ pub(crate) fn initialize_fresh_portable_catalog(
             error,
         )
     })?;
-    validate_v16(&transaction)?;
+    validate_current(&transaction)?;
     transaction.commit().map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::Ddl,
@@ -222,7 +223,7 @@ pub(crate) fn initialize_fresh_portable_catalog(
 pub(crate) fn validate_current_portable_catalog(
     connection: &Connection,
 ) -> Result<(), PortableCatalogSchemaError> {
-    inspect_v16(connection).map(|_| ())
+    inspect_current(connection).map(|_| ())
 }
 
 fn open_existing_read_only(path: &Path) -> Result<Connection, PortableCatalogSchemaError> {
@@ -245,7 +246,7 @@ fn open_existing_read_write(path: &Path) -> Result<Connection, PortableCatalogSc
     })
 }
 
-fn inspect_v16(
+fn inspect_current(
     connection: &Connection,
 ) -> Result<PortableCatalogSchemaReport, PortableCatalogSchemaError> {
     let source_version = read_version(connection)?;
@@ -256,7 +257,7 @@ fn inspect_v16(
         ));
     }
 
-    validate_v16(connection)?;
+    validate_current(connection)?;
     Ok(report(source_version))
 }
 
@@ -300,7 +301,7 @@ fn upgrade_after_snapshot(
     let source_version = read_version(&connection)?;
 
     if source_version == CURRENT_PORTABLE_SCHEMA_VERSION {
-        validate_v16(&connection)?;
+        validate_current(&connection)?;
         return Ok(report(source_version));
     }
     let Some(source_schema) = supported_upgrade_source(source_version) else {
@@ -310,10 +311,10 @@ fn upgrade_after_snapshot(
         ));
     };
 
-    if source_version == 15 {
-        validate_v15_precondition(&connection)?;
-    } else {
-        validate_integrity_precondition(&connection)?;
+    match source_version {
+        15 => validate_legacy_precondition(&connection, false)?,
+        16 => validate_legacy_precondition(&connection, true)?,
+        _ => validate_integrity_precondition(&connection)?,
     }
 
     let transaction = connection
@@ -332,7 +333,7 @@ fn upgrade_after_snapshot(
             error,
         )
     })?;
-    validate_v16(&transaction)?;
+    validate_current(&transaction)?;
     transaction.commit().map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::Ddl,
@@ -348,7 +349,7 @@ fn upgrade_after_snapshot(
             error,
         )
     })?;
-    validate_v16(&connection)?;
+    validate_current(&connection)?;
 
     Ok(report(source_version))
 }
@@ -370,19 +371,25 @@ fn read_version(connection: &Connection) -> Result<u32, PortableCatalogSchemaErr
     })
 }
 
-fn validate_v15_precondition(connection: &Connection) -> Result<(), PortableCatalogSchemaError> {
-    validation::validate_catalog_schema_before_portable_path_tags_observational(connection)
-        .map_err(|error| {
-            PortableCatalogSchemaError::with_source(
-                PortableCatalogSchemaErrorKind::TransitionPrecondition,
-                "v15 catalog does not satisfy the exact transition precondition",
-                error,
-            )
-        })?;
+fn validate_legacy_precondition(
+    connection: &Connection,
+    require_portable_path_tags: bool,
+) -> Result<(), PortableCatalogSchemaError> {
+    validation::validate_legacy_portable_catalog_observational(
+        connection,
+        require_portable_path_tags,
+    )
+    .map_err(|error| {
+        PortableCatalogSchemaError::with_source(
+            PortableCatalogSchemaErrorKind::TransitionPrecondition,
+            "released legacy catalog does not satisfy its exact transition precondition",
+            error,
+        )
+    })?;
     validation::validate_database_integrity(connection).map_err(|error| {
         PortableCatalogSchemaError::with_source(
             PortableCatalogSchemaErrorKind::TransitionPrecondition,
-            "v15 catalog failed integrity precondition",
+            "released legacy catalog failed integrity precondition",
             error,
         )
     })
@@ -408,7 +415,7 @@ fn supported_upgrade_source(version: u32) -> Option<i32> {
     steps::can_upgrade_from(version).then_some(version)
 }
 
-fn validate_v16(connection: &Connection) -> Result<(), PortableCatalogSchemaError> {
+fn validate_current(connection: &Connection) -> Result<(), PortableCatalogSchemaError> {
     let observed_version = read_version(connection)?;
     if observed_version != CURRENT_PORTABLE_SCHEMA_VERSION {
         return Err(PortableCatalogSchemaError::message(

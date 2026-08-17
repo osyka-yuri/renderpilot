@@ -147,6 +147,9 @@ pub enum ServiceError {
         /// Backend-only diagnostic detail from the failing platform boundary.
         detail: String,
     },
+    /// A DLL-dependent NVAPI mutation requires a completed catalog scan, but
+    /// the game's current projection has never completed or was invalidated.
+    NvapiCatalogNotReady,
 }
 
 impl fmt::Display for ServiceError {
@@ -244,6 +247,9 @@ impl fmt::Display for ServiceError {
             Self::AccessDenied { operation, detail } => {
                 write!(formatter, "access denied while {operation}: {detail}")
             }
+            Self::NvapiCatalogNotReady => formatter.write_str(
+                "the game catalog is not ready; rescan the game before changing DLL-dependent NVIDIA settings",
+            ),
         }
     }
 }
@@ -422,6 +428,7 @@ mod tests {
                 operation: "updating NVAPI DRS settings".to_owned(),
                 detail: "NVAPI reported invalid user privilege".to_owned(),
             },
+            ServiceError::NvapiCatalogNotReady,
         ];
 
         for err in &errors {

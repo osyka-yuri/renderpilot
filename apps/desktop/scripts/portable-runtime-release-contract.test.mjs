@@ -8,7 +8,7 @@ const VALID = `{
   "supervisorCapability": 3,
   "appSessionProtocol": "renderpilot-portable-app-session-v2",
   "minimumPortableSchema": 4,
-  "currentSchema": 16
+  "currentSchema": 17
 }`;
 
 test('portable runtime release contract accepts exact JSON integer fields', () => {
@@ -17,7 +17,7 @@ test('portable runtime release contract accepts exact JSON integer fields', () =
   assert.equal(contract.contractVersion, 1);
   assert.equal(contract.supervisorCapability, 3);
   assert.equal(contract.appSessionProtocol, 'renderpilot-portable-app-session-v2');
-  assert.equal(contract.currentSchema, 16);
+  assert.equal(contract.currentSchema, 17);
 });
 
 test('portable runtime release contract rejects non-lexical, overflow, and wire-shape variants', () => {
@@ -29,13 +29,13 @@ test('portable runtime release contract rejects non-lexical, overflow, and wire-
       '"appSessionProtocol": "renderpilot-portable-app-session-v2"',
       '"appSessionProtocol": "renderpilot-portable-app-session-v1"',
     ),
-    VALID.replace('"currentSchema": 16', '"currentSchema": 17'),
+    VALID.replace('"currentSchema": 17', '"currentSchema": 18'),
     VALID.replace('"minimumPortableSchema": 4', '"minimumPortableSchema": "4"'),
     VALID.replace('"minimumPortableSchema": 4,', ''),
-    VALID.replace('"currentSchema": 16', '"currentSchema": 16, "unknown": 1'),
-    VALID.replace('"currentSchema": 16', '"currentSchema": 15, "currentSchema": 16'),
-    VALID.replace('"currentSchema": 16', '"\\u0063urrentSchema": 15, "currentSchema": 16'),
-    VALID.replace('"currentSchema": 16', '"CurrentSchema": 16'),
+    VALID.replace('"currentSchema": 17', '"currentSchema": 17, "unknown": 1'),
+    VALID.replace('"currentSchema": 17', '"currentSchema": 16, "currentSchema": 17'),
+    VALID.replace('"currentSchema": 17', '"\\u0063urrentSchema": 16, "currentSchema": 17'),
+    VALID.replace('"currentSchema": 17', '"CurrentSchema": 17'),
   ];
 
   for (const source of invalid) {

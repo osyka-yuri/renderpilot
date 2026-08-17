@@ -2,6 +2,8 @@
 
 /// Serializable DTOs for NVAPI setting state and metadata.
 pub mod dto;
+/// Guard-owning sessions for per-game and global NVAPI operations.
+pub mod game_session;
 /// Read/write operations for NVAPI driver profile settings.
 pub mod ops;
 /// NVAPI setting registry backed by the DLSS settings catalog.

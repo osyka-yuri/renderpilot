@@ -22,10 +22,6 @@ BEGIN
 END;
 "#;
 
-pub(super) const fn baseline_sql() -> &'static str {
-    SQL
-}
-
 pub(crate) fn apply(connection: &Connection) -> AppResult<()> {
     connection
         .execute_batch(SQL)

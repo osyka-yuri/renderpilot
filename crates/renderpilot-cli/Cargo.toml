@@ -20,7 +20,7 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 hex = "0.4"
-renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite" }
+renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite", features = ["test-instrumentation"] }
 sha2 = "0.11"
 tempfile = "3"
 

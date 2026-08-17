@@ -255,7 +255,71 @@ pub mod settings {
     pub const ALL: &[&str] = &[KEY, VALUE, CREATED_AT, UPDATED_AT];
 }
 
-pub mod file_hash_cache {
+pub mod catalog_scan_authority {
+    pub const GAME_ID: &str = "game_id";
+    pub const READINESS: &str = "readiness";
+    pub const AUTHORITY_EPOCH: &str = "authority_epoch";
+    pub const INVALIDATION_REASON: &str = "invalidation_reason";
+    pub const MUTATION_TOKEN: &str = "mutation_token";
+    pub const COMPLETED_AT: &str = "completed_at";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[
+        GAME_ID,
+        READINESS,
+        AUTHORITY_EPOCH,
+        INVALIDATION_REASON,
+        MUTATION_TOKEN,
+        COMPLETED_AT,
+        UPDATED_AT,
+    ];
+}
+
+pub mod file_observations {
+    pub const OWNER_KIND: &str = "owner_kind";
+    pub const OWNER_ID: &str = "owner_id";
+    pub const GAME_ID: &str = "game_id";
+    pub const ARTIFACT_ID: &str = "artifact_id";
+    pub const NORMALIZED_PATH: &str = "normalized_path";
+    pub const IDENTITY_KIND: &str = "identity_kind";
+    pub const OBJECT_IDENTITY: &str = "object_identity";
+    pub const CHANGE_TOKEN: &str = "change_token";
+    pub const SIZE: &str = "size";
+    pub const ALGORITHM_REVISION: &str = "algorithm_revision";
+    pub const SHA256: &str = "sha256";
+    pub const VERSION_OBSERVED: &str = "version_observed";
+    pub const VERSION: &str = "version";
+    pub const RUNTIME_OBSERVED: &str = "runtime_observed";
+    pub const RUNTIME_JSON: &str = "runtime_json";
+    pub const PE_OBSERVED: &str = "pe_observed";
+    pub const PE_JSON: &str = "pe_json";
+    pub const CREATED_AT: &str = "created_at";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[
+        OWNER_KIND,
+        OWNER_ID,
+        GAME_ID,
+        ARTIFACT_ID,
+        NORMALIZED_PATH,
+        IDENTITY_KIND,
+        OBJECT_IDENTITY,
+        CHANGE_TOKEN,
+        SIZE,
+        ALGORITHM_REVISION,
+        SHA256,
+        VERSION_OBSERVED,
+        VERSION,
+        RUNTIME_OBSERVED,
+        RUNTIME_JSON,
+        PE_OBSERVED,
+        PE_JSON,
+        CREATED_AT,
+        UPDATED_AT,
+    ];
+}
+
+/// Released v16 columns retained only for exact, read-only portable migration
+/// admission. Production CURRENT no longer creates this weak cache.
+pub mod legacy_file_hash_cache {
     pub const PATH: &str = "path";
     pub const SIZE: &str = "size";
     pub const MODIFIED_AT: &str = "modified_at";
@@ -263,7 +327,6 @@ pub mod file_hash_cache {
     pub const VERSION: &str = "version";
     pub const CREATED_AT: &str = "created_at";
     pub const UPDATED_AT: &str = "updated_at";
-
     pub const ALL: &[&str] = &[
         PATH,
         SIZE,
@@ -273,6 +336,15 @@ pub mod file_hash_cache {
         CREATED_AT,
         UPDATED_AT,
     ];
+}
+
+/// Released v16 columns retained only for exact, read-only portable migration
+/// admission. Production CURRENT no longer creates scan checkpoints.
+pub mod legacy_scan_source_checkpoints {
+    pub const SOURCE_KEY: &str = "source_key";
+    pub const FINGERPRINT: &str = "fingerprint";
+    pub const UPDATED_AT: &str = "updated_at";
+    pub const ALL: &[&str] = &[SOURCE_KEY, FINGERPRINT, UPDATED_AT];
 }
 
 pub mod nvapi_executable_overrides {
@@ -321,13 +393,6 @@ pub mod profile_addon_capabilities {
     pub const ALL: &[&str] = &[GAME_ID, ADDON_KIND, SOURCE_REVISION, UPDATED_AT];
 }
 
-pub mod scan_source_checkpoints {
-    pub const SOURCE_KEY: &str = "source_key";
-    pub const FINGERPRINT: &str = "fingerprint";
-    pub const UPDATED_AT: &str = "updated_at";
-    pub const ALL: &[&str] = &[SOURCE_KEY, FINGERPRINT, UPDATED_AT];
-}
-
 pub mod portable_path_tags {
     pub const TAG: &str = "tag";
     pub const KIND: &str = "kind";
@@ -351,7 +416,8 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
     ("operations", operations::ALL),
     ("operation_items", operation_items::ALL),
     ("settings", settings::ALL),
-    ("file_hash_cache", file_hash_cache::ALL),
+    ("catalog_scan_authority", catalog_scan_authority::ALL),
+    ("file_observations", file_observations::ALL),
     (
         "nvapi_executable_overrides",
         nvapi_executable_overrides::ALL,
@@ -362,6 +428,5 @@ pub const CONTRACT_TABLES: &[(&str, &[&str])] = &[
         "profile_addon_capabilities",
         profile_addon_capabilities::ALL,
     ),
-    ("scan_source_checkpoints", scan_source_checkpoints::ALL),
     ("portable_path_tags", portable_path_tags::ALL),
 ];

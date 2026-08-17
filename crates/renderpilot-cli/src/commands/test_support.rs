@@ -5,9 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use renderpilot_orchestration::application::{
-    ArtifactRepository, ComponentRepository, GameRepository,
-};
+use renderpilot_orchestration::application::{ArtifactRepository, GameRepository};
 use renderpilot_orchestration::domain::{
     ArtifactId, ArtifactTrustLevel, ComponentFile, ComponentId, ComponentKind, GameId,
     GameIdentity, GameInstallation, GameRuntime, Launcher, LibraryArtifact, LibraryTechnology,
@@ -87,14 +85,21 @@ impl CatalogFixture {
             .expect("game should be stored");
     }
 
-    pub(super) fn store_components(
+    /// Publishes fixture components through the storage adapter's explicit
+    /// test-only complete-scan path. Ordinary public component replacement is
+    /// intentionally not a ready catalog projection.
+    pub(super) fn store_complete_components(
         &self,
         game_id: &GameId,
         components: &[renderpilot_orchestration::domain::LibraryComponent],
     ) {
+        let game = self
+            .storage
+            .require_game(game_id)
+            .expect("game should be stored");
         self.storage
-            .replace_components_for_game(game_id, components)
-            .expect("components should be stored");
+            .store_complete_components_for_test(&game, components)
+            .expect("complete fixture components should be stored");
     }
 
     pub(super) fn store_artifact(&self, artifact: &LibraryArtifact) {

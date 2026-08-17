@@ -1,6 +1,6 @@
 //! Write and validate NVAPI setting overrides.
 
-use renderpilot_nvapi::setting::{NvapiSetting, SettingContext};
+use renderpilot_nvapi::setting::{CatalogReadiness, NvapiSetting, SettingContext};
 
 use super::assemble::known_preset_set;
 use super::live::read_pre_state;
@@ -55,14 +55,18 @@ pub fn validate_value_supported(
     dword: u32,
     ctx: &SettingContext,
 ) -> Result<(), ServiceError> {
+    ensure_dll_setting_catalog_ready(setting, ctx)?;
     let Some(kind) = setting.dll_kind() else {
         return Ok(());
     };
     let Some(info) = ctx.dlls.get(&kind) else {
         return Ok(());
     };
+    let Some(version) = info.version else {
+        return Ok(());
+    };
 
-    let supported = supported_presets_for(bundled_manifest(kind), &info.version);
+    let supported = supported_presets_for(bundled_manifest(kind), &version);
     if supported.is_empty() {
         return Ok(());
     }
@@ -75,7 +79,7 @@ pub fn validate_value_supported(
             setting
                 .format_wire(dword)
                 .unwrap_or_else(|| dword.to_string()),
-            info.version,
+            version,
             kind
         )));
     }
@@ -92,6 +96,7 @@ pub fn write_setting_value(
     ctx: &SettingContext,
     op: WriteOp,
 ) -> Result<(), ServiceError> {
+    ensure_dll_setting_catalog_ready(setting, ctx)?;
     let session = open_drs_session().map_err(warning_to_service_error)?;
 
     let profile = target.resolve_profile_for_write(&session, ctx)?;
@@ -137,6 +142,18 @@ pub fn write_setting_value(
     Ok(())
 }
 
+/// Rejects a DLL-dependent mutation until the game has a current complete
+/// catalog projection. This must run before DRS access or baseline writes.
+pub(crate) fn ensure_dll_setting_catalog_ready(
+    setting: &dyn NvapiSetting,
+    ctx: &SettingContext,
+) -> Result<(), ServiceError> {
+    if setting.dll_kind().is_some() && ctx.catalog_readiness == CatalogReadiness::NotReady {
+        return Err(ServiceError::NvapiCatalogNotReady);
+    }
+    Ok(())
+}
+
 /// Restores every setting baseline for one game in a single DRS session and
 /// publishes the driver changes with exactly one save.
 ///
@@ -144,8 +161,14 @@ pub fn write_setting_value(
 /// SQLite failure therefore leaves an idempotent, retryable restore record.
 pub(crate) fn restore_game_baselines(
     context: &crate::Context,
+    guard: &crate::game_mutation_lock::GameMutationGuard,
     game_id: &str,
 ) -> Result<(), ServiceError> {
+    if guard.game_id().as_str() != game_id {
+        return Err(ServiceError::command_failed(
+            "NVAPI baseline restore requires the matching game mutation boundary",
+        ));
+    }
     let baselines = context
         .storage()
         .list_nvapi_setting_baselines_for_game(game_id)?;

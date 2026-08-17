@@ -7,7 +7,8 @@ use renderpilot_domain::{
 };
 
 use super::{
-    SqliteStorage, component_backups, components, installed_addons, pending_file_mutations,
+    SqliteStorage, component_backups, components, installed_addons, observations,
+    pending_file_mutations,
 };
 
 /// Typed mutation of the component rollback aggregate.
@@ -86,12 +87,40 @@ impl SqliteStorage {
     /// Atomically commits feature rows and, when present, the durable filesystem phase.
     pub fn commit_game_mutation(&self, commit: GameMutationCommit<'_>) -> AppResult<()> {
         self.with_transaction(|transaction| {
-            if let Some(component_set) = commit.component_set {
+            let prepared_binding = if let Some(mutation_id) = commit.mutation_id {
+                Some(pending_file_mutations::validate_prepared_mutation_commit_within_transaction(
+                    transaction,
+                    commit.game_id,
+                    mutation_id,
+                    commit.component_set.map(<[LibraryComponent]>::len),
+                    !commit.baseline_mutations.is_empty(),
+                )?)
+            } else {
+                None
+            };
+            let skip_absent_empty_component_replacement = matches!(
+                (prepared_binding, commit.component_set),
+                (
+                    Some(pending_file_mutations::PreparedMutationCommitBinding::CatalogAbsent),
+                    Some(component_set)
+                ) if component_set.is_empty()
+            );
+            if let Some(component_set) = commit.component_set
+                && !skip_absent_empty_component_replacement
+            {
                 components::replace_components_for_game_within_transaction(
                     transaction,
                     commit.game_id,
                     component_set,
                 )?;
+                if commit.mutation_id.is_none() {
+                    observations::invalidate_game_authority_within_transaction(
+                        transaction,
+                        commit.game_id,
+                        "game_mutation_component_set",
+                        None,
+                    )?;
+                }
             }
             for mutation in commit.baseline_mutations {
                 match mutation {
@@ -162,11 +191,74 @@ impl SqliteStorage {
 
 #[cfg(test)]
 mod tests {
-    use renderpilot_application::InstalledAddonRepository;
-    use renderpilot_domain::{AddonKind, GameId, InstalledAddon, PathRef};
+    use renderpilot_application::{ComponentRepository, GameRepository, InstalledAddonRepository};
+    use renderpilot_domain::{
+        AddonKind, ComponentKind, GameId, GameIdentity, GameInstallation, GameRuntime,
+        InstalledAddon, Launcher, LibraryComponent, LibraryTechnology, PathRef, Platform,
+        Swappability,
+    };
 
     use super::*;
-    use crate::repositories::{PendingFileMutationRow, PendingFileMutationState, SqliteStorage};
+    use crate::repositories::{
+        AuthorityCas, BeginFileMutationPreparation, CatalogReadiness, CompleteScanWriteUnit,
+        PendingFileMutationRow, PendingFileMutationState, SqliteStorage,
+    };
+
+    fn test_game(game_id: GameId) -> GameInstallation {
+        let install_path =
+            PathRef::new(format!("C:/Games/{}", game_id.as_str().replace(':', "_"))).expect("path");
+        let identity = GameIdentity::new(game_id, "Test Game", Launcher::Steam).expect("identity");
+        GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            install_path,
+        )
+    }
+
+    fn complete_game_scan(storage: &SqliteStorage, game: &GameInstallation) {
+        storage
+            .save_complete_scan_write_unit(CompleteScanWriteUnit {
+                game,
+                components: &[],
+                artifacts: &[],
+                observations: &[],
+                authority: AuthorityCas::new(0),
+                prune_empty_operations: false,
+            })
+            .expect("complete scan");
+    }
+
+    fn prepare_mutation(storage: &SqliteStorage, game_id: &GameId, id: &str) {
+        storage
+            .prepare_file_mutation(&PendingFileMutationRow {
+                id: id.to_owned(),
+                game_id: game_id.clone(),
+                feature: renderpilot_domain::mutation_features::LUMA_UPDATE.to_owned(),
+                subject_id: None,
+                state: PendingFileMutationState::Preparing,
+                manifest_json: r#"{"snapshots":[]}"#.to_owned(),
+            })
+            .expect("reserve mutation");
+        storage
+            .finish_preparing_file_mutation(id, r#"{"snapshots":[]}"#)
+            .expect("prepare mutation");
+    }
+
+    fn prepare_pre_catalog_mutation(storage: &SqliteStorage, game_id: &GameId, id: &str) {
+        storage
+            .begin_file_mutation_preparation(&BeginFileMutationPreparation {
+                id: id.to_owned(),
+                game_id: game_id.clone(),
+                feature: renderpilot_domain::mutation_features::LUMA_UPDATE.to_owned(),
+                subject_id: None,
+                initial_manifest_json: r#"{"snapshots":[]}"#.to_owned(),
+            })
+            .expect("reserve pre-catalog mutation");
+        storage
+            .finish_preparing_file_mutation(id, r#"{"snapshots":[]}"#)
+            .expect("prepare pre-catalog mutation");
+    }
 
     #[test]
     fn commit_game_mutation_rolls_back_addon_when_mutation_mark_fails() {
@@ -201,6 +293,9 @@ mod tests {
     fn commit_game_mutation_marks_prepared_mutation_with_addon_upsert() {
         let storage = SqliteStorage::in_memory().expect("storage");
         let game_id = GameId::new("steam:mutation-ok").expect("id");
+        storage
+            .upsert_game(&test_game(game_id.clone()))
+            .expect("store game");
         let addon = InstalledAddon::new(
             game_id.clone(),
             AddonKind::Luma,
@@ -212,15 +307,18 @@ mod tests {
                 game_id: game_id.clone(),
                 feature: renderpilot_domain::mutation_features::LUMA_UPDATE.to_owned(),
                 subject_id: None,
-                state: PendingFileMutationState::Prepared,
+                state: PendingFileMutationState::Preparing,
                 manifest_json: r#"{"snapshots":[]}"#.to_owned(),
             })
             .expect("prepare");
+        storage
+            .finish_preparing_file_mutation("tx-ok", r#"{"snapshots":[]}"#)
+            .expect("finish prepare");
 
         storage
             .commit_game_mutation(GameMutationCommit {
                 game_id: &game_id,
-                component_set: None,
+                component_set: Some(&[]),
                 baseline_mutations: &[],
                 addon: InstalledAddonMutation::Upsert(&addon),
                 mutation_id: Some("tx-ok"),
@@ -241,5 +339,304 @@ mod tests {
                 .state,
             PendingFileMutationState::Committed
         );
+        assert_eq!(
+            storage.catalog_readiness(&game_id).expect("readiness"),
+            CatalogReadiness::Invalidated {
+                authority_epoch: 1,
+                reason: "prepared_file_mutation".to_owned(),
+                mutation_token: Some("tx-ok".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn metadata_only_mutation_leaves_a_complete_authority_unchanged() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:metadata-only").expect("id");
+        let game = test_game(game_id.clone());
+        complete_game_scan(&storage, &game);
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: None,
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: None,
+            })
+            .expect("metadata-only mutation");
+
+        let CatalogReadiness::Complete(ready) =
+            storage.catalog_readiness(&game_id).expect("readiness")
+        else {
+            panic!("metadata-only mutation must preserve Complete authority");
+        };
+        assert_eq!(ready.game_id(), &game_id);
+        assert_eq!(ready.authority_epoch(), 1);
+    }
+
+    #[test]
+    fn component_set_without_file_mutation_invalidates_authority() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:component-set").expect("id");
+        let game = test_game(game_id.clone());
+        complete_game_scan(&storage, &game);
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: Some(&[]),
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: None,
+            })
+            .expect("component mutation");
+
+        assert_eq!(
+            storage.catalog_readiness(&game_id).expect("readiness"),
+            CatalogReadiness::Invalidated {
+                authority_epoch: 2,
+                reason: "game_mutation_component_set".to_owned(),
+                mutation_token: None,
+            }
+        );
+    }
+
+    #[test]
+    fn mutation_id_requires_same_game_prepared_row_with_matching_invalidation() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:mutation-conditions").expect("id");
+        let other_game_id = GameId::new("steam:mutation-other-game").expect("id");
+        let game = test_game(game_id.clone());
+        let other_game = test_game(other_game_id.clone());
+        complete_game_scan(&storage, &game);
+        complete_game_scan(&storage, &other_game);
+        prepare_mutation(&storage, &other_game_id, "tx-other-game");
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: Some(&[]),
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: Some("tx-other-game"),
+            })
+            .expect_err("a different game's prepared mutation cannot commit");
+
+        storage
+            .prepare_file_mutation(&PendingFileMutationRow {
+                id: "tx-without-invalidation".to_owned(),
+                game_id: game_id.clone(),
+                feature: renderpilot_domain::mutation_features::LUMA_UPDATE.to_owned(),
+                subject_id: None,
+                state: PendingFileMutationState::Prepared,
+                manifest_json: r#"{"snapshots":[]}"#.to_owned(),
+            })
+            .expect("fixture prepared row");
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: None,
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: Some("tx-without-invalidation"),
+            })
+            .expect_err("prepared state without matching invalidation cannot commit");
+        let CatalogReadiness::Complete(ready) =
+            storage.catalog_readiness(&game_id).expect("readiness")
+        else {
+            panic!("rejected mutation must preserve Complete authority");
+        };
+        assert_eq!(ready.game_id(), &game_id);
+        assert_eq!(ready.authority_epoch(), 1);
+    }
+
+    #[test]
+    fn pre_catalog_mutation_permits_only_addon_commit_effects() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:pre-catalog-addon").expect("id");
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-pre-catalog-addon");
+        let addon = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::Luma,
+            PathRef::new(r"C:\Games\Test\Luma-Game.addon").expect("path"),
+        );
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: None,
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Upsert(&addon),
+                mutation_id: Some("tx-pre-catalog-addon"),
+            })
+            .expect("pre-catalog add-on commit");
+
+        assert!(
+            storage
+                .get_installed_addon(&game_id)
+                .expect("addon")
+                .is_some()
+        );
+        assert_eq!(
+            storage
+                .get_pending_file_mutation("tx-pre-catalog-addon")
+                .expect("row")
+                .expect("row")
+                .state,
+            PendingFileMutationState::Committed
+        );
+        assert!(storage.catalog_readiness(&game_id).is_err());
+    }
+
+    #[test]
+    fn pre_catalog_mutation_allows_empty_component_cleanup_without_creating_catalog_state() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:pre-catalog-empty-cleanup").expect("id");
+        let addon = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::Luma,
+            PathRef::new(r"C:\Games\Test\Luma-Game.addon").expect("path"),
+        );
+        storage
+            .upsert_installed_addon(&addon)
+            .expect("seed orphan add-on");
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-pre-catalog-empty-cleanup");
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: Some(&[]),
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Delete(AddonKind::Luma),
+                mutation_id: Some("tx-pre-catalog-empty-cleanup"),
+            })
+            .expect("empty orphan component cleanup is a no-op");
+
+        assert!(storage.find_game(&game_id).expect("game query").is_none());
+        assert!(storage.catalog_readiness(&game_id).is_err());
+        assert!(
+            storage
+                .list_components_for_game(&game_id)
+                .expect("component query")
+                .is_empty()
+        );
+        assert!(
+            storage
+                .get_installed_addon(&game_id)
+                .expect("add-on query")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn pre_catalog_mutation_rejects_nonempty_component_and_baseline_effects() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:pre-catalog-catalog-write").expect("id");
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-pre-catalog-nonempty");
+
+        let component = LibraryComponent::new(
+            ComponentId::new("component:pre-catalog-set").expect("component id"),
+            game_id.clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::DlssSuperResolution,
+            Swappability::BundleOnly,
+        );
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: Some(std::slice::from_ref(&component)),
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: Some("tx-pre-catalog-nonempty"),
+            })
+            .expect_err("pre-catalog component write must fail");
+
+        let component_id = ComponentId::new("component:pre-catalog").expect("component id");
+        let baseline = [ComponentBaselineMutation::Delete {
+            component_id: &component_id,
+        }];
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-pre-catalog-baseline");
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: None,
+                baseline_mutations: &baseline,
+                addon: InstalledAddonMutation::Keep,
+                mutation_id: Some("tx-pre-catalog-baseline"),
+            })
+            .expect_err("pre-catalog baseline write must fail");
+        assert_eq!(
+            storage
+                .get_pending_file_mutation("tx-pre-catalog-nonempty")
+                .expect("row")
+                .expect("row")
+                .state,
+            PendingFileMutationState::Prepared
+        );
+        assert_eq!(
+            storage
+                .get_pending_file_mutation("tx-pre-catalog-baseline")
+                .expect("row")
+                .expect("row")
+                .state,
+            PendingFileMutationState::Prepared
+        );
+    }
+
+    #[test]
+    fn late_catalog_insertion_binds_prepared_addon_commit_before_feature_writes() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:late-catalog-binding").expect("id");
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-late-catalog-binding");
+        let game = test_game(game_id.clone());
+        storage.upsert_game(&game).expect("late game insert");
+        let addon = InstalledAddon::new(
+            game_id.clone(),
+            AddonKind::Luma,
+            PathRef::new(r"C:\Games\Test\Luma-Game.addon").expect("path"),
+        );
+
+        storage
+            .commit_game_mutation(GameMutationCommit {
+                game_id: &game_id,
+                component_set: Some(&[]),
+                baseline_mutations: &[],
+                addon: InstalledAddonMutation::Upsert(&addon),
+                mutation_id: Some("tx-late-catalog-binding"),
+            })
+            .expect("late-bound add-on commit");
+        assert_eq!(
+            storage.catalog_readiness(&game_id).expect("authority"),
+            CatalogReadiness::Invalidated {
+                authority_epoch: 1,
+                reason: "prepared_file_mutation".to_owned(),
+                mutation_token: Some("tx-late-catalog-binding".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn complete_scan_publication_is_excluded_while_late_bound_mutation_is_pending() {
+        let storage = SqliteStorage::in_memory().expect("storage");
+        let game_id = GameId::new("steam:pending-complete-exclusion").expect("id");
+        prepare_pre_catalog_mutation(&storage, &game_id, "tx-pending-complete-exclusion");
+        let game = test_game(game_id.clone());
+        storage.upsert_game(&game).expect("late game insert");
+
+        storage
+            .save_complete_scan_write_unit(CompleteScanWriteUnit {
+                game: &game,
+                components: &[],
+                artifacts: &[],
+                observations: &[],
+                authority: AuthorityCas::new(0),
+                prune_empty_operations: false,
+            })
+            .expect_err("a pending file mutation must exclude Complete publication");
+        assert!(matches!(
+            storage.catalog_readiness(&game_id).expect("authority"),
+            CatalogReadiness::NeverCompleted { authority_epoch: 0 }
+        ));
     }
 }

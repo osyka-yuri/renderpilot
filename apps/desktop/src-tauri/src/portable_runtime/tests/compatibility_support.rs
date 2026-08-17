@@ -31,6 +31,9 @@ use crate::portable_runtime::{
 pub(super) const RELEASED_V4_SCHEMA: &str = include_str!(
     "../../../../../../crates/renderpilot-storage-sqlite/tests/fixtures/catalog-v4.sql"
 );
+const RELEASED_V16_SCAN_SCHEMA: &str = include_str!(
+    "../../../../../../crates/renderpilot-storage-sqlite/tests/fixtures/catalog-v16-scan-state.sql"
+);
 
 type MigrationExchange = fn(
     &PortableAppSessionV2,
@@ -269,13 +272,21 @@ pub(super) fn portable_paths(root: &Path) -> RuntimePathsV1 {
 }
 
 pub(super) fn catalog_with_version(path: &Path, version: u32) {
-    if version == 15 {
+    if matches!(version, 15 | 16) {
         let storage = SqliteStorage::open(path).expect("create exact current catalog fixture");
         drop(storage);
-        Connection::open(path)
-            .expect("open current catalog for v15 fixture")
-            .execute_batch("DROP TABLE portable_path_tags; PRAGMA user_version = 15;")
-            .expect("reduce current catalog to the exact v15 boundary");
+        let connection = Connection::open(path).expect("open current catalog for legacy fixture");
+        connection
+            .execute_batch(RELEASED_V16_SCAN_SCHEMA)
+            .expect("restore released v16 weak scan state");
+        if version == 15 {
+            connection
+                .execute_batch("DROP TABLE portable_path_tags;")
+                .expect("remove v16 portable path tags");
+        }
+        connection
+            .pragma_update(None, "user_version", version)
+            .expect("stamp exact legacy schema fixture");
         return;
     }
     let connection = Connection::open(path).expect("create SQLite fixture");

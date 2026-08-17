@@ -93,7 +93,7 @@ function Get-RenderPilotPortableRuntimeReleaseContractFromJson {
             $supervisorCapability -cne 3 -or
             $appSessionProtocol -cne "renderpilot-portable-app-session-v2" -or
             $minimumSchema -cne 4 -or
-            $currentSchema -cne 16
+            $currentSchema -cne 17
         ) {
             throw "Portable runtime release contract has an unsupported version or range."
         }

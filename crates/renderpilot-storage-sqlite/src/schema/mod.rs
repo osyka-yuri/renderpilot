@@ -61,6 +61,8 @@ use self::version::database_has_user_schema;
 //   15 → 16: records the portable-runtime path-tag/receipt boundary. Existing
 //             game install paths are external data and are intentionally not
 //             rebased by catalog schema migration.
+//   16 → 17: replace weak global scan caches with owner-scoped observations and
+//             typed, fail-closed scan authority.
 pub(super) fn pragma_column_names(
     connection: &Connection,
     table_name: &str,

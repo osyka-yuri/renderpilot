@@ -44,7 +44,7 @@ fn plan_swap_renders_operation_plan_json() {
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -126,7 +126,7 @@ fn plan_swap_blocks_invalid_artifact() {
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:dlss",
@@ -180,7 +180,7 @@ fn plan_swap_surfaces_streamline_confirmation_warning() {
     let game = sample_game(&format!("manual:{install_path}"), "Game A", &install_path);
 
     fixture.store_game(&game);
-    fixture.store_components(
+    fixture.store_complete_components(
         game.id(),
         &[sample_component(
             "component:game-a:streamline",

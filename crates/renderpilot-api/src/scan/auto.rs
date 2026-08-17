@@ -57,7 +57,7 @@ fn scan_auto_libraries_with_mode(
     }
 }
 
-/// Runs a checkpoint-aware background scan and returns its typed delta for the
+/// Runs an authoritative background scan and returns its typed delta for the
 /// startup coordinator. Serialization remains at the transport boundary.
 #[cfg(windows)]
 pub fn scan_auto_libraries_background_output(

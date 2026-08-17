@@ -381,10 +381,15 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': 'Restaurer la valeur initiale',
   'gameDetails.nvapi.alreadyBaseline': 'Déjà à la valeur initiale',
   'gameDetails.nvapi.noBaseline': 'Aucune valeur initiale enregistrée',
+  'gameDetails.nvapi.versionUnavailable': 'Version DLSS indisponible',
 
   'gameDetails.nvapi.warning.noDll': "Aucune DLL DLSS détectée dans le répertoire d'installation.",
   'gameDetails.nvapi.warning.noManifest':
     "Le manifeste n'a aucune entrée pour cette version de DLL.",
+  'gameDetails.nvapi.warning.dllVersionUnknown':
+    'Une DLL DLSS a été trouvée, mais sa version est indisponible.',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    'Le catalogue du jeu n’est pas prêt. Analysez de nouveau le jeu avant de modifier les paramètres NVIDIA dépendants des DLL.',
   'gameDetails.nvapi.warning.noExecutable': 'Aucun exécutable trouvé pour ce jeu.',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI indisponible.',
   'gameDetails.nvapi.warning.nvapiInitFailed': "Échec de l'initialisation de NVAPI.",
@@ -616,6 +621,8 @@ export const fr = defineLocalizedCatalog<'fr', EnglishCatalog>()({
   'user_message.rollback_also_failed':
     'L’action a échoué et RenderPilot n’a pas pu restaurer complètement l’état précédent des fichiers. Vérifiez les fichiers du jeu avant de réessayer.',
   'user_message.access_denied': 'L’accès a été refusé. Vérifiez vos autorisations et réessayez.',
+  'user_message.nvapi_catalog_not_ready':
+    'Analysez de nouveau le jeu avant de modifier les paramètres NVIDIA dépendants des DLL.',
 
   'suggested_action.refresh_games': 'Actualisez la liste des jeux et réessayez.',
   'suggested_action.reload_game_details': 'Actualisez les détails du jeu et réessayez.',

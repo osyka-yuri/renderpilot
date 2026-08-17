@@ -44,6 +44,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Stora
 rustix = { version = "1.1.4", features = ["fs"] }
 
 [dev-dependencies]
+renderpilot-detection = { path = "../renderpilot-detection", features = ["test-instrumentation"] }
 renderpilot-storage-sqlite = { path = "../renderpilot-storage-sqlite", features = ["test-instrumentation"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 tempfile = "3"

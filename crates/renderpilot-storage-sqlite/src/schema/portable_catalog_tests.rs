@@ -24,6 +24,8 @@ use super::{
 
 static NEXT_TEMP_CATALOG: AtomicU64 = AtomicU64::new(0);
 const RELEASED_V4_SCHEMA: &str = include_str!("../../tests/fixtures/catalog-v4.sql");
+const RELEASED_V16_SCAN_SCHEMA: &str =
+    include_str!("../../tests/fixtures/catalog-v16-scan-state.sql");
 
 struct TemporaryCatalog {
     directory: PathBuf,
@@ -51,14 +53,14 @@ impl Drop for TemporaryCatalog {
 
 #[test]
 fn v15_to_current_transition_writes_the_exact_rows_and_version() {
-    let catalog = TemporaryCatalog::new("v15-to-v16");
+    let catalog = TemporaryCatalog::new("v15-to-current");
     prepare_v15_catalog(&catalog.path);
 
     let report = transition_portable_catalog_schema(
         &catalog.path,
         PortableCatalogSchemaTransition::UpgradeToCurrentAfterSnapshot,
     )
-    .expect("exact v15-to-v16 transition");
+    .expect("exact v15-to-current transition");
 
     assert_eq!(report.source_version, 15);
     assert_eq!(report.target_version, CURRENT_SCHEMA_VERSION as u32);
@@ -109,18 +111,18 @@ fn released_v4_catalog_migrates_to_current_without_losing_user_data() {
 }
 
 #[test]
-fn v16_validation_is_observational() {
-    let catalog = TemporaryCatalog::new("v16-observational");
+fn current_validation_is_observational() {
+    let catalog = TemporaryCatalog::new("current-observational");
     prepare_current_catalog(&catalog.path);
     let before = fs::read(&catalog.path).expect("read catalog before validation");
 
     let observed_version =
-        inspect_portable_catalog_schema(&catalog.path).expect("inspect v16 catalog");
+        inspect_portable_catalog_schema(&catalog.path).expect("inspect current catalog");
     let transition_report = transition_portable_catalog_schema(
         &catalog.path,
         PortableCatalogSchemaTransition::ValidateCurrent,
     )
-    .expect("validate v16 catalog");
+    .expect("validate current catalog");
 
     assert_eq!(observed_version, CURRENT_SCHEMA_VERSION as u32);
     assert_eq!(
@@ -143,7 +145,7 @@ fn v16_validation_is_observational() {
 }
 
 #[test]
-fn v15_inspection_validates_without_requiring_v16_path_tags_or_mutating_bytes() {
+fn v15_inspection_validates_without_requiring_portable_path_tags_or_mutating_bytes() {
     let catalog = TemporaryCatalog::new("v15-observational");
     prepare_v15_catalog(&catalog.path);
     let before = fs::read(&catalog.path).expect("read v15 catalog before inspection");
@@ -160,8 +162,25 @@ fn v15_inspection_validates_without_requiring_v16_path_tags_or_mutating_bytes() 
 }
 
 #[test]
-fn v16_upgrade_retry_validates_without_reapplying_the_transition() {
-    let catalog = TemporaryCatalog::new("v16-retry");
+fn v16_inspection_validates_released_weak_cache_shape_without_mutating_bytes() {
+    let catalog = TemporaryCatalog::new("v16-observational");
+    prepare_v16_catalog(&catalog.path);
+    let before = fs::read(&catalog.path).expect("read v16 catalog before inspection");
+
+    let observed_version =
+        inspect_portable_catalog_schema(&catalog.path).expect("inspect valid v16 catalog");
+
+    assert_eq!(observed_version, 16);
+    assert_eq!(
+        fs::read(&catalog.path).expect("read v16 catalog after inspection"),
+        before,
+        "v16 inspection must be observational"
+    );
+}
+
+#[test]
+fn current_upgrade_retry_validates_without_reapplying_the_transition() {
+    let catalog = TemporaryCatalog::new("current-retry");
     prepare_v15_catalog(&catalog.path);
 
     transition_portable_catalog_schema(
@@ -175,7 +194,7 @@ fn v16_upgrade_retry_validates_without_reapplying_the_transition() {
         &catalog.path,
         PortableCatalogSchemaTransition::UpgradeToCurrentAfterSnapshot,
     )
-    .expect("v16 retry validates");
+    .expect("current retry validates");
 
     assert_eq!(retry.source_version, CURRENT_SCHEMA_VERSION as u32);
     assert_eq!(retry.target_version, CURRENT_SCHEMA_VERSION as u32);
@@ -207,7 +226,11 @@ fn absent_unknown_future_and_malformed_catalogs_are_not_mutated() {
         "no-create open must leave the path absent"
     );
 
-    for (label, schema_version) in [("pre-v1", 3), ("unreleased-gap", 7), ("future", 17)] {
+    for (label, schema_version) in [
+        ("pre-v1", 3),
+        ("unreleased-gap", 7),
+        ("future", CURRENT_SCHEMA_VERSION + 1),
+    ] {
         let catalog = TemporaryCatalog::new(label);
         prepare_current_catalog(&catalog.path);
         set_version(&catalog.path, schema_version);
@@ -574,12 +597,21 @@ fn prepare_v4_catalog(path: &Path) {
 }
 
 fn prepare_v15_catalog(path: &Path) {
-    prepare_current_catalog(path);
-    let connection = Connection::open(path).expect("open current catalog for v15 fixture");
+    prepare_v16_catalog(path);
+    let connection = Connection::open(path).expect("open v16 catalog for v15 fixture");
     connection
         .execute_batch(&format!("DROP TABLE {};", portable_path_tags::TABLE_NAME))
         .expect("remove v16-only path-tag table");
     version::write(&connection, 15).expect("stamp v15 fixture");
+}
+
+fn prepare_v16_catalog(path: &Path) {
+    prepare_current_catalog(path);
+    let connection = Connection::open(path).expect("open current catalog for v16 fixture");
+    connection
+        .execute_batch(RELEASED_V16_SCAN_SCHEMA)
+        .expect("restore released v16 scan state");
+    version::write(&connection, 16).expect("stamp v16 fixture");
 }
 
 fn set_version(path: &Path, schema_version: i32) {

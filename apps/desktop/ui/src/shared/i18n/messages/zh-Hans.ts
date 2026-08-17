@@ -321,9 +321,13 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.nvapi.restoreBaseline': '恢复初始值',
   'gameDetails.nvapi.alreadyBaseline': '已处于初始值',
   'gameDetails.nvapi.noBaseline': '未保存初始值',
+  'gameDetails.nvapi.versionUnavailable': 'DLSS 版本不可用',
 
   'gameDetails.nvapi.warning.noDll': '在安装目录中未检测到 DLSS DLL。',
   'gameDetails.nvapi.warning.noManifest': '清单中没有该 DLL 版本的数据。',
+  'gameDetails.nvapi.warning.dllVersionUnknown': '找到了 DLSS DLL，但其版本不可用。',
+  'gameDetails.nvapi.warning.catalogNotReady':
+    '游戏目录尚未就绪。更改依赖 DLL 的 NVIDIA 设置前，请重新扫描游戏。',
   'gameDetails.nvapi.warning.noExecutable': '未找到该游戏的可执行文件。',
   'gameDetails.nvapi.warning.nvapiUnavailable': 'NVAPI 不可用。',
   'gameDetails.nvapi.warning.nvapiInitFailed': 'NVAPI 初始化失败。',
@@ -519,6 +523,7 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'user_message.rollback_also_failed':
     '操作失败，且 RenderPilot 无法完全恢复之前的文件状态。重试前请检查游戏文件。',
   'user_message.access_denied': '访问被拒绝。请检查权限后重试。',
+  'user_message.nvapi_catalog_not_ready': '更改依赖 DLL 的 NVIDIA 设置前，请重新扫描游戏。',
 
   'suggested_action.refresh_games': '刷新游戏列表并重试。',
   'suggested_action.reload_game_details': '刷新游戏详情并重试。',

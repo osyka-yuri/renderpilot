@@ -297,6 +297,13 @@
       "messageKey": "user_message.access_denied",
       "severity": "error",
       "actions": ["inspect_logs"]
+    },
+    {
+      "code": "nvapi_catalog_not_ready",
+      "rustVariant": "NvapiCatalogNotReady",
+      "messageKey": "user_message.nvapi_catalog_not_ready",
+      "severity": "warning",
+      "actions": ["refresh_or_scan_game_folder"]
     }
   ],
   "suggestedActions": [

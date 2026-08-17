@@ -2,14 +2,16 @@
 //!
 //! ## Modules
 //!
-//! - `target` -- [`crate::nvapi::ops::SettingTarget`] / [`crate::nvapi::ops::WriteOp`]
+//! - `target` -- internal `SettingTarget` / `WriteOp` routing types
 //! - `session` -- DRS session open + error mapping
 //! - `live` -- live DWORD reads
 //! - `assemble` -- DTO assembly from a live read
 //! - `read` -- single/batch read entry points
 //! - `write` -- write, revert, value validation
 //!
-//! External callers use the flat `nvapi::ops::{...}` surface re-exported below.
+//! The flat operation surface is crate-private. Public per-game callers must
+//! use [`crate::nvapi::game_session::GameNvapiSession`] so the mutation guard
+//! remains held through projection, driver work, and response serialization.
 
 mod assemble;
 mod live;
@@ -21,7 +23,10 @@ mod write;
 #[cfg(test)]
 mod tests;
 
-pub use read::{read_all_setting_states, read_setting_state};
-pub use target::{SettingTarget, WriteOp};
+pub(crate) use read::{read_all_setting_states, read_setting_state};
+pub(crate) use target::{SettingTarget, WriteOp};
 pub(crate) use write::restore_game_baselines;
-pub use write::{resolve_revert_op, validate_value_supported, write_setting_value};
+pub(crate) use write::{
+    ensure_dll_setting_catalog_ready, resolve_revert_op, validate_value_supported,
+    write_setting_value,
+};
