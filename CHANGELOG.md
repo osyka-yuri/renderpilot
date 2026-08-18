@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.3] - 2026-08-18
+
+### Added
+
+- **DLSS-Fix recovery and status**: RenderPilot now tracks the RenoDX DLSS Frame Generation companion fix with an explicit lifecycle. If an operation is interrupted, the game card displays a clear recovery warning with dedicated actions to repair or complete the recovery.
+
+### Changed
+
+- **Safer NVIDIA driver settings**: Adjusting driver settings that depend on DLSS DLLs now verifies that the game catalog is ready. If the catalog is not ready, DLL-dependent overrides are blocked with a prompt to rescan.
+- **Accurate DLL presence**: DLSS files whose version cannot be determined remain registered as present with an unknown version, instead of being treated as missing.
+- **Windows scan performance**: Re-scanning unchanged games on Windows checks NTFS file identity and change journals, re-verifying DLLs without reading file contents from disk.
+
+### Fixed
+
+- **Crash-safe DLSS-Fix operations**: Companion file installations, updates, and removals use transactional manifests, preventing orphaned or corrupt files if the process exits unexpectedly.
+- **Clean add-on removal**: Uninstalling RenoDX cleanly removes or restores DLSS-Fix companion files without affecting untouched ReShade settings.
+
+### Compatibility
+
+- **Game catalog rescan after update**: Schema v17 deprecates legacy global scan caches in favor of isolated file observations. Existing games require a fresh scan after updating to verify their DLL state and re-enable dependent NVIDIA settings.
+
+### Changed (Refactoring & Maintenance)
+
+- **Local library verification**: A single SQL query now loads all cached component observations regardless of artifact count.
+
 ## [1.9.2] - 2026-08-15
 
 ### Fixed
