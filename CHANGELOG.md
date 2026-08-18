@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.5] - 2026-08-18
+
+### Fixed
+
+- **NVIDIA settings readiness after DLL swap**: Swapping or rolling back DLSS DLLs immediately updates driver setting context and keeps dependent NVIDIA settings enabled without requiring a manual rescan or page reload.
+
 ## [1.9.4] - 2026-08-18
 
 ### Fixed
@@ -20,7 +26,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **Safer NVIDIA driver settings**: Adjusting driver settings that depend on DLSS DLLs now verifies that the game catalog is ready. If the catalog is not ready, DLL-dependent overrides are blocked with a prompt to rescan.
+- **Safer NVIDIA driver settings**: Adjusting driver settings that depend on DLSS DLLs now verifies that the game has completed an initial scan. If the catalog scan has not yet completed, DLL-dependent overrides are blocked with a prompt to scan.
 - **Accurate DLL presence**: DLSS files whose version cannot be determined remain registered as present with an unknown version, instead of being treated as missing.
 - **Windows scan performance**: Re-scanning unchanged games on Windows checks NTFS file identity and change journals, re-verifying DLLs without reading file contents from disk.
 
