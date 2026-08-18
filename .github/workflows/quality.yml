@@ -67,7 +67,9 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: ${{ matrix.os }}
+          # Invalidate the cache whenever workspace manifests, Cargo profiles, or the
+          # Rust toolchain change so CI runners never restore stale compiler artifacts.
+          key: ${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/rust-toolchain.toml') }}
 
       # Code formatting is OS-independent. We perform this check exclusively on the Linux runner to save CI time.
       - name: Check formatting
