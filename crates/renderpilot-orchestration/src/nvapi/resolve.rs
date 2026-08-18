@@ -142,8 +142,8 @@ pub fn stored_override_path(
 
 /// Builds the NVAPI [`SettingContext`] for a game from the reconciled catalog
 /// projection and effective executable, using an already-open storage
-/// connection. An incomplete or invalidated catalog never projects its prior
-/// component rows as a DLL absence.
+/// connection. A game that has never completed its initial scan fails closed
+/// as `NotReady`, so unpopulated component rows cannot become a false `NoDll`.
 pub(crate) fn build_setting_context_with_context(
     context: &crate::Context,
     install_dir: &Path,
@@ -154,20 +154,20 @@ pub(crate) fn build_setting_context_with_context(
     let override_path = stored_override_path(context, game_id)?;
     let effective_exe = pick_effective_exe(install_dir, override_path.as_deref());
 
-    // Reuse only a completed global catalog projection instead of walking the
-    // install dir again. Invalidated and never-completed projections fail
-    // closed so stale component rows can never become a false `NoDll` result.
+    // Reuse the catalog component projection instead of walking the install dir again.
+    // Games that have never completed an initial scan fail closed so empty component
+    // rows cannot become a false `NoDll` result before the first scan finishes.
     let game = GameId::new(game_id).map_err(|_| ServiceError::GameNotFound(game_id.to_owned()))?;
     let readiness = context.storage().catalog_readiness(&game)?;
     let (catalog_readiness, dlls) = match readiness {
-        CatalogReadiness::Complete(_) => {
+        CatalogReadiness::Complete(_) | CatalogReadiness::Invalidated { .. } => {
             let components = context.storage().list_components_for_game(&game)?;
             (
                 NvapiCatalogReadiness::Ready,
                 installed_dlls_from_components(&components, install_dir),
             )
         }
-        CatalogReadiness::NeverCompleted { .. } | CatalogReadiness::Invalidated { .. } => (
+        CatalogReadiness::NeverCompleted { .. } => (
             NvapiCatalogReadiness::NotReady,
             std::collections::HashMap::new(),
         ),
@@ -371,6 +371,119 @@ mod tests {
                 .get_nvapi_executable_override(game_id.as_str())
                 .expect("read override")
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn build_setting_context_reports_not_ready_for_never_completed_game() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let game_id = GameId::new("steam:never-completed").expect("id");
+        let identity = GameIdentity::new(game_id.clone(), "Never Completed", Launcher::Steam)
+            .expect("identity");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(directory.path().to_string_lossy().into_owned()).expect("install path"),
+        );
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("persist game");
+        let context = crate::Context::from_storage(storage);
+
+        let ctx =
+            super::build_setting_context_with_context(&context, directory.path(), game_id.as_str())
+                .expect("build context");
+
+        assert_eq!(ctx.catalog_readiness, NvapiCatalogReadiness::NotReady);
+        assert!(ctx.dlls.is_empty());
+    }
+
+    #[test]
+    fn build_setting_context_reports_ready_when_complete_or_invalidated_after_mutation() {
+        use renderpilot_application::ComponentRepository;
+        use renderpilot_domain::{
+            ComponentFile, ComponentId, ComponentKind, LibraryComponent, LibraryTechnology,
+            Swappability, Version,
+        };
+        use renderpilot_nvapi::{DlssDllKind, DlssVersion};
+        use renderpilot_storage_sqlite::{AuthorityCas, CompleteScanWriteUnit};
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let game_id = GameId::new("steam:test-game").expect("id");
+        let identity =
+            GameIdentity::new(game_id.clone(), "Test Game", Launcher::Steam).expect("identity");
+        let game = GameInstallation::new(
+            identity,
+            Platform::Windows,
+            GameRuntime::NativeWindows,
+            PathRef::new(directory.path().to_string_lossy().into_owned()).expect("install path"),
+        );
+        let storage = SqliteStorage::in_memory().expect("storage");
+        storage.upsert_game(&game).expect("persist game");
+
+        let dll_path = directory.path().join("nvngx_dlss.dll");
+        let normalized_dll = dll_path.to_string_lossy().replace('\\', "/");
+        let file = ComponentFile::new(PathRef::new(normalized_dll).expect("path"))
+            .with_version(Version::parse("3.7.10.0").expect("version"));
+        let component = LibraryComponent::new(
+            ComponentId::new("component:dlss:sr").expect("id"),
+            game_id.clone(),
+            ComponentKind::NativeLibrary,
+            LibraryTechnology::DlssSuperResolution,
+            Swappability::Swappable,
+        )
+        .with_file(file);
+
+        storage
+            .save_complete_scan_write_unit(CompleteScanWriteUnit {
+                game: &game,
+                components: std::slice::from_ref(&component),
+                artifacts: &[],
+                observations: &[],
+                authority: AuthorityCas::new(0),
+                prune_empty_operations: false,
+            })
+            .expect("save scan");
+
+        let context = crate::Context::from_storage(storage);
+
+        let ctx =
+            super::build_setting_context_with_context(&context, directory.path(), game_id.as_str())
+                .expect("build context complete");
+
+        assert_eq!(ctx.catalog_readiness, NvapiCatalogReadiness::Ready);
+        assert_eq!(
+            ctx.dlls.get(&DlssDllKind::Sr).and_then(|info| info.version),
+            Some(DlssVersion::new(3, 7, 10, 0))
+        );
+
+        context
+            .storage()
+            .replace_components_for_game(&game_id, &[component])
+            .expect("replace components invalidates scan authority");
+
+        assert!(matches!(
+            context
+                .storage()
+                .catalog_readiness(&game_id)
+                .expect("readiness"),
+            renderpilot_storage_sqlite::CatalogReadiness::Invalidated { .. }
+        ));
+
+        let ctx_after_mutation =
+            super::build_setting_context_with_context(&context, directory.path(), game_id.as_str())
+                .expect("build context after mutation");
+
+        assert_eq!(
+            ctx_after_mutation.catalog_readiness,
+            NvapiCatalogReadiness::Ready
+        );
+        assert_eq!(
+            ctx_after_mutation
+                .dlls
+                .get(&DlssDllKind::Sr)
+                .and_then(|info| info.version),
+            Some(DlssVersion::new(3, 7, 10, 0))
         );
     }
 }

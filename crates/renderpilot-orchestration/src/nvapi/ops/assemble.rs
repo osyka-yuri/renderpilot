@@ -61,9 +61,9 @@ pub(super) fn assemble_response(
             NvapiCatalogReadiness::NotApplicable => {}
         }
     }
-    // An invalidated catalog is terminal for DLL-dependent settings. Do not
+    // An unready catalog is terminal for DLL-dependent settings. Do not
     // append a live-driver warning: consumers must receive the single,
-    // actionable CatalogNotReady fact and wait for a complete rescan.
+    // actionable CatalogNotReady fact and wait for an initial scan.
     if !matches!(ctx.catalog_readiness, NvapiCatalogReadiness::NotReady)
         && let Some(warning) = live.warning
     {
