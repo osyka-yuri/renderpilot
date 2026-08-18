@@ -16,6 +16,7 @@ permissions:
 env:
   RENDERPILOT_LIBRARIES_CONTRACT_REF: 4aa1696a921e19eb9491119d2ad01d57626f437d
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
   # Deny rustc warnings for workspace packages (Cargo 1.97+). Prefer this over
   # RUSTFLAGS=-Dwarnings so the build cache is not thrash-invalidated.
   # Note (Cargo #17142): build.warnings=deny elevates informational MSVC
@@ -58,13 +59,13 @@ jobs:
         run: rustup show
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@b20dedce73af6905cdc30d6611090c9b67557c8d # v2.85.12
+        uses: taiki-e/install-action@5b4d68e2e660441203ab128a23676f1e4faf1532 # v2.86.3
         with:
           tool: nextest@0.9.143
           fallback: none
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.os }}
 
@@ -73,13 +74,8 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
 
-      - name: Build workspace
-        run: cargo build --workspace --locked --all-features
-        env:
-          CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
-
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo clippy --profile ci --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Test portable release ZIP packaging policy
         if: runner.os == 'Windows'
@@ -107,7 +103,7 @@ jobs:
         run: ./apps/desktop/scripts/release-github-client.test.ps1
 
       - name: Run tests with nextest
-        run: cargo nextest run --profile ci --workspace --all-features --locked
+        run: cargo nextest run --cargo-profile ci --profile ci --workspace --all-features --locked
         # Cargo 1.97 promotes MSVC linker diagnostics through build.warnings;
         # Clippy above still denies Rust warnings for every test target.
         env:
@@ -116,7 +112,7 @@ jobs:
       # Nextest does not run Rust documentation tests, so preserve them as a
       # separate Cargo gate on every supported CI platform.
       - name: Run doctests
-        run: cargo test --workspace --all-features --locked --doc --no-fail-fast
+        run: cargo test --profile ci --workspace --all-features --locked --doc --no-fail-fast
         env:
           CARGO_BUILD_WARNINGS: ${{ runner.os == 'Windows' && 'warn' || 'deny' }}
 
@@ -140,7 +136,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           package_json_file: apps/desktop/package.json
 

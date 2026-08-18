@@ -31,8 +31,20 @@ needless_pass_by_value = "warn"
 redundant_clone = "warn"
 unnecessary_to_owned = "warn"
 
-# D3D12 mutation preflight hashes large game executables. Keep the crypto
-# primitive optimized in development builds so safety checks do not make the
-# desktop UI appear frozen under `tauri dev`.
+# Keep cryptographic hashing optimized in development builds so safety and integrity
+# checks on large game executables do not stall the desktop UI under `tauri dev`.
 [profile.dev.package.sha2]
 opt-level = 3
+
+# Continuous integration profile: keep line tables for readable panic backtraces
+# while eliminating heavy type/variable debuginfo to accelerate CI passes.
+[profile.ci]
+inherits = "test"
+debug = "line-tables-only"
+
+# Production release profile: optimize across workspace crates and strip symbols
+# to produce compact, high-performance distributable binaries.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
