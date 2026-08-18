@@ -52,6 +52,14 @@ function unsupportedLumaAvailability(): unknown {
   };
 }
 
+function unavailableDlssFixAvailability(): unknown {
+  return {
+    kind: 'binding',
+    state: 'none',
+    actions: [],
+  };
+}
+
 describe('GameDetailsPage', () => {
   let target: HTMLDivElement;
   let component: object | undefined;
@@ -77,6 +85,9 @@ describe('GameDetailsPage', () => {
       }
       if (command === 'luma_availability') {
         return Promise.resolve(unsupportedLumaAvailability());
+      }
+      if (command === 'renodx_dlss_fix_availability') {
+        return Promise.resolve(unavailableDlssFixAvailability());
       }
       if (command === 'resolve_game_executable') {
         return Promise.resolve(null);

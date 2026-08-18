@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use renderpilot_storage_sqlite::{PendingFileMutationRow, PreparedRestoreFence};
+use renderpilot_storage_sqlite::{PendingFileMutationRow, PreparedMutationResolutionFence};
 use serde::{Deserialize, Serialize};
 
 use crate::ServiceError;
@@ -45,7 +45,7 @@ pub(super) fn deserialize_manifest(
 /// Restores only after storage minted a fence for this exact Prepared row.
 pub(super) fn restore_manifest(
     manifest: &FileMutationManifest,
-    _fence: &PreparedRestoreFence,
+    _fence: &PreparedMutationResolutionFence,
 ) -> Result<(), ServiceError> {
     for before in manifest.snapshots.iter().rev() {
         let path = Path::new(&before.path);
@@ -57,6 +57,8 @@ pub(super) fn restore_manifest(
     Ok(())
 }
 
+/// Cleans a manifest created and retained in this process. Crash recovery must
+/// instead carry the canonical directory returned by the exact-owner validator.
 pub(super) fn cleanup_manifest(manifest: &FileMutationManifest) -> Result<(), ServiceError> {
     super::remove_dir_if_exists(Path::new(&manifest.transaction_dir))
 }

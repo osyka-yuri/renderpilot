@@ -694,6 +694,9 @@ export const en = defineSourceCatalog({
   'gameDetails.renodx.actionInstall': 'Install',
   'gameDetails.renodx.actionUninstall': 'Remove RenoDX',
   'gameDetails.renodx.actionRepair': 'Repair',
+  'gameDetails.renodx.actionRepairDlssFix': 'Repair DLSS-Fix',
+  'gameDetails.renodx.actionFinishDlssFixRecovery': 'Finish recovery',
+  'gameDetails.renodx.dlssFixRecoveryPending': 'A previous DLSS-Fix operation needs recovery.',
   'gameDetails.renodx.uninstallConfirmTitle': 'Remove RenoDX from this game?',
   'gameDetails.renodx.uninstallConfirmBody':
     'This removes the RenoDX add-on and restores only ReShade files that were changed during RenoDX setup.',

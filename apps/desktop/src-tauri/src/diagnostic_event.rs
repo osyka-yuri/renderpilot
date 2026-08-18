@@ -77,6 +77,8 @@ closed_codes! {
         RenodxCheckUpdate => "renodx_check_update",
         RenodxUpdate => "renodx_update",
         RenodxInstallDlssFix => "renodx_install_dlss_fix",
+        RenodxUpdateDlssFix => "renodx_update_dlss_fix",
+        RenodxRetryDlssFixRecovery => "renodx_retry_dlss_fix_recovery",
         RenodxUninstallDlssFix => "renodx_uninstall_dlss_fix",
         RenodxDlssFixAvailability => "renodx_dlss_fix_availability",
         LumaAvailability => "luma_availability",

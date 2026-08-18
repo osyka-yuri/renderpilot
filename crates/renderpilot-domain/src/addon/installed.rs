@@ -404,15 +404,6 @@ impl InstalledAddon {
         self.registered_exe_path.as_ref()
     }
 
-    /// Returns whether the install includes the DLSS-Fix companion add-on (a
-    /// `DlssFix` tracked source is present).
-    #[must_use]
-    pub fn has_dlss_fix(&self) -> bool {
-        self.tracked_sources
-            .iter()
-            .any(|source| source.role() == TrackedSourceRole::DlssFix)
-    }
-
     /// Returns whether the add-on payload has a checkable upstream identity. This
     /// includes an advisory source recovered from an exact manifest payload; only
     /// records with no source URL at all are displayed as installed from a file.

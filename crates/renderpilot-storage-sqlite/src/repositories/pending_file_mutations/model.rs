@@ -81,10 +81,10 @@ pub struct BeginFileMutationPreparation {
 /// to a matching invalidated catalog authority. Only storage can mint this
 /// value.
 #[derive(Debug)]
-pub struct PreparedRestoreFence {
+pub struct PreparedMutationResolutionFence {
     pub(super) game_id: GameId,
     pub(super) mutation_id: String,
-    pub(super) catalog_binding: PreparedRestoreCatalogBinding,
+    pub(super) catalog_binding: PreparedResolutionCatalogBinding,
 }
 
 /// Total relationship between a durable row and the catalog projection.
@@ -111,7 +111,7 @@ pub(in crate::repositories) enum PreparedMutationCommitBinding {
 
 /// The post-fence catalog state carried privately with a restore capability.
 #[derive(Debug)]
-pub(super) enum PreparedRestoreCatalogBinding {
+pub(super) enum PreparedResolutionCatalogBinding {
     CatalogAbsent,
     CatalogInvalidated { authority_epoch: u64 },
 }

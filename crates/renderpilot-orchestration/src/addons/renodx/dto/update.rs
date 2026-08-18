@@ -17,8 +17,8 @@ pub struct RenoDxUpdateReport {
     pub host: Option<UpdateStatus>,
     /// Update verdict for the DLSS-Fix companion add-on. `None` if not installed.
     pub dlss_fix: Option<UpdateStatus>,
-    /// The combined verdict: available if any tracked source changed, current if
-    /// all tracked sources are current.
+    /// The generic RenoDX verdict. It combines only the main add-on and ReShade
+    /// host; DLSS-Fix is independently actionable and never drives this button.
     pub overall: UpdateStatus,
     /// Vulkan-layer digest-mismatch diagnostics, populated only for shared-Vulkan
     /// installs. Empty for proxy installs or when no digest mismatch is detected.
@@ -48,10 +48,7 @@ impl RenoDxUpdateReport {
     ) -> Self {
         let overall = combine(
             addon.unwrap_or(UpdateStatus::Unknown),
-            combine(
-                host.unwrap_or(UpdateStatus::Current),
-                dlss_fix.unwrap_or(UpdateStatus::Current),
-            ),
+            host.unwrap_or(UpdateStatus::Current),
         );
         Self {
             addon,
@@ -109,8 +106,8 @@ mod tests {
     }
 
     #[test]
-    fn report_assembly_with_dlss_fix() {
+    fn report_assembly_keeps_dlss_fix_out_of_generic_overall() {
         let report = RenoDxUpdateReport::new(Some(Current), Some(Current), Some(Available));
-        assert_eq!(report.overall, Available);
+        assert_eq!(report.overall, Current);
     }
 }

@@ -16,5 +16,5 @@ pub(super) use commit::{
 pub(super) use model::PreparedMutationCommitBinding;
 pub use model::{
     BeginFileMutationPreparation, PendingFileMutationRow, PendingFileMutationState,
-    PreparedRestoreFence,
+    PreparedMutationResolutionFence,
 };

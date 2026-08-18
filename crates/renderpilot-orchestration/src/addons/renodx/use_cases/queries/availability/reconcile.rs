@@ -22,6 +22,16 @@ pub(super) fn maybe_adopt(
     reshade_sources: &ReshadeSourceCatalog,
     game_id: &GameId,
 ) -> Result<(), ServiceError> {
+    // Availability is a read query. It may describe an existing row but must
+    // never adopt/reconcile disk state while a mutation boundary still has a
+    // pending transaction for this game.
+    if !context
+        .storage()
+        .pending_file_mutations_for_game(game_id)?
+        .is_empty()
+    {
+        return Ok(());
+    }
     if preflight.blocked.is_some() || preflight.record.is_some() {
         return Ok(());
     }

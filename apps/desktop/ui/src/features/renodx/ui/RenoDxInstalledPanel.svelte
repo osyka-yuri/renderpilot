@@ -54,13 +54,7 @@
   const channelSwitchEnabled = $derived(store.hostActions.switch_channel?.enabled === true);
   const channelControlBusy = $derived(busy || !channelSwitchEnabled);
 
-  const showDlssFixRow = $derived(store.dlssFixInstalled || store.dlssFixAvailable);
-  const dlssFixDescription = $derived(
-    store.dlssFixInstalled
-      ? t('gameDetails.renodx.component.dlssFixDesc')
-      : t('gameDetails.renodx.component.dlssFixOffer'),
-  );
-  const dlssFixStatus = $derived(store.dlssFixInstalled ? store.dlssFixUpdate : undefined);
+  const dlssFix = $derived(store.dlssFix);
 
   function handleRepair(): void {
     void store.install(gameId, store.selectedReshadeChannel, false);
@@ -74,16 +68,21 @@
     void store.switchChannel(gameId, channel);
   }
 
-  function handleInstallDlssFix(): void {
-    if (busy || !store.dlssFixAvailable) {
+  function handleDlssFixPrimaryAction(): void {
+    if (busy || dlssFix.kind !== 'component' || !dlssFix.primaryAction) {
       return;
     }
 
-    void store.installDlssFix(gameId);
+    if (dlssFix.primaryAction.kind === 'install') {
+      void store.installDlssFix(gameId);
+      return;
+    }
+
+    void store.updateDlssFix(gameId);
   }
 
   function handleUninstallDlssFix(): void {
-    if (busy || !store.dlssFixInstalled) {
+    if (busy || dlssFix.kind !== 'component' || !dlssFix.canRemove) {
       return;
     }
 
@@ -116,17 +115,29 @@
   {/snippet}
 
   {#snippet extraComponentRows()}
-    {#if showDlssFixRow}
+    {#if dlssFix.kind === 'component'}
+      {@const primaryAction = dlssFix.primaryAction}
       <AddonComponentRow
         icon="dlssfix"
         title={t('gameDetails.renodx.component.dlssFix')}
-        description={dlssFixDescription}
+        description={t(dlssFix.descriptionKey)}
         hint={t('gameDetails.renodx.component.dlssFixHint')}
-        status={dlssFixStatus}
+        status={dlssFix.status}
         statusI18nPrefix="gameDetails.renodx"
       >
         {#snippet actions()}
-          {#if store.dlssFixInstalled}
+          {#if primaryAction}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onclick={handleDlssFixPrimaryAction}
+            >
+              {t(primaryAction.labelKey)}
+            </Button>
+          {/if}
+          {#if dlssFix.canRemove}
             <Button
               type="button"
               variant="destructive"
@@ -136,16 +147,6 @@
             >
               <Trash2Icon class="size-4" aria-hidden="true" />
               {t('gameDetails.renodx.actionRemoveDlssFix')}
-            </Button>
-          {:else}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onclick={handleInstallDlssFix}
-            >
-              {t('gameDetails.renodx.actionInstallDlssFix')}
             </Button>
           {/if}
         {/snippet}

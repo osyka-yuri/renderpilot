@@ -5,6 +5,7 @@ import type { ReshadeChannel } from '@entities/addon';
 
 import type {
   AvailabilityReport,
+  DlssFixAvailability,
   RenoDxInstallState,
   RenoDxUpdateReport,
   VulkanLayerManagementReport,
@@ -109,9 +110,23 @@ export async function uninstallRenoDxDlssFix(gameId: string): Promise<RenoDxInst
   });
 }
 
-/** Returns whether a DLSS-Fix can be installed for this game. */
-export async function getRenoDxDlssFixAvailability(gameId: string): Promise<boolean> {
-  return invokeDesktop<boolean>('renodx_dlss_fix_availability', {
+/** Updates or payload-repairs DLSS-Fix without running generic RenoDX update policy. */
+export async function updateRenoDxDlssFix(gameId: string): Promise<RenoDxInstallState> {
+  return invokeDesktop<RenoDxInstallState>('renodx_update_dlss_fix', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+/** Retries only durable DLSS-Fix recovery; it does not fetch or update RenoDX. */
+export async function retryRenoDxDlssFixRecovery(gameId: string): Promise<RenoDxInstallState> {
+  return invokeDesktop<RenoDxInstallState>('renodx_retry_dlss_fix_recovery', {
+    gameId: requireNonBlankString(gameId, 'gameId'),
+  });
+}
+
+/** Returns backend-authored DLSS-Fix ownership/actions. */
+export async function getRenoDxDlssFixAvailability(gameId: string): Promise<DlssFixAvailability> {
+  return invokeDesktop<DlssFixAvailability>('renodx_dlss_fix_availability', {
     gameId: requireNonBlankString(gameId, 'gameId'),
   });
 }
@@ -156,6 +171,8 @@ export type RenoDxApi = {
   update: typeof updateRenoDx;
   switchChannel: typeof switchRenoDxReshadeChannel;
   installDlssFix: typeof installRenoDxDlssFix;
+  updateDlssFix: typeof updateRenoDxDlssFix;
+  retryDlssFixRecovery: typeof retryRenoDxDlssFixRecovery;
   uninstallDlssFix: typeof uninstallRenoDxDlssFix;
   dlssFixAvailability: typeof getRenoDxDlssFixAvailability;
   vulkanLayerStatus: typeof getVulkanLayerStatus;
@@ -174,6 +191,8 @@ export const renodxApi: RenoDxApi = {
   update: updateRenoDx,
   switchChannel: switchRenoDxReshadeChannel,
   installDlssFix: installRenoDxDlssFix,
+  updateDlssFix: updateRenoDxDlssFix,
+  retryDlssFixRecovery: retryRenoDxDlssFixRecovery,
   uninstallDlssFix: uninstallRenoDxDlssFix,
   dlssFixAvailability: getRenoDxDlssFixAvailability,
   vulkanLayerStatus: getVulkanLayerStatus,

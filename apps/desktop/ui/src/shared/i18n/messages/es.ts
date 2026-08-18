@@ -697,6 +697,10 @@ export const es = defineLocalizedCatalog<'es', EnglishCatalog>()({
   'gameDetails.renodx.actionInstall': 'Instalar',
   'gameDetails.renodx.actionUninstall': 'Quitar RenoDX',
   'gameDetails.renodx.actionRepair': 'Reparar',
+  'gameDetails.renodx.actionRepairDlssFix': 'Reparar DLSS-Fix',
+  'gameDetails.renodx.actionFinishDlssFixRecovery': 'Finalizar recuperación',
+  'gameDetails.renodx.dlssFixRecoveryPending':
+    'Una operación anterior de DLSS-Fix requiere recuperación.',
   'gameDetails.renodx.uninstallConfirmTitle': '¿Quitar RenoDX de este juego?',
   'gameDetails.renodx.uninstallConfirmBody':
     'Esto elimina el add-on RenoDX y restaura solo los archivos de ReShade modificados durante la configuración de RenoDX.',

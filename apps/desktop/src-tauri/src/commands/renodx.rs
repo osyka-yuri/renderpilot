@@ -231,6 +231,36 @@ pub async fn renodx_install_dlss_fix(
 }
 
 #[tauri::command]
+pub async fn renodx_update_dlss_fix(
+    context: tauri::State<'_, Arc<Context>>,
+    app: tauri::AppHandle,
+    game_id: String,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::RenodxUpdateDlssFix);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+    let progress = download_progress_emitter(app, game_id.clone());
+
+    boundary
+        .run_async(move || async move {
+            desktop::renodx_update_dlss_fix(&context, game_id, Some(&progress)).await
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn renodx_retry_dlss_fix_recovery(
+    context: tauri::State<'_, Arc<Context>>,
+    game_id: String,
+) -> JsonCommandResult {
+    let boundary = CommandBoundary::new(CommandOperation::RenodxRetryDlssFixRecovery);
+    let (game_id, context) = require_game_context(&boundary, game_id, &context)?;
+
+    boundary
+        .run(move || desktop::renodx_retry_dlss_fix_recovery(&context, game_id))
+        .await
+}
+
+#[tauri::command]
 pub async fn renodx_uninstall_dlss_fix(
     context: tauri::State<'_, Arc<Context>>,
     game_id: String,

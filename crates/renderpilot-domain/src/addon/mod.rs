@@ -246,7 +246,6 @@ mod tests {
         // The record now exposes the raw fields that per-tool state builders
         // (renodx::tracking etc.) turn into RenoDxInstallState.
         assert_eq!(installed.addon_version(), Some("snapshot-2026.06"));
-        assert!(!installed.has_dlss_fix());
         assert!(!installed.has_addon_source());
     }
 
@@ -303,20 +302,6 @@ mod tests {
     }
 
     #[test]
-    fn has_dlss_fix_reflects_tracked_source() {
-        let base = InstalledAddon::new(game_id(), AddonKind::RenoDx, addon_path());
-        assert!(!base.has_dlss_fix());
-
-        let with_fix = base.with_tracked_source(TrackedSource::new(
-            TrackedSourceRole::DlssFix,
-            "https://example/renodx-dlssfix.addon64",
-            None,
-            "dlss-fix-digest",
-        ));
-        assert!(with_fix.has_dlss_fix());
-    }
-
-    #[test]
     fn install_state_serializes_with_status_tag() {
         let json = serde_json::to_string(&RenoDxInstallState::NotInstalled).expect("serialize");
         assert_eq!(json, r#"{"status":"not_installed"}"#);
@@ -327,13 +312,13 @@ mod tests {
             addon_dated: None,
             installed_at: 1_700_000_000_000,
             updated_at: 1_700_000_000_000,
-            dlss_fix_installed: false,
+            dlss_fix_evidence_present: false,
             addon_tracked: true,
         };
         let json = serde_json::to_string(&installed).expect("serialize");
         assert_eq!(
             json,
-            r#"{"status":"installed","host_kind":"proxy","version":null,"addon_dated":null,"installed_at":1700000000000,"updated_at":1700000000000,"dlss_fix_installed":false,"addon_tracked":true}"#
+            r#"{"status":"installed","host_kind":"proxy","version":null,"addon_dated":null,"installed_at":1700000000000,"updated_at":1700000000000,"dlss_fix_evidence_present":false,"addon_tracked":true}"#
         );
     }
 

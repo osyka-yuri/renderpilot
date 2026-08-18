@@ -11,18 +11,18 @@ use super::super::{
 use super::{
     binding::classify_catalog_binding_within_transaction,
     model::{
-        CatalogBinding, PendingFileMutationState, PreparedRestoreCatalogBinding,
-        PreparedRestoreFence,
+        CatalogBinding, PendingFileMutationState, PreparedMutationResolutionFence,
+        PreparedResolutionCatalogBinding,
     },
 };
 
 impl SqliteStorage {
-    /// Acquires the authority fence required before any Prepared-row restore.
-    pub fn fence_prepared_file_mutation_restore(
+    /// Acquires the authority fence required before resolving a Prepared row.
+    pub fn fence_prepared_file_mutation_resolution(
         &self,
         expected_game_id: &GameId,
         id: &str,
-    ) -> AppResult<PreparedRestoreFence> {
+    ) -> AppResult<PreparedMutationResolutionFence> {
         self.with_transaction(|transaction| {
             let row: Option<(String, String)> = transaction
                 .query_row(
@@ -52,13 +52,13 @@ impl SqliteStorage {
                 transaction,
                 expected_game_id,
             )? {
-                CatalogBinding::CatalogAbsent => PreparedRestoreCatalogBinding::CatalogAbsent,
+                CatalogBinding::CatalogAbsent => PreparedResolutionCatalogBinding::CatalogAbsent,
                 CatalogBinding::CatalogPresent(CatalogReadiness::Invalidated {
                     authority_epoch,
                     mutation_token: Some(token),
                     ..
                 }) if token == id => {
-                    PreparedRestoreCatalogBinding::CatalogInvalidated { authority_epoch }
+                    PreparedResolutionCatalogBinding::CatalogInvalidated { authority_epoch }
                 }
                 CatalogBinding::CatalogPresent(_) => {
                     let repaired = observations::invalidate_game_authority_within_transaction(
@@ -74,18 +74,18 @@ impl SqliteStorage {
                     } = repaired
                     else {
                         return Err(AppError::storage_failed(
-                            "prepared restore fence did not produce invalidated catalog authority",
+                            "prepared resolution fence did not produce invalidated catalog authority",
                         ));
                     };
                     if token != id {
                         return Err(AppError::storage_failed(
-                            "prepared restore fence produced a mismatched mutation token",
+                            "prepared resolution fence produced a mismatched mutation token",
                         ));
                     }
-                    PreparedRestoreCatalogBinding::CatalogInvalidated { authority_epoch }
+                    PreparedResolutionCatalogBinding::CatalogInvalidated { authority_epoch }
                 }
             };
-            Ok(PreparedRestoreFence {
+            Ok(PreparedMutationResolutionFence {
                 game_id: expected_game_id.clone(),
                 mutation_id: id.to_owned(),
                 catalog_binding,
@@ -95,41 +95,70 @@ impl SqliteStorage {
 
     /// Removes a Prepared row only after restoration executed under its
     /// matching fence.
-    pub fn complete_prepared_file_mutation_restore(
+    pub fn complete_prepared_file_mutation_restored(
         &self,
-        fence: &PreparedRestoreFence,
+        fence: PreparedMutationResolutionFence,
     ) -> AppResult<()> {
+        self.complete_prepared_file_mutation_resolution(fence, "restore")
+    }
+
+    /// Removes a Prepared row after an authenticated cleanup-only resolution.
+    ///
+    /// This is intentionally distinct from restore completion: callers use it
+    /// only when the durable manifest cannot prove which forward operations
+    /// reached disk, so touching live paths would risk clobbering a foreign
+    /// file. The catalog remains invalidated and must be rebuilt from disk.
+    pub fn complete_prepared_file_mutation_without_restore(
+        &self,
+        fence: PreparedMutationResolutionFence,
+    ) -> AppResult<()> {
+        self.complete_prepared_file_mutation_resolution(fence, "cleanup-only recovery")
+    }
+
+    fn complete_prepared_file_mutation_resolution(
+        &self,
+        fence: PreparedMutationResolutionFence,
+        resolution: &str,
+    ) -> AppResult<()> {
+        let PreparedMutationResolutionFence {
+            game_id,
+            mutation_id,
+            catalog_binding,
+        } = fence;
         self.with_transaction(|transaction| {
             match (
-                &fence.catalog_binding,
-                classify_catalog_binding_within_transaction(transaction, &fence.game_id)?,
+                &catalog_binding,
+                classify_catalog_binding_within_transaction(transaction, &game_id)?,
             ) {
-                (PreparedRestoreCatalogBinding::CatalogAbsent, CatalogBinding::CatalogAbsent) => {}
                 (
-                    PreparedRestoreCatalogBinding::CatalogInvalidated { authority_epoch },
+                    PreparedResolutionCatalogBinding::CatalogAbsent,
+                    CatalogBinding::CatalogAbsent,
+                ) => {}
+                (
+                    PreparedResolutionCatalogBinding::CatalogInvalidated { authority_epoch },
                     CatalogBinding::CatalogPresent(CatalogReadiness::Invalidated {
                         authority_epoch: current_epoch,
                         mutation_token: Some(token),
                         ..
                     }),
-                ) if *authority_epoch == current_epoch && token == fence.mutation_id => {}
+                ) if *authority_epoch == current_epoch && token == mutation_id => {}
                 _ => {
-                    return Err(AppError::storage_failed(
-                        "prepared restore fence changed before restore completion",
-                    ));
+                    return Err(AppError::storage_failed(format!(
+                        "prepared resolution fence changed before {resolution} completion"
+                    )));
                 }
             }
             let deleted = transaction
                 .execute(
                     "DELETE FROM pending_file_mutations
                      WHERE id = ?1 AND game_id = ?2 AND state = 'prepared'",
-                    [&fence.mutation_id, fence.game_id.as_str()],
+                    [mutation_id.as_str(), game_id.as_str()],
                 )
                 .map_err(storage_error)?;
             if deleted != 1 {
-                return Err(AppError::storage_failed(
-                    "prepared file mutation changed before restore completion",
-                ));
+                return Err(AppError::storage_failed(format!(
+                    "prepared file mutation changed before {resolution} completion"
+                )));
             }
             Ok(())
         })

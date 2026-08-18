@@ -19,7 +19,7 @@ pub use repositories::{
     ComponentBaselineMutation, ComponentRekey, ConsolidatedScanWriteReport,
     ConsolidationConflictSummary, ConsolidationPlan, ConsolidationReport, ConsolidationSource,
     GameMutationCommit, InstalledAddonMutation, ObservationOwner, PendingFileMutationRow,
-    PendingFileMutationState, PreparedRestoreFence, StoredFileObservation,
+    PendingFileMutationState, PreparedMutationResolutionFence, StoredFileObservation,
 };
 pub use repositories::{CompleteScanWriteUnit, ScanWriteReport, SqliteStorage};
 pub use schema::portable_catalog::{

@@ -198,7 +198,7 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
 
     case 'renodx_dlss_fix_availability':
       readStringField(command, payload, 'gameId');
-      return false;
+      return { kind: 'binding', state: 'none', actions: [] };
 
     case 'renodx_vulkan_layer_status':
       return mockVulkanLayerStatus();
@@ -212,6 +212,8 @@ async function dispatchCommand(command: DesktopCommand, payload: unknown): Promi
     case 'renodx_update':
     case 'renodx_switch_reshade_channel':
     case 'renodx_install_dlss_fix':
+    case 'renodx_update_dlss_fix':
+    case 'renodx_retry_dlss_fix_recovery':
     case 'renodx_uninstall_dlss_fix':
     case 'renodx_apply_vulkan_layer':
     case 'renodx_remove_vulkan_layer':

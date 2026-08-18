@@ -406,7 +406,7 @@ fn dlss_fix_source(record: &InstalledAddon) -> Option<&TrackedSource> {
 }
 
 #[test]
-fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_proxy() {
+fn whole_row_adoption_records_dlss_fix_source_and_created_path_when_companion_present_proxy() {
     let dir = tempdir().expect("tempdir");
     let host_file = dir.path().join("dxgi.dll");
     let addon_file = dir.path().join("renodx-test.addon64");
@@ -425,8 +425,7 @@ fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_pro
         addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
     };
 
-    let record =
-        attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate, true);
+    let record = build_adopted_record(&candidate).expect("whole-row adoption");
 
     let dlss_fix = dlss_fix_source(&record).expect("advisory dlss-fix source recorded");
     assert!(dlss_fix.is_advisory());
@@ -444,10 +443,16 @@ fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_pro
             .expect("addon source recorded")
             .digest()
     );
+    assert!(
+        created_names(&record)
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("renodx-dlssfix.addon64")),
+        "whole-row adoption persists the exact DLSS companion as a created path"
+    );
 }
 
 #[test]
-fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_vulkan() {
+fn whole_row_adoption_records_dlss_fix_source_when_companion_present_vulkan() {
     let dir = tempdir().expect("tempdir");
     let host_file = dir.path().join("ReShade64.dll");
     let addon_file = dir.path().join("renodx-test.addon64");
@@ -463,17 +468,13 @@ fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_vul
         addon_file,
         host_file: Some(host_file),
         host_kind: InstalledAddonHostKind::SharedVulkanLayer,
-        registered_exe_path: None,
+        registered_exe_path: Some(dir.path().join("Game.exe")),
         reshade_config: test_support::reshade_sources(),
         game_arch: Some(Architecture::X64),
         addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
     };
 
-    let record = attach_advisory_provenance(
-        base_record(InstalledAddonHostKind::SharedVulkanLayer),
-        &candidate,
-        false,
-    );
+    let record = build_adopted_record(&candidate).expect("whole-row adoption");
 
     // Proves DLSS-Fix attribution is NOT gated by host kind, unlike HostBinary (Proxy-only).
     let dlss_fix = dlss_fix_source(&record).expect("advisory dlss-fix source recorded");
@@ -481,7 +482,7 @@ fn attach_advisory_provenance_records_dlss_fix_source_when_companion_present_vul
 }
 
 #[test]
-fn attach_advisory_provenance_skips_dlss_fix_source_when_companion_absent() {
+fn whole_row_adoption_skips_dlss_fix_source_when_companion_absent() {
     let dir = tempdir().expect("tempdir");
     let host_file = dir.path().join("dxgi.dll");
     let addon_file = dir.path().join("renodx-test.addon64");
@@ -500,8 +501,85 @@ fn attach_advisory_provenance_skips_dlss_fix_source_when_companion_absent() {
         addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
     };
 
-    let record =
-        attach_advisory_provenance(base_record(InstalledAddonHostKind::Proxy), &candidate, true);
+    let record = build_adopted_record(&candidate).expect("whole-row adoption");
 
     assert!(dlss_fix_source(&record).is_none());
+}
+
+#[test]
+fn whole_row_adoption_ignores_a_nonregular_dlss_fix_companion_for_provenance_and_proxy_policy() {
+    let dir = tempdir().expect("tempdir");
+    let host_file = dir.path().join("dxgi.dll");
+    let addon_file = dir.path().join("renodx-test.addon64");
+    write_file(&host_file, &full_reshade_host());
+    write_file(&addon_file, b"addon-bytes");
+    let candidate = OrphanedInstall {
+        game_id: game_id("1091501"),
+        game_dir: dir.path().to_path_buf(),
+        addon_file,
+        host_file: Some(host_file.clone()),
+        host_kind: InstalledAddonHostKind::Proxy,
+        registered_exe_path: None,
+        reshade_config: test_support::reshade_sources(),
+        game_arch: Some(Architecture::X64),
+        addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
+    };
+    let base = InstalledAddon::new(
+        candidate.game_id.clone(),
+        AddonKind::RenoDx,
+        PathRef::new(candidate.addon_file.to_string_lossy().into_owned()).expect("addon path"),
+    )
+    .with_host_kind(InstalledAddonHostKind::Proxy);
+    let policy_without_companion = may_adopt_proxy_runtime(&base, &candidate, &host_file);
+
+    std::fs::create_dir(dir.path().join("renodx-dlssfix.addon64")).expect("nonregular companion");
+
+    assert_eq!(
+        may_adopt_proxy_runtime(&base, &candidate, &host_file),
+        policy_without_companion,
+        "a nonregular companion must not enter the proxy host-policy allowlist"
+    );
+    let record = build_adopted_record(&candidate).expect("whole-row adoption");
+    assert!(dlss_fix_source(&record).is_none());
+    assert!(
+        !created_names(&record)
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("renodx-dlssfix.addon64"))
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn whole_row_adoption_ignores_a_symlinked_dlss_fix_companion() {
+    use std::os::windows::fs::symlink_file;
+
+    let dir = tempdir().expect("tempdir");
+    let target = dir.path().join("foreign.addon64");
+    let addon_file = dir.path().join("renodx-test.addon64");
+    write_file(&target, b"foreign");
+    write_file(&addon_file, b"addon-bytes");
+    if symlink_file(&target, dir.path().join("renodx-dlssfix.addon64")).is_err() {
+        // Some Windows test environments deny symlink creation; the
+        // nonregular regression above still covers the no-follow policy.
+        return;
+    }
+    let candidate = OrphanedInstall {
+        game_id: game_id("1091502"),
+        game_dir: dir.path().to_path_buf(),
+        addon_file,
+        host_file: None,
+        host_kind: InstalledAddonHostKind::Proxy,
+        registered_exe_path: None,
+        reshade_config: test_support::reshade_sources(),
+        game_arch: Some(Architecture::X64),
+        addon_url: Some("https://example.com/renodx-test.addon64".to_owned()),
+    };
+
+    let record = build_adopted_record(&candidate).expect("whole-row adoption");
+    assert!(dlss_fix_source(&record).is_none());
+    assert!(
+        !created_names(&record)
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("renodx-dlssfix.addon64"))
+    );
 }

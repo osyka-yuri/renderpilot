@@ -194,7 +194,7 @@ describe('createRenoDxStore', () => {
     expect(store.reshadeStableSupported).toBe(true);
     expect(store.selectedReshadeChannel).toBe('stable');
     expect(store.vulkanLayer).toBeNull();
-    expect(store.dlssFixAvailable).toBe(false);
+    expect(store.dlssFix).toEqual({ kind: 'hidden' });
   });
 
   it('uses the backend selected channel rather than the detected channel', async () => {

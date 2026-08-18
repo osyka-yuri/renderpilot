@@ -12,6 +12,11 @@ use super::types::RenoDxGeneric;
 /// GitHub Pages host serving the per-game RenoDX add-ons.
 const RENODX_BASE: &str = "https://clshortfuse.github.io/renodx";
 
+/// Reserved slug for the DLSS-Fix companion. Both its canonical source URL and
+/// on-disk file name derive from this single value, so it cannot become a main
+/// RenoDX payload through manifest drift.
+pub(super) const DLSS_FIX_SLUG: &str = "dlssfix";
+
 /// On-disk add-on file stem (`renodx-<slug>`). A manual generic install with no
 /// catalogue slug falls back to `renodx-manual` so the path stays well-formed.
 #[must_use]
@@ -24,6 +29,24 @@ pub(super) fn addon_file_stem(slug: &str) -> String {
 #[must_use]
 pub(super) fn addon_file_name(slug: &str, arch: Architecture) -> String {
     format!("{}.{}", addon_file_stem(slug), arch.addon_extension())
+}
+
+/// Canonical DLSS-Fix companion file name for `arch`.
+#[must_use]
+pub(super) fn dlss_fix_file_name(arch: Architecture) -> String {
+    addon_file_name(DLSS_FIX_SLUG, arch)
+}
+
+/// Whether a file name is a DLSS-Fix-shaped candidate. This deliberately
+/// recognizes every extension after the reserved stem: legacy records with a
+/// wrong architecture or malformed suffix still need to remain opaque to a
+/// generic RenoDX mutation.
+#[must_use]
+pub(super) fn is_dlss_fix_candidate_file_name(file_name: &str) -> bool {
+    let prefix = format!("{}.", addon_file_stem(DLSS_FIX_SLUG));
+    file_name
+        .get(..prefix.len())
+        .is_some_and(|prefix_in_name| prefix_in_name.eq_ignore_ascii_case(&prefix))
 }
 
 /// Canonical local slug for an engine-generic add-on. New manifests provide an
@@ -58,7 +81,7 @@ pub(super) fn generic_addon_url(generic: &RenoDxGeneric, arch: Architecture) -> 
 /// slug. Architecture-specific (`renodx-dlssfix.addon64` / `.addon32`).
 #[must_use]
 pub(super) fn dlss_fix_url(arch: Architecture) -> String {
-    addon_url("dlssfix", arch)
+    addon_url(DLSS_FIX_SLUG, arch)
 }
 
 #[cfg(test)]
@@ -91,6 +114,21 @@ mod tests {
             addon_file_name("", Architecture::X64),
             "renodx-manual.addon64"
         );
+    }
+
+    #[test]
+    fn dlss_fix_source_and_file_name_share_the_reserved_slug() {
+        assert_eq!(
+            dlss_fix_file_name(Architecture::X64),
+            addon_file_name(DLSS_FIX_SLUG, Architecture::X64)
+        );
+        assert_eq!(
+            dlss_fix_url(Architecture::X86),
+            addon_url(DLSS_FIX_SLUG, Architecture::X86)
+        );
+        assert!(is_dlss_fix_candidate_file_name("RENODX-DLSSFIX.ADDON64"));
+        assert!(is_dlss_fix_candidate_file_name("renodx-dlssfix.invalid"));
+        assert!(!is_dlss_fix_candidate_file_name("renodx-dlssfixer.addon64"));
     }
 
     #[test]

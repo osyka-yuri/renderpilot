@@ -466,8 +466,8 @@ async fn availability_auto_adopts_proxy_install_with_dlss_fix_companion() {
             .to_string();
     assert_eq!(addon_source.digest(), real_addon_digest);
 
-    // Symptom 2 fixed: DLSS-Fix is recognized as installed.
-    assert!(record.has_dlss_fix());
+    // Symptom 2 fixed: the central ownership projection sees DLSS-Fix evidence.
+    assert!(crate::addons::renodx::dlss_fix_binding::resolve(&record).has_evidence);
 }
 
 #[tokio::test]

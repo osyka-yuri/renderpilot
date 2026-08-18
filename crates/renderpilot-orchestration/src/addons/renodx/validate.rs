@@ -62,6 +62,7 @@ fn validate_generic(generic: &RenoDxGeneric) -> Result<(), ServiceError> {
     generic.message.validate("generic message")?;
     if let Some(slug) = &generic.slug {
         ensure_slug("generic slug", slug)?;
+        ensure_not_reserved_dlss_fix_slug("generic slug", slug)?;
     }
 
     let has_url64 = generic.url64.is_some();
@@ -98,6 +99,7 @@ fn validate_title(title: &RenoDxTitle) -> Result<(), ServiceError> {
     ensure_not_blank("title id", &title.id)?;
     ensure_not_blank("title name", &title.name)?;
     ensure_slug("title slug", &title.slug)?;
+    ensure_not_reserved_dlss_fix_slug("title slug", &title.slug)?;
 
     validate_match_rules(&title.id, &title.match_rules)?;
 
@@ -147,6 +149,16 @@ fn ensure_slug(field: &str, value: &str) -> Result<(), ServiceError> {
     if !ok {
         return Err(errors::failed(format!(
             "`{field}` must be a bare slug ([A-Za-z0-9._-]), got `{value}`"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_not_reserved_dlss_fix_slug(field: &str, value: &str) -> Result<(), ServiceError> {
+    if value.eq_ignore_ascii_case(source::DLSS_FIX_SLUG) {
+        return Err(errors::failed(format!(
+            "`{field}` must not use reserved DLSS-Fix slug `{}`",
+            source::DLSS_FIX_SLUG
         )));
     }
     Ok(())
@@ -282,6 +294,27 @@ mod tests {
         }];
 
         assert!(validate_manifest(&m).is_ok());
+    }
+
+    #[test]
+    fn reserved_dlss_fix_slug_is_rejected_case_insensitively_for_titles_and_generics() {
+        let mut title_manifest = one_title_manifest();
+        title_manifest.titles[0].slug = "DLSSFIX".to_owned();
+        assert!(validate_manifest(&title_manifest).is_err());
+
+        let mut generic_manifest = one_title_manifest();
+        generic_manifest.generics = vec![RenoDxGeneric {
+            engine: Engine::Unity,
+            status: Status::Working,
+            slug: Some("DlSsFiX".to_owned()),
+            url64: None,
+            url32: None,
+            message: crate::addons::CatalogMessage::new(
+                "renodx.generic.unity",
+                "Generic Unity profile",
+            ),
+        }];
+        assert!(validate_manifest(&generic_manifest).is_err());
     }
 
     #[test]

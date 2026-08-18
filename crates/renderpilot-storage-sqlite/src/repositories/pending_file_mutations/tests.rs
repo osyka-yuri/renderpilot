@@ -156,7 +156,7 @@ fn illegal_state_transitions_are_rejected() {
 }
 
 #[test]
-fn restore_fence_is_idempotent_and_repairs_wrong_authority_once() {
+fn resolution_fence_is_idempotent_and_repairs_wrong_authority_once() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let game_id = GameId::new("steam:fence").expect("id");
     store_game(&storage, game_id.clone());
@@ -174,10 +174,10 @@ fn restore_fence_is_idempotent_and_repairs_wrong_authority_once() {
         .expect("finish");
 
     let _first = storage
-        .fence_prepared_file_mutation_restore(&game_id, "tx-fence")
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-fence")
         .expect("matching fence");
     let _second = storage
-        .fence_prepared_file_mutation_restore(&game_id, "tx-fence")
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-fence")
         .expect("idempotent matching fence");
     assert_eq!(
         storage
@@ -199,10 +199,10 @@ fn restore_fence_is_idempotent_and_repairs_wrong_authority_once() {
         })
         .expect("corrupt authority fixture");
     let _repair = storage
-        .fence_prepared_file_mutation_restore(&game_id, "tx-fence")
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-fence")
         .expect("repair fence");
     let _repeat = storage
-        .fence_prepared_file_mutation_restore(&game_id, "tx-fence")
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-fence")
         .expect("repaired fence is idempotent");
     assert_eq!(
         storage.catalog_readiness(&game_id).expect("readiness"),
@@ -215,12 +215,12 @@ fn restore_fence_is_idempotent_and_repairs_wrong_authority_once() {
 }
 
 #[test]
-fn restore_fence_rejects_missing_or_wrong_game_authority() {
+fn resolution_fence_rejects_missing_or_wrong_game_authority() {
     let storage = SqliteStorage::in_memory().expect("storage");
     let game_id = GameId::new("steam:fence-missing").expect("id");
     store_game(&storage, game_id.clone());
     storage
-        .fence_prepared_file_mutation_restore(&game_id, "missing")
+        .fence_prepared_file_mutation_resolution(&game_id, "missing")
         .expect_err("missing prepared row must stop");
 
     let row = PendingFileMutationRow {
@@ -233,7 +233,7 @@ fn restore_fence_rejects_missing_or_wrong_game_authority() {
     };
     storage.prepare_file_mutation(&row).expect("fixture row");
     storage
-        .fence_prepared_file_mutation_restore(&game_id, &row.id)
+        .fence_prepared_file_mutation_resolution(&game_id, &row.id)
         .expect_err("wrong game must stop before any authority write");
 }
 
@@ -255,14 +255,55 @@ fn pre_catalog_finish_and_fence_preserve_total_absence() {
         .expect("finish without catalog");
 
     let fence = storage
-        .fence_prepared_file_mutation_restore(&game_id, "tx-pre-catalog")
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-pre-catalog")
         .expect("fence without catalog");
     storage
-        .complete_prepared_file_mutation_restore(&fence)
+        .complete_prepared_file_mutation_restored(fence)
         .expect("complete without catalog");
     assert!(
         storage.catalog_readiness(&game_id).is_err(),
         "both catalog rows must remain absent for a pre-catalog mutation"
+    );
+}
+
+#[test]
+fn cleanup_only_resolution_removes_the_row_and_keeps_catalog_invalidated() {
+    let storage = SqliteStorage::in_memory().expect("storage");
+    let game_id = GameId::new("steam:cleanup-only-resolution").expect("id");
+    store_game(&storage, game_id.clone());
+    storage
+        .begin_file_mutation_preparation(&BeginFileMutationPreparation {
+            id: "tx-cleanup-only".to_owned(),
+            game_id: game_id.clone(),
+            feature: "test".to_owned(),
+            subject_id: None,
+            initial_manifest_json: r#"{"snapshots":[]}"#.to_owned(),
+        })
+        .expect("begin");
+    storage
+        .finish_preparing_file_mutation("tx-cleanup-only", r#"{"snapshots":[]}"#)
+        .expect("finish");
+
+    let fence = storage
+        .fence_prepared_file_mutation_resolution(&game_id, "tx-cleanup-only")
+        .expect("fence");
+    storage
+        .complete_prepared_file_mutation_without_restore(fence)
+        .expect("complete cleanup-only");
+
+    assert!(
+        storage
+            .get_pending_file_mutation("tx-cleanup-only")
+            .expect("row lookup")
+            .is_none()
+    );
+    assert_eq!(
+        storage.catalog_readiness(&game_id).expect("readiness"),
+        super::super::observations::CatalogReadiness::Invalidated {
+            authority_epoch: 1,
+            reason: "prepared_file_mutation".to_owned(),
+            mutation_token: Some("tx-cleanup-only".to_owned()),
+        }
     );
 }
 

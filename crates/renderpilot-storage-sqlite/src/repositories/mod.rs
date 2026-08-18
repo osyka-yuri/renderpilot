@@ -39,7 +39,7 @@ pub use observations::{
 };
 pub use pending_file_mutations::{
     BeginFileMutationPreparation, PendingFileMutationRow, PendingFileMutationState,
-    PreparedRestoreFence,
+    PreparedMutationResolutionFence,
 };
 
 /// SQLite-backed storage adapter implementing application repository ports.

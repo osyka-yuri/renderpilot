@@ -17,7 +17,7 @@ use crate::addons::renodx::types::RenoDxManifest;
 use crate::addons::renodx::use_cases::reshade_update::{
     HostUpdateTarget, recorded_reshade_channel, resolve_host_update_target,
 };
-use crate::addons::renodx::{errors, fetch, install, tracking};
+use crate::addons::renodx::{errors, fetch, tracking};
 use crate::addons::reshade::channel;
 use crate::addons::reshade::fetch::{Download, fetch_reshade_from_source};
 use crate::addons::reshade::types::{RecordedChannelParse, ReshadeSourceCatalog};
@@ -26,7 +26,9 @@ use crate::game_mutation_lock;
 use crate::net::ProgressObserver;
 use crate::{Context, ServiceError};
 
-/// Applies an update to tracked RenoDX sources and host artifacts.
+/// Applies an update to the main RenoDX add-on and host artifacts only.
+/// DLSS-Fix has an independent update/repair command and its source/path
+/// projection is copied byte-for-byte through this generic transaction.
 ///
 /// Network prepare for per-game artifacts runs **outside** the per-game lock
 /// (same 3-phase contract as Luma update). Shared Vulkan layer updates still
@@ -81,7 +83,12 @@ pub async fn update(
         &revalidated.record,
         &replacement_paths,
         host_install_path.as_deref(),
-    );
+    )?;
+    let PreparedUpdateArtifacts {
+        refreshed_sources,
+        replacements,
+        host_install,
+    } = prepared;
 
     crate::addons::durable::run_targets_mutation(
         crate::addons::durable::TargetsMutation {
@@ -92,8 +99,8 @@ pub async fn update(
             game_id,
         },
         |mutation_id| -> Result<(), ServiceError> {
-            let mut originals = apply_replacements(prepared.replacements)?;
-            let host_receipt = match prepared.host_install.as_ref() {
+            let mut originals = apply_replacements(replacements)?;
+            let host_receipt = match host_install {
                 Some(install) => match apply_host_install(install, &mut originals) {
                     Ok(receipt) => Some(receipt),
                     Err(error) => {
@@ -105,7 +112,7 @@ pub async fn update(
             };
             let refreshed = match tracking::rebuild_with_sources_and_receipt(
                 current,
-                prepared.refreshed_sources,
+                refreshed_sources,
                 host_receipt.as_ref(),
                 "RenoDX update rebuild",
             ) {
@@ -143,7 +150,6 @@ struct UpdateSnapshot {
     /// Cloned tracked sources needed for unlocked prepare (owned).
     addon: Option<TrackedSource>,
     host: Option<TrackedSource>,
-    dlss_fix: Option<TrackedSource>,
     host_target: Option<HostUpdateTarget>,
 }
 
@@ -161,6 +167,11 @@ fn resolve_update_snapshot(
 ) -> Result<UpdateSnapshot, ServiceError> {
     let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
+    if crate::addons::renodx::dlss_fix_binding::resolve(&record).main_payload_collides() {
+        return Err(errors::invalid(
+            "RenoDX main payload collides with the reserved DLSS-Fix companion target".to_owned(),
+        ));
+    }
     let shared_vulkan_host = matches!(
         record.host_kind(),
         Some(InstalledAddonHostKind::SharedVulkanLayer)
@@ -182,7 +193,6 @@ fn resolve_update_snapshot(
             return Err(errors::duplicate_host_sources());
         }
     };
-    let dlss_fix = source_with_role(&record, TrackedSourceRole::DlssFix).cloned();
     let host_channel = if shared_vulkan_host {
         None
     } else {
@@ -215,12 +225,7 @@ fn resolve_update_snapshot(
     let addon_tracked = addon
         .as_ref()
         .is_some_and(|source| !source.url().is_empty());
-    if !addon_tracked
-        && host.is_none()
-        && dlss_fix.is_none()
-        && !host_policy_writes
-        && shared_vulkan_channel.is_none()
-    {
+    if !addon_tracked && host.is_none() && !host_policy_writes && shared_vulkan_channel.is_none() {
         return Err(errors::invalid(
             "this RenoDX install has no recorded source to update from".to_owned(),
         ));
@@ -231,7 +236,6 @@ fn resolve_update_snapshot(
         shared_vulkan_channel,
         addon,
         host,
-        dlss_fix,
         host_target,
     })
 }
@@ -258,13 +262,19 @@ async fn prepare_update_artifacts(
         .addon
         .as_ref()
         .is_some_and(|source| !source.url().is_empty());
-    let mut refreshed_sources: Vec<TrackedSource> = Vec::new();
+    // The generic update has no authority to fetch, write, or refresh DLSS-Fix.
+    // Preserve its exact phase-3 projection, including advisory/partial evidence.
+    let mut refreshed_sources: Vec<TrackedSource> = record
+        .tracked_sources()
+        .iter()
+        .filter(|source| source.role() == TrackedSourceRole::DlssFix)
+        .cloned()
+        .collect();
     let mut replacements: Vec<Replacement> = Vec::new();
     let mut host_install: Option<HostInstall> = None;
     // Shared Vulkan is applied in phase 3; do not count it in unlocked stages.
     let stage_count = u64::from(addon_tracked)
-        + u64::from(snapshot.host.is_some() && snapshot.host_target.is_some())
-        + u64::from(snapshot.dlss_fix.is_some());
+        + u64::from(snapshot.host.is_some() && snapshot.host_target.is_some());
     let mut stage_index = 0;
 
     if let Some(addon) = snapshot.addon.as_ref() {
@@ -300,16 +310,6 @@ async fn prepare_update_artifacts(
         refreshed_sources.push(host.clone());
     }
 
-    if let Some(dlss_fix) = snapshot.dlss_fix.as_ref() {
-        let stage_progress_fn = sequential_stage_observer(progress, stage_index, stage_count);
-        let stage_progress = stage_progress_fn
-            .as_ref()
-            .map(|observer| observer as &ProgressObserver<'_>);
-        let prepared = prepare_dlss_fix_update(record, dlss_fix, stage_progress).await?;
-        refreshed_sources.push(prepared.source);
-        replacements.extend(prepared.replacement);
-        stage_index += 1;
-    }
     debug_assert_eq!(stage_index, stage_count);
 
     Ok(PreparedUpdateArtifacts {
@@ -399,28 +399,6 @@ async fn prepare_policy_host_update(
     })
 }
 
-async fn prepare_dlss_fix_update(
-    record: &InstalledAddon,
-    source: &TrackedSource,
-    progress: Option<&ProgressObserver<'_>>,
-) -> Result<PreparedSourceUpdate, ServiceError> {
-    let download = fetch::fetch_addon(source.url(), "DLSS-Fix", progress).await?;
-    let refreshed = refreshed_source(source, &download);
-    let replacement = if download.digest == source.digest() {
-        None
-    } else {
-        Some(Replacement {
-            path: dlss_fix_path(record)?,
-            bytes: download.bytes,
-            mtime: download.last_modified,
-        })
-    };
-    Ok(PreparedSourceUpdate {
-        source: refreshed,
-        replacement,
-    })
-}
-
 fn refreshed_source(source: &TrackedSource, download: &Download) -> TrackedSource {
     TrackedSource::new(
         source.role(),
@@ -435,11 +413,6 @@ fn addon_path(record: &InstalledAddon) -> PathBuf {
     PathBuf::from(record.addon_file().as_str())
 }
 
-fn dlss_fix_path(record: &InstalledAddon) -> Result<PathBuf, ServiceError> {
-    install::dlss_fix_file_path(record)
-        .ok_or_else(|| errors::invalid("no DLSS-Fix add-on in this install".to_owned()))
-}
-
 /// Installs `install`'s bytes at its destination via a no-backup `Replace` op
 /// (so the returned receipt still updates the record's `created_files` the way
 /// it always has), then appends the destination's pre-write state to
@@ -450,23 +423,25 @@ fn dlss_fix_path(record: &InstalledAddon) -> Result<PathBuf, ServiceError> {
 /// here: the engine's own single-op rollback already leaves the destination
 /// exactly as it was.
 fn apply_host_install(
-    install: &HostInstall,
+    install: HostInstall,
     originals: &mut Vec<OriginalFile>,
 ) -> Result<InstallReceipt, ServiceError> {
-    let path = install.game_dir.join(&install.name);
+    let HostInstall {
+        game_dir,
+        name,
+        bytes,
+    } = install;
+    let path = game_dir.join(&name);
     let original_bytes = if path.is_file() {
         Some(crate::fs::read_file(&path)?)
     } else {
         None
     };
     let receipt = engine::install(
-        &install.game_dir,
+        &game_dir,
         &InstallPlan {
             kind: AddonKind::RenoDx,
-            ops: vec![FileOp::Replace {
-                name: install.name.clone(),
-                bytes: install.bytes.clone(),
-            }],
+            ops: vec![FileOp::Replace { name, bytes }],
         },
     )?;
     originals.push(OriginalFile {
@@ -498,7 +473,6 @@ mod tests {
             shared_vulkan_channel: channel,
             addon: None,
             host: None,
-            dlss_fix: None,
             host_target: None,
         }
     }
@@ -517,5 +491,27 @@ mod tests {
         let current = snapshot(record(), Some(ReshadeChannel::Nightly));
 
         assert!(ensure_update_snapshot_matches(&prepared, &current).is_err());
+    }
+
+    #[tokio::test]
+    async fn generic_prepare_preserves_the_dlss_projection_without_network_or_writes() {
+        let dlss = TrackedSource::new(
+            TrackedSourceRole::DlssFix,
+            "https://example.test/renodx-dlssfix.addon64",
+            Some("etag".to_owned()),
+            "live-digest",
+        )
+        .with_last_modified(Some("Mon, 01 Jan 2024 00:00:00 GMT".to_owned()))
+        .with_advisory();
+        let prepared = prepare_update_artifacts(
+            &snapshot(record().with_tracked_source(dlss.clone()), None),
+            None,
+        )
+        .await
+        .expect("generic prepare does not fetch DLSS");
+
+        assert_eq!(prepared.refreshed_sources, vec![dlss]);
+        assert!(prepared.replacements.is_empty());
+        assert!(prepared.host_install.is_none());
     }
 }

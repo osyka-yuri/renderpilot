@@ -82,9 +82,9 @@ pub use self::operations::{apply_swap, plan_rollback, plan_swap, rollback_compon
 pub use self::renodx::{
     renodx_apply_vulkan_layer, renodx_availability, renodx_check_update,
     renodx_dlss_fix_availability, renodx_install, renodx_install_dlss_fix,
-    renodx_install_from_file, renodx_remove_vulkan_layer, renodx_switch_reshade_channel,
-    renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
-    renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
+    renodx_install_from_file, renodx_remove_vulkan_layer, renodx_retry_dlss_fix_recovery,
+    renodx_switch_reshade_channel, renodx_uninstall, renodx_uninstall_dlss_fix, renodx_update,
+    renodx_update_dlss_fix, renodx_vulkan_layer_management_status, renodx_vulkan_layer_status,
 };
 pub use self::scan::{
     AutoScanOutput, add_game, inspect_game_install, remove_game_from_catalog, scan_auto_libraries,

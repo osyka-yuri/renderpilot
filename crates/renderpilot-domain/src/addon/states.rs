@@ -53,16 +53,17 @@ pub enum RenoDxInstallState {
         /// bumped by an add-on/host/DLSS-Fix update.
         /// Always a concrete number for emitted `installed` states.
         updated_at: i64,
-        /// Whether the install includes the DLSS-Fix companion add-on. Surfaced
-        /// directly on the state so the UI does not have to infer it from the
-        /// update report (which is `null` while the update probe is in flight or
-        /// after a network failure).
+        /// Whether the install record contains any DLSS-Fix ownership or source
+        /// evidence. This does not claim that a safe companion file is currently
+        /// present; the dedicated availability projection determines that exact
+        /// relationship and its allowed actions. Surfaced directly so the UI can
+        /// retain the component row while that projection is in flight or failed.
         #[serde(default)]
-        dlss_fix_installed: bool,
+        dlss_fix_evidence_present: bool,
         /// Whether the add-on has a tracked upstream source (a normal install).
         /// `false` for a user-file install, which records no upstream URL.
         /// Surfaced directly on the state for the same reason as
-        /// `dlss_fix_installed`, so the "installed from a file" hint stays correct
+        /// `dlss_fix_evidence_present`, so the "installed from a file" hint stays correct
         /// while the update probe is in flight or after it fails (the report's
         /// `addon` is `null` in those cases too).
         #[serde(default)]
@@ -71,20 +72,6 @@ pub enum RenoDxInstallState {
 }
 
 impl RenoDxInstallState {
-    /// Returns whether this state is `Installed` **and** includes the DLSS-Fix
-    /// companion add-on. A thin pattern-match helper so callers need not repeat
-    /// the `match`/`if let` boilerplate.
-    #[must_use]
-    pub fn is_dlss_fix_installed(&self) -> bool {
-        matches!(
-            self,
-            Self::Installed {
-                dlss_fix_installed: true,
-                ..
-            }
-        )
-    }
-
     /// Returns whether this state is `Installed` and its add-on payload has a
     /// non-empty upstream source URL.
     #[must_use]

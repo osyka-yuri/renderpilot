@@ -591,6 +591,9 @@ export const zhHant = defineLocalizedCatalog<'zh-Hant', EnglishCatalog>()({
   'gameDetails.renodx.actionInstall': '安裝',
   'gameDetails.renodx.actionUninstall': '移除 RenoDX',
   'gameDetails.renodx.actionRepair': '修復',
+  'gameDetails.renodx.actionRepairDlssFix': '修復 DLSS-Fix',
+  'gameDetails.renodx.actionFinishDlssFixRecovery': '完成復原',
+  'gameDetails.renodx.dlssFixRecoveryPending': '先前的 DLSS-Fix 操作需要復原。',
   'gameDetails.renodx.uninstallConfirmTitle': '要從此遊戲移除 RenoDX 嗎？',
   'gameDetails.renodx.uninstallConfirmBody':
     '這會移除 RenoDX 附加元件，並只還原 RenoDX 設定期間變更過的 ReShade 檔案。',

@@ -25,7 +25,7 @@
 
 use std::path::Path;
 
-use renderpilot_domain::{Architecture, GameId};
+use renderpilot_domain::GameId;
 
 use crate::ServiceError;
 
@@ -41,32 +41,9 @@ mod uninstall;
 mod tests;
 
 pub use recovery::recover_torn_install;
-pub use uninstall::uninstall;
-
-/// The DLSS-Fix companion add-on file name prefix (`renodx-dlssfix.`).
-pub(crate) const DLSS_FIX_FILE_PREFIX: &str = "renodx-dlssfix.";
-
-/// The DLSS-Fix add-on file name for `arch` (e.g. `renodx-dlssfix.addon64`).
-#[must_use]
-pub(crate) fn dlss_fix_file_name(arch: Architecture) -> String {
-    format!("{DLSS_FIX_FILE_PREFIX}{}", arch.addon_extension())
-}
-
-/// The path of the DLSS-Fix companion add-on within the record's `created_files`,
-/// if one is installed (matched by the [`DLSS_FIX_FILE_PREFIX`] file name).
-#[must_use]
-pub(crate) fn dlss_fix_file_path(
-    record: &renderpilot_domain::InstalledAddon,
-) -> Option<std::path::PathBuf> {
-    record
-        .created_files()
-        .iter()
-        .find(|f| {
-            f.file_name()
-                .is_some_and(|n| n.starts_with(DLSS_FIX_FILE_PREFIX))
-        })
-        .map(|f| std::path::PathBuf::from(f.as_str()))
-}
+pub(crate) use uninstall::PreparedRenoDxUninstall;
+#[cfg(test)]
+pub(crate) use uninstall::uninstall;
 
 /// Everything the engine needs to lay down an install, with payloads already
 /// downloaded and integrity-verified by the fetch layer.

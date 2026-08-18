@@ -270,18 +270,28 @@ fn other_channel_source(
 /// Update verdict for the DLSS-Fix companion add-on. Not installed (no DlssFix
 /// source) contributes `None`.
 async fn check_dlss_fix(record: &InstalledAddon) -> Option<UpdateStatus> {
-    let dlss_fix = source_with_role(record, TrackedSourceRole::DlssFix)?;
-    if let Ok(validators) = head_validators(dlss_fix.url(), "DLSS-Fix update check").await {
-        let current = validators.cache_validator();
-        if let Some(status) = validator_fast_path(dlss_fix.etag(), current.as_deref()) {
-            return Some(status);
+    let binding = crate::addons::renodx::dlss_fix_binding::resolve(record);
+    match binding.state {
+        crate::addons::renodx::dlss_fix_binding::DlssFixBindingState::None => None,
+        crate::addons::renodx::dlss_fix_binding::DlssFixBindingState::Invalid
+        | crate::addons::renodx::dlss_fix_binding::DlssFixBindingState::SourceOnly
+        | crate::addons::renodx::dlss_fix_binding::DlssFixBindingState::OwnedOnly => {
+            Some(UpdateStatus::UnknownNeedsValidation)
         }
-    }
-    // Fetch and compare the digest. The recorded URL already encodes the
-    // architecture, so no arch derivation is needed here.
-    match fetch::fetch_addon(dlss_fix.url(), "DLSS-Fix", None).await {
-        Ok(download) => Some(digest_verdict(dlss_fix.digest(), &download.digest)),
-        Err(_) => Some(UpdateStatus::Unknown),
+        crate::addons::renodx::dlss_fix_binding::DlssFixBindingState::Bound => {
+            let crate::file_mutation::V2DiskObservation::Regular { digest } = binding.observation
+            else {
+                return Some(UpdateStatus::UnknownNeedsValidation);
+            };
+            let source = binding.source?;
+            // A validator is only a network optimization for the main add-on.
+            // DLSS-Fix availability compares *live* target bytes to upstream so a
+            // manually changed managed file remains safely updateable/removable.
+            match fetch::fetch_addon(source.url(), "DLSS-Fix", None).await {
+                Ok(download) => Some(digest_verdict(&digest, &download.digest)),
+                Err(_) => Some(UpdateStatus::Unknown),
+            }
+        }
     }
 }
 

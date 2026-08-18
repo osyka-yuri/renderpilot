@@ -592,6 +592,9 @@ export const zhHans = defineLocalizedCatalog<'zh-Hans', EnglishCatalog>()({
   'gameDetails.renodx.actionInstall': '安装',
   'gameDetails.renodx.actionUninstall': '移除 RenoDX',
   'gameDetails.renodx.actionRepair': '修复',
+  'gameDetails.renodx.actionRepairDlssFix': '修复 DLSS-Fix',
+  'gameDetails.renodx.actionFinishDlssFixRecovery': '完成恢复',
+  'gameDetails.renodx.dlssFixRecoveryPending': '先前的 DLSS-Fix 操作需要恢复。',
   'gameDetails.renodx.uninstallConfirmTitle': '要从此游戏移除 RenoDX 吗？',
   'gameDetails.renodx.uninstallConfirmBody':
     '这会移除 RenoDX 插件，并只恢复 RenoDX 设置期间更改过的 ReShade 文件。',

@@ -10,6 +10,7 @@ import {
 import type { RenoDxApi } from '../api/desktop';
 import type {
   AvailabilityReport,
+  DlssFixAvailability,
   HostKind,
   RenoDxInstallState,
   RenoDxUpdateReport,
@@ -134,7 +135,7 @@ export const INSTALLED: AvailabilityReport = availability({
     addon_dated: 'Thu, 18 Jun 2026 12:00:00 GMT',
     installed_at: 1_700_000_000_000,
     updated_at: 1_700_000_500_000,
-    dlss_fix_installed: false,
+    dlss_fix_evidence_present: false,
     addon_tracked: true,
   },
   host_detection: 'present',
@@ -176,7 +177,42 @@ export function installedWithChannel(
  *  `install_dlss_fix` response, which records a DlssFix tracked source). */
 export const INSTALLED_WITH_DLSS_FIX: RenoDxInstallState = {
   ...(INSTALLED.state as Extract<RenoDxInstallState, { status: 'installed' }>),
-  dlss_fix_installed: true,
+  dlss_fix_evidence_present: true,
+};
+
+export const DLSS_FIX_INSTALLABLE: DlssFixAvailability = {
+  kind: 'binding',
+  state: 'none',
+  actions: ['install'],
+};
+
+export const DLSS_FIX_UNAVAILABLE: DlssFixAvailability = {
+  kind: 'binding',
+  state: 'none',
+  actions: [],
+};
+
+export const DLSS_FIX_MANAGED: DlssFixAvailability = {
+  kind: 'binding',
+  state: 'bound',
+  actions: ['update', 'remove'],
+};
+
+export const DLSS_FIX_NEEDS_REPAIR: DlssFixAvailability = {
+  kind: 'binding',
+  state: 'source_only',
+  actions: ['repair', 'remove'],
+};
+
+export const DLSS_FIX_PENDING_RECOVERY: DlssFixAvailability = {
+  kind: 'recovery_pending',
+  actions: ['retry_recovery'],
+};
+
+export const DLSS_FIX_VALIDATION_REQUIRED: DlssFixAvailability = {
+  kind: 'binding',
+  state: 'invalid',
+  actions: ['validation_required'],
 };
 
 export function fakeApi(overrides: Partial<RenoDxApi> = {}): RenoDxApi {
@@ -196,8 +232,10 @@ export function fakeApi(overrides: Partial<RenoDxApi> = {}): RenoDxApi {
     update: vi.fn(() => Promise.resolve(INSTALLED.state)),
     switchChannel: vi.fn(() => Promise.resolve(INSTALLED.state)),
     installDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
+    updateDlssFix: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
+    retryDlssFixRecovery: vi.fn(() => Promise.resolve(INSTALLED_WITH_DLSS_FIX)),
     uninstallDlssFix: vi.fn(() => Promise.resolve(INSTALLED.state)),
-    dlssFixAvailability: vi.fn(() => Promise.resolve(false)),
+    dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_UNAVAILABLE)),
     vulkanLayerStatus: vi.fn(() => Promise.resolve(VULKAN_NOT_INSTALLED)),
     vulkanLayerManagementStatus: vi.fn(() =>
       Promise.resolve({

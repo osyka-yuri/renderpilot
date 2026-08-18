@@ -18,7 +18,7 @@ pub(super) fn install_state_from_record(record: &InstalledAddon) -> RenoDxInstal
         addon_dated: tracking::effective_addon_dated(record),
         installed_at: record.installed_at().unwrap_or(0),
         updated_at: record.updated_at().unwrap_or(0),
-        dlss_fix_installed: record.has_dlss_fix(),
+        dlss_fix_evidence_present: super::dlss_fix_binding::resolve(record).has_evidence,
         addon_tracked: record.has_addon_source(),
     }
 }
@@ -77,32 +77,43 @@ pub(super) fn rebuild_with_sources_and_receipt(
     rebuild_with_parts(record, created, backed_up, sources, label)
 }
 
-pub(super) fn rebuild_after_receipt(
+/// Rebuilds the single DLSS-Fix ownership projection. The exact managed path is
+/// deletion authority; the source is advisory update provenance. Both are
+/// replaced atomically in the persisted record so partial-evidence convergence
+/// never leaves a source path pointing at an unrelated file.
+pub(super) fn rebuild_with_dlss_projection(
     record: &InstalledAddon,
-    receipt: &InstallReceipt,
-    removal: Option<(&Path, TrackedSourceRole)>,
-    new_source: Option<TrackedSource>,
+    exact_path: Option<&Path>,
+    source: Option<TrackedSource>,
     label: &str,
 ) -> Result<InstalledAddon, ServiceError> {
+    let expected = super::dlss_fix_binding::resolve(record).target;
+    let expected_key = crate::paths::normalized_key(&expected);
     let mut created = record.created_files().to_vec();
-    if let Some((removed_path, _)) = removal {
-        let removed_str = removed_path.to_string_lossy();
-        created.retain(|path| path.as_str() != removed_str);
+    created.retain(|path| {
+        let candidate = PathBuf::from(path.as_str());
+        crate::paths::normalized_key(&candidate) != expected_key
+    });
+    if let Some(path) = exact_path {
+        let path = PathRef::new(path.to_string_lossy().into_owned()).map_err(|error| {
+            errors::failed(format!(
+                "{label} produced an invalid DLSS-Fix path: {error}"
+            ))
+        })?;
+        created.push(path);
     }
-    merge_path_refs(&mut created, &receipt.created_files, label)?;
-
-    let mut backed_up = record.backed_up_files().to_vec();
-    merge_path_refs(&mut backed_up, &receipt.backed_up_files, label)?;
-
     let mut sources = record.tracked_sources().to_vec();
-    if let Some((_, role)) = removal {
-        sources.retain(|source| source.role() != role);
-    }
-    if let Some(source) = new_source {
+    sources.retain(|source| source.role() != TrackedSourceRole::DlssFix);
+    if let Some(source) = source {
         sources.push(source);
     }
-
-    rebuild_with_parts(record, created, backed_up, sources, label)
+    rebuild_with_parts(
+        record,
+        created,
+        record.backed_up_files().to_vec(),
+        sources,
+        label,
+    )
 }
 
 fn rebuild_with_parts(
@@ -258,38 +269,6 @@ mod tests {
         assert_eq!(updated.backed_up_files().len(), 1);
         assert_eq!(updated.installed_at(), Some(10));
         assert_eq!(updated.updated_at(), Some(20));
-    }
-
-    #[test]
-    fn rebuild_with_parts_names_the_missing_addon_file_in_its_error() {
-        let addon_path = path(r"C:\Games\Test\renodx-test.addon64");
-        let record = record(vec![addon_path.clone()], Vec::new());
-        let receipt = InstallReceipt::default();
-
-        // Removing the addon file's own path from `created_files` violates the
-        // `from_parts` invariant — the error should name it, not just say
-        // "the invariant was violated".
-        let error = rebuild_after_receipt(
-            &record,
-            &receipt,
-            Some((
-                Path::new(addon_path.as_str()),
-                TrackedSourceRole::HostBinary,
-            )),
-            None,
-            "test rebuild",
-        )
-        .expect_err("removing the addon file violates the addon_file invariant");
-
-        match error {
-            ServiceError::CommandFailed(message) => {
-                assert!(
-                    message.contains("renodx-test.addon64"),
-                    "expected the offending file name in: {message}"
-                );
-            }
-            other => panic!("expected CommandFailed, got {other:?}"),
-        }
     }
 
     #[test]

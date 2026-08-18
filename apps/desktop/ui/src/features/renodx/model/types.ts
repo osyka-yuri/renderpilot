@@ -116,11 +116,11 @@ export type RenoDxInstallState =
       /** When the install record was last updated (Unix epoch ms). Always present for installed state. */
       updated_at: number;
       /**
-       * Whether the install includes the DLSS-Fix companion add-on. Surfaced
-       * directly on the state (rather than derived from the update report) so it
-       * stays correct while the update probe is in flight or after it failed.
+       * Whether the install record contains any DLSS-Fix ownership or source
+       * evidence. Exact file presence and allowed actions come from the dedicated
+       * DLSS-Fix availability projection.
        */
-      dlss_fix_installed: boolean;
+      dlss_fix_evidence_present: boolean;
       /**
        * Whether the add-on has a tracked upstream source (a normal install).
        * `false` for a user-file install. Surfaced directly (not inferred from the
@@ -152,6 +152,32 @@ export type RenoDxUpdateReport = {
   /** Vulkan-layer digest-mismatch diagnostics (empty for proxy installs). */
   vulkan_diagnostics?: LayerDiagnosticReason[];
 };
+
+/** Exact DLSS-Fix ownership relationship returned by the backend. */
+export type DlssFixBindingState = 'none' | 'source_only' | 'owned_only' | 'bound' | 'invalid';
+
+/** A dedicated DLSS-Fix action, independent of generic RenoDX update policy. */
+export type DlssFixAction =
+  | 'retry_recovery'
+  | 'install'
+  | 'update'
+  | 'repair'
+  | 'remove'
+  | 'validation_required';
+
+/** Backend-authored DLSS-Fix action projection. */
+export type DlssFixAvailability =
+  | {
+      /** A durable DLSS-Fix mutation needs recovery before normal RenoDX state is available. */
+      kind: 'recovery_pending';
+      actions: ['retry_recovery'];
+    }
+  | {
+      /** Normal per-install companion ownership/action projection. */
+      kind: 'binding';
+      state: DlssFixBindingState;
+      actions: DlssFixAction[];
+    };
 
 /** Detected / generic engine identity used for RenoDX engine-profile installs. */
 export type RenoDxEngine = 'unreal' | 'unreal_extended' | 'unity';

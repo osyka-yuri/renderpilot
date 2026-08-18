@@ -16,6 +16,7 @@ import type { AvailabilityReport, RenoDxInstallState, RenoDxUpdateReport } from 
 import {
   action,
   availability,
+  DLSS_FIX_MANAGED,
   fakeApi,
   INSTALLED,
   INSTALLED_WITH_DLSS_FIX,
@@ -842,7 +843,7 @@ describe('createRenoDxStore', () => {
       addon_dated: null,
       installed_at: 1_000_000_000_000,
       updated_at: 1_000_000_000_000,
-      dlss_fix_installed: false,
+      dlss_fix_evidence_present: false,
       addon_tracked: true,
     };
     const api = fakeApi({ install: vi.fn(() => Promise.resolve(installedFromBackend)) });
@@ -921,8 +922,8 @@ describe('createRenoDxStore', () => {
     expect(store.freshness).toBe('current');
   });
 
-  it('dlssFixInstalled survives an update-probe failure (read off the state)', async () => {
-    // The companion is tracked (the state carries dlss_fix_installed), but the
+  it('DLSS-Fix evidence survives an update-probe failure', async () => {
+    // The companion is tracked (the state carries DLSS-Fix evidence), but the
     // update probe fails. The UI must still show the "Remove" button — the
     // presence is read off the state, not the (null) update report.
     const api = fakeApi({
@@ -930,12 +931,16 @@ describe('createRenoDxStore', () => {
         Promise.resolve({ ...INSTALLED, state: INSTALLED_WITH_DLSS_FIX }),
       ),
       checkUpdate: vi.fn(() => Promise.reject(new Error('network down'))),
+      dlssFixAvailability: vi.fn(() => Promise.resolve(DLSS_FIX_MANAGED)),
     });
     const store = createRenoDxStore({ api });
 
     await store.load('steam:1091500');
 
-    expect(store.dlssFixInstalled).toBe(true);
+    expect(store.dlssFix).toMatchObject({
+      kind: 'component',
+      canRemove: true,
+    });
     expect(store.freshness).toBe('unknown');
   });
 

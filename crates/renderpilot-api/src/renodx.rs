@@ -242,6 +242,27 @@ pub async fn renodx_install_dlss_fix(
     to_json(state)
 }
 
+/// Updates or payload-repairs only the DLSS-Fix companion. This intentionally
+/// bypasses generic RenoDX add-on, host, and shared-Vulkan policy.
+pub async fn renodx_update_dlss_fix(
+    context: &Context,
+    game_id: impl Into<String>,
+    progress: Option<&ProgressObserver<'_>>,
+) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let state =
+        renodx::use_cases::commands::dlss_fix::update_dlss_fix(context, &game_id, progress).await?;
+    to_json(state)
+}
+
+/// Retries pending DLSS-Fix transaction recovery without downloading or
+/// evaluating generic RenoDX/ReShade update policy.
+pub fn renodx_retry_dlss_fix_recovery(context: &Context, game_id: impl Into<String>) -> JsonResult {
+    let game_id = parse_game_id(game_id)?;
+    let state = renodx::use_cases::commands::dlss_fix::retry_dlss_fix_recovery(context, &game_id)?;
+    to_json(state)
+}
+
 /// Removes the DLSS-Fix companion add-on, leaving the main RenoDX install intact,
 /// and returns the resulting install state.
 pub fn renodx_uninstall_dlss_fix(context: &Context, game_id: impl Into<String>) -> JsonResult {
@@ -250,9 +271,7 @@ pub fn renodx_uninstall_dlss_fix(context: &Context, game_id: impl Into<String>) 
     to_json(state)
 }
 
-/// Returns whether a DLSS-Fix can be installed for this game (RenoDX installed +
-/// NVIDIA Frame Generation + DLSS + Streamline detected, and DLSS-Fix not already
-/// installed).
+/// Returns the explicit DLSS-Fix ownership and action projection.
 pub fn renodx_dlss_fix_availability(context: &Context, game_id: impl Into<String>) -> JsonResult {
     let game_id = parse_game_id(game_id)?;
     to_json(renodx::use_cases::queries::dlss_fix::availability(

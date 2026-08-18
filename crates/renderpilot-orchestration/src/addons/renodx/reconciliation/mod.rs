@@ -8,9 +8,10 @@ use renderpilot_domain::{
 
 use crate::addons::records;
 use crate::addons::vulkan_lock;
+use crate::file_mutation::V2DiskObservation;
 use crate::{Context, ServiceError};
 
-use super::{errors, install, source, vulkan};
+use super::{errors, source, vulkan};
 use crate::addons::reshade::host_policy::{self, HostLifecycle};
 use crate::addons::reshade::scan as reshade;
 use crate::addons::reshade::source::reshade_source;
@@ -84,7 +85,7 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
         && candidate
             .host_file
             .as_deref()
-            .is_some_and(|host_file| may_adopt_proxy_runtime(candidate, host_file));
+            .is_some_and(|host_file| may_adopt_proxy_runtime(&record, candidate, host_file));
     record = attach_advisory_provenance(record, candidate, adopts_proxy_runtime);
 
     match candidate.host_kind {
@@ -109,15 +110,28 @@ fn build_adopted_record(candidate: &OrphanedInstall) -> Result<InstalledAddon, S
         }
     }
 
+    // The binding resolver is the authority for whole-row DLSS adoption: no
+    // prefix scan or game-architecture-derived companion is permitted.
+    if let Some(source) = build_advisory_dlss_fix_source(&record) {
+        record = record.with_tracked_source(source);
+    }
+    // A whole-row DB-loss adoption may record both advisory provenance and the
+    // one exact regular created path. Active rows are handled separately.
+    let binding = super::dlss_fix_binding::resolve(&record);
+    if binding.state == super::dlss_fix_binding::DlssFixBindingState::SourceOnly
+        && matches!(binding.observation, V2DiskObservation::Regular { .. })
+    {
+        record = with_created_path(record, &binding.target)?;
+    }
+
     Ok(record)
 }
 
-/// Attaches best-effort advisory provenance to a freshly adopted record: the
+/// Attaches best-effort non-DLSS advisory provenance to a freshly adopted record: the
 /// guessed ReShade channel (from the host file's PE identity strings) for
 /// every host kind, a tracked `HostBinary` source for Proxy installs only, a
-/// tracked `AddonPayload` source for the main add-on, and, for every host
-/// kind, a tracked `DlssFix` source when a DLSS-Fix companion file is
-/// physically present alongside the main add-on. A Vulkan layer's real host
+/// tracked `AddonPayload` source for the main add-on. DLSS-Fix provenance is
+/// added separately through the central binding resolver. A Vulkan layer's real host
 /// provenance lives in the shared-artifact table (see
 /// [`record_shared_vulkan_layer_best_effort`]), so only the channel guess is
 /// useful for its host binary here; DLSS-Fix is unaffected by host kind since
@@ -165,10 +179,6 @@ fn attach_advisory_provenance(
     }
 
     if let Some(source) = build_advisory_addon_source(candidate) {
-        record = record.with_tracked_source(source);
-    }
-
-    if let Some(source) = build_advisory_dlss_fix_source(candidate) {
         record = record.with_tracked_source(source);
     }
 
@@ -236,31 +246,15 @@ fn build_advisory_addon_source(candidate: &OrphanedInstall) -> Option<TrackedSou
     )
 }
 
-/// Best-effort advisory `DlssFix` source for an adopted install's DLSS-Fix
-/// companion add-on, when one is physically present alongside the main add-on.
-/// Host-kind-agnostic -- unlike the Vulkan-shared `HostBinary` case, DLSS-Fix is
-/// always a per-game file next to the main add-on regardless of host kind.
-/// `None` if no DLSS-Fix file exists at the expected co-located path or it
-/// cannot be hashed.
-fn build_advisory_dlss_fix_source(candidate: &OrphanedInstall) -> Option<TrackedSource> {
-    let addon_dir = candidate.addon_file.parent()?;
-    let arch = candidate.game_arch.unwrap_or(Architecture::X64);
-    let dlss_fix_path = addon_dir.join(install::dlss_fix_file_name(arch));
-    if !dlss_fix_path.is_file() {
+/// Best-effort DLSS-Fix provenance for a whole-row adoption. The binding
+/// resolver establishes the one exact companion from the recorded main add-on;
+/// this code never discovers a companion by scanning a directory.
+fn build_advisory_dlss_fix_source(record: &InstalledAddon) -> Option<TrackedSource> {
+    let binding = super::dlss_fix_binding::resolve(record);
+    let arch = binding.arch?;
+    let V2DiskObservation::Regular { digest } = binding.observation else {
         return None;
-    }
-
-    let digest = match renderpilot_detection::sha256_file(&dlss_fix_path) {
-        Ok(digest) => digest.to_string(),
-        Err(error) => {
-            log::debug!(
-                "Failed to hash adopted DLSS-Fix file {}: {error}",
-                dlss_fix_path.display()
-            );
-            return None;
-        }
     };
-
     Some(
         TrackedSource::new(
             TrackedSourceRole::DlssFix,
@@ -272,7 +266,11 @@ fn build_advisory_dlss_fix_source(candidate: &OrphanedInstall) -> Option<Tracked
     )
 }
 
-fn may_adopt_proxy_runtime(candidate: &OrphanedInstall, host_file: &Path) -> bool {
+fn may_adopt_proxy_runtime(
+    record: &InstalledAddon,
+    candidate: &OrphanedInstall,
+    host_file: &Path,
+) -> bool {
     let Some(proxy_dll_name) = host_file.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
@@ -282,13 +280,9 @@ fn may_adopt_proxy_runtime(candidate: &OrphanedInstall, host_file: &Path) -> boo
             .file_name()
             .and_then(|name| name.to_str()),
     ];
-    let dlss_fix = install::dlss_fix_file_name(candidate.game_arch.unwrap_or(Architecture::X64));
-    if candidate
-        .addon_file
-        .parent()
-        .is_some_and(|dir| dir.join(&dlss_fix).is_file())
-    {
-        allowed.push(Some(dlss_fix.as_str()));
+    let binding = super::dlss_fix_binding::resolve(record);
+    if matches!(binding.observation, V2DiskObservation::Regular { .. }) {
+        allowed.push(binding.target.file_name().and_then(|name| name.to_str()));
     }
     let allowed: Vec<&str> = allowed.into_iter().flatten().collect();
     let assessment = host_policy::assess_for_tool_with_allowed_addons(

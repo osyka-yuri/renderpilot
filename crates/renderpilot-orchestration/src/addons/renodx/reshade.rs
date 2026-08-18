@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::addons::renodx::install::DLSS_FIX_FILE_PREFIX;
+use crate::addons::renodx::source::is_dlss_fix_candidate_file_name;
 use crate::addons::reshade::scan::{ReshadePaths, load_ini, read_addon_config_state};
 
 /// State of the RenoDX add-on on disk/config for a detected host.
@@ -98,7 +98,7 @@ fn discover_renodx_addon(addon_dir: &Path) -> Option<PathBuf> {
         }
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
         let is_renodx_addon = crate::addons::renodx::tool::is_renodx_addon_file_name(&name);
-        let is_dlss_fix = name.starts_with(DLSS_FIX_FILE_PREFIX);
+        let is_dlss_fix = is_dlss_fix_candidate_file_name(&name);
         (is_renodx_addon && !is_dlss_fix).then(|| entry.path())
     })
 }

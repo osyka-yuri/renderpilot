@@ -26,6 +26,61 @@ pub use crate::addons::reshade::dto::{
 /// Backend-derived RenoDX actions (shared host-action wire shape).
 pub type RenoDxActions = HostActions;
 
+/// Explicit companion action capability. Kept separate from generic RenoDX
+/// host/add-on actions because DLSS-Fix can be recovered independently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DlssFixAction {
+    /// Cleans a pending crash-recovery row without fetching or touching host policy.
+    RetryRecovery,
+    /// Explicit first install/claim of the exact companion target.
+    Install,
+    /// Refreshes a bound companion from its dedicated upstream.
+    Update,
+    /// Recreates a missing payload or reconciles partial ownership evidence.
+    Repair,
+    /// Removes a structurally safe companion projection.
+    Remove,
+    /// Targeted action is disabled until inconsistent evidence is inspected.
+    ValidationRequired,
+}
+
+/// DLSS-Fix action capability. Pending recovery is deliberately distinct from
+/// binding evidence so a transaction lifecycle state cannot be mistaken for a
+/// malformed companion ownership projection.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DlssFixAvailability {
+    /// At least one exact DLSS-Fix durable mutation is pending for this game.
+    RecoveryPending {
+        /// Recovery capability available through the authorized retry boundary.
+        actions: Vec<DlssFixAction>,
+    },
+    /// Ownership/repair capability for the current RenoDX record.
+    Binding {
+        /// Current exact ownership/evidence state.
+        state: DlssFixBindingState,
+        /// Actions permitted for the current state.
+        actions: Vec<DlssFixAction>,
+    },
+}
+
+/// Persisted/disk evidence relationship for the exact companion target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DlssFixBindingState {
+    /// Neither managed path nor source evidence is recorded.
+    None,
+    /// Advisory upstream source remains but path authority is missing.
+    SourceOnly,
+    /// Exact deletion authority remains but source provenance is missing.
+    OwnedOnly,
+    /// Both path ownership and source provenance are recorded.
+    Bound,
+    /// Duplicated, malformed, or unsafe evidence disables targeted mutation.
+    Invalid,
+}
+
 /// Read-only preview of whether RenoDX can be installed for a game.
 #[derive(Debug, Clone, Serialize)]
 pub struct AvailabilityReport {

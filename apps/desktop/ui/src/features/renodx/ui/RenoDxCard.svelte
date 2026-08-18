@@ -10,6 +10,7 @@
   import { getCardView } from '../model/card-view';
   import { createRenoDxStore, type RenoDxStore } from '../model/create-renodx-store.svelte';
   import RenoDxExternalView from './RenoDxExternalView.svelte';
+  import RenoDxDlssRecoveryView from './RenoDxDlssRecoveryView.svelte';
   import RenoDxInstallableView from './RenoDxInstallableView.svelte';
   import RenoDxInstalledPanel from './RenoDxInstalledPanel.svelte';
   import RenoDxManualFallbackView from './RenoDxManualFallbackView.svelte';
@@ -64,6 +65,7 @@
   const progressIds = $derived([gameId]);
   const showLoading = $derived(view === 'loading');
   const showLoadError = $derived(view === 'load-error');
+  const showDlssFixRecovery = $derived(store.dlssFix.kind === 'recovery_pending');
   const showAttribution = $derived(
     view !== 'installable' && view !== 'installed' && view !== 'external',
   );
@@ -143,7 +145,9 @@
     {/if}
   {/snippet}
 
-  {#if view === 'installed'}
+  {#if showDlssFixRecovery}
+    <RenoDxDlssRecoveryView {gameId} {store} busy={combinedBusy} />
+  {:else if view === 'installed'}
     <RenoDxInstalledPanel {gameId} {store} busy={combinedBusy} />
   {:else if view === 'blocked-by-other-addon'}
     <AddonBlockedMessage

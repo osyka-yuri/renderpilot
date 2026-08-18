@@ -13,6 +13,7 @@
 //! installability) lives in `policy`, separate from the generic detection facts.
 
 pub(crate) mod dlss_fix;
+pub(crate) mod dlss_fix_binding;
 /// DTOs
 pub mod dto;
 mod errors;
@@ -70,10 +71,11 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<RenoDxManifest, ServiceError> {
 /// Derives the add-on architecture from an add-on file name's extension
 /// (`renodx-<slug>.addon64` → X64, `.addon32` → X86).
 #[must_use]
-fn arch_from_addon_file(name: &str) -> Option<Architecture> {
-    if name.ends_with("addon64") {
+pub(super) fn arch_from_addon_file(name: &str) -> Option<Architecture> {
+    let name = name.to_ascii_lowercase();
+    if name.ends_with(".addon64") {
         Some(Architecture::X64)
-    } else if name.ends_with("addon32") {
+    } else if name.ends_with(".addon32") {
         Some(Architecture::X86)
     } else {
         None

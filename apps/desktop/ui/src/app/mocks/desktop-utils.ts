@@ -87,6 +87,8 @@ export type DesktopCommandPayloadMap = {
   renodx_update: { gameId: string };
   renodx_switch_reshade_channel: { gameId: string; reshadeChannel: string };
   renodx_install_dlss_fix: { gameId: string };
+  renodx_update_dlss_fix: { gameId: string };
+  renodx_retry_dlss_fix_recovery: { gameId: string };
   renodx_uninstall_dlss_fix: { gameId: string };
   renodx_dlss_fix_availability: { gameId: string };
   renodx_vulkan_layer_status: undefined;
@@ -136,8 +138,12 @@ export type DesktopCommandResultMap = {
   renodx_update: unknown;
   renodx_switch_reshade_channel: unknown;
   renodx_install_dlss_fix: unknown;
+  renodx_update_dlss_fix: unknown;
+  renodx_retry_dlss_fix_recovery: unknown;
   renodx_uninstall_dlss_fix: unknown;
-  renodx_dlss_fix_availability: boolean;
+  renodx_dlss_fix_availability:
+    | { kind: 'recovery_pending'; actions: ['retry_recovery'] }
+    | { kind: 'binding'; state: string; actions: string[] };
   renodx_vulkan_layer_status: unknown;
   renodx_vulkan_layer_management_status: unknown;
   renodx_apply_vulkan_layer: unknown;
@@ -185,6 +191,8 @@ const ALL_DESKTOP_COMMANDS = [
   'renodx_update',
   'renodx_switch_reshade_channel',
   'renodx_install_dlss_fix',
+  'renodx_update_dlss_fix',
+  'renodx_retry_dlss_fix_recovery',
   'renodx_uninstall_dlss_fix',
   'renodx_dlss_fix_availability',
   'renodx_vulkan_layer_status',

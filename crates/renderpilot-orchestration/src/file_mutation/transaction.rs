@@ -104,9 +104,9 @@ impl DurableFileTransaction {
     /// invalidation token for retry/recovery.
     pub(crate) fn rollback(self, storage: &SqliteStorage) -> Result<(), ServiceError> {
         super::recover::validate_manifest_scope(&self.manifest, &self.transaction_root)?;
-        let fence = storage.fence_prepared_file_mutation_restore(&self.game_id, &self.id)?;
+        let fence = storage.fence_prepared_file_mutation_resolution(&self.game_id, &self.id)?;
         restore_manifest(&self.manifest, &fence)?;
-        storage.complete_prepared_file_mutation_restore(&fence)?;
+        storage.complete_prepared_file_mutation_restored(fence)?;
         if let Err(error) = cleanup_manifest(&self.manifest) {
             log::warn!("rolled-back file transaction left cleanup for the orphan sweep: {error}");
         }

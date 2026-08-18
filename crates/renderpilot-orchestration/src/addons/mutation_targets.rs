@@ -52,6 +52,18 @@ impl MutationTargets {
         extra_roots: impl IntoIterator<Item = PathBuf>,
         extra_live_paths: impl IntoIterator<Item = PathBuf>,
     ) -> Self {
+        Self::for_record_excluding(record, extra_roots, extra_live_paths, std::iter::empty())
+    }
+
+    /// Record-driven target set that excludes exact live paths and their
+    /// sidecars. Used where one tracked projection must remain untouched by a
+    /// broader durable mutation owned by the same record.
+    pub(crate) fn for_record_excluding(
+        record: &InstalledAddon,
+        extra_roots: impl IntoIterator<Item = PathBuf>,
+        extra_live_paths: impl IntoIterator<Item = PathBuf>,
+        excluded_live_paths: impl IntoIterator<Item = PathBuf>,
+    ) -> Self {
         let mut roots: Vec<PathBuf> = extra_roots.into_iter().collect();
         if let Some(parent) = Path::new(record.addon_file().as_str())
             .parent()
@@ -61,6 +73,12 @@ impl MutationTargets {
         }
         let mut paths = crate::addons::records::record_live_and_sidecar_paths(record);
         paths.extend(crate::fs::expand_with_sidecars(extra_live_paths));
+        let excluded: std::collections::HashSet<String> =
+            crate::fs::expand_with_sidecars(excluded_live_paths)
+                .into_iter()
+                .map(|path| crate::paths::normalized_key(&path))
+                .collect();
+        paths.retain(|path| !excluded.contains(&crate::paths::normalized_key(path)));
         Self::from_preexpanded_paths(roots, paths)
     }
 

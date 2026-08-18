@@ -273,6 +273,8 @@ fn configure_commands(builder: DesktopBuilder) -> DesktopBuilder {
         commands::renodx_check_update,
         commands::renodx_update,
         commands::renodx_install_dlss_fix,
+        commands::renodx_update_dlss_fix,
+        commands::renodx_retry_dlss_fix_recovery,
         commands::renodx_uninstall_dlss_fix,
         commands::renodx_dlss_fix_availability,
         // Luma Framework add-on (card surface; CLI status/bulk stay off IPC)

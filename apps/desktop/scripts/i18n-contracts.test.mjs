@@ -23,7 +23,7 @@ import { validateEditorialPolicy } from './i18n-contracts/validator.mjs';
 import { PLACEHOLDER_CONTRACT_CASES } from '../ui/src/shared/i18n/messages/placeholder-contract-cases.ts';
 
 const EXPECTED_CONTRACT_VERSION =
-  'i18n-v2:a0690ce2604c7c9ab32f9f9ce206e2930571ceb5f6339562b7e4efa3d40bc2d4';
+  'i18n-v2:120ab4f606b916397bd0ac2ad7b655cc02a1994d665f6e97b04512f4ff6e8286';
 
 test('contract generation is deterministic and committed outputs are current', async () => {
   const first = await createI18nContractOutputs();

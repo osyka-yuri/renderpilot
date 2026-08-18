@@ -8,7 +8,7 @@ use crate::addons::game_analysis::{analyze_game, install_target_dir};
 use crate::addons::records;
 use crate::addons::renodx::errors;
 use crate::addons::renodx::game_context::{executable_override, require_game};
-use crate::addons::renodx::install::uninstall as uninstall_files;
+use crate::addons::renodx::install::PreparedRenoDxUninstall;
 use crate::addons::renodx::vulkan;
 use crate::addons::reshade::proxy::{HostKind, host_decision, primary_api};
 use crate::addons::vulkan_lock;
@@ -49,43 +49,42 @@ pub(crate) fn uninstall_locked(
     let record = records::record_of_kind(context, game_id, AddonKind::RenoDx)?
         .ok_or_else(errors::not_installed)?;
 
-    let game_dir_hint = resolved_game_dir(context, game_id);
-    let targets = crate::addons::renodx::mutation_targets::uninstall_targets(
-        &record,
-        game_dir_hint.as_deref(),
-    );
-    let workset = targets.resolve_workset()?;
-
-    crate::addons::durable::run_uninstall_workset(
-        crate::addons::durable::UninstallWorkset {
-            context,
-            guard,
-            workset,
-            feature: crate::addons::mutation_features::RENODX_UNINSTALL,
-            game_id,
-        },
-        |mutation_id| {
-            // Per-game files: restore the game folder (add-on, ReShade.ini,
-            // backups). `game_dir_hint` only helps locate a pre-existing
-            // `ReShade.ini` the record itself doesn't reference. Metadata-only:
-            // engine uninstall is still invoked so any path that happens to
-            // exist is cleaned; missing files are not an error.
-            uninstall_files(&record, game_dir_hint.as_deref())?;
-            context.storage().commit_game_mutation(
-                renderpilot_storage_sqlite::GameMutationCommit {
-                    game_id,
-                    component_set: None,
-                    baseline_mutations: &[],
-                    addon: renderpilot_storage_sqlite::InstalledAddonMutation::Delete(
-                        AddonKind::RenoDx,
-                    ),
-                    mutation_id,
-                },
-            )?;
-            Ok(())
-        },
-        || {},
-    )?;
+    let mut plan =
+        PreparedRenoDxUninstall::prepare(&record, resolved_game_dir(context, game_id).as_deref());
+    let affected_paths = plan.affected_paths();
+    let roots = affected_paths
+        .iter()
+        .filter_map(|path| path.parent().map(PathBuf::from));
+    match crate::file_mutation::MutationScope::try_from_reachable_roots(roots)? {
+        Some(scope) => {
+            plan.retain_reachable(Some(&scope));
+            let affected_paths = plan.affected_paths();
+            if affected_paths.is_empty() {
+                commit_prepared_uninstall(context, game_id, &plan, None)?;
+            } else {
+                crate::file_mutation::run_durable_mutation(
+                    crate::file_mutation::DurableMutation {
+                        context,
+                        guard,
+                        scope: &scope,
+                        feature: crate::addons::mutation_features::RENODX_UNINSTALL,
+                        subject_id: Some(game_id.as_str()),
+                        paths: affected_paths,
+                    },
+                    |mutation_id| {
+                        commit_prepared_uninstall(context, game_id, &plan, Some(mutation_id))
+                    },
+                    |_| {},
+                    || {},
+                )?;
+            }
+        }
+        None => {
+            plan.retain_reachable(None);
+            commit_prepared_uninstall(context, game_id, &plan, None)?;
+        }
+    }
+    plan.remove_logs_best_effort();
 
     // Shared Vulkan layer cleanup: unregister this game's exe from
     // ReShadeApps.ini. If it was the last app, remove the empty shared
@@ -100,6 +99,25 @@ pub(crate) fn uninstall_locked(
             Err(error) => log::warn!("failed to unregister Vulkan layer app: {error}"),
         }
     }
+    Ok(())
+}
+
+fn commit_prepared_uninstall(
+    context: &Context,
+    game_id: &GameId,
+    plan: &PreparedRenoDxUninstall,
+    mutation_id: Option<&str>,
+) -> Result<(), ServiceError> {
+    plan.apply()?;
+    context
+        .storage()
+        .commit_game_mutation(renderpilot_storage_sqlite::GameMutationCommit {
+            game_id,
+            component_set: None,
+            baseline_mutations: &[],
+            addon: renderpilot_storage_sqlite::InstalledAddonMutation::Delete(AddonKind::RenoDx),
+            mutation_id,
+        })?;
     Ok(())
 }
 

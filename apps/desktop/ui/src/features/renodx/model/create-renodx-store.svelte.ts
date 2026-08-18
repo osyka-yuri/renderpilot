@@ -20,11 +20,13 @@ import {
 import type {
   AvailabilityOutcome,
   AvailabilityReport,
+  DlssFixAvailability,
   ManualFileInstall,
   RenoDxInstallState,
   RenoDxUpdateReport,
   VulkanLayerReport,
 } from './types';
+import { presentDlssFix } from './dlss-fix-presentation';
 
 /** Reactive store backing the RenoDX card for a single game. */
 export type RenoDxStore = ReturnType<typeof createRenoDxStore>;
@@ -60,7 +62,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   let outcome = $state<AvailabilityOutcome | null>(null);
   let manualInstall = $state<ManualFileInstall | null>(null);
   let vulkanLayer = $state<VulkanLayerReport | null>(null);
-  let dlssFixAvailable = $state(false);
+  let dlssFixAvailability = $state<DlssFixAvailability | null>(null);
 
   function applyAvailabilitySnapshot(
     report: Parameters<typeof availabilitySnapshotFromReport>[0],
@@ -116,7 +118,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       outcome = null;
       manualInstall = null;
       vulkanLayer = null;
-      dlssFixAvailable = false;
+      dlssFixAvailability = null;
     },
     buildUpdateReportForInstall: (nextState) => {
       if (nextState.status !== 'installed') {
@@ -125,7 +127,7 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       return {
         addon: 'current',
         host: 'current',
-        dlssFix: nextState.dlss_fix_installed ? 'current' : null,
+        dlssFix: nextState.dlss_fix_evidence_present ? 'current' : null,
         overall: 'current',
       };
     },
@@ -152,10 +154,14 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
   const genericProfile = $derived(
     outcome?.kind === 'installable' ? (outcome.generic_profile ?? null) : null,
   );
-  const dlssFixUpdate = $derived(core.updateReport?.dlssFix ?? null);
   const vulkanUpdateDiagnostics = $derived(core.updateReport?.vulkan_diagnostics ?? []);
-  const dlssFixInstalled = $derived(
-    core.state?.status === 'installed' && core.state.dlss_fix_installed,
+  const dlssFix = $derived(
+    presentDlssFix({
+      availability: dlssFixAvailability,
+      fallbackEvidencePresent:
+        core.state?.status === 'installed' && core.state.dlss_fix_evidence_present,
+      updateStatus: core.updateReport?.dlssFix ?? null,
+    }),
   );
   const addonTracked = $derived(
     core.state?.status === 'installed' ? core.state.addon_tracked : null,
@@ -163,56 +169,45 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
 
   async function probeDlssFixAvailability(gameId: string, token: number): Promise<void> {
     try {
-      const available = await api.dlssFixAvailability(gameId);
+      const availability = await api.dlssFixAvailability(gameId);
       if (core.isCurrentRequest(token)) {
-        dlssFixAvailable = available;
+        dlssFixAvailability = availability;
       }
     } catch {
       if (core.isCurrentRequest(token)) {
-        dlssFixAvailable = false;
+        dlssFixAvailability = null;
       }
     }
   }
 
-  async function maybeProbeDlssFix(gameId: string, token: number): Promise<void> {
-    if (!core.isCurrentRequest(token)) {
-      return;
-    }
-    if (core.state?.status !== 'installed' || core.state.dlss_fix_installed) {
-      return;
-    }
-    if (core.updateReport?.dlssFix !== null) {
-      return;
-    }
-    await probeDlssFixAvailability(gameId, token);
-  }
-
   async function load(gameId: string): Promise<void> {
-    dlssFixAvailable = false;
+    dlssFixAvailability = null;
     const loading = core.load(gameId);
     const token = core.requestToken;
     await loading;
     if (core.isCurrentRequest(token) && !core.loadError) {
-      await maybeProbeDlssFix(gameId, token);
+      await probeDlssFixAvailability(gameId, token);
     }
   }
 
   async function retry(gameId: string): Promise<void> {
-    dlssFixAvailable = false;
+    dlssFixAvailability = null;
     const loading = core.retry(gameId);
     const token = core.requestToken;
     await loading;
     if (core.isCurrentRequest(token) && !core.loadError) {
-      await maybeProbeDlssFix(gameId, token);
+      await probeDlssFixAvailability(gameId, token);
     }
   }
 
   async function checkForUpdates(gameId: string): Promise<void> {
-    dlssFixAvailable = false;
+    dlssFixAvailability = null;
     const checking = core.checkForUpdates(gameId);
     const token = core.requestToken;
     await checking;
-    await maybeProbeDlssFix(gameId, token);
+    if (core.isCurrentRequest(token)) {
+      await probeDlssFixAvailability(gameId, token);
+    }
   }
 
   async function refreshVulkanLayerStatus(token: number): Promise<void> {
@@ -246,8 +241,8 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     if (!core.isCurrentRequest(token)) {
       return;
     }
-    dlssFixAvailable = false;
-    await maybeProbeDlssFix(gameId, token);
+    dlssFixAvailability = null;
+    await probeDlssFixAvailability(gameId, token);
   }
 
   async function afterCapabilityCommit(
@@ -366,6 +361,21 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
     });
   }
 
+  async function updateDlssFix(gameId: string): Promise<AddonMutationResult> {
+    return core.runBusyMutation(gameId, () => api.updateDlssFix(gameId), {
+      errorKey: 'gameDetails.renodx.dlssFixInstallError',
+      afterCommit: (token) => afterInstallLikeCommit(gameId, token),
+    });
+  }
+
+  async function retryDlssFixRecovery(gameId: string): Promise<AddonMutationResult> {
+    return core.runBusyMutation(gameId, () => api.retryDlssFixRecovery(gameId), {
+      errorKey: 'gameDetails.renodx.dlssFixInstallError',
+      clearDownloadProgress: false,
+      afterCommit: (token) => afterInstallLikeCommit(gameId, token),
+    });
+  }
+
   return mergeAddonApis(
     addonCoreApi(core),
     commonOutcomeApi(() => outcome),
@@ -416,20 +426,14 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       get vulkanLayer() {
         return vulkanLayer;
       },
-      get dlssFixUpdate() {
-        return dlssFixUpdate;
-      },
       get vulkanUpdateDiagnostics() {
         return vulkanUpdateDiagnostics;
-      },
-      get dlssFixInstalled() {
-        return dlssFixInstalled;
       },
       get addonTracked() {
         return addonTracked;
       },
-      get dlssFixAvailable() {
-        return dlssFixAvailable;
+      get dlssFix() {
+        return dlssFix;
       },
       load,
       retry,
@@ -441,6 +445,8 @@ export function createRenoDxStore(options: RenoDxStoreOptions = {}) {
       update,
       uninstall,
       installDlssFix,
+      updateDlssFix,
+      retryDlssFixRecovery,
       uninstallDlssFix,
     },
   );
