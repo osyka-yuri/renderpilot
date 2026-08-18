@@ -93,17 +93,27 @@ fn packaging_contract_keeps_rpu_grammar_and_effective_trust_inputs_closed() {
 }
 
 #[test]
-fn native_epoch_requires_the_exact_schema_capability() {
+fn stable_supervisor_accepts_future_generation_schema_capabilities() {
     use crate::portable_runtime::rpu::{MAXIMUM_SCHEMA, MINIMUM_SCHEMA, schema_range_is_supported};
 
     assert!(schema_range_is_supported(MINIMUM_SCHEMA, MAXIMUM_SCHEMA));
-    assert!(!schema_range_is_supported(
+    assert!(schema_range_is_supported(
         MINIMUM_SCHEMA,
         MAXIMUM_SCHEMA + 1
     ));
+    assert!(schema_range_is_supported(MINIMUM_SCHEMA, i32::MAX as u32));
+    assert!(!schema_range_is_supported(
+        MINIMUM_SCHEMA,
+        i32::MAX as u32 + 1
+    ));
+    assert!(!schema_range_is_supported(MINIMUM_SCHEMA, u32::MAX));
     assert!(!schema_range_is_supported(
         MINIMUM_SCHEMA + 1,
-        MAXIMUM_SCHEMA
+        MAXIMUM_SCHEMA + 1
+    ));
+    assert!(!schema_range_is_supported(
+        MINIMUM_SCHEMA,
+        MINIMUM_SCHEMA - 1
     ));
 }
 
