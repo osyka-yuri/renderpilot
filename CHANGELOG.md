@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.4] - 2026-08-18
+
+### Fixed
+
+- **Portable update loop**: Fixed an issue where portable builds could repeatedly download an update from the beginning after completion instead of applying it.
+
+### Compatibility
+
+- **Manual update from portable 1.9.3 or earlier**: Portable copies running 1.9.3 or earlier require a manual update. Fully close RenderPilot and extract the complete 1.9.4 package into the existing portable folder, replacing files when prompted. Existing user data and settings are preserved.
+
 ## [1.9.3] - 2026-08-18
 
 ### Added
@@ -35,7 +45,7 @@ All notable changes to this project will be documented in this file.
 
 ### Compatibility
 
-- **Manual update from portable 1.9.1**: Portable 1.9.1 requires a one-time manual update. Fully close RenderPilot and extract the complete 1.9.2 package into the existing portable folder, replacing files when prompted. Do not delete the folder first. Future updates can be installed normally from the application.
+- **Manual update from portable 1.9.1**: Portable 1.9.1 requires a manual update. Fully close RenderPilot and extract the complete 1.9.2 package into the existing portable folder, replacing files when prompted. Do not delete the folder first.
 
 ## [1.9.1] - 2026-08-14
 
@@ -54,7 +64,7 @@ All notable changes to this project will be documented in this file.
 
 ### Compatibility
 
-- **One-time portable package upgrade**: Portable copies running 1.9.0 must be fully closed and updated once with the complete portable package for this release. Keep the existing data and recovery folders. The 1.9.0 in-app updater cannot perform this transition; later compatible portable updates work normally.
+- **One-time portable package upgrade**: Portable copies running 1.9.0 must be fully closed and updated with the complete portable package for this release. Keep the existing data and recovery folders. The 1.9.0 in-app updater cannot perform this transition.
 
 ### Changed (Refactoring & Maintenance)
 
@@ -81,7 +91,7 @@ All notable changes to this project will be documented in this file.
 
 ### Compatibility
 
-- **Portable updates from earlier 1.x versions**: Close RenderPilot and replace the portable executable once with the 1.9.0 version. Keep the adjacent `data` folder unchanged; its data is migrated on first launch, and later portable updates can be installed from the application.
+- **Portable updates from earlier 1.x versions**: Close RenderPilot and replace the portable executable once with the 1.9.0 version. Keep the adjacent `data` folder unchanged; its data is migrated on first launch.
 - **Local data upgrade**: The first launch upgrades existing RenderPilot 1.x data automatically and creates a verified backup. Earlier RenderPilot versions cannot reuse the upgraded database without restoring that backup.
 
 ## [1.8.2] - 2026-07-30
