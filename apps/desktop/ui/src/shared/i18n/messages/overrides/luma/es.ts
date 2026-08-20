@@ -31,6 +31,7 @@ const translations = {
   deadlineUltra: 'En los ajustes del juego, selecciona «Ultra».',
   filamentAaHigh: 'En los ajustes del juego, selecciona AA «High» o «Very High».',
   aaHigh: 'En los ajustes del juego, selecciona AA «High».',
+  aaUltra: 'En los ajustes del juego, selecciona AA «Ultra».',
   mutantMotionBlur:
     'En los ajustes del juego, selecciona AA «High». Para una imagen en movimiento más clara, se recomienda r.motionblur.amount=0 en Engine.ini.',
   supralandTaa: 'En los ajustes del juego, selecciona AA «Temporal Anti Aliasing».',

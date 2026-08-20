@@ -36,7 +36,7 @@ describe('Luma message catalogs', () => {
     const expectedKeys = lumaMessageKeys.toSorted();
 
     expect(new Set(lumaMessageKeys).size).toBe(lumaMessageKeys.length);
-    expect(lumaMessageKeys).toHaveLength(99);
+    expect(lumaMessageKeys).toHaveLength(104);
 
     for (const locale of LAZY_LOCALES) {
       const overrides = lumaCatalogs[locale];

@@ -124,11 +124,19 @@
           "context": "guidance.engine_ini"
         },
         {
+          "id": "luma.no-more-heroes-3.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
           "id": "luma.project-wingman.engine_ini",
           "context": "guidance.engine_ini"
         },
         {
           "id": "luma.remnant-from-the-ashes.engine_ini",
+          "context": "guidance.engine_ini"
+        },
+        {
+          "id": "luma.solar-ash.engine_ini",
           "context": "guidance.engine_ini"
         },
         {
@@ -315,6 +323,24 @@
         },
         {
           "id": "luma.submerged-hidden-depths.game_setting",
+          "context": "guidance.game_setting"
+        }
+      ]
+    },
+    {
+      "key": "aaUltra",
+      "sourceText": "In the game settings, use: AA \"Ultra\".",
+      "messages": [
+        {
+          "id": "luma.destroy-all-humans.game_setting",
+          "context": "guidance.game_setting"
+        },
+        {
+          "id": "luma.rad.game_setting",
+          "context": "guidance.game_setting"
+        },
+        {
+          "id": "luma.spongebob-squarepants-the-cosmic-shake.game_setting",
           "context": "guidance.game_setting"
         }
       ]
