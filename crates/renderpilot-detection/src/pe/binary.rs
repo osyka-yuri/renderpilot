@@ -4,17 +4,17 @@ pub(super) fn read_utf16_null_terminated(
     limit: usize,
 ) -> Option<(String, usize)> {
     let mut cursor = offset;
-    let mut value = Vec::new();
 
     while cursor.checked_add(2)? <= limit {
         let unit = read_u16(bytes, cursor)?;
         cursor = cursor.checked_add(2)?;
 
         if unit == 0 {
-            return String::from_utf16(&value).ok().map(|text| (text, cursor));
+            return bytes
+                .get(offset..cursor - 2)
+                .and_then(|value| String::from_utf16le(value).ok())
+                .map(|text| (text, cursor));
         }
-
-        value.push(unit);
     }
 
     None
@@ -22,18 +22,11 @@ pub(super) fn read_utf16_null_terminated(
 
 pub(super) fn read_utf16_value(bytes: &[u8], offset: usize, units: usize) -> Option<String> {
     let raw = checked_range(bytes, offset, units.checked_mul(2)?)?;
-    let mut value = Vec::with_capacity(units);
-
-    for chunk in raw.chunks_exact(2) {
-        let unit: [u8; 2] = chunk.try_into().ok()?;
-        value.push(u16::from_le_bytes(unit));
+    let mut end = raw.len();
+    while end >= 2 && raw[end - 2..end] == [0, 0] {
+        end -= 2;
     }
-
-    while value.last() == Some(&0) {
-        value.pop();
-    }
-
-    String::from_utf16(&value).ok()
+    String::from_utf16le(&raw[..end]).ok()
 }
 
 pub(super) fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
@@ -103,6 +96,33 @@ mod tests {
         // "AB" encoded as UTF-16 LE (4 bytes), null-terminated.
         let data = [b'A', 0x00, b'B', 0x00, 0x00, 0x00];
         assert_eq!(read_utf16_value(&data, 0, 3), Some(String::from("AB")));
+    }
+
+    #[test]
+    fn read_utf16_null_terminated_respects_bound_and_returns_cursor_after_terminator() {
+        let data = [b'A', 0x00, b'B', 0x00, 0x00, 0x00, b'X', 0x00];
+        assert_eq!(
+            read_utf16_null_terminated(&data, 0, 6),
+            Some((String::from("AB"), 6))
+        );
+    }
+
+    #[test]
+    fn read_utf16_null_terminated_rejects_terminator_outside_bound() {
+        let data = [b'A', 0x00, 0x00, 0x00];
+        assert_eq!(read_utf16_null_terminated(&data, 0, 2), None);
+    }
+
+    #[test]
+    fn utf16_readers_reject_lone_surrogates() {
+        let null_terminated = [0x00, 0xD8, 0x00, 0x00];
+        assert_eq!(
+            read_utf16_null_terminated(&null_terminated, 0, null_terminated.len()),
+            None
+        );
+
+        let fixed = [0x00, 0xD8];
+        assert_eq!(read_utf16_value(&fixed, 0, 1), None);
     }
 
     #[test]

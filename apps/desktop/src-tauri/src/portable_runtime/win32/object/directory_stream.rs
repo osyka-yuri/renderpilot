@@ -91,18 +91,13 @@ fn visit_buffer(bytes: &[u8], visit: &mut impl FnMut(DirectoryEntry) -> Result<(
                 "directory stream name was invalid",
             ));
         }
-        let name = String::from_utf16(
-            &bytes[offset + base..offset + base + name_length]
-                .chunks_exact(2)
-                .map(|unit| u16::from_le_bytes([unit[0], unit[1]]))
-                .collect::<Vec<_>>(),
-        )
-        .map_err(|_| {
-            PortableRuntimeError::new(
-                "portable_diagnostics_retention",
-                "directory name was not UTF-16",
-            )
-        })?;
+        let name = String::from_utf16le(&bytes[offset + base..offset + base + name_length])
+            .map_err(|_| {
+                PortableRuntimeError::new(
+                    "portable_diagnostics_retention",
+                    "directory name was not UTF-16",
+                )
+            })?;
         // NtQueryDirectoryFile legally exposes these native pseudoentries. They are budgeted and consumers decide whether their type is admissible.
         if !is_native_pseudoentry(&name) && name.contains(['\\', '/']) {
             return Err(PortableRuntimeError::new(
@@ -170,7 +165,12 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_native_pseudoentry;
+    use super::{is_native_pseudoentry, visit_buffer};
+    use crate::portable_runtime::error::Result;
+
+    fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
 
     #[test]
     fn native_dot_names_are_distinct_from_authoritative_leaves() {
@@ -178,5 +178,38 @@ mod tests {
         assert!(is_native_pseudoentry(".."));
         assert!(!is_native_pseudoentry("admission.lock"));
         assert!(!is_native_pseudoentry("a/foreign"));
+    }
+
+    #[test]
+    fn invalid_utf16_name_is_rejected_before_visiting() {
+        let base = std::mem::offset_of!(
+            windows_sys::Wdk::Storage::FileSystem::FILE_DIRECTORY_INFORMATION,
+            FileName
+        );
+        let name_length_offset = std::mem::offset_of!(
+            windows_sys::Wdk::Storage::FileSystem::FILE_DIRECTORY_INFORMATION,
+            FileNameLength
+        );
+        let next_offset = std::mem::offset_of!(
+            windows_sys::Wdk::Storage::FileSystem::FILE_DIRECTORY_INFORMATION,
+            NextEntryOffset
+        );
+        let mut bytes = vec![0; base + 2];
+        write_u32(&mut bytes, name_length_offset, 2);
+        write_u32(&mut bytes, next_offset, 0);
+        bytes[base..base + 2].copy_from_slice(&[0x00, 0xD8]);
+
+        let mut visits = 0;
+        let error = visit_buffer(&bytes, &mut |_entry| -> Result<()> {
+            visits += 1;
+            Ok(())
+        })
+        .expect_err("lone surrogate must be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "portable_diagnostics_retention: directory name was not UTF-16"
+        );
+        assert_eq!(visits, 0);
     }
 }

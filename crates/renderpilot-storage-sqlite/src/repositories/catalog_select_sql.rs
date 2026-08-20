@@ -2,7 +2,7 @@
 //!
 //! Projection alias strings must match [`crate::repositories::columns::projection`].
 //! `macro_rules!` embeds literals into `concat!(...)` because `concat!` does not accept
-//! `const` path fragments on this toolchain (verified with rustc 1.95); workspace MSRV is 1.97.
+//! `const` path fragments on this toolchain (verified with rustc 1.95); workspace MSRV is 1.98.
 
 /// `SELECT` list body; must match [`crate::repositories::columns::projection::game`].
 macro_rules! projection_game_sql {

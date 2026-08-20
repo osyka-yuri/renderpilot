@@ -198,6 +198,27 @@ fn addon_file_must_be_a_safe_root_luma_addon() {
 }
 
 #[test]
+fn addon_file_prefix_and_suffix_are_ascii_case_insensitive() {
+    let mut m = one_title_manifest();
+    m.titles[0].addon_file = "lUmA-Dishonored 2.AdDoN".to_owned();
+    assert!(validate_manifest(&m).is_ok());
+}
+
+#[test]
+fn addon_file_rejects_blank_name() {
+    let mut m = one_title_manifest();
+    m.titles[0].addon_file = "Luma-   .addon".to_owned();
+    assert!(validate_manifest(&m).is_err());
+}
+
+#[test]
+fn asset_prefix_and_suffix_are_case_sensitive() {
+    let mut m = one_title_manifest();
+    m.titles[0].asset = "luma-Dishonored_2.zip".to_owned();
+    assert!(validate_manifest(&m).is_err());
+}
+
+#[test]
 fn one_release_asset_cannot_claim_multiple_payload_names() {
     let mut m = one_title_manifest();
     let mut second = title(

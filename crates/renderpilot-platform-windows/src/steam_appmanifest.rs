@@ -254,9 +254,7 @@ fn details_from_manifest_entry(
 
 fn app_id_from_manifest_file_name(file_name: &OsStr) -> Option<String> {
     let file_name = file_name.to_str()?;
-    let app_id = file_name
-        .strip_prefix("appmanifest_")?
-        .strip_suffix(".acf")?;
+    let app_id = file_name.strip_circumfix("appmanifest_", ".acf")?;
 
     if app_id.is_empty() || !app_id.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;

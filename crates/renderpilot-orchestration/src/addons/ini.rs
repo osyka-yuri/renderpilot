@@ -38,9 +38,9 @@ impl Ini {
         for raw in text.lines() {
             let line = raw.trim_end_matches('\r');
             let trimmed = line.trim();
-            if trimmed.starts_with('[') && trimmed.ends_with(']') && trimmed.len() >= 2 {
+            if let Some(header) = trimmed.strip_circumfix('[', ']') {
                 sections.push(IniSection {
-                    header: trimmed[1..trimmed.len() - 1].to_owned(),
+                    header: header.to_owned(),
                     lines: Vec::new(),
                 });
             } else {
@@ -359,5 +359,11 @@ mod tests {
         // blank line before the header.
         let ini = Ini::parse("; remark\r\n[ADDON]\r\nAddonPath=.\r\n");
         assert_eq!(ini.render(), "; remark\r\n\r\n[ADDON]\r\nAddonPath=.\r\n");
+    }
+
+    #[test]
+    fn empty_section_header_round_trips() {
+        let ini = Ini::parse("[]\r\n");
+        assert_eq!(ini.render(), "[]\r\n");
     }
 }

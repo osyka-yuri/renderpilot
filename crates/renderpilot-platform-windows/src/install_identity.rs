@@ -78,7 +78,7 @@ fn gog_identity(install_dir: &Path) -> Option<InstallIdentityDetails> {
             continue;
         };
 
-        if !file_name.starts_with("goggame-") || !file_name.ends_with(".info") {
+        if file_name.strip_circumfix("goggame-", ".info").is_none() {
             continue;
         }
 
@@ -115,7 +115,7 @@ fn gog_identity_from_info(file_name: &str, content: &str) -> Option<InstallIdent
 }
 
 fn gog_product_id_from_file_name(file_name: &str) -> Option<String> {
-    let id = file_name.strip_prefix("goggame-")?.strip_suffix(".info")?;
+    let id = file_name.strip_circumfix("goggame-", ".info")?;
 
     if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;

@@ -91,16 +91,13 @@ fn ensure_addon_file(title: &LumaTitle) -> Result<(), ServiceError> {
     let field = format!("title `{}` addon_file", title.id);
     ensure_safe_file_name(&field, &title.addon_file)?;
     let lower = title.addon_file.to_ascii_lowercase();
-    if !lower.starts_with("luma-") || !lower.ends_with(".addon") {
+    let Some(name) = lower.strip_circumfix("luma-", ".addon") else {
         return Err(errors::failed(format!(
             "{field} `{}` must be a root Luma .addon file",
             title.addon_file
         )));
-    }
-    if title.addon_file["Luma-".len()..title.addon_file.len() - ".addon".len()]
-        .trim()
-        .is_empty()
-    {
+    };
+    if name.trim().is_empty() {
         return Err(errors::failed(format!(
             "{field} must include a name between `Luma-` and `.addon`"
         )));
@@ -115,8 +112,7 @@ fn ensure_addon_file(title: &LumaTitle) -> Result<(), ServiceError> {
 fn ensure_asset(title: &LumaTitle) -> Result<(), ServiceError> {
     let Some(stem) = title
         .asset
-        .strip_prefix(ASSET_PREFIX)
-        .and_then(|rest| rest.strip_suffix(ASSET_SUFFIX))
+        .strip_circumfix(ASSET_PREFIX, ASSET_SUFFIX)
         .filter(|stem| !stem.is_empty())
     else {
         return Err(errors::failed(format!(

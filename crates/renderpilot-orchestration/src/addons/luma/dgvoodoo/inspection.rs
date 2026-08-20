@@ -13,10 +13,7 @@ use super::plan::{config_sections, managed_config_default};
 pub(crate) fn requirement(
     requirement: Option<&LumaExternalRequirement>,
 ) -> Option<&LumaExternalRequirement> {
-    match requirement {
-        Some(requirement @ LumaExternalRequirement::Dgvoodoo2 { .. }) => Some(requirement),
-        None => None,
-    }
+    requirement.filter(|r| matches!(r, LumaExternalRequirement::Dgvoodoo2 { .. }))
 }
 
 /// Advisory wrapper provenance for DB-loss recovery when the on-disk stack is

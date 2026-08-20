@@ -1,6 +1,6 @@
 # Development setup
 
-RenderPilot is a Rust workspace with a Tauri desktop application, a Svelte frontend, and a source-only CLI. The minimum supported Rust version is 1.97 and `rust-toolchain.toml` pins 1.97.1; the desktop package requires Node.js 24 or later and declares pnpm 11.18.0 as the package-manager source of truth.
+RenderPilot is a Rust workspace with a Tauri desktop application, a Svelte frontend, and a source-only CLI. The minimum supported Rust version is 1.98 and `rust-toolchain.toml` pins 1.98.0; the desktop package requires Node.js 24 or later and declares pnpm 11.18.0 as the package-manager source of truth.
 
 ## Toolchain
 

@@ -193,8 +193,7 @@ fn transaction_from_append_object(bytes: &[u8], key: &str) -> Result<String> {
         })?;
     let suffix = format!(":{key}");
     object_id
-        .strip_prefix("journal-outbox-append:")
-        .and_then(|value| value.strip_suffix(&suffix))
+        .strip_circumfix("journal-outbox-append:", &suffix)
         .filter(|value| is_digest(value))
         .map(str::to_owned)
         .ok_or_else(|| {
@@ -225,4 +224,56 @@ pub(in crate::portable_runtime::journal) fn valid_image_shape(image: &JournalIma
             (true, _, Some(head), Some(_), Some(_)) => is_digest(head),
             _ => false,
         }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::transaction_from_append_object;
+
+    const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const TRANSACTION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    fn envelope(object_id: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({ "object_id": object_id })).expect("envelope")
+    }
+
+    #[test]
+    fn append_object_parser_rejects_wrong_prefix() {
+        let error = transaction_from_append_object(
+            &envelope(&format!("journal-outbox-wrong:{TRANSACTION}:{KEY}")),
+            KEY,
+        )
+        .expect_err("wrong prefix");
+        assert_eq!(
+            error.to_string(),
+            "portable_journal_outbox: intent envelope object id was invalid"
+        );
+    }
+
+    #[test]
+    fn append_object_parser_rejects_dynamic_key_mismatch() {
+        let other_key = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+        let error = transaction_from_append_object(
+            &envelope(&format!("journal-outbox-append:{TRANSACTION}:{other_key}")),
+            KEY,
+        )
+        .expect_err("dynamic key mismatch");
+        assert_eq!(
+            error.to_string(),
+            "portable_journal_outbox: intent envelope object id was invalid"
+        );
+    }
+
+    #[test]
+    fn append_object_parser_rejects_invalid_transaction_digest() {
+        let error = transaction_from_append_object(
+            &envelope(&format!("journal-outbox-append:not-a-digest:{KEY}")),
+            KEY,
+        )
+        .expect_err("invalid transaction digest");
+        assert_eq!(
+            error.to_string(),
+            "portable_journal_outbox: intent envelope object id was invalid"
+        );
+    }
 }

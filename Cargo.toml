@@ -16,7 +16,7 @@ resolver = "2"
 [workspace.package]
 version = "1.9.5"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 license = "GPL-3.0-only"
 
 [workspace.lints.rust]
@@ -31,20 +31,72 @@ needless_pass_by_value = "warn"
 redundant_clone = "warn"
 unnecessary_to_owned = "warn"
 
-# Keep cryptographic hashing optimized in development builds so safety and integrity
-# checks on large game executables do not stall the desktop UI under `tauri dev`.
-[profile.dev.package.sha2]
-opt-level = 3
-
 # Continuous integration profile: keep line tables for readable panic backtraces
 # while eliminating heavy type/variable debuginfo to accelerate CI passes.
 [profile.ci]
 inherits = "test"
 debug = "line-tables-only"
 
-# Production release profile: optimize across workspace crates and strip symbols
-# to produce compact, high-performance distributable binaries.
+# Production release profile: `s` everywhere except the computational leaf
+# dependencies below. Our workspace crates have no measurable O3 hot spots
+# (scanning and hashing are IO- or library-bound), so they stay at `s`.
 [profile.release]
-lto = "thin"
+lto = "fat"
+opt-level = "s"
 codegen-units = 1
 strip = true
+
+# Hot leaf dependencies: opt-level does not propagate from a crate to its own
+# dependencies, so each crate and its engines must be listed explicitly
+# (e.g. `regex` and `regex-automata`). C-backed crates are unaffected by
+# opt-level and are intentionally absent.
+[profile.release.package.sha2]
+opt-level = 3
+[profile.release.package.serde_json]
+opt-level = 3
+[profile.release.package.serde]
+opt-level = 3
+[profile.release.package.serde_core]
+opt-level = 3
+[profile.release.package.zmij]
+opt-level = 3
+[profile.release.package.itoa]
+opt-level = 3
+[profile.release.package.regex]
+opt-level = 3
+[profile.release.package.regex-automata]
+opt-level = 3
+[profile.release.package.regex-syntax]
+opt-level = 3
+[profile.release.package.aho-corasick]
+opt-level = 3
+[profile.release.package.memchr]
+opt-level = 3
+[profile.release.package.miniz_oxide]
+opt-level = 3
+[profile.release.package.simd-adler32]
+opt-level = 3
+[profile.release.package.zlib-rs]
+opt-level = 3
+[profile.release.package.zip]
+opt-level = 3
+[profile.release.package.crc32fast]
+opt-level = 3
+[profile.release.package.adler2]
+opt-level = 3
+[profile.release.package.brotli]
+opt-level = 3
+[profile.release.package.brotli-decompressor]
+opt-level = 3
+[profile.release.package.quick-xml]
+opt-level = 3
+[profile.release.package.png]
+opt-level = 3
+[profile.release.package.hex]
+opt-level = 3
+[profile.release.package.time]
+opt-level = 3
+[profile.release.package.jiff]
+opt-level = 3
+[profile.release.package.jiff-core]
+opt-level = 3
